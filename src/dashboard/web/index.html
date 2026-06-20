@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AegisFlow — local spend console</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 34'%3E%3Cpath d='M15 1 L28 6 V16 C28 25 22 30 15 33 C8 30 2 25 2 16 V6 Z' fill='%230b0b0e' stroke='%23e9b949' stroke-width='2'/%3E%3Cpath d='M15 9 L15 22 M9 15 L21 15' stroke='%23e9b949' stroke-width='2'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --ink: #0b0b0e;
+    --ink-2: #0f0f13;
+    --panel: #141419;
+    --panel-2: #1a1a21;
+    --line: #26262f;
+    --line-soft: #1d1d25;
+    --text: #ededea;
+    --muted: #9a9aa6;
+    --faint: #62626d;
+    --gold: #e9b949;
+    --gold-soft: rgba(233, 185, 73, 0.14);
+    --mint: #57d2a3;
+    --coral: #f06b5a;
+    --sky: #7cc4f2;
+    --violet: #b69cf0;
+    --r: 14px;
+    --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    --sans: 'IBM Plex Sans', system-ui, sans-serif;
+    --serif: 'Fraunces', Georgia, serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--ink);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+    background-image:
+      radial-gradient(900px 500px at 85% -10%, rgba(233, 185, 73, 0.08), transparent 60%),
+      radial-gradient(700px 400px at 5% 0%, rgba(124, 196, 242, 0.05), transparent 55%);
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    opacity: 0.04;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .wrap { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; padding: 28px 28px 80px; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 20px; padding-bottom: 22px; margin-bottom: 26px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .shield { width: 30px; height: 34px; flex: none; filter: drop-shadow(0 2px 10px rgba(233, 185, 73, 0.35)); }
+  .brand h1 { font-family: var(--serif); font-weight: 500; font-size: 21px; letter-spacing: -0.01em; }
+  .brand .tag { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--faint); margin-top: 1px; }
+  .live { display: inline-flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 11px; color: var(--mint); letter-spacing: 0.08em; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--mint); animation: pulse 2.4s infinite; }
+  .dlcsv { font-family: var(--mono); font-size: 11px; color: var(--faint); text-decoration: none; border: 1px solid var(--line-soft); border-radius: 8px; padding: 5px 10px; transition: all .18s; }
+  .dlcsv:hover { color: var(--gold); border-color: rgba(233,185,73,0.3); }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(87,210,163,0.5); } 70% { box-shadow: 0 0 0 7px rgba(87,210,163,0); } 100% { box-shadow: 0 0 0 0 rgba(87,210,163,0); } }
+
+  .ranges { display: flex; gap: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 4px; }
+  .ranges button { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.05em; color: var(--muted); background: none; border: 0; padding: 6px 12px; border-radius: 7px; cursor: pointer; transition: all 0.18s ease; }
+  .ranges button:hover { color: var(--text); }
+  .ranges button.on { background: var(--gold-soft); color: var(--gold); }
+
+  .grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 18px; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+
+  .card { background: linear-gradient(180deg, var(--panel) 0%, var(--ink-2) 100%); border: 1px solid var(--line); border-radius: var(--r); padding: 22px; position: relative; overflow: hidden; }
+  .card .label { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); margin-bottom: 14px; }
+
+  .hero { grid-column: 1 / -1; display: grid; grid-template-columns: 1.4fr 1fr; gap: 0; padding: 0; }
+  @media (max-width: 860px) { .hero { grid-template-columns: 1fr; } }
+  .hero .spend { padding: 26px 26px 24px; border-right: 1px solid var(--line-soft); }
+  @media (max-width: 860px) { .hero .spend { border-right: 0; border-bottom: 1px solid var(--line-soft); } }
+  .bignum { font-family: var(--mono); font-weight: 700; font-size: clamp(40px, 7vw, 68px); letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; color: var(--text); }
+  .bignum .cur { color: var(--gold); font-size: 0.5em; vertical-align: 0.5em; margin-right: 2px; }
+  .spend .sub { color: var(--muted); margin-top: 12px; font-size: 13px; }
+  .spend .sub b { color: var(--text); font-family: var(--mono); font-weight: 500; }
+
+  .gaugewrap { padding: 26px; display: flex; align-items: center; gap: 22px; }
+  .gauge { width: 116px; height: 116px; flex: none; }
+  .budgetinfo .k { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  .budgetinfo .v { font-family: var(--mono); font-size: 20px; font-weight: 500; margin: 2px 0 14px; font-variant-numeric: tabular-nums; }
+  .budgetinfo .v.left { color: var(--mint); }
+  .nocap { color: var(--muted); font-size: 13px; max-width: 220px; }
+  .nocap code { font-family: var(--mono); color: var(--gold); background: var(--gold-soft); padding: 1px 6px; border-radius: 5px; font-size: 12px; }
+
+  .stats { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
+  @media (max-width: 720px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  .stat .n { font-family: var(--mono); font-size: 24px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .stat .n.in { color: var(--sky); }
+  .stat .n.out { color: var(--violet); }
+  .stat .n.req { color: var(--gold); }
+
+  .chartcard { grid-column: 1 / -1; }
+  svg.spark { width: 100%; height: 150px; display: block; }
+
+  .bars { display: flex; flex-direction: column; gap: 13px; }
+  .bar .top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .bar .name { font-family: var(--mono); font-size: 12.5px; color: var(--text); }
+  .bar .name .prov { color: var(--faint); }
+  .bar .cost { font-family: var(--mono); font-size: 12.5px; color: var(--gold); font-variant-numeric: tabular-nums; }
+  .bar .track { height: 7px; background: var(--panel-2); border-radius: 6px; overflow: hidden; }
+  .bar .fill { height: 100%; border-radius: 6px; background: linear-gradient(90deg, var(--gold), #f3cf7a); transition: width 0.6s cubic-bezier(.2,.7,.2,1); }
+  .bar .meta { font-family: var(--mono); font-size: 10.5px; color: var(--faint); margin-top: 4px; }
+
+  .recent { grid-column: 1 / -1; }
+  table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px; }
+  th { text-align: left; font-weight: 400; color: var(--faint); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; padding: 0 10px 10px; border-bottom: 1px solid var(--line-soft); }
+  td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); font-variant-numeric: tabular-nums; }
+  tr:last-child td { border-bottom: 0; }
+  td.cost { color: var(--gold); text-align: right; }
+  td.model { color: var(--text); }
+  td.prov, td.t { color: var(--faint); }
+  .pill { font-size: 9.5px; padding: 1px 6px; border-radius: 5px; letter-spacing: 0.06em; }
+  .pill.stream { background: rgba(124,196,242,0.12); color: var(--sky); }
+  .pill.block { background: rgba(240,107,90,0.14); color: var(--coral); }
+  .pill.est { background: rgba(240,107,90,0.1); color: var(--coral); }
+
+  .empty { grid-column: 1 / -1; text-align: center; padding: 60px 20px; }
+  .empty h3 { font-family: var(--serif); font-weight: 500; font-size: 22px; margin-bottom: 10px; }
+  .empty p { color: var(--muted); max-width: 480px; margin: 0 auto 18px; }
+  .cmd { display: inline-block; font-family: var(--mono); font-size: 13px; color: var(--gold); background: var(--gold-soft); border: 1px solid rgba(233,185,73,0.25); border-radius: 9px; padding: 10px 16px; text-align: left; }
+  .cmd span { color: var(--faint); }
+
+  .foot { margin-top: 30px; text-align: center; color: var(--faint); font-family: var(--mono); font-size: 11px; letter-spacing: 0.05em; }
+  .foot b { color: var(--mint); }
+
+  /* Governance alerts banner */
+  #alerts { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+  #alerts:empty { display: none; }
+  .alert { display: flex; align-items: flex-start; gap: 12px; padding: 12px 16px; border-radius: 11px; border: 1px solid var(--line-soft); background: var(--panel); }
+  .alert .sev { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 8px; border-radius: 6px; white-space: nowrap; margin-top: 2px; }
+  .alert.critical { border-color: rgba(240,107,90,0.4); background: rgba(240,107,90,0.07); }
+  .alert.critical .sev { background: rgba(240,107,90,0.18); color: var(--coral); }
+  .alert.warn .sev { background: rgba(233,185,73,0.16); color: var(--gold); }
+  .alert.info .sev { background: rgba(98,98,109,0.18); color: var(--faint); }
+  .alert .abody { flex: 1; }
+  .alert .atitle { font-weight: 600; color: var(--text); }
+  .alert .ametric { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-left: 8px; }
+  .alert .adetail { color: var(--muted); font-size: 12.5px; margin-top: 2px; line-height: 1.5; }
+  .demobar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding: 10px 16px; border-radius: 11px;
+    border: 1px solid rgba(233,185,73,0.45); background: rgba(233,185,73,0.08); color: var(--muted); font-size: 12.5px; }
+  .demobar .demotag { font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 0.12em; padding: 3px 9px;
+    border-radius: 6px; background: rgba(233,185,73,0.2); color: var(--gold); white-space: nowrap; }
+  .demobar code { font-family: var(--mono); font-size: 11.5px; color: var(--gold); }
+  .fade { animation: fade 0.5s ease both; }
+  @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  /* ---- Return on Intelligence ---- */
+  .vhead { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 40px 0 18px; padding-top: 28px; border-top: 1px solid var(--line-soft); }
+  .vhead h2 { font-family: var(--serif); font-weight: 500; font-size: 22px; letter-spacing: -0.01em; }
+  .vhead .tag { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); margin-top: 3px; }
+  .vbtn { font-family: var(--mono); font-size: 11.5px; color: var(--gold); background: var(--gold-soft); border: 1px solid rgba(233,185,73,0.3); border-radius: 9px; padding: 7px 14px; cursor: pointer; transition: all .18s; }
+  .vbtn:hover { background: rgba(233,185,73,0.2); }
+  .roihero { grid-column: 1/-1; display: grid; grid-template-columns: 1fr 1.4fr; gap: 0; padding: 0; }
+  @media (max-width: 860px) { .roihero { grid-template-columns: 1fr; } }
+  .roihero .idxpane { padding: 26px; border-right: 1px solid var(--line-soft); display: flex; flex-direction: column; justify-content: center; }
+  @media (max-width: 860px) { .roihero .idxpane { border-right: 0; border-bottom: 1px solid var(--line-soft); } }
+  .roibig { font-family: var(--mono); font-weight: 700; font-size: clamp(44px,7vw,66px); line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .roibig small { font-size: 0.3em; color: var(--faint); font-weight: 500; }
+  .roihero .lenspane { padding: 24px 26px; }
+  .lens { display: grid; grid-template-columns: 96px 1fr 46px; gap: 11px; align-items: center; margin: 9px 0; }
+  .lens .ln { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .lens .lt { height: 7px; background: var(--panel-2); border-radius: 6px; overflow: hidden; }
+  .lens .lf { height: 100%; border-radius: 6px; background: linear-gradient(90deg, var(--gold), #f3cf7a); transition: width .6s cubic-bezier(.2,.7,.2,1); }
+  .lens .lv { font-family: var(--mono); font-size: 12px; text-align: right; color: var(--gold); font-variant-numeric: tabular-nums; }
+  .lens .lv.na { color: var(--faint); font-size: 10px; }
+  .wstage, .rrow { display: flex; justify-content: space-between; align-items: center; font-family: var(--mono); font-size: 12px; padding: 7px 0; border-bottom: 1px solid var(--line-soft); }
+  .wstage:last-child, .rrow:last-child { border-bottom: 0; }
+  .wstage .c { color: var(--gold); font-variant-numeric: tabular-nums; }
+  .wstage .c.good { color: var(--mint); }
+  .rec { font-family: var(--mono); font-size: 11.5px; color: var(--muted); padding: 7px 0; line-height: 1.5; border-bottom: 1px solid var(--line-soft); }
+  .rec:last-child { border-bottom: 0; }
+  .rtag { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.08em; padding: 1px 6px; border-radius: 5px; margin-right: 7px; }
+  .rtag.grow { background: rgba(87,210,163,0.14); color: var(--mint); }
+  .rtag.trim { background: rgba(240,107,90,0.14); color: var(--coral); }
+  td.roi { color: var(--mint); text-align: right; }
+  .lenshow { color: var(--faint); font-size: 10.5px; font-family: var(--mono); margin-top: 8px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <svg class="shield" viewBox="0 0 30 34" fill="none">
+        <path d="M15 1 L28 6 V16 C28 25 22 30 15 33 C8 30 2 25 2 16 V6 Z" stroke="#e9b949" stroke-width="1.5" fill="rgba(233,185,73,0.06)"/>
+        <path d="M15 9 L15 22 M9 15 L21 15" stroke="#e9b949" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <div><h1>AegisFlow</h1><div class="tag">local spend console</div></div>
+    </div>
+    <div style="display:flex; align-items:center; gap:18px;">
+      <div class="ranges" id="ranges">
+        <button data-r="today" class="on">Today</button>
+        <button data-r="7d">7d</button>
+        <button data-r="30d">30d</button>
+        <button data-r="all">All</button>
+      </div>
+      <a class="dlcsv" id="dlcsv" href="/api/export.csv?range=today" download title="Download the request ledger as CSV">↓ CSV</a>
+      <span class="live"><span class="dot"></span> LIVE</span>
+    </div>
+  </header>
+
+  <div id="demobanner"></div>
+  <div id="alerts"></div>
+
+  <div class="grid" id="grid"></div>
+
+  <div class="vhead">
+    <div><h2>Return on Intelligence</h2><div class="tag">what the spend returned · git + reported outcomes</div></div>
+    <button class="vbtn" id="vrefresh">↻ Compute</button>
+  </div>
+  <div class="grid" id="vgrid"></div>
+
+  <div class="foot">
+    AegisFlow runs entirely on this machine · <b>no prompt or code leaves your device</b> · <span id="gen"></span>
+  </div>
+</div>
+
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+let RANGE = 'today';
+
+// Escape every dynamic string before it enters markup. Model ids and project
+// names arrive from API responses / request headers, so treat them as untrusted.
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// Inject a fully-escaped HTML string as parsed nodes (no innerHTML sink).
+function setNodes(elNode, html) {
+  const range = document.createRange();
+  range.selectNodeContents(elNode);
+  elNode.replaceChildren(range.createContextualFragment(html));
+}
+
+const usd = (n) => {
+  if (n == null) return '—';
+  if (n === 0) return '0.00';
+  if (n >= 1) return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (n >= 0.01) return n.toFixed(4);
+  return n.toFixed(6);
+};
+// Aggregate dollar amounts (P&L, frontier, caps) read best at 2dp; usd() keeps
+// extra precision for per-request micro-costs and model rates.
+const money = (n) => (n == null ? '—' : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+const tok = (n) => (n || 0).toLocaleString('en-US');
+
+function gauge(pct, over) {
+  const r = 50, c = 2 * Math.PI * r;
+  const p = Math.min(100, Math.max(0, pct));
+  const off = c * (1 - p / 100);
+  const col = over || p > 85 ? 'var(--coral)' : p > 65 ? 'var(--gold)' : 'var(--mint)';
+  return `<svg class="gauge" viewBox="0 0 120 120">
+    <circle cx="60" cy="60" r="${r}" fill="none" stroke="var(--panel-2)" stroke-width="10"/>
+    <circle cx="60" cy="60" r="${r}" fill="none" stroke="${col}" stroke-width="10" stroke-linecap="round"
+      stroke-dasharray="${c}" stroke-dashoffset="${off}" transform="rotate(-90 60 60)"
+      style="transition: stroke-dashoffset 0.7s cubic-bezier(.2,.7,.2,1)"/>
+    <text x="60" y="58" text-anchor="middle" fill="var(--text)" font-size="22" font-weight="700" font-family="var(--mono)">${Math.round(p)}%</text>
+    <text x="60" y="76" text-anchor="middle" fill="var(--faint)" font-size="9" letter-spacing="1" font-family="var(--mono)">USED</text>
+  </svg>`;
+}
+
+function sparkline(series) {
+  if (!series.length) return '<div style="color:var(--faint);font-family:var(--mono);font-size:12px;padding:40px 0;text-align:center">no spend recorded in this window</div>';
+  const w = 1000, h = 150, pad = 10;
+  const max = Math.max(...series.map((s) => s.costUsd), 0.0000001);
+  const n = series.length;
+  const x = (i) => pad + (i / Math.max(1, n - 1)) * (w - pad * 2);
+  const y = (v) => h - pad - (v / max) * (h - pad * 2 - 14);
+  let area = `M ${x(0)} ${h - pad}`;
+  series.forEach((s, i) => { area += ` L ${x(i)} ${y(s.costUsd)}`; });
+  area += ` L ${x(n - 1)} ${h - pad} Z`;
+  let line = '';
+  series.forEach((s, i) => { line += `${i ? 'L' : 'M'} ${x(i)} ${y(s.costUsd)} `; });
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+    <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="rgba(233,185,73,0.35)"/><stop offset="1" stop-color="rgba(233,185,73,0)"/>
+    </linearGradient></defs>
+    <path d="${area}" fill="url(#g)"/>
+    <path d="${line}" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linejoin="round"/>
+  </svg>`;
+}
+
+const SEV_LABEL = { critical: 'CRITICAL', warn: 'WARN', info: 'INFO' };
+function renderAlerts(alerts) {
+  const host = $('#alerts');
+  if (!host) return;
+  if (!alerts || !alerts.length) { setNodes(host, ''); return; }
+  setNodes(host, alerts.map((a) => `
+    <div class="alert ${esc(a.severity)}">
+      <span class="sev">${esc(SEV_LABEL[a.severity] || a.severity)}</span>
+      <div class="abody">
+        <div><span class="atitle">${esc(a.title)}</span>${a.metric ? `<span class="ametric">${esc(a.metric)}</span>` : ''}</div>
+        <div class="adetail">${esc(a.detail)}</div>
+      </div>
+    </div>`).join(''));
+}
+
+function renderDemo(isDemo) {
+  const host = $('#demobanner');
+  if (!host) return;
+  if (!isDemo) { setNodes(host, ''); return; }
+  setNodes(host, `<div class="demobar">
+    <span class="demotag">DEMO DATA</span>
+    <span>Synthetic traffic — priced by the real cost engine, isolated in <code>demo.db</code>. Real metering is untouched. Clear with <code>aegisflow demo --clear</code>.</span>
+  </div>`);
+}
+
+function render(d) {
+  const grid = $('#grid');
+  renderDemo(d.demo);
+  renderAlerts(d.alerts);
+  const b = d.budget;
+  const cap = b.dailyUsd;
+  const over = cap != null && b.todaySpendUsd > cap;
+  const pct = cap ? (b.todaySpendUsd / cap) * 100 : 0;
+  const s = d.summary;
+
+  if (s.requests === 0) {
+    setNodes(grid, `<div class="empty fade card" style="grid-column:1/-1">
+      <h3>Nothing metered yet in this window.</h3>
+      <p>Point your AI coding tools at the proxy, then run them as usual. Every call shows up here in real time — costs computed locally, prompts never stored.</p>
+      <div class="cmd"><span># PowerShell</span><br>$env:ANTHROPIC_BASE_URL="http://localhost:8090"<br>$env:OPENAI_BASE_URL="http://localhost:8090/v1"</div>
+    </div>`);
+    $('#gen').textContent = new Date(d.generatedAt).toLocaleTimeString();
+    return;
+  }
+
+  const budgetPane = cap != null
+    ? `<div class="gaugewrap">${gauge(pct, over)}
+        <div class="budgetinfo">
+          <div class="k">Daily cap</div><div class="v">$${usd(cap)}</div>
+          <div class="k">Remaining today</div><div class="v left">$${usd(b.remainingDailyUsd)}</div>
+        </div></div>`
+    : `<div class="gaugewrap"><div class="nocap">No daily cap set. AegisFlow is metering but not enforcing.<br><br>Set one: <code>aegisflow budget --daily 25</code></div></div>`;
+
+  const maxModel = Math.max(...d.byModel.map((m) => m.costUsd), 0.0000001);
+  const modelBars = d.byModel.slice(0, 7).map((m) => `
+    <div class="bar">
+      <div class="top">
+        <span class="name"><span class="prov">${esc(m.provider)}/</span>${esc(m.label)}</span>
+        <span class="cost">$${usd(m.costUsd)}</span>
+      </div>
+      <div class="track"><div class="fill" style="width:${(m.costUsd / maxModel) * 100}%"></div></div>
+      <div class="meta">${m.requests} req · ${tok(m.inputTokens)} in · ${tok(m.outputTokens)} out</div>
+    </div>`).join('');
+
+  const rows = d.recent.slice(0, 14).map((r) => {
+    const t = new Date(r.tsEpochMs).toLocaleTimeString('en-US', { hour12: false });
+    const tags = [];
+    if (r.statusCode === 429) tags.push('<span class="pill block">BLOCKED</span>');
+    if (r.streamed) tags.push('<span class="pill stream">STREAM</span>');
+    if (r.estimated) tags.push('<span class="pill est">EST</span>');
+    return `<tr>
+      <td class="t">${esc(t)}</td>
+      <td class="prov">${esc(r.provider)}</td>
+      <td class="model">${esc(r.model)}</td>
+      <td>${tok(r.inputTokens)} → ${tok(r.outputTokens)}</td>
+      <td>${tags.join(' ')}</td>
+      <td class="cost">$${usd(r.costUsd)}</td>
+    </tr>`;
+  }).join('');
+
+  const projectBars = d.byProject.map((p) => `
+    <div class="bar"><div class="top"><span class="name">${esc(p.label)}</span><span class="cost">$${usd(p.costUsd)}</span></div>
+    <div class="meta">${p.requests} req</div></div>`).join('');
+
+  const hasUsers = (d.byUser || []).some((u) => u.label !== 'unassigned');
+  const userBars = (d.byUser || []).map((u) => `
+    <div class="bar"><div class="top"><span class="name">${esc(u.label)}</span><span class="cost">$${usd(u.costUsd)}</span></div>
+    <div class="meta">${u.requests} req</div></div>`).join('');
+  const userCard = hasUsers ? `<div class="card fade"><div class="label">By user</div><div class="bars">${userBars}</div></div>` : '';
+
+  setNodes(grid, `
+    <div class="card hero fade">
+      <div class="spend">
+        <div class="label">Spend · ${esc(d.range)}</div>
+        <div class="bignum"><span class="cur">$</span>${usd(s.costUsd)}</div>
+        <div class="sub"><b>${s.requests.toLocaleString()}</b> requests metered · all computed on-device</div>
+      </div>
+      ${budgetPane}
+    </div>
+    <div class="stats fade">
+      <div class="card stat"><div class="label">Requests</div><div class="n req">${s.requests.toLocaleString()}</div></div>
+      <div class="card stat"><div class="label">Input tokens</div><div class="n in">${tok(s.inputTokens)}</div></div>
+      <div class="card stat"><div class="label">Output tokens</div><div class="n out">${tok(s.outputTokens)}</div></div>
+      <div class="card stat"><div class="label">Today's spend</div><div class="n">$${usd(b.todaySpendUsd)}</div></div>
+    </div>
+    <div class="card chartcard fade"><div class="label">Spend over time</div>${sparkline(d.series)}</div>
+    <div class="card fade"><div class="label">By model</div><div class="bars">${modelBars || '<span style="color:var(--faint)">no data</span>'}</div></div>
+    <div class="card fade"><div class="label">By project</div><div class="bars">${projectBars || '<span style="color:var(--faint)">no data</span>'}</div></div>
+    ${userCard}
+    <div class="card recent fade">
+      <div class="label">Recent requests</div>
+      <table>
+        <thead><tr><th>Time</th><th>Provider</th><th>Model</th><th>Tokens</th><th></th><th style="text-align:right">Cost</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`);
+
+  $('#gen').textContent = 'updated ' + new Date(d.generatedAt).toLocaleTimeString();
+}
+
+async function load() {
+  const dl = $('#dlcsv');
+  if (dl) dl.href = '/api/export.csv?range=' + RANGE;
+  try {
+    const res = await fetch('/api/overview?range=' + RANGE);
+    render(await res.json());
+  } catch (e) {
+    setNodes($('#grid'), '<div class="empty card" style="grid-column:1/-1"><h3>Proxy not reachable</h3><p>Start it with aegisflow start.</p></div>');
+  }
+}
+
+$('#ranges').addEventListener('click', (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  document.querySelectorAll('#ranges button').forEach((x) => x.classList.remove('on'));
+  btn.classList.add('on');
+  RANGE = btn.dataset.r;
+  load();
+});
+
+// ---- Return on Intelligence panels ----
+const cap1 = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
+
+function lensBar(name, lens) {
+  if (!lens || !lens.instrumented || lens.value == null) {
+    return `<div class="lens"><span class="ln">${esc(name)}</span><div class="lt"></div><span class="lv na">n/a</span></div>`;
+  }
+  const p = Math.round(lens.value * 100);
+  const cls = name === 'Realization' || name === 'Impact' ? '' : '';
+  return `<div class="lens"><span class="ln">${esc(name)}</span><div class="lt"><div class="lf ${cls}" style="width:${p}%"></div></div><span class="lv">${p}%</span></div>`;
+}
+
+function renderValue(d) {
+  const g = $('#vgrid');
+  const roi = d.roi;
+  const idx = roi && roi.roiIndex != null ? Math.round(roi.roiIndex) : null;
+  const idxColor = idx == null ? 'var(--faint)' : idx > 60 ? 'var(--mint)' : idx > 30 ? 'var(--gold)' : 'var(--coral)';
+  const iv = roi && roi.roiInterval;
+  const band = iv && iv.low != null && iv.high != null && (iv.high - iv.low) > 0.5 ? Math.round(iv.low) + '–' + Math.round(iv.high) : null;
+  const upperBound = !!(roi && roi.indexIsUpperBound && idx != null);
+  const eff = roi && roi.realizedEfficiency != null ? Math.round(roi.realizedEfficiency * 100) + '%' : '—';
+  const cov = roi ? Math.round(roi.coverage * 4) : 0;
+
+  const heroLenses = roi
+    ? ['realization', 'acceptance', 'lift', 'impact'].map((k) => lensBar(cap1(k), roi.lenses[k])).join('')
+    : '<div style="color:var(--faint);font-family:var(--mono);font-size:12px;line-height:1.6">No git repo at the dashboard root, so the coding lenses are unavailable. Non-coding usage is measured below.</div>';
+
+  let pnl = '<div style="color:var(--faint);font-family:var(--mono);font-size:12px">connect a git repo to see the funnel P&amp;L</div>';
+  if (d.realization) {
+    const stages = d.realization.matured.wasteByStage;
+    pnl = stages.length
+      ? stages.map((b) => {
+          const good = b.stage === 'realized';
+          const label = good ? 'realized ✓' : 'died at ' + b.stage;
+          return `<div class="wstage"><span>${esc(label)}</span><span class="c ${good ? 'good' : ''}">$${money(b.costUsd)} · ${b.units}u</span></div>`;
+        }).join('')
+      : '<div style="color:var(--faint);font-family:var(--mono);font-size:12px">no matured units yet</div>';
+  }
+
+  const bud = d.budget;
+  // Prefer the quantified allocation plan (concrete $ moves + projected value
+  // gain); fall back to the qualitative trim/grow when there isn't enough data.
+  const alloc = d.allocation;
+  const reallocs = (alloc && alloc.moves && alloc.moves.length)
+    ? `<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Allocate the same budget by return → <b style="color:var(--mint)">+$${money(alloc.projectedValueGainUsd)}</b> realized value</div>`
+      + alloc.moves.slice(0, 5).map((m) =>
+          `<div class="rec"><span class="rtag grow">MOVE&nbsp;$${money(m.amountUsd)}</span>${esc(m.fromKey)} → ${esc(m.toKey)} <span style="color:var(--mint)">+$${money(m.projectedValueGainUsd)}</span></div>`).join('')
+      + `<div style="font-size:10.5px;color:var(--faint);margin-top:6px;line-height:1.45">${esc(alloc.assumptions[1])}</div>`
+    : (bud.reallocations || []).map((r) =>
+        `<div class="rec"><span class="rtag ${r.action === 'grow' ? 'grow' : 'trim'}">${esc(r.action.toUpperCase())}</span>${esc(r.context)} — ${esc(r.reason)}</div>`).join('');
+
+  let frontierCard = '';
+  if (d.frontier) {
+    const frows = d.frontier.byModelAndTask.slice(0, 10).map((c) =>
+      `<tr><td class="model">${esc(c.key)}</td><td>${c.units}</td><td class="cost">$${money(c.costUsd)}</td><td>${Math.round(c.realizationRate * 100)}%</td><td class="roi">${c.roiIndex == null ? '—' : Math.round(c.roiIndex)}</td></tr>`).join('');
+    const frecs = d.frontier.recommendations.map((r) => `<div class="rec">→ ${esc(r)}</div>`).join('');
+    frontierCard = `<div class="card fade" style="grid-column:1/-1">
+      <div class="label">The frontier — what's best for you (RoI by model × task-type)</div>
+      <table><thead><tr><th>Context</th><th>Units</th><th style="text-align:right">Cost</th><th>Realized</th><th style="text-align:right">RoI</th></tr></thead>
+      <tbody>${frows || '<tr><td colspan="5" style="color:var(--faint)">not enough matured data yet</td></tr>'}</tbody></table>
+      ${frecs ? `<div style="margin-top:12px">${frecs}</div>` : ''}
+    </div>`;
+  }
+
+  // By-project value — the budget owner's view (who/what is the spend paying off).
+  let projectCard = '';
+  if (d.projects && d.projects.length) {
+    const prows = d.projects.map((p) =>
+      `<tr><td class="model">${esc(p.project)}</td><td>${p.units}</td><td class="cost">$${money(p.costUsd)}</td><td>${Math.round(p.realizationRate * 100)}%</td><td class="roi">${p.roiIndex == null ? '—' : Math.round(p.roiIndex)}</td></tr>`).join('');
+    const pa = d.projectAllocation;
+    const paHtml = (pa && pa.moves && pa.moves.length)
+      ? `<div style="margin-top:12px"><div style="font-size:12px;color:var(--muted);margin-bottom:6px">Reallocate across projects → <b style="color:var(--mint)">+$${money(pa.projectedValueGainUsd)}</b> realized value</div>`
+        + pa.moves.slice(0, 4).map((m) =>
+            `<div class="rec"><span class="rtag grow">MOVE&nbsp;$${money(m.amountUsd)}</span>${esc(m.fromKey)} → ${esc(m.toKey)} <span style="color:var(--mint)">+$${money(m.projectedValueGainUsd)}</span></div>`).join('')
+        + `</div>`
+      : '';
+    projectCard = `<div class="card fade" style="grid-column:1/-1">
+      <div class="label">By project — is each team's AI spend paying off? <span style="color:var(--faint)">the budget owner's view</span></div>
+      <table><thead><tr><th>Project</th><th>Units</th><th style="text-align:right">Cost</th><th>Realized</th><th style="text-align:right">RoI</th></tr></thead>
+      <tbody>${prows}</tbody></table>
+      ${paHtml}
+    </div>`;
+  }
+
+  const u = d.usage;
+  const uidx = u.roi.roiIndex != null ? Math.round(u.roi.roiIndex) : null;
+
+  const budBody = bud.recommendedDailyUsd == null
+    ? `<div class="rrow" style="color:var(--muted);font-size:12.5px;line-height:1.5">Not enough spend history yet — keep metering; a value-aware cap appears once there are a few active days of real usage.</div>`
+    : `<div class="rrow"><span style="color:var(--muted)">Recommended daily cap</span><span style="color:var(--mint);font-family:var(--mono)">$${money(bud.recommendedDailyUsd)}</span></div>
+      <div class="rrow"><span style="color:var(--muted)">Soft warn</span><span style="font-family:var(--mono)">$${money(bud.recommendedSoftUsd)}</span></div>
+      ${bud.projectedMonthlyWasteUsd != null ? `<div class="rrow"><span style="color:var(--muted)">Projected monthly waste</span><span style="color:var(--coral);font-family:var(--mono)">$${money(bud.projectedMonthlyWasteUsd)}</span></div>` : ''}
+      ${reallocs ? `<div style="margin-top:10px">${reallocs}</div>` : ''}`;
+
+  const srcLabel = d.valueSource === 'store' ? ' · <span style="color:var(--gold)">stored snapshot</span>'
+    : d.valueSource === 'git' ? ' · <span style="color:var(--muted)">live · git</span>' : '';
+
+  setNodes(g, `
+    <div class="card roihero fade">
+      <div class="idxpane">
+        <div class="label">RoI Index</div>
+        <div class="roibig" style="color:${idxColor}">${idx == null ? '—' : idx}<small> / 100</small></div>
+        ${band ? `<div style="font-family:var(--mono);font-size:11.5px;color:var(--muted);margin-top:3px">partially-identified interval <b style="color:var(--text)">${band}</b></div>` : ''}
+        ${upperBound ? `<div style="font-family:var(--mono);font-size:11px;color:var(--gold);margin-top:3px">↑ upper bound — wiring the rest can only lower it</div>` : ''}
+        <div class="sub" style="color:var(--muted);margin-top:12px;font-size:12.5px">Realized efficiency <b style="color:var(--text);font-family:var(--mono)">${esc(eff)}</b> · ${cov}/4 lenses wired${srcLabel}</div>
+      </div>
+      <div class="lenspane">
+        <div class="label">Value lenses · geometric mean — no axis can carry it alone</div>
+        ${heroLenses}
+      </div>
+    </div>
+    <div class="card fade"><div class="label">Where the spend went</div>${pnl}</div>
+    <div class="card fade">
+      <div class="label">Budget advisor</div>
+      ${budBody}
+    </div>
+    ${frontierCard}
+    ${projectCard}
+    <div class="card fade" style="grid-column:1/-1">
+      <div class="label">Non-coding usage · chat · research · drafting</div>
+      <div class="rrow"><span style="color:var(--muted)">RoI Index</span><span style="font-family:var(--mono);color:${uidx == null ? 'var(--faint)' : 'var(--mint)'}">${uidx == null ? 'n/a' : uidx + ' / 100'}</span></div>
+      <div class="rrow"><span style="color:var(--muted)">Realized sessions</span><span style="font-family:var(--mono)">${u.realizedUnits}/${u.units.length} · $${money(u.totalCostUsd)}</span></div>
+      <div class="lenshow">Acceptance &amp; survival are n/a for non-code (no diff, no git) — realized = a reported, no-incident outcome. Wire with: <span style="color:var(--gold)">aegisflow report --session &lt;id&gt; --kind used</span></div>
+    </div>`);
+}
+
+async function loadValue() {
+  const g = $('#vgrid');
+  setNodes(g, '<div class="card" style="grid-column:1/-1;color:var(--faint);font-family:var(--mono);font-size:12px">Computing realized value…</div>');
+  try {
+    const res = await fetch('/api/value');
+    renderValue(await res.json());
+  } catch (e) {
+    setNodes(g, '<div class="card" style="grid-column:1/-1;color:var(--faint)">Could not compute value.</div>');
+  }
+}
+$('#vrefresh').addEventListener('click', loadValue);
+
+load();
+setInterval(load, 4000);
+loadValue();
+</script>
+</body>
+</html>

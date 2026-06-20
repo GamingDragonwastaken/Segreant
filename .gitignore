@@ -1,0 +1,14 @@
+node_modules/
+*.log
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.aegisflow/
+dist/
+.DS_Store
+.env
+.env.*
+!.env.example
+coverage/
+*.local

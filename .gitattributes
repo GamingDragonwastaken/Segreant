@@ -1,0 +1,10 @@
+# Normalize all text files to LF inside the repo, regardless of the
+# committer's OS. Keeps diffs clean across Windows / macOS / Linux checkouts.
+* text=auto eol=lf
+
+# Treat these as binary (never normalize / never diff as text).
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.db binary

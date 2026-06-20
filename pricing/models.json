@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "updated": "2026-06-15",
+  "currency": "USD",
+  "unit": "per_million_tokens",
+  "notes": [
+    "Prices are USD per 1,000,000 tokens.",
+    "cache_write_5m / cache_write_1h: cost to WRITE tokens into the prompt cache (Anthropic charges 1.25x input for 5-min TTL, 2x for 1-hour TTL).",
+    "cache_read: cost to READ tokens already in cache (Anthropic ~0.1x input; OpenAI ~0.5x input).",
+    "Anthropic bills extended-thinking ('reasoning') tokens as ordinary OUTPUT tokens. OpenAI bills o-series reasoning tokens inside completion_tokens. There is NO separate reasoning multiplier in current provider pricing.",
+    "Anthropic values verified against platform pricing (2026-06). OpenAI values are community-maintained best-effort and should be re-verified before billing-grade use."
+  ],
+  "providers": {
+    "anthropic": {
+      "verified": true,
+      "source": "platform.claude.com/docs/en/pricing (cache 2026-06)",
+      "models": {
+        "claude-fable-5":   { "input": 10.0, "output": 50.0, "cache_write_5m": 12.50, "cache_write_1h": 20.0, "cache_read": 1.00 },
+        "claude-opus-4-8":  { "input": 5.0,  "output": 25.0, "cache_write_5m": 6.25,  "cache_write_1h": 10.0, "cache_read": 0.50 },
+        "claude-opus-4-7":  { "input": 5.0,  "output": 25.0, "cache_write_5m": 6.25,  "cache_write_1h": 10.0, "cache_read": 0.50 },
+        "claude-opus-4-6":  { "input": 5.0,  "output": 25.0, "cache_write_5m": 6.25,  "cache_write_1h": 10.0, "cache_read": 0.50 },
+        "claude-opus-4-5":  { "input": 5.0,  "output": 25.0, "cache_write_5m": 6.25,  "cache_write_1h": 10.0, "cache_read": 0.50 },
+        "claude-sonnet-4-6":{ "input": 3.0,  "output": 15.0, "cache_write_5m": 3.75,  "cache_write_1h": 6.0,  "cache_read": 0.30 },
+        "claude-sonnet-4-5":{ "input": 3.0,  "output": 15.0, "cache_write_5m": 3.75,  "cache_write_1h": 6.0,  "cache_read": 0.30 },
+        "claude-haiku-4-5": { "input": 1.0,  "output": 5.0,  "cache_write_5m": 1.25,  "cache_write_1h": 2.0,  "cache_read": 0.10 }
+      }
+    },
+    "openai": {
+      "verified": false,
+      "source": "community-maintained best-effort — re-verify before billing-grade use",
+      "models": {
+        "gpt-4o":        { "input": 2.50, "output": 10.0, "cache_read": 1.25 },
+        "gpt-4o-mini":   { "input": 0.15, "output": 0.60, "cache_read": 0.075 },
+        "gpt-4.1":       { "input": 2.00, "output": 8.00, "cache_read": 0.50 },
+        "gpt-4.1-mini":  { "input": 0.40, "output": 1.60, "cache_read": 0.10 },
+        "gpt-4.1-nano":  { "input": 0.10, "output": 0.40, "cache_read": 0.025 },
+        "o3":            { "input": 2.00, "output": 8.00, "cache_read": 0.50 },
+        "o4-mini":       { "input": 1.10, "output": 4.40, "cache_read": 0.275 }
+      }
+    }
+  },
+  "fallbacks": {
+    "comment": "Used when a model name is unknown. Heuristic match by substring; otherwise the 'unknown' rate (conservative mid-tier) is applied and the request is flagged estimated=true.",
+    "unknown": { "input": 3.0, "output": 15.0, "cache_read": 0.30 }
+  }
+}

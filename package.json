@@ -1,0 +1,40 @@
+{
+  "name": "aegisflow",
+  "version": "0.1.0",
+  "description": "Local-first proxy that meters and caps what your AI coding agents spend — without sending a byte of your code anywhere.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "bin": {
+    "aegisflow": "bin/aegisflow.mjs"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning bin/aegisflow.mjs start",
+    "aegis": "node --disable-warning=ExperimentalWarning bin/aegisflow.mjs",
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "files": [
+    "bin",
+    "src",
+    "pricing"
+  ],
+  "keywords": [
+    "finops",
+    "llm",
+    "proxy",
+    "tokens",
+    "cost",
+    "claude",
+    "openai",
+    "developer-productivity",
+    "ai-governance"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AegisFlow — govern the spend, not the developer</title>
+<meta name="description" content="A local-first proxy that meters and caps what your AI coding agents spend — in real time, without a byte of your code leaving the machine." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 34'%3E%3Cpath d='M15 1 L28 6 V16 C28 25 22 30 15 33 C8 30 2 25 2 16 V6 Z' fill='%230a0a0d' stroke='%23e9b949' stroke-width='2'/%3E%3Cpath d='M15 9 L15 22 M9 15 L21 15' stroke='%23e9b949' stroke-width='2'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --ink: #0a0a0d;
+    --ink-2: #0e0e12;
+    --panel: #141419;
+    --panel-2: #1a1a21;
+    --line: #25252e;
+    --line-soft: #1c1c24;
+    --text: #efefea;
+    --muted: #a0a0ac;
+    --faint: #6a6a76;
+    --gold: #e9b949;
+    --gold-2: #f3cf7a;
+    --gold-soft: rgba(233, 185, 73, 0.13);
+    --mint: #57d2a3;
+    --coral: #f06b5a;
+    --sky: #7cc4f2;
+    --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    --sans: 'IBM Plex Sans', system-ui, sans-serif;
+    --serif: 'Fraunces', Georgia, serif;
+    --maxw: 1100px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--ink); color: var(--text); font-family: var(--sans);
+    font-size: 16px; line-height: 1.6; -webkit-font-smoothing: antialiased; overflow-x: hidden;
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.035;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .container { max-width: var(--maxw); margin: 0 auto; padding: 0 28px; position: relative; z-index: 1; }
+  a { color: inherit; text-decoration: none; }
+  .mono { font-family: var(--mono); }
+
+  /* ---------- nav ---------- */
+  nav {
+    position: sticky; top: 0; z-index: 50;
+    backdrop-filter: blur(14px); background: rgba(10,10,13,0.72);
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .nav-in { max-width: var(--maxw); margin: 0 auto; padding: 14px 28px; display: flex; align-items: center; justify-content: space-between; }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo svg { width: 24px; height: 27px; filter: drop-shadow(0 2px 8px rgba(233,185,73,0.4)); }
+  .logo b { font-family: var(--serif); font-weight: 600; font-size: 18px; letter-spacing: -0.01em; }
+  .nav-links { display: flex; gap: 28px; align-items: center; }
+  .nav-links a { font-size: 13.5px; color: var(--muted); transition: color 0.2s; }
+  .nav-links a:hover { color: var(--text); }
+  .nav-cta { font-family: var(--mono); font-size: 12.5px; color: var(--gold); border: 1px solid rgba(233,185,73,0.4); padding: 7px 14px; border-radius: 8px; transition: all 0.2s; }
+  .nav-cta:hover { background: var(--gold-soft); }
+  @media (max-width: 720px) { .nav-links a:not(.nav-cta) { display: none; } }
+
+  /* ---------- hero ---------- */
+  .hero { padding: 96px 0 72px; position: relative; }
+  .hero::after {
+    content: ''; position: absolute; top: -120px; left: 50%; transform: translateX(-50%);
+    width: 900px; height: 600px; pointer-events: none; z-index: 0;
+    background: radial-gradient(closest-side, rgba(233,185,73,0.13), transparent 70%);
+  }
+  .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--gold); margin-bottom: 22px; }
+  h1.display {
+    font-family: var(--serif); font-weight: 500; font-size: clamp(40px, 6.6vw, 76px);
+    line-height: 1.02; letter-spacing: -0.025em; max-width: 16ch;
+  }
+  h1.display em { font-style: italic; color: var(--gold); font-weight: 500; }
+  .lede { font-size: clamp(17px, 2.2vw, 21px); color: var(--muted); max-width: 60ch; margin: 28px 0 36px; }
+  .lede b { color: var(--text); font-weight: 500; }
+  .cta-row { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+  .install {
+    display: inline-flex; align-items: center; gap: 14px;
+    font-family: var(--mono); font-size: 15px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 11px; padding: 13px 16px; cursor: pointer; transition: border-color 0.2s;
+  }
+  .install:hover { border-color: rgba(233,185,73,0.5); }
+  .install .pr { color: var(--gold); }
+  .install .copy { font-family: var(--sans); font-size: 11px; color: var(--faint); border-left: 1px solid var(--line); padding-left: 12px; letter-spacing: 0.08em; }
+  .ghost { font-size: 14px; color: var(--muted); display: inline-flex; align-items: center; gap: 7px; }
+  .ghost:hover { color: var(--text); }
+  .trustline { margin-top: 30px; display: flex; gap: 22px; flex-wrap: wrap; font-family: var(--mono); font-size: 12px; color: var(--faint); }
+  .trustline span { display: inline-flex; align-items: center; gap: 7px; }
+  .tick { color: var(--mint); }
+
+  /* hero device mock */
+  .device {
+    margin-top: 64px; border: 1px solid var(--line); border-radius: 16px; overflow: hidden;
+    background: linear-gradient(180deg, var(--panel), var(--ink-2));
+    box-shadow: 0 40px 120px -40px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.03);
+  }
+  .device .bar { display: flex; align-items: center; gap: 8px; padding: 13px 16px; border-bottom: 1px solid var(--line-soft); }
+  .device .bar i { width: 11px; height: 11px; border-radius: 50%; background: #2a2a33; display: inline-block; }
+  .device .bar .url { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-left: 10px; }
+  .device .body { padding: 28px; display: grid; grid-template-columns: 1.3fr 1fr; gap: 24px; }
+  @media (max-width: 720px) { .device .body { grid-template-columns: 1fr; } }
+  .mlabel { font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); margin-bottom: 12px; }
+  .mbig { font-family: var(--mono); font-weight: 700; font-size: 52px; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .mbig .c { color: var(--gold); font-size: 0.5em; vertical-align: 0.6em; }
+  .msub { color: var(--faint); font-family: var(--mono); font-size: 12px; margin-top: 8px; }
+  .gring { display: flex; align-items: center; gap: 18px; margin-top: 8px; }
+  .mrow { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 12.5px; padding: 9px 0; border-bottom: 1px solid var(--line-soft); }
+  .mrow:last-child { border: 0; }
+  .mrow .m { color: var(--muted); } .mrow .v { color: var(--gold); }
+
+  /* ---------- sections ---------- */
+  section { padding: 84px 0; position: relative; }
+  .sec-eyebrow { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin-bottom: 16px; }
+  h2.head { font-family: var(--serif); font-weight: 500; font-size: clamp(28px, 4vw, 44px); line-height: 1.08; letter-spacing: -0.02em; max-width: 20ch; }
+  h2.head em { font-style: italic; color: var(--gold); }
+  .sec-lede { font-size: 17px; color: var(--muted); max-width: 62ch; margin-top: 18px; }
+
+  .divider { height: 1px; background: var(--line-soft); }
+
+  /* problem cards */
+  .cards3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 48px; }
+  @media (max-width: 800px) { .cards3 { grid-template-columns: 1fr; } }
+  .pcard { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 26px; }
+  .pcard .n { font-family: var(--mono); font-size: 12px; color: var(--coral); letter-spacing: 0.1em; }
+  .pcard h3 { font-family: var(--serif); font-weight: 500; font-size: 20px; margin: 14px 0 10px; }
+  .pcard p { font-size: 14.5px; color: var(--muted); }
+
+  /* how it works */
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; margin-top: 50px; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+  @media (max-width: 800px) { .steps { grid-template-columns: 1fr; } }
+  .step { padding: 30px; border-right: 1px solid var(--line-soft); background: var(--panel); }
+  .step:last-child { border-right: 0; }
+  @media (max-width: 800px) { .step { border-right: 0; border-bottom: 1px solid var(--line-soft); } }
+  .step .k { font-family: var(--mono); font-size: 34px; font-weight: 700; color: var(--gold); opacity: 0.85; }
+  .step h3 { font-family: var(--serif); font-weight: 500; font-size: 19px; margin: 12px 0 10px; }
+  .step p { font-size: 14px; color: var(--muted); }
+  .step code { font-family: var(--mono); font-size: 12.5px; color: var(--gold); background: var(--gold-soft); padding: 2px 7px; border-radius: 6px; }
+
+  /* feature grid */
+  .feat { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; margin-top: 48px; }
+  @media (max-width: 720px) { .feat { grid-template-columns: 1fr; } }
+  .fcard { display: flex; gap: 16px; padding: 24px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
+  .fcard .ic { width: 38px; height: 38px; flex: none; border-radius: 10px; background: var(--gold-soft); display: grid; place-items: center; }
+  .fcard .ic svg { width: 19px; height: 19px; stroke: var(--gold); }
+  .fcard h3 { font-size: 16px; font-weight: 600; margin-bottom: 5px; }
+  .fcard p { font-size: 14px; color: var(--muted); }
+
+  /* the metric section */
+  .vs { display: grid; grid-template-columns: 1fr auto 1fr; gap: 0; align-items: stretch; margin-top: 48px; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+  @media (max-width: 800px) { .vs { grid-template-columns: 1fr; } }
+  .vs .col { padding: 30px; }
+  .vs .old { background: var(--panel); }
+  .vs .new { background: linear-gradient(180deg, rgba(233,185,73,0.07), var(--panel)); }
+  .vs .mid { display: grid; place-items: center; padding: 0 6px; background: var(--ink-2); border-left: 1px solid var(--line-soft); border-right: 1px solid var(--line-soft); }
+  @media (max-width: 800px) { .vs .mid { padding: 14px; border: 0; border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); } }
+  .vs .mid span { font-family: var(--mono); font-size: 12px; color: var(--faint); letter-spacing: 0.1em; }
+  .vs .tag { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 14px; }
+  .vs .old .tag { color: var(--coral); }
+  .vs .new .tag { color: var(--gold); }
+  .vs h3 { font-family: var(--serif); font-weight: 500; font-size: 24px; margin-bottom: 8px; }
+  .vs .unit { font-family: var(--mono); font-size: 13px; color: var(--muted); margin-bottom: 18px; }
+  .vs ul { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .vs li { font-size: 14px; color: var(--muted); padding-left: 22px; position: relative; }
+  .vs li::before { position: absolute; left: 0; top: 0; font-family: var(--mono); }
+  .vs .old li::before { content: '✕'; color: var(--coral); }
+  .vs .new li::before { content: '✓'; color: var(--mint); }
+
+  .formula { margin-top: 30px; text-align: center; padding: 30px; border: 1px solid var(--line); border-radius: 14px; background: var(--ink-2); }
+  .formula .eq { font-family: var(--mono); font-size: clamp(16px, 2.6vw, 24px); }
+  .formula .eq b { color: var(--gold); }
+  .formula .eq .frac { display: inline-flex; flex-direction: column; vertical-align: middle; margin: 0 6px; }
+  .formula .eq .frac span { padding: 2px 10px; }
+  .formula .eq .frac .num { border-bottom: 1.5px solid var(--gold); color: var(--mint); }
+  .formula .eq .frac .den { color: var(--coral); }
+  .formula .cap { font-size: 13.5px; color: var(--muted); margin-top: 16px; max-width: 60ch; margin-left: auto; margin-right: auto; }
+
+  .ymetrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 18px; }
+  @media (max-width: 720px) { .ymetrics { grid-template-columns: 1fr; } }
+  .ym { padding: 24px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+  .ym .h { font-family: var(--mono); font-size: 12px; color: var(--gold); letter-spacing: 0.08em; margin-bottom: 10px; }
+  .ym h4 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+  .ym p { font-size: 13.5px; color: var(--muted); }
+
+  /* trust band */
+  .trust { background: linear-gradient(180deg, var(--ink-2), var(--ink)); border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
+  .trust .pill { display: inline-block; font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--mint); border: 1px solid rgba(87,210,163,0.3); border-radius: 30px; padding: 5px 14px; margin-bottom: 22px; }
+  .priority { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 32px; }
+  .priority .p { font-family: var(--mono); font-size: 13px; padding: 9px 15px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+  .priority .p b { color: var(--gold); }
+  .priority .arrow { color: var(--faint); align-self: center; }
+
+  /* comparison */
+  .cmp { margin-top: 44px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .cmp table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .cmp th, .cmp td { text-align: left; padding: 15px 18px; border-bottom: 1px solid var(--line-soft); }
+  .cmp thead th { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); background: var(--ink-2); }
+  .cmp tbody tr:last-child td { border-bottom: 0; }
+  .cmp .name { color: var(--text); font-weight: 500; }
+  .cmp .me { background: rgba(233,185,73,0.05); }
+  .cmp .me .name { color: var(--gold); }
+  .yes { color: var(--mint); } .no { color: var(--faint); } .part { color: var(--gold); }
+  @media (max-width: 720px) { .cmp { overflow-x: auto; } .cmp table { min-width: 640px; } }
+
+  /* numbers */
+  .nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-top: 44px; }
+  @media (max-width: 720px) { .nums { grid-template-columns: repeat(2, 1fr); } }
+  .nstat { text-align: center; padding: 26px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+  .nstat .big { font-family: var(--mono); font-weight: 700; font-size: 36px; color: var(--gold); letter-spacing: -0.02em; }
+  .nstat .lbl { font-size: 13px; color: var(--muted); margin-top: 8px; }
+  .disclaimer { margin-top: 22px; font-size: 12.5px; color: var(--faint); font-style: italic; }
+
+  /* final cta */
+  .final { text-align: center; padding: 100px 0; position: relative; }
+  .final::after { content: ''; position: absolute; inset: 0; z-index: 0; background: radial-gradient(closest-side at 50% 40%, rgba(233,185,73,0.1), transparent 70%); pointer-events: none; }
+  .final h2 { font-family: var(--serif); font-weight: 500; font-size: clamp(30px, 5vw, 52px); letter-spacing: -0.02em; position: relative; }
+  .final p { color: var(--muted); margin: 18px auto 34px; max-width: 52ch; position: relative; }
+  .final .cta-row { justify-content: center; position: relative; }
+
+  /* footer */
+  footer { border-top: 1px solid var(--line-soft); padding: 44px 0; }
+  .foot-in { display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; }
+  .foot-in .mono { font-size: 12px; color: var(--faint); }
+  .foot-links { display: flex; gap: 22px; font-size: 13px; color: var(--muted); }
+
+  /* reveal animation — gated behind .js so content is fully visible without
+     JavaScript (accessibility, SEO, no-JS robustness). Animation is enhancement. */
+  .js .reveal { opacity: 0; transform: translateY(18px); transition: opacity 0.7s ease, transform 0.7s cubic-bezier(.2,.7,.2,1); }
+  .js .reveal.in { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) { .js .reveal { opacity: 1; transform: none; transition: none; } }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-in">
+    <a class="logo" href="#top">
+      <svg viewBox="0 0 30 34" fill="none"><path d="M15 1 L28 6 V16 C28 25 22 30 15 33 C8 30 2 25 2 16 V6 Z" stroke="#e9b949" stroke-width="1.5" fill="rgba(233,185,73,0.06)"/><path d="M15 9 L15 22 M9 15 L21 15" stroke="#e9b949" stroke-width="1.5" stroke-linecap="round"/></svg>
+      <b>AegisFlow</b>
+    </a>
+    <div class="nav-links">
+      <a href="#problem">The problem</a>
+      <a href="#measure">The metric</a>
+      <a href="#how">How it works</a>
+      <a href="#trust">Trust</a>
+      <a href="#compare">Compare</a>
+      <a class="nav-cta" href="#start">Get started →</a>
+    </div>
+  </div>
+</nav>
+
+<a id="top"></a>
+<header class="hero">
+  <div class="container">
+    <div class="eyebrow reveal">AI FinOps for engineering teams</div>
+    <h1 class="display reveal">Govern the spend.<br><em>Not</em> the developer.</h1>
+    <p class="lede reveal">Your AI coding agents bill by the token now — and an agent stuck in a loop overnight doesn't send a warning, it sends an invoice. AegisFlow is a <b>local-first proxy</b> that meters every call, caps runaway spend, and — the part that actually matters — <b>measures whether that spend produced work worth keeping.</b> All on-device. No byte of your code leaves the machine.</p>
+    <div class="cta-row reveal">
+      <div class="install" id="install" title="Click to copy">
+        <span><span class="pr">$</span> npx aegisflow start</span>
+        <span class="copy" id="copyLabel">COPY</span>
+      </div>
+      <a class="ghost" href="#how">See how it works <span>↓</span></a>
+    </div>
+    <div class="trustline reveal">
+      <span><span class="tick">✓</span> Local-first — zero data egress</span>
+      <span><span class="tick">✓</span> Works with Claude Code, Cursor, OpenAI SDK</span>
+      <span><span class="tick">✓</span> MIT licensed</span>
+    </div>
+
+    <div class="device reveal">
+      <div class="bar"><i></i><i></i><i></i><span class="url">localhost:8091  ·  aegisflow console</span></div>
+      <div class="body">
+        <div>
+          <div class="mlabel">Spend · today</div>
+          <div class="mbig"><span class="c">$</span>42.18</div>
+          <div class="msub">1,204 requests metered · all computed on-device</div>
+          <div class="gring">
+            <svg width="92" height="92" viewBox="0 0 120 120">
+              <circle cx="60" cy="60" r="50" fill="none" stroke="#1a1a21" stroke-width="10"/>
+              <circle cx="60" cy="60" r="50" fill="none" stroke="#e9b949" stroke-width="10" stroke-linecap="round" stroke-dasharray="314" stroke-dashoffset="84" transform="rotate(-90 60 60)"/>
+              <text x="60" y="58" text-anchor="middle" fill="#efefea" font-size="22" font-weight="700" font-family="JetBrains Mono">73%</text>
+              <text x="60" y="76" text-anchor="middle" fill="#6a6a76" font-size="9" font-family="JetBrains Mono">USED</text>
+            </svg>
+            <div>
+              <div class="msub" style="margin:0">DAILY CAP</div>
+              <div class="mono" style="font-size:18px;margin:2px 0 10px">$58.00</div>
+              <div class="msub" style="margin:0">REMAINING</div>
+              <div class="mono" style="font-size:18px;color:#57d2a3">$15.82</div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="mlabel">By model</div>
+          <div class="mrow"><span class="m">anthropic / claude-opus-4-8</span><span class="v">$28.40</span></div>
+          <div class="mrow"><span class="m">anthropic / claude-sonnet-4-6</span><span class="v">$9.96</span></div>
+          <div class="mrow"><span class="m">openai / gpt-4o</span><span class="v">$3.12</span></div>
+          <div class="mrow"><span class="m">openai / o4-mini</span><span class="v">$0.70</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section id="problem">
+  <div class="container">
+    <div class="sec-eyebrow reveal">The problem · "tokenmaxxing"</div>
+    <h2 class="head reveal">When tokens become the metric, <em>tokens become the goal.</em></h2>
+    <p class="sec-lede reveal">It's Goodhart's Law, applied to engineering: the moment raw AI usage is treated as productivity, workflows bend to maximize the number instead of the work. Three forces turn that into a runaway bill.</p>
+    <div class="cards3">
+      <div class="pcard reveal"><div class="n">01 / GAMING</div><h3>The metric gets gamed</h3><p>Parallel agents left looping unattended, padded prompts, redundant re-summaries — activity inflates while shipped code does not.</p></div>
+      <div class="pcard reveal"><div class="n">02 / AGENTIC LOOPS</div><h3>Costs compound silently</h3><p>Agentic tools re-process context across multi-step tool calls. One stuck loop can burn more in an hour than a developer does in a week — with no guarantee anything compiles.</p></div>
+      <div class="pcard reveal"><div class="n">03 / USAGE BILLING</div><h3>The ceiling is gone</h3><p>As providers move from flat subscriptions to usage-based pricing, a predictable license cost becomes a volatile, uncapped token bill nobody sees until the invoice lands.</p></div>
+    </div>
+    <div class="reveal" style="margin-top:34px; border-left:3px solid var(--coral); background:var(--ink-2); border-radius:0 12px 12px 0; padding:20px 24px;">
+      <div class="mono" style="font-size:11px; letter-spacing:0.16em; text-transform:uppercase; color:var(--coral); margin-bottom:10px;">Not hypothetical</div>
+      <p style="color:var(--muted); font-size:15px; line-height:1.6; margin:0;">In early 2026, <b style="color:var(--text)">Meta</b> ("Claudeonomics") and <b style="color:var(--text)">Amazon</b> ("KiroRank") stood up internal token-consumption leaderboards. Spend spiked roughly <b style="color:var(--text)">10×</b> in six months with no matching gain in output — and both were quietly shut down. Token-as-metric doesn't just fail in theory; it has already failed in production.</p>
+    </div>
+    <p class="sec-lede reveal" style="margin-top:36px">Traditional APM can't help here. A request that costs <span class="mono" style="color:var(--mint)">$0.002</span> and a bloated loop that costs <span class="mono" style="color:var(--coral)">$0.40</span> look identical when you only measure latency and errors. The cost dimension is simply invisible.</p>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section id="measure">
+  <style>
+    .funnel { margin-top: 34px; border: 1px solid var(--line); border-radius: 16px; background: var(--ink-2); padding: 30px clamp(18px,3vw,40px); }
+    .funnel .fhdr { display: flex; justify-content: space-between; align-items: baseline; font-family: var(--mono); font-size: 12px; color: var(--faint); letter-spacing: 0.08em; margin-bottom: 22px; flex-wrap: wrap; gap: 8px; }
+    .funnel .fhdr b { color: var(--gold); }
+    .frow { display: grid; grid-template-columns: 96px 1fr 132px; align-items: center; gap: 14px; padding: 5px 0; }
+    .frow .glabel { font-family: var(--mono); font-size: 12px; color: var(--muted); text-align: right; }
+    .frow .track { height: 22px; background: rgba(255,255,255,0.03); border-radius: 6px; overflow: hidden; }
+    .frow .fill { height: 100%; border-radius: 6px; background: linear-gradient(90deg, rgba(233,185,73,0.30), var(--gold)); transition: width 0.9s cubic-bezier(.2,.7,.2,1); }
+    .frow.realized .fill { background: linear-gradient(90deg, rgba(87,210,163,0.4), var(--mint)); }
+    .frow .gval { font-family: var(--mono); font-size: 12px; color: var(--faint); text-align: left; font-variant-numeric: tabular-nums; }
+    .frow .gval .leak { color: var(--coral); }
+    .frow .gval .keep { color: var(--mint); }
+    .rstats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 28px; }
+    @media (max-width: 720px) { .rstats { grid-template-columns: 1fr; } .frow { grid-template-columns: 72px 1fr; } .frow .gval { grid-column: 2; text-align: right; } }
+    .rstat { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); padding: 22px; }
+    .rstat .k { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold); }
+    .rstat .big { font-family: var(--mono); font-weight: 700; font-size: 40px; letter-spacing: -0.02em; margin: 12px 0 6px; font-variant-numeric: tabular-nums; }
+    .rstat.dollarfree .big { color: var(--mint); }
+    .rstat.money .big { color: var(--gold); }
+    .rstat.collab .big { color: var(--text); }
+    .rstat p { color: var(--muted); font-size: 13.5px; line-height: 1.5; }
+    .rstat .lens { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); }
+    .receipt { margin-top: 26px; display: grid; grid-template-columns: auto 1fr; gap: 22px; align-items: center; border: 1px solid var(--line); border-radius: 14px; background: var(--ink-2); padding: 22px clamp(16px,2.5vw,28px); }
+    @media (max-width: 720px) { .receipt { grid-template-columns: 1fr; } }
+    .receipt pre { font-family: var(--mono); font-size: 11px; line-height: 1.55; color: var(--muted); background: var(--ink); border: 1px solid var(--line-soft); border-radius: 10px; padding: 14px 16px; margin: 0; white-space: pre; overflow-x: auto; }
+    .receipt pre .v { color: var(--gold); } .receipt pre .ok { color: var(--mint); }
+    .receipt h4 { font-family: var(--serif); font-weight: 500; font-size: 19px; margin: 0 0 8px; }
+    .receipt p { color: var(--muted); font-size: 13.5px; line-height: 1.55; }
+  </style>
+  <div class="container">
+    <div class="sec-eyebrow reveal">The new standard · a unit of account for AI work</div>
+    <h2 class="head reveal">So how do you know you're using AI <em>well?</em></h2>
+    <p class="sec-lede reveal">Tokens measure consumption. "Lines of code" rewards verbosity. Neither answers the only question that matters: <b style="color:var(--text)">did the spend become a verified, durable, correct outcome?</b> The Realization Standard scores every commit through a funnel of eight objective gates — and <b style="color:var(--text)">production is measured dollar-free.</b> Money is a lens laid on top, never the definition.</p>
+
+    <div class="funnel reveal">
+      <div class="fhdr"><span>THE REALIZATION FUNNEL · <b>$1,000</b> of AI spend, one sprint</span><span>illustrative</span></div>
+      <div class="frow"><div class="glabel">Proposed</div><div class="track"><div class="fill" style="width:100%"></div></div><div class="gval">$1,000 · AI originated</div></div>
+      <div class="frow"><div class="glabel">Accepted</div><div class="track"><div class="fill" style="width:88%"></div></div><div class="gval"><span class="leak">−$120</span> rewritten</div></div>
+      <div class="frow"><div class="glabel">Committed</div><div class="track"><div class="fill" style="width:88%"></div></div><div class="gval">$880 in git</div></div>
+      <div class="frow"><div class="glabel">Tested</div><div class="track"><div class="fill" style="width:82%"></div></div><div class="gval"><span class="leak">−$60</span> failed tests</div></div>
+      <div class="frow"><div class="glabel">Merged</div><div class="track"><div class="fill" style="width:78%"></div></div><div class="gval"><span class="leak">−$40</span> never merged</div></div>
+      <div class="frow"><div class="glabel">Shipped</div><div class="track"><div class="fill" style="width:72%"></div></div><div class="gval"><span class="leak">−$60</span> never shipped</div></div>
+      <div class="frow"><div class="glabel">Survived</div><div class="track"><div class="fill" style="width:66%"></div></div><div class="gval"><span class="leak">−$60</span> churned out</div></div>
+      <div class="frow realized"><div class="glabel">Clean</div><div class="track"><div class="fill" style="width:61%"></div></div><div class="gval"><span class="keep">$610 realized</span></div></div>
+    </div>
+
+    <div class="rstats reveal">
+      <div class="rstat dollarfree">
+        <div class="k">Realization Rate</div>
+        <div class="big">61%</div>
+        <div class="lens">production · dollar-free</div>
+        <p>Share of work that reached verified, durable value. The answer to "are we turning AI into real outcomes?"</p>
+      </div>
+      <div class="rstat money">
+        <div class="k">Realized Value</div>
+        <div class="big">$610</div>
+        <div class="lens">the money lens · AI P&amp;L</div>
+        <p>The share of spend that reached realized — cost matched to outcome. For the buyer. A lens, not the soul.</p>
+      </div>
+      <div class="rstat collab">
+        <div class="k">First-Pass Acceptance</div>
+        <div class="big">88%</div>
+        <div class="lens">collaboration · in-session</div>
+        <p>How much of the AI's <em>proposed</em> diff actually shipped — measured in the proxy path. The signal only an in-path tool can see.</p>
+      </div>
+    </div>
+
+    <div class="vs reveal" style="margin-top:30px">
+      <div class="col old">
+        <div class="tag">What it replaces · gameable</div>
+        <h3>Tokens consumed</h3>
+        <div class="unit">activity going <em>in</em></div>
+        <ul>
+          <li>Rewards spending more, not shipping more</li>
+          <li>A padded prompt scores the same as real work</li>
+          <li>Says nothing about whether the work was realized</li>
+          <li>And "lines of code" just rewards verbosity instead</li>
+        </ul>
+      </div>
+      <div class="mid"><span>→</span></div>
+      <div class="col new">
+        <div class="tag">The standard · outcome-anchored</div>
+        <h3>Realization</h3>
+        <div class="unit">verified outcome coming <em>out</em></div>
+        <ul>
+          <li>Eight objective gates, from proposed to clean-in-prod</li>
+          <li>An unwired gate reads <em>unknown</em> — never faked as a pass</li>
+          <li>Every report shows your instrumentation coverage</li>
+          <li>The way up is to wire more gates, not to game one</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="receipt reveal">
+      <pre>AEGIS VALUE RECEIPT  #a91f…
+─────────────────────────
+unit      backend-refactor
+cost      <span class="v">$4.20</span>
+accepted  <span class="v">91%</span> unchanged
+tested    <span class="ok">passed (47/47)</span>
+shipped   2026-06-14
+survived  27d · 0 incidents
+verdict   <span class="ok">VERIFIED VALUE</span>
+signed    ed25519:9c3a…</pre>
+      <div>
+        <h4>What makes it a <em>standard</em>, not a dashboard</h4>
+        <p>Each realized unit emits a portable, ed25519-signed receipt of <span class="mono" style="color:var(--gold)">cost → gate verdicts → outcome</span>. Anyone — a buyer, an auditor, another tool — can verify the claim with the public key and <b style="color:var(--text)">no access to your source.</b> That is the difference between an internal number and a unit of account the industry can trust.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section id="how">
+  <div class="container">
+    <div class="sec-eyebrow reveal">How it works</div>
+    <h2 class="head reveal">One command. It sits in the path and does the rest.</h2>
+    <p class="sec-lede reveal">AegisFlow is a reverse proxy you point your tools at — no certificate to install, no traffic intercepted that you didn't explicitly route to it.</p>
+    <div class="steps">
+      <div class="step reveal"><div class="k">1</div><h3>Point your tools at it</h3><p>Set <code>ANTHROPIC_BASE_URL</code> and <code>OPENAI_BASE_URL</code> to <code>localhost:8090</code>. Your agents work exactly as before.</p></div>
+      <div class="step reveal"><div class="k">2</div><h3>Every call is metered</h3><p>It reads the exact usage each provider returns — streaming or not — prices it locally against a versioned rate card, and logs it to an on-device SQLite store. Prompt bodies are never stored.</p></div>
+      <div class="step reveal"><div class="k">3</div><h3>Runaway spend gets capped</h3><p>Soft thresholds warn; hard caps block with a clean error; a velocity guard halts an agent burning money in a loop — before the bill, not after.</p></div>
+    </div>
+
+    <div class="feat">
+      <div class="fcard reveal"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><path d="M3 3v18h18"/><path d="M7 14l3-4 3 3 5-7"/></svg></div><div><h3>Real-time cost, per request</h3><p>Watch spend accrue live in a terminal and a local web console. Cost headers come back on every response.</p></div></div>
+      <div class="fcard reveal"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M3 12h6M15 12h6M12 3v6M12 15v6"/></svg></div><div><h3>Cost per commit</h3><p>Correlate spend with the git history it produced — objective cost-per-commit and tokens-per-diff. No invented "efficiency score" to game.</p></div></div>
+      <div class="fcard reveal"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><path d="M12 2L4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6z"/></svg></div><div><h3>Budgets that actually enforce</h3><p>Daily, per-session, and runaway-velocity caps — soft and hard — enforced locally, before money is spent.</p></div></div>
+      <div class="fcard reveal"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg></div><div><h3>Nothing leaves the machine</h3><p>Provider-reported token counts only. No code, no prompts, no keys ever transmitted. Optional team sync is numeric metadata, opt-in.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<section id="trust" class="trust">
+  <div class="container">
+    <span class="pill reveal">Not a surveillance tool</span>
+    <h2 class="head reveal">Built so developers <em>want</em> it on.</h2>
+    <p class="sec-lede reveal">A FinOps tool that developers route around is worthless. AegisFlow is engineered as capability, not control: personal dashboards for self-optimization, team views restricted to aggregates, and a hard architectural priority order that never trades away privacy or speed for analytics.</p>
+    <div class="priority reveal">
+      <span class="p"><b>1.</b> Security &amp; data privacy</span>
+      <span class="arrow">›</span>
+      <span class="p"><b>2.</b> Latency overhead</span>
+      <span class="arrow">›</span>
+      <span class="p"><b>3.</b> Budget enforcement</span>
+      <span class="arrow">›</span>
+      <span class="p"><b>4.</b> UI &amp; overrides</span>
+    </div>
+    <p class="sec-lede reveal" style="margin-top:28px">If two requirements ever conflict, the higher tier wins. Analytics never compromise the first two. That rule is in the architecture, not the marketing.</p>
+  </div>
+</section>
+
+<section id="compare">
+  <div class="container">
+    <div class="sec-eyebrow reveal">Where it fits</div>
+    <h2 class="head reveal">Log readers see the past. Gateways live in the cloud. <em>AegisFlow does both, locally.</em></h2>
+    <div class="cmp reveal">
+      <table>
+        <thead><tr><th>Tool</th><th>Runs</th><th>Real-time control</th><th>Git correlation</th><th>Code stays local</th></tr></thead>
+        <tbody>
+          <tr><td class="name">Usage log readers</td><td>Local CLI</td><td class="no">— passive</td><td class="no">—</td><td class="yes">✓</td></tr>
+          <tr><td class="name">Self-hosted gateways</td><td>Your server</td><td class="part">per-key caps</td><td class="no">—</td><td class="part">your infra</td></tr>
+          <tr><td class="name">High-perf gateways</td><td>Your server</td><td class="yes">✓ blocking</td><td class="no">—</td><td class="part">your infra</td></tr>
+          <tr><td class="name">SaaS observability</td><td>Vendor cloud</td><td class="no">alerts only</td><td class="no">—</td><td class="no">round-trips out</td></tr>
+          <tr class="me"><td class="name">AegisFlow</td><td>Your machine</td><td class="yes">✓ caps + runaway guard</td><td class="yes">✓ cost / commit</td><td class="yes">✓ zero egress</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section id="numbers">
+  <div class="container">
+    <div class="sec-eyebrow reveal">What good governance looks like</div>
+    <h2 class="head reveal">Visibility you can act on, caps you can trust.</h2>
+    <div class="nums">
+      <div class="nstat reveal"><div class="big">&lt;1ms</div><div class="lbl">added latency vs. the provider round-trip it wraps</div></div>
+      <div class="nstat reveal"><div class="big">0 bytes</div><div class="lbl">of prompt or source code that leave the device</div></div>
+      <div class="nstat reveal"><div class="big">100%</div><div class="lbl">of calls metered — streaming and non-streaming</div></div>
+      <div class="nstat reveal"><div class="big">1 cmd</div><div class="lbl">to install and run — no daemon to manage, no build step</div></div>
+    </div>
+    <p class="disclaimer reveal">Cost-reduction figures depend entirely on how wasteful your baseline is. AegisFlow's job is to make that baseline visible and give you the controls to act — it does not promise a fixed percentage. Honest tools quote ranges, not guarantees.</p>
+  </div>
+</section>
+
+<section id="start" class="final">
+  <div class="container">
+    <h2 class="reveal">Put a meter on the engine.</h2>
+    <p class="reveal">Run it once, point your agents at it, and watch every token turn into a number you can see — and a bill you can cap.</p>
+    <div class="cta-row reveal">
+      <div class="install" id="install2" title="Click to copy">
+        <span><span class="pr">$</span> npx aegisflow start</span>
+        <span class="copy" id="copyLabel2">COPY</span>
+      </div>
+      <a class="ghost" href="#how">Read the architecture →</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container foot-in">
+    <a class="logo" href="#top">
+      <svg viewBox="0 0 30 34" fill="none"><path d="M15 1 L28 6 V16 C28 25 22 30 15 33 C8 30 2 25 2 16 V6 Z" stroke="#e9b949" stroke-width="1.5" fill="rgba(233,185,73,0.06)"/><path d="M15 9 L15 22 M9 15 L21 15" stroke="#e9b949" stroke-width="1.5" stroke-linecap="round"/></svg>
+      <b>AegisFlow</b>
+    </a>
+    <div class="foot-links">
+      <a href="#how">How it works</a>
+      <a href="#trust">Trust</a>
+      <a href="#compare">Compare</a>
+    </div>
+    <span class="mono">MIT · local-first · built for the agentic era</span>
+  </div>
+</footer>
+
+<script>
+  // Mark JS active so reveal-hiding applies only when we can also un-hide.
+  document.documentElement.classList.add('js');
+
+  // Copy-to-clipboard for the install commands (no markup injection).
+  function wireCopy(boxId, labelId) {
+    const box = document.getElementById(boxId);
+    const label = document.getElementById(labelId);
+    if (!box) return;
+    box.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText('npx aegisflow start');
+        const prev = label.textContent;
+        label.textContent = 'COPIED ✓';
+        label.style.color = '#57d2a3';
+        setTimeout(() => { label.textContent = prev; label.style.color = ''; }, 1600);
+      } catch (_) { /* clipboard blocked — ignore */ }
+    });
+  }
+  wireCopy('install', 'copyLabel');
+  wireCopy('install2', 'copyLabel2');
+
+  // Staggered scroll reveals.
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((e, i) => {
+      if (e.isIntersecting) {
+        const el = e.target;
+        setTimeout(() => el.classList.add('in'), Math.min(i * 60, 240));
+        io.unobserve(el);
+      }
+    });
+  }, { threshold: 0.12 });
+  document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
+</script>
+</body>
+</html>
