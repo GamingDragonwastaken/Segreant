@@ -6,9 +6,9 @@
 <title>AegisFlow — govern the spend, not the developer</title>
 <meta name="description" content="A local-first proxy that meters and caps what your AI coding agents spend — in real time, without a byte of your code leaving the machine." />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 34'%3E%3Cpath d='M15 1 L28 6 V16 C28 25 22 30 15 33 C8 30 2 25 2 16 V6 Z' fill='%230a0a0d' stroke='%23e9b949' stroke-width='2'/%3E%3Cpath d='M15 9 L15 22 M9 15 L21 15' stroke='%23e9b949' stroke-width='2'/%3E%3C/svg%3E" />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<!-- No web fonts. AegisFlow is local-first: even the landing page makes ZERO
+     external requests. System font stack (prefers nicer faces when locally
+     installed, falls back to elegant platform fonts) — see --serif/--sans/--mono. -->
 <style>
   :root {
     --ink: #0a0a0d;
@@ -26,9 +26,9 @@
     --mint: #57d2a3;
     --coral: #f06b5a;
     --sky: #7cc4f2;
-    --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
-    --sans: 'IBM Plex Sans', system-ui, sans-serif;
-    --serif: 'Fraunces', Georgia, serif;
+    --mono: ui-monospace, 'JetBrains Mono', 'SF Mono', 'Cascadia Code', 'Cascadia Mono', Consolas, Menlo, monospace;
+    --sans: system-ui, -apple-system, 'Segoe UI', 'IBM Plex Sans', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --serif: 'Fraunces', 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
     --maxw: 1100px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
