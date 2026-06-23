@@ -24,6 +24,7 @@ import { acceptanceForCommit, type ProposedFile } from './proposals.ts';
 import { GATE_LADDER, scoreFunnel, type Gate, type GateResult, type Verdict, type FunnelOutcome } from './gates.ts';
 import { classifyTaskType, type TaskType } from './taskType.ts';
 import { computeReturnOnIntelligence, type RoIOptions } from './lenses.ts';
+import { liftFromData, type AiEvent, type DataLiftResult } from './lift.ts';
 
 const run = promisify(execFile);
 
@@ -392,4 +393,37 @@ export function rollupRealization(
       instrumentation,
     },
   };
+}
+
+/**
+ * Bridge: derive a REAL Lift (measured AI time × configured task baselines) for a
+ * report, pulling the request events from the store over the span of the report's
+ * realized work. Keeps lift.ts pure (no store import) and gives the CLI + dashboard
+ * a one-liner for the non-demo path. Uninstrumented when there's no baselined
+ * realized work or no measured AI time — Lift stays honest, never invented.
+ */
+export function liftOptionsFromStore(
+  store: Store,
+  report: RealizationReport,
+  baselineMinutes: Record<string, number>,
+): DataLiftResult {
+  const mature = report.units.filter((u) => !u.maturing);
+  const realized = mature.filter((u) => u.funnel.realized);
+  // Bound the measured-time window to when the realized work actually happened (the
+  // unit attribution windows). timeWithAiMinutes dedupes overlapping windows, so
+  // taking the union of the realized units' spans never double-counts.
+  let events: AiEvent[] = [];
+  if (realized.length > 0) {
+    const startMs = Math.min(...realized.map((u) => u.windowStartMs));
+    const endMs = Math.max(...realized.map((u) => u.windowEndMs));
+    events = store.requestsInRange(startMs, endMs).map((r) => ({
+      sessionId: r.sessionId ?? 'unknown',
+      tsEpochMs: r.tsEpochMs,
+    }));
+  }
+  return liftFromData({
+    units: mature.map((u) => ({ taskType: u.taskType, realized: u.funnel.realized })),
+    events,
+    baselineMinutes,
+  });
 }

@@ -13,7 +13,7 @@ import { dirname, join } from 'node:path';
 import type { Store } from '../store/db.ts';
 import { isDemo, type AegisConfig } from '../config.ts';
 import { startOfLocalDay } from '../budget/guard.ts';
-import { loadRealization, projectValueBreakdown } from '../value/realization.ts';
+import { loadRealization, projectValueBreakdown, liftOptionsFromStore } from '../value/realization.ts';
 import { demoLiftOptions } from '../demo/seed.ts';
 import { recommendAllocation } from '../budget/allocate.ts';
 import { computeReturnOnIntelligence } from '../value/lenses.ts';
@@ -153,9 +153,15 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
           if (loaded) {
             const rep = loaded.report;
             realization = { matured: rep.matured, firstPassAcceptance: rep.firstPassAcceptance, proposalCoverage: rep.proposalCoverage, units: rep.units };
-            // In demo mode, thread a labeled synthetic TSF so the 4th lens and the
-            // RoI interval show live (production reads its own behavioral baseline).
-            const roiOpts = isDemo() ? demoLiftOptions() : {};
+            // Lift: in demo mode a labeled synthetic TSF; otherwise the REAL source
+            // — measured "time with AI" × configured task baselines — so the 4th lens
+            // and the RoI interval reflect this machine's own behavioral data.
+            const roiOpts = isDemo()
+              ? demoLiftOptions()
+              : (() => {
+                  const dl = liftOptionsFromStore(store, rep, config.lift.baselineMinutes);
+                  return { lift: dl.lift, liftRange: dl.liftRange };
+                })();
             roi = computeReturnOnIntelligence(rep, roiOpts);
             frontier = computeFrontier(rep.units);
             // Per-project value (the budget owner's view) + cross-project allocation.

@@ -37,6 +37,19 @@ export interface AlertsConfig {
   minSeverity: 'critical' | 'warn' | 'info';
 }
 
+export interface LiftConfig {
+  /**
+   * Estimated manual minutes a developer would spend per task-type — the
+   * counterfactual baseline for the Lift lens. An auditable ORG input (like the
+   * labor rate), never self-report. The Lift TSF = (these minutes, summed over
+   * realized work) ÷ (measured "time with AI"). Override per task-type to fit your
+   * team; an unknown task-type simply doesn't contribute (Lift stays honest).
+   */
+  baselineMinutes: Record<string, number>;
+  /** Labor rate ($/hr) for break-even + effort tax. null = effort priced at 0. */
+  laborRatePerHour: number | null;
+}
+
 export interface AegisConfig {
   port: number;
   dashboardPort: number;
@@ -46,6 +59,7 @@ export interface AegisConfig {
   };
   budget: BudgetConfig;
   alerts: AlertsConfig;
+  lift: LiftConfig;
   /** Prune request rows older than this many days during maintenance. */
   retentionDays: number;
   /** When true, the proxy logs only metadata and never the prompt/response bodies. */
@@ -69,6 +83,14 @@ export const DEFAULT_CONFIG: AegisConfig = {
   alerts: {
     webhookUrl: null,
     minSeverity: 'warn',
+  },
+  lift: {
+    // Rough industry baselines (manual minutes per task-type) — illustrative
+    // defaults that make Lift work out of the box; tune them to your team via
+    // `aegisflow config`. The measured denominator (time with AI) keeps Lift
+    // honest regardless of these.
+    baselineMinutes: { feature: 240, fix: 90, refactor: 120, test: 60, docs: 45, perf: 120, chore: 30, other: 90 },
+    laborRatePerHour: null,
   },
   retentionDays: 180,
   metadataOnly: true,

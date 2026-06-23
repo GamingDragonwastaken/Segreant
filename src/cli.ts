@@ -25,11 +25,11 @@ import {
   aegisHome,
   type AegisConfig,
 } from './config.ts';
-import { seedDemo, DEMO_TSF } from './demo/seed.ts';
+import { seedDemo, demoLiftOptions } from './demo/seed.ts';
 import { startOfLocalDay } from './budget/guard.ts';
 import { attributeCommits, isGitRepo, projectName, resolveCommit } from './git/correlate.ts';
 import { computeQuality } from './git/quality.ts';
-import { computeRealization, loadRealization } from './value/realization.ts';
+import { computeRealization, loadRealization, liftOptionsFromStore } from './value/realization.ts';
 import { computeReturnOnIntelligence } from './value/lenses.ts';
 import { boundedLift } from './value/lift.ts';
 import { computeFrontier } from './value/frontier.ts';
@@ -804,6 +804,7 @@ async function cmdRoi(flags: Flags): Promise<void> {
   const repo = (flags.repo as string) ?? process.cwd();
   const windowDays = flags.window ? Number(flags.window) : 14;
   const laborRate = flags['labor-rate'] !== undefined ? Number(flags['labor-rate']) : null;
+  const cfg = loadConfig();
   const store = new Store(dbPath());
   const loaded = await loadRealization(store, repo, { windowDays, persist: true });
   if (!loaded) {
@@ -813,20 +814,28 @@ async function cmdRoi(flags: Flags): Promise<void> {
     return;
   }
   const report = loaded.report;
-  // Lift requires a behavioral baseline (a transcript-judge / A-B TSF), supplied
-  // via --tsf. Self-report is never accepted. Absent --tsf, Lift is uninstrumented.
-  // A real Lift needs a behavioral TSF (--tsf). In demo mode we substitute a
-  // labeled synthetic TSF so the interval shows; everywhere else, absent --tsf,
-  // Lift stays honestly uninstrumented.
-  const tsf = flags.tsf !== undefined ? Number(flags.tsf) : isDemo() ? DEMO_TSF : null;
-  const liftEst = boundedLift({ tsfUpperBound: tsf });
-  const roi = computeReturnOnIntelligence(report, {
-    laborRatePerHour: laborRate,
-    lift: liftEst.lensScore,
-    liftRange: { low: liftEst.lensLow, high: liftEst.lensHigh },
-  });
-  if (tsf !== null) roi.notes.unshift(...liftEst.notes);
-  if (isDemo() && flags.tsf === undefined) roi.notes.unshift('Demo: Lift uses a synthetic TSF stand-in for a real transcript-judge / A-B measurement.');
+  // Lift source, in priority order — self-report is NEVER accepted:
+  //   1. --tsf <x>   an externally measured TSF (transcript judge / RCT) — gold standard
+  //   2. demo mode   a labeled synthetic TSF, so the interval shows in the demo
+  //   3. real data   measured "time with AI" × configured task baselines (the
+  //                  default real path; uninstrumented if there's no measured time
+  //                  or no baselined realized work)
+  let liftOpts: { lift: number | null; liftRange: { low: number | null; high: number | null } };
+  let liftNotes: string[];
+  if (flags.tsf !== undefined) {
+    const e = boundedLift({ tsfUpperBound: Number(flags.tsf) });
+    liftOpts = { lift: e.lensScore, liftRange: { low: e.lensLow, high: e.lensHigh } };
+    liftNotes = e.notes;
+  } else if (isDemo()) {
+    liftOpts = demoLiftOptions();
+    liftNotes = ['Demo: Lift uses a synthetic TSF stand-in for a real transcript-judge / A-B measurement.'];
+  } else {
+    const dl = liftOptionsFromStore(store, report, cfg.lift.baselineMinutes);
+    liftOpts = { lift: dl.lift, liftRange: dl.liftRange };
+    liftNotes = dl.notes;
+  }
+  const roi = computeReturnOnIntelligence(report, { laborRatePerHour: laborRate, ...liftOpts });
+  roi.notes.unshift(...liftNotes);
 
   if (flags.json) {
     process.stdout.write(JSON.stringify(roi, null, 2) + '\n');

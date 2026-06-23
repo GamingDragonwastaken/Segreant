@@ -129,3 +129,80 @@ export function breakEven(timeSavedHours: number, laborRatePerHour: number, cost
   const ratio = costUsd > 0 ? valueUsd / costUsd : Infinity;
   return { valueUsd, costUsd, ratio, passes: ratio >= 1 };
 }
+
+export interface WorkItemForLift {
+  taskType: string;
+  realized: boolean;
+}
+
+export interface DataLiftInputs {
+  units: WorkItemForLift[]; // matured work units (task-type + whether it realized)
+  events: AiEvent[]; // request events for the measured "time with AI" denominator
+  baselineMinutes: Record<string, number>; // task-type → estimated manual minutes
+  discounts?: LiftDiscounts;
+}
+
+export interface DataLiftResult {
+  lift: number | null; // lens score (0..1) for computeReturnOnIntelligence({lift})
+  liftRange: { low: number | null; high: number | null };
+  tsf: number | null; // pooled time-savings factor = manualMinutes / aiMinutes
+  estimatedManualMinutes: number;
+  measuredAiMinutes: number;
+  coveredUnits: number; // realized units that had a configured baseline
+  notes: string[];
+}
+
+/**
+ * A REAL, zero-API Lift, computed from data already on the machine:
+ *
+ *   TSF = (estimated manual minutes of REALIZED work) ÷ (measured "time with AI")
+ *
+ * The denominator is fully behavioral — METR's 10-minute concurrency windowing over
+ * real request timestamps. The numerator credits only output that actually realized,
+ * priced by per-task-type baselines (an auditable org input, exactly like the labor
+ * rate — never a self-reported speedup). Because only realized work enters the
+ * numerator while ALL measured AI time enters the denominator, time burned on work
+ * that never realized pulls the TSF DOWN: you cannot inflate Lift by spending more.
+ * The pooled TSF feeds the same METR-discounted `boundedLift`, so the result is a
+ * conservative partially-identified interval, never a false point. Returns
+ * uninstrumented (null) when there's no baselined realized work or no measured AI
+ * time — we never invent a counterfactual.
+ */
+export function liftFromData(inp: DataLiftInputs): DataLiftResult {
+  let estimatedManualMinutes = 0;
+  let coveredUnits = 0;
+  for (const u of inp.units) {
+    if (!u.realized) continue;
+    const b = inp.baselineMinutes[u.taskType];
+    if (typeof b === 'number' && b > 0) {
+      estimatedManualMinutes += b;
+      coveredUnits += 1;
+    }
+  }
+  const measuredAiMinutes = timeWithAiMinutes(inp.events).totalMin;
+  if (coveredUnits === 0 || !(measuredAiMinutes > 0)) {
+    return {
+      lift: null,
+      liftRange: { low: null, high: null },
+      tsf: null,
+      estimatedManualMinutes,
+      measuredAiMinutes,
+      coveredUnits,
+      notes: ['Lift uninstrumented: needs realized work with a configured task baseline AND measured AI time (proxy traffic).'],
+    };
+  }
+  const tsf = estimatedManualMinutes / measuredAiMinutes;
+  const est = boundedLift({ tsfUpperBound: tsf, discounts: inp.discounts });
+  return {
+    lift: est.lensScore,
+    liftRange: { low: est.lensLow, high: est.lensHigh },
+    tsf,
+    estimatedManualMinutes,
+    measuredAiMinutes,
+    coveredUnits,
+    notes: [
+      `Lift from measured data: ${coveredUnits} realized unit(s) ≈ ${Math.round(estimatedManualMinutes)} manual min vs ${Math.round(measuredAiMinutes)} measured AI min → TSF ${tsf.toFixed(2)}×. Baseline-estimated (not a controlled A/B); tighten with --tsf from a transcript judge or RCT.`,
+      ...est.notes,
+    ],
+  };
+}
