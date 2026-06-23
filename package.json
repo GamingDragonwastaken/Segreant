@@ -13,7 +13,8 @@
     "start": "node --disable-warning=ExperimentalWarning bin/aegisflow.mjs start",
     "aegis": "node --disable-warning=ExperimentalWarning bin/aegisflow.mjs",
     "test": "node --disable-warning=ExperimentalWarning --test test/*.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "demo": "node --disable-warning=ExperimentalWarning bin/aegisflow.mjs demo --serve"
   },
   "files": [
     "bin",
