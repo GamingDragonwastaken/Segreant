@@ -300,8 +300,8 @@ test('budget advisor: cap fits usage; low realized value tightens it and project
 
 test('budget advisor: frontier drives trim/grow reallocation', () => {
   const cells: FrontierCell[] = [
-    { key: 'feature · opus', model: 'opus', taskType: 'feature', units: 3, costUsd: 12, realizedValueUsd: 4, realizationRate: 0.33, acceptance: null, costPerUnit: 4, roiIndex: 40 },
-    { key: 'fix · haiku', model: 'haiku', taskType: 'fix', units: 3, costUsd: 3, realizedValueUsd: 3, realizationRate: 1, acceptance: null, costPerUnit: 1, roiIndex: 95 },
+    { key: 'feature · opus', model: 'opus', taskType: 'feature', units: 3, costUsd: 12, realizedValueUsd: 4, netRealizedValueUsd: 4, realizationRate: 0.33, acceptance: null, costPerUnit: 4, roiIndex: 40 },
+    { key: 'fix · haiku', model: 'haiku', taskType: 'fix', units: 3, costUsd: 3, realizedValueUsd: 3, netRealizedValueUsd: 3, realizationRate: 1, acceptance: null, costPerUnit: 1, roiIndex: 95 },
   ];
   const rec = recommendBudget({ dailySpends: [5, 5, 5], realizedValueRate: 0.6, frontier: cells });
   const trim = rec.reallocations.find((r) => r.action === 'trim');

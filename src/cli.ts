@@ -903,7 +903,7 @@ async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
   const allocation =
     frontierCells.length >= 2
       ? recommendAllocation(
-          frontierCells.map((c) => ({ key: c.key, costUsd: c.costUsd, roiIndex: c.roiIndex, realizedValueUsd: c.realizedValueUsd })),
+          frontierCells.map((c) => ({ key: c.key, costUsd: c.costUsd, roiIndex: c.roiIndex, realizedValueUsd: c.netRealizedValueUsd })),
         )
       : null;
 

@@ -20,6 +20,7 @@ export interface FrontierCell {
   units: number;
   costUsd: number;
   realizedValueUsd: number;
+  netRealizedValueUsd: number;
   realizationRate: number;
   acceptance: number | null;
   costPerUnit: number;
@@ -37,13 +38,17 @@ function makeCell(key: string, model: string | null, taskType: string | null, un
   const realized = units.filter((u) => u.funnel.realized);
   const costUsd = units.reduce((s, u) => s + u.attributedCostUsd, 0);
   const realizedValueUsd = realized.reduce((s, u) => s + u.attributedCostUsd, 0);
+  // Net of rework: discount each realized unit's value by its first-pass acceptance
+  // (unknown acceptance → full credit), matching the headline's net efficiency so
+  // the frontier + allocation rank contexts by the SAME value the Index rewards.
+  const netRealizedValueUsd = realized.reduce((s, u) => s + u.attributedCostUsd * (u.acceptance ?? 1), 0);
   const withAcc = units.filter((u) => u.acceptance !== null);
   const acceptance = withAcc.length > 0 ? withAcc.reduce((s, u) => s + (u.acceptance ?? 0), 0) / withAcc.length : null;
   const realizationRate = units.length > 0 ? realized.length / units.length : 0;
   const roiIndex = computeReturnOnIntelligence({
     firstPassAcceptance: acceptance,
     units,
-    matured: { realizationRate, totalCostUsd: costUsd, realizedValueUsd },
+    matured: { realizationRate, totalCostUsd: costUsd, realizedValueUsd, netRealizedValueUsd },
   }).roiIndex;
   return {
     key,
@@ -52,6 +57,7 @@ function makeCell(key: string, model: string | null, taskType: string | null, un
     units: units.length,
     costUsd,
     realizedValueUsd,
+    netRealizedValueUsd,
     realizationRate,
     acceptance,
     costPerUnit: units.length > 0 ? costUsd / units.length : 0,

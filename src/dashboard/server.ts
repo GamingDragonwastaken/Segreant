@@ -168,7 +168,7 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
             projects = projectValueBreakdown(store, { windowDays, roiOptions: roiOpts });
             if (projects.length >= 2) {
               projectAllocation = recommendAllocation(
-                projects.map((p) => ({ key: p.project, costUsd: p.costUsd, roiIndex: p.roiIndex, realizedValueUsd: p.realizedValueUsd })),
+                projects.map((p) => ({ key: p.project, costUsd: p.costUsd, roiIndex: p.roiIndex, realizedValueUsd: p.netRealizedValueUsd })),
               );
             }
           }
@@ -181,7 +181,7 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
           const allocation =
             frontier && frontier.byModelAndTask.length >= 2
               ? recommendAllocation(
-                  frontier.byModelAndTask.map((c) => ({ key: c.key, costUsd: c.costUsd, roiIndex: c.roiIndex, realizedValueUsd: c.realizedValueUsd })),
+                  frontier.byModelAndTask.map((c) => ({ key: c.key, costUsd: c.costUsd, roiIndex: c.roiIndex, realizedValueUsd: c.netRealizedValueUsd })),
                 )
               : null;
           return json(res, 200, {
