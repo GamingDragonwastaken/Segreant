@@ -53,9 +53,17 @@ interface RouteInfo {
   upstreamBase: string;
 }
 
-function detectRoute(req: http.IncomingMessage, cfg: AegisConfig): RouteInfo | null {
+export function detectRoute(req: http.IncomingMessage, cfg: AegisConfig): RouteInfo | null {
   const url = req.url ?? '';
   const headers = req.headers;
+
+  // OpenAI-compatible upstream override: one proxy can meter ANY provider that
+  // speaks the OpenAI wire format (OpenRouter — which itself fronts Gemini,
+  // Claude, Llama, Mistral, DeepSeek — plus Ollama, DeepSeek, Mistral, or a local
+  // model server) by setting x-aegis-openai-base to its base URL. Must be an
+  // absolute http(s) URL; otherwise the configured OpenAI upstream is used.
+  const ovr = headerStr(req, 'x-aegis-openai-base');
+  const openaiBase = ovr && /^https?:\/\//i.test(ovr) ? ovr : cfg.upstreams.openai;
 
   // Path-based detection first (most reliable).
   if (url.startsWith('/v1/messages') || url.includes('/anthropic/')) {
@@ -68,14 +76,14 @@ function detectRoute(req: http.IncomingMessage, cfg: AegisConfig): RouteInfo | n
     url.includes('/embeddings') ||
     url.includes('/openai/')
   ) {
-    return { provider: 'openai', upstreamBase: cfg.upstreams.openai };
+    return { provider: 'openai', upstreamBase: openaiBase };
   }
   // Header-based fallback.
   if (headers['x-api-key'] || headers['anthropic-version']) {
     return { provider: 'anthropic', upstreamBase: cfg.upstreams.anthropic };
   }
   if (typeof headers['authorization'] === 'string') {
-    return { provider: 'openai', upstreamBase: cfg.upstreams.openai };
+    return { provider: 'openai', upstreamBase: openaiBase };
   }
   return null;
 }
@@ -281,11 +289,42 @@ async function handle(
   // --- Forward upstream ---
   const outboundBody = ensureOpenAIUsage(provider, parsed.stream, body);
   const targetUrl = upstreamBase.replace(/\/$/, '') + (req.url ?? '');
-  const upstream = await fetch(targetUrl, {
-    method: req.method,
-    headers: buildUpstreamHeaders(req),
-    body: req.method === 'GET' || req.method === 'HEAD' ? undefined : outboundBody,
-  });
+  let upstream: Response;
+  try {
+    upstream = await fetch(targetUrl, {
+      method: req.method,
+      headers: buildUpstreamHeaders(req),
+      body: req.method === 'GET' || req.method === 'HEAD' ? undefined : outboundBody,
+    });
+  } catch (err) {
+    // The upstream is unreachable (DNS failure, connection refused, network drop).
+    // Fail transparently with a provider-shaped error the client already knows how
+    // to handle, and record the attempt — AegisFlow must never be a worse failure
+    // mode than calling the provider directly.
+    res.writeHead(502, { 'content-type': 'application/json', 'x-aegis-upstream-error': '1' });
+    res.end(providerErrorBody(provider, `upstream unreachable: ${String(err)}`));
+    safeLog(deps, {
+      requestId,
+      sessionId,
+      tsEpochMs: startedAt,
+      provider,
+      model: parsed.model,
+      project,
+      user,
+      taskWeight,
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheWriteTokens: 0,
+      cacheReadTokens: 0,
+      reasoningTokens: 0,
+      costUsd: 0,
+      estimated: false,
+      streamed: parsed.stream,
+      statusCode: 502,
+      durationMs: Date.now() - startedAt,
+    }, decision);
+    return;
+  }
 
   const downHeaders = copyDownstreamHeaders(upstream);
   // Up-front budget context (final cost not yet known for streams).

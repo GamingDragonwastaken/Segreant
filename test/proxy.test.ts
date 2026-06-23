@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { once } from 'node:events';
 import { Store } from '../src/store/db.ts';
-import { createProxyServer } from '../src/proxy/server.ts';
+import { createProxyServer, detectRoute } from '../src/proxy/server.ts';
 import { StreamProposalAccumulator } from '../src/proxy/stream-proposals.ts';
 import { DEFAULT_CONFIG, type AegisConfig } from '../src/config.ts';
 
@@ -324,5 +324,55 @@ test('budget: hard daily cap blocks with 429 once exceeded', async () => {
 
   await proxy.close();
   await upstream.close();
+  store.close();
+});
+
+test('detectRoute: x-aegis-openai-base overrides the OpenAI upstream (any OpenAI-compatible provider)', () => {
+  const cfg = DEFAULT_CONFIG;
+  const mk = (headers: Record<string, string>, url = '/v1/chat/completions') =>
+    ({ url, headers }) as unknown as http.IncomingMessage;
+  assert.equal(detectRoute(mk({ authorization: 'Bearer x' }), cfg)?.upstreamBase, cfg.upstreams.openai);
+  assert.equal(
+    detectRoute(mk({ authorization: 'Bearer x', 'x-aegis-openai-base': 'https://openrouter.ai/api' }), cfg)?.upstreamBase,
+    'https://openrouter.ai/api',
+  );
+  // The Anthropic route ignores the OpenAI override.
+  assert.equal(
+    detectRoute(mk({ 'x-api-key': 'k', 'x-aegis-openai-base': 'https://openrouter.ai/api' }, '/v1/messages'), cfg)?.upstreamBase,
+    cfg.upstreams.anthropic,
+  );
+  // A non-http(s) override is rejected (no file://, ssrf-ish schemes) — falls back to config.
+  assert.equal(
+    detectRoute(mk({ authorization: 'Bearer x', 'x-aegis-openai-base': 'file:///etc/passwd' }), cfg)?.upstreamBase,
+    cfg.upstreams.openai,
+  );
+});
+
+test('upstream unreachable: transparent provider-shaped 502, and the failed attempt is recorded', async () => {
+  // Bind a port, then free it, so nothing is listening — the upstream fetch is refused.
+  const dead = await startMockUpstream();
+  const deadUrl = dead.url;
+  await dead.close();
+
+  const store = new Store(':memory:');
+  const proxy = await startProxy(store, {}, deadUrl);
+
+  const res = await fetch(`${proxy.base}/v1/messages`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-api-key': 'sk-test' },
+    body: JSON.stringify({ model: 'claude-opus-4-8', messages: [{ role: 'user', content: 'hi' }] }),
+  });
+  assert.equal(res.status, 502);
+  assert.equal(res.headers.get('x-aegis-upstream-error'), '1');
+  const json = (await res.json()) as { type?: string; error?: unknown };
+  assert.equal(json.type, 'error', 'Anthropic-shaped error so the client handles it like any provider error');
+
+  await new Promise((r) => setTimeout(r, 20));
+  const recent = store.recent(5);
+  assert.ok(recent.length >= 1, 'the unreachable attempt is logged for the audit trail');
+  assert.equal(recent[0]!.statusCode, 502);
+  assert.equal(recent[0]!.costUsd, 0, 'at zero cost — nothing was spent');
+
+  await proxy.close();
   store.close();
 });
