@@ -43,6 +43,19 @@ architecture puts privacy and latency ahead of analytics, always.
 Requires **Node.js ≥ 22.5** (Node 24 recommended). No build step, no native
 modules — it runs the TypeScript directly and uses Node's built-in SQLite.
 
+**See it work in ten seconds** — no API key, no setup:
+
+```bash
+npm install        # dev toolchain only (AegisFlow has zero runtime deps)
+npm run demo       # seeds labeled synthetic data and opens the dashboard
+```
+
+That lights up every surface — spend, governance alerts, the RoI index and its
+four value lenses, the per-model×task frontier, the budget allocator — all priced
+by the real cost engine in an isolated `demo.db`. Clear it with `aegisflow demo --clear`.
+
+**Then meter your real traffic:**
+
 ```bash
 # from a clone
 node bin/aegisflow.mjs start
@@ -66,11 +79,6 @@ export OPENAI_BASE_URL="http://localhost:8090/v1"
 
 Run your agents as usual. Watch spend accrue in the terminal and at
 **http://localhost:8091**.
-
-> **Want to see it populated first?** `npx aegisflow demo --serve` seeds a
-> clearly-labeled, isolated synthetic dataset (priced by the real cost engine,
-> kept in its own `demo.db`) and opens the dashboard on it — every surface lit
-> up, no API key needed. Remove it any time with `aegisflow demo --clear`.
 
 To stop tracking, unset the variables — traffic routes straight to the provider
 and AegisFlow is out of the path entirely.
@@ -251,6 +259,22 @@ IDE / Agent → ANTHROPIC_BASE_URL/OPENAI_BASE_URL → AegisFlow proxy (:8090)
 
 Full design in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
+### Beyond Anthropic & OpenAI
+
+The OpenAI route speaks the wire format most of the ecosystem now exposes, so
+AegisFlow meters far more than two vendors. Point the OpenAI-compatible path at
+any compatible endpoint, per request, with one header:
+
+```
+X-Aegis-OpenAI-Base: https://openrouter.ai/api    # then call /v1/chat/completions as usual
+```
+
+That covers **OpenRouter** (which itself fronts Gemini, Claude, Llama, Mistral,
+DeepSeek, and more), **Ollama** and other local model servers, **DeepSeek**,
+**Mistral**, and anything else speaking OpenAI's API — every call still metered,
+priced, and capped locally. With no override it uses the configured OpenAI
+upstream. The header is stripped before forwarding; it never leaves the device.
+
 ---
 
 ## What's real, what's not
@@ -272,6 +296,8 @@ number.
 - No prompt text, source code, or credentials are transmitted anywhere.
 - Provider API keys pass through to the provider and are **never stored**.
 - All cost computation happens on-device against a local pricing table.
+- The dashboard itself makes **zero external requests** — no web fonts, no CDNs,
+  no analytics. Open your browser's network tab and confirm it.
 - The local store lives under `~/.aegisflow` (`%USERPROFILE%\.aegisflow` on
   Windows) under your OS file permissions.
 - **The one thing that can leave the device is opt-in and metadata-only:** if you
@@ -297,11 +323,15 @@ toolchain.
 
 ## Status
 
-Working core: proxy (Anthropic + OpenAI, streaming + non-streaming), cost engine,
-budget enforcement + **value-aware allocation**, git correlation with
-**persisted, repo-less realized-value** and a **per-project budget-owner view**,
-terminal + web dashboards. See [docs/ARCHITECTURE.md §7](docs/ARCHITECTURE.md)
-for what comes next (cross-machine team sync, more providers, auto-updating
-pricing).
+Working core: proxy (Anthropic, OpenAI, and **any OpenAI-compatible provider** via
+`x-aegis-openai-base` — OpenRouter, Ollama, DeepSeek, Mistral, …), streaming +
+non-streaming, with transparent fail-open on upstream errors. Cost engine, budget
+enforcement + **value-aware allocation**, git correlation with **persisted,
+repo-less realized-value** and a **per-project budget-owner view**. **Lift** now
+derives from measured time-with-AI × configurable task baselines (no synthetic
+constant in real use). Terminal + a **fully self-contained** web dashboard (zero
+external requests). 90/90 tests, `tsc` clean. See
+[docs/ARCHITECTURE.md §7](docs/ARCHITECTURE.md) for what comes next (cross-machine
+team sync, native non-OpenAI APIs, auto-updating pricing).
 
 MIT licensed.
