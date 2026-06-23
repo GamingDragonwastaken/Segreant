@@ -138,9 +138,3 @@ export function computeCost(provider: Provider, model: string, usage: Normalized
 
   return { costUsd, estimated, rate, components };
 }
-
-/** Rough pre-flight input-cost estimate from a request body, before the call runs. */
-export function estimateInputCost(provider: Provider, model: string, approxInputTokens: number): number {
-  const { rate } = rateFor(provider, model);
-  return per(approxInputTokens, rate.input);
-}

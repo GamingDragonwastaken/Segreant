@@ -125,24 +125,19 @@ function copyDownstreamHeaders(upstream: Response): Record<string, string> {
 interface ParsedRequest {
   model: string;
   stream: boolean;
-  approxInputTokens: number;
 }
 
-function parseRequestBody(provider: Provider, body: Buffer): ParsedRequest {
+function parseRequestBody(body: Buffer): ParsedRequest {
   let model = 'unknown';
   let stream = false;
-  let approxInputTokens = 0;
   try {
     const json = JSON.parse(body.toString('utf8')) as Record<string, unknown>;
     if (typeof json.model === 'string') model = json.model;
     if (json.stream === true) stream = true;
-    // Cheap input-size proxy: ~4 chars/token on the serialized messages.
-    const messages = json.messages ?? json.input ?? json.prompt;
-    if (messages) approxInputTokens = Math.ceil(JSON.stringify(messages).length / 4);
   } catch {
     /* non-JSON body (embeddings binary, etc.) — leave defaults */
   }
-  return { model, stream, approxInputTokens };
+  return { model, stream };
 }
 
 /** For OpenAI streaming, ensure the usage chunk is emitted by the API. */
@@ -228,7 +223,7 @@ async function handle(
   }
 
   const { provider, upstreamBase } = route;
-  const parsed = parseRequestBody(provider, body);
+  const parsed = parseRequestBody(body);
 
   // --- Metadata from custom headers (attribution) ---
   const project = headerStr(req, 'x-aegis-project') ?? 'default';

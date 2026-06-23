@@ -72,8 +72,9 @@ export interface RoIResult {
 export interface RoIOptions {
   laborRatePerHour?: number | null; // unset → effort tax 0, denominator token-only
   minutesPerUnitRework?: number; // modeled minutes a fully-reworked unit costs a human
-  lift?: number | null; // injected behavioral lift score (0..1) when measured; null otherwise
+  lift?: number | null; // injected lift score (0..1) when measured; null otherwise
   liftRange?: { low: number | null; high: number | null }; // partial-ID bound for Lift, in lens-score units
+  liftHow?: string; // how Lift was sourced (baseline estimate / measured A-B / synthetic) — honest disclosure
   weights?: { realization: number; acceptance: number; lift: number; impact: number };
   theta?: number; // CES substitution parameter; 0 (default) = the forced geometric mean
 }
@@ -148,7 +149,7 @@ export function computeReturnOnIntelligence(report: RealizationLike, opts: RoIOp
   const lift: LensValue = {
     value: opts.lift ?? null,
     instrumented: opts.lift !== undefined && opts.lift !== null,
-    how: 'behavioral time-to-outcome / model A-B on like-for-like tasks',
+    how: opts.liftHow ?? 'counterfactual time saved — partially identified (wire a baseline or A-B to tighten)',
   };
   if (!lift.instrumented) notes.push('Lift uninstrumented: needs a measured baseline (model A/B or no-AI control).');
 

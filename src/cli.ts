@@ -820,18 +820,18 @@ async function cmdRoi(flags: Flags): Promise<void> {
   //   3. real data   measured "time with AI" × configured task baselines (the
   //                  default real path; uninstrumented if there's no measured time
   //                  or no baselined realized work)
-  let liftOpts: { lift: number | null; liftRange: { low: number | null; high: number | null } };
+  let liftOpts: { lift: number | null; liftRange: { low: number | null; high: number | null }; liftHow: string };
   let liftNotes: string[];
   if (flags.tsf !== undefined) {
     const e = boundedLift({ tsfUpperBound: Number(flags.tsf) });
-    liftOpts = { lift: e.lensScore, liftRange: { low: e.lensLow, high: e.lensHigh } };
+    liftOpts = { lift: e.lensScore, liftRange: { low: e.lensLow, high: e.lensHigh }, liftHow: 'externally measured TSF (transcript judge / A-B)' };
     liftNotes = e.notes;
   } else if (isDemo()) {
-    liftOpts = demoLiftOptions();
+    liftOpts = { ...demoLiftOptions(), liftHow: 'labeled synthetic TSF (demo stand-in for a real A-B)' };
     liftNotes = ['Demo: Lift uses a synthetic TSF stand-in for a real transcript-judge / A-B measurement.'];
   } else {
     const dl = liftOptionsFromStore(store, report, cfg.lift.baselineMinutes);
-    liftOpts = { lift: dl.lift, liftRange: dl.liftRange };
+    liftOpts = { lift: dl.lift, liftRange: dl.liftRange, liftHow: 'measured time-with-AI × configured task baselines (estimate, not a controlled A/B)' };
     liftNotes = dl.notes;
   }
   const roi = computeReturnOnIntelligence(report, { laborRatePerHour: laborRate, ...liftOpts });
