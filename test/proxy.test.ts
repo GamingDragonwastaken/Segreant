@@ -327,24 +327,32 @@ test('budget: hard daily cap blocks with 429 once exceeded', async () => {
   store.close();
 });
 
-test('detectRoute: x-aegis-openai-base overrides the OpenAI upstream (any OpenAI-compatible provider)', () => {
-  const cfg = DEFAULT_CONFIG;
+test('detectRoute: x-aegis-openai-base override is OFF by default, honored only when enabled', () => {
+  const off = DEFAULT_CONFIG; // allowOpenAIBaseOverride: false
+  const on: AegisConfig = { ...DEFAULT_CONFIG, allowOpenAIBaseOverride: true };
   const mk = (headers: Record<string, string>, url = '/v1/chat/completions') =>
     ({ url, headers }) as unknown as http.IncomingMessage;
-  assert.equal(detectRoute(mk({ authorization: 'Bearer x' }), cfg)?.upstreamBase, cfg.upstreams.openai);
+
+  // Off by default → the header is ignored, the configured upstream is used (no
+  // key-exfil vector from an attacker-influenced header).
   assert.equal(
-    detectRoute(mk({ authorization: 'Bearer x', 'x-aegis-openai-base': 'https://openrouter.ai/api' }), cfg)?.upstreamBase,
+    detectRoute(mk({ authorization: 'Bearer x', 'x-aegis-openai-base': 'https://evil.example' }), off)?.upstreamBase,
+    off.upstreams.openai,
+  );
+  // Enabled → honored for any OpenAI-compatible provider.
+  assert.equal(
+    detectRoute(mk({ authorization: 'Bearer x', 'x-aegis-openai-base': 'https://openrouter.ai/api' }), on)?.upstreamBase,
     'https://openrouter.ai/api',
   );
-  // The Anthropic route ignores the OpenAI override.
+  // The Anthropic route ignores the OpenAI override regardless.
   assert.equal(
-    detectRoute(mk({ 'x-api-key': 'k', 'x-aegis-openai-base': 'https://openrouter.ai/api' }, '/v1/messages'), cfg)?.upstreamBase,
-    cfg.upstreams.anthropic,
+    detectRoute(mk({ 'x-api-key': 'k', 'x-aegis-openai-base': 'https://openrouter.ai/api' }, '/v1/messages'), on)?.upstreamBase,
+    on.upstreams.anthropic,
   );
-  // A non-http(s) override is rejected (no file://, ssrf-ish schemes) — falls back to config.
+  // A non-http(s) override is rejected even when enabled (no file://, ssrf-ish schemes).
   assert.equal(
-    detectRoute(mk({ authorization: 'Bearer x', 'x-aegis-openai-base': 'file:///etc/passwd' }), cfg)?.upstreamBase,
-    cfg.upstreams.openai,
+    detectRoute(mk({ authorization: 'Bearer x', 'x-aegis-openai-base': 'file:///etc/passwd' }), on)?.upstreamBase,
+    on.upstreams.openai,
   );
 });
 

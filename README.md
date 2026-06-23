@@ -262,18 +262,22 @@ Full design in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 ### Beyond Anthropic & OpenAI
 
 The OpenAI route speaks the wire format most of the ecosystem now exposes, so
-AegisFlow meters far more than two vendors. Point the OpenAI-compatible path at
-any compatible endpoint, per request, with one header:
+AegisFlow meters far more than two vendors. The simplest way: point
+`upstreams.openai` at any compatible base — **OpenRouter** (which itself fronts
+Gemini, Claude, Llama, Mistral, DeepSeek, and more), **Ollama** and other local
+model servers, **DeepSeek**, **Mistral** — and every call is metered, priced, and
+capped locally. No flag, nothing else to change.
+
+Want to switch providers *per request* from one proxy? Enable
+`allowOpenAIBaseOverride` in config, then send the base as a header:
 
 ```
 X-Aegis-OpenAI-Base: https://openrouter.ai/api    # then call /v1/chat/completions as usual
 ```
 
-That covers **OpenRouter** (which itself fronts Gemini, Claude, Llama, Mistral,
-DeepSeek, and more), **Ollama** and other local model servers, **DeepSeek**,
-**Mistral**, and anything else speaking OpenAI's API — every call still metered,
-priced, and capped locally. With no override it uses the configured OpenAI
-upstream. The header is stripped before forwarding; it never leaves the device.
+It's **off by default on purpose**: that header would forward your provider auth
+to the URL it names, so honoring it unconditionally could leak your key. The
+header is stripped before forwarding upstream and never leaves the device.
 
 ---
 

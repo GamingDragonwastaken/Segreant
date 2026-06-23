@@ -57,12 +57,13 @@ export function detectRoute(req: http.IncomingMessage, cfg: AegisConfig): RouteI
   const url = req.url ?? '';
   const headers = req.headers;
 
-  // OpenAI-compatible upstream override: one proxy can meter ANY provider that
-  // speaks the OpenAI wire format (OpenRouter — which itself fronts Gemini,
-  // Claude, Llama, Mistral, DeepSeek — plus Ollama, DeepSeek, Mistral, or a local
-  // model server) by setting x-aegis-openai-base to its base URL. Must be an
-  // absolute http(s) URL; otherwise the configured OpenAI upstream is used.
-  const ovr = headerStr(req, 'x-aegis-openai-base');
+  // Per-request OpenAI-compatible upstream override (OpenRouter — which itself
+  // fronts Gemini/Claude/Llama/Mistral/DeepSeek — plus Ollama, DeepSeek, Mistral,
+  // or a local model server). OFF by default: honoring it forwards the provider
+  // auth header to the named URL, so it must be explicitly enabled
+  // (config.allowOpenAIBaseOverride). For the common case, set config.upstreams.openai
+  // instead — no flag, no per-request key-exfil risk. Must be absolute http(s).
+  const ovr = cfg.allowOpenAIBaseOverride ? headerStr(req, 'x-aegis-openai-base') : undefined;
   const openaiBase = ovr && /^https?:\/\//i.test(ovr) ? ovr : cfg.upstreams.openai;
 
   // Path-based detection first (most reliable).

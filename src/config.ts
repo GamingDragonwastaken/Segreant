@@ -57,6 +57,15 @@ export interface AegisConfig {
     anthropic: string;
     openai: string;
   };
+  /**
+   * When true, a request may override the OpenAI-compatible upstream per call via
+   * the `x-aegis-openai-base` header (to meter OpenRouter / Ollama / DeepSeek / a
+   * local server from one proxy). OFF by default: that header forwards your
+   * provider auth to the named URL, so honoring an attacker-influenced header
+   * could exfiltrate the key. For the common case just set `upstreams.openai` to
+   * your compatible base — no flag, no per-request risk.
+   */
+  allowOpenAIBaseOverride: boolean;
   budget: BudgetConfig;
   alerts: AlertsConfig;
   lift: LiftConfig;
@@ -73,6 +82,7 @@ export const DEFAULT_CONFIG: AegisConfig = {
     anthropic: 'https://api.anthropic.com',
     openai: 'https://api.openai.com',
   },
+  allowOpenAIBaseOverride: false,
   budget: {
     dailyUsd: null,
     dailySoftUsd: null,
