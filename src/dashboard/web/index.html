@@ -194,6 +194,18 @@
   .rtag.trim { background: rgba(240,107,90,0.14); color: var(--coral); }
   td.roi { color: var(--mint); text-align: right; }
   .lenshow { color: var(--faint); font-size: 10.5px; font-family: var(--mono); margin-top: 8px; line-height: 1.5; }
+  /* Explanatory popovers: every uncertain state (n/a, upper bound, below break-
+     even, cold start) justifies itself on hover/focus, so nothing is unexplained.
+     Pure CSS + keyboard-focusable; no script, no innerHTML sink. Value cards get
+     overflow:visible so the popover isn't clipped by the card's rounded mask. */
+  #vgrid .card { overflow: visible; }
+  .info { display:inline-flex; align-items:center; justify-content:center; width:14px; height:14px; margin-left:5px; border-radius:50%; border:1px solid var(--line); color:var(--faint); font-family:var(--mono); font-size:9px; font-style:normal; line-height:1; cursor:help; position:relative; vertical-align:middle; transition:all .15s; outline:none; }
+  .info:hover, .info:focus { color:var(--gold); border-color:rgba(233,185,73,0.4); }
+  .info .pop { position:absolute; bottom:calc(100% + 9px); left:50%; transform:translateX(-50%) translateY(4px); width:max-content; max-width:270px; background:var(--ink-2); border:1px solid var(--line); border-radius:10px; padding:10px 12px; font-family:var(--sans); font-size:11.5px; font-style:normal; font-weight:400; line-height:1.5; letter-spacing:normal; text-transform:none; color:var(--muted); box-shadow:0 12px 34px rgba(0,0,0,0.55); opacity:0; pointer-events:none; transition:opacity .15s ease, transform .15s ease; z-index:30; white-space:normal; text-align:left; }
+  .info .pop::after { content:''; position:absolute; top:100%; left:50%; transform:translateX(-50%); border:6px solid transparent; border-top-color:var(--line); }
+  .info .pop b { color:var(--text); font-weight:600; }
+  .info .pop code { font-family:var(--mono); color:var(--gold); font-size:10.5px; }
+  .info:hover .pop, .info:focus .pop { opacity:1; transform:translateX(-50%) translateY(0); }
 </style>
 </head>
 <body>
@@ -441,13 +453,29 @@ $('#ranges').addEventListener('click', (e) => {
 // ---- Return on Intelligence panels ----
 const cap1 = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
 
+// A keyboard-focusable explanatory popover. The body is authored (static), so it
+// may carry <b>/<code>; we derive a plain-text aria-label by stripping tags.
+function tip(html) {
+  const plain = String(html).replace(/<[^>]+>/g, '');
+  return `<span class="info" tabindex="0" role="note" aria-label="${esc(plain)}">i<span class="pop">${html}</span></span>`;
+}
+
+// Why a lens reads n/a, and how to light it up — so "uninstrumented" is never a
+// dead end. Keyed by lens name.
+const LENS_WHY = {
+  Realization: 'No matured units yet. Realization needs commits that have travelled the gate funnel (committed → tested → merged → shipped → survived).',
+  Acceptance: 'No proposals captured. Route your agent through the proxy so the <b>proposed-vs-committed</b> diff can be measured — the signal only an in-path tool sees.',
+  Lift: 'No measured time-with-AI yet. Lift weighs manual-time baselines against your actual AI session time; route real traffic so it can be captured (behavioural, never self-reported).',
+  Impact: 'No realized units to weight by production reach yet (shipped &gt; merged &gt; committed, × whether it survived).',
+};
+
 function lensBar(name, lens) {
   if (!lens || !lens.instrumented || lens.value == null) {
-    return `<div class="lens"><span class="ln">${esc(name)}</span><div class="lt"></div><span class="lv na">n/a</span></div>`;
+    const why = LENS_WHY[name] ? tip('<b>' + esc(name) + ' isn\'t wired yet.</b> ' + LENS_WHY[name]) : '';
+    return `<div class="lens"><span class="ln">${esc(name)}</span><div class="lt"></div><span class="lv na">n/a${why}</span></div>`;
   }
   const p = Math.round(lens.value * 100);
-  const cls = name === 'Realization' || name === 'Impact' ? '' : '';
-  return `<div class="lens"><span class="ln">${esc(name)}</span><div class="lt"><div class="lf ${cls}" style="width:${p}%"></div></div><span class="lv">${p}%</span></div>`;
+  return `<div class="lens"><span class="ln">${esc(name)}</span><div class="lt"><div class="lf" style="width:${p}%"></div></div><span class="lv">${p}%</span></div>`;
 }
 
 function renderValue(d) {
@@ -469,10 +497,10 @@ function renderValue(d) {
     const rcolor = head >= 1 ? 'var(--mint)' : 'var(--coral)';
     const rband = rr.causalRange && rr.causalRange.low != null && rr.causalRange.high != null
       ? ` <span style="color:var(--muted)">[${rr.causalRange.low.toFixed(2)}–${rr.causalRange.high.toFixed(2)}×]</span>` : '';
-    returnHtml = `<div class="sub" style="margin-top:10px;font-size:12.5px;color:var(--muted)">RoI return <b style="color:${rcolor};font-family:var(--mono)">${head.toFixed(2)}×</b>${rband} — ${head >= 1 ? 'pays for itself' : 'below break-even'}`
+    returnHtml = `<div class="sub" style="margin-top:10px;font-size:12.5px;color:var(--muted)">RoI return ${tip('Return on Intelligence as money: <b>realized value ÷ honest cost</b> (tokens + measured supervision time). <b>≥ 1×</b> means it paid for itself. Shown as a range because the counterfactual is a range; capped at gross until Lift is wired.')}<b style="color:${rcolor};font-family:var(--mono)">${head.toFixed(2)}×</b>${rband} — ${head >= 1 ? 'pays for itself' : 'below break-even'}`
       + `<div style="color:var(--faint);font-size:11px;margin-top:2px">$${money(rr.realizedValueUsd)} realized work ÷ $${money(rr.costUsd)} cost (tokens + your time)${rr.causalRatio == null ? ' · gross, Lift not wired' : ''}</div></div>`;
   } else if (rr && rr.realizedValueUsd != null && !rr.supervisionPriced) {
-    returnHtml = `<div class="sub" style="margin-top:10px;font-size:11.5px;color:var(--faint)">RoI return un-priced — wire proxy traffic so your time-with-AI can be measured</div>`;
+    returnHtml = `<div class="sub" style="margin-top:10px;font-size:11.5px;color:var(--faint)">RoI return un-priced — wire proxy traffic so your time-with-AI can be measured ${tip('The dollar return cannot be priced until your <b>time-with-AI</b> is measured. Route real traffic through the proxy so supervision time is captured; without it a dollar return would be fiction.')}</div>`;
   }
 
   const heroLenses = roi
@@ -552,21 +580,21 @@ function renderValue(d) {
   setNodes(g, `
     <div class="card roihero fade">
       <div class="idxpane">
-        <div class="label">RoI Index</div>
+        <div class="label">RoI Index ${tip('The <b>geometric mean</b> of the four value lenses, 0–100. Geometric, not an average: if any one lens nears zero the whole index collapses, so a single maxed axis cannot game it.')}</div>
         <div class="roibig" style="color:${idxColor}">${idx == null ? '—' : idx}<small> / 100</small></div>
-        ${band ? `<div style="font-family:var(--mono);font-size:11.5px;color:var(--muted);margin-top:3px">partially-identified interval <b style="color:var(--text)">${band}</b></div>` : ''}
-        ${upperBound ? `<div style="font-family:var(--mono);font-size:11px;color:var(--gold);margin-top:3px">↑ upper bound — wiring the rest can only lower it</div>` : ''}
-        <div class="sub" style="color:var(--muted);margin-top:12px;font-size:12.5px">Realized efficiency <b style="color:var(--text);font-family:var(--mono)">${esc(eff)}</b> · ${cov}/4 lenses wired${srcLabel}</div>
+        ${band ? `<div style="font-family:var(--mono);font-size:11.5px;color:var(--muted);margin-top:3px">partially-identified interval <b style="color:var(--text)">${band}</b>${tip('The counterfactual lens (Lift) can only be <b>bounded</b>, not pinned to a point, so the index is shown as an honest range rather than false precision.')}</div>` : ''}
+        ${upperBound ? `<div style="font-family:var(--mono);font-size:11px;color:var(--gold);margin-top:3px">↑ upper bound — wiring the rest can only lower it${tip('Some lenses are not wired yet, so this is the <b>highest</b> the index could be. Measuring the rest can only pull it down, never up — more instrumentation means a more honest number.')}</div>` : ''}
+        <div class="sub" style="color:var(--muted);margin-top:12px;font-size:12.5px">Realized efficiency <b style="color:var(--text);font-family:var(--mono)">${esc(eff)}</b> · ${cov}/4 lenses wired${srcLabel}${tip('<b>Realized efficiency</b>: the share of spend that became kept, durable value. <b>' + cov + '/4 lenses wired</b>: how much signal is connected — unwired lenses are excluded, never guessed.')}</div>
         ${returnHtml}
       </div>
       <div class="lenspane">
-        <div class="label">Value lenses · geometric mean — no axis can carry it alone</div>
+        <div class="label">Value lenses · geometric mean — no axis can carry it alone ${tip('Four independent ways raw output overstates value: <b>Realization</b> (did it last?), <b>Acceptance</b> (kept first try?), <b>Lift</b> (better than no-AI?), <b>Impact</b> (did it matter?). An n/a lens is excluded, not guessed.')}</div>
         ${heroLenses}
       </div>
     </div>
-    <div class="card fade"><div class="label">Where the spend went</div>${pnl}</div>
+    <div class="card fade"><div class="label">Where the spend went ${tip('Realized-cost grouped by the <b>last gate each unit reached</b>. "died at tested" means it was tested but never merged or shipped — spend that stalled before becoming durable value; "realized" made it all the way through.')}</div>${pnl}</div>
     <div class="card fade">
-      <div class="label">Budget advisor</div>
+      <div class="label">Budget advisor ${tip('A value-aware cap from your p90 active-day spend, tightened when realized value is low. It needs a few active days of real usage before it appears — no invented numbers on day one.')}</div>
       ${budBody}
     </div>
     ${frontierCard}
