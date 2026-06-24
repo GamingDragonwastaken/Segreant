@@ -81,6 +81,9 @@ export OPENAI_BASE_URL="http://localhost:8090/v1"
 Run your agents as usual. Watch spend accrue in the terminal and at
 **http://localhost:8091**.
 
+Per-tool recipes (opencode, aider, Cursor, Antigravity, your own SDK scripts) and
+the **$0 Gemini free-tier test** are in **[docs/INTEGRATIONS.md](docs/INTEGRATIONS.md)**.
+
 To stop tracking, unset the variables — traffic routes straight to the provider
 and AegisFlow is out of the path entirely.
 
