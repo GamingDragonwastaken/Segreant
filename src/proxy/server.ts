@@ -286,19 +286,32 @@ async function handle(
   const outboundBody = ensureOpenAIUsage(provider, parsed.stream, body);
   const targetUrl = upstreamBase.replace(/\/$/, '') + (req.url ?? '');
   let upstream: Response;
+  // Connect/TTFB timeout ONLY: abort if the upstream never starts responding.
+  // Cleared the instant headers arrive (right after the await), so a long
+  // streaming BODY is never cut — only a hung or unreachable provider trips it.
+  const controller = new AbortController();
+  const timeoutTimer = setTimeout(() => controller.abort(), config.upstreamTimeoutMs);
   try {
     upstream = await fetch(targetUrl, {
       method: req.method,
       headers: buildUpstreamHeaders(req),
       body: req.method === 'GET' || req.method === 'HEAD' ? undefined : outboundBody,
+      signal: controller.signal,
     });
+    clearTimeout(timeoutTimer);
   } catch (err) {
-    // The upstream is unreachable (DNS failure, connection refused, network drop).
-    // Fail transparently with a provider-shaped error the client already knows how
-    // to handle, and record the attempt — AegisFlow must never be a worse failure
-    // mode than calling the provider directly.
-    res.writeHead(502, { 'content-type': 'application/json', 'x-aegis-upstream-error': '1' });
-    res.end(providerErrorBody(provider, `upstream unreachable: ${String(err)}`));
+    clearTimeout(timeoutTimer);
+    // Either the upstream is unreachable (DNS/refused/network drop) or it never
+    // started responding within upstreamTimeoutMs (we aborted). Fail transparently
+    // with a provider-shaped error the client already handles, and record the
+    // attempt — AegisFlow must never be a worse failure mode than calling direct.
+    const timedOut = controller.signal.aborted;
+    const status = timedOut ? 504 : 502;
+    const detail = timedOut
+      ? `upstream timed out after ${config.upstreamTimeoutMs}ms (no response headers)`
+      : `upstream unreachable: ${String(err)}`;
+    res.writeHead(status, { 'content-type': 'application/json', 'x-aegis-upstream-error': '1' });
+    res.end(providerErrorBody(provider, detail));
     safeLog(deps, {
       requestId,
       sessionId,
@@ -316,7 +329,7 @@ async function handle(
       costUsd: 0,
       estimated: false,
       streamed: parsed.stream,
-      statusCode: 502,
+      statusCode: status,
       durationMs: Date.now() - startedAt,
     }, decision);
     return;

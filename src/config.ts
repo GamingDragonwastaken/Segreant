@@ -66,6 +66,13 @@ export interface AegisConfig {
    * your compatible base — no flag, no per-request risk.
    */
   allowOpenAIBaseOverride: boolean;
+  /**
+   * Milliseconds to wait for the upstream to START responding (connection +
+   * first byte / headers) before failing transparently with a 504. The timer is
+   * cleared once headers arrive, so a long streaming BODY is never cut — only a
+   * genuinely hung or unreachable provider trips it.
+   */
+  upstreamTimeoutMs: number;
   budget: BudgetConfig;
   alerts: AlertsConfig;
   lift: LiftConfig;
@@ -83,6 +90,7 @@ export const DEFAULT_CONFIG: AegisConfig = {
     openai: 'https://api.openai.com',
   },
   allowOpenAIBaseOverride: false,
+  upstreamTimeoutMs: 120_000,
   budget: {
     dailyUsd: null,
     dailySoftUsd: null,

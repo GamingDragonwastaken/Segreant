@@ -384,3 +384,54 @@ test('upstream unreachable: transparent provider-shaped 502, and the failed atte
   await proxy.close();
   store.close();
 });
+
+/** A provider that accepts the connection and the request body, then NEVER responds. */
+function startHungUpstream(): Promise<{ url: string; close: () => Promise<void> }> {
+  const server = http.createServer((req) => {
+    req.on('data', () => {});
+    req.on('end', () => {
+      /* deliberately no response — simulate a provider hung after connect */
+    });
+  });
+  server.listen(0);
+  return once(server, 'listening').then(() => {
+    const addr = server.address();
+    const port = typeof addr === 'object' && addr ? addr.port : 0;
+    return {
+      url: `http://127.0.0.1:${port}`,
+      close: () =>
+        new Promise<void>((r) => {
+          server.closeAllConnections?.();
+          server.close(() => r());
+        }),
+    };
+  });
+}
+
+test('upstream hangs past the timeout: transparent 504, fails fast, attempt recorded at zero cost', async () => {
+  const hung = await startHungUpstream();
+  const store = new Store(':memory:');
+  const proxy = await startProxy(store, { upstreamTimeoutMs: 200 }, hung.url);
+
+  const started = Date.now();
+  const res = await fetch(`${proxy.base}/v1/messages`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-api-key': 'sk-test' },
+    body: JSON.stringify({ model: 'claude-opus-4-8', messages: [{ role: 'user', content: 'hi' }] }),
+  });
+  const elapsed = Date.now() - started;
+  assert.equal(res.status, 504, 'a hung provider yields a Gateway Timeout, not a hang');
+  assert.equal(res.headers.get('x-aegis-upstream-error'), '1');
+  assert.ok(elapsed < 2000, `failed fast on the 200ms timeout (took ${elapsed}ms), never hung the client`);
+  const json = (await res.json()) as { type?: string };
+  assert.equal(json.type, 'error', 'provider-shaped so the client handles it like any error');
+
+  await new Promise((r) => setTimeout(r, 20));
+  const recent = store.recent(5);
+  assert.equal(recent[0]!.statusCode, 504, 'the timed-out attempt is logged');
+  assert.equal(recent[0]!.costUsd, 0, 'nothing was spent');
+
+  await proxy.close();
+  await hung.close();
+  store.close();
+});
