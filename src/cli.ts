@@ -32,6 +32,7 @@ import { computeQuality } from './git/quality.ts';
 import { computeRealization, loadRealization, liftOptionsFromStore, moneyInputsFromStore } from './value/realization.ts';
 import { computeReturnOnIntelligence } from './value/lenses.ts';
 import { boundedLift } from './value/lift.ts';
+import { refreshPricing, pricingStatus } from './cost/pricing.ts';
 import { computeFrontier } from './value/frontier.ts';
 import { computeUsageRoI } from './value/usage.ts';
 import { recommendBudget } from './budget/recommend.ts';
@@ -1182,6 +1183,47 @@ async function cmdDemo(flags: Flags): Promise<void> {
   }
 }
 
+async function cmdPricing(flags: Flags): Promise<void> {
+  const cfg = loadConfig();
+  const on = process.stdout.isTTY ?? false;
+
+  if (flags['refresh']) {
+    const url = (typeof flags['url'] === 'string' ? flags['url'] : null) ?? cfg.pricing.manifestUrl;
+    if (!flags.json) console.error(`  Refreshing pricing from ${url ?? '(none configured)'} …`);
+    const result = await refreshPricing(url);
+    if (flags.json) {
+      console.log(JSON.stringify(result, null, 2));
+      process.exitCode = result.ok ? 0 : 1;
+      return;
+    }
+    if (result.ok) {
+      console.log(`  ${color(on, C.green, '✓')} Pricing updated — ${result.modelCount} models, table dated ${result.updated}.`);
+      console.log(`  ${color(on, C.dim, `Saved to ${join(aegisHome(), 'pricing', 'models.json')} (overrides the bundled table).`)}`);
+    } else {
+      console.error(`  ${color(on, C.yellow, '✗')} Refresh failed: ${result.error}`);
+      console.error(`  ${color(on, C.dim, 'Keeping the current table — pricing still works; only the update was skipped.')}`);
+      process.exitCode = 1;
+    }
+    return;
+  }
+
+  const st = pricingStatus(cfg.pricing.maxAgeDays);
+  if (flags.json) {
+    console.log(JSON.stringify(st, null, 2));
+    return;
+  }
+  console.log(`\n  ${color(on, C.bold, 'AegisFlow pricing')}`);
+  console.log(`  Source     ${st.source === 'cache' ? 'refreshed cache (~/.aegisflow/pricing)' : 'bundled with the package'}`);
+  const age = st.ageDays === null ? '' : `  (${num(st.ageDays)}d ago)`;
+  const stale = st.stale ? color(on, C.yellow, '  — STALE') : '';
+  console.log(`  Updated    ${st.updated}${age}${stale}`);
+  console.log(`  Models     ${num(st.modelCount)} across ${st.providers.join(', ')}`);
+  if (st.stale || st.source === 'bundled') {
+    console.log(`\n  ${color(on, C.dim, 'Refresh with:  aegisflow pricing --refresh')}`);
+  }
+  console.log('');
+}
+
 /** This package's version, read from package.json — the single source of truth. */
 function packageVersion(): string {
   try {
@@ -1232,6 +1274,9 @@ function cmdHelp(): void {
     init                  Write default config + print setup steps
     doctor                First-run health check: config, DB, proxy, caps, data quality
     config                Show config and file paths    (--json)
+    pricing               Show the rate card: source, age, model count (--json).
+                          Update it:  pricing --refresh  (pulls the latest rates;
+                          --url <manifest> to override the source)
     prune                 Prune old rows and compact the database
     demo                  Generate isolated, clearly-labeled synthetic data so every
                           surface populates without an API key (--serve to launch the
@@ -1329,6 +1374,9 @@ async function main(): Promise<void> {
       break;
     case 'prune':
       cmdPrune();
+      break;
+    case 'pricing':
+      await cmdPricing(flags);
       break;
     case 'help':
     case '--help':

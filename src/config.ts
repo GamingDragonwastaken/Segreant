@@ -50,6 +50,26 @@ export interface LiftConfig {
   laborRatePerHour: number | null;
 }
 
+export interface PricingConfig {
+  /**
+   * Remote pricing manifest (same schema as the bundled pricing/models.json).
+   * `aegisflow pricing --refresh` pulls it into ~/.aegisflow/pricing/models.json,
+   * which then overrides the bundled table. Provider rates drift, and pricing is
+   * a core dependability, so this keeps it current without a reinstall. The fetch
+   * is a plain GET of a public file — it sends nothing about you. null = no
+   * remote source (manual edits only).
+   */
+  manifestUrl: string | null;
+  /** Past this age, the table is flagged stale (in `pricing`, `doctor`). */
+  maxAgeDays: number;
+  /**
+   * When true, `aegisflow start` refreshes pricing on launch if the cache is
+   * older than maxAgeDays. OFF by default to keep "zero external requests" true
+   * out of the box — the manual `aegisflow pricing --refresh` always works.
+   */
+  autoRefresh: boolean;
+}
+
 export interface AegisConfig {
   port: number;
   dashboardPort: number;
@@ -76,6 +96,7 @@ export interface AegisConfig {
   budget: BudgetConfig;
   alerts: AlertsConfig;
   lift: LiftConfig;
+  pricing: PricingConfig;
   /** Prune request rows older than this many days during maintenance. */
   retentionDays: number;
   /** When true, the proxy logs only metadata and never the prompt/response bodies. */
@@ -109,6 +130,11 @@ export const DEFAULT_CONFIG: AegisConfig = {
     // honest regardless of these.
     baselineMinutes: { feature: 240, fix: 90, refactor: 120, test: 60, docs: 45, perf: 120, chore: 30, other: 90 },
     laborRatePerHour: null,
+  },
+  pricing: {
+    manifestUrl: 'https://raw.githubusercontent.com/GamingDragonwastaken/aegisflow/main/pricing/models.json',
+    maxAgeDays: 30,
+    autoRefresh: false,
   },
   retentionDays: 180,
   metadataOnly: true,
