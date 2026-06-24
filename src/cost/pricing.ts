@@ -79,15 +79,17 @@ export function loadPricing(force = false): PricingFile {
   return cached;
 }
 
-/** Best-effort substring match for model families when the exact id is unknown. */
-function heuristicMatch(provider: Provider, model: string): ModelRate | null {
-  const table = loadPricing().providers[provider];
-  if (!table) return null;
+/**
+ * Best-effort substring match for model families within one provider's table.
+ * Prefers the longest matching key so "gemini-2.5-flash-lite" wins over
+ * "gemini-2.5-flash", and "claude-opus-4-8" wins over a bare "claude".
+ */
+function heuristicMatch(models: Record<string, ModelRate> | undefined, model: string): ModelRate | null {
+  if (!models) return null;
   const m = model.toLowerCase();
-  // Prefer the longest matching key so "claude-opus-4-8" wins over "claude".
-  const keys = Object.keys(table.models).sort((a, b) => b.length - a.length);
+  const keys = Object.keys(models).sort((a, b) => b.length - a.length);
   for (const key of keys) {
-    if (m.includes(key.toLowerCase())) return table.models[key]!;
+    if (m.includes(key.toLowerCase())) return models[key]!;
   }
   return null;
 }
@@ -99,12 +101,33 @@ export interface ResolvedRate {
 
 export function rateFor(provider: Provider, model: string): ResolvedRate {
   const pricing = loadPricing();
-  const exact = pricing.providers[provider]?.models[model];
+  const here = pricing.providers[provider]?.models;
+
+  // 1) Exact id in the named provider — the price we're surest about.
+  const exact = here?.[model];
   if (exact) return { rate: exact, estimated: false };
 
-  const heuristic = heuristicMatch(provider, model);
-  if (heuristic) return { rate: heuristic, estimated: true };
+  // 2) Family (substring) match within the named provider.
+  const family = heuristicMatch(here, model);
+  if (family) return { rate: family, estimated: true };
 
+  // 3) Exact id in ANY provider. An OpenAI-compatible endpoint can legitimately
+  //    carry a non-OpenAI model — Gemini via Google's .../v1beta/openai/ base, a
+  //    Claude model via OpenRouter — so the transport is OpenAI-shaped but the
+  //    price follows the MODEL. An exact id match anywhere is an exact price, so
+  //    `estimated` stays false; only the path differs, not the rate.
+  for (const p of Object.keys(pricing.providers)) {
+    const r = pricing.providers[p]?.models[model];
+    if (r) return { rate: r, estimated: false };
+  }
+
+  // 4) Family match in ANY provider (e.g. a dated gemini id on the OpenAI path).
+  for (const p of Object.keys(pricing.providers)) {
+    const r = heuristicMatch(pricing.providers[p]?.models, model);
+    if (r) return { rate: r, estimated: true };
+  }
+
+  // 5) Nothing matched — conservative mid-tier rate, flagged estimated.
   return { rate: pricing.fallbacks.unknown, estimated: true };
 }
 

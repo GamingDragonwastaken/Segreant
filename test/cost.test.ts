@@ -51,6 +51,47 @@ test('computeCost: OpenAI uncached input excludes cached tokens', () => {
   assert.ok(Math.abs(costUsd - 0.00275) < 1e-9, `got ${costUsd}`);
 });
 
+test('Gemini on the OpenAI-compatible path: exact rate by model, not estimated', () => {
+  // A request to Google's .../v1beta/openai/ base arrives on the OpenAI path,
+  // but the model id is a Gemini one. The price must follow the MODEL: an exact
+  // cross-provider id match is an exact price, so estimated stays false.
+  const { rate, estimated } = rateFor('openai', 'gemini-2.5-flash');
+  assert.equal(estimated, false);
+  assert.equal(rate.input, 0.3);
+  assert.equal(rate.output, 2.5);
+});
+
+test('Flash-Lite resolves to its own rate, not Flash (longest key wins)', () => {
+  const { rate } = rateFor('openai', 'gemini-2.5-flash-lite');
+  assert.equal(rate.input, 0.1); // not 0.3 — must not collapse into "...flash"
+  assert.equal(rate.output, 0.4);
+});
+
+test('A dated Gemini id matches its family across providers, flagged estimated', () => {
+  const { rate, estimated } = rateFor('openai', 'gemini-2.5-flash-preview-09-2026');
+  assert.equal(rate.input, 0.3);
+  assert.equal(estimated, true); // family (substring) match, not an exact id
+});
+
+test('Native OpenAI model still resolves in its own provider (no cross-provider drift)', () => {
+  const { rate, estimated } = rateFor('openai', 'gpt-4o');
+  assert.equal(estimated, false);
+  assert.equal(rate.input, 2.5);
+});
+
+test('computeCost prices a Gemini request carried on the OpenAI path', () => {
+  const usage = {
+    inputTokens: 10_000,
+    outputTokens: 2_000,
+    cacheWriteTokens: 0,
+    cacheReadTokens: 0,
+  };
+  const { costUsd, estimated } = computeCost('openai', 'gemini-2.5-flash', usage);
+  // 10000*0.30 + 2000*2.50 = 3000 + 5000 (per 1e6) = 0.008
+  assert.ok(Math.abs(costUsd - 0.008) < 1e-9, `got ${costUsd}`);
+  assert.equal(estimated, false);
+});
+
 test('Anthropic usage normalization keeps input uncached', () => {
   const usage = normalizeAnthropicUsage({
     input_tokens: 1000,
