@@ -115,30 +115,45 @@ mean every dashboard uses, (ρ+α+λ+ι)/4, has no such floor — a single pumpe
 lifts it regardless of a zero elsewhere. The product structure is *forced* by the
 requirement "no single axis can be gamed."
 
-### 4.2 Why the GEOMETRIC mean specifically (a characterization theorem)
+### 4.2 Why the GEOMETRIC mean specifically (what is forced, and what is disclosed)
 
 For a comparable 0–100 **Index** we need a mean M(ρ,α,λ,ι) on the same scale.
-There are infinitely many means; the correct one is forced by one more
-requirement that value-composition demands — **multiplicative consistency**: the
-index of a two-stage process equals the product of the stage indices,
-`M(x·y) = M(x)·M(y)`.
+There are infinitely many means; the **form** is pinned down by one requirement
+that value-composition demands — **multiplicative consistency**: the index of a
+two-stage process equals the product of the stage indices, `M(x·y) = M(x)·M(y)`.
 
 > **Kolmogorov–Nagumo–de Finetti (specialized).** Every quasi-arithmetic mean is
 > `M_φ(x) = φ⁻¹(Σ wₖ φ(xₖ))` for a continuous strictly-monotone generator φ.
-> Among the scale-homogeneous ones (the power means), the **geometric mean**
-> (φ = log) is the *unique* one satisfying `M(x·y) = M(x)·M(y)`.
+> The generator that makes the mean multiplicative — `M(x·y) = M(x)·M(y)` for all
+> x,y — is **φ = log**, i.e. the (weighted) **geometric** form. Among *symmetric*
+> means it is the unique multiplicative one.
 
-So the aggregator is not a taste choice. Require that quality composes the way
-value composes, and the mathematics forces the **weighted geometric mean**:
+So the **functional form is forced** — require quality to compose the way value
+composes and you must use a weighted geometric mean. Equivalently it is a
+**constant-returns-to-scale Cobb–Douglas** function whose exponents are the
+lenses' **output elasticities** wₖ:
 
 ```
-RoI Index = 100 · ρ^wρ · α^wα · λ^wλ · ι^wι ,   Σ wₖ = 1
-default weights: Realization 1.0 · Acceptance 0.7 · Lift 1.2 · Impact 1.0
+RoI Index = 100 · ρ^wρ · α^wα · λ^wλ · ι^wι ,   Σ wₖ = 1   (Cobb–Douglas, CRS)
 ```
 
-Proof it holds: GM(x·y) = ∏(xₖyₖ)^wₖ = ∏xₖ^wₖ · ∏yₖ^wₖ = GM(x)·GM(y). The
-arithmetic mean fails it: Σwₖxₖyₖ ≠ (Σwₖxₖ)(Σwₖyₖ). (Tested in
-`test/equation.test.ts`.)
+Two things are **disclosed, not forced**, and we say so plainly:
+
+1. **The weights.** wₖ is the elasticity of the Index w.r.t. lens k —
+   `∂ln(Index)/∂ln(xₖ) = wₖ` — "a 1 % gain in lens k lifts the Index wₖ %." They
+   are calibrated from the literature (§7), normalized to sum to 1. The
+   implementation divides by Σw internally, so the raw defaults
+   `{1.0, 0.7, 1.2, 1.0}` realize elasticities `{0.26, 0.18, 0.31, 0.26}`. Set
+   them **equal** (0.25 each) and you recover the **symmetric axiomatic index** —
+   the unique symmetric multiplicative mean — for a buyer who wants no editorial
+   weighting at all (`weights: {1,1,1,1}`).
+2. **The substitution θ** (§4.3): θ = 0 (geometric) is the distinguished neutral
+   point, but the whole CES family is exposed.
+
+What is *not* a taste choice is the multiplicativity itself: any zero lens
+collapses the Index, no matter the weights. Proof: GM(x·y) = ∏(xₖyₖ)^wₖ =
+∏xₖ^wₖ · ∏yₖ^wₖ = GM(x)·GM(y); the arithmetic mean fails it,
+Σwₖxₖyₖ ≠ (Σwₖxₖ)(Σwₖyₖ). (Tested in `test/equation.test.ts`.)
 
 ### 4.3 The substitution knob (a principled family, one distinguished default)
 
@@ -185,25 +200,78 @@ unknown ≠ fault.)
 
 ### 4.5 The two faces (kept distinct on purpose)
 
-The same per-unit lens scores project into two honest objects:
+The same evidence projects into two honest objects. The first is unitless and
+comparable; the second is dollars and decides whether to keep paying.
 
-- **RoI — the money number (interval-valued):**
-  `RoI(E) = Σᵢ sᵢ·ρᵢαᵢλᵢιᵢ ⁄ Σᵢ [tokenᵢ + (1−αᵢ)·mᵢ·(w/60)]` — realized,
-  counterfactual, impact-weighted value over total intelligence cost (tokens +
-  effort tax at wage *w*). **RoI > 1 ⟺ the AI paid for itself.** The
-  **break-even constraint** (`src/value/lift.ts` `breakEven`) is exactly the
-  RoI = 1 line; METR's "19% slower" finding is the RoI < 1 case, which the metric
-  correctly flags.
-- **RoI Index — the comparability number (0–100 + coverage):** the forced
-  weighted geometric mean above. Unitless, universal, the dashboard hero.
+**Face 1 — RoI Index (0–100 + coverage):** the weighted geometric mean above
+(§4.2). Unitless, universal, the dashboard hero. (`roiIndex` in `lenses.ts`.)
 
-They differ by Jensen's inequality (per-unit-then-sum for dollars,
-per-lens-then-compose for the scorecard) — correct, because one is a sum of
-dollars and the other a capability scorecard.
+**Face 2 — RoI return (the money number).** A real, dimensionless ratio,
+computed *directly* as value ÷ cost (`returnRatio` in `lenses.ts`):
+
+```
+                Σ_realized  baselineMin(u) · (wage/60) · acceptance(u)
+RoI_gross   =  ─────────────────────────────────────────────────────────
+                  tokenCost   +   supervisionMin · (wage/60)
+
+RoI_causal  =  RoI_gross · λ            (λ = the Lift lens, applied ONCE)
+            ∈ [ RoI_gross·λ_low , RoI_gross·λ_high ]   (Manski interval, §4.4)
+```
+
+Every term is defended:
+
+- **Numerator — realized, manual-equivalent value, net of rework.** Only work
+  that *realized* (ρ) is counted, each priced at its **manual baseline** — what
+  the kept output would have cost a human (`baselineMin × wage`, an auditable org
+  input, never a self-reported speedup) — and discounted by first-pass
+  **acceptance** α (reworked output is worth less). This is value measured in the
+  worth of the work, not in the tokens it took (which would be circular).
+- **Denominator — the *honest* cost of the intelligence.** Tokens **plus your
+  measured time supervising the AI** (`supervisionMin`, METR 10-minute windowing
+  over real request timestamps, §3), priced at the wage. Pricing your own time is
+  what keeps the ratio real: token cost alone makes a \$4 feature look like a 100×
+  return; adding the hour you actually spent driving it lands the number where the
+  evidence does (METR's ~1.4–2× value, not the ~3× raw speed). The metric
+  **refuses to print a dollar return** until supervision time is measured — it
+  will not invent the denominator (`basis: 'none'`).
+- **The counterfactual λ is applied exactly once.** `RoI_gross` is an honest
+  **upper bound** on the causal return (it does not subtract what you'd have done
+  anyway); multiplying by the Lift lens λ once yields `RoI_causal`. We do **not**
+  also fold the speedup into a separate "leverage" term — that would count the
+  time-savings twice (it already lives in the manual-vs-AI time ratio *and* in λ).
+  Keeping the money number independent of the Index is what avoids the
+  double-count. **RoI_causal ≥ 1 ⟺ the AI paid for itself**; METR's "19 % slower"
+  is the RoI < 1 case, which the metric flags. (The `breakEven` helper is the
+  RoI = 1 line.)
+
+The two faces differ by Jensen's inequality (value sums dollars per-unit; the
+Index composes lenses) — correct, because one is a sum of dollars and the other a
+capability scorecard.
 
 Alongside, **the frontier ("what's best for you")** breaks RoI Index and cost
 down by model × task-type, so *"is Opus worth 5× Haiku for my refactors?"* is a
 number, not a guess.
+
+### 4.6 Risk — two named treatments (a return needs more than a mean)
+
+A point estimate is not a decision. RoI prices risk twice, on purpose:
+
+1. **Balance risk (cross-sectional).** The geometric mean is *already*
+   risk-averse across lenses: by AM–GM, an imbalanced profile (0.9, 0.1) scores
+   far below its arithmetic average, so the Index punishes fragility — a tool
+   that's brilliant on one axis and broken on another cannot hide.
+2. **Estimation risk (longitudinal).** How sure are we? The Index is partially
+   identified (§4.4), so we expose a **certainty-equivalent** at a buyer's
+   risk-aversion γ ∈ [0,1] (`certaintyEquivalent` in `lenses.ts`):
+
+   ```
+   CE(γ) = point − γ · (point − low)
+   ```
+
+   γ = 0 returns the interior point; γ = 1 returns the conservative lower bound
+   (every un-instrumented necessary condition assumed adverse). It is coherent —
+   monotone in γ, never exceeds the point, degenerates to the point when the
+   interval is a point. "Even under conservative assumptions, RoI ≥ CE(γ)."
 
 ---
 
@@ -231,6 +299,13 @@ invention is the synthesis**, which has not been built:
    name as their blocker and avoiding the self-report bias METR documents.
 5. **A decision, not just a score.** The per-context frontier turns the metric
    into "what's best for *you*."
+6. **A money number that can't be gamed by ignoring your time.** The RoI return
+   prices the denominator as tokens **+ measured supervision time**, values the
+   numerator at the work's manual-equivalent worth (not the tokens it cost), and
+   credits the counterfactual exactly once — so it lands at the literature's
+   ~1–2×, not a fantasy multiple, and refuses to print a dollar figure until your
+   time is measured (§4.5). Paired with two explicit risk treatments — balance
+   (the geometric mean) and estimation (the γ certainty-equivalent, §4.6).
 
 What we are **not** claiming: that we invented the geometric mean, CES, or
 partial identification (we did not — §4 cites them); that any single lens is novel
@@ -244,9 +319,11 @@ hand-wavy.
 
 ## 6. Honest scope / build order
 
-- **Now**: lens math + the geometric-mean composite + return ratio, over the
-  coding substrate (Realization funnel), with the effort-tax denominator.
-  (`src/value/lenses.ts`, `aegisflow roi`.)
+- **Now**: lens math + the geometric-mean composite (RoI Index) + the money
+  number (RoI return: realized manual-equivalent value over tokens + measured
+  supervision time, counterfactually credited once) + the risk-adjusted
+  certainty-equivalent, over the coding substrate (Realization funnel).
+  (`src/value/lenses.ts`, `aegisflow roi [--labor-rate <w>] [--risk <γ>]`.)
 - **Next**: the per-context frontier (model × task-type) from proposal→outcome
   linkage; behavioral Lift via model A/B on like tasks.
 - **Then**: non-coding modality capture (chat/research/writing/agent outcome

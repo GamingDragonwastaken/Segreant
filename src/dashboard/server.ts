@@ -13,7 +13,7 @@ import { dirname, join } from 'node:path';
 import type { Store } from '../store/db.ts';
 import { isDemo, type AegisConfig } from '../config.ts';
 import { startOfLocalDay } from '../budget/guard.ts';
-import { loadRealization, projectValueBreakdown, liftOptionsFromStore } from '../value/realization.ts';
+import { loadRealization, projectValueBreakdown, liftOptionsFromStore, moneyInputsFromStore } from '../value/realization.ts';
 import { demoLiftOptions } from '../demo/seed.ts';
 import { recommendAllocation } from '../budget/allocate.ts';
 import { computeReturnOnIntelligence } from '../value/lenses.ts';
@@ -162,7 +162,19 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
                   const dl = liftOptionsFromStore(store, rep, config.lift.baselineMinutes);
                   return { lift: dl.lift, liftRange: dl.liftRange };
                 })();
-            roi = computeReturnOnIntelligence(rep, roiOpts);
+            // The money number, priced exactly like the CLI (shared helper). Labor
+            // rate falls back to config; the demo assumes an illustrative rate so the
+            // dollar return is visible. Threaded only into the headline RoI — not the
+            // shared roiOpts — so per-project values aren't given a global numerator.
+            let laborRate = config.lift.laborRatePerHour;
+            if (laborRate === null && isDemo()) laborRate = 120;
+            const money = moneyInputsFromStore(store, rep, config.lift.baselineMinutes, laborRate);
+            roi = computeReturnOnIntelligence(rep, {
+              ...roiOpts,
+              laborRatePerHour: laborRate,
+              grossRealizedValueUsd: money.grossRealizedValueUsd,
+              supervisionMinutes: money.supervisionMinutes,
+            });
             frontier = computeFrontier(rep.units);
             // Per-project value (the budget owner's view) + cross-project allocation.
             projects = projectValueBreakdown(store, { windowDays, roiOptions: roiOpts });

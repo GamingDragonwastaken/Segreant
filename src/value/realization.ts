@@ -24,7 +24,7 @@ import { acceptanceForCommit, type ProposedFile } from './proposals.ts';
 import { GATE_LADDER, scoreFunnel, type Gate, type GateResult, type Verdict, type FunnelOutcome } from './gates.ts';
 import { classifyTaskType, type TaskType } from './taskType.ts';
 import { computeReturnOnIntelligence, type RoIOptions } from './lenses.ts';
-import { liftFromData, type AiEvent, type DataLiftResult } from './lift.ts';
+import { liftFromData, timeWithAiMinutes, type AiEvent, type DataLiftResult } from './lift.ts';
 
 const run = promisify(execFile);
 
@@ -426,4 +426,45 @@ export function liftOptionsFromStore(
     events,
     baselineMinutes,
   });
+}
+
+export interface MoneyInputs {
+  grossRealizedValueUsd: number | null; // realized work valued at manual baseline × rate, net of rework
+  supervisionMinutes: number | null; // measured time-with-AI over the matured-work span
+}
+
+/**
+ * The money number's inputs, measured from the same store the lenses use — so the
+ * CLI and the dashboard price the RoI return identically (one source of truth):
+ *   · numerator   = Σ over REALIZED matured units of baseline manual $ × acceptance
+ *   · supervision = measured time-with-AI (METR windowing) over the matured span
+ * Gross value is null without a labor rate; supervision is null without measured
+ * traffic — the return stays honestly un-priced rather than invented.
+ */
+export function moneyInputsFromStore(
+  store: Store,
+  report: RealizationReport,
+  baselineMinutes: Record<string, number>,
+  laborRate: number | null,
+): MoneyInputs {
+  const matured = report.units.filter((u) => !u.maturing);
+  let grossRealizedValueUsd: number | null = null;
+  if (laborRate !== null && laborRate > 0) {
+    let v = 0;
+    for (const u of matured) {
+      if (!u.funnel.realized) continue;
+      const b = baselineMinutes[u.taskType];
+      if (typeof b === 'number' && b > 0) v += b * (laborRate / 60) * (u.acceptance ?? 1);
+    }
+    grossRealizedValueUsd = v;
+  }
+  let supervisionMinutes: number | null = null;
+  if (matured.length > 0) {
+    const startMs = Math.min(...matured.map((u) => u.windowStartMs));
+    const endMs = Math.max(...matured.map((u) => u.windowEndMs));
+    const events = store.requestsInRange(startMs, endMs).map((r) => ({ sessionId: r.sessionId ?? 'unknown', tsEpochMs: r.tsEpochMs }));
+    const m = timeWithAiMinutes(events).totalMin;
+    supervisionMinutes = m > 0 ? m : null;
+  }
+  return { grossRealizedValueUsd, supervisionMinutes };
 }

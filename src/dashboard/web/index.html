@@ -461,6 +461,20 @@ function renderValue(d) {
   const eff = roi && roi.realizedEfficiency != null ? Math.round(roi.realizedEfficiency * 100) + '%' : '—';
   const cov = roi ? Math.round(roi.coverage * 4) : 0;
 
+  // The money number — Return on Intelligence as a real ratio (value ÷ cost).
+  const rr = roi && roi.returnRatio;
+  let returnHtml = '';
+  if (rr && rr.basis === 'usd' && rr.grossRatio != null) {
+    const head = rr.causalRatio != null ? rr.causalRatio : rr.grossRatio;
+    const rcolor = head >= 1 ? 'var(--mint)' : 'var(--coral)';
+    const rband = rr.causalRange && rr.causalRange.low != null && rr.causalRange.high != null
+      ? ` <span style="color:var(--muted)">[${rr.causalRange.low.toFixed(2)}–${rr.causalRange.high.toFixed(2)}×]</span>` : '';
+    returnHtml = `<div class="sub" style="margin-top:10px;font-size:12.5px;color:var(--muted)">RoI return <b style="color:${rcolor};font-family:var(--mono)">${head.toFixed(2)}×</b>${rband} — ${head >= 1 ? 'pays for itself' : 'below break-even'}`
+      + `<div style="color:var(--faint);font-size:11px;margin-top:2px">$${money(rr.realizedValueUsd)} realized work ÷ $${money(rr.costUsd)} cost (tokens + your time)${rr.causalRatio == null ? ' · gross, Lift not wired' : ''}</div></div>`;
+  } else if (rr && rr.realizedValueUsd != null && !rr.supervisionPriced) {
+    returnHtml = `<div class="sub" style="margin-top:10px;font-size:11.5px;color:var(--faint)">RoI return un-priced — wire proxy traffic so your time-with-AI can be measured</div>`;
+  }
+
   const heroLenses = roi
     ? ['realization', 'acceptance', 'lift', 'impact'].map((k) => lensBar(cap1(k), roi.lenses[k])).join('')
     : '<div style="color:var(--faint);font-family:var(--mono);font-size:12px;line-height:1.6">No git repo at the dashboard root, so the coding lenses are unavailable. Non-coding usage is measured below.</div>';
@@ -543,6 +557,7 @@ function renderValue(d) {
         ${band ? `<div style="font-family:var(--mono);font-size:11.5px;color:var(--muted);margin-top:3px">partially-identified interval <b style="color:var(--text)">${band}</b></div>` : ''}
         ${upperBound ? `<div style="font-family:var(--mono);font-size:11px;color:var(--gold);margin-top:3px">↑ upper bound — wiring the rest can only lower it</div>` : ''}
         <div class="sub" style="color:var(--muted);margin-top:12px;font-size:12.5px">Realized efficiency <b style="color:var(--text);font-family:var(--mono)">${esc(eff)}</b> · ${cov}/4 lenses wired${srcLabel}</div>
+        ${returnHtml}
       </div>
       <div class="lenspane">
         <div class="label">Value lenses · geometric mean — no axis can carry it alone</div>

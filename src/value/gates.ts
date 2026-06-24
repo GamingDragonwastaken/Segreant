@@ -99,6 +99,21 @@ export function scoreFunnel(verdicts: Record<Gate, GateResult>): FunnelOutcome {
     diedAt === null && verdicts.survived.verdict === 'pass' && verdicts.clean.verdict === 'pass';
   const instrumented = passes + fails;
 
+  // Realization score is MONOTONE along the necessary-condition chain: a unit
+  // cannot bank gates it passed AFTER an earlier required gate failed — once it
+  // dies at `diedAt`, deeper passes are moot (its fate was sealed there). With no
+  // failure it is "of the gates we could judge, how many passed"; with a failure
+  // it is "passes before death ÷ (those passes + the failing gate)". This keeps
+  // `unknown` neutral (never counted) while refusing to reward post-fail passes.
+  let realizationScore: number;
+  if (diedAtIndex === null) {
+    realizationScore = instrumented > 0 ? passes / instrumented : 0;
+  } else {
+    let passesBeforeDeath = 0;
+    for (let i = 0; i < diedAtIndex; i++) if (results[i]!.verdict === 'pass') passesBeforeDeath += 1;
+    realizationScore = passesBeforeDeath / (passesBeforeDeath + 1);
+  }
+
   return {
     results,
     reachedIndex,
@@ -110,6 +125,6 @@ export function scoreFunnel(verdicts: Record<Gate, GateResult>): FunnelOutcome {
     fails,
     unknowns,
     instrumented,
-    realizationScore: instrumented > 0 ? passes / instrumented : 0,
+    realizationScore,
   };
 }

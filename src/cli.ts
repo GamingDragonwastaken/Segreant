@@ -29,7 +29,7 @@ import { seedDemo, demoLiftOptions } from './demo/seed.ts';
 import { startOfLocalDay } from './budget/guard.ts';
 import { attributeCommits, isGitRepo, projectName, resolveCommit } from './git/correlate.ts';
 import { computeQuality } from './git/quality.ts';
-import { computeRealization, loadRealization, liftOptionsFromStore } from './value/realization.ts';
+import { computeRealization, loadRealization, liftOptionsFromStore, moneyInputsFromStore } from './value/realization.ts';
 import { computeReturnOnIntelligence } from './value/lenses.ts';
 import { boundedLift } from './value/lift.ts';
 import { computeFrontier } from './value/frontier.ts';
@@ -803,8 +803,13 @@ async function cmdReceipt(flags: Flags): Promise<void> {
 async function cmdRoi(flags: Flags): Promise<void> {
   const repo = (flags.repo as string) ?? process.cwd();
   const windowDays = flags.window ? Number(flags.window) : 14;
-  const laborRate = flags['labor-rate'] !== undefined ? Number(flags['labor-rate']) : null;
   const cfg = loadConfig();
+  // Labor rate prices both the effort tax and the money number's denominator.
+  // Falls back to config; in the demo we assume an illustrative rate so the dollar
+  // return is visible (clearly labeled), since the demo has no real org rate.
+  let laborRate = flags['labor-rate'] !== undefined ? Number(flags['labor-rate']) : cfg.lift.laborRatePerHour;
+  if (laborRate === null && isDemo()) laborRate = 120;
+  const riskAversion = flags['risk'] !== undefined ? Number(flags['risk']) : 0;
   const store = new Store(dbPath());
   const loaded = await loadRealization(store, repo, { windowDays, persist: true });
   if (!loaded) {
@@ -834,7 +839,17 @@ async function cmdRoi(flags: Flags): Promise<void> {
     liftOpts = { lift: dl.lift, liftRange: dl.liftRange, liftHow: 'measured time-with-AI × configured task baselines (estimate, not a controlled A/B)' };
     liftNotes = dl.notes;
   }
-  const roi = computeReturnOnIntelligence(report, { laborRatePerHour: laborRate, ...liftOpts });
+  // The money number's inputs, measured from the same data the lenses use (shared
+  // with the dashboard via moneyInputsFromStore, so both price the return identically).
+  const { grossRealizedValueUsd, supervisionMinutes } = moneyInputsFromStore(store, report, cfg.lift.baselineMinutes, laborRate);
+
+  const roi = computeReturnOnIntelligence(report, {
+    laborRatePerHour: laborRate,
+    grossRealizedValueUsd,
+    supervisionMinutes,
+    riskAversion,
+    ...liftOpts,
+  });
   roi.notes.unshift(...liftNotes);
 
   if (flags.json) {
@@ -860,6 +875,28 @@ async function cmdRoi(flags: Flags): Promise<void> {
   }
   const eff = roi.realizedEfficiency;
   console.log(`  Realized efficiency  ${eff === null ? '—' : color(tty, C.green, pct(eff))}   ${color(tty, C.gray, `of $${(roi.tokenCostUsd + roi.effortTaxUsd).toFixed(2)} spent (tokens${roi.effortTaxUsd > 0 ? ' + effort' : ''})`)}`);
+
+  // The money number — value ÷ cost, ≥1 ⟺ it paid for itself.
+  const rr = roi.returnRatio;
+  if (rr.basis === 'usd' && rr.grossRatio !== null) {
+    const headline = rr.causalRatio ?? rr.grossRatio;
+    const col = headline >= 1 ? C.green : C.red;
+    const band =
+      rr.causalRange.low !== null && rr.causalRange.high !== null
+        ? color(tty, C.gray, ` [${rr.causalRange.low.toFixed(2)}–${rr.causalRange.high.toFixed(2)}×]`)
+        : '';
+    const tail = (headline >= 1 ? 'pays for itself' : 'below break-even') + (rr.causalRatio === null ? ' (gross — wire Lift to credit the counterfactual)' : '');
+    console.log(`  ${color(tty, C.bold, 'RoI return')}           ${color(tty, col, headline.toFixed(2) + '×')}${band}   ${color(tty, C.gray, tail)}`);
+    console.log(color(tty, C.gray, `  ${''.padEnd(20)}$${(rr.realizedValueUsd ?? 0).toFixed(0)} realized work (manual-equiv, net of rework) ÷ $${rr.costUsd.toFixed(2)} cost (tokens + your time)`));
+  } else if (rr.realizedValueUsd !== null && !rr.supervisionPriced) {
+    console.log(`  ${color(tty, C.bold, 'RoI return')}           ${color(tty, C.gray, 'un-priced — wire proxy traffic so your time-with-AI can be measured')}`);
+  } else {
+    console.log(`  ${color(tty, C.bold, 'RoI return')}           ${color(tty, C.gray, 'pass --labor-rate (or set lift.laborRatePerHour) to price the dollar return')}`);
+  }
+  const ce = roi.certaintyEquivalent;
+  if (ce.riskAversion > 0 && ce.index !== null) {
+    console.log(`  Risk-adjusted Index  ${color(tty, C.yellow, `${ce.index.toFixed(0)} / 100`)}   ${color(tty, C.gray, `γ=${ce.riskAversion.toFixed(2)} conservative read — toward the partial-ID lower bound`)}`);
+  }
 
   console.log('');
   console.log(color(tty, C.bold, '  Value lenses'));

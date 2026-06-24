@@ -41,7 +41,11 @@ test('funnel: all gates pass → realized, score 1', () => {
   assert.equal(f.reached, 'clean');
 });
 
-test('funnel: a failed gate sets diedAt and blocks realization; unknowns do not inflate score', () => {
+test('funnel: a failed gate sets diedAt and blocks realization; a post-fail pass does NOT inflate the score', () => {
+  // `committed` passes AFTER `accepted` failed — a real case (heavily-rewritten AI
+  // code still lands in git). The score is MONOTONE: the unit died at `accepted`,
+  // so the later `committed` pass is moot. Credit = passes before death (proposed)
+  // ÷ (those passes + the failing gate) = 1/2, not 2/3.
   const f = scoreFunnel(vr({ proposed: 'pass', accepted: 'fail', committed: 'pass' }));
   assert.equal(f.diedAt, 'accepted');
   assert.equal(f.reached, 'proposed'); // deepest pass before the failure
@@ -49,7 +53,7 @@ test('funnel: a failed gate sets diedAt and blocks realization; unknowns do not 
   assert.equal(f.passes, 2);
   assert.equal(f.fails, 1);
   assert.equal(f.instrumented, 3);
-  assert.ok(Math.abs(f.realizationScore - 2 / 3) < 1e-9);
+  assert.ok(Math.abs(f.realizationScore - 1 / 2) < 1e-9, `monotone score ${f.realizationScore} should be 0.5`);
 });
 
 test('funnel: maturing (survived/clean unknown) is never realized', () => {
@@ -151,11 +155,10 @@ test('receipt: claiming a trusted keyId while signing with another key is detect
 
 // ---- Return on Intelligence: lenses + composite ----
 
-function ru(opts: { realized: boolean; acceptance: number | null; linesAdded: number; shipped?: boolean }): RealizationLike['units'][number] {
+function ru(opts: { realized: boolean; acceptance: number | null; shipped?: boolean }): RealizationLike['units'][number] {
   return {
     maturing: false,
     acceptance: opts.acceptance,
-    linesAdded: opts.linesAdded,
     funnel: { realized: opts.realized, results: [{ gate: 'shipped', verdict: opts.shipped ? 'pass' : 'unknown' }] },
   };
 }
@@ -163,7 +166,7 @@ function ru(opts: { realized: boolean; acceptance: number | null; linesAdded: nu
 test('RoI: geometric mean collapses to 0 if any lens is 0 (no axis can carry the score)', () => {
   const report: RealizationLike = {
     firstPassAcceptance: 0, // kept nothing first-try
-    units: [ru({ realized: true, acceptance: 0, linesAdded: 10 })],
+    units: [ru({ realized: true, acceptance: 0 })],
     matured: { realizationRate: 0.8, totalCostUsd: 10, realizedValueUsd: 8 },
   };
   const r = computeReturnOnIntelligence(report);
@@ -176,7 +179,7 @@ test('RoI: geometric mean collapses to 0 if any lens is 0 (no axis can carry the
 test('RoI: injected lift widens coverage; index is the geometric mean of instrumented lenses', () => {
   const report: RealizationLike = {
     firstPassAcceptance: 0.9,
-    units: [ru({ realized: true, acceptance: 0.9, linesAdded: 10, shipped: true })],
+    units: [ru({ realized: true, acceptance: 0.9, shipped: true })],
     matured: { realizationRate: 0.8, totalCostUsd: 10, realizedValueUsd: 8 },
   };
   const r = computeReturnOnIntelligence(report, { lift: 0.5 });
@@ -187,7 +190,7 @@ test('RoI: injected lift widens coverage; index is the geometric mean of instrum
 test('RoI: effort tax raises the denominator, lowering realized efficiency', () => {
   const report: RealizationLike = {
     firstPassAcceptance: 0.5,
-    units: [ru({ realized: true, acceptance: 0.5, linesAdded: 10 })],
+    units: [ru({ realized: true, acceptance: 0.5 })],
     matured: { realizationRate: 1, totalCostUsd: 10, realizedValueUsd: 10 },
   };
   const tokenOnly = computeReturnOnIntelligence(report);
@@ -197,17 +200,20 @@ test('RoI: effort tax raises the denominator, lowering realized efficiency', () 
   assert.ok(withLabor.realizedEfficiency !== null && withLabor.realizedEfficiency < 1);
 });
 
-test('RoI: Impact diverges from raw realization (a shipped, high-blast unit weighs more)', () => {
+test('RoI: Impact diverges from raw realization via production reach (shipped weighs more), not line counts', () => {
   const report: RealizationLike = {
     firstPassAcceptance: null,
     units: [
-      ru({ realized: true, acceptance: null, linesAdded: 100, shipped: true }), // big, shipped, realized
-      ru({ realized: false, acceptance: null, linesAdded: 1 }), // tiny, not realized
+      ru({ realized: true, acceptance: null, shipped: true }), // realized AND reached production
+      ru({ realized: false, acceptance: null }), // not realized
     ],
     matured: { realizationRate: 0.5, totalCostUsd: 5, realizedValueUsd: 3 },
   };
   const r = computeReturnOnIntelligence(report);
   assert.ok(r.lenses.impact.value !== null);
+  // The realized unit shipped (reach 1.5) while the other didn't realize → impact
+  // is pulled above the raw 0.5 realization purely by production reach. No LOC input
+  // exists on the lens anymore, so this divergence cannot come from size.
   assert.ok(r.lenses.impact.value! > 0.5, `impact ${r.lenses.impact.value} should exceed raw 0.5 realization`);
 });
 

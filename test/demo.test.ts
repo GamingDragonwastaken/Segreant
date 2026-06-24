@@ -80,9 +80,11 @@ test('demo seed: spend-spike baseline is per-DAY, not per-request (series bucket
   const store = new Store(':memory:');
   const now = noonToday();
   seedDemo(store, { now });
-  // ~14 days of data → ~14 daily buckets, not hundreds (the CAST-to-INTEGER fix).
+  // ~3-4 weeks of data (background chatter + the older commits' AI sessions) →
+  // a few dozen DAILY buckets at most, not hundreds (the per-request bucketing
+  // bug would yield one bucket per request — the CAST-to-INTEGER fix).
   const buckets = store.series(now - 30 * 86400000, now + 1000, 86400000);
-  assert.ok(buckets.length <= 20, `daily buckets, got ${buckets.length}`);
+  assert.ok(buckets.length <= 31, `daily buckets over a month, got ${buckets.length}`);
   store.close();
 });
 

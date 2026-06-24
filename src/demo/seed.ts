@@ -362,10 +362,46 @@ function makeRealizationUnit(ctx: Ctx, now: number, spec: UnitSpec, hash: string
   };
 }
 
+function unitModelPick(model: string): ModelPick {
+  return model.startsWith('gpt') ? { provider: 'openai', model } : { provider: 'anthropic', model };
+}
+
+/**
+ * Seed the AI requests that produced a unit, spread INSIDE its attribution window
+ * and sharing one session id. This makes "time with AI" (METR 10-min windowing)
+ * measurable in the demo — which is what lets the money number (RoI return) price
+ * your supervision time instead of reading `un-priced`. Without it the seeded
+ * requests sit in the last fortnight and never overlap the older matured units.
+ */
+function seedUnitTraffic(ctx: Ctx, spec: UnitSpec, u: WorkUnit): void {
+  const reqs = Math.min(u.attributedRequests, 8);
+  const span = Math.max(1, u.windowEndMs - u.windowStartMs);
+  const model = unitModelPick(spec.model);
+  const user = pick(ctx.rng, NAMED_USERS);
+  for (let k = 0; k < reqs; k++) {
+    const base = u.windowStartMs + Math.floor((span * (k + 0.5)) / reqs);
+    const ts = Math.min(u.windowEndMs, Math.max(u.windowStartMs, base + int(ctx.rng, -2 * 60_000, 2 * 60_000)));
+    addRequest(ctx, {
+      tsEpochMs: ts,
+      model,
+      project: spec.project,
+      user,
+      // sessionId null on purpose: this is the coding traffic that produced the
+      // commit, so it must NOT be grouped as a non-coding usage session. METR
+      // windowing still measures it (it buckets null sessions as one stream).
+      sessionId: null,
+      inputTokens: int(ctx.rng, 6_000, 30_000),
+      outputTokens: int(ctx.rng, 600, 3_500),
+      cacheReadTokens: int(ctx.rng, 3_000, 30_000),
+    });
+  }
+}
+
 /** Persist the roster as realization snapshots; returns the number written. */
 function seedRealizationUnits(ctx: Ctx, now: number): number {
   const records: RealizationUnitRecord[] = REALIZATION_ROSTER.map((spec, i) => {
     const u = makeRealizationUnit(ctx, now, spec, `demo-commit-${i + 1}`);
+    seedUnitTraffic(ctx, spec, u);
     return {
       commitHash: u.hash,
       project: spec.project,

@@ -13,7 +13,6 @@ function report(over: Partial<RealizationLike> = {}): RealizationLike {
   const unit = (realized: boolean) => ({
     maturing: false,
     acceptance: 0.8,
-    linesAdded: 50,
     funnel: { realized, results: [{ gate: 'shipped' as const, verdict: realized ? ('pass' as const) : ('unknown' as const) }] },
   });
   return {
