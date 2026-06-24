@@ -4,7 +4,7 @@
   "description": "Local-first proxy that meters and caps what your AI coding agents spend — without sending a byte of your code anywhere.",
   "type": "module",
   "engines": {
-    "node": ">=22.5.0"
+    "node": ">=24.0.0"
   },
   "bin": {
     "aegisflow": "bin/aegisflow.mjs"
@@ -14,7 +14,8 @@
     "aegis": "node --disable-warning=ExperimentalWarning bin/aegisflow.mjs",
     "test": "node --disable-warning=ExperimentalWarning --test test/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "demo": "node --disable-warning=ExperimentalWarning bin/aegisflow.mjs demo --serve"
+    "demo": "node --disable-warning=ExperimentalWarning bin/aegisflow.mjs demo --serve",
+    "prepublishOnly": "npm run typecheck && npm test"
   },
   "files": [
     "bin",
@@ -34,6 +35,12 @@
   ],
   "author": "",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GamingDragonwastaken/aegisflow.git"
+  },
+  "homepage": "https://github.com/GamingDragonwastaken/aegisflow#readme",
+  "bugs": "https://github.com/GamingDragonwastaken/aegisflow/issues",
   "devDependencies": {
     "@types/node": "^25.9.3",
     "typescript": "^5.7.0"

@@ -10,6 +10,18 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 
+// Fail fast with a human message on too-old Node, rather than a cryptic
+// "Unknown file extension .ts" when built-in type stripping isn't available.
+const major = Number(process.versions.node.split('.')[0]);
+if (major < 24) {
+  console.error(
+    `AegisFlow needs Node >= 24 (you have ${process.versions.node}).\n` +
+    `It runs TypeScript directly via Node's built-in type stripping, stable on 24.\n` +
+    `Upgrade Node from https://nodejs.org/ and re-run.`,
+  );
+  process.exit(1);
+}
+
 const self = fileURLToPath(import.meta.url);
 
 if (!process.env.__AEGIS_CHILD) {

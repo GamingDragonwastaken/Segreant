@@ -48,7 +48,8 @@ import {
   type SignedReceipt,
   type VerifyOptions,
 } from './value/receipt.ts';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 
@@ -1181,6 +1182,18 @@ async function cmdDemo(flags: Flags): Promise<void> {
   }
 }
 
+/** This package's version, read from package.json — the single source of truth. */
+function packageVersion(): string {
+  try {
+    const pkgPath = join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json');
+    return (JSON.parse(readFileSync(pkgPath, 'utf8')) as { version?: string }).version ?? 'unknown';
+  } catch {
+    // Version is informational only; a missing/garbled package.json must never
+    // break the CLI. Return an explicit sentinel rather than crash.
+    return 'unknown';
+  }
+}
+
 function cmdHelp(): void {
   console.log(`
   AegisFlow — meter and cap what your AI coding agents spend, locally.
@@ -1225,12 +1238,17 @@ function cmdHelp(): void {
                           dashboard on it; --clear to remove). Add --demo to any read
                           command (today, alerts, usage, start) to view the demo data.
     help                  This message
+    --version             Print the AegisFlow version
 
   Setup
     1) aegisflow start
     2) $env:ANTHROPIC_BASE_URL="http://localhost:8090"   (PowerShell)
        $env:OPENAI_BASE_URL="http://localhost:8090/v1"
     3) Run your AI tools as usual. Watch the dashboard.
+
+  Any OpenAI-compatible provider works through the OpenAI path — point your tool
+  at http://localhost:8090/v1. Gemini, for example, via Google's free tier:
+       $env:OPENAI_BASE_URL="http://localhost:8090/v1"   then use a gemini-* model
 `);
 }
 
@@ -1316,6 +1334,11 @@ async function main(): Promise<void> {
     case '--help':
     case '-h':
       cmdHelp();
+      break;
+    case 'version':
+    case '--version':
+    case '-v':
+      console.log(`aegisflow ${packageVersion()}`);
       break;
     default:
       console.error(`  Unknown command: ${cmd}\n  Run "aegisflow help" for usage.`);
