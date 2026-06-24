@@ -40,8 +40,9 @@ architecture puts privacy and latency ahead of analytics, always.
 
 ## Quickstart
 
-Requires **Node.js ≥ 22.5** (Node 24 recommended). No build step, no native
-modules — it runs the TypeScript directly and uses Node's built-in SQLite.
+Requires **Node.js ≥ 24**. No build step, no native modules — it runs the
+TypeScript directly via Node's built-in type stripping and uses Node's built-in
+SQLite.
 
 **See it work in ten seconds** — no API key, no setup:
 
@@ -168,6 +169,29 @@ lenses into one index that can't be gamed on a single axis.
 > if any one lens collapses, the index collapses. The denominator is **tokens +
 > the human effort it cost** (priced at a labor rate), not tokens alone.
 
+That index is unitless on purpose — it answers *"how well is the intelligence
+working, across every axis at once?"*, and a geometric mean resists gaming because
+one weak lens drags the whole number down. But a budget owner also asks a blunter
+question: **did it pay for itself, in dollars?** So RoI has a second, independent
+face:
+
+> **RoI Return** ℛ = **realized value ÷ honest cost**. Value is the manual time
+> the realized work would otherwise have taken, priced at your labor rate and
+> discounted by first-pass acceptance; cost is **tokens + the measured supervision
+> time** it took to get there. **ℛ ≥ 1 ⟺ the spend paid for itself.** It's
+> reported as an *interval*, because the counterfactual — "how much faster than
+> doing it without AI?" — is honestly a range, not a point.
+
+The two faces are deliberately **never multiplied**. The dollar return already
+*is* a speedup, and so is the Lift lens inside the index — combining them would
+square the same effect. The index tells you *how well* the intelligence works; the
+return tells you *whether it was worth it*. And because the measured supervision
+time sits in the denominator, the return lands in the **empirically-documented
+~1–2× range** for real coding work — not the fantasy 100× you get from counting
+tokens alone. AegisFlow refuses to print a dollar return at all until it has
+measured supervision time to divide by; an honest "not yet" beats a flattering
+lie.
+
 The four lenses, each answering a different real question (full definitions in
 **[docs/RETURN-ON-INTELLIGENCE.md](docs/RETURN-ON-INTELLIGENCE.md)**):
 
@@ -268,6 +292,16 @@ Gemini, Claude, Llama, Mistral, DeepSeek, and more), **Ollama** and other local
 model servers, **DeepSeek**, **Mistral** — and every call is metered, priced, and
 capped locally. No flag, nothing else to change.
 
+**Pricing follows the model, not the wire.** The cost engine resolves a rate by
+model family *across* providers, so a `gemini-*` model carried over the
+OpenAI-compatible path is billed at Google's real published rate — Gemini is a
+first-class, verified entry in the rate card, not a generic fallback. That also
+makes it the easiest **zero-cost way to meter a live agent**: point
+`upstreams.openai` at Google's free-tier OpenAI-compatible endpoint
+(`https://generativelanguage.googleapis.com/v1beta/openai/`), run any tool through
+AegisFlow with a `gemini-2.5-flash` model, and watch a real RoI accrue without
+spending a cent.
+
 Want to switch providers *per request* from one proxy? Enable
 `allowOpenAIBaseOverride` in config, then send the base as a header:
 
@@ -327,14 +361,16 @@ toolchain.
 
 ## Status
 
-Working core: proxy (Anthropic, OpenAI, and **any OpenAI-compatible provider** via
-`x-aegis-openai-base` — OpenRouter, Ollama, DeepSeek, Mistral, …), streaming +
-non-streaming, with transparent fail-open on upstream errors. Cost engine, budget
-enforcement + **value-aware allocation**, git correlation with **persisted,
-repo-less realized-value** and a **per-project budget-owner view**. **Lift** now
-derives from measured time-with-AI × configurable task baselines (no synthetic
-constant in real use). Terminal + a **fully self-contained** web dashboard (zero
-external requests). 90/90 tests, `tsc` clean. See
+Working core: proxy (Anthropic, OpenAI, **natively-priced Gemini**, and **any
+OpenAI-compatible provider** via `x-aegis-openai-base` — OpenRouter, Ollama,
+DeepSeek, Mistral, …), streaming + non-streaming, with transparent fail-open on
+upstream errors and a connect/TTFB timeout so a hung provider can't hang you. Cost
+engine with **cross-provider, model-family pricing**, budget enforcement +
+**value-aware allocation**, git correlation with **persisted, repo-less
+realized-value** and a **per-project budget-owner view**. **Lift** now derives from
+measured time-with-AI × configurable task baselines (no synthetic constant in real
+use). Terminal + a **fully self-contained** web dashboard (zero external requests).
+102/102 tests, `tsc` clean. Installable via `npx aegisflow`. See
 [docs/ARCHITECTURE.md §7](docs/ARCHITECTURE.md) for what comes next (cross-machine
 team sync, native non-OpenAI APIs, auto-updating pricing).
 
