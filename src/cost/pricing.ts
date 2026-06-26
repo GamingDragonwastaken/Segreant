@@ -235,19 +235,20 @@ export function rateFor(provider: Provider, model: string): ResolvedRate {
   const exact = here?.[model];
   if (exact) return { rate: exact, estimated: false };
 
-  // 2) Family (substring) match within the named provider.
-  const family = heuristicMatch(here, model);
-  if (family) return { rate: family, estimated: true };
-
-  // 3) Exact id in ANY provider. An OpenAI-compatible endpoint can legitimately
-  //    carry a non-OpenAI model — Gemini via Google's .../v1beta/openai/ base, a
-  //    Claude model via OpenRouter — so the transport is OpenAI-shaped but the
-  //    price follows the MODEL. An exact id match anywhere is an exact price, so
-  //    `estimated` stays false; only the path differs, not the rate.
+  // 2) Exact id in ANY provider — an EXACT price always beats a fuzzy family
+  //    guess, so this is tried before any substring match. An OpenAI-compatible
+  //    endpoint can legitimately carry a non-OpenAI model (Gemini via Google's
+  //    .../v1beta/openai/ base, a Claude model via OpenRouter): the transport is
+  //    OpenAI-shaped but the price follows the MODEL. Exact anywhere ⟹ exact rate,
+  //    so `estimated` stays false; only the path differed, not the rate.
   for (const p of Object.keys(pricing.providers)) {
     const r = pricing.providers[p]?.models[model];
     if (r) return { rate: r, estimated: false };
   }
+
+  // 3) Family (substring) match within the named provider.
+  const family = heuristicMatch(here, model);
+  if (family) return { rate: family, estimated: true };
 
   // 4) Family match in ANY provider (e.g. a dated gemini id on the OpenAI path).
   for (const p of Object.keys(pricing.providers)) {

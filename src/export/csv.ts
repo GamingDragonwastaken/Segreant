@@ -22,7 +22,7 @@ export function toCsv(headers: string[], rows: Array<Array<unknown>>): string {
 }
 
 const REQUEST_COLUMNS = [
-  'tsIso', 'tsEpochMs', 'provider', 'model', 'project', 'user', 'sessionId',
+  'tsIso', 'tsEpochMs', 'provider', 'model', 'project', 'user', 'source', 'sessionId',
   'inputTokens', 'outputTokens', 'cacheWriteTokens', 'cacheReadTokens', 'reasoningTokens',
   'costUsd', 'estimated', 'streamed', 'statusCode', 'durationMs', 'requestId',
 ];
@@ -32,7 +32,7 @@ export function requestsToCsv(rows: RequestRow[]): string {
   return toCsv(
     REQUEST_COLUMNS,
     rows.map((r) => [
-      new Date(r.tsEpochMs).toISOString(), r.tsEpochMs, r.provider, r.model, r.project, r.user ?? '', r.sessionId ?? '',
+      new Date(r.tsEpochMs).toISOString(), r.tsEpochMs, r.provider, r.model, r.project, r.user ?? '', r.source ?? '', r.sessionId ?? '',
       r.inputTokens, r.outputTokens, r.cacheWriteTokens, r.cacheReadTokens, r.reasoningTokens ?? 0,
       r.costUsd, r.estimated ? 1 : 0, r.streamed ? 1 : 0, r.statusCode ?? '', r.durationMs ?? '', r.requestId,
     ]),

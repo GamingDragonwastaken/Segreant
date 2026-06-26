@@ -34,6 +34,7 @@ export interface RequestRow {
   statusCode: number | null;
   durationMs: number | null;
   user?: string | null; // developer/team attribution (x-aegis-user header); null = unassigned
+  source?: string | null; // connected tool/feed attribution (x-aegis-source header); null = direct
 }
 
 export interface SpendBucket {
@@ -110,7 +111,8 @@ CREATE TABLE IF NOT EXISTS requests (
   streamed          INTEGER NOT NULL DEFAULT 0,
   status_code       INTEGER,
   duration_ms       INTEGER,
-  user              TEXT
+  user              TEXT,
+  source            TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_requests_ts      ON requests(ts_epoch_ms);
@@ -211,7 +213,11 @@ export class Store {
     if (!cols.some((c) => c.name === 'user')) {
       this.db.prepare('ALTER TABLE requests ADD COLUMN user TEXT').run();
     }
+    if (!cols.some((c) => c.name === 'source')) {
+      this.db.prepare('ALTER TABLE requests ADD COLUMN source TEXT').run();
+    }
     this.runScript('CREATE INDEX IF NOT EXISTS idx_requests_user ON requests(user)');
+    this.runScript('CREATE INDEX IF NOT EXISTS idx_requests_source ON requests(source)');
   }
 
   /** Run one or more `;`-separated statements via prepared statements. */
@@ -246,8 +252,8 @@ export class Store {
         `INSERT INTO requests (
             request_id, session_id, ts_iso, ts_epoch_ms, provider, model, project,
             task_weight, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens,
-            reasoning_tokens, cost_usd, estimated, streamed, status_code, duration_ms, user
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            reasoning_tokens, cost_usd, estimated, streamed, status_code, duration_ms, user, source
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       )
       .run(
         r.requestId,
@@ -269,6 +275,7 @@ export class Store {
         r.statusCode,
         r.durationMs,
         r.user ?? null,
+        r.source ?? null,
       );
   }
 
@@ -361,6 +368,24 @@ export class Store {
   }
 
   /**
+   * Spend grouped by connected source/feed (x-aegis-source); null reads as
+   * 'direct'. A source is one AI tool deliberately routed through AegisFlow — the
+   * unit the product meters. The tag is set by `aegisflow connect <tool>` and
+   * stripped before the request leaves the machine, so the provider never sees it.
+   */
+  bySource(startMs: number, endMs: number): SpendBucket[] {
+    return this.db
+      .prepare(
+        `SELECT COALESCE(source, 'direct') AS label,
+                COALESCE(SUM(cost_usd),0) AS costUsd, COUNT(*) AS requests,
+                COALESCE(SUM(input_tokens),0) AS inputTokens, COALESCE(SUM(output_tokens),0) AS outputTokens
+         FROM requests WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ?
+         GROUP BY COALESCE(source, 'direct') ORDER BY costUsd DESC`,
+      )
+      .all(startMs, endMs) as unknown as SpendBucket[];
+  }
+
+  /**
    * Spend series over [startMs, endMs) bucketed by bucketMs, for charts.
    *
    * The bucket index is CAST to INTEGER so the division truncates to a whole
@@ -388,7 +413,7 @@ export class Store {
                 input_tokens AS inputTokens, output_tokens AS outputTokens,
                 cache_write_tokens AS cacheWriteTokens, cache_read_tokens AS cacheReadTokens,
                 reasoning_tokens AS reasoningTokens, cost_usd AS costUsd,
-                estimated, streamed, status_code AS statusCode, duration_ms AS durationMs, user
+                estimated, streamed, status_code AS statusCode, duration_ms AS durationMs, user, source
          FROM requests ORDER BY ts_epoch_ms DESC LIMIT ?`,
       )
       .all(limit) as Array<Record<string, unknown>>;
@@ -408,7 +433,7 @@ export class Store {
                 input_tokens AS inputTokens, output_tokens AS outputTokens,
                 cache_write_tokens AS cacheWriteTokens, cache_read_tokens AS cacheReadTokens,
                 reasoning_tokens AS reasoningTokens, cost_usd AS costUsd,
-                estimated, streamed, status_code AS statusCode, duration_ms AS durationMs, user
+                estimated, streamed, status_code AS statusCode, duration_ms AS durationMs, user, source
          FROM requests WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ? ORDER BY ts_epoch_ms ASC`,
       )
       .all(startMs, endMs) as Array<Record<string, unknown>>;

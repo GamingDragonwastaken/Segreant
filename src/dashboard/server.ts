@@ -7,7 +7,7 @@
  */
 
 import http from 'node:http';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import type { Store } from '../store/db.ts';
@@ -25,6 +25,30 @@ import { requestsToCsv } from '../export/csv.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const INDEX_HTML = join(__dirname, 'web', 'index.html');
+
+/**
+ * Loopback-only Host allowlist. The server is bound to 127.0.0.1, but a remote
+ * page could still reach it via DNS-rebinding (rebind a hostname to 127.0.0.1,
+ * then read responses as same-origin). Rejecting any non-loopback Host closes
+ * that — a rebound request carries the attacker's hostname, not localhost.
+ */
+function isLocalHost(host: string | undefined): boolean {
+  if (!host) return true; // no Host header → only reachable on the loopback we bind to
+  const name = host.replace(/:\d+$/, '').replace(/^\[|\]$/g, '').toLowerCase();
+  return name === 'localhost' || name === '127.0.0.1' || name === '::1';
+}
+
+/** Only honor a ?repo= that is an existing directory; otherwise the dashboard's cwd. */
+function safeRepo(param: string | null): string {
+  if (param) {
+    try {
+      if (existsSync(param) && statSync(param).isDirectory()) return param;
+    } catch {
+      /* unreadable path → fall back to cwd */
+    }
+  }
+  return process.cwd();
+}
 
 type RangeKey = 'today' | '7d' | '30d' | 'all';
 
@@ -63,6 +87,7 @@ function buildOverview(store: Store, config: AegisConfig, range: RangeKey) {
     byModel: store.byModel(startMs, endMs),
     byProject: store.byProject(startMs, endMs),
     byUser: store.byUser(startMs, endMs),
+    bySource: store.bySource(startMs, endMs),
     series: store.series(startMs, endMs, bucketMs),
     recent: store.recent(40),
     // Governance alerts refresh on the live poll. Realized-value alerts (git-gated)
@@ -81,6 +106,14 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
 
   return http.createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
+
+    // Loopback Host guard — defeats DNS-rebinding that could otherwise let a
+    // remote page read your local spend/value data despite the 127.0.0.1 bind.
+    if (!isLocalHost(req.headers.host)) {
+      res.writeHead(403, { 'content-type': 'text/plain' });
+      res.end('forbidden');
+      return;
+    }
 
     if (url.pathname === '/api/health') {
       return json(res, 200, { ok: true, service: 'aegisflow-dashboard' });
@@ -116,7 +149,7 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
     }
 
     if (url.pathname === '/api/realization') {
-      const repo = url.searchParams.get('repo') || process.cwd();
+      const repo = safeRepo(url.searchParams.get('repo'));
       const windowDays = Number(url.searchParams.get('window') || '14') || 14;
       void (async () => {
         try {
@@ -131,7 +164,7 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
     }
 
     if (url.pathname === '/api/value') {
-      const repo = url.searchParams.get('repo') || process.cwd();
+      const repo = safeRepo(url.searchParams.get('repo'));
       const windowDays = Number(url.searchParams.get('window') || '14') || 14;
       void (async () => {
         try {

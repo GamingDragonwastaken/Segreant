@@ -229,7 +229,12 @@ async function handle(
   const project = headerStr(req, 'x-aegis-project') ?? 'default';
   const sessionId = headerStr(req, 'x-aegis-session-id') ?? null;
   const user = headerStr(req, 'x-aegis-user') ?? null;
-  const taskWeight = Number(headerStr(req, 'x-aegis-task-weight') ?? '1') || 1;
+  // The connected source/feed (set by `aegisflow connect <tool>`). Like every
+  // x-aegis-* header it is stripped in buildUpstreamHeaders, so it tags our local
+  // ledger without ever being forwarded to the provider.
+  const source = headerStr(req, 'x-aegis-source') ?? null;
+  const rawTaskWeight = Number(headerStr(req, 'x-aegis-task-weight') ?? '1');
+  const taskWeight = Number.isFinite(rawTaskWeight) && rawTaskWeight > 0 ? rawTaskWeight : 1;
   const requestId = randomUUID();
   if (sessionId) store.upsertSession(sessionId, project, headerStr(req, 'user-agent') ?? 'unknown', startedAt);
 
@@ -267,6 +272,7 @@ async function handle(
       model: parsed.model,
       project,
       user,
+      source,
       taskWeight,
       inputTokens: 0,
       outputTokens: 0,
@@ -320,6 +326,7 @@ async function handle(
       model: parsed.model,
       project,
       user,
+      source,
       taskWeight,
       inputTokens: 0,
       outputTokens: 0,
@@ -414,6 +421,7 @@ async function handle(
     model: resolvedModel,
     project,
     user,
+    source,
     taskWeight,
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,
@@ -443,6 +451,10 @@ function persistProposals(
   files: ProposedFile[],
 ): void {
   try {
+    // Honor metadataOnly: when set, the local store keeps only token/cost metadata,
+    // so the AI's proposed code lines are never persisted (this turns off First-Pass
+    // Acceptance, by the user's choice).
+    if (deps.config.metadataOnly) return;
     if (files.length === 0) return;
     deps.store.insertProposal({
       proposalId: meta.requestId,

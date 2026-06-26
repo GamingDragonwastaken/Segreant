@@ -287,7 +287,7 @@ export function computeReturnOnIntelligence(report: RealizationLike, opts: RoIOp
   if (indexIsUpperBound && roiIndex !== null) {
     notes.push(
       `RoI Index is an UPPER bound: ${all.filter((l) => l.instrumented).length} of 4 lenses instrumented. ` +
-        'Wiring the rest can only lower it toward the truth — more measurement, more honest, never inflated.',
+        'Measuring the rest can only lower it toward the truth — more measurement, more honest, never inflated.',
     );
   }
 
@@ -368,7 +368,7 @@ export function computeReturnOnIntelligence(report: RealizationLike, opts: RoIOp
       basis: 'none',
     };
     if (grossValue !== null && !supervisionPriced) {
-      notes.push('RoI return un-priced: needs measured time-with-AI (proxy traffic) AND a labor rate to honestly cost your supervision — we will not invent a dollar return.');
+      notes.push('RoI return not yet priced: needs measured time-with-AI (proxy traffic) AND a labor rate to honestly cost your supervision — we will not invent a dollar return.');
     }
   }
 

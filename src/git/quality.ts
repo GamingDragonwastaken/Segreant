@@ -90,7 +90,9 @@ export async function revertedHashes(repoPath: string, limit: number): Promise<S
   const out = await git(repoPath, ['log', `-n${limit * 3}`, '--format=%b%x1e']);
   const reverted = new Set<string>();
   const re = /This reverts commit ([0-9a-f]{7,40})/g;
-  for (const m of out.matchAll(re)) reverted.add(m[1]!);
+  // Normalize to the 7-char prefix so detection works regardless of the
+  // abbreviation length git wrote into the revert message (7, 8, …, 40).
+  for (const m of out.matchAll(re)) reverted.add(m[1]!.slice(0, 7));
   return reverted;
 }
 
@@ -148,7 +150,7 @@ export async function computeQuality(
     const ageDays = (now - a.tsEpochMs) / (24 * 60 * 60 * 1000);
     const maturing = now - a.tsEpochMs < windowMs;
     const cost = a.attributedCostUsd;
-    const isReverted = reverted.has(a.hash) || reverted.has(a.hash.slice(0, 7));
+    const isReverted = reverted.has(a.hash.slice(0, 7));
 
     commits.push({
       ...a,

@@ -75,6 +75,10 @@ const PROJECTS = ['backend-api', 'web-frontend', 'data-pipeline'];
 const NAMED_USERS: string[] = ['alice@team', 'bob@team', 'carol@team'];
 // Background traffic includes some unattributed calls (no x-aegis-user header).
 const USERS: Array<string | null> = [...NAMED_USERS, null];
+// Connected sources (feeds) — the AI tools routed through AegisFlow. opencode is
+// the first first-class connector; the rest are a realistic multi-tool mix, plus
+// some untagged traffic (no x-aegis-source header) that reads as 'direct'.
+const SOURCES: Array<string | null> = ['opencode', 'cursor', 'claude-code', null];
 
 /**
  * Deterministic PRNG (mulberry32). A fixed seed makes the demo reproducible —
@@ -116,6 +120,7 @@ interface ReqSpec {
   model: ModelPick;
   project: string;
   user: string | null;
+  source?: string | null;
   sessionId: string | null;
   inputTokens: number;
   outputTokens: number;
@@ -161,6 +166,7 @@ function addRequest(ctx: Ctx, spec: ReqSpec): void {
     statusCode: spec.statusCode ?? 200,
     durationMs: blocked ? 2 : int(ctx.rng, 600, 9000),
     user: spec.user,
+    source: spec.source ?? null,
   };
   ctx.store.insertRequest(row);
   ctx.requests += 1;
@@ -178,6 +184,7 @@ function backgroundCall(ctx: Ctx, tsEpochMs: number): void {
     model,
     project: pick(ctx.rng, PROJECTS),
     user: pick(ctx.rng, USERS),
+    source: pick(ctx.rng, SOURCES),
     sessionId: null,
     inputTokens: int(ctx.rng, 1_200, 26_000),
     outputTokens: int(ctx.rng, 200, 3_000),
@@ -211,7 +218,8 @@ function codingSession(ctx: Ctx, idx: number, startMs: number): void {
   const sessionId = `demo-sess-code-${idx}`;
   const project = pick(ctx.rng, PROJECTS);
   const user = pick(ctx.rng, NAMED_USERS);
-  ctx.store.upsertSession(sessionId, project, 'cursor', startMs);
+  const source = pick(ctx.rng, ['opencode', 'cursor']);
+  ctx.store.upsertSession(sessionId, project, source, startMs);
   ctx.sessions += 1;
 
   const calls = int(ctx.rng, 6, 12);
@@ -222,6 +230,7 @@ function codingSession(ctx: Ctx, idx: number, startMs: number): void {
       model: pick(ctx.rng, [OPUS, SONNET, SONNET]),
       project,
       user,
+      source,
       sessionId,
       inputTokens: int(ctx.rng, 6_000, 45_000),
       outputTokens: int(ctx.rng, 700, 4_500),
@@ -243,6 +252,7 @@ function nonCodingSession(ctx: Ctx, idx: number, startMs: number, outcome: strin
   const sessionId = `demo-sess-chat-${idx}`;
   const project = pick(ctx.rng, PROJECTS);
   const user = pick(ctx.rng, USERS);
+  const source = pick(ctx.rng, SOURCES);
   ctx.store.upsertSession(sessionId, project, 'chat', startMs);
   ctx.sessions += 1;
 
@@ -254,6 +264,7 @@ function nonCodingSession(ctx: Ctx, idx: number, startMs: number, outcome: strin
       model: pick(ctx.rng, [SONNET, GPT4O, HAIKU]),
       project,
       user,
+      source,
       sessionId,
       inputTokens: int(ctx.rng, 1_500, 12_000),
       outputTokens: int(ctx.rng, 300, 2_000),
@@ -378,6 +389,7 @@ function seedUnitTraffic(ctx: Ctx, spec: UnitSpec, u: WorkUnit): void {
   const span = Math.max(1, u.windowEndMs - u.windowStartMs);
   const model = unitModelPick(spec.model);
   const user = pick(ctx.rng, NAMED_USERS);
+  const source = pick(ctx.rng, ['opencode', 'cursor', 'claude-code']);
   for (let k = 0; k < reqs; k++) {
     const base = u.windowStartMs + Math.floor((span * (k + 0.5)) / reqs);
     const ts = Math.min(u.windowEndMs, Math.max(u.windowStartMs, base + int(ctx.rng, -2 * 60_000, 2 * 60_000)));
@@ -386,6 +398,7 @@ function seedUnitTraffic(ctx: Ctx, spec: UnitSpec, u: WorkUnit): void {
       model,
       project: spec.project,
       user,
+      source,
       // sessionId null on purpose: this is the coding traffic that produced the
       // commit, so it must NOT be grouped as a non-coding usage session. METR
       // windowing still measures it (it buckets null sessions as one stream).
@@ -444,6 +457,7 @@ export function seedDemo(store: Store, opts: { now?: number; days?: number } = {
         model: pick(ctx.rng, [OPUS, SONNET, SONNET, OPUS]),
         project: proj,
         user,
+        source: pick(ctx.rng, SOURCES),
         sessionId: null,
         inputTokens: int(ctx.rng, 8_000, 55_000),
         outputTokens: int(ctx.rng, 800, 5_000),
@@ -483,6 +497,7 @@ export function seedDemo(store: Store, opts: { now?: number; days?: number } = {
       model: OPUS,
       project: 'backend-api',
       user: 'alice@team',
+      source: 'claude-code',
       sessionId: hotSession,
       inputTokens: int(ctx.rng, 45_000, 120_000),
       outputTokens: int(ctx.rng, 3_000, 8_000),
@@ -503,6 +518,7 @@ export function seedDemo(store: Store, opts: { now?: number; days?: number } = {
       model: OPUS,
       project: 'backend-api',
       user: 'alice@team',
+      source: 'claude-code',
       sessionId: hotSession,
       inputTokens: 0,
       outputTokens: 0,

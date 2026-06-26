@@ -27,6 +27,10 @@
     --sky: #7cc4f2;
     --violet: #b69cf0;
     --r: 14px;
+    /* 4px spacing scale — every margin/padding/gap below snaps to this so the
+       layout holds one rhythm instead of drifting off-grid (was 28/22/18/14/11px…). */
+    --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px;
+    --s6: 24px; --s8: 32px; --s10: 40px; --s12: 48px;
     /* System-only stacks — no external fetch (local-first). Prefer installed
        niceties (JetBrains Mono / IBM Plex / Fraunces) and otherwise fall back to
        first-class platform fonts (Cascadia/SF Mono, Segoe UI, Palatino). */
@@ -57,11 +61,11 @@
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   }
 
-  .wrap { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; padding: 28px 28px 80px; }
+  .wrap { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; padding: var(--s8) var(--s8) 80px; }
 
   header {
     display: flex; align-items: center; justify-content: space-between;
-    gap: 20px; padding-bottom: 22px; margin-bottom: 26px;
+    gap: var(--s5); padding-bottom: var(--s6); margin-bottom: var(--s8);
     border-bottom: 1px solid var(--line-soft);
   }
   .brand { display: flex; align-items: center; gap: 12px; }
@@ -79,30 +83,30 @@
   .ranges button:hover { color: var(--text); }
   .ranges button.on { background: var(--gold-soft); color: var(--gold); }
 
-  .grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 18px; }
-  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+  .grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: var(--s5); }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } .wrap { padding: var(--s5) var(--s4) var(--s12); } }
 
-  .card { background: linear-gradient(180deg, var(--panel) 0%, var(--ink-2) 100%); border: 1px solid var(--line); border-radius: var(--r); padding: 22px; position: relative; overflow: hidden; }
-  .card .label { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); margin-bottom: 14px; }
+  .card { background: linear-gradient(180deg, var(--panel) 0%, var(--ink-2) 100%); border: 1px solid var(--line); border-radius: var(--r); padding: var(--s6); position: relative; overflow: hidden; }
+  .card .label { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); margin-bottom: var(--s4); }
 
   .hero { grid-column: 1 / -1; display: grid; grid-template-columns: 1.4fr 1fr; gap: 0; padding: 0; }
   @media (max-width: 860px) { .hero { grid-template-columns: 1fr; } }
-  .hero .spend { padding: 26px 26px 24px; border-right: 1px solid var(--line-soft); }
+  .hero .spend { padding: var(--s6); border-right: 1px solid var(--line-soft); }
   @media (max-width: 860px) { .hero .spend { border-right: 0; border-bottom: 1px solid var(--line-soft); } }
   .bignum { font-family: var(--mono); font-weight: 700; font-size: clamp(40px, 7vw, 68px); letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; color: var(--text); }
   .bignum .cur { color: var(--gold); font-size: 0.5em; vertical-align: 0.5em; margin-right: 2px; }
   .spend .sub { color: var(--muted); margin-top: 12px; font-size: 13px; }
   .spend .sub b { color: var(--text); font-family: var(--mono); font-weight: 500; }
 
-  .gaugewrap { padding: 26px; display: flex; align-items: center; gap: 22px; }
+  .gaugewrap { padding: var(--s6); display: flex; align-items: center; gap: var(--s5); }
   .gauge { width: 116px; height: 116px; flex: none; }
   .budgetinfo .k { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
-  .budgetinfo .v { font-family: var(--mono); font-size: 20px; font-weight: 500; margin: 2px 0 14px; font-variant-numeric: tabular-nums; }
+  .budgetinfo .v { font-family: var(--mono); font-size: 20px; font-weight: 500; margin: var(--s1) 0 var(--s4); font-variant-numeric: tabular-nums; }
   .budgetinfo .v.left { color: var(--mint); }
   .nocap { color: var(--muted); font-size: 13px; max-width: 220px; }
   .nocap code { font-family: var(--mono); color: var(--gold); background: var(--gold-soft); padding: 1px 6px; border-radius: 5px; font-size: 12px; }
 
-  .stats { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
+  .stats { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s5); }
   @media (max-width: 720px) { .stats { grid-template-columns: repeat(2, 1fr); } }
   .stat .n { font-family: var(--mono); font-size: 24px; font-weight: 500; font-variant-numeric: tabular-nums; }
   .stat .n.in { color: var(--sky); }
@@ -112,8 +116,8 @@
   .chartcard { grid-column: 1 / -1; }
   svg.spark { width: 100%; height: 150px; display: block; }
 
-  .bars { display: flex; flex-direction: column; gap: 13px; }
-  .bar .top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .bars { display: flex; flex-direction: column; gap: var(--s3); }
+  .bar .top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: var(--s2); }
   .bar .name { font-family: var(--mono); font-size: 12.5px; color: var(--text); }
   .bar .name .prov { color: var(--faint); }
   .bar .cost { font-family: var(--mono); font-size: 12.5px; color: var(--gold); font-variant-numeric: tabular-nums; }
@@ -140,11 +144,11 @@
   .cmd { display: inline-block; font-family: var(--mono); font-size: 13px; color: var(--gold); background: var(--gold-soft); border: 1px solid rgba(233,185,73,0.25); border-radius: 9px; padding: 10px 16px; text-align: left; }
   .cmd span { color: var(--faint); }
 
-  .foot { margin-top: 30px; text-align: center; color: var(--faint); font-family: var(--mono); font-size: 11px; letter-spacing: 0.05em; }
+  .foot { margin-top: var(--s8); text-align: center; color: var(--faint); font-family: var(--mono); font-size: 11px; letter-spacing: 0.05em; }
   .foot b { color: var(--mint); }
 
   /* Governance alerts banner */
-  #alerts { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+  #alerts { display: flex; flex-direction: column; gap: var(--s2); margin-bottom: var(--s5); }
   #alerts:empty { display: none; }
   .alert { display: flex; align-items: flex-start; gap: 12px; padding: 12px 16px; border-radius: 11px; border: 1px solid var(--line-soft); background: var(--panel); }
   .alert .sev { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 8px; border-radius: 6px; white-space: nowrap; margin-top: 2px; }
@@ -165,29 +169,29 @@
   @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
   /* ---- Return on Intelligence ---- */
-  .vhead { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 40px 0 18px; padding-top: 28px; border-top: 1px solid var(--line-soft); }
+  .vhead { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); margin: var(--s10) 0 var(--s5); padding-top: var(--s6); border-top: 1px solid var(--line-soft); }
   .vhead h2 { font-family: var(--serif); font-weight: 500; font-size: 22px; letter-spacing: -0.01em; }
   .vhead .tag { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); margin-top: 3px; }
   .vbtn { font-family: var(--mono); font-size: 11.5px; color: var(--gold); background: var(--gold-soft); border: 1px solid rgba(233,185,73,0.3); border-radius: 9px; padding: 7px 14px; cursor: pointer; transition: all .18s; }
   .vbtn:hover { background: rgba(233,185,73,0.2); }
   .roihero { grid-column: 1/-1; display: grid; grid-template-columns: 1fr 1.4fr; gap: 0; padding: 0; }
   @media (max-width: 860px) { .roihero { grid-template-columns: 1fr; } }
-  .roihero .idxpane { padding: 26px; border-right: 1px solid var(--line-soft); display: flex; flex-direction: column; justify-content: center; }
+  .roihero .idxpane { padding: var(--s6); border-right: 1px solid var(--line-soft); display: flex; flex-direction: column; justify-content: center; }
   @media (max-width: 860px) { .roihero .idxpane { border-right: 0; border-bottom: 1px solid var(--line-soft); } }
   .roibig { font-family: var(--mono); font-weight: 700; font-size: clamp(44px,7vw,66px); line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
   .roibig small { font-size: 0.3em; color: var(--faint); font-weight: 500; }
-  .roihero .lenspane { padding: 24px 26px; }
-  .lens { display: grid; grid-template-columns: 96px 1fr 46px; gap: 11px; align-items: center; margin: 9px 0; }
+  .roihero .lenspane { padding: var(--s6); }
+  .lens { display: grid; grid-template-columns: 96px 1fr 46px; gap: var(--s3); align-items: center; margin: var(--s2) 0; }
   .lens .ln { font-family: var(--mono); font-size: 12px; color: var(--muted); }
   .lens .lt { height: 7px; background: var(--panel-2); border-radius: 6px; overflow: hidden; }
   .lens .lf { height: 100%; border-radius: 6px; background: linear-gradient(90deg, var(--gold), #f3cf7a); transition: width .6s cubic-bezier(.2,.7,.2,1); }
   .lens .lv { font-family: var(--mono); font-size: 12px; text-align: right; color: var(--gold); font-variant-numeric: tabular-nums; }
   .lens .lv.na { color: var(--faint); font-size: 10px; }
-  .wstage, .rrow { display: flex; justify-content: space-between; align-items: center; font-family: var(--mono); font-size: 12px; padding: 7px 0; border-bottom: 1px solid var(--line-soft); }
+  .wstage, .rrow { display: flex; justify-content: space-between; align-items: center; font-family: var(--mono); font-size: 12px; padding: var(--s2) 0; border-bottom: 1px solid var(--line-soft); }
   .wstage:last-child, .rrow:last-child { border-bottom: 0; }
   .wstage .c { color: var(--gold); font-variant-numeric: tabular-nums; }
   .wstage .c.good { color: var(--mint); }
-  .rec { font-family: var(--mono); font-size: 11.5px; color: var(--muted); padding: 7px 0; line-height: 1.5; border-bottom: 1px solid var(--line-soft); }
+  .rec { font-family: var(--mono); font-size: 11.5px; color: var(--muted); padding: var(--s2) 0; line-height: 1.5; border-bottom: 1px solid var(--line-soft); }
   .rec:last-child { border-bottom: 0; }
   .rtag { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.08em; padding: 1px 6px; border-radius: 5px; margin-right: 7px; }
   .rtag.grow { background: rgba(87,210,163,0.14); color: var(--mint); }
@@ -400,6 +404,12 @@ function render(d) {
     <div class="meta">${u.requests} req</div></div>`).join('');
   const userCard = hasUsers ? `<div class="card fade"><div class="label">By user</div><div class="bars">${userBars}</div></div>` : '';
 
+  const hasSources = (d.bySource || []).some((x) => x.label !== 'direct');
+  const sourceBars = (d.bySource || []).map((x) => `
+    <div class="bar"><div class="top"><span class="name">${esc(x.label)}</span><span class="cost">$${usd(x.costUsd)}</span></div>
+    <div class="meta">${x.requests} req</div></div>`).join('');
+  const sourceCard = hasSources ? `<div class="card fade"><div class="label">By source ${tip('Spend grouped by connected source — each AI tool you route through AegisFlow. Tag a tool with the <code>X-Aegis-Source</code> header (the connect command sets this for you) and its spend lands here. Untagged traffic reads as <b>direct</b>. The tag is stripped before the request ever leaves your machine.')}</div><div class="bars">${sourceBars}</div></div>` : '';
+
   setNodes(grid, `
     <div class="card hero fade">
       <div class="spend">
@@ -419,6 +429,7 @@ function render(d) {
     <div class="card fade"><div class="label">By model</div><div class="bars">${modelBars || '<span style="color:var(--faint)">no data</span>'}</div></div>
     <div class="card fade"><div class="label">By project</div><div class="bars">${projectBars || '<span style="color:var(--faint)">no data</span>'}</div></div>
     ${userCard}
+    ${sourceCard}
     <div class="card recent fade">
       <div class="label">Recent requests</div>
       <table>
@@ -471,7 +482,7 @@ const LENS_WHY = {
 
 function lensBar(name, lens) {
   if (!lens || !lens.instrumented || lens.value == null) {
-    const why = LENS_WHY[name] ? tip('<b>' + esc(name) + ' isn\'t wired yet.</b> ' + LENS_WHY[name]) : '';
+    const why = LENS_WHY[name] ? tip('<b>' + esc(name) + ' isn\'t connected yet.</b>' + LENS_WHY[name]) : '';
     return `<div class="lens"><span class="ln">${esc(name)}</span><div class="lt"></div><span class="lv na">n/a${why}</span></div>`;
   }
   const p = Math.round(lens.value * 100);
@@ -497,10 +508,10 @@ function renderValue(d) {
     const rcolor = head >= 1 ? 'var(--mint)' : 'var(--coral)';
     const rband = rr.causalRange && rr.causalRange.low != null && rr.causalRange.high != null
       ? ` <span style="color:var(--muted)">[${rr.causalRange.low.toFixed(2)}–${rr.causalRange.high.toFixed(2)}×]</span>` : '';
-    returnHtml = `<div class="sub" style="margin-top:10px;font-size:12.5px;color:var(--muted)">RoI return ${tip('Return on Intelligence as money: <b>realized value ÷ honest cost</b> (tokens + measured supervision time). <b>≥ 1×</b> means it paid for itself. Shown as a range because the counterfactual is a range; capped at gross until Lift is wired.')}<b style="color:${rcolor};font-family:var(--mono)">${head.toFixed(2)}×</b>${rband} — ${head >= 1 ? 'pays for itself' : 'below break-even'}`
-      + `<div style="color:var(--faint);font-size:11px;margin-top:2px">$${money(rr.realizedValueUsd)} realized work ÷ $${money(rr.costUsd)} cost (tokens + your time)${rr.causalRatio == null ? ' · gross, Lift not wired' : ''}</div></div>`;
+    returnHtml = `<div class="sub" style="margin-top:10px;font-size:12.5px;color:var(--muted)">RoI return ${tip('Return on Intelligence as money: <b>realized value ÷ honest cost</b> (tokens + measured supervision time). <b>≥ 1×</b> means it paid for itself. Shown as a range because the counterfactual is a range; capped at the gross figure until Lift is connected.')}<b style="color:${rcolor};font-family:var(--mono)">${head.toFixed(2)}×</b>${rband} — ${head >= 1 ? 'pays for itself' : 'below break-even'}`
+      + `<div style="color:var(--faint);font-size:11px;margin-top:2px">$${money(rr.realizedValueUsd)} realized work ÷ $${money(rr.costUsd)} cost (tokens + your time)${rr.causalRatio == null ? ' · gross — Lift not yet connected' : ''}</div></div>`;
   } else if (rr && rr.realizedValueUsd != null && !rr.supervisionPriced) {
-    returnHtml = `<div class="sub" style="margin-top:10px;font-size:11.5px;color:var(--faint)">RoI return un-priced — wire proxy traffic so your time-with-AI can be measured ${tip('The dollar return cannot be priced until your <b>time-with-AI</b> is measured. Route real traffic through the proxy so supervision time is captured; without it a dollar return would be fiction.')}</div>`;
+    returnHtml = `<div class="sub" style="margin-top:10px;font-size:11.5px;color:var(--faint)">RoI return — not yet priced. Route real traffic through the proxy so your time-with-AI can be measured${tip('The dollar return cannot be priced until your <b>time-with-AI</b> is measured. Route real traffic through the proxy so supervision time is captured; without it, a dollar return would be invented.')}</div>`;
   }
 
   const heroLenses = roi
@@ -513,7 +524,7 @@ function renderValue(d) {
     pnl = stages.length
       ? stages.map((b) => {
           const good = b.stage === 'realized';
-          const label = good ? 'realized ✓' : 'died at ' + b.stage;
+          const label = good ? 'realized ✓' : 'stopped at ' + b.stage;
           return `<div class="wstage"><span>${esc(label)}</span><span class="c ${good ? 'good' : ''}">$${money(b.costUsd)} · ${b.units}u</span></div>`;
         }).join('')
       : '<div style="color:var(--faint);font-family:var(--mono);font-size:12px">no matured units yet</div>';
@@ -531,18 +542,13 @@ function renderValue(d) {
     : (bud.reallocations || []).map((r) =>
         `<div class="rec"><span class="rtag ${r.action === 'grow' ? 'grow' : 'trim'}">${esc(r.action.toUpperCase())}</span>${esc(r.context)} — ${esc(r.reason)}</div>`).join('');
 
-  let frontierCard = '';
-  if (d.frontier) {
-    const frows = d.frontier.byModelAndTask.slice(0, 10).map((c) =>
-      `<tr><td class="model">${esc(c.key)}</td><td>${c.units}</td><td class="cost">$${money(c.costUsd)}</td><td>${Math.round(c.realizationRate * 100)}%</td><td class="roi">${c.roiIndex == null ? '—' : Math.round(c.roiIndex)}</td></tr>`).join('');
-    const frecs = d.frontier.recommendations.map((r) => `<div class="rec">→ ${esc(r)}</div>`).join('');
-    frontierCard = `<div class="card fade" style="grid-column:1/-1">
-      <div class="label">The frontier — what's best for you (RoI by model × task-type)</div>
-      <table><thead><tr><th>Context</th><th>Units</th><th style="text-align:right">Cost</th><th>Realized</th><th style="text-align:right">RoI</th></tr></thead>
-      <tbody>${frows || '<tr><td colspan="5" style="color:var(--faint)">not enough matured data yet</td></tr>'}</tbody></table>
-      ${frecs ? `<div style="margin-top:12px">${frecs}</div>` : ''}
-    </div>`;
-  }
+  // The "frontier" (best model × task-type) is intentionally NOT a dashboard
+  // panel. Recommending which model to use is an operational call, not a financial
+  // one — outside what a spend-governance console should assert. Its financial
+  // half (move budget toward higher-return contexts) already appears in the
+  // Budget advisor's allocation rows. The full table stays a *usage*, via the CLI:
+  // `aegisflow frontier`. The /api/value `frontier` field is still served (it
+  // backs allocation), just not rendered here.
 
   // By-project value — the budget owner's view (who/what is the spend paying off).
   let projectCard = '';
@@ -557,7 +563,7 @@ function renderValue(d) {
         + `</div>`
       : '';
     projectCard = `<div class="card fade" style="grid-column:1/-1">
-      <div class="label">By project — is each team's AI spend paying off? <span style="color:var(--faint)">the budget owner's view</span></div>
+      <div class="label">By project ${tip('Return on each project\'s AI spend, read from stored snapshots — so a budget owner sees it without any of the team\'s repos on their machine. <b>Realized</b> = the share of that project\'s work that became kept, durable output; <b>RoI</b> = its RoI Index (0–100).')}</div>
       <table><thead><tr><th>Project</th><th>Units</th><th style="text-align:right">Cost</th><th>Realized</th><th style="text-align:right">RoI</th></tr></thead>
       <tbody>${prows}</tbody></table>
       ${paHtml}
@@ -580,11 +586,11 @@ function renderValue(d) {
   setNodes(g, `
     <div class="card roihero fade">
       <div class="idxpane">
-        <div class="label">RoI Index ${tip('The <b>geometric mean</b> of the four value lenses, 0–100. Geometric, not an average: if any one lens nears zero the whole index collapses, so a single maxed axis cannot game it.')}</div>
+        <div class="label">RoI Index ${tip('The <b>geometric mean</b> of the four value lenses, 0–100. Geometric, not an average: if any one lens nears zero the whole index collapses, so no single maxed axis can inflate it.')}</div>
         <div class="roibig" style="color:${idxColor}">${idx == null ? '—' : idx}<small> / 100</small></div>
-        ${band ? `<div style="font-family:var(--mono);font-size:11.5px;color:var(--muted);margin-top:3px">partially-identified interval <b style="color:var(--text)">${band}</b>${tip('The counterfactual lens (Lift) can only be <b>bounded</b>, not pinned to a point, so the index is shown as an honest range rather than false precision.')}</div>` : ''}
-        ${upperBound ? `<div style="font-family:var(--mono);font-size:11px;color:var(--gold);margin-top:3px">↑ upper bound — wiring the rest can only lower it${tip('Some lenses are not wired yet, so this is the <b>highest</b> the index could be. Measuring the rest can only pull it down, never up — more instrumentation means a more honest number.')}</div>` : ''}
-        <div class="sub" style="color:var(--muted);margin-top:12px;font-size:12.5px">Realized efficiency <b style="color:var(--text);font-family:var(--mono)">${esc(eff)}</b> · ${cov}/4 lenses wired${srcLabel}${tip('<b>Realized efficiency</b>: the share of spend that became kept, durable value. <b>' + cov + '/4 lenses wired</b>: how much signal is connected — unwired lenses are excluded, never guessed.')}</div>
+        ${band ? `<div style="font-family:var(--mono);font-size:11.5px;color:var(--muted);margin-top:3px">range <b style="color:var(--text)">${band}</b>${tip('Lift — the "no-AI" counterfactual — can only be <b>bounded</b>, not pinned to a single number, so the Index is shown as an honest range rather than false precision.')}</div>` : ''}
+        ${upperBound ? `<div style="font-family:var(--mono);font-size:11px;color:var(--gold);margin-top:3px">↑ upper bound — measuring the rest can only lower it${tip('Some lenses aren\'t connected yet, so this is the <b>highest</b> the Index could be. Measuring the rest can only pull it down, never up — more measurement means a more honest number.')}</div>` : ''}
+        <div class="sub" style="color:var(--muted);margin-top:12px;font-size:12.5px">Realized efficiency <b style="color:var(--text);font-family:var(--mono)">${esc(eff)}</b> · ${cov}/4 lenses connected${srcLabel}${tip('<b>Realized efficiency</b>: the share of spend that became kept, durable value. <b>' + cov + '/4 lenses connected</b>: how much signal is connected — unconnected lenses are excluded, never guessed.')}</div>
         ${returnHtml}
       </div>
       <div class="lenspane">
@@ -592,18 +598,17 @@ function renderValue(d) {
         ${heroLenses}
       </div>
     </div>
-    <div class="card fade"><div class="label">Where the spend went ${tip('Realized-cost grouped by the <b>last gate each unit reached</b>. "died at tested" means it was tested but never merged or shipped — spend that stalled before becoming durable value; "realized" made it all the way through.')}</div>${pnl}</div>
+    <div class="card fade"><div class="label">Where the spend went ${tip('Realized-cost grouped by the <b>last gate each unit reached</b>. "stopped at tested" means it was tested but never merged or shipped — spend that stalled before becoming durable value; "realized" made it all the way through.')}</div>${pnl}</div>
     <div class="card fade">
       <div class="label">Budget advisor ${tip('A value-aware cap from your p90 active-day spend, tightened when realized value is low. It needs a few active days of real usage before it appears — no invented numbers on day one.')}</div>
       ${budBody}
     </div>
-    ${frontierCard}
     ${projectCard}
     <div class="card fade" style="grid-column:1/-1">
       <div class="label">Non-coding usage · chat · research · drafting</div>
       <div class="rrow"><span style="color:var(--muted)">RoI Index</span><span style="font-family:var(--mono);color:${uidx == null ? 'var(--faint)' : 'var(--mint)'}">${uidx == null ? 'n/a' : uidx + ' / 100'}</span></div>
       <div class="rrow"><span style="color:var(--muted)">Realized sessions</span><span style="font-family:var(--mono)">${u.realizedUnits}/${u.units.length} · $${money(u.totalCostUsd)}</span></div>
-      <div class="lenshow">Acceptance &amp; survival are n/a for non-code (no diff, no git) — realized = a reported, no-incident outcome. Wire with: <span style="color:var(--gold)">aegisflow report --session &lt;id&gt; --kind used</span></div>
+      <div class="lenshow">Acceptance &amp; survival are n/a for non-code (no diff, no git) — realized = a reported, no-incident outcome. Record with: <span style="color:var(--gold)">aegisflow report --session &lt;id&gt; --kind used</span></div>
     </div>`);
 }
 

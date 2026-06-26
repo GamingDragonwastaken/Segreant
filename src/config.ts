@@ -99,7 +99,13 @@ export interface AegisConfig {
   pricing: PricingConfig;
   /** Prune request rows older than this many days during maintenance. */
   retentionDays: number;
-  /** When true, the proxy logs only metadata and never the prompt/response bodies. */
+  /**
+   * When true, the proxy stores ONLY token/cost metadata and skips capturing
+   * proposed-edit content. That turns OFF First-Pass Acceptance (the proposal⇄commit
+   * diff needs the AI's proposed lines stored locally). Default false so the signal
+   * works out of the box. Either way nothing is ever sent off-device — this only
+   * controls what is persisted in the local DB.
+   */
   metadataOnly: boolean;
 }
 
@@ -137,7 +143,7 @@ export const DEFAULT_CONFIG: AegisConfig = {
     autoRefresh: false,
   },
   retentionDays: 180,
-  metadataOnly: true,
+  metadataOnly: false,
 };
 
 export function aegisHome(): string {
@@ -193,6 +199,7 @@ export function ensureHome(): string {
 function deepMerge<T>(base: T, override: Partial<T>): T {
   const out = { ...base } as Record<string, unknown>;
   for (const [k, v] of Object.entries(override ?? {})) {
+    if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
     if (v && typeof v === 'object' && !Array.isArray(v) && typeof out[k] === 'object') {
       out[k] = deepMerge(out[k] as Record<string, unknown>, v as Record<string, unknown>);
     } else if (v !== undefined) {

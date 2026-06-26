@@ -72,7 +72,7 @@ test('RoI return: refuses to invent a dollar return without measured supervision
   assert.equal(r.returnRatio.basis, 'none');
   assert.equal(r.returnRatio.grossRatio, null);
   assert.equal(r.returnRatio.causalRatio, null);
-  assert.ok(r.notes.some((n) => /un-priced/i.test(n)), 'explains why it will not fake the number');
+  assert.ok(r.notes.some((n) => /will not invent a dollar return/i.test(n)), 'explains why it will not fake the number');
 });
 
 test('RoI return: gross-only (Lift not wired) is an explicit upper bound on the causal return', () => {

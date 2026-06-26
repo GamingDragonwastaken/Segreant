@@ -30,6 +30,21 @@ test('store.byUser: groups spend by developer; null reads as "unassigned", sorte
   store.close();
 });
 
+test('store.bySource: groups spend by connected source; null reads as "direct", sorted by cost', () => {
+  const store = new Store(':memory:');
+  store.insertRequest(req({ source: 'opencode', costUsd: 3 }));
+  store.insertRequest(req({ source: 'opencode', costUsd: 2 }));
+  store.insertRequest(req({ source: 'cursor', costUsd: 1 }));
+  store.insertRequest(req({ source: null, costUsd: 4 }));
+  const rows = store.bySource(0, 5000);
+  const map = Object.fromEntries(rows.map((r) => [r.label, r.costUsd]));
+  assert.equal(map['opencode'], 5);
+  assert.equal(map['cursor'], 1);
+  assert.equal(map['direct'], 4);
+  assert.equal(rows[0]!.label, 'opencode'); // highest cost first (opencode $5 > direct $4 > cursor $1)
+  store.close();
+});
+
 test('store migration: a DB created before the user column gains it (ALTER path)', () => {
   const dir = mkdtempSync(join(tmpdir(), 'aegis-mig-'));
   const path = join(dir, 'old.db');

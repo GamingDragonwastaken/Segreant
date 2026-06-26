@@ -287,6 +287,42 @@ test('proxy attributes spend to the x-aegis-user header (per-developer FinOps)',
   store.close();
 });
 
+test('proxy attributes spend to x-aegis-source AND strips the tag before forwarding upstream', async () => {
+  // A recording upstream so we can assert the source tag never reaches the provider —
+  // "connect, don't intercept": the tag is ours, the provider sees a vanilla request.
+  let received: http.IncomingHttpHeaders = {};
+  const upstream = http.createServer(async (req, res) => {
+    received = req.headers;
+    for await (const _ of req) { /* drain body */ }
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ id: 'msg_1', model: 'claude-opus-4-8', usage: { input_tokens: 1000, output_tokens: 50 } }));
+  });
+  upstream.listen(0);
+  await once(upstream, 'listening');
+  const addr = upstream.address();
+  const port = typeof addr === 'object' && addr ? addr.port : 0;
+
+  const store = new Store(':memory:');
+  const proxy = await startProxy(store, {}, `http://127.0.0.1:${port}`);
+
+  await fetch(`${proxy.base}/v1/messages`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-api-key': 'sk-test', 'x-aegis-source': 'opencode', 'x-aegis-project': 'demo' },
+    body: JSON.stringify({ model: 'claude-opus-4-8', messages: [{ role: 'user', content: 'hi' }] }),
+  });
+  await new Promise((r) => setTimeout(r, 20));
+
+  const rows = store.bySource(0, Date.now() + 1000);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]!.label, 'opencode');
+  assert.ok(rows[0]!.costUsd > 0, 'spend attributed to the source');
+  assert.equal(received['x-aegis-source'], undefined, 'the source tag is ours — never forwarded to the provider');
+
+  await proxy.close();
+  await new Promise<void>((r) => upstream.close(() => r()));
+  store.close();
+});
+
 test('budget: hard daily cap blocks with 429 once exceeded', async () => {
   const upstream = await startMockUpstream();
   const store = new Store(':memory:');

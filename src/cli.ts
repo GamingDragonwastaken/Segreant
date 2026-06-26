@@ -51,8 +51,10 @@ import {
 } from './value/receipt.ts';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync } from 'node:fs';
+import { SOURCE_HEADER, CONNECTORS, opencodeProviderBlock, mergeOpencodeConfig } from './connect/connectors.ts';
 
 const C = {
   reset: '\x1b[0m',
@@ -192,6 +194,243 @@ function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void {
   console.log(color(tty, C.gray, `  Dashboard: run "aegisflow start" then open http://localhost:${cfg.dashboardPort}`));
   console.log('');
   store.close();
+}
+
+/**
+ * Spend by connected source — each AI tool deliberately routed through AegisFlow.
+ * This is the "connect, don't intercept" view: a source is a feed, and its depth
+ * is honest about how much of the loop it exposes (a proxy-connected tool gives
+ * spend + attribution; untagged traffic is 'direct' and spend-only).
+ */
+function cmdSources(flags: Flags): void {
+  const store = new Store(dbPath());
+  const all = Boolean(flags.all);
+  const now = Date.now();
+  const startMs = all ? 0 : now - 30 * 24 * 60 * 60 * 1000;
+  const bySource = store.bySource(startMs, now + 1000);
+
+  if (flags.json) {
+    process.stdout.write(JSON.stringify({ window: all ? 'all' : '30d', demo: isDemo(), bySource }, null, 2) + '\n');
+    store.close();
+    return;
+  }
+
+  const tty = process.stdout.isTTY ?? false;
+  console.log('');
+  console.log(color(tty, C.bold, '  AegisFlow — sources (connected AI feeds)'));
+  console.log(color(tty, C.gray, '  ' + '─'.repeat(46)));
+  if (isDemo()) console.log(color(tty, C.yellow, '  ● DEMO DATA — synthetic, isolated in demo.db'));
+  console.log(color(tty, C.gray, `  ${all ? 'all time' : 'last 30 days'} · spend grouped by the tool each request was routed from`));
+  console.log('');
+
+  if (!bySource.length) {
+    console.log(color(tty, C.gray, '  No metered traffic yet. Connect a tool as a source, then run it:'));
+    console.log(color(tty, C.green, '    aegisflow connect opencode'));
+    console.log('');
+    store.close();
+    return;
+  }
+
+  for (const s of bySource.slice(0, 12)) {
+    const depth = s.label === 'direct' ? 'untagged · spend only' : 'connected · spend + attribution';
+    console.log(`  ${s.label.padEnd(20)} ${usd(s.costUsd).padStart(11)}  ${color(tty, C.gray, `${num(s.requests)} req · ${depth}`)}`);
+  }
+  console.log('');
+  console.log(color(tty, C.gray, "  A source is one AI tool deliberately routed through AegisFlow (connect, don't intercept)."));
+  console.log(color(tty, C.gray, '  Tag one with:  aegisflow connect <tool>   — the tag is stripped before traffic leaves your machine.'));
+  console.log('');
+  store.close();
+}
+
+/** Where opencode keeps its global config (XDG-style, same on Windows). */
+function opencodeConfigPath(): string | null {
+  for (const name of ['opencode.jsonc', 'opencode.json']) {
+    const p = join(homedir(), '.config', 'opencode', name);
+    if (existsSync(p)) return p;
+  }
+  return null;
+}
+
+/** Print the provider block, indented under the "provider" key it goes inside. */
+function printOpencodeSnippet(block: Record<string, unknown>, tty: boolean): void {
+  const snippet = JSON.stringify({ aegisflow: block }, null, 2);
+  console.log('');
+  for (const line of snippet.split('\n')) console.log(color(tty, C.cyan, '    ' + line));
+  console.log('');
+}
+
+/** The shared closing note: where the key/model come from + how to verify. */
+function finishConnectOpencode(tty: boolean): void {
+  console.log(color(tty, C.gray, '  apiKey/model are whatever provider you actually route through AegisFlow — point'));
+  console.log(color(tty, C.gray, "  AegisFlow's upstream at that provider. (The example block shows the Gemini free tier;"));
+  console.log(color(tty, C.gray, '  swap in the provider + key you already use.) Then run opencode and check:'));
+  console.log(color(tty, C.green, '    aegisflow sources'));
+  console.log('');
+}
+
+function connectOpencode(cfg: AegisConfig, flags: Flags, tty: boolean): void {
+  const port = cfg.port;
+  const block = opencodeProviderBlock(port);
+  const path = opencodeConfigPath();
+
+  console.log('');
+  console.log(color(tty, C.bold, '  Connect opencode as a source'));
+  console.log(color(tty, C.gray, '  ' + '─'.repeat(46)));
+  console.log(color(tty, C.gray, `  Routes opencode through AegisFlow on http://localhost:${port} and tags its`));
+  console.log(color(tty, C.gray, `  traffic with  ${SOURCE_HEADER}: opencode  (stripped before it leaves your machine).`));
+  console.log('');
+  console.log(color(tty, C.gray, '  This meters traffic you ROUTE through AegisFlow. opencode Zen and other managed/'));
+  console.log(color(tty, C.gray, '  closed paths go straight to their own servers, so they cannot be metered this way —'));
+  console.log(color(tty, C.gray, "  that's the cooperative model (connect, don't intercept), not a gap being hidden."));
+  console.log('');
+
+  // Read-only state probe (reading the user's config is fine; we only WRITE on --write).
+  let raw = '';
+  if (path) {
+    try {
+      raw = readFileSync(path, 'utf8');
+    } catch {
+      /* unreadable → treated as absent below */
+    }
+    const probe = mergeOpencodeConfig(raw, port);
+    if (probe.ok && probe.alreadyConnected && !flags.write) {
+      console.log(color(tty, C.green, '  ✓ opencode is already connected as a source.'));
+      console.log(color(tty, C.gray, `    Config: ${path}`));
+      console.log(color(tty, C.gray, '    Run opencode, then:  aegisflow sources'));
+      console.log('');
+      return;
+    }
+    console.log(color(tty, C.gray, `  Found your opencode config: ${path}`));
+  } else {
+    console.log(color(tty, C.gray, '  No opencode config found (looked in ~/.config/opencode/).'));
+  }
+
+  // Default (no --write): print the snippet. Non-destructive and copy-pasteable.
+  if (!flags.write) {
+    console.log(color(tty, C.gray, '  Add this to the "provider" object in your opencode config:'));
+    printOpencodeSnippet(block, tty);
+    console.log(color(tty, C.gray, '  …or let AegisFlow apply it for you:'));
+    console.log(color(tty, C.green, '    aegisflow connect opencode --write'));
+    console.log('');
+    finishConnectOpencode(tty);
+    return;
+  }
+
+  // --write: create a fresh config if none exists.
+  if (!path) {
+    const dest = join(homedir(), '.config', 'opencode', 'opencode.json');
+    const fresh = JSON.stringify({ $schema: 'https://opencode.ai/config.json', provider: { aegisflow: block } }, null, 2) + '\n';
+    try {
+      mkdirSync(dirname(dest), { recursive: true });
+      writeFileSync(dest, fresh, 'utf8');
+      console.log(color(tty, C.green, '  ✓ Created an opencode config with the AegisFlow source:'));
+      console.log(color(tty, C.gray, `    ${dest}`));
+    } catch (e) {
+      console.log(color(tty, C.yellow, `  Could not write the config: ${String(e)}`));
+      console.log(color(tty, C.gray, '  Add this provider block yourself instead:'));
+      printOpencodeSnippet(block, tty);
+    }
+    console.log('');
+    finishConnectOpencode(tty);
+    return;
+  }
+
+  // --write with an existing config: safe-merge, backing up first.
+  const res = mergeOpencodeConfig(raw, port);
+  if (!res.ok || !res.merged) {
+    console.log(color(tty, C.yellow, `  Could not safely auto-edit the config (${res.error ?? 'unknown error'}).`));
+    console.log(color(tty, C.gray, '  Add this provider block yourself instead:'));
+    printOpencodeSnippet(block, tty);
+    console.log('');
+    finishConnectOpencode(tty);
+    return;
+  }
+  if (res.alreadyConnected) {
+    console.log(color(tty, C.green, '  ✓ Already connected — no change needed.'));
+    console.log('');
+    finishConnectOpencode(tty);
+    return;
+  }
+  try {
+    copyFileSync(path, path + '.bak');
+    writeFileSync(path, res.merged, 'utf8');
+    console.log(color(tty, C.green, `  ✓ Connected. Updated ${path}`));
+    console.log(color(tty, C.gray, `    A backup of the original is at ${path}.bak`));
+    console.log(color(tty, C.gray, '    Note: JSON comments were reformatted away; your settings + keys are preserved.'));
+  } catch (e) {
+    console.log(color(tty, C.yellow, `  Could not write the config: ${String(e)}`));
+    console.log(color(tty, C.gray, '  Add this provider block yourself instead:'));
+    printOpencodeSnippet(block, tty);
+  }
+  console.log('');
+  finishConnectOpencode(tty);
+}
+
+function connectGenericApi(cfg: AegisConfig, flags: Flags, tty: boolean): void {
+  const port = cfg.port;
+  // Optional custom source name: `aegisflow connect api my-script`.
+  const source = (typeof flags._[1] === 'string' ? flags._[1] : 'api').toLowerCase();
+  // The standard OpenAI-SDK convention DOES include /v1 (the SDK appends
+  // /chat/completions to it); the proxy forwards the whole path upstream.
+  const base = `http://localhost:${port}/v1`;
+
+  console.log('');
+  console.log(color(tty, C.bold, `  Connect a raw API / SDK as a source ("${source}")`));
+  console.log(color(tty, C.gray, '  ' + '─'.repeat(46)));
+  console.log(color(tty, C.gray, '  Point any OpenAI-compatible client at the proxy and tag it with one header:'));
+  console.log('');
+  console.log(color(tty, C.cyan, `    OPENAI_BASE_URL = ${base}`));
+  console.log(color(tty, C.cyan, `    header           ${SOURCE_HEADER}: ${source}`));
+  console.log('');
+  console.log(color(tty, C.gray, '  OpenAI SDK:'));
+  console.log(color(tty, C.cyan, `    new OpenAI({ baseURL: "${base}", defaultHeaders: { "${SOURCE_HEADER}": "${source}" } })`));
+  console.log(color(tty, C.gray, '  curl:'));
+  console.log(color(tty, C.cyan, `    curl ${base}/chat/completions -H "${SOURCE_HEADER}: ${source}" ...`));
+  console.log('');
+  console.log(color(tty, C.gray, '  Run it, then check:'));
+  console.log(color(tty, C.green, '    aegisflow sources'));
+  console.log('');
+}
+
+/**
+ * `aegisflow connect [<tool>] [--write] [--list]` — turn an AI tool into a source.
+ * No tool (or --list) shows the menu; opencode writes/prints its provider block;
+ * `api` prints the generic env + header recipe (with an optional custom source name).
+ */
+function cmdConnect(flags: Flags): void {
+  const tty = process.stdout.isTTY ?? false;
+  const cfg = loadConfig();
+  const tool = (typeof flags._[0] === 'string' ? flags._[0] : '').toLowerCase();
+
+  if (!tool || flags.list) {
+    console.log('');
+    console.log(color(tty, C.bold, '  Connect an AI tool as a source'));
+    console.log(color(tty, C.gray, '  A source is one tool routed through AegisFlow so its spend is metered,'));
+    console.log(color(tty, C.gray, "  honestly, at the depth it exposes — connect, don't intercept."));
+    console.log('');
+    for (const c of CONNECTORS) {
+      console.log(`  ${color(tty, C.green, c.id.padEnd(12))} ${color(tty, C.gray, c.summary)}`);
+    }
+    console.log('');
+    console.log(color(tty, C.gray, '  Usage:  aegisflow connect <tool>          e.g. aegisflow connect opencode'));
+    console.log(color(tty, C.gray, '          aegisflow connect opencode --write  apply it for you (backs up first)'));
+    console.log('');
+    return;
+  }
+
+  if (tool === 'opencode') {
+    connectOpencode(cfg, flags, tty);
+    return;
+  }
+  if (tool === 'api' || tool === 'sdk' || tool === 'openai' || tool === 'generic') {
+    connectGenericApi(cfg, flags, tty);
+    return;
+  }
+
+  console.log('');
+  console.log(color(tty, C.yellow, `  Unknown tool "${tool}".`) + color(tty, C.gray, ' Known connectors:'));
+  for (const c of CONNECTORS) console.log(`    ${color(tty, C.green, c.id)}  ${color(tty, C.gray, c.summary)}`);
+  console.log('');
 }
 
 async function cmdAlerts(flags: Flags): Promise<void> {
@@ -1245,6 +1484,11 @@ function cmdHelp(): void {
   Commands
     start                 Start the proxy + local dashboard
     today | week | month  Show spend for a window      (--json)
+    sources               Spend by connected source — each AI tool routed here
+                          (--all for all-time, --json)
+    connect <tool>        Connect an AI tool as a source so its spend is metered:
+                          opencode (--write to apply), api (generic SDK/curl recipe).
+                          No tool lists the connectors.
     audit --repo <path>   Correlate spend with git commits (--limit N, --json)
     roi --repo <path>     Return on Intelligence: four value lenses (Realization,
                           Acceptance, Lift, Impact) → one composite index
@@ -1326,6 +1570,12 @@ async function main(): Promise<void> {
       break;
     case 'month':
       cmdShow('month', flags);
+      break;
+    case 'sources':
+      cmdSources(flags);
+      break;
+    case 'connect':
+      cmdConnect(flags);
       break;
     case 'init':
       cmdInit();
