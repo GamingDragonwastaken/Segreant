@@ -77,6 +77,23 @@ test('store.bySourceWithDepth: depth is read from real signals (proposals → ac
   store.close();
 });
 
+test('store.sourceModelBreakdown: groups model spend within each source (Source→Model)', () => {
+  const store = new Store(':memory:');
+  store.insertRequest(req({ source: 'opencode', provider: 'anthropic', model: 'opus', costUsd: 5 }));
+  store.insertRequest(req({ source: 'opencode', provider: 'anthropic', model: 'sonnet', costUsd: 2 }));
+  store.insertRequest(req({ source: 'opencode', provider: 'anthropic', model: 'opus', costUsd: 3 }));
+  store.insertRequest(req({ source: 'cursor', provider: 'openai', model: 'gpt-4o', costUsd: 1 }));
+  const rows = store.sourceModelBreakdown(0, 5000);
+  const opencode = rows.filter((r) => r.source === 'opencode');
+  assert.equal(opencode[0]!.model, 'opus'); // cost-descending within the source
+  assert.equal(opencode[0]!.costUsd, 8); // 5 + 3 merged into one model row
+  assert.equal(opencode[0]!.requests, 2);
+  const cursor = rows.filter((r) => r.source === 'cursor');
+  assert.equal(cursor.length, 1);
+  assert.equal(cursor[0]!.model, 'gpt-4o');
+  store.close();
+});
+
 test('store migration: a DB created before the user column gains it (ALTER path)', () => {
   const dir = mkdtempSync(join(tmpdir(), 'aegis-mig-'));
   const path = join(dir, 'old.db');

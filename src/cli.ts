@@ -211,9 +211,17 @@ function cmdSources(flags: Flags): void {
   // Each source carries its measured depth (spend / + acceptance / + RoI),
   // read off real signals via the shared helper — same wording as the dashboard.
   const bySource = store.bySourceWithDepth(startMs, now + 1000).map((s) => ({ ...s, ...describeSourceDepth(s) }));
+  // Model mix WITHIN each source (Source→Model), grouped for display.
+  const modelsBySource = new Map<string, Array<{ provider: string; model: string; costUsd: number; requests: number }>>();
+  for (const m of store.sourceModelBreakdown(startMs, now + 1000)) {
+    const list = modelsBySource.get(m.source) ?? [];
+    list.push({ provider: m.provider, model: m.model, costUsd: m.costUsd, requests: m.requests });
+    modelsBySource.set(m.source, list);
+  }
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify({ window: all ? 'all' : '30d', demo: isDemo(), bySource }, null, 2) + '\n');
+    const enriched = bySource.map((s) => ({ ...s, models: modelsBySource.get(s.label) ?? [] }));
+    process.stdout.write(JSON.stringify({ window: all ? 'all' : '30d', demo: isDemo(), bySource: enriched }, null, 2) + '\n');
     store.close();
     return;
   }
@@ -237,6 +245,10 @@ function cmdSources(flags: Flags): void {
   for (const s of bySource.slice(0, 12)) {
     const tag = s.full ? color(tty, C.green, ' ✓ full RoI') : '';
     console.log(`  ${s.label.padEnd(20)} ${usd(s.costUsd).padStart(11)}  ${color(tty, C.gray, `${num(s.requests)} req · ${s.depth}`)}${tag}`);
+    // Source→Model: the top models this source spent on.
+    for (const m of (modelsBySource.get(s.label) ?? []).slice(0, 3)) {
+      console.log(color(tty, C.gray, `      ${`${m.provider}/${m.model}`.padEnd(30)} ${usd(m.costUsd).padStart(11)}  ${num(m.requests)} req`));
+    }
   }
   console.log('');
   console.log(color(tty, C.gray, '  Depth is read from real signals: spend always · + acceptance once a source sends'));

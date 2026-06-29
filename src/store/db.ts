@@ -436,6 +436,26 @@ export class Store {
   }
 
   /**
+   * The model mix WITHIN each source — which models a given tool is spending on
+   * (Source→Model). Flat rows, cost-descending; the caller groups by `source`.
+   * null source reads as 'direct', matching bySource.
+   */
+  sourceModelBreakdown(
+    startMs: number,
+    endMs: number,
+  ): Array<{ source: string; provider: string; model: string; costUsd: number; requests: number }> {
+    return this.db
+      .prepare(
+        `SELECT COALESCE(source, 'direct') AS source, provider, model,
+                COALESCE(SUM(cost_usd),0) AS costUsd, COUNT(*) AS requests
+         FROM requests WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ?
+         GROUP BY COALESCE(source, 'direct'), provider, model
+         ORDER BY costUsd DESC`,
+      )
+      .all(startMs, endMs) as unknown as Array<{ source: string; provider: string; model: string; costUsd: number; requests: number }>;
+  }
+
+  /**
    * Spend series over [startMs, endMs) bucketed by bucketMs, for charts.
    *
    * The bucket index is CAST to INTEGER so the division truncates to a whole
