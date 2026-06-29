@@ -112,16 +112,18 @@ test('store migration: a DB created before the user column gains it (ALTER path)
       .run();
     raw.close();
 
-    // Opening via Store runs migrate(), which must ALTER ADD COLUMN user.
+    // Opening via Store runs migrate(), which must ALTER ADD COLUMN both `user`
+    // and `source` — a real DB created before either column existed.
     const store = new Store(path);
-    store.insertRequest(req({ user: 'alice', costUsd: 2 }));
-    const rows = store.byUser(0, 5000);
-    assert.equal(rows[0]!.label, 'alice');
+    store.insertRequest(req({ user: 'alice', source: 'opencode', costUsd: 2 }));
+    assert.equal(store.byUser(0, 5000)[0]!.label, 'alice');
+    assert.equal(store.bySource(0, 5000)[0]!.label, 'opencode'); // source column was added
 
-    // Idempotent: re-opening the now-migrated DB must not throw.
+    // Idempotent: re-opening the now-migrated DB must not throw, and both columns persist.
     store.close();
     const again = new Store(path);
     assert.equal(again.byUser(0, 5000)[0]!.label, 'alice');
+    assert.equal(again.bySource(0, 5000)[0]!.label, 'opencode');
     again.close();
   } finally {
     rmSync(dir, { recursive: true, force: true });
