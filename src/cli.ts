@@ -130,9 +130,10 @@ function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void {
   const byModel = store.byModel(startMs, endMs);
   const byProject = store.byProject(startMs, endMs);
   const byUser = store.byUser(startMs, endMs);
+  const bySource = store.bySource(startMs, endMs);
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify({ window, label, demo: isDemo(), summary, byModel, byProject, byUser }, null, 2) + '\n');
+    process.stdout.write(JSON.stringify({ window, label, demo: isDemo(), summary, byModel, byProject, byUser, bySource }, null, 2) + '\n');
     store.close();
     return;
   }
@@ -190,6 +191,15 @@ function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void {
     for (const u of byUser.slice(0, 8)) {
       console.log(`  ${u.label.padEnd(34)} ${usd(u.costUsd).padStart(11)}  ${color(tty, C.gray, `${num(u.requests)} req`)}`);
     }
+  }
+
+  if (bySource.some((s) => s.label !== 'direct')) {
+    console.log('');
+    console.log(color(tty, C.bold, '  By source'));
+    for (const s of bySource.slice(0, 8)) {
+      console.log(`  ${s.label.padEnd(34)} ${usd(s.costUsd).padStart(11)}  ${color(tty, C.gray, `${num(s.requests)} req`)}`);
+    }
+    console.log(color(tty, C.gray, '  → per-source depth + model mix:  aegisflow sources'));
   }
   console.log('');
   console.log(color(tty, C.gray, `  Dashboard: run "aegisflow start" then open http://localhost:${cfg.dashboardPort}`));
