@@ -406,9 +406,9 @@ function render(d) {
 
   const hasSources = (d.bySource || []).some((x) => x.label !== 'direct');
   const sourceBars = (d.bySource || []).map((x) => `
-    <div class="bar"><div class="top"><span class="name">${esc(x.label)}</span><span class="cost">$${usd(x.costUsd)}</span></div>
-    <div class="meta">${x.requests} req</div></div>`).join('');
-  const sourceCard = hasSources ? `<div class="card fade"><div class="label">By source ${tip('Spend grouped by connected source — each AI tool you route through AegisFlow. Tag a tool with the <code>X-Aegis-Source</code> header (the connect command sets this for you) and its spend lands here. Untagged traffic reads as <b>direct</b>. The tag is stripped before the request ever leaves your machine.')}</div><div class="bars">${sourceBars}</div></div>` : '';
+    <div class="bar"><div class="top"><span class="name">${esc(x.label)}${x.full ? ' <span class="pill stream">FULL RoI</span>' : ''}</span><span class="cost">$${usd(x.costUsd)}</span></div>
+    <div class="meta">${x.requests} req · ${esc(x.depth || 'spend')}</div></div>`).join('');
+  const sourceCard = hasSources ? `<div class="card fade"><div class="label">By source ${tip('Spend grouped by connected source — each AI tool you route through AegisFlow. Tag a tool with the <code>X-Aegis-Source</code> header (the connect command sets this for you) and its spend lands here. Untagged traffic reads as <b>direct</b>. The tag is stripped before the request ever leaves your machine. <b>Depth</b> is read from real signals, not asserted: <b>spend</b> always, <b>+ acceptance</b> once the source sends proposed edits, <b>+ RoI</b> once its work reaches projects with realized value.')}</div><div class="bars">${sourceBars}</div></div>` : '';
 
   setNodes(grid, `
     <div class="card hero fade">

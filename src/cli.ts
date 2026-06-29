@@ -31,6 +31,7 @@ import { attributeCommits, isGitRepo, projectName, resolveCommit } from './git/c
 import { computeQuality } from './git/quality.ts';
 import { computeRealization, loadRealization, liftOptionsFromStore, moneyInputsFromStore } from './value/realization.ts';
 import { computeReturnOnIntelligence } from './value/lenses.ts';
+import { describeSourceDepth } from './value/sourceDepth.ts';
 import { boundedLift } from './value/lift.ts';
 import { refreshPricing, pricingStatus } from './cost/pricing.ts';
 import { computeFrontier } from './value/frontier.ts';
@@ -207,7 +208,9 @@ function cmdSources(flags: Flags): void {
   const all = Boolean(flags.all);
   const now = Date.now();
   const startMs = all ? 0 : now - 30 * 24 * 60 * 60 * 1000;
-  const bySource = store.bySource(startMs, now + 1000);
+  // Each source carries its measured depth (spend / + acceptance / + RoI),
+  // read off real signals via the shared helper — same wording as the dashboard.
+  const bySource = store.bySourceWithDepth(startMs, now + 1000).map((s) => ({ ...s, ...describeSourceDepth(s) }));
 
   if (flags.json) {
     process.stdout.write(JSON.stringify({ window: all ? 'all' : '30d', demo: isDemo(), bySource }, null, 2) + '\n');
@@ -232,10 +235,12 @@ function cmdSources(flags: Flags): void {
   }
 
   for (const s of bySource.slice(0, 12)) {
-    const depth = s.label === 'direct' ? 'untagged · spend only' : 'connected · spend + attribution';
-    console.log(`  ${s.label.padEnd(20)} ${usd(s.costUsd).padStart(11)}  ${color(tty, C.gray, `${num(s.requests)} req · ${depth}`)}`);
+    const tag = s.full ? color(tty, C.green, ' ✓ full RoI') : '';
+    console.log(`  ${s.label.padEnd(20)} ${usd(s.costUsd).padStart(11)}  ${color(tty, C.gray, `${num(s.requests)} req · ${s.depth}`)}${tag}`);
   }
   console.log('');
+  console.log(color(tty, C.gray, '  Depth is read from real signals: spend always · + acceptance once a source sends'));
+  console.log(color(tty, C.gray, '  proposed edits · + RoI once its work reaches projects with realized value.'));
   console.log(color(tty, C.gray, "  A source is one AI tool deliberately routed through AegisFlow (connect, don't intercept)."));
   console.log(color(tty, C.gray, '  Tag one with:  aegisflow connect <tool>   — the tag is stripped before traffic leaves your machine.'));
   console.log('');

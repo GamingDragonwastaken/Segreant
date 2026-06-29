@@ -45,6 +45,38 @@ test('store.bySource: groups spend by connected source; null reads as "direct", 
   store.close();
 });
 
+test('store.bySourceWithDepth: depth is read from real signals (proposals → acceptance, realized project → RoI)', () => {
+  const store = new Store(':memory:');
+  // opencode: a coding session with a SESSION-LINKED proposal (request_id null) → acceptance.
+  store.insertRequest(req({ source: 'opencode', sessionId: 's1', project: 'pA', costUsd: 3 }));
+  store.insertProposal({
+    proposalId: 'pr1', requestId: null, sessionId: 's1', tsEpochMs: 1000,
+    provider: 'anthropic', model: 'm', project: 'pA', files: [{ path: 'a.ts', addedLines: ['x'] }],
+  });
+  // cursor: no proposals, but its work is in a project that has realized-value snapshots → RoI.
+  store.insertRequest(req({ source: 'cursor', sessionId: null, project: 'pRealized', costUsd: 2 }));
+  store.saveRealizationUnits([{
+    commitHash: 'c1', project: 'pRealized', tsEpochMs: 1000, computedAtMs: 1000,
+    attributedCostUsd: 1, maturing: false, realized: true, unitJson: '{}',
+  }]);
+  // direct: untagged traffic, spend only.
+  store.insertRequest(req({ source: null, sessionId: null, project: 'pA', costUsd: 1 }));
+
+  const rows = store.bySourceWithDepth(0, 5000);
+  const by = Object.fromEntries(rows.map((r) => [r.label, r]));
+  assert.deepEqual(
+    { tagged: by['opencode']!.tagged, hasProposals: by['opencode']!.hasProposals, hasOutcomes: by['opencode']!.hasOutcomes },
+    { tagged: true, hasProposals: true, hasOutcomes: false },
+  );
+  assert.deepEqual(
+    { tagged: by['cursor']!.tagged, hasProposals: by['cursor']!.hasProposals, hasOutcomes: by['cursor']!.hasOutcomes },
+    { tagged: true, hasProposals: false, hasOutcomes: true },
+  );
+  assert.equal(by['direct']!.tagged, false);
+  assert.equal(by['direct']!.hasProposals, false);
+  store.close();
+});
+
 test('store migration: a DB created before the user column gains it (ALTER path)', () => {
   const dir = mkdtempSync(join(tmpdir(), 'aegis-mig-'));
   const path = join(dir, 'old.db');

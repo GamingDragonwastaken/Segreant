@@ -17,6 +17,7 @@ import { loadRealization, projectValueBreakdown, liftOptionsFromStore, moneyInpu
 import { demoLiftOptions } from '../demo/seed.ts';
 import { recommendAllocation } from '../budget/allocate.ts';
 import { computeReturnOnIntelligence } from '../value/lenses.ts';
+import { describeSourceDepth } from '../value/sourceDepth.ts';
 import { computeFrontier } from '../value/frontier.ts';
 import { computeUsageRoI } from '../value/usage.ts';
 import { recommendBudget } from '../budget/recommend.ts';
@@ -87,7 +88,9 @@ function buildOverview(store: Store, config: AegisConfig, range: RangeKey) {
     byModel: store.byModel(startMs, endMs),
     byProject: store.byProject(startMs, endMs),
     byUser: store.byUser(startMs, endMs),
-    bySource: store.bySource(startMs, endMs),
+    // Each source carries its measured depth (spend / + acceptance / + RoI),
+    // computed server-side so the dashboard and CLI render identical wording.
+    bySource: store.bySourceWithDepth(startMs, endMs).map((s) => ({ ...s, ...describeSourceDepth(s) })),
     series: store.series(startMs, endMs, bucketMs),
     recent: store.recent(40),
     // Governance alerts refresh on the live poll. Realized-value alerts (git-gated)

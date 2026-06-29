@@ -386,6 +386,56 @@ export class Store {
   }
 
   /**
+   * Sources with their measured DEPTH — what each connected feed actually
+   * exposes, read off real signals (never asserted):
+   *   · spend       — always (the request ledger);
+   *   · acceptance  — the source emitted captured proposals, so First-Pass
+   *                   Acceptance is measurable for it;
+   *   · outcomes    — the source's traffic landed in projects that have
+   *                   realized-value snapshots, so the RoI loop is in view.
+   * `tagged` is false for 'direct' (routed but un-attributed) traffic. The
+   * proposals join is session-aware: real proxy proposals carry the request_id,
+   * but a session-linked proposal (no request_id) still attributes to the source
+   * via its session — so neither path is silently missed.
+   */
+  bySourceWithDepth(
+    startMs: number,
+    endMs: number,
+  ): Array<SpendBucket & { tagged: boolean; hasProposals: boolean; hasOutcomes: boolean }> {
+    const base = this.bySource(startMs, endMs);
+
+    const propRows = this.db
+      .prepare(
+        `SELECT DISTINCT COALESCE(r.source, 'direct') AS label
+         FROM proposals p JOIN requests r
+           ON (p.request_id = r.request_id
+               OR (p.request_id IS NULL AND p.session_id IS NOT NULL AND p.session_id = r.session_id))
+         WHERE p.ts_epoch_ms >= ? AND p.ts_epoch_ms < ?`,
+      )
+      .all(startMs, endMs) as Array<{ label: string }>;
+    const withProposals = new Set(propRows.map((r) => r.label));
+
+    const realizedProjects = new Set(this.realizationProjects());
+    const withOutcomes = new Set<string>();
+    if (realizedProjects.size > 0) {
+      const srcProj = this.db
+        .prepare(
+          `SELECT DISTINCT COALESCE(source, 'direct') AS label, project
+           FROM requests WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ?`,
+        )
+        .all(startMs, endMs) as Array<{ label: string; project: string }>;
+      for (const r of srcProj) if (realizedProjects.has(r.project)) withOutcomes.add(r.label);
+    }
+
+    return base.map((s) => ({
+      ...s,
+      tagged: s.label !== 'direct',
+      hasProposals: withProposals.has(s.label),
+      hasOutcomes: withOutcomes.has(s.label),
+    }));
+  }
+
+  /**
    * Spend series over [startMs, endMs) bucketed by bucketMs, for charts.
    *
    * The bucket index is CAST to INTEGER so the division truncates to a whole
