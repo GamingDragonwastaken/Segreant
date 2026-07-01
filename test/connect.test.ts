@@ -1,10 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { join } from 'node:path';
 import {
   SOURCE_HEADER,
   opencodeProviderBlock,
   stripJsonc,
   mergeOpencodeConfig,
+  resolveOpencodeConfigPath,
 } from '../src/connect/connectors.ts';
 
 test('opencodeProviderBlock: routes to the proxy (no /v1) and tags the source', () => {
@@ -71,4 +73,26 @@ test('mergeOpencodeConfig: unparseable input fails safe (ok:false) so the caller
   assert.equal(res.ok, false);
   assert.equal(res.merged, undefined);
   assert.ok(res.error);
+});
+
+test('resolveOpencodeConfigPath: OPENCODE_CONFIG → project-level → global (matches opencode precedence)', () => {
+  const home = join('/home', 'u');
+  const cwd = join('/work', 'proj');
+  const projJson = join(cwd, 'opencode.json');
+  const globJsonc = join(home, '.config', 'opencode', 'opencode.jsonc');
+
+  // Explicit env path wins when it exists.
+  assert.equal(
+    resolveOpencodeConfigPath({ env: '/custom/x.json', cwd, home, exists: (p) => p === '/custom/x.json' }),
+    '/custom/x.json',
+  );
+  // A set-but-missing env path falls through to the project-level config.
+  assert.equal(
+    resolveOpencodeConfigPath({ env: '/custom/x.json', cwd, home, exists: (p) => p === projJson }),
+    projJson,
+  );
+  // No env, no project → the global config.
+  assert.equal(resolveOpencodeConfigPath({ cwd, home, exists: (p) => p === globJsonc }), globJsonc);
+  // Nothing exists → null (connect then creates a fresh global config on --write).
+  assert.equal(resolveOpencodeConfigPath({ cwd, home, exists: () => false }), null);
 });

@@ -55,7 +55,7 @@ import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync } from 'node:fs';
-import { SOURCE_HEADER, CONNECTORS, opencodeProviderBlock, mergeOpencodeConfig } from './connect/connectors.ts';
+import { SOURCE_HEADER, CONNECTORS, opencodeProviderBlock, mergeOpencodeConfig, resolveOpencodeConfigPath } from './connect/connectors.ts';
 
 const C = {
   reset: '\x1b[0m',
@@ -269,13 +269,14 @@ function cmdSources(flags: Flags): void {
   store.close();
 }
 
-/** Where opencode keeps its global config (XDG-style, same on Windows). */
+/** Locate the user's opencode config (env override → project-level → global). */
 function opencodeConfigPath(): string | null {
-  for (const name of ['opencode.jsonc', 'opencode.json']) {
-    const p = join(homedir(), '.config', 'opencode', name);
-    if (existsSync(p)) return p;
-  }
-  return null;
+  return resolveOpencodeConfigPath({
+    env: process.env.OPENCODE_CONFIG,
+    cwd: process.cwd(),
+    home: homedir(),
+    exists: existsSync,
+  });
 }
 
 /** Print the provider block, indented under the "provider" key it goes inside. */
@@ -329,7 +330,7 @@ function connectOpencode(cfg: AegisConfig, flags: Flags, tty: boolean): void {
     }
     console.log(color(tty, C.gray, `  Found your opencode config: ${path}`));
   } else {
-    console.log(color(tty, C.gray, '  No opencode config found (looked in ~/.config/opencode/).'));
+    console.log(color(tty, C.gray, '  No opencode config found (checked $OPENCODE_CONFIG, ./opencode.json, ~/.config/opencode/).'));
   }
 
   // Default (no --write): print the snippet. Non-destructive and copy-pasteable.

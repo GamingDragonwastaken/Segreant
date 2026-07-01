@@ -13,6 +13,8 @@
  * seam to extract a shared Connector abstraction.
  */
 
+import { join } from 'node:path';
+
 export const SOURCE_HEADER = 'x-aegis-source';
 
 /**
@@ -24,6 +26,34 @@ export const SOURCE_HEADER = 'x-aegis-source';
  */
 export function proxyBaseUrl(port: number): string {
   return `http://localhost:${port}`;
+}
+
+/**
+ * Locate the opencode config the user actually uses, mirroring opencode's own
+ * resolution order: an explicit `OPENCODE_CONFIG` path, then a project-level
+ * `opencode.json(c)` in the working dir, then the global `~/.config/opencode/`.
+ * Returns the first that exists (or null). Pure — takes an `exists` probe — so
+ * `connect opencode` probes/writes the REAL file instead of only ever the global
+ * one (many opencode users keep a per-project config, which is highest-precedence
+ * for opencode itself).
+ */
+export function resolveOpencodeConfigPath(opts: {
+  env?: string;
+  cwd: string;
+  home: string;
+  exists: (p: string) => boolean;
+}): string | null {
+  const { env, cwd, home, exists } = opts;
+  if (env && exists(env)) return env;
+  for (const name of ['opencode.jsonc', 'opencode.json']) {
+    const p = join(cwd, name);
+    if (exists(p)) return p;
+  }
+  for (const name of ['opencode.jsonc', 'opencode.json']) {
+    const p = join(home, '.config', 'opencode', name);
+    if (exists(p)) return p;
+  }
+  return null;
 }
 
 export interface ConnectorInfo {
