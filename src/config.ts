@@ -70,6 +70,23 @@ export interface PricingConfig {
   autoRefresh: boolean;
 }
 
+export interface PerUserConfig {
+  /**
+   * Opt-in for per-user VALUE (extraction rate, coaching headroom). OFF by
+   * default: spend-by-user is cost governance and always available, but attributing
+   * VALUE to named people is the surveillance-prone axis, so it stays dark until a
+   * team deliberately turns it on. Even then the org view is distribution-only and
+   * gated by k-anonymity — this flag never unlocks a leaderboard.
+   */
+  enabled: boolean;
+  /**
+   * k-anonymity floor: the minimum number of identified users before ANY per-user
+   * value is shown. Below this a team is too small to report on without fingering
+   * an individual. Default 5.
+   */
+  minCohort: number;
+}
+
 export interface AegisConfig {
   port: number;
   dashboardPort: number;
@@ -97,6 +114,7 @@ export interface AegisConfig {
   alerts: AlertsConfig;
   lift: LiftConfig;
   pricing: PricingConfig;
+  perUser: PerUserConfig;
   /** Prune request rows older than this many days during maintenance. */
   retentionDays: number;
   /**
@@ -141,6 +159,10 @@ export const DEFAULT_CONFIG: AegisConfig = {
     manifestUrl: 'https://raw.githubusercontent.com/GamingDragonwastaken/aegisflow/main/pricing/models.json',
     maxAgeDays: 30,
     autoRefresh: false,
+  },
+  perUser: {
+    enabled: false,
+    minCohort: 5,
   },
   retentionDays: 180,
   metadataOnly: false,
@@ -187,7 +209,11 @@ function withDemoDefaults(cfg: AegisConfig): AegisConfig {
   if (budget.dailySoftUsd === null) budget.dailySoftUsd = 20;
   if (budget.sessionUsd === null) budget.sessionUsd = 8;
   if (budget.runawayMaxUsd === null) budget.runawayMaxUsd = 5;
-  return { ...cfg, budget };
+  // Per-user VALUE is opt-in and off in real deployments; the demo enables it so
+  // the feature is visible. The demo roster is synthetic, so there's no privacy
+  // cost, and this is never persisted.
+  const perUser = { ...cfg.perUser, enabled: true };
+  return { ...cfg, budget, perUser };
 }
 
 export function ensureHome(): string {

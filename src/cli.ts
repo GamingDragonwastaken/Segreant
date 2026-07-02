@@ -36,6 +36,7 @@ import { boundedLift } from './value/lift.ts';
 import { refreshPricing, pricingStatus } from './cost/pricing.ts';
 import { computeFrontier } from './value/frontier.ts';
 import { computeUsageRoI } from './value/usage.ts';
+import { computeCohort, userValueRows, selfView } from './value/cohort.ts';
 import { recommendBudget } from './budget/recommend.ts';
 import { recommendAllocation } from './budget/allocate.ts';
 import { shadowPriceOfIntelligence } from './value/marginal.ts';
@@ -1064,6 +1065,85 @@ async function cmdUsage(flags: Flags): Promise<void> {
   store.close();
 }
 
+async function cmdTeam(flags: Flags): Promise<void> {
+  const cfg = loadConfig();
+  const store = new Store(dbPath());
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const days = flags.days ? Number(flags.days) : 30;
+  const window = { startMs: now - days * dayMs, endMs: now + 1000 };
+  const opts = { enabled: cfg.perUser.enabled, minCohort: cfg.perUser.minCohort };
+  const tty = process.stdout.isTTY ?? false;
+
+  // --me <user>: a person's own view of themselves. Their own number is always
+  // theirs to see; the peer comparison is gated by opt-in + cohort size.
+  if (typeof flags.me === 'string') {
+    const rows = userValueRows(store, window);
+    const view = selfView(rows, flags.me, opts);
+    store.close();
+    if (flags.json) {
+      process.stdout.write(JSON.stringify(view, null, 2) + '\n');
+      return;
+    }
+    console.log('');
+    if (!view) {
+      console.log(color(tty, C.gray, `  No attributed sessions for "${flags.me}" in the last ${days}d.`));
+      console.log('');
+      return;
+    }
+    console.log(color(tty, C.bold, `  Your AI value — ${view.user}`));
+    console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
+    console.log(`  Extraction          ${color(tty, C.cyan, pct(view.extraction))}   ${color(tty, C.gray, 'of your non-coding AI spend reached a realized outcome')}`);
+    console.log(`  Confidence          ${pct(view.reliability)}   ${color(tty, C.gray, `${view.sessions} sessions of evidence`)}`);
+    if (view.cohortComparable && view.percentile !== null && view.vsMedianPct !== null) {
+      const sign = view.vsMedianPct >= 0 ? '+' : '';
+      console.log(`  vs. team median     ${color(tty, view.vsMedianPct >= 0 ? C.green : C.yellow, `${sign}${(view.vsMedianPct * 100).toFixed(0)}%`)}   ${color(tty, C.gray, `you extract more than ${(view.percentile * 100).toFixed(0)}% of the team`)}`);
+    } else {
+      console.log(color(tty, C.gray, '  Peer comparison withheld (per-user value off, or team below the k-anonymity floor).'));
+    }
+    console.log('');
+    console.log(color(tty, C.gray, '  This is your own data. The org view never sees your name — only the distribution.'));
+    console.log('');
+    return;
+  }
+
+  // Org view: distribution + coaching lever only. Never a ranked list of people.
+  const rep = computeCohort(store, { ...window, ...opts });
+  store.close();
+  if (flags.json) {
+    process.stdout.write(JSON.stringify(rep, null, 2) + '\n');
+    return;
+  }
+  console.log('');
+  console.log(color(tty, C.bold, '  Team value — how non-coding AI spend converts to outcomes across people'));
+  console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
+  if (rep.suppressed || !rep.distribution) {
+    console.log(color(tty, C.yellow, '  Per-user value is withheld.'));
+    console.log(color(tty, C.gray, `  ${rep.reason}.`));
+    console.log('');
+    if (!rep.enabled) {
+      console.log(color(tty, C.gray, '  It is OFF by default on purpose: attributing value to named people is the'));
+      console.log(color(tty, C.gray, '  surveillance-prone axis. Enable deliberately in config (perUser.enabled),'));
+      console.log(color(tty, C.gray, '  and even then this stays a distribution — never a leaderboard.'));
+    }
+    console.log('');
+    console.log(color(tty, C.gray, '  A person can always see their OWN value:  aegisflow team --me <user>'));
+    console.log('');
+    return;
+  }
+  const d = rep.distribution;
+  console.log(color(tty, C.gray, `  ${d.cohortSize} people · individuals not identified · distribution only`));
+  console.log('');
+  console.log(`  Extraction          median ${color(tty, C.cyan, pct(d.medianExtraction))}   ${color(tty, C.gray, `range ${pct(d.p25Extraction)}–${pct(d.p75Extraction)} (p25–p75)`)}`);
+  console.log(`  Spread              ${d.broadBased ? color(tty, C.green, 'broad-based') : color(tty, C.yellow, 'concentrated')}   ${color(tty, C.gray, `dispersion ${d.dispersion.toFixed(2)}`)}`);
+  console.log(`  Realized value      ${color(tty, C.gray, `${usd(d.totalRealizedValueUsd)} of ${usd(d.totalCostUsd)} spent`)}`);
+  console.log('');
+  console.log(color(tty, C.bold, `  Coaching headroom   ${color(tty, C.green, usd(d.coachingHeadroomUsd))}`));
+  console.log(color(tty, C.gray, '  Latent value if everyone below the median were enabled up to it — at their'));
+  console.log(color(tty, C.gray, '  own current spend. A case for training/support, not a ranking of people.'));
+  console.log('');
+}
+
 async function cmdReceipt(flags: Flags): Promise<void> {
   const tty = process.stdout.isTTY ?? false;
 
@@ -1789,6 +1869,9 @@ async function main(): Promise<void> {
       break;
     case 'usage':
       await cmdUsage(flags);
+      break;
+    case 'team':
+      await cmdTeam(flags);
       break;
     case 'report':
       await cmdReport(flags);

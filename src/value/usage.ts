@@ -37,6 +37,27 @@ function strongestReach(kinds: Set<string>): Reach | null {
   return null;
 }
 
+export interface SessionOutcome {
+  reach: Reach | null; // graded strongest reported outcome; null = nothing reported
+  positive: boolean; // any positive, non-failed outcome
+  negative: boolean; // any incident/redone/discarded or failed verdict
+  realized: boolean; // positive and not negative — the honest "it mattered" bar
+}
+
+/**
+ * Classify a session's reported signals into a graded outcome. This is the ONE
+ * source of truth for "did this non-git session realize, and how far did it
+ * reach" — reused by both the cross-modality report and per-user value so they
+ * can never drift apart.
+ */
+export function classifySession(signals: Array<{ kind: string; verdict: string }>): SessionOutcome {
+  const posKinds = new Set(signals.filter((x) => POSITIVE_OUTCOMES.has(x.kind) && x.verdict !== 'fail').map((x) => x.kind));
+  const reach = strongestReach(posKinds);
+  const positive = reach !== null;
+  const negative = signals.some((x) => NEGATIVE_OUTCOMES.has(x.kind) || x.verdict === 'fail');
+  return { reach, positive, negative, realized: positive && !negative };
+}
+
 function gate(g: Gate, verdict: Verdict, detail: string): GateResult {
   return { gate: g, verdict, detail };
 }
@@ -70,10 +91,7 @@ export function computeUsageRoI(store: Store, opts: { startMs: number; endMs: nu
 
   for (const s of sessions) {
     const signals = store.signalsForCommit(s.sessionId); // commit_hash column reused as a generic ref
-    const posKinds = new Set(signals.filter((x) => POSITIVE_OUTCOMES.has(x.kind) && x.verdict !== 'fail').map((x) => x.kind));
-    const reach = strongestReach(posKinds);
-    const positive = reach !== null;
-    const negative = signals.some((x) => NEGATIVE_OUTCOMES.has(x.kind) || x.verdict === 'fail');
+    const { reach, positive, negative } = classifySession(signals);
 
     // Map the reported outcome onto the shared ladder, GRADED by reach so Impact
     // differentiates a published deliverable from a one-off answer. Code-only gates

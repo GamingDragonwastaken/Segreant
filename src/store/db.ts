@@ -649,6 +649,28 @@ export class Store {
     return rows.map((r) => ({ ...r, hasProposals: withProposals.has(r.sessionId) }));
   }
 
+  /**
+   * NON-CODING sessions with their attributed user (the x-aegis-user tag) and
+   * cost, for per-user value. Scoped to sessions WITHOUT code proposals, because
+   * only those have outcomes we can honestly attribute to a user: their outcome
+   * is reported against the session (which carries the user tag). Coding value is
+   * realized against git commits, not the user tag, so it lives in the git-based
+   * RoI path instead of being mis-attributed here. A session with more than one
+   * user tag splits its cost across those (user, session) pairs.
+   */
+  sessionUnitsByUser(startMs: number, endMs: number): Array<{ sessionId: string; user: string; costUsd: number }> {
+    return this.db
+      .prepare(
+        `SELECT session_id AS sessionId, COALESCE(user, 'unassigned') AS user,
+                COALESCE(SUM(cost_usd),0) AS costUsd
+         FROM requests
+         WHERE session_id IS NOT NULL AND ts_epoch_ms >= ? AND ts_epoch_ms < ?
+           AND session_id NOT IN (SELECT DISTINCT session_id FROM proposals WHERE session_id IS NOT NULL)
+         GROUP BY session_id, COALESCE(user, 'unassigned')`,
+      )
+      .all(startMs, endMs) as Array<{ sessionId: string; user: string; costUsd: number }>;
+  }
+
   saveReceipt(r: { unit: string; project: string; tsEpochMs: number; realized: boolean; receiptJson: string }): void {
     this.db
       .prepare(

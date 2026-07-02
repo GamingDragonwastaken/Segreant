@@ -4,6 +4,7 @@ import { seedDemo } from '../src/demo/seed.ts';
 import { Store } from '../src/store/db.ts';
 import { computeAlerts } from '../src/alerts/detect.ts';
 import { computeUsageRoI } from '../src/value/usage.ts';
+import { computeCohort } from '../src/value/cohort.ts';
 import { startOfLocalDay } from '../src/budget/guard.ts';
 import { DEFAULT_CONFIG, type AegisConfig } from '../src/config.ts';
 
@@ -94,10 +95,29 @@ test('demo seed: non-coding RoI lights up honestly (partial coverage, not a fake
   seedDemo(store, { now });
 
   const usage = computeUsageRoI(store, { startMs: now - 30 * 86400000, endMs: now + 1000 });
-  assert.equal(usage.units.length, 6, 'six non-coding sessions');
-  assert.equal(usage.realizedUnits, 3, 'three reported positive outcomes realize');
+  assert.equal(usage.units.length, 18, 'eighteen non-coding sessions (three per dev across six devs)');
+  assert.equal(usage.realizedUnits, 9, 'nine reported positive outcomes realize');
   assert.notEqual(usage.roi.roiIndex, null, 'RoI index is computed, not null');
   assert.ok(Number.isFinite(usage.roi.roiIndex!), 'RoI index is a real number, never NaN');
   assert.equal(usage.roi.coverage, 0.5, 'realization + impact instrumented; acceptance + lift honestly n/a');
+  // Graded reach is seeded (not all flattened to one bucket).
+  assert.ok(usage.outcomeMix.published > 0 && usage.outcomeMix.resolved > 0 && usage.outcomeMix.used > 0, 'a spread of reach');
+  store.close();
+});
+
+test('demo seed: per-user value clears k-anonymity and shows a real distribution', () => {
+  const store = new Store(':memory:');
+  const now = noonToday();
+  seedDemo(store, { now });
+
+  const rep = computeCohort(store, { startMs: now - 30 * 86400000, endMs: now + 1000, enabled: true, minCohort: 5 });
+  assert.equal(rep.suppressed, false, 'six seeded devs clear the k-anonymity floor');
+  assert.equal(rep.distribution!.cohortSize, 6);
+  assert.ok(rep.distribution!.coachingHeadroomUsd > 0, 'a spread of extraction yields enablement upside');
+
+  // The guardrail still bites when disabled.
+  const off = computeCohort(store, { startMs: now - 30 * 86400000, endMs: now + 1000, enabled: false, minCohort: 5 });
+  assert.equal(off.suppressed, true);
+  assert.equal(off.distribution, null);
   store.close();
 });

@@ -72,7 +72,9 @@ const GPT4O: ModelPick = { provider: 'openai', model: 'gpt-4o' };
 const GPT_MINI: ModelPick = { provider: 'openai', model: 'gpt-4.1-mini' };
 
 const PROJECTS = ['backend-api', 'web-frontend', 'data-pipeline'];
-const NAMED_USERS: string[] = ['alice@team', 'bob@team', 'carol@team'];
+// Six named devs — deliberately above the k-anonymity floor (5) so the demo can
+// show the per-user VALUE distribution. Real deployments still default this off.
+const NAMED_USERS: string[] = ['alice@team', 'bob@team', 'carol@team', 'dave@team', 'erin@team', 'frank@team'];
 // Background traffic includes some unattributed calls (no x-aegis-user header).
 const USERS: Array<string | null> = [...NAMED_USERS, null];
 // Connected sources (feeds) — the AI tools routed through AegisFlow. opencode is
@@ -248,10 +250,10 @@ function codingSession(ctx: Ctx, idx: number, startMs: number): void {
  * for RoI on its own — `computeUsageRoI` reads the outcome signal keyed on the
  * session id.
  */
-function nonCodingSession(ctx: Ctx, idx: number, startMs: number, outcome: string | null): void {
+function nonCodingSession(ctx: Ctx, idx: number, startMs: number, outcome: string | null, user?: string | null): void {
   const sessionId = `demo-sess-chat-${idx}`;
   const project = pick(ctx.rng, PROJECTS);
-  const user = pick(ctx.rng, USERS);
+  const sessionUser = user === undefined ? pick(ctx.rng, USERS) : user;
   const source = pick(ctx.rng, SOURCES);
   ctx.store.upsertSession(sessionId, project, 'chat', startMs);
   ctx.sessions += 1;
@@ -263,7 +265,7 @@ function nonCodingSession(ctx: Ctx, idx: number, startMs: number, outcome: strin
       tsEpochMs: t,
       model: pick(ctx.rng, [SONNET, GPT4O, HAIKU]),
       project,
-      user,
+      user: sessionUser,
       source,
       sessionId,
       inputTokens: int(ctx.rng, 1_500, 12_000),
@@ -470,11 +472,25 @@ export function seedDemo(store: Store, opts: { now?: number; days?: number } = {
   const codingStarts = [11, 9, 7, 4].map((d) => now - d * DAY_MS + 10 * HOUR_MS);
   codingStarts.forEach((startMs, i) => codingSession(ctx, i + 1, startMs));
 
-  // Non-coding sessions with a realistic mix of outcomes: 3 realized (positive),
-  // 1 redone (negative), 2 with no reported outcome → ~50% realization, never a
-  // fake 100%.
-  const outcomes: Array<string | null> = ['used', 'resolved', 'published', 'redone', null, null];
-  outcomes.forEach((o, i) => nonCodingSession(ctx, i + 1, now - int(ctx.rng, 1, days - 1) * DAY_MS + 13 * HOUR_MS, o));
+  // Non-coding sessions, seeded per-user so the per-user VALUE distribution is
+  // real: a spread of extraction across the team (some extract nearly all their
+  // spend, some little), which drives dispersion + coaching headroom in
+  // `aegisflow team`. Outcomes stay honest (redone = negative, null = unreported),
+  // so no user shows a fake 100%. Each dev gets 3 sessions.
+  const perUserOutcomes: Array<{ user: string; outcomes: Array<string | null> }> = [
+    { user: 'alice@team', outcomes: ['published', 'resolved', 'used'] }, // extracts a lot
+    { user: 'bob@team', outcomes: ['resolved', 'used', null] },
+    { user: 'carol@team', outcomes: ['used', 'published', 'redone'] },
+    { user: 'dave@team', outcomes: ['used', null, null] },
+    { user: 'erin@team', outcomes: ['resolved', 'redone', null] },
+    { user: 'frank@team', outcomes: ['redone', null, null] }, // could use enablement
+  ];
+  let chatIdx = 1;
+  for (const { user, outcomes } of perUserOutcomes) {
+    for (const o of outcomes) {
+      nonCodingSession(ctx, chatIdx++, now - int(ctx.rng, 1, days - 1) * DAY_MS + 13 * HOUR_MS, o, user);
+    }
+  }
 
   // TODAY runs hot: a looping coding agent (many large opus calls) plus normal
   // background. This is what makes today's spend breach the demo daily cap
