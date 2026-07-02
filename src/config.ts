@@ -48,6 +48,14 @@ export interface LiftConfig {
   baselineMinutes: Record<string, number>;
   /** Labor rate ($/hr) for break-even + effort tax. null = effort priced at 0. */
   laborRatePerHour: number | null;
+  /**
+   * Manual-equivalent minutes for NON-CODING outcomes, by reported reach
+   * (used / resolved / published) — the org input that upgrades non-coding value
+   * from its honest floor ("realized value = the spend that realized") to a real
+   * dollar estimate, exactly like `baselineMinutes` does for code. Empty (the
+   * default) = the dollar return for non-coding stays honestly un-priced.
+   */
+  outcomeBaselineMinutes: Record<string, number>;
 }
 
 export interface PricingConfig {
@@ -154,6 +162,7 @@ export const DEFAULT_CONFIG: AegisConfig = {
     // honest regardless of these.
     baselineMinutes: { feature: 240, fix: 90, refactor: 120, test: 60, docs: 45, perf: 120, chore: 30, other: 90 },
     laborRatePerHour: null,
+    outcomeBaselineMinutes: {},
   },
   pricing: {
     manifestUrl: 'https://raw.githubusercontent.com/GamingDragonwastaken/aegisflow/main/pricing/models.json',

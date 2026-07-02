@@ -394,6 +394,38 @@ test('cross-modality: outcome is GRADED — realizing a further-reaching outcome
   assert.equal(used.outcomeMix.used, 4);
 });
 
+test('cross-modality: outcome baselines price the dollar face — and never touch the efficiency lens', () => {
+  const store = new Store(':memory:');
+  try {
+    const t = Date.parse('2026-06-01T10:00:00Z');
+    for (let i = 0; i < 3; i++) {
+      store.insertRequest({
+        requestId: `r${i}`, sessionId: `s${i}`, tsEpochMs: t + i * 60_000, provider: 'anthropic', model: 'claude-opus-4-8', project: 'p', taskWeight: 1,
+        inputTokens: 0, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, reasoningTokens: 0,
+        costUsd: 1, estimated: false, streamed: false, statusCode: 200, durationMs: 1,
+      });
+      store.insertSignal({ signalId: `g${i}`, kind: 'resolved', commitHash: `s${i}`, project: 'p', tsEpochMs: t + 1000, verdict: 'pass', detail: null });
+    }
+    const window = { startMs: t - 1000, endMs: t + 600_000 };
+
+    // Un-priced by default: no baselines → the dollar face stays dark.
+    const bare = computeUsageRoI(store, window);
+    assert.equal(bare.money.priced, false);
+    assert.equal(bare.roi.returnRatio.basis === 'usd' && bare.roi.returnRatio.grossRatio !== null, false, 'no invented dollars');
+
+    // Disclosed baselines + rate → priced: 3 resolved × 30min × $120/hr = $180 gross.
+    const priced = computeUsageRoI(store, { ...window, money: { outcomeBaselineMinutes: { resolved: 30 }, laborRatePerHour: 120 } });
+    assert.equal(priced.money.priced, true);
+    assert.ok(Math.abs(priced.money.grossRealizedValueUsd! - 180) < 1e-9, `gross = $180, got ${priced.money.grossRealizedValueUsd}`);
+
+    // The efficiency lens keeps the honest floor either way (a 0..1 share of spend).
+    assert.ok(priced.roi.realizedEfficiency !== null && priced.roi.realizedEfficiency <= 1, 'efficiency stays a share');
+    assert.equal(priced.roi.realizedEfficiency, bare.roi.realizedEfficiency, 'pricing never inflates the efficiency lens');
+  } finally {
+    store.close();
+  }
+});
+
 // ---- realization integration (real git) ----
 
 function g(cwd: string, args: string[], env: Record<string, string> = {}): void {

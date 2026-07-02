@@ -177,7 +177,19 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
           const day = 24 * 60 * 60 * 1000;
           const series = store.series(now - 30 * day, now + 1000, day);
           const dailySpends = series.map((s) => s.costUsd);
-          const usage = computeUsageRoI(store, { startMs: now - 30 * day, endMs: now + 1000 });
+          // Money inputs mirror the CLI exactly (demo assumes labeled illustrative
+          // values) so the two surfaces can't disagree on the non-coding dollar.
+          let usageRate = config.lift.laborRatePerHour;
+          let usageBaselines = config.lift.outcomeBaselineMinutes;
+          if (isDemo()) {
+            if (usageRate === null) usageRate = 120;
+            if (Object.keys(usageBaselines).length === 0) usageBaselines = { used: 10, resolved: 30, published: 90 };
+          }
+          const usage = computeUsageRoI(store, {
+            startMs: now - 30 * day,
+            endMs: now + 1000,
+            money: { outcomeBaselineMinutes: usageBaselines, laborRatePerHour: usageRate },
+          });
           // Per-user VALUE — distribution only, gated by opt-in + k-anonymity. When
           // disabled/suppressed this carries no per-user data (suppressed:true), so
           // the dashboard can render the guardrail state without ever seeing names.

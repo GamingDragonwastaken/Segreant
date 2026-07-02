@@ -1113,11 +1113,24 @@ async function cmdExec(flags: Flags, command: string[]): Promise<void> {
 }
 
 async function cmdUsage(flags: Flags): Promise<void> {
+  const cfg = loadConfig();
   const store = new Store(dbPath());
   const now = Date.now();
   const dayMs = 24 * 60 * 60 * 1000;
   const days = flags.days ? Number(flags.days) : 30;
-  const rep = computeUsageRoI(store, { startMs: now - days * dayMs, endMs: now + 1000 });
+  // Money inputs: org-disclosed outcome baselines + labor rate. The demo assumes
+  // illustrative values (clearly labeled) so the dollar face is visible there.
+  let laborRate = cfg.lift.laborRatePerHour;
+  let outcomeBaselines = cfg.lift.outcomeBaselineMinutes;
+  if (isDemo()) {
+    if (laborRate === null) laborRate = 120;
+    if (Object.keys(outcomeBaselines).length === 0) outcomeBaselines = { used: 10, resolved: 30, published: 90 };
+  }
+  const rep = computeUsageRoI(store, {
+    startMs: now - days * dayMs,
+    endMs: now + 1000,
+    money: { outcomeBaselineMinutes: outcomeBaselines, laborRatePerHour: laborRate },
+  });
 
   if (flags.json) {
     process.stdout.write(JSON.stringify(rep, null, 2) + '\n');
@@ -1142,6 +1155,14 @@ async function cmdUsage(flags: Flags): Promise<void> {
   if (rep.roi.realizationInterval) {
     const ci = rep.roi.realizationInterval;
     console.log(color(tty, C.gray, `                      ${pct(ci.low)}–${pct(ci.high)} anytime-valid ${Math.round(ci.level * 100)}% — valid at every glance, not just once`));
+  }
+  // The money face — only when the org disclosed outcome baselines + a rate.
+  const rr = rep.roi.returnRatio;
+  if (rep.money.priced && rr.basis === 'usd' && rr.grossRatio !== null) {
+    const head = rr.causalRatio ?? rr.grossRatio;
+    console.log(`  RoI return          ${color(tty, head >= 1 ? C.green : C.red, head.toFixed(2) + '×')}   ${color(tty, C.gray, `${head >= 1 ? 'pays for itself' : 'below break-even'} — outcomes priced by your disclosed baselines${isDemo() ? ' (demo: illustrative baselines)' : ''}`)}`);
+  } else if (rep.realizedUnits > 0) {
+    console.log(color(tty, C.gray, '                      dollar return un-priced — set lift.outcomeBaselineMinutes + laborRatePerHour to price outcomes'));
   }
   // Reach breakdown — the grade, not a flat "positive". Further-reaching outcomes
   // weigh more in Impact, so this is where non-coding value actually differentiates.

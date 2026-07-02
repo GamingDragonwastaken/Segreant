@@ -22,6 +22,7 @@
 import type { Store } from '../store/db.ts';
 import { scoreFunnel, type Gate, type GateResult, type Verdict } from './gates.ts';
 import { computeReturnOnIntelligence, type RoIResult } from './lenses.ts';
+import { timeWithAiMinutes } from './lift.ts';
 
 const POSITIVE_OUTCOMES = new Set(['used', 'resolved', 'published', 'shipped', 'accepted']);
 const NEGATIVE_OUTCOMES = new Set(['incident', 'redone', 'discarded']);
@@ -78,10 +79,23 @@ export interface UsageReport {
   totalCostUsd: number;
   /** How reported outcomes broke down by reach — the richer non-coding picture. */
   outcomeMix: { published: number; resolved: number; used: number; none: number };
+  /** The money face's inputs, when priced (org-disclosed outcome baselines + labor rate). */
+  money: { priced: boolean; grossRealizedValueUsd: number | null; supervisionMinutes: number | null };
   roi: RoIResult;
 }
 
-export function computeUsageRoI(store: Store, opts: { startMs: number; endMs: number }): UsageReport {
+export interface UsageMoneyOptions {
+  /** Manual-equivalent minutes per realized outcome, by reach name (used/resolved/published). Org input, disclosed. */
+  outcomeBaselineMinutes: Record<string, number>;
+  laborRatePerHour: number | null;
+}
+
+/** The outcomeMix name a graded reach prices under (same mapping the breakdown uses). */
+function reachName(reach: Reach): 'published' | 'resolved' | 'used' {
+  return reach === 'shipped' ? 'published' : reach === 'merged' ? 'resolved' : 'used';
+}
+
+export function computeUsageRoI(store: Store, opts: { startMs: number; endMs: number; money?: UsageMoneyOptions }): UsageReport {
   // Non-coding usage = sessions that produced no code proposals.
   const sessions = store.sessionUnits(opts.startMs, opts.endMs).filter((s) => !s.hasProposals);
 
@@ -114,7 +128,7 @@ export function computeUsageRoI(store: Store, opts: { startMs: number; endMs: nu
     };
     const funnel = scoreFunnel(verdicts);
 
-    outcomeMix[reach === 'shipped' ? 'published' : reach === 'merged' ? 'resolved' : reach === 'kept' ? 'used' : 'none'] += 1;
+    outcomeMix[reach === null ? 'none' : reachName(reach)] += 1;
 
     units.push({
       sessionId: s.sessionId,
@@ -130,17 +144,55 @@ export function computeUsageRoI(store: Store, opts: { startMs: number; endMs: nu
 
   const realized = units.filter((u) => u.realized);
   const totalCostUsd = units.reduce((s, u) => s + u.costUsd, 0);
+  // The efficiency lens keeps the honest FLOOR (realized value = the spend that
+  // realized), so it stays a 0..1 share regardless of pricing below.
   const realizedValueUsd = realized.reduce((s, u) => s + u.costUsd, 0);
 
-  const roi = computeReturnOnIntelligence({
-    firstPassAcceptance: null,
-    units: lensUnits,
-    matured: {
-      realizationRate: units.length > 0 ? realized.length / units.length : 0,
-      totalCostUsd,
-      realizedValueUsd,
-    },
-  });
+  // The MONEY face (RoI Return): price realized outcomes by the org's disclosed
+  // manual-equivalent baselines — the exact pattern coding uses (baselineMinutes).
+  // Supervision time is measured the same way too: 10-min concurrency windowing
+  // over these sessions' own requests. Without baselines + a rate, the dollar
+  // stays honestly un-priced; nothing here feeds the Index or the lenses.
+  const money: UsageReport['money'] = { priced: false, grossRealizedValueUsd: null, supervisionMinutes: null };
+  const rate = opts.money?.laborRatePerHour ?? null;
+  if (opts.money && rate !== null && rate > 0) {
+    let gross = 0;
+    let pricedUnits = 0;
+    for (const u of realized) {
+      if (u.reach === null) continue;
+      const minutes = opts.money.outcomeBaselineMinutes[reachName(u.reach)];
+      if (typeof minutes === 'number' && minutes > 0) {
+        gross += (minutes / 60) * rate;
+        pricedUnits += 1;
+      }
+    }
+    if (pricedUnits > 0) {
+      const ids = new Set(units.map((u) => u.sessionId));
+      const events = store
+        .requestsInRange(opts.startMs, opts.endMs)
+        .filter((r) => r.sessionId !== null && ids.has(r.sessionId))
+        .map((r) => ({ sessionId: r.sessionId!, tsEpochMs: r.tsEpochMs }));
+      const supMin = timeWithAiMinutes(events).totalMin;
+      money.priced = true;
+      money.grossRealizedValueUsd = gross;
+      money.supervisionMinutes = supMin > 0 ? supMin : null;
+    }
+  }
 
-  return { units, realizedUnits: realized.length, totalCostUsd, outcomeMix, roi };
+  const roi = computeReturnOnIntelligence(
+    {
+      firstPassAcceptance: null,
+      units: lensUnits,
+      matured: {
+        realizationRate: units.length > 0 ? realized.length / units.length : 0,
+        totalCostUsd,
+        realizedValueUsd,
+      },
+    },
+    money.priced
+      ? { laborRatePerHour: rate, grossRealizedValueUsd: money.grossRealizedValueUsd, supervisionMinutes: money.supervisionMinutes }
+      : {},
+  );
+
+  return { units, realizedUnits: realized.length, totalCostUsd, outcomeMix, money, roi };
 }
