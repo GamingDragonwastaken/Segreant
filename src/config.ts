@@ -222,7 +222,15 @@ function withDemoDefaults(cfg: AegisConfig): AegisConfig {
   // the feature is visible. The demo roster is synthetic, so there's no privacy
   // cost, and this is never persisted.
   const perUser = { ...cfg.perUser, enabled: true };
-  return { ...cfg, budget, perUser };
+  // The demo discloses a labor rate + outcome baselines so every value surface
+  // (and the guide's journey) tells the fully-priced story. Never persisted;
+  // real deployments keep the honest "un-priced until disclosed" default.
+  const lift = { ...cfg.lift };
+  if (lift.laborRatePerHour === null) lift.laborRatePerHour = 120;
+  if (Object.keys(lift.outcomeBaselineMinutes).length === 0) {
+    lift.outcomeBaselineMinutes = { used: 10, resolved: 30, published: 90 };
+  }
+  return { ...cfg, budget, perUser, lift };
 }
 
 export function ensureHome(): string {

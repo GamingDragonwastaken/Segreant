@@ -739,6 +739,12 @@ export class Store {
     return row.n;
   }
 
+  /** Total outcome signals ever recorded (`report`/`exec` wiring), across projects. */
+  countSignals(): number {
+    const row = this.db.prepare(`SELECT COUNT(*) AS n FROM gate_signals`).get() as { n: number };
+    return row.n;
+  }
+
   /** Distinct projects that have stored realization snapshots — the budget owner's rows. */
   realizationProjects(): string[] {
     const rows = this.db

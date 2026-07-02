@@ -43,6 +43,7 @@ import { shadowPriceOfIntelligence, estimateBetaFromPairs } from './value/margin
 import { driftEProcess } from './value/drift.ts';
 import { instrumentationPriority } from './value/voi.ts';
 import { estimateBetaPrior, shrinkRate } from './value/reliability.ts';
+import { buildGuide, type GuideFacts } from './guide.ts';
 import { computeAlerts } from './alerts/detect.ts';
 import { notifyWebhook } from './alerts/notify.ts';
 import { requestsToCsv } from './export/csv.ts';
@@ -720,6 +721,76 @@ function cmdInit(): void {
   console.log(`    export OPENAI_BASE_URL="http://localhost:${cfg.port}/v1"`);
   console.log('');
   console.log(`  Then run: ${color(tty, C.green, 'aegisflow start')}`);
+  console.log('');
+}
+
+/**
+ * Every guide fact is read from the database or probed live — never inferred
+ * from what the user ran before. Re-running `guide` after any action shows the
+ * journey advance, which is the whole point: the tool teaches by reflecting state.
+ */
+async function gatherGuideFacts(): Promise<GuideFacts> {
+  const cfg = loadConfig();
+  const store = new Store(dbPath());
+  const now = Date.now();
+  const day = 24 * 60 * 60 * 1000;
+  const all = store.summary(0, now + 1000);
+  const sum30 = store.summary(now - 30 * day, now + 1000);
+  const outcomeSignals = store.countSignals();
+  const realizationUnits = store.countRealizationUnits();
+  store.close();
+
+  let proxyUp = false;
+  try {
+    const r = await fetch(`http://localhost:${cfg.port}/__aegis/health`, { signal: AbortSignal.timeout(800) });
+    proxyUp = r.ok;
+  } catch {
+    proxyUp = false;
+  }
+
+  return {
+    demo: isDemo(),
+    port: cfg.port,
+    dashboardPort: cfg.dashboardPort,
+    proxyUp,
+    requestsAllTime: all.requests,
+    spend30dUsd: sum30.costUsd,
+    dailyCapUsd: cfg.budget.dailyUsd,
+    outcomeSignals,
+    realizationUnits,
+    laborRateSet: cfg.lift.laborRatePerHour !== null,
+  };
+}
+
+async function cmdGuide(flags: Flags): Promise<void> {
+  const report = buildGuide(await gatherGuideFacts());
+  if (flags.json) {
+    process.stdout.write(JSON.stringify(report, null, 2) + '\n');
+    return;
+  }
+
+  const tty = process.stdout.isTTY ?? false;
+  console.log('');
+  console.log(color(tty, C.bold, '  AegisFlow — where you are') + (isDemo() ? color(tty, C.yellow, '   ● DEMO DATA') : ''));
+  console.log(color(tty, C.gray, '  ' + '─'.repeat(58)));
+  console.log(`  ${color(tty, C.bold, report.headline)}`);
+  console.log('');
+
+  for (const step of report.steps) {
+    const isNext = step.id === report.next.id;
+    const mark = step.done ? color(tty, C.green, '✓') : isNext ? color(tty, C.cyan, '→') : color(tty, C.gray, '·');
+    const padded = step.title.padEnd(24);
+    const title = step.done ? padded : isNext ? color(tty, C.cyan, padded) : color(tty, C.gray, padded);
+    console.log(`  ${mark} ${title} ${color(tty, C.gray, step.state)}`);
+    if (isNext) {
+      console.log(`      ${step.why}`);
+      for (const c of step.commands) console.log(color(tty, C.cyan, `        ${c}`));
+    }
+  }
+
+  console.log('');
+  if (report.hint) console.log(color(tty, C.gray, `  ${report.hint}`));
+  console.log(color(tty, C.gray, '  aegisflow help — every command · aegisflow doctor — health check'));
   console.log('');
 }
 
@@ -1925,6 +1996,8 @@ function cmdHelp(): void {
   Usage: aegisflow <command> [options]
 
   Commands
+    guide                 Where you are + the single next step, read from your
+                          actual state — also what bare "aegisflow" shows (--json)
     start                 Start the proxy + local dashboard
     today | week | month  Show spend for a window      (--json)
     sources               Spend by connected source — each AI tool routed here
@@ -1992,7 +2065,9 @@ function cmdHelp(): void {
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
-  const cmd = argv[0] ?? 'help';
+  // Bare `aegisflow` opens the guide, not the reference: the tool's first job
+  // is to tell you where you are and the single next step. `help` is one word away.
+  const cmd = argv[0] ?? 'guide';
   // `exec` wraps another command: everything after the bare `--` belongs to the
   // wrapped command verbatim and must never be flag-parsed.
   const sep = argv.indexOf('--');
@@ -2045,6 +2120,10 @@ async function main(): Promise<void> {
       break;
     case 'export':
       cmdExport(flags);
+      break;
+    case 'guide':
+    case 'next':
+      await cmdGuide(flags);
       break;
     case 'doctor':
       await cmdDoctor();
