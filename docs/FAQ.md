@@ -100,9 +100,26 @@ whenever and act whenever. The honest price is a slightly wider interval — sho
 not hidden.
 
 **What do I have to configure for the dollar return to appear?**
-A labor rate (`lift.laborRatePerHour`) and, ideally, per-task manual-time baselines.
-Until then you still get the full 0–100 RoI Index and spend metering; the *dollar*
-ratio stays honestly un-priced rather than invented.
+A labor rate (`lift.laborRatePerHour`) and, ideally, per-task manual-time baselines
+(`lift.baselineMinutes` for code, `lift.outcomeBaselineMinutes` for non-coding
+outcomes like resolved tickets or published drafts). Until then you still get the
+full 0–100 RoI Index and spend metering; the *dollar* ratio stays honestly
+un-priced rather than invented.
+
+**How would I know if the metric itself is being gamed?**
+The Stability line. An anytime-valid drift alarm watches the realization stream
+for the signature of a bent metric — a rate that moves while a constant-rate story
+fails — without reading any content. It fires on real regime changes too (a new
+model, a new workflow), and says so: its job is to force the question *"did the
+work change, or did the measuring get bent?"* — which no other dashboard even asks.
+False alarms are capped at 5% over all of time, and that cap is verified by
+simulation in the test suite.
+
+**What should I measure next?**
+Ask the tool: the "Instrument next" line names the unmeasured lens whose
+measurement would move your Index most (evaluated at a disclosed midpoint, not a
+prediction). Measuring can only make the number more honest — it names the cheapest
+place to buy honesty.
 
 ## Cost & licensing
 

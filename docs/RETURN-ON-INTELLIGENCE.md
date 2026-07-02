@@ -503,9 +503,63 @@ dependency — the Beta ratio is built by the exact recurrence
 `k/n`, so the interval falls out of bisection. (`src/value/anytime.ts`,
 `test/anytime.test.ts` — including the simulated-peeking coverage test.)
 
-**Scoped next application (not yet built): a Goodhart drift alarm.** The same
-e-process machinery, run as a sequential test of exchangeability on the
-acceptance/realization stream, grows an e-value when behavior bends *toward the
-metric* (gaming) rather than toward value. Building it honestly requires a test
-martingale that is valid under a composite null, which is research-grade care —
-so it is scoped here rather than shipped half-principled.
+## 11. The Goodhart alarm — detecting a bent metric
+
+Goodhart's law is the fate of every metric: once a number is a target, people
+optimize the number instead of the value it stood for. A gamed metric doesn't
+announce itself — it shows up as the rate **drifting** (acceptance creeping up
+while nothing else improves; realization sagging as easy wins get cherry-picked).
+The alarm detects exactly that, with the same anytime-valid guarantee as §10,
+reading **no content** — drift is visible in the 0/1 outcome stream alone.
+
+The construction is **universal inference** (a running-MLE e-process). Race two
+forecasters over the stream: a *predictive* alternative — a Krichevsky–Trofimov
+estimator over a trailing window, which only ever sees the past and adapts when
+the rate moves — against the best *constant* rate in hindsight (the composite
+null's maximum likelihood, refit at every step):
+
+```
+Eₙ = Π qᵢ₋₁(xᵢ)  /  sup_p p^k (1−p)^{n−k}
+```
+
+Validity, in two lines: for any fixed rate p₀ in the null, `Π qᵢ₋₁(xᵢ)/p₀(xᵢ)`
+is a nonnegative martingale (each factor has conditional expectation 1), and the
+sup-denominator only makes Eₙ smaller — so Ville's inequality bounds the false-
+alarm rate by α **over all of time, for every constant rate at once**. It is
+deterministic (no randomization, unlike conformal martingales on binary data).
+Measured: false alarms 0.2% against a 5% budget across three stable rates; an
+abrupt regime collapse caught 100/100; slow Goodhart-style creep caught 93/100.
+
+The honest framing travels with the output: the alarm detects that the rate
+**moved**, not *why*. A genuine regime change (new model, new workflow) and a
+gamed metric both trip it. Its job is to force the question no dashboard asks —
+*did the work change, or did the measuring get bent?*
+(`src/value/drift.ts`, `test/drift.test.ts`; the "Stability" line in
+`aegisflow roi` and the dashboard.)
+
+## 12. Value of Information — which measurement to buy next
+
+The Index is an upper bound while lenses are missing (§5), but "wire more
+lenses" is not a decision — "wire **this** lens next" is. For each
+un-instrumented lens k, evaluate the composite with that lens hypothetically
+measured at a **disclosed neutral reference** v = 0.5 (a midpoint, not a
+prediction):
+
+```
+Index_k(v) = 100 · exp( (Σᵢ wᵢ ln xᵢ + w_k ln v) / (Σᵢ wᵢ + w_k) )
+```
+
+and rank by the size of the move. The arithmetic is fully transparent — no
+hidden priors; a heavier, further-from-current lens moves the Index more, and
+measuring can only make the number more honest. This completes the decision
+calculus the instrument hands an organization:
+
+| Question | Answer | Section |
+|---|---|---|
+| Where does the next **dollar** go? | the shadow price μ | §9 |
+| Which **measurement** do I buy next? | instrumentation priority | §12 |
+| When do I actually **know**? | the anytime-valid interval | §10 |
+| Is the number being **bent**? | the Goodhart alarm | §11 |
+
+(`src/value/voi.ts`, `test/voi.test.ts`; the "Instrument next" line in
+`aegisflow roi` / `usage`.)
