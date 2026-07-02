@@ -104,6 +104,22 @@ npx aegisflow alerts                         # budget/spike/throttle/value alert
 npx aegisflow export --csv --days 30         # get the numbers out
 ```
 
+## 5. Per-user value (opt-in, privacy-first)
+
+How much of each person's AI spend reaches a real outcome — as a *distribution*,
+never a leaderboard. It's **off by default**; enable it deliberately (it's the
+surveillance-prone axis), and even then it's withheld below a k-anonymity floor.
+
+```bash
+# enable in config: perUser.enabled = true  (see: aegisflow config)
+npx aegisflow team              # team distribution + coaching headroom (no names)
+npx aegisflow team --me you@co  # your OWN extraction vs. the team median
+```
+
+The org view shows the median, the spread, and *coaching headroom* — the latent
+value if below-median extractors were supported up to the median. It's a case for
+enablement, not a ranking. See [FAQ.md](FAQ.md) → "Do you rank developers?".
+
 ## Where things live
 
 - **Config + database:** `~/.aegisflow/` (Windows: `%USERPROFILE%\.aegisflow`).

@@ -1752,6 +1752,9 @@ function cmdHelp(): void {
                           routing recommendations (--window D, --json)
     usage                 RoI for non-coding usage (chat, research, drafting) —
                           sessions scored from reported outcomes (--days N, --json)
+    team                  Per-user value: how much of the spend reaches outcomes.
+                          Opt-in, distribution-only, k-anonymous. --me <user> for
+                          your own view (--days N, --json)
     report --kind K       Wire an outcome: code --commit <hash>, non-code --session <id>
                           kinds: tested|merged|shipped|incident|used|resolved|published|…
     realize --repo <path> The Realization Standard: % of AI spend that became

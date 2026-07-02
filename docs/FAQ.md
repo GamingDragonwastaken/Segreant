@@ -14,6 +14,18 @@ never content).
 No. Keys stay in your environment / your tool's config. The proxy forwards the auth
 header upstream unchanged and never stores it. AegisFlow's author never sees it.
 
+**Do you rank or score individual developers?**
+No — and the code refuses to. Per-user *value* (how much of someone's AI spend
+reaches a real outcome) is **off by default**; spend-by-user is cost governance and
+stays available, but attributing value to named people is opt-in. Even switched on,
+the org view is a **distribution only** (median, spread, a coaching-headroom number)
+— never a ranked list — and it is **withheld entirely** below a k-anonymity floor
+(default 5 people), so a small team can't use it to single anyone out. Names appear
+only in a person's own view of themselves (`aegisflow team --me <you>`). Thin samples
+are shrunk toward the team mean, so nobody is judged on two noisy sessions. The
+headline number is *coaching headroom* — the latent value if below-median extractors
+were supported up to the median — an argument for enablement, not for blame.
+
 **Is there a root certificate or traffic interception?**
 No. AegisFlow is a base-URL reverse proxy — you explicitly point tools at it. That's
 a deliberate choice: enterprise security teams (rightly) ban dev-machine root CAs, so
@@ -60,6 +72,15 @@ usually down. That's the point: more measurement, more honest, never inflated.
 Reliability shrinkage. Two-of-two successes isn't the same evidence as 140-of-200, so
 thin results are shrunk toward the population average until there's enough data. It
 stops the tool from chasing luck.
+
+**How do you value non-coding AI use (chat, research, drafting)?**
+The same funnel, with the outcome reported instead of read from git. But it's
+*graded*, not pass/fail: an answer you merely *used* counts less than one you
+*resolved* a ticket with, which counts less than something you *published* —
+mapped onto the same reach ladder the code Impact lens uses. The grade is only ever
+what you reported (`aegisflow report --session <id> --kind used|resolved|published`),
+never inferred from the content of your prompts. Acceptance and survival-over-time
+don't apply to a one-shot answer, so they stay honestly n/a rather than faked.
 
 **What's the "shadow price of intelligence"?**
 The value of one more AI dollar, spent optimally, right now (μ). μ ≥ $1 means invest
