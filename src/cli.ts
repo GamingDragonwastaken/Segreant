@@ -591,6 +591,15 @@ async function cmdDoctor(): Promise<void> {
   console.log(`  ${mark(proxyUp)} Proxy       ${proxyUp ? color(tty, C.green, `running on :${cfg.port}`) : color(tty, C.yellow, `not reachable on :${cfg.port} — start with "aegisflow start"`)}`);
   console.log(`  ${mark(cfg.budget.dailyUsd !== null)} Daily cap   ${cfg.budget.dailyUsd !== null ? usd(cfg.budget.dailyUsd) : color(tty, C.yellow, 'none — metering only (set with "aegisflow budget --daily N")')}`);
   console.log(`  ${mark(estShare <= 0.2)} Pricing     ${estShare > 0 ? `${Math.round(estShare * 100)}% of 30d spend used estimated rates` : 'all spend priced from the rate card'}`);
+  const price = pricingStatus(cfg.pricing.maxAgeDays);
+  const priceAge = price.ageDays === null ? '' : ` · ${price.ageDays}d old`;
+  console.log(
+    `  ${mark(!price.stale)} Rate card   ${
+      price.stale
+        ? color(tty, C.yellow, `stale (>${cfg.pricing.maxAgeDays}d${priceAge}) — refresh with "aegisflow pricing --refresh"`)
+        : `${price.source === 'cache' ? 'refreshed' : 'bundled'}${priceAge} · ${price.modelCount} models`
+    }`,
+  );
   console.log(`  ${mark(criticals === 0)} Alerts      ${alerts.length ? `${num(alerts.length)} active (${criticals} critical) — see "aegisflow alerts"` : color(tty, C.green, 'all clear')}`);
   console.log('');
   console.log(color(tty, C.gray, '  Point your AI tools at the proxy:'));
@@ -1344,6 +1353,19 @@ async function cmdStart(flags: Flags): Promise<void> {
 
   const store = new Store(dbPath());
   const tty = process.stdout.isTTY ?? false;
+
+  // Honor pricing.autoRefresh: if the rate card is stale and a manifest is set,
+  // pull a fresh one on launch so metering prices at current rates. OFF by default
+  // (keeps "zero external requests" true out of the box); a failure never blocks
+  // the daemon — we keep the current table and say so.
+  if (cfg.pricing.autoRefresh && cfg.pricing.manifestUrl && pricingStatus(cfg.pricing.maxAgeDays).stale) {
+    const res = await refreshPricing(cfg.pricing.manifestUrl);
+    console.log(
+      res.ok
+        ? color(tty, C.gray, `  ↻ pricing refreshed — ${res.modelCount} models (${cfg.pricing.manifestUrl})`)
+        : color(tty, C.yellow, `  ↻ pricing auto-refresh skipped: ${res.error ?? 'unreachable'} — keeping current table`),
+    );
+  }
 
   const proxy = createProxyServer({
     store,

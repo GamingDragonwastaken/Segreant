@@ -29,7 +29,6 @@ export interface UsageUnit {
   requests: number;
   maturing: boolean;
   acceptance: number | null;
-  linesAdded: number;
   realized: boolean;
 }
 
@@ -44,7 +43,7 @@ export function computeUsageRoI(store: Store, opts: { startMs: number; endMs: nu
   // Non-coding usage = sessions that produced no code proposals.
   const sessions = store.sessionUnits(opts.startMs, opts.endMs).filter((s) => !s.hasProposals);
 
-  const lensUnits: Array<{ maturing: boolean; acceptance: number | null; linesAdded: number; funnel: ReturnType<typeof scoreFunnel> }> = [];
+  const lensUnits: Array<{ maturing: boolean; acceptance: number | null; funnel: ReturnType<typeof scoreFunnel> }> = [];
   const units: UsageUnit[] = [];
 
   for (const s of sessions) {
@@ -74,10 +73,9 @@ export function computeUsageRoI(store: Store, opts: { startMs: number; endMs: nu
       requests: s.requests,
       maturing: false, // a non-coding outcome is the reported signal, not survival-over-time
       acceptance: null,
-      linesAdded: 0,
       realized: funnel.realized,
     });
-    lensUnits.push({ maturing: false, acceptance: null, linesAdded: 0, funnel });
+    lensUnits.push({ maturing: false, acceptance: null, funnel });
   }
 
   const realized = units.filter((u) => u.realized);
