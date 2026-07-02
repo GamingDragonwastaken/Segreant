@@ -85,6 +85,19 @@ don't apply to a one-shot answer, so they stay honestly n/a rather than faked.
 **What's the "shadow price of intelligence"?**
 The value of one more AI dollar, spent optimally, right now (μ). μ ≥ $1 means invest
 more; μ < $1 means the next dollar returns less than it costs — cut before you grow.
+The diminishing-returns curve behind it (β) is estimated from your own history when
+there's enough of it, and falls back to a disclosed default — with the reason
+printed — when there isn't.
+
+**Can I trust the interval while watching it live?**
+Yes — and that's rarer than it sounds. A classical interval is only valid if you
+look once, at a pre-planned sample size; watched continuously (the way every
+dashboard is actually used), its real error rate explodes — in simulation, a 90%
+classical interval goes wrong at some point in ~64% of runs. AegisFlow's
+realization rate carries an **anytime-valid** interval (a confidence sequence)
+instead: the guarantee holds simultaneously at every glance, so you may peek
+whenever and act whenever. The honest price is a slightly wider interval — shown,
+not hidden.
 
 **What do I have to configure for the dollar return to appear?**
 A labor rate (`lift.laborRatePerHour`) and, ideally, per-task manual-time baselines.

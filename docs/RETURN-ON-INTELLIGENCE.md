@@ -439,3 +439,73 @@ of it — the honest antidote to "pour everything into the top-scoring model." �
 disclosed like the Index's weights and θ; the concave shape is a planning
 assumption that travels with the output. (`src/value/marginal.ts`,
 `test/marginal.test.ts`; surfaced in `aegisflow budget --recommend`.)
+
+### 9.1 β estimated from your own curvature (never silently assumed)
+
+When history supports it, β is **estimated from the org's own data** rather than
+assumed. The estimator is chosen for one property: it cannot be biased by context
+quality. Comparing *different* contexts confounds β with quality (teams route more
+spend where value is higher, so a pooled log-log regression inflates β). So we
+never compare across contexts. Within one context observed in the window's two
+halves, its quality `aᵢ` cancels exactly:
+
+```
+V₂/V₁ = aᵢs₂^β / aᵢs₁^β   ⟹   β = log(V₂/V₁) / log(s₂/s₁)
+```
+
+One slope per context; the estimate is the **median** across contexts, so a
+minority whose quality genuinely shifted between halves can't drag it. Gates, all
+disclosed in the output: positive spend and value in both halves; spend moved
+≥10% (otherwise the slope is unidentified); ≥3 usable pairs; and the median must
+land inside (0.05, 0.95) — a median at or above 1 means *no diminishing returns
+were detected*, and the honest response is to keep the disclosed default and say
+why, not to clamp an estimate the data rejects. β's provenance (estimated vs.
+default, and from how many contexts) prints next to the shadow price.
+(`estimateBetaFromPairs` in `src/value/marginal.ts`.)
+
+## 10. Anytime-valid — the number you are allowed to watch
+
+Every monitoring product ships intervals with a flaw its users never see: a
+classical 95% interval is only valid if you look **once**, at a pre-registered
+sample size. A dashboard invites the opposite — glance at every refresh, act the
+moment the number looks good. Under that use the real error rate of a fixed-n
+interval grows without bound (the *optional stopping* / "peeking" problem that
+forces clinical trials into sequential designs). In our simulation, watching a
+stream at every step, a classical 90% interval was wrong at some point in **~64%
+of runs**. A product whose brand is "never a dishonest number" cannot show that.
+
+The fix is a **confidence sequence**, built from an e-process. For a realization
+stream `x₁..xₙ` and a candidate rate `p`, the mixture likelihood ratio
+
+```
+Mₙ(p) = ∫ q^k (1−q)^{n−k} dBeta(a,a)(q)  /  p^k (1−p)^{n−k}
+```
+
+is a nonnegative martingale with `E[M₀] = 1` when `p` is the true rate, so
+**Ville's inequality** bounds it over *all* time at once: `P(∃n: Mₙ(p) ≥ 1/α) ≤ α`.
+The interval at any moment is simply every rate not yet rejected:
+
+```
+CSₙ = { p : Mₙ(p) < 1/α }      — valid SIMULTANEOUSLY at every n
+```
+
+Peek whenever, stop whenever, act whenever: the guarantee holds. In the same
+simulation the confidence sequence violated its 10% budget in **6.0%** of runs —
+inside budget — while the classical interval failed in 63.8%.
+
+Three honest notes. (1) The price is width: an anytime-valid interval is ~1.5–2×
+wider than a fixed-n one. We show that cost instead of hiding it — a narrower
+number would be a lie about how dashboards are used. (2) It is **display-only**:
+it never feeds the Index or its partial-ID interval, so nothing about §4–§5
+changes meaning. (3) The implementation needs no gamma function and no
+dependency — the Beta ratio is built by the exact recurrence
+`B(x+1,y) = B(x,y)·x/(x+y)`, and `log Mₙ(p)` is quasi-convex with its minimum at
+`k/n`, so the interval falls out of bisection. (`src/value/anytime.ts`,
+`test/anytime.test.ts` — including the simulated-peeking coverage test.)
+
+**Scoped next application (not yet built): a Goodhart drift alarm.** The same
+e-process machinery, run as a sequential test of exchangeability on the
+acceptance/realization stream, grows an e-value when behavior bends *toward the
+metric* (gaming) rather than toward value. Building it honestly requires a test
+martingale that is valid under a composite null, which is research-grade care —
+so it is scoped here rather than shipped half-principled.

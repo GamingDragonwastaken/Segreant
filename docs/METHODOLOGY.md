@@ -79,6 +79,14 @@ not invent the denominator.
    there's enough evidence — so recommendations don't chase luck. (See "reliability"
    in the technical doc.)
 
+3. **It's valid while you watch it.** Ordinary statistics are only guaranteed if you
+   check the number once; a live dashboard gets checked constantly, which quietly
+   breaks the guarantee (checked continuously, a "90% sure" range is wrong at some
+   point in about two-thirds of cases). AegisFlow's headline rate uses **anytime-valid**
+   math instead: the range stays honest at every glance, so acting the moment it
+   looks good is statistically safe. The trade — a slightly wider range — is shown,
+   not hidden. (See §10 in the technical doc.)
+
 ## The decision it hands you: the Shadow Price of Intelligence
 
 Beyond scoring the past, AegisFlow answers *"what is one more dollar of AI budget
