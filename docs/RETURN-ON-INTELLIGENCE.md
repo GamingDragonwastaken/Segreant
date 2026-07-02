@@ -368,3 +368,74 @@ Feb 2026); METR 2026 technical-worker survey; *The Fast and Spurious* (arXiv
 2510.24265, HumanAISE@FSE'26); *Beyond the Commit* (arXiv 2602.03593,
 ICSE-SEIP'26); SPACE (Forsgren et al. 2021); DORA AI insights. Full synthesis in
 the project's research notes.
+
+---
+
+## 8. Reliability — trust in proportion to evidence (empirical Bayes)
+
+A raw rate lies with confidence on thin data: **2 of 2 realized (100%)** out-ranks
+**140 of 200 (70%)**, and the noisy small cell then captures budget and "best
+model" recommendations. This is the batting-average fallacy, and unaddressed it is
+the fastest way a skeptic discredits the whole tool.
+
+The fix is the **James–Stein** result: an estimator that shrinks each cell's rate
+toward the population mean strictly beats the raw rate in total squared error once
+there are ≥ 3 cells. We model realized/total as **Beta–Binomial** — each context's
+`k` of `n` outcomes has its own success probability drawn from a shared
+`Beta(α, β)` prior — and report each context's **reliable rate** as the posterior
+mean:
+
+```
+ρ̂ = (k + κ·μ) / (n + κ) ,   μ = α/(α+β) (population rate),  κ = α+β (prior strength)
+```
+
+A thin cell is pulled to μ; a data-rich cell barely moves. Crucially **κ is
+estimated from the data, not chosen** (the *empirical* in empirical Bayes): by
+method of moments on the beta-binomial's extra-binomial variation (Williams 1982),
+
+```
+ρ_icc = ( Σ(kᵢ − nᵢμ)² / [μ(1−μ)] − N ) / Σ nᵢ(nᵢ−1) ,   κ = 1/ρ_icc − 1.
+```
+
+Tightly-clustered cell rates ⟹ their spread is noise ⟹ large κ ⟹ heavy shrinkage;
+genuinely spread rates ⟹ real differences ⟹ small κ ⟹ light shrinkage. Alongside
+each shrunken figure we can show the **evidence weight** `n/(n+κ) ∈ [0,1]` — a
+plain-language confidence. (`src/value/reliability.ts`, `test/reliability.test.ts`.)
+This feeds the allocation optimum below so a 2-unit cell can't steer the budget.
+
+---
+
+## 9. The Shadow Price of Intelligence — the marginal dollar
+
+Every FinOps tool reports where the money **went**; none says where the next dollar
+should **go**, or whether it is worth spending at all. That is a constrained
+optimization whose solution carries one decision-grade number.
+
+Model each context's realized value as concave in the spend routed to it —
+diminishing returns, the honest default (easy wins land first; contexts saturate):
+
+```
+Vᵢ(s) = aᵢ · s^β ,   0 < β < 1   (β disclosed; default 0.5),   aᵢ = Vᵢ / sᵢ^β  (fit)
+```
+
+Maximizing total realized value `Σ Vᵢ(sᵢ)` subject to a fixed budget `Σ sᵢ = B` is
+a **water-filling** problem. Its Lagrangian `ℒ = Σ aᵢsᵢ^β − μ(Σsᵢ − B)` gives the
+first-order condition `Vᵢ′(sᵢ) = μ` for every funded context — **at the optimum
+every dollar earns the same marginal return μ**, the Lagrange multiplier. Because
+the objective is homogeneous of degree β, Euler's theorem closes it in one line:
+
+```
+optimal split   sᵢ* = B · wᵢ / Σⱼ wⱼ ,   wᵢ = aᵢ^{1/(1−β)}
+shadow price    μ  = β · V*(B) / B          (V* = total realized value at the optimum)
+```
+
+**μ is the headline.** `μ ≥ 1` ⟺ the next AI dollar returns more than a dollar of
+realized value (under-invested — room to grow); `μ < 1` ⟺ the next dollar returns
+less (past positive margin — cut, don't grow). This is the answer to *"what is one
+more dollar of AI budget worth to me, right now?"* — a question the market cannot
+otherwise answer. And because the split follows `aᵢ^{1/(1−β)}` rather than `aᵢ`,
+**concavity forbids winner-take-all**: the best context gets more budget, never all
+of it — the honest antidote to "pour everything into the top-scoring model." β is
+disclosed like the Index's weights and θ; the concave shape is a planning
+assumption that travels with the output. (`src/value/marginal.ts`,
+`test/marginal.test.ts`; surfaced in `aegisflow budget --recommend`.)

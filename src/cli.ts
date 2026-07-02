@@ -38,6 +38,8 @@ import { computeFrontier } from './value/frontier.ts';
 import { computeUsageRoI } from './value/usage.ts';
 import { recommendBudget } from './budget/recommend.ts';
 import { recommendAllocation } from './budget/allocate.ts';
+import { shadowPriceOfIntelligence } from './value/marginal.ts';
+import { estimateBetaPrior, shrinkRate } from './value/reliability.ts';
 import { computeAlerts } from './alerts/detect.ts';
 import { notifyWebhook } from './alerts/notify.ts';
 import { requestsToCsv } from './export/csv.ts';
@@ -1222,8 +1224,23 @@ async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
         )
       : null;
 
+  // The shadow price of intelligence — what one more AI dollar returns, optimally
+  // deployed. Reliability-adjust each context's value first (empirical-Bayes
+  // shrinkage of its realization rate) so a noisy 2-unit cell can't distort the
+  // optimum. (docs/RETURN-ON-INTELLIGENCE.md §8–9.)
+  let shadow: ReturnType<typeof shadowPriceOfIntelligence> | null = null;
+  if (frontierCells.length >= 2) {
+    const prior = estimateBetaPrior(frontierCells.map((c) => ({ k: Math.round(c.realizationRate * c.units), n: c.units })));
+    const marginalCells = frontierCells.map((c) => {
+      const shrunk = shrinkRate(Math.round(c.realizationRate * c.units), c.units, prior);
+      const adj = c.realizationRate > 0 ? shrunk / c.realizationRate : 1; // scale value by the reliable/raw ratio
+      return { key: c.key, costUsd: c.costUsd, realizedValueUsd: c.netRealizedValueUsd * adj };
+    });
+    shadow = shadowPriceOfIntelligence(marginalCells);
+  }
+
   if (flags.json) {
-    process.stdout.write(JSON.stringify({ ...rec, allocation }, null, 2) + '\n');
+    process.stdout.write(JSON.stringify({ ...rec, allocation, shadowPrice: shadow }, null, 2) + '\n');
     store.close();
     return;
   }
@@ -1274,6 +1291,17 @@ async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
       const tag = re.action === 'grow' ? color(tty, C.green, 'GROW') : color(tty, C.yellow, 'TRIM');
       console.log(`    ${tag}  ${re.context.padEnd(28)} ${color(tty, C.gray, re.reason)}`);
     }
+  }
+  // The headline scalar: the marginal return on the next AI dollar at the optimum.
+  if (shadow && shadow.budgetUsd > 0 && shadow.optimalValueUsd > 0) {
+    const d2 = (n: number) => '$' + n.toFixed(2);
+    console.log('');
+    console.log(color(tty, C.bold, '  Shadow price of intelligence') + color(tty, C.gray, '   what one more AI $ returns, optimally spent'));
+    console.log(
+      `    ${color(tty, shadow.paysAtMargin ? C.green : C.red, d2(shadow.shadowPriceUsd) + ' per AI $')}   ` +
+        color(tty, C.gray, shadow.paysAtMargin ? 'the next dollar still pays for itself — room to grow' : 'past positive margin — cut before you grow'),
+    );
+    console.log(color(tty, C.gray, `    same ${d2(shadow.budgetUsd)} budget split optimally: ${d2(shadow.currentValueUsd)} → ${d2(shadow.optimalValueUsd)} realized value (+${d2(shadow.upliftUsd)})`));
   }
   if (flags.apply) {
     cfg.budget.dailyUsd = dailyCap;
