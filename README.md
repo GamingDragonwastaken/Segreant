@@ -40,6 +40,11 @@ architecture puts privacy and latency ahead of analytics, always.
 
 ## Quickstart
 
+New here? Start with **[docs/GETTING-STARTED.md](docs/GETTING-STARTED.md)**. For the
+measurement in plain language (the CFO version) see
+**[docs/METHODOLOGY.md](docs/METHODOLOGY.md)**; common questions are in
+**[docs/FAQ.md](docs/FAQ.md)**.
+
 Requires **Node.js ≥ 24**. No build step, no native modules — it runs the
 TypeScript directly via Node's built-in type stripping and uses Node's built-in
 SQLite.
