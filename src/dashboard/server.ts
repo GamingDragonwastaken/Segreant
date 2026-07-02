@@ -20,6 +20,7 @@ import { computeReturnOnIntelligence } from '../value/lenses.ts';
 import { describeSourceDepth } from '../value/sourceDepth.ts';
 import { computeFrontier } from '../value/frontier.ts';
 import { computeUsageRoI } from '../value/usage.ts';
+import { computeCohort } from '../value/cohort.ts';
 import { recommendBudget } from '../budget/recommend.ts';
 import { computeAlerts } from '../alerts/detect.ts';
 import { requestsToCsv } from '../export/csv.ts';
@@ -176,6 +177,15 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
           const series = store.series(now - 30 * day, now + 1000, day);
           const dailySpends = series.map((s) => s.costUsd);
           const usage = computeUsageRoI(store, { startMs: now - 30 * day, endMs: now + 1000 });
+          // Per-user VALUE — distribution only, gated by opt-in + k-anonymity. When
+          // disabled/suppressed this carries no per-user data (suppressed:true), so
+          // the dashboard can render the guardrail state without ever seeing names.
+          const team = computeCohort(store, {
+            startMs: now - 30 * day,
+            endMs: now + 1000,
+            enabled: config.perUser.enabled,
+            minCohort: config.perUser.minCohort,
+          });
 
           // Live git when a real repo is attached; otherwise persisted snapshots
           // (what a manager's dashboard / the demo reads). One resolver, so the
@@ -245,6 +255,7 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
             projects,
             projectAllocation,
             usage,
+            team,
           });
         } catch (err) {
           return json(res, 500, { error: String(err) });

@@ -573,6 +573,29 @@ function renderValue(d) {
   const u = d.usage;
   const uidx = u.roi.roiIndex != null ? Math.round(u.roi.roiIndex) : null;
 
+  // Team value — distribution only, never a leaderboard. When off/suppressed the
+  // payload carries no per-user data, so the card renders the guardrail state.
+  const team = d.team;
+  let teamCard = '';
+  if (team && !team.suppressed && team.distribution) {
+    const t = team.distribution;
+    const spread = t.broadBased
+      ? '<span style="color:var(--mint)">broad-based</span>'
+      : '<span style="color:var(--gold)">concentrated</span>';
+    teamCard = `<div class="card fade" style="grid-column:1/-1">
+      <div class="label">Team value · per-user extraction ${tip('How much of each person\'s AI spend reaches a realized outcome. <b>Distribution only</b> — never a ranked list. Opt-in, and withheld entirely below a k-anonymity floor so it can\'t finger an individual. Names appear only in a person\'s own <code>aegisflow team --me</code>.')}</div>
+      <div class="rrow"><span style="color:var(--muted)">Extraction (median)</span><span style="font-family:var(--mono)">${Math.round(t.medianExtraction * 100)}% <span style="color:var(--faint)">· ${Math.round(t.p25Extraction * 100)}–${Math.round(t.p75Extraction * 100)}% p25–p75</span></span></div>
+      <div class="rrow"><span style="color:var(--muted)">Spread</span><span style="font-family:var(--mono)">${spread} <span style="color:var(--faint)">· ${t.cohortSize} people, unidentified</span></span></div>
+      <div class="rrow"><span style="color:var(--muted)">Coaching headroom ${tip('Latent value if everyone below the median were enabled up to it, at their own current spend. A case for training/support — <b>not</b> a ranking of people.')}</span><span style="font-family:var(--mono);color:var(--mint)">+$${money(t.coachingHeadroomUsd)}</span></div>
+      <div class="lenshow">Realized value $${money(t.totalRealizedValueUsd)} of $${money(t.totalCostUsd)} spent (non-coding). A person sees their own number with <span style="color:var(--gold)">aegisflow team --me &lt;user&gt;</span>.</div>
+    </div>`;
+  } else if (team && team.enabled && team.suppressed) {
+    teamCard = `<div class="card fade" style="grid-column:1/-1">
+      <div class="label">Team value · per-user extraction</div>
+      <div class="lenshow">Withheld: ${esc(team.reason)}. The k-anonymity floor keeps a small team from being used to single anyone out.</div>
+    </div>`;
+  }
+
   const budBody = bud.recommendedDailyUsd == null
     ? `<div class="rrow" style="color:var(--muted);font-size:12.5px;line-height:1.5">Not enough spend history yet — keep metering; a value-aware cap appears once there are a few active days of real usage.</div>`
     : `<div class="rrow"><span style="color:var(--muted)">Recommended daily cap</span><span style="color:var(--mint);font-family:var(--mono)">$${money(bud.recommendedDailyUsd)}</span></div>
@@ -609,7 +632,8 @@ function renderValue(d) {
       <div class="rrow"><span style="color:var(--muted)">RoI Index</span><span style="font-family:var(--mono);color:${uidx == null ? 'var(--faint)' : 'var(--mint)'}">${uidx == null ? 'n/a' : uidx + ' / 100'}</span></div>
       <div class="rrow"><span style="color:var(--muted)">Realized sessions</span><span style="font-family:var(--mono)">${u.realizedUnits}/${u.units.length} · $${money(u.totalCostUsd)}</span></div>
       <div class="lenshow">Acceptance &amp; survival are n/a for non-code (no diff, no git) — realized = a reported, no-incident outcome. Record with: <span style="color:var(--gold)">aegisflow report --session &lt;id&gt; --kind used</span></div>
-    </div>`);
+    </div>
+    ${teamCard}`);
 }
 
 async function loadValue() {
