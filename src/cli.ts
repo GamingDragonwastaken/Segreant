@@ -1045,6 +1045,10 @@ async function cmdUsage(flags: Flags): Promise<void> {
   const idx = rep.roi.roiIndex;
   console.log(`  RoI Index           ${idx === null ? color(tty, C.gray, 'n/a') : color(tty, idx > 60 ? C.green : C.yellow, `${idx.toFixed(0)} / 100`)}`);
   console.log(`  Realized            ${rep.realizedUnits}/${rep.units.length} sessions   ${color(tty, C.gray, `${usd(rep.totalCostUsd)} total`)}`);
+  if (rep.roi.realizationInterval) {
+    const ci = rep.roi.realizationInterval;
+    console.log(color(tty, C.gray, `                      ${pct(ci.low)}–${pct(ci.high)} anytime-valid ${Math.round(ci.level * 100)}% — valid at every glance, not just once`));
+  }
   // Reach breakdown — the grade, not a flat "positive". Further-reaching outcomes
   // weigh more in Impact, so this is where non-coding value actually differentiates.
   const m = rep.outcomeMix;
@@ -1362,6 +1366,10 @@ async function cmdRoi(flags: Flags): Promise<void> {
     console.log(`    ${name.padEnd(13)} ${v}   ${color(tty, C.gray, l.how)}`);
   };
   lensRow('Realization', roi.lenses.realization);
+  if (roi.realizationInterval) {
+    const ci = roi.realizationInterval;
+    console.log(color(tty, C.gray, `                  ${pct(ci.low)}–${pct(ci.high)} anytime-valid ${Math.round(ci.level * 100)}% — safe to watch continuously and act on at any moment`));
+  }
   lensRow('Acceptance', roi.lenses.acceptance);
   lensRow('Lift', roi.lenses.lift);
   lensRow('Impact', roi.lenses.impact);

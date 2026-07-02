@@ -28,6 +28,7 @@
  */
 
 import type { Gate, Verdict } from './gates.ts';
+import { anytimeRateInterval } from './anytime.ts';
 
 interface UnitLike {
   maturing: boolean;
@@ -111,6 +112,12 @@ export interface RoIResult {
   // necessary lenses are un-instrumented, and unobserved conditions can only
   // lower it. More measurement makes the number more honest, never inflated.
   indexIsUpperBound: boolean;
+  // ANYTIME-VALID interval on the realization rate (docs §10): a confidence
+  // sequence that holds simultaneously at every sample size, so it remains
+  // honest under the way dashboards are actually used — watched continuously,
+  // acted on the moment it looks good. A fixed-n interval is invalid under that
+  // use; this one is not. Additive: it never changes the Index or its interval.
+  realizationInterval: { low: number; high: number; level: number } | null;
   tokenCostUsd: number;
   effortTaxUsd: number;
   realizedEfficiency: number | null; // realized value / (token + effort) cost, 0..1
@@ -384,12 +391,24 @@ export function computeReturnOnIntelligence(report: RealizationLike, opts: RoIOp
     notes.push(`Risk-adjusted (γ=${gamma.toFixed(2)}): conservative RoI Index ${ceIndex.toFixed(0)} — pulled toward the partial-ID lower bound.`);
   }
 
+  // --- Anytime-valid interval on the realization rate (docs §10) -------------
+  // A dashboard is watched continuously; only a confidence sequence stays valid
+  // under that use. Computed on matured units (realized k of n), display-only:
+  // it never feeds the Index, so the composite's meaning is unchanged.
+  let realizationCS: { low: number; high: number; level: number } | null = null;
+  if (mature.length > 0) {
+    const kRealized = mature.filter((u) => u.funnel.realized).length;
+    const cs = anytimeRateInterval(kRealized, mature.length, { level: 0.95 });
+    realizationCS = { low: cs.low, high: cs.high, level: cs.level };
+  }
+
   return {
     lenses: { realization, acceptance, lift, impact },
     coverage: all.filter((l) => l.instrumented).length / 4,
     roiIndex,
     roiInterval,
     indexIsUpperBound,
+    realizationInterval: realizationCS,
     tokenCostUsd,
     effortTaxUsd,
     realizedEfficiency,
