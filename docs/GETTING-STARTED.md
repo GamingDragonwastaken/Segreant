@@ -87,8 +87,18 @@ npx aegisflow realize --repo .    # the Realization funnel over recent commits
 npx aegisflow roi --repo . --labor-rate 120
 ```
 
-Report outcomes the proxy can't see (tests, merges, ships, or non-coding results) so
-more of the funnel lights up:
+Outcomes the proxy can't see (tests, ships) are best captured **ambiently** — wrap
+the command once and every run reports itself, no human in the loop:
+
+```bash
+npx aegisflow exec -- npm test                        # exit 0 → tested=pass, else fail
+npx aegisflow exec --kind shipped -- npm run deploy   # deploys report themselves too
+```
+
+Put it in a package.json script (`"test": "aegisflow exec -- vitest"`) and the
+funnel feeds itself from then on. The wrapper is transparent: same output, same
+exit code, so pipelines and CI steps behave identically. Manual reporting stays
+available as the fallback:
 
 ```bash
 npx aegisflow report --commit <hash> --kind tested

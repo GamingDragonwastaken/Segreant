@@ -57,6 +57,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
+import { spawn } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync } from 'node:fs';
 import { SOURCE_HEADER, CONNECTORS, opencodeProviderBlock, mergeOpencodeConfig, resolveOpencodeConfigPath, listOpencodeProviders, wrapOpencodeProvider } from './connect/connectors.ts';
 
@@ -1018,6 +1019,98 @@ async function cmdReport(flags: Flags): Promise<void> {
   store.close();
 }
 
+/**
+ * Ambient outcome capture — `aegisflow exec [--kind K] [--commit R|--session S] -- <cmd…>`.
+ *
+ * The adoption cliff of outcome reporting is the human in the loop: every manual
+ * `report` decays to zero compliance. But machines already KNOW outcomes — as
+ * exit codes. Wrap the test/deploy command once (a package.json script, a shell
+ * alias, a Makefile target) and every run reports itself: exit 0 → the gate
+ * passes, non-zero → it honestly fails. The wrapper is transparent — the wrapped
+ * command's stdio and exit code pass straight through, so pipelines and CI steps
+ * behave identically. Our own chatter goes to stderr only.
+ */
+async function cmdExec(flags: Flags, command: string[]): Promise<void> {
+  const codeKinds = ['tested', 'merged', 'shipped'];
+  const usageKinds = ['used', 'resolved', 'published'];
+  const kind = String(flags.kind ?? 'tested');
+  if (![...codeKinds, ...usageKinds].includes(kind)) {
+    console.error(`  Usage: aegisflow exec [--kind <${[...codeKinds, ...usageKinds].join('|')}>] [--commit <ref> | --session <id>] -- <command…>`);
+    process.exitCode = 1;
+    return;
+  }
+  if (command.length === 0) {
+    console.error('  Nothing to run. Put the wrapped command after a bare "--":  aegisflow exec -- npm test');
+    process.exitCode = 1;
+    return;
+  }
+  if (usageKinds.includes(kind) && !flags.session) {
+    console.error(`  Non-code outcome "${kind}" needs --session <id>.`);
+    process.exitCode = 1;
+    return;
+  }
+
+  // Resolve the ref BEFORE running: the outcome belongs to the work that was
+  // current when the command started (HEAD may move underneath a long run).
+  let ref: string | null = null;
+  let project = 'default';
+  if (flags.session) {
+    ref = String(flags.session);
+  } else {
+    const repo = (flags.repo as string) ?? process.cwd();
+    if (flags.commit) {
+      if (!(await isGitRepo(repo))) {
+        printNotAGitRepo(repo);
+        process.exitCode = 1;
+        return;
+      }
+      ref = await resolveCommit(repo, String(flags.commit));
+      if (!ref) {
+        console.error(`  Could not resolve commit: ${String(flags.commit)}`);
+        process.exitCode = 1;
+        return;
+      }
+      project = await projectName(repo);
+    } else if (await isGitRepo(repo)) {
+      ref = await resolveCommit(repo, 'HEAD');
+      project = await projectName(repo);
+    }
+  }
+
+  const started = Date.now();
+  const exitCode: number = await new Promise((resolve) => {
+    // Windows tool entrypoints (npm, npx, …) are .cmd shims that need a shell;
+    // elsewhere spawn directly — no word-splitting surprises.
+    const child =
+      process.platform === 'win32'
+        ? spawn(command.join(' '), { stdio: 'inherit', shell: true })
+        : spawn(command[0]!, command.slice(1), { stdio: 'inherit' });
+    child.on('error', (e) => {
+      console.error(`  aegisflow exec: could not start "${command[0]}": ${String(e)}`);
+      resolve(127);
+    });
+    child.on('close', (code) => resolve(code ?? 1));
+  });
+  const secs = ((Date.now() - started) / 1000).toFixed(1);
+  const verdict = exitCode === 0 ? 'pass' : 'fail';
+
+  const store = new Store(dbPath());
+  store.insertSignal({
+    signalId: randomUUID(),
+    kind,
+    commitHash: ref,
+    project,
+    tsEpochMs: Date.now(),
+    verdict,
+    detail: `ambient: "${command.join(' ')}" exit ${exitCode} in ${secs}s`,
+  });
+  store.close();
+
+  const tty = process.stderr.isTTY ?? false;
+  console.error(color(tty, C.gray, `  [aegisflow] ${kind} = ${verdict} (exit ${exitCode}, ${secs}s)${ref ? ` → ${ref.slice(0, 12)}` : ' (project-wide)'}`));
+  process.exitCode = exitCode; // transparent: the wrapper never changes what the pipeline sees
+}
+
 async function cmdUsage(flags: Flags): Promise<void> {
   const store = new Store(dbPath());
   const now = Date.now();
@@ -1788,6 +1881,9 @@ function cmdHelp(): void {
                           your own view (--days N, --json)
     report --kind K       Wire an outcome: code --commit <hash>, non-code --session <id>
                           kinds: tested|merged|shipped|incident|used|resolved|published|…
+    exec -- <command>     AMBIENT outcome capture: run any command and report its
+                          exit code as the outcome — wrap "npm test" once, every
+                          run reports itself ([--kind tested|shipped|…] [--commit R|--session S])
     realize --repo <path> The Realization Standard: % of AI spend that became
                           verified, durable outcomes (--window DAYS, --limit N, --json)
     receipt --repo <path> Emit signed, verifiable value receipts (--unit <hash>, --json)
@@ -1833,7 +1929,11 @@ function cmdHelp(): void {
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const cmd = argv[0] ?? 'help';
-  const flags = parseFlags(argv.slice(1));
+  // `exec` wraps another command: everything after the bare `--` belongs to the
+  // wrapped command verbatim and must never be flag-parsed.
+  const sep = argv.indexOf('--');
+  const flags = parseFlags(cmd === 'exec' && sep !== -1 ? argv.slice(1, sep) : argv.slice(1));
+  const wrapped = cmd === 'exec' && sep !== -1 ? argv.slice(sep + 1) : [];
 
   // Demo mode: point every store-open at an isolated demo.db and flag surfaces
   // to render the DEMO label. One switch covers the CLI and the in-process
@@ -1909,6 +2009,9 @@ async function main(): Promise<void> {
       break;
     case 'report':
       await cmdReport(flags);
+      break;
+    case 'exec':
+      await cmdExec(flags, wrapped);
       break;
     case 'receipt':
     case 'receipts':
