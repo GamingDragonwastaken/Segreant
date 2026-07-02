@@ -143,6 +143,14 @@
   .empty p { color: var(--muted); max-width: 480px; margin: 0 auto 18px; }
   .cmd { display: inline-block; font-family: var(--mono); font-size: 13px; color: var(--gold); background: var(--gold-soft); border: 1px solid rgba(233,185,73,0.25); border-radius: 9px; padding: 10px 16px; text-align: left; }
   .cmd span { color: var(--faint); }
+  /* Journey guide — rendered from /api/guide, the same engine as `aegisflow guide` */
+  .guide { margin-bottom: var(--s5); }
+  .guide .gsteps { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s5); margin-bottom: var(--s3); }
+  .guide .gstep { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.04em; color: var(--faint); white-space: nowrap; }
+  .guide .gstep.done { color: var(--mint); }
+  .guide .gstep.next { color: var(--gold); }
+  .guide .gwhy { font-family: var(--serif); font-size: 16px; margin-bottom: var(--s3); }
+  .guide .gcmds { display: flex; flex-direction: column; gap: var(--s2); align-items: flex-start; }
 
   .foot { margin-top: var(--s8); text-align: center; color: var(--faint); font-family: var(--mono); font-size: 11px; letter-spacing: 0.05em; }
   .foot b { color: var(--mint); }
@@ -236,6 +244,7 @@
 
   <div id="demobanner"></div>
   <div id="alerts"></div>
+  <div id="guide"></div>
 
   <div class="grid" id="grid"></div>
 
@@ -652,9 +661,41 @@ async function loadValue() {
 }
 $('#vrefresh').addEventListener('click', loadValue);
 
+// ---- Journey guide (same engine as `aegisflow guide` — one truth, two renderers) ----
+function renderGuide(g) {
+  const host = $('#guide');
+  if (!host || !g || !g.steps) return;
+  const complete = g.stage === 'steward';
+  const steps = g.steps.map((s) => {
+    const isNext = s.id === g.next.id;
+    const cls = s.done ? 'done' : isNext ? 'next' : '';
+    const mark = s.done ? '✓' : isNext ? '→' : '·';
+    return `<span class="gstep ${cls}" title="${esc(s.state)}">${mark} ${esc(s.title)}</span>`;
+  }).join('');
+  const body = complete
+    ? `<div class="gwhy">${esc(g.headline)}</div>`
+    : `<div class="gwhy">${esc(g.headline)} <span style="color:var(--muted)">${esc(g.next.why)}</span></div>
+       <div class="gcmds">${g.next.commands.map((c) => `<span class="cmd">${esc(c)}</span>`).join('')}</div>`;
+  setNodes(host, `<div class="card guide fade">
+    <div class="label">Your journey · ${complete ? 'fully instrumented' : 'next: ' + esc(g.next.title)}</div>
+    <div class="gsteps">${steps}</div>
+    ${body}
+  </div>`);
+}
+async function loadGuide() {
+  try {
+    const res = await fetch('/api/guide');
+    renderGuide(await res.json());
+  } catch (e) {
+    console.warn('guide unavailable', e); // optional chrome — the dashboard works without it
+  }
+}
+
 load();
 setInterval(load, 4000);
 loadValue();
+loadGuide();
+setInterval(loadGuide, 8000);
 </script>
 </body>
 </html>

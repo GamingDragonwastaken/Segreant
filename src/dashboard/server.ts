@@ -22,6 +22,7 @@ import { computeFrontier } from '../value/frontier.ts';
 import { computeUsageRoI } from '../value/usage.ts';
 import { computeCohort } from '../value/cohort.ts';
 import { driftEProcess } from '../value/drift.ts';
+import { buildGuide } from '../guide.ts';
 import { recommendBudget } from '../budget/recommend.ts';
 import { computeAlerts } from '../alerts/detect.ts';
 import { requestsToCsv } from '../export/csv.ts';
@@ -161,6 +162,38 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
           const loaded = await loadRealization(store, repo, { limit: 40, windowDays, persist: false });
           if (!loaded) return json(res, 200, { available: false, repo });
           return json(res, 200, { available: true, source: loaded.source, repo, report: loaded.report });
+        } catch (err) {
+          return json(res, 500, { error: String(err) });
+        }
+      })();
+      return;
+    }
+
+    if (url.pathname === '/api/guide') {
+      // Same journey engine as `aegisflow guide` — one truth, two renderers.
+      void (async () => {
+        try {
+          const now = Date.now();
+          const day = 24 * 60 * 60 * 1000;
+          let proxyUp = false;
+          try {
+            const r = await fetch(`http://localhost:${config.port}/__aegis/health`, { signal: AbortSignal.timeout(500) });
+            proxyUp = r.ok;
+          } catch {
+            proxyUp = false;
+          }
+          return json(res, 200, buildGuide({
+            demo: isDemo(),
+            port: config.port,
+            dashboardPort: config.dashboardPort,
+            proxyUp,
+            requestsAllTime: store.summary(0, now + 1000).requests,
+            spend30dUsd: store.summary(now - 30 * day, now + 1000).costUsd,
+            dailyCapUsd: config.budget.dailyUsd,
+            outcomeSignals: store.countSignals(),
+            realizationUnits: store.countRealizationUnits(),
+            laborRateSet: config.lift.laborRatePerHour !== null,
+          }));
         } catch (err) {
           return json(res, 500, { error: String(err) });
         }
