@@ -7,7 +7,56 @@ import {
   stripJsonc,
   mergeOpencodeConfig,
   resolveOpencodeConfigPath,
+  listOpencodeProviders,
+  wrapOpencodeProvider,
 } from '../src/connect/connectors.ts';
+
+const REAL_CONFIG = `{
+  // my providers
+  "provider": {
+    "featherless": { "npm": "@ai-sdk/openai-compatible", "options": { "baseURL": "https://api.featherless.ai/v1", "apiKey": "{env:FW}" } },
+    "zen": { "npm": "@ai-sdk/anthropic", "options": { "apiKey": "{env:ZEN}" } }
+  }
+}`;
+
+test('listOpencodeProviders: reports each provider and whether it is wrappable (has a baseURL)', () => {
+  const ps = listOpencodeProviders(REAL_CONFIG);
+  const by = Object.fromEntries(ps.map((p) => [p.name, p]));
+  assert.equal(by.featherless!.wrappable, true);
+  assert.equal(by.featherless!.baseUrl, 'https://api.featherless.ai/v1');
+  assert.equal(by.zen!.wrappable, false); // hosted/managed — no baseURL to route
+  assert.equal(by.zen!.baseUrl, null);
+});
+
+test('wrapOpencodeProvider: routes an existing provider through the proxy, preserves its key, returns the real upstream', () => {
+  const res = wrapOpencodeProvider(REAL_CONFIG, 'featherless', 8090);
+  assert.equal(res.ok, true);
+  assert.equal(res.originalBaseUrl, 'https://api.featherless.ai/v1'); // → AegisFlow upstream
+  const obj = JSON.parse(res.merged!);
+  assert.equal(obj.provider.featherless.options.baseURL, 'http://localhost:8090'); // now the proxy
+  assert.equal(obj.provider.featherless.options.apiKey, '{env:FW}', 'the user key is untouched');
+  assert.equal(obj.provider.featherless.options.headers[SOURCE_HEADER], 'opencode');
+});
+
+test('wrapOpencodeProvider: idempotent — re-wrapping an already-proxied provider is a no-op tag-ensure', () => {
+  const once = wrapOpencodeProvider(REAL_CONFIG, 'featherless', 8090).merged!;
+  const twice = wrapOpencodeProvider(once, 'featherless', 8090);
+  assert.equal(twice.ok, true);
+  assert.equal(twice.alreadyWrapped, true);
+  assert.equal(twice.originalBaseUrl, undefined); // don't clobber the AegisFlow upstream on re-run
+});
+
+test('wrapOpencodeProvider: refuses a hosted/managed provider (no baseURL) with an honest error', () => {
+  const res = wrapOpencodeProvider(REAL_CONFIG, 'zen', 8090);
+  assert.equal(res.ok, false);
+  assert.ok(res.error && res.error.includes('hosted/managed'));
+});
+
+test('wrapOpencodeProvider: unknown provider fails safe', () => {
+  const res = wrapOpencodeProvider(REAL_CONFIG, 'nope', 8090);
+  assert.equal(res.ok, false);
+  assert.ok(res.error);
+});
 
 test('opencodeProviderBlock: routes to the proxy (no /v1) and tags the source', () => {
   const block = opencodeProviderBlock(8090);

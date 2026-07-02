@@ -188,3 +188,80 @@ export function mergeOpencodeConfig(raw: string, port: number): MergeResult {
 
   return { ok: true, merged: JSON.stringify(obj, null, 2) + '\n', alreadyConnected };
 }
+
+export interface OpencodeProvider {
+  name: string;
+  baseUrl: string | null;
+  wrappable: boolean; // has an options.baseURL we can route through the proxy
+}
+
+/**
+ * List the providers already in an opencode config, with the baseURL each routes
+ * to. This is the raw material for the HONEST native connection: rather than add a
+ * throwaway stub provider, we wrap a provider the user ALREADY uses. A provider
+ * with no `options.baseURL` is a hosted/managed one (e.g. opencode Zen) that talks
+ * straight to its own servers — not wrappable by a cooperative proxy, and we say so.
+ */
+export function listOpencodeProviders(raw: string): OpencodeProvider[] {
+  let obj: Record<string, unknown>;
+  try {
+    obj = raw.trim() ? (JSON.parse(stripJsonc(raw)) as Record<string, unknown>) : {};
+  } catch {
+    return [];
+  }
+  const provider = obj.provider;
+  if (!provider || typeof provider !== 'object' || Array.isArray(provider)) return [];
+  const out: OpencodeProvider[] = [];
+  for (const [name, v] of Object.entries(provider as Record<string, unknown>)) {
+    const opts = v && typeof v === 'object' ? ((v as Record<string, unknown>).options as Record<string, unknown> | undefined) : undefined;
+    const baseUrl = typeof opts?.baseURL === 'string' ? (opts.baseURL as string) : null;
+    out.push({ name, baseUrl, wrappable: baseUrl !== null });
+  }
+  return out;
+}
+
+export interface WrapResult {
+  ok: boolean;
+  merged?: string;
+  originalBaseUrl?: string; // the base to point AegisFlow's upstream at; undefined if already wrapped
+  alreadyWrapped?: boolean;
+  error?: string;
+}
+
+/**
+ * Wrap an EXISTING opencode provider so its traffic routes through AegisFlow — the
+ * honest native connection. It rewrites that provider's `options.baseURL` to the
+ * local proxy and tags it `x-aegis-source: opencode`, returning the provider's
+ * ORIGINAL baseURL so the caller can set AegisFlow's upstream to it (the proxy then
+ * forwards there, with the user's own key, unchanged). The provider's apiKey/models
+ * are untouched. Idempotent: re-wrapping a provider already pointed at the proxy is
+ * a no-op that just ensures the source tag. Fails safe on unparseable input or a
+ * provider that has no baseURL to wrap (a hosted/managed provider that can't be
+ * metered cooperatively — reported honestly, not silently mangled).
+ */
+export function wrapOpencodeProvider(raw: string, providerName: string, port: number): WrapResult {
+  let obj: Record<string, unknown>;
+  try {
+    obj = raw.trim() ? (JSON.parse(stripJsonc(raw)) as Record<string, unknown>) : {};
+  } catch (e) {
+    return { ok: false, error: `could not parse the existing config: ${String(e)}` };
+  }
+  const provider = obj.provider as Record<string, unknown> | undefined;
+  const target = provider?.[providerName] as Record<string, unknown> | undefined;
+  if (!target || typeof target !== 'object' || Array.isArray(target)) {
+    return { ok: false, error: `provider "${providerName}" not found in the opencode config` };
+  }
+  const options = (target.options ??= {}) as Record<string, unknown>;
+  const currentBase = typeof options.baseURL === 'string' ? (options.baseURL as string) : null;
+  if (currentBase === null) {
+    return { ok: false, error: `provider "${providerName}" has no options.baseURL — it's a hosted/managed provider a cooperative proxy can't meter` };
+  }
+  const headers = (options.headers ??= {}) as Record<string, unknown>;
+  headers[SOURCE_HEADER] = 'opencode';
+
+  if (currentBase.startsWith(`http://localhost:${port}`) || currentBase.startsWith(`http://127.0.0.1:${port}`)) {
+    return { ok: true, merged: JSON.stringify(obj, null, 2) + '\n', alreadyWrapped: true };
+  }
+  options.baseURL = proxyBaseUrl(port);
+  return { ok: true, merged: JSON.stringify(obj, null, 2) + '\n', originalBaseUrl: currentBase };
+}

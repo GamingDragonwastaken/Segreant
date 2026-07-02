@@ -57,7 +57,7 @@ import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync } from 'node:fs';
-import { SOURCE_HEADER, CONNECTORS, opencodeProviderBlock, mergeOpencodeConfig, resolveOpencodeConfigPath } from './connect/connectors.ts';
+import { SOURCE_HEADER, CONNECTORS, opencodeProviderBlock, mergeOpencodeConfig, resolveOpencodeConfigPath, listOpencodeProviders, wrapOpencodeProvider } from './connect/connectors.ts';
 
 const C = {
   reset: '\x1b[0m',
@@ -298,10 +298,83 @@ function finishConnectOpencode(tty: boolean): void {
   console.log('');
 }
 
+/**
+ * The honest NATIVE connection: wrap an opencode provider the user ALREADY has.
+ * Rewrites that provider's baseURL to the proxy (+ source tag) and sets AegisFlow's
+ * upstream to the provider's real base, so opencode keeps working exactly as before
+ * but its traffic is metered and forwarded with the user's own key. Two local files
+ * change on --write (opencode config + AegisFlow config); read-only preview otherwise.
+ */
+function wrapOpencodeFlow(cfg: AegisConfig, flags: Flags, tty: boolean, providerName: string, path: string | null): void {
+  if (!path) {
+    console.log(color(tty, C.yellow, '  No opencode config found to wrap. Run `aegisflow connect opencode` to see your options.'));
+    console.log('');
+    return;
+  }
+  let raw = '';
+  try {
+    raw = readFileSync(path, 'utf8');
+  } catch {
+    /* handled by the parse below */
+  }
+  const res = wrapOpencodeProvider(raw, providerName, cfg.port);
+
+  console.log('');
+  console.log(color(tty, C.bold, `  Connect opencode natively — wrap your "${providerName}" provider`));
+  console.log(color(tty, C.gray, '  ' + '─'.repeat(46)));
+  if (!res.ok) {
+    console.log(color(tty, C.yellow, `  Can't wrap "${providerName}": ${res.error}`));
+    const wrappable = listOpencodeProviders(raw).filter((p) => p.wrappable).map((p) => p.name);
+    if (wrappable.length) console.log(color(tty, C.gray, `  Wrappable providers: ${wrappable.join(', ')}`));
+    console.log('');
+    return;
+  }
+  if (res.alreadyWrapped) {
+    console.log(color(tty, C.green, `  ✓ "${providerName}" already routes through AegisFlow.`));
+    console.log(color(tty, C.gray, `    AegisFlow openai upstream: ${cfg.upstreams.openai}`));
+    console.log('');
+    return;
+  }
+  console.log(color(tty, C.gray, `  opencode keeps using "${providerName}" as-is — but its requests now go to the proxy,`));
+  console.log(color(tty, C.gray, `  which forwards them to ${res.originalBaseUrl} with your own key. Your key never`));
+  console.log(color(tty, C.gray, "  touches AegisFlow's author, and opencode Zen (if any) is unaffected."));
+  console.log('');
+
+  if (!flags.write) {
+    console.log(color(tty, C.gray, '  Two local changes (preview — nothing written yet):'));
+    console.log(color(tty, C.cyan, `    1. opencode  ${providerName}.options.baseURL → http://localhost:${cfg.port}  (+ ${SOURCE_HEADER}: opencode)`));
+    console.log(color(tty, C.cyan, `    2. AegisFlow upstreams.openai          → ${res.originalBaseUrl}`));
+    console.log('');
+    console.log(color(tty, C.green, `    aegisflow connect opencode --wrap ${providerName} --write`));
+    console.log('');
+    return;
+  }
+
+  try {
+    copyFileSync(path, path + '.bak');
+    writeFileSync(path, res.merged!, 'utf8');
+    saveConfig({ ...cfg, upstreams: { ...cfg.upstreams, openai: res.originalBaseUrl! } });
+    console.log(color(tty, C.green, `  ✓ Wrapped "${providerName}". opencode now routes through AegisFlow.`));
+    console.log(color(tty, C.gray, `    opencode config: ${path}  (backup at ${path}.bak)`));
+    console.log(color(tty, C.gray, `    AegisFlow upstreams.openai → ${res.originalBaseUrl}`));
+    console.log(color(tty, C.gray, '    JSON comments were reformatted away; your settings + keys are preserved.'));
+    console.log('');
+    console.log(color(tty, C.gray, '  Restart AegisFlow (aegisflow start), run opencode, then:  aegisflow sources'));
+  } catch (e) {
+    console.log(color(tty, C.yellow, `  Could not write: ${String(e)}`));
+  }
+  console.log('');
+}
+
 function connectOpencode(cfg: AegisConfig, flags: Flags, tty: boolean): void {
   const port = cfg.port;
   const block = opencodeProviderBlock(port);
   const path = opencodeConfigPath();
+
+  if (typeof flags.wrap === 'string' && flags.wrap) {
+    wrapOpencodeFlow(cfg, flags, tty, flags.wrap, path);
+    return;
+  }
 
   console.log('');
   console.log(color(tty, C.bold, '  Connect opencode as a source'));
@@ -335,11 +408,24 @@ function connectOpencode(cfg: AegisConfig, flags: Flags, tty: boolean): void {
     console.log(color(tty, C.gray, '  No opencode config found (checked $OPENCODE_CONFIG, ./opencode.json, ~/.config/opencode/).'));
   }
 
-  // Default (no --write): print the snippet. Non-destructive and copy-pasteable.
+  // Default (no --write): recommend wrapping a provider the user already has (the
+  // honest native path — their key, all their traffic), then offer the stub block.
   if (!flags.write) {
-    console.log(color(tty, C.gray, '  Add this to the "provider" object in your opencode config:'));
+    const providers = raw ? listOpencodeProviders(raw) : [];
+    const wrappable = providers.filter((p) => p.wrappable);
+    if (wrappable.length) {
+      console.log(color(tty, C.bold, '  Recommended — wrap a provider you already use (native; your key, all its traffic):'));
+      for (const p of wrappable) console.log(color(tty, C.gray, `    • ${p.name}  → ${p.baseUrl}`));
+      console.log(color(tty, C.green, `    aegisflow connect opencode --wrap <provider> --write`));
+      const hosted = providers.filter((p) => !p.wrappable).map((p) => p.name);
+      if (hosted.length) console.log(color(tty, C.gray, `    (hosted/managed — can't be metered cooperatively: ${hosted.join(', ')})`));
+      console.log('');
+      console.log(color(tty, C.gray, '  Or add a dedicated metered provider block:'));
+    } else {
+      console.log(color(tty, C.gray, '  Add this to the "provider" object in your opencode config:'));
+    }
     printOpencodeSnippet(block, tty);
-    console.log(color(tty, C.gray, '  …or let AegisFlow apply it for you:'));
+    console.log(color(tty, C.gray, '  …or let AegisFlow apply the block for you:'));
     console.log(color(tty, C.green, '    aegisflow connect opencode --write'));
     console.log('');
     finishConnectOpencode(tty);
