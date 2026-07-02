@@ -39,7 +39,7 @@ import { computeUsageRoI } from './value/usage.ts';
 import { computeCohort, userValueRows, selfView } from './value/cohort.ts';
 import { recommendBudget } from './budget/recommend.ts';
 import { recommendAllocation } from './budget/allocate.ts';
-import { shadowPriceOfIntelligence } from './value/marginal.ts';
+import { shadowPriceOfIntelligence, estimateBetaFromPairs } from './value/marginal.ts';
 import { estimateBetaPrior, shrinkRate } from './value/reliability.ts';
 import { computeAlerts } from './alerts/detect.ts';
 import { notifyWebhook } from './alerts/notify.ts';
@@ -1414,14 +1414,33 @@ async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
   // shrinkage of its realization rate) so a noisy 2-unit cell can't distort the
   // optimum. (docs/RETURN-ON-INTELLIGENCE.md §8–9.)
   let shadow: ReturnType<typeof shadowPriceOfIntelligence> | null = null;
+  let betaEstimate: ReturnType<typeof estimateBetaFromPairs> | null = null;
   if (frontierCells.length >= 2) {
+    // β from the org's OWN curvature when history supports it: the same contexts
+    // observed in the window's two halves; within-context slopes cancel context
+    // quality, so heterogeneous contexts can't bias the elasticity. Falls back to
+    // the disclosed planning default (0.5) when not estimable. (docs §9.)
+    const units = loadedValue!.report.units;
+    let betaOpts: { beta?: number; betaHow?: string } = {};
+    if (units.length >= 6) {
+      const ts = units.map((u) => u.tsEpochMs).sort((a, b) => a - b);
+      const cut = ts[ts.length >> 1]!;
+      const early = computeFrontier(units.filter((u) => u.tsEpochMs < cut)).byModelAndTask;
+      const late = new Map(computeFrontier(units.filter((u) => u.tsEpochMs >= cut)).byModelAndTask.map((c) => [c.key, c]));
+      const pairs = early.flatMap((c) => {
+        const l = late.get(c.key);
+        return l ? [{ key: c.key, spend1: c.costUsd, value1: c.netRealizedValueUsd, spend2: l.costUsd, value2: l.netRealizedValueUsd }] : [];
+      });
+      betaEstimate = estimateBetaFromPairs(pairs);
+      if (betaEstimate.beta !== null) betaOpts = { beta: betaEstimate.beta, betaHow: betaEstimate.how };
+    }
     const prior = estimateBetaPrior(frontierCells.map((c) => ({ k: Math.round(c.realizationRate * c.units), n: c.units })));
     const marginalCells = frontierCells.map((c) => {
       const shrunk = shrinkRate(Math.round(c.realizationRate * c.units), c.units, prior);
       const adj = c.realizationRate > 0 ? shrunk / c.realizationRate : 1; // scale value by the reliable/raw ratio
       return { key: c.key, costUsd: c.costUsd, realizedValueUsd: c.netRealizedValueUsd * adj };
     });
-    shadow = shadowPriceOfIntelligence(marginalCells);
+    shadow = shadowPriceOfIntelligence(marginalCells, betaOpts);
   }
 
   if (flags.json) {
@@ -1487,6 +1506,10 @@ async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
         color(tty, C.gray, shadow.paysAtMargin ? 'the next dollar still pays for itself — room to grow' : 'past positive margin — cut before you grow'),
     );
     console.log(color(tty, C.gray, `    same ${d2(shadow.budgetUsd)} budget split optimally: ${d2(shadow.currentValueUsd)} → ${d2(shadow.optimalValueUsd)} realized value (+${d2(shadow.upliftUsd)})`));
+    const betaLine = betaEstimate && betaEstimate.beta !== null
+      ? `β=${shadow.beta.toFixed(2)} — ${betaEstimate.how}`
+      : `β=${shadow.beta.toFixed(2)} — disclosed planning default${betaEstimate ? ` (${betaEstimate.how})` : ''}`;
+    console.log(color(tty, C.gray, `    ${betaLine}`));
   }
   if (flags.apply) {
     cfg.budget.dailyUsd = dailyCap;
