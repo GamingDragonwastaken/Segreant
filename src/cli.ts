@@ -40,6 +40,7 @@ import { computeCohort, userValueRows, selfView } from './value/cohort.ts';
 import { recommendBudget } from './budget/recommend.ts';
 import { recommendAllocation } from './budget/allocate.ts';
 import { shadowPriceOfIntelligence, estimateBetaFromPairs } from './value/marginal.ts';
+import { driftEProcess } from './value/drift.ts';
 import { estimateBetaPrior, shrinkRate } from './value/reliability.ts';
 import { computeAlerts } from './alerts/detect.ts';
 import { notifyWebhook } from './alerts/notify.ts';
@@ -1406,8 +1407,14 @@ async function cmdRoi(flags: Flags): Promise<void> {
   });
   roi.notes.unshift(...liftNotes);
 
+  // Goodhart drift alarm (docs §11): is the realization rate being BENT? Run the
+  // anytime-valid e-process over mature units in time order. Needs a real stream
+  // to say anything (≥10 resolved units); silent below that, honestly.
+  const matureOrdered = report.units.filter((u) => !u.maturing).sort((a, b) => a.tsEpochMs - b.tsEpochMs);
+  const drift = matureOrdered.length >= 10 ? driftEProcess(matureOrdered.map((u) => u.funnel.realized)) : null;
+
   if (flags.json) {
-    process.stdout.write(JSON.stringify(roi, null, 2) + '\n');
+    process.stdout.write(JSON.stringify({ ...roi, drift }, null, 2) + '\n');
     store.close();
     return;
   }
@@ -1466,6 +1473,18 @@ async function cmdRoi(flags: Flags): Promise<void> {
   lensRow('Acceptance', roi.lenses.acceptance);
   lensRow('Lift', roi.lenses.lift);
   lensRow('Impact', roi.lenses.impact);
+
+  // Stability: the Goodhart alarm. It detects that the rate MOVED, not why —
+  // gaming and a genuine regime change both trip it; its job is to force the question.
+  if (drift) {
+    console.log('');
+    if (drift.alarm) {
+      console.log(`  ${color(tty, C.bold, 'Stability')}            ${color(tty, C.red, 'DRIFT DETECTED')}   ${color(tty, C.gray, `realization moved ${pct(drift.overallRate ?? 0)} → ${pct(drift.recentRate ?? 0)} recently (anytime-valid, α=${drift.alpha})`)}`);
+      console.log(color(tty, C.gray, '                       ask why: did the work change (new model/workflow → re-baseline), or is the metric being gamed?'));
+    } else {
+      console.log(`  ${color(tty, C.bold, 'Stability')}            ${color(tty, C.green, 'stable')}   ${color(tty, C.gray, `no drift in the realization stream (${drift.n} units, anytime-valid)`)}`);
+    }
+  }
 
   if (roi.notes.length) {
     console.log('');

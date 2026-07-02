@@ -21,6 +21,7 @@ import { describeSourceDepth } from '../value/sourceDepth.ts';
 import { computeFrontier } from '../value/frontier.ts';
 import { computeUsageRoI } from '../value/usage.ts';
 import { computeCohort } from '../value/cohort.ts';
+import { driftEProcess } from '../value/drift.ts';
 import { recommendBudget } from '../budget/recommend.ts';
 import { computeAlerts } from '../alerts/detect.ts';
 import { requestsToCsv } from '../export/csv.ts';
@@ -196,8 +197,13 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
           let frontier = null;
           let projects = null;
           let projectAllocation = null;
+          let drift = null;
           if (loaded) {
             const rep = loaded.report;
+            // Goodhart drift alarm (docs §11) over mature units in time order —
+            // same computation as the CLI so the two surfaces can't disagree.
+            const matureOrdered = rep.units.filter((u) => !u.maturing).sort((a, b) => a.tsEpochMs - b.tsEpochMs);
+            if (matureOrdered.length >= 10) drift = driftEProcess(matureOrdered.map((u) => u.funnel.realized));
             realization = { matured: rep.matured, firstPassAcceptance: rep.firstPassAcceptance, proposalCoverage: rep.proposalCoverage, units: rep.units };
             // Lift: in demo mode a labeled synthetic TSF; otherwise the REAL source
             // — measured "time with AI" × configured task baselines — so the 4th lens
@@ -256,6 +262,7 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
             projectAllocation,
             usage,
             team,
+            drift,
           });
         } catch (err) {
           return json(res, 500, { error: String(err) });
