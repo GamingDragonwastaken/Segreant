@@ -1044,6 +1044,17 @@ async function cmdUsage(flags: Flags): Promise<void> {
   const idx = rep.roi.roiIndex;
   console.log(`  RoI Index           ${idx === null ? color(tty, C.gray, 'n/a') : color(tty, idx > 60 ? C.green : C.yellow, `${idx.toFixed(0)} / 100`)}`);
   console.log(`  Realized            ${rep.realizedUnits}/${rep.units.length} sessions   ${color(tty, C.gray, `${usd(rep.totalCostUsd)} total`)}`);
+  // Reach breakdown — the grade, not a flat "positive". Further-reaching outcomes
+  // weigh more in Impact, so this is where non-coding value actually differentiates.
+  const m = rep.outcomeMix;
+  const reached = m.published + m.resolved + m.used;
+  if (reached > 0) {
+    const parts: string[] = [];
+    if (m.published > 0) parts.push(color(tty, C.green, `${m.published} published`));
+    if (m.resolved > 0) parts.push(color(tty, C.cyan, `${m.resolved} resolved`));
+    if (m.used > 0) parts.push(`${m.used} used`);
+    console.log(`  Reach               ${parts.join(color(tty, C.gray, ' · '))}${m.none > 0 ? color(tty, C.gray, ` · ${m.none} no outcome yet`) : ''}`);
+  }
   console.log('');
   for (const n of rep.roi.notes) console.log(color(tty, C.gray, `  · ${n}`));
   console.log('');

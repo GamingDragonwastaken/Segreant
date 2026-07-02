@@ -8,8 +8,15 @@
  * session; it "realizes" when it has a positive, no-incident outcome — the
  * direct analog of shipped+survived+clean for code.
  *
+ * DEPTH (not just realized/not): a reported outcome is GRADED onto the same reach
+ * ladder the Impact lens uses for code — `used`/`accepted` = kept, `resolved` =
+ * merged-level, `published`/`shipped` = shipped-level. So a published deliverable
+ * counts for more Impact than a one-off answer, without inventing anything: the
+ * grade is exactly what the user reported, never inferred from prompt content.
+ *
  * No prompt text is read or stored, so we never classify by content. Acceptance
- * (edit-distance) and survival don't apply, so they stay `unknown` — never faked.
+ * (edit-distance) and survival-over-time don't apply to a one-shot answer, so they
+ * stay `unknown` — never faked.
  */
 
 import type { Store } from '../store/db.ts';
@@ -18,6 +25,17 @@ import { computeReturnOnIntelligence, type RoIResult } from './lenses.ts';
 
 const POSITIVE_OUTCOMES = new Set(['used', 'resolved', 'published', 'shipped', 'accepted']);
 const NEGATIVE_OUTCOMES = new Set(['incident', 'redone', 'discarded']);
+
+/** How far a reported non-coding outcome reached — the Impact ladder, non-coding side. */
+export type Reach = 'shipped' | 'merged' | 'kept';
+
+/** The strongest reach implied by a session's reported positive outcomes (null = none). */
+function strongestReach(kinds: Set<string>): Reach | null {
+  if (kinds.has('published') || kinds.has('shipped')) return 'shipped'; // reached an external audience
+  if (kinds.has('resolved')) return 'merged'; // closed a task/ticket
+  if (kinds.has('used') || kinds.has('accepted')) return 'kept'; // used, but internal
+  return null;
+}
 
 function gate(g: Gate, verdict: Verdict, detail: string): GateResult {
   return { gate: g, verdict, detail };
@@ -29,6 +47,7 @@ export interface UsageUnit {
   requests: number;
   maturing: boolean;
   acceptance: number | null;
+  reach: Reach | null; // graded from the reported outcome; null = no outcome reported
   realized: boolean;
 }
 
@@ -36,6 +55,8 @@ export interface UsageReport {
   units: UsageUnit[];
   realizedUnits: number;
   totalCostUsd: number;
+  /** How reported outcomes broke down by reach — the richer non-coding picture. */
+  outcomeMix: { published: number; resolved: number; used: number; none: number };
   roi: RoIResult;
 }
 
@@ -45,27 +66,37 @@ export function computeUsageRoI(store: Store, opts: { startMs: number; endMs: nu
 
   const lensUnits: Array<{ maturing: boolean; acceptance: number | null; funnel: ReturnType<typeof scoreFunnel> }> = [];
   const units: UsageUnit[] = [];
+  const outcomeMix = { published: 0, resolved: 0, used: 0, none: 0 };
 
   for (const s of sessions) {
     const signals = store.signalsForCommit(s.sessionId); // commit_hash column reused as a generic ref
-    const positive = signals.some((x) => POSITIVE_OUTCOMES.has(x.kind) && x.verdict !== 'fail');
+    const posKinds = new Set(signals.filter((x) => POSITIVE_OUTCOMES.has(x.kind) && x.verdict !== 'fail').map((x) => x.kind));
+    const reach = strongestReach(posKinds);
+    const positive = reach !== null;
     const negative = signals.some((x) => NEGATIVE_OUTCOMES.has(x.kind) || x.verdict === 'fail');
 
-    // Map non-coding outcomes onto the shared ladder. Inapplicable code gates
-    // (committed/tested/merged) stay `unknown`; acceptance/survival can't be
-    // observed for chat, so they're `unknown` unless a positive outcome implies
-    // the answer was kept for the period.
+    // Map the reported outcome onto the shared ladder, GRADED by reach so Impact
+    // differentiates a published deliverable from a one-off answer. Code-only gates
+    // (committed/tested) and unobservable ones (accepted/survival-over-time) stay
+    // `unknown` — never faked. "survived" here means "kept for the period", the
+    // reported analog of durability.
     const verdicts: Record<Gate, GateResult> = {
       proposed: gate('proposed', 'pass', 'AI produced output'),
       accepted: gate('accepted', 'unknown', 'no diff to compare for non-code'),
       committed: gate('committed', 'unknown', 'n/a for non-code usage'),
       tested: gate('tested', 'unknown', 'n/a for non-code usage'),
-      merged: gate('merged', 'unknown', 'n/a for non-code usage'),
-      shipped: gate('shipped', positive ? 'pass' : 'unknown', positive ? 'reported used/resolved/published' : 'no outcome reported'),
+      merged: gate(
+        'merged',
+        reach === 'merged' || reach === 'shipped' ? 'pass' : 'unknown',
+        reach === 'merged' ? 'reported resolved' : reach === 'shipped' ? 'resolved en route to published' : 'no resolution reported',
+      ),
+      shipped: gate('shipped', reach === 'shipped' ? 'pass' : 'unknown', reach === 'shipped' ? 'reported published/shipped' : 'not reported as published'),
       survived: gate('survived', positive ? 'pass' : 'unknown', positive ? 'kept for the period' : 'no outcome reported'),
       clean: gate('clean', negative ? 'fail' : positive ? 'pass' : 'unknown', negative ? 'reported incident/redone' : positive ? 'no incident' : 'no outcome reported'),
     };
     const funnel = scoreFunnel(verdicts);
+
+    outcomeMix[reach === 'shipped' ? 'published' : reach === 'merged' ? 'resolved' : reach === 'kept' ? 'used' : 'none'] += 1;
 
     units.push({
       sessionId: s.sessionId,
@@ -73,6 +104,7 @@ export function computeUsageRoI(store: Store, opts: { startMs: number; endMs: nu
       requests: s.requests,
       maturing: false, // a non-coding outcome is the reported signal, not survival-over-time
       acceptance: null,
+      reach,
       realized: funnel.realized,
     });
     lensUnits.push({ maturing: false, acceptance: null, funnel });
@@ -92,5 +124,5 @@ export function computeUsageRoI(store: Store, opts: { startMs: number; endMs: nu
     },
   });
 
-  return { units, realizedUnits: realized.length, totalCostUsd, roi };
+  return { units, realizedUnits: realized.length, totalCostUsd, outcomeMix, roi };
 }

@@ -354,6 +354,46 @@ test('cross-modality: a non-coding session with a reported positive outcome real
   }
 });
 
+test('cross-modality: outcome is GRADED — realizing a further-reaching outcome earns more Impact', () => {
+  // Impact = realized reach-weight ÷ total reach-weight. So realizing a high-reach
+  // outcome (published) must move Impact more than realizing a low-reach one (used).
+  // We hold the portfolio shape fixed — N realized units of `kind` paired with N
+  // sessions that ran but reported nothing (unrealized) — and vary only the graded
+  // kind. Before grading, every positive was flat shipped=pass and these were equal.
+  const build = (kind: string): ReturnType<typeof computeUsageRoI> => {
+    const store = new Store(':memory:');
+    try {
+      const t = Date.parse('2026-06-01T10:00:00Z');
+      const req = (id: string, session: string) => ({
+        requestId: id, sessionId: session, tsEpochMs: t, provider: 'anthropic', model: 'claude-opus-4-8', project: 'p', taskWeight: 1,
+        inputTokens: 0, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, reasoningTokens: 0,
+        costUsd: 2, estimated: false, streamed: false, statusCode: 200, durationMs: 1,
+      });
+      for (let i = 0; i < 4; i++) {
+        store.insertRequest(req(`r${i}`, `s${i}`)); // realized, graded
+        store.insertSignal({ signalId: `g${i}`, kind, commitHash: `s${i}`, project: 'p', tsEpochMs: t + 1000, verdict: 'pass', detail: null });
+        store.insertRequest(req(`u${i}`, `n${i}`)); // ran, nothing reported → unrealized ballast
+      }
+      return computeUsageRoI(store, { startMs: t - 1000, endMs: t + 10_000 });
+    } finally {
+      store.close();
+    }
+  };
+
+  const published = build('published');
+  const resolved = build('resolved');
+  const used = build('used');
+  const impact = (r: ReturnType<typeof computeUsageRoI>) => r.roi.lenses.impact.value!;
+  assert.ok(impact(published) > impact(resolved), 'published outreaches resolved');
+  assert.ok(impact(resolved) > impact(used), 'resolved outreaches used');
+
+  // The breakdown reflects the grade, not a flat "positive" bucket.
+  assert.equal(published.outcomeMix.published, 4);
+  assert.equal(published.outcomeMix.none, 4);
+  assert.equal(resolved.outcomeMix.resolved, 4);
+  assert.equal(used.outcomeMix.used, 4);
+});
+
 // ---- realization integration (real git) ----
 
 function g(cwd: string, args: string[], env: Record<string, string> = {}): void {
