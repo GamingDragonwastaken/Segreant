@@ -41,6 +41,7 @@ import { recommendBudget } from './budget/recommend.ts';
 import { recommendAllocation } from './budget/allocate.ts';
 import { shadowPriceOfIntelligence, estimateBetaFromPairs } from './value/marginal.ts';
 import { driftEProcess } from './value/drift.ts';
+import { instrumentationPriority } from './value/voi.ts';
 import { estimateBetaPrior, shrinkRate } from './value/reliability.ts';
 import { computeAlerts } from './alerts/detect.ts';
 import { notifyWebhook } from './alerts/notify.ts';
@@ -1175,6 +1176,12 @@ async function cmdUsage(flags: Flags): Promise<void> {
     if (m.used > 0) parts.push(`${m.used} used`);
     console.log(`  Reach               ${parts.join(color(tty, C.gray, ' · '))}${m.none > 0 ? color(tty, C.gray, ` · ${m.none} no outcome yet`) : ''}`);
   }
+  // VoI: which measurement to buy next for this modality.
+  const usageVoi = instrumentationPriority(rep.roi);
+  if (usageVoi.length > 0 && rep.roi.roiIndex !== null) {
+    const top = usageVoi[0]!;
+    console.log(`  Instrument next     ${color(tty, C.cyan, top.lens)}   ${color(tty, C.gray, `largest unmeasured exposure — at a mid ${top.reference} the Index moves ${rep.roi.roiIndex.toFixed(0)} → ${top.indexAtReference.toFixed(0)}`)}`);
+  }
   console.log('');
   for (const n of rep.roi.notes) console.log(color(tty, C.gray, `  · ${n}`));
   console.log('');
@@ -1433,9 +1440,12 @@ async function cmdRoi(flags: Flags): Promise<void> {
   // to say anything (≥10 resolved units); silent below that, honestly.
   const matureOrdered = report.units.filter((u) => !u.maturing).sort((a, b) => a.tsEpochMs - b.tsEpochMs);
   const drift = matureOrdered.length >= 10 ? driftEProcess(matureOrdered.map((u) => u.funnel.realized)) : null;
+  // VoI (docs §12): which measurement to buy next — the un-instrumented lens
+  // whose measurement would move the Index most, at a disclosed mid reference.
+  const voi = instrumentationPriority(roi);
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify({ ...roi, drift }, null, 2) + '\n');
+    process.stdout.write(JSON.stringify({ ...roi, drift, instrumentNext: voi }, null, 2) + '\n');
     store.close();
     return;
   }
@@ -1505,6 +1515,20 @@ async function cmdRoi(flags: Flags): Promise<void> {
     } else {
       console.log(`  ${color(tty, C.bold, 'Stability')}            ${color(tty, C.green, 'stable')}   ${color(tty, C.gray, `no drift in the realization stream (${drift.n} units, anytime-valid)`)}`);
     }
+  }
+
+  // VoI: name the next measurement worth buying, with the exposure quantified.
+  if (voi.length > 0 && roi.roiIndex !== null) {
+    const top = voi[0]!;
+    console.log('');
+    console.log(
+      `  ${color(tty, C.bold, 'Instrument next')}      ${color(tty, C.cyan, top.lens)}   ` +
+        color(
+          tty,
+          C.gray,
+          `largest unmeasured exposure: measured at a mid ${top.reference}, the Index moves ${roi.roiIndex.toFixed(0)} → ${top.indexAtReference.toFixed(0)} — measuring only makes the number more honest`,
+        ),
+    );
   }
 
   if (roi.notes.length) {
