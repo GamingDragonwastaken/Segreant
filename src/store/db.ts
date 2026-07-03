@@ -279,6 +279,46 @@ export class Store {
       );
   }
 
+  /**
+   * Idempotent insert for imported feeds (local transcripts, billing exports):
+   * request_id is the natural key, so re-importing the same period is a no-op.
+   * Returns true when the row was actually new.
+   */
+  insertRequestIfNew(r: RequestRow): boolean {
+    const info = this.db
+      .prepare(
+        `INSERT INTO requests (
+            request_id, session_id, ts_iso, ts_epoch_ms, provider, model, project,
+            task_weight, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens,
+            reasoning_tokens, cost_usd, estimated, streamed, status_code, duration_ms, user, source
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         ON CONFLICT(request_id) DO NOTHING`,
+      )
+      .run(
+        r.requestId,
+        r.sessionId,
+        new Date(r.tsEpochMs).toISOString(),
+        r.tsEpochMs,
+        r.provider,
+        r.model,
+        r.project,
+        r.taskWeight,
+        r.inputTokens,
+        r.outputTokens,
+        r.cacheWriteTokens,
+        r.cacheReadTokens,
+        r.reasoningTokens,
+        r.costUsd,
+        r.estimated ? 1 : 0,
+        r.streamed ? 1 : 0,
+        r.statusCode,
+        r.durationMs,
+        r.user ?? null,
+        r.source ?? null,
+      );
+    return Number(info.changes ?? 0) > 0;
+  }
+
   /** Total USD spend across [startMs, endMs). */
   spendBetween(startMs: number, endMs: number): number {
     const row = this.db

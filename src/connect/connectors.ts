@@ -59,13 +59,14 @@ export function resolveOpencodeConfigPath(opts: {
 export interface ConnectorInfo {
   id: string;
   label: string;
-  kind: 'config-file' | 'env';
+  kind: 'config-file' | 'env' | 'local-files';
   summary: string;
 }
 
 /** Known connectors. opencode is the first config-file connector; `api` is the generic env recipe. */
 export const CONNECTORS: ConnectorInfo[] = [
   { id: 'opencode', label: 'opencode', kind: 'config-file', summary: 'Terminal AI agent — adds a metered provider to opencode.json(c).' },
+  { id: 'claude-code', label: 'Claude Code', kind: 'local-files', summary: 'NATIVE, no routing: imports exact usage from local transcripts — works on subscriptions.' },
   { id: 'antigravity', label: 'Antigravity', kind: 'env', summary: 'Google Antigravity IDE — custom OpenAI-compatible provider pointed at the proxy.' },
   { id: 'api', label: 'API / SDK', kind: 'env', summary: 'Any OpenAI-compatible SDK, script, or curl — base URL + one header.' },
 ];

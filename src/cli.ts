@@ -63,6 +63,7 @@ import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync } from 'node:fs';
 import { SOURCE_HEADER, CONNECTORS, GEMINI_OPENAI_COMPAT_BASE, opencodeProviderBlock, mergeOpencodeConfig, resolveOpencodeConfigPath, listOpencodeProviders, wrapOpencodeProvider } from './connect/connectors.ts';
+import { importClaudeCode, defaultClaudeCodeRoot } from './connect/claudeCode.ts';
 
 const C = {
   reset: '\x1b[0m',
@@ -589,6 +590,20 @@ function cmdConnect(flags: Flags): void {
   }
   if (tool === 'antigravity') {
     connectAntigravity(cfg, flags, tty);
+    return;
+  }
+  if (tool === 'claude-code' || tool === 'claudecode') {
+    console.log('');
+    console.log(color(tty, C.bold, '  Connect Claude Code — natively, no routing'));
+    console.log(color(tty, C.gray, '  ' + '─'.repeat(52)));
+    console.log(color(tty, C.gray, '  Claude Code already writes exact usage (model, tokens, cache splits) to'));
+    console.log(color(tty, C.gray, '  local transcripts — including on Pro/Max subscriptions that never touch a'));
+    console.log(color(tty, C.gray, '  proxy. No base URL to change, no key to move. Import it:'));
+    console.log('');
+    console.log(color(tty, C.green, '    aegisflow import claude-code'));
+    console.log('');
+    console.log(color(tty, C.gray, '  Idempotent — re-run any time (or cron it); only new traffic is added.'));
+    console.log('');
     return;
   }
   if (tool === 'api' || tool === 'sdk' || tool === 'openai' || tool === 'generic') {
@@ -1151,6 +1166,61 @@ async function cmdReport(flags: Flags): Promise<void> {
  * command's stdio and exit code pass straight through, so pipelines and CI steps
  * behave identically. Our own chatter goes to stderr only.
  */
+/**
+ * `aegisflow import claude-code [--root <dir>] [--days N] [--json]` — native
+ * metering for a managed tool: read the exact usage Claude Code already writes
+ * to local transcripts. Idempotent (request_id is the natural key), so this is
+ * safe to re-run forever; each run adds only new traffic.
+ */
+async function cmdImport(flags: Flags): Promise<void> {
+  const tty = process.stdout.isTTY ?? false;
+  const what = (typeof flags._[0] === 'string' ? flags._[0] : '').toLowerCase();
+  if (what !== 'claude-code' && what !== 'claudecode') {
+    console.error('  Usage: aegisflow import claude-code  [--root <transcripts dir>] [--days N] [--json]');
+    console.error('  (More local feeds — Codex, opencode sessions — are planned; claude-code is the first.)');
+    process.exitCode = 1;
+    return;
+  }
+
+  const days = typeof flags.days === 'string' ? Number(flags.days) : null;
+  const sinceMs = days && days > 0 ? Date.now() - days * 24 * 60 * 60 * 1000 : 0;
+  const root = typeof flags.root === 'string' ? flags.root : undefined;
+
+  const store = new Store(dbPath());
+  const sum = await importClaudeCode(store, { root, sinceMs });
+  store.close();
+
+  if (flags.json) {
+    process.stdout.write(JSON.stringify(sum, null, 2) + '\n');
+    return;
+  }
+
+  console.log('');
+  console.log(color(tty, C.bold, '  Claude Code import — native, no routing'));
+  console.log(color(tty, C.gray, '  ' + '─'.repeat(58)));
+  console.log(`  Transcripts  ${color(tty, C.gray, root ?? defaultClaudeCodeRoot())}  (${num(sum.files)} files)`);
+  if (sum.eventsSeen === 0) {
+    console.log(color(tty, C.gray, '  No usage entries found — has Claude Code run on this machine?'));
+    console.log('');
+    return;
+  }
+  const span =
+    sum.earliestMs !== null && sum.latestMs !== null
+      ? `${new Date(sum.earliestMs).toISOString().slice(0, 10)} → ${new Date(sum.latestMs).toISOString().slice(0, 10)}`
+      : '—';
+  console.log(`  Requests     ${num(sum.eventsSeen)} found · ${color(tty, C.green, `${num(sum.inserted)} new`)} imported  (${span})`);
+  console.log(`  Consumption  ${color(tty, C.green, usd(sum.costUsd))} at API list rates${sum.estimatedCostUsd > 0 ? color(tty, C.yellow, `  (~est ${usd(sum.estimatedCostUsd)})`) : ''}`);
+  const models = Object.entries(sum.byModel).sort((a, b) => b[1].costUsd - a[1].costUsd).slice(0, 5);
+  for (const [m, v] of models) console.log(`    ${m.padEnd(24)} ${usd(v.costUsd).padStart(10)}  ${color(tty, C.gray, `${num(v.requests)} req`)}`);
+  console.log('');
+  console.log(color(tty, C.gray, '  On a subscription this is consumption valued at list rates — what the traffic'));
+  console.log(color(tty, C.gray, '  WOULD bill via API — not your invoice. Do not also route Claude Code through'));
+  console.log(color(tty, C.gray, '  the proxy for the same period, or it would count twice.'));
+  console.log('');
+  console.log(color(tty, C.gray, '  Safe to re-run any time — only new traffic is added. See it: aegisflow today'));
+  console.log('');
+}
+
 async function cmdExec(flags: Flags, command: string[]): Promise<void> {
   const codeKinds = ['tested', 'merged', 'shipped'];
   const usageKinds = ['used', 'resolved', 'published'];
@@ -2070,9 +2140,14 @@ function cmdHelp(): void {
     sources               Spend by connected source — each AI tool routed here
                           (--all for all-time, --json)
     connect <tool>        Connect an AI tool as a source so its spend is metered:
-                          opencode (--write to apply), antigravity (custom-provider
-                          recipe; --write points the upstream at Gemini free tier),
-                          api (generic SDK/curl recipe). No tool lists the connectors.
+                          opencode (--write to apply), claude-code (native import),
+                          antigravity (custom-provider recipe; --write points the
+                          upstream at Gemini free tier), api (generic SDK/curl
+                          recipe). No tool lists the connectors.
+    import claude-code    NATIVE metering, no routing: read the exact usage Claude
+                          Code already logs locally — works on subscriptions the
+                          proxy can never see. Idempotent; re-run or cron it.
+                          (--root <dir>, --days N, --json)
     audit --repo <path>   Correlate spend with git commits (--limit N, --json)
     roi --repo <path>     Return on Intelligence: four value lenses (Realization,
                           Acceptance, Lift, Impact) → one composite index
@@ -2226,6 +2301,9 @@ async function main(): Promise<void> {
       break;
     case 'exec':
       await cmdExec(flags, wrapped);
+      break;
+    case 'import':
+      await cmdImport(flags);
       break;
     case 'receipt':
     case 'receipts':
