@@ -244,6 +244,7 @@
     <div class="nav-links">
       <a href="#problem">The problem</a>
       <a href="#measure">The metric</a>
+      <a href="#math">The math</a>
       <a href="#how">How it works</a>
       <a href="#trust">Trust</a>
       <a href="#compare">Compare</a>
@@ -255,7 +256,7 @@
 <a id="top"></a>
 <header class="hero">
   <div class="container">
-    <div class="eyebrow reveal">AI FinOps for engineering teams</div>
+    <div class="eyebrow reveal">Return on Intelligence · measured locally</div>
     <h1 class="display reveal">Govern the spend.<br><em>Not</em> the developer.</h1>
     <p class="lede reveal">Your AI coding agents bill by the token now — and an agent stuck in a loop overnight doesn't send a warning, it sends an invoice. AegisFlow is a <b>local-first proxy</b> that meters every call, caps runaway spend, and — the part that actually matters — <b>measures whether that spend produced work worth keeping.</b> All on-device. No byte of your code leaves the machine.</p>
     <div class="cta-row reveal">
@@ -440,6 +441,66 @@ signed    ed25519:9c3a…</pre>
 
 <div class="divider"></div>
 
+<section id="math">
+  <style>
+    .mathgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 34px; }
+    @media (max-width: 860px) { .mathgrid { grid-template-columns: 1fr; } }
+    .mcard { border: 1px solid var(--line); border-radius: 16px; background: var(--ink-2); padding: 26px clamp(18px,2.5vw,30px); }
+    .mcard .n { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold); margin-bottom: 12px; }
+    .mcard h3 { font-family: var(--serif); font-weight: 500; font-size: 21px; margin: 0 0 10px; }
+    .mcard p { color: var(--muted); font-size: 13.5px; line-height: 1.6; margin: 0; }
+    .mcard p b { color: var(--text); font-weight: 600; }
+    .mcard .eq { font-family: var(--mono); font-size: 13px; color: var(--gold); background: var(--ink); border: 1px solid var(--line-soft); border-radius: 10px; padding: 12px 16px; margin: 14px 0 12px; overflow-x: auto; white-space: nowrap; }
+    .mcard .measured { font-family: var(--mono); font-size: 11px; color: var(--mint); letter-spacing: 0.04em; margin-top: 12px; }
+    .qstrip { margin-top: 26px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); padding: 20px clamp(16px,2.5vw,28px); display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
+    @media (max-width: 860px) { .qstrip { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 520px) { .qstrip { grid-template-columns: 1fr; } }
+    .qstrip .q { font-family: var(--serif); font-size: 15.5px; color: var(--text); }
+    .qstrip .a { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); margin-top: 6px; }
+  </style>
+  <div class="container">
+    <div class="sec-eyebrow reveal">The mathematics · derived, not designed</div>
+    <h2 class="head reveal">Four lenses. One index. <em>Valid while you watch it.</em></h2>
+    <p class="sec-lede reveal">Anyone can copy a dashboard. What makes a <b style="color:var(--text)">standard</b> is the derivation underneath it: every formula in AegisFlow is forced by stated axioms, every guarantee is verified by simulation in the test suite, and the whole derivation is published. The numbers below are measured, not asserted.</p>
+
+    <div class="mathgrid reveal">
+      <div class="mcard">
+        <div class="n">01 · The RoI Index</div>
+        <h3>The composite that cannot be gamed on one axis</h3>
+        <div class="eq">Index&nbsp;=&nbsp;100&nbsp;·&nbsp;exp(&nbsp;Σ&nbsp;w<sub>i</sub>&nbsp;ln&nbsp;x<sub>i</sub>&nbsp;/&nbsp;Σ&nbsp;w<sub>i</sub>&nbsp;)</div>
+        <p>Four necessary conditions — did it stick <b>(Realization)</b>, did you keep it <b>(Acceptance)</b>, did it save time <b>(Lift)</b>, did it matter <b>(Impact)</b> — combined as a weighted geometric mean. Not a taste choice: it is the unique form where a zero on any lens zeroes the whole, and an <em>unknown</em> lens is dropped from the mean instead of faked as a pass.</p>
+      </div>
+      <div class="mcard">
+        <div class="n">02 · Anytime-valid confidence</div>
+        <h3>An interval you may peek at</h3>
+        <p>A classical interval is only valid if you look once, at a planned sample size. Watched continuously — the way every dashboard is actually used — it breaks. AegisFlow's realization rate carries a <b>confidence sequence</b>: the guarantee holds at every glance, so you may act whenever. The honest price, disclosed: a slightly wider band.</p>
+        <div class="measured">measured: classical 90% interval wrong in 63.8% of monitored runs · this one 6.0%</div>
+      </div>
+      <div class="mcard">
+        <div class="n">03 · The Goodhart alarm</div>
+        <h3>It notices when the metric is being bent</h3>
+        <p>Any metric that matters gets gamed — so the metric ships with its own tamper alarm. The <b>Stability line</b> races a forecaster that only ever sees the past against the best constant-rate story in hindsight; when your realization rate genuinely drifts, the alarm fires and asks the only fair question: <em>did the work change, or did the measuring?</em></p>
+        <div class="measured">false alarms capped at 5% over all time · measured 0.2% · abrupt collapse caught 100/100</div>
+      </div>
+      <div class="mcard">
+        <div class="n">04 · The Shadow Price of Intelligence</div>
+        <h3>What one more AI dollar is worth, right now</h3>
+        <div class="eq">μ&nbsp;=&nbsp;β&nbsp;·&nbsp;V*&nbsp;/&nbsp;B</div>
+        <p>μ&nbsp;≥&nbsp;$1 — invest more. μ&nbsp;&lt;&nbsp;$1 — the next dollar returns less than it costs; cut before you grow. Diminishing returns (β) are estimated from your own history when there is enough of it, and fall back to a disclosed default — with the reason printed — when there is not.</p>
+      </div>
+    </div>
+
+    <div class="qstrip reveal">
+      <div><div class="q">Where does the next dollar go?</div><div class="a">shadow price</div></div>
+      <div><div class="q">What should you measure next?</div><div class="a">instrument next</div></div>
+      <div><div class="q">When do you actually know?</div><div class="a">anytime interval</div></div>
+      <div><div class="q">Is the number being bent?</div><div class="a">stability alarm</div></div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
 <section id="how">
   <div class="container">
     <div class="sec-eyebrow reveal">How it works</div>
@@ -516,13 +577,13 @@ signed    ed25519:9c3a…</pre>
 <section id="start" class="final">
   <div class="container">
     <h2 class="reveal">Put a meter on the engine.</h2>
-    <p class="reveal">Run it once, point your agents at it, and watch every token turn into a number you can see — and a bill you can cap.</p>
+    <p class="reveal">Run it once, point your agents at it, and watch every token turn into a number you can see — and a bill you can cap. From there the tool guides itself: <code style="color:var(--gold)">aegisflow guide</code> reads your actual state and names the single next step, every time.</p>
     <div class="cta-row reveal">
       <div class="install" id="install2" title="Click to copy">
         <span><span class="pr">$</span> npx aegisflow start</span>
         <span class="copy" id="copyLabel2">COPY</span>
       </div>
-      <a class="ghost" href="#how">Read the architecture →</a>
+      <a class="ghost" href="#math">Read the math →</a>
     </div>
   </div>
 </section>
@@ -534,6 +595,7 @@ signed    ed25519:9c3a…</pre>
       <b>AegisFlow</b>
     </a>
     <div class="foot-links">
+      <a href="#math">The math</a>
       <a href="#how">How it works</a>
       <a href="#trust">Trust</a>
       <a href="#compare">Compare</a>
