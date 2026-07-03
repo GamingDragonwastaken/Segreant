@@ -33,7 +33,7 @@ import { computeRealization, loadRealization, liftOptionsFromStore, moneyInputsF
 import { computeReturnOnIntelligence } from './value/lenses.ts';
 import { describeSourceDepth } from './value/sourceDepth.ts';
 import { boundedLift } from './value/lift.ts';
-import { refreshPricing, pricingStatus } from './cost/pricing.ts';
+import { refreshPricing, pricingStatus, DEFAULT_MANIFEST_URL } from './cost/pricing.ts';
 import { computeFrontier } from './value/frontier.ts';
 import { computeUsageRoI } from './value/usage.ts';
 import { computeCohort, userValueRows, selfView } from './value/cohort.ts';
@@ -62,7 +62,7 @@ import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync } from 'node:fs';
-import { SOURCE_HEADER, CONNECTORS, opencodeProviderBlock, mergeOpencodeConfig, resolveOpencodeConfigPath, listOpencodeProviders, wrapOpencodeProvider } from './connect/connectors.ts';
+import { SOURCE_HEADER, CONNECTORS, GEMINI_OPENAI_COMPAT_BASE, opencodeProviderBlock, mergeOpencodeConfig, resolveOpencodeConfigPath, listOpencodeProviders, wrapOpencodeProvider } from './connect/connectors.ts';
 
 const C = {
   reset: '\x1b[0m',
@@ -487,6 +487,50 @@ function connectOpencode(cfg: AegisConfig, flags: Flags, tty: boolean): void {
   finishConnectOpencode(tty);
 }
 
+/**
+ * Antigravity's BUILT-IN Gemini agent routes through Google's own servers — a
+ * managed backend no cooperative proxy can meter (same class as opencode Zen).
+ * But Antigravity supports CUSTOM OpenAI-compatible providers (base URL + key),
+ * and those we meter fully: provider → proxy → the upstream of your choice.
+ * `--write` points the proxy's OpenAI upstream at Gemini's OpenAI-compatible
+ * endpoint, the free-tier test path; the user's key passes through untouched.
+ */
+function connectAntigravity(cfg: AegisConfig, flags: Flags, tty: boolean): void {
+  const base = `http://localhost:${cfg.port}/v1`;
+
+  if (flags.write) {
+    const next: AegisConfig = { ...cfg, upstreams: { ...cfg.upstreams, openai: GEMINI_OPENAI_COMPAT_BASE } };
+    saveConfig(next);
+    console.log('');
+    console.log(`  ${color(tty, C.green, '✓')} OpenAI-path upstream set to Gemini's OpenAI-compatible endpoint:`);
+    console.log(color(tty, C.cyan, `      ${GEMINI_OPENAI_COMPAT_BASE}`));
+    console.log(color(tty, C.gray, '    (undo: set upstreams.openai back to https://api.openai.com in config)'));
+  }
+
+  console.log('');
+  console.log(color(tty, C.bold, '  Connect Google Antigravity as a source'));
+  console.log(color(tty, C.gray, '  ' + '─'.repeat(52)));
+  console.log(color(tty, C.gray, '  Antigravity’s built-in Gemini agent runs on Google’s servers — unmeterable'));
+  console.log(color(tty, C.gray, '  by any cooperative proxy. Its CUSTOM providers, however, meter fully:'));
+  console.log('');
+  console.log(`  1) ${color(tty, C.bold, 'Choose the upstream')} the proxy forwards to. For the Gemini free tier:`);
+  console.log(color(tty, C.green, '       aegisflow connect antigravity --write'));
+  console.log(color(tty, C.gray, `       (sets upstreams.openai → ${GEMINI_OPENAI_COMPAT_BASE})`));
+  console.log('');
+  console.log(`  2) ${color(tty, C.bold, 'In Antigravity')}: Settings → Models → add a custom provider:`);
+  console.log(color(tty, C.cyan, '       Provider type   OpenAI-compatible'));
+  console.log(color(tty, C.cyan, `       Base URL        ${base}`));
+  console.log(color(tty, C.cyan, '       API key         your provider key (passes through the proxy; never stored)'));
+  console.log(color(tty, C.cyan, '       Model           e.g. gemini-2.5-flash'));
+  console.log('');
+  console.log(`  3) ${color(tty, C.bold, 'Run it')}: aegisflow start, use Antigravity with that model, then:`);
+  console.log(color(tty, C.green, '       aegisflow today') + color(tty, C.gray, '   — the requests and their cost appear live'));
+  console.log('');
+  console.log(color(tty, C.gray, '  Note: without a custom-headers field the spend lands under the "direct"'));
+  console.log(color(tty, C.gray, '  source. Metering, caps, and RoI all work the same.'));
+  console.log('');
+}
+
 function connectGenericApi(cfg: AegisConfig, flags: Flags, tty: boolean): void {
   const port = cfg.port;
   // Optional custom source name: `aegisflow connect api my-script`.
@@ -541,6 +585,10 @@ function cmdConnect(flags: Flags): void {
 
   if (tool === 'opencode') {
     connectOpencode(cfg, flags, tty);
+    return;
+  }
+  if (tool === 'antigravity') {
+    connectAntigravity(cfg, flags, tty);
     return;
   }
   if (tool === 'api' || tool === 'sdk' || tool === 'openai' || tool === 'generic') {
@@ -1822,11 +1870,11 @@ async function cmdStart(flags: Flags): Promise<void> {
   // pull a fresh one on launch so metering prices at current rates. OFF by default
   // (keeps "zero external requests" true out of the box); a failure never blocks
   // the daemon — we keep the current table and say so.
-  if (cfg.pricing.autoRefresh && cfg.pricing.manifestUrl && pricingStatus(cfg.pricing.maxAgeDays).stale) {
+  if (cfg.pricing.autoRefresh && pricingStatus(cfg.pricing.maxAgeDays).stale) {
     const res = await refreshPricing(cfg.pricing.manifestUrl);
     console.log(
       res.ok
-        ? color(tty, C.gray, `  ↻ pricing refreshed — ${res.modelCount} models (${cfg.pricing.manifestUrl})`)
+        ? color(tty, C.gray, `  ↻ pricing refreshed — ${res.modelCount} models (${cfg.pricing.manifestUrl ?? DEFAULT_MANIFEST_URL})`)
         : color(tty, C.yellow, `  ↻ pricing auto-refresh skipped: ${res.error ?? 'unreachable'} — keeping current table`),
     );
   }
@@ -1940,9 +1988,27 @@ async function cmdPricing(flags: Flags): Promise<void> {
   const cfg = loadConfig();
   const on = process.stdout.isTTY ?? false;
 
+  // One-command self-maintenance: `pricing --auto` opts into refreshing the
+  // rate card on every `start` when it's stale (a plain GET of a public price
+  // file — nothing about the user). `--auto off` turns it back off.
+  if (flags['auto'] !== undefined) {
+    const enable = flags['auto'] !== 'off' && flags['auto'] !== 'false';
+    saveConfig({ ...cfg, pricing: { ...cfg.pricing, autoRefresh: enable } });
+    console.log('');
+    if (enable) {
+      console.log(`  ${color(on, C.green, '✓')} Auto-refresh ON — "aegisflow start" updates the rate card when it is older than ${cfg.pricing.maxAgeDays}d.`);
+      console.log(`  ${color(on, C.dim, `Source: ${cfg.pricing.manifestUrl ?? DEFAULT_MANIFEST_URL}`)}`);
+      console.log(`  ${color(on, C.dim, 'The fetch is a GET of a public pricing file — it sends nothing about you. Turn off: aegisflow pricing --auto off')}`);
+    } else {
+      console.log(`  ${color(on, C.green, '✓')} Auto-refresh OFF — the rate card only changes when you run "aegisflow pricing --refresh".`);
+    }
+    console.log('');
+    return;
+  }
+
   if (flags['refresh']) {
     const url = (typeof flags['url'] === 'string' ? flags['url'] : null) ?? cfg.pricing.manifestUrl;
-    if (!flags.json) console.error(`  Refreshing pricing from ${url ?? '(none configured)'} …`);
+    if (!flags.json) console.error(`  Refreshing pricing from ${url ?? DEFAULT_MANIFEST_URL} …`);
     const result = await refreshPricing(url);
     if (flags.json) {
       console.log(JSON.stringify(result, null, 2));
@@ -1972,7 +2038,8 @@ async function cmdPricing(flags: Flags): Promise<void> {
   console.log(`  Updated    ${st.updated}${age}${stale}`);
   console.log(`  Models     ${num(st.modelCount)} across ${st.providers.join(', ')}`);
   if (st.stale || st.source === 'bundled') {
-    console.log(`\n  ${color(on, C.dim, 'Refresh with:  aegisflow pricing --refresh')}`);
+    console.log(`\n  ${color(on, C.dim, 'Refresh now:   aegisflow pricing --refresh')}`);
+    console.log(`  ${color(on, C.dim, 'Keep current:  aegisflow pricing --auto     (refreshes on start when stale)')}`);
   }
   console.log('');
 }
@@ -2003,8 +2070,9 @@ function cmdHelp(): void {
     sources               Spend by connected source — each AI tool routed here
                           (--all for all-time, --json)
     connect <tool>        Connect an AI tool as a source so its spend is metered:
-                          opencode (--write to apply), api (generic SDK/curl recipe).
-                          No tool lists the connectors.
+                          opencode (--write to apply), antigravity (custom-provider
+                          recipe; --write points the upstream at Gemini free tier),
+                          api (generic SDK/curl recipe). No tool lists the connectors.
     audit --repo <path>   Correlate spend with git commits (--limit N, --json)
     roi --repo <path>     Return on Intelligence: four value lenses (Realization,
                           Acceptance, Lift, Impact) → one composite index
@@ -2041,8 +2109,11 @@ function cmdHelp(): void {
     doctor                First-run health check: config, DB, proxy, caps, data quality
     config                Show config and file paths    (--json)
     pricing               Show the rate card: source, age, model count (--json).
-                          Update it:  pricing --refresh  (pulls the latest rates;
-                          --url <manifest> to override the source)
+                          Update it:  pricing --refresh  (pulls the latest rates
+                          from the community price feed; --url <manifest> to
+                          override the source)
+                          Self-maintaining: pricing --auto  (refresh on start
+                          when stale; --auto off to disable)
     prune                 Prune old rows and compact the database
     demo                  Generate isolated, clearly-labeled synthetic data so every
                           surface populates without an API key (--serve to launch the

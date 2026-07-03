@@ -145,3 +145,29 @@ test('resolveOpencodeConfigPath: OPENCODE_CONFIG → project-level → global (m
   // Nothing exists → null (connect then creates a fresh global config on --write).
   assert.equal(resolveOpencodeConfigPath({ cwd, home, exists: () => false }), null);
 });
+
+// ---- antigravity connector (through the real CLI, isolated AEGIS_HOME) ----
+
+test('connect antigravity --write points the OpenAI upstream at the Gemini endpoint', async () => {
+  const { execFile } = await import('node:child_process');
+  const { mkdtempSync, readFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const home = mkdtempSync(join(tmpdir(), 'aegis-connect-'));
+  const CLI = join(import.meta.dirname, '..', 'src', 'cli.ts');
+
+  const out = await new Promise<{ code: number; stdout: string }>((resolve) => {
+    execFile(
+      process.execPath,
+      [CLI, 'connect', 'antigravity', '--write'],
+      { env: { ...process.env, AEGIS_HOME: home, NODE_OPTIONS: '' } },
+      (err, stdout) => resolve({ code: err ? 1 : 0, stdout: String(stdout) }),
+    );
+  });
+  assert.equal(out.code, 0);
+  // The recipe names the two facts that matter: proxy base URL + honest scope note.
+  assert.match(out.stdout, /localhost:8090\/v1/);
+  assert.match(out.stdout, /built-in Gemini agent/);
+  // And the config actually changed — the proxy now fronts Gemini's OpenAI-compatible API.
+  const cfg = JSON.parse(readFileSync(join(home, 'config.json'), 'utf8')) as { upstreams: { openai: string } };
+  assert.equal(cfg.upstreams.openai, 'https://generativelanguage.googleapis.com/v1beta/openai');
+});

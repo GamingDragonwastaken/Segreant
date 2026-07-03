@@ -60,12 +60,13 @@ export interface LiftConfig {
 
 export interface PricingConfig {
   /**
-   * Remote pricing manifest (same schema as the bundled pricing/models.json).
-   * `aegisflow pricing --refresh` pulls it into ~/.aegisflow/pricing/models.json,
-   * which then overrides the bundled table. Provider rates drift, and pricing is
-   * a core dependability, so this keeps it current without a reinstall. The fetch
-   * is a plain GET of a public file — it sends nothing about you. null = no
-   * remote source (manual edits only).
+   * Remote pricing manifest. `aegisflow pricing --refresh` pulls it into
+   * ~/.aegisflow/pricing/models.json, which then overrides the bundled table.
+   * Accepts our native schema OR a LiteLLM price file (auto-detected and
+   * transformed). Provider rates drift, and pricing is a core dependability,
+   * so this keeps it current without a reinstall. The fetch is a plain GET of
+   * a public file — it sends nothing about you. null = the default community
+   * feed (LiteLLM's model_prices file, updated with every model release).
    */
   manifestUrl: string | null;
   /** Past this age, the table is flagged stale (in `pricing`, `doctor`). */
@@ -165,7 +166,11 @@ export const DEFAULT_CONFIG: AegisConfig = {
     outcomeBaselineMinutes: {},
   },
   pricing: {
-    manifestUrl: 'https://raw.githubusercontent.com/GamingDragonwastaken/aegisflow/main/pricing/models.json',
+    // null = the default community feed (LiteLLM's price file — maintained by
+    // hundreds of contributors, updated with every model release). A previous
+    // placeholder here pointed at a repo that 404'd; null is the self-maintaining
+    // choice and still overridable for orgs that pin their own manifest.
+    manifestUrl: null,
     maxAgeDays: 30,
     autoRefresh: false,
   },

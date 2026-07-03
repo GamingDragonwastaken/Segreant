@@ -66,8 +66,16 @@ export interface ConnectorInfo {
 /** Known connectors. opencode is the first config-file connector; `api` is the generic env recipe. */
 export const CONNECTORS: ConnectorInfo[] = [
   { id: 'opencode', label: 'opencode', kind: 'config-file', summary: 'Terminal AI agent — adds a metered provider to opencode.json(c).' },
+  { id: 'antigravity', label: 'Antigravity', kind: 'env', summary: 'Google Antigravity IDE — custom OpenAI-compatible provider pointed at the proxy.' },
   { id: 'api', label: 'API / SDK', kind: 'env', summary: 'Any OpenAI-compatible SDK, script, or curl — base URL + one header.' },
 ];
+
+/**
+ * Google's OpenAI-compatible endpoint for Gemini. The free-tier upstream for
+ * any tool that speaks the OpenAI protocol: tool → proxy → this, with the
+ * user's own Gemini key passing through untouched.
+ */
+export const GEMINI_OPENAI_COMPAT_BASE = 'https://generativelanguage.googleapis.com/v1beta/openai';
 
 /**
  * The opencode provider block that routes traffic through the proxy and tags it

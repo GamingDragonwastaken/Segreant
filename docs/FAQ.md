@@ -139,8 +139,19 @@ Usually the `/v1` double-version gotcha: if your client already appends
 [INTEGRATIONS.md](INTEGRATIONS.md).
 
 **`doctor` says the rate card is stale.**
-`aegisflow pricing --refresh` (or set `pricing.autoRefresh: true` to refresh stale
-pricing when the proxy starts).
+`aegisflow pricing --refresh` pulls current rates from the community price feed
+(LiteLLM's model-price file — machine-readable, updated by hundreds of
+contributors within days of every model release; the GET sends nothing about
+you). For self-maintenance, `aegisflow pricing --auto` refreshes on start
+whenever the table goes stale. A malformed or shrunken feed is refused and the
+current table kept — a bad refresh can never corrupt your pricing.
+
+**How does pricing stay correct as new models launch?**
+Three layers, in order: the refreshed community feed above (170+ models across
+Anthropic, OpenAI, Google); substring family-matching when an exact name is
+missing (a new `-preview` variant prices as its family); and a conservative
+flat fallback that marks every such request `~est` — surfaced in `doctor` as
+"% of spend on estimated rates", so pricing drift is measured, never silent.
 
 **Nothing shows under value / RoI.**
 Attach a git repo (`--repo .`) and let the maturity window elapse, or report outcomes
