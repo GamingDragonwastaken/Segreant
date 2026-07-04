@@ -26,6 +26,10 @@ import { buildGuide } from '../guide.ts';
 import { recommendBudget } from '../budget/recommend.ts';
 import { computeAlerts } from '../alerts/detect.ts';
 import { requestsToCsv } from '../export/csv.ts';
+import { IMPORTERS, type ImportSummary } from '../connect/importShared.ts';
+import { importClaudeCode, defaultClaudeCodeRoot } from '../connect/claudeCode.ts';
+import { importOpencode, defaultOpencodeDbPath } from '../connect/opencode.ts';
+import { importCodex, defaultCodexRoot } from '../connect/codex.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const INDEX_HTML = join(__dirname, 'web', 'index.html');
@@ -102,6 +106,37 @@ function buildOverview(store: Store, config: AegisConfig, range: RangeKey) {
   };
 }
 
+/**
+ * Server-side view of the importers: where each tool's local data lives, whether
+ * it's present on this machine, and how to read it. Lets non-CLI users click to
+ * meter their tools from the dashboard — same engines as `aegisflow import`.
+ */
+interface DashImporter {
+  id: string;
+  label: string;
+  blurb: string;
+  locate: () => string | null;
+  run: (store: Store, opts: { sinceMs?: number }) => ImportSummary | Promise<ImportSummary>;
+}
+
+const DASH_IMPORTERS: DashImporter[] = [
+  {
+    ...IMPORTERS.find((i) => i.id === 'claude-code')!,
+    locate: () => (existsSync(defaultClaudeCodeRoot()) ? defaultClaudeCodeRoot() : null),
+    run: (store, opts) => importClaudeCode(store, opts),
+  },
+  {
+    ...IMPORTERS.find((i) => i.id === 'opencode')!,
+    locate: () => defaultOpencodeDbPath(),
+    run: (store, opts) => importOpencode(store, opts),
+  },
+  {
+    ...IMPORTERS.find((i) => i.id === 'codex')!,
+    locate: () => defaultCodexRoot(),
+    run: (store, opts) => importCodex(store, opts),
+  },
+];
+
 export interface DashboardDeps {
   store: Store;
   config: AegisConfig;
@@ -123,6 +158,53 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
 
     if (url.pathname === '/api/health') {
       return json(res, 200, { ok: true, service: 'aegisflow-dashboard' });
+    }
+
+    // Which native importers exist on THIS machine — drives the dashboard's
+    // one-click "Import local usage" panel so non-CLI users never touch a terminal.
+    if (url.pathname === '/api/importers') {
+      return json(res, 200, {
+        importers: DASH_IMPORTERS.map((imp) => {
+          const location = imp.locate();
+          return { id: imp.id, label: imp.label, blurb: imp.blurb, available: location !== null, location };
+        }),
+      });
+    }
+
+    // Trigger a native import from the dashboard. POST-only + a custom header the
+    // browser only sets same-origin: a cross-site form can't forge it (no CORS
+    // preflight is answered), so this is CSRF-safe despite mutating the local DB.
+    if (url.pathname === '/api/import') {
+      if (req.method !== 'POST') {
+        res.writeHead(405, { 'content-type': 'text/plain', allow: 'POST' });
+        res.end('method not allowed');
+        return;
+      }
+      if (req.headers['x-aegis-local'] !== '1') {
+        res.writeHead(403, { 'content-type': 'text/plain' });
+        res.end('forbidden');
+        return;
+      }
+      const tool = url.searchParams.get('tool') ?? 'all';
+      const targets = tool === 'all' ? DASH_IMPORTERS : DASH_IMPORTERS.filter((i) => i.id === tool);
+      if (targets.length === 0) return json(res, 400, { error: `unknown tool: ${tool}` });
+      // Drain (and ignore) the request body so the socket frees cleanly.
+      req.resume();
+      void (async () => {
+        try {
+          const results: Record<string, ImportSummary & { available: boolean }> = {};
+          for (const imp of targets) {
+            const available = imp.locate() !== null;
+            const sum = available ? await imp.run(store, {}) : { files: 0, eventsSeen: 0, inserted: 0, costUsd: 0, estimatedCostUsd: 0, byModel: {}, earliestMs: null, latestMs: null };
+            results[imp.id] = { ...sum, available };
+          }
+          const totalNew = Object.values(results).reduce((n, r) => n + r.inserted, 0);
+          return json(res, 200, { ok: true, totalNew, results });
+        } catch (err) {
+          return json(res, 500, { error: String(err) });
+        }
+      })();
+      return;
     }
 
     if (url.pathname === '/api/overview') {

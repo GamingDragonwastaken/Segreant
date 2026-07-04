@@ -42,8 +42,27 @@ it can natively wrap a provider you already use.
 Closed/hosted endpoints that route to their own servers — e.g. **opencode Zen**, or
 consumer apps like ChatGPT/Claude desktop with no base-URL override. A cooperative
 proxy fundamentally can't see traffic that doesn't pass through it, and we won't
-install a root CA to force it. Those are honestly labeled as unmeterable here; the
-roadmap covers them later via **billing/usage import** (spend-only), not interception.
+install a root CA to force it. Those are honestly labeled as unmeterable here.
+
+**Do I have to change a base URL to meter my coding tool?**
+No — that's what **importers** are for. Subscription-mode tools (Claude Code on
+Pro/Max, Codex, opencode) talk straight to vendor servers and never touch a
+proxy, but they each write their exact usage to local disk. `aegisflow import
+claude-code | opencode | codex | all` reads that native record — no base URL, no
+key, no config. It's idempotent (safe to re-run or cron), and `--watch` keeps it
+live, polling read-only so the tool keeps writing uninterrupted. In the dashboard,
+the **Import local usage** panel does the same with one click and an "auto every
+30s" toggle — no terminal needed. Imported usage flows into every surface
+(`today`, `sources`, `roi`, the dashboard) exactly like proxied traffic. On a flat
+subscription the dollar figure is *consumption valued at list rates* — what the
+traffic would bill via API, not your invoice — and it's labeled as such. Don't
+both proxy AND import the same tool for the same period, or it double-counts.
+
+**So which path do I use?**
+Two, by tool type. **Proxy** (base URL + your key) meters *and enforces* caps —
+best for API-key tools, scripts, and enterprises with gateways. **Import** meters
+natively with zero wiring — best for subscription tools a proxy can't see. Most
+people import their editor and, if they also run raw API scripts, proxy those.
 
 **Does the proxy slow my requests down?**
 Negligibly. The proxy overhead is microseconds against a provider round-trip of

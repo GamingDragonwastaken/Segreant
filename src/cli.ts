@@ -584,6 +584,9 @@ function cmdConnect(flags: Flags): void {
     console.log(color(tty, C.gray, '  Usage:  aegisflow connect <tool>          e.g. aegisflow connect opencode'));
     console.log(color(tty, C.gray, '          aegisflow connect opencode --write  apply it for you (backs up first)'));
     console.log('');
+    console.log(color(tty, C.gray, '  No base URL to wire? Meter subscription tools natively — no routing, no key:'));
+    console.log(color(tty, C.green, '          aegisflow import claude-code | opencode | codex | all   ') + color(tty, C.gray, '(--watch = live)'));
+    console.log('');
     return;
   }
 

@@ -151,6 +151,24 @@
   .guide .gstep.next { color: var(--gold); }
   .guide .gwhy { font-family: var(--serif); font-size: 16px; margin-bottom: var(--s3); }
   .guide .gcmds { display: flex; flex-direction: column; gap: var(--s2); align-items: flex-start; }
+  /* Import panel — one-click native metering for people who don't live in a terminal */
+  .import { margin-bottom: var(--s5); }
+  .import .ihead { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s4); flex-wrap: wrap; margin-bottom: var(--s4); }
+  .import .ihead .tag { margin: 0; }
+  .import .itools { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--s3); }
+  .import .itool { border: 1px solid var(--line); border-radius: 12px; background: var(--ink-2); padding: var(--s4); display: flex; flex-direction: column; gap: var(--s2); }
+  .import .itool .iname { font-family: var(--mono); font-size: 12px; letter-spacing: 0.06em; color: var(--text); display: flex; align-items: center; gap: var(--s2); }
+  .import .itool .idot { width: 7px; height: 7px; border-radius: 50%; background: var(--mint); flex: none; }
+  .import .itool.off .idot { background: var(--faint); }
+  .import .itool .iblurb { font-size: 12px; color: var(--muted); line-height: 1.45; flex: 1; }
+  .import .itool .iresult { font-family: var(--mono); font-size: 11px; color: var(--mint); min-height: 14px; }
+  .import .ibtn { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold); background: var(--gold-soft); border: 1px solid rgba(233,185,73,0.3); border-radius: 8px; padding: 7px 12px; cursor: pointer; align-self: flex-start; transition: background .15s; }
+  .import .ibtn:hover:not(:disabled) { background: rgba(233,185,73,0.18); }
+  .import .ibtn:disabled { color: var(--faint); border-color: var(--line); background: transparent; cursor: default; }
+  .import .iactions { display: flex; align-items: center; gap: var(--s4); }
+  .import .iauto { display: inline-flex; align-items: center; gap: var(--s2); font-family: var(--mono); font-size: 11px; color: var(--muted); cursor: pointer; user-select: none; }
+  .import .iallbtn { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; color: var(--mint); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 7px 14px; cursor: pointer; }
+  .import .iallbtn:hover { border-color: var(--mint); }
 
   .foot { margin-top: var(--s8); text-align: center; color: var(--faint); font-family: var(--mono); font-size: 11px; letter-spacing: 0.05em; }
   .foot b { color: var(--mint); }
@@ -245,6 +263,7 @@
   <div id="demobanner"></div>
   <div id="alerts"></div>
   <div id="guide"></div>
+  <div id="importpanel"></div>
 
   <div class="grid" id="grid"></div>
 
@@ -691,11 +710,70 @@ async function loadGuide() {
   }
 }
 
+// ---- Import panel: one-click native metering, no terminal required ----
+let IMPORT_AUTO = false;
+function renderImporters(list) {
+  const host = $('#importpanel');
+  if (!host) return;
+  if (!list || !list.length) { setNodes(host, ''); return; }
+  const tools = list.map((t) => `
+    <div class="itool ${t.available ? '' : 'off'}" data-id="${esc(t.id)}">
+      <div class="iname"><span class="idot"></span>${esc(t.label)}</div>
+      <div class="iblurb">${esc(t.blurb)}</div>
+      <div class="iresult" data-result="${esc(t.id)}">${t.available ? '' : 'not found on this machine'}</div>
+      <button class="ibtn" data-import="${esc(t.id)}" ${t.available ? '' : 'disabled'}>Import</button>
+    </div>`).join('');
+  setNodes(host, `<div class="card import fade">
+    <div class="ihead">
+      <div><div class="label">Import local usage · native, no routing</div>
+        <div class="tag">meter tools that never touch the proxy — reads what they already log on this machine</div></div>
+      <div class="iactions">
+        <label class="iauto"><input type="checkbox" id="iauto"> auto every 30s</label>
+        <button class="iallbtn" id="iall">Import all</button>
+      </div>
+    </div>
+    <div class="itools">${tools}</div>
+  </div>`);
+  const auto = $('#iauto'); if (auto) { auto.checked = IMPORT_AUTO; auto.addEventListener('change', () => { IMPORT_AUTO = auto.checked; }); }
+  const all = $('#iall'); if (all) all.addEventListener('click', () => doImport('all'));
+  host.querySelectorAll('[data-import]').forEach((b) =>
+    b.addEventListener('click', () => doImport(b.getAttribute('data-import'))));
+}
+async function doImport(tool) {
+  const setResult = (id, msg) => { const el = $(`[data-result="${id}"]`); if (el) el.textContent = msg; };
+  const ids = tool === 'all' ? [...document.querySelectorAll('[data-import]')].map((b) => b.getAttribute('data-import')) : [tool];
+  ids.forEach((id) => setResult(id, 'importing…'));
+  try {
+    const res = await fetch('/api/import?tool=' + encodeURIComponent(tool), { method: 'POST', headers: { 'x-aegis-local': '1' } });
+    const data = await res.json();
+    if (!data.ok) { ids.forEach((id) => setResult(id, 'failed')); return; }
+    for (const [id, r] of Object.entries(data.results || {})) {
+      if (!r.available) { setResult(id, 'not found'); continue; }
+      const cost = r.costUsd > 0 ? ' · $' + r.costUsd.toFixed(2) : '';
+      setResult(id, r.inserted > 0 ? `+${r.inserted.toLocaleString()} new${cost}` : 'up to date');
+    }
+    load(); // refresh the spend views so imported traffic shows immediately
+  } catch (e) {
+    ids.forEach((id) => setResult(id, 'error'));
+  }
+}
+async function loadImporters() {
+  try {
+    const res = await fetch('/api/importers');
+    const data = await res.json();
+    renderImporters(data.importers || []);
+  } catch (e) { console.warn('importers unavailable', e); }
+}
+
 load();
 setInterval(load, 4000);
 loadValue();
 loadGuide();
 setInterval(loadGuide, 8000);
+loadImporters();
+// The browser-driven live feed: when "auto" is on, re-import on a slow interval.
+// Reads are read-only snapshots, so the tool being metered is never blocked.
+setInterval(() => { if (IMPORT_AUTO) doImport('all'); }, 30000);
 </script>
 </body>
 </html>
