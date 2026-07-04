@@ -24,6 +24,9 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type { Store, RequestRow } from '../store/db.ts';
 import { computeCost } from '../cost/pricing.ts';
+import { type ImportSummary, type ImportOptions, emptyImportSummary, recordInsert } from './importShared.ts';
+
+export type { ImportSummary, ImportOptions } from './importShared.ts';
 
 export interface TranscriptUsageEvent {
   requestId: string;
@@ -99,24 +102,6 @@ export function parseTranscriptLine(line: string): TranscriptUsageEvent | null {
   };
 }
 
-export interface ImportSummary {
-  files: number;
-  eventsSeen: number;
-  inserted: number;
-  costUsd: number;
-  estimatedCostUsd: number;
-  byModel: Record<string, { requests: number; costUsd: number }>;
-  earliestMs: number | null;
-  latestMs: number | null;
-}
-
-export interface ImportOptions {
-  root?: string;
-  /** Only import events at/after this epoch ms (default: everything). */
-  sinceMs?: number;
-  source?: string;
-}
-
 /**
  * Scan every transcript under `root` and insert each API request exactly once.
  * Idempotent by construction (request_id is the store's natural key), so
@@ -143,16 +128,7 @@ export async function importClaudeCode(store: Store, opts: ImportOptions = {}): 
     files = []; // no Claude Code install → an honest empty import, not a crash
   }
 
-  const summary: ImportSummary = {
-    files: files.length,
-    eventsSeen: 0,
-    inserted: 0,
-    costUsd: 0,
-    estimatedCostUsd: 0,
-    byModel: {},
-    earliestMs: null,
-    latestMs: null,
-  };
+  const summary = emptyImportSummary(files.length);
 
   for (const file of files) {
     const seenInFile = new Set<string>(); // one API request = many transcript lines; first wins
@@ -162,7 +138,6 @@ export async function importClaudeCode(store: Store, opts: ImportOptions = {}): 
       if (!ev || ev.tsEpochMs < sinceMs) continue;
       if (seenInFile.has(ev.requestId)) continue;
       seenInFile.add(ev.requestId);
-      summary.eventsSeen += 1;
 
       const cost = computeCost('anthropic', ev.model, {
         inputTokens: ev.inputTokens,
@@ -194,16 +169,7 @@ export async function importClaudeCode(store: Store, opts: ImportOptions = {}): 
         source,
       };
       if (ev.sessionId) store.upsertSession(ev.sessionId, ev.project, source, ev.tsEpochMs);
-      if (store.insertRequestIfNew(row)) {
-        summary.inserted += 1;
-        summary.costUsd += cost.costUsd;
-        if (cost.estimated) summary.estimatedCostUsd += cost.costUsd;
-        const m = (summary.byModel[ev.model] ??= { requests: 0, costUsd: 0 });
-        m.requests += 1;
-        m.costUsd += cost.costUsd;
-        summary.earliestMs = summary.earliestMs === null ? ev.tsEpochMs : Math.min(summary.earliestMs, ev.tsEpochMs);
-        summary.latestMs = summary.latestMs === null ? ev.tsEpochMs : Math.max(summary.latestMs, ev.tsEpochMs);
-      }
+      recordInsert(store, summary, row, cost.estimated);
     }
   }
   return summary;

@@ -64,6 +64,9 @@ import { spawn } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync } from 'node:fs';
 import { SOURCE_HEADER, CONNECTORS, GEMINI_OPENAI_COMPAT_BASE, opencodeProviderBlock, mergeOpencodeConfig, resolveOpencodeConfigPath, listOpencodeProviders, wrapOpencodeProvider } from './connect/connectors.ts';
 import { importClaudeCode, defaultClaudeCodeRoot } from './connect/claudeCode.ts';
+import { importOpencode, defaultOpencodeDbPath } from './connect/opencode.ts';
+import { importCodex, defaultCodexRoot } from './connect/codex.ts';
+import { type ImportSummary } from './connect/importShared.ts';
 
 const C = {
   reset: '\x1b[0m',
@@ -1098,6 +1101,73 @@ async function cmdRealize(flags: Flags): Promise<void> {
   store.close();
 }
 
+/**
+ * Live import: poll the source(s) on an interval and fold in new traffic as it
+ * appears. Reads are read-only snapshots (SQLite WAL / streamed JSONL), so the
+ * tool being metered keeps writing uninterrupted. Idempotent inserts mean a
+ * re-scan only ever adds what's new — this is the import equivalent of the
+ * proxy's live feed, minus the base-URL wiring.
+ */
+async function cmdImportWatch(
+  targets: string[],
+  opts: { root?: string; sinceMs?: number; intervalMs?: number },
+): Promise<void> {
+  const tty = process.stdout.isTTY ?? false;
+  const intervalMs = Math.max(2000, opts.intervalMs ?? 5000);
+  const store = new Store(dbPath());
+  // Advancing watermark keeps each poll cheap; a lookback covers out-of-order or
+  // mid-write events (idempotency makes any re-read harmless anyway).
+  const lookbackMs = 5 * 60 * 1000;
+  let watermark = opts.sinceMs ?? 0;
+
+  const labels = targets.map((t) => IMPORT_RUNNERS[t]!.label).join(', ');
+  console.log('');
+  console.log(color(tty, C.bold, `  Live import — watching ${labels}`));
+  console.log(color(tty, C.gray, `  Polling every ${Math.round(intervalMs / 1000)}s · read-only, never blocks the tool · Ctrl+C to stop`));
+  console.log('');
+
+  let running = true;
+  const tick = async (first: boolean): Promise<void> => {
+    let newlyInserted = 0;
+    let latest = 0;
+    for (const id of targets) {
+      const runner = IMPORT_RUNNERS[id]!;
+      const useRoot = targets.length === 1 ? opts.root : undefined;
+      const sum = await runner.run(store, { root: useRoot, sinceMs: first ? watermark : Math.max(0, watermark - lookbackMs) });
+      newlyInserted += sum.inserted;
+      if (sum.latestMs) latest = Math.max(latest, sum.latestMs);
+      if (first) {
+        renderImportSummary(tty, id, runner.location(useRoot), sum);
+      }
+    }
+    if (latest) watermark = Math.max(watermark, latest);
+    if (first) {
+      console.log('');
+      console.log(color(tty, C.gray, '  Watching for new traffic…'));
+    } else if (newlyInserted > 0) {
+      const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+      console.log(color(tty, C.gray, `  ${time}  `) + color(tty, C.green, `+${num(newlyInserted)} new request${newlyInserted === 1 ? '' : 's'} imported`));
+    }
+  };
+
+  await tick(true);
+  const timer = setInterval(() => {
+    if (running) void tick(false);
+  }, intervalMs);
+
+  await new Promise<void>((resolve) => {
+    const stop = () => {
+      running = false;
+      clearInterval(timer);
+      store.close();
+      console.log('\n  Stopped watching.');
+      resolve();
+    };
+    process.on('SIGINT', stop);
+    process.on('SIGTERM', stop);
+  });
+}
+
 async function cmdReport(flags: Flags): Promise<void> {
   const kind = String(flags.kind ?? '');
   const codeKinds = ['tested', 'merged', 'shipped', 'incident'];
@@ -1167,40 +1237,53 @@ async function cmdReport(flags: Flags): Promise<void> {
  * behave identically. Our own chatter goes to stderr only.
  */
 /**
- * `aegisflow import claude-code [--root <dir>] [--days N] [--json]` — native
- * metering for a managed tool: read the exact usage Claude Code already writes
- * to local transcripts. Idempotent (request_id is the natural key), so this is
- * safe to re-run forever; each run adds only new traffic.
+ * The import registry — one entry per native-metering source. Each knows how to
+ * find its local data and how to read it into the store idempotently. Adding a
+ * tool is adding a row here; the CLI, `all`, watch mode, and the dashboard all
+ * drive off this list.
  */
-async function cmdImport(flags: Flags): Promise<void> {
-  const tty = process.stdout.isTTY ?? false;
-  const what = (typeof flags._[0] === 'string' ? flags._[0] : '').toLowerCase();
-  if (what !== 'claude-code' && what !== 'claudecode') {
-    console.error('  Usage: aegisflow import claude-code  [--root <transcripts dir>] [--days N] [--json]');
-    console.error('  (More local feeds — Codex, opencode sessions — are planned; claude-code is the first.)');
-    process.exitCode = 1;
-    return;
-  }
+interface ImportRunner {
+  label: string;
+  /** Human-readable location of the source data (for the report + "not found"). */
+  location: (root?: string) => string;
+  run: (store: Store, opts: { root?: string; sinceMs?: number }) => ImportSummary | Promise<ImportSummary>;
+}
 
-  const days = typeof flags.days === 'string' ? Number(flags.days) : null;
-  const sinceMs = days && days > 0 ? Date.now() - days * 24 * 60 * 60 * 1000 : 0;
-  const root = typeof flags.root === 'string' ? flags.root : undefined;
+const IMPORT_RUNNERS: Record<string, ImportRunner> = {
+  'claude-code': {
+    label: 'Claude Code',
+    location: (r) => r ?? defaultClaudeCodeRoot(),
+    run: (store, opts) => importClaudeCode(store, opts),
+  },
+  opencode: {
+    label: 'opencode',
+    location: (r) => r ?? defaultOpencodeDbPath() ?? '(opencode not found on this machine)',
+    run: (store, opts) => importOpencode(store, opts),
+  },
+  codex: {
+    label: 'Codex CLI',
+    location: (r) => r ?? defaultCodexRoot() ?? '(Codex not found on this machine)',
+    run: (store, opts) => importCodex(store, opts),
+  },
+};
 
-  const store = new Store(dbPath());
-  const sum = await importClaudeCode(store, { root, sinceMs });
-  store.close();
+/** Normalize the aliases users actually type. */
+function resolveImporterId(what: string): string | null {
+  const w = what.toLowerCase();
+  if (w === 'claude-code' || w === 'claudecode' || w === 'claude') return 'claude-code';
+  if (w === 'opencode') return 'opencode';
+  if (w === 'codex' || w === 'codex-cli') return 'codex';
+  return null;
+}
 
-  if (flags.json) {
-    process.stdout.write(JSON.stringify(sum, null, 2) + '\n');
-    return;
-  }
-
+function renderImportSummary(tty: boolean, id: string, location: string, sum: ImportSummary): void {
+  const label = IMPORT_RUNNERS[id]!.label;
   console.log('');
-  console.log(color(tty, C.bold, '  Claude Code import — native, no routing'));
+  console.log(color(tty, C.bold, `  ${label} import — native, no routing`));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(58)));
-  console.log(`  Transcripts  ${color(tty, C.gray, root ?? defaultClaudeCodeRoot())}  (${num(sum.files)} files)`);
+  console.log(`  Source       ${color(tty, C.gray, location)}${sum.files > 1 ? color(tty, C.gray, `  (${num(sum.files)} files)`) : ''}`);
   if (sum.eventsSeen === 0) {
-    console.log(color(tty, C.gray, '  No usage entries found — has Claude Code run on this machine?'));
+    console.log(color(tty, C.gray, `  No usage entries found — has ${label} run on this machine?`));
     console.log('');
     return;
   }
@@ -1209,15 +1292,73 @@ async function cmdImport(flags: Flags): Promise<void> {
       ? `${new Date(sum.earliestMs).toISOString().slice(0, 10)} → ${new Date(sum.latestMs).toISOString().slice(0, 10)}`
       : '—';
   console.log(`  Requests     ${num(sum.eventsSeen)} found · ${color(tty, C.green, `${num(sum.inserted)} new`)} imported  (${span})`);
-  console.log(`  Consumption  ${color(tty, C.green, usd(sum.costUsd))} at API list rates${sum.estimatedCostUsd > 0 ? color(tty, C.yellow, `  (~est ${usd(sum.estimatedCostUsd)})`) : ''}`);
+  console.log(`  Consumption  ${color(tty, C.green, usd(sum.costUsd))}${sum.estimatedCostUsd > 0 ? color(tty, C.yellow, `  (~est ${usd(sum.estimatedCostUsd)})`) : ''}`);
   const models = Object.entries(sum.byModel).sort((a, b) => b[1].costUsd - a[1].costUsd).slice(0, 5);
-  for (const [m, v] of models) console.log(`    ${m.padEnd(24)} ${usd(v.costUsd).padStart(10)}  ${color(tty, C.gray, `${num(v.requests)} req`)}`);
+  for (const [m, v] of models) console.log(`    ${m.padEnd(26)} ${usd(v.costUsd).padStart(10)}  ${color(tty, C.gray, `${num(v.requests)} req`)}`);
+}
+
+/**
+ * `aegisflow import <tool|all> [--root <dir>] [--days N] [--watch] [--json]` —
+ * native metering for managed/subscription tools: read the usage each tool
+ * already writes to local disk. Idempotent (request_id is the natural key), so
+ * it is safe to re-run or poll; each run adds only new traffic. `--watch` keeps
+ * it live (see cmdImportWatch).
+ */
+async function cmdImport(flags: Flags): Promise<void> {
+  const tty = process.stdout.isTTY ?? false;
+  const what = typeof flags._[0] === 'string' ? flags._[0] : '';
+  const targets: string[] =
+    what.toLowerCase() === 'all'
+      ? Object.keys(IMPORT_RUNNERS)
+      : (() => {
+          const id = resolveImporterId(what);
+          return id ? [id] : [];
+        })();
+
+  if (targets.length === 0) {
+    console.error(`  Usage: aegisflow import <${Object.keys(IMPORT_RUNNERS).join('|')}|all>  [--root <dir>] [--days N] [--watch] [--json]`);
+    console.error('  Native metering — no base URL, no key. Reads what the tool already logs locally.');
+    process.exitCode = 1;
+    return;
+  }
+
+  const days = typeof flags.days === 'string' ? Number(flags.days) : null;
+  const sinceMs = days && days > 0 ? Date.now() - days * 24 * 60 * 60 * 1000 : 0;
+  const root = typeof flags.root === 'string' ? flags.root : undefined;
+
+  if (flags.watch) {
+    await cmdImportWatch(targets, { root, sinceMs, intervalMs: typeof flags.every === 'string' ? Number(flags.every) * 1000 : undefined });
+    return;
+  }
+
+  const store = new Store(dbPath());
+  const results: Array<{ id: string; location: string; sum: ImportSummary }> = [];
+  for (const id of targets) {
+    const runner = IMPORT_RUNNERS[id]!;
+    // `all` with a single --root would mis-point the other tools; only pass it for a single target.
+    const useRoot = targets.length === 1 ? root : undefined;
+    const sum = await runner.run(store, { root: useRoot, sinceMs });
+    results.push({ id, location: runner.location(useRoot), sum });
+  }
+  store.close();
+
+  if (flags.json) {
+    process.stdout.write(JSON.stringify(targets.length === 1 ? results[0]!.sum : Object.fromEntries(results.map((r) => [r.id, r.sum])), null, 2) + '\n');
+    return;
+  }
+
+  for (const r of results) renderImportSummary(tty, r.id, r.location, r.sum);
+  const totalNew = results.reduce((n, r) => n + r.sum.inserted, 0);
   console.log('');
-  console.log(color(tty, C.gray, '  On a subscription this is consumption valued at list rates — what the traffic'));
-  console.log(color(tty, C.gray, '  WOULD bill via API — not your invoice. Do not also route Claude Code through'));
-  console.log(color(tty, C.gray, '  the proxy for the same period, or it would count twice.'));
-  console.log('');
-  console.log(color(tty, C.gray, '  Safe to re-run any time — only new traffic is added. See it: aegisflow today'));
+  if (totalNew > 0) {
+    console.log(color(tty, C.gray, '  On a subscription this is consumption valued at list rates — what the traffic'));
+    console.log(color(tty, C.gray, '  WOULD bill via API — not your invoice. Don’t also proxy the same tool for the'));
+    console.log(color(tty, C.gray, '  same period, or it would count twice.'));
+    console.log('');
+    console.log(color(tty, C.gray, '  Safe to re-run (or add --watch to keep it live). See it: aegisflow today · aegisflow start'));
+  } else {
+    console.log(color(tty, C.gray, '  Nothing new to import. Add --watch to fold in new traffic as it happens.'));
+  }
   console.log('');
 }
 
@@ -2144,10 +2285,11 @@ function cmdHelp(): void {
                           antigravity (custom-provider recipe; --write points the
                           upstream at Gemini free tier), api (generic SDK/curl
                           recipe). No tool lists the connectors.
-    import claude-code    NATIVE metering, no routing: read the exact usage Claude
-                          Code already logs locally — works on subscriptions the
-                          proxy can never see. Idempotent; re-run or cron it.
-                          (--root <dir>, --days N, --json)
+    import <tool|all>     NATIVE metering, no routing: read the usage a tool
+                          already logs locally — works on subscriptions the proxy
+                          can never see. Tools: claude-code, opencode, codex (or
+                          all). Idempotent. --watch keeps it live (poll every N
+                          sec: --every N). (--root <dir>, --days N, --json)
     audit --repo <path>   Correlate spend with git commits (--limit N, --json)
     roi --repo <path>     Return on Intelligence: four value lenses (Realization,
                           Acceptance, Lift, Impact) → one composite index
