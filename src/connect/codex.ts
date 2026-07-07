@@ -19,6 +19,7 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type { Store, RequestRow } from '../store/db.ts';
 import { computeCost, type Provider } from '../cost/pricing.ts';
+import { projectKey } from '../value/characterization.ts';
 import { type ImportSummary, type ImportOptions, emptyImportSummary, recordInsert } from './importShared.ts';
 
 /** Codex home: ~/.codex (override with CODEX_HOME). null = not installed. */
@@ -80,6 +81,7 @@ export async function parseCodexRollout(file: string): Promise<
     provider: string;
     model: string;
     project: string;
+    cwd: string | null;
     inputTokens: number;
     outputTokens: number;
     cacheReadTokens: number;
@@ -91,11 +93,12 @@ export async function parseCodexRollout(file: string): Promise<
   let provider = 'openai';
   let model = 'gpt-5';
   let project = 'codex';
+  let cwd: string | null = null;
   let ordinal = 0;
   let prev: TokenTotals = { input: 0, cachedInput: 0, output: 0, reasoning: 0 };
   const rows: Awaited<ReturnType<typeof parseCodexRollout>> = [];
 
-  const projFromCwd = (cwd: string): string => (cwd ? (cwd.split(/[\\/]/).filter(Boolean).pop() ?? 'codex') : 'codex');
+  const projFromCwd = (cwd: string): string => projectKey(cwd, 'codex');
 
   for await (const line of rl) {
     let o: { type?: string; timestamp?: string; payload?: Record<string, unknown> };
@@ -107,14 +110,20 @@ export async function parseCodexRollout(file: string): Promise<
     const p = o.payload ?? {};
     if (o.type === 'session_meta') {
       sessionId = (p.id as string) ?? sessionId;
-      if (typeof p.cwd === 'string') project = projFromCwd(p.cwd);
+      if (typeof p.cwd === 'string') {
+        cwd = p.cwd;
+        project = projFromCwd(p.cwd);
+      }
       if (typeof p.model_provider === 'string') provider = p.model_provider;
       if (typeof p.model === 'string') model = p.model as string;
       continue;
     }
     if (o.type === 'turn_context') {
       if (typeof p.model === 'string') model = p.model as string;
-      if (typeof p.cwd === 'string') project = projFromCwd(p.cwd);
+      if (typeof p.cwd === 'string') {
+        cwd = p.cwd;
+        project = projFromCwd(p.cwd);
+      }
       continue;
     }
     if (o.type === 'event_msg' && p.type === 'token_count') {
@@ -138,6 +147,7 @@ export async function parseCodexRollout(file: string): Promise<
         provider,
         model,
         project,
+        cwd,
         inputTokens: uncachedIn,
         outputTokens: dOut,
         cacheReadTokens: dCached,
@@ -199,6 +209,7 @@ export async function importCodex(store: Store, opts: ImportOptions = {}): Promi
         durationMs: null,
         user: null,
         source,
+        cwd: ev.cwd,
       };
       if (ev.sessionId) store.upsertSession(ev.sessionId, ev.project, source, ev.tsEpochMs);
       recordInsert(store, summary, row, c.estimated);

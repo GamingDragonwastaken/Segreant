@@ -29,7 +29,8 @@ import { seedDemo, demoLiftOptions } from './demo/seed.ts';
 import { startOfLocalDay } from './budget/guard.ts';
 import { attributeCommits, isGitRepo, projectName, resolveCommit } from './git/correlate.ts';
 import { computeQuality } from './git/quality.ts';
-import { computeRealization, loadRealization, liftOptionsFromStore, moneyInputsFromStore } from './value/realization.ts';
+import { computeRealization, loadRealization, liftOptionsFromStore, moneyInputsFromStore, realizeDiscoveredProjects, projectValueBreakdown } from './value/realization.ts';
+import { scanWithDiff, saveScan, type ScanDiff } from './scan/scan.ts';
 import { computeReturnOnIntelligence } from './value/lenses.ts';
 import { describeSourceDepth } from './value/sourceDepth.ts';
 import { boundedLift } from './value/lift.ts';
@@ -1006,10 +1007,22 @@ async function cmdYield(flags: Flags): Promise<void> {
   store.close();
 }
 
-/** A one-line honesty note when realized-value figures come from stored snapshots. */
-function noteSource(tty: boolean, source: 'git' | 'store'): void {
+/**
+ * One-line honesty notes about where the realized-value figures came from: a
+ * stored snapshot vs a live repo, and — for a live repo — whether the dollars were
+ * scoped to THIS project's own spend (the ledger is characterized by project:
+ * native imports or tagged traffic) or fell back to the project-blind window sum
+ * (untagged proxy). Discloses the basis so the number is never silently mixed.
+ */
+function noteSource(tty: boolean, source: 'git' | 'store', projectScoped?: boolean): void {
   if (source === 'store') {
     console.log(color(tty, C.gray, '  ● stored realization snapshot — no live repo attached; figures are as of the last realize run.'));
+    return;
+  }
+  if (projectScoped === true) {
+    console.log(color(tty, C.gray, "  ● scoped to this project's own spend — ledger characterized by project (imports / tagged traffic)."));
+  } else if (projectScoped === false) {
+    console.log(color(tty, C.gray, '  ● project-blind window attribution — no project-tagged spend here. Import or tag sources to scope value per project.'));
   }
 }
 
@@ -1047,7 +1060,7 @@ async function cmdRealize(flags: Flags): Promise<void> {
   console.log(color(tty, C.bold, '  The Realization Standard — did AI spend become real outcomes?'));
   console.log(color(tty, C.gray, `  ${m.units} matured units (older than ${windowDays}d) · ${wiredGates} of ${GATE_LADDER.length} gates instrumented`));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
-  noteSource(tty, loaded.source);
+  noteSource(tty, loaded.source, loaded.report.projectScoped);
 
   if (m.units === 0) {
     console.log(color(tty, C.gray, `  No units older than ${windowDays}d yet — realization needs the window to elapse.`));
@@ -1363,6 +1376,213 @@ async function cmdImport(flags: Flags): Promise<void> {
     console.log(color(tty, C.gray, '  Nothing new to import. Add --watch to fold in new traffic as it happens.'));
   }
   console.log('');
+}
+
+/**
+ * Discover the git repos behind imported projects and auto-correlate each into
+ * per-project RoI — the "no --repo, no wiring" native path. Opt-in: the user runs
+ * it (or clicks the dashboard button) to scan the projects the ledger already knows
+ * a working directory for, realize the ones that are git repos, and persist a
+ * per-project snapshot that then lights up `roi`, `today`, and the dashboard. Each
+ * project is reported with the TOOLS that coded it (repo↔project↔tool).
+ */
+async function cmdDiscover(flags: Flags): Promise<void> {
+  const tty = process.stdout.isTTY ?? false;
+  const windowDays = flags.window ? Number(flags.window) : undefined;
+  const store = new Store(dbPath());
+  const paths = store.projectPaths();
+  const discovered = await realizeDiscoveredProjects(store, { windowDays });
+  const projects = projectValueBreakdown(store, { windowDays });
+  store.close();
+
+  if (flags.json) {
+    process.stdout.write(JSON.stringify({ discovered, projects }, null, 2) + '\n');
+    return;
+  }
+
+  console.log('');
+  console.log(color(tty, C.bold, '  Discover — correlate imported projects into per-project RoI'));
+  console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
+
+  if (paths.length === 0) {
+    console.log(color(tty, C.gray, '  No project working directories on record yet. Import a tool first:'));
+    console.log(color(tty, C.gray, '    aegisflow import claude-code | codex | opencode | all'));
+    console.log(color(tty, C.gray, '  Imports capture each project’s folder — that is what Discover correlates.'));
+    console.log('');
+    return;
+  }
+
+  if (discovered.length === 0) {
+    console.log(color(tty, C.yellow, `  Found ${paths.length} project folder(s), but none are git repositories — nothing to correlate.`));
+    console.log(color(tty, C.gray, '  RoI needs git history (the committed/survived/clean gates); spend is still metered.'));
+    console.log('');
+    return;
+  }
+
+  console.log(color(tty, C.gray, `  Correlated ${discovered.length} of ${paths.length} project folder(s) that are git repos:`));
+  console.log('');
+  const roiByProject = new Map(projects.map((p) => [p.project, p.roiIndex]));
+  for (const d of discovered) {
+    const roi = roiByProject.get(d.project);
+    const roiStr =
+      roi == null
+        ? color(tty, C.gray, 'RoI —')
+        : color(tty, roi > 60 ? C.green : roi > 30 ? C.yellow : C.red, `RoI ${Math.round(roi)}`);
+    const tools = d.sources.length ? d.sources.join(', ') : 'unknown';
+    console.log(`  ${color(tty, C.bold, d.project.padEnd(22))} ${usd(d.costUsd).padStart(10)}   ${d.realizedUnits}/${d.units} realized   ${roiStr}`);
+    console.log(color(tty, C.gray, `    ${d.repoPath}`));
+    console.log(color(tty, C.gray, `    coded with: ${tools}`));
+  }
+  console.log('');
+  console.log(color(tty, C.gray, '  Now live in: aegisflow roi · aegisflow today · the dashboard (By project).'));
+  console.log('');
+}
+
+/** Render "what changed since your last scan of these roots" — silent on a first scan. */
+function renderScanDiff(tty: boolean, diff: ScanDiff): void {
+  if (!diff.comparable) return; // first scan of these roots — nothing to compare against
+  const since = diff.sinceMs ? ` on ${new Date(diff.sinceMs).toISOString().slice(0, 10)}` : '';
+  const bits: string[] = [];
+  if (diff.newRepos.length) bits.push(color(tty, C.green, `+${diff.newRepos.length} new repo(s)`));
+  if (diff.newTools.length) bits.push(color(tty, C.green, `+${diff.newTools.length} new tool(s)`));
+  if (diff.goneRepos.length) bits.push(color(tty, C.gray, `−${diff.goneRepos.length} gone`));
+  if (bits.length === 0) {
+    console.log(color(tty, C.gray, `  No change since your last scan${since}.`));
+  } else {
+    console.log(color(tty, C.bold, `  Since your last scan${since}:  `) + bits.join(color(tty, C.gray, ' · ')));
+    for (const r of diff.newRepos.slice(0, 8)) console.log(color(tty, C.green, `    + ${r}`));
+    for (const id of diff.newTools) console.log(color(tty, C.green, `    + tool detected: ${id}`));
+  }
+  console.log('');
+}
+
+/**
+ * `aegisflow scan [path] [--deep] [--setup] [--json]` — the proactive, opt-in
+ * discovery pass. It inspects the machine: which supported AI tools have local
+ * usage data, and which folders under `path` (default: your home) are git repos.
+ * Read-only and bounded by default — it PREVIEWS a setup plan and changes nothing.
+ * `--setup` is the deliberate second step: import every detected tool, then correlate
+ * every discovered repo into per-project RoI (the same engines as import + discover),
+ * so one command turns a fresh machine into a full AI-capital map. `--deep` widens
+ * the walk (depth + budget) for large or unusually nested trees.
+ */
+async function cmdScan(flags: Flags): Promise<void> {
+  const tty = process.stdout.isTTY ?? false;
+  const root = typeof flags._[0] === 'string' ? flags._[0] : undefined;
+  const deep = Boolean(flags.deep);
+  const scanOpts = deep ? { maxDepth: 12, maxDirs: 80000 } : undefined;
+
+  const store = new Store(dbPath());
+  // Diff against the last scan of these roots BEFORE we overwrite the snapshot.
+  const { plan, diff } = scanWithDiff(store, { roots: root ? [root] : undefined, scan: scanOpts });
+  saveScan(store, plan); // remember this scan so the next one can report what changed
+  const present = plan.tools.filter((t) => t.present);
+
+  if (flags.json && !flags.setup) {
+    process.stdout.write(JSON.stringify({ ...plan, diff }, null, 2) + '\n');
+    store.close();
+    return;
+  }
+
+  console.log('');
+  console.log(color(tty, C.bold, '  Scan — find your AI tools and repos, then set it all up'));
+  console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
+  console.log(color(tty, C.gray, '  Read-only: reads what exists on disk. Nothing is imported or sent.'));
+  console.log('');
+
+  // Detected tools.
+  console.log(color(tty, C.bold, '  AI coding tools on this machine'));
+  for (const t of plan.tools) {
+    const mark = t.present ? color(tty, C.green, '  ✓') : color(tty, C.gray, '  ·');
+    const where = t.present ? color(tty, C.gray, t.dataPath ?? '') : color(tty, C.gray, 'not found');
+    console.log(`${mark} ${t.label.padEnd(16)} ${where}`);
+  }
+  console.log('');
+
+  // Discovered repos.
+  const roots = plan.roots.length ? plan.roots.join(', ') : '(none existed)';
+  console.log(color(tty, C.bold, `  Git repositories under ${roots}`));
+  if (plan.repos.length === 0) {
+    console.log(color(tty, C.gray, '    None found. Point the scan at your code folder:  aegisflow scan <path>'));
+  } else {
+    console.log(
+      `    ${color(tty, C.green, `${plan.repos.length} repo(s)`)} found` +
+        `   ${color(tty, C.gray, `(${plan.reposWithSpend.length} already have AI spend on record → RoI-ready)`)}`,
+    );
+    for (const r of plan.repos.slice(0, 12)) {
+      const ready = plan.reposWithSpend.includes(r);
+      const tag = ready ? color(tty, C.green, '  ✓ has AI spend → RoI-ready') : color(tty, C.gray, '  no AI spend recorded yet');
+      console.log(`    ${color(tty, C.gray, r)}${tag}`);
+    }
+    if (plan.repos.length > 12) console.log(color(tty, C.gray, `    …and ${plan.repos.length - 12} more`));
+  }
+  if (plan.scan.hitBudget) {
+    console.log('');
+    console.log(color(tty, C.yellow, `    Stopped after ${num(plan.scan.dirsVisited)} folders (budget) — results are partial.`));
+    console.log(color(tty, C.gray, '    Point at a narrower folder, or the results above are a representative sample.'));
+  }
+  console.log('');
+
+  renderScanDiff(tty, diff);
+
+  if (!flags.setup) {
+    // Dry run: tell them exactly what --setup would do, and why it is safe.
+    if (present.length === 0 && plan.repos.length === 0) {
+      console.log(color(tty, C.gray, '  Nothing to set up yet — no supported tools and no repos found here.'));
+      console.log(color(tty, C.gray, '  If your code lives elsewhere, try:  aegisflow scan <path-to-your-projects>'));
+    } else {
+      const toolNames = present.map((t) => t.label).join(', ') || 'no detected tools';
+      console.log(color(tty, C.bold, '  Ready to set up:'));
+      console.log(color(tty, C.gray, `    • import usage from: ${toolNames}`));
+      // Correlation follows the SPEND — it values every project the tools actually
+      // ran in (which may live outside this folder), not the raw repo count above.
+      console.log(color(tty, C.gray, '    • correlate every project your tools ran in into per-project RoI'));
+      console.log('');
+      console.log(`  Do it in one step:  ${color(tty, C.bold, 'aegisflow scan' + (root ? ` ${root}` : '') + ' --setup')}`);
+      console.log(color(tty, C.gray, '  Then re-run scan to see which repos here got valued.'));
+    }
+    console.log('');
+    store.close();
+    return;
+  }
+
+  // --setup: the deliberate, mutating step. Import every present tool, then correlate.
+  console.log(color(tty, C.bold, '  Setting up…'));
+  let totalNew = 0;
+  for (const t of present) {
+    const runner = IMPORT_RUNNERS[t.id];
+    if (!runner) continue;
+    const sum = await runner.run(store, {});
+    totalNew += sum.inserted;
+    console.log(
+      `    ${color(tty, C.green, '✓')} ${t.label.padEnd(16)} ${color(tty, C.green, `${num(sum.inserted)} new`)}` +
+        `  ${color(tty, C.gray, `(${num(sum.eventsSeen)} seen · ${usd(sum.costUsd)})`)}`,
+    );
+  }
+  if (present.length === 0) console.log(color(tty, C.gray, '    No detected tools to import.'));
+
+  const discovered = await realizeDiscoveredProjects(store, {});
+  const projects = projectValueBreakdown(store, {});
+  const roiByProject = new Map(projects.map((p) => [p.project, p.roiIndex]));
+  store.close();
+
+  console.log('');
+  console.log(color(tty, C.bold, `  Correlated ${discovered.length} project(s) into per-project RoI`));
+  for (const d of discovered.slice(0, 12)) {
+    const roi = roiByProject.get(d.project);
+    const roiStr =
+      roi == null
+        ? color(tty, C.gray, 'RoI —')
+        : color(tty, roi > 60 ? C.green : roi > 30 ? C.yellow : C.red, `RoI ${Math.round(roi)}`);
+    const tools = d.sources.length ? d.sources.join(', ') : 'unknown';
+    console.log(`    ${color(tty, C.bold, d.project.padEnd(22))} ${usd(d.costUsd).padStart(10)}   ${roiStr}   ${color(tty, C.gray, `coded with: ${tools}`)}`);
+  }
+  console.log('');
+  console.log(color(tty, C.gray, `  Imported ${num(totalNew)} new request(s). Now live in: aegisflow today · roi · the dashboard.`));
+  console.log(color(tty, C.gray, '  Safe to re-run any time to fold in new tools, repos, and traffic.'));
+  console.log('');
+
+  if (flags.json) process.stdout.write(JSON.stringify({ setup: true, totalNew, discovered }, null, 2) + '\n');
 }
 
 async function cmdExec(flags: Flags, command: string[]): Promise<void> {
@@ -1788,7 +2008,7 @@ async function cmdRoi(flags: Flags): Promise<void> {
   console.log(color(tty, C.bold, '  Return on Intelligence — how much you actually got from the AI'));
   console.log(color(tty, C.gray, `  ${Math.round(roi.coverage * 4)} of 4 value lenses instrumented · docs/RETURN-ON-INTELLIGENCE.md`));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
-  noteSource(tty, loaded.source);
+  noteSource(tty, loaded.source, loaded.report.projectScoped);
 
   const idx = roi.roiIndex;
   const iv = roi.roiInterval;
@@ -2041,7 +2261,7 @@ async function cmdFrontier(flags: Flags): Promise<void> {
   console.log(color(tty, C.bold, '  The per-context frontier — what AI is worth it, for what'));
   console.log(color(tty, C.gray, '  RoI compared within like-for-like work · docs/RETURN-ON-INTELLIGENCE.md'));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
-  noteSource(tty, loaded.source);
+  noteSource(tty, loaded.source, loaded.report.projectScoped);
 
   console.log(color(tty, C.bold, '  By model'));
   console.log(color(tty, C.gray, '    model                        units   cost      realized   RoI'));
@@ -2293,6 +2513,11 @@ function cmdHelp(): void {
                           can never see. Tools: claude-code, opencode, codex (or
                           all). Idempotent. --watch keeps it live (poll every N
                           sec: --every N). (--root <dir>, --days N, --json)
+    scan [path]           One-command onboarding: find the AI tools + git repos on
+                          this machine and preview a setup plan (read-only). --setup
+                          imports every detected tool and correlates every repo into
+                          per-project RoI. --deep widens the walk. (path defaults to
+                          your home; --json)
     audit --repo <path>   Correlate spend with git commits (--limit N, --json)
     roi --repo <path>     Return on Intelligence: four value lenses (Realization,
                           Acceptance, Lift, Impact) → one composite index
@@ -2449,6 +2674,12 @@ async function main(): Promise<void> {
       break;
     case 'import':
       await cmdImport(flags);
+      break;
+    case 'discover':
+      await cmdDiscover(flags);
+      break;
+    case 'scan':
+      await cmdScan(flags);
       break;
     case 'receipt':
     case 'receipts':

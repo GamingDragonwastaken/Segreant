@@ -13,7 +13,8 @@ import { dirname, join } from 'node:path';
 import type { Store } from '../store/db.ts';
 import { isDemo, type AegisConfig } from '../config.ts';
 import { startOfLocalDay } from '../budget/guard.ts';
-import { loadRealization, projectValueBreakdown, liftOptionsFromStore, moneyInputsFromStore } from '../value/realization.ts';
+import { loadRealization, projectValueBreakdown, liftOptionsFromStore, moneyInputsFromStore, realizeDiscoveredProjects } from '../value/realization.ts';
+import { scanWithDiff, saveScan } from '../scan/scan.ts';
 import { demoLiftOptions } from '../demo/seed.ts';
 import { recommendAllocation } from '../budget/allocate.ts';
 import { computeReturnOnIntelligence } from '../value/lenses.ts';
@@ -26,6 +27,7 @@ import { buildGuide } from '../guide.ts';
 import { recommendBudget } from '../budget/recommend.ts';
 import { computeAlerts } from '../alerts/detect.ts';
 import { requestsToCsv } from '../export/csv.ts';
+import { DIMENSIONS } from '../value/characterization.ts';
 import { IMPORTERS, type ImportSummary } from '../connect/importShared.ts';
 import { importClaudeCode, defaultClaudeCodeRoot } from '../connect/claudeCode.ts';
 import { importOpencode, defaultOpencodeDbPath } from '../connect/opencode.ts';
@@ -98,6 +100,12 @@ function buildOverview(store: Store, config: AegisConfig, range: RangeKey) {
     // Each source carries its measured depth (spend / + acceptance / + RoI),
     // computed server-side so the dashboard and CLI render identical wording.
     bySource: store.bySourceWithDepth(startMs, endMs).map((s) => ({ ...s, ...describeSourceDepth(s) })),
+    // Canonical, typed characterization of this window's spend across the flat axes
+    // (project/model/source/user) — one shape shared by the CLI and API, plus the
+    // axis vocabulary itself. The depth-augmented `bySource` above stays for the
+    // existing UI; this is the typed section API consumers read (characterization.ts).
+    characterization: store.characterization(startMs, endMs),
+    dimensions: DIMENSIONS,
     series: store.series(startMs, endMs, bucketMs),
     recent: store.recent(40),
     // Governance alerts refresh on the live poll. Realized-value alerts (git-gated)
@@ -205,6 +213,90 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
         }
       })();
       return;
+    }
+
+    // Auto-correlate imported projects into per-project RoI — the "no --repo, no
+    // wiring" native path. POST-only + the same local-only header guard as
+    // /api/import (it mutates the DB by persisting realization snapshots).
+    if (url.pathname === '/api/discover') {
+      if (req.method !== 'POST') {
+        res.writeHead(405, { 'content-type': 'text/plain', allow: 'POST' });
+        res.end('method not allowed');
+        return;
+      }
+      if (req.headers['x-aegis-local'] !== '1') {
+        res.writeHead(403, { 'content-type': 'text/plain' });
+        res.end('forbidden');
+        return;
+      }
+      req.resume();
+      void (async () => {
+        try {
+          const windowDays = Number(url.searchParams.get('window') || '14') || 14;
+          const foundFolders = store.projectPaths().length;
+          const discovered = await realizeDiscoveredProjects(store, { windowDays });
+          return json(res, 200, { ok: true, foundFolders, correlated: discovered.length, discovered });
+        } catch (err) {
+          return json(res, 500, { error: String(err) });
+        }
+      })();
+      return;
+    }
+
+    // The proactive, opt-in SYSTEM SCAN — the one-click onboarding path.
+    //   GET  /api/scan[?path=]  → dry-run preview: detected tools + git repos under
+    //        the root (default: home). Read-only; imports and mutates nothing.
+    //   POST /api/scan          → the deliberate setup step (CSRF-guarded like the
+    //        other mutating routes): import every detected tool, then correlate every
+    //        discovered project into per-project RoI. Same engines as import+discover.
+    if (url.pathname === '/api/scan') {
+      if (req.method === 'POST') {
+        if (req.headers['x-aegis-local'] !== '1') {
+          res.writeHead(403, { 'content-type': 'text/plain' });
+          res.end('forbidden');
+          return;
+        }
+        req.resume();
+        void (async () => {
+          try {
+            const imported: Record<string, { inserted: number; costUsd: number; available: boolean }> = {};
+            let totalNew = 0;
+            for (const imp of DASH_IMPORTERS) {
+              const available = imp.locate() !== null;
+              const sum = available ? await imp.run(store, {}) : null;
+              imported[imp.id] = { inserted: sum?.inserted ?? 0, costUsd: sum?.costUsd ?? 0, available };
+              totalNew += sum?.inserted ?? 0;
+            }
+            const discovered = await realizeDiscoveredProjects(store, {});
+            return json(res, 200, { ok: true, totalNew, imported, correlated: discovered.length, discovered });
+          } catch (err) {
+            return json(res, 500, { error: String(err) });
+          }
+        })();
+        return;
+      }
+      // GET preview. The filesystem walk is bounded (depth + visit budget), so this
+      // stays responsive; repo paths are capped in the payload for large trees. It
+      // also reports what changed since the last scan of these roots, then records
+      // this scan as the new baseline (a local marker — imports/correlates nothing).
+      try {
+        const path = url.searchParams.get('path') || undefined;
+        const { plan, diff } = scanWithDiff(store, { roots: path ? [path] : undefined });
+        saveScan(store, plan);
+        return json(res, 200, {
+          ok: true,
+          tools: plan.tools,
+          roots: plan.roots,
+          repoCount: plan.repos.length,
+          repos: plan.repos.slice(0, 50),
+          reposWithSpend: plan.reposWithSpend.length,
+          hitBudget: plan.scan.hitBudget,
+          dirsVisited: plan.scan.dirsVisited,
+          diff,
+        });
+      } catch (err) {
+        return json(res, 500, { error: String(err) });
+      }
     }
 
     if (url.pathname === '/api/overview') {
@@ -331,7 +423,7 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
             // same computation as the CLI so the two surfaces can't disagree.
             const matureOrdered = rep.units.filter((u) => !u.maturing).sort((a, b) => a.tsEpochMs - b.tsEpochMs);
             if (matureOrdered.length >= 10) drift = driftEProcess(matureOrdered.map((u) => u.funnel.realized));
-            realization = { matured: rep.matured, firstPassAcceptance: rep.firstPassAcceptance, proposalCoverage: rep.proposalCoverage, units: rep.units };
+            realization = { matured: rep.matured, firstPassAcceptance: rep.firstPassAcceptance, proposalCoverage: rep.proposalCoverage, projectScoped: rep.projectScoped, units: rep.units };
             // Lift: in demo mode a labeled synthetic TSF; otherwise the REAL source
             // — measured "time with AI" × configured task baselines — so the 4th lens
             // and the RoI interval reflect this machine's own behavioral data.
@@ -378,6 +470,10 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
           return json(res, 200, {
             gitRepo: loaded?.source === 'git',
             valueSource: loaded?.source ?? null,
+            // Whether the realized-value dollars came from spend SCOPED to this
+            // project (imports / tagged proxy) vs the project-blind window sum —
+            // disclosed so the number's basis is never silent.
+            projectScoped: loaded?.report.projectScoped ?? null,
             repo,
             generatedAt: new Date(now).toISOString(),
             realization,

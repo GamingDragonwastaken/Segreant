@@ -233,6 +233,10 @@ async function handle(
   // x-aegis-* header it is stripped in buildUpstreamHeaders, so it tags our local
   // ledger without ever being forwarded to the provider.
   const source = headerStr(req, 'x-aegis-source') ?? null;
+  // Optional full working-directory path (also an x-aegis-* header, so stripped
+  // before the request leaves the machine). Lets proxied traffic be repo-correlated
+  // for per-project RoI the same way imported traffic is, when a tool sends it.
+  const cwd = headerStr(req, 'x-aegis-cwd') ?? null;
   const rawTaskWeight = Number(headerStr(req, 'x-aegis-task-weight') ?? '1');
   const taskWeight = Number.isFinite(rawTaskWeight) && rawTaskWeight > 0 ? rawTaskWeight : 1;
   const requestId = randomUUID();
@@ -273,6 +277,7 @@ async function handle(
       project,
       user,
       source,
+      cwd,
       taskWeight,
       inputTokens: 0,
       outputTokens: 0,
@@ -327,6 +332,7 @@ async function handle(
       project,
       user,
       source,
+      cwd,
       taskWeight,
       inputTokens: 0,
       outputTokens: 0,
@@ -422,6 +428,7 @@ async function handle(
     project,
     user,
     source,
+    cwd,
     taskWeight,
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,

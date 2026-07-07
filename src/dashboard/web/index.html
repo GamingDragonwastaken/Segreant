@@ -169,6 +169,13 @@
   .import .iauto { display: inline-flex; align-items: center; gap: var(--s2); font-family: var(--mono); font-size: 11px; color: var(--muted); cursor: pointer; user-select: none; }
   .import .iallbtn { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; color: var(--mint); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 7px 14px; cursor: pointer; }
   .import .iallbtn:hover { border-color: var(--mint); }
+  .import .scaninput { font-family: var(--mono); font-size: 11px; color: var(--text); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; width: 190px; }
+  .import .scaninput::placeholder { color: var(--faint); }
+  .import .scanbtn { color: var(--gold); border-color: var(--line); }
+  .import .scanbtn:hover { border-color: var(--gold); }
+  .scanchips { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s4); margin-bottom: var(--s3); }
+  .scanchips .gstep { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.04em; color: var(--faint); }
+  .scanchips .gstep.done { color: var(--mint); }
 
   .foot { margin-top: var(--s8); text-align: center; color: var(--faint); font-family: var(--mono); font-size: 11px; letter-spacing: 0.05em; }
   .foot b { color: var(--mint); }
@@ -263,6 +270,7 @@
   <div id="demobanner"></div>
   <div id="alerts"></div>
   <div id="guide"></div>
+  <div id="scanpanel"></div>
   <div id="importpanel"></div>
 
   <div class="grid" id="grid"></div>
@@ -582,7 +590,7 @@ function renderValue(d) {
   let projectCard = '';
   if (d.projects && d.projects.length) {
     const prows = d.projects.map((p) =>
-      `<tr><td class="model">${esc(p.project)}</td><td>${p.units}</td><td class="cost">$${money(p.costUsd)}</td><td>${Math.round(p.realizationRate * 100)}%</td><td class="roi">${p.roiIndex == null ? '—' : Math.round(p.roiIndex)}</td></tr>`).join('');
+      `<tr><td class="model">${esc(p.project)}${p.sources && p.sources.length ? `<div style="font-size:10.5px;color:var(--faint);font-family:var(--mono)">coded with ${esc(p.sources.join(' · '))}</div>` : ''}</td><td>${p.units}</td><td class="cost">$${money(p.costUsd)}</td><td>${Math.round(p.realizationRate * 100)}%</td><td class="roi">${p.roiIndex == null ? '—' : Math.round(p.roiIndex)}</td></tr>`).join('');
     const pa = d.projectAllocation;
     const paHtml = (pa && pa.moves && pa.moves.length)
       ? `<div style="margin-top:12px"><div style="font-size:12px;color:var(--muted);margin-bottom:6px">Reallocate across projects → <b style="color:var(--mint)">+$${money(pa.projectedValueGainUsd)}</b> realized value</div>`
@@ -631,8 +639,16 @@ function renderValue(d) {
       ${bud.projectedMonthlyWasteUsd != null ? `<div class="rrow"><span style="color:var(--muted)">Projected monthly waste</span><span style="color:var(--coral);font-family:var(--mono)">$${money(bud.projectedMonthlyWasteUsd)}</span></div>` : ''}
       ${reallocs ? `<div style="margin-top:10px">${reallocs}</div>` : ''}`;
 
-  const srcLabel = d.valueSource === 'store' ? ' · <span style="color:var(--gold)">stored snapshot</span>'
-    : d.valueSource === 'git' ? ' · <span style="color:var(--muted)">live · git</span>' : '';
+  // For a live repo, disclose whether realized value was attributed only from this
+  // project's own spend (the ledger is characterized by project) or fell back to the
+  // project-blind window sum — so the number's basis is visible, never silently mixed.
+  const scopeLabel = d.valueSource === 'git'
+    ? (d.projectScoped
+        ? ' · <span style="color:var(--mint)">scoped to project</span>' + tip('This project\'s realized value is attributed only from spend tagged to it (native imports or tagged traffic) — never other projects\' concurrent spend.')
+        : ' · <span style="color:var(--muted)">window-wide</span>' + tip('Spend here isn\'t tagged by project, so value is attributed across the whole time window. Import your tools (or tag traffic) to scope value to this project.'))
+    : '';
+  const srcLabel = (d.valueSource === 'store' ? ' · <span style="color:var(--gold)">stored snapshot</span>'
+    : d.valueSource === 'git' ? ' · <span style="color:var(--muted)">live · git</span>' : '') + scopeLabel;
 
   setNodes(g, `
     <div class="card roihero fade">
@@ -710,6 +726,82 @@ async function loadGuide() {
   }
 }
 
+// ---- System scan: one-click onboarding (find tools + repos, then set it all up) ----
+function renderScanPanel() {
+  const host = $('#scanpanel');
+  if (!host) return;
+  setNodes(host, `<div class="card import fade">
+    <div class="ihead">
+      <div><div class="label">Set up automatically · one scan</div>
+        <div class="tag">find the AI tools and git repos on this machine, then import + correlate everything — read-only until you say go</div></div>
+      <div class="iactions">
+        <input id="scanpath" class="scaninput" placeholder="your home folder" title="Optional: point at a folder. Blank scans your home directory.">
+        <button class="iallbtn scanbtn" id="scanbtn">Scan my system</button>
+      </div>
+    </div>
+    <div class="iresult" id="scanres" style="margin-top:8px"></div>
+  </div>`);
+  const b = $('#scanbtn'); if (b) b.addEventListener('click', doScanPreview);
+  const inp = $('#scanpath'); if (inp) inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') doScanPreview(); });
+}
+async function doScanPreview() {
+  const el = $('#scanres'); const btn = $('#scanbtn');
+  const path = (($('#scanpath') || {}).value || '').trim();
+  if (el) el.textContent = 'scanning… reads what exists on disk; nothing is imported or sent';
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch('/api/scan' + (path ? '?path=' + encodeURIComponent(path) : ''));
+    const d = await res.json();
+    if (!d.ok) { if (el) el.textContent = 'scan failed'; return; }
+    renderScanResult(d);
+  } catch (e) {
+    if (el) el.textContent = 'error';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+function scanDiffLine(diff) {
+  if (!diff || !diff.comparable) return ''; // first scan of these roots — nothing to compare
+  const since = diff.sinceMs ? ' on ' + new Date(diff.sinceMs).toISOString().slice(0, 10) : '';
+  const parts = [];
+  if ((diff.newRepos || []).length) parts.push('+' + diff.newRepos.length + ' new repo(s)');
+  if ((diff.newTools || []).length) parts.push('+' + diff.newTools.length + ' new tool(s)');
+  if ((diff.goneRepos || []).length) parts.push('−' + diff.goneRepos.length + ' gone');
+  const msg = parts.length ? 'Since last scan' + since + ': ' + parts.join(' · ') : 'No change since last scan' + since;
+  return `<div class="tag" style="margin-bottom:8px;color:var(--mint)">${esc(msg)}</div>`;
+}
+function renderScanResult(d) {
+  const el = $('#scanres'); if (!el) return;
+  const present = (d.tools || []).filter((t) => t.present).length;
+  const chips = (d.tools || []).map((t) =>
+    `<span class="gstep ${t.present ? 'done' : ''}" title="${esc(t.dataPath || 'not found on this machine')}">${t.present ? '✓' : '·'} ${esc(t.label)}</span>`).join('');
+  const where = (d.roots && d.roots.length) ? d.roots.join(', ') : 'nothing found';
+  const budget = d.hitBudget ? ` · partial — stopped at ${Number(d.dirsVisited).toLocaleString()} folders; point at a narrower path` : '';
+  const canSetup = present > 0 || d.repoCount > 0;
+  setNodes(el, `
+    <div class="scanchips">${chips}</div>
+    <div class="tag" style="margin-bottom:8px">${Number(d.repoCount).toLocaleString()} git repo(s) under ${esc(where)} · ${Number(d.reposWithSpend).toLocaleString()} already RoI-ready${esc(budget)}</div>
+    ${scanDiffLine(d.diff)}
+    ${canSetup
+      ? `<button class="iallbtn scanbtn" id="scansetup">Set it all up → import ${present} tool(s) + correlate</button>`
+      : `<span class="tag">nothing to set up here — try pointing the scan at your code folder</span>`}
+  `);
+  const sb = $('#scansetup'); if (sb) sb.addEventListener('click', doScanSetup);
+}
+async function doScanSetup() {
+  const el = $('#scanres'); if (!el) return;
+  el.textContent = 'setting up… importing your tools and correlating projects (may take a moment)';
+  try {
+    const res = await fetch('/api/scan', { method: 'POST', headers: { 'x-aegis-local': '1' } });
+    const d = await res.json();
+    if (!d.ok) { el.textContent = 'setup failed'; return; }
+    el.textContent = `✓ imported ${Number(d.totalNew).toLocaleString()} new request(s) · correlated ${Number(d.correlated).toLocaleString()} project(s) → now live below`;
+    load(); loadValue(); loadGuide(); loadImporters();
+  } catch (e) {
+    el.textContent = 'error';
+  }
+}
+
 // ---- Import panel: one-click native metering, no terminal required ----
 let IMPORT_AUTO = false;
 function renderImporters(list) {
@@ -730,14 +822,40 @@ function renderImporters(list) {
       <div class="iactions">
         <label class="iauto"><input type="checkbox" id="iauto"> auto every 30s</label>
         <button class="iallbtn" id="iall">Import all</button>
+        <button class="iallbtn" id="idiscover" title="Find the git repos behind your imported projects and turn each project's spend into per-project Return on Intelligence — no --repo, no wiring.">Correlate projects → RoI</button>
       </div>
     </div>
     <div class="itools">${tools}</div>
+    <div class="iresult" id="idiscoverres" style="margin-top:8px"></div>
   </div>`);
   const auto = $('#iauto'); if (auto) { auto.checked = IMPORT_AUTO; auto.addEventListener('change', () => { IMPORT_AUTO = auto.checked; }); }
   const all = $('#iall'); if (all) all.addEventListener('click', () => doImport('all'));
+  const disc = $('#idiscover'); if (disc) disc.addEventListener('click', doDiscover);
   host.querySelectorAll('[data-import]').forEach((b) =>
     b.addEventListener('click', () => doImport(b.getAttribute('data-import'))));
+}
+async function doDiscover() {
+  const el = $('#idiscoverres');
+  const btn = $('#idiscover');
+  if (el) el.textContent = 'correlating imported projects…';
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch('/api/discover', { method: 'POST', headers: { 'x-aegis-local': '1' } });
+    const data = await res.json();
+    if (!data.ok) { if (el) el.textContent = 'failed'; return; }
+    if (el) {
+      el.textContent = data.correlated > 0
+        ? `correlated ${data.correlated} of ${data.foundFolders} project folder(s) → per-project RoI below`
+        : (data.foundFolders > 0
+            ? `${data.foundFolders} project folder(s) found, but none are git repositories`
+            : 'no project folders yet — import a tool first');
+    }
+    loadValue(); // light up the per-project RoI section with the fresh snapshots
+  } catch (e) {
+    if (el) el.textContent = 'error';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 async function doImport(tool) {
   const setResult = (id, msg) => { const el = $(`[data-result="${id}"]`); if (el) el.textContent = msg; };
@@ -770,6 +888,7 @@ setInterval(load, 4000);
 loadValue();
 loadGuide();
 setInterval(loadGuide, 8000);
+renderScanPanel();
 loadImporters();
 // The browser-driven live feed: when "auto" is on, re-import on a slow interval.
 // Reads are read-only snapshots, so the tool being metered is never blocked.

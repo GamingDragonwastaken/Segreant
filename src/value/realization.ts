@@ -99,6 +99,11 @@ export interface RealizationReport {
   windowDays: number;
   acceptanceThreshold: number;
   survivalThreshold: number;
+  // True when the units' cost was attributed from spend SCOPED to this project (the
+  // ledger is characterized by project — native imports, or tagged proxy traffic),
+  // rather than the project-blind window sum. Honest disclosure of which basis the
+  // dollars came from, never silent. See git/correlate.ts.
+  projectScoped: boolean;
   units: WorkUnit[];
   firstPassAcceptance: number | null;
   proposalCoverage: number; // units with a captured proposal / total units
@@ -139,8 +144,18 @@ export async function computeRealization(
   const now = Date.now();
   const windowMs = windowDays * 24 * 60 * 60 * 1000;
   const project = await projectName(repoPath);
+  // Attribute this project's OWN spend to its commits when the ledger is actually
+  // characterized by project (native imports, or proxy traffic tagged with
+  // x-aegis-project); otherwise fall back to the project-blind window sum so a
+  // classic 'default'-tagged proxy store is unchanged. This is the bridge that
+  // makes native, no-proxy imported spend produce correct per-project RoI.
+  const projectScoped = store.hasProjectSpend(project);
 
-  const attributions = await attributeCommits(store, repoPath, { limit, persist: opts.persist });
+  const attributions = await attributeCommits(store, repoPath, {
+    limit,
+    persist: opts.persist,
+    scopeProject: projectScoped ? project : undefined,
+  });
   const reverted = await revertedHashes(repoPath, limit);
 
   const units: WorkUnit[] = [];
@@ -226,7 +241,7 @@ export async function computeRealization(
     );
   }
 
-  return rollupRealization(units, { generatedAt: now, windowDays, acceptanceThreshold, survivalThreshold });
+  return rollupRealization(units, { generatedAt: now, windowDays, acceptanceThreshold, survivalThreshold, projectScoped });
 }
 
 /**
@@ -248,6 +263,9 @@ export function realizationFromStore(
     windowDays: opts.windowDays ?? 14,
     acceptanceThreshold: opts.acceptanceThreshold ?? 0.6,
     survivalThreshold: opts.survivalThreshold ?? 0.5,
+    // A single-project read is inherently project-scoped; the cross-project
+    // aggregate is not. Reflects how the persisted snapshots were sliced here.
+    projectScoped: opts.project !== undefined,
   });
 }
 
@@ -297,6 +315,9 @@ export interface ProjectValue {
   realizedValueUsd: number;
   netRealizedValueUsd: number;
   roiIndex: number | null;
+  // Which AI tools produced this project's spend (repo↔project↔tool interconnection).
+  // Empty when the project has no cwd-tagged traffic (e.g. untagged proxy).
+  sources: string[];
 }
 
 /**
@@ -304,12 +325,15 @@ export interface ProjectValue {
  * realization snapshots, roll its units up (the same pure rollup) and score its
  * RoI, so a manager sees which projects' AI spend is paying off — with no repo on
  * their machine. `roiOptions` is threaded through so per-project RoI matches the
- * headline (e.g. the demo's synthetic lift), keeping the numbers consistent.
+ * headline (e.g. the demo's synthetic lift), keeping the numbers consistent. Each
+ * project is joined to the TOOLS that produced its spend, so the view answers not
+ * just "did this project pay off" but "which tool coded it".
  */
 export function projectValueBreakdown(
   store: Store,
   opts: { windowDays?: number; roiOptions?: RoIOptions } = {},
 ): ProjectValue[] {
+  const sourcesByProject = new Map(store.projectPaths().map((p) => [p.project, p.sources]));
   const out: ProjectValue[] = [];
   for (const project of store.realizationProjects()) {
     const rep = realizationFromStore(store, { project, windowDays: opts.windowDays });
@@ -323,9 +347,63 @@ export function projectValueBreakdown(
       realizedValueUsd: rep.matured.realizedValueUsd,
       netRealizedValueUsd: rep.matured.netRealizedValueUsd,
       roiIndex: roi.roiIndex,
+      sources: sourcesByProject.get(project) ?? [],
     });
   }
   return out.sort((a, b) => b.costUsd - a.costUsd);
+}
+
+export interface DiscoveredProject {
+  project: string;
+  repoPath: string; // the captured cwd that is a git working tree
+  sources: string[]; // the tools that produced this project's spend
+  costUsd: number;
+  requests: number;
+}
+
+/**
+ * Discover the git repos behind the ledger's projects — the interconnectedness that
+ * makes native per-project RoI possible with NO --repo and NO wiring. For each
+ * project the store has a working directory for (from `projectPaths`), keep the one
+ * whose cwd is a real git working tree, paired with the tools (sources) that coded
+ * it. Pure discovery: it neither attributes nor persists. An import with no cwd, or
+ * a cwd that isn't a repo (or has been deleted), is simply skipped — never guessed.
+ */
+export async function discoverProjectRepos(store: Store): Promise<DiscoveredProject[]> {
+  const out: DiscoveredProject[] = [];
+  for (const p of store.projectPaths()) {
+    if (await isGitRepo(p.cwd)) {
+      out.push({ project: p.project, repoPath: p.cwd, sources: p.sources, costUsd: p.costUsd, requests: p.requests });
+    }
+  }
+  return out;
+}
+
+/**
+ * Auto-correlate every discovered project repo: run the REAL realization scorer on
+ * each (persisting a per-project snapshot), so a user who only IMPORTED their tools
+ * — never proxied, never passed --repo — still gets full per-project RoI. Because
+ * attribution is project-scoped, each repo absorbs only its own project's spend, and
+ * the captured source tags mean the persisted value knows which tool produced it.
+ * Honest no-op when nothing is discoverable (no captured cwd, or none are repos) —
+ * e.g. in demo mode, where seeded rows carry no cwd.
+ */
+export async function realizeDiscoveredProjects(
+  store: Store,
+  opts: { windowDays?: number; limit?: number } = {},
+): Promise<Array<DiscoveredProject & { units: number; realizedUnits: number }>> {
+  const repos = await discoverProjectRepos(store);
+  const results: Array<DiscoveredProject & { units: number; realizedUnits: number }> = [];
+  for (const r of repos) {
+    const rep = await computeRealization(store, r.repoPath, {
+      limit: opts.limit ?? 40,
+      windowDays: opts.windowDays,
+      persist: true,
+    });
+    const realizedUnits = rep.units.filter((u) => !u.maturing && u.funnel.realized).length;
+    results.push({ ...r, units: rep.units.length, realizedUnits });
+  }
+  return results;
 }
 
 /**
@@ -340,7 +418,7 @@ export function projectValueBreakdown(
  */
 export function rollupRealization(
   units: WorkUnit[],
-  opts: { generatedAt?: number; windowDays: number; acceptanceThreshold: number; survivalThreshold: number },
+  opts: { generatedAt?: number; windowDays: number; acceptanceThreshold: number; survivalThreshold: number; projectScoped?: boolean },
 ): RealizationReport {
   const generatedMs = opts.generatedAt ?? Date.now();
 
@@ -378,6 +456,7 @@ export function rollupRealization(
     windowDays: opts.windowDays,
     acceptanceThreshold: opts.acceptanceThreshold,
     survivalThreshold: opts.survivalThreshold,
+    projectScoped: opts.projectScoped ?? false,
     units,
     firstPassAcceptance,
     proposalCoverage: units.length > 0 ? withProposal.length / units.length : 0,

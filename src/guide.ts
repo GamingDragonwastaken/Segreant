@@ -71,10 +71,14 @@ export function buildGuide(f: GuideFacts): GuideReport {
         : f.proxyUp
           ? `proxy running on :${f.port} — no traffic through it yet`
           : 'no traffic yet',
-    why: 'Nothing can be governed or valued until the spend passes through a point you control.',
+    why: 'Nothing can be governed or valued until the spend is captured — imported from what your tools already log, or routed through the proxy.',
     commands: f.proxyUp
       ? [envHint, 'then run your AI tool as usual — watch requests appear']
-      : ['aegisflow start', envHint],
+      : [
+          'aegisflow scan --setup    (find your AI tools + repos, import everything — no wiring)',
+          'or aegisflow start, then set the base URL to also CAP spend:',
+          envHint,
+        ],
   };
 
   const cap: GuideStep = {

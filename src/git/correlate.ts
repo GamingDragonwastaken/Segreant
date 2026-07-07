@@ -16,8 +16,8 @@
 
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { basename } from 'node:path';
 import type { Store } from '../store/db.ts';
+import { projectKey } from '../value/characterization.ts';
 
 const run = promisify(execFile);
 
@@ -63,12 +63,19 @@ export async function resolveCommit(repoPath: string, ref: string): Promise<stri
   }
 }
 
+/**
+ * The project key for a repo — the same canonical `projectKey` the importers use
+ * on a session's working directory, so imported spend (cwd basename) and shipped
+ * commits (repo top-level basename) characterize to the SAME project when a tool
+ * runs from its repo root. That agreement is what lets project-scoped attribution
+ * pull a project's native, no-proxy spend into its own RoI.
+ */
 export async function projectName(repoPath: string): Promise<string> {
   try {
     const top = (await git(repoPath, ['rev-parse', '--show-toplevel'])).trim();
-    return basename(top) || 'default';
+    return projectKey(top, projectKey(repoPath));
   } catch {
-    return basename(repoPath) || 'default';
+    return projectKey(repoPath);
   }
 }
 
@@ -117,7 +124,7 @@ export async function readCommits(repoPath: string, limit: number): Promise<Comm
 export async function attributeCommits(
   store: Store,
   repoPath: string,
-  opts: { limit?: number; maxLookbackHours?: number; persist?: boolean } = {},
+  opts: { limit?: number; maxLookbackHours?: number; persist?: boolean; scopeProject?: string } = {},
 ): Promise<CommitAttribution[]> {
   const limit = opts.limit ?? 20;
   const maxLookbackMs = (opts.maxLookbackHours ?? 8) * 60 * 60 * 1000;
@@ -132,7 +139,11 @@ export async function attributeCommits(
     const windowStartMs = Math.max(naturalStart, commit.tsEpochMs - maxLookbackMs);
     const windowEndMs = commit.tsEpochMs;
 
-    const spend = store.summary(windowStartMs, windowEndMs);
+    // Scope the window's spend to this repo's project when the caller asks — so a
+    // commit absorbs only its own project's native/imported spend, not every
+    // project's concurrent traffic. Undefined scope = the project-blind window sum
+    // (proxy default), preserving the original behavior.
+    const spend = store.summary(windowStartMs, windowEndMs, opts.scopeProject);
     const totalLines = commit.linesAdded + commit.linesDeleted;
     const costPerHundredLines = totalLines > 0 ? (spend.costUsd / totalLines) * 100 : null;
 

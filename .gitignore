@@ -12,3 +12,10 @@ dist/
 !.env.example
 coverage/
 *.local
+
+# Local agent scratch / session working notes (kept locally, not tracked)
+_workstate.md
+findings.md
+progress.md
+task_plan.md
+_*.ts

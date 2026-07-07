@@ -21,6 +21,7 @@ import { homedir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import type { Store, RequestRow } from '../store/db.ts';
 import { computeCost, type Provider } from '../cost/pricing.ts';
+import { projectKey } from '../value/characterization.ts';
 import { type ImportSummary, type ImportOptions, emptyImportSummary, recordInsert } from './importShared.ts';
 
 /** Locate opencode's data dir across platforms; first existing wins. null = not installed. */
@@ -43,6 +44,8 @@ export interface OpencodeUsageEvent {
   provider: string;
   model: string;
   project: string;
+  /** Full working-directory path — the repo AegisFlow can find and auto-correlate. */
+  cwd: string | null;
   inputTokens: number;
   outputTokens: number;
   reasoningTokens: number;
@@ -85,7 +88,7 @@ export function parseOpencodeMessage(id: string, dataJson: string, fallbackTsMs?
   const ts = d.time?.created ?? fallbackTsMs;
   if (typeof ts !== 'number' || !Number.isFinite(ts)) return null;
   const cwd = d.path?.cwd ?? '';
-  const project = cwd ? (cwd.split(/[\\/]/).filter(Boolean).pop() ?? 'opencode') : 'opencode';
+  const project = projectKey(cwd, 'opencode');
 
   return {
     requestId: id,
@@ -94,6 +97,7 @@ export function parseOpencodeMessage(id: string, dataJson: string, fallbackTsMs?
     provider: d.providerID ?? 'opencode',
     model,
     project,
+    cwd: cwd || null,
     inputTokens: input,
     outputTokens: output,
     reasoningTokens: reasoning,
@@ -169,6 +173,7 @@ export function importOpencode(store: Store, opts: ImportOptions = {}): ImportSu
         durationMs: null,
         user: null,
         source,
+        cwd: ev.cwd,
       };
       if (r.sessionId) store.upsertSession(r.sessionId, ev.project, source, ev.tsEpochMs);
       recordInsert(store, summary, row, estimated);

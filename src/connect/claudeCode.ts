@@ -24,6 +24,7 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type { Store, RequestRow } from '../store/db.ts';
 import { computeCost } from '../cost/pricing.ts';
+import { projectKey } from '../value/characterization.ts';
 import { type ImportSummary, type ImportOptions, emptyImportSummary, recordInsert } from './importShared.ts';
 
 export type { ImportSummary, ImportOptions } from './importShared.ts';
@@ -35,6 +36,8 @@ export interface TranscriptUsageEvent {
   model: string;
   /** Basename of the session's working directory — the same notion of "project" the proxy uses. */
   project: string;
+  /** Full working-directory path — the repo AegisFlow can find and auto-correlate. */
+  cwd: string | null;
   inputTokens: number;
   outputTokens: number;
   cacheWriteTokens: number;
@@ -86,7 +89,7 @@ export function parseTranscriptLine(line: string): TranscriptUsageEvent | null {
   const ttl5m = u.cache_creation?.ephemeral_5m_input_tokens ?? 0;
   const ttl1h = u.cache_creation?.ephemeral_1h_input_tokens ?? 0;
   const cwd = e.cwd ?? '';
-  const project = cwd ? (cwd.split(/[\\/]/).filter(Boolean).pop() ?? 'claude-code') : 'claude-code';
+  const project = projectKey(cwd, 'claude-code');
 
   return {
     requestId: id,
@@ -94,6 +97,7 @@ export function parseTranscriptLine(line: string): TranscriptUsageEvent | null {
     tsEpochMs: ts,
     model,
     project,
+    cwd: cwd || null,
     inputTokens: u.input_tokens ?? 0,
     outputTokens: u.output_tokens ?? 0,
     cacheWriteTokens: cacheWrite,
@@ -167,6 +171,7 @@ export async function importClaudeCode(store: Store, opts: ImportOptions = {}): 
         durationMs: null,
         user: null,
         source,
+        cwd: ev.cwd,
       };
       if (ev.sessionId) store.upsertSession(ev.sessionId, ev.project, source, ev.tsEpochMs);
       recordInsert(store, summary, row, cost.estimated);

@@ -35,6 +35,9 @@ export interface RequestRow {
   durationMs: number | null;
   user?: string | null; // developer/team attribution (x-aegis-user header); null = unassigned
   source?: string | null; // connected tool/feed attribution (x-aegis-source header); null = direct
+  cwd?: string | null; // full working-directory path this request was made from; null = unknown. The
+  // link that lets AegisFlow find the git repo behind a project and auto-correlate
+  // its spend into RoI with no --repo — the "no wiring" path. `project` is its basename.
 }
 
 export interface SpendBucket {
@@ -43,6 +46,20 @@ export interface SpendBucket {
   requests: number;
   inputTokens: number;
   outputTokens: number;
+}
+
+/**
+ * A window's spend characterized across the flat axes — the typed, one-call
+ * breakdown the CLI and the HTTP API both render, so "by project / model / source
+ * / user" means the same thing on every surface (see value/characterization.ts for
+ * the axis vocabulary). Session is a finer per-thread drill-down with its own
+ * shape (sessionUnits), not one of these uniform spend buckets.
+ */
+export interface Characterization {
+  byProject: SpendBucket[];
+  byModel: Array<SpendBucket & { provider: string }>;
+  bySource: SpendBucket[];
+  byUser: SpendBucket[];
 }
 
 export interface ProposalRow {
@@ -112,7 +129,8 @@ CREATE TABLE IF NOT EXISTS requests (
   status_code       INTEGER,
   duration_ms       INTEGER,
   user              TEXT,
-  source            TEXT
+  source            TEXT,
+  cwd               TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_requests_ts      ON requests(ts_epoch_ms);
@@ -187,6 +205,13 @@ CREATE TABLE IF NOT EXISTS receipts (
   ts_epoch_ms  INTEGER NOT NULL,
   realized     INTEGER NOT NULL DEFAULT 0,
   receipt_json TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS scan_snapshots (
+  roots_key  TEXT PRIMARY KEY NOT NULL,
+  repos_json TEXT NOT NULL,
+  tools_json TEXT NOT NULL,
+  at_ms      INTEGER NOT NULL
 )`;
 
 export class Store {
@@ -216,6 +241,9 @@ export class Store {
     if (!cols.some((c) => c.name === 'source')) {
       this.db.prepare('ALTER TABLE requests ADD COLUMN source TEXT').run();
     }
+    if (!cols.some((c) => c.name === 'cwd')) {
+      this.db.prepare('ALTER TABLE requests ADD COLUMN cwd TEXT').run();
+    }
     this.runScript('CREATE INDEX IF NOT EXISTS idx_requests_user ON requests(user)');
     this.runScript('CREATE INDEX IF NOT EXISTS idx_requests_source ON requests(source)');
   }
@@ -236,6 +264,39 @@ export class Store {
     return this.db;
   }
 
+  /**
+   * Persist the last system-scan result for a given set of roots, so a later scan
+   * of the SAME roots can report what changed (the re-scan diff). Keyed by the roots
+   * string: scanning your home and scanning one subfolder keep independent history.
+   * This is scan bookkeeping only — it stores directory paths + tool ids, never any
+   * spend, prompt, or code.
+   */
+  saveScanSnapshot(rootsKey: string, repos: string[], toolIds: string[], atMs: number): void {
+    this.db
+      .prepare(
+        `INSERT INTO scan_snapshots (roots_key, repos_json, tools_json, at_ms)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(roots_key) DO UPDATE SET
+           repos_json = excluded.repos_json,
+           tools_json = excluded.tools_json,
+           at_ms      = excluded.at_ms`,
+      )
+      .run(rootsKey, JSON.stringify(repos), JSON.stringify(toolIds), atMs);
+  }
+
+  /** The last scan of these roots, or null if this set of roots has never been scanned. */
+  loadScanSnapshot(rootsKey: string): { repos: string[]; toolIds: string[]; atMs: number } | null {
+    const row = this.db
+      .prepare(`SELECT repos_json, tools_json, at_ms FROM scan_snapshots WHERE roots_key = ?`)
+      .get(rootsKey) as { repos_json: string; tools_json: string; at_ms: number } | undefined;
+    if (!row) return null;
+    try {
+      return { repos: JSON.parse(row.repos_json), toolIds: JSON.parse(row.tools_json), atMs: row.at_ms };
+    } catch {
+      return null; // a corrupt snapshot row is treated as "never scanned", never thrown
+    }
+  }
+
   upsertSession(sessionId: string, project: string, tool: string, startMs: number): void {
     this.db
       .prepare(
@@ -252,8 +313,8 @@ export class Store {
         `INSERT INTO requests (
             request_id, session_id, ts_iso, ts_epoch_ms, provider, model, project,
             task_weight, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens,
-            reasoning_tokens, cost_usd, estimated, streamed, status_code, duration_ms, user, source
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            reasoning_tokens, cost_usd, estimated, streamed, status_code, duration_ms, user, source, cwd
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       )
       .run(
         r.requestId,
@@ -276,6 +337,7 @@ export class Store {
         r.durationMs,
         r.user ?? null,
         r.source ?? null,
+        r.cwd ?? null,
       );
   }
 
@@ -290,8 +352,8 @@ export class Store {
         `INSERT INTO requests (
             request_id, session_id, ts_iso, ts_epoch_ms, provider, model, project,
             task_weight, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens,
-            reasoning_tokens, cost_usd, estimated, streamed, status_code, duration_ms, user, source
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            reasoning_tokens, cost_usd, estimated, streamed, status_code, duration_ms, user, source, cwd
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
          ON CONFLICT(request_id) DO NOTHING`,
       )
       .run(
@@ -315,6 +377,7 @@ export class Store {
         r.durationMs,
         r.user ?? null,
         r.source ?? null,
+        r.cwd ?? null,
       );
     return Number(info.changes ?? 0) > 0;
   }
@@ -358,15 +421,105 @@ export class Store {
     return { blocked: row.blocked, estimatedCostUsd: row.estCost, totalCostUsd: row.total };
   }
 
-  summary(startMs: number, endMs: number): SpendBucket {
+  /**
+   * Total spend over [startMs, endMs), optionally scoped to one project key. The
+   * project filter is what makes attribution project-aware: a commit's window can
+   * absorb only ITS project's spend instead of every project's concurrent traffic
+   * (see git/correlate.ts). Omit `project` for the project-blind total (the default,
+   * unchanged for every existing caller).
+   */
+  summary(startMs: number, endMs: number, project?: string): SpendBucket {
+    const args: Array<number | string> = project !== undefined ? [startMs, endMs, project] : [startMs, endMs];
     const row = this.db
       .prepare(
         `SELECT COALESCE(SUM(cost_usd),0) AS cost, COUNT(*) AS n,
                 COALESCE(SUM(input_tokens),0) AS inp, COALESCE(SUM(output_tokens),0) AS outp
-         FROM requests WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ?`,
+         FROM requests WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ?` +
+          (project !== undefined ? ` AND project = ?` : ``),
       )
-      .get(startMs, endMs) as { cost: number; n: number; inp: number; outp: number };
-    return { label: 'range', costUsd: row.cost, requests: row.n, inputTokens: row.inp, outputTokens: row.outp };
+      .get(...args) as { cost: number; n: number; inp: number; outp: number };
+    return { label: project ?? 'range', costUsd: row.cost, requests: row.n, inputTokens: row.inp, outputTokens: row.outp };
+  }
+
+  /**
+   * Does the ledger hold ANY spend tagged with this exact project key? It separates
+   * data that IS characterized by project (native imports, or proxy traffic tagged
+   * with x-aegis-project) from untagged 'default' proxy traffic. Attribution uses it
+   * to decide whether scoping a commit's window to its project is meaningful — so a
+   * project-blind store keeps its original window-wide behavior, no regression.
+   */
+  hasProjectSpend(project: string): boolean {
+    const row = this.db.prepare(`SELECT 1 AS present FROM requests WHERE project = ? LIMIT 1`).get(project) as
+      | { present: number }
+      | undefined;
+    return row !== undefined;
+  }
+
+  /** One typed breakdown across the flat characterization axes (project/model/source/user). */
+  characterization(startMs: number, endMs: number): Characterization {
+    return {
+      byProject: this.byProject(startMs, endMs),
+      byModel: this.byModel(startMs, endMs),
+      bySource: this.bySource(startMs, endMs),
+      byUser: this.byUser(startMs, endMs),
+    };
+  }
+
+  /**
+   * The interconnectedness map: for each project the ledger has a working directory
+   * for, its REPRESENTATIVE cwd (the path most requests came from — a project's dir
+   * is stable, so the mode is robust to the odd one-off subdir), the TOOLS (sources)
+   * that produced its spend, and its cost/requests. This is what lets AegisFlow find
+   * the git repo behind a project AND say which AI tool coded it — repo↔project↔tool,
+   * the thing that makes native per-project RoI possible with no --repo and no wiring.
+   * Only rows carrying a cwd participate (imports set it; untagged proxy traffic is
+   * excluded rather than guessed).
+   */
+  projectPaths(): Array<{ project: string; cwd: string; sources: string[]; costUsd: number; requests: number }> {
+    const cwdRows = this.db
+      .prepare(
+        `SELECT project, cwd, COUNT(*) AS n, COALESCE(SUM(cost_usd),0) AS cost
+         FROM requests WHERE cwd IS NOT NULL AND cwd <> ''
+         GROUP BY project, cwd`,
+      )
+      .all() as Array<{ project: string; cwd: string; n: number; cost: number }>;
+    const srcRows = this.db
+      .prepare(
+        `SELECT DISTINCT project, COALESCE(source, 'direct') AS source
+         FROM requests WHERE cwd IS NOT NULL AND cwd <> ''`,
+      )
+      .all() as Array<{ project: string; source: string }>;
+
+    // Pick each project's modal cwd (highest request count) and total its spend.
+    const byProject = new Map<string, { cwd: string; bestN: number; costUsd: number; requests: number }>();
+    for (const r of cwdRows) {
+      const cur = byProject.get(r.project);
+      if (!cur) {
+        byProject.set(r.project, { cwd: r.cwd, bestN: r.n, costUsd: r.cost, requests: r.n });
+      } else {
+        cur.costUsd += r.cost;
+        cur.requests += r.n;
+        if (r.n > cur.bestN) {
+          cur.cwd = r.cwd;
+          cur.bestN = r.n;
+        }
+      }
+    }
+    const srcByProject = new Map<string, Set<string>>();
+    for (const s of srcRows) {
+      let set = srcByProject.get(s.project);
+      if (!set) srcByProject.set(s.project, (set = new Set<string>()));
+      set.add(s.source);
+    }
+    return [...byProject.entries()]
+      .map(([project, v]) => ({
+        project,
+        cwd: v.cwd,
+        sources: [...(srcByProject.get(project) ?? [])].sort(),
+        costUsd: v.costUsd,
+        requests: v.requests,
+      }))
+      .sort((a, b) => b.costUsd - a.costUsd);
   }
 
   byModel(startMs: number, endMs: number): Array<SpendBucket & { provider: string }> {

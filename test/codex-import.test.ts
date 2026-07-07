@@ -62,6 +62,7 @@ test('codex parse: each turn is the delta of the cumulative total, telescoping e
   assert.equal(totalInput, 1800, 'deltas sum to Codex own cumulative total — no double count');
   assert.equal(rows[0]!.model, 'gpt-5.5');
   assert.equal(rows[0]!.project, 'game');
+  assert.equal(rows[0]!.cwd, 'C:\\Users\\dev\\projects\\game', 'full cwd captured for repo auto-correlation');
 });
 
 test('codex import: idempotent by stable per-turn id; unknown model priced as honest estimate', async () => {
