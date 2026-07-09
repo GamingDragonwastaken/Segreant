@@ -7,7 +7,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Store, type RequestRow } from '../src/store/db.ts';
@@ -49,6 +49,28 @@ test('findGitRepos: finds nested repos incl. an umbrella parent; prunes vendored
   assert.equal(found.has(join(repoA, 'node_modules', 'vendored-lib')), false, 'vendored repo under node_modules is pruned');
   assert.equal([...found].some((r) => r.includes('.cache')), false, 'repo under a hidden dir is pruned');
   assert.equal(res.hitBudget, false);
+  assert.deepEqual(res.unreadableDirs, [], 'nothing was unreadable — the field is honestly empty, not omitted');
+});
+
+test('findGitRepos: an unreadable directory is disclosed, not silently dropped', (t) => {
+  if (process.platform === 'win32') {
+    // Node's fs.chmodSync doesn't reliably block same-user directory listing under
+    // Windows ACLs the way POSIX mode bits do — this path is exercised for real on
+    // the ubuntu-latest/macos-latest CI legs instead of faked here.
+    t.skip('POSIX permission semantics required to make a dir unreadable to its own owner');
+    return;
+  }
+  const root = mkdtempSync(join(tmpdir(), 'scan-unreadable-'));
+  const blocked = dir(root, 'blocked');
+  const okRepo = makeRepo(dir(root, 'ok-repo'));
+  chmodSync(blocked, 0o000);
+  try {
+    const res = findGitRepos([root]);
+    assert.ok(res.unreadableDirs.includes(blocked), 'the unreadable dir is disclosed, not treated as empty');
+    assert.ok(res.repos.includes(okRepo), 'a sibling readable repo is still found — one bad dir does not blind the walk');
+  } finally {
+    chmodSync(blocked, 0o755); // restore so the temp-dir cleanup can actually remove it
+  }
 });
 
 test('findGitRepos: respects maxDepth — a repo deeper than the cap is not found', () => {
@@ -129,7 +151,7 @@ function mkPlan(roots: string[], repos: string[], presentToolIds: string[]): Sca
     tools: presentToolIds.map((id) => ({ id, label: id, present: true, dataPath: '/x', blurb: '' })),
     roots,
     repos,
-    scan: { repos, roots, dirsVisited: 0, hitBudget: false },
+    scan: { repos, roots, dirsVisited: 0, hitBudget: false, unreadableDirs: [] },
     knownProjects: 0,
     reposWithSpend: [],
     reposUnmetered: repos,
@@ -179,5 +201,25 @@ test('scanWithDiff + saveScan: a re-scan of the same roots diffs against the sav
   const third = scanWithDiff(store, { roots: [root] });
   assert.equal(third.diff.comparable, true);
   assert.deepEqual([third.diff.newRepos, third.diff.goneRepos], [[], []], 'no churn → no changes');
+  store.close();
+});
+
+test('Store.loadScanSnapshot: a corrupt row is treated as missing, but leaves a trace, not silence', () => {
+  const store = new Store(join(mkdtempSync(join(tmpdir(), 'scan-corrupt-')), 'test.db'));
+  store.raw()
+    .prepare(`INSERT INTO scan_snapshots (roots_key, repos_json, tools_json, at_ms) VALUES (?, ?, ?, ?)`)
+    .run('bad-key', '{not valid json', '[]', Date.now());
+
+  const original = console.error;
+  const logged: string[] = [];
+  console.error = (...args: unknown[]) => { logged.push(String(args[0])); };
+  try {
+    const snap = store.loadScanSnapshot('bad-key');
+    assert.equal(snap, null, 'a corrupt row still degrades to null, never throws');
+    assert.equal(logged.length, 1, 'exactly one error was logged instead of failing silently');
+    assert.ok(logged[0]!.includes('bad-key'), 'the log identifies which roots the corrupt snapshot belonged to');
+  } finally {
+    console.error = original;
+  }
   store.close();
 });

@@ -777,10 +777,11 @@ function renderScanResult(d) {
     `<span class="gstep ${t.present ? 'done' : ''}" title="${esc(t.dataPath || 'not found on this machine')}">${t.present ? '✓' : '·'} ${esc(t.label)}</span>`).join('');
   const where = (d.roots && d.roots.length) ? d.roots.join(', ') : 'nothing found';
   const budget = d.hitBudget ? ` · partial — stopped at ${Number(d.dirsVisited).toLocaleString()} folders; point at a narrower path` : '';
+  const unreadable = d.unreadableDirs ? ` · ${Number(d.unreadableDirs).toLocaleString()} folder(s) couldn't be read (permissions) — repo count may be incomplete` : '';
   const canSetup = present > 0 || d.repoCount > 0;
   setNodes(el, `
     <div class="scanchips">${chips}</div>
-    <div class="tag" style="margin-bottom:8px">${Number(d.repoCount).toLocaleString()} git repo(s) under ${esc(where)} · ${Number(d.reposWithSpend).toLocaleString()} already RoI-ready${esc(budget)}</div>
+    <div class="tag" style="margin-bottom:8px">${Number(d.repoCount).toLocaleString()} git repo(s) under ${esc(where)} · ${Number(d.reposWithSpend).toLocaleString()} already RoI-ready${esc(budget)}${esc(unreadable)}</div>
     ${scanDiffLine(d.diff)}
     ${canSetup
       ? `<button class="iallbtn scanbtn" id="scansetup">Set it all up → import ${present} tool(s) + correlate</button>`

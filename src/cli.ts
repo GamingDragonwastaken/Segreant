@@ -1484,46 +1484,61 @@ async function cmdScan(flags: Flags): Promise<void> {
     return;
   }
 
-  console.log('');
-  console.log(color(tty, C.bold, '  Scan — find your AI tools and repos, then set it all up'));
-  console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
-  console.log(color(tty, C.gray, '  Read-only: reads what exists on disk. Nothing is imported or sent.'));
-  console.log('');
-
-  // Detected tools.
-  console.log(color(tty, C.bold, '  AI coding tools on this machine'));
-  for (const t of plan.tools) {
-    const mark = t.present ? color(tty, C.green, '  ✓') : color(tty, C.gray, '  ·');
-    const where = t.present ? color(tty, C.gray, t.dataPath ?? '') : color(tty, C.gray, 'not found');
-    console.log(`${mark} ${t.label.padEnd(16)} ${where}`);
-  }
-  console.log('');
-
-  // Discovered repos.
-  const roots = plan.roots.length ? plan.roots.join(', ') : '(none existed)';
-  console.log(color(tty, C.bold, `  Git repositories under ${roots}`));
-  if (plan.repos.length === 0) {
-    console.log(color(tty, C.gray, '    None found. Point the scan at your code folder:  aegisflow scan <path>'));
-  } else {
-    console.log(
-      `    ${color(tty, C.green, `${plan.repos.length} repo(s)`)} found` +
-        `   ${color(tty, C.gray, `(${plan.reposWithSpend.length} already have AI spend on record → RoI-ready)`)}`,
-    );
-    for (const r of plan.repos.slice(0, 12)) {
-      const ready = plan.reposWithSpend.includes(r);
-      const tag = ready ? color(tty, C.green, '  ✓ has AI spend → RoI-ready') : color(tty, C.gray, '  no AI spend recorded yet');
-      console.log(`    ${color(tty, C.gray, r)}${tag}`);
-    }
-    if (plan.repos.length > 12) console.log(color(tty, C.gray, `    …and ${plan.repos.length - 12} more`));
-  }
-  if (plan.scan.hitBudget) {
+  // This preamble (banner, tool list, repo list, diff) is human-readable rendering
+  // only — nothing here has a side effect the --setup path depends on (the diff
+  // was already computed and the new baseline already saved above). Gated behind
+  // !flags.json so `scan --setup --json` doesn't fall through to here and print
+  // prose ahead of the JSON blob (this block sits BEFORE the `!flags.setup` branch,
+  // so both dry-run and --setup reach it — only the line-1481 early return skips it,
+  // and that early return deliberately excludes --setup).
+  if (!flags.json) {
     console.log('');
-    console.log(color(tty, C.yellow, `    Stopped after ${num(plan.scan.dirsVisited)} folders (budget) — results are partial.`));
-    console.log(color(tty, C.gray, '    Point at a narrower folder, or the results above are a representative sample.'));
-  }
-  console.log('');
+    console.log(color(tty, C.bold, '  Scan — find your AI tools and repos, then set it all up'));
+    console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
+    console.log(color(tty, C.gray, '  Read-only: reads what exists on disk. Nothing is imported or sent.'));
+    console.log('');
 
-  renderScanDiff(tty, diff);
+    // Detected tools.
+    console.log(color(tty, C.bold, '  AI coding tools on this machine'));
+    for (const t of plan.tools) {
+      const mark = t.present ? color(tty, C.green, '  ✓') : color(tty, C.gray, '  ·');
+      const where = t.present ? color(tty, C.gray, t.dataPath ?? '') : color(tty, C.gray, 'not found');
+      console.log(`${mark} ${t.label.padEnd(16)} ${where}`);
+    }
+    console.log('');
+
+    // Discovered repos.
+    const roots = plan.roots.length ? plan.roots.join(', ') : '(none existed)';
+    console.log(color(tty, C.bold, `  Git repositories under ${roots}`));
+    if (plan.repos.length === 0) {
+      console.log(color(tty, C.gray, '    None found. Point the scan at your code folder:  aegisflow scan <path>'));
+    } else {
+      console.log(
+        `    ${color(tty, C.green, `${plan.repos.length} repo(s)`)} found` +
+          `   ${color(tty, C.gray, `(${plan.reposWithSpend.length} already have AI spend on record → RoI-ready)`)}`,
+      );
+      for (const r of plan.repos.slice(0, 12)) {
+        const ready = plan.reposWithSpend.includes(r);
+        const tag = ready ? color(tty, C.green, '  ✓ has AI spend → RoI-ready') : color(tty, C.gray, '  no AI spend recorded yet');
+        console.log(`    ${color(tty, C.gray, r)}${tag}`);
+      }
+      if (plan.repos.length > 12) console.log(color(tty, C.gray, `    …and ${plan.repos.length - 12} more`));
+    }
+    if (plan.scan.hitBudget) {
+      console.log('');
+      console.log(color(tty, C.yellow, `    Stopped after ${num(plan.scan.dirsVisited)} folders (budget) — results are partial.`));
+      console.log(color(tty, C.gray, '    Point at a narrower folder, or the results above are a representative sample.'));
+    }
+    if (plan.scan.unreadableDirs.length > 0) {
+      console.log('');
+      console.log(
+        color(tty, C.yellow, `    ${num(plan.scan.unreadableDirs.length)} folder(s) could not be read (permissions) — repo count may be incomplete.`),
+      );
+    }
+    console.log('');
+
+    renderScanDiff(tty, diff);
+  }
 
   if (!flags.setup) {
     // Dry run: tell them exactly what --setup would do, and why it is safe.
@@ -1547,40 +1562,52 @@ async function cmdScan(flags: Flags): Promise<void> {
   }
 
   // --setup: the deliberate, mutating step. Import every present tool, then correlate.
-  console.log(color(tty, C.bold, '  Setting up…'));
+  // The work always runs; every line below is human-readable progress output, gated
+  // behind !flags.json so `--setup --json` emits clean, parseable JSON like every
+  // other command in this file (cmdImport, cmdDiscover, …) — never mixed with prose.
+  if (!flags.json) console.log(color(tty, C.bold, '  Setting up…'));
   let totalNew = 0;
   for (const t of present) {
     const runner = IMPORT_RUNNERS[t.id];
-    if (!runner) continue;
+    if (!runner) {
+      if (!flags.json) {
+        console.log(color(tty, C.yellow, `    ! ${t.label.padEnd(16)} detected, but no importer is registered — skipped`));
+      }
+      continue;
+    }
     const sum = await runner.run(store, {});
     totalNew += sum.inserted;
-    console.log(
-      `    ${color(tty, C.green, '✓')} ${t.label.padEnd(16)} ${color(tty, C.green, `${num(sum.inserted)} new`)}` +
-        `  ${color(tty, C.gray, `(${num(sum.eventsSeen)} seen · ${usd(sum.costUsd)})`)}`,
-    );
+    if (!flags.json) {
+      console.log(
+        `    ${color(tty, C.green, '✓')} ${t.label.padEnd(16)} ${color(tty, C.green, `${num(sum.inserted)} new`)}` +
+          `  ${color(tty, C.gray, `(${num(sum.eventsSeen)} seen · ${usd(sum.costUsd)})`)}`,
+      );
+    }
   }
-  if (present.length === 0) console.log(color(tty, C.gray, '    No detected tools to import.'));
+  if (present.length === 0 && !flags.json) console.log(color(tty, C.gray, '    No detected tools to import.'));
 
   const discovered = await realizeDiscoveredProjects(store, {});
   const projects = projectValueBreakdown(store, {});
   const roiByProject = new Map(projects.map((p) => [p.project, p.roiIndex]));
   store.close();
 
-  console.log('');
-  console.log(color(tty, C.bold, `  Correlated ${discovered.length} project(s) into per-project RoI`));
-  for (const d of discovered.slice(0, 12)) {
-    const roi = roiByProject.get(d.project);
-    const roiStr =
-      roi == null
-        ? color(tty, C.gray, 'RoI —')
-        : color(tty, roi > 60 ? C.green : roi > 30 ? C.yellow : C.red, `RoI ${Math.round(roi)}`);
-    const tools = d.sources.length ? d.sources.join(', ') : 'unknown';
-    console.log(`    ${color(tty, C.bold, d.project.padEnd(22))} ${usd(d.costUsd).padStart(10)}   ${roiStr}   ${color(tty, C.gray, `coded with: ${tools}`)}`);
+  if (!flags.json) {
+    console.log('');
+    console.log(color(tty, C.bold, `  Correlated ${discovered.length} project(s) into per-project RoI`));
+    for (const d of discovered.slice(0, 12)) {
+      const roi = roiByProject.get(d.project);
+      const roiStr =
+        roi == null
+          ? color(tty, C.gray, 'RoI —')
+          : color(tty, roi > 60 ? C.green : roi > 30 ? C.yellow : C.red, `RoI ${Math.round(roi)}`);
+      const tools = d.sources.length ? d.sources.join(', ') : 'unknown';
+      console.log(`    ${color(tty, C.bold, d.project.padEnd(22))} ${usd(d.costUsd).padStart(10)}   ${roiStr}   ${color(tty, C.gray, `coded with: ${tools}`)}`);
+    }
+    console.log('');
+    console.log(color(tty, C.gray, `  Imported ${num(totalNew)} new request(s). Now live in: aegisflow today · roi · the dashboard.`));
+    console.log(color(tty, C.gray, '  Safe to re-run any time to fold in new tools, repos, and traffic.'));
+    console.log('');
   }
-  console.log('');
-  console.log(color(tty, C.gray, `  Imported ${num(totalNew)} new request(s). Now live in: aegisflow today · roi · the dashboard.`));
-  console.log(color(tty, C.gray, '  Safe to re-run any time to fold in new tools, repos, and traffic.'));
-  console.log('');
 
   if (flags.json) process.stdout.write(JSON.stringify({ setup: true, totalNew, discovered }, null, 2) + '\n');
 }
@@ -2709,6 +2736,14 @@ async function main(): Promise<void> {
       process.exitCode = 1;
   }
 }
+
+// A reader closing early (e.g. `aegisflow scan | head`) makes further console.log
+// writes throw EPIPE — expected, not a real failure. Exit clean instead of an
+// uncaught-exception stack trace; any OTHER stdout error still propagates.
+process.stdout.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EPIPE') process.exit(0);
+  throw err;
+});
 
 main().catch((err) => {
   console.error('  AegisFlow error:', err);

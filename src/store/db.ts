@@ -292,8 +292,11 @@ export class Store {
     if (!row) return null;
     try {
       return { repos: JSON.parse(row.repos_json), toolIds: JSON.parse(row.tools_json), atMs: row.at_ms };
-    } catch {
-      return null; // a corrupt snapshot row is treated as "never scanned", never thrown
+    } catch (err) {
+      // Treated as "never scanned" (never thrown — this is bookkeeping, not the ledger),
+      // but logged so a corrupt row doesn't silently erase scan history without a trace.
+      console.error(`  scan snapshot for "${rootsKey}" is corrupt, treating as missing: ${String(err)}`);
+      return null;
     }
   }
 

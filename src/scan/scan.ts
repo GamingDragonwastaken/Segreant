@@ -95,6 +95,11 @@ export interface RepoScanResult {
   dirsVisited: number;
   /** True when the visit budget was hit — results are partial, scan a narrower root. */
   hitBudget: boolean;
+  /**
+   * Dirs that existed but couldn't be listed (permissions, a deletion race, ENOTDIR, …).
+   * Repo counts under these paths may be incomplete — disclosed, never silently dropped.
+   */
+  unreadableDirs: string[];
 }
 
 /**
@@ -114,6 +119,7 @@ export function findGitRepos(roots: string[], options: RepoScanOptions = {}): Re
   const skip = new Set<string>([...HEAVY_DIRS, ...(options.skipNames ?? [])]);
   const repos: string[] = [];
   const walkedRoots: string[] = [];
+  const unreadableDirs: string[] = [];
   let dirsVisited = 0;
   let hitBudget = false;
 
@@ -132,7 +138,8 @@ export function findGitRepos(roots: string[], options: RepoScanOptions = {}): Re
       try {
         entries = readdirSync(dir, { withFileTypes: true });
       } catch {
-        continue; // unreadable (permissions, race, deleted) → skip, never throw
+        unreadableDirs.push(dir); // permissions, race, ENOTDIR, … — disclosed, not swallowed
+        continue;
       }
       // A .git entry marks a repository root. Record it — but keep descending, so
       // independent child repos under an umbrella/init'd parent are not hidden.
@@ -152,7 +159,7 @@ export function findGitRepos(roots: string[], options: RepoScanOptions = {}): Re
     if (hitBudget) break;
   }
 
-  return { repos, roots: walkedRoots, dirsVisited, hitBudget };
+  return { repos, roots: walkedRoots, dirsVisited, hitBudget, unreadableDirs };
 }
 
 export interface ScanPlan {

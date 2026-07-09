@@ -275,6 +275,11 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
         })();
         return;
       }
+      if (req.method !== 'GET') {
+        res.writeHead(405, { 'content-type': 'text/plain', allow: 'GET, POST' });
+        res.end('method not allowed');
+        return;
+      }
       // GET preview. The filesystem walk is bounded (depth + visit budget), so this
       // stays responsive; repo paths are capped in the payload for large trees. It
       // also reports what changed since the last scan of these roots, then records
@@ -292,6 +297,7 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
           reposWithSpend: plan.reposWithSpend.length,
           hitBudget: plan.scan.hitBudget,
           dirsVisited: plan.scan.dirsVisited,
+          unreadableDirs: plan.scan.unreadableDirs.length,
           diff,
         });
       } catch (err) {
