@@ -11,6 +11,8 @@ time, without a single byte of your code leaving the machine.
 
 `local-first` · `value-aware` · `zero data egress` · `no build step` · `MIT`
 
+[![CI](https://github.com/GamingDragonwastaken/aegisflow/actions/workflows/ci.yml/badge.svg)](https://github.com/GamingDragonwastaken/aegisflow/actions/workflows/ci.yml)
+
 </div>
 
 ---
@@ -96,6 +98,29 @@ and AegisFlow is out of the path entirely.
 
 ## Commands
 
+Onboarding — where you are, and how spend gets in with no wiring at all:
+
+```
+aegisflow guide                 Where you are + the single next step, read from your
+                                real state — also what bare `aegisflow` shows  (--json)
+aegisflow scan [path]           One-command setup: find the AI tools + git repos on
+                                this machine, preview a plan (read-only). --setup
+                                imports every detected tool and correlates every repo
+                                into per-project RoI. --deep widens the walk.
+aegisflow import <tool|all>     NATIVE metering, no routing — reads the usage a tool
+                                already logs locally (works on subscriptions the proxy
+                                can never see). Tools: claude-code, opencode, codex.
+                                Idempotent; --watch keeps it live.  (--days N, --json)
+aegisflow discover              Correlate already-imported projects into per-project
+                                RoI without re-importing — `scan --setup`'s other half
+aegisflow connect <tool>        Wire a tool through the proxy as a connected source
+                                (opencode, antigravity, or any OpenAI-compatible API)
+aegisflow sources                Spend by connected source, at its honest depth
+                                (--all for all-time, --json)
+```
+
+Metering, governance, and value:
+
 ```
 aegisflow start                 Start the proxy (:8090) + dashboard (:8091)
 aegisflow today | week | month  Show spend for a window        (--json)
@@ -103,6 +128,8 @@ aegisflow roi --repo <path>     Return on Intelligence — four value lenses com
                                 into one index (--labor-rate $/hr, --tsf X, --json)
 aegisflow frontier --repo <p>   What's best for you — RoI by model × task-type + routing
 aegisflow usage                 RoI for non-coding usage (chat/research), from outcomes
+aegisflow team                  Per-user value extraction — opt-in, distribution-only,
+                                k-anonymous (--me <user> for your own view, --json)
 aegisflow budget --recommend    Value-aware budget from usage + realized value (--apply)
 aegisflow alerts                Governance alerts — spikes, throttling, runaway, value
                                 craters (--repo for value; --json; exits 1 if critical).
@@ -114,14 +141,23 @@ aegisflow realize --repo <path> Realization Standard — % of spend that became
                                 verified durable outcomes      (--window D, --json)
 aegisflow report --kind K       Wire an outcome gate: tested|merged|shipped|incident
                                 --commit <hash> [--verdict pass|fail] [--detail "…"]
+aegisflow exec -- <command>     AMBIENT outcome capture — wrap a command once (e.g.
+                                `npm test`); every run reports its own exit code
 aegisflow receipt --repo <path> Emit signed value receipts (--pubkey to publish your
                                 identity; --verify <file> --key-id <id> to verify + pin)
 aegisflow yield --repo <path>   AI Yield (survival lens) — durable lines per $
 aegisflow budget ...            Set caps (see below)
 aegisflow audit --repo <path>   Cost per commit from git history (--limit N, --json)
+```
+
+Operations:
+
+```
 aegisflow init                  Write default config + print setup steps
 aegisflow doctor                First-run health check — config, DB, proxy, caps, pricing
 aegisflow config                Show config and file paths      (--json)
+aegisflow pricing --refresh     Update the rate card from the community price feed
+                                (--auto to self-refresh on start when stale)
 aegisflow prune                 Prune old rows and compact the DB
 aegisflow demo                  Seed isolated, labeled synthetic data so every surface
                                 populates with no API key (--serve opens the dashboard
@@ -365,21 +401,37 @@ npm run typecheck    # tsc --noEmit (strict)
 Runtime dependencies: **none.** The `node_modules` directory holds only the dev
 toolchain.
 
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs `typecheck` +
+`test` on Linux, macOS, and Windows for every push and pull request to `main`.
+
 ---
 
 ## Status
 
-Working core: proxy (Anthropic, OpenAI, **natively-priced Gemini**, and **any
-OpenAI-compatible provider** via `x-aegis-openai-base` — OpenRouter, Ollama,
-DeepSeek, Mistral, …), streaming + non-streaming, with transparent fail-open on
-upstream errors and a connect/TTFB timeout so a hung provider can't hang you. Cost
-engine with **cross-provider, model-family pricing**, budget enforcement +
-**value-aware allocation**, git correlation with **persisted, repo-less
-realized-value** and a **per-project budget-owner view**. **Lift** now derives from
-measured time-with-AI × configurable task baselines (no synthetic constant in real
-use). Terminal + a **fully self-contained** web dashboard (zero external requests).
-102/102 tests, `tsc` clean. Installable via `npx aegisflow`. See
-[docs/ARCHITECTURE.md §7](docs/ARCHITECTURE.md) for what comes next (cross-machine
-team sync, native non-OpenAI APIs, auto-updating pricing).
+**Two ways in, and they cross-correlate.** *Proxy* metering (Anthropic, OpenAI,
+**natively-priced Gemini**, and **any OpenAI-compatible provider** via
+`x-aegis-openai-base` — OpenRouter, Ollama, DeepSeek, Mistral, …) covers anything
+you point at it live, with transparent fail-open on upstream errors and a
+connect/TTFB timeout so a hung provider can't hang you. **Native import** (`aegisflow
+import` — Claude Code, opencode, Codex CLI) reads what those tools already log
+locally, with **zero base-URL wiring**. `aegisflow scan` finds both the tools and the
+git repos on your machine and can set the whole thing up in one command; `discover`
+auto-correlates whatever it finds into **per-project Return on Intelligence**, tagged
+with which tool coded it — no `--repo` needed either way.
+
+Cost engine with **cross-provider, model-family pricing** that **self-refreshes**
+from a community feed, budget enforcement + **value-aware allocation**, persisted
+repo-less realized-value with a **per-project budget-owner view**, and **opt-in,
+k-anonymous per-user value**. **Lift** derives from measured time-with-AI ×
+configurable task baselines (no synthetic constant in real use). A state-aware
+`aegisflow guide` (and bare `aegisflow`) tells you the single next step from your
+actual data. Terminal + a **fully self-contained** web dashboard (zero external
+requests) mirror every surface.
+
+**220/220 tests, `tsc` clean, CI on Linux/macOS/Windows.** Installable via `npx
+aegisflow`. See [docs/ARCHITECTURE.md §7](docs/ARCHITECTURE.md) for what's
+deliberately still open — a hosted, cross-machine team tier is real future value but
+sits outside this release's local-only, zero-maintenance shape; it's revisited only
+if real usage and requests justify the operational commitment it would take to run.
 
 MIT licensed.

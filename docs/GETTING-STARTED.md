@@ -26,23 +26,36 @@ npx aegisflow budget --recommend --demo   # a cap that fits + the shadow price
 
 ## 2. Meter your own AI usage
 
-### The model: connect, don't intercept
+### The easiest path: zero wiring, if you already use a supported tool
 
-You point a tool at the local proxy; the proxy meters the request and forwards it to
-the real provider **with your own key**. There is no root certificate and no traffic
-interception — your key never touches anyone else, and anything you don't route
-simply isn't metered (honest by design).
+If you already run **Claude Code, opencode, or Codex CLI**, you don't need to
+configure anything — those tools already log their own usage locally, and AegisFlow
+can just read it:
 
-### Start the proxy
+```bash
+npx aegisflow scan            # finds the tools + git repos on this machine (read-only)
+npx aegisflow scan --setup    # imports everything it found + correlates per-project RoI
+```
+
+That's it — no base URL, no proxy, no key to point anywhere. Re-run `scan` any time;
+it tells you what's new since last time. This is genuinely the fastest way to see
+real numbers, and it's why it's what `aegisflow guide` leads with on a fresh install.
+
+### The proxy path: connect, don't intercept
+
+For anything else — or if you want AegisFlow to actively **cap** spend in real time,
+not just read logs after the fact — point a tool at the local proxy; it meters the
+request and forwards it to the real provider **with your own key**. There is no root
+certificate and no traffic interception — your key never touches anyone else, and
+anything you don't route simply isn't metered (honest by design).
 
 ```bash
 npx aegisflow start     # proxy on :8090, dashboard on :8091
 ```
 
-### Connect a tool (three ways)
-
 **A — a coding agent that already has providers (e.g. opencode):** wrap a provider
-you already use. This is the most native path — your existing key, all its traffic:
+you already use. This is the most native proxy path — your existing key, all its
+traffic:
 
 ```bash
 npx aegisflow connect opencode                       # see your providers + advice
@@ -66,6 +79,15 @@ $env:OPENAI_BASE_URL="http://localhost:8090/v1"
 
 See [INTEGRATIONS.md](INTEGRATIONS.md) for per-tool recipes and the one common gotcha
 (don't add `/v1` when a client already appends the request path).
+
+### Already imported or proxied spend from multiple projects?
+
+```bash
+npx aegisflow discover   # correlate what's already in the ledger into per-project RoI
+```
+
+`scan --setup` already does this as its last step; run `discover` on its own after a
+fresh `import` if you skipped `scan`.
 
 ### Check it's flowing
 

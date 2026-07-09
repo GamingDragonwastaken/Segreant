@@ -180,11 +180,43 @@ This is single-user, single-process, local. "Scale" means a busy developer's age
 
 ## 7. What I'd revisit as it grows
 
-1. **Team aggregation** — the optional, metadata-only sync to a shared dashboard. Numeric only, opt-in, signed. Not built; the local store and schema are designed so it can be added without touching the hot path.
-2. **More providers** — Gemini, Bedrock, Vertex, and OpenAI's `/responses` shape. The usage parser is the only place that needs per-provider knowledge.
-3. **Auto-updating pricing** — fetch the community rate card on a schedule with schema validation, instead of the bundled snapshot.
-4. **Passive log import** — read tools' own local JSONL logs (e.g. Claude Code sessions) to backfill calls that bypassed the proxy. Complements, doesn't replace, the live path.
-5. **Rust core** — only if AegisFlow becomes a shared gateway under real concurrency. Until then it's premature.
+Three items that used to live here are done and moved to the README's Status
+section: native provider pricing beyond the OpenAI wire format (Gemini is now a
+first-class, verified rate-card entry), auto-updating pricing (`pricing --refresh` /
+`--auto` against a community feed), and passive log import (`aegisflow import` —
+Claude Code, opencode, Codex CLI — which grew into `scan`/`discover`, the zero-wiring
+onboarding path). What's still genuinely open:
+
+1. **A machine-wide tool inventory scan.** `aegisflow scan` today finds git repos and
+   checks for the 3 *already-built* importers at their known paths. The bigger version
+   — detecting AI coding tools/apps installed on the machine that AegisFlow doesn't
+   have an importer for yet (via process detection, OS install records, or `PATH`
+   probing for CLI binaries) — is confirmed essential to the product, not a maybe. It's
+   deliberately sequenced *after* the hardening pass (docs, CI, cross-platform
+   verification) so it isn't built on top of unverified ground. The consent/framing
+   bar is the same one `scan` already holds: read-only, opt-in, discloses exactly what
+   it found before doing anything — this must never drift toward anything that reads
+   as system surveillance, which is the one thing that would undermine the "connect,
+   don't intercept" trust the rest of the product is built on.
+2. **A hosted, cross-machine team tier** — the optional, metadata-only sync to a shared
+   dashboard; SSO; support/SLA. Numeric-only, opt-in, signed if built. This is real
+   future value, but it requires an operator: ongoing hosting, and a support
+   commitment that sits outside this release's local-only, zero-maintenance,
+   donationware shape. Not scoped for this release. Revisit only if real usage and
+   requests justify taking on that operational commitment — the local store and
+   schema are designed so it *could* be added later without touching the hot path,
+   but "could" isn't "should" until there's a real signal to build it for.
+3. **Native non-OpenAI-wire-format APIs** — Bedrock, Vertex, and OpenAI's `/responses`
+   shape. Everything reachable over an OpenAI-compatible wire format is already
+   covered; these three have genuinely different request/response envelopes.
+4. **A real behavioral Lift source** (transcript-judge or a true A/B time study) to
+   replace the disclosed manual-baseline assumption. Deliberately not default-on even
+   if built: a transcript-judge approach means sending session content to an LLM API,
+   which is a real, loud opt-in decision against the "nothing leaves your machine"
+   promise — not just an API-cost question. See the README's Lift section and
+   `docs/RETURN-ON-INTELLIGENCE.md` for what's already measured without it.
+5. **Rust core** — only if AegisFlow becomes a shared gateway under real concurrency.
+   Until then it's premature.
 
 ---
 

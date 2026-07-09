@@ -2518,6 +2518,9 @@ function cmdHelp(): void {
                           imports every detected tool and correlates every repo into
                           per-project RoI. --deep widens the walk. (path defaults to
                           your home; --json)
+    discover               Correlate ALREADY-imported projects into per-project RoI,
+                          without re-importing — the correlation half of "scan --setup"
+                          on its own      (--window D, --json)
     audit --repo <path>   Correlate spend with git commits (--limit N, --json)
     roi --repo <path>     Return on Intelligence: four value lenses (Realization,
                           Acceptance, Lift, Impact) → one composite index
