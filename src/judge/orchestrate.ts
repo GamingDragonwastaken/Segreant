@@ -70,6 +70,20 @@ export async function judgeSession(
       : 'hosted-llm-structural'
     : decision.confidence;
   if (wantsFullContent) {
+    // decision.notes was seeded by tier.ts based on CONFIGURED intent (before
+    // this function knew the payload would be downgraded) and claims a
+    // fidelity — "full session content" — that never actually gets sent.
+    // Strip that claim rather than merely appending a correction after it, so
+    // the rationale never asserts something that didn't happen even
+    // momentarily within the same string.
+    for (let i = notes.length - 1; i >= 0; i--) {
+      if (/full session content/i.test(notes[i]!)) notes.splice(i, 1);
+    }
+    notes.push(
+      isLocal
+        ? 'Judge tier: local LLM (full-content configured but downgraded to structural — stays on this machine either way).'
+        : 'Judge tier: hosted API (full-content configured but downgraded to structural — only a structural summary leaves this machine, never raw content).',
+    );
     notes.push(
       'Full-content judging is configured but not yet implemented (AegisFlow does not persist transcript text) — ' +
         'sent the structural summary instead, labeled accordingly.',

@@ -18,7 +18,12 @@
  *    required on verification, or every genuine ES256 token fails to verify.
  *  - The JWKS `kid` in the token header selects which published key to check
  *    against; issuers rotate keys, so this must be looked up per-token, not
- *    cached as "the" key.
+ *    cached as "the" key. A kid that isn't in the cached JWKS triggers one
+ *    forced refresh (cooled down per jwksUrl) before being rejected, so a
+ *    mid-TTL key rotation doesn't 401 every request until the cache expires.
+ *  - Multiple JWKS entries can be candidates at once (no kid in the header, or
+ *    a JWKS with duplicate kids) — every candidate is tried until one verifies,
+ *    never just the first one that happens to be constructible as a KeyObject.
  */
 
 import { createPublicKey, verify as cryptoVerify, type KeyObject } from 'node:crypto';
@@ -56,16 +61,21 @@ export type VerifyResult = VerifiedIdentity | VerificationFailure;
 
 const ALLOWED_ALGS = new Set(['RS256', 'ES256']);
 const DEFAULT_JWKS_CACHE_TTL_MS = 10 * 60 * 1000;
+const JWKS_FORCE_REFRESH_COOLDOWN_MS = 30_000;
 
 function base64UrlDecode(s: string): Buffer {
   return Buffer.from(s.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
 }
 
 const jwksCache = new Map<string, { jwks: Jwks; fetchedAtMs: number }>();
+const discoveryCache = new Map<string, { jwksUri: string; fetchedAtMs: number }>();
+const jwksForceRefreshedAt = new Map<string, number>();
 
 /** Exposed for tests — a fresh process/module instance clears this naturally, but tests share a module. */
 export function clearJwksCacheForTests(): void {
   jwksCache.clear();
+  discoveryCache.clear();
+  jwksForceRefreshedAt.clear();
 }
 
 async function discoverJwksUri(issuerUrl: string): Promise<string> {
@@ -77,9 +87,14 @@ async function discoverJwksUri(issuerUrl: string): Promise<string> {
   return doc.jwks_uri;
 }
 
-async function fetchJwks(jwksUrl: string, cacheTtlMs: number): Promise<Jwks> {
+async function fetchJwks(jwksUrl: string, cacheTtlMs: number, forceRefresh = false): Promise<Jwks> {
   const cached = jwksCache.get(jwksUrl);
-  if (cached && Date.now() - cached.fetchedAtMs < cacheTtlMs) return cached.jwks;
+  if (!forceRefresh && cached && Date.now() - cached.fetchedAtMs < cacheTtlMs) return cached.jwks;
+  if (forceRefresh) {
+    const lastForced = jwksForceRefreshedAt.get(jwksUrl) ?? 0;
+    if (cached && Date.now() - lastForced < JWKS_FORCE_REFRESH_COOLDOWN_MS) return cached.jwks;
+    jwksForceRefreshedAt.set(jwksUrl, Date.now());
+  }
   const res = await fetch(jwksUrl, { signal: AbortSignal.timeout(10_000) });
   if (!res.ok) throw new Error(`JWKS fetch failed: HTTP ${res.status} from ${jwksUrl}`);
   const jwks = (await res.json()) as Jwks;
@@ -90,7 +105,16 @@ async function fetchJwks(jwksUrl: string, cacheTtlMs: number): Promise<Jwks> {
 
 async function resolveJwksUrl(cfg: OidcConfig): Promise<string> {
   if (cfg.jwksUrl) return cfg.jwksUrl;
-  return discoverJwksUri(cfg.issuerUrl);
+  const ttl = cfg.jwksCacheTtlMs ?? DEFAULT_JWKS_CACHE_TTL_MS;
+  const cached = discoveryCache.get(cfg.issuerUrl);
+  if (cached && Date.now() - cached.fetchedAtMs < ttl) return cached.jwksUri;
+  const jwksUri = await discoverJwksUri(cfg.issuerUrl);
+  discoveryCache.set(cfg.issuerUrl, { jwksUri, fetchedAtMs: Date.now() });
+  return jwksUri;
+}
+
+function findCandidates(jwks: Jwks, kid: string | undefined): Jwk[] {
+  return kid ? jwks.keys.filter((k) => k.kid === kid) : jwks.keys;
 }
 
 /** Verify an OIDC ID token (JWT) against the configured issuer/audience/JWKS. */
@@ -123,40 +147,49 @@ export async function verifyIdToken(token: string, cfg: OidcConfig): Promise<Ver
     return { valid: false, reason: `OIDC discovery error: ${String(err)}` };
   }
 
+  const cacheTtlMs = cfg.jwksCacheTtlMs ?? DEFAULT_JWKS_CACHE_TTL_MS;
   let jwks: Jwks;
   try {
-    jwks = await fetchJwks(jwksUrl, cfg.jwksCacheTtlMs ?? DEFAULT_JWKS_CACHE_TTL_MS);
+    jwks = await fetchJwks(jwksUrl, cacheTtlMs);
   } catch (err) {
     return { valid: false, reason: `JWKS fetch error: ${String(err)}` };
   }
 
   const kid = typeof header.kid === 'string' ? header.kid : undefined;
-  const candidates = kid ? jwks.keys.filter((k) => k.kid === kid) : jwks.keys;
+  let candidates = findCandidates(jwks, kid);
   if (candidates.length === 0) {
-    return { valid: false, reason: `no matching signing key found in JWKS for kid=${kid ?? '(none)'}` };
-  }
-
-  let publicKey: KeyObject | null = null;
-  for (const jwk of candidates) {
+    // The cached JWKS may simply be stale (an IdP key rotation landed mid-TTL)
+    // — force one refresh before concluding the key genuinely doesn't exist.
     try {
-      publicKey = createPublicKey({ key: jwk as unknown as Record<string, unknown>, format: 'jwk' });
-      break;
-    } catch {
-      continue;
+      jwks = await fetchJwks(jwksUrl, cacheTtlMs, true);
+    } catch (err) {
+      return { valid: false, reason: `JWKS fetch error: ${String(err)}` };
+    }
+    candidates = findCandidates(jwks, kid);
+    if (candidates.length === 0) {
+      return { valid: false, reason: `no matching signing key found in JWKS for kid=${kid ?? '(none)'} (after refresh)` };
     }
   }
-  if (!publicKey) return { valid: false, reason: 'unable to construct a public key from the matched JWKS entry' };
 
   const signingInput = Buffer.from(`${headerB64}.${payloadB64}`);
   const signature = base64UrlDecode(sigB64);
-  let sigOk: boolean;
-  try {
-    sigOk =
-      alg === 'ES256'
-        ? cryptoVerify('sha256', signingInput, { key: publicKey, dsaEncoding: 'ieee-p1363' }, signature)
-        : cryptoVerify('sha256', signingInput, publicKey, signature);
-  } catch (err) {
-    return { valid: false, reason: `signature verification error: ${String(err)}` };
+  let sigOk = false;
+  for (const jwk of candidates) {
+    let publicKey: KeyObject;
+    try {
+      publicKey = createPublicKey({ key: jwk as unknown as Record<string, unknown>, format: 'jwk' });
+    } catch {
+      continue;
+    }
+    try {
+      sigOk =
+        alg === 'ES256'
+          ? cryptoVerify('sha256', signingInput, { key: publicKey, dsaEncoding: 'ieee-p1363' }, signature)
+          : cryptoVerify('sha256', signingInput, publicKey, signature);
+    } catch {
+      sigOk = false;
+    }
+    if (sigOk) break;
   }
   if (!sigOk) return { valid: false, reason: 'signature mismatch' };
 

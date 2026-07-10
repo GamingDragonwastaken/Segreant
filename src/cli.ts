@@ -2671,7 +2671,7 @@ async function cmdTeamPush(flags: Flags): Promise<void> {
       ? `no realized units found for project "${projectFilter}" in the last ${windowDays}d — nothing to push`
       : `no realized units found in the last ${windowDays}d — nothing to push`;
     if (flags.json) {
-      console.log(JSON.stringify({ ok: false, error: msg }, null, 2));
+      console.log(JSON.stringify({ ok: true, projects: 0, note: msg }, null, 2));
       return;
     }
     console.log(`  ${color(tty, C.dim, msg)}`);

@@ -125,14 +125,34 @@ test('buildDeveloperReport: a developer with $0 cost is counted in cohortSize bu
     developer({ keyId: 'a', totalCostUsd: 0, totalRealizedValueUsd: 0, realizedValueRate: null }),
     developer({ keyId: 'b', totalCostUsd: 100, totalRealizedValueUsd: 100, realizedValueRate: 1.0 }),
     developer({ keyId: 'c', totalCostUsd: 100, totalRealizedValueUsd: 100, realizedValueRate: 1.0 }),
+    developer({ keyId: 'd', totalCostUsd: 100, totalRealizedValueUsd: 100, realizedValueRate: 1.0 }),
   ];
   const config: TeamAggregateConfig = { minCohort: 3, exposeDeveloperBreakdown: true };
   const report = buildDeveloperReport(totals, config);
+  assert.equal(report.suppressed, false);
   const d = report.distribution!;
-  assert.equal(d.cohortSize, 3); // the $0 developer still counts toward cohort size
-  // If the $0 developer's rate had been folded in as 0, the median of [0,1,1] would be 1
-  // but the mean would be pulled down; excluding it entirely, the median of [1,1] is exactly 1.
+  assert.equal(d.cohortSize, 4); // the $0 developer still counts toward cohort size
+  // If the $0 developer's rate had been folded in as 0, the median would be
+  // pulled down; excluding it entirely, the median of [1,1,1] is exactly 1.
   assert.equal(d.medianRealizedValueRate, 1);
+});
+
+test('buildDeveloperReport: the rate distribution is suppressed on its own when excluding $0-cost developers drops it below the k-anonymity floor, even though the raw cohort clears it', () => {
+  const totals = [
+    developer({ keyId: 'a', totalCostUsd: 0, totalRealizedValueUsd: 0, realizedValueRate: null }),
+    developer({ keyId: 'b', totalCostUsd: 0, totalRealizedValueUsd: 0, realizedValueRate: null }),
+    developer({ keyId: 'c', totalCostUsd: 100, totalRealizedValueUsd: 100, realizedValueRate: 1.0 }),
+    developer({ keyId: 'd', totalCostUsd: 100, totalRealizedValueUsd: 100, realizedValueRate: 1.0 }),
+    developer({ keyId: 'e', totalCostUsd: 100, totalRealizedValueUsd: 100, realizedValueRate: 1.0 }),
+  ];
+  const config: TeamAggregateConfig = { minCohort: 5, exposeDeveloperBreakdown: true };
+  const report = buildDeveloperReport(totals, config);
+  // totals.length (5) clears minCohort (5), but rates.length (3, after
+  // excluding the two $0-cost developers) does not — the disclosed rate axis
+  // must not be shown over a sub-cohort smaller than the configured floor.
+  assert.equal(report.suppressed, true);
+  assert.equal(report.distribution, null);
+  assert.match(report.reason, /rate cohort of 3/);
 });
 
 test('buildDeveloperReport: report never resolves developerCount = 0 into a false "shown" state', () => {

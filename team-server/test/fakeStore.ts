@@ -49,6 +49,21 @@ export class FakeRollupStore implements RollupStore {
   /** Mirrors PgRollupStore.aggregateProjects's weighting exactly — see store.ts's header comment on why realizationRate/avgRoiIndex can't be naive averages. */
   async aggregateProjects(filter: PeriodFilter = {}): Promise<ProjectTotals[]> {
     const inWindow = this.rollups.filter((r) => overlapsWindow(r.periodFrom, r.periodTo, filter));
+    // Cumulative-snapshot rollups: a developer who pushed more than once with
+    // overlapping windows (e.g. a daily cron) must only count once — summing
+    // every overlapping snapshot would multiply their true spend by however
+    // many times they happened to push. Keep only each developer's single
+    // latest (by receivedAt) rollup among those overlapping the filter.
+    const latestPerDev = new Map<string, StoredRollup>();
+    for (const r of inWindow) {
+      const existing = latestPerDev.get(r.keyId);
+      // >= (not >): on an exact receivedAt tie, the later-inserted rollup wins
+      // — this.rollups is in insertion order, so a later loop iteration means
+      // a later insert. Matches PgRollupStore's DISTINCT ON ... ORDER BY
+      // received_at DESC, id DESC secondary tiebreaker.
+      if (!existing || r.receivedAt >= existing.receivedAt) latestPerDev.set(r.keyId, r);
+    }
+    const deduped = [...latestPerDev.values()];
     interface Acc {
       developers: Set<string>;
       rollups: Set<string>;
@@ -61,7 +76,7 @@ export class FakeRollupStore implements RollupStore {
       roiDenominator: number;
     }
     const byProject = new Map<string, Acc>();
-    for (const r of inWindow) {
+    for (const r of deduped) {
       for (const p of r.body.projects) {
         let acc = byProject.get(p.project);
         if (!acc) {
@@ -109,36 +124,29 @@ export class FakeRollupStore implements RollupStore {
 
   async aggregateDevelopers(filter: PeriodFilter = {}): Promise<DeveloperTotals[]> {
     const inWindow = this.rollups.filter((r) => overlapsWindow(r.periodFrom, r.periodTo, filter));
-    interface Acc {
-      rollups: Set<string>;
-      totalCostUsd: number;
-      totalRealizedValueUsd: number;
-      lastPushedAt: string;
-    }
-    const byDev = new Map<string, Acc>();
+    const latestPerDev = new Map<string, StoredRollup>();
     for (const r of inWindow) {
-      let acc = byDev.get(r.keyId);
-      if (!acc) {
-        acc = { rollups: new Set(), totalCostUsd: 0, totalRealizedValueUsd: 0, lastPushedAt: r.receivedAt };
-        byDev.set(r.keyId, acc);
-      }
-      acc.rollups.add(r.id);
-      for (const p of r.body.projects) {
-        acc.totalCostUsd += p.costUsd;
-        acc.totalRealizedValueUsd += p.realizedValueUsd;
-      }
-      if (r.receivedAt > acc.lastPushedAt) acc.lastPushedAt = r.receivedAt;
+      const existing = latestPerDev.get(r.keyId);
+      if (!existing || r.receivedAt >= existing.receivedAt) latestPerDev.set(r.keyId, r);
     }
-    return [...byDev.entries()]
-      .map(([keyId, acc]) => ({
-        keyId,
-        label: this.developers.get(keyId)?.label ?? null,
-        rollupCount: acc.rollups.size,
-        totalCostUsd: acc.totalCostUsd,
-        totalRealizedValueUsd: acc.totalRealizedValueUsd,
-        realizedValueRate: acc.totalCostUsd > 0 ? acc.totalRealizedValueUsd / acc.totalCostUsd : null,
-        lastPushedAt: acc.lastPushedAt,
-      }))
+    return [...latestPerDev.values()]
+      .map((r) => {
+        let totalCostUsd = 0;
+        let totalRealizedValueUsd = 0;
+        for (const p of r.body.projects) {
+          totalCostUsd += p.costUsd;
+          totalRealizedValueUsd += p.realizedValueUsd;
+        }
+        return {
+          keyId: r.keyId,
+          label: this.developers.get(r.keyId)?.label ?? null,
+          rollupCount: 1,
+          totalCostUsd,
+          totalRealizedValueUsd,
+          realizedValueRate: totalCostUsd > 0 ? totalRealizedValueUsd / totalCostUsd : null,
+          lastPushedAt: r.receivedAt,
+        };
+      })
       .sort((a, b) => b.totalCostUsd - a.totalCostUsd);
   }
 

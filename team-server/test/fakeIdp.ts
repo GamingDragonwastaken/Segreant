@@ -16,9 +16,11 @@ export interface FakeIdp {
   jwksUrl: string;
   rsaKid: string;
   ecKid: string;
-  /** Signs a JWT with the given algorithm's keypair. Pass a raw header to override alg/kid for attack scenarios. */
   sign(payload: Record<string, unknown>, opts?: { alg?: 'RS256' | 'ES256'; header?: Record<string, unknown> }): string;
   jwksHits: () => number;
+  wellKnownHits: () => number;
+  /** Publishes a brand-new RSA keypair under the JWKS (simulating an IdP key rotation where the old JWKS was already cached) and returns a signer bound to it. The original rsaKid/ecKid stay published too, mirroring how real IdPs overlap old+new keys during a rotation window. */
+  rotateInNewRsaKey(): { kid: string; sign: (payload: Record<string, unknown>) => string };
   close(): Promise<void>;
 }
 
@@ -34,11 +36,14 @@ export async function startFakeIdp(): Promise<FakeIdp> {
 
   const rsaJwk = { ...(rsa.publicKey.export({ format: 'jwk' }) as Record<string, unknown>), kid: rsaKid, alg: 'RS256', use: 'sig' };
   const ecJwk = { ...(ec.publicKey.export({ format: 'jwk' }) as Record<string, unknown>), kid: ecKid, alg: 'ES256', use: 'sig' };
+  const keys: Record<string, unknown>[] = [rsaJwk, ecJwk];
 
   let jwksHits = 0;
+  let wellKnownHits = 0;
   const server = http.createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
     if (url.pathname === '/.well-known/openid-configuration') {
+      wellKnownHits += 1;
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ issuer: issuerUrl(), jwks_uri: `${issuerUrl()}/jwks.json` }));
       return;
@@ -46,7 +51,7 @@ export async function startFakeIdp(): Promise<FakeIdp> {
     if (url.pathname === '/jwks.json') {
       jwksHits += 1;
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ keys: [rsaJwk, ecJwk] }));
+      res.end(JSON.stringify({ keys }));
       return;
     }
     res.writeHead(404);
@@ -85,6 +90,23 @@ export async function startFakeIdp(): Promise<FakeIdp> {
     return `${headerB64}.${payloadB64}.${base64url(signature)}`;
   }
 
+  function rotateInNewRsaKey(): { kid: string; sign: (payload: Record<string, unknown>) => string } {
+    const fresh = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const kid = 'rsa-key-rotated';
+    keys.push({ ...(fresh.publicKey.export({ format: 'jwk' }) as Record<string, unknown>), kid, alg: 'RS256', use: 'sig' });
+    return {
+      kid,
+      sign: (payload: Record<string, unknown>) => {
+        const header = { alg: 'RS256', typ: 'JWT', kid };
+        const headerB64 = base64url(Buffer.from(JSON.stringify(header)));
+        const payloadB64 = base64url(Buffer.from(JSON.stringify(payload)));
+        const signingInput = Buffer.from(`${headerB64}.${payloadB64}`);
+        const signature = cryptoSign('sha256', signingInput, fresh.privateKey);
+        return `${headerB64}.${payloadB64}.${base64url(signature)}`;
+      },
+    };
+  }
+
   return {
     url: base,
     issuer: base,
@@ -93,6 +115,8 @@ export async function startFakeIdp(): Promise<FakeIdp> {
     ecKid,
     sign,
     jwksHits: () => jwksHits,
+    wellKnownHits: () => wellKnownHits,
+    rotateInNewRsaKey,
     close: () => new Promise((resolve) => server.close(() => resolve())),
   };
 }

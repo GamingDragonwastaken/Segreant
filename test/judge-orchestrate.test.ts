@@ -165,6 +165,7 @@ test('judgeSession: a full-content tier downgrades its REPORTED confidence to st
     );
     assert.equal(j.confidence, 'local-llm', 'local structural and full share one tag, so this alone does not prove the downgrade');
     assert.ok(j.rationale.includes('not yet implemented'), 'the downgrade must be visible in the rationale, not silent');
+    assert.doesNotMatch(j.rationale, /full session content/i, 'the rationale must not retain the pre-downgrade fidelity claim');
   } finally {
     await mock.close();
   }
@@ -183,6 +184,7 @@ test('judgeSession: a full-content tier downgrades its REPORTED confidence to st
       // would read 'hosted-llm-full' instead.
       assert.equal(j.confidence, 'hosted-llm-structural');
       assert.ok(j.rationale.includes('not yet implemented'));
+      assert.doesNotMatch(j.rationale, /full session content/i, 'the rationale must not claim content left the machine when only the structural summary was sent');
     });
   } finally {
     await mock2.close();

@@ -131,6 +131,18 @@ export function buildDeveloperReport(totals: DeveloperTotals[], config: TeamAggr
     .filter((t): t is DeveloperTotals & { realizedValueRate: number } => t.realizedValueRate !== null)
     .map((t) => t.realizedValueRate)
     .sort((a, b) => a - b);
+  // The k-anonymity floor must hold for whatever population a statistic is
+  // actually computed over — the rate axis is computed over a SMALLER,
+  // filtered population than the raw cohort, so it needs its own floor check
+  // rather than inheriting the one above.
+  if (rates.length < config.minCohort) {
+    return {
+      enabled: true,
+      suppressed: true,
+      reason: `rate cohort of ${rates.length} (after excluding $0-cost developers) is below the k-anonymity floor of ${config.minCohort}; per-developer breakdown withheld`,
+      distribution: null,
+    };
+  }
   return {
     enabled: true,
     suppressed: false,

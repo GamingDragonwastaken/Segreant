@@ -227,7 +227,14 @@ export class PgRollupStore implements RollupStore {
    */
   async aggregateProjects(filter: PeriodFilter = {}): Promise<ProjectTotals[]> {
     const res = await this.pool.query<ProjectTotalsRow>(
-      `SELECT
+      `WITH latest_rollup_per_dev AS (
+         SELECT DISTINCT ON (r.key_id) r.id
+         FROM rollups r
+         WHERE ($1::timestamptz IS NULL OR r.period_to > $1::timestamptz)
+           AND ($2::timestamptz IS NULL OR r.period_from < $2::timestamptz)
+         ORDER BY r.key_id, r.received_at DESC, r.id DESC
+       )
+       SELECT
          rp.project AS project,
          COUNT(DISTINCT r.key_id)::float8 AS developer_count,
          COUNT(DISTINCT r.id)::float8 AS rollup_count,
@@ -235,17 +242,13 @@ export class PgRollupStore implements RollupStore {
          COALESCE(SUM(rp.cost_usd), 0)::float8 AS total_cost_usd,
          COALESCE(SUM(rp.realized_value_usd), 0)::float8 AS total_realized_value_usd,
          COALESCE(SUM(rp.net_realized_value_usd), 0)::float8 AS total_net_realized_value_usd,
-         -- realization_rate_i = realizedUnits_i / units_i, so realization_rate_i * units_i = realizedUnits_i
-         -- exactly (float roundoff only) — summing that and dividing by SUM(units) gives the
-         -- team-wide unit-count realization rate without ever needing realizedUnits as its own column.
          (SUM(rp.realization_rate * rp.units) / NULLIF(SUM(rp.units), 0))::float8 AS realization_rate,
          (SUM(rp.realized_value_usd) / NULLIF(SUM(rp.cost_usd), 0))::float8 AS realized_value_rate,
          (SUM(CASE WHEN rp.roi_index IS NOT NULL THEN rp.roi_index * rp.cost_usd ELSE 0 END)
             / NULLIF(SUM(CASE WHEN rp.roi_index IS NOT NULL THEN rp.cost_usd ELSE 0 END), 0))::float8 AS avg_roi_index
        FROM rollup_projects rp
        JOIN rollups r ON r.id = rp.rollup_id
-       WHERE ($1::timestamptz IS NULL OR r.period_to > $1::timestamptz)
-         AND ($2::timestamptz IS NULL OR r.period_from < $2::timestamptz)
+       WHERE r.id IN (SELECT id FROM latest_rollup_per_dev)
        GROUP BY rp.project
        ORDER BY total_cost_usd DESC`,
       [filter.periodFrom ?? null, filter.periodTo ?? null],
@@ -266,19 +269,24 @@ export class PgRollupStore implements RollupStore {
 
   async aggregateDevelopers(filter: PeriodFilter = {}): Promise<DeveloperTotals[]> {
     const res = await this.pool.query<DeveloperTotalsRow>(
-      `SELECT
+      `WITH latest_rollup_per_dev AS (
+         SELECT DISTINCT ON (r.key_id) r.id, r.key_id, r.received_at
+         FROM rollups r
+         WHERE ($1::timestamptz IS NULL OR r.period_to > $1::timestamptz)
+           AND ($2::timestamptz IS NULL OR r.period_from < $2::timestamptz)
+         ORDER BY r.key_id, r.received_at DESC, r.id DESC
+       )
+       SELECT
          d.key_id AS key_id,
          d.label AS label,
-         COUNT(DISTINCT r.id)::float8 AS rollup_count,
+         COUNT(DISTINCT lr.id)::float8 AS rollup_count,
          COALESCE(SUM(rp.cost_usd), 0)::float8 AS total_cost_usd,
          COALESCE(SUM(rp.realized_value_usd), 0)::float8 AS total_realized_value_usd,
          (SUM(rp.realized_value_usd) / NULLIF(SUM(rp.cost_usd), 0))::float8 AS realized_value_rate,
-         MAX(r.received_at) AS last_pushed_at
+         MAX(lr.received_at) AS last_pushed_at
        FROM developers d
-       JOIN rollups r ON r.key_id = d.key_id
-       LEFT JOIN rollup_projects rp ON rp.rollup_id = r.id
-       WHERE ($1::timestamptz IS NULL OR r.period_to > $1::timestamptz)
-         AND ($2::timestamptz IS NULL OR r.period_from < $2::timestamptz)
+       JOIN latest_rollup_per_dev lr ON lr.key_id = d.key_id
+       LEFT JOIN rollup_projects rp ON rp.rollup_id = lr.id
        GROUP BY d.key_id, d.label
        ORDER BY total_cost_usd DESC`,
       [filter.periodFrom ?? null, filter.periodTo ?? null],

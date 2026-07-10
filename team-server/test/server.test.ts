@@ -420,6 +420,56 @@ test('team-server: GET /dashboard/projects weights realizationRate by units and 
   }
 });
 
+test('team-server: GET /dashboard/projects does not double-count when the same developer pushes overlapping-window rollups (cumulative-snapshot pushes, e.g. daily cron)', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'aegis-team-server-'));
+  const idp = await startFakeIdp();
+  try {
+    const dev: KeyPair = loadOrCreateKeyPair(join(dir, 'dev.json'));
+    const store = new FakeRollupStore();
+    const srv = await startTeamServer({
+      store,
+      adminToken: null,
+      oidc: { issuerUrl: idp.issuer, clientId: 'team-dashboard', jwksUrl: idp.jwksUrl },
+      aggregate: { minCohort: 1, exposeDeveloperBreakdown: false },
+    });
+    try {
+      // Simulates `aegisflow team push --window 30` run on two consecutive
+      // days: each push is a full rolling snapshot of the SAME underlying
+      // spend, not incremental new work, so the two periods overlap almost
+      // entirely.
+      const day1 = { from: '2026-06-04T00:00:00.000Z', to: '2026-07-04T00:00:00.000Z' };
+      const day2 = { from: '2026-06-05T00:00:00.000Z', to: '2026-07-05T00:00:00.000Z' };
+      const snapshot: ProjectValue[] = [
+        { project: 'aegisflow', units: 10, costUsd: 100, realizationRate: 0.8, realizedValueUsd: 80, netRealizedValueUsd: 80, roiIndex: 1.0, sources: [] },
+      ];
+      await pushRollup(srv, store, dev, snapshot, day1);
+      await pushRollup(srv, store, dev, snapshot, day2);
+
+      const now = Math.floor(Date.now() / 1000);
+      const token = idp.sign({ iss: idp.issuer, aud: 'team-dashboard', sub: 'lead@example.com', iat: now, exp: now + 3600 });
+      const res = await fetch(`${srv.url}/dashboard/projects`, { headers: { authorization: `Bearer ${token}` } });
+      assert.equal(res.status, 200);
+      const payload = (await res.json()) as { ok: boolean; projects: Array<Record<string, unknown>> };
+      assert.equal(payload.projects.length, 1);
+      const row = payload.projects[0]!;
+      assert.equal(row['suppressed'], false);
+      // The second push re-snapshots the SAME spend, not additional work —
+      // totals must reflect this one developer's true $100/10-unit snapshot,
+      // not double it.
+      assert.equal(row['totalCostUsd'], 100);
+      assert.equal(row['totalUnits'], 10);
+      assert.equal(row['totalRealizedValueUsd'], 80);
+      assert.equal(row['developerCount'], 1);
+      assert.equal(row['rollupCount'], 1);
+    } finally {
+      await srv.close();
+    }
+  } finally {
+    await idp.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('team-server: GET /dashboard/projects suppresses a project below the k-anonymity floor and leaks no dollar figures', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'aegis-team-server-'));
   const idp = await startFakeIdp();

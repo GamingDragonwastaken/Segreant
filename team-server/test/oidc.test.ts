@@ -177,3 +177,50 @@ test('verifyIdToken: without an explicit jwksUrl, OIDC discovery finds it via .w
     await idp.close();
   }
 });
+
+test('verifyIdToken: without an explicit jwksUrl, OIDC discovery is cached — a second verification does not re-hit .well-known', async () => {
+  const idp = await startFakeIdp();
+  try {
+    clearJwksCacheForTests();
+    const c: OidcConfig = { issuerUrl: idp.issuer, clientId: CLIENT_ID }; // no jwksUrl — forces discovery
+    await verifyIdToken(idp.sign(validPayload(idp)), c);
+    const hitsAfterFirst = idp.wellKnownHits();
+    await verifyIdToken(idp.sign(validPayload(idp)), c);
+    assert.equal(idp.wellKnownHits(), hitsAfterFirst, 'a second verification should reuse the cached discovery result, not re-hit .well-known');
+  } finally {
+    await idp.close();
+  }
+});
+
+test('verifyIdToken: a key rotated in after the JWKS was cached is still accepted (forces one refresh on unknown kid)', async () => {
+  const idp = await startFakeIdp();
+  try {
+    clearJwksCacheForTests();
+    const c = cfg(idp, { jwksCacheTtlMs: 60_000 });
+    await verifyIdToken(idp.sign(validPayload(idp)), c); // primes the cache with the original two keys
+    const hitsBeforeRotation = idp.jwksHits();
+
+    const rotated = idp.rotateInNewRsaKey();
+    const token = rotated.sign(validPayload(idp));
+    const result = await verifyIdToken(token, c);
+
+    assert.equal(result.valid, true, 'a genuinely valid token signed by a newly-rotated key must not be rejected just because the cache predates the rotation');
+    assert.ok(idp.jwksHits() > hitsBeforeRotation, 'an unknown kid must force a JWKS refresh, not just fail against the stale cache');
+  } finally {
+    await idp.close();
+  }
+});
+
+test('verifyIdToken: a JWT with no kid header is accepted even when multiple JWKS candidates exist (tries every candidate, not just the first)', async () => {
+  const idp = await startFakeIdp();
+  try {
+    // No kid in the header → verifyIdToken must treat every key in the JWKS as
+    // a candidate and try each one, not bail out after the first constructible
+    // key fails to verify.
+    const token = idp.sign(validPayload(idp), { alg: 'RS256', header: { alg: 'RS256', typ: 'JWT' } });
+    const result = await verifyIdToken(token, cfg(idp));
+    assert.equal(result.valid, true);
+  } finally {
+    await idp.close();
+  }
+});
