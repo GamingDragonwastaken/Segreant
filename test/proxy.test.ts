@@ -65,6 +65,54 @@ function startMockUpstream(): Promise<{ url: string; close: () => Promise<void> 
       return;
     }
 
+    if ((req.url ?? '').includes('/responses')) {
+      // Mirrors OpenAI's real behavior: unlike /chat/completions, the Responses
+      // API rejects stream_options outright (400 unknown_parameter). If the
+      // proxy ever sends it here, this branch — not a usage mismatch — is what
+      // the corresponding test should catch.
+      if (json.stream_options !== undefined) {
+        res.writeHead(400, { 'content-type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            error: {
+              message: "Unknown parameter: 'stream_options.include_usage'",
+              type: 'invalid_request_error',
+              param: 'stream_options.include_usage',
+              code: 'unknown_parameter',
+            },
+          }),
+        );
+        return;
+      }
+      const usage = {
+        input_tokens: 1000,
+        input_tokens_details: { cached_tokens: 200 },
+        output_tokens: 50,
+        output_tokens_details: { reasoning_tokens: 10 },
+        total_tokens: 1050,
+      };
+      if (!stream) {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ id: 'resp_1', object: 'response', model: 'gpt-4o', status: 'completed', usage }));
+        return;
+      }
+      // Responses API streaming: semantic events, full resource nested under
+      // `response` — usage only appears on response.completed, not top-level.
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.write('event: response.created\n');
+      res.write(
+        'data: {"type":"response.created","response":{"id":"resp_1","object":"response","status":"in_progress","model":"gpt-4o"}}\n\n',
+      );
+      res.write('event: response.output_text.delta\n');
+      res.write('data: {"type":"response.output_text.delta","delta":"Hi"}\n\n');
+      res.write('event: response.completed\n');
+      res.write(
+        `data: {"type":"response.completed","response":{"id":"resp_1","object":"response","status":"completed","model":"gpt-4o","usage":${JSON.stringify(usage)}}}\n\n`,
+      );
+      res.end();
+      return;
+    }
+
     res.writeHead(404);
     res.end('not found');
   });
@@ -189,6 +237,59 @@ test('streaming OpenAI: proxy injects stream_options so usage is captured', asyn
   const today = store.summary(0, Date.now() + 1000);
   assert.equal(today.requests, 1);
   // 800*2.5 + 50*10 + 200*1.25 per 1e6 = 0.00275
+  assert.ok(Math.abs(today.costUsd - 0.00275) < 1e-9, `db cost ${today.costUsd}`);
+
+  await proxy.close();
+  await upstream.close();
+  store.close();
+});
+
+test('non-streaming OpenAI Responses API: input_tokens/output_tokens shape normalizes like Chat Completions', async () => {
+  const upstream = await startMockUpstream();
+  const store = new Store(':memory:');
+  const proxy = await startProxy(store, {}, upstream.url);
+
+  const res = await fetch(`${proxy.base}/v1/responses`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: 'Bearer sk-test' },
+    body: JSON.stringify({ model: 'gpt-4o', input: 'hi' }),
+  });
+  assert.equal(res.status, 200);
+  await res.text();
+
+  const today = store.summary(0, Date.now() + 1000);
+  assert.equal(today.requests, 1);
+  // Same 1000/200/50/10 figures as the Chat Completions test above, in the
+  // Responses API's field names — must land on the identical cost, proving
+  // input_tokens is read as inclusive-of-cache exactly like prompt_tokens.
+  // 800*2.5 + 50*10 + 200*1.25 per 1e6 = 0.00275
+  assert.ok(Math.abs(today.costUsd - 0.00275) < 1e-9, `db cost ${today.costUsd}`);
+
+  await proxy.close();
+  await upstream.close();
+  store.close();
+});
+
+test('streaming OpenAI Responses API: proxy withholds stream_options (would 400) and reads nested response.usage', async () => {
+  const upstream = await startMockUpstream();
+  const store = new Store(':memory:');
+  const proxy = await startProxy(store, {}, upstream.url);
+
+  const res = await fetch(`${proxy.base}/v1/responses`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: 'Bearer sk-test' },
+    body: JSON.stringify({ model: 'gpt-4o', input: 'hi', stream: true }),
+  });
+  // A 400 here means the proxy injected stream_options and the mock upstream
+  // rejected it exactly as the real Responses API does — the regression this
+  // test exists to catch.
+  assert.equal(res.status, 200);
+  const body = await res.text();
+  assert.ok(body.includes('response.completed'), 'client still gets the full SSE stream');
+  await new Promise((r) => setTimeout(r, 20));
+
+  const today = store.summary(0, Date.now() + 1000);
+  assert.equal(today.requests, 1);
   assert.ok(Math.abs(today.costUsd - 0.00275) < 1e-9, `db cost ${today.costUsd}`);
 
   await proxy.close();

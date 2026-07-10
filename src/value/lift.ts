@@ -21,6 +21,8 @@
  * it is `uninstrumented` — never surveyed.
  */
 
+import { sessionEfficiencySignal } from './liftEfficiency.ts';
+
 export interface AiEvent {
   sessionId: string;
   tsEpochMs: number;
@@ -57,6 +59,11 @@ export interface LiftDiscounts {
   selection?: number; // transcript corpus is AI-amenable tasks (0.3–0.7)
   substitution?: number; // marginal AI-unlocked tasks worth less (0.5–0.8)
   concurrency?: number; // non-AI parallel work inflates TSF (0.6–0.9)
+  // How cleanly the AI-assisted time itself was used (0.85–1.15, 1 = no signal).
+  // See liftEfficiency.ts — content-free, reuses Acceptance-lens data. Unlike the
+  // other three discounts (fixed METR-derived constants), this one is COMPUTED
+  // per Lift calculation from real local data, not a hand-picked range.
+  efficiency?: number;
 }
 
 export interface LiftInputs {
@@ -95,8 +102,9 @@ export function boundedLift(inp: LiftInputs): LiftEstimate {
   const sel = d.selection ?? 0.5;
   const sub = d.substitution ?? 0.65;
   const con = d.concurrency ?? 0.8;
+  const eff = d.efficiency ?? 1; // neutral unless a real signal (liftEfficiency.ts) supplied one
 
-  const point = tsf * sel * sub * con; // discounted toward value uplift
+  const point = tsf * sel * sub * con * eff; // discounted toward value uplift
   const high = tsf; // ceiling = new-task uplift (the inequality's upper bound)
   const low = inp.oldTaskLift ?? Math.max(0, point * 0.7); // floor
   // Saturating map multiplier → lens score in [0,1): 1×→0.5, 2×→0.67, 0.81×→0.45.
@@ -133,6 +141,10 @@ export function breakEven(timeSavedHours: number, laborRatePerHour: number, cost
 export interface WorkItemForLift {
   taskType: string;
   realized: boolean;
+  // Optional: this unit's Acceptance rate (WorkUnit.acceptance), feeding the
+  // efficiency discount below. Absent/null units are simply excluded from that
+  // signal's pool — never treated as a zero.
+  acceptance?: number | null;
 }
 
 export interface DataLiftInputs {
@@ -140,6 +152,11 @@ export interface DataLiftInputs {
   events: AiEvent[]; // request events for the measured "time with AI" denominator
   baselineMinutes: Record<string, number>; // task-type → estimated manual minutes
   discounts?: LiftDiscounts;
+  // This ledger's own overall first-pass acceptance (RealizationReport.
+  // firstPassAcceptance) — the shrink-toward prior for the efficiency signal.
+  // Omitted/null → the signal stays honestly uninstrumented (multiplier 1, no
+  // invented population figure). See liftEfficiency.ts.
+  ledgerAcceptance?: number | null;
 }
 
 export interface DataLiftResult {
@@ -171,12 +188,14 @@ export interface DataLiftResult {
 export function liftFromData(inp: DataLiftInputs): DataLiftResult {
   let estimatedManualMinutes = 0;
   let coveredUnits = 0;
+  const coveredAcceptance: Array<number | null | undefined> = [];
   for (const u of inp.units) {
     if (!u.realized) continue;
     const b = inp.baselineMinutes[u.taskType];
     if (typeof b === 'number' && b > 0) {
       estimatedManualMinutes += b;
       coveredUnits += 1;
+      coveredAcceptance.push(u.acceptance);
     }
   }
   const measuredAiMinutes = timeWithAiMinutes(inp.events).totalMin;
@@ -192,7 +211,14 @@ export function liftFromData(inp: DataLiftInputs): DataLiftResult {
     };
   }
   const tsf = estimatedManualMinutes / measuredAiMinutes;
-  const est = boundedLift({ tsfUpperBound: tsf, discounts: inp.discounts });
+  const efficiency = sessionEfficiencySignal({
+    unitAcceptance: coveredAcceptance,
+    ledgerAcceptance: inp.ledgerAcceptance ?? null,
+  });
+  const est = boundedLift({
+    tsfUpperBound: tsf,
+    discounts: { ...inp.discounts, efficiency: efficiency.multiplier },
+  });
   return {
     lift: est.lensScore,
     liftRange: { low: est.lensLow, high: est.lensHigh },
@@ -202,6 +228,7 @@ export function liftFromData(inp: DataLiftInputs): DataLiftResult {
     coveredUnits,
     notes: [
       `Lift from measured data: ${coveredUnits} realized unit(s) ≈ ${Math.round(estimatedManualMinutes)} manual min vs ${Math.round(measuredAiMinutes)} measured AI min → TSF ${tsf.toFixed(2)}×. Baseline-estimated (not a controlled A/B); tighten with --tsf from a transcript judge or RCT.`,
+      ...efficiency.notes,
       ...est.notes,
     ],
   };

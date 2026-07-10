@@ -51,6 +51,33 @@ test('computeCost: OpenAI uncached input excludes cached tokens', () => {
   assert.ok(Math.abs(costUsd - 0.00275) < 1e-9, `got ${costUsd}`);
 });
 
+test('computeCost: OpenAI Responses API shape (input_tokens) normalizes identically to Chat Completions', () => {
+  // Same figures as the prompt_tokens-shape test above, in the Responses API's
+  // field names — proves input_tokens is read as inclusive-of-cache too, and
+  // that reasoning_tokens is picked up from output_tokens_details.
+  const raw = {
+    input_tokens: 1000,
+    output_tokens: 50,
+    input_tokens_details: { cached_tokens: 200 },
+    output_tokens_details: { reasoning_tokens: 10 },
+  };
+  const usage = normalizeOpenAIUsage(raw);
+  assert.equal(usage.inputTokens, 800);
+  assert.equal(usage.cacheReadTokens, 200);
+  assert.equal(usage.reasoningTokens, 10);
+  const { costUsd } = computeCost('openai', 'gpt-4o', usage);
+  assert.ok(Math.abs(costUsd - 0.00275) < 1e-9, `got ${costUsd}`);
+});
+
+test('normalizeOpenAIUsage: an empty Responses-shape usage object never crosses into the Chat Completions branch', () => {
+  // output_tokens: 0 is falsy but must still select the Responses shape via
+  // `!== undefined` — a `if (u.output_tokens)` truthiness check would wrongly
+  // fall through to reading (undefined) prompt_tokens instead.
+  const usage = normalizeOpenAIUsage({ input_tokens: 500, output_tokens: 0 });
+  assert.equal(usage.inputTokens, 500);
+  assert.equal(usage.outputTokens, 0);
+});
+
 test('Gemini on the OpenAI-compatible path: exact rate by model, not estimated', () => {
   // A request to Google's .../v1beta/openai/ base arrives on the OpenAI path,
   // but the model id is a Gemini one. The price must follow the MODEL: an exact

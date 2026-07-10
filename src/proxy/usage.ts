@@ -3,15 +3,29 @@
  *
  * Both providers report exact token usage in their responses — we never have to
  * tokenize anything locally, which keeps us accurate and keeps prompt bodies out
- * of our hands. The job here is to fold two different shapes into one
- * NormalizedUsage, handling the streaming (SSE) and non-streaming cases.
+ * of our hands. The job here is to fold these shapes into one NormalizedUsage,
+ * handling the streaming (SSE) and non-streaming cases.
  *
  * Key cross-provider subtlety:
  *   Anthropic: `usage.input_tokens` is the UNCACHED input; cache reads/writes
  *              are reported in separate fields.
- *   OpenAI:    `usage.prompt_tokens` INCLUDES cached tokens; the cached subset
- *              is in `prompt_tokens_details.cached_tokens`. So uncached input =
- *              prompt_tokens - cached_tokens.
+ *   OpenAI:    both of OpenAI's usage shapes report input INCLUSIVE of cached
+ *              tokens, with the cached subset broken out separately — so
+ *              uncached input is always (total - cached), never the raw total:
+ *                - Chat Completions: prompt_tokens / prompt_tokens_details.cached_tokens
+ *                - Responses API:    input_tokens / input_tokens_details.cached_tokens
+ *              The inclusive relationship isn't stated plainly in OpenAI's own
+ *              docs (unreachable at time of writing — 403s on the API reference
+ *              and pricing pages); confirmed instead via litellm's independent
+ *              cost-calculation source (github.com/BerriAI/litellm), which
+ *              subtracts cached_tokens from prompt_tokens/input_tokens the same
+ *              way for both shapes.
+ *
+ * Responses API streaming subtlety: unlike Chat Completions (which streams
+ * usage flat on the final chunk's `usage` field), the Responses API streams
+ * semantic events where the full resource — including `usage` and `model` —
+ * is nested under a `response` key (e.g. the `response.completed` event has
+ * `usage` at `event.response.usage`, not `event.usage`). See consumeOpenAI.
  */
 
 import type { NormalizedUsage, Provider } from '../cost/pricing.ts';
@@ -28,11 +42,21 @@ interface AnthropicUsage {
 }
 
 interface OpenAIUsage {
+  // Chat Completions shape.
   prompt_tokens?: number;
   completion_tokens?: number;
   total_tokens?: number;
   prompt_tokens_details?: { cached_tokens?: number };
   completion_tokens_details?: { reasoning_tokens?: number };
+  // Responses API shape — field names differ, semantics (inclusive cached
+  // subset) match. `input_tokens_details.cache_write_tokens` also exists on
+  // this shape but is deliberately left unmapped below: unlike the read side,
+  // whether OpenAI bills cache writes on the Responses API separately hasn't
+  // been verified, so we don't invent a cost dimension we can't confirm.
+  input_tokens?: number;
+  output_tokens?: number;
+  input_tokens_details?: { cached_tokens?: number };
+  output_tokens_details?: { reasoning_tokens?: number };
 }
 
 export function normalizeAnthropicUsage(u: AnthropicUsage): NormalizedUsage {
@@ -51,6 +75,19 @@ export function normalizeAnthropicUsage(u: AnthropicUsage): NormalizedUsage {
 }
 
 export function normalizeOpenAIUsage(u: OpenAIUsage): NormalizedUsage {
+  // Responses API and Chat Completions never share field names, so presence
+  // of either input_tokens or output_tokens is an unambiguous shape signal.
+  if (u.input_tokens !== undefined || u.output_tokens !== undefined) {
+    const cached = u.input_tokens_details?.cached_tokens ?? 0;
+    const input = u.input_tokens ?? 0;
+    return {
+      inputTokens: Math.max(0, input - cached),
+      outputTokens: u.output_tokens ?? 0,
+      cacheWriteTokens: 0, // OpenAI auto-caches with no separate write charge
+      cacheReadTokens: cached,
+      reasoningTokens: u.output_tokens_details?.reasoning_tokens ?? 0,
+    };
+  }
   const cached = u.prompt_tokens_details?.cached_tokens ?? 0;
   const prompt = u.prompt_tokens ?? 0;
   return {
@@ -152,10 +189,23 @@ export class StreamUsageAccumulator {
   }
 
   private consumeOpenAI(json: unknown): void {
-    const obj = json as { model?: string; usage?: OpenAIUsage | null };
-    if (obj.model) this.seenModel = obj.model;
-    if (obj.usage) {
-      const n = normalizeOpenAIUsage(obj.usage);
+    // Chat Completions chunks carry model/usage flat. The Responses API instead
+    // streams named events (response.created, response.output_text.delta, ...,
+    // response.completed) whose payload is the full resource nested under
+    // `response` — so model/usage live at `.response.model` / `.response.usage`
+    // there, not top-level. Checking both shapes unconditionally is cheap and
+    // correct either way, since a Chat Completions chunk never has a `response`
+    // key and a Responses event never has a top-level `usage`.
+    const obj = json as {
+      model?: string;
+      usage?: OpenAIUsage | null;
+      response?: { model?: string; usage?: OpenAIUsage | null };
+    };
+    const model = obj.model ?? obj.response?.model;
+    if (model) this.seenModel = model;
+    const usage = obj.usage ?? obj.response?.usage;
+    if (usage) {
+      const n = normalizeOpenAIUsage(usage);
       this.partial = { ...n };
       this.maxOutput = Math.max(this.maxOutput, n.outputTokens);
     }

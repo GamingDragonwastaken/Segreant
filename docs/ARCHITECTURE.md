@@ -182,7 +182,7 @@ This is single-user, single-process, local. "Scale" means a busy developer's age
 
 ## 7. What I'd revisit as it grows
 
-Five items that used to live here are done and moved to the README's Status
+Six items that used to live here are done and moved to the README's Status
 section: native provider pricing beyond the OpenAI wire format (Gemini is now a
 first-class, verified rate-card entry), auto-updating pricing (`pricing --refresh` /
 `--auto` against a community feed), passive log import (`aegisflow import` —
@@ -191,34 +191,130 @@ onboarding path), a machine-wide tool inventory scan (`scan` now also surfaces a
 read-only, best-effort inventory of other AI coding tools it recognizes but doesn't
 import from yet — config-dir/PATH-binary checks only, see `src/scan/knownApps.ts` —
 holding the same consent/framing bar as the rest of `scan`: read-only, discloses
-exactly what it found, never reads as system surveillance), and a cited,
+exactly what it found, never reads as system surveillance), a cited,
 personally-calibrated Lift baseline (the manual-minutes-per-task-type input is now a
 METR-anchored population prior blended with the user's own pre-tracking git history
 via empirical-Bayes shrinkage, replacing the old flat unsourced table — see
-`docs/RETURN-ON-INTELLIGENCE.md` §7.1). What's still genuinely open:
+`docs/RETURN-ON-INTELLIGENCE.md` §7.1), and correct native `/responses` metering (the
+OpenAI-compatible route already forwarded `/responses` traffic, but two latent bugs
+meant it was mismetered at best: the proxy force-injected a Chat-Completions-only
+`stream_options` param that the Responses API rejects outright, 400ing every
+*streaming* `/responses` request, and the usage parser only understood the
+`prompt_tokens` shape, not `/responses`' `input_tokens` shape, on the requests that
+did succeed — see `src/proxy/usage.ts` and `src/proxy/server.ts`). What's still
+genuinely open:
 
 1. **A hosted, cross-machine team tier** — the optional, metadata-only sync to a shared
-   dashboard; SSO; support/SLA. Numeric-only, opt-in, signed if built. This is real
-   future value, but it requires an operator: ongoing hosting, and a support
-   commitment that sits outside this release's local-only, zero-maintenance,
-   donationware shape. Not scoped for this release. Revisit only if real usage and
-   requests justify taking on that operational commitment — the local store and
-   schema are designed so it *could* be added later without touching the hot path,
-   but "could" isn't "should" until there's a real signal to build it for.
-2. **Native non-OpenAI-wire-format APIs** — Bedrock, Vertex, and OpenAI's `/responses`
-   shape. Everything reachable over an OpenAI-compatible wire format is already
-   covered; these three have genuinely different request/response envelopes.
-3. **A true transcript-judge or controlled A/B time study** for Lift — a different,
-   larger thing than the baseline-sourcing upgrade above. That upgrade made the
-   manual-*comparator* honest (cited + personally calibrated instead of a flat
-   guess); it did not change how the AI-assisted side is measured. This item would
-   judge the actual AI-assisted session directly (an LLM reading transcripts, or a
-   real controlled A/B), which could tighten the TSF interval further. Deliberately
-   not default-on even if built: a transcript-judge approach means sending session
-   content to an LLM API, which is a real, loud opt-in decision against the "nothing
-   leaves your machine" promise — not just an API-cost question. See the README's
-   Lift section and `docs/RETURN-ON-INTELLIGENCE.md` §7/§7.1 for what's already
-   measured without it.
+   dashboard; SSO; support/SLA. Numeric-only, opt-in, signed. Scoped in
+   [docs/TEAM-TIER-DESIGN.md](TEAM-TIER-DESIGN.md) as a bring-your-own
+   server/hosting/SSO deployment model, keeping AegisFlow as software an operator
+   deploys rather than a service we run — that framing hasn't changed. **The
+   client half is now built:** `src/team/rollup.ts` (`buildRollupBody`/
+   `signRollup`/`verifyRollup`, reusing `value/receipt.ts`'s `canonical`/
+   `keyIdForPem` directly — canonicalization must be byte-identical between
+   signer and verifier, so that's a correctness requirement, not just reuse for
+   its own sake) and the `aegisflow team push` CLI command (`--url`, `--dry-run`,
+   `--pubkey`, `--window`, `--project`) — 5 adversarial tests in
+   `test/team-rollup.test.ts` (tamper detection, key-pinning against a
+   self-consistent forgery, a forged keyId claim, a garbled public key). A
+   developer can sign and push a numeric-only per-project rollup today. **The
+   server scaffold is now built too:** `team-server/` — a genuinely separate
+   npm package (its own `package.json`, `pg` as its sole dependency, never
+   pulled into the main CLI's install), a Postgres schema
+   (`team-server/schema.sql`: `developers`, `rollups`, `rollup_projects`,
+   applied idempotently on boot), and an HTTP server (`team-server/src/
+   server.ts`) exposing `POST /developers` (admin-bearer-token-gated
+   registration — fails closed without a token configured, not open) and
+   `POST /rollups` (verifies the pushed rollup's signature pinned to the
+   *registered* key, never the key embedded in the payload, before storing —
+   the concrete defense against a self-consistent forgery from an unregistered
+   key). **Honestly unverified:** the real SQL (`team-server/src/store.ts`'s
+   `PgRollupStore`, `schema.sql`) was code-reviewed but not run against a live
+   Postgres this session (Docker wasn't running locally when this was built) —
+   see `team-server/README.md` for how to verify it. Compensating evidence: a
+   genuine end-to-end run of the real `aegisflow team push` CLI against the
+   real `team-server` HTTP layer (fake store in place of Postgres) proved the
+   client↔server wire format matches, for both the accept and the
+   unregistered-key-reject paths.
+   **OIDC/JWT verification is now built too:** `team-server/src/oidc.ts`'s
+   `verifyIdToken`, `node:crypto` only (no `jsonwebtoken`/`jose` dependency),
+   gating a real route (`GET /me`) rather than left untested in isolation.
+   Algorithm whitelisted to RS256/ES256 — rejects `alg: "none"` (a real
+   historical JWT vulnerability) and HS256 (would allow an algorithm-confusion
+   attack using the issuer's own public RSA key as a forged HMAC secret); ES256
+   verified with `dsaEncoding: 'ieee-p1363'` since JWT's raw-`r‖s` ECDSA
+   encoding differs from `node:crypto`'s DER default. Proven against **genuine**
+   RS256/ES256 signatures via an in-process fake IdP that signs real tokens
+   with real keypairs (`team-server/test/fakeIdp.ts`) — 12 tests in `oidc.test.ts`
+   plus 3 HTTP-level tests for `/me`.
+   **The aggregate dashboard API is now built too:** `GET /dashboard/projects`
+   (team-wide totals per project) and `GET /dashboard/developers` (an opt-in,
+   k-anonymized per-developer distribution), both OIDC-gated. The interesting
+   part wasn't the SQL, it was getting two things right that a naive
+   implementation would get wrong: (1) `ProjectValue.realizationRate` is a
+   *unit-count* ratio, not a dollar ratio — the aggregate query weights it as
+   `SUM(realizationRate_i × units_i) / SUM(units_i)`, algebraically exact
+   because `realizationRate_i × units_i = realizedUnits_i` by definition, so
+   the team view means the same thing the single-machine dashboard already
+   means by "realization rate," not a silently different number under the
+   same name; and (2) a project with too few contributing developers is
+   suppressed row-by-row (`TEAM_SERVER_MIN_COHORT`, default 5) — otherwise a
+   lone contributor's project total just *is* their personal total under
+   another name, re-deriving the same re-identification risk the existing
+   single-machine `src/value/cohort.ts` feature already guards against, one
+   level down. `GET /dashboard/developers` gets `cohort.ts`'s full two-factor
+   treatment (opt-in *and* k-anonymized, distribution only, never a named
+   list) via `team-server/src/aggregate.ts` — kept as pure, HTTP/DB-free
+   functions so the privacy logic is unit-testable on its own (9 tests) apart
+   from the HTTP-level tests that push hand-computed rollups through the real
+   server and assert exact numbers chosen so a naive unweighted average would
+   visibly disagree. Total `team-server/` suite: 39 tests. **Still not
+   built:** a rendered dashboard UI that calls these APIs, and any link
+   between an OIDC identity and a specific developer's `keyId` (so there is
+   still no "these are MY numbers" self-view — only the team-wide aggregate
+   and the anonymized distribution). Still true that nothing in
+   `src/team/rollup.ts`, the CLI command, or `team-server/` touches
+   `src/proxy/server.ts` or any per-request path.
+2. **Native Bedrock and Vertex wire formats** — the two remaining non-OpenAI-compatible
+   envelopes. Unlike `/responses` above (same OpenAI base URL, bearer-key auth, JSON
+   over HTTPS — only the JSON shape and streaming event semantics differed), Bedrock
+   puts the model id in the URL path rather than the body and Vertex rejects static
+   API keys outright (OAuth2 access token required) — both verified against AWS's
+   and Google's own references, not assumed. Both remain reverse-proxy-compatible in
+   principle (Bedrock via its newer bearer-token "API key" mode, not classic SigV4
+   signing which a transparent proxy can't support; Vertex via a client-supplied
+   OAuth2 access token, still a forwardable bearer token even though it isn't a
+   static key) — so this doesn't require AegisFlow to hold real cloud credentials.
+   Not yet scoped as a build: Bedrock's cache-token inclusive/exclusive usage
+   semantics specifically still need the same independent cross-check the
+   `/responses` fix used before any cost math on them would be trustworthy.
+3. **A true transcript-judge or controlled A/B time study** for Lift — narrower now
+   than it used to be. The AI-assisted side of the TSF ratio used to be pure
+   wall-clock duration, unable to tell a focused three-turn session from a
+   forty-turn one that flailed to the same result. The content-free half of that
+   gap is now closed: `src/value/liftEfficiency.ts` pools each covered work unit's
+   Acceptance rate (already computed for the Acceptance lens, edit-distance,
+   never content) and shrinks it toward the ledger's own first-pass rate via the
+   same empirical-Bayes machinery as §8, feeding a small, bounded discount into
+   `boundedLift` alongside selection/substitution/concurrency — see
+   `docs/RETURN-ON-INTELLIGENCE.md` §7.2. The LLM-judge ladder above it is now
+   mostly built too: `src/judge/tier.ts` (`resolveJudgeTier`, the trust-ladder
+   gate), `src/judge/payload.ts` (a content-free structural summary — turn
+   counts, timing gaps, request-size trend, the exact signals the algorithmic
+   piece didn't wire in), and `src/judge/call.ts` +
+   `src/judge/orchestrate.ts`'s `judgeSession` (the actual OpenAI-compatible
+   call, strictly parsed, gated first, gracefully degraded on any failure) —
+   42 tests across four files, none of them mocked-away: real local HTTP
+   servers stand in for the judge endpoint the same way `test/proxy.test.ts`
+   already stands in for upstream providers. One honest gap surfaced by
+   building it: AegisFlow never persisted prompt/response transcript text, so
+   the "full session content" tiers this item originally imagined can't
+   actually send anything richer than the structural summary yet — see
+   [docs/LIFT-AI-SIDE-JUDGE-DESIGN.md](LIFT-AI-SIDE-JUDGE-DESIGN.md) §2's boxed
+   note. Genuinely still open: real transcript capture (a bigger, separate
+   privacy decision), a real controlled A/B, and any CLI/dashboard surface to
+   actually trigger a judgment — `judgeSession` is a library capability today,
+   called from nowhere yet.
 4. **Rust core** — only if AegisFlow becomes a shared gateway under real concurrency.
    Until then it's premature.
 

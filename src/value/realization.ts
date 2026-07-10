@@ -501,9 +501,10 @@ export function liftOptionsFromStore(
     }));
   }
   return liftFromData({
-    units: mature.map((u) => ({ taskType: u.taskType, realized: u.funnel.realized })),
+    units: mature.map((u) => ({ taskType: u.taskType, realized: u.funnel.realized, acceptance: u.acceptance })),
     events,
     baselineMinutes,
+    ledgerAcceptance: report.firstPassAcceptance,
   });
 }
 

@@ -431,6 +431,61 @@ choice over pretending to fit one from too little data. None of this touches
 `liftFromData`, `boundedLift`, or the Manski interval mechanics above — it only
 sharpens one of their inputs.
 
+### 7.2 AI-side efficiency: the Acceptance-driven Lift discount
+
+§7.1 sharpened the manual-baseline side of the TSF ratio. It never touched the
+other side: measured time-with-AI treats a focused three-turn session and a
+forty-turn session that flailed to the same result identically, because both
+produce the same wall-clock duration. `src/value/liftEfficiency.ts` adds a
+behavioral signal for that — content-free, computed entirely from data already
+in the pipeline.
+
+Each realized, baseline-covered work unit already carries an Acceptance rate
+(`WorkUnit.acceptance` — edit-distance between proposed and kept output,
+structural, never semantic; the same figure that already drives the Acceptance
+lens of the RoI Index). `liftFromData` pools the Acceptance rates of the units
+feeding one Lift calculation and shrinks that pool toward this ledger's OWN
+overall first-pass acceptance rate (`RealizationReport.firstPassAcceptance`)
+via `reliability.ts`'s `shrinkRate` — the exact empirical-Bayes machinery §8
+describes, reused rather than reimplemented, with a fixed κ=20 for the same
+reason as §7.1's baseline blend: a single Lift calculation typically covers too
+few units to separate real spread from noise the way §8's cross-cell dispersion
+estimate can. The shrunk rate maps to a small, disclosed multiplier bounded to
+`[0.85, 1.15]`:
+
+```
+efficiency = clamp(1 + (shrunk − ledgerAcceptance), 0.85, 1.15)
+```
+
+**Why shrink toward the ledger's own rate, not a population figure.** Unlike
+§7.1's baseline-minutes prior, there is no cited external source for "typical
+AI first-pass acceptance rate" the way METR publishes one for task-completion
+time — inventing one would violate the same discipline this project holds
+everywhere else. The only honest prior available is the user's own broader
+history.
+
+**Why a fourth point-multiplier, not a separate interval-narrowing mechanic.**
+The earlier design sketch (`docs/LIFT-AI-SIDE-JUDGE-DESIGN.md` §1) described
+this signal as something that should "narrow or widen the Lift interval's
+confidence." The shipped implementation instead feeds `efficiency` into
+`boundedLift` as a fourth discount alongside `selection`/`substitution`/
+`concurrency` — all four multiply into the same `point` estimate, and because
+`low = point × 0.7` when no A/B floor is supplied, a high-efficiency session's
+`point` and `low` rise together while `high` (the TSF ceiling) is untouched,
+narrowing the interval's *width* as a side effect of one well-understood
+mechanic rather than a new one. This is the simpler, more consistent choice: it
+reuses `boundedLift` exactly as built, never redefines "the interval
+mechanics" — the same discipline §7.1 states explicitly ("None of this touches
+`liftFromData`, `boundedLift`, or the Manski interval mechanics above — it only
+sharpens one of their inputs") applied to this input too.
+
+Absent Acceptance data (no proposal captured for any covered unit) or an
+uninstrumented ledger (`firstPassAcceptance` still null), the signal returns
+multiplier `1` — the prior, unmodified numeric result — with a note explaining
+why. Wired through `liftOptionsFromStore` (`src/value/realization.ts`); unit
+math lives in `test/lift-efficiency.test.ts`, end-to-end wiring in
+`test/lift-source.test.ts`.
+
 ---
 
 ## 8. Reliability — trust in proportion to evidence (empirical Bayes)

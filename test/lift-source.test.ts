@@ -3,7 +3,8 @@
  * measured AI minutes, fed through the METR-discounted boundedLift. These tests
  * pin the math and — most importantly — the honesty properties: it degrades to
  * uninstrumented rather than inventing a counterfactual, and it cannot be gamed
- * by spending more AI time.
+ * by spending more AI time. Also covers the optional Acceptance-driven efficiency
+ * signal's end-to-end wiring (unit math lives in test/lift-efficiency.test.ts).
  */
 
 import { test } from 'node:test';
@@ -67,4 +68,35 @@ test('liftFromData: cannot be gamed — more AI time on the same realized work l
   assert.ok(lean.tsf > bloated.tsf, 'spending more AI time for the same output drops the TSF');
   assert.ok(lean.lift !== null && bloated.lift !== null);
   assert.ok(lean.lift >= bloated.lift, 'and therefore cannot raise the Lift lens');
+});
+
+test('liftFromData: omitting acceptance/ledgerAcceptance leaves the efficiency signal neutral (backward compatible)', () => {
+  const r = liftFromData({
+    units: [{ taskType: 'feature', realized: true }],
+    events: singleSessionEvents(4, 10),
+    baselineMinutes: { feature: 240 },
+  });
+  assert.ok(r.notes.some((n) => n.includes('Efficiency signal uninstrumented')));
+});
+
+test('liftFromData: above-prior Acceptance (when supplied) sharpens the discounted Lift point without moving TSF', () => {
+  const baselineMinutes = { feature: 240 };
+  const events = singleSessionEvents(4, 10);
+
+  const neutral = liftFromData({ units: [{ taskType: 'feature', realized: true }], events, baselineMinutes });
+  const withAcceptance = liftFromData({
+    units: [{ taskType: 'feature', realized: true, acceptance: 1 }],
+    events,
+    baselineMinutes,
+    ledgerAcceptance: 0.3,
+  });
+
+  assert.ok(neutral.tsf !== null && withAcceptance.tsf !== null);
+  assert.ok(
+    Math.abs(neutral.tsf - withAcceptance.tsf) < 1e-9,
+    'the efficiency signal discounts the point estimate, it never touches the behavioral TSF ratio itself',
+  );
+  assert.ok(neutral.lift !== null && withAcceptance.lift !== null);
+  assert.ok(withAcceptance.lift > neutral.lift, 'above-prior first-pass acceptance raises the discounted Lift point');
+  assert.ok(withAcceptance.notes.some((n) => n.includes('Efficiency signal:')));
 });

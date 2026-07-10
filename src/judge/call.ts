@@ -1,0 +1,149 @@
+/**
+ * The actual outbound call to an OpenAI-compatible judge endpoint (local or
+ * hosted — same wire shape either way, only baseUrl/apiKey differ). This module
+ * is deliberately STRICT: it throws JudgeCallError on anything short of a
+ * well-formed judgment, and never guesses. All graceful-degradation behavior
+ * (falling back to the algorithmic signal on failure) lives one layer up in
+ * judge/orchestrate.ts — this file either returns a trustworthy SessionJudgment
+ * or throws, nothing in between.
+ *
+ * See docs/LIFT-AI-SIDE-JUDGE-DESIGN.md §3 for SessionJudgment's design and §2
+ * for why the credential is a dedicated env var, never the metered proxy key.
+ */
+
+import type { JudgeConfidence } from './tier.ts';
+import type { StructuralSessionSummary } from './payload.ts';
+
+export interface SessionJudgment {
+  sessionId: string;
+  efficiencyMultiplier: number; // clamped to [MULTIPLIER_FLOOR, MULTIPLIER_CAP]
+  confidence: JudgeConfidence;
+  rationale: string; // shown to the user — never silently trusted
+}
+
+export class JudgeCallError extends Error {
+  readonly reason: 'network' | 'timeout' | 'http-status' | 'malformed-response';
+
+  constructor(message: string, reason: 'network' | 'timeout' | 'http-status' | 'malformed-response') {
+    super(message);
+    this.name = 'JudgeCallError';
+    this.reason = reason;
+  }
+}
+
+// Matches liftEfficiency.ts's algorithmic bound in spirit but wider, per the
+// design doc's §3 sketch ("bounded to [0.5, 1.5]") — an LLM judge has more
+// signal than the algorithmic pool, so its ceiling on how much it can move Lift
+// is deliberately looser, while still being a REAL bound, never open-ended.
+export const JUDGE_MULTIPLIER_FLOOR = 0.5;
+export const JUDGE_MULTIPLIER_CAP = 1.5;
+
+const CALL_TIMEOUT_MS = 30_000;
+
+function judgePrompt(summary: StructuralSessionSummary): string {
+  return (
+    'You are judging how EFFICIENTLY an AI coding session used its time — not whether the code was good. ' +
+    'You will NOT see any prompt or code content, only structural session metrics. Reply with ONLY a JSON ' +
+    'object of the exact shape {"efficiencyMultiplier": number, "rationale": string}. ' +
+    `efficiencyMultiplier must be between ${JUDGE_MULTIPLIER_FLOOR} and ${JUDGE_MULTIPLIER_CAP}, where 1.0 means ` +
+    'no adjustment, above 1.0 means the session used AI-assisted time unusually well (few turns, tight timing, ' +
+    'proposals converging rather than sprawling), and below 1.0 means it looks like it flailed (many turns, ' +
+    'erratic or growing request sizes, few proposals relative to turns). rationale must be one short sentence.\n\n' +
+    `Session metrics:\n${JSON.stringify(
+      {
+        requestCount: summary.requestCount,
+        proposalCount: summary.proposalCount,
+        interTurnGapsSec: summary.interTurnGapsSec,
+        requestSizeTrend: summary.requestSizeTrend,
+        spanMinutes: Math.round(summary.spanMinutes * 10) / 10,
+      },
+      null,
+      2,
+    )}`
+  );
+}
+
+function clamp(v: number, lo: number, hi: number): number {
+  return Math.min(hi, Math.max(lo, v));
+}
+
+/**
+ * Calls one OpenAI-compatible Chat Completions endpoint and returns a validated
+ * SessionJudgment, or throws JudgeCallError. `apiKey` is null for local calls —
+ * no Authorization header is sent in that case, matching how the reverse proxy's
+ * own local-server support (x-aegis-openai-base) never assumes a key either.
+ */
+export async function callJudgeApi(
+  baseUrl: string,
+  model: string,
+  apiKey: string | null,
+  summary: StructuralSessionSummary,
+  confidence: JudgeConfidence,
+  timeoutMs = CALL_TIMEOUT_MS,
+): Promise<SessionJudgment> {
+  const controller = new AbortController();
+  const timeoutTimer = setTimeout(() => controller.abort(), timeoutMs);
+
+  let res: Response;
+  try {
+    res = await fetch(baseUrl.replace(/\/$/, '') + '/chat/completions', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}),
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: judgePrompt(summary) }],
+        response_format: { type: 'json_object' },
+        temperature: 0,
+      }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    const timedOut = controller.signal.aborted;
+    throw new JudgeCallError(
+      timedOut ? `judge call timed out after ${timeoutMs}ms` : `judge endpoint unreachable: ${String(err)}`,
+      timedOut ? 'timeout' : 'network',
+    );
+  } finally {
+    clearTimeout(timeoutTimer);
+  }
+
+  if (!res.ok) {
+    throw new JudgeCallError(`judge endpoint returned HTTP ${res.status}`, 'http-status');
+  }
+
+  let envelope: unknown;
+  try {
+    envelope = await res.json();
+  } catch {
+    throw new JudgeCallError('judge endpoint response was not valid JSON', 'malformed-response');
+  }
+
+  const content = (envelope as { choices?: Array<{ message?: { content?: unknown } }> })?.choices?.[0]?.message
+    ?.content;
+  if (typeof content !== 'string') {
+    throw new JudgeCallError('judge endpoint response had no choices[0].message.content string', 'malformed-response');
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    throw new JudgeCallError('judge model reply was not valid JSON', 'malformed-response');
+  }
+
+  const rawMultiplier = (parsed as { efficiencyMultiplier?: unknown })?.efficiencyMultiplier;
+  const rawRationale = (parsed as { rationale?: unknown })?.rationale;
+  if (typeof rawMultiplier !== 'number' || !Number.isFinite(rawMultiplier)) {
+    throw new JudgeCallError('judge model reply had a non-numeric or non-finite efficiencyMultiplier', 'malformed-response');
+  }
+
+  return {
+    sessionId: summary.sessionId,
+    efficiencyMultiplier: clamp(rawMultiplier, JUDGE_MULTIPLIER_FLOOR, JUDGE_MULTIPLIER_CAP),
+    confidence,
+    rationale: typeof rawRationale === 'string' && rawRationale.trim() ? rawRationale.trim().slice(0, 500) : '(judge gave no rationale)',
+  };
+}

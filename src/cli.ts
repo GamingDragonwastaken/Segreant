@@ -59,6 +59,7 @@ import {
   type SignedReceipt,
   type VerifyOptions,
 } from './value/receipt.ts';
+import { buildRollupBody, signRollup, type SignedRollup } from './team/rollup.ts';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
@@ -2604,6 +2605,137 @@ async function cmdBaseline(flags: Flags): Promise<void> {
   console.log('');
 }
 
+/**
+ * Push a signed, numeric-only rollup of this machine's per-project value/RoI to
+ * an enterprise-run team server. See docs/TEAM-TIER-DESIGN.md — AegisFlow hosts
+ * nothing; --url points at infrastructure the team already runs and trusts.
+ * Uses a SEPARATE keypair from `receipt --pubkey` on purpose (src/team/rollup.ts).
+ */
+async function cmdTeamPush(flags: Flags): Promise<void> {
+  const tty = process.stdout.isTTY ?? false;
+  const keyPath = join(aegisHome(), 'team-key.json');
+  const sub = typeof flags._[0] === 'string' ? flags._[0] : '';
+
+  if (sub !== 'push') {
+    console.log('');
+    console.log(color(tty, C.bold, '  Team tier — push a signed rollup to a team server you run'));
+    console.log(color(tty, C.gray, '  AegisFlow hosts nothing; --url points at infrastructure your team already trusts.'));
+    console.log('');
+    console.log(color(tty, C.gray, '  Usage:  aegisflow team push --url <url>          send this window\'s per-project value/RoI'));
+    console.log(color(tty, C.gray, '          aegisflow team push --dry-run             preview without sending'));
+    console.log(color(tty, C.gray, '          aegisflow team push --pubkey              print this machine\'s rollup signing identity'));
+    console.log(color(tty, C.gray, '          aegisflow team push --url <url> --window 7 --project <name>'));
+    console.log('');
+    return;
+  }
+
+  if (flags.pubkey) {
+    const keys = loadOrCreateKeyPair(keyPath);
+    if (flags.json) {
+      process.stdout.write(JSON.stringify({ keyId: keys.keyId, publicKey: keys.publicPem }, null, 2) + '\n');
+      return;
+    }
+    console.log('');
+    console.log(color(tty, C.bold, '  AegisFlow team-rollup identity') + color(tty, C.gray, '   register this with your team server'));
+    console.log(`  keyId: ${color(tty, C.cyan, keys.keyId)}`);
+    console.log('');
+    process.stdout.write(keys.publicPem.endsWith('\n') ? keys.publicPem : keys.publicPem + '\n');
+    console.log('');
+    return;
+  }
+
+  const url = typeof flags['url'] === 'string' ? flags['url'] : null;
+  const dryRun = Boolean(flags['dry-run']);
+  if (!url && !dryRun) {
+    const msg = 'no team server URL given — pass one your team runs: aegisflow team push --url <url>  (or --dry-run to preview without sending)';
+    if (flags.json) {
+      console.log(JSON.stringify({ ok: false, error: msg }, null, 2));
+      process.exitCode = 1;
+      return;
+    }
+    console.error(`  ${color(tty, C.yellow, '✗')} ${msg}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const windowDays = flags.window ? Number(flags.window) : 30;
+  const projectFilter = typeof flags['project'] === 'string' ? flags['project'] : null;
+
+  const store = new Store(dbPath());
+  let projects = projectValueBreakdown(store, { windowDays });
+  store.close();
+  if (projectFilter) projects = projects.filter((p) => p.project === projectFilter);
+
+  if (projects.length === 0) {
+    const msg = projectFilter
+      ? `no realized units found for project "${projectFilter}" in the last ${windowDays}d — nothing to push`
+      : `no realized units found in the last ${windowDays}d — nothing to push`;
+    if (flags.json) {
+      console.log(JSON.stringify({ ok: false, error: msg }, null, 2));
+      return;
+    }
+    console.log(`  ${color(tty, C.dim, msg)}`);
+    return;
+  }
+
+  const keys = loadOrCreateKeyPair(keyPath);
+  const to = new Date();
+  const from = new Date(to.getTime() - windowDays * 86_400_000);
+  const body = buildRollupBody(keys, projects, { from: from.toISOString(), to: to.toISOString() });
+  const signed: SignedRollup = signRollup(body, keys);
+
+  if (dryRun) {
+    if (flags.json) {
+      console.log(JSON.stringify(signed, null, 2));
+      return;
+    }
+    console.log('');
+    console.log(color(tty, C.bold, `  Dry run — would push ${projects.length} project(s), signed by key ${keys.keyId}`));
+    for (const p of projects) {
+      const roiStr = p.roiIndex === null ? 'RoI —' : `RoI ${Math.round(p.roiIndex)}`;
+      console.log(`    ${p.project.padEnd(24)} ${usd(p.costUsd).padStart(12)}   ${roiStr}`);
+    }
+    console.log(color(tty, C.gray, `  Nothing was sent. Re-run with --url <url> to actually push.`));
+    console.log('');
+    return;
+  }
+
+  try {
+    const res = await fetch(url!.replace(/\/$/, '') + '/rollups', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(signed),
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      const msg = `push failed: HTTP ${res.status} from ${url}${detail ? ` — ${detail.slice(0, 200)}` : ''}`;
+      if (flags.json) {
+        console.log(JSON.stringify({ ok: false, error: msg }, null, 2));
+        process.exitCode = 1;
+        return;
+      }
+      console.error(`  ${color(tty, C.red, '✗')} ${msg}`);
+      process.exitCode = 1;
+      return;
+    }
+    if (flags.json) {
+      console.log(JSON.stringify({ ok: true, keyId: keys.keyId, projects: projects.length }, null, 2));
+      return;
+    }
+    console.log(`  ${color(tty, C.green, '✓')} Pushed ${projects.length} project(s) to ${url}, signed by key ${keys.keyId}`);
+  } catch (e) {
+    const msg = `push failed: ${String(e)}`;
+    if (flags.json) {
+      console.log(JSON.stringify({ ok: false, error: msg }, null, 2));
+      process.exitCode = 1;
+      return;
+    }
+    console.error(`  ${color(tty, C.red, '✗')} ${msg}`);
+    process.exitCode = 1;
+  }
+}
+
 /** This package's version, read from package.json — the single source of truth. */
 function packageVersion(): string {
   try {
@@ -2658,6 +2790,11 @@ function cmdHelp(): void {
     team                  Per-user value: how much of the spend reaches outcomes.
                           Opt-in, distribution-only, k-anonymous. --me <user> for
                           your own view (--days N, --json)
+    team push --url <u>   Cross-machine: sign + push this window's per-project
+                          value/RoI to a team server YOU run (AegisFlow hosts
+                          nothing). --dry-run to preview, --pubkey to publish
+                          this machine's rollup identity (--window D, --project
+                          <name>, --json)
     report --kind K       Wire an outcome: code --commit <hash>, non-code --session <id>
                           kinds: tested|merged|shipped|incident|used|resolved|published|…
     exec -- <command>     AMBIENT outcome capture: run any command and report its
@@ -2797,7 +2934,16 @@ async function main(): Promise<void> {
       await cmdUsage(flags);
       break;
     case 'team':
-      await cmdTeam(flags);
+      // Bare `team` / `team --me <user>` = the existing local, k-anonymous
+      // per-user value view (single machine). `team push` = sign and push a
+      // cross-project rollup to a separate, BYO team server (multi-machine).
+      // Same top-level verb, two scopes — not a naming collision: `push`
+      // lands in flags._[0] because `main()` already consumed argv[0] as `cmd`.
+      if (flags._[0] === 'push') {
+        await cmdTeamPush(flags);
+      } else {
+        await cmdTeam(flags);
+      }
       break;
     case 'report':
       await cmdReport(flags);

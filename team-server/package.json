@@ -1,0 +1,23 @@
+{
+  "name": "aegisflow-team-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Separate, optional, BYO-Postgres team server for AegisFlow's team tier. AegisFlow hosts nothing — an enterprise runs this on infrastructure they already own. See docs/TEAM-TIER-DESIGN.md in the main repo.",
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/index.ts",
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "@types/pg": "^8.11.10",
+    "typescript": "^5.7.0"
+  }
+}

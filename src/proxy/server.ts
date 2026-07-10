@@ -141,8 +141,13 @@ function parseRequestBody(body: Buffer): ParsedRequest {
 }
 
 /** For OpenAI streaming, ensure the usage chunk is emitted by the API. */
-function ensureOpenAIUsage(provider: Provider, stream: boolean, body: Buffer): Buffer {
-  if (provider !== 'openai' || !stream) return body;
+function ensureOpenAIUsage(provider: Provider, stream: boolean, url: string, body: Buffer): Buffer {
+  // Chat Completions needs stream_options.include_usage opted in explicitly.
+  // The Responses API always reports usage on its `response.completed` event
+  // with no opt-in — and unlike Chat Completions, it rejects an unrecognized
+  // stream_options param outright (400 unknown_parameter), so injecting it
+  // here would break every streaming /responses request.
+  if (provider !== 'openai' || !stream || url.includes('/responses')) return body;
   try {
     const json = JSON.parse(body.toString('utf8')) as Record<string, unknown>;
     const so = (json.stream_options ?? {}) as Record<string, unknown>;
@@ -294,7 +299,7 @@ async function handle(
   }
 
   // --- Forward upstream ---
-  const outboundBody = ensureOpenAIUsage(provider, parsed.stream, body);
+  const outboundBody = ensureOpenAIUsage(provider, parsed.stream, req.url ?? '', body);
   const targetUrl = upstreamBase.replace(/\/$/, '') + (req.url ?? '');
   let upstream: Response;
   // Connect/TTFB timeout ONLY: abort if the upstream never starts responding.

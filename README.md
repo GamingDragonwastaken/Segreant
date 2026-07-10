@@ -132,6 +132,11 @@ aegisflow frontier --repo <p>   What's best for you — RoI by model × task-typ
 aegisflow usage                 RoI for non-coding usage (chat/research), from outcomes
 aegisflow team                  Per-user value extraction — opt-in, distribution-only,
                                 k-anonymous (--me <user> for your own view, --json)
+aegisflow team push --url <u>   Cross-machine: sign + push this window's per-project
+                                value/RoI to a team server YOU run (AegisFlow hosts
+                                nothing). --dry-run to preview, --pubkey to publish
+                                this machine's rollup identity (--window D, --project
+                                <name>, --json)
 aegisflow budget --recommend    Value-aware budget from usage + realized value (--apply)
 aegisflow alerts                Governance alerts — spikes, throttling, runaway, value
                                 craters (--repo for value; --json; exits 1 if critical).
@@ -410,9 +415,10 @@ CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs `typecheck` +
 
 ## Status
 
-**Two ways in, and they cross-correlate.** *Proxy* metering (Anthropic, OpenAI,
-**natively-priced Gemini**, and **any OpenAI-compatible provider** via
-`x-aegis-openai-base` — OpenRouter, Ollama, DeepSeek, Mistral, …) covers anything
+**Two ways in, and they cross-correlate.** *Proxy* metering (Anthropic, OpenAI
+(Chat Completions and Responses API), **natively-priced Gemini**, and **any
+OpenAI-compatible provider** via `x-aegis-openai-base` — OpenRouter, Ollama,
+DeepSeek, Mistral, …) covers anything
 you point at it live, with transparent fail-open on upstream errors and a
 connect/TTFB timeout so a hung provider can't hang you. **Native import** (`aegisflow
 import` — Claude Code, opencode, Codex CLI) reads what those tools already log
@@ -434,11 +440,19 @@ synthetic constant, no unsourced table. A state-aware `aegisflow guide` (and bar
 **fully self-contained** web dashboard (zero external requests) mirror every
 surface.
 
-**248/249 tests (1 skipped — POSIX-only permission semantics), `tsc` clean, CI on
+**309/310 tests (1 skipped — POSIX-only permission semantics), `tsc` clean, CI on
 Linux/macOS/Windows.** Installable via `npx
 aegisflow`. See [docs/ARCHITECTURE.md §7](docs/ARCHITECTURE.md) for what's
-deliberately still open — a hosted, cross-machine team tier is real future value but
-sits outside this release's local-only, zero-maintenance shape; it's revisited only
-if real usage and requests justify the operational commitment it would take to run.
+deliberately still open — `aegisflow team push` can sign and push a numeric-only
+project rollup to [`team-server/`](team-server/README.md), a separate,
+optional, BYO-Postgres server an operator runs themselves (AegisFlow hosts
+nothing; its own `package.json` keeps `pg` out of the main CLI's dependency
+tree). The server verifies and stores what's pushed, verifies a human's SSO
+login via OIDC (`node:crypto` only, RS256/ES256), and now serves a real,
+OIDC-gated aggregate dashboard API back out — team-wide spend/RoI by project,
+and an opt-in, k-anonymized distribution by developer, never a named list
+(team-server's own 39-test suite). Still out of scope: a rendered dashboard UI
+over that API, and linking an OIDC identity to a specific developer for a
+self-view.
 
 MIT licensed.

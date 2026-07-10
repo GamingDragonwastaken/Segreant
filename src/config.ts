@@ -96,6 +96,56 @@ export interface PerUserConfig {
   minCohort: number;
 }
 
+export interface JudgeConfig {
+  /**
+   * Local OpenAI-compatible inference server for the AI-side Lift judge (e.g. a
+   * local Ollama). null = the local-LLM judge tier is off. A separate field from
+   * upstreams.openai on purpose — judge calls are never metered proxy traffic and
+   * must never share a base URL with what's actually being measured.
+   */
+  localBaseUrl: string | null;
+  /**
+   * Model name to request from localBaseUrl (e.g. "llama3.1"). Required
+   * operationally — a Chat Completions call needs a model field — but there is
+   * no safe universal default the way there is for judge.hostedModel below,
+   * since local installs vary. null = the local tier stays off even if
+   * localBaseUrl is set (see judge/orchestrate.ts, not the privacy gate in
+   * judge/tier.ts — this is an executability check, not a consent check).
+   */
+  localModel: string | null;
+  /**
+   * Loud opt-in: once the local tier is active, also send full session content
+   * (not just the structural proposal-count/timing summary) to it. Independent
+   * of hostedSendFullContent below — turning this on never affects the hosted
+   * tier. Still explicit, still off by default, even though the trust boundary
+   * ("your machine") isn't crossed any more than it already is by the coding
+   * tool itself (docs/LIFT-AI-SIDE-JUDGE-DESIGN.md §2).
+   */
+  localSendFullContent: boolean;
+  /**
+   * Explicit opt-in for the HOSTED judge tier. The credential itself
+   * (AEGIS_JUDGE_API_KEY) must ALSO be set as an environment variable — never
+   * stored here. config.json can end up committed, backed up, or shared, and a
+   * bearer key for a separate judge account has no business living next to Lift
+   * baselines. Both this flag AND the env var must independently be set before
+   * any hosted call is made — see resolveJudgeTier in src/judge/tier.ts.
+   */
+  hostedEnabled: boolean;
+  /**
+   * Which OpenAI-compatible hosted endpoint to call once hostedEnabled AND the
+   * env var are both set. This is operationally required (a call needs a URL),
+   * not itself a third consent gate — the two real privacy decisions are
+   * hostedEnabled and the env var.
+   */
+  hostedBaseUrl: string | null;
+  /** Model name to request from hostedBaseUrl. Same executability role as
+   * localModel above — required to build a valid request, not a consent gate. */
+  hostedModel: string | null;
+  /** Loud opt-in: once the hosted tier is active, also send full session content,
+   * not just the structural summary. Independent of localSendFullContent. */
+  hostedSendFullContent: boolean;
+}
+
 export interface AegisConfig {
   port: number;
   dashboardPort: number;
@@ -122,6 +172,7 @@ export interface AegisConfig {
   budget: BudgetConfig;
   alerts: AlertsConfig;
   lift: LiftConfig;
+  judge: JudgeConfig;
   pricing: PricingConfig;
   perUser: PerUserConfig;
   /** Prune request rows older than this many days during maintenance. */
@@ -164,6 +215,18 @@ export const DEFAULT_CONFIG: AegisConfig = {
     baselineMinutes: { feature: 240, fix: 90, refactor: 120, test: 60, docs: 45, perf: 120, chore: 30, other: 90 },
     laborRatePerHour: null,
     outcomeBaselineMinutes: {},
+  },
+  judge: {
+    // Every judge tier above the always-on algorithmic default is OFF until the
+    // user takes an explicit action — no field here defaults to anything that
+    // sends data anywhere. See docs/LIFT-AI-SIDE-JUDGE-DESIGN.md §4.
+    localBaseUrl: null,
+    localModel: null,
+    localSendFullContent: false,
+    hostedEnabled: false,
+    hostedBaseUrl: null,
+    hostedModel: null,
+    hostedSendFullContent: false,
   },
   pricing: {
     // null = the default community feed (LiteLLM's price file — maintained by
