@@ -20,7 +20,8 @@
   "files": [
     "bin",
     "src",
-    "pricing"
+    "pricing",
+    "baselines"
   ],
   "keywords": [
     "finops",

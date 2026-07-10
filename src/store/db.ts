@@ -212,6 +212,12 @@ CREATE TABLE IF NOT EXISTS scan_snapshots (
   repos_json TEXT NOT NULL,
   tools_json TEXT NOT NULL,
   at_ms      INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS lift_baselines (
+  project      TEXT PRIMARY KEY NOT NULL,
+  buckets_json TEXT NOT NULL,
+  at_ms        INTEGER NOT NULL
 )`;
 
 export class Store {
@@ -298,6 +304,45 @@ export class Store {
       console.error(`  scan snapshot for "${rootsKey}" is corrupt, treating as missing: ${String(err)}`);
       return null;
     }
+  }
+
+  /**
+   * Earliest recorded request across the whole ledger, or null if nothing has
+   * ever been metered. The personal Lift-baseline miner uses this as the
+   * "before AI tracking began" cutoff: commits older than this are the honest
+   * personal-history evidence (see value/liftBaseline.ts). Bookkeeping only —
+   * one MIN() over an indexed column, never a project-scoped ledger read.
+   */
+  earliestRequestMs(): number | null {
+    const row = this.db.prepare(`SELECT MIN(ts_epoch_ms) AS m FROM requests`).get() as { m: number | null };
+    return row.m ?? null;
+  }
+
+  /**
+   * Persist the computed personal Lift-baseline buckets for a project, so the
+   * (relatively expensive) git-history mining runs once and is reused rather
+   * than recomputed on every `roi`/dashboard read. Caller owns the JSON shape
+   * (PersonalBaselineBucket[]) — this is storage only, exactly like
+   * saveRealizationUnits/realizationUnitRows keep the typed shape in value/.
+   */
+  saveLiftBaseline(project: string, bucketsJson: string, atMs: number): void {
+    this.db
+      .prepare(
+        `INSERT INTO lift_baselines (project, buckets_json, at_ms)
+         VALUES (?, ?, ?)
+         ON CONFLICT(project) DO UPDATE SET
+           buckets_json = excluded.buckets_json,
+           at_ms        = excluded.at_ms`,
+      )
+      .run(project, bucketsJson, atMs);
+  }
+
+  /** The last computed personal Lift-baseline for a project, or null if never computed. */
+  loadLiftBaseline(project: string): { bucketsJson: string; atMs: number } | null {
+    const row = this.db.prepare(`SELECT buckets_json, at_ms FROM lift_baselines WHERE project = ?`).get(project) as
+      | { buckets_json: string; at_ms: number }
+      | undefined;
+    return row ? { bucketsJson: row.buckets_json, atMs: row.at_ms } : null;
   }
 
   upsertSession(sessionId: string, project: string, tool: string, startMs: number): void {

@@ -142,6 +142,7 @@ test('planScan: honest empty — no repos under an empty root, no crash', () => 
   assert.deepEqual(plan.repos, []);
   assert.deepEqual(plan.reposWithSpend, []);
   assert.equal(plan.tools.length, 3, 'tools are still detected even with no repos');
+  assert.ok(Array.isArray(plan.otherApps) && plan.otherApps.length >= 5, 'the wider app inventory runs too');
   store.close();
 });
 
@@ -149,6 +150,7 @@ test('planScan: honest empty — no repos under an empty root, no crash', () => 
 function mkPlan(roots: string[], repos: string[], presentToolIds: string[]): ScanPlan {
   return {
     tools: presentToolIds.map((id) => ({ id, label: id, present: true, dataPath: '/x', blurb: '' })),
+    otherApps: [],
     roots,
     repos,
     scan: { repos, roots, dirsVisited: 0, hitBudget: false, unreadableDirs: [] },

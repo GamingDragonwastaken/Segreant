@@ -64,6 +64,15 @@ best for API-key tools, scripts, and enterprises with gateways. **Import** meter
 natively with zero wiring — best for subscription tools a proxy can't see. Most
 people import their editor and, if they also run raw API scripts, proxy those.
 
+**What does `aegisflow scan` mean when it lists a tool as "detected" but not imported?**
+Scan also runs a wider, read-only inventory pass — checking for config directories
+or PATH binaries of AI coding tools beyond the three native importers (today:
+Cursor, Windsurf, Aider, Continue, Zed). Seeing one listed is honestly just an
+existence check — `~/.cursor` exists, or `aider` is on PATH — never a promise that
+its usage is being read. Spend from a detected-but-not-imported tool isn't counted
+anywhere until you wire it via the proxy path (if it supports a base URL) or a
+native importer ships for it.
+
 **Does the proxy slow my requests down?**
 Negligibly. The proxy overhead is microseconds against a provider round-trip of
 hundreds of milliseconds to seconds. If AegisFlow is off, traffic you pointed at it
@@ -119,11 +128,16 @@ whenever and act whenever. The honest price is a slightly wider interval — sho
 not hidden.
 
 **What do I have to configure for the dollar return to appear?**
-A labor rate (`lift.laborRatePerHour`) and, ideally, per-task manual-time baselines
-(`lift.baselineMinutes` for code, `lift.outcomeBaselineMinutes` for non-coding
-outcomes like resolved tickets or published drafts). Until then you still get the
-full 0–100 RoI Index and spend metering; the *dollar* ratio stays honestly
-un-priced rather than invented.
+A labor rate (`lift.laborRatePerHour`) — for code, that's it. Per-task minutes
+(`lift.baselineMinutes`) now resolve automatically: a cited population prior (METR's
+published human-timed task scale) blended with your own pre-tracking git history via
+empirical-Bayes shrinkage, falling back to the population prior alone when you don't
+have enough history yet. Set `lift.baselineMinutes` yourself and your value always
+wins — auto-resolution only fills in what you haven't set. Non-coding outcomes
+(resolved tickets, published drafts) still need `lift.outcomeBaselineMinutes` set
+explicitly — there's no git-history signal for those. Until a labor rate is set you
+still get the full 0–100 RoI Index and spend metering; the *dollar* ratio stays
+honestly un-priced rather than invented.
 
 **How would I know if the metric itself is being gamed?**
 The Stability line. An anytime-valid drift alarm watches the realization stream

@@ -78,7 +78,9 @@ The whole daemon is one Node process. The proxy (`:8090`) and the dashboard (`:8
 | Realization | `src/value/realization.ts` | Assembles each commit's gate funnel; Realization Rate, Realized Value, acceptance |
 | Gate ladder | `src/value/gates.ts` | The eight gates + pass/fail/unknown funnel scoring |
 | Proposals | `src/value/proposals.ts` | Extract proposed edits from responses; edit-distance acceptance |
+| Lift baseline | `src/value/liftBaseline.ts` | Resolve manual-minutes-per-task-type: cited/refreshable population prior + personal pre-tracking git history, combined by continuous-data empirical-Bayes shrinkage |
 | Receipts | `src/value/receipt.ts` | ed25519-signed, verifiable Value Receipts |
+| System scan | `src/scan/scan.ts`, `src/scan/knownApps.ts` | Proactive, read-only discovery: the 3 importable tools, repos under a root, and a wider best-effort inventory of other AI coding tools detected (never a claim of import capability) |
 | Config | `src/config.ts` | Load/save `~/.aegisflow/config.json`, resolve paths |
 | Dashboard | `src/dashboard/` | Read-only JSON API + single-page console |
 | CLI | `src/cli.ts` | `start`, `today/week/month`, `realize`, `report`, `receipt`, `yield`, `budget`, `audit`, … |
@@ -180,25 +182,22 @@ This is single-user, single-process, local. "Scale" means a busy developer's age
 
 ## 7. What I'd revisit as it grows
 
-Three items that used to live here are done and moved to the README's Status
+Five items that used to live here are done and moved to the README's Status
 section: native provider pricing beyond the OpenAI wire format (Gemini is now a
 first-class, verified rate-card entry), auto-updating pricing (`pricing --refresh` /
-`--auto` against a community feed), and passive log import (`aegisflow import` —
+`--auto` against a community feed), passive log import (`aegisflow import` —
 Claude Code, opencode, Codex CLI — which grew into `scan`/`discover`, the zero-wiring
-onboarding path). What's still genuinely open:
+onboarding path), a machine-wide tool inventory scan (`scan` now also surfaces a
+read-only, best-effort inventory of other AI coding tools it recognizes but doesn't
+import from yet — config-dir/PATH-binary checks only, see `src/scan/knownApps.ts` —
+holding the same consent/framing bar as the rest of `scan`: read-only, discloses
+exactly what it found, never reads as system surveillance), and a cited,
+personally-calibrated Lift baseline (the manual-minutes-per-task-type input is now a
+METR-anchored population prior blended with the user's own pre-tracking git history
+via empirical-Bayes shrinkage, replacing the old flat unsourced table — see
+`docs/RETURN-ON-INTELLIGENCE.md` §7.1). What's still genuinely open:
 
-1. **A machine-wide tool inventory scan.** `aegisflow scan` today finds git repos and
-   checks for the 3 *already-built* importers at their known paths. The bigger version
-   — detecting AI coding tools/apps installed on the machine that AegisFlow doesn't
-   have an importer for yet (via process detection, OS install records, or `PATH`
-   probing for CLI binaries) — is confirmed essential to the product, not a maybe. It's
-   deliberately sequenced *after* the hardening pass (docs, CI, cross-platform
-   verification) so it isn't built on top of unverified ground. The consent/framing
-   bar is the same one `scan` already holds: read-only, opt-in, discloses exactly what
-   it found before doing anything — this must never drift toward anything that reads
-   as system surveillance, which is the one thing that would undermine the "connect,
-   don't intercept" trust the rest of the product is built on.
-2. **A hosted, cross-machine team tier** — the optional, metadata-only sync to a shared
+1. **A hosted, cross-machine team tier** — the optional, metadata-only sync to a shared
    dashboard; SSO; support/SLA. Numeric-only, opt-in, signed if built. This is real
    future value, but it requires an operator: ongoing hosting, and a support
    commitment that sits outside this release's local-only, zero-maintenance,
@@ -206,16 +205,21 @@ onboarding path). What's still genuinely open:
    requests justify taking on that operational commitment — the local store and
    schema are designed so it *could* be added later without touching the hot path,
    but "could" isn't "should" until there's a real signal to build it for.
-3. **Native non-OpenAI-wire-format APIs** — Bedrock, Vertex, and OpenAI's `/responses`
+2. **Native non-OpenAI-wire-format APIs** — Bedrock, Vertex, and OpenAI's `/responses`
    shape. Everything reachable over an OpenAI-compatible wire format is already
    covered; these three have genuinely different request/response envelopes.
-4. **A real behavioral Lift source** (transcript-judge or a true A/B time study) to
-   replace the disclosed manual-baseline assumption. Deliberately not default-on even
-   if built: a transcript-judge approach means sending session content to an LLM API,
-   which is a real, loud opt-in decision against the "nothing leaves your machine"
-   promise — not just an API-cost question. See the README's Lift section and
-   `docs/RETURN-ON-INTELLIGENCE.md` for what's already measured without it.
-5. **Rust core** — only if AegisFlow becomes a shared gateway under real concurrency.
+3. **A true transcript-judge or controlled A/B time study** for Lift — a different,
+   larger thing than the baseline-sourcing upgrade above. That upgrade made the
+   manual-*comparator* honest (cited + personally calibrated instead of a flat
+   guess); it did not change how the AI-assisted side is measured. This item would
+   judge the actual AI-assisted session directly (an LLM reading transcripts, or a
+   real controlled A/B), which could tighten the TSF interval further. Deliberately
+   not default-on even if built: a transcript-judge approach means sending session
+   content to an LLM API, which is a real, loud opt-in decision against the "nothing
+   leaves your machine" promise — not just an API-cost question. See the README's
+   Lift section and `docs/RETURN-ON-INTELLIGENCE.md` §7/§7.1 for what's already
+   measured without it.
+4. **Rust core** — only if AegisFlow becomes a shared gateway under real concurrency.
    Until then it's premature.
 
 ---

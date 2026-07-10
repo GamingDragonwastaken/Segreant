@@ -41,6 +41,10 @@ That's it — no base URL, no proxy, no key to point anywhere. Re-run `scan` any
 it tells you what's new since last time. This is genuinely the fastest way to see
 real numbers, and it's why it's what `aegisflow guide` leads with on a fresh install.
 
+`scan` also mentions other AI coding tools it sees on your machine (Cursor,
+Windsurf, Aider, Continue, Zed) even though it can't import from them yet — an
+honest inventory, not a claim of coverage.
+
 ### The proxy path: connect, don't intercept
 
 For anything else — or if you want AegisFlow to actively **cap** spend in real time,

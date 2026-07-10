@@ -79,15 +79,9 @@ export async function projectName(repoPath: string): Promise<string> {
   }
 }
 
-/** Read the last `limit` commits with author timestamps and numstat diffs. */
-export async function readCommits(repoPath: string, limit: number): Promise<CommitInfo[]> {
-  // Prefix each commit's pretty line with a record-separator (\x1e) so the
-  // trailing --numstat block stays in the SAME chunk when we split. Fields
-  // inside the line are unit-separated (\x1f): hash, author-epoch, subject.
-  const fmt = '%x1e%H%x1f%at%x1f%s';
-  const out = await git(repoPath, ['log', `-n${limit}`, `--pretty=format:${fmt}`, '--numstat']);
+/** Parse `git log --pretty=format:%x1e%H%x1f%at%x1f%s --numstat` output (shared by every reader below). */
+function parseCommitLog(out: string): CommitInfo[] {
   const commits: CommitInfo[] = [];
-
   for (const record of out.split('\x1e')) {
     if (!record.trim()) continue;
     const lines = record.split('\n');
@@ -114,6 +108,36 @@ export async function readCommits(repoPath: string, limit: number): Promise<Comm
     });
   }
   return commits;
+}
+
+/** Read the last `limit` commits with author timestamps and numstat diffs. */
+export async function readCommits(repoPath: string, limit: number): Promise<CommitInfo[]> {
+  // Prefix each commit's pretty line with a record-separator (\x1e) so the
+  // trailing --numstat block stays in the SAME chunk when we split. Fields
+  // inside the line are unit-separated (\x1f): hash, author-epoch, subject.
+  const fmt = '%x1e%H%x1f%at%x1f%s';
+  const out = await git(repoPath, ['log', `-n${limit}`, `--pretty=format:${fmt}`, '--numstat']);
+  return parseCommitLog(out);
+}
+
+/**
+ * Commits strictly before `beforeMs`, most-recent-first, capped at `limit`. A
+ * plain `-n<limit>` cap (readCommits) takes the N most recent commits overall —
+ * on a repo with lots of history AFTER a cutoff, that can miss the commits
+ * BEFORE it entirely. `--before` filters at the git-log level first, so the cap
+ * applies to the pre-cutoff slice itself. Used by the personal Lift-baseline
+ * miner, which specifically wants commits from before AI tracking began.
+ */
+export async function readCommitsBefore(repoPath: string, beforeMs: number, limit: number): Promise<CommitInfo[]> {
+  const fmt = '%x1e%H%x1f%at%x1f%s';
+  const out = await git(repoPath, [
+    'log',
+    `--before=${new Date(beforeMs).toISOString()}`,
+    `-n${limit}`,
+    `--pretty=format:${fmt}`,
+    '--numstat',
+  ]);
+  return parseCommitLog(out);
 }
 
 /**

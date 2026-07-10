@@ -369,6 +369,68 @@ Feb 2026); METR 2026 technical-worker survey; *The Fast and Spurious* (arXiv
 ICSE-SEIP'26); SPACE (Forsgren et al. 2021); DORA AI insights. Full synthesis in
 the project's research notes.
 
+### 7.1 Baseline minutes: cited, refreshable, personally calibrated
+
+`liftFromData`'s numerator needs one more input per realized unit: how many
+manual minutes that task-type would have taken. Before this was a flat,
+hand-picked, unsourced table. It now resolves per task-type from three sources,
+in priority order (`src/value/liftBaseline.ts`), and every number is labeled with
+which source produced it:
+
+1. **An explicit override in `config.lift.baselineMinutes`** — always wins. This
+   is unchanged: an auditable org input, exactly like the labor rate, never
+   silently replaced.
+2. **This machine's own pre-tracking git history**, when there's any. Commits
+   from before AegisFlow recorded its first tracked request ANYWHERE (a global
+   cutoff, not per-project) are treated as pre-tracking evidence. Consecutive
+   commits whose gap looks like real, continuous working time (bounded 2–90
+   minutes by default — short enough to exclude fixup/squash noise, long enough
+   to exclude breaks) are classified by the same task-type classifier the
+   realization engine already uses (`classifyTaskType`), and the gap becomes a
+   real, behavioral personal-minutes sample. Two honest limits on the cutoff,
+   disclosed rather than hidden: it can only reflect AI use AegisFlow has itself
+   tracked, so AI-assisted work from *before* AegisFlow was installed reads as
+   "manual"; and it's the minimum timestamp in the (retention-prunable) request
+   ledger, so on a long-lived install it can drift forward as old requests age
+   out, rather than staying pinned to the true first-ever request. Neither is
+   fixed by more engineering here — they're exactly why this prior is always
+   shrunk toward the population prior below, never trusted outright.
+3. **A cited population prior** (`baselines/lift-baselines.json`), anchored to
+   METR's published, human-timed task-completion research (Time Horizon 1.1,
+   2026-05-08: metr.org/time-horizons, arXiv:2503.14499) — METR times skilled
+   professional engineers completing real tasks and reports the task LENGTH, in
+   that human-timed unit, at which frontier models succeed 50%/80% of the time.
+   METR does not publish a breakdown matching this project's task-type taxonomy,
+   so the per-task-type minutes are this project's own calibration against that
+   published scale, not a METR output — disclosed as such in the manifest file
+   itself. These values are unchanged from AegisFlow's earlier illustrative
+   defaults; the METR anchor is an order-of-magnitude sanity check against a
+   real, cited human-timed scale, not a re-derivation of the numbers from METR
+   data. Refreshable via `aegisflow baseline --refresh --url <manifest>` (a
+   user-writable cache under `~/.aegisflow/baselines/` overrides the bundled
+   floor; `aegisflow baseline` alone shows source/age/staleness) — but honestly,
+   unlike `aegisflow pricing`, there is no established machine-readable feed for
+   this, so `--url` is required every time: there is no saved or invented
+   default to silently reuse.
+
+Sources 2 and 3 are combined, not just chosen between, via a continuous-data
+analogue of §8's Beta-Binomial shrinkage:
+
+```
+minutes = (personalSum + κ·populationMean) / (personalN + κ)
+```
+
+the same "evidence plus κ pseudo-observations at the prior mean" shape, but for
+a continuous positive mean instead of a 0..1 rate. `κ` here (20 pseudo-commits)
+is a **fixed, disclosed constant, not empirically estimated** — §8's Beta-
+Binomial prior can estimate its own shrinkage strength from the dispersion
+across every model×task cell in the whole ledger, but a personal git baseline
+typically has only a handful of task-type buckets, too few to separate real
+spread from noise the same way. A fixed, conservative constant is the honest
+choice over pretending to fit one from too little data. None of this touches
+`liftFromData`, `boundedLift`, or the Manski interval mechanics above — it only
+sharpens one of their inputs.
+
 ---
 
 ## 8. Reliability — trust in proportion to evidence (empirical Bayes)

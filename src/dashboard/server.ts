@@ -11,9 +11,11 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import type { Store } from '../store/db.ts';
-import { isDemo, type AegisConfig } from '../config.ts';
+import { isDemo, DEFAULT_CONFIG, type AegisConfig } from '../config.ts';
 import { startOfLocalDay } from '../budget/guard.ts';
 import { loadRealization, projectValueBreakdown, liftOptionsFromStore, moneyInputsFromStore, realizeDiscoveredProjects } from '../value/realization.ts';
+import { projectName } from '../git/correlate.ts';
+import { resolveBaselineMinutesForRepo } from '../value/liftBaseline.ts';
 import { scanWithDiff, saveScan } from '../scan/scan.ts';
 import { demoLiftOptions } from '../demo/seed.ts';
 import { recommendAllocation } from '../budget/allocate.ts';
@@ -291,6 +293,7 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
         return json(res, 200, {
           ok: true,
           tools: plan.tools,
+          otherApps: plan.otherApps.filter((a) => a.present),
           roots: plan.roots,
           repoCount: plan.repos.length,
           repos: plan.repos.slice(0, 50),
@@ -430,13 +433,29 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
             const matureOrdered = rep.units.filter((u) => !u.maturing).sort((a, b) => a.tsEpochMs - b.tsEpochMs);
             if (matureOrdered.length >= 10) drift = driftEProcess(matureOrdered.map((u) => u.funnel.realized));
             realization = { matured: rep.matured, firstPassAcceptance: rep.firstPassAcceptance, proposalCoverage: rep.proposalCoverage, projectScoped: rep.projectScoped, units: rep.units };
+            // Baseline minutes, resolved exactly like the CLI (config override >
+            // personal git history, shrunk toward a cited population prior >
+            // population prior alone). `repo` is never empty — `safeRepo` falls back
+            // to the dashboard's launch directory when no `?repo=` is given, the same
+            // `flags.repo ?? process.cwd()` convention every CLI command already uses
+            // — so this mines that directory's git history exactly as `aegisflow roi`
+            // (no `--repo`) would. Only demo mode skips it (the seeded snapshots
+            // aren't this checkout's real history).
+            const resolvedBaseline = !isDemo()
+              ? await resolveBaselineMinutesForRepo(store, repo, await projectName(repo), config.lift.baselineMinutes, DEFAULT_CONFIG.lift.baselineMinutes)
+              : { minutes: config.lift.baselineMinutes, basis: {}, notes: [] as string[] };
+            const baselineMinutes = resolvedBaseline.minutes;
             // Lift: in demo mode a labeled synthetic TSF; otherwise the REAL source
-            // — measured "time with AI" × configured task baselines — so the 4th lens
-            // and the RoI interval reflect this machine's own behavioral data.
+            // — measured "time with AI" × resolved task baselines — so the 4th lens
+            // and the RoI interval reflect this machine's own behavioral data. Notes
+            // (incl. which baseline source won, per task-type) are threaded into
+            // `roi.notes` below so the dashboard explains itself exactly like the CLI.
+            let liftNotes: string[] = [];
             const roiOpts = isDemo()
               ? demoLiftOptions()
               : (() => {
-                  const dl = liftOptionsFromStore(store, rep, config.lift.baselineMinutes);
+                  const dl = liftOptionsFromStore(store, rep, baselineMinutes);
+                  liftNotes = [...dl.notes, ...resolvedBaseline.notes];
                   return { lift: dl.lift, liftRange: dl.liftRange };
                 })();
             // The money number, priced exactly like the CLI (shared helper). Labor
@@ -445,13 +464,14 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
             // shared roiOpts — so per-project values aren't given a global numerator.
             let laborRate = config.lift.laborRatePerHour;
             if (laborRate === null && isDemo()) laborRate = 120;
-            const money = moneyInputsFromStore(store, rep, config.lift.baselineMinutes, laborRate);
+            const money = moneyInputsFromStore(store, rep, baselineMinutes, laborRate);
             roi = computeReturnOnIntelligence(rep, {
               ...roiOpts,
               laborRatePerHour: laborRate,
               grossRealizedValueUsd: money.grossRealizedValueUsd,
               supervisionMinutes: money.supervisionMinutes,
             });
+            roi.notes.unshift(...liftNotes);
             frontier = computeFrontier(rep.units);
             // Per-project value (the budget owner's view) + cross-project allocation.
             projects = projectValueBreakdown(store, { windowDays, roiOptions: roiOpts });

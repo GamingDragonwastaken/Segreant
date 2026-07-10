@@ -57,7 +57,9 @@ Separately, we compute a plain dollar ratio:
 > **RoI Return = (value of the work the AI actually produced) ÷ (what it truly cost)**
 
 - **The value** = what that kept work would have cost a human to produce (priced from
-  your own baselines) — not the tokens it burned.
+  your own baselines — a cited population prior blended with your own git history,
+  never a guess; see [RETURN-ON-INTELLIGENCE.md §7.1](RETURN-ON-INTELLIGENCE.md)) —
+  not the tokens it burned.
 - **The true cost** = the tokens **plus the time you spent supervising the AI**.
   Counting your own time is what keeps this honest: token cost alone makes a $4
   feature look like a 100× win; adding the hour you spent driving it lands the number

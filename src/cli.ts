@@ -23,6 +23,7 @@ import {
   unlinkDemoDb,
   configPath,
   aegisHome,
+  DEFAULT_CONFIG,
   type AegisConfig,
 } from './config.ts';
 import { seedDemo, demoLiftOptions } from './demo/seed.ts';
@@ -34,6 +35,7 @@ import { scanWithDiff, saveScan, type ScanDiff } from './scan/scan.ts';
 import { computeReturnOnIntelligence } from './value/lenses.ts';
 import { describeSourceDepth } from './value/sourceDepth.ts';
 import { boundedLift } from './value/lift.ts';
+import { resolveBaselineMinutesForRepo, refreshBaselineManifest, baselineManifestStatus } from './value/liftBaseline.ts';
 import { refreshPricing, pricingStatus, DEFAULT_MANIFEST_URL } from './cost/pricing.ts';
 import { computeFrontier } from './value/frontier.ts';
 import { computeUsageRoI } from './value/usage.ts';
@@ -763,6 +765,15 @@ async function cmdDoctor(): Promise<void> {
         : `${price.source === 'cache' ? 'refreshed' : 'bundled'}${priceAge} · ${price.modelCount} models`
     }`,
   );
+  const base = baselineManifestStatus();
+  const baseAge = base.ageDays === null ? '' : ` · ${base.ageDays}d old`;
+  console.log(
+    `  ${mark(!base.stale)} Baseline    ${
+      base.stale
+        ? color(tty, C.yellow, `stale (${baseAge.trim()}) — refresh with "aegisflow baseline --refresh --url <manifest>" if you have one to trust`)
+        : `${base.source === 'cache' ? 'refreshed' : 'bundled'}${baseAge} · ${base.taskTypeCount} task-types`
+    }`,
+  );
   console.log(`  ${mark(criticals === 0)} Alerts      ${alerts.length ? `${num(alerts.length)} active (${criticals} critical) — see "aegisflow alerts"` : color(tty, C.green, 'all clear')}`);
   console.log('');
   console.log(color(tty, C.gray, '  Point your AI tools at the proxy:'));
@@ -1460,9 +1471,12 @@ function renderScanDiff(tty: boolean, diff: ScanDiff): void {
  * `aegisflow scan [path] [--deep] [--setup] [--json]` — the proactive, opt-in
  * discovery pass. It inspects the machine: which supported AI tools have local
  * usage data, and which folders under `path` (default: your home) are git repos.
- * Read-only and bounded by default — it PREVIEWS a setup plan and changes nothing.
- * `--setup` is the deliberate second step: import every detected tool, then correlate
- * every discovered repo into per-project RoI (the same engines as import + discover),
+ * Also surfaces a wider, best-effort inventory of OTHER AI coding tools it
+ * recognizes (config-dir or PATH-binary checks only — see src/scan/knownApps.ts) —
+ * inventory only, never a claim of import capability. Read-only and bounded by
+ * default — it PREVIEWS a setup plan and changes nothing. `--setup` is the
+ * deliberate second step: import every detected tool, then correlate every
+ * discovered repo into per-project RoI (the same engines as import + discover),
  * so one command turns a fresh machine into a full AI-capital map. `--deep` widens
  * the walk (depth + budget) for large or unusually nested trees.
  */
@@ -1506,6 +1520,19 @@ async function cmdScan(flags: Flags): Promise<void> {
       console.log(`${mark} ${t.label.padEnd(16)} ${where}`);
     }
     console.log('');
+
+    // Other AI tools we merely SEE — inventory only, never a claim we can import
+    // from them. Silent when none are found, so an all-clear machine doesn't get
+    // a hollow section header.
+    const otherPresent = plan.otherApps.filter((a) => a.present);
+    if (otherPresent.length > 0) {
+      console.log(color(tty, C.bold, '  Other AI tools detected (not yet natively supported)'));
+      for (const a of otherPresent) {
+        console.log(`  ${color(tty, C.gray, '·')} ${a.label.padEnd(16)} ${color(tty, C.gray, a.evidence ?? '')}`);
+      }
+      console.log(color(tty, C.gray, '    We see these exist, but don\'t read their usage data yet — spend from them isn\'t counted above.'));
+      console.log('');
+    }
 
     // Discovered repos.
     const roots = plan.roots.length ? plan.roots.join(', ') : '(none existed)';
@@ -1982,10 +2009,21 @@ async function cmdRoi(flags: Flags): Promise<void> {
     return;
   }
   const report = loaded.report;
+  // The manual-minutes-per-task-type input, resolved from three sources in
+  // priority order (never silent about which one won, per-task-type):
+  //   1. an explicit user override in config — always respected
+  //   2. THIS project's own pre-AI-tracking git history, shrunk toward #3
+  //   3. a cited, refreshable METR-anchored population prior
+  // Demo mode skips git entirely (the seeded snapshots aren't this checkout's
+  // real history) and uses the population prior + config as-is.
+  const project = isDemo() ? 'demo' : await projectName(repo);
+  const resolvedBaseline = isDemo()
+    ? { minutes: cfg.lift.baselineMinutes, basis: {}, notes: [] as string[] }
+    : await resolveBaselineMinutesForRepo(store, repo, project, cfg.lift.baselineMinutes, DEFAULT_CONFIG.lift.baselineMinutes);
   // Lift source, in priority order — self-report is NEVER accepted:
   //   1. --tsf <x>   an externally measured TSF (transcript judge / RCT) — gold standard
   //   2. demo mode   a labeled synthetic TSF, so the interval shows in the demo
-  //   3. real data   measured "time with AI" × configured task baselines (the
+  //   3. real data   measured "time with AI" × resolved task baselines (the
   //                  default real path; uninstrumented if there's no measured time
   //                  or no baselined realized work)
   let liftOpts: { lift: number | null; liftRange: { low: number | null; high: number | null }; liftHow: string };
@@ -1998,13 +2036,13 @@ async function cmdRoi(flags: Flags): Promise<void> {
     liftOpts = { ...demoLiftOptions(), liftHow: 'labeled synthetic TSF (demo stand-in for a real A-B)' };
     liftNotes = ['Demo: Lift uses a synthetic TSF stand-in for a real transcript-judge / A-B measurement.'];
   } else {
-    const dl = liftOptionsFromStore(store, report, cfg.lift.baselineMinutes);
-    liftOpts = { lift: dl.lift, liftRange: dl.liftRange, liftHow: 'measured time-with-AI × configured task baselines (estimate, not a controlled A/B)' };
-    liftNotes = dl.notes;
+    const dl = liftOptionsFromStore(store, report, resolvedBaseline.minutes);
+    liftOpts = { lift: dl.lift, liftRange: dl.liftRange, liftHow: 'measured time-with-AI × resolved task baselines (estimate, not a controlled A/B)' };
+    liftNotes = [...dl.notes, ...resolvedBaseline.notes];
   }
   // The money number's inputs, measured from the same data the lenses use (shared
   // with the dashboard via moneyInputsFromStore, so both price the return identically).
-  const { grossRealizedValueUsd, supervisionMinutes } = moneyInputsFromStore(store, report, cfg.lift.baselineMinutes, laborRate);
+  const { grossRealizedValueUsd, supervisionMinutes } = moneyInputsFromStore(store, report, resolvedBaseline.minutes, laborRate);
 
   const roi = computeReturnOnIntelligence(report, {
     laborRatePerHour: laborRate,
@@ -2505,6 +2543,67 @@ async function cmdPricing(flags: Flags): Promise<void> {
   console.log('');
 }
 
+/**
+ * `aegisflow baseline [--refresh --url <url>] [--json]` — status and refresh for
+ * the Lift population-prior manifest (`baselines/lift-baselines.json`), the CLI
+ * surface `docs/RETURN-ON-INTELLIGENCE.md` §7.1 promises but that, until now, had
+ * no command to reach it. Deliberately NOT a mirror of `pricing --auto`: there is
+ * no established machine-readable feed for this (METR publishes research, not a
+ * versioned endpoint), so there is no default URL and no auto-refresh-on-stale —
+ * `--url` is required on every refresh, never silently reused from a prior run.
+ */
+async function cmdBaseline(flags: Flags): Promise<void> {
+  const on = process.stdout.isTTY ?? false;
+
+  if (flags['refresh']) {
+    const url = typeof flags['url'] === 'string' ? flags['url'] : null;
+    if (!url) {
+      const msg = 'no URL given — Lift baselines have no default source (unlike pricing). Pass one you trust: aegisflow baseline --refresh --url <url>';
+      if (flags.json) {
+        console.log(JSON.stringify({ ok: false, error: msg }, null, 2));
+        process.exitCode = 1;
+        return;
+      }
+      console.error(`  ${color(on, C.yellow, '✗')} ${msg}`);
+      console.error(`  ${color(on, C.dim, 'Or edit the cache file by hand: ~/.aegisflow/baselines/lift-baselines.json')}`);
+      process.exitCode = 1;
+      return;
+    }
+    if (!flags.json) console.error(`  Refreshing Lift baselines from ${url} …`);
+    const result = await refreshBaselineManifest(url);
+    if (flags.json) {
+      console.log(JSON.stringify(result, null, 2));
+      process.exitCode = result.ok ? 0 : 1;
+      return;
+    }
+    if (result.ok) {
+      console.log(`  ${color(on, C.green, '✓')} Baselines updated — ${result.taskTypeCount} task-type(s), table dated ${result.curated}.`);
+      console.log(`  ${color(on, C.dim, `Saved to ${join(aegisHome(), 'baselines', 'lift-baselines.json')} (overrides the bundled table).`)}`);
+    } else {
+      console.error(`  ${color(on, C.yellow, '✗')} Refresh failed: ${result.error}`);
+      console.error(`  ${color(on, C.dim, 'Keeping the current table — baselines still work; only the update was skipped.')}`);
+      process.exitCode = 1;
+    }
+    return;
+  }
+
+  const st = baselineManifestStatus();
+  if (flags.json) {
+    console.log(JSON.stringify(st, null, 2));
+    return;
+  }
+  console.log(`\n  ${color(on, C.bold, 'AegisFlow Lift baselines')}`);
+  console.log(`  Source     ${st.source === 'cache' ? 'refreshed cache (~/.aegisflow/baselines)' : 'bundled with the package'}`);
+  const age = st.ageDays === null ? '' : `  (${num(st.ageDays)}d ago)`;
+  const stale = st.stale ? color(on, C.yellow, '  — STALE') : '';
+  console.log(`  Curated    ${st.curated}${age}${stale}`);
+  console.log(`  Task-types ${num(st.taskTypeCount)}`);
+  console.log(`  ${color(on, C.dim, 'Real per-project numbers (blended with your own git history): aegisflow roi')}`);
+  console.log(`\n  ${color(on, C.dim, 'Refresh from a source you trust:  aegisflow baseline --refresh --url <url>')}`);
+  console.log(`  ${color(on, C.dim, 'No default source exists for this — unlike pricing, METR publishes research, not a feed.')}`);
+  console.log('');
+}
+
 /** This package's version, read from package.json — the single source of truth. */
 function packageVersion(): string {
   try {
@@ -2589,6 +2688,10 @@ function cmdHelp(): void {
                           override the source)
                           Self-maintaining: pricing --auto  (refresh on start
                           when stale; --auto off to disable)
+    baseline               Show the Lift manual-minutes population prior: source,
+                          age, task-type count (--json). Update it: baseline
+                          --refresh --url <manifest>  (no default source exists —
+                          unlike pricing, METR publishes research, not a feed)
     prune                 Prune old rows and compact the database
     demo                  Generate isolated, clearly-labeled synthetic data so every
                           surface populates without an API key (--serve to launch the
@@ -2720,6 +2823,10 @@ async function main(): Promise<void> {
       break;
     case 'pricing':
       await cmdPricing(flags);
+      break;
+    case 'baseline':
+    case 'baselines':
+      await cmdBaseline(flags);
       break;
     case 'help':
     case '--help':

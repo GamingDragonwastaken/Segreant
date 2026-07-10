@@ -106,7 +106,9 @@ aegisflow guide                 Where you are + the single next step, read from 
 aegisflow scan [path]           One-command setup: find the AI tools + git repos on
                                 this machine, preview a plan (read-only). --setup
                                 imports every detected tool and correlates every repo
-                                into per-project RoI. --deep widens the walk.
+                                into per-project RoI, plus a read-only inventory of
+                                other AI tools seen (not yet imported). --deep widens
+                                the walk.
 aegisflow import <tool|all>     NATIVE metering, no routing — reads the usage a tool
                                 already logs locally (works on subscriptions the proxy
                                 can never see). Tools: claude-code, opencode, codex.
@@ -415,20 +417,25 @@ you point at it live, with transparent fail-open on upstream errors and a
 connect/TTFB timeout so a hung provider can't hang you. **Native import** (`aegisflow
 import` — Claude Code, opencode, Codex CLI) reads what those tools already log
 locally, with **zero base-URL wiring**. `aegisflow scan` finds both the tools and the
-git repos on your machine and can set the whole thing up in one command; `discover`
-auto-correlates whatever it finds into **per-project Return on Intelligence**, tagged
-with which tool coded it — no `--repo` needed either way.
+git repos on your machine — plus a wider, read-only inventory of other AI coding
+tools it sees installed (Cursor, Windsurf, Aider, Continue, Zed) but doesn't import
+from yet — and can set the whole thing up in one command; `discover` auto-correlates
+whatever it finds into **per-project Return on Intelligence**, tagged with which tool
+coded it — no `--repo` needed either way.
 
 Cost engine with **cross-provider, model-family pricing** that **self-refreshes**
 from a community feed, budget enforcement + **value-aware allocation**, persisted
 repo-less realized-value with a **per-project budget-owner view**, and **opt-in,
-k-anonymous per-user value**. **Lift** derives from measured time-with-AI ×
-configurable task baselines (no synthetic constant in real use). A state-aware
-`aegisflow guide` (and bare `aegisflow`) tells you the single next step from your
-actual data. Terminal + a **fully self-contained** web dashboard (zero external
-requests) mirror every surface.
+k-anonymous per-user value**. **Lift** derives from measured time-with-AI × task
+baselines that blend a cited population prior (METR's published human-timed task
+scale) with your own pre-tracking git history via empirical-Bayes shrinkage — no
+synthetic constant, no unsourced table. A state-aware `aegisflow guide` (and bare
+`aegisflow`) tells you the single next step from your actual data. Terminal + a
+**fully self-contained** web dashboard (zero external requests) mirror every
+surface.
 
-**220/220 tests, `tsc` clean, CI on Linux/macOS/Windows.** Installable via `npx
+**248/249 tests (1 skipped — POSIX-only permission semantics), `tsc` clean, CI on
+Linux/macOS/Windows.** Installable via `npx
 aegisflow`. See [docs/ARCHITECTURE.md §7](docs/ARCHITECTURE.md) for what's
 deliberately still open — a hosted, cross-machine team tier is real future value but
 sits outside this release's local-only, zero-maintenance shape; it's revisited only

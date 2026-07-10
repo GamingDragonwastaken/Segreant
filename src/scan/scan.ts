@@ -23,6 +23,7 @@ import { projectKey } from '../value/characterization.ts';
 import { defaultClaudeCodeRoot } from '../connect/claudeCode.ts';
 import { defaultOpencodeDbPath } from '../connect/opencode.ts';
 import { defaultCodexRoot } from '../connect/codex.ts';
+import { detectKnownApps, type DetectedApp } from './knownApps.ts';
 
 /** A supported AI coding tool and whether its local usage data is on this machine. */
 export interface DetectedTool {
@@ -164,6 +165,13 @@ export function findGitRepos(roots: string[], options: RepoScanOptions = {}): Re
 
 export interface ScanPlan {
   tools: DetectedTool[];
+  /**
+   * OTHER AI coding tools detected on this machine — inventory only, never a
+   * promise of import capability (see knownApps.ts). Empty array, not omitted,
+   * when none are found — an honest "we looked and saw nothing else", not
+   * silence.
+   */
+  otherApps: DetectedApp[];
   /** Roots actually walked for repos. */
   roots: string[];
   /** Every git repo found under the roots. */
@@ -186,6 +194,7 @@ export interface ScanPlan {
  */
 export function planScan(store: Store, options: { roots?: string[]; scan?: RepoScanOptions } = {}): ScanPlan {
   const tools = detectTools();
+  const otherApps = detectKnownApps();
   const roots = options.roots && options.roots.length > 0 ? options.roots : [homedir()];
   const scan = findGitRepos(roots, options.scan);
 
@@ -199,6 +208,7 @@ export function planScan(store: Store, options: { roots?: string[]; scan?: RepoS
 
   return {
     tools,
+    otherApps,
     roots: scan.roots,
     repos: scan.repos,
     scan,
