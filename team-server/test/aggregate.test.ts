@@ -9,7 +9,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildProjectReport, buildDeveloperReport, type TeamAggregateConfig } from '../src/aggregate.ts';
+import { buildProjectReport, buildDeveloperReport, buildStandardizedComparison, type TeamAggregateConfig } from '../src/aggregate.ts';
 import type { ProjectTotals, DeveloperTotals } from '../src/store.ts';
 
 function project(overrides: Partial<ProjectTotals> = {}): ProjectTotals {
@@ -160,4 +160,46 @@ test('buildDeveloperReport: report never resolves developerCount = 0 into a fals
   const report = buildDeveloperReport([], config);
   assert.equal(report.suppressed, true);
   assert.equal(report.distribution, null);
+});
+
+test('Simpson defense: identical within-stratum performance, reversed raw ranking — standardization removes the reversal', () => {
+  // Both teams: 90% realization on `fix` tasks, 30% on `feature` tasks.
+  // Team A worked mostly fixes (easy mix), Team B mostly features (hard mix).
+  const teamA = {
+    label: 'team-a',
+    strata: [
+      { stratum: 'fix', value: 0.9, activity: 90 },
+      { stratum: 'feature', value: 0.3, activity: 10 },
+    ],
+  };
+  const teamB = {
+    label: 'team-b',
+    strata: [
+      { stratum: 'fix', value: 0.9, activity: 10 },
+      { stratum: 'feature', value: 0.3, activity: 90 },
+    ],
+  };
+  const cmp = buildStandardizedComparison([teamA, teamB]);
+  const a = cmp.rows.find((r) => r.label === 'team-a')!;
+  const b = cmp.rows.find((r) => r.label === 'team-b')!;
+
+  // The naive pooled numbers "rank" A far above B on task mix alone: 0.84 vs 0.36.
+  assert.ok(a.raw! > b.raw! + 0.4, `raw pooled scores must show the mix artifact (${a.raw} vs ${b.raw})`);
+  // At a fixed basket the two teams are indistinguishable — performance is identical.
+  assert.ok(
+    Math.abs(a.standardized.score! - b.standardized.score!) < 1e-9,
+    `standardized scores must agree when within-stratum performance is identical (${a.standardized.score} vs ${b.standardized.score})`,
+  );
+});
+
+test('buildStandardizedComparison: operator-pinned weights win over the pooled-mix fallback, and the provenance says which was used', () => {
+  const entities = [
+    { label: 'x', strata: [{ stratum: 'fix', value: 0.9, activity: 100 }] },
+    { label: 'y', strata: [{ stratum: 'fix', value: 0.7, activity: 1 }] },
+  ];
+  const pinned = buildStandardizedComparison(entities, { fix: 1, feature: 1 });
+  assert.match(pinned.basketSource, /operator-pinned/);
+  assert.deepEqual(pinned.referenceBasket, { fix: 1, feature: 1 });
+  const fallback = buildStandardizedComparison(entities);
+  assert.match(fallback.basketSource, /pooled activity mix/);
 });

@@ -448,7 +448,7 @@ synthetic constant, no unsourced table. A state-aware `aegisflow guide` (and bar
 **fully self-contained** web dashboard (zero external requests) mirror every
 surface.
 
-**337/338 tests (1 skipped — POSIX-only permission semantics), `tsc` clean, CI on
+**335/336 tests (1 skipped — POSIX-only permission semantics), `tsc` clean, CI on
 Linux/macOS/Windows.** Installable via `npx
 aegisflow`. See [docs/ARCHITECTURE.md §7](docs/ARCHITECTURE.md) for what's
 deliberately still open — `aegisflow team push` can sign and push a numeric-only
@@ -459,7 +459,7 @@ tree). The server verifies and stores what's pushed, verifies a human's SSO
 login via OIDC (`node:crypto` only, RS256/ES256), and now serves a real,
 OIDC-gated aggregate dashboard API back out — team-wide spend/RoI by project,
 and an opt-in, k-anonymized distribution by developer, never a named list
-(team-server's own 44-test suite). Still out of scope: a rendered dashboard UI
+(team-server's own 46-test suite). Still out of scope: a rendered dashboard UI
 over that API, and linking an OIDC identity to a specific developer for a
 self-view.
 

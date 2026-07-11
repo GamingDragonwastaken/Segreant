@@ -268,7 +268,7 @@ genuinely open:
    functions so the privacy logic is unit-testable on its own (9 tests) apart
    from the HTTP-level tests that push hand-computed rollups through the real
    server and assert exact numbers chosen so a naive unweighted average would
-   visibly disagree. Total `team-server/` suite: 44 tests. **Still not
+   visibly disagree. Total `team-server/` suite: 46 tests. **Still not
    built:** a rendered dashboard UI that calls these APIs, and any link
    between an OIDC identity and a specific developer's `keyId` (so there is
    still no "these are MY numbers" self-view — only the team-wide aggregate
