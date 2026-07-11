@@ -68,7 +68,7 @@ by the real cost engine in an isolated `demo.db`. Clear it with `aegisflow demo 
 # from a clone
 node bin/aegisflow.mjs start
 # or, once published
-npx aegisflow start
+npx @2am_seeker/aegisflow start
 ```
 
 Then point your tools at it:
@@ -450,7 +450,7 @@ surface.
 
 **335/336 tests (1 skipped — POSIX-only permission semantics), `tsc` clean, CI on
 Linux/macOS/Windows.** Installable via `npx
-aegisflow`. See [docs/ARCHITECTURE.md §7](docs/ARCHITECTURE.md) for what's
+@2am_seeker/aegisflow`. See [docs/ARCHITECTURE.md §7](docs/ARCHITECTURE.md) for what's
 deliberately still open — `aegisflow team push` can sign and push a numeric-only
 project rollup to [`team-server/`](team-server/README.md), a separate,
 optional, BYO-Postgres server an operator runs themselves (AegisFlow hosts

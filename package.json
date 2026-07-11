@@ -1,5 +1,5 @@
 {
-  "name": "aegisflow",
+  "name": "@2am_seeker/aegisflow",
   "version": "0.1.0",
   "description": "Local-first proxy that meters and caps what your AI coding agents spend — without sending a byte of your code anywhere.",
   "type": "module",
