@@ -177,6 +177,7 @@ export async function cmdPricing(flags: Flags): Promise<void> {
     if (result.ok) {
       console.log(`  ${color(on, C.green, '✓')} Pricing updated — ${result.modelCount} models, table dated ${result.updated}.`);
       console.log(`  ${color(on, C.dim, `Saved to ${join(aegisHome(), 'pricing', 'models.json')} (overrides the bundled table).`)}`);
+      console.log(`  ${color(on, C.dim, 'Applies to new traffic and future imports; rows already metered keep the price recorded at the time.')}`);
     } else {
       console.error(`  ${color(on, C.yellow, '✗')} Refresh failed: ${result.error}`);
       console.error(`  ${color(on, C.dim, 'Keeping the current table — pricing still works; only the update was skipped.')}`);

@@ -126,7 +126,7 @@ export function detectAlerts(inp: AlertInputs): Alert[] {
       severity: 'info',
       title: 'Costs are approximate',
       detail: 'Some spend used estimated pricing (an unrecognized model). Re-verify pricing/models.json before billing-grade use.',
-      metric: `${Math.round(inp.estimatedShare * 100)}% of spend estimated`,
+      metric: `${Math.round(inp.estimatedShare * 100)}% of last-7d spend estimated`,
     });
   }
 

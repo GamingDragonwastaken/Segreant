@@ -266,6 +266,7 @@ export async function cmdDiscover(flags: Flags): Promise<void> {
     console.log(color(tty, C.gray, `    coded with: ${tools}`));
   }
   console.log('');
+  console.log(color(tty, C.gray, '  RoI here scores every stored unit (all time); "aegisflow roi --repo" scopes to a window — the two can differ.'));
   console.log(color(tty, C.gray, '  Now live in: aegisflow roi · aegisflow today · the dashboard (By project).'));
   console.log('');
 }
@@ -452,6 +453,7 @@ export async function cmdScan(flags: Flags): Promise<void> {
       console.log(`    ${color(tty, C.bold, d.project.padEnd(22))} ${usd(d.costUsd).padStart(10)}   ${roiStr}   ${color(tty, C.gray, `coded with: ${tools}`)}`);
     }
     console.log('');
+    console.log(color(tty, C.gray, '  RoI here scores every stored unit (all time); "aegisflow roi --repo" scopes to a window — the two can differ.'));
     console.log(color(tty, C.gray, `  Imported ${num(totalNew)} new request(s). Now live in: aegisflow today · roi · the dashboard.`));
     console.log(color(tty, C.gray, '  Safe to re-run any time to fold in new tools, repos, and traffic.'));
     console.log('');

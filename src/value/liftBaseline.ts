@@ -424,7 +424,8 @@ export async function resolveBaselineMinutesForRepo(
     // posture as Store.loadScanSnapshot's corrupt-row handling) and flagged in
     // `miningFailed` so the notes below can say "unavailable", not misreport it
     // as "no personal history yet" (a different, honest claim this isn't).
-    console.error(`  personal baseline mining for "${project}" failed, falling back to the population prior: ${String(err)}`);
+    const reason = String(err instanceof Error ? err.message : err).replace(/\s*\n\s*/g, ' · ').slice(0, 160);
+    console.error(`  personal baseline mining for "${project}" unavailable (using the population prior): ${reason}`);
     personalBuckets = [];
     miningFailed = String(err instanceof Error ? err.message : err);
   }
