@@ -1,11 +1,12 @@
 /**
- * Value/RoI command cluster — yield, realize, report, usage, roi,
+ * Value/RoI command cluster — yield, realize, report, exec, usage, roi,
  * budget-advisor, and frontier. Extracted verbatim from cli.ts in the
  * per-command-module split; these are the commands that read the realization
  * funnel, Lift, and RoI engines and present them honestly.
  */
 
 import { randomUUID } from 'node:crypto';
+import { spawn } from 'node:child_process';
 import { Store } from '../store/db.ts';
 import { loadConfig, saveConfig, dbPath, isDemo, DEFAULT_CONFIG } from '../config.ts';
 import { demoLiftOptions } from '../demo/seed.ts';
@@ -688,3 +689,95 @@ export async function cmdFrontier(flags: Flags): Promise<void> {
   store.close();
 }
 
+/**
+ * Ambient outcome capture — `aegisflow exec [--kind K] [--commit R|--session S] -- <cmd…>`.
+ *
+ * The adoption cliff of outcome reporting is the human in the loop: every manual
+ * `report` decays to zero compliance. But machines already KNOW outcomes — as
+ * exit codes. Wrap the test/deploy command once (a package.json script, a shell
+ * alias, a Makefile target) and every run reports itself: exit 0 → the gate
+ * passes, non-zero → it honestly fails. The wrapper is transparent — the wrapped
+ * command's stdio and exit code pass straight through, so pipelines and CI steps
+ * behave identically. Our own chatter goes to stderr only.
+ */
+
+export async function cmdExec(flags: Flags, command: string[]): Promise<void> {
+  const codeKinds = ['tested', 'merged', 'shipped'];
+  const usageKinds = ['used', 'resolved', 'published'];
+  const kind = String(flags.kind ?? 'tested');
+  if (![...codeKinds, ...usageKinds].includes(kind)) {
+    console.error(`  Usage: aegisflow exec [--kind <${[...codeKinds, ...usageKinds].join('|')}>] [--commit <ref> | --session <id>] -- <command…>`);
+    process.exitCode = 1;
+    return;
+  }
+  if (command.length === 0) {
+    console.error('  Nothing to run. Put the wrapped command after a bare "--":  aegisflow exec -- npm test');
+    process.exitCode = 1;
+    return;
+  }
+  if (usageKinds.includes(kind) && !flags.session) {
+    console.error(`  Non-code outcome "${kind}" needs --session <id>.`);
+    process.exitCode = 1;
+    return;
+  }
+
+  // Resolve the ref BEFORE running: the outcome belongs to the work that was
+  // current when the command started (HEAD may move underneath a long run).
+  let ref: string | null = null;
+  let project = 'default';
+  if (flags.session) {
+    ref = String(flags.session);
+  } else {
+    const repo = (flags.repo as string) ?? process.cwd();
+    if (flags.commit) {
+      if (!(await isGitRepo(repo))) {
+        printNotAGitRepo(repo);
+        process.exitCode = 1;
+        return;
+      }
+      ref = await resolveCommit(repo, String(flags.commit));
+      if (!ref) {
+        console.error(`  Could not resolve commit: ${String(flags.commit)}`);
+        process.exitCode = 1;
+        return;
+      }
+      project = await projectName(repo);
+    } else if (await isGitRepo(repo)) {
+      ref = await resolveCommit(repo, 'HEAD');
+      project = await projectName(repo);
+    }
+  }
+
+  const started = Date.now();
+  const exitCode: number = await new Promise((resolve) => {
+    // Windows tool entrypoints (npm, npx, …) are .cmd shims that need a shell;
+    // elsewhere spawn directly — no word-splitting surprises.
+    const child =
+      process.platform === 'win32'
+        ? spawn(command.join(' '), { stdio: 'inherit', shell: true })
+        : spawn(command[0]!, command.slice(1), { stdio: 'inherit' });
+    child.on('error', (e) => {
+      console.error(`  aegisflow exec: could not start "${command[0]}": ${String(e)}`);
+      resolve(127);
+    });
+    child.on('close', (code) => resolve(code ?? 1));
+  });
+  const secs = ((Date.now() - started) / 1000).toFixed(1);
+  const verdict = exitCode === 0 ? 'pass' : 'fail';
+
+  const store = new Store(dbPath());
+  store.insertSignal({
+    signalId: randomUUID(),
+    kind,
+    commitHash: ref,
+    project,
+    tsEpochMs: Date.now(),
+    verdict,
+    detail: `ambient: "${command.join(' ')}" exit ${exitCode} in ${secs}s`,
+  });
+  store.close();
+
+  const tty = process.stderr.isTTY ?? false;
+  console.error(color(tty, C.gray, `  [aegisflow] ${kind} = ${verdict} (exit ${exitCode}, ${secs}s)${ref ? ` → ${ref.slice(0, 12)}` : ' (project-wide)'}`));
+  process.exitCode = exitCode; // transparent: the wrapper never changes what the pipeline sees
+}
