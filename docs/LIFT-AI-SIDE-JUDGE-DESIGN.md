@@ -19,7 +19,7 @@
   `src/judge/orchestrate.ts`'s `judgeSession` (gate → payload → call, with
   visible graceful degradation on any failure) are built and adversarially
   tested (`test/judge-payload.test.ts`, `test/judge-call.test.ts`,
-  `test/judge-orchestrate.test.ts` — 42 tests total across the four judge
+  `test/judge-orchestrate.test.ts`, `test/judge-cli.test.ts` — 47 tests total across the five judge
   modules). **Not wired into the CLI or dashboard yet** — per §"What this doc
   does NOT decide," the exact invocation surface was always left open, and
   still is.

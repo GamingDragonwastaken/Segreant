@@ -83,7 +83,7 @@ The whole daemon is one Node process. The proxy (`:8090`) and the dashboard (`:8
 | System scan | `src/scan/scan.ts`, `src/scan/knownApps.ts` | Proactive, read-only discovery: the 3 importable tools, repos under a root, and a wider best-effort inventory of other AI coding tools detected (never a claim of import capability) |
 | Config | `src/config.ts` | Load/save `~/.aegisflow/config.json`, resolve paths |
 | Dashboard | `src/dashboard/` | Read-only JSON API + single-page console |
-| CLI | `src/cli.ts` | `start`, `today/week/month`, `realize`, `report`, `receipt`, `yield`, `budget`, `audit`, … |
+| CLI | `src/cli.ts` + `src/cli/` | Thin dispatcher (`src/cli.ts`: help, version, main) over per-command modules — `showCmd`, `valueCmd`, `teamCmd`, `importCmd`, `connectCmd`, `opsCmd`, `runCmd`, with shared `ui`/`flags` helpers |
 
 ---
 
@@ -268,7 +268,7 @@ genuinely open:
    functions so the privacy logic is unit-testable on its own (9 tests) apart
    from the HTTP-level tests that push hand-computed rollups through the real
    server and assert exact numbers chosen so a naive unweighted average would
-   visibly disagree. Total `team-server/` suite: 39 tests. **Still not
+   visibly disagree. Total `team-server/` suite: 44 tests. **Still not
    built:** a rendered dashboard UI that calls these APIs, and any link
    between an OIDC identity and a specific developer's `keyId` (so there is
    still no "these are MY numbers" self-view — only the team-wide aggregate
@@ -304,7 +304,7 @@ genuinely open:
    piece didn't wire in), and `src/judge/call.ts` +
    `src/judge/orchestrate.ts`'s `judgeSession` (the actual OpenAI-compatible
    call, strictly parsed, gated first, gracefully degraded on any failure) —
-   42 tests across four files, none of them mocked-away: real local HTTP
+   47 tests across five files (incl. the `aegisflow judge` CLI wiring), none of them mocked-away: real local HTTP
    servers stand in for the judge endpoint the same way `test/proxy.test.ts`
    already stands in for upstream providers. One honest gap surfaced by
    building it: AegisFlow never persisted prompt/response transcript text, so

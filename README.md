@@ -130,6 +130,10 @@ aegisflow roi --repo <path>     Return on Intelligence — four value lenses com
                                 into one index (--labor-rate $/hr, --tsf X, --json)
 aegisflow frontier --repo <p>   What's best for you — RoI by model × task-type + routing
 aegisflow usage                 RoI for non-coding usage (chat/research), from outcomes
+aegisflow judge                 Score a recent window's AI-assisted efficiency —
+                                algorithmic by default; opt into a local/hosted LLM
+                                judge via config.judge.*  (--window D, --project
+                                <name>, --json)
 aegisflow team                  Per-user value extraction — opt-in, distribution-only,
                                 k-anonymous (--me <user> for your own view, --json)
 aegisflow team push --url <u>   Cross-machine: sign + push this window's per-project
@@ -165,6 +169,10 @@ aegisflow doctor                First-run health check — config, DB, proxy, ca
 aegisflow config                Show config and file paths      (--json)
 aegisflow pricing --refresh     Update the rate card from the community price feed
                                 (--auto to self-refresh on start when stale)
+aegisflow baseline              Show the Lift manual-minutes population prior: source,
+                                age, task-type count (--json). Update it: baseline
+                                --refresh --url <manifest> — no default source exists;
+                                unlike pricing, METR publishes research, not a feed
 aegisflow prune                 Prune old rows and compact the DB
 aegisflow demo                  Seed isolated, labeled synthetic data so every surface
                                 populates with no API key (--serve opens the dashboard
@@ -440,7 +448,7 @@ synthetic constant, no unsourced table. A state-aware `aegisflow guide` (and bar
 **fully self-contained** web dashboard (zero external requests) mirror every
 surface.
 
-**309/310 tests (1 skipped — POSIX-only permission semantics), `tsc` clean, CI on
+**337/338 tests (1 skipped — POSIX-only permission semantics), `tsc` clean, CI on
 Linux/macOS/Windows.** Installable via `npx
 aegisflow`. See [docs/ARCHITECTURE.md §7](docs/ARCHITECTURE.md) for what's
 deliberately still open — `aegisflow team push` can sign and push a numeric-only
@@ -451,7 +459,7 @@ tree). The server verifies and stores what's pushed, verifies a human's SSO
 login via OIDC (`node:crypto` only, RS256/ES256), and now serves a real,
 OIDC-gated aggregate dashboard API back out — team-wide spend/RoI by project,
 and an opt-in, k-anonymized distribution by developer, never a named list
-(team-server's own 39-test suite). Still out of scope: a rendered dashboard UI
+(team-server's own 44-test suite). Still out of scope: a rendered dashboard UI
 over that API, and linking an OIDC identity to a specific developer for a
 self-view.
 
