@@ -37,7 +37,9 @@ import {
   moneyInputsFromStore,
   realizeDiscoveredProjects,
   projectValueBreakdown,
+  projectTaskStrata,
   type ProjectValue,
+  type ProjectTaskStratum,
 } from './value/realization.ts';
 import { scanWithDiff, saveScan, type ScanDiff } from './scan/scan.ts';
 import { computeReturnOnIntelligence } from './value/lenses.ts';
@@ -2714,7 +2716,7 @@ type PushResult =
  */
 async function signAndPushRollup(
   projects: ProjectValue[],
-  opts: { windowDays: number; projectFilter: string | null; keys: KeyPair; url: string | null; dryRun: boolean },
+  opts: { windowDays: number; projectFilter: string | null; keys: KeyPair; url: string | null; dryRun: boolean; strata?: ProjectTaskStratum[] },
 ): Promise<PushResult> {
   if (projects.length === 0) {
     const message = opts.projectFilter
@@ -2725,7 +2727,7 @@ async function signAndPushRollup(
 
   const to = new Date();
   const from = new Date(to.getTime() - opts.windowDays * 86_400_000);
-  const body = buildRollupBody(opts.keys, projects, { from: from.toISOString(), to: to.toISOString() });
+  const body = buildRollupBody(opts.keys, projects, { from: from.toISOString(), to: to.toISOString() }, opts.strata);
   const signed: SignedRollup = signRollup(body, opts.keys);
 
   if (opts.dryRun) {
@@ -2827,11 +2829,17 @@ async function cmdTeamPush(flags: Flags): Promise<void> {
 
   const store = new Store(dbPath());
   let projects = projectValueBreakdown(store, { windowDays });
+  // Task strata travel with the rollup so the server can standardize on a fixed
+  // task basket (src/team/standardize.ts) — same project filter as the totals.
+  let strata = projectTaskStrata(store, { windowDays });
   store.close();
-  if (projectFilter) projects = projects.filter((p) => p.project === projectFilter);
+  if (projectFilter) {
+    projects = projects.filter((p) => p.project === projectFilter);
+    strata = strata.filter((s) => s.project === projectFilter);
+  }
 
   const keys = loadOrCreateKeyPair(keyPath);
-  const result = await signAndPushRollup(projects, { windowDays, projectFilter, keys, url, dryRun });
+  const result = await signAndPushRollup(projects, { windowDays, projectFilter, keys, url, dryRun, strata });
 
   if (result.status === 'empty') {
     if (flags.json) {
@@ -2911,13 +2919,18 @@ async function cmdTeamPushWatch(opts: {
     const time = new Date().toLocaleTimeString('en-US', { hour12: false });
     try {
       let projects = projectValueBreakdown(store, { windowDays: opts.windowDays });
-      if (opts.projectFilter) projects = projects.filter((p) => p.project === opts.projectFilter);
+      let strata = projectTaskStrata(store, { windowDays: opts.windowDays });
+      if (opts.projectFilter) {
+        projects = projects.filter((p) => p.project === opts.projectFilter);
+        strata = strata.filter((s) => s.project === opts.projectFilter);
+      }
       const result = await signAndPushRollup(projects, {
         windowDays: opts.windowDays,
         projectFilter: opts.projectFilter,
         keys,
         url: opts.url,
         dryRun: false,
+        strata,
       });
       if (result.status === 'ok') {
         console.log(color(tty, C.gray, `  ${time}  `) + color(tty, C.green, `✓ pushed ${result.projectCount} project(s)`));

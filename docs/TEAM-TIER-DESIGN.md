@@ -293,6 +293,13 @@ interface RollupBody {
   generatedAt: string;
   period: { from: string; to: string };
   projects: ProjectValue[];         // numeric-only; the full per-project breakdown, one push
+  strata?: ProjectTaskStratum[];    // optional, additive: project × task-type counts/dollars,
+                                    // so the server can standardize on a FIXED task basket
+                                    // (src/team/standardize.ts) — without this grain, any
+                                    // cross-developer or over-time ranking is at the mercy of
+                                    // task-mix differences (Simpson's paradox). Absent from
+                                    // rollups pushed by older clients; same disclosure class
+                                    // as `projects` (no content, counts and dollars only).
 }
 interface SignedRollup {
   body: RollupBody;

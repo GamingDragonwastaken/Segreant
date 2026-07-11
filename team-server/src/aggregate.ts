@@ -26,6 +26,7 @@
  */
 
 import type { ProjectTotals, DeveloperTotals } from './store.ts';
+import { standardizedScore, type StandardizedScore } from '../../src/team/standardize.ts';
 
 export type ProjectAggregateRow =
   | { project: string; developerCount: number; suppressed: true; reason: string }
@@ -157,4 +158,76 @@ export function buildDeveloperReport(totals: DeveloperTotals[], config: TeamAggr
       totalRealizedValueUsd: totals.reduce((s, t) => s + t.totalRealizedValueUsd, 0),
     },
   };
+}
+
+// ---- Task-standardized comparison (Simpson's-paradox defense) ---------------
+
+export interface EntityStrata {
+  /** Comparison label — a project, a period, or (behind the developer gate) a developer. */
+  label: string;
+  strata: Array<{ stratum: string; value: number | null; activity: number }>;
+}
+
+export interface StandardizedComparisonRow {
+  label: string;
+  /** Activity-weighted pooled score — the naive number, kept for the contrast. */
+  raw: number | null;
+  standardized: StandardizedScore;
+}
+
+export interface StandardizedComparison {
+  /** The fixed basket every entity is scored on. */
+  referenceBasket: Record<string, number>;
+  /** Where the basket came from — an operator-pinned input, or the pooled mix (disclosed). */
+  basketSource: string;
+  rows: StandardizedComparisonRow[];
+}
+
+/**
+ * Compare entities at a FIXED task mix. Raw pooled scores are reported next to
+ * the standardized ones deliberately: when the two rankings disagree, that
+ * disagreement IS the Simpson's-paradox warning — the raw ranking was task-mix,
+ * not performance. The reference basket should be pinned by the operator
+ * ex-ante (weights chosen after seeing the numbers are just another way to game
+ * the comparison); absent that, the pooled activity mix across the compared
+ * entities is used as a common basket and the provenance is disclosed.
+ */
+export function buildStandardizedComparison(
+  entities: ReadonlyArray<EntityStrata>,
+  referenceWeights?: Record<string, number>,
+): StandardizedComparison {
+  let basket: Record<string, number>;
+  let basketSource: string;
+  if (referenceWeights && Object.keys(referenceWeights).length > 0) {
+    basket = referenceWeights;
+    basketSource = 'operator-pinned reference weights (ex-ante)';
+  } else {
+    basket = {};
+    for (const e of entities) {
+      for (const s of e.strata) {
+        if (s.activity > 0 && s.value !== null) basket[s.stratum] = (basket[s.stratum] ?? 0) + s.activity;
+      }
+    }
+    basketSource = 'pooled activity mix across the compared entities (fallback — pin ex-ante weights for accountability use)';
+  }
+
+  const rows: StandardizedComparisonRow[] = entities.map((e) => {
+    let act = 0;
+    let weighted = 0;
+    for (const s of e.strata) {
+      if (s.value === null || s.activity <= 0) continue;
+      act += s.activity;
+      weighted += s.activity * s.value;
+    }
+    return {
+      label: e.label,
+      raw: act > 0 ? weighted / act : null,
+      standardized: standardizedScore(
+        e.strata.map((s) => ({ stratum: s.stratum, value: s.value })),
+        basket,
+      ),
+    };
+  });
+
+  return { referenceBasket: basket, basketSource, rows };
 }

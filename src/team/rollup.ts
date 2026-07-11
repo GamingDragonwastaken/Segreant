@@ -25,7 +25,7 @@
 
 import { sign as cryptoSign, verify as cryptoVerify, createHash, createPublicKey, type KeyObject } from 'node:crypto';
 import { canonical, keyIdForPem, type KeyPair } from '../value/receipt.ts';
-import type { ProjectValue } from '../value/realization.ts';
+import type { ProjectValue, ProjectTaskStratum } from '../value/realization.ts';
 
 export interface RollupBody {
   v: 1;
@@ -36,6 +36,13 @@ export interface RollupBody {
   // no raw request log — the same aggregate shape already shown to a
   // single-machine budget owner (value/realization.ts's projectValueBreakdown).
   projects: ProjectValue[];
+  // Optional (additive — absent from rollups pushed by older clients): the
+  // same numbers one grain finer, per project × task-type, so the server can
+  // hold a task basket FIXED and compare developers/periods like with like
+  // instead of letting task-mix differences drive the ranking (Simpson's
+  // paradox — see src/team/standardize.ts). Same disclosure class as
+  // `projects`: counts and dollars only.
+  strata?: ProjectTaskStratum[];
 }
 
 export interface SignedRollup {
@@ -50,8 +57,17 @@ function sha256Hex(s: string): string {
   return createHash('sha256').update(s).digest('hex');
 }
 
-export function buildRollupBody(keys: KeyPair, projects: ProjectValue[], period: { from: string; to: string }): RollupBody {
-  return { v: 1, keyId: keys.keyId, generatedAt: new Date().toISOString(), period, projects };
+export function buildRollupBody(
+  keys: KeyPair,
+  projects: ProjectValue[],
+  period: { from: string; to: string },
+  strata?: ProjectTaskStratum[],
+): RollupBody {
+  const body: RollupBody = { v: 1, keyId: keys.keyId, generatedAt: new Date().toISOString(), period, projects };
+  // Only attach the key when there is something to say — an absent field and an
+  // empty array canonicalize differently, and absent is the older-client shape.
+  if (strata && strata.length > 0) body.strata = strata;
+  return body;
 }
 
 export function signRollup(body: RollupBody, keys: KeyPair): SignedRollup {

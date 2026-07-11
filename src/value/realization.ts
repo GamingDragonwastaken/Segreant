@@ -373,6 +373,42 @@ export function projectValueBreakdown(
   return out.sort((a, b) => b.costUsd - a.costUsd);
 }
 
+export interface ProjectTaskStratum {
+  project: string;
+  taskType: string;
+  units: number; // matured units in this stratum
+  realizedUnits: number;
+  costUsd: number;
+}
+
+/**
+ * Per-project × task-type strata over matured units — the raw material for
+ * task-standardized team comparison (src/team/standardize.ts). Numeric-only,
+ * same disclosure posture as ProjectValue: no prompt/response content, no raw
+ * request log — counts and dollars a budget owner already sees, one grain
+ * finer. Without this grain, cross-machine comparisons are at the mercy of
+ * task-mix differences (Simpson's paradox); with it, the team server can hold
+ * the basket fixed and compare like with like.
+ */
+export function projectTaskStrata(store: Store, opts: { windowDays?: number } = {}): ProjectTaskStratum[] {
+  const out: ProjectTaskStratum[] = [];
+  for (const project of store.realizationProjects()) {
+    const rep = realizationFromStore(store, { project, windowDays: opts.windowDays });
+    const mature = rep.units.filter((u) => !u.maturing);
+    if (mature.length === 0) continue;
+    const byType = new Map<string, { units: number; realizedUnits: number; costUsd: number }>();
+    for (const u of mature) {
+      const cell = byType.get(u.taskType) ?? { units: 0, realizedUnits: 0, costUsd: 0 };
+      cell.units += 1;
+      if (u.funnel.realized) cell.realizedUnits += 1;
+      cell.costUsd += u.attributedCostUsd;
+      byType.set(u.taskType, cell);
+    }
+    for (const [taskType, cell] of byType) out.push({ project, taskType, ...cell });
+  }
+  return out.sort((a, b) => b.costUsd - a.costUsd);
+}
+
 export interface DiscoveredProject {
   project: string;
   repoPath: string; // the captured cwd that is a git working tree
