@@ -84,70 +84,8 @@ import { importOpencode, defaultOpencodeDbPath } from './connect/opencode.ts';
 import { importCodex, defaultCodexRoot } from './connect/codex.ts';
 import { type ImportSummary } from './connect/importShared.ts';
 
-const C = {
-  reset: '\x1b[0m',
-  dim: '\x1b[2m',
-  bold: '\x1b[1m',
-  cyan: '\x1b[36m',
-  green: '\x1b[32m',
-  yellow: '\x1b[33m',
-  red: '\x1b[31m',
-  gray: '\x1b[90m',
-};
-
-function color(on: boolean, code: string, s: string): string {
-  return on ? `${code}${s}${C.reset}` : s;
-}
-
-function usd(n: number): string {
-  if (n === 0) return '$0.00';
-  if (n >= 1) return `$${n.toFixed(2)}`;
-  if (n >= 0.01) return `$${n.toFixed(4)}`;
-  return `$${n.toFixed(6)}`;
-}
-
-function num(n: number): string {
-  return n.toLocaleString('en-US');
-}
-
-/** Actionable not-a-git-repo message: tell the user what to do, not just what's wrong. */
-function printNotAGitRepo(repo: string): void {
-  console.error(`  Not a git repository: ${repo}`);
-  console.error('  Run this from inside your repo, or pass --repo <path>. Non-coding usage needs no git: aegisflow usage');
-}
-
-interface Flags {
-  _: string[];
-  [k: string]: string | boolean | string[];
-}
-
-function parseFlags(argv: string[]): Flags {
-  const flags: Flags = { _: [] };
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i]!;
-    if (a.startsWith('--')) {
-      const key = a.slice(2);
-      const next = argv[i + 1];
-      if (next === undefined || next.startsWith('--')) {
-        flags[key] = true;
-      } else {
-        flags[key] = next;
-        i++;
-      }
-    } else {
-      (flags._ as string[]).push(a);
-    }
-  }
-  return flags;
-}
-
-function rangeFor(window: 'today' | 'week' | 'month'): { startMs: number; endMs: number; label: string } {
-  const now = Date.now();
-  const day = 24 * 60 * 60 * 1000;
-  if (window === 'today') return { startMs: startOfLocalDay(now), endMs: now + 1000, label: 'Today' };
-  if (window === 'week') return { startMs: now - 7 * day, endMs: now + 1000, label: 'Last 7 days' };
-  return { startMs: now - 30 * day, endMs: now + 1000, label: 'Last 30 days' };
-}
+import { C, color, usd, num, pct, glyph, noteSource, printNotAGitRepo } from './cli/ui.ts';
+import { parseFlags, rangeFor, type Flags } from './cli/flags.ts';
 
 function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void {
   const cfg = loadConfig();
@@ -963,10 +901,6 @@ async function cmdAudit(flags: Flags): Promise<void> {
   store.close();
 }
 
-function pct(n: number): string {
-  return `${(n * 100).toFixed(0)}%`;
-}
-
 async function cmdYield(flags: Flags): Promise<void> {
   const repo = (flags.repo as string) ?? process.cwd();
   const limit = flags.limit ? Number(flags.limit) : 30;
@@ -1029,31 +963,6 @@ async function cmdYield(flags: Flags): Promise<void> {
   console.log(color(tty, C.gray, '  read it as a team trend, never a per-developer ranking. (docs/RESEARCH-REVIEW.md)'));
   console.log('');
   store.close();
-}
-
-/**
- * One-line honesty notes about where the realized-value figures came from: a
- * stored snapshot vs a live repo, and — for a live repo — whether the dollars were
- * scoped to THIS project's own spend (the ledger is characterized by project:
- * native imports or tagged traffic) or fell back to the project-blind window sum
- * (untagged proxy). Discloses the basis so the number is never silently mixed.
- */
-function noteSource(tty: boolean, source: 'git' | 'store', projectScoped?: boolean): void {
-  if (source === 'store') {
-    console.log(color(tty, C.gray, '  ● stored realization snapshot — no live repo attached; figures are as of the last realize run.'));
-    return;
-  }
-  if (projectScoped === true) {
-    console.log(color(tty, C.gray, "  ● scoped to this project's own spend — ledger characterized by project (imports / tagged traffic)."));
-  } else if (projectScoped === false) {
-    console.log(color(tty, C.gray, '  ● project-blind window attribution — no project-tagged spend here. Import or tag sources to scope value per project.'));
-  }
-}
-
-function glyph(tty: boolean, v: Verdict): string {
-  if (v === 'pass') return color(tty, C.green, '✓');
-  if (v === 'fail') return color(tty, C.red, '✗');
-  return color(tty, C.gray, '·');
 }
 
 async function cmdRealize(flags: Flags): Promise<void> {
