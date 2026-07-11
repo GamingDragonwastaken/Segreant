@@ -113,7 +113,15 @@ easy to stand up; the enterprise's job is everything downstream of `docker run`.
 > the single-machine case, one level down. `GET /dashboard/developers` gets
 > `cohort.ts`'s full treatment: opt-in (`TEAM_SERVER_EXPOSE_DEVELOPER_BREAKDOWN`,
 > default off) *and* k-anonymized, returning a distribution (median/p25/p75)
-> and never a named list. `team-server/src/aggregate.ts` holds this privacy
+> and never a named list. One honest limit on that gate: **k-anonymity is a
+> minimum bar, not a complete leakage defense.** Under REPEATED releases it is
+> vulnerable to differencing — two snapshots straddling one developer's
+> join/leave can expose that developer's contribution as the delta between two
+> individually-suppressed-compliant aggregates. Mitigations (release-interval
+> floors, suppressing deltas below the cohort floor, or noise à la differential
+> privacy) are deliberately left to the team-server operator, who controls
+> release cadence; the design's contribution is naming the risk instead of
+> letting "k-anonymous" imply more than it guarantees. `team-server/src/aggregate.ts` holds this privacy
 > logic as pure, HTTP- and DB-free functions; `team-server/test/aggregate.test.ts`
 > tests it in isolation (9 tests: exact-floor boundaries, the opt-in gate, a
 > $0-cost developer correctly excluded from the rate distribution without being

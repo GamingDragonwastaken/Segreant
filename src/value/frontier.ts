@@ -11,7 +11,8 @@
  */
 
 import type { WorkUnit } from './realization.ts';
-import { computeReturnOnIntelligence } from './lenses.ts';
+import { computeReturnOnIntelligence, lensRedundancy, type LensRedundancy } from './lenses.ts';
+import { anytimeRateInterval } from './anytime.ts';
 
 export interface FrontierCell {
   key: string;
@@ -25,6 +26,10 @@ export interface FrontierCell {
   acceptance: number | null;
   costPerUnit: number;
   roiIndex: number | null;
+  // The impact lens value for this cell (realized fraction weighted by
+  // production reach + durability) — kept so the cells double as the sample
+  // for the lens-redundancy statistic below.
+  impact: number | null;
 }
 
 export interface FrontierReport {
@@ -32,6 +37,11 @@ export interface FrontierReport {
   byTaskType: FrontierCell[];
   byModelAndTask: FrontierCell[];
   recommendations: string[];
+  // d_eff over the finest cells: how many independent dimensions the lens
+  // system actually measures across contexts. Low d_eff = the lenses co-move —
+  // a composite silently overweighting one latent factor. Disclosure, never an
+  // automatic reweighting. See lenses.ts `lensRedundancy`.
+  lensRedundancy: LensRedundancy;
 }
 
 function makeCell(key: string, model: string | null, taskType: string | null, units: WorkUnit[]): FrontierCell {
@@ -45,11 +55,11 @@ function makeCell(key: string, model: string | null, taskType: string | null, un
   const withAcc = units.filter((u) => u.acceptance !== null);
   const acceptance = withAcc.length > 0 ? withAcc.reduce((s, u) => s + (u.acceptance ?? 0), 0) / withAcc.length : null;
   const realizationRate = units.length > 0 ? realized.length / units.length : 0;
-  const roiIndex = computeReturnOnIntelligence({
+  const roi = computeReturnOnIntelligence({
     firstPassAcceptance: acceptance,
     units,
     matured: { realizationRate, totalCostUsd: costUsd, realizedValueUsd, netRealizedValueUsd },
-  }).roiIndex;
+  });
   return {
     key,
     model,
@@ -61,7 +71,8 @@ function makeCell(key: string, model: string | null, taskType: string | null, un
     realizationRate,
     acceptance,
     costPerUnit: units.length > 0 ? costUsd / units.length : 0,
-    roiIndex,
+    roiIndex: roi.roiIndex,
+    impact: roi.lenses.impact.value,
   };
 }
 
@@ -99,7 +110,15 @@ export function computeFrontier(units: WorkUnit[]): FrontierReport {
   }
   byModelAndTask.sort(byRoiDesc);
 
-  return { byModel, byTaskType, byModelAndTask, recommendations: buildRecommendations(mature) };
+  // Redundancy over the finest slicing (most contexts): per-cell vectors of the
+  // three per-context-computable lenses. Lift is window-global, so it cannot
+  // vary across cells and is excluded rather than padded.
+  const redundancy = lensRedundancy(
+    byModelAndTask.map((c) => [c.realizationRate, c.acceptance, c.impact]),
+    ['realization', 'acceptance', 'impact'],
+  );
+
+  return { byModel, byTaskType, byModelAndTask, recommendations: buildRecommendations(mature), lensRedundancy: redundancy };
 }
 
 /**
@@ -126,9 +145,21 @@ function buildRecommendations(mature: WorkUnit[]): string[] {
     } else {
       const relRoi = dearest.roiIndex && best.roiIndex ? Math.round((best.roiIndex / Math.max(1, dearest.roiIndex)) * 100) : null;
       const relCost = dearest.costPerUnit > 0 ? best.costPerUnit / dearest.costPerUnit : 0;
+      // A routing decision is a policy change — it deserves a lower-bound check,
+      // not a point-estimate coin flip. Compare the two cells' realization rates
+      // via their anytime confidence sequences: only when the leader's LOWER
+      // bound clears the alternative's UPPER bound is the evidence separated;
+      // otherwise the recommendation says so out loud instead of feigning
+      // certainty from a handful of units.
+      const bestCs = anytimeRateInterval(Math.round(best.realizationRate * best.units), best.units, { level: 0.95 });
+      const dearCs = anytimeRateInterval(Math.round(dearest.realizationRate * dearest.units), dearest.units, { level: 0.95 });
+      const separated = bestCs.low > dearCs.high;
+      const confidence = separated
+        ? 'the separation holds at the anytime-valid lower bound — safe to act on'
+        : `provisional: the anytime intervals still overlap on ${best.units + dearest.units} units — route a few more tasks before committing`;
       recs.push(
         `For ${tt}: ${best.model} leads (RoI ${best.roiIndex!.toFixed(0)} vs ${dearest.model} ${dearest.roiIndex!.toFixed(0)}) ` +
-          `at ${relCost.toFixed(2)}× the per-unit cost — ${relRoi !== null ? `${relRoi}% of the return question is decided here; ` : ''}consider routing ${tt} work to ${best.model}.`,
+          `at ${relCost.toFixed(2)}× the per-unit cost — ${relRoi !== null ? `${relRoi}% of the return question is decided here; ` : ''}consider routing ${tt} work to ${best.model} (${confidence}).`,
       );
     }
   }

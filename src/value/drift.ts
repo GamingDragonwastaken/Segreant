@@ -43,6 +43,8 @@
  * dashboard today even asks.
  */
 
+import type { FunnelOutcome, Gate } from './gates.ts';
+
 export interface DriftReport {
   n: number;
   /** log Eₙ at the end of the stream. */
@@ -120,4 +122,78 @@ export function driftEProcess(
     overallRate: finalPHat,
     window,
   };
+}
+
+// ---- The multi-stream Goodhart watch ---------------------------------------
+//
+// One drifting rate forces one question; the PATTERN across streams often
+// answers it. Acceptance creeping up while realization stagnates is the
+// signature of proposal-inflation gaming; hard-gate unknowns climbing while
+// the headline holds is coverage suppression (measure less, look better).
+// Each stream gets its own e-process — the same anytime-valid guarantee —
+// and each alarm names what its movement typically means. Detection is the
+// SECOND line of defense; the structural defenses (ex-ante weights, gates
+// that cannot be silently un-wired, baselines from fixed histories) come
+// first. This just makes sure bending the metric leaves a visible mark.
+
+/** The funnel gates whose *absence of observation* is itself worth watching. */
+const HARD_GATES: readonly Gate[] = ['tested', 'merged', 'shipped'] as const;
+
+export interface NamedDriftReport {
+  stream: 'realization' | 'acceptance' | 'hard-gate-coverage';
+  /** What a movement in this stream typically means — travels with the alarm. */
+  reading: string;
+  report: DriftReport;
+}
+
+/**
+ * Run the drift e-process over the three gaming-sensitive 0/1 streams derivable
+ * from funnel outcomes (oldest first). Streams shorter than `minN` observed
+ * points are omitted — an alarm needs a stream to say anything, honestly.
+ */
+export function goodhartStreams(
+  outcomes: ReadonlyArray<FunnelOutcome>,
+  opts: { alpha?: number; window?: number; minN?: number } = {},
+): NamedDriftReport[] {
+  const minN = opts.minN ?? 10;
+  const out: NamedDriftReport[] = [];
+
+  const realization = outcomes.map((o) => (o.realized ? 1 : 0) as 0 | 1);
+  if (realization.length >= minN) {
+    out.push({
+      stream: 'realization',
+      reading: 'the outcome rate moved — did the work change (new model/workflow → re-baseline), or is the metric being gamed?',
+      report: driftEProcess(realization, opts),
+    });
+  }
+
+  // Acceptance stream: the accepted-gate verdict where it was observed.
+  // Rising acceptance with flat realization is the proposal-inflation signature.
+  const acceptance = outcomes
+    .map((o) => o.results.find((r) => r.gate === 'accepted')?.verdict)
+    .filter((v): v is 'pass' | 'fail' => v === 'pass' || v === 'fail')
+    .map((v) => (v === 'pass' ? 1 : 0) as 0 | 1);
+  if (acceptance.length >= minN) {
+    out.push({
+      stream: 'acceptance',
+      reading: 'first-pass acceptance moved — if realization did NOT move with it, suspect trivially-acceptable proposals inflating the collaboration lens',
+      report: driftEProcess(acceptance, opts),
+    });
+  }
+
+  // Coverage stream: 1 when any hard gate went UNOBSERVED. A rising rate means
+  // the measuring is being turned off — the quietest way to bend a metric that
+  // treats unknown as neutral.
+  const unknownHard = outcomes.map(
+    (o) => (o.results.some((r) => HARD_GATES.includes(r.gate) && r.verdict === 'unknown') ? 1 : 0) as 0 | 1,
+  );
+  if (unknownHard.length >= minN) {
+    out.push({
+      stream: 'hard-gate-coverage',
+      reading: 'the share of units with unobserved hard gates moved — a RISING rate is coverage suppression (measure less, look better); wire the gates back',
+      report: driftEProcess(unknownHard, opts),
+    });
+  }
+
+  return out;
 }

@@ -208,6 +208,34 @@ test('resolveBaselineMinutes: a task-type with only user config and no populatio
   assert.equal(r.minutes['feature'], 220);
 });
 
+test('resolveBaselineMinutes: a personal-shrunk key carries the [population, raw personal] band and the point sits inside it', () => {
+  const r = resolveBaselineMinutes({
+    configBaseline: { feature: 240 },
+    defaultBaseline: { feature: 240 },
+    personalBuckets: [{ taskType: 'feature', minutes: 400, n: 30 }],
+    populationBaseline: { feature: 220 },
+  });
+  assert.equal(r.minutesLow['feature'], 220, 'band floor = the smaller of prior and raw personal mean');
+  assert.equal(r.minutesHigh['feature'], 400, 'band ceiling = the larger of the two');
+  assert.ok(
+    r.minutes['feature']! >= r.minutesLow['feature']! && r.minutes['feature']! <= r.minutesHigh['feature']!,
+    'the shrunken point is a convex combination — it must sit inside its own band',
+  );
+});
+
+test('resolveBaselineMinutes: override and population-only keys are exact points (no invented spread)', () => {
+  const r = resolveBaselineMinutes({
+    configBaseline: { feature: 500, fix: 60 },
+    defaultBaseline: { feature: 240, fix: 60 },
+    personalBuckets: [],
+    populationBaseline: { feature: 220, fix: 55 },
+  });
+  assert.equal(r.minutesLow['feature'], 500, 'an audited config override is exact');
+  assert.equal(r.minutesHigh['feature'], 500);
+  assert.equal(r.minutesLow['fix'], 55, 'a population-only key is a disclosed point, not a fabricated interval');
+  assert.equal(r.minutesHigh['fix'], 55);
+});
+
 // ---- resolveBaselineMinutesForRepo (impure orchestrator: git + store) ----
 // The pure functions above are unit-tested to the line; this covers the glue
 // that actually ships (cache round-trip, staleness, and honest failure) — the

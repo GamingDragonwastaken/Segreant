@@ -1,6 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { driftEProcess } from '../src/value/drift.ts';
+import { driftEProcess, goodhartStreams } from '../src/value/drift.ts';
+import { GATE_LADDER, scoreFunnel, type Gate, type GateResult, type Verdict, type FunnelOutcome } from '../src/value/gates.ts';
+
+function vr(map: Partial<Record<Gate, Verdict>>): Record<Gate, GateResult> {
+  const out = {} as Record<Gate, GateResult>;
+  for (const g of GATE_LADDER) out[g] = { gate: g, verdict: map[g] ?? 'unknown', detail: '' };
+  return out;
+}
 
 /** Deterministic RNG (mulberry32) — the validity/power claims must be reproducible. */
 function rng(seed: number): () => number {
@@ -85,4 +92,43 @@ test('drift: the e-value is a crossing memory — maxLogE never decreases below 
   const rep = driftEProcess(stream, { alpha: 0.05 });
   assert.ok(rep.maxLogE >= rep.logE, 'max is over all time');
   assert.equal(rep.alarm, true, 'the excursion is not forgotten');
+});
+
+// ---- the multi-stream Goodhart watch ----
+
+test('goodhartStreams: all three streams reported when observed; coverage suppression is caught as drift', () => {
+  // First 30 units: hard gates instrumented (tested pass), realized mix.
+  // Next 30: hard gates silently un-wired (unknown) — the coverage stream drifts 0 → 1.
+  const instrumented: FunnelOutcome[] = Array.from({ length: 30 }, (_, i) =>
+    scoreFunnel(vr({ proposed: 'pass', accepted: i % 3 === 0 ? 'fail' : 'pass', committed: 'pass', tested: 'pass', merged: 'pass', shipped: 'pass', survived: 'pass', clean: 'pass' })),
+  );
+  const suppressed: FunnelOutcome[] = Array.from({ length: 30 }, (_, i) =>
+    scoreFunnel(vr({ proposed: 'pass', accepted: i % 3 === 0 ? 'fail' : 'pass', committed: 'pass', survived: 'pass', clean: 'pass' })),
+  );
+  const streams = goodhartStreams([...instrumented, ...suppressed]);
+  const names = streams.map((s) => s.stream);
+  assert.deepEqual(names.sort(), ['acceptance', 'hard-gate-coverage', 'realization'].sort(), 'all three streams have enough data');
+  const coverage = streams.find((s) => s.stream === 'hard-gate-coverage')!;
+  assert.equal(coverage.report.alarm, true, 'un-wiring the hard gates mid-stream must trip the coverage alarm');
+  assert.match(coverage.reading, /coverage suppression/i, 'the alarm must carry its typical reading');
+});
+
+test('goodhartStreams: acceptance stream uses only OBSERVED accepted verdicts; short streams are omitted, never invented', () => {
+  // 12 units with observed accepted verdicts, but only 5 total units for other checks? — here:
+  // acceptance observed on all 12, so acceptance + realization + coverage all have n=12.
+  const outcomes: FunnelOutcome[] = Array.from({ length: 12 }, () =>
+    scoreFunnel(vr({ proposed: 'pass', accepted: 'pass', committed: 'pass' })),
+  );
+  const streams = goodhartStreams(outcomes);
+  const acc = streams.find((s) => s.stream === 'acceptance');
+  assert.ok(acc, 'acceptance stream present with 12 observed verdicts');
+  assert.equal(acc!.report.n, 12);
+
+  // Under 10 observed accepted verdicts → the acceptance stream is omitted.
+  const thin: FunnelOutcome[] = Array.from({ length: 12 }, (_, i) =>
+    scoreFunnel(vr({ proposed: 'pass', accepted: i < 5 ? 'pass' : 'unknown', committed: 'pass' })),
+  );
+  const thinStreams = goodhartStreams(thin);
+  assert.equal(thinStreams.find((s) => s.stream === 'acceptance'), undefined, 'only 5 observed accepted verdicts — no invented stream');
+  assert.ok(thinStreams.find((s) => s.stream === 'realization'), 'realization still has its 12 outcomes');
 });

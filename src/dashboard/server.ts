@@ -443,7 +443,7 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
             // aren't this checkout's real history).
             const resolvedBaseline = !isDemo()
               ? await resolveBaselineMinutesForRepo(store, repo, await projectName(repo), config.lift.baselineMinutes, DEFAULT_CONFIG.lift.baselineMinutes)
-              : { minutes: config.lift.baselineMinutes, basis: {}, notes: [] as string[] };
+              : { minutes: config.lift.baselineMinutes, minutesLow: config.lift.baselineMinutes, minutesHigh: config.lift.baselineMinutes, basis: {}, notes: [] as string[] };
             const baselineMinutes = resolvedBaseline.minutes;
             // Lift: in demo mode a labeled synthetic TSF; otherwise the REAL source
             // — measured "time with AI" × resolved task baselines — so the 4th lens
@@ -454,7 +454,7 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
             const roiOpts = isDemo()
               ? demoLiftOptions()
               : (() => {
-                  const dl = liftOptionsFromStore(store, rep, baselineMinutes);
+                  const dl = liftOptionsFromStore(store, rep, baselineMinutes, { low: resolvedBaseline.minutesLow, high: resolvedBaseline.minutesHigh });
                   liftNotes = [...dl.notes, ...resolvedBaseline.notes];
                   return { lift: dl.lift, liftRange: dl.liftRange };
                 })();

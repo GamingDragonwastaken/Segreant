@@ -268,6 +268,19 @@ export function shrinkContinuousMean(personalSum: number, personalN: number, pri
 
 export interface ResolvedBaseline {
   minutes: Record<string, number>;
+  // The baseline as an INTERVAL, per task-type. The Lift lens is most dangerous
+  // near break-even (dL/dB = T/B² — small baseline errors flip the sign), so an
+  // estimated baseline must carry its width into the TSF rather than pose as a
+  // point. The band is identification-style, never an invented spread:
+  //   · config override → exact (an audited org input, like the labor rate);
+  //   · population prior alone → exact (its own width is unpublished; treating
+  //     it as a point is disclosed, not hidden);
+  //   · personal-shrunk → [min(population, raw personal), max(...)] — the
+  //     shrunken point is a convex combination of the two, so this band is
+  //     "anywhere between trusting the prior fully and trusting your own
+  //     history fully", which is exactly the real uncertainty.
+  minutesLow: Record<string, number>;
+  minutesHigh: Record<string, number>;
   /** One human-readable sentence per task-type explaining where its number came from. */
   basis: Record<string, string>;
   notes: string[];
@@ -292,6 +305,8 @@ export function resolveBaselineMinutes(opts: {
   const personalByType = new Map(opts.personalBuckets.map((b) => [b.taskType, b] as const));
   const keys = new Set([...Object.keys(opts.configBaseline), ...Object.keys(opts.populationBaseline)]);
   const minutes: Record<string, number> = {};
+  const minutesLow: Record<string, number> = {};
+  const minutesHigh: Record<string, number> = {};
   const basis: Record<string, string> = {};
   // Per-key `basis` (above) is the full sourcing sentence; these counts are only
   // for the compact human-readable summary line below — same information, two
@@ -308,6 +323,8 @@ export function resolveBaselineMinutes(opts: {
 
     if (userVal !== undefined && userVal !== defaultVal) {
       minutes[k] = userVal;
+      minutesLow[k] = userVal;
+      minutesHigh[k] = userVal;
       basis[k] = 'user override (config)';
       overrideCount++;
       continue;
@@ -315,18 +332,26 @@ export function resolveBaselineMinutes(opts: {
     const personal = personalByType.get(k as TaskType);
     if (personal && personal.n > 0 && popVal !== undefined) {
       minutes[k] = shrinkContinuousMean(personal.minutes * personal.n, personal.n, popVal, opts.pseudoCount);
+      // The shrunken point is a convex combination of popVal and the raw
+      // personal mean, so this band contains it by construction.
+      minutesLow[k] = Math.min(popVal, personal.minutes);
+      minutesHigh[k] = Math.max(popVal, personal.minutes);
       basis[k] = `personal git history (n=${personal.n} pre-tracking commit(s)), shrunk toward the population prior`;
       personalCount++;
       continue;
     }
     if (popVal !== undefined) {
       minutes[k] = popVal;
+      minutesLow[k] = popVal;
+      minutesHigh[k] = popVal;
       basis[k] = 'population prior (METR-anchored, no personal history yet)';
       populationCount++;
       continue;
     }
     if (userVal !== undefined) {
       minutes[k] = userVal;
+      minutesLow[k] = userVal;
+      minutesHigh[k] = userVal;
       basis[k] = 'config (no population default for this task-type)';
       overrideCount++;
     }
@@ -345,7 +370,7 @@ export function resolveBaselineMinutes(opts: {
       .filter((s): s is string => s !== null)
       .join(', ')}.`,
   ];
-  return { minutes, basis, notes };
+  return { minutes, minutesLow, minutesHigh, basis, notes };
 }
 
 // ---- Impure orchestration (git + store) ----

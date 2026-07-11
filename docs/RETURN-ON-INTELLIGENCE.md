@@ -155,6 +155,19 @@ collapses the Index, no matter the weights. Proof: GM(x·y) = ∏(xₖyₖ)^wₖ
 ∏xₖ^wₖ · ∏yₖ^wₖ = GM(x)·GM(y); the arithmetic mean fails it,
 Σwₖxₖyₖ ≠ (Σwₖxₖ)(Σwₖyₖ). (Tested in `test/equation.test.ts`.)
 
+One property of that collapse deserves naming: it is a **policy veto embedded
+in the aggregation**, and it is *discontinuous* — a lens crossing from 0.01 to
+exactly 0 moves the Index from small to zero in one step, so noisy
+classification near zero can flip a ranking. The composite-indicator
+literature's alternative is a hurdle decomposition — `Index = H · G₊`, a hard
+eligibility indicator times a smooth strictly-positive score (or a penalized
+geometric mean) — which keeps low compensability without the cliff. We keep
+the single-product form deliberately: the veto **is** the message ("no axis
+can be bought back"), and separating it would blunt exactly the property that
+makes the Index resistant to single-axis gaming. But the choice is a design
+stance, not a mathematical necessity, and an integrator who needs ranking
+stability near zero should use the hurdle form on top of the same lenses.
+
 ### 4.3 The substitution knob (a principled family, one distinguished default)
 
 The geometric mean is the θ→0 case of the **CES / power mean**
@@ -197,6 +210,23 @@ true conversion (`indexIsUpperBound`) — so more measurement makes the number m
 honest (usually lower), never inflated. The exact opposite of the usual dashboard
 incentive. (Lenses you haven't wired are excluded and **coverage** is reported —
 unknown ≠ fault.)
+
+The identification interval above is not the only width the Index carries. The
+lenses are also *estimated from finite data*, so a second, **statistical** width
+exists — and the two are folded together in the `compositeInterval`: each lens's
+own bounds (today: the realization rate's anytime-valid confidence sequence, §10)
+are substituted into the aggregator at their joint endpoints. Because the
+aggregator is **monotone in every lens**, endpoint substitution brackets the
+truth **without any lens-independence assumption** — correlated lenses cannot
+break it, only make it conservative. The interval names its `sources`: a lens
+with no interval of its own enters as a point and is *not* claimed as covered.
+One statistical sequence enters today, so its level is the joint level; as more
+lens sequences are wired, the α is split across them before folding. A related
+disclosure travels with the frontier: **lens redundancy** `d_eff = m²/Σr²ᵢⱼ`,
+the effective number of independent dimensions the lens system measures across
+contexts — `d_eff ≪ m` means the lenses co-move and the composite is silently
+overweighting one latent factor. It is a disclosure, never an automatic
+reweighting: correlation alone doesn't prove redundancy.
 
 ### 4.5 The two faces (kept distinct on purpose)
 
@@ -272,6 +302,15 @@ A point estimate is not a decision. RoI prices risk twice, on purpose:
    (every un-instrumented necessary condition assumed adverse). It is coherent —
    monotone in γ, never exceeds the point, degenerates to the point when the
    interval is a point. "Even under conservative assumptions, RoI ≥ CE(γ)."
+
+   One classification matters for anyone auditing this: **CE(γ) is a decision
+   policy over an identified interval, not statistical evidence.** It is not a
+   confidence bound, not a posterior mean, and it carries no coverage guarantee
+   of its own — γ encodes the *reader's* risk attitude, chosen by the user, and
+   the honest statistical objects remain the interval itself (§4.4) and the
+   anytime-valid sequences (§10). Reporting CE(γ) without saying which γ was
+   chosen would be laundering a preference as a measurement; the CLI always
+   prints γ next to the number.
 
 ---
 

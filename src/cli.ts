@@ -30,7 +30,15 @@ import { seedDemo, demoLiftOptions } from './demo/seed.ts';
 import { startOfLocalDay } from './budget/guard.ts';
 import { attributeCommits, isGitRepo, projectName, resolveCommit } from './git/correlate.ts';
 import { computeQuality } from './git/quality.ts';
-import { computeRealization, loadRealization, liftOptionsFromStore, moneyInputsFromStore, realizeDiscoveredProjects, projectValueBreakdown } from './value/realization.ts';
+import {
+  computeRealization,
+  loadRealization,
+  liftOptionsFromStore,
+  moneyInputsFromStore,
+  realizeDiscoveredProjects,
+  projectValueBreakdown,
+  type ProjectValue,
+} from './value/realization.ts';
 import { scanWithDiff, saveScan, type ScanDiff } from './scan/scan.ts';
 import { computeReturnOnIntelligence } from './value/lenses.ts';
 import { describeSourceDepth } from './value/sourceDepth.ts';
@@ -43,7 +51,7 @@ import { computeCohort, userValueRows, selfView } from './value/cohort.ts';
 import { recommendBudget } from './budget/recommend.ts';
 import { recommendAllocation } from './budget/allocate.ts';
 import { shadowPriceOfIntelligence, estimateBetaFromPairs } from './value/marginal.ts';
-import { driftEProcess } from './value/drift.ts';
+import { goodhartStreams } from './value/drift.ts';
 import { instrumentationPriority } from './value/voi.ts';
 import { estimateBetaPrior, shrinkRate } from './value/reliability.ts';
 import { buildGuide, type GuideFacts } from './guide.ts';
@@ -58,8 +66,10 @@ import {
   verifyReceipt,
   type SignedReceipt,
   type VerifyOptions,
+  type KeyPair,
 } from './value/receipt.ts';
 import { buildRollupBody, signRollup, type SignedRollup } from './team/rollup.ts';
+import { judgeSessionFromStore } from './judge/orchestrate.ts';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
@@ -1080,6 +1090,15 @@ async function cmdRealize(flags: Flags): Promise<void> {
     const rr = pct(m.realizationRate);
     const rv = m.realizedValueRate === null ? '—' : pct(m.realizedValueRate);
     console.log(`  ${color(tty, C.bold, 'Realization Rate')}    ${color(tty, m.realizationRate > 0.6 ? C.green : C.yellow, rr.padStart(4))}   ${color(tty, C.gray, 'production — units that reached verified durable value')}`);
+    // The partial-ID interval: confirmed-realized up to not-observed-dead. Shown
+    // whenever unobserved gates leave real width, so the confirmed rate is never
+    // mistaken for the whole story (nor a perfect progress score for realization).
+    if (m.realizationBounds.upper - m.realizationBounds.lower > 0.005) {
+      console.log(color(tty, C.gray, `                      confirmed ${pct(m.realizationBounds.lower)} – not-observed-dead ${pct(m.realizationBounds.upper)}; the gap is the unmeasured region — wire more gates to close it`));
+    }
+    if (m.serial.sG !== null && m.serial.skipped.length > 0) {
+      console.log(color(tty, C.gray, `                      survival chain ${pct(m.serial.sG)} over ${m.serial.included.length}/${GATE_LADDER.length} observed stages (unobserved: ${m.serial.skipped.join(', ')})`));
+    }
     console.log(`  Realized Value      ${color(tty, C.green, usd(m.realizedValueUsd))} / ${usd(m.totalCostUsd)}  ${color(tty, C.gray, `(${rv})  the money lens`)}`);
     console.log(`  Net of rework       ${color(tty, C.green, usd(m.netRealizedValueUsd))}  ${color(tty, C.gray, 'realized value after first-pass acceptance — reworked output is worth less')}`);
   }
@@ -2019,7 +2038,7 @@ async function cmdRoi(flags: Flags): Promise<void> {
   // real history) and uses the population prior + config as-is.
   const project = isDemo() ? 'demo' : await projectName(repo);
   const resolvedBaseline = isDemo()
-    ? { minutes: cfg.lift.baselineMinutes, basis: {}, notes: [] as string[] }
+    ? { minutes: cfg.lift.baselineMinutes, minutesLow: cfg.lift.baselineMinutes, minutesHigh: cfg.lift.baselineMinutes, basis: {}, notes: [] as string[] }
     : await resolveBaselineMinutesForRepo(store, repo, project, cfg.lift.baselineMinutes, DEFAULT_CONFIG.lift.baselineMinutes);
   // Lift source, in priority order — self-report is NEVER accepted:
   //   1. --tsf <x>   an externally measured TSF (transcript judge / RCT) — gold standard
@@ -2037,7 +2056,7 @@ async function cmdRoi(flags: Flags): Promise<void> {
     liftOpts = { ...demoLiftOptions(), liftHow: 'labeled synthetic TSF (demo stand-in for a real A-B)' };
     liftNotes = ['Demo: Lift uses a synthetic TSF stand-in for a real transcript-judge / A-B measurement.'];
   } else {
-    const dl = liftOptionsFromStore(store, report, resolvedBaseline.minutes);
+    const dl = liftOptionsFromStore(store, report, resolvedBaseline.minutes, { low: resolvedBaseline.minutesLow, high: resolvedBaseline.minutesHigh });
     liftOpts = { lift: dl.lift, liftRange: dl.liftRange, liftHow: 'measured time-with-AI × resolved task baselines (estimate, not a controlled A/B)' };
     liftNotes = [...dl.notes, ...resolvedBaseline.notes];
   }
@@ -2054,17 +2073,22 @@ async function cmdRoi(flags: Flags): Promise<void> {
   });
   roi.notes.unshift(...liftNotes);
 
-  // Goodhart drift alarm (docs §11): is the realization rate being BENT? Run the
-  // anytime-valid e-process over mature units in time order. Needs a real stream
-  // to say anything (≥10 resolved units); silent below that, honestly.
+  // Goodhart drift alarm (docs §11): is a rate being BENT? Three anytime-valid
+  // e-processes over mature units in time order — realization, acceptance, and
+  // hard-gate coverage (each stream needs ≥10 observed points; silent below
+  // that, honestly). The PATTERN across streams is the tell: acceptance rising
+  // while realization stagnates = proposal inflation; hard-gate unknowns rising
+  // while the headline holds = coverage suppression.
   const matureOrdered = report.units.filter((u) => !u.maturing).sort((a, b) => a.tsEpochMs - b.tsEpochMs);
-  const drift = matureOrdered.length >= 10 ? driftEProcess(matureOrdered.map((u) => u.funnel.realized)) : null;
+  const driftStreams = goodhartStreams(matureOrdered.map((u) => u.funnel));
+  // Back-compat: `drift` stays the realization stream's report, as before.
+  const drift = driftStreams.find((s) => s.stream === 'realization')?.report ?? null;
   // VoI (docs §12): which measurement to buy next — the un-instrumented lens
   // whose measurement would move the Index most, at a disclosed mid reference.
   const voi = instrumentationPriority(roi);
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify({ ...roi, drift, instrumentNext: voi }, null, 2) + '\n');
+    process.stdout.write(JSON.stringify({ ...roi, drift, driftStreams, instrumentNext: voi }, null, 2) + '\n');
     store.close();
     return;
   }
@@ -2124,15 +2148,20 @@ async function cmdRoi(flags: Flags): Promise<void> {
   lensRow('Lift', roi.lenses.lift);
   lensRow('Impact', roi.lenses.impact);
 
-  // Stability: the Goodhart alarm. It detects that the rate MOVED, not why —
-  // gaming and a genuine regime change both trip it; its job is to force the question.
-  if (drift) {
+  // Stability: the Goodhart alarms. Each detects that a rate MOVED, not why —
+  // gaming and a genuine regime change both trip them; their job is to force the
+  // question, and each firing stream carries its own typical reading.
+  if (driftStreams.length > 0) {
     console.log('');
-    if (drift.alarm) {
-      console.log(`  ${color(tty, C.bold, 'Stability')}            ${color(tty, C.red, 'DRIFT DETECTED')}   ${color(tty, C.gray, `realization moved ${pct(drift.overallRate ?? 0)} → ${pct(drift.recentRate ?? 0)} recently (anytime-valid, α=${drift.alpha})`)}`);
-      console.log(color(tty, C.gray, '                       ask why: did the work change (new model/workflow → re-baseline), or is the metric being gamed?'));
+    const firing = driftStreams.filter((s) => s.report.alarm);
+    if (firing.length > 0) {
+      for (const s of firing) {
+        console.log(`  ${color(tty, C.bold, 'Stability')}            ${color(tty, C.red, 'DRIFT DETECTED')}   ${color(tty, C.gray, `${s.stream} moved ${pct(s.report.overallRate ?? 0)} → ${pct(s.report.recentRate ?? 0)} recently (anytime-valid, α=${s.report.alpha})`)}`);
+        console.log(color(tty, C.gray, `                       ${s.reading}`));
+      }
     } else {
-      console.log(`  ${color(tty, C.bold, 'Stability')}            ${color(tty, C.green, 'stable')}   ${color(tty, C.gray, `no drift in the realization stream (${drift.n} units, anytime-valid)`)}`);
+      const watched = driftStreams.map((s) => s.stream).join(', ');
+      console.log(`  ${color(tty, C.bold, 'Stability')}            ${color(tty, C.green, 'stable')}   ${color(tty, C.gray, `no drift across ${driftStreams.length} watched stream(s): ${watched} (anytime-valid)`)}`);
     }
   }
 
@@ -2606,10 +2635,128 @@ async function cmdBaseline(flags: Flags): Promise<void> {
 }
 
 /**
+ * Judge a recent window's AI-assisted efficiency (src/judge/orchestrate.ts).
+ * One CLI invocation is one ad-hoc judged window, not a detected session
+ * boundary — real session-boundary detection doesn't exist in this codebase
+ * yet, so `sessionId` is freshly generated per call, not looked up. With no
+ * judge.* tier configured (the default), this always returns the zero-cost
+ * algorithmic signal — that's the expected steady state, not a degraded one.
+ * See docs/LIFT-AI-SIDE-JUDGE-DESIGN.md §4 for the trust-ladder this reads.
+ */
+async function cmdJudge(flags: Flags): Promise<void> {
+  const tty = process.stdout.isTTY ?? false;
+  const repo = (flags.repo as string) ?? process.cwd();
+
+  let project: string;
+  if (typeof flags.project === 'string') {
+    project = flags.project;
+  } else {
+    if (!(await isGitRepo(repo))) {
+      printNotAGitRepo(repo);
+      process.exitCode = 1;
+      return;
+    }
+    project = await projectName(repo);
+  }
+
+  const windowDays = flags.window ? Number(flags.window) : 1;
+  const windowEndMs = Date.now();
+  const windowStartMs = windowEndMs - windowDays * 86_400_000;
+  const sessionId = randomUUID();
+
+  const cfg = loadConfig();
+  const store = new Store(dbPath());
+  const judgment = await judgeSessionFromStore(store, project, sessionId, windowStartMs, windowEndMs, cfg.judge);
+  store.close();
+
+  if (flags.json) {
+    process.stdout.write(JSON.stringify(judgment, null, 2) + '\n');
+    return;
+  }
+
+  // Escalating ladder, matching the design doc's "a richer source must never
+  // look as cheap as algorithmic" principle (§3) — confidence is the most
+  // load-bearing field here, so it gets the most visually distinct color.
+  const confColor: string =
+    judgment.confidence === 'algorithmic' ? C.gray
+    : judgment.confidence === 'local-llm' ? C.cyan
+    : judgment.confidence === 'hosted-llm-structural' ? C.yellow
+    : C.red; // 'hosted-llm-full'
+
+  console.log('');
+  console.log(color(tty, C.bold, `  AegisFlow — session judge · ${project}`));
+  console.log(color(tty, C.gray, '  ' + '─'.repeat(46)));
+  console.log(color(tty, C.gray, `  window: last ${windowDays}d · session ${sessionId}`));
+  console.log('');
+  console.log(`  Efficiency    ${color(tty, judgment.efficiencyMultiplier >= 1 ? C.green : C.yellow, judgment.efficiencyMultiplier.toFixed(2) + 'x')}`);
+  console.log(`  Confidence    ${color(tty, confColor, judgment.confidence)}`);
+  console.log('');
+  console.log(color(tty, C.gray, `  ${judgment.rationale}`));
+  if (judgment.confidence === 'algorithmic') {
+    console.log('');
+    console.log(color(tty, C.gray, '  No LLM judge tier is configured — this is the always-on algorithmic signal.'));
+    console.log(color(tty, C.gray, '  Opt into a local or hosted LLM judge via config.judge.* — see docs/LIFT-AI-SIDE-JUDGE-DESIGN.md §4.'));
+  }
+  console.log('');
+}
+
+type PushResult =
+  | { status: 'empty'; message: string }
+  | { status: 'dry-run'; signed: SignedRollup }
+  | { status: 'ok'; keyId: string; projectCount: number }
+  | { status: 'error'; message: string };
+
+/**
+ * Sign and (unless dryRun) push a rollup of the given projects. Pure: no
+ * printing, no process.exitCode — callers decide how to present each
+ * PushResult. Shared by the one-shot and --watch paths (cmdTeamPush,
+ * cmdTeamPushWatch) so both stay in lockstep on message text and JSON shape.
+ */
+async function signAndPushRollup(
+  projects: ProjectValue[],
+  opts: { windowDays: number; projectFilter: string | null; keys: KeyPair; url: string | null; dryRun: boolean },
+): Promise<PushResult> {
+  if (projects.length === 0) {
+    const message = opts.projectFilter
+      ? `no realized units found for project "${opts.projectFilter}" in the last ${opts.windowDays}d — nothing to push`
+      : `no realized units found in the last ${opts.windowDays}d — nothing to push`;
+    return { status: 'empty', message };
+  }
+
+  const to = new Date();
+  const from = new Date(to.getTime() - opts.windowDays * 86_400_000);
+  const body = buildRollupBody(opts.keys, projects, { from: from.toISOString(), to: to.toISOString() });
+  const signed: SignedRollup = signRollup(body, opts.keys);
+
+  if (opts.dryRun) {
+    return { status: 'dry-run', signed };
+  }
+
+  try {
+    const res = await fetch(opts.url!.replace(/\/$/, '') + '/rollups', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(signed),
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      const message = `push failed: HTTP ${res.status} from ${opts.url}${detail ? ` — ${detail.slice(0, 200)}` : ''}`;
+      return { status: 'error', message };
+    }
+    return { status: 'ok', keyId: opts.keys.keyId, projectCount: projects.length };
+  } catch (e) {
+    return { status: 'error', message: `push failed: ${String(e)}` };
+  }
+}
+
+/**
  * Push a signed, numeric-only rollup of this machine's per-project value/RoI to
  * an enterprise-run team server. See docs/TEAM-TIER-DESIGN.md — AegisFlow hosts
  * nothing; --url points at infrastructure the team already runs and trusts.
  * Uses a SEPARATE keypair from `receipt --pubkey` on purpose (src/team/rollup.ts).
+ * `--watch` keeps pushing on an interval (--every seconds) — see cmdTeamPushWatch,
+ * the same pattern as `import --watch` (cmdImportWatch).
  */
 async function cmdTeamPush(flags: Flags): Promise<void> {
   const tty = process.stdout.isTTY ?? false;
@@ -2625,6 +2772,7 @@ async function cmdTeamPush(flags: Flags): Promise<void> {
     console.log(color(tty, C.gray, '          aegisflow team push --dry-run             preview without sending'));
     console.log(color(tty, C.gray, '          aegisflow team push --pubkey              print this machine\'s rollup signing identity'));
     console.log(color(tty, C.gray, '          aegisflow team push --url <url> --window 7 --project <name>'));
+    console.log(color(tty, C.gray, '          aegisflow team push --url <url> --watch --every 3600   background interval (seconds)'));
     console.log('');
     return;
   }
@@ -2661,32 +2809,42 @@ async function cmdTeamPush(flags: Flags): Promise<void> {
   const windowDays = flags.window ? Number(flags.window) : 30;
   const projectFilter = typeof flags['project'] === 'string' ? flags['project'] : null;
 
+  if (flags.watch) {
+    if (!url) {
+      const msg = 'no team server URL given — --watch needs somewhere to push: aegisflow team push --url <url> --watch';
+      if (flags.json) {
+        console.log(JSON.stringify({ ok: false, error: msg }, null, 2));
+        process.exitCode = 1;
+        return;
+      }
+      console.error(`  ${color(tty, C.yellow, '✗')} ${msg}`);
+      process.exitCode = 1;
+      return;
+    }
+    await cmdTeamPushWatch({ keyPath, url, windowDays, projectFilter, intervalMs: typeof flags.every === 'string' ? Number(flags.every) * 1000 : undefined });
+    return;
+  }
+
   const store = new Store(dbPath());
   let projects = projectValueBreakdown(store, { windowDays });
   store.close();
   if (projectFilter) projects = projects.filter((p) => p.project === projectFilter);
 
-  if (projects.length === 0) {
-    const msg = projectFilter
-      ? `no realized units found for project "${projectFilter}" in the last ${windowDays}d — nothing to push`
-      : `no realized units found in the last ${windowDays}d — nothing to push`;
+  const keys = loadOrCreateKeyPair(keyPath);
+  const result = await signAndPushRollup(projects, { windowDays, projectFilter, keys, url, dryRun });
+
+  if (result.status === 'empty') {
     if (flags.json) {
-      console.log(JSON.stringify({ ok: true, projects: 0, note: msg }, null, 2));
+      console.log(JSON.stringify({ ok: true, projects: 0, note: result.message }, null, 2));
       return;
     }
-    console.log(`  ${color(tty, C.dim, msg)}`);
+    console.log(`  ${color(tty, C.dim, result.message)}`);
     return;
   }
 
-  const keys = loadOrCreateKeyPair(keyPath);
-  const to = new Date();
-  const from = new Date(to.getTime() - windowDays * 86_400_000);
-  const body = buildRollupBody(keys, projects, { from: from.toISOString(), to: to.toISOString() });
-  const signed: SignedRollup = signRollup(body, keys);
-
-  if (dryRun) {
+  if (result.status === 'dry-run') {
     if (flags.json) {
-      console.log(JSON.stringify(signed, null, 2));
+      console.log(JSON.stringify(result.signed, null, 2));
       return;
     }
     console.log('');
@@ -2700,40 +2858,95 @@ async function cmdTeamPush(flags: Flags): Promise<void> {
     return;
   }
 
-  try {
-    const res = await fetch(url!.replace(/\/$/, '') + '/rollups', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(signed),
-      signal: AbortSignal.timeout(20_000),
-    });
-    if (!res.ok) {
-      const detail = await res.text().catch(() => '');
-      const msg = `push failed: HTTP ${res.status} from ${url}${detail ? ` — ${detail.slice(0, 200)}` : ''}`;
-      if (flags.json) {
-        console.log(JSON.stringify({ ok: false, error: msg }, null, 2));
-        process.exitCode = 1;
-        return;
-      }
-      console.error(`  ${color(tty, C.red, '✗')} ${msg}`);
+  if (result.status === 'error') {
+    if (flags.json) {
+      console.log(JSON.stringify({ ok: false, error: result.message }, null, 2));
       process.exitCode = 1;
       return;
     }
-    if (flags.json) {
-      console.log(JSON.stringify({ ok: true, keyId: keys.keyId, projects: projects.length }, null, 2));
-      return;
-    }
-    console.log(`  ${color(tty, C.green, '✓')} Pushed ${projects.length} project(s) to ${url}, signed by key ${keys.keyId}`);
-  } catch (e) {
-    const msg = `push failed: ${String(e)}`;
-    if (flags.json) {
-      console.log(JSON.stringify({ ok: false, error: msg }, null, 2));
-      process.exitCode = 1;
-      return;
-    }
-    console.error(`  ${color(tty, C.red, '✗')} ${msg}`);
+    console.error(`  ${color(tty, C.red, '✗')} ${result.message}`);
     process.exitCode = 1;
+    return;
   }
+
+  if (flags.json) {
+    console.log(JSON.stringify({ ok: true, keyId: result.keyId, projects: result.projectCount }, null, 2));
+    return;
+  }
+  console.log(`  ${color(tty, C.green, '✓')} Pushed ${result.projectCount} project(s) to ${url}, signed by key ${result.keyId}`);
+}
+
+/**
+ * Live team push: re-sign and push the rolling window on an interval — same
+ * poll/print-one-line/Ctrl+C-to-stop pattern as cmdImportWatch. Keeps the store
+ * open across ticks (the one-shot path above opens, reads, and closes once) and
+ * re-queries project totals fresh each tick, so a long-running watch reflects
+ * work completed after it started.
+ */
+async function cmdTeamPushWatch(opts: {
+  keyPath: string;
+  url: string;
+  windowDays: number;
+  projectFilter: string | null;
+  intervalMs?: number;
+}): Promise<void> {
+  const tty = process.stdout.isTTY ?? false;
+  const intervalMs = Math.max(2000, opts.intervalMs ?? 5000);
+  const store = new Store(dbPath());
+  const keys = loadOrCreateKeyPair(opts.keyPath);
+
+  console.log('');
+  console.log(color(tty, C.bold, `  Team push — watching, pushing every ${Math.round(intervalMs / 1000)}s`));
+  console.log(
+    color(
+      tty,
+      C.gray,
+      `  Window: last ${opts.windowDays}d${opts.projectFilter ? ` · project ${opts.projectFilter}` : ''} · target ${opts.url} · Ctrl+C to stop`,
+    ),
+  );
+  console.log('');
+
+  let running = true;
+  const tick = async (): Promise<void> => {
+    const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+    try {
+      let projects = projectValueBreakdown(store, { windowDays: opts.windowDays });
+      if (opts.projectFilter) projects = projects.filter((p) => p.project === opts.projectFilter);
+      const result = await signAndPushRollup(projects, {
+        windowDays: opts.windowDays,
+        projectFilter: opts.projectFilter,
+        keys,
+        url: opts.url,
+        dryRun: false,
+      });
+      if (result.status === 'ok') {
+        console.log(color(tty, C.gray, `  ${time}  `) + color(tty, C.green, `✓ pushed ${result.projectCount} project(s)`));
+      } else if (result.status === 'empty') {
+        console.log(color(tty, C.gray, `  ${time}  ${result.message}`));
+      } else if (result.status === 'error') {
+        console.log(color(tty, C.gray, `  ${time}  `) + color(tty, C.red, `✗ ${result.message}`));
+      }
+    } catch (e) {
+      console.log(color(tty, C.gray, `  ${time}  `) + color(tty, C.red, `✗ push tick failed: ${String(e)}`));
+    }
+  };
+
+  await tick();
+  const timer = setInterval(() => {
+    if (running) void tick();
+  }, intervalMs);
+
+  await new Promise<void>((resolve) => {
+    const stop = () => {
+      running = false;
+      clearInterval(timer);
+      store.close();
+      console.log('\n  Stopped watching.');
+      resolve();
+    };
+    process.on('SIGINT', stop);
+    process.on('SIGTERM', stop);
+  });
 }
 
 /** This package's version, read from package.json — the single source of truth. */
@@ -2787,14 +3000,18 @@ function cmdHelp(): void {
                           routing recommendations (--window D, --json)
     usage                 RoI for non-coding usage (chat, research, drafting) —
                           sessions scored from reported outcomes (--days N, --json)
+    judge                 Score a recent window's AI-assisted efficiency —
+                          algorithmic by default; opt into a local/hosted LLM
+                          judge via config.judge.* (--window D, --project <name>, --json)
     team                  Per-user value: how much of the spend reaches outcomes.
                           Opt-in, distribution-only, k-anonymous. --me <user> for
                           your own view (--days N, --json)
     team push --url <u>   Cross-machine: sign + push this window's per-project
                           value/RoI to a team server YOU run (AegisFlow hosts
                           nothing). --dry-run to preview, --pubkey to publish
-                          this machine's rollup identity (--window D, --project
-                          <name>, --json)
+                          this machine's rollup identity, --watch to keep
+                          pushing on an interval (--window D, --project
+                          <name>, --every N, --json)
     report --kind K       Wire an outcome: code --commit <hash>, non-code --session <id>
                           kinds: tested|merged|shipped|incident|used|resolved|published|…
     exec -- <command>     AMBIENT outcome capture: run any command and report its
@@ -2932,6 +3149,9 @@ async function main(): Promise<void> {
       break;
     case 'usage':
       await cmdUsage(flags);
+      break;
+    case 'judge':
+      await cmdJudge(flags);
       break;
     case 'team':
       // Bare `team` / `team --me <user>` = the existing local, k-anonymous

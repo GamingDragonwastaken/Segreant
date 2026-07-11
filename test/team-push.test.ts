@@ -39,3 +39,18 @@ test('team push: no realized units in the window reports ok:true (projects:0) in
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('team push --watch: refuses to start without --url — nothing to poll into, exit 1, no hang', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'aegis-team-push-'));
+  try {
+    const db = join(dir, 'push.db');
+    const home = join(dir, 'home');
+    const r = await runCli(['team', 'push', '--watch', '--json'], db, home);
+    assert.equal(r.code, 1, `--watch with no --url must fail fast rather than hang waiting for input, stdout: ${r.stdout}`);
+    const payload = JSON.parse(r.stdout) as { ok: boolean; error: string };
+    assert.equal(payload.ok, false);
+    assert.match(payload.error, /--url/, 'error must point the user at the missing flag, not a generic failure');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

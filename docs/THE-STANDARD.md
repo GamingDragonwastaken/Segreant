@@ -100,7 +100,20 @@ can't observe.** Consequences:
 
 - The **realization score** of a unit is `passes ÷ instrumented` where
   `instrumented = passes + fails` — *of the checks we could actually make, how
-  many passed.* Uninstrumented gates don't inflate or deflate it.
+  many passed.* Uninstrumented gates don't inflate or deflate it. It is a
+  **progress statistic, not a realization probability**: a unit with four early
+  passes and four unknown gates scores 100% *of what was observed* while its
+  realization is genuinely undetermined. Two companion quantities keep that
+  honest at the aggregate level (`src/value/gates.ts`):
+  - **Realization bounds** — the share *confirmed realized* up to the share
+    *not observed dead*. The truth is provably inside this interval; its width
+    is exactly the unmeasured region, and wiring more gates narrows it.
+  - **Serial realization** `S_G = Π q_g` — realization as an ordered survival
+    chain: each `q_g` is the pass rate at gate *g* among units still alive
+    entering it, and the product prices the fact that realized work must
+    survive *every* stage in sequence, not an unordered checklist. Gates with
+    no observations among alive units are skipped **and named** — never
+    silently assumed passed.
 - Every report shows **instrumentation coverage**: "5 of 8 gates wired." The
   path to a higher-trust number is to wire more gates, not to game one.
 - Maturing commits (younger than the window) get `unknown` on Survived and

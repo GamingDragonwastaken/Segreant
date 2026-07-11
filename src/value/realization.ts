@@ -21,7 +21,18 @@ import { attributeCommits, isGitRepo, projectName, type CommitAttribution } from
 import { isDemo } from '../config.ts';
 import { survivingLines, revertedHashes } from '../git/quality.ts';
 import { acceptanceForCommit, type ProposedFile } from './proposals.ts';
-import { GATE_LADDER, scoreFunnel, type Gate, type GateResult, type Verdict, type FunnelOutcome } from './gates.ts';
+import {
+  GATE_LADDER,
+  scoreFunnel,
+  terminalRealizationBounds,
+  serialRealization,
+  type Gate,
+  type GateResult,
+  type Verdict,
+  type FunnelOutcome,
+  type TerminalRealizationBounds,
+  type SerialRealization,
+} from './gates.ts';
 import { classifyTaskType, type TaskType } from './taskType.ts';
 import { computeReturnOnIntelligence, type RoIOptions } from './lenses.ts';
 import { liftFromData, timeWithAiMinutes, type AiEvent, type DataLiftResult } from './lift.ts';
@@ -117,6 +128,15 @@ export interface RealizationReport {
     realizedValueRate: number | null;
     wasteByStage: WasteBucket[];
     instrumentation: Record<Gate, number>;
+    // Partial-identification interval on the realization rate: lower = confirmed
+    // realized (== realizationRate), upper = not observed dead. The truth is inside;
+    // the width is exactly the unobserved region. Guards the per-unit progress score
+    // from being misread as a realization probability. See gates.ts.
+    realizationBounds: TerminalRealizationBounds;
+    // Ordered survival chain S_G = Π q_g — realization as a product of per-gate
+    // conditional pass rates, with uninstrumented gates disclosed in `skipped`
+    // rather than silently assumed passed. See gates.ts.
+    serial: SerialRealization;
   };
 }
 
@@ -470,6 +490,8 @@ export function rollupRealization(
       realizedValueRate: totalCostUsd > 0 ? realizedValueUsd / totalCostUsd : null,
       wasteByStage: [...wasteMap.values()].sort((a, b) => b.costUsd - a.costUsd),
       instrumentation,
+      realizationBounds: terminalRealizationBounds(mature.map((u) => u.funnel)),
+      serial: serialRealization(mature.map((u) => u.funnel)),
     },
   };
 }
@@ -485,6 +507,7 @@ export function liftOptionsFromStore(
   store: Store,
   report: RealizationReport,
   baselineMinutes: Record<string, number>,
+  baselineBounds?: { low: Record<string, number>; high: Record<string, number> },
 ): DataLiftResult {
   const mature = report.units.filter((u) => !u.maturing);
   const realized = mature.filter((u) => u.funnel.realized);
@@ -504,6 +527,8 @@ export function liftOptionsFromStore(
     units: mature.map((u) => ({ taskType: u.taskType, realized: u.funnel.realized, acceptance: u.acceptance })),
     events,
     baselineMinutes,
+    baselineMinutesLow: baselineBounds?.low,
+    baselineMinutesHigh: baselineBounds?.high,
     ledgerAcceptance: report.firstPassAcceptance,
   });
 }

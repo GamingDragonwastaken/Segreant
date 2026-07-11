@@ -118,6 +118,15 @@ export interface RoIResult {
   // acted on the moment it looks good. A fixed-n interval is invalid under that
   // use; this one is not. Additive: it never changes the Index or its interval.
   realizationInterval: { low: number; high: number; level: number } | null;
+  // The FULL-uncertainty read of the Index: statistical width (the realization
+  // confidence sequence) and identification width (Lift's partial-ID range)
+  // folded into the composite by monotone substitution — the aggregator is
+  // monotone in every lens, so evaluating it at the joint lower/upper lens
+  // bounds brackets the truth WITHOUT any lens-independence assumption.
+  // `sources` names exactly which uncertainties entered, so the interval never
+  // claims coverage it doesn't have (lenses with no interval enter as points).
+  // Additive: roiInterval keeps its documented identification-only meaning.
+  compositeInterval: { low: number | null; point: number | null; high: number | null; sources: string[] } | null;
   tokenCostUsd: number;
   effortTaxUsd: number;
   realizedEfficiency: number | null; // realized value / (token + effort) cost, 0..1
@@ -257,11 +266,14 @@ export function computeReturnOnIntelligence(report: RealizationLike, opts: RoIOp
   const w = opts.weights ?? DEFAULT_LENS_WEIGHTS;
   const theta = opts.theta ?? 0;
 
-  // Compose the Index for a specific Lift value (null → exclude Lift entirely).
-  // The other three instrumented lenses are always included.
-  const composeIndex = (liftValue: number | null): number | null => {
+  // Compose the Index for a specific Lift value (null → exclude Lift entirely),
+  // optionally overriding the realization lens (used to substitute its
+  // confidence-sequence endpoints into the composite — monotone, so endpoint
+  // substitution brackets the truth). The other instrumented lenses are always
+  // included at their point values.
+  const composeIndex = (liftValue: number | null, realizationValue: number | null = realization.value): number | null => {
     const pairs: Array<{ value: number; weight: number }> = [];
-    if (realization.instrumented && realization.value !== null) pairs.push({ value: realization.value, weight: w.realization });
+    if (realization.instrumented && realizationValue !== null) pairs.push({ value: realizationValue, weight: w.realization });
     if (acceptance.instrumented && acceptance.value !== null) pairs.push({ value: acceptance.value, weight: w.acceptance });
     if (liftValue !== null) pairs.push({ value: liftValue, weight: w.lift });
     if (impact.instrumented && impact.value !== null) pairs.push({ value: impact.value, weight: w.impact });
@@ -402,6 +414,29 @@ export function computeReturnOnIntelligence(report: RealizationLike, opts: RoIOp
     realizationCS = { low: cs.low, high: cs.high, level: cs.level };
   }
 
+  // --- Composite interval: statistical × identification width, by monotone
+  // substitution of each lens's own bounds into the (monotone) aggregator.
+  // Lenses without an interval enter as points and are NOT claimed as covered —
+  // `sources` is the disclosure. One statistical sequence enters today (the
+  // realization CS), so its level is the joint level; when more lens CSs exist,
+  // split α across them before folding in.
+  let compositeInterval: RoIResult['compositeInterval'] = null;
+  if (roiIndex !== null) {
+    const sources: string[] = [];
+    const liftLow = lift.instrumented ? (opts.liftRange?.low ?? lift.value) : null;
+    const liftHigh = lift.instrumented ? (opts.liftRange?.high ?? lift.value) : null;
+    if (lift.instrumented && opts.liftRange && (opts.liftRange.low !== null || opts.liftRange.high !== null)) {
+      sources.push('lift partial-identification range');
+    }
+    const realLow = realizationCS ? realizationCS.low : realization.value;
+    const realHigh = realizationCS ? realizationCS.high : realization.value;
+    if (realizationCS) sources.push(`realization anytime confidence sequence (level ${realizationCS.level})`);
+    compositeInterval =
+      sources.length > 0
+        ? { low: composeIndex(liftLow, realLow), point: roiIndex, high: composeIndex(liftHigh, realHigh), sources }
+        : { low: roiIndex, point: roiIndex, high: roiIndex, sources };
+  }
+
   return {
     lenses: { realization, acceptance, lift, impact },
     coverage: all.filter((l) => l.instrumented).length / 4,
@@ -409,11 +444,86 @@ export function computeReturnOnIntelligence(report: RealizationLike, opts: RoIOp
     roiInterval,
     indexIsUpperBound,
     realizationInterval: realizationCS,
+    compositeInterval,
     tokenCostUsd,
     effortTaxUsd,
     realizedEfficiency,
     returnRatio,
     certaintyEquivalent,
     notes,
+  };
+}
+
+/**
+ * Lens redundancy — the effective number of independent dimensions the lens
+ * system is actually measuring across contexts:
+ *
+ *      d_eff = (tr R)² / tr(R²)  =  m² / Σᵢⱼ rᵢⱼ²
+ *
+ * where R is the correlation matrix of the LOG lens values across contexts
+ * (frontier cells). d_eff = m when the lenses move independently; d_eff → 1
+ * when they all track one latent factor — i.e. the "m-lens" composite is
+ * really a one-number dashboard wearing m names. Correlated lenses also mean
+ * the shared factor is silently overweighted in any composite, so a low d_eff
+ * is a disclosure the audit trail must carry, NOT an automatic reweighting:
+ * correlation alone doesn't prove redundancy (contexts may genuinely co-move).
+ *
+ * Honesty guards: complete-case rows only (pairwise-complete correlations can
+ * yield an inconsistent R); lenses with ~zero variance across contexts carry
+ * no correlation information and are dropped (named in `how`); fewer than 3
+ * complete rows or 2 usable lenses → null, never an invented statistic.
+ */
+export interface LensRedundancy {
+  dEff: number | null;
+  lensCount: number; // lenses that entered the statistic
+  contexts: number; // complete-case rows used
+  how: string;
+}
+
+export function lensRedundancy(rows: ReadonlyArray<ReadonlyArray<number | null>>, lensNames?: string[]): LensRedundancy {
+  const m0 = rows.length > 0 ? rows[0]!.length : 0;
+  const names = lensNames ?? Array.from({ length: m0 }, (_, i) => `lens${i + 1}`);
+  // Complete cases: every lens observed and positive (log needs > 0).
+  const complete = rows.filter((r) => r.length === m0 && r.every((v) => v !== null && v > 0));
+  if (complete.length < 3 || m0 < 2) {
+    return { dEff: null, lensCount: 0, contexts: complete.length, how: 'needs ≥3 complete contexts and ≥2 lenses — not enough evidence to estimate correlation' };
+  }
+  const logs = complete.map((r) => r.map((v) => Math.log(v as number)));
+  const n = logs.length;
+
+  // Column means/sds; drop near-constant columns (no correlation information).
+  const means = Array.from({ length: m0 }, (_, j) => logs.reduce((s, r) => s + r[j]!, 0) / n);
+  const sds = Array.from({ length: m0 }, (_, j) => Math.sqrt(logs.reduce((s, r) => s + (r[j]! - means[j]!) ** 2, 0) / n));
+  const keep: number[] = [];
+  const dropped: string[] = [];
+  for (let j = 0; j < m0; j++) {
+    if (sds[j]! > 1e-9) keep.push(j);
+    else dropped.push(names[j] ?? `lens${j + 1}`);
+  }
+  const m = keep.length;
+  if (m < 2) {
+    return { dEff: null, lensCount: m, contexts: n, how: `fewer than 2 lenses vary across contexts${dropped.length ? ` (constant: ${dropped.join(', ')})` : ''}` };
+  }
+
+  // Σᵢⱼ rᵢⱼ² over the kept columns (diagonal contributes m).
+  let sumSq = m;
+  for (let a = 0; a < m; a++) {
+    for (let b = a + 1; b < m; b++) {
+      const ja = keep[a]!;
+      const jb = keep[b]!;
+      let cov = 0;
+      for (const r of logs) cov += (r[ja]! - means[ja]!) * (r[jb]! - means[jb]!);
+      const rho = cov / n / (sds[ja]! * sds[jb]!);
+      sumSq += 2 * rho * rho;
+    }
+  }
+  const dEff = (m * m) / sumSq;
+  return {
+    dEff,
+    lensCount: m,
+    contexts: n,
+    how:
+      `effective dimensions ${dEff.toFixed(2)} of ${m} lenses over ${n} contexts` +
+      (dropped.length ? ` (constant lenses excluded: ${dropped.join(', ')})` : ''),
   };
 }

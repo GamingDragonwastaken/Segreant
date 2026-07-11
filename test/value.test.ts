@@ -8,6 +8,8 @@ import { Store } from '../src/store/db.ts';
 import {
   GATE_LADDER,
   scoreFunnel,
+  terminalRealizationBounds,
+  serialRealization,
   type Gate,
   type GateResult,
   type Verdict,
@@ -15,8 +17,8 @@ import {
 import { extractProposals, acceptanceRatio, acceptanceForCommit } from '../src/value/proposals.ts';
 import { loadOrCreateKeyPair, buildReceiptBody, signReceipt, verifyReceipt } from '../src/value/receipt.ts';
 import { computeRealization } from '../src/value/realization.ts';
-import { computeReturnOnIntelligence, type RealizationLike } from '../src/value/lenses.ts';
-import { timeWithAiMinutes, boundedLift, breakEven } from '../src/value/lift.ts';
+import { computeReturnOnIntelligence, lensRedundancy, type RealizationLike } from '../src/value/lenses.ts';
+import { timeWithAiMinutes, boundedLift, breakEven, liftFromData } from '../src/value/lift.ts';
 import { classifyTaskType, type TaskType } from '../src/value/taskType.ts';
 import { computeFrontier, type FrontierCell } from '../src/value/frontier.ts';
 import { recommendBudget } from '../src/budget/recommend.ts';
@@ -60,6 +62,63 @@ test('funnel: maturing (survived/clean unknown) is never realized', () => {
   const f = scoreFunnel(vr({ proposed: 'pass', accepted: 'pass', committed: 'pass', survived: 'unknown', clean: 'unknown' }));
   assert.equal(f.diedAt, null);
   assert.equal(f.realized, false); // no fail, but durability not confirmed
+});
+
+test('terminal bounds: a perfect-progress-score unit with unknown durability sits strictly inside [0,1], never read as realized', () => {
+  // The audit case: (P,P,P,P,U,U,U,U) — progress score 100%, realization unknown.
+  const f = scoreFunnel(vr({ proposed: 'pass', accepted: 'pass', committed: 'pass', tested: 'pass' }));
+  assert.equal(f.realizationScore, 1, 'progress score is honestly 4/4 of the observed gates');
+  const b = terminalRealizationBounds([f]);
+  assert.equal(b.lower, 0, 'not confirmed realized — the lower bound must not credit it');
+  assert.equal(b.upper, 1, 'not observed dead — the upper bound must not bury it');
+});
+
+test('terminal bounds: confirmed realized lifts the lower bound; an observed death lowers the upper', () => {
+  const realized = scoreFunnel(vr({ proposed: 'pass', accepted: 'pass', committed: 'pass', tested: 'pass', merged: 'pass', shipped: 'pass', survived: 'pass', clean: 'pass' }));
+  const dead = scoreFunnel(vr({ proposed: 'pass', accepted: 'fail' }));
+  const indeterminate = scoreFunnel(vr({ proposed: 'pass', accepted: 'pass', committed: 'pass' }));
+  const b = terminalRealizationBounds([realized, dead, indeterminate]);
+  assert.equal(b.n, 3);
+  assert.ok(Math.abs(b.lower - 1 / 3) < 1e-9, 'exactly one of three confirmed realized');
+  assert.ok(Math.abs(b.upper - 2 / 3) < 1e-9, 'exactly one of three observed dead');
+  assert.ok(b.lower <= b.upper, 'a bounds pair must always be an interval');
+});
+
+test('serial realization: S_G is the product of per-gate conditional pass rates, and dead units leave later gates\' alive pool', () => {
+  // Three units: one full pass, one dies at accepted, one passes proposed+accepted then unknown.
+  const a = scoreFunnel(vr({ proposed: 'pass', accepted: 'pass', committed: 'pass', tested: 'pass', merged: 'pass', shipped: 'pass', survived: 'pass', clean: 'pass' }));
+  const b = scoreFunnel(vr({ proposed: 'pass', accepted: 'fail' }));
+  const c = scoreFunnel(vr({ proposed: 'pass', accepted: 'pass' }));
+  const s = serialRealization([a, b, c]);
+  const byGate = new Map(s.gates.map((g) => [g.gate, g]));
+  assert.equal(byGate.get('proposed')!.q, 1, 'all three alive and passing at proposed');
+  assert.ok(Math.abs((byGate.get('accepted')!.q ?? 0) - 2 / 3) < 1e-9, '2 of 3 alive pass accepted');
+  assert.equal(byGate.get('committed')!.alive, 2, 'the accepted-fail unit is out of every later pool');
+  assert.equal(byGate.get('committed')!.q, 1, 'of the alive, only the full-pass unit is observed at committed — 1/1');
+  // Product over instrumented gates only; every skipped gate is disclosed by name.
+  const expected = 1 * (2 / 3) * 1 * 1 * 1 * 1 * 1 * 1;
+  assert.ok(Math.abs((s.sG ?? 0) - expected) < 1e-9, `sG ${s.sG} should be ${expected}`);
+  assert.equal(s.skipped.length, 0, 'no gate lacked observations among alive units here');
+});
+
+test('serial realization: an uninstrumented gate is skipped AND disclosed, never silently assumed passed', () => {
+  // Nobody has any verdict at `tested`+ — the chain estimate must say which links are missing.
+  const a = scoreFunnel(vr({ proposed: 'pass', accepted: 'pass', committed: 'pass' }));
+  const b = scoreFunnel(vr({ proposed: 'pass', accepted: 'pass', committed: 'pass' }));
+  const s = serialRealization([a, b]);
+  assert.equal(s.sG, 1, 'product over the three observed gates only');
+  assert.deepEqual(s.included, ['proposed', 'accepted', 'committed']);
+  assert.deepEqual(s.skipped, ['tested', 'merged', 'shipped', 'survived', 'clean']);
+});
+
+test('serial realization + bounds: empty input yields nulls/zeros, never NaN or an invented rate', () => {
+  const s = serialRealization([]);
+  assert.equal(s.sG, null);
+  assert.equal(s.included.length, 0);
+  const b = terminalRealizationBounds([]);
+  assert.equal(b.n, 0);
+  assert.equal(b.lower, 0);
+  assert.equal(b.upper, 0);
 });
 
 test('acceptanceRatio: fraction of proposed lines that shipped, whitespace-insensitive', () => {
@@ -187,6 +246,65 @@ test('RoI: injected lift widens coverage; index is the geometric mean of instrum
   assert.ok(r.roiIndex !== null && r.roiIndex > 0 && r.roiIndex < 100);
 });
 
+test('RoI composite interval: statistical width (realization CS) enters even without a Lift range, sources disclosed', () => {
+  const report: RealizationLike = {
+    firstPassAcceptance: 0.9,
+    units: [ru({ realized: true, acceptance: 0.9, shipped: true }), ru({ realized: false, acceptance: 0.9 })],
+    matured: { realizationRate: 0.5, totalCostUsd: 10, realizedValueUsd: 5 },
+  };
+  const r = computeReturnOnIntelligence(report, { lift: 0.5 });
+  const ci = r.compositeInterval;
+  assert.ok(ci !== null, 'matured units exist, so a composite interval must exist');
+  assert.ok(ci!.low !== null && ci!.point !== null && ci!.high !== null);
+  assert.ok(ci!.low! <= ci!.point! && ci!.point! <= ci!.high!, 'monotone substitution must bracket the point');
+  assert.ok(ci!.high! - ci!.low! > 0, 'two matured units carry real statistical width — the interval must show it');
+  assert.ok(ci!.sources.some((s) => /confidence sequence/.test(s)), 'the CS source must be named');
+  // roiInterval keeps its documented identification-only meaning: no Lift range → degenerate.
+  assert.equal(r.roiInterval.low, r.roiInterval.high);
+});
+
+test('RoI composite interval: identification (Lift range) and statistical (CS) widths fold together, wider than either alone', () => {
+  const report: RealizationLike = {
+    firstPassAcceptance: 0.9,
+    units: [ru({ realized: true, acceptance: 0.9, shipped: true }), ru({ realized: false, acceptance: 0.9 })],
+    matured: { realizationRate: 0.5, totalCostUsd: 10, realizedValueUsd: 5 },
+  };
+  const r = computeReturnOnIntelligence(report, { lift: 0.5, liftRange: { low: 0.4, high: 0.7 } });
+  const ci = r.compositeInterval!;
+  assert.equal(ci.sources.length, 2, 'both uncertainty sources named');
+  const idOnly = r.roiInterval; // identification-only interval
+  assert.ok(ci.low! <= idOnly.low! && ci.high! >= idOnly.high!, 'the combined interval must contain the identification-only one');
+});
+
+test('lensRedundancy: independent lenses ≈ m effective dimensions; perfectly co-moving lenses ≈ 1', () => {
+  const e = Math.exp(1);
+  // Log-values (1,1),(1,2),(2,1),(2,2): zero correlation between columns.
+  const independent = lensRedundancy([
+    [e, e],
+    [e, e * e],
+    [e * e, e],
+    [e * e, e * e],
+  ]);
+  assert.ok(independent.dEff !== null && Math.abs(independent.dEff - 2) < 1e-9, `orthogonal columns → d_eff 2, got ${independent.dEff}`);
+  // Column 2 = column 1 squared → logs perfectly correlated.
+  const collinear = lensRedundancy([
+    [2, 4],
+    [3, 9],
+    [5, 25],
+    [7, 49],
+  ]);
+  assert.ok(collinear.dEff !== null && Math.abs(collinear.dEff - 1) < 1e-9, `perfectly co-moving columns → d_eff 1, got ${collinear.dEff}`);
+});
+
+test('lensRedundancy: too few contexts, missing values, or constant lenses → null with the reason, never an invented statistic', () => {
+  assert.equal(lensRedundancy([[0.5, 0.6], [0.7, 0.8]]).dEff, null, 'two rows cannot support a correlation');
+  const withNulls = lensRedundancy([[0.5, null], [0.7, 0.8], [0.9, 0.6], [0.4, 0.5]]);
+  assert.equal(withNulls.contexts, 3, 'incomplete rows are dropped, complete-case only');
+  const constantCol = lensRedundancy([[0.5, 0.5], [0.7, 0.5], [0.9, 0.5], [0.4, 0.5]]);
+  assert.equal(constantCol.dEff, null, 'a constant lens carries no correlation information');
+  assert.match(constantCol.how, /constant/i);
+});
+
 test('RoI: effort tax raises the denominator, lowering realized efficiency', () => {
   const report: RealizationLike = {
     firstPassAcceptance: 0.5,
@@ -242,6 +360,33 @@ test('Lift: TSF is discounted to a bounded value estimate; no baseline → unins
   const none = boundedLift({ tsfUpperBound: null });
   assert.equal(none.lensScore, null);
   assert.ok(none.notes.some((n) => n.includes('uninstrumented')));
+});
+
+test('Lift: baseline-interval propagation — a band straddling break-even reaches the lens as real width, never a false point', () => {
+  // The audit's sign-flip case: 100 measured AI minutes; the baseline band runs
+  // from 84 manual min (AI net-SLOWED you, TSF 0.84 — METR's experienced-dev
+  // result) to 120 manual min (net save, TSF 1.20). A point baseline hides that
+  // the SIGN of the effect is undetermined; the band must carry it.
+  const unit = { taskType: 'feature', realized: true, acceptance: null };
+  // One realized unit; events spaced to measure ~100 minutes of AI time
+  // (10-min windowing: 10 windows × 1 session = 100 min).
+  const events = Array.from({ length: 10 }, (_, i) => ({ sessionId: 's1', tsEpochMs: i * 10 * 60_000 + 1 }));
+  const banded = liftFromData({
+    units: [unit],
+    events,
+    baselineMinutes: { feature: 100 },
+    baselineMinutesLow: { feature: 84 },
+    baselineMinutesHigh: { feature: 120 },
+  });
+  assert.ok(banded.tsfRange !== null, 'a non-degenerate baseline band must surface a TSF range');
+  assert.ok(banded.tsfRange!.low < 1 && banded.tsfRange!.high > 1, 'the range must straddle break-even — that is the whole point');
+  const point = liftFromData({ units: [unit], events, baselineMinutes: { feature: 100 } });
+  assert.equal(point.tsfRange, null, 'no band supplied → exactly the old behavior, no invented width');
+  assert.ok(
+    banded.liftRange.low! < point.liftRange.low! && banded.liftRange.high! > point.liftRange.high!,
+    'baseline width must WIDEN the lens interval beyond the discount-only interval',
+  );
+  assert.ok(banded.notes.some((n) => /baseline uncertainty/i.test(n)), 'the propagation must announce itself');
 });
 
 test('Lift: break-even flags when token+effort cost exceeds the value of time saved', () => {
@@ -306,8 +451,8 @@ test('budget advisor: cap fits usage; low realized value tightens it and project
 
 test('budget advisor: frontier drives trim/grow reallocation', () => {
   const cells: FrontierCell[] = [
-    { key: 'feature · opus', model: 'opus', taskType: 'feature', units: 3, costUsd: 12, realizedValueUsd: 4, netRealizedValueUsd: 4, realizationRate: 0.33, acceptance: null, costPerUnit: 4, roiIndex: 40 },
-    { key: 'fix · haiku', model: 'haiku', taskType: 'fix', units: 3, costUsd: 3, realizedValueUsd: 3, netRealizedValueUsd: 3, realizationRate: 1, acceptance: null, costPerUnit: 1, roiIndex: 95 },
+    { key: 'feature · opus', model: 'opus', taskType: 'feature', units: 3, costUsd: 12, realizedValueUsd: 4, netRealizedValueUsd: 4, realizationRate: 0.33, acceptance: null, costPerUnit: 4, roiIndex: 40, impact: 0.33 },
+    { key: 'fix · haiku', model: 'haiku', taskType: 'fix', units: 3, costUsd: 3, realizedValueUsd: 3, netRealizedValueUsd: 3, realizationRate: 1, acceptance: null, costPerUnit: 1, roiIndex: 95, impact: 1 },
   ];
   const rec = recommendBudget({ dailySpends: [5, 5, 5], realizedValueRate: 0.6, frontier: cells });
   const trim = rec.reallocations.find((r) => r.action === 'trim');

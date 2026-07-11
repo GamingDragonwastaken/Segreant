@@ -31,6 +31,13 @@ export interface AiEvent {
 /**
  * METR 10-minute concurrency windowing → minutes of human "time with AI".
  * A window with n concurrently-active sessions charges each session 10/n minutes.
+ *
+ * Gaming note (worth stating because a supervision-time denominator invites
+ * it): the TOTAL is invariant to session count — n sessions in one window sum
+ * to exactly the window's minutes (n × 10/n = 10) — so opening dummy parallel
+ * sessions neither shrinks nor inflates the total supervision time the RoI
+ * denominator prices. Only the per-session split moves. Idle sessions charge
+ * nothing at all: a window counts only when it contains real request events.
  */
 export function timeWithAiMinutes(
   events: AiEvent[],
@@ -151,6 +158,13 @@ export interface DataLiftInputs {
   units: WorkItemForLift[]; // matured work units (task-type + whether it realized)
   events: AiEvent[]; // request events for the measured "time with AI" denominator
   baselineMinutes: Record<string, number>; // task-type → estimated manual minutes
+  // The baseline as an interval (liftBaseline.ts's identification band). The TSF
+  // is MOST sensitive exactly where it matters most — dL/dB = T/B² flips the
+  // sign near break-even on small baseline errors — so when the baseline is an
+  // estimate its width must reach the lens interval, not vanish into a point.
+  // Absent (or equal to the point) → no extra width, exactly today's behavior.
+  baselineMinutesLow?: Record<string, number>;
+  baselineMinutesHigh?: Record<string, number>;
   discounts?: LiftDiscounts;
   // This ledger's own overall first-pass acceptance (RealizationReport.
   // firstPassAcceptance) — the shrink-toward prior for the efficiency signal.
@@ -163,6 +177,9 @@ export interface DataLiftResult {
   lift: number | null; // lens score (0..1) for computeReturnOnIntelligence({lift})
   liftRange: { low: number | null; high: number | null };
   tsf: number | null; // pooled time-savings factor = manualMinutes / aiMinutes
+  // TSF at the baseline band's endpoints (null when the baseline carried no
+  // width) — how much of liftRange's width is baseline uncertainty, disclosed.
+  tsfRange: { low: number; high: number } | null;
   estimatedManualMinutes: number;
   measuredAiMinutes: number;
   coveredUnits: number; // realized units that had a configured baseline
@@ -187,6 +204,8 @@ export interface DataLiftResult {
  */
 export function liftFromData(inp: DataLiftInputs): DataLiftResult {
   let estimatedManualMinutes = 0;
+  let manualMinutesLow = 0;
+  let manualMinutesHigh = 0;
   let coveredUnits = 0;
   const coveredAcceptance: Array<number | null | undefined> = [];
   for (const u of inp.units) {
@@ -194,6 +213,10 @@ export function liftFromData(inp: DataLiftInputs): DataLiftResult {
     const b = inp.baselineMinutes[u.taskType];
     if (typeof b === 'number' && b > 0) {
       estimatedManualMinutes += b;
+      // Endpoint tables fall back to the point per-key, so a partially-banded
+      // table still yields a well-formed (possibly degenerate) interval.
+      manualMinutesLow += inp.baselineMinutesLow?.[u.taskType] ?? b;
+      manualMinutesHigh += inp.baselineMinutesHigh?.[u.taskType] ?? b;
       coveredUnits += 1;
       coveredAcceptance.push(u.acceptance);
     }
@@ -204,6 +227,7 @@ export function liftFromData(inp: DataLiftInputs): DataLiftResult {
       lift: null,
       liftRange: { low: null, high: null },
       tsf: null,
+      tsfRange: null,
       estimatedManualMinutes,
       measuredAiMinutes,
       coveredUnits,
@@ -215,21 +239,43 @@ export function liftFromData(inp: DataLiftInputs): DataLiftResult {
     unitAcceptance: coveredAcceptance,
     ledgerAcceptance: inp.ledgerAcceptance ?? null,
   });
-  const est = boundedLift({
-    tsfUpperBound: tsf,
-    discounts: { ...inp.discounts, efficiency: efficiency.multiplier },
-  });
+  const discounts = { ...inp.discounts, efficiency: efficiency.multiplier };
+  const est = boundedLift({ tsfUpperBound: tsf, discounts });
+
+  // Baseline-uncertainty propagation: re-run the SAME discount pipeline at the
+  // baseline band's endpoints (boundedLift is monotone in its TSF input, so the
+  // endpoint runs bracket the point run) and widen the lens interval to cover
+  // them. dL/dB = T/B²: near break-even this width is where sign flips live —
+  // hiding it inside a point is exactly the false precision the interval exists
+  // to prevent.
+  let tsfRange: { low: number; high: number } | null = null;
+  let lensLow = est.lensLow;
+  let lensHigh = est.lensHigh;
+  const notes: string[] = [
+    `Lift from measured data: ${coveredUnits} realized unit(s) ≈ ${Math.round(estimatedManualMinutes)} manual min vs ${Math.round(measuredAiMinutes)} measured AI min → TSF ${tsf.toFixed(2)}×. Baseline-estimated (not a controlled A/B); tighten with --tsf from a transcript judge or RCT.`,
+  ];
+  if (manualMinutesHigh > manualMinutesLow) {
+    const tsfLow = manualMinutesLow / measuredAiMinutes;
+    const tsfHigh = manualMinutesHigh / measuredAiMinutes;
+    tsfRange = { low: tsfLow, high: tsfHigh };
+    const atLow = boundedLift({ tsfUpperBound: tsfLow, discounts });
+    const atHigh = boundedLift({ tsfUpperBound: tsfHigh, discounts });
+    if (atLow.lensLow !== null) lensLow = lensLow === null ? atLow.lensLow : Math.min(lensLow, atLow.lensLow);
+    if (atHigh.lensHigh !== null) lensHigh = lensHigh === null ? atHigh.lensHigh : Math.max(lensHigh, atHigh.lensHigh);
+    notes.push(
+      `Baseline uncertainty propagated: manual-minutes band [${Math.round(manualMinutesLow)}, ${Math.round(manualMinutesHigh)}] → TSF [${tsfLow.toFixed(2)}×, ${tsfHigh.toFixed(2)}×] — the lens interval covers both endpoints (dL/dB = T/B²: near break-even, baseline error flips the sign).`,
+    );
+  }
+  notes.push(...efficiency.notes, ...est.notes);
+
   return {
     lift: est.lensScore,
-    liftRange: { low: est.lensLow, high: est.lensHigh },
+    liftRange: { low: lensLow, high: lensHigh },
     tsf,
+    tsfRange,
     estimatedManualMinutes,
     measuredAiMinutes,
     coveredUnits,
-    notes: [
-      `Lift from measured data: ${coveredUnits} realized unit(s) ≈ ${Math.round(estimatedManualMinutes)} manual min vs ${Math.round(measuredAiMinutes)} measured AI min → TSF ${tsf.toFixed(2)}×. Baseline-estimated (not a controlled A/B); tighten with --tsf from a transcript judge or RCT.`,
-      ...efficiency.notes,
-      ...est.notes,
-    ],
+    notes,
   };
 }
