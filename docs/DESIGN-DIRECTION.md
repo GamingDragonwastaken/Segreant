@@ -1,7 +1,11 @@
 # Design Direction — the full rebrand & overhaul
 
-Status: **awaiting two user inputs** — (1) name pick, (2) generated image assets from the
-prompts in §5. Everything else here is ready to execute.
+**DECIDED (2026-07-11): the name is FISCUS; the brand device is the Minted Seal — a coin
+bearing an engraved heraldic griffin — not a walking mascot.** The user delegated the
+choice; the mascot idea softened into "use generated assets for uniqueness," and an
+emblem/coin reads premium where a creature-character risks gimmick for a
+financial-governance product. §5's prompts are superseded by the FINAL PROMPTS section
+at the end of this file. Status: awaiting generated assets, then execute §6.
 
 ---
 
@@ -114,3 +118,48 @@ whole-sprite transforms.
    griffin states wired to demo data, scroll reveals.
 4. CLI palette echo (the `C` object in `src/cli/ui.ts`): gold reserved for value lines.
 5. README badges/wordmark, npm republish under the new name.
+
+---
+
+## FINAL PROMPTS — Fiscus / Minted Seal (supersede §5)
+
+Prepend the STYLE LOCK to every prompt. Request PNG at the stated size; transparent
+background where noted. If the tool offers it, ask for "no text anywhere in the image".
+
+**STYLE LOCK:**
+> Style: engraved-coin relief meets modern minimal branding; confident single-weight
+> linework like a master engraver's burin; palette strictly deep indigo-black (#0B0D14),
+> molten gold (#E8B33C), silver-fog (#C7CBD6); dramatic rim lighting; crisp silhouette;
+> no text, no letters, no watermark.
+
+**P1 — Logo: the Minted Seal, obverse** *(transparent PNG, 2048×2048 + a simplified pass that stays legible at 64×64)*
+> A perfectly circular minted coin seen face-on, bearing an engraved heraldic griffin in
+> profile facing right — eagle head and wing over a lion body — rendered in raised gold
+> relief on a dark coin field, with a thin reeded rim like a real coin edge. Flat,
+> emblem-like, vector-clean.
+
+**P2 — The Guardian emblem** *(transparent PNG, 2048×2560 portrait — hero/section art, empty states)*
+> A tall heraldic griffin statant with wings half-raised, engraved in fine silver
+> linework with molten-gold accents on the eye, talons, and wing edges, standing guard
+> over a small pile of gold coins; formal, symmetrical, like a treasury's carved
+> insignia come to life; dark transparent surroundings.
+
+**P3 — Hero background plate** *(3840×2160 PNG, no transparency — landing hero)*
+> A vast dark treasury vault interior from a low angle: colossal columns dissolving
+> upward into indigo darkness, a thin river of molten-gold light flowing across a
+> polished black floor toward the viewer, faint atmospheric haze, extremely dark
+> overall so interface text can sit on top; no creatures, no objects in focus.
+
+**P4 — Coin edge-on spin frame** *(transparent PNG, 2048×2048 — used mid "coin flip" animation)*
+> The same minted coin from P1 seen almost edge-on at a steep angle, catching a single
+> gold glint along its reeded edge, mostly silhouette; minimal and dark.
+
+**P5 — OG / social banner plate** *(1600×840 PNG — left two-thirds nearly empty for typography)*
+> The minted griffin coin from P1 small and centered in the right third, hovering above
+> a dark horizon with a hairline molten-gold dawn line; the left two thirds almost pure
+> indigo-black, clean and empty.
+
+Delivery notes: PNGs beat JPGs (we need the transparency); if a result comes back with
+text or letters baked in, regenerate — the wordmark is set in live type, never in the
+image. Consistency matters more than any single image being perfect: same griffin, same
+coin, same three colors across all five.
