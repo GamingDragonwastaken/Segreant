@@ -19,7 +19,7 @@ import type { ProjectValue } from '../src/value/realization.ts';
 function projects(): ProjectValue[] {
   return [
     {
-      project: 'aegisflow',
+      project: 'fiscus',
       units: 12,
       costUsd: 41.5,
       realizationRate: 0.8,

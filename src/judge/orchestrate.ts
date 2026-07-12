@@ -85,7 +85,7 @@ export async function judgeSession(
         : 'Judge tier: hosted API (full-content configured but downgraded to structural — only a structural summary leaves this machine, never raw content).',
     );
     notes.push(
-      'Full-content judging is configured but not yet implemented (AegisFlow does not persist transcript text) — ' +
+      'Full-content judging is configured but not yet implemented (Fiscus does not persist transcript text) — ' +
         'sent the structural summary instead, labeled accordingly.',
     );
   }

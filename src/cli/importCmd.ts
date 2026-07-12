@@ -146,7 +146,7 @@ function renderImportSummary(tty: boolean, id: string, location: string, sum: Im
 }
 
 /**
- * `aegisflow import <tool|all> [--root <dir>] [--days N] [--watch] [--json]` —
+ * `fiscus import <tool|all> [--root <dir>] [--days N] [--watch] [--json]` —
  * native metering for managed/subscription tools: read the usage each tool
  * already writes to local disk. Idempotent (request_id is the natural key), so
  * it is safe to re-run or poll; each run adds only new traffic. `--watch` keeps
@@ -164,7 +164,7 @@ export async function cmdImport(flags: Flags): Promise<void> {
         })();
 
   if (targets.length === 0) {
-    console.error(`  Usage: aegisflow import <${Object.keys(IMPORT_RUNNERS).join('|')}|all>  [--root <dir>] [--days N] [--watch] [--json]`);
+    console.error(`  Usage: fiscus import <${Object.keys(IMPORT_RUNNERS).join('|')}|all>  [--root <dir>] [--days N] [--watch] [--json]`);
     console.error('  Native metering — no base URL, no key. Reads what the tool already logs locally.');
     process.exitCode = 1;
     return;
@@ -203,7 +203,7 @@ export async function cmdImport(flags: Flags): Promise<void> {
     console.log(color(tty, C.gray, '  WOULD bill via API — not your invoice. Don’t also proxy the same tool for the'));
     console.log(color(tty, C.gray, '  same period, or it would count twice.'));
     console.log('');
-    console.log(color(tty, C.gray, '  Safe to re-run (or add --watch to keep it live). See it: aegisflow today · aegisflow start'));
+    console.log(color(tty, C.gray, '  Safe to re-run (or add --watch to keep it live). See it: fiscus today · fiscus start'));
   } else {
     console.log(color(tty, C.gray, '  Nothing new to import. Add --watch to fold in new traffic as it happens.'));
   }
@@ -238,7 +238,7 @@ export async function cmdDiscover(flags: Flags): Promise<void> {
 
   if (paths.length === 0) {
     console.log(color(tty, C.gray, '  No project working directories on record yet. Import a tool first:'));
-    console.log(color(tty, C.gray, '    aegisflow import claude-code | codex | opencode | all'));
+    console.log(color(tty, C.gray, '    fiscus import claude-code | codex | opencode | all'));
     console.log(color(tty, C.gray, '  Imports capture each project’s folder — that is what Discover correlates.'));
     console.log('');
     return;
@@ -266,8 +266,8 @@ export async function cmdDiscover(flags: Flags): Promise<void> {
     console.log(color(tty, C.gray, `    coded with: ${tools}`));
   }
   console.log('');
-  console.log(color(tty, C.gray, '  RoI here scores every stored unit (all time); "aegisflow roi --repo" scopes to a window — the two can differ.'));
-  console.log(color(tty, C.gray, '  Now live in: aegisflow roi · aegisflow today · the dashboard (By project).'));
+  console.log(color(tty, C.gray, '  RoI here scores every stored unit (all time); "fiscus roi --repo" scopes to a window — the two can differ.'));
+  console.log(color(tty, C.gray, '  Now live in: fiscus roi · fiscus today · the dashboard (By project).'));
   console.log('');
 }
 
@@ -290,7 +290,7 @@ function renderScanDiff(tty: boolean, diff: ScanDiff): void {
 }
 
 /**
- * `aegisflow scan [path] [--deep] [--setup] [--json]` — the proactive, opt-in
+ * `fiscus scan [path] [--deep] [--setup] [--json]` — the proactive, opt-in
  * discovery pass. It inspects the machine: which supported AI tools have local
  * usage data, and which folders under `path` (default: your home) are git repos.
  * Also surfaces a wider, best-effort inventory of OTHER AI coding tools it
@@ -360,7 +360,7 @@ export async function cmdScan(flags: Flags): Promise<void> {
     const roots = plan.roots.length ? plan.roots.join(', ') : '(none existed)';
     console.log(color(tty, C.bold, `  Git repositories under ${roots}`));
     if (plan.repos.length === 0) {
-      console.log(color(tty, C.gray, '    None found. Point the scan at your code folder:  aegisflow scan <path>'));
+      console.log(color(tty, C.gray, '    None found. Point the scan at your code folder:  fiscus scan <path>'));
     } else {
       console.log(
         `    ${color(tty, C.green, `${plan.repos.length} repo(s)`)} found` +
@@ -393,7 +393,7 @@ export async function cmdScan(flags: Flags): Promise<void> {
     // Dry run: tell them exactly what --setup would do, and why it is safe.
     if (present.length === 0 && plan.repos.length === 0) {
       console.log(color(tty, C.gray, '  Nothing to set up yet — no supported tools and no repos found here.'));
-      console.log(color(tty, C.gray, '  If your code lives elsewhere, try:  aegisflow scan <path-to-your-projects>'));
+      console.log(color(tty, C.gray, '  If your code lives elsewhere, try:  fiscus scan <path-to-your-projects>'));
     } else {
       const toolNames = present.map((t) => t.label).join(', ') || 'no detected tools';
       console.log(color(tty, C.bold, '  Ready to set up:'));
@@ -402,7 +402,7 @@ export async function cmdScan(flags: Flags): Promise<void> {
       // ran in (which may live outside this folder), not the raw repo count above.
       console.log(color(tty, C.gray, '    • correlate every project your tools ran in into per-project RoI'));
       console.log('');
-      console.log(`  Do it in one step:  ${color(tty, C.bold, 'aegisflow scan' + (root ? ` ${root}` : '') + ' --setup')}`);
+      console.log(`  Do it in one step:  ${color(tty, C.bold, 'fiscus scan' + (root ? ` ${root}` : '') + ' --setup')}`);
       console.log(color(tty, C.gray, '  Then re-run scan to see which repos here got valued.'));
     }
     console.log('');
@@ -453,8 +453,8 @@ export async function cmdScan(flags: Flags): Promise<void> {
       console.log(`    ${color(tty, C.bold, d.project.padEnd(22))} ${usd(d.costUsd).padStart(10)}   ${roiStr}   ${color(tty, C.gray, `coded with: ${tools}`)}`);
     }
     console.log('');
-    console.log(color(tty, C.gray, '  RoI here scores every stored unit (all time); "aegisflow roi --repo" scopes to a window — the two can differ.'));
-    console.log(color(tty, C.gray, `  Imported ${num(totalNew)} new request(s). Now live in: aegisflow today · roi · the dashboard.`));
+    console.log(color(tty, C.gray, '  RoI here scores every stored unit (all time); "fiscus roi --repo" scopes to a window — the two can differ.'));
+    console.log(color(tty, C.gray, `  Imported ${num(totalNew)} new request(s). Now live in: fiscus today · roi · the dashboard.`));
     console.log(color(tty, C.gray, '  Safe to re-run any time to fold in new tools, repos, and traffic.'));
     console.log('');
   }

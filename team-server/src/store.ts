@@ -3,7 +3,7 @@
  * implementation. Kept as an interface — not just a class — so the HTTP layer
  * (server.ts) can be exercised in tests against an in-memory fake instead of
  * a live Postgres (see test/fakeStore.ts). Same "test through a real
- * interface boundary" instinct as the rest of AegisFlow: mock HTTP servers
+ * interface boundary" instinct as the rest of Fiscus: mock HTTP servers
  * stand in for upstream/judge endpoints elsewhere; here, a fake store stands
  * in for Postgres so auth/verification/routing logic is provable without an
  * external database in CI.

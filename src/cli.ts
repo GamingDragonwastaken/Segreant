@@ -1,13 +1,13 @@
 /**
- * AegisFlow command-line interface.
+ * Fiscus command-line interface.
  *
- *   aegisflow start            start the proxy + local dashboard
- *   aegisflow today|week|month show spend for a window  (--json for raw)
- *   aegisflow init             write a default config and print setup steps
- *   aegisflow budget ...       set soft/hard caps
- *   aegisflow audit --repo .   correlate spend with git commits
- *   aegisflow config           show config + paths
- *   aegisflow prune            prune old rows and compact the database
+ *   fiscus start            start the proxy + local dashboard
+ *   fiscus today|week|month show spend for a window  (--json for raw)
+ *   fiscus init             write a default config and print setup steps
+ *   fiscus budget ...       set soft/hard caps
+ *   fiscus audit --repo .   correlate spend with git commits
+ *   fiscus config           show config + paths
+ *   fiscus prune            prune old rows and compact the database
  */
 
 import './util/quiet.ts';
@@ -39,13 +39,13 @@ function packageVersion(): string {
 
 function cmdHelp(): void {
   console.log(`
-  AegisFlow — meter and cap what your AI coding agents spend, locally.
+  Fiscus — meter and cap what your AI coding agents spend, locally.
 
-  Usage: aegisflow <command> [options]
+  Usage: fiscus <command> [options]
 
   Commands
     guide                 Where you are + the single next step, read from your
-                          actual state — also what bare "aegisflow" shows (--json)
+                          actual state — also what bare "fiscus" shows (--json)
     start                 Start the proxy + local dashboard
     today | week | month  Show spend for a window      (--json)
     sources               Spend by connected source — each AI tool routed here
@@ -83,7 +83,7 @@ function cmdHelp(): void {
                           Opt-in, distribution-only, k-anonymous. --me <user> for
                           your own view (--days N, --json)
     team push --url <u>   Cross-machine: sign + push this window's per-project
-                          value/RoI to a team server YOU run (AegisFlow hosts
+                          value/RoI to a team server YOU run (Fiscus hosts
                           nothing). --dry-run to preview, --pubkey to publish
                           this machine's rollup identity, --watch to keep
                           pushing on an interval (--window D, --project
@@ -128,10 +128,10 @@ function cmdHelp(): void {
                           dashboard on it; --clear to remove). Add --demo to any read
                           command (today, alerts, usage, start) to view the demo data.
     help                  This message
-    --version             Print the AegisFlow version
+    --version             Print the Fiscus version
 
   Setup
-    1) aegisflow start
+    1) fiscus start
     2) $env:ANTHROPIC_BASE_URL="http://localhost:8090"   (PowerShell)
        $env:OPENAI_BASE_URL="http://localhost:8090/v1"
     3) Run your AI tools as usual. Watch the dashboard.
@@ -144,7 +144,7 @@ function cmdHelp(): void {
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
-  // Bare `aegisflow` opens the guide, not the reference: the tool's first job
+  // Bare `fiscus` opens the guide, not the reference: the tool's first job
   // is to tell you where you are and the single next step. `help` is one word away.
   const cmd = argv[0] ?? 'guide';
   // `exec` wraps another command: everything after the bare `--` belongs to the
@@ -278,15 +278,15 @@ async function main(): Promise<void> {
     case 'version':
     case '--version':
     case '-v':
-      console.log(`aegisflow ${packageVersion()}`);
+      console.log(`fiscus ${packageVersion()}`);
       break;
     default:
-      console.error(`  Unknown command: ${cmd}\n  Run "aegisflow help" for usage.`);
+      console.error(`  Unknown command: ${cmd}\n  Run "fiscus help" for usage.`);
       process.exitCode = 1;
   }
 }
 
-// A reader closing early (e.g. `aegisflow scan | head`) makes further console.log
+// A reader closing early (e.g. `fiscus scan | head`) makes further console.log
 // writes throw EPIPE — expected, not a real failure. Exit clean instead of an
 // uncaught-exception stack trace; any OTHER stdout error still propagates.
 process.stdout.on('error', (err: NodeJS.ErrnoException) => {
@@ -295,6 +295,6 @@ process.stdout.on('error', (err: NodeJS.ErrnoException) => {
 });
 
 main().catch((err) => {
-  console.error('  AegisFlow error:', err);
+  console.error('  Fiscus error:', err);
   process.exitCode = 1;
 });

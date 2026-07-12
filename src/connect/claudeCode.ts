@@ -36,7 +36,7 @@ export interface TranscriptUsageEvent {
   model: string;
   /** Basename of the session's working directory — the same notion of "project" the proxy uses. */
   project: string;
-  /** Full working-directory path — the repo AegisFlow can find and auto-correlate. */
+  /** Full working-directory path — the repo Fiscus can find and auto-correlate. */
   cwd: string | null;
   inputTokens: number;
   outputTokens: number;

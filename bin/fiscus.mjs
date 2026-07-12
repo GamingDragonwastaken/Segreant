@@ -5,7 +5,7 @@
 // Node emits the "SQLite is an experimental feature" warning from an internal
 // path that a userland process.emitWarning override can't intercept, so we
 // re-exec ourselves once with --disable-warning to keep output clean. This is
-// the only knob that reliably suppresses it for `npx aegisflow`.
+// the only knob that reliably suppresses it for `npx fiscus`.
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -15,7 +15,7 @@ import { dirname, join } from 'node:path';
 const major = Number(process.versions.node.split('.')[0]);
 if (major < 24) {
   console.error(
-    `AegisFlow needs Node >= 24 (you have ${process.versions.node}).\n` +
+    `Fiscus needs Node >= 24 (you have ${process.versions.node}).\n` +
     `It runs TypeScript directly via Node's built-in type stripping, stable on 24.\n` +
     `Upgrade Node from https://nodejs.org/ and re-run.`,
   );

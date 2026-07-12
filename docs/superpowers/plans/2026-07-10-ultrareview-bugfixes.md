@@ -6,7 +6,7 @@
 
 **Architecture:** Five independent tasks, grouped by file so no two tasks touch the same file (safe to run in parallel). Each task is TDD: write/extend a failing test that reproduces the reported bug, watch it fail, apply the minimal fix, watch it pass, run the full local test suite for that package, commit.
 
-**Tech Stack:** TypeScript on Node >=24 (native type-stripping, no ts-node/tsx). `node --test` as the test runner (no Jest/Vitest). Root package (`aegisflow`) and `team-server/` are separate npm packages with separate `test`/`typecheck` scripts.
+**Tech Stack:** TypeScript on Node >=24 (native type-stripping, no ts-node/tsx). `node --test` as the test runner (no Jest/Vitest). Root package (`fiscus`) and `team-server/` are separate npm packages with separate `test`/`typecheck` scripts.
 
 ---
 
@@ -457,7 +457,7 @@ git commit -m "fix: OIDC JWKS/discovery caching — refresh on unknown kid, cach
 - Modify: `team-server/test/fakeStore.ts` (`FakeRollupStore` mirrors the same SQL logic in JS — must be fixed in lockstep, per its own header comment)
 - Modify: `team-server/test/server.test.ts`
 
-**Design:** `aegisflow team push --window N` sends a full rolling N-day snapshot every time it runs (not a delta). A developer pushing on a cron produces multiple rollups whose `[period_from, period_to)` windows overlap almost entirely. The fix: when aggregating, keep only each developer's SINGLE latest rollup (by `received_at`) among those whose window overlaps the query filter, then sum `rollup_projects` rows only from those surviving rollups. This is additive/non-breaking for the common case (one rollup per developer in the window) and fixes the duplication case (multiple overlapping rollups per developer).
+**Design:** `fiscus team push --window N` sends a full rolling N-day snapshot every time it runs (not a delta). A developer pushing on a cron produces multiple rollups whose `[period_from, period_to)` windows overlap almost entirely. The fix: when aggregating, keep only each developer's SINGLE latest rollup (by `received_at`) among those whose window overlaps the query filter, then sum `rollup_projects` rows only from those surviving rollups. This is additive/non-breaking for the common case (one rollup per developer in the window) and fixes the duplication case (multiple overlapping rollups per developer).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -477,14 +477,14 @@ test('team-server: GET /dashboard/projects does not double-count when the same d
       aggregate: { minCohort: 1, exposeDeveloperBreakdown: false },
     });
     try {
-      // Simulates `aegisflow team push --window 30` run on two consecutive
+      // Simulates `fiscus team push --window 30` run on two consecutive
       // days: each push is a full rolling snapshot of the SAME underlying
       // spend, not incremental new work, so the two periods overlap almost
       // entirely.
       const day1 = { from: '2026-06-04T00:00:00.000Z', to: '2026-07-04T00:00:00.000Z' };
       const day2 = { from: '2026-06-05T00:00:00.000Z', to: '2026-07-05T00:00:00.000Z' };
       const snapshot: ProjectValue[] = [
-        { project: 'aegisflow', units: 10, costUsd: 100, realizationRate: 0.8, realizedValueUsd: 80, netRealizedValueUsd: 80, roiIndex: 1.0, sources: [] },
+        { project: 'fiscus', units: 10, costUsd: 100, realizationRate: 0.8, realizedValueUsd: 80, netRealizedValueUsd: 80, roiIndex: 1.0, sources: [] },
       ];
       await pushRollup(srv, store, dev, snapshot, day1);
       await pushRollup(srv, store, dev, snapshot, day2);
@@ -981,7 +981,7 @@ export async function judgeSession(
         : 'Judge tier: hosted API (full-content configured but downgraded to structural — only a structural summary leaves this machine, never raw content).',
     );
     notes.push(
-      'Full-content judging is configured but not yet implemented (AegisFlow does not persist transcript text) — ' +
+      'Full-content judging is configured but not yet implemented (Fiscus does not persist transcript text) — ' +
         'sent the structural summary instead, labeled accordingly.',
     );
   }
@@ -1036,7 +1036,7 @@ Create `test/team-push.test.ts`:
 
 ```typescript
 /**
- * `aegisflow team push` CLI-level checks — integration-tested through the
+ * `fiscus team push` CLI-level checks — integration-tested through the
  * real CLI process, same pattern as test/exec.test.ts.
  */
 import { test } from 'node:test';
@@ -1150,7 +1150,7 @@ Investigation while preparing this plan surfaced several "missing features," but
 - Rendered team-dashboard UI — `docs/TEAM-TIER-DESIGN.md`: "a rendered frontend that calls these APIs is still out of scope for this release." A real new application; would need its own planning pass, not a silent addition here.
 - OIDC-identity-to-`keyId` linking (a "these are my numbers" self-view) — same doc: "not scoped here."
 - Background/cron push scheduling — same doc: "no opt-in background interval exists yet — that remains an open, deferred question."
-- Real full-content judging (transcript capture) — `docs/LIFT-AI-SIDE-JUDGE-DESIGN.md`: "blocked on a materially bigger, separate privacy decision" — would require AegisFlow to start persisting transcript text, contradicting its core "nothing leaves your machine unless you opt up" pitch.
-- `aegisflow judge` CLI subcommand / automatic invocation from `aegisflow lift` — same doc: "still an open question, not decided here."
+- Real full-content judging (transcript capture) — `docs/LIFT-AI-SIDE-JUDGE-DESIGN.md`: "blocked on a materially bigger, separate privacy decision" — would require Fiscus to start persisting transcript text, contradicting its core "nothing leaves your machine unless you opt up" pitch.
+- `fiscus judge` CLI subcommand / automatic invocation from `fiscus lift` — same doc: "still an open question, not decided here."
 
 None of these are built in this plan. They are candidates for the user to explicitly greenlight, not autonomous follow-on work.

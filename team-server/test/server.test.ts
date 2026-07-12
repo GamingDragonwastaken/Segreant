@@ -23,7 +23,7 @@ import { startFakeIdp } from './fakeIdp.ts';
 function projects(): ProjectValue[] {
   return [
     {
-      project: 'aegisflow',
+      project: 'fiscus',
       units: 12,
       costUsd: 41.5,
       realizationRate: 0.8,
@@ -74,7 +74,7 @@ test('team-server: GET /health reports ok', async () => {
   try {
     const res = await fetch(`${srv.url}/health`);
     assert.equal(res.status, 200);
-    assert.deepEqual(await res.json(), { ok: true, service: 'aegisflow-team-server' });
+    assert.deepEqual(await res.json(), { ok: true, service: 'fiscus-team-server' });
   } finally {
     await srv.close();
   }
@@ -188,7 +188,7 @@ test('team-server: POST /rollups from a registered key with a valid signature is
 
       const stored = await store.listRollups({ keyId: dev.keyId });
       assert.equal(stored.length, 1);
-      assert.equal(stored[0]!.body.projects[0]!.project, 'aegisflow');
+      assert.equal(stored[0]!.body.projects[0]!.project, 'fiscus');
     } finally {
       await srv.close();
     }
@@ -433,14 +433,14 @@ test('team-server: GET /dashboard/projects does not double-count when the same d
       aggregate: { minCohort: 1, exposeDeveloperBreakdown: false },
     });
     try {
-      // Simulates `aegisflow team push --window 30` run on two consecutive
+      // Simulates `fiscus team push --window 30` run on two consecutive
       // days: each push is a full rolling snapshot of the SAME underlying
       // spend, not incremental new work, so the two periods overlap almost
       // entirely.
       const day1 = { from: '2026-06-04T00:00:00.000Z', to: '2026-07-04T00:00:00.000Z' };
       const day2 = { from: '2026-06-05T00:00:00.000Z', to: '2026-07-05T00:00:00.000Z' };
       const snapshot: ProjectValue[] = [
-        { project: 'aegisflow', units: 10, costUsd: 100, realizationRate: 0.8, realizedValueUsd: 80, netRealizedValueUsd: 80, roiIndex: 1.0, sources: [] },
+        { project: 'fiscus', units: 10, costUsd: 100, realizationRate: 0.8, realizedValueUsd: 80, netRealizedValueUsd: 80, roiIndex: 1.0, sources: [] },
       ];
       await pushRollup(srv, store, dev, snapshot, day1);
       await pushRollup(srv, store, dev, snapshot, day2);

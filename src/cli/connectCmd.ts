@@ -1,5 +1,5 @@
 /**
- * `aegisflow connect <tool>` — per-tool connection recipes (opencode wrap
+ * `fiscus connect <tool>` — per-tool connection recipes (opencode wrap
  * flows, Antigravity, generic OpenAI-compatible APIs). Extracted verbatim
  * from cli.ts in the per-command-module split; only cmdConnect is exported,
  * the per-tool flows stay module-internal.
@@ -34,7 +34,7 @@ function opencodeConfigPath(): string | null {
 
 /** Print the provider block, indented under the "provider" key it goes inside. */
 function printOpencodeSnippet(block: Record<string, unknown>, tty: boolean): void {
-  const snippet = JSON.stringify({ aegisflow: block }, null, 2);
+  const snippet = JSON.stringify({ fiscus: block }, null, 2);
   console.log('');
   for (const line of snippet.split('\n')) console.log(color(tty, C.cyan, '    ' + line));
   console.log('');
@@ -42,23 +42,23 @@ function printOpencodeSnippet(block: Record<string, unknown>, tty: boolean): voi
 
 /** The shared closing note: where the key/model come from + how to verify. */
 function finishConnectOpencode(tty: boolean): void {
-  console.log(color(tty, C.gray, '  apiKey/model are whatever provider you actually route through AegisFlow — point'));
-  console.log(color(tty, C.gray, "  AegisFlow's upstream at that provider. (The example block shows the Gemini free tier;"));
+  console.log(color(tty, C.gray, '  apiKey/model are whatever provider you actually route through Fiscus — point'));
+  console.log(color(tty, C.gray, "  Fiscus's upstream at that provider. (The example block shows the Gemini free tier;"));
   console.log(color(tty, C.gray, '  swap in the provider + key you already use.) Then run opencode and check:'));
-  console.log(color(tty, C.green, '    aegisflow sources'));
+  console.log(color(tty, C.green, '    fiscus sources'));
   console.log('');
 }
 
 /**
  * The honest NATIVE connection: wrap an opencode provider the user ALREADY has.
- * Rewrites that provider's baseURL to the proxy (+ source tag) and sets AegisFlow's
+ * Rewrites that provider's baseURL to the proxy (+ source tag) and sets Fiscus's
  * upstream to the provider's real base, so opencode keeps working exactly as before
  * but its traffic is metered and forwarded with the user's own key. Two local files
- * change on --write (opencode config + AegisFlow config); read-only preview otherwise.
+ * change on --write (opencode config + Fiscus config); read-only preview otherwise.
  */
 function wrapOpencodeFlow(cfg: AegisConfig, flags: Flags, tty: boolean, providerName: string, path: string | null): void {
   if (!path) {
-    console.log(color(tty, C.yellow, '  No opencode config found to wrap. Run `aegisflow connect opencode` to see your options.'));
+    console.log(color(tty, C.yellow, '  No opencode config found to wrap. Run `fiscus connect opencode` to see your options.'));
     console.log('');
     return;
   }
@@ -81,22 +81,22 @@ function wrapOpencodeFlow(cfg: AegisConfig, flags: Flags, tty: boolean, provider
     return;
   }
   if (res.alreadyWrapped) {
-    console.log(color(tty, C.green, `  ✓ "${providerName}" already routes through AegisFlow.`));
-    console.log(color(tty, C.gray, `    AegisFlow openai upstream: ${cfg.upstreams.openai}`));
+    console.log(color(tty, C.green, `  ✓ "${providerName}" already routes through Fiscus.`));
+    console.log(color(tty, C.gray, `    Fiscus openai upstream: ${cfg.upstreams.openai}`));
     console.log('');
     return;
   }
   console.log(color(tty, C.gray, `  opencode keeps using "${providerName}" as-is — but its requests now go to the proxy,`));
   console.log(color(tty, C.gray, `  which forwards them to ${res.originalBaseUrl} with your own key. Your key never`));
-  console.log(color(tty, C.gray, "  touches AegisFlow's author, and opencode Zen (if any) is unaffected."));
+  console.log(color(tty, C.gray, "  touches Fiscus's author, and opencode Zen (if any) is unaffected."));
   console.log('');
 
   if (!flags.write) {
     console.log(color(tty, C.gray, '  Two local changes (preview — nothing written yet):'));
     console.log(color(tty, C.cyan, `    1. opencode  ${providerName}.options.baseURL → http://localhost:${cfg.port}  (+ ${SOURCE_HEADER}: opencode)`));
-    console.log(color(tty, C.cyan, `    2. AegisFlow upstreams.openai          → ${res.originalBaseUrl}`));
+    console.log(color(tty, C.cyan, `    2. Fiscus upstreams.openai          → ${res.originalBaseUrl}`));
     console.log('');
-    console.log(color(tty, C.green, `    aegisflow connect opencode --wrap ${providerName} --write`));
+    console.log(color(tty, C.green, `    fiscus connect opencode --wrap ${providerName} --write`));
     console.log('');
     return;
   }
@@ -105,12 +105,12 @@ function wrapOpencodeFlow(cfg: AegisConfig, flags: Flags, tty: boolean, provider
     copyFileSync(path, path + '.bak');
     writeFileSync(path, res.merged!, 'utf8');
     saveConfig({ ...cfg, upstreams: { ...cfg.upstreams, openai: res.originalBaseUrl! } });
-    console.log(color(tty, C.green, `  ✓ Wrapped "${providerName}". opencode now routes through AegisFlow.`));
+    console.log(color(tty, C.green, `  ✓ Wrapped "${providerName}". opencode now routes through Fiscus.`));
     console.log(color(tty, C.gray, `    opencode config: ${path}  (backup at ${path}.bak)`));
-    console.log(color(tty, C.gray, `    AegisFlow upstreams.openai → ${res.originalBaseUrl}`));
+    console.log(color(tty, C.gray, `    Fiscus upstreams.openai → ${res.originalBaseUrl}`));
     console.log(color(tty, C.gray, '    JSON comments were reformatted away; your settings + keys are preserved.'));
     console.log('');
-    console.log(color(tty, C.gray, '  Restart AegisFlow (aegisflow start), run opencode, then:  aegisflow sources'));
+    console.log(color(tty, C.gray, '  Restart Fiscus (fiscus start), run opencode, then:  fiscus sources'));
   } catch (e) {
     console.log(color(tty, C.yellow, `  Could not write: ${String(e)}`));
   }
@@ -130,10 +130,10 @@ function connectOpencode(cfg: AegisConfig, flags: Flags, tty: boolean): void {
   console.log('');
   console.log(color(tty, C.bold, '  Connect opencode as a source'));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(46)));
-  console.log(color(tty, C.gray, `  Routes opencode through AegisFlow on http://localhost:${port} and tags its`));
+  console.log(color(tty, C.gray, `  Routes opencode through Fiscus on http://localhost:${port} and tags its`));
   console.log(color(tty, C.gray, `  traffic with  ${SOURCE_HEADER}: opencode  (stripped before it leaves your machine).`));
   console.log('');
-  console.log(color(tty, C.gray, '  This meters traffic you ROUTE through AegisFlow. opencode Zen and other managed/'));
+  console.log(color(tty, C.gray, '  This meters traffic you ROUTE through Fiscus. opencode Zen and other managed/'));
   console.log(color(tty, C.gray, '  closed paths go straight to their own servers, so they cannot be metered this way —'));
   console.log(color(tty, C.gray, "  that's the cooperative model (connect, don't intercept), not a gap being hidden."));
   console.log('');
@@ -150,7 +150,7 @@ function connectOpencode(cfg: AegisConfig, flags: Flags, tty: boolean): void {
     if (probe.ok && probe.alreadyConnected && !flags.write) {
       console.log(color(tty, C.green, '  ✓ opencode is already connected as a source.'));
       console.log(color(tty, C.gray, `    Config: ${path}`));
-      console.log(color(tty, C.gray, '    Run opencode, then:  aegisflow sources'));
+      console.log(color(tty, C.gray, '    Run opencode, then:  fiscus sources'));
       console.log('');
       return;
     }
@@ -167,7 +167,7 @@ function connectOpencode(cfg: AegisConfig, flags: Flags, tty: boolean): void {
     if (wrappable.length) {
       console.log(color(tty, C.bold, '  Recommended — wrap a provider you already use (native; your key, all its traffic):'));
       for (const p of wrappable) console.log(color(tty, C.gray, `    • ${p.name}  → ${p.baseUrl}`));
-      console.log(color(tty, C.green, `    aegisflow connect opencode --wrap <provider> --write`));
+      console.log(color(tty, C.green, `    fiscus connect opencode --wrap <provider> --write`));
       const hosted = providers.filter((p) => !p.wrappable).map((p) => p.name);
       if (hosted.length) console.log(color(tty, C.gray, `    (hosted/managed — can't be metered cooperatively: ${hosted.join(', ')})`));
       console.log('');
@@ -176,8 +176,8 @@ function connectOpencode(cfg: AegisConfig, flags: Flags, tty: boolean): void {
       console.log(color(tty, C.gray, '  Add this to the "provider" object in your opencode config:'));
     }
     printOpencodeSnippet(block, tty);
-    console.log(color(tty, C.gray, '  …or let AegisFlow apply the block for you:'));
-    console.log(color(tty, C.green, '    aegisflow connect opencode --write'));
+    console.log(color(tty, C.gray, '  …or let Fiscus apply the block for you:'));
+    console.log(color(tty, C.green, '    fiscus connect opencode --write'));
     console.log('');
     finishConnectOpencode(tty);
     return;
@@ -186,11 +186,11 @@ function connectOpencode(cfg: AegisConfig, flags: Flags, tty: boolean): void {
   // --write: create a fresh config if none exists.
   if (!path) {
     const dest = join(homedir(), '.config', 'opencode', 'opencode.json');
-    const fresh = JSON.stringify({ $schema: 'https://opencode.ai/config.json', provider: { aegisflow: block } }, null, 2) + '\n';
+    const fresh = JSON.stringify({ $schema: 'https://opencode.ai/config.json', provider: { fiscus: block } }, null, 2) + '\n';
     try {
       mkdirSync(dirname(dest), { recursive: true });
       writeFileSync(dest, fresh, 'utf8');
-      console.log(color(tty, C.green, '  ✓ Created an opencode config with the AegisFlow source:'));
+      console.log(color(tty, C.green, '  ✓ Created an opencode config with the Fiscus source:'));
       console.log(color(tty, C.gray, `    ${dest}`));
     } catch (e) {
       console.log(color(tty, C.yellow, `  Could not write the config: ${String(e)}`));
@@ -260,7 +260,7 @@ function connectAntigravity(cfg: AegisConfig, flags: Flags, tty: boolean): void 
   console.log(color(tty, C.gray, '  by any cooperative proxy. Its CUSTOM providers, however, meter fully:'));
   console.log('');
   console.log(`  1) ${color(tty, C.bold, 'Choose the upstream')} the proxy forwards to. For the Gemini free tier:`);
-  console.log(color(tty, C.green, '       aegisflow connect antigravity --write'));
+  console.log(color(tty, C.green, '       fiscus connect antigravity --write'));
   console.log(color(tty, C.gray, `       (sets upstreams.openai → ${GEMINI_OPENAI_COMPAT_BASE})`));
   console.log('');
   console.log(`  2) ${color(tty, C.bold, 'In Antigravity')}: Settings → Models → add a custom provider:`);
@@ -269,8 +269,8 @@ function connectAntigravity(cfg: AegisConfig, flags: Flags, tty: boolean): void 
   console.log(color(tty, C.cyan, '       API key         your provider key (passes through the proxy; never stored)'));
   console.log(color(tty, C.cyan, '       Model           e.g. gemini-2.5-flash'));
   console.log('');
-  console.log(`  3) ${color(tty, C.bold, 'Run it')}: aegisflow start, use Antigravity with that model, then:`);
-  console.log(color(tty, C.green, '       aegisflow today') + color(tty, C.gray, '   — the requests and their cost appear live'));
+  console.log(`  3) ${color(tty, C.bold, 'Run it')}: fiscus start, use Antigravity with that model, then:`);
+  console.log(color(tty, C.green, '       fiscus today') + color(tty, C.gray, '   — the requests and their cost appear live'));
   console.log('');
   console.log(color(tty, C.gray, '  Note: without a custom-headers field the spend lands under the "direct"'));
   console.log(color(tty, C.gray, '  source. Metering, caps, and RoI all work the same.'));
@@ -279,7 +279,7 @@ function connectAntigravity(cfg: AegisConfig, flags: Flags, tty: boolean): void 
 
 function connectGenericApi(cfg: AegisConfig, flags: Flags, tty: boolean): void {
   const port = cfg.port;
-  // Optional custom source name: `aegisflow connect api my-script`.
+  // Optional custom source name: `fiscus connect api my-script`.
   const source = (typeof flags._[1] === 'string' ? flags._[1] : 'api').toLowerCase();
   // The standard OpenAI-SDK convention DOES include /v1 (the SDK appends
   // /chat/completions to it); the proxy forwards the whole path upstream.
@@ -299,12 +299,12 @@ function connectGenericApi(cfg: AegisConfig, flags: Flags, tty: boolean): void {
   console.log(color(tty, C.cyan, `    curl ${base}/chat/completions -H "${SOURCE_HEADER}: ${source}" ...`));
   console.log('');
   console.log(color(tty, C.gray, '  Run it, then check:'));
-  console.log(color(tty, C.green, '    aegisflow sources'));
+  console.log(color(tty, C.green, '    fiscus sources'));
   console.log('');
 }
 
 /**
- * `aegisflow connect [<tool>] [--write] [--list]` — turn an AI tool into a source.
+ * `fiscus connect [<tool>] [--write] [--list]` — turn an AI tool into a source.
  * No tool (or --list) shows the menu; opencode writes/prints its provider block;
  * `api` prints the generic env + header recipe (with an optional custom source name).
  */
@@ -316,18 +316,18 @@ export function cmdConnect(flags: Flags): void {
   if (!tool || flags.list) {
     console.log('');
     console.log(color(tty, C.bold, '  Connect an AI tool as a source'));
-    console.log(color(tty, C.gray, '  A source is one tool routed through AegisFlow so its spend is metered,'));
+    console.log(color(tty, C.gray, '  A source is one tool routed through Fiscus so its spend is metered,'));
     console.log(color(tty, C.gray, "  honestly, at the depth it exposes — connect, don't intercept."));
     console.log('');
     for (const c of CONNECTORS) {
       console.log(`  ${color(tty, C.green, c.id.padEnd(12))} ${color(tty, C.gray, c.summary)}`);
     }
     console.log('');
-    console.log(color(tty, C.gray, '  Usage:  aegisflow connect <tool>          e.g. aegisflow connect opencode'));
-    console.log(color(tty, C.gray, '          aegisflow connect opencode --write  apply it for you (backs up first)'));
+    console.log(color(tty, C.gray, '  Usage:  fiscus connect <tool>          e.g. fiscus connect opencode'));
+    console.log(color(tty, C.gray, '          fiscus connect opencode --write  apply it for you (backs up first)'));
     console.log('');
     console.log(color(tty, C.gray, '  No base URL to wire? Meter subscription tools natively — no routing, no key:'));
-    console.log(color(tty, C.green, '          aegisflow import claude-code | opencode | codex | all   ') + color(tty, C.gray, '(--watch = live)'));
+    console.log(color(tty, C.green, '          fiscus import claude-code | opencode | codex | all   ') + color(tty, C.gray, '(--watch = live)'));
     console.log('');
     return;
   }
@@ -348,7 +348,7 @@ export function cmdConnect(flags: Flags): void {
     console.log(color(tty, C.gray, '  local transcripts — including on Pro/Max subscriptions that never touch a'));
     console.log(color(tty, C.gray, '  proxy. No base URL to change, no key to move. Import it:'));
     console.log('');
-    console.log(color(tty, C.green, '    aegisflow import claude-code'));
+    console.log(color(tty, C.green, '    fiscus import claude-code'));
     console.log('');
     console.log(color(tty, C.gray, '  Idempotent — re-run any time (or cron it); only new traffic is added.'));
     console.log('');

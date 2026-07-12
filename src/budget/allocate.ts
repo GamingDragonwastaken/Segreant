@@ -2,7 +2,7 @@
  * Value-aware allocation — the forward-looking half of budget governance.
  *
  * `recommendBudget` (recommend.ts) sets a spend CEILING. This answers the next
- * question, the one that turns AegisFlow from a meter into a manager: given what
+ * question, the one that turns Fiscus from a meter into a manager: given what
  * each context actually RETURNS (its RoI and realized-value rate), how should the
  * SAME budget be split across contexts — and what does moving a dollar from a
  * low-return context to a high-return one project to gain?

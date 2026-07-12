@@ -8,11 +8,11 @@
  * store-integrated convenience wrapper lives in judge/orchestrate.ts, mirroring
  * how value/lift.ts stays pure and value/realization.ts bridges it to the store.
  *
- * IMPORTANT — what "structural" means here in practice: AegisFlow's store never
+ * IMPORTANT — what "structural" means here in practice: Fiscus's store never
  * persists prompt text or the AI's response text (src/store/db.ts's RequestRow
  * has no content field; ProposalRow stores only the proposed file diffs for the
  * Acceptance lens). So this summary is not a redacted slice of a transcript —
- * it is genuinely ALL the session-level signal AegisFlow has ever captured, full
+ * it is genuinely ALL the session-level signal Fiscus has ever captured, full
  * stop. See judge/orchestrate.ts for what that means for the "full content"
  * judge tiers.
  */

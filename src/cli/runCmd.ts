@@ -78,7 +78,7 @@ function printBanner(cfg: AegisConfig, tty: boolean): void {
   const line = (s: string) => console.log('  ' + s);
   console.log('');
   line(color(tty, C.bold, '╔════════════════════════════════════════════════════════╗'));
-  line(color(tty, C.bold, '║   AegisFlow  ·  local AI-spend proxy is running         ║'));
+  line(color(tty, C.bold, '║   Fiscus  ·  local AI-spend proxy is running         ║'));
   line(color(tty, C.bold, '╚════════════════════════════════════════════════════════╝'));
   console.log('');
   line(`Proxy      ${color(tty, C.cyan, `http://localhost:${cfg.port}`)}`);
@@ -93,12 +93,12 @@ function printBanner(cfg: AegisConfig, tty: boolean): void {
   line(color(tty, C.gray, `  $env:OPENAI_BASE_URL="http://localhost:${cfg.port}/v1"`));
   console.log('');
   if (cfg.budget.dailyUsd !== null) {
-    line(`Daily cap  ${usd(cfg.budget.dailyUsd)}  ${color(tty, C.gray, '(set with: aegisflow budget --daily N)')}`);
+    line(`Daily cap  ${usd(cfg.budget.dailyUsd)}  ${color(tty, C.gray, '(set with: fiscus budget --daily N)')}`);
   } else {
-    line(color(tty, C.gray, 'No budget cap set. Add one: aegisflow budget --daily 25 --soft 18'));
+    line(color(tty, C.gray, 'No budget cap set. Add one: fiscus budget --daily 25 --soft 18'));
   }
   console.log('');
-  line(color(tty, C.gray, 'Press Ctrl+C to stop. Traffic falls straight through if AegisFlow is off.'));
+  line(color(tty, C.gray, 'Press Ctrl+C to stop. Traffic falls straight through if Fiscus is off.'));
   console.log('');
 }
 
@@ -118,7 +118,7 @@ export async function cmdDemo(flags: Flags): Promise<void> {
   store.close();
 
   console.log('');
-  console.log(color(tty, C.bold, '  AegisFlow — demo data generated'));
+  console.log(color(tty, C.bold, '  Fiscus — demo data generated'));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(52)));
   console.log(
     `  ${num(res.requests)} requests · ${num(res.blocked)} blocked · ` +
@@ -127,14 +127,14 @@ export async function cmdDemo(flags: Flags): Promise<void> {
   console.log(`  ${color(tty, C.green, usd(res.totalCostUsd))} of synthetic spend across ${res.days} days`);
   console.log('');
   console.log(color(tty, C.yellow, '  ● DEMO DATA — synthetic, priced by the real engine, isolated in demo.db.'));
-  console.log(color(tty, C.gray, '    It never mixes with real metering. Clear it: aegisflow demo --clear'));
+  console.log(color(tty, C.gray, '    It never mixes with real metering. Clear it: fiscus demo --clear'));
   console.log('');
   console.log(color(tty, C.bold, '  Explore it:'));
-  console.log(`    aegisflow today --demo        ${color(tty, C.gray, '# spend, by-model, by-user')}`);
-  console.log(`    aegisflow alerts --demo       ${color(tty, C.gray, '# budget, spike, throttling')}`);
-  console.log(`    aegisflow usage --demo        ${color(tty, C.gray, '# non-coding RoI from outcomes')}`);
-  console.log(`    aegisflow budget --recommend --demo`);
-  console.log(`    aegisflow start --demo        ${color(tty, C.gray, '# dashboard, pointed at the demo data')}`);
+  console.log(`    fiscus today --demo        ${color(tty, C.gray, '# spend, by-model, by-user')}`);
+  console.log(`    fiscus alerts --demo       ${color(tty, C.gray, '# budget, spike, throttling')}`);
+  console.log(`    fiscus usage --demo        ${color(tty, C.gray, '# non-coding RoI from outcomes')}`);
+  console.log(`    fiscus budget --recommend --demo`);
+  console.log(`    fiscus start --demo        ${color(tty, C.gray, '# dashboard, pointed at the demo data')}`);
   console.log('');
 
   if (flags.serve || flags.start) {
@@ -155,11 +155,11 @@ export async function cmdPricing(flags: Flags): Promise<void> {
     saveConfig({ ...cfg, pricing: { ...cfg.pricing, autoRefresh: enable } });
     console.log('');
     if (enable) {
-      console.log(`  ${color(on, C.green, '✓')} Auto-refresh ON — "aegisflow start" updates the rate card when it is older than ${cfg.pricing.maxAgeDays}d.`);
+      console.log(`  ${color(on, C.green, '✓')} Auto-refresh ON — "fiscus start" updates the rate card when it is older than ${cfg.pricing.maxAgeDays}d.`);
       console.log(`  ${color(on, C.dim, `Source: ${cfg.pricing.manifestUrl ?? DEFAULT_MANIFEST_URL}`)}`);
-      console.log(`  ${color(on, C.dim, 'The fetch is a GET of a public pricing file — it sends nothing about you. Turn off: aegisflow pricing --auto off')}`);
+      console.log(`  ${color(on, C.dim, 'The fetch is a GET of a public pricing file — it sends nothing about you. Turn off: fiscus pricing --auto off')}`);
     } else {
-      console.log(`  ${color(on, C.green, '✓')} Auto-refresh OFF — the rate card only changes when you run "aegisflow pricing --refresh".`);
+      console.log(`  ${color(on, C.green, '✓')} Auto-refresh OFF — the rate card only changes when you run "fiscus pricing --refresh".`);
     }
     console.log('');
     return;
@@ -191,21 +191,21 @@ export async function cmdPricing(flags: Flags): Promise<void> {
     console.log(JSON.stringify(st, null, 2));
     return;
   }
-  console.log(`\n  ${color(on, C.bold, 'AegisFlow pricing')}`);
+  console.log(`\n  ${color(on, C.bold, 'Fiscus pricing')}`);
   console.log(`  Source     ${st.source === 'cache' ? 'refreshed cache (~/.aegisflow/pricing)' : 'bundled with the package'}`);
   const age = st.ageDays === null ? '' : `  (${num(st.ageDays)}d ago)`;
   const stale = st.stale ? color(on, C.yellow, '  — STALE') : '';
   console.log(`  Updated    ${st.updated}${age}${stale}`);
   console.log(`  Models     ${num(st.modelCount)} across ${st.providers.join(', ')}`);
   if (st.stale || st.source === 'bundled') {
-    console.log(`\n  ${color(on, C.dim, 'Refresh now:   aegisflow pricing --refresh')}`);
-    console.log(`  ${color(on, C.dim, 'Keep current:  aegisflow pricing --auto     (refreshes on start when stale)')}`);
+    console.log(`\n  ${color(on, C.dim, 'Refresh now:   fiscus pricing --refresh')}`);
+    console.log(`  ${color(on, C.dim, 'Keep current:  fiscus pricing --auto     (refreshes on start when stale)')}`);
   }
   console.log('');
 }
 
 /**
- * `aegisflow baseline [--refresh --url <url>] [--json]` — status and refresh for
+ * `fiscus baseline [--refresh --url <url>] [--json]` — status and refresh for
  * the Lift population-prior manifest (`baselines/lift-baselines.json`), the CLI
  * surface `docs/RETURN-ON-INTELLIGENCE.md` §7.1 promises but that, until now, had
  * no command to reach it. Deliberately NOT a mirror of `pricing --auto`: there is
@@ -219,7 +219,7 @@ export async function cmdBaseline(flags: Flags): Promise<void> {
   if (flags['refresh']) {
     const url = typeof flags['url'] === 'string' ? flags['url'] : null;
     if (!url) {
-      const msg = 'no URL given — Lift baselines have no default source (unlike pricing). Pass one you trust: aegisflow baseline --refresh --url <url>';
+      const msg = 'no URL given — Lift baselines have no default source (unlike pricing). Pass one you trust: fiscus baseline --refresh --url <url>';
       if (flags.json) {
         console.log(JSON.stringify({ ok: false, error: msg }, null, 2));
         process.exitCode = 1;
@@ -253,14 +253,14 @@ export async function cmdBaseline(flags: Flags): Promise<void> {
     console.log(JSON.stringify(st, null, 2));
     return;
   }
-  console.log(`\n  ${color(on, C.bold, 'AegisFlow Lift baselines')}`);
+  console.log(`\n  ${color(on, C.bold, 'Fiscus Lift baselines')}`);
   console.log(`  Source     ${st.source === 'cache' ? 'refreshed cache (~/.aegisflow/baselines)' : 'bundled with the package'}`);
   const age = st.ageDays === null ? '' : `  (${num(st.ageDays)}d ago)`;
   const stale = st.stale ? color(on, C.yellow, '  — STALE') : '';
   console.log(`  Curated    ${st.curated}${age}${stale}`);
   console.log(`  Task-types ${num(st.taskTypeCount)}`);
-  console.log(`  ${color(on, C.dim, 'Real per-project numbers (blended with your own git history): aegisflow roi')}`);
-  console.log(`\n  ${color(on, C.dim, 'Refresh from a source you trust:  aegisflow baseline --refresh --url <url>')}`);
+  console.log(`  ${color(on, C.dim, 'Real per-project numbers (blended with your own git history): fiscus roi')}`);
+  console.log(`\n  ${color(on, C.dim, 'Refresh from a source you trust:  fiscus baseline --refresh --url <url>')}`);
   console.log(`  ${color(on, C.dim, 'No default source exists for this — unlike pricing, METR publishes research, not a feed.')}`);
   console.log('');
 }

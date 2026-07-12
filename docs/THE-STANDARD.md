@@ -3,7 +3,7 @@
 > A unit of account for AI-assisted work. The thing tokens-per-developer never
 > was, and "surviving lines" only pretended to be.
 
-This document defines the measure AegisFlow exists to establish. It is the
+This document defines the measure Fiscus exists to establish. It is the
 product's reason to be trusted over a cost dashboard. Read it before changing
 anything in `src/value/`.
 
@@ -43,7 +43,7 @@ verifiable. Commits group into **tasks** (a session's worth) and **periods**
 ## 3. The funnel — eight gates
 
 A unit of work travels down a ladder of gates. Each gate is an **objective,
-observable check**, and each is sourced from data AegisFlow can actually see:
+observable check**, and each is sourced from data Fiscus can actually see:
 
 | # | Gate | Proves | Source |
 |---|------|--------|--------|
@@ -70,7 +70,7 @@ measure.
 
 Gates 3–8 can be reconstructed by anyone with git + CI hooks. Gates **1–2 can
 only be measured from inside the request path**, which is exactly where
-AegisFlow sits. This is the moat.
+Fiscus sits. This is the moat.
 
 The proxy sees the agent's *proposed* edits (tool-call payloads in the response
 body). Git sees what was *actually committed*. The overlap between them —
@@ -122,7 +122,7 @@ can't observe.** Consequences:
 
 This is what makes it "all-inclusive" without being dishonest: the **model**
 covers the entire lifecycle; the **engine** fills in what it observes; the
-**gaps are explicit and pluggable** (`aegisflow report` ingests test / merge /
+**gaps are explicit and pluggable** (`fiscus report` ingests test / merge /
 ship / incident signals).
 
 ---
@@ -160,8 +160,8 @@ lies:
   so a forger can't even lie about which `keyId` signed it.)
 - **Authenticity** — the receipt was signed by the party you expect. This
   requires a trust anchor obtained **out of band**: the publisher prints their
-  identity once (`aegisflow receipt --pubkey` → a `keyId`), shares it, and the
-  verifier pins it (`aegisflow receipt --verify <file> --key-id <id>`). Any
+  identity once (`fiscus receipt --pubkey` → a `keyId`), shares it, and the
+  verifier pins it (`fiscus receipt --verify <file> --key-id <id>`). Any
   receipt signed by a different key is rejected, and the verify command exits
   non-zero so CI and auditors can gate on it.
 

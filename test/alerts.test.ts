@@ -82,7 +82,7 @@ test('alerts: sorted by severity (critical → warn → info)', () => {
 test('webhook payload carries ONLY alert metadata — no field that could hold a prompt/code/key', () => {
   const alerts = detectAlerts(base({ todaySpendUsd: 25, dailyCapUsd: 25, blocked24h: 2, estimatedShare: 0.9 }));
   const payload = buildWebhookPayload(alerts, 'warn');
-  assert.equal(payload.source, 'aegisflow');
+  assert.equal(payload.source, 'fiscus');
   assert.ok(payload.alerts.every((a) => a.severity !== 'info'), 'info filtered at minSeverity warn');
   for (const a of payload.alerts) {
     assert.deepEqual(Object.keys(a).sort(), ['detail', 'id', 'metric', 'severity', 'title']);
@@ -114,7 +114,7 @@ test('notifyWebhook POSTs the metadata payload and reports delivery', async () =
     assert.equal(r.delivered, true);
     assert.equal(r.status, 200);
     assert.ok(r.posted >= 1);
-    assert.equal(received!.source, 'aegisflow');
+    assert.equal(received!.source, 'fiscus');
     assert.equal(received!.alerts![0]!.id, 'budget-exhausted');
   } finally {
     await new Promise<void>((res) => server.close(() => res()));

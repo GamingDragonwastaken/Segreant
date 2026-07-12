@@ -66,7 +66,7 @@ test('store: summary scopes to a project, hasProjectSpend gates, characterizatio
     const t = '2026-06-01T10:30:00Z';
     store.insertRequest(importedRow('game', 'claude-code', t, 0.5, 'a'));
     store.insertRequest(importedRow('game', 'claude-code', t, 0.25, 'b'));
-    store.insertRequest(importedRow('aegisflow', 'codex', t, 9.0, 'c'));
+    store.insertRequest(importedRow('fiscus', 'codex', t, 9.0, 'c'));
 
     const start = Date.parse('2026-06-01T00:00:00Z');
     const end = Date.parse('2026-06-02T00:00:00Z');
@@ -75,17 +75,17 @@ test('store: summary scopes to a project, hasProjectSpend gates, characterizatio
     assert.ok(Math.abs(store.summary(start, end).costUsd - 9.75) < 1e-9);
     assert.ok(Math.abs(store.summary(start, end, 'game').costUsd - 0.75) < 1e-9);
     assert.equal(store.summary(start, end, 'game').requests, 2);
-    assert.ok(Math.abs(store.summary(start, end, 'aegisflow').costUsd - 9.0) < 1e-9);
+    assert.ok(Math.abs(store.summary(start, end, 'fiscus').costUsd - 9.0) < 1e-9);
     assert.equal(store.summary(start, end, 'nonexistent').costUsd, 0);
 
     // the gate that decides whether scoping is meaningful
     assert.equal(store.hasProjectSpend('game'), true);
-    assert.equal(store.hasProjectSpend('aegisflow'), true);
+    assert.equal(store.hasProjectSpend('fiscus'), true);
     assert.equal(store.hasProjectSpend('default'), false);
 
     // the typed characterization section
     const ch = store.characterization(start, end);
-    assert.deepEqual(ch.byProject.map((b) => b.label).sort(), ['aegisflow', 'game']);
+    assert.deepEqual(ch.byProject.map((b) => b.label).sort(), ['fiscus', 'game']);
     assert.deepEqual(ch.bySource.map((b) => b.label).sort(), ['claude-code', 'codex']);
     assert.equal(ch.byModel.length, 1);
     assert.equal(ch.byModel[0]!.provider, 'anthropic');

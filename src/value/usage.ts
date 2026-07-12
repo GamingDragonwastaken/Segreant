@@ -3,7 +3,7 @@
  *
  * The universal spine (intent → output → acceptance → outcome) is modality-
  * agnostic, so the same RoI lenses apply. What changes is the outcome source:
- * coding uses git; non-coding uses *reported* outcomes (`aegisflow report
+ * coding uses git; non-coding uses *reported* outcomes (`fiscus report
  * --session <id> --kind used|resolved|published`). A non-coding unit is a
  * session; it "realizes" when it has a positive, no-incident outcome — the
  * direct analog of shipped+survived+clean for code.

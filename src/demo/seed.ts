@@ -77,7 +77,7 @@ const PROJECTS = ['backend-api', 'web-frontend', 'data-pipeline'];
 const NAMED_USERS: string[] = ['alice@team', 'bob@team', 'carol@team', 'dave@team', 'erin@team', 'frank@team'];
 // Background traffic includes some unattributed calls (no x-aegis-user header).
 const USERS: Array<string | null> = [...NAMED_USERS, null];
-// Connected sources (feeds) — the AI tools routed through AegisFlow. opencode is
+// Connected sources (feeds) — the AI tools routed through Fiscus. opencode is
 // the first first-class connector; the rest are a realistic multi-tool mix, plus
 // some untagged traffic (no x-aegis-source header) that reads as 'direct'.
 const SOURCES: Array<string | null> = ['opencode', 'cursor', 'claude-code', null];
@@ -475,7 +475,7 @@ export function seedDemo(store: Store, opts: { now?: number; days?: number } = {
   // Non-coding sessions, seeded per-user so the per-user VALUE distribution is
   // real: a spread of extraction across the team (some extract nearly all their
   // spend, some little), which drives dispersion + coaching headroom in
-  // `aegisflow team`. Outcomes stay honest (redone = negative, null = unreported),
+  // `fiscus team`. Outcomes stay honest (redone = negative, null = unreported),
   // so no user shows a fake 100%. Each dev gets 3 sessions.
   const perUserOutcomes: Array<{ user: string; outcomes: Array<string | null> }> = [
     { user: 'alice@team', outcomes: ['published', 'resolved', 'used'] }, // extracts a lot

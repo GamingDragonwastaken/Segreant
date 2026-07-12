@@ -31,7 +31,7 @@ test('listOpencodeProviders: reports each provider and whether it is wrappable (
 test('wrapOpencodeProvider: routes an existing provider through the proxy, preserves its key, returns the real upstream', () => {
   const res = wrapOpencodeProvider(REAL_CONFIG, 'featherless', 8090);
   assert.equal(res.ok, true);
-  assert.equal(res.originalBaseUrl, 'https://api.featherless.ai/v1'); // → AegisFlow upstream
+  assert.equal(res.originalBaseUrl, 'https://api.featherless.ai/v1'); // → Fiscus upstream
   const obj = JSON.parse(res.merged!);
   assert.equal(obj.provider.featherless.options.baseURL, 'http://localhost:8090'); // now the proxy
   assert.equal(obj.provider.featherless.options.apiKey, '{env:FW}', 'the user key is untouched');
@@ -43,7 +43,7 @@ test('wrapOpencodeProvider: idempotent — re-wrapping an already-proxied provid
   const twice = wrapOpencodeProvider(once, 'featherless', 8090);
   assert.equal(twice.ok, true);
   assert.equal(twice.alreadyWrapped, true);
-  assert.equal(twice.originalBaseUrl, undefined); // don't clobber the AegisFlow upstream on re-run
+  assert.equal(twice.originalBaseUrl, undefined); // don't clobber the Fiscus upstream on re-run
 });
 
 test('wrapOpencodeProvider: refuses a hosted/managed provider (no baseURL) with an honest error', () => {
@@ -80,12 +80,12 @@ test('stripJsonc: removes // and /* */ comments and trailing commas, but never t
   assert.deepEqual(parsed.list, [1, 2, 3]);
 });
 
-test('mergeOpencodeConfig: empty config gets a fresh AegisFlow source provider', () => {
+test('mergeOpencodeConfig: empty config gets a fresh Fiscus source provider', () => {
   const res = mergeOpencodeConfig('', 8090);
   assert.equal(res.ok, true);
   assert.equal(res.alreadyConnected, false);
   const obj = JSON.parse(res.merged!);
-  assert.equal(obj.provider.aegisflow.options.headers[SOURCE_HEADER], 'opencode');
+  assert.equal(obj.provider.fiscus.options.headers[SOURCE_HEADER], 'opencode');
 });
 
 test('mergeOpencodeConfig: preserves the user\'s existing apiKey and other providers; only adds the tag', () => {
@@ -93,7 +93,7 @@ test('mergeOpencodeConfig: preserves the user\'s existing apiKey and other provi
     // my opencode config
     "provider": {
       "featherless": { "npm": "@ai-sdk/openai-compatible", "options": { "apiKey": "{env:FW}" } },
-      "aegisflow": {
+      "fiscus": {
         "npm": "@ai-sdk/openai-compatible",
         "options": { "baseURL": "http://localhost:8090", "apiKey": "{env:MY_SECRET}" }
       },
@@ -104,8 +104,8 @@ test('mergeOpencodeConfig: preserves the user\'s existing apiKey and other provi
   assert.equal(res.alreadyConnected, false); // header wasn't there yet
   const obj = JSON.parse(res.merged!);
   assert.equal(obj.provider.featherless.options.apiKey, '{env:FW}', 'other providers preserved');
-  assert.equal(obj.provider.aegisflow.options.apiKey, '{env:MY_SECRET}', 'the user key is NOT clobbered');
-  assert.equal(obj.provider.aegisflow.options.headers[SOURCE_HEADER], 'opencode', 'source tag added');
+  assert.equal(obj.provider.fiscus.options.apiKey, '{env:MY_SECRET}', 'the user key is NOT clobbered');
+  assert.equal(obj.provider.fiscus.options.headers[SOURCE_HEADER], 'opencode', 'source tag added');
 });
 
 test('mergeOpencodeConfig: idempotent — an already-tagged config reports alreadyConnected', () => {
@@ -114,7 +114,7 @@ test('mergeOpencodeConfig: idempotent — an already-tagged config reports alrea
   assert.equal(res.ok, true);
   assert.equal(res.alreadyConnected, true);
   const obj = JSON.parse(res.merged!);
-  assert.equal(obj.provider.aegisflow.options.headers[SOURCE_HEADER], 'opencode');
+  assert.equal(obj.provider.fiscus.options.headers[SOURCE_HEADER], 'opencode');
 });
 
 test('mergeOpencodeConfig: unparseable input fails safe (ok:false) so the caller prints instead of writing garbage', () => {

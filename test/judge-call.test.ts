@@ -1,6 +1,6 @@
 /**
  * The outbound judge HTTP call (src/judge/call.ts): strict-parsing and
- * adversarial coverage. This is the one place AegisFlow itself acts as an LLM
+ * adversarial coverage. This is the one place Fiscus itself acts as an LLM
  * API CLIENT (everywhere else it's a transparent metering proxy), so it gets
  * the same "assume nothing, verify everything" treatment as the receipt
  * signing code — a malformed or hostile response must never propagate an

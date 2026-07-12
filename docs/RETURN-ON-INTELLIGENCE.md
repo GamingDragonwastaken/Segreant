@@ -362,7 +362,7 @@ hand-wavy.
   number (RoI return: realized manual-equivalent value over tokens + measured
   supervision time, counterfactually credited once) + the risk-adjusted
   certainty-equivalent, over the coding substrate (Realization funnel).
-  (`src/value/lenses.ts`, `aegisflow roi [--labor-rate <w>] [--risk <γ>]`.)
+  (`src/value/lenses.ts`, `fiscus roi [--labor-rate <w>] [--risk <γ>]`.)
 - **Next**: the per-context frontier (model × task-type) from proposal→outcome
   linkage; behavioral Lift via model A/B on like tasks.
 - **Then**: non-coding modality capture (chat/research/writing/agent outcome
@@ -420,15 +420,15 @@ which source produced it:
    is unchanged: an auditable org input, exactly like the labor rate, never
    silently replaced.
 2. **This machine's own pre-tracking git history**, when there's any. Commits
-   from before AegisFlow recorded its first tracked request ANYWHERE (a global
+   from before Fiscus recorded its first tracked request ANYWHERE (a global
    cutoff, not per-project) are treated as pre-tracking evidence. Consecutive
    commits whose gap looks like real, continuous working time (bounded 2–90
    minutes by default — short enough to exclude fixup/squash noise, long enough
    to exclude breaks) are classified by the same task-type classifier the
    realization engine already uses (`classifyTaskType`), and the gap becomes a
    real, behavioral personal-minutes sample. Two honest limits on the cutoff,
-   disclosed rather than hidden: it can only reflect AI use AegisFlow has itself
-   tracked, so AI-assisted work from *before* AegisFlow was installed reads as
+   disclosed rather than hidden: it can only reflect AI use Fiscus has itself
+   tracked, so AI-assisted work from *before* Fiscus was installed reads as
    "manual"; and it's the minimum timestamp in the (retention-prunable) request
    ledger, so on a long-lived install it can drift forward as old requests age
    out, rather than staying pinned to the true first-ever request. Neither is
@@ -442,13 +442,13 @@ which source produced it:
    METR does not publish a breakdown matching this project's task-type taxonomy,
    so the per-task-type minutes are this project's own calibration against that
    published scale, not a METR output — disclosed as such in the manifest file
-   itself. These values are unchanged from AegisFlow's earlier illustrative
+   itself. These values are unchanged from Fiscus's earlier illustrative
    defaults; the METR anchor is an order-of-magnitude sanity check against a
    real, cited human-timed scale, not a re-derivation of the numbers from METR
-   data. Refreshable via `aegisflow baseline --refresh --url <manifest>` (a
+   data. Refreshable via `fiscus baseline --refresh --url <manifest>` (a
    user-writable cache under `~/.aegisflow/baselines/` overrides the bundled
-   floor; `aegisflow baseline` alone shows source/age/staleness) — but honestly,
-   unlike `aegisflow pricing`, there is no established machine-readable feed for
+   floor; `fiscus baseline` alone shows source/age/staleness) — but honestly,
+   unlike `fiscus pricing`, there is no established machine-readable feed for
    this, so `--url` is required every time: there is no saved or invented
    default to silently reuse.
 
@@ -594,7 +594,7 @@ otherwise answer. And because the split follows `aᵢ^{1/(1−β)}` rather than 
 of it — the honest antidote to "pour everything into the top-scoring model." β is
 disclosed like the Index's weights and θ; the concave shape is a planning
 assumption that travels with the output. (`src/value/marginal.ts`,
-`test/marginal.test.ts`; surfaced in `aegisflow budget --recommend`.)
+`test/marginal.test.ts`; surfaced in `fiscus budget --recommend`.)
 
 ### 9.1 β estimated from your own curvature (never silently assumed)
 
@@ -691,7 +691,7 @@ The honest framing travels with the output: the alarm detects that the rate
 gamed metric both trip it. Its job is to force the question no dashboard asks —
 *did the work change, or did the measuring get bent?*
 (`src/value/drift.ts`, `test/drift.test.ts`; the "Stability" line in
-`aegisflow roi` and the dashboard.)
+`fiscus roi` and the dashboard.)
 
 ## 12. Value of Information — which measurement to buy next
 
@@ -718,4 +718,4 @@ calculus the instrument hands an organization:
 | Is the number being **bent**? | the Goodhart alarm | §11 |
 
 (`src/value/voi.ts`, `test/voi.test.ts`; the "Instrument next" line in
-`aegisflow roi` / `usage`.)
+`fiscus roi` / `usage`.)

@@ -9,7 +9,7 @@ Legend: ✅ verified · 🔧 corrected · ⚠️ unverifiable / illustrative · 
 ## 1. Technical claims
 
 ### 🔧 "Transparent MITM proxy" with a root CA
-The brief calls AegisFlow a "transparent MITM proxy gateway" with a dynamically generated root CA, then *also* says developers set `ANTHROPIC_BASE_URL`/`OPENAI_BASE_URL`. Those are two different architectures. MITM (install a CA, decrypt all TLS) is unnecessary here because the target tools already accept a base URL, and it carries real costs: corporate device policies forbid it, endpoint protection flags it, and it's the exact surveillance posture the brief elsewhere disavows.
+The brief calls Fiscus a "transparent MITM proxy gateway" with a dynamically generated root CA, then *also* says developers set `ANTHROPIC_BASE_URL`/`OPENAI_BASE_URL`. Those are two different architectures. MITM (install a CA, decrypt all TLS) is unnecessary here because the target tools already accept a base URL, and it carries real costs: corporate device policies forbid it, endpoint protection flags it, and it's the exact surveillance posture the brief elsewhere disavows.
 **Build**: base-URL reverse proxy is the core. No CA, no TLS interception. MITM is, at most, a future opt-in "advanced mode."
 
 ### 🔧 The cost formula and "reasoning multiplier"
@@ -46,7 +46,7 @@ Aspirational. We ship a curated snapshot of the models that matter, clearly mark
 
 ### ⚠️ "Up to 85% cost reduction" / the comparison-matrix deltas (30% churn, 25% flow, etc.)
 These are projections, not measured results. The actual reduction depends entirely on how wasteful a given baseline is. Stated as fact, they'd be the kind of overclaim that loses enterprise trust.
-**Build**: the landing page frames these as *modeled* and adds an explicit disclaimer that AegisFlow provides visibility and controls, not a guaranteed percentage.
+**Build**: the landing page frames these as *modeled* and adds an explicit disclaimer that Fiscus provides visibility and controls, not a guaranteed percentage.
 
 ### ⚠️ Named-company anecdotes (Uber exhausted its 2026 budget in 4 months; Meta/Microsoft/Shopify leaderboards; $2,100 on a $200 plan)
 I could not verify any of these specific figures. The *mechanism* they illustrate is real and defensible — Goodhart's Law on token metrics, agentic loops compounding cost, usage-based billing removing the ceiling. So I kept the mechanism and dropped the unverifiable specifics from public-facing copy. The landing page argues from the dynamics, not from claimed invoices.
@@ -69,7 +69,7 @@ The brief defines AES = (Δdiff × Q × U) / tokens, where **U is a "structural 
 2. **A basket with built-in tension.** Cost, survival, and revert move against each other — inflate line count and survival doesn't follow; write fast and sloppy and churn/revert rise. You can't win by gaming one axis.
 3. **Coaching, not stack-rank.** Team trends and aggregates, never a per-developer ranking tied to comp.
 
-The replacement standard that results (built in `src/git/quality.ts`, surfaced as `aegisflow yield`):
+The replacement standard that results (built in `src/git/quality.ts`, surfaced as `fiscus yield`):
 
 - **AI Yield = surviving lines ÷ AI cost** — durable output per dollar. Where tokenmaxxing rewarded *spending more*, Yield rewards *shipping work that sticks, per dollar*.
 - **Effective Spend Ratio** — the honest version of the brief's TER: % of AI spend that landed in code that survived. The brief's TER counted "tokens that preceded committed changes"; survival raises the bar from *committed* to *survived*, which is far harder to fake.

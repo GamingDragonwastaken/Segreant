@@ -1,5 +1,5 @@
 /**
- * Ambient outcome capture (`aegisflow exec -- <cmd>`): the wrapper must record
+ * Ambient outcome capture (`fiscus exec -- <cmd>`): the wrapper must record
  * the wrapped command's exit code as an outcome signal AND stay transparent
  * (same exit code out as in). Integration-tested through the real CLI process.
  */

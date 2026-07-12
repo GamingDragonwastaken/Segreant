@@ -44,7 +44,7 @@ export interface OpencodeUsageEvent {
   provider: string;
   model: string;
   project: string;
-  /** Full working-directory path — the repo AegisFlow can find and auto-correlate. */
+  /** Full working-directory path — the repo Fiscus can find and auto-correlate. */
   cwd: string | null;
   inputTokens: number;
   outputTokens: number;

@@ -33,7 +33,7 @@ export function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void 
   const tty = process.stdout.isTTY ?? false;
   const todaySpend = store.spendBetween(startOfLocalDay(), Date.now() + 1000);
   console.log('');
-  console.log(color(tty, C.bold, `  AegisFlow — ${label}`));
+  console.log(color(tty, C.bold, `  Fiscus — ${label}`));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(46)));
   if (isDemo()) console.log(color(tty, C.yellow, '  ● DEMO DATA — synthetic, isolated in demo.db'));
   console.log(`  Spend       ${color(tty, C.green, usd(summary.costUsd))}   ${color(tty, C.gray, `(${num(summary.requests)} requests)`)}`);
@@ -48,7 +48,7 @@ export function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void 
       const sevColor = top.severity === 'critical' ? C.red : top.severity === 'warn' ? C.yellow : C.gray;
       console.log('');
       console.log(
-        `  ${color(tty, sevColor, `● ${alerts.length} ${alerts.length === 1 ? 'alert' : 'alerts'}`)}${crit ? color(tty, C.red, ` (${crit} critical)`) : ''}  ${color(tty, C.gray, `— ${top.title}. Run: aegisflow alerts`)}`,
+        `  ${color(tty, sevColor, `● ${alerts.length} ${alerts.length === 1 ? 'alert' : 'alerts'}`)}${crit ? color(tty, C.red, ` (${crit} critical)`) : ''}  ${color(tty, C.gray, `— ${top.title}. Run: fiscus alerts`)}`,
       );
     }
   }
@@ -91,16 +91,16 @@ export function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void 
     for (const s of bySource.slice(0, 8)) {
       console.log(`  ${s.label.padEnd(34)} ${usd(s.costUsd).padStart(11)}  ${color(tty, C.gray, `${num(s.requests)} req`)}`);
     }
-    console.log(color(tty, C.gray, '  → per-source depth + model mix:  aegisflow sources'));
+    console.log(color(tty, C.gray, '  → per-source depth + model mix:  fiscus sources'));
   }
   console.log('');
-  console.log(color(tty, C.gray, `  Dashboard: run "aegisflow start" then open http://localhost:${cfg.dashboardPort}`));
+  console.log(color(tty, C.gray, `  Dashboard: run "fiscus start" then open http://localhost:${cfg.dashboardPort}`));
   console.log('');
   store.close();
 }
 
 /**
- * Spend by connected source — each AI tool deliberately routed through AegisFlow.
+ * Spend by connected source — each AI tool deliberately routed through Fiscus.
  * This is the "connect, don't intercept" view: a source is a feed, and its depth
  * is honest about how much of the loop it exposes (a proxy-connected tool gives
  * spend + attribution; untagged traffic is 'direct' and spend-only).
@@ -130,7 +130,7 @@ export function cmdSources(flags: Flags): void {
 
   const tty = process.stdout.isTTY ?? false;
   console.log('');
-  console.log(color(tty, C.bold, '  AegisFlow — sources (connected AI feeds)'));
+  console.log(color(tty, C.bold, '  Fiscus — sources (connected AI feeds)'));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(46)));
   if (isDemo()) console.log(color(tty, C.yellow, '  ● DEMO DATA — synthetic, isolated in demo.db'));
   console.log(color(tty, C.gray, `  ${all ? 'all time' : 'last 30 days'} · spend grouped by the tool each request was routed from`));
@@ -138,7 +138,7 @@ export function cmdSources(flags: Flags): void {
 
   if (!bySource.length) {
     console.log(color(tty, C.gray, '  No metered traffic yet. Connect a tool as a source, then run it:'));
-    console.log(color(tty, C.green, '    aegisflow connect opencode'));
+    console.log(color(tty, C.green, '    fiscus connect opencode'));
     console.log('');
     store.close();
     return;
@@ -155,8 +155,8 @@ export function cmdSources(flags: Flags): void {
   console.log('');
   console.log(color(tty, C.gray, '  Depth is read from real signals: spend always · + acceptance once a source sends'));
   console.log(color(tty, C.gray, '  proposed edits · + RoI once its work reaches projects with realized value.'));
-  console.log(color(tty, C.gray, "  A source is one AI tool deliberately routed through AegisFlow (connect, don't intercept)."));
-  console.log(color(tty, C.gray, '  Tag one with:  aegisflow connect <tool>   — the tag is stripped before traffic leaves your machine.'));
+  console.log(color(tty, C.gray, "  A source is one AI tool deliberately routed through Fiscus (connect, don't intercept)."));
+  console.log(color(tty, C.gray, '  Tag one with:  fiscus connect <tool>   — the tag is stripped before traffic leaves your machine.'));
   console.log('');
   store.close();
 }

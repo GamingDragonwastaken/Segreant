@@ -18,11 +18,11 @@
  *      machine-readable feed for this: refreshing requires an explicit URL, we
  *      never invent a default one.
  *   2. A PERSONAL prior. `personalBaselineFromCommits` mines this project's own
- *      git history from BEFORE AegisFlow recorded its first tracked request
+ *      git history from BEFORE Fiscus recorded its first tracked request
  *      ANYWHERE (a global cutoff, not per-project) — turning inter-commit gaps
  *      into a real, behavioral personal baseline. Two honest limits, disclosed
- *      rather than hidden: (a) the cutoff can only reflect AI use AegisFlow has
- *      itself tracked — pre-install AI-assisted commits (from a tool AegisFlow
+ *      rather than hidden: (a) the cutoff can only reflect AI use Fiscus has
+ *      itself tracked — pre-install AI-assisted commits (from a tool Fiscus
  *      never saw) are indistinguishable from genuinely manual ones and get
  *      absorbed into the "manual" signal; (b) the cutoff is `MIN(ts_epoch_ms)`
  *      over the `requests` table, which retention pruning (`Store.prune`) can

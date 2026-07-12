@@ -1,7 +1,7 @@
 /**
  * The guide: guidance instead of documentation.
  *
- * AegisFlow's journey is five verifiable facts — traffic flows, a cap exists,
+ * Fiscus's journey is five verifiable facts — traffic flows, a cap exists,
  * an outcome landed, value computed, dollars disclosed. This module reads those
  * facts (gathered by the caller from the store + config, never from what the
  * user says they did) and returns the whole journey with done-flags plus the
@@ -75,8 +75,8 @@ export function buildGuide(f: GuideFacts): GuideReport {
     commands: f.proxyUp
       ? [envHint, 'then run your AI tool as usual — watch requests appear']
       : [
-          'aegisflow scan --setup    (find your AI tools + repos, import everything — no wiring)',
-          'or aegisflow start, then set the base URL to also CAP spend:',
+          'fiscus scan --setup    (find your AI tools + repos, import everything — no wiring)',
+          'or fiscus start, then set the base URL to also CAP spend:',
           envHint,
         ],
   };
@@ -89,8 +89,8 @@ export function buildGuide(f: GuideFacts): GuideReport {
     why: 'Metering without enforcement is a report, not governance. The proxy can actually say no.',
     commands:
       f.spend30dUsd > 0
-        ? ['aegisflow budget --recommend        (suggests a cap from your own usage)', 'aegisflow budget --daily 25 --soft 18']
-        : ['aegisflow budget --daily 25 --soft 18'],
+        ? ['fiscus budget --recommend        (suggests a cap from your own usage)', 'fiscus budget --daily 25 --soft 18']
+        : ['fiscus budget --daily 25 --soft 18'],
   };
 
   const outcome: GuideStep = {
@@ -102,7 +102,7 @@ export function buildGuide(f: GuideFacts): GuideReport {
         ? `${fmtInt(f.outcomeSignals)} outcome signals recorded`
         : 'no outcomes yet — spend is a cost with no counterweight',
     why: 'Exit codes are outcomes. Wrap your test command once and every run reports itself.',
-    commands: ['aegisflow exec -- npm test        (any command; its exit code is the outcome)', 'aegisflow report --kind merged --commit <hash>'],
+    commands: ['fiscus exec -- npm test        (any command; its exit code is the outcome)', 'fiscus report --kind merged --commit <hash>'],
   };
 
   const value: GuideStep = {
@@ -114,7 +114,7 @@ export function buildGuide(f: GuideFacts): GuideReport {
         ? `${fmtInt(f.realizationUnits)} units of work scored`
         : 'outcomes recorded but never scored against the spend',
     why: 'Four lenses — did it stick, did you keep it, did it save time, did it matter — one honest index.',
-    commands: ['aegisflow roi --repo .', 'aegisflow usage        (non-coding sessions: chat, research, drafting)'],
+    commands: ['fiscus roi --repo .', 'fiscus usage        (non-coding sessions: chat, research, drafting)'],
   };
 
   const price: GuideStep = {
@@ -123,7 +123,7 @@ export function buildGuide(f: GuideFacts): GuideReport {
     done: f.laborRateSet,
     state: f.laborRateSet ? 'labor rate set — returns priced in dollars' : 'index only — the dollar return stays honestly un-priced',
     why: 'One auditable org input turns the 0–100 index into a break-even answer: was the AI worth it.',
-    commands: ['aegisflow roi --repo . --labor-rate 120', 'or set lift.laborRatePerHour in config for every surface'],
+    commands: ['fiscus roi --repo . --labor-rate 120', 'or set lift.laborRatePerHour in config for every surface'],
   };
 
   const journeyDone = [meter, cap, outcome, value, price].every((s) => s.done);
@@ -136,9 +136,9 @@ export function buildGuide(f: GuideFacts): GuideReport {
       : 'unlocks when the journey above is complete',
     why: 'Where does the next dollar go, what should you measure next, when do you actually know, and is the number being bent.',
     commands: [
-      'aegisflow budget --recommend --repo .   (value-aware cap)',
-      'aegisflow frontier --repo .             (best model × task for YOU)',
-      'aegisflow roi --repo .                  (watch Stability + Instrument next)',
+      'fiscus budget --recommend --repo .   (value-aware cap)',
+      'fiscus frontier --repo .             (best model × task for YOU)',
+      'fiscus roi --repo .                  (watch Stability + Instrument next)',
     ],
   };
 
@@ -158,9 +158,9 @@ export function buildGuide(f: GuideFacts): GuideReport {
 
   let hint: string | null = null;
   if (f.demo) {
-    hint = 'You are looking at synthetic demo data. Run "aegisflow guide" without --demo to see your real journey.';
+    hint = 'You are looking at synthetic demo data. Run "fiscus guide" without --demo to see your real journey.';
   } else if (f.requestsAllTime === 0) {
-    hint = 'Want to see every surface populated first? "aegisflow demo --serve" builds an isolated, clearly-labeled sandbox.';
+    hint = 'Want to see every surface populated first? "fiscus demo --serve" builds an isolated, clearly-labeled sandbox.';
   }
 
   return {

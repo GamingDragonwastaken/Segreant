@@ -1,4 +1,4 @@
-# AegisFlow FAQ
+# Fiscus FAQ
 
 ## Privacy & security
 
@@ -12,7 +12,7 @@ never content).
 
 **Do you see my API keys?**
 No. Keys stay in your environment / your tool's config. The proxy forwards the auth
-header upstream unchanged and never stores it. AegisFlow's author never sees it.
+header upstream unchanged and never stores it. Fiscus's author never sees it.
 
 **Do you rank or score individual developers?**
 No — and the code refuses to. Per-user *value* (how much of someone's AI spend
@@ -21,13 +21,13 @@ stays available, but attributing value to named people is opt-in. Even switched 
 the org view is a **distribution only** (median, spread, a coaching-headroom number)
 — never a ranked list — and it is **withheld entirely** below a k-anonymity floor
 (default 5 people), so a small team can't use it to single anyone out. Names appear
-only in a person's own view of themselves (`aegisflow team --me <you>`). Thin samples
+only in a person's own view of themselves (`fiscus team --me <you>`). Thin samples
 are shrunk toward the team mean, so nobody is judged on two noisy sessions. The
 headline number is *coaching headroom* — the latent value if below-median extractors
 were supported up to the median — an argument for enablement, not for blame.
 
 **Is there a root certificate or traffic interception?**
-No. AegisFlow is a base-URL reverse proxy — you explicitly point tools at it. That's
+No. Fiscus is a base-URL reverse proxy — you explicitly point tools at it. That's
 a deliberate choice: enterprise security teams (rightly) ban dev-machine root CAs, so
 "connect, don't intercept" is the only enterprise-viable model.
 
@@ -47,7 +47,7 @@ install a root CA to force it. Those are honestly labeled as unmeterable here.
 **Do I have to change a base URL to meter my coding tool?**
 No — that's what **importers** are for. Subscription-mode tools (Claude Code on
 Pro/Max, Codex, opencode) talk straight to vendor servers and never touch a
-proxy, but they each write their exact usage to local disk. `aegisflow import
+proxy, but they each write their exact usage to local disk. `fiscus import
 claude-code | opencode | codex | all` reads that native record — no base URL, no
 key, no config. It's idempotent (safe to re-run or cron), and `--watch` keeps it
 live, polling read-only so the tool keeps writing uninterrupted. In the dashboard,
@@ -64,7 +64,7 @@ best for API-key tools, scripts, and enterprises with gateways. **Import** meter
 natively with zero wiring — best for subscription tools a proxy can't see. Most
 people import their editor and, if they also run raw API scripts, proxy those.
 
-**What does `aegisflow scan` mean when it lists a tool as "detected" but not imported?**
+**What does `fiscus scan` mean when it lists a tool as "detected" but not imported?**
 Scan also runs a wider, read-only inventory pass — checking for config directories
 or PATH binaries of AI coding tools beyond the three native importers (today:
 Cursor, Windsurf, Aider, Continue, Zed). Seeing one listed is honestly just an
@@ -75,7 +75,7 @@ native importer ships for it.
 
 **Does the proxy slow my requests down?**
 Negligibly. The proxy overhead is microseconds against a provider round-trip of
-hundreds of milliseconds to seconds. If AegisFlow is off, traffic you pointed at it
+hundreds of milliseconds to seconds. If Fiscus is off, traffic you pointed at it
 simply fails over/through — tracking never breaks your session.
 
 ## The measurement
@@ -106,7 +106,7 @@ The same funnel, with the outcome reported instead of read from git. But it's
 *graded*, not pass/fail: an answer you merely *used* counts less than one you
 *resolved* a ticket with, which counts less than something you *published* —
 mapped onto the same reach ladder the code Impact lens uses. The grade is only ever
-what you reported (`aegisflow report --session <id> --kind used|resolved|published`),
+what you reported (`fiscus report --session <id> --kind used|resolved|published`),
 never inferred from the content of your prompts. Acceptance and survival-over-time
 don't apply to a one-shot answer, so they stay honestly n/a rather than faked.
 
@@ -121,7 +121,7 @@ printed — when there isn't.
 Yes — and that's rarer than it sounds. A classical interval is only valid if you
 look once, at a pre-planned sample size; watched continuously (the way every
 dashboard is actually used), its real error rate explodes — in simulation, a 90%
-classical interval goes wrong at some point in ~64% of runs. AegisFlow's
+classical interval goes wrong at some point in ~64% of runs. Fiscus's
 realization rate carries an **anytime-valid** interval (a confidence sequence)
 instead: the guarantee holds simultaneously at every glance, so you may peek
 whenever and act whenever. The honest price is a slightly wider interval — shown,
@@ -156,13 +156,13 @@ place to buy honesty.
 
 ## Cost & licensing
 
-**What does AegisFlow cost?**
+**What does Fiscus cost?**
 The local tool is free. It uses only free tiers and Node built-ins; there's no
 account and no telemetry.
 
 **Is my data mine?**
 Entirely. It's a local file (`~/.aegisflow/`). Export anytime with
-`aegisflow export --csv`. Delete anytime by removing the directory.
+`fiscus export --csv`. Delete anytime by removing the directory.
 
 ## Troubleshooting
 
@@ -172,10 +172,10 @@ Usually the `/v1` double-version gotcha: if your client already appends
 [INTEGRATIONS.md](INTEGRATIONS.md).
 
 **`doctor` says the rate card is stale.**
-`aegisflow pricing --refresh` pulls current rates from the community price feed
+`fiscus pricing --refresh` pulls current rates from the community price feed
 (LiteLLM's model-price file — machine-readable, updated by hundreds of
 contributors within days of every model release; the GET sends nothing about
-you). For self-maintenance, `aegisflow pricing --auto` refreshes on start
+you). For self-maintenance, `fiscus pricing --auto` refreshes on start
 whenever the table goes stale. A malformed or shrunken feed is refused and the
 current table kept — a bad refresh can never corrupt your pricing.
 
@@ -188,5 +188,5 @@ flat fallback that marks every such request `~est` — surfaced in `doctor` as
 
 **Nothing shows under value / RoI.**
 Attach a git repo (`--repo .`) and let the maturity window elapse, or report outcomes
-with `aegisflow report`. Value stays honestly dark until there's something real to
+with `fiscus report`. Value stays honestly dark until there's something real to
 show.

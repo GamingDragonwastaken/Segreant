@@ -1,6 +1,6 @@
 <div align="center">
 
-# AegisFlow
+# Fiscus
 
 **Govern the spend. Not the developer.**
 
@@ -24,13 +24,13 @@ doesn't send a warning — it sends an invoice. Traditional monitoring is blind 
 this: a request that costs `$0.002` and a bloated loop that costs `$0.40` look
 identical when you only measure latency and errors.
 
-AegisFlow sits in the path, prices every call locally, and caps runaway spend
+Fiscus sits in the path, prices every call locally, and caps runaway spend
 **before** the bill — while treating prompts and source code as things that never
 leave your device.
 
 But capping waste is only the floor. The question a budget owner actually has is
 *"is this spend worth it, and where should the next dollar go?"* — and "tokens
-consumed" never answered it. AegisFlow measures the return on every dollar of AI
+consumed" never answered it. Fiscus measures the return on every dollar of AI
 spend and reallocates the budget toward the contexts that pay off. It's the
 capital-allocation layer for AI, not another usage chart.
 
@@ -54,21 +54,21 @@ SQLite.
 **See it work in ten seconds** — no API key, no setup:
 
 ```bash
-npm install        # dev toolchain only (AegisFlow has zero runtime deps)
+npm install        # dev toolchain only (Fiscus has zero runtime deps)
 npm run demo       # seeds labeled synthetic data and opens the dashboard
 ```
 
 That lights up every surface — spend, governance alerts, the RoI index and its
 four value lenses, the per-model×task frontier, the budget allocator — all priced
-by the real cost engine in an isolated `demo.db`. Clear it with `aegisflow demo --clear`.
+by the real cost engine in an isolated `demo.db`. Clear it with `fiscus demo --clear`.
 
 **Then meter your real traffic:**
 
 ```bash
 # from a clone
-node bin/aegisflow.mjs start
+node bin/fiscus.mjs start
 # or, once published
-npx @2am_seeker/aegisflow start
+npx fiscus start
 ```
 
 Then point your tools at it:
@@ -92,7 +92,7 @@ Per-tool recipes (opencode, aider, Cursor, Antigravity, your own SDK scripts) an
 the **$0 Gemini free-tier test** are in **[docs/INTEGRATIONS.md](docs/INTEGRATIONS.md)**.
 
 To stop tracking, unset the variables — traffic routes straight to the provider
-and AegisFlow is out of the path entirely.
+and Fiscus is out of the path entirely.
 
 ---
 
@@ -101,80 +101,80 @@ and AegisFlow is out of the path entirely.
 Onboarding — where you are, and how spend gets in with no wiring at all:
 
 ```
-aegisflow guide                 Where you are + the single next step, read from your
-                                real state — also what bare `aegisflow` shows  (--json)
-aegisflow scan [path]           One-command setup: find the AI tools + git repos on
+fiscus guide                 Where you are + the single next step, read from your
+                                real state — also what bare `fiscus` shows  (--json)
+fiscus scan [path]           One-command setup: find the AI tools + git repos on
                                 this machine, preview a plan (read-only). --setup
                                 imports every detected tool and correlates every repo
                                 into per-project RoI, plus a read-only inventory of
                                 other AI tools seen (not yet imported). --deep widens
                                 the walk.
-aegisflow import <tool|all>     NATIVE metering, no routing — reads the usage a tool
+fiscus import <tool|all>     NATIVE metering, no routing — reads the usage a tool
                                 already logs locally (works on subscriptions the proxy
                                 can never see). Tools: claude-code, opencode, codex.
                                 Idempotent; --watch keeps it live.  (--days N, --json)
-aegisflow discover              Correlate already-imported projects into per-project
+fiscus discover              Correlate already-imported projects into per-project
                                 RoI without re-importing — `scan --setup`'s other half
-aegisflow connect <tool>        Wire a tool through the proxy as a connected source
+fiscus connect <tool>        Wire a tool through the proxy as a connected source
                                 (opencode, antigravity, or any OpenAI-compatible API)
-aegisflow sources                Spend by connected source, at its honest depth
+fiscus sources                Spend by connected source, at its honest depth
                                 (--all for all-time, --json)
 ```
 
 Metering, governance, and value:
 
 ```
-aegisflow start                 Start the proxy (:8090) + dashboard (:8091)
-aegisflow today | week | month  Show spend for a window        (--json)
-aegisflow roi --repo <path>     Return on Intelligence — four value lenses composed
+fiscus start                 Start the proxy (:8090) + dashboard (:8091)
+fiscus today | week | month  Show spend for a window        (--json)
+fiscus roi --repo <path>     Return on Intelligence — four value lenses composed
                                 into one index (--labor-rate $/hr, --tsf X, --json)
-aegisflow frontier --repo <p>   What's best for you — RoI by model × task-type + routing
-aegisflow usage                 RoI for non-coding usage (chat/research), from outcomes
-aegisflow judge                 Score a recent window's AI-assisted efficiency —
+fiscus frontier --repo <p>   What's best for you — RoI by model × task-type + routing
+fiscus usage                 RoI for non-coding usage (chat/research), from outcomes
+fiscus judge                 Score a recent window's AI-assisted efficiency —
                                 algorithmic by default; opt into a local/hosted LLM
                                 judge via config.judge.*  (--window D, --project
                                 <name>, --json)
-aegisflow team                  Per-user value extraction — opt-in, distribution-only,
+fiscus team                  Per-user value extraction — opt-in, distribution-only,
                                 k-anonymous (--me <user> for your own view, --json)
-aegisflow team push --url <u>   Cross-machine: sign + push this window's per-project
-                                value/RoI to a team server YOU run (AegisFlow hosts
+fiscus team push --url <u>   Cross-machine: sign + push this window's per-project
+                                value/RoI to a team server YOU run (Fiscus hosts
                                 nothing). --dry-run to preview, --pubkey to publish
                                 this machine's rollup identity (--window D, --project
                                 <name>, --json)
-aegisflow budget --recommend    Value-aware budget from usage + realized value (--apply)
-aegisflow alerts                Governance alerts — spikes, throttling, runaway, value
+fiscus budget --recommend    Value-aware budget from usage + realized value (--apply)
+fiscus alerts                Governance alerts — spikes, throttling, runaway, value
                                 craters (--repo for value; --json; exits 1 if critical).
                                 Deliver to your webhook: --set-webhook <url>, then --notify
                                 (cron it; metadata only — never prompts/code/keys)
-aegisflow export                Export the request ledger for BI (--csv|--json, --days N|
+fiscus export                Export the request ledger for BI (--csv|--json, --days N|
                                 --all, --out <file>); dashboard has a ↓ CSV button too
-aegisflow realize --repo <path> Realization Standard — % of spend that became
+fiscus realize --repo <path> Realization Standard — % of spend that became
                                 verified durable outcomes      (--window D, --json)
-aegisflow report --kind K       Wire an outcome gate: tested|merged|shipped|incident
+fiscus report --kind K       Wire an outcome gate: tested|merged|shipped|incident
                                 --commit <hash> [--verdict pass|fail] [--detail "…"]
-aegisflow exec -- <command>     AMBIENT outcome capture — wrap a command once (e.g.
+fiscus exec -- <command>     AMBIENT outcome capture — wrap a command once (e.g.
                                 `npm test`); every run reports its own exit code
-aegisflow receipt --repo <path> Emit signed value receipts (--pubkey to publish your
+fiscus receipt --repo <path> Emit signed value receipts (--pubkey to publish your
                                 identity; --verify <file> --key-id <id> to verify + pin)
-aegisflow yield --repo <path>   AI Yield (survival lens) — durable lines per $
-aegisflow budget ...            Set caps (see below)
-aegisflow audit --repo <path>   Cost per commit from git history (--limit N, --json)
+fiscus yield --repo <path>   AI Yield (survival lens) — durable lines per $
+fiscus budget ...            Set caps (see below)
+fiscus audit --repo <path>   Cost per commit from git history (--limit N, --json)
 ```
 
 Operations:
 
 ```
-aegisflow init                  Write default config + print setup steps
-aegisflow doctor                First-run health check — config, DB, proxy, caps, pricing
-aegisflow config                Show config and file paths      (--json)
-aegisflow pricing --refresh     Update the rate card from the community price feed
+fiscus init                  Write default config + print setup steps
+fiscus doctor                First-run health check — config, DB, proxy, caps, pricing
+fiscus config                Show config and file paths      (--json)
+fiscus pricing --refresh     Update the rate card from the community price feed
                                 (--auto to self-refresh on start when stale)
-aegisflow baseline              Show the Lift manual-minutes population prior: source,
+fiscus baseline              Show the Lift manual-minutes population prior: source,
                                 age, task-type count (--json). Update it: baseline
                                 --refresh --url <manifest> — no default source exists;
                                 unlike pricing, METR publishes research, not a feed
-aegisflow prune                 Prune old rows and compact the DB
-aegisflow demo                  Seed isolated, labeled synthetic data so every surface
+fiscus prune                 Prune old rows and compact the DB
+fiscus demo                  Seed isolated, labeled synthetic data so every surface
                                 populates with no API key (--serve opens the dashboard
                                 on it; --clear removes it). Append --demo to today,
                                 alerts, usage, or start to view the demo data.
@@ -183,7 +183,7 @@ aegisflow demo                  Seed isolated, labeled synthetic data so every s
 ### Budgets
 
 ```bash
-aegisflow budget --daily 25 --soft 18 --session 5 --runaway 2 --window 60
+fiscus budget --daily 25 --soft 18 --session 5 --runaway 2 --window 60
 ```
 
 | Flag | Meaning |
@@ -209,7 +209,7 @@ X-Aegis-Session-Id: <uuid>
 X-Aegis-Task-Weight: 1.5
 ```
 
-Spend then rolls up by user in `aegisflow today`, the dashboard's "By user"
+Spend then rolls up by user in `fiscus today`, the dashboard's "By user"
 card, and the CSV export. Unset → reported as `unassigned`. These headers are
 stripped before the request is forwarded upstream — they never leave the device.
 
@@ -219,7 +219,7 @@ stripped before the request is forwarded upstream — they never leave the devic
 
 Capping waste is the floor. The question that matters is **how much you actually
 get from the AI** — and neither "tokens consumed" nor "lines of code" ever
-answered it. AegisFlow's core is **Return on Intelligence (RoI)**: a measure of
+answered it. Fiscus's core is **Return on Intelligence (RoI)**: a measure of
 realized AI value that works across *any* token usage (not just coding), is
 measured from the request path instead of surveys, and composes four value
 lenses into one index that can't be gamed on a single axis.
@@ -247,7 +247,7 @@ square the same effect. The index tells you *how well* the intelligence works; t
 return tells you *whether it was worth it*. And because the measured supervision
 time sits in the denominator, the return lands in the **empirically-documented
 ~1–2× range** for real coding work — not the fantasy 100× you get from counting
-tokens alone. AegisFlow refuses to print a dollar return at all until it has
+tokens alone. Fiscus refuses to print a dollar return at all until it has
 measured supervision time to divide by; an honest "not yet" beats a flattering
 lie.
 
@@ -263,7 +263,7 @@ The four lenses, each answering a different real question (full definitions in
 
 A lens with no signal reads `uninstrumented` and is excluded — never faked — and
 the report shows your lens coverage. The path to a higher number is to wire more
-signal, not to game one. `aegisflow roi --repo .`
+signal, not to game one. `fiscus roi --repo .`
 
 ### The Realization substrate
 
@@ -284,29 +284,29 @@ unit is *realized* when it reaches the end with no failure. From that:
 
 What makes it a *standard* and not a dashboard: every realized unit emits a
 **Value Receipt** — an ed25519-signed, portable record of `cost → gate verdicts →
-outcome` that anyone can verify without access to your source (`aegisflow
+outcome` that anyone can verify without access to your source (`fiscus
 receipt`). And `unknown` is never `fault`: a gate you haven't wired stays
 `unknown` and the report shows your instrumentation coverage ("3 of 8 gates
 wired"). The path to a higher number is to wire more gates — not to game one.
 
 ```bash
-aegisflow realize --repo .            # the funnel + the three headline numbers
-aegisflow report --kind tested --commit HEAD   # wire an outcome gate
-aegisflow receipt --repo .            # emit signed value receipts
+fiscus realize --repo .            # the funnel + the three headline numbers
+fiscus report --kind tested --commit HEAD   # wire an outcome gate
+fiscus receipt --repo .            # emit signed value receipts
 ```
 
 The full model is in **[docs/THE-STANDARD.md](docs/THE-STANDARD.md)**. The older
-**AI Yield** (`aegisflow yield`) survives as one *lens* — durable lines per
+**AI Yield** (`fiscus yield`) survives as one *lens* — durable lines per
 dollar — but the Standard, not Yield, is the headline. The honest account of why
 the research's "AI Efficiency Score" and our own first Yield-only attempt were
 both rebuilt is in [docs/RESEARCH-REVIEW.md §3](docs/RESEARCH-REVIEW.md).
 
 ## Allocate by return
 
-Measuring RoI is the core; **acting on it** is the point. AegisFlow turns the
+Measuring RoI is the core; **acting on it** is the point. Fiscus turns the
 measurement into budget decisions — the capital-allocation layer:
 
-- **A value-aware cap** — `aegisflow budget --recommend` derives a daily budget
+- **A value-aware cap** — `fiscus budget --recommend` derives a daily budget
   from real usage (p90 of active days), tightened when realized value is low,
   with projected monthly waste called out.
 - **Reallocation, quantified** — it re-weights the *same* budget toward the
@@ -327,7 +327,7 @@ way the lenses stay honest about coverage.
 ## How it works
 
 ```
-IDE / Agent → ANTHROPIC_BASE_URL/OPENAI_BASE_URL → AegisFlow proxy (:8090)
+IDE / Agent → ANTHROPIC_BASE_URL/OPENAI_BASE_URL → Fiscus proxy (:8090)
                                                        │ price locally, log to SQLite
                                                        ▼ forward, keys untouched
                                                   api.anthropic.com / api.openai.com
@@ -345,7 +345,7 @@ Full design in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 ### Beyond Anthropic & OpenAI
 
 The OpenAI route speaks the wire format most of the ecosystem now exposes, so
-AegisFlow meters far more than two vendors. The simplest way: point
+Fiscus meters far more than two vendors. The simplest way: point
 `upstreams.openai` at any compatible base — **OpenRouter** (which itself fronts
 Gemini, Claude, Llama, Mistral, DeepSeek, and more), **Ollama** and other local
 model servers, **DeepSeek**, **Mistral** — and every call is metered, priced, and
@@ -358,7 +358,7 @@ first-class, verified entry in the rate card, not a generic fallback. That also
 makes it the easiest **zero-cost way to meter a live agent**: point
 `upstreams.openai` at Google's free-tier OpenAI-compatible endpoint
 (`https://generativelanguage.googleapis.com/v1beta/openai/`), run any tool through
-AegisFlow with a `gemini-2.5-flash` model, and watch a real RoI accrue without
+Fiscus with a `gemini-2.5-flash` model, and watch a real RoI accrue without
 spending a cent.
 
 Want to switch providers *per request* from one proxy? Enable
@@ -382,7 +382,7 @@ what was corrected (the cost formula, the MITM design, model ids), and what was
 deliberately left out (a per-developer "efficiency score" that would just
 recreate the metric-gaming it's meant to stop).
 
-Cost-reduction percentages depend on your baseline waste. AegisFlow's job is to
+Cost-reduction percentages depend on your baseline waste. Fiscus's job is to
 make that baseline visible and give you the controls to act — not to promise a
 number.
 
@@ -398,7 +398,7 @@ number.
 - The local store lives under `~/.aegisflow` (`%USERPROFILE%\.aegisflow` on
   Windows) under your OS file permissions.
 - **The one thing that can leave the device is opt-in and metadata-only:** if you
-  set an alert webhook (`aegisflow alerts --set-webhook <url>`), AegisFlow POSTs
+  set an alert webhook (`fiscus alerts --set-webhook <url>`), Fiscus POSTs
   alert summaries — severity, title, a short metric like `$35.00 / $30.00` — to
   *your* endpoint. By construction it sends nothing else: no prompts, no code, no
   keys. Off by default.
@@ -428,9 +428,9 @@ CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs `typecheck` +
 OpenAI-compatible provider** via `x-aegis-openai-base` — OpenRouter, Ollama,
 DeepSeek, Mistral, …) covers anything
 you point at it live, with transparent fail-open on upstream errors and a
-connect/TTFB timeout so a hung provider can't hang you. **Native import** (`aegisflow
+connect/TTFB timeout so a hung provider can't hang you. **Native import** (`fiscus
 import` — Claude Code, opencode, Codex CLI) reads what those tools already log
-locally, with **zero base-URL wiring**. `aegisflow scan` finds both the tools and the
+locally, with **zero base-URL wiring**. `fiscus scan` finds both the tools and the
 git repos on your machine — plus a wider, read-only inventory of other AI coding
 tools it sees installed (Cursor, Windsurf, Aider, Continue, Zed) but doesn't import
 from yet — and can set the whole thing up in one command; `discover` auto-correlates
@@ -443,17 +443,16 @@ repo-less realized-value with a **per-project budget-owner view**, and **opt-in,
 k-anonymous per-user value**. **Lift** derives from measured time-with-AI × task
 baselines that blend a cited population prior (METR's published human-timed task
 scale) with your own pre-tracking git history via empirical-Bayes shrinkage — no
-synthetic constant, no unsourced table. A state-aware `aegisflow guide` (and bare
-`aegisflow`) tells you the single next step from your actual data. Terminal + a
+synthetic constant, no unsourced table. A state-aware `fiscus guide` (and bare
+`fiscus`) tells you the single next step from your actual data. Terminal + a
 **fully self-contained** web dashboard (zero external requests) mirror every
 surface.
 
 **335/336 tests (1 skipped — POSIX-only permission semantics), `tsc` clean, CI on
-Linux/macOS/Windows.** Installable via `npx
-@2am_seeker/aegisflow`. See [docs/ARCHITECTURE.md §7](docs/ARCHITECTURE.md) for what's
-deliberately still open — `aegisflow team push` can sign and push a numeric-only
+Linux/macOS/Windows.** Installable via `npx fiscus`. See [docs/ARCHITECTURE.md §7](docs/ARCHITECTURE.md) for what's
+deliberately still open — `fiscus team push` can sign and push a numeric-only
 project rollup to [`team-server/`](team-server/README.md), a separate,
-optional, BYO-Postgres server an operator runs themselves (AegisFlow hosts
+optional, BYO-Postgres server an operator runs themselves (Fiscus hosts
 nothing; its own `package.json` keeps `pg` out of the main CLI's dependency
 tree). The server verifies and stores what's pushed, verifies a human's SSO
 login via OIDC (`node:crypto` only, RS256/ES256), and now serves a real,

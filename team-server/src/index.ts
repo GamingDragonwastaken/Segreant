@@ -1,7 +1,7 @@
 /**
  * Team server entrypoint. Configured entirely through environment variables
  * per docs/TEAM-TIER-DESIGN.md §1 — the operator provides a database and,
- * optionally, an OIDC issuer for human-facing routes; AegisFlow provides the
+ * optionally, an OIDC issuer for human-facing routes; Fiscus provides the
  * software only.
  */
 
@@ -71,7 +71,7 @@ async function main(): Promise<void> {
   const server = createTeamServer({ store, adminToken, oidc, aggregate });
   server.listen(port, host, () => {
     console.log(
-      `aegisflow team-server listening on ${host}:${port} ` +
+      `fiscus team-server listening on ${host}:${port} ` +
         `(admin registration: ${adminToken ? 'enabled' : 'DISABLED'}, OIDC: ${oidc ? 'enabled' : 'DISABLED'}, ` +
         `developer breakdown: ${aggregate.exposeDeveloperBreakdown ? 'enabled' : 'DISABLED'}, min cohort: ${aggregate.minCohort})`,
     );

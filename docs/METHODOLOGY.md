@@ -1,4 +1,4 @@
-# How AegisFlow measures Return on Intelligence — in plain language
+# How Fiscus measures Return on Intelligence — in plain language
 
 *For anyone deciding whether this tool is trustworthy — no math background needed.
 The full derivation lives in [RETURN-ON-INTELLIGENCE.md](RETURN-ON-INTELLIGENCE.md);
@@ -8,7 +8,7 @@ this is the version you can explain to your CFO.*
 
 ## The problem, in one sentence
 
-Everyone can see their **AI bill**. Nobody can see their **AI return**. AegisFlow
+Everyone can see their **AI bill**. Nobody can see their **AI return**. Fiscus
 measures the return — honestly, from your own machine, without sending your prompts
 or code anywhere.
 
@@ -21,7 +21,7 @@ or code anywhere.
   experienced developers were actually **19% slower** with AI while *believing* they
   were 24% faster. So we never use self-report.
 
-AegisFlow only counts things it can **observe**: did the AI's output get kept, ship,
+Fiscus only counts things it can **observe**: did the AI's output get kept, ship,
 survive, and matter — measured from the wire and from your git history.
 
 ## The four questions we score (each 0–100%)
@@ -84,14 +84,14 @@ not invent the denominator.
 3. **It's valid while you watch it.** Ordinary statistics are only guaranteed if you
    check the number once; a live dashboard gets checked constantly, which quietly
    breaks the guarantee (checked continuously, a "90% sure" range is wrong at some
-   point in about two-thirds of cases). AegisFlow's headline rate uses **anytime-valid**
+   point in about two-thirds of cases). Fiscus's headline rate uses **anytime-valid**
    math instead: the range stays honest at every glance, so acting the moment it
    looks good is statistically safe. The trade — a slightly wider range — is shown,
    not hidden. (See §10 in the technical doc.)
 
 ## The decision it hands you: the Shadow Price of Intelligence
 
-Beyond scoring the past, AegisFlow answers *"what is one more dollar of AI budget
+Beyond scoring the past, Fiscus answers *"what is one more dollar of AI budget
 worth to me, right now, spent optimally?"* — a single number (**μ**). If μ ≥ $1 of
 value per AI dollar, you have room to invest more. If μ < $1, the next dollar returns
 less than it costs — cut before you grow. No other tool answers this.

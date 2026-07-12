@@ -1,6 +1,6 @@
-# Integrations — wiring AegisFlow to your tools
+# Integrations — wiring Fiscus to your tools
 
-AegisFlow meters and caps AI spend by sitting **in the path** as a local proxy.
+Fiscus meters and caps AI spend by sitting **in the path** as a local proxy.
 There is no per-tool plugin to install: any tool that (1) speaks the OpenAI or
 Anthropic HTTP API and (2) lets you set a **base URL** is wired by configuration
 alone. One running proxy meters *every* such tool at once — your IDE, your CLI
@@ -8,10 +8,10 @@ agent, your scripts — and nothing about your prompts or code ever leaves the
 device.
 
 ```
-your tool ──(base URL)──▶ AegisFlow :8090 ──price · cap · log──▶ provider
+your tool ──(base URL)──▶ Fiscus :8090 ──price · cap · log──▶ provider
 ```
 
-The mental model: **point the tool's base URL at AegisFlow, and point AegisFlow's
+The mental model: **point the tool's base URL at Fiscus, and point Fiscus's
 upstream at the provider.** That's the whole integration.
 
 ---
@@ -20,8 +20,8 @@ upstream at the provider.** That's the whole integration.
 
 | Knob | Where | What it does |
 |---|---|---|
-| Your tool's base URL | the tool's config / env | sends the tool's traffic to AegisFlow instead of straight to the provider |
-| `upstreams.openai` / `upstreams.anthropic` | `~/.aegisflow/config.json` | where AegisFlow forwards, after metering |
+| Your tool's base URL | the tool's config / env | sends the tool's traffic to Fiscus instead of straight to the provider |
+| `upstreams.openai` / `upstreams.anthropic` | `~/.aegisflow/config.json` | where Fiscus forwards, after metering |
 
 For native OpenAI or Anthropic, you only touch the first knob — the upstream
 defaults are already correct. You touch the second only to meter an
@@ -30,7 +30,7 @@ Ollama, …).
 
 ### The base-URL `/v1` rule (read this once)
 
-AegisFlow forwards the **incoming path** onto the upstream base. So the upstream
+Fiscus forwards the **incoming path** onto the upstream base. So the upstream
 base must contain the provider's version segment, and the tool's base URL must
 *not* duplicate it:
 
@@ -48,10 +48,10 @@ off the tool's base URL.**
 ## Metering Gemini on the free tier (the $0 test)
 
 This is the recommended way to watch real agent traffic accrue without spending a
-cent — Gemini 2.5 Flash is free-tier, and it doubles as proof of AegisFlow's
+cent — Gemini 2.5 Flash is free-tier, and it doubles as proof of Fiscus's
 multi-provider pricing.
 
-**1. Point AegisFlow's OpenAI upstream at Google.** `~/.aegisflow/config.json`:
+**1. Point Fiscus's OpenAI upstream at Google.** `~/.aegisflow/config.json`:
 
 ```json
 {
@@ -61,9 +61,9 @@ multi-provider pricing.
 }
 ```
 
-**2. Start the proxy:** `aegisflow start` (proxy on :8090, dashboard on :8091).
+**2. Start the proxy:** `fiscus start` (proxy on :8090, dashboard on :8091).
 
-**3. Set your key in the environment** — this is the one secret AegisFlow never
+**3. Set your key in the environment** — this is the one secret Fiscus never
 stores and never needs to see. Get a free key from Google AI Studio, then:
 
 ```powershell
@@ -75,13 +75,13 @@ Open a **new** terminal after `setx` so the variable is visible.
 
 **4. Run a tool through it** (opencode recipe below) with model
 `gemini-2.5-flash`. Traffic is metered into your real ledger; watch it at
-**http://localhost:8091** or with `aegisflow today`.
+**http://localhost:8091** or with `fiscus today`.
 
 **To revert to real OpenAI later:** set `upstreams.openai` back to
 `https://api.openai.com` (or delete `config.json` to restore all defaults).
 
 > **Pricing:** Gemini rates are built in and verified. Rates drift — keep them
-> current with `aegisflow pricing --refresh` (see [pricing](#keeping-pricing-current)).
+> current with `fiscus pricing --refresh` (see [pricing](#keeping-pricing-current)).
 
 ---
 
@@ -90,20 +90,20 @@ Open a **new** terminal after `setx` so the variable is visible.
 ### opencode
 
 opencode reads `~/.config/opencode/opencode.jsonc`. Add a provider (this is the
-exact shape AegisFlow ships set up):
+exact shape Fiscus ships set up):
 
 ```jsonc
 {
   "provider": {
-    "aegisflow": {
-      "name": "AegisFlow → Gemini (metered)",
+    "fiscus": {
+      "name": "Fiscus → Gemini (metered)",
       "npm": "@ai-sdk/openai-compatible",
       "options": {
         "baseURL": "http://localhost:8090",
         "apiKey": "{env:GEMINI_API_KEY}"
       },
       "models": {
-        "gemini-2.5-flash": { "name": "Gemini 2.5 Flash (via AegisFlow)" }
+        "gemini-2.5-flash": { "name": "Gemini 2.5 Flash (via Fiscus)" }
       }
     }
   }
@@ -111,7 +111,7 @@ exact shape AegisFlow ships set up):
 ```
 
 The `{env:GEMINI_API_KEY}` substitution keeps your key in the environment, never
-in the file. In opencode, run `/models` and pick the AegisFlow provider's model.
+in the file. In opencode, run `/models` and pick the Fiscus provider's model.
 
 ### aider
 
@@ -122,14 +122,14 @@ export OPENAI_API_KEY="$OPENAI_KEY"
 aider --model gpt-4o
 ```
 
-For Gemini-via-AegisFlow, set `OPENAI_API_BASE="http://localhost:8090"` (no
+For Gemini-via-Fiscus, set `OPENAI_API_BASE="http://localhost:8090"` (no
 `/v1`), `OPENAI_API_KEY` to your Gemini key, and `--model gemini-2.5-flash`.
 
 ### Cursor
 
 Settings → Models → **Override OpenAI Base URL** → `http://localhost:8090/v1`.
 Cursor's verification call must succeed, so the proxy must be running. Your key
-goes in Cursor as usual; AegisFlow forwards it untouched.
+goes in Cursor as usual; Fiscus forwards it untouched.
 
 ### Continue / Cline (VS Code)
 
@@ -170,7 +170,7 @@ X-Aegis-OpenAI-Base: https://openrouter.ai/api
 ```
 
 It's **off by default on purpose** — that header forwards your provider key to the
-URL it names, so AegisFlow only honors it when you opt in. For a single provider,
+URL it names, so Fiscus only honors it when you opt in. For a single provider,
 just set `upstreams.openai` and skip the flag.
 
 **Pricing follows the model, not the wire.** A `gemini-*` model arriving over the
@@ -186,8 +186,8 @@ Pricing is a core dependability, and provider rates change. The table ships
 bundled (works offline) and can be refreshed in place:
 
 ```bash
-aegisflow pricing             # source, age, model count, staleness
-aegisflow pricing --refresh   # pull the latest rates (a plain GET; sends nothing about you)
+fiscus pricing             # source, age, model count, staleness
+fiscus pricing --refresh   # pull the latest rates (a plain GET; sends nothing about you)
 ```
 
 A refreshed table is written to `~/.aegisflow/pricing/models.json` and overrides
@@ -202,6 +202,6 @@ the bundled one. A malformed download is rejected and your current table is kept
 |---|---|---|
 | `404` from the provider | double `/v1` (tool base URL **and** upstream both carry a version) | drop `/v1` from the tool base URL when the upstream already has a version segment |
 | `401 / 403` | key not in the environment, or wrong key for the upstream | confirm the env var is set in the shell that launched the tool; open a new shell after `setx` |
-| Tool's "verify" fails | proxy not running | `aegisflow start`, then retry |
-| Cost shows `estimated` | model id not in the rate card | `aegisflow pricing --refresh`, or check the model name |
-| Nothing in the dashboard | tool didn't route through the proxy | re-check the base URL; `aegisflow today` to confirm requests land |
+| Tool's "verify" fails | proxy not running | `fiscus start`, then retry |
+| Cost shows `estimated` | model id not in the rate card | `fiscus pricing --refresh`, or check the model name |
+| Nothing in the dashboard | tool didn't route through the proxy | re-check the base URL; `fiscus today` to confirm requests land |

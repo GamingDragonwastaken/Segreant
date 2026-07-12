@@ -1,6 +1,6 @@
-# AegisFlow — Architecture
+# Fiscus — Architecture
 
-This document records what AegisFlow is, how it's built, and — just as important — what it deliberately is **not**. It reflects the system as actually implemented, not an aspirational spec.
+This document records what Fiscus is, how it's built, and — just as important — what it deliberately is **not**. It reflects the system as actually implemented, not an aspirational spec.
 
 ---
 
@@ -35,7 +35,7 @@ This document records what AegisFlow is, how it's built, and — just as importa
  │  IDE / Agent CLI  (Claude Code, Cursor, OpenAI SDK, aider) │
  │        │  ANTHROPIC_BASE_URL / OPENAI_BASE_URL → :8090     │
  │        ▼                                                   │
- │  ┌──────────────────── AegisFlow daemon ────────────────┐ │
+ │  ┌──────────────────── Fiscus daemon ────────────────┐ │
  │  │                                                       │ │
  │  │  Proxy core (src/proxy/server.ts)                     │ │
  │  │   • detect provider   • budget pre-flight             │ │
@@ -124,7 +124,7 @@ SQLite, seven tables (`src/store/db.ts`). Timestamps stored as both ISO string a
 - **git_commits** — commits discovered during `audit`.
 - **commit_attribution** — spend attributed to each commit's preceding window.
 - **proposals** — proposed edits captured in the proxy path (the Accepted-gate signal): provider, model, project, and the proposed files/lines as JSON.
-- **gate_signals** — ingested outcome verdicts (`tested`/`merged`/`shipped`/`incident`) from `aegisflow report`, optionally linked to a commit hash.
+- **gate_signals** — ingested outcome verdicts (`tested`/`merged`/`shipped`/`incident`) from `fiscus report`, optionally linked to a commit hash.
 - **receipts** — emitted Value Receipts, one per certified unit.
 
 The schema diverges from the source research in three deliberate ways, all in `docs/RESEARCH-REVIEW.md`: cache-write/cache-read columns added (they drive real cost), the fictional `reasoning_tokens` *multiplier* removed (reasoning tokens are billed as output), and the `efficiency_metrics` table (TER/AES) deferred rather than shipped.
@@ -141,7 +141,7 @@ The research describes a "transparent MITM proxy" with a root CA *and* base-URL 
 
 ### D2 — TypeScript on Node 24, not Rust
 - **Why**: The proxy's overhead is irrelevant next to the provider round-trip. Node 24 runs TypeScript directly (type-stripping) and ships SQLite built-in, giving the same "single zero-config artifact" story Rust was invoked for — runnable today, matching the rest of the stack, zero native compilation.
-- **Trade-off**: A hot loop processing tens of thousands of req/s would favor Rust/Go. That is not this workload (one developer's agents). If AegisFlow ever became a shared team gateway, the core would be a rewrite candidate. The cost model and schema are language-independent, so that port is bounded.
+- **Trade-off**: A hot loop processing tens of thousands of req/s would favor Rust/Go. That is not this workload (one developer's agents). If Fiscus ever became a shared team gateway, the core would be a rewrite candidate. The cost model and schema are language-independent, so that port is bounded.
 
 ### D3 — Real cost model, not the research's formula
 Cost = `input·R_in + output·R_out + cacheWrite·R_cw + cacheRead·R_cr`. The research's separate "reasoning multiplier" models a price that neither provider charges. Verified against live pricing; Anthropic values are authoritative, OpenAI values flagged community-maintained in the table.
@@ -159,7 +159,7 @@ The Standard instead scores each commit through a **funnel of eight objective ga
 - **First-Pass Acceptance** — the signal only an in-path proxy can produce: edit-distance between the AI's *proposed* diff (parsed from the response body, `src/value/proposals.ts`) and what was actually committed. Measures the human-AI collaboration loop directly, in-session.
 
 Design properties that make it a standard rather than a dashboard:
-- **`unknown` is first-class, never `fail`** (`src/value/gates.ts`). A gate you haven't wired stays `unknown` and the report shows instrumentation coverage. The model spans the whole lifecycle; the engine fills in what it observes; gaps are explicit and pluggable via `aegisflow report` (ingests test/merge/ship/incident signals into `gate_signals`).
+- **`unknown` is first-class, never `fail`** (`src/value/gates.ts`). A gate you haven't wired stays `unknown` and the report shows instrumentation coverage. The model spans the whole lifecycle; the engine fills in what it observes; gaps are explicit and pluggable via `fiscus report` (ingests test/merge/ship/incident signals into `gate_signals`).
 - **Maturity holds the line on honesty**: Survived and Clean are `unknown` until the window elapses, so no unit is called realized prematurely.
 - **Value Receipts** (`src/value/receipt.ts`): each unit emits an ed25519-signed, canonical record of cost → gate verdicts → outcome. Verification separates two guarantees: **integrity** (body unaltered, signature valid, claimed keyId honestly fingerprints the embedded key) always holds from the receipt alone; **authenticity** (signed by the expected party) requires an out-of-band trust anchor — the verifier pins the publisher's keyId (`receipt --verify <file> --key-id <id>`, publish yours with `receipt --pubkey`). Without a pin, a self-consistent forgery would read as intact, so the CLI flags unpinned checks explicitly. This is what turns a private number into a portable, auditable unit of account.
 - **Honest scope**: proposal capture covers **both streaming (SSE tool-call reassembly, `src/proxy/stream-proposals.ts`) and non-streaming** responses through identical extraction; Tested/Merged/Shipped depend on ingested signals; Survived/Clean are "to date". None of these are faked — unobserved gates read `unknown`. (Full reasoning in RESEARCH-REVIEW §3.)
@@ -185,7 +185,7 @@ This is single-user, single-process, local. "Scale" means a busy developer's age
 Six items that used to live here are done and moved to the README's Status
 section: native provider pricing beyond the OpenAI wire format (Gemini is now a
 first-class, verified rate-card entry), auto-updating pricing (`pricing --refresh` /
-`--auto` against a community feed), passive log import (`aegisflow import` —
+`--auto` against a community feed), passive log import (`fiscus import` —
 Claude Code, opencode, Codex CLI — which grew into `scan`/`discover`, the zero-wiring
 onboarding path), a machine-wide tool inventory scan (`scan` now also surfaces a
 read-only, best-effort inventory of other AI coding tools it recognizes but doesn't
@@ -207,13 +207,13 @@ genuinely open:
 1. **A hosted, cross-machine team tier** — the optional, metadata-only sync to a shared
    dashboard; SSO; support/SLA. Numeric-only, opt-in, signed. Scoped in
    [docs/TEAM-TIER-DESIGN.md](TEAM-TIER-DESIGN.md) as a bring-your-own
-   server/hosting/SSO deployment model, keeping AegisFlow as software an operator
+   server/hosting/SSO deployment model, keeping Fiscus as software an operator
    deploys rather than a service we run — that framing hasn't changed. **The
    client half is now built:** `src/team/rollup.ts` (`buildRollupBody`/
    `signRollup`/`verifyRollup`, reusing `value/receipt.ts`'s `canonical`/
    `keyIdForPem` directly — canonicalization must be byte-identical between
    signer and verifier, so that's a correctness requirement, not just reuse for
-   its own sake) and the `aegisflow team push` CLI command (`--url`, `--dry-run`,
+   its own sake) and the `fiscus team push` CLI command (`--url`, `--dry-run`,
    `--pubkey`, `--window`, `--project`) — 5 adversarial tests in
    `test/team-rollup.test.ts` (tamper detection, key-pinning against a
    self-consistent forgery, a forged keyId claim, a garbled public key). A
@@ -232,7 +232,7 @@ genuinely open:
    `PgRollupStore`, `schema.sql`) was code-reviewed but not run against a live
    Postgres this session (Docker wasn't running locally when this was built) —
    see `team-server/README.md` for how to verify it. Compensating evidence: a
-   genuine end-to-end run of the real `aegisflow team push` CLI against the
+   genuine end-to-end run of the real `fiscus team push` CLI against the
    real `team-server` HTTP layer (fake store in place of Postgres) proved the
    client↔server wire format matches, for both the accept and the
    unregistered-key-reject paths.
@@ -284,7 +284,7 @@ genuinely open:
    principle (Bedrock via its newer bearer-token "API key" mode, not classic SigV4
    signing which a transparent proxy can't support; Vertex via a client-supplied
    OAuth2 access token, still a forwardable bearer token even though it isn't a
-   static key) — so this doesn't require AegisFlow to hold real cloud credentials.
+   static key) — so this doesn't require Fiscus to hold real cloud credentials.
    Not yet scoped as a build: Bedrock's cache-token inclusive/exclusive usage
    semantics specifically still need the same independent cross-check the
    `/responses` fix used before any cost math on them would be trustworthy.
@@ -304,10 +304,10 @@ genuinely open:
    piece didn't wire in), and `src/judge/call.ts` +
    `src/judge/orchestrate.ts`'s `judgeSession` (the actual OpenAI-compatible
    call, strictly parsed, gated first, gracefully degraded on any failure) —
-   47 tests across five files (incl. the `aegisflow judge` CLI wiring), none of them mocked-away: real local HTTP
+   47 tests across five files (incl. the `fiscus judge` CLI wiring), none of them mocked-away: real local HTTP
    servers stand in for the judge endpoint the same way `test/proxy.test.ts`
    already stands in for upstream providers. One honest gap surfaced by
-   building it: AegisFlow never persisted prompt/response transcript text, so
+   building it: Fiscus never persisted prompt/response transcript text, so
    the "full session content" tiers this item originally imagined can't
    actually send anything richer than the structural summary yet — see
    [docs/LIFT-AI-SIDE-JUDGE-DESIGN.md](LIFT-AI-SIDE-JUDGE-DESIGN.md) §2's boxed
@@ -315,7 +315,7 @@ genuinely open:
    privacy decision), a real controlled A/B, and any CLI/dashboard surface to
    actually trigger a judgment — `judgeSession` is a library capability today,
    called from nowhere yet.
-4. **Rust core** — only if AegisFlow becomes a shared gateway under real concurrency.
+4. **Rust core** — only if Fiscus becomes a shared gateway under real concurrency.
    Until then it's premature.
 
 ---
@@ -325,4 +325,4 @@ genuinely open:
 - Sees only traffic routed through it (D1).
 - Cost accuracy depends on the pricing table; unknown models are flagged `estimated` and use a conservative fallback rather than failing.
 - Budget blocking is pre-flight on cumulative state; a single in-flight request can still complete above a cap (you can't un-send a request mid-stream).
-- "Cost reduction %" is a function of baseline waste, not a guarantee the tool makes. AegisFlow provides visibility and controls; the savings are the user's to realize.
+- "Cost reduction %" is a function of baseline waste, not a guarantee the tool makes. Fiscus provides visibility and controls; the savings are the user's to realize.

@@ -319,6 +319,6 @@ test('resolveBaselineMinutesForRepo: a non-git directory degrades to the populat
 test('package.json ships the bundled baselines directory (npm `files` allowlist)', () => {
   const pkgPath = join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json');
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { files: string[] };
-  assert.ok(pkg.files.includes('baselines'), '"baselines" must be in package.json "files", or a fresh `npx aegisflow roi` throws ENOENT on install');
+  assert.ok(pkg.files.includes('baselines'), '"baselines" must be in package.json "files", or a fresh `npx fiscus roi` throws ENOENT on install');
   assert.ok(pkg.files.includes('pricing'), '"pricing" must be in package.json "files" (same class of bug, existing feature)');
 });

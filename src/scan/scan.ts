@@ -10,7 +10,7 @@
  * It is read-only and local by construction: it reads file existence and directory
  * NAMES only, imports nothing, sends nothing, and mutates nothing. Turning the plan
  * into imported spend + per-project RoI is a separate, deliberate step
- * (`aegisflow scan --setup`, or the dashboard button). Every filesystem walk is
+ * (`fiscus scan --setup`, or the dashboard button). Every filesystem walk is
  * bounded (depth cap + visit budget + skip-list) so it can never wander the whole
  * disk or hang, and it never follows symlinks (no cycles, no escaping the roots).
  */

@@ -119,7 +119,7 @@ function buildOverview(store: Store, config: AegisConfig, range: RangeKey) {
 /**
  * Server-side view of the importers: where each tool's local data lives, whether
  * it's present on this machine, and how to read it. Lets non-CLI users click to
- * meter their tools from the dashboard — same engines as `aegisflow import`.
+ * meter their tools from the dashboard — same engines as `fiscus import`.
  */
 interface DashImporter {
   id: string;
@@ -167,7 +167,7 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
     }
 
     if (url.pathname === '/api/health') {
-      return json(res, 200, { ok: true, service: 'aegisflow-dashboard' });
+      return json(res, 200, { ok: true, service: 'fiscus-dashboard' });
     }
 
     // Which native importers exist on THIS machine — drives the dashboard's
@@ -328,7 +328,7 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
         const csv = requestsToCsv(store.requestsInRange(startMs, endMs));
         res.writeHead(200, {
           'content-type': 'text/csv; charset=utf-8',
-          'content-disposition': `attachment; filename="aegisflow-${safe}.csv"`,
+          'content-disposition': `attachment; filename="fiscus-${safe}.csv"`,
         });
         res.end(csv);
       } catch (err) {
@@ -353,7 +353,7 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
     }
 
     if (url.pathname === '/api/guide') {
-      // Same journey engine as `aegisflow guide` — one truth, two renderers.
+      // Same journey engine as `fiscus guide` — one truth, two renderers.
       void (async () => {
         try {
           const now = Date.now();
@@ -438,7 +438,7 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
             // population prior alone). `repo` is never empty — `safeRepo` falls back
             // to the dashboard's launch directory when no `?repo=` is given, the same
             // `flags.repo ?? process.cwd()` convention every CLI command already uses
-            // — so this mines that directory's git history exactly as `aegisflow roi`
+            // — so this mines that directory's git history exactly as `fiscus roi`
             // (no `--repo`) would. Only demo mode skips it (the seeded snapshots
             // aren't this checkout's real history).
             const resolvedBaseline = !isDemo()

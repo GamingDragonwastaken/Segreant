@@ -17,8 +17,8 @@ test('projectKey: trailing segment of either separator style', () => {
 });
 
 test('projectKey: Windows and POSIX forms of the same dir AGREE (no phantom split)', () => {
-  assert.equal(projectKey('C:\\a\\b\\aegisflow'), projectKey('/a/b/aegisflow'));
-  assert.equal(projectKey('C:\\a\\b\\aegisflow'), 'aegisflow');
+  assert.equal(projectKey('C:\\a\\b\\fiscus'), projectKey('/a/b/fiscus'));
+  assert.equal(projectKey('C:\\a\\b\\fiscus'), 'fiscus');
 });
 
 test('projectKey: trailing separators are ignored', () => {

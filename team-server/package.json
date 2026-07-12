@@ -2,7 +2,7 @@
   "name": "aegisflow-team-server",
   "version": "0.1.0",
   "private": true,
-  "description": "Separate, optional, BYO-Postgres team server for AegisFlow's team tier. AegisFlow hosts nothing — an enterprise runs this on infrastructure they already own. See docs/TEAM-TIER-DESIGN.md in the main repo.",
+  "description": "Separate, optional, BYO-Postgres team server for Fiscus's team tier. Fiscus hosts nothing — an enterprise runs this on infrastructure they already own. See docs/TEAM-TIER-DESIGN.md in the main repo.",
   "type": "module",
   "engines": {
     "node": ">=24.0.0"

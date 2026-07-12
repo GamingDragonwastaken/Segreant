@@ -1,5 +1,5 @@
 /**
- * Characterization — the canonical vocabulary for the axes AegisFlow slices usage
+ * Characterization — the canonical vocabulary for the axes Fiscus slices usage
  * by, defined ONCE so every surface agrees on what a slice means.
  *
  * Metering answers "how much"; characterization answers "of what" — per project,

@@ -9,7 +9,7 @@
  * Gate sources:
  *   git    — committed (always), survived (blame), clean (revert/incident)
  *   proxy  — proposed / accepted (captured proposals vs committed lines)
- *   signal — tested / merged / shipped (ingested via `aegisflow report`)
+ *   signal — tested / merged / shipped (ingested via `fiscus report`)
  *
  * An unobservable gate is `unknown`, never `fail`. See THE-STANDARD §5.
  */

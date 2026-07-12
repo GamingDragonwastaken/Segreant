@@ -1,5 +1,5 @@
 /**
- * `aegisflow judge` CLI-level checks — integration-tested through the real
+ * `fiscus judge` CLI-level checks — integration-tested through the real
  * CLI process, same pattern as test/team-push.test.ts.
  */
 import { test } from 'node:test';

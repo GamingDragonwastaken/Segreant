@@ -203,7 +203,7 @@ async function handle(
   // Lightweight health endpoint for the dashboard / readiness checks.
   if (req.url === '/__aegis/health') {
     res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, service: 'aegisflow-proxy', port: config.port }));
+    res.end(JSON.stringify({ ok: true, service: 'fiscus-proxy', port: config.port }));
     return;
   }
 
@@ -216,7 +216,7 @@ async function handle(
       JSON.stringify({
         error: {
           message:
-            'AegisFlow could not detect the provider. Point Anthropic clients at ANTHROPIC_BASE_URL=http://localhost:' +
+            'Fiscus could not detect the provider. Point Anthropic clients at ANTHROPIC_BASE_URL=http://localhost:' +
             config.port +
             ' and OpenAI clients at OPENAI_BASE_URL=http://localhost:' +
             config.port +
@@ -234,7 +234,7 @@ async function handle(
   const project = headerStr(req, 'x-aegis-project') ?? 'default';
   const sessionId = headerStr(req, 'x-aegis-session-id') ?? null;
   const user = headerStr(req, 'x-aegis-user') ?? null;
-  // The connected source/feed (set by `aegisflow connect <tool>`). Like every
+  // The connected source/feed (set by `fiscus connect <tool>`). Like every
   // x-aegis-* header it is stripped in buildUpstreamHeaders, so it tags our local
   // ledger without ever being forwarded to the provider.
   const source = headerStr(req, 'x-aegis-source') ?? null;
@@ -320,7 +320,7 @@ async function handle(
     // Either the upstream is unreachable (DNS/refused/network drop) or it never
     // started responding within upstreamTimeoutMs (we aborted). Fail transparently
     // with a provider-shaped error the client already handles, and record the
-    // attempt — AegisFlow must never be a worse failure mode than calling direct.
+    // attempt — Fiscus must never be a worse failure mode than calling direct.
     const timedOut = controller.signal.aborted;
     const status = timedOut ? 504 : 502;
     const detail = timedOut

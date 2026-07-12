@@ -2,7 +2,7 @@
  * Known-app inventory — the wider, honest half of `scan`.
  *
  * `detectTools()` (scan.ts) answers "which of our 3 NATIVELY SUPPORTED tools are
- * here" — present implies AegisFlow can read its usage data. This module answers
+ * here" — present implies Fiscus can read its usage data. This module answers
  * a different, narrower question: "which OTHER AI coding tools do we merely SEE
  * evidence of on this machine". Presence here implies nothing about import
  * capability — it is a plain inventory, not a promise. Every signature is a

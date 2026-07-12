@@ -1,7 +1,7 @@
 /**
  * Connectors — turning an AI tool into a SOURCE.
  *
- * The product meters by SOURCE: a tool deliberately routed through AegisFlow so
+ * The product meters by SOURCE: a tool deliberately routed through Fiscus so
  * its spend is attributed. "Connecting" a tool is two things — point it at the
  * local proxy, and tag its traffic with an `x-aegis-source` header. The tag is
  * stripped before the request leaves the machine (connect, don't intercept), so
@@ -81,19 +81,19 @@ export const GEMINI_OPENAI_COMPAT_BASE = 'https://generativelanguage.googleapis.
 /**
  * The opencode provider block that routes traffic through the proxy and tags it
  * as the `opencode` source. apiKey/model default to the Gemini free tier (the
- * upstream `aegisflow start` fronts by default); a user can change them — the
+ * upstream `fiscus start` fronts by default); a user can change them — the
  * merge below preserves whatever they already set.
  */
 export function opencodeProviderBlock(port: number): Record<string, unknown> {
   return {
     npm: '@ai-sdk/openai-compatible',
-    name: 'AegisFlow (metered)',
+    name: 'Fiscus (metered)',
     options: {
       baseURL: proxyBaseUrl(port),
       apiKey: '{env:GEMINI_API_KEY}',
       headers: { [SOURCE_HEADER]: 'opencode' },
     },
-    models: { 'gemini-2.5-flash': { name: 'Gemini 2.5 Flash (via AegisFlow)' } },
+    models: { 'gemini-2.5-flash': { name: 'Gemini 2.5 Flash (via Fiscus)' } },
   };
 }
 
@@ -161,7 +161,7 @@ export interface MergeResult {
 }
 
 /**
- * Add (or update) the AegisFlow source provider in an opencode config. PRESERVES
+ * Add (or update) the Fiscus source provider in an opencode config. PRESERVES
  * the user's existing provider settings (apiKey, models, baseURL) — it only
  * ensures the source header (and fills baseURL/npm if absent). Idempotent:
  * re-running on an already-tagged config reports `alreadyConnected` and changes
@@ -181,7 +181,7 @@ export function mergeOpencodeConfig(raw: string, port: number): MergeResult {
 
   const provider = (obj.provider ??= {}) as Record<string, unknown>;
   const block = opencodeProviderBlock(port);
-  const existing = provider.aegisflow as Record<string, unknown> | undefined;
+  const existing = provider.fiscus as Record<string, unknown> | undefined;
   let alreadyConnected = false;
 
   if (existing && typeof existing === 'object' && !Array.isArray(existing)) {
@@ -192,7 +192,7 @@ export function mergeOpencodeConfig(raw: string, port: number): MergeResult {
     options.baseURL ??= (block.options as Record<string, unknown>).baseURL;
     existing.npm ??= block.npm;
   } else {
-    provider.aegisflow = block;
+    provider.fiscus = block;
   }
 
   return { ok: true, merged: JSON.stringify(obj, null, 2) + '\n', alreadyConnected };
@@ -232,16 +232,16 @@ export function listOpencodeProviders(raw: string): OpencodeProvider[] {
 export interface WrapResult {
   ok: boolean;
   merged?: string;
-  originalBaseUrl?: string; // the base to point AegisFlow's upstream at; undefined if already wrapped
+  originalBaseUrl?: string; // the base to point Fiscus's upstream at; undefined if already wrapped
   alreadyWrapped?: boolean;
   error?: string;
 }
 
 /**
- * Wrap an EXISTING opencode provider so its traffic routes through AegisFlow — the
+ * Wrap an EXISTING opencode provider so its traffic routes through Fiscus — the
  * honest native connection. It rewrites that provider's `options.baseURL` to the
  * local proxy and tags it `x-aegis-source: opencode`, returning the provider's
- * ORIGINAL baseURL so the caller can set AegisFlow's upstream to it (the proxy then
+ * ORIGINAL baseURL so the caller can set Fiscus's upstream to it (the proxy then
  * forwards there, with the user's own key, unchanged). The provider's apiKey/models
  * are untouched. Idempotent: re-wrapping a provider already pointed at the proxy is
  * a no-op that just ensures the source tag. Fails safe on unparseable input or a

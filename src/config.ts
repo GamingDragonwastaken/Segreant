@@ -1,7 +1,7 @@
 /**
  * Configuration + on-disk paths.
  *
- * Everything AegisFlow persists lives under a single directory:
+ * Everything Fiscus persists lives under a single directory:
  *   Windows : %USERPROFILE%\.aegisflow
  *   macOS   : ~/.aegisflow
  *   Linux   : ~/.aegisflow   (XDG override honored via AEGIS_HOME)
@@ -29,7 +29,7 @@ export interface BudgetConfig {
 export interface AlertsConfig {
   /**
    * Opt-in webhook for alert delivery (e.g. a Slack/Teams/PagerDuty incoming URL).
-   * null = off (the default). When set, AegisFlow POSTs ONLY alert metadata —
+   * null = off (the default). When set, Fiscus POSTs ONLY alert metadata —
    * id, severity, title, detail, and a short metric. Never prompts, code, or keys.
    */
   webhookUrl: string | null;
@@ -60,7 +60,7 @@ export interface LiftConfig {
 
 export interface PricingConfig {
   /**
-   * Remote pricing manifest. `aegisflow pricing --refresh` pulls it into
+   * Remote pricing manifest. `fiscus pricing --refresh` pulls it into
    * ~/.aegisflow/pricing/models.json, which then overrides the bundled table.
    * Accepts our native schema OR a LiteLLM price file (auto-detected and
    * transformed). Provider rates drift, and pricing is a core dependability,
@@ -72,9 +72,9 @@ export interface PricingConfig {
   /** Past this age, the table is flagged stale (in `pricing`, `doctor`). */
   maxAgeDays: number;
   /**
-   * When true, `aegisflow start` refreshes pricing on launch if the cache is
+   * When true, `fiscus start` refreshes pricing on launch if the cache is
    * older than maxAgeDays. OFF by default to keep "zero external requests" true
-   * out of the box — the manual `aegisflow pricing --refresh` always works.
+   * out of the box — the manual `fiscus pricing --refresh` always works.
    */
   autoRefresh: boolean;
 }
@@ -210,7 +210,7 @@ export const DEFAULT_CONFIG: AegisConfig = {
   lift: {
     // Rough industry baselines (manual minutes per task-type) — illustrative
     // defaults that make Lift work out of the box; tune them to your team via
-    // `aegisflow config`. The measured denominator (time with AI) keeps Lift
+    // `fiscus config`. The measured denominator (time with AI) keeps Lift
     // honest regardless of these.
     baselineMinutes: { feature: 240, fix: 90, refactor: 120, test: 60, docs: 45, perf: 120, chore: 30, other: 90 },
     laborRatePerHour: null,
@@ -257,7 +257,7 @@ export function dbPath(): string {
   return process.env.AEGIS_DB ?? join(aegisHome(), 'aegis.db');
 }
 
-/** Isolated database for `aegisflow demo` — never mixed with real metering. */
+/** Isolated database for `fiscus demo` — never mixed with real metering. */
 export function demoDbPath(): string {
   return join(aegisHome(), 'demo.db');
 }

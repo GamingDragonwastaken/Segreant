@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>AegisFlow — govern the spend, not the developer</title>
+<title>Fiscus — govern the spend, not the developer</title>
 <meta name="description" content="A local-first proxy that meters and caps what your AI coding agents spend — in real time, without a byte of your code leaving the machine." />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 34'%3E%3Cpath d='M15 1 L28 6 V16 C28 25 22 30 15 33 C8 30 2 25 2 16 V6 Z' fill='%230a0a0d' stroke='%23e9b949' stroke-width='2'/%3E%3Cpath d='M15 9 L15 22 M9 15 L21 15' stroke='%23e9b949' stroke-width='2'/%3E%3C/svg%3E" />
-<!-- No web fonts. AegisFlow is local-first: even the landing page makes ZERO
+<!-- No web fonts. Fiscus is local-first: even the landing page makes ZERO
      external requests. System font stack (prefers nicer faces when locally
      installed, falls back to elegant platform fonts) — see --serif/--sans/--mono. -->
 <style>
@@ -239,7 +239,7 @@
   <div class="nav-in">
     <a class="logo" href="#top">
       <svg viewBox="0 0 30 34" fill="none"><path d="M15 1 L28 6 V16 C28 25 22 30 15 33 C8 30 2 25 2 16 V6 Z" stroke="#e9b949" stroke-width="1.5" fill="rgba(233,185,73,0.06)"/><path d="M15 9 L15 22 M9 15 L21 15" stroke="#e9b949" stroke-width="1.5" stroke-linecap="round"/></svg>
-      <b>AegisFlow</b>
+      <b>Fiscus</b>
     </a>
     <div class="nav-links">
       <a href="#problem">The problem</a>
@@ -258,10 +258,10 @@
   <div class="container">
     <div class="eyebrow reveal">Return on Intelligence · measured locally</div>
     <h1 class="display reveal">Govern the spend.<br><em>Not</em> the developer.</h1>
-    <p class="lede reveal">Your AI coding agents bill by the token now — and an agent stuck in a loop overnight doesn't send a warning, it sends an invoice. AegisFlow is a <b>local-first proxy</b> that meters every call, caps runaway spend, and — the part that actually matters — <b>measures whether that spend produced work worth keeping.</b> All on-device. No byte of your code leaves the machine.</p>
+    <p class="lede reveal">Your AI coding agents bill by the token now — and an agent stuck in a loop overnight doesn't send a warning, it sends an invoice. Fiscus is a <b>local-first proxy</b> that meters every call, caps runaway spend, and — the part that actually matters — <b>measures whether that spend produced work worth keeping.</b> All on-device. No byte of your code leaves the machine.</p>
     <div class="cta-row reveal">
       <div class="install" id="install" title="Click to copy">
-        <span><span class="pr">$</span> npx aegisflow start</span>
+        <span><span class="pr">$</span> npx fiscus start</span>
         <span class="copy" id="copyLabel">COPY</span>
       </div>
       <a class="ghost" href="#how">See how it works <span>↓</span></a>
@@ -273,7 +273,7 @@
     </div>
 
     <div class="device reveal">
-      <div class="bar"><i></i><i></i><i></i><span class="url">localhost:8091  ·  aegisflow console</span></div>
+      <div class="bar"><i></i><i></i><i></i><span class="url">localhost:8091  ·  fiscus console</span></div>
       <div class="body">
         <div>
           <div class="mlabel">Spend · today</div>
@@ -461,7 +461,7 @@ signed    ed25519:9c3a…</pre>
   <div class="container">
     <div class="sec-eyebrow reveal">The mathematics · derived, not designed</div>
     <h2 class="head reveal">Four lenses. One index. <em>Valid while you watch it.</em></h2>
-    <p class="sec-lede reveal">Anyone can copy a dashboard. What makes a <b style="color:var(--text)">standard</b> is the derivation underneath it: every formula in AegisFlow is forced by stated axioms, every guarantee is verified by simulation in the test suite, and the whole derivation is published. The numbers below are measured, not asserted.</p>
+    <p class="sec-lede reveal">Anyone can copy a dashboard. What makes a <b style="color:var(--text)">standard</b> is the derivation underneath it: every formula in Fiscus is forced by stated axioms, every guarantee is verified by simulation in the test suite, and the whole derivation is published. The numbers below are measured, not asserted.</p>
 
     <div class="mathgrid reveal">
       <div class="mcard">
@@ -473,7 +473,7 @@ signed    ed25519:9c3a…</pre>
       <div class="mcard">
         <div class="n">02 · Anytime-valid confidence</div>
         <h3>An interval you may peek at</h3>
-        <p>A classical interval is only valid if you look once, at a planned sample size. Watched continuously — the way every dashboard is actually used — it breaks. AegisFlow's realization rate carries a <b>confidence sequence</b>: the guarantee holds at every glance, so you may act whenever. The honest price, disclosed: a slightly wider band.</p>
+        <p>A classical interval is only valid if you look once, at a planned sample size. Watched continuously — the way every dashboard is actually used — it breaks. Fiscus's realization rate carries a <b>confidence sequence</b>: the guarantee holds at every glance, so you may act whenever. The honest price, disclosed: a slightly wider band.</p>
         <div class="measured">measured: classical 90% interval wrong in 63.8% of monitored runs · this one 6.0%</div>
       </div>
       <div class="mcard">
@@ -505,7 +505,7 @@ signed    ed25519:9c3a…</pre>
   <div class="container">
     <div class="sec-eyebrow reveal">How it works</div>
     <h2 class="head reveal">One command. It sits in the path and does the rest.</h2>
-    <p class="sec-lede reveal">AegisFlow is a reverse proxy you point your tools at — no certificate to install, no traffic intercepted that you didn't explicitly route to it.</p>
+    <p class="sec-lede reveal">Fiscus is a reverse proxy you point your tools at — no certificate to install, no traffic intercepted that you didn't explicitly route to it.</p>
     <div class="steps">
       <div class="step reveal"><div class="k">1</div><h3>Point your tools at it</h3><p>Set <code>ANTHROPIC_BASE_URL</code> and <code>OPENAI_BASE_URL</code> to <code>localhost:8090</code>. Your agents work exactly as before.</p></div>
       <div class="step reveal"><div class="k">2</div><h3>Every call is metered</h3><p>It reads the exact usage each provider returns — streaming or not — prices it locally against a versioned rate card, and logs it to an on-device SQLite store. Prompt bodies are never stored.</p></div>
@@ -525,7 +525,7 @@ signed    ed25519:9c3a…</pre>
   <div class="container">
     <span class="pill reveal">Not a surveillance tool</span>
     <h2 class="head reveal">Built so developers <em>want</em> it on.</h2>
-    <p class="sec-lede reveal">A FinOps tool that developers route around is worthless. AegisFlow is engineered as capability, not control: personal dashboards for self-optimization, team views restricted to aggregates, and a hard architectural priority order that never trades away privacy or speed for analytics.</p>
+    <p class="sec-lede reveal">A FinOps tool that developers route around is worthless. Fiscus is engineered as capability, not control: personal dashboards for self-optimization, team views restricted to aggregates, and a hard architectural priority order that never trades away privacy or speed for analytics.</p>
     <div class="priority reveal">
       <span class="p"><b>1.</b> Security &amp; data privacy</span>
       <span class="arrow">›</span>
@@ -542,7 +542,7 @@ signed    ed25519:9c3a…</pre>
 <section id="compare">
   <div class="container">
     <div class="sec-eyebrow reveal">Where it fits</div>
-    <h2 class="head reveal">Log readers see the past. Gateways live in the cloud. <em>AegisFlow does both, locally.</em></h2>
+    <h2 class="head reveal">Log readers see the past. Gateways live in the cloud. <em>Fiscus does both, locally.</em></h2>
     <div class="cmp reveal">
       <table>
         <thead><tr><th>Tool</th><th>Runs</th><th>Real-time control</th><th>Git correlation</th><th>Code stays local</th></tr></thead>
@@ -551,7 +551,7 @@ signed    ed25519:9c3a…</pre>
           <tr><td class="name">Self-hosted gateways</td><td>Your server</td><td class="part">per-key caps</td><td class="no">—</td><td class="part">your infra</td></tr>
           <tr><td class="name">High-perf gateways</td><td>Your server</td><td class="yes">✓ blocking</td><td class="no">—</td><td class="part">your infra</td></tr>
           <tr><td class="name">SaaS observability</td><td>Vendor cloud</td><td class="no">alerts only</td><td class="no">—</td><td class="no">round-trips out</td></tr>
-          <tr class="me"><td class="name">AegisFlow</td><td>Your machine</td><td class="yes">✓ caps + runaway guard</td><td class="yes">✓ cost / commit</td><td class="yes">✓ zero egress</td></tr>
+          <tr class="me"><td class="name">Fiscus</td><td>Your machine</td><td class="yes">✓ caps + runaway guard</td><td class="yes">✓ cost / commit</td><td class="yes">✓ zero egress</td></tr>
         </tbody>
       </table>
     </div>
@@ -570,17 +570,17 @@ signed    ed25519:9c3a…</pre>
       <div class="nstat reveal"><div class="big">100%</div><div class="lbl">of calls metered — streaming and non-streaming</div></div>
       <div class="nstat reveal"><div class="big">1 cmd</div><div class="lbl">to install and run — no daemon to manage, no build step</div></div>
     </div>
-    <p class="disclaimer reveal">Cost-reduction figures depend entirely on how wasteful your baseline is. AegisFlow's job is to make that baseline visible and give you the controls to act — it does not promise a fixed percentage. Honest tools quote ranges, not guarantees.</p>
+    <p class="disclaimer reveal">Cost-reduction figures depend entirely on how wasteful your baseline is. Fiscus's job is to make that baseline visible and give you the controls to act — it does not promise a fixed percentage. Honest tools quote ranges, not guarantees.</p>
   </div>
 </section>
 
 <section id="start" class="final">
   <div class="container">
     <h2 class="reveal">Put a meter on the engine.</h2>
-    <p class="reveal">Run it once, point your agents at it, and watch every token turn into a number you can see — and a bill you can cap. From there the tool guides itself: <code style="color:var(--gold)">aegisflow guide</code> reads your actual state and names the single next step, every time.</p>
+    <p class="reveal">Run it once, point your agents at it, and watch every token turn into a number you can see — and a bill you can cap. From there the tool guides itself: <code style="color:var(--gold)">fiscus guide</code> reads your actual state and names the single next step, every time.</p>
     <div class="cta-row reveal">
       <div class="install" id="install2" title="Click to copy">
-        <span><span class="pr">$</span> npx aegisflow start</span>
+        <span><span class="pr">$</span> npx fiscus start</span>
         <span class="copy" id="copyLabel2">COPY</span>
       </div>
       <a class="ghost" href="#math">Read the math →</a>
@@ -592,7 +592,7 @@ signed    ed25519:9c3a…</pre>
   <div class="container foot-in">
     <a class="logo" href="#top">
       <svg viewBox="0 0 30 34" fill="none"><path d="M15 1 L28 6 V16 C28 25 22 30 15 33 C8 30 2 25 2 16 V6 Z" stroke="#e9b949" stroke-width="1.5" fill="rgba(233,185,73,0.06)"/><path d="M15 9 L15 22 M9 15 L21 15" stroke="#e9b949" stroke-width="1.5" stroke-linecap="round"/></svg>
-      <b>AegisFlow</b>
+      <b>Fiscus</b>
     </a>
     <div class="foot-links">
       <a href="#math">The math</a>
@@ -615,7 +615,7 @@ signed    ed25519:9c3a…</pre>
     if (!box) return;
     box.addEventListener('click', async () => {
       try {
-        await navigator.clipboard.writeText('npx aegisflow start');
+        await navigator.clipboard.writeText('npx fiscus start');
         const prev = label.textContent;
         label.textContent = 'COPIED ✓';
         label.style.color = '#57d2a3';

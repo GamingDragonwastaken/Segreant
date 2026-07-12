@@ -24,7 +24,7 @@ const BUNDLED_PRICING_PATH = join(__dirname, '..', '..', 'pricing', 'models.json
 /**
  * A user-writable copy under ~/.aegisflow/pricing/models.json that, when present
  * and structurally valid, OVERRIDES the bundled table. This is where
- * `aegisflow pricing --refresh` writes a freshly-pulled manifest, so prices can
+ * `fiscus pricing --refresh` writes a freshly-pulled manifest, so prices can
  * be updated without reinstalling — pricing is a core dependability, and
  * provider rates drift.
  */

@@ -23,14 +23,14 @@ test('guide: a fresh install starts at meter, tells you to start the proxy, and 
   const g = buildGuide(freshFacts());
   assert.equal(g.stage, 'meter');
   assert.equal(g.next.id, 'meter');
-  assert.ok(g.next.commands.some((c) => c.includes('aegisflow start')), 'proxy down → the first command starts it');
+  assert.ok(g.next.commands.some((c) => c.includes('fiscus start')), 'proxy down → the first command starts it');
   assert.ok(g.hint !== null && g.hint.includes('demo'), 'an empty install is offered the sandbox');
 });
 
 test('guide: proxy up but silent → commands switch from starting to pointing tools at it', () => {
   const g = buildGuide(freshFacts({ proxyUp: true }));
   assert.equal(g.stage, 'meter');
-  assert.ok(!g.next.commands.some((c) => c.includes('aegisflow start')), 'no need to start what is running');
+  assert.ok(!g.next.commands.some((c) => c.includes('fiscus start')), 'no need to start what is running');
   assert.ok(g.next.commands.some((c) => c.includes('BASE_URL')), 'the missing piece is the env var');
 });
 

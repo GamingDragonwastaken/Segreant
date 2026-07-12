@@ -156,7 +156,7 @@ export async function cmdRealize(flags: Flags): Promise<void> {
 
   // Gate coverage
   console.log('');
-  console.log(color(tty, C.bold, '  Gate coverage') + color(tty, C.gray, '   (wire more with: aegisflow report)'));
+  console.log(color(tty, C.bold, '  Gate coverage') + color(tty, C.gray, '   (wire more with: fiscus report)'));
   for (const g of GATE_LADDER) {
     const n = m.instrumentation[g];
     const meta = GATE_META[g];
@@ -192,7 +192,7 @@ export async function cmdReport(flags: Flags): Promise<void> {
   const usageKinds = ['used', 'resolved', 'published', 'accepted', 'redone', 'discarded'];
   const allowed = [...codeKinds, ...usageKinds];
   if (!allowed.includes(kind)) {
-    console.error(`  Usage: aegisflow report --kind <${allowed.join('|')}>`);
+    console.error(`  Usage: fiscus report --kind <${allowed.join('|')}>`);
     console.error('         code:  --commit <hash>      non-code:  --session <id>      [--verdict pass|fail] [--detail "..."]');
     process.exitCode = 1;
     return;
@@ -238,7 +238,7 @@ export async function cmdReport(flags: Flags): Promise<void> {
   });
   console.log('');
   console.log(`  Recorded ${color(tty, C.bold, kind)} = ${verdict}` + (ref ? ` for ${ref.slice(0, 12)}` : ' (project-wide)'));
-  console.log(color(tty, C.gray, '  It resolves the matching gate on the next "aegisflow realize" / "usage".'));
+  console.log(color(tty, C.gray, '  It resolves the matching gate on the next "fiscus realize" / "usage".'));
   console.log('');
   store.close();
 }
@@ -272,7 +272,7 @@ export async function cmdUsage(flags: Flags): Promise<void> {
   const tty = process.stdout.isTTY ?? false;
   console.log('');
   console.log(color(tty, C.bold, '  Return on Intelligence — non-coding usage (chat, research, drafting)'));
-  console.log(color(tty, C.gray, `  ${rep.units.length} sessions · outcomes via "aegisflow report --session <id> --kind used|resolved|…"`));
+  console.log(color(tty, C.gray, `  ${rep.units.length} sessions · outcomes via "fiscus report --session <id> --kind used|resolved|…"`));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
   if (rep.units.length === 0) {
     console.log(color(tty, C.gray, '  No non-coding sessions in range. Tag sessions with X-Aegis-Session-Id to measure them.'));
@@ -690,7 +690,7 @@ export async function cmdFrontier(flags: Flags): Promise<void> {
 }
 
 /**
- * Ambient outcome capture — `aegisflow exec [--kind K] [--commit R|--session S] -- <cmd…>`.
+ * Ambient outcome capture — `fiscus exec [--kind K] [--commit R|--session S] -- <cmd…>`.
  *
  * The adoption cliff of outcome reporting is the human in the loop: every manual
  * `report` decays to zero compliance. But machines already KNOW outcomes — as
@@ -706,12 +706,12 @@ export async function cmdExec(flags: Flags, command: string[]): Promise<void> {
   const usageKinds = ['used', 'resolved', 'published'];
   const kind = String(flags.kind ?? 'tested');
   if (![...codeKinds, ...usageKinds].includes(kind)) {
-    console.error(`  Usage: aegisflow exec [--kind <${[...codeKinds, ...usageKinds].join('|')}>] [--commit <ref> | --session <id>] -- <command…>`);
+    console.error(`  Usage: fiscus exec [--kind <${[...codeKinds, ...usageKinds].join('|')}>] [--commit <ref> | --session <id>] -- <command…>`);
     process.exitCode = 1;
     return;
   }
   if (command.length === 0) {
-    console.error('  Nothing to run. Put the wrapped command after a bare "--":  aegisflow exec -- npm test');
+    console.error('  Nothing to run. Put the wrapped command after a bare "--":  fiscus exec -- npm test');
     process.exitCode = 1;
     return;
   }
@@ -757,7 +757,7 @@ export async function cmdExec(flags: Flags, command: string[]): Promise<void> {
         ? spawn(command.join(' '), { stdio: 'inherit', shell: true })
         : spawn(command[0]!, command.slice(1), { stdio: 'inherit' });
     child.on('error', (e) => {
-      console.error(`  aegisflow exec: could not start "${command[0]}": ${String(e)}`);
+      console.error(`  fiscus exec: could not start "${command[0]}": ${String(e)}`);
       resolve(127);
     });
     child.on('close', (code) => resolve(code ?? 1));
@@ -778,6 +778,6 @@ export async function cmdExec(flags: Flags, command: string[]): Promise<void> {
   store.close();
 
   const tty = process.stderr.isTTY ?? false;
-  console.error(color(tty, C.gray, `  [aegisflow] ${kind} = ${verdict} (exit ${exitCode}, ${secs}s)${ref ? ` → ${ref.slice(0, 12)}` : ' (project-wide)'}`));
+  console.error(color(tty, C.gray, `  [fiscus] ${kind} = ${verdict} (exit ${exitCode}, ${secs}s)${ref ? ` → ${ref.slice(0, 12)}` : ' (project-wide)'}`));
   process.exitCode = exitCode; // transparent: the wrapper never changes what the pipeline sees
 }

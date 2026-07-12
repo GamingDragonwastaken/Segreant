@@ -36,7 +36,7 @@ Lift compares two things: manual-baseline minutes, and measured time-with-AI
 [RETURN-ON-INTELLIGENCE.md §4](RETURN-ON-INTELLIGENCE.md)). The manual-baseline side
 was the flat, unsourced input until this session's earlier work made it a cited METR
 prior blended with personal git history (§7.1 of that doc, `src/value/liftBaseline.ts`
-— see [[aegisflow-real-lift-source-idea]]). **That upgrade never touched the other
+— see [[fiscus-real-lift-source-idea]]). **That upgrade never touched the other
 side of the comparison.** Time-with-AI today is still just wall-clock duration
 between a session's first and last request, windowed for concurrency — it can't tell
 a focused, three-turn session that nailed the task from a forty-turn session that
@@ -132,7 +132,7 @@ that lens already does.
 > visibly, via `rationale` — on any failure.
 >
 > **The "full session content" tiers described below cannot honestly be built
-> yet, and this document undersold why.** AegisFlow's store never persists
+> yet, and this document undersold why.** Fiscus's store never persists
 > prompt text or the AI's response text — `RequestRow` has no content field,
 > and `ProposalRow` stores only the proposed file diffs that already feed the
 > Acceptance lens. There is no transcript sitting in the local database for a
@@ -240,7 +240,7 @@ what the ladder allows:
 | Hosted API, structural input | Off | A proposal-count/timing summary only | Same | Two independent opt-ins: `judge.hostedEnabled: true` AND the `AEGIS_JUDGE_API_KEY` env var set (plus `judge.hostedBaseUrl` + `judge.hostedModel` configured — operationally required, not consent gates) |
 | Hosted API, full content | Off | Actual session content | ⚠ Downgrades to the structural summary — see below | The above plus `judge.hostedSendFullContent` — the loudest tier, matching ARCHITECTURE §7 item 3's "real, loud opt-in decision" language exactly |
 
-⚠ **The two "full content" rows do not yet do what their name says.** AegisFlow
+⚠ **The two "full content" rows do not yet do what their name says.** Fiscus
 never persists prompt or response transcript text (see the boxed note in §2), so
 there is nothing richer than the structural summary to send even when a user
 opts all the way up the ladder. `judgeSession`
@@ -274,11 +274,11 @@ can affect the other tier's behavior.
 - **Real transcript-capture and full-content judging.** Blocked on a
   materially bigger, separate privacy decision (see the ⚠ note above), not on
   anything in this document.
-- **A generic "point AegisFlow at any OpenAI-compatible judge model" UI/CLI
+- **A generic "point Fiscus at any OpenAI-compatible judge model" UI/CLI
   surface.** `judgeSession`/`judgeSessionFromStore` exist as a library-level
   capability (`src/judge/orchestrate.ts`) but nothing calls them yet — no
-  `aegisflow judge` subcommand, no dashboard trigger, no automatic invocation
-  from `aegisflow lift`. Still an open question, not decided here.
+  `fiscus judge` subcommand, no dashboard trigger, no automatic invocation
+  from `fiscus lift`. Still an open question, not decided here.
 
 ## Revisit condition
 

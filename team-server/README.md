@@ -1,18 +1,18 @@
-# AegisFlow team server
+# Fiscus team server
 
-A separate, optional, BYO-Postgres server for AegisFlow's team tier. **AegisFlow
+A separate, optional, BYO-Postgres server for Fiscus's team tier. **Fiscus
 hosts nothing** — you run this on infrastructure you already own and trust: your
 server, your Postgres, eventually your SSO. See
 [`docs/TEAM-TIER-DESIGN.md`](../docs/TEAM-TIER-DESIGN.md) in the main repo for
 the full design reasoning.
 
 This is a genuinely separate package (its own `package.json`) so the main
-`aegisflow` CLI/proxy stays at zero runtime dependencies. `pg` (the standard
+`fiscus` CLI/proxy stays at zero runtime dependencies. `pg` (the standard
 Postgres driver) lives only here.
 
 ## What this does today
 
-Developers run `aegisflow team push --url <this-server-url>` to sign and push a
+Developers run `fiscus team push --url <this-server-url>` to sign and push a
 numeric-only, per-project value/RoI snapshot (no prompt/response content, no raw
 request log). This server verifies each push's ed25519 signature against a
 registered developer key and stores it in Postgres.
@@ -58,11 +58,11 @@ Environment variables:
 | `TEAM_SERVER_EXPOSE_DEVELOPER_BREAKDOWN` | no (default off) | Set to exactly `true` to turn on `GET /dashboard/developers`. Off by default — opt-in, same fail-closed posture as `TEAM_SERVER_ADMIN_TOKEN`. |
 | `TEAM_SERVER_MIN_COHORT` | no (default `5`) | The k-anonymity floor: `/dashboard/projects` withholds any single project's numbers if fewer than this many distinct developers contributed to it, and `/dashboard/developers` withholds its whole distribution below this many total developers. Same default `cohort.ts` already uses for the single-machine per-user value feature. |
 | `PORT` | no (default `8092`) | Listen port. |
-| `HOST` | no (default `0.0.0.0`) | Listen address. Unlike AegisFlow's own local dashboard, this server is *meant* to be reached across your network. |
+| `HOST` | no (default `0.0.0.0`) | Listen address. Unlike Fiscus's own local dashboard, this server is *meant* to be reached across your network. |
 
 This process speaks plain HTTP. Put a reverse proxy (nginx, Caddy, your cloud
 load balancer) in front of it for TLS — that's your infrastructure's job, not
-this process's; see `docs/TEAM-TIER-DESIGN.md` §1's "AegisFlow provides the
+this process's; see `docs/TEAM-TIER-DESIGN.md` §1's "Fiscus provides the
 software, never the operation" framing.
 
 ## Registering a developer
@@ -70,7 +70,7 @@ software, never the operation" framing.
 Each developer publishes their rollup-signing identity once:
 
 ```sh
-aegisflow team push --pubkey
+fiscus team push --pubkey
 ```
 
 An admin then registers it with the team server:
@@ -95,7 +95,7 @@ full reasoning.
 |---|---|---|---|
 | `/health` | GET | none | Liveness check. |
 | `/developers` | POST | admin bearer token | Register a developer's rollup-signing public key. |
-| `/rollups` | POST | the rollup's own signature, pinned to the registered key | What `aegisflow team push` calls. |
+| `/rollups` | POST | the rollup's own signature, pinned to the registered key | What `fiscus team push` calls. |
 | `/me` | GET | OIDC bearer ID token | Verifies your SSO login and echoes back the verified identity. |
 | `/dashboard/projects` | GET | OIDC bearer ID token | Team-wide totals per project (units, cost, realized value, RoI Index), optionally windowed with `?periodFrom=`/`?periodTo=` (ISO 8601). Any project with fewer than `TEAM_SERVER_MIN_COHORT` contributing developers reports `suppressed: true` with no numbers. |
 | `/dashboard/developers` | GET | OIDC bearer ID token | A k-anonymized distribution (median/p25/p75) of per-developer spend and realization. `enabled: false` unless `TEAM_SERVER_EXPOSE_DEVELOPER_BREAKDOWN=true`; `suppressed: true` below the cohort floor either way. Never a named list. |

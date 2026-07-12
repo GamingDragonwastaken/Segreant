@@ -1,11 +1,11 @@
 /**
- * The team server's HTTP surface. Unlike AegisFlow's own dashboard
+ * The team server's HTTP surface. Unlike Fiscus's own dashboard
  * (loopback-only — see src/dashboard/server.ts's isLocalHost guard), this
  * server is MEANT to be reached across the network: developer machines push
  * rollups to whatever host/port the operator deploys this on. TLS/network
  * exposure is the operator's job (a reverse proxy, load balancer, etc. — see
  * team-server/README.md); this process speaks plain HTTP and trusts whatever
- * fronts it to terminate TLS, matching "AegisFlow provides the software,
+ * fronts it to terminate TLS, matching "Fiscus provides the software,
  * never the operation" (docs/TEAM-TIER-DESIGN.md §1).
  *
  * Three trust domains, three auth mechanisms:
@@ -138,7 +138,7 @@ export function createTeamServer(deps: TeamServerDeps): http.Server {
     const url = new URL(req.url ?? '/', 'http://localhost');
 
     if (url.pathname === '/health') {
-      return json(res, 200, { ok: true, service: 'aegisflow-team-server' });
+      return json(res, 200, { ok: true, service: 'fiscus-team-server' });
     }
 
     if (url.pathname === '/developers') {
@@ -201,7 +201,7 @@ export function createTeamServer(deps: TeamServerDeps): http.Server {
         }
         const developer = await store.findDeveloper(parsed.keyId).catch(() => null);
         if (!developer) {
-          return json(res, 403, { ok: false, error: 'unregistered key — ask a team admin to register your `aegisflow team push --pubkey` output first' });
+          return json(res, 403, { ok: false, error: 'unregistered key — ask a team admin to register your `fiscus team push --pubkey` output first' });
         }
         const result = verifyRollup(parsed, { trustedPublicKeyPem: developer.publicKey });
         if (!result.valid) {

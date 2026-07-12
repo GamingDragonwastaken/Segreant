@@ -96,7 +96,7 @@ export async function cmdTeam(flags: Flags): Promise<void> {
       console.log(color(tty, C.gray, '  and even then this stays a distribution — never a leaderboard.'));
     }
     console.log('');
-    console.log(color(tty, C.gray, '  A person can always see their OWN value:  aegisflow team --me <user>'));
+    console.log(color(tty, C.gray, '  A person can always see their OWN value:  fiscus team --me <user>'));
     console.log('');
     return;
   }
@@ -124,12 +124,12 @@ export async function cmdReceipt(flags: Flags): Promise<void> {
       return;
     }
     console.log('');
-    console.log(color(tty, C.bold, '  AegisFlow signing identity') + color(tty, C.gray, '   publish this so others can verify your receipts'));
+    console.log(color(tty, C.bold, '  Fiscus signing identity') + color(tty, C.gray, '   publish this so others can verify your receipts'));
     console.log(`  keyId: ${color(tty, C.cyan, keys.keyId)}`);
     console.log('');
     process.stdout.write(keys.publicPem.endsWith('\n') ? keys.publicPem : keys.publicPem + '\n');
     console.log(color(tty, C.gray, '  A buyer/auditor verifies your receipts against this identity with:'));
-    console.log(color(tty, C.gray, `    aegisflow receipt --verify <file> --key-id ${keys.keyId}`));
+    console.log(color(tty, C.gray, `    fiscus receipt --verify <file> --key-id ${keys.keyId}`));
     console.log('');
     return;
   }
@@ -207,8 +207,8 @@ export async function cmdReceipt(flags: Flags): Promise<void> {
   console.log('');
   console.log(color(tty, C.bold, '  Value Receipts') + color(tty, C.gray, `   signed with key ${keys.keyId} (ed25519)`));
   console.log(color(tty, C.gray, '  Portable, verifiable proof of cost → outcome.'));
-  console.log(color(tty, C.gray, `  Publish your identity:  aegisflow receipt --pubkey   (keyId ${keys.keyId})`));
-  console.log(color(tty, C.gray, '  Others verify + pin it: aegisflow receipt --verify <file> --key-id <keyId>'));
+  console.log(color(tty, C.gray, `  Publish your identity:  fiscus receipt --pubkey   (keyId ${keys.keyId})`));
+  console.log(color(tty, C.gray, '  Others verify + pin it: fiscus receipt --verify <file> --key-id <keyId>'));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
   if (receipts.length === 0) {
     console.log(color(tty, C.gray, `  No matured units to certify yet (need commits older than ${windowDays}d).`));
@@ -276,7 +276,7 @@ export async function cmdJudge(flags: Flags): Promise<void> {
     : C.red; // 'hosted-llm-full'
 
   console.log('');
-  console.log(color(tty, C.bold, `  AegisFlow — session judge · ${project}`));
+  console.log(color(tty, C.bold, `  Fiscus — session judge · ${project}`));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(46)));
   console.log(color(tty, C.gray, `  window: last ${windowDays}d · session ${sessionId}`));
   console.log('');
@@ -344,7 +344,7 @@ async function signAndPushRollup(
 
 /**
  * Push a signed, numeric-only rollup of this machine's per-project value/RoI to
- * an enterprise-run team server. See docs/TEAM-TIER-DESIGN.md — AegisFlow hosts
+ * an enterprise-run team server. See docs/TEAM-TIER-DESIGN.md — Fiscus hosts
  * nothing; --url points at infrastructure the team already runs and trusts.
  * Uses a SEPARATE keypair from `receipt --pubkey` on purpose (src/team/rollup.ts).
  * `--watch` keeps pushing on an interval (--every seconds) — see cmdTeamPushWatch,
@@ -358,13 +358,13 @@ export async function cmdTeamPush(flags: Flags): Promise<void> {
   if (sub !== 'push') {
     console.log('');
     console.log(color(tty, C.bold, '  Team tier — push a signed rollup to a team server you run'));
-    console.log(color(tty, C.gray, '  AegisFlow hosts nothing; --url points at infrastructure your team already trusts.'));
+    console.log(color(tty, C.gray, '  Fiscus hosts nothing; --url points at infrastructure your team already trusts.'));
     console.log('');
-    console.log(color(tty, C.gray, '  Usage:  aegisflow team push --url <url>          send this window\'s per-project value/RoI'));
-    console.log(color(tty, C.gray, '          aegisflow team push --dry-run             preview without sending'));
-    console.log(color(tty, C.gray, '          aegisflow team push --pubkey              print this machine\'s rollup signing identity'));
-    console.log(color(tty, C.gray, '          aegisflow team push --url <url> --window 7 --project <name>'));
-    console.log(color(tty, C.gray, '          aegisflow team push --url <url> --watch --every 3600   background interval (seconds)'));
+    console.log(color(tty, C.gray, '  Usage:  fiscus team push --url <url>          send this window\'s per-project value/RoI'));
+    console.log(color(tty, C.gray, '          fiscus team push --dry-run             preview without sending'));
+    console.log(color(tty, C.gray, '          fiscus team push --pubkey              print this machine\'s rollup signing identity'));
+    console.log(color(tty, C.gray, '          fiscus team push --url <url> --window 7 --project <name>'));
+    console.log(color(tty, C.gray, '          fiscus team push --url <url> --watch --every 3600   background interval (seconds)'));
     console.log('');
     return;
   }
@@ -376,7 +376,7 @@ export async function cmdTeamPush(flags: Flags): Promise<void> {
       return;
     }
     console.log('');
-    console.log(color(tty, C.bold, '  AegisFlow team-rollup identity') + color(tty, C.gray, '   register this with your team server'));
+    console.log(color(tty, C.bold, '  Fiscus team-rollup identity') + color(tty, C.gray, '   register this with your team server'));
     console.log(`  keyId: ${color(tty, C.cyan, keys.keyId)}`);
     console.log('');
     process.stdout.write(keys.publicPem.endsWith('\n') ? keys.publicPem : keys.publicPem + '\n');
@@ -387,7 +387,7 @@ export async function cmdTeamPush(flags: Flags): Promise<void> {
   const url = typeof flags['url'] === 'string' ? flags['url'] : null;
   const dryRun = Boolean(flags['dry-run']);
   if (!url && !dryRun) {
-    const msg = 'no team server URL given — pass one your team runs: aegisflow team push --url <url>  (or --dry-run to preview without sending)';
+    const msg = 'no team server URL given — pass one your team runs: fiscus team push --url <url>  (or --dry-run to preview without sending)';
     if (flags.json) {
       console.log(JSON.stringify({ ok: false, error: msg }, null, 2));
       process.exitCode = 1;
@@ -403,7 +403,7 @@ export async function cmdTeamPush(flags: Flags): Promise<void> {
 
   if (flags.watch) {
     if (!url) {
-      const msg = 'no team server URL given — --watch needs somewhere to push: aegisflow team push --url <url> --watch';
+      const msg = 'no team server URL given — --watch needs somewhere to push: fiscus team push --url <url> --watch';
       if (flags.json) {
         console.log(JSON.stringify({ ok: false, error: msg }, null, 2));
         process.exitCode = 1;

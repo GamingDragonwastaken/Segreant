@@ -7,7 +7,7 @@
  * A dashboard invites the opposite — glance at every refresh, act the moment
  * the number looks good. Under that use, the real error rate of a fixed-n
  * interval grows without bound (the optional-stopping / "peeking" problem that
- * forces clinical trials into special sequential designs). AegisFlow's whole
+ * forces clinical trials into special sequential designs). Fiscus's whole
  * brand is "never a dishonest number", so its headline rate carries an interval
  * that stays valid at EVERY glance.
  *

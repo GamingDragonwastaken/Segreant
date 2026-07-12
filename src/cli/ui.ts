@@ -40,7 +40,7 @@ export function pct(n: number): string {
 /** Actionable not-a-git-repo message: tell the user what to do, not just what's wrong. */
 export function printNotAGitRepo(repo: string): void {
   console.error(`  Not a git repository: ${repo}`);
-  console.error('  Run this from inside your repo, or pass --repo <path>. Non-coding usage needs no git: aegisflow usage');
+  console.error('  Run this from inside your repo, or pass --repo <path>. Non-coding usage needs no git: fiscus usage');
 }
 
 /**

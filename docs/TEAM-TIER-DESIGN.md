@@ -3,7 +3,7 @@
 **Status: BUILT, 2026-07-10.** All four planned slices are implemented and
 tested. The client side of §2's recommended design — signed rollup pushes,
 reusing `value/receipt.ts`'s primitives — is `src/team/rollup.ts`
-(`buildRollupBody`/`signRollup`/`verifyRollup`) and the `aegisflow team push`
+(`buildRollupBody`/`signRollup`/`verifyRollup`) and the `fiscus team push`
 CLI command. **§1's server** exists as a genuinely separate deployable:
 `team-server/` (its own `package.json`, `pg` as its only dependency, never
 touching the main CLI's zero-dependency footprint). It ingests and verifies
@@ -35,10 +35,10 @@ contradicted by unrelated changes in the meantime.
    question. Bounded, well-trodden, mostly a matter of picking the right off-the-shelf
    pattern.
 2. **How do N developers' independent local SQLite files become one team view?**
-   This is a data-model question specific to how AegisFlow is actually built today —
+   This is a data-model question specific to how Fiscus is actually built today —
    every install has its own local, unsynced SQLite store, with no concept of
    identity or a shared server anywhere in the current design. This is the harder,
-   AegisFlow-specific half, and it's the half that determines whether "team tier" is
+   Fiscus-specific half, and it's the half that determines whether "team tier" is
    a thin wrapper or a real new subsystem.
 
 Both need answering before this is buildable. §1 below answers the first. §2 answers
@@ -46,49 +46,49 @@ the second — it's the one that actually decides how big this feature is.
 
 ## 1. Deployment model: bring-your-own-everything
 
-The user's framing (2026-07-10): don't host anything ourselves. Build AegisFlow so an
+The user's framing (2026-07-10): don't host anything ourselves. Build Fiscus so an
 enterprise that wants a team tier can stand it up entirely on infrastructure *they*
-already trust — their server, their hosting, their SSO provider — with AegisFlow
+already trust — their server, their hosting, their SSO provider — with Fiscus
 providing the software, never the operation.
 
 This is a better answer than the two alternatives:
 
-- **AegisFlow-hosted SaaS** — was already ruled out by the existing roadmap language
+- **Fiscus-hosted SaaS** — was already ruled out by the existing roadmap language
   ("requires an operator: ongoing hosting, and a support commitment"). Directly
-  violates the zero-dollar-cost ceiling and turns AegisFlow into a company with an
+  violates the zero-dollar-cost ceiling and turns Fiscus into a company with an
   uptime obligation, not a tool.
 - **A pure design doc with no code** (the original "scope it, don't build it"
   framing before this session's refinement) — leaves "ready for a team tier" as an
   unverified claim. A reader has no way to tell if the local store and schema
   actually support this or if that's aspirational.
-- **BYO-server / BYO-hosting / BYO-SSO** (this proposal) — AegisFlow ships as
+- **BYO-server / BYO-hosting / BYO-SSO** (this proposal) — Fiscus ships as
   software an enterprise deploys on infrastructure they already have and already
   trust. No hosting bill on either side. No new secret-handling surface for
-  AegisFlow — an enterprise's SSO credentials and server never touch anything
-  AegisFlow operates, because AegisFlow operates nothing. Consistent with the
+  Fiscus — an enterprise's SSO credentials and server never touch anything
+  Fiscus operates, because Fiscus operates nothing. Consistent with the
   existing "connect, don't intercept" and local-first positioning; it just moves
   "local" from one laptop to one server the *team* controls, not us.
 
 **Concretely, this means the team-tier component is a separate,
 optional, standalone deployable** — not a feature flag inside the existing
-single-user `aegisflow` CLI/proxy. A small server binary the
+single-user `fiscus` CLI/proxy. A small server binary the
 enterprise runs (bare process, Docker image, whatever — deployment mechanics are
 the enterprise's choice, not ours), configured entirely through environment
 variables: a database connection string they provide, and (in a later slice)
-an SSO issuer config (§3). AegisFlow's job is to make that binary correct and
+an SSO issuer config (§3). Fiscus's job is to make that binary correct and
 easy to stand up; the enterprise's job is everything downstream of `docker run`.
 
 > **What actually shipped (this session):** exactly this shape. `team-server/`
 > is a real, separate npm package — its own `package.json`, `pg` as its only
-> dependency, never pulled into the main `aegisflow` CLI's install. It reads
+> dependency, never pulled into the main `fiscus` CLI's install. It reads
 > `DATABASE_URL` (required), `TEAM_SERVER_ADMIN_TOKEN` (optional but
 > registration is disabled — fails closed, not open — without it), `PORT`, and
 > `HOST` from the environment, applies `schema.sql` idempotently on every boot,
-> and listens for pushed rollups. Unlike AegisFlow's own dashboard (loopback-
+> and listens for pushed rollups. Unlike Fiscus's own dashboard (loopback-
 > only), this server defaults to `0.0.0.0`: it exists specifically to be
 > reached from developer machines across a network. TLS termination is left to
 > whatever the enterprise puts in front of it (reverse proxy, load balancer) —
-> this process speaks plain HTTP by design, matching "AegisFlow provides the
+> this process speaks plain HTTP by design, matching "Fiscus provides the
 > software, never the operation." Full detail in `team-server/README.md`.
 >
 > **The aggregate dashboard API also now exists** — `GET /dashboard/projects`
@@ -137,7 +137,7 @@ easy to stand up; the enterprise's job is everything downstream of `docker run`.
 ## 2. The hard part: from N local stores to one team view
 
 This is the question the BYO-server idea doesn't answer by itself, and it's the one
-that actually determines feature size. Today, `aegisflow`'s entire data model is one
+that actually determines feature size. Today, `fiscus`'s entire data model is one
 local SQLite file per machine (`src/store/db.ts`), written only by that machine's own
 proxy/import/scan commands, read only by that machine's own CLI/dashboard. There is no
 identity concept anywhere in the schema — no user table, no auth, nothing to key a
@@ -166,7 +166,7 @@ regressed to raw file transfer would be inconsistent with that precedent.
 **Recommended — periodic signed rollup pushes, reusing the existing receipt
 primitive.** Each local install already computes aggregate rollups for its own
 dashboard (`store.summary`, `store.byUser`, `store.bySource`, the RoI Index). Extend
-this with a command (`aegisflow team push`, or an opt-in background interval) that
+this with a command (`fiscus team push`, or an opt-in background interval) that
 takes a rollup for a period — numeric-only: total spend, per-project spend, RoI
 components, no prompt/response content, no raw request log — and signs it with the
 **same ed25519 primitive `src/value/receipt.ts` already implements** (`KeyPair`,
@@ -179,7 +179,7 @@ it against a known key (each developer's public key registered once, e.g. at
 onboarding), store it, and serve an aggregate dashboard over the accumulated
 rollups. The proxy hot path never changes — pushing a rollup is a periodic,
 async, out-of-band operation, exactly as disconnected from request-serving as
-`aegisflow pricing --refresh` already is today.
+`fiscus pricing --refresh` already is today.
 
 > **What actually shipped (this session):** exactly this, on the client side.
 > `src/team/rollup.ts` defines `RollupBody`/`SignedRollup` and
@@ -194,7 +194,7 @@ async, out-of-band operation, exactly as disconnected from request-serving as
 > a commit receipt's key may be shared per-commit with any reviewer, while a
 > team-rollup key is a longer-lived "this is developer X's machine" identity
 > registered once with a team server; conflating them would leak one trust
-> domain into the other. `aegisflow team push` is the CLI surface: `--url`
+> domain into the other. `fiscus team push` is the CLI surface: `--url`
 > to push, `--dry-run` to preview the signed payload without sending,
 > `--pubkey` to print this machine's rollup identity for registration,
 > `--window`/`--project` to scope the period and filter. 5 adversarial tests
@@ -231,7 +231,7 @@ rejection in [docs/RESEARCH-REVIEW.md](RESEARCH-REVIEW.md)).
 
 ## 3. SSO extension point: one generic protocol, not N integrations
 
-"Bring your own SSO provider" only stays zero-maintenance if AegisFlow implements
+"Bring your own SSO provider" only stays zero-maintenance if Fiscus implements
 **one** thing — a standard protocol — rather than N provider-specific integrations
 (Okta SDK, Azure AD SDK, Google Workspace SDK, ...), each with its own quirks and
 ongoing support burden. The standard that fits: **OIDC (OpenID Connect)**. Every
@@ -331,7 +331,7 @@ interface TeamServerConfig {
 The local store and schema were already noted in ARCHITECTURE.md as designed so
 this "could be added later without touching the hot path" — the shipped half is
 the first real check of that claim, and it holds: nothing in `src/team/rollup.ts`
-or the `aegisflow team push` command touches `src/proxy/server.ts` or any
+or the `fiscus team push` command touches `src/proxy/server.ts` or any
 per-request code path. It's additive: one new command, and (still to come) one
 new, separate, optional server binary.
 
@@ -355,7 +355,7 @@ new, separate, optional server binary.
   this an authenticated team member," or billing/seat-count logic — all of that is
   downstream of the two questions this doc actually answers (deployment model,
   aggregation model) and shouldn't be designed before those are validated.
-- **The exact rollup period/cadence.** Resolved narrowly, not fully: `aegisflow
+- **The exact rollup period/cadence.** Resolved narrowly, not fully: `fiscus
   team push` is on-demand only (a `--window <days>` flag picks the lookback, run
   whenever the developer or a cron job invokes it). No opt-in background
   interval exists yet — that remains an open, deferred question.

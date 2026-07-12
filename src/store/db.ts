@@ -36,7 +36,7 @@ export interface RequestRow {
   user?: string | null; // developer/team attribution (x-aegis-user header); null = unassigned
   source?: string | null; // connected tool/feed attribution (x-aegis-source header); null = direct
   cwd?: string | null; // full working-directory path this request was made from; null = unknown. The
-  // link that lets AegisFlow find the git repo behind a project and auto-correlate
+  // link that lets Fiscus find the git repo behind a project and auto-correlate
   // its spend into RoI with no --repo — the "no wiring" path. `project` is its basename.
 }
 
@@ -517,7 +517,7 @@ export class Store {
    * The interconnectedness map: for each project the ledger has a working directory
    * for, its REPRESENTATIVE cwd (the path most requests came from — a project's dir
    * is stable, so the mode is robust to the odd one-off subdir), the TOOLS (sources)
-   * that produced its spend, and its cost/requests. This is what lets AegisFlow find
+   * that produced its spend, and its cost/requests. This is what lets Fiscus find
    * the git repo behind a project AND say which AI tool coded it — repo↔project↔tool,
    * the thing that makes native per-project RoI possible with no --repo and no wiring.
    * Only rows carrying a cwd participate (imports set it; untagged proxy traffic is
@@ -610,8 +610,8 @@ export class Store {
 
   /**
    * Spend grouped by connected source/feed (x-aegis-source); null reads as
-   * 'direct'. A source is one AI tool deliberately routed through AegisFlow — the
-   * unit the product meters. The tag is set by `aegisflow connect <tool>` and
+   * 'direct'. A source is one AI tool deliberately routed through Fiscus — the
+   * unit the product meters. The tag is set by `fiscus connect <tool>` and
    * stripped before the request leaves the machine, so the provider never sees it.
    */
   bySource(startMs: number, endMs: number): SpendBucket[] {

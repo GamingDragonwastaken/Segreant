@@ -49,7 +49,7 @@ export async function cmdAlerts(flags: Flags): Promise<void> {
   if (flags.notify) {
     const url = typeof flags['notify-url'] === 'string' ? String(flags['notify-url']) : cfg.alerts.webhookUrl;
     if (!url) {
-      console.error('  No webhook configured. Set one with: aegisflow alerts --set-webhook <url>  (or pass --notify-url <url>)');
+      console.error('  No webhook configured. Set one with: fiscus alerts --set-webhook <url>  (or pass --notify-url <url>)');
       process.exitCode = 1;
       store.close();
       return;
@@ -75,7 +75,7 @@ export async function cmdAlerts(flags: Flags): Promise<void> {
   }
 
   console.log('');
-  console.log(color(tty, C.bold, '  AegisFlow — governance alerts'));
+  console.log(color(tty, C.bold, '  Fiscus — governance alerts'));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(58)));
   if (alerts.length === 0) {
     console.log(color(tty, C.green, '  ✓ All clear — no active alerts.'));
@@ -119,19 +119,19 @@ export async function cmdDoctor(): Promise<void> {
 
   const mark = (good: boolean) => (good ? color(tty, C.green, '✓') : color(tty, C.yellow, '!'));
   console.log('');
-  console.log(color(tty, C.bold, '  AegisFlow — doctor'));
+  console.log(color(tty, C.bold, '  Fiscus — doctor'));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(58)));
   console.log(`  ${mark(true)} Config      ${color(tty, C.gray, configPath())}`);
   console.log(`  ${mark(true)} Database    ${color(tty, C.gray, `${dbPath()}  (${num(sum30.requests)} req · ${usd(sum30.costUsd)} in 30d)`)}`);
-  console.log(`  ${mark(proxyUp)} Proxy       ${proxyUp ? color(tty, C.green, `running on :${cfg.port}`) : color(tty, C.yellow, `not reachable on :${cfg.port} — start with "aegisflow start"`)}`);
-  console.log(`  ${mark(cfg.budget.dailyUsd !== null)} Daily cap   ${cfg.budget.dailyUsd !== null ? usd(cfg.budget.dailyUsd) : color(tty, C.yellow, 'none — metering only (set with "aegisflow budget --daily N")')}`);
+  console.log(`  ${mark(proxyUp)} Proxy       ${proxyUp ? color(tty, C.green, `running on :${cfg.port}`) : color(tty, C.yellow, `not reachable on :${cfg.port} — start with "fiscus start"`)}`);
+  console.log(`  ${mark(cfg.budget.dailyUsd !== null)} Daily cap   ${cfg.budget.dailyUsd !== null ? usd(cfg.budget.dailyUsd) : color(tty, C.yellow, 'none — metering only (set with "fiscus budget --daily N")')}`);
   console.log(`  ${mark(estShare <= 0.2)} Pricing     ${estShare > 0 ? `${Math.round(estShare * 100)}% of 30d spend used estimated rates` : 'all spend priced from the rate card'}`);
   const price = pricingStatus(cfg.pricing.maxAgeDays);
   const priceAge = price.ageDays === null ? '' : ` · ${price.ageDays}d old`;
   console.log(
     `  ${mark(!price.stale)} Rate card   ${
       price.stale
-        ? color(tty, C.yellow, `stale (>${cfg.pricing.maxAgeDays}d${priceAge}) — refresh with "aegisflow pricing --refresh"`)
+        ? color(tty, C.yellow, `stale (>${cfg.pricing.maxAgeDays}d${priceAge}) — refresh with "fiscus pricing --refresh"`)
         : `${price.source === 'cache' ? 'refreshed' : 'bundled'}${priceAge} · ${price.modelCount} models`
     }`,
   );
@@ -140,11 +140,11 @@ export async function cmdDoctor(): Promise<void> {
   console.log(
     `  ${mark(!base.stale)} Baseline    ${
       base.stale
-        ? color(tty, C.yellow, `stale (${baseAge.trim()}) — refresh with "aegisflow baseline --refresh --url <manifest>" if you have one to trust`)
+        ? color(tty, C.yellow, `stale (${baseAge.trim()}) — refresh with "fiscus baseline --refresh --url <manifest>" if you have one to trust`)
         : `${base.source === 'cache' ? 'refreshed' : 'bundled'}${baseAge} · ${base.taskTypeCount} task-types`
     }`,
   );
-  console.log(`  ${mark(criticals === 0)} Alerts      ${alerts.length ? `${num(alerts.length)} active (${criticals} critical) — see "aegisflow alerts"` : color(tty, C.green, 'all clear')}`);
+  console.log(`  ${mark(criticals === 0)} Alerts      ${alerts.length ? `${num(alerts.length)} active (${criticals} critical) — see "fiscus alerts"` : color(tty, C.green, 'all clear')}`);
   console.log('');
   console.log(color(tty, C.gray, '  Point your AI tools at the proxy:'));
   console.log(color(tty, C.gray, `    ANTHROPIC_BASE_URL=http://localhost:${cfg.port}   OPENAI_BASE_URL=http://localhost:${cfg.port}/v1`));
@@ -157,7 +157,7 @@ export function cmdInit(): void {
   saveConfig(cfg);
   const tty = process.stdout.isTTY ?? false;
   console.log('');
-  console.log(color(tty, C.bold, '  AegisFlow initialized'));
+  console.log(color(tty, C.bold, '  Fiscus initialized'));
   console.log(`  Config: ${configPath()}`);
   console.log(`  Data:   ${dbPath()}`);
   console.log('');
@@ -171,7 +171,7 @@ export function cmdInit(): void {
   console.log(`    export ANTHROPIC_BASE_URL="http://localhost:${cfg.port}"`);
   console.log(`    export OPENAI_BASE_URL="http://localhost:${cfg.port}/v1"`);
   console.log('');
-  console.log(`  Then run: ${color(tty, C.green, 'aegisflow start')}`);
+  console.log(`  Then run: ${color(tty, C.green, 'fiscus start')}`);
   console.log('');
 }
 
@@ -222,7 +222,7 @@ export async function cmdGuide(flags: Flags): Promise<void> {
 
   const tty = process.stdout.isTTY ?? false;
   console.log('');
-  console.log(color(tty, C.bold, '  AegisFlow — where you are') + (isDemo() ? color(tty, C.yellow, '   ● DEMO DATA') : ''));
+  console.log(color(tty, C.bold, '  Fiscus — where you are') + (isDemo() ? color(tty, C.yellow, '   ● DEMO DATA') : ''));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(58)));
   console.log(`  ${color(tty, C.bold, report.headline)}`);
   console.log('');
@@ -241,7 +241,7 @@ export async function cmdGuide(flags: Flags): Promise<void> {
 
   console.log('');
   if (report.hint) console.log(color(tty, C.gray, `  ${report.hint}`));
-  console.log(color(tty, C.gray, '  aegisflow help — every command · aegisflow doctor — health check'));
+  console.log(color(tty, C.gray, '  fiscus help — every command · fiscus doctor — health check'));
   console.log('');
 }
 

@@ -25,7 +25,7 @@ export interface AlertWire {
 }
 
 export interface WebhookPayload {
-  source: 'aegisflow';
+  source: 'fiscus';
   generatedAt: string;
   alerts: AlertWire[];
 }
@@ -38,7 +38,7 @@ export function buildWebhookPayload(
 ): WebhookPayload {
   const min = SEV_RANK[minSeverity];
   return {
-    source: 'aegisflow',
+    source: 'fiscus',
     generatedAt: new Date(now).toISOString(),
     alerts: alerts
       .filter((a) => SEV_RANK[a.severity] >= min)

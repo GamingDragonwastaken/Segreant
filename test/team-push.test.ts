@@ -1,5 +1,5 @@
 /**
- * `aegisflow team push` CLI-level checks — integration-tested through the
+ * `fiscus team push` CLI-level checks — integration-tested through the
  * real CLI process, same pattern as test/exec.test.ts.
  */
 import { test } from 'node:test';

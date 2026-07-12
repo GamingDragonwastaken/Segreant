@@ -1,7 +1,7 @@
--- AegisFlow team server — Postgres schema.
+-- Fiscus team server — Postgres schema.
 --
 -- This database belongs entirely to the operator (the enterprise running this
--- server). AegisFlow never connects to it. Applied automatically and
+-- server). Fiscus never connects to it. Applied automatically and
 -- idempotently on server startup (src/index.ts) via IF NOT EXISTS everywhere,
 -- so re-running it against an already-initialized database is always safe.
 
