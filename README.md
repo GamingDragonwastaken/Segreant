@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="web/assets/seal-256.png" alt="The Fiscus Minted Seal — a heraldic griffin engraved on a gold coin" width="112" />
+
 # Fiscus
 
 **Govern the spend. Not the developer.**

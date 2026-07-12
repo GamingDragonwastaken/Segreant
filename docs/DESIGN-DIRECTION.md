@@ -112,12 +112,16 @@ whole-sprite transforms.
 
 ## 6. Execution order (once name + assets land)
 
-1. Rename pass: package name, bin name, repo strings, docs, CLI banner, dashboard title.
-2. Token swap in `src/dashboard/web/index.html` (`:root` variables) + logo/mascot slots.
-3. Landing page rebuild in `web/index.html`: new hero (plate + cursor spotlight + count-up),
-   griffin states wired to demo data, scroll reveals.
-4. CLI palette echo (the `C` object in `src/cli/ui.ts`): gold reserved for value lines.
-5. README badges/wordmark, npm republish under the new name.
+1. ✓ Rename pass: package name, bin name, repo strings, docs, CLI banner, dashboard title.
+2. ✓ Token swap in `src/dashboard/web/index.html` (`:root` variables) + Minted Seal in header/favicon.
+3. ✓ Landing page rebuild in `web/index.html`: vault-hero plate (drift + parallax), cursor
+   spotlight, count-up numerals + animated funnel, guardian emblem in the trust band,
+   OG banner meta. (Griffin *states* wired to demo data — deferred; the emblem is static.)
+4. ✓ CLI palette echo (the `C` object in `src/cli/ui.ts`): truecolor gold/sage/red with ANSI fallback.
+5. README wordmark ✓ · npm publish as `fiscus` — awaiting the user's OTP-gated `npm publish`.
+
+Optional polish, not blocking: coin-spin loading state from seal-edge.png (P4), griffin
+alert/sleep states, ~/.aegisflow → ~/.fiscus home-dir migration.
 
 ---
 
