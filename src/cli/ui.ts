@@ -7,14 +7,20 @@
 
 import type { Verdict } from '../value/gates.ts';
 
+// Night Vault brand colors on terminals that declare 24-bit support (molten
+// gold for value, sage for pass, signal red for alerts); the plain ANSI-16
+// equivalents everywhere else so older terminals never see garbage escapes.
+const truecolor =
+  process.env.COLORTERM === 'truecolor' || process.env.COLORTERM === '24bit' || Boolean(process.env.WT_SESSION);
+
 export const C = {
   reset: '\x1b[0m',
   dim: '\x1b[2m',
   bold: '\x1b[1m',
   cyan: '\x1b[36m',
-  green: '\x1b[32m',
-  yellow: '\x1b[33m',
-  red: '\x1b[31m',
+  green: truecolor ? '\x1b[38;2;99;197;147m' : '\x1b[32m',
+  yellow: truecolor ? '\x1b[38;2;232;179;60m' : '\x1b[33m',
+  red: truecolor ? '\x1b[38;2;226;93;74m' : '\x1b[31m',
   gray: '\x1b[90m',
 };
 
