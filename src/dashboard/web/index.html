@@ -136,8 +136,8 @@
   td.prov, td.t { color: var(--faint); }
   .pill { font-size: 9.5px; padding: 1px 6px; border-radius: 5px; letter-spacing: 0.06em; }
   .pill.stream { background: rgba(124,196,242,0.12); color: var(--sky); }
-  .pill.block { background: rgba(240,107,90,0.14); color: var(--coral); }
-  .pill.est { background: rgba(240,107,90,0.1); color: var(--coral); }
+  .pill.block { background: rgba(226,93,74,0.14); color: var(--coral); }
+  .pill.est { background: rgba(226,93,74,0.1); color: var(--coral); }
 
   .empty { grid-column: 1 / -1; text-align: center; padding: 60px 20px; }
   .empty h3 { font-family: var(--serif); font-weight: 500; font-size: 22px; margin-bottom: 10px; }
@@ -186,8 +186,8 @@
   #alerts:empty { display: none; }
   .alert { display: flex; align-items: flex-start; gap: 12px; padding: 12px 16px; border-radius: 11px; border: 1px solid var(--line-soft); background: var(--panel); }
   .alert .sev { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 8px; border-radius: 6px; white-space: nowrap; margin-top: 2px; }
-  .alert.critical { border-color: rgba(240,107,90,0.4); background: rgba(240,107,90,0.07); }
-  .alert.critical .sev { background: rgba(240,107,90,0.18); color: var(--coral); }
+  .alert.critical { border-color: rgba(226,93,74,0.4); background: rgba(226,93,74,0.07); }
+  .alert.critical .sev { background: rgba(226,93,74,0.18); color: var(--coral); }
   .alert.warn .sev { background: rgba(232,179,60,0.16); color: var(--gold); }
   .alert.info .sev { background: rgba(98,98,109,0.18); color: var(--faint); }
   .alert .abody { flex: 1; }
@@ -229,7 +229,7 @@
   .rec:last-child { border-bottom: 0; }
   .rtag { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.08em; padding: 1px 6px; border-radius: 5px; margin-right: 7px; }
   .rtag.grow { background: rgba(87,210,163,0.14); color: var(--mint); }
-  .rtag.trim { background: rgba(240,107,90,0.14); color: var(--coral); }
+  .rtag.trim { background: rgba(226,93,74,0.14); color: var(--coral); }
   td.roi { color: var(--mint); text-align: right; }
   .lenshow { color: var(--faint); font-size: 10.5px; font-family: var(--mono); margin-top: 8px; line-height: 1.5; }
   /* Explanatory popovers: every uncertain state (n/a, upper bound, below break-
@@ -237,13 +237,13 @@
      Pure CSS + keyboard-focusable; no script, no innerHTML sink. Value cards get
      overflow:visible so the popover isn't clipped by the card's rounded mask. */
   #vgrid .card { overflow: visible; }
-  .info { display:inline-flex; align-items:center; justify-content:center; width:14px; height:14px; margin-left:5px; border-radius:50%; border:1px solid var(--line); color:var(--faint); font-family:var(--mono); font-size:9px; font-style:normal; line-height:1; cursor:help; position:relative; vertical-align:middle; transition:all .15s; outline:none; }
-  .info:hover, .info:focus { color:var(--gold); border-color:rgba(232,179,60,0.4); }
-  .info .pop { position:absolute; bottom:calc(100% + 9px); left:50%; transform:translateX(-50%) translateY(4px); width:max-content; max-width:270px; background:var(--ink-2); border:1px solid var(--line); border-radius:10px; padding:10px 12px; font-family:var(--sans); font-size:11.5px; font-style:normal; font-weight:400; line-height:1.5; letter-spacing:normal; text-transform:none; color:var(--muted); box-shadow:0 12px 34px rgba(0,0,0,0.55); opacity:0; pointer-events:none; transition:opacity .15s ease, transform .15s ease; z-index:30; white-space:normal; text-align:left; }
-  .info .pop::after { content:''; position:absolute; top:100%; left:50%; transform:translateX(-50%); border:6px solid transparent; border-top-color:var(--line); }
-  .info .pop b { color:var(--text); font-weight:600; }
-  .info .pop code { font-family:var(--mono); color:var(--gold); font-size:10.5px; }
-  .info:hover .pop, .info:focus .pop { opacity:1; transform:translateX(-50%) translateY(0); }
+  .ihelp { display:inline-flex; align-items:center; justify-content:center; width:14px; height:14px; margin-left:5px; border-radius:50%; border:1px solid var(--line); color:var(--faint); font-family:var(--mono); font-size:9px; font-style:normal; line-height:1; cursor:help; position:relative; vertical-align:middle; transition:all .15s; outline:none; }
+  .ihelp:hover, .ihelp:focus { color:var(--gold); border-color:rgba(232,179,60,0.4); }
+  .ihelp .pop { position:absolute; bottom:calc(100% + 9px); left:50%; transform:translateX(-50%) translateY(4px); width:max-content; max-width:270px; background:var(--ink-2); border:1px solid var(--line); border-radius:10px; padding:10px 12px; font-family:var(--sans); font-size:11.5px; font-style:normal; font-weight:400; line-height:1.5; letter-spacing:normal; text-transform:none; color:var(--muted); box-shadow:0 12px 34px rgba(0,0,0,0.55); opacity:0; pointer-events:none; transition:opacity .15s ease, transform .15s ease; z-index:30; white-space:normal; text-align:left; }
+  .ihelp .pop::after { content:''; position:absolute; top:100%; left:50%; transform:translateX(-50%); border:6px solid transparent; border-top-color:var(--line); }
+  .ihelp .pop b { color:var(--text); font-weight:600; }
+  .ihelp .pop code { font-family:var(--mono); color:var(--gold); font-size:10.5px; }
+  .ihelp:hover .pop, .ihelp:focus .pop { opacity:1; transform:translateX(-50%) translateY(0); }
 </style>
 </head>
 <body>
@@ -502,7 +502,7 @@ const cap1 = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
 // may carry <b>/<code>; we derive a plain-text aria-label by stripping tags.
 function tip(html) {
   const plain = String(html).replace(/<[^>]+>/g, '');
-  return `<span class="info" tabindex="0" role="note" aria-label="${esc(plain)}">i<span class="pop">${html}</span></span>`;
+  return `<span class="ihelp" tabindex="0" role="note" aria-label="${esc(plain)}">i<span class="pop">${html}</span></span>`;
 }
 
 // Why a lens reads n/a, and how to light it up — so "uninstrumented" is never a
