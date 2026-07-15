@@ -167,3 +167,55 @@ Delivery notes: PNGs beat JPGs (we need the transparency); if a result comes bac
 text or letters baked in, regenerate — the wordmark is set in live type, never in the
 image. Consistency matters more than any single image being perfect: same griffin, same
 coin, same three colors across all five.
+
+---
+
+## UI MOCKUP PROMPTS — dashboard redesign (2026-07-16)
+
+The code-first re-theme was not enough; the user was right that UI should be *designed*
+via generated mockups, then implemented. Process: generate 2–3 variations per prompt in
+ChatGPT, cherry-pick what we like and can build, implement faithfully from the picture.
+Text in generated UI is always gibberish — harvest layout/hierarchy/spacing/mood only.
+
+**UI STYLE LOCK (prepend to every prompt):**
+> High-fidelity UI design mockup, 1440×900 desktop, dark premium fintech console.
+> Palette strictly: near-black indigo background #0B0D14, slightly lighter panels
+> #10131d with hairline borders #1e2230, silver-grey text #C7CBD6, molten gold #E8B33C
+> used ONLY for money/value numbers and one primary action, sage green #63C593 for
+> success, muted red #E25D4A for alerts. A small gold coin emblem bearing a griffin as
+> the logo, top-left. Monospaced digits for all numbers. Elegant, calm, expensive —
+> Linear/Stripe-level polish, generous whitespace, nothing cramped. No browser chrome.
+
+**U1 — Dashboard overview (the main screen).**
+> Dashboard for a local AI-spend console. Top bar: coin logo + product name left; a
+> segmented time-range control (Today / 7d / 30d / All) and a small LIVE indicator
+> right. Below: one dominant hero number — today's spend in dollars — very large, with
+> a thin progress ring or bar showing budget used, and 3 small stat tiles beside it
+> (requests, budget remaining, top model). Under that: a wide area chart of spend over
+> time with a gold line on dark, then a compact table of spend by model. One quiet
+> alert banner above the chart. Everything aligned to a strict grid.
+
+**U2 — Dashboard, denser "bento" alternative.**
+> Same product, different layout: a bento grid of rounded panels — a large spend panel
+> with sparkline, a budget-gauge panel, a per-model breakdown panel with tiny bars, a
+> "Return on Intelligence" panel showing a 0–100 index dial with a confidence range,
+> and a narrow activity feed of recent requests. Panels breathe; one panel uses a very
+> subtle gold-tinted gradient as the only decoration.
+
+**U3 — First-run / empty state.**
+> The same console with no data yet: centered, the griffin-coin emblem large but dim,
+> one headline, one short sub-line, a single gold primary button ("scan"-style action)
+> and a secondary ghost button, and beneath them a horizontal 4-step journey strip
+> (meter → cap → wire an outcome → see the return) with the first step highlighted.
+> Feels inviting, not empty.
+
+**U4 — RoI / value section.**
+> One scrolled-down section of the console: a "Return on Intelligence" band showing a
+> large index number with an uncertainty range (e.g. a bracket or band around it), four
+> small lens cards (Realization / Acceptance / Lift / Impact) each with a mini-meter,
+> and a funnel visual of spend surviving eight gates, gold shrinking to sage. Numbers
+> monospaced; explanatory captions in small quiet text.
+
+Deliver as PNG, one image per variation. When the picks land: implement in
+`src/dashboard/web/index.html` taking geometry/hierarchy from the mockups, real data
+wiring and copy stay ours.
