@@ -705,14 +705,14 @@ export class Store {
    * instead of its day/hour. (That silent break also fed a per-request value into
    * the spend-spike baseline.)
    */
-  series(startMs: number, endMs: number, bucketMs: number): Array<{ bucketMs: number; costUsd: number }> {
+  series(startMs: number, endMs: number, bucketMs: number): Array<{ bucketMs: number; costUsd: number; requests: number }> {
     const rows = this.db
       .prepare(
-        `SELECT CAST(ts_epoch_ms / ? AS INTEGER) * ? AS bucketMs, COALESCE(SUM(cost_usd),0) AS costUsd
+        `SELECT CAST(ts_epoch_ms / ? AS INTEGER) * ? AS bucketMs, COALESCE(SUM(cost_usd),0) AS costUsd, COUNT(*) AS requests
          FROM requests WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ?
          GROUP BY bucketMs ORDER BY bucketMs ASC`,
       )
-      .all(bucketMs, bucketMs, startMs, endMs) as Array<{ bucketMs: number; costUsd: number }>;
+      .all(bucketMs, bucketMs, startMs, endMs) as Array<{ bucketMs: number; costUsd: number; requests: number }>;
     return rows;
   }
 

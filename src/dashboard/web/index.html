@@ -41,6 +41,9 @@
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
+  /* Hidden-but-positioned tooltip popovers near the right edge must never widen
+     the page into a horizontal scroll. clip (not hidden) so no scroll container. */
+  html { overflow-x: clip; }
   body {
     background: var(--ink);
     color: var(--text);
@@ -90,32 +93,39 @@
   .card { background: linear-gradient(180deg, var(--panel) 0%, var(--ink-2) 100%); border: 1px solid var(--line); border-radius: var(--r); padding: var(--s6); position: relative; overflow: hidden; }
   .card .label { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); margin-bottom: var(--s4); }
 
-  .hero { grid-column: 1 / -1; display: grid; grid-template-columns: 1.4fr 1fr; gap: 0; padding: 0; }
-  @media (max-width: 860px) { .hero { grid-template-columns: 1fr; } }
-  .hero .spend { padding: var(--s6); border-right: 1px solid var(--line-soft); }
-  @media (max-width: 860px) { .hero .spend { border-right: 0; border-bottom: 1px solid var(--line-soft); } }
-  .bignum { font-family: var(--mono); font-weight: 700; font-size: clamp(40px, 7vw, 68px); letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; color: var(--text); }
-  .bignum .cur { color: var(--gold); font-size: 0.5em; vertical-align: 0.5em; margin-right: 2px; }
-  .spend .sub { color: var(--muted); margin-top: 12px; font-size: 13px; }
-  .spend .sub b { color: var(--text); font-family: var(--mono); font-weight: 500; }
+  /* Hero row — one dominant spend panel + three stat tiles (mockup U1) */
+  .herorow { grid-column: 1 / -1; display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: var(--s5); }
+  @media (max-width: 1000px) { .herorow { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 640px) { .herorow { grid-template-columns: 1fr; } }
+  .bignum { font-family: var(--mono); font-weight: 700; font-size: clamp(40px, 5.5vw, 62px); letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; color: var(--gold); }
+  .bignum .cur { font-size: 0.62em; vertical-align: 0.35em; margin-right: 2px; }
+  .spendpane .sub { color: var(--muted); margin-top: 12px; font-size: 12.5px; }
+  .spendpane .sub b { color: var(--text); font-family: var(--mono); font-weight: 500; }
+  /* Budget-used bar under the hero number */
+  .budgetbar { margin-top: var(--s5); }
+  .budgetbar .brow { display: flex; justify-content: space-between; align-items: baseline; font-family: var(--mono); font-size: 11.5px; margin-bottom: 7px; }
+  .budgetbar .brow .bl { color: var(--muted); font-family: var(--sans); font-size: 12.5px; }
+  .budgetbar .brow .bp { color: var(--gold); }
+  .budgetbar .btrack { height: 9px; background: var(--panel-2); border-radius: 6px; overflow: hidden; }
+  .budgetbar .bfill { height: 100%; border-radius: 6px; background: linear-gradient(90deg, var(--gold), #f0c65e); transition: width 0.7s cubic-bezier(.2,.7,.2,1); }
+  .budgetbar .bfill.over { background: linear-gradient(90deg, var(--coral), #f08a7a); }
+  .budgetbar .bunder { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 11px; color: var(--faint); margin-top: 7px; }
+  .budgetbar .bunder .used { color: var(--gold); }
+  .nocap { color: var(--muted); font-size: 12.5px; margin-top: var(--s5); line-height: 1.55; }
+  .nocap code { font-family: var(--mono); color: var(--gold); background: var(--gold-soft); padding: 1px 6px; border-radius: 5px; font-size: 11.5px; }
 
-  .gaugewrap { padding: var(--s6); display: flex; align-items: center; gap: var(--s5); }
-  .gauge { width: 116px; height: 116px; flex: none; }
-  .budgetinfo .k { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
-  .budgetinfo .v { font-family: var(--mono); font-size: 20px; font-weight: 500; margin: var(--s1) 0 var(--s4); font-variant-numeric: tabular-nums; }
-  .budgetinfo .v.left { color: var(--mint); }
-  .nocap { color: var(--muted); font-size: 13px; max-width: 220px; }
-  .nocap code { font-family: var(--mono); color: var(--gold); background: var(--gold-soft); padding: 1px 6px; border-radius: 5px; font-size: 12px; }
-
-  .stats { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s5); }
-  @media (max-width: 720px) { .stats { grid-template-columns: repeat(2, 1fr); } }
-  .stat .n { font-family: var(--mono); font-size: 24px; font-weight: 500; font-variant-numeric: tabular-nums; }
-  .stat .n.in { color: var(--sky); }
-  .stat .n.out { color: var(--violet); }
-  .stat .n.req { color: var(--gold); }
+  /* Stat tiles: number on top, tiny sparkline pinned below */
+  .tile { display: flex; flex-direction: column; }
+  .tile .n { font-family: var(--mono); font-size: clamp(22px, 2.4vw, 30px); font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; line-height: 1.1; overflow-wrap: anywhere; }
+  .tile .n.money { color: var(--gold); }
+  .tile .tsub { font-family: var(--mono); font-size: 11px; color: var(--faint); margin-top: 6px; }
+  .tile .tspark { margin-top: auto; padding-top: var(--s4); }
+  svg.mini { width: 100%; height: 40px; display: block; }
 
   .chartcard { grid-column: 1 / -1; }
-  svg.spark { width: 100%; height: 150px; display: block; }
+  svg.spark { width: 100%; height: 190px; display: block; }
+  .spark .axis { font-family: var(--mono); font-size: 10px; fill: var(--faint); }
+  .spark .gridline { stroke: var(--line-soft); stroke-width: 1; }
 
   .bars { display: flex; flex-direction: column; gap: var(--s3); }
   .bar .top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: var(--s2); }
@@ -129,29 +139,49 @@
   .recent { grid-column: 1 / -1; }
   table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px; }
   th { text-align: left; font-weight: 400; color: var(--faint); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; padding: 0 10px 10px; border-bottom: 1px solid var(--line-soft); }
-  td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); font-variant-numeric: tabular-nums; }
+  td { padding: 10px; border-bottom: 1px solid var(--line-soft); font-variant-numeric: tabular-nums; }
   tr:last-child td { border-bottom: 0; }
   td.cost { color: var(--gold); text-align: right; }
   td.model { color: var(--text); }
   td.prov, td.t { color: var(--faint); }
+  td.num, th.num { text-align: right; }
+  tr.total td { border-top: 1px solid var(--line); border-bottom: 0; color: var(--text); padding-top: 12px; }
+  tr.total td.cost { font-weight: 600; }
+  /* Provider monogram chip (letter, never a trademark asset) */
+  .mono-chip { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; background: var(--panel-2); border: 1px solid var(--line); color: var(--muted); font-family: var(--mono); font-size: 10.5px; margin-right: 8px; vertical-align: middle; }
   .pill { font-size: 9.5px; padding: 1px 6px; border-radius: 5px; letter-spacing: 0.06em; }
-  .pill.stream { background: rgba(124,196,242,0.12); color: var(--sky); }
+  .pill.stream { background: rgba(126,166,224,0.12); color: var(--sky); }
   .pill.block { background: rgba(226,93,74,0.14); color: var(--coral); }
   .pill.est { background: rgba(226,93,74,0.1); color: var(--coral); }
 
-  .empty { grid-column: 1 / -1; text-align: center; padding: 60px 20px; }
-  .empty h3 { font-family: var(--serif); font-weight: 500; font-size: 22px; margin-bottom: 10px; }
-  .empty p { color: var(--muted); max-width: 480px; margin: 0 auto 18px; }
+  /* First-run empty state — mockup U3 composition: dim seal, headline, two actions */
+  .empty { grid-column: 1 / -1; text-align: center; padding: 56px 20px 48px; }
+  .empty .eseal { width: 130px; height: 130px; border-radius: 50%; opacity: 0.55; filter: saturate(0.9); box-shadow: 0 0 80px rgba(232,179,60,0.12); margin-bottom: var(--s6); }
+  .empty h3 { font-family: var(--serif); font-weight: 500; font-size: 26px; margin-bottom: 10px; letter-spacing: -0.01em; }
+  .empty p { color: var(--muted); max-width: 480px; margin: 0 auto 24px; }
+  .empty .eactions { display: flex; gap: var(--s3); justify-content: center; flex-wrap: wrap; margin-bottom: var(--s6); }
+  .btn-gold { font-family: var(--sans); font-size: 13.5px; font-weight: 600; color: #14161f; background: var(--gold); border: 0; border-radius: 9px; padding: 11px 20px; cursor: pointer; transition: filter .15s; }
+  .btn-gold:hover { filter: brightness(1.08); }
+  .btn-ghost { font-family: var(--sans); font-size: 13.5px; color: var(--text); background: transparent; border: 1px solid var(--line); border-radius: 9px; padding: 11px 20px; cursor: pointer; transition: border-color .15s; }
+  .btn-ghost:hover { border-color: var(--muted); }
   .cmd { display: inline-block; font-family: var(--mono); font-size: 13px; color: var(--gold); background: var(--gold-soft); border: 1px solid rgba(232,179,60,0.25); border-radius: 9px; padding: 10px 16px; text-align: left; }
   .cmd span { color: var(--faint); }
-  /* Journey guide — rendered from /api/guide, the same engine as `fiscus guide` */
+  /* Journey guide — numbered circles with dashed connectors (mockup U3 strip) */
   .guide { margin-bottom: var(--s5); }
-  .guide .gsteps { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s5); margin-bottom: var(--s3); }
-  .guide .gstep { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.04em; color: var(--faint); white-space: nowrap; }
+  .guide .gsteps { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s3) 0; margin: var(--s2) 0 var(--s4); }
+  .guide .gstep { display: flex; flex-direction: column; align-items: center; gap: 7px; min-width: 86px; text-align: center; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.04em; color: var(--faint); }
+  .guide .gstep .gc { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; border: 1.5px solid var(--line); color: var(--faint); font-size: 11px; background: var(--ink-2); }
+  .guide .gstep.done .gc { border-color: var(--mint); color: var(--mint); }
+  .guide .gstep.next .gc { border-color: var(--gold); color: var(--gold); box-shadow: 0 0 14px rgba(232,179,60,0.25); }
   .guide .gstep.done { color: var(--mint); }
   .guide .gstep.next { color: var(--gold); }
+  .guide .gdash { flex: 1 1 24px; min-width: 16px; border-top: 1.5px dashed var(--line); margin-top: 15px; }
   .guide .gwhy { font-family: var(--serif); font-size: 16px; margin-bottom: var(--s3); }
   .guide .gcmds { display: flex; flex-direction: column; gap: var(--s2); align-items: flex-start; }
+  /* Spend-health strip — what alerts look like when everything is quiet (mockup U2) */
+  .health { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s6); padding: 12px 16px; border: 1px solid var(--line-soft); border-radius: 11px; background: var(--panel); }
+  .health span { display: inline-flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+  .health .hchk { color: var(--mint); font-weight: 700; }
   /* Import panel — one-click native metering for people who don't live in a terminal */
   .import { margin-bottom: var(--s5); }
   .import .ihead { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s4); flex-wrap: wrap; margin-bottom: var(--s4); }
@@ -184,12 +214,16 @@
   /* Governance alerts banner */
   #alerts { display: flex; flex-direction: column; gap: var(--s2); margin-bottom: var(--s5); }
   #alerts:empty { display: none; }
-  .alert { display: flex; align-items: flex-start; gap: 12px; padding: 12px 16px; border-radius: 11px; border: 1px solid var(--line-soft); background: var(--panel); }
-  .alert .sev { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 8px; border-radius: 6px; white-space: nowrap; margin-top: 2px; }
-  .alert.critical { border-color: rgba(226,93,74,0.4); background: rgba(226,93,74,0.07); }
+  /* Tinted full-width banners with a leading icon (mockup U1's alert strip) */
+  .alert { display: flex; align-items: flex-start; gap: 12px; padding: 13px 16px; border-radius: 11px; border: 1px solid var(--line-soft); background: var(--panel); }
+  .alert .aicon { flex: none; width: 18px; height: 18px; margin-top: 1px; color: var(--faint); }
+  .alert .sev { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 8px; border-radius: 6px; white-space: nowrap; margin-top: 2px; background: rgba(98,98,109,0.18); color: var(--faint); }
+  .alert.critical { border-color: rgba(226,93,74,0.4); background: rgba(226,93,74,0.08); }
   .alert.critical .sev { background: rgba(226,93,74,0.18); color: var(--coral); }
+  .alert.critical .aicon, .alert.critical .atitle { color: var(--coral); }
+  .alert.warn { border-color: rgba(232,179,60,0.35); background: rgba(232,179,60,0.06); }
   .alert.warn .sev { background: rgba(232,179,60,0.16); color: var(--gold); }
-  .alert.info .sev { background: rgba(98,98,109,0.18); color: var(--faint); }
+  .alert.warn .aicon { color: var(--gold); }
   .alert .abody { flex: 1; }
   .alert .atitle { font-weight: 600; color: var(--text); }
   .alert .ametric { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-left: 8px; }
@@ -208,19 +242,51 @@
   .vhead .tag { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); margin-top: 3px; }
   .vbtn { font-family: var(--mono); font-size: 11.5px; color: var(--gold); background: var(--gold-soft); border: 1px solid rgba(232,179,60,0.3); border-radius: 9px; padding: 7px 14px; cursor: pointer; transition: all .18s; }
   .vbtn:hover { background: rgba(232,179,60,0.2); }
-  .roihero { grid-column: 1/-1; display: grid; grid-template-columns: 1fr 1.4fr; gap: 0; padding: 0; }
-  @media (max-width: 860px) { .roihero { grid-template-columns: 1fr; } }
-  .roihero .idxpane { padding: var(--s6); border-right: 1px solid var(--line-soft); display: flex; flex-direction: column; justify-content: center; }
-  @media (max-width: 860px) { .roihero .idxpane { border-right: 0; border-bottom: 1px solid var(--line-soft); } }
-  .roibig { font-family: var(--mono); font-weight: 700; font-size: clamp(44px,7vw,66px); line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-  .roibig small { font-size: 0.3em; color: var(--faint); font-weight: 500; }
-  .roihero .lenspane { padding: var(--s6); }
-  .lens { display: grid; grid-template-columns: 96px 1fr 46px; gap: var(--s3); align-items: center; margin: var(--s2) 0; }
-  .lens .ln { font-family: var(--mono); font-size: 12px; color: var(--muted); }
-  .lens .lt { height: 7px; background: var(--panel-2); border-radius: 6px; overflow: hidden; }
-  .lens .lf { height: 100%; border-radius: 6px; background: linear-gradient(90deg, var(--gold), #f3cf7a); transition: width .6s cubic-bezier(.2,.7,.2,1); }
-  .lens .lv { font-family: var(--mono); font-size: 12px; text-align: right; color: var(--gold); font-variant-numeric: tabular-nums; }
-  .lens .lv.na { color: var(--faint); font-size: 10px; }
+  /* RoI hero — mockup U4: giant index · uncertainty band · position scale */
+  .roihero { grid-column: 1/-1; display: grid; grid-template-columns: auto 1fr 1.2fr; gap: var(--s8); padding: var(--s6); align-items: center; border-color: rgba(232,179,60,0.22); background: linear-gradient(180deg, rgba(232,179,60,0.05), var(--ink-2) 70%); }
+  @media (max-width: 960px) { .roihero { grid-template-columns: auto 1fr; } .roihero .scalepane { grid-column: 1 / -1; } }
+  .roibig { font-family: var(--mono); font-weight: 700; font-size: clamp(56px,7vw,86px); line-height: 0.95; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+  .roibig small { font-size: 0.24em; color: var(--faint); font-weight: 500; }
+  .idxcap { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--faint); margin-top: 8px; }
+  .bandpane .bandnum { font-family: var(--mono); font-weight: 700; font-size: clamp(26px,3vw,38px); color: var(--gold); letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+  .bandpane .bandcap { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-top: 6px; line-height: 1.6; max-width: 30ch; }
+  /* Horizontal 0–100 scale with the band highlighted and a most-likely marker */
+  .scale { position: relative; height: 8px; border-radius: 5px; background: var(--panel-2); margin: 26px 0 10px; }
+  .scale .sband { position: absolute; top: -3px; bottom: -3px; border: 1.5px solid rgba(232,179,60,0.8); border-radius: 7px; background: rgba(232,179,60,0.14); }
+  .scale .smark { position: absolute; top: 50%; width: 13px; height: 13px; border-radius: 50%; background: var(--gold); transform: translate(-50%, -50%); box-shadow: 0 0 12px rgba(232,179,60,0.6); }
+  .scaleticks { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 10px; color: var(--faint); }
+  .scalefeet { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); margin-top: 10px; }
+  .scalefeet .ml { color: var(--gold); }
+  /* Lens cards — four across, icon + score + mini-meter (mockup U4) */
+  .lensrow { grid-column: 1/-1; display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s5); }
+  @media (max-width: 960px) { .lensrow { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 560px) { .lensrow { grid-template-columns: 1fr; } }
+  .lenscard .lhead { display: flex; align-items: center; gap: 9px; margin-bottom: 3px; }
+  .lenscard .licon { width: 30px; height: 30px; flex: none; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--line); color: var(--gold); }
+  .lenscard .licon svg { width: 15px; height: 15px; }
+  .lenscard .lname { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text); }
+  .lenscard .lsub { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); margin-bottom: var(--s4); }
+  .lenscard .lscore { font-family: var(--mono); font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--gold); line-height: 1; }
+  .lenscard.na .lscore { color: var(--faint); font-size: 22px; }
+  .lenscard .lmeter { position: relative; height: 5px; border-radius: 4px; background: var(--panel-2); margin: 14px 0 6px; }
+  .lenscard .lmfill { position: absolute; inset: 0 auto 0 0; border-radius: 4px; background: var(--gold); transition: width .6s cubic-bezier(.2,.7,.2,1); }
+  .lenscard .lmdot { position: absolute; top: 50%; width: 9px; height: 9px; border-radius: 50%; background: var(--gold); transform: translate(-50%,-50%); }
+  .lenscard .lticks { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 9px; color: var(--faint); margin-bottom: var(--s3); }
+  .lenscard .lwhy { font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+  /* Realization funnel — numbered gates, tapering bars, survivors columns */
+  .funnelcard { grid-column: 1/-1; }
+  .fnl { display: grid; grid-template-columns: 34px 110px 1fr 70px 110px; gap: 6px 14px; align-items: center; font-family: var(--mono); }
+  @media (max-width: 720px) { .fnl { grid-template-columns: 28px 90px 1fr 60px; } .fnl .fusd { display: none; } }
+  .fnl .fno { font-size: 10.5px; color: var(--faint); }
+  .fnl .fgate { font-size: 11.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text); }
+  .fnl .fbarwrap { display: flex; justify-content: center; }
+  .fnl .fbar { height: 17px; border-radius: 3px; transition: width .7s cubic-bezier(.2,.7,.2,1); min-width: 2px; }
+  .fnl .fpct { font-size: 11.5px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+  .fnl .fusd { font-size: 11.5px; color: var(--gold); text-align: right; font-variant-numeric: tabular-nums; }
+  .fnl .fq { font-family: var(--sans); font-size: 10.5px; color: var(--faint); letter-spacing: 0; text-transform: none; display: block; margin-top: 1px; }
+  .fsummary { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: var(--s5); padding-top: var(--s4); border-top: 1px solid var(--line-soft); font-family: var(--mono); font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+  .fsummary .fok { color: var(--mint); }
+  .fsummary b { color: var(--gold); }
   .wstage, .rrow { display: flex; justify-content: space-between; align-items: center; font-family: var(--mono); font-size: 12px; padding: var(--s2) 0; border-bottom: 1px solid var(--line-soft); }
   .wstage:last-child, .rrow:last-child { border-bottom: 0; }
   .wstage .c { color: var(--gold); font-variant-numeric: tabular-nums; }
@@ -312,50 +378,93 @@ const usd = (n) => {
 const money = (n) => (n == null ? '—' : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 const tok = (n) => (n || 0).toLocaleString('en-US');
 
-function gauge(pct, over) {
-  const r = 50, c = 2 * Math.PI * r;
-  const p = Math.min(100, Math.max(0, pct));
-  const off = c * (1 - p / 100);
-  const col = over || p > 85 ? 'var(--coral)' : p > 65 ? 'var(--gold)' : 'var(--mint)';
-  return `<svg class="gauge" viewBox="0 0 120 120">
-    <circle cx="60" cy="60" r="${r}" fill="none" stroke="var(--panel-2)" stroke-width="10"/>
-    <circle cx="60" cy="60" r="${r}" fill="none" stroke="${col}" stroke-width="10" stroke-linecap="round"
-      stroke-dasharray="${c}" stroke-dashoffset="${off}" transform="rotate(-90 60 60)"
-      style="transition: stroke-dashoffset 0.7s cubic-bezier(.2,.7,.2,1)"/>
-    <text x="60" y="58" text-anchor="middle" fill="var(--text)" font-size="22" font-weight="700" font-family="var(--mono)">${Math.round(p)}%</text>
-    <text x="60" y="76" text-anchor="middle" fill="var(--faint)" font-size="9" letter-spacing="1" font-family="var(--mono)">USED</text>
-  </svg>`;
-}
-
+// Full chart with $-gridlines and time labels (mockup U1's SPEND OVER TIME).
 function sparkline(series) {
   if (!series.length) return '<div style="color:var(--faint);font-family:var(--mono);font-size:12px;padding:40px 0;text-align:center">no spend recorded in this window</div>';
-  const w = 1000, h = 150, pad = 10;
+  const w = 1000, h = 190, padL = 56, padR = 12, padT = 10, padB = 24;
   const max = Math.max(...series.map((s) => s.costUsd), 0.0000001);
   const n = series.length;
-  const x = (i) => pad + (i / Math.max(1, n - 1)) * (w - pad * 2);
-  const y = (v) => h - pad - (v / max) * (h - pad * 2 - 14);
-  let area = `M ${x(0)} ${h - pad}`;
+  const x = (i) => padL + (i / Math.max(1, n - 1)) * (w - padL - padR);
+  const y = (v) => padT + (1 - v / max) * (h - padT - padB);
+  let area = `M ${x(0)} ${h - padB}`;
   series.forEach((s, i) => { area += ` L ${x(i)} ${y(s.costUsd)}`; });
-  area += ` L ${x(n - 1)} ${h - pad} Z`;
+  area += ` L ${x(n - 1)} ${h - padB} Z`;
   let line = '';
   series.forEach((s, i) => { line += `${i ? 'L' : 'M'} ${x(i)} ${y(s.costUsd)} `; });
+  // 4 horizontal gridlines with $ tick labels; 5 time labels along the bottom.
+  let grid = '';
+  for (let g = 0; g <= 3; g++) {
+    const v = (max / 3) * g, gy = y(v);
+    grid += `<line class="gridline" x1="${padL}" y1="${gy}" x2="${w - padR}" y2="${gy}"/>` +
+      `<text class="axis" x="${padL - 8}" y="${gy + 3}" text-anchor="end">$${v >= 1 ? v.toFixed(2) : v.toFixed(v >= 0.01 ? 3 : 4)}</text>`;
+  }
+  let times = '';
+  const spanMs = (series[n - 1].bucketMs || 0) - (series[0].bucketMs || 0);
+  const multiDay = spanMs > 2 * 86400000;
+  const nLbl = Math.min(5, n);
+  for (let t = 0; t < nLbl; t++) {
+    const i = Math.round((t / Math.max(1, nLbl - 1)) * (n - 1));
+    const ms = series[i].bucketMs;
+    if (!ms) continue;
+    const dt = new Date(ms);
+    const lbl = multiDay
+      ? dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      : dt.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+    times += `<text class="axis" x="${x(i)}" y="${h - 6}" text-anchor="${t === 0 ? 'start' : t === nLbl - 1 ? 'end' : 'middle'}">${esc(lbl)}</text>`;
+  }
   return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
     <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="rgba(232,179,60,0.35)"/><stop offset="1" stop-color="rgba(232,179,60,0)"/>
     </linearGradient></defs>
+    ${grid}
     <path d="${area}" fill="url(#g)"/>
     <path d="${line}" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linejoin="round"/>
+    ${times}
   </svg>`;
 }
 
+// Tiny axis-free sparkline for the hero stat tiles.
+function mini(series, key) {
+  const vals = (series || []).map((s) => (key && s[key] != null ? s[key] : s.costUsd) || 0);
+  if (vals.length < 2 || !vals.some((v) => v > 0)) return '';
+  const w = 200, h = 40, pad = 3;
+  const max = Math.max(...vals, 0.0000001);
+  const x = (i) => pad + (i / (vals.length - 1)) * (w - pad * 2);
+  const y = (v) => h - pad - (v / max) * (h - pad * 2);
+  let line = '';
+  vals.forEach((v, i) => { line += `${i ? 'L' : 'M'} ${x(i)} ${y(v)} `; });
+  return `<svg class="mini" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+    <path d="${line}" fill="none" stroke="var(--gold)" stroke-width="1.5" stroke-linejoin="round" opacity="0.85"/>
+  </svg>`;
+}
+
+// Provider monogram chip — a letter, never a trademark asset (zero-egress page).
+const provChip = (p) => `<span class="mono-chip">${esc(String(p || '?').charAt(0).toUpperCase())}</span>`;
+
 const SEV_LABEL = { critical: 'CRITICAL', warn: 'WARN', info: 'INFO' };
-function renderAlerts(alerts) {
+const SEV_ICON = {
+  critical: '<svg class="aicon" viewBox="0 0 16 16" fill="none"><path d="M8 1.5 15 14H1L8 1.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 6v4" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="12" r="0.9" fill="currentColor"/></svg>',
+  warn: '<svg class="aicon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.4"/><path d="M8 4.5v4.5" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="11.5" r="0.9" fill="currentColor"/></svg>',
+  info: '<svg class="aicon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="4.8" r="0.9" fill="currentColor"/><path d="M8 7.5V11.5" stroke="currentColor" stroke-width="1.4"/></svg>',
+};
+// `health`: when there are no alerts and real data exists, render a quiet green-check
+// strip (mockup 3) instead of empty space — silence should read as verified-good.
+function renderAlerts(alerts, health) {
   const host = $('#alerts');
   if (!host) return;
-  if (!alerts || !alerts.length) { setNodes(host, ''); return; }
+  if (!alerts || !alerts.length) {
+    if (health && health.requests > 0) {
+      const items = [];
+      if (health.capSet) items.push(`<span class="hk"><span class="hchk">✓</span> spend within budget · ${Math.min(999, Math.round(health.pctUsed))}% of daily cap</span>`);
+      items.push('<span class="hk"><span class="hchk">✓</span> no active alerts</span>');
+      if (health.models > 0) items.push(`<span class="hk"><span class="hchk">✓</span> ${health.models} model${health.models === 1 ? '' : 's'} metered</span>`);
+      setNodes(host, `<div class="health fade">${items.join('')}</div>`);
+    } else setNodes(host, '');
+    return;
+  }
   setNodes(host, alerts.map((a) => `
     <div class="alert ${esc(a.severity)}">
-      <span class="sev">${esc(SEV_LABEL[a.severity] || a.severity)}</span>
+      ${SEV_ICON[a.severity] || SEV_ICON.info}<span class="sev">${esc(SEV_LABEL[a.severity] || a.severity)}</span>
       <div class="abody">
         <div><span class="atitle">${esc(a.title)}</span>${a.metric ? `<span class="ametric">${esc(a.metric)}</span>` : ''}</div>
         <div class="adetail">${esc(a.detail)}</div>
@@ -376,41 +485,71 @@ function renderDemo(isDemo) {
 function render(d) {
   const grid = $('#grid');
   renderDemo(d.demo);
-  renderAlerts(d.alerts);
   const b = d.budget;
   const cap = b.dailyUsd;
   const over = cap != null && b.todaySpendUsd > cap;
   const pct = cap ? (b.todaySpendUsd / cap) * 100 : 0;
   const s = d.summary;
+  renderAlerts(d.alerts, { requests: s.requests, capSet: cap != null, pctUsed: pct, models: d.byModel.length });
 
   if (s.requests === 0) {
-    setNodes(grid, `<div class="empty fade card" style="grid-column:1/-1">
-      <h3>Nothing metered yet in this window.</h3>
-      <p>Point your AI coding tools at the proxy, then run them as usual. Every call shows up here in real time — costs computed locally, prompts never stored.</p>
-      <div class="cmd"><span># PowerShell</span><br>$env:ANTHROPIC_BASE_URL="http://localhost:8090"<br>$env:OPENAI_BASE_URL="http://localhost:8090/v1"</div>
+    setNodes(grid, `<div class="empty fade card">
+      <img class="eseal" id="eseal" alt="" src="">
+      <h3>Nothing metered yet.</h3>
+      <p>Point your AI coding tools at the proxy and run them as usual. Every call lands here in real time — costs computed on this machine, prompts never stored.</p>
+      <div class="eactions">
+        <button class="btn-gold" id="escan">Scan my system</button>
+        <button class="btn-ghost" id="emanual">Show manual setup</button>
+      </div>
+      <div class="cmd" id="envcmd" style="display:none"><span># PowerShell</span><br>$env:ANTHROPIC_BASE_URL="http://localhost:8090"<br>$env:OPENAI_BASE_URL="http://localhost:8090/v1"</div>
     </div>`);
+    const es = $('#eseal'); const brandSeal = document.querySelector('.seal-mark');
+    if (es && brandSeal) es.src = brandSeal.src;
+    const scanBtn = $('#escan');
+    if (scanBtn) scanBtn.addEventListener('click', () => {
+      const sp = $('#scanpanel');
+      if (sp) sp.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      doScanPreview();
+    });
+    const manBtn = $('#emanual');
+    if (manBtn) manBtn.addEventListener('click', () => {
+      const c = $('#envcmd');
+      if (c) c.style.display = c.style.display === 'none' ? '' : 'none';
+    });
     $('#gen').textContent = new Date(d.generatedAt).toLocaleTimeString();
     return;
   }
 
   const budgetPane = cap != null
-    ? `<div class="gaugewrap">${gauge(pct, over)}
-        <div class="budgetinfo">
-          <div class="k">Daily cap</div><div class="v">$${usd(cap)}</div>
-          <div class="k">Remaining today</div><div class="v left">$${usd(b.remainingDailyUsd)}</div>
-        </div></div>`
-    : `<div class="gaugewrap"><div class="nocap">No daily cap set. Fiscus is metering but not enforcing.<br><br>Set one: <code>fiscus budget --daily 25</code></div></div>`;
+    ? `<div class="budgetbar">
+        <div class="brow"><span class="bl">Daily budget</span><span class="bp">${Math.round(pct)}% used${over ? ' · OVER CAP' : ''}</span></div>
+        <div class="btrack"><div class="bfill${over ? ' over' : ''}" style="width:${Math.min(100, pct)}%"></div></div>
+        <div class="bunder"><span class="used">$${usd(b.todaySpendUsd)} today</span><span>$${usd(Math.max(0, b.remainingDailyUsd))} left of $${usd(cap)}</span></div>
+      </div>`
+    : `<div class="nocap">No daily cap set — metering, not enforcing. Set one: <code>fiscus budget --daily 25</code></div>`;
 
-  const maxModel = Math.max(...d.byModel.map((m) => m.costUsd), 0.0000001);
-  const modelBars = d.byModel.slice(0, 7).map((m) => `
-    <div class="bar">
-      <div class="top">
-        <span class="name"><span class="prov">${esc(m.provider)}/</span>${esc(m.label)}</span>
-        <span class="cost">$${usd(m.costUsd)}</span>
-      </div>
-      <div class="track"><div class="fill" style="width:${(m.costUsd / maxModel) * 100}%"></div></div>
-      <div class="meta">${m.requests} req · ${tok(m.inputTokens)} in · ${tok(m.outputTokens)} out</div>
-    </div>`).join('');
+  const top = d.byModel[0];
+  const topShare = top && s.costUsd > 0 ? Math.round((top.costUsd / s.costUsd) * 100) : 0;
+  const modelTable = d.byModel.slice(0, 7).map((m) => {
+    const kTok = (m.inputTokens + m.outputTokens) / 1000;
+    const avg = kTok > 0 ? m.costUsd / kTok : null;
+    const share = s.costUsd > 0 ? (m.costUsd / s.costUsd) * 100 : 0;
+    return `<tr>
+      <td class="model">${provChip(m.provider)}${esc(m.label)}<span style="color:var(--faint)"> · ${esc(m.provider)}</span></td>
+      <td class="num">${m.requests.toLocaleString()}</td>
+      <td class="num">${tok(m.inputTokens)} / ${tok(m.outputTokens)}</td>
+      <td class="num">${avg == null ? '—' : '$' + avg.toFixed(avg >= 0.1 ? 2 : 4)}</td>
+      <td class="num" style="color:var(--muted)">${share >= 1 ? Math.round(share) : share.toFixed(1)}%</td>
+      <td class="cost">$${usd(m.costUsd)}</td>
+    </tr>`;
+  }).join('');
+  const totalRow = `<tr class="total">
+    <td>TOTAL${d.byModel.length > 7 ? ` <span style="color:var(--faint)">· all ${d.byModel.length} models</span>` : ''}</td>
+    <td class="num">${s.requests.toLocaleString()}</td>
+    <td class="num">${tok(s.inputTokens)} / ${tok(s.outputTokens)}</td>
+    <td class="num"></td><td class="num"></td>
+    <td class="cost">$${usd(s.costUsd)}</td>
+  </tr>`;
 
   const rows = d.recent.slice(0, 14).map((r) => {
     const t = new Date(r.tsEpochMs).toLocaleTimeString('en-US', { hour12: false });
@@ -445,22 +584,40 @@ function render(d) {
   const sourceCard = hasSources ? `<div class="card fade"><div class="label">By source ${tip('Spend grouped by connected source — each AI tool you route through Fiscus. Tag a tool with the <code>X-Aegis-Source</code> header (the connect command sets this for you) and its spend lands here. Untagged traffic reads as <b>direct</b>. The tag is stripped before the request ever leaves your machine. <b>Depth</b> is read from real signals, not asserted: <b>spend</b> always, <b>+ acceptance</b> once the source sends proposed edits, <b>+ RoI</b> once its work reaches projects with realized value.')}</div><div class="bars">${sourceBars}</div></div>` : '';
 
   setNodes(grid, `
-    <div class="card hero fade">
-      <div class="spend">
+    <div class="herorow fade">
+      <div class="card spendpane">
         <div class="label">Spend · ${esc(d.range)}</div>
         <div class="bignum"><span class="cur">$</span>${usd(s.costUsd)}</div>
-        <div class="sub"><b>${s.requests.toLocaleString()}</b> requests metered · all computed on-device</div>
+        <div class="sub"><b>${s.requests.toLocaleString()}</b> requests metered · computed on-device</div>
+        ${budgetPane}
       </div>
-      ${budgetPane}
+      <div class="card tile">
+        <div class="label">Requests</div>
+        <div class="n">${s.requests.toLocaleString()}</div>
+        <div class="tsub">this window</div>
+        <div class="tspark">${mini(d.series, 'requests')}</div>
+      </div>
+      <div class="card tile">
+        <div class="label">Tokens in / out</div>
+        <div class="n">${tok(s.inputTokens)}<span style="color:var(--faint)"> / </span>${tok(s.outputTokens)}</div>
+        <div class="tsub">${s.requests ? tok(Math.round((s.inputTokens + s.outputTokens) / s.requests)) + ' avg per request' : ''}</div>
+        <div class="tspark"></div>
+      </div>
+      <div class="card tile">
+        <div class="label">Top model</div>
+        <div class="n money">$${top ? usd(top.costUsd) : '0.00'}</div>
+        <div class="tsub">${top ? esc(top.label) + ' · ' + topShare + '% of spend' : 'no data'}</div>
+        <div class="tspark"></div>
+      </div>
     </div>
-    <div class="stats fade">
-      <div class="card stat"><div class="label">Requests</div><div class="n req">${s.requests.toLocaleString()}</div></div>
-      <div class="card stat"><div class="label">Input tokens</div><div class="n in">${tok(s.inputTokens)}</div></div>
-      <div class="card stat"><div class="label">Output tokens</div><div class="n out">${tok(s.outputTokens)}</div></div>
-      <div class="card stat"><div class="label">Today's spend</div><div class="n">$${usd(b.todaySpendUsd)}</div></div>
+    <div class="card chartcard fade"><div class="label">Spend over time · ${esc(d.range)}</div>${sparkline(d.series)}</div>
+    <div class="card fade" style="grid-column:1/-1">
+      <div class="label">By model</div>
+      <table>
+        <thead><tr><th>Model</th><th class="num">Reqs</th><th class="num">Tokens in / out</th><th class="num">$ / 1k tok</th><th class="num">Share</th><th class="num">Cost</th></tr></thead>
+        <tbody>${modelTable || '<tr><td colspan="6" style="color:var(--faint)">no data</td></tr>'}${modelTable ? totalRow : ''}</tbody>
+      </table>
     </div>
-    <div class="card chartcard fade"><div class="label">Spend over time</div>${sparkline(d.series)}</div>
-    <div class="card fade"><div class="label">By model</div><div class="bars">${modelBars || '<span style="color:var(--faint)">no data</span>'}</div></div>
     <div class="card fade"><div class="label">By project</div><div class="bars">${projectBars || '<span style="color:var(--faint)">no data</span>'}</div></div>
     ${userCard}
     ${sourceCard}
@@ -514,13 +671,38 @@ const LENS_WHY = {
   Impact: 'No realized units to weight by production reach yet (shipped &gt; merged &gt; committed, × whether it survived).',
 };
 
-function lensBar(name, lens) {
+const LENS_SUB = {
+  Realization: 'did it last?',
+  Acceptance: 'kept first try?',
+  Lift: 'faster than no-AI?',
+  Impact: 'did it matter?',
+};
+const LENS_ICON = {
+  Realization: '<svg viewBox="0 0 16 16" fill="none"><path d="M8 1.5 13.5 3.5v4.2c0 3.2-2.3 5.6-5.5 6.8-3.2-1.2-5.5-3.6-5.5-6.8V3.5L8 1.5z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="m5.6 7.8 1.7 1.7 3.1-3.4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  Acceptance: '<svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.3" stroke="currentColor" stroke-width="1.2"/><path d="m5.2 8.2 1.9 1.9 3.7-4.1" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  Lift: '<svg viewBox="0 0 16 16" fill="none"><path d="M2 12.5 6.2 8l2.6 2.4L14 4.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.5 4.5H14V8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  Impact: '<svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.3" stroke="currentColor" stroke-width="1.2"/><circle cx="8" cy="8" r="3.4" stroke="currentColor" stroke-width="1.2"/><circle cx="8" cy="8" r="1" fill="currentColor"/></svg>',
+};
+// A lens as a scored card (mockup U2): icon + name + question, big score,
+// a 0–100 meter with a position dot, and — when unconnected — the exact reason
+// plus how to light it up. n/a is a teaching state, never a dead end.
+function lensCard(name, lens) {
+  const icon = `<span class="licon">${LENS_ICON[name] || ''}</span>`;
+  const head = `<div class="lhead">${icon}<span class="lname">${esc(name)}</span></div><div class="lsub">${esc(LENS_SUB[name] || '')}</div>`;
   if (!lens || !lens.instrumented || lens.value == null) {
-    const why = LENS_WHY[name] ? tip('<b>' + esc(name) + ' isn\'t connected yet.</b>' + LENS_WHY[name]) : '';
-    return `<div class="lens"><span class="ln">${esc(name)}</span><div class="lt"></div><span class="lv na">n/a${why}</span></div>`;
+    return `<div class="card lenscard na">${head}
+      <div class="lscore">n/a</div>
+      <div class="lmeter"></div>
+      <div class="lticks"><span>0</span><span>50</span><span>100</span></div>
+      <div class="lwhy">${LENS_WHY[name] || 'Not connected yet.'}</div>
+    </div>`;
   }
   const p = Math.round(lens.value * 100);
-  return `<div class="lens"><span class="ln">${esc(name)}</span><div class="lt"><div class="lf" style="width:${p}%"></div></div><span class="lv">${p}%</span></div>`;
+  return `<div class="card lenscard">${head}
+    <div class="lscore">${p}<span style="font-size:0.5em;color:var(--muted)">%</span></div>
+    <div class="lmeter"><div class="lmfill" style="width:${p}%"></div><div class="lmdot" style="left:${p}%"></div></div>
+    <div class="lticks"><span>0</span><span>50</span><span>100</span></div>
+  </div>`;
 }
 
 function renderValue(d) {
@@ -548,20 +730,51 @@ function renderValue(d) {
     returnHtml = `<div class="sub" style="margin-top:10px;font-size:11.5px;color:var(--faint)">RoI return — not yet priced. Route real traffic through the proxy so your time-with-AI can be measured${tip('The dollar return cannot be priced until your <b>time-with-AI</b> is measured. Route real traffic through the proxy so supervision time is captured; without it, a dollar return would be invented.')}</div>`;
   }
 
-  const heroLenses = roi
-    ? ['realization', 'acceptance', 'lift', 'impact'].map((k) => lensBar(cap1(k), roi.lenses[k])).join('')
-    : '<div style="color:var(--faint);font-family:var(--mono);font-size:12px;line-height:1.6">No git repo at the dashboard root, so the coding lenses are unavailable. Non-coding usage is measured below.</div>';
+  const lensRow = roi
+    ? `<div class="lensrow fade" style="grid-column:1/-1">${['realization', 'acceptance', 'lift', 'impact'].map((k) => lensCard(cap1(k), roi.lenses[k])).join('')}</div>`
+    : `<div class="card fade" style="grid-column:1/-1;color:var(--faint);font-family:var(--mono);font-size:12px;line-height:1.6">No git repo at the dashboard root, so the coding lenses are unavailable. Non-coding usage is measured below.</div>`;
 
+  // The realization funnel (mockup U2): survivors-in-dollars at each gate, gold
+  // tapering to sage. A bucket that died AT gate g passed everything before g;
+  // 'realized' passed all eight. 'unverified' can't be placed — disclosed, not drawn.
   let pnl = '<div style="color:var(--faint);font-family:var(--mono);font-size:12px">connect a git repo to see the funnel P&amp;L</div>';
   if (d.realization) {
     const stages = d.realization.matured.wasteByStage;
-    pnl = stages.length
-      ? stages.map((b) => {
-          const good = b.stage === 'realized';
-          const label = good ? 'realized ✓' : 'stopped at ' + b.stage;
-          return `<div class="wstage"><span>${esc(label)}</span><span class="c ${good ? 'good' : ''}">$${money(b.costUsd)} · ${b.units}u</span></div>`;
-        }).join('')
-      : '<div style="color:var(--faint);font-family:var(--mono);font-size:12px">no matured units yet</div>';
+    if (stages.length) {
+      const GATES = ['proposed', 'accepted', 'committed', 'tested', 'merged', 'shipped', 'survived', 'clean'];
+      const GATE_Q = { proposed: 'what the AI put forward', accepted: 'kept in the session', committed: 'landed in git', tested: 'passed the suite', merged: 'reached mainline', shipped: 'went to production', survived: 'lasted the window', clean: 'no rework needed' };
+      const unverified = stages.find((b) => b.stage === 'unverified');
+      const placeable = stages.filter((b) => b.stage !== 'unverified');
+      const totalUsd = placeable.reduce((a, b) => a + b.costUsd, 0);
+      const totalUnits = placeable.reduce((a, b) => a + b.units, 0);
+      // Weight by dollars when spend is attributed to these units; otherwise fall
+      // back to unit counts (never draw a fake all-zero funnel) and say so.
+      const byUsd = totalUsd > 0;
+      const total = byUsd ? totalUsd : totalUnits;
+      const survivorsAt = (gi) => placeable.reduce((a, b) => {
+        const ti = b.stage === 'realized' ? GATES.length : GATES.indexOf(b.stage);
+        return a + (ti > gi ? (byUsd ? b.costUsd : b.units) : 0);
+      }, 0);
+      const mix = (t) => { // gold #E8B33C → sage #63C593
+        const c = (a, b2) => Math.round(a + (b2 - a) * t);
+        return `rgb(${c(232, 99)},${c(179, 197)},${c(60, 147)})`;
+      };
+      const rows = GATES.map((g2, i) => {
+        const passed = survivorsAt(i); // $ of units that passed gate i
+        const pctW = total > 0 ? (passed / total) * 100 : 0;
+        return `<span class="fno">${String(i + 1).padStart(2, '0')}</span>
+          <span class="fgate">${esc(g2)}<span class="fq">${esc(GATE_Q[g2])}</span></span>
+          <span class="fbarwrap"><span class="fbar" style="width:${Math.max(2, pctW)}%;background:${mix(i / (GATES.length - 1))}"></span></span>
+          <span class="fpct">${total > 0 ? Math.round((passed / total) * 100) : 0}%</span>
+          <span class="fusd">${byUsd ? '$' + money(passed) : passed + 'u'}</span>`;
+      }).join('');
+      const realized = survivorsAt(GATES.length - 1);
+      const amt = (v) => byUsd ? '$' + money(v) : v + ' unit' + (v === 1 ? '' : 's');
+      pnl = `<div class="fnl">${rows}</div>
+        <div class="fsummary">${amt(realized)} of ${amt(total)}${byUsd ? ` across ${totalUnits} matured units` : ''} made it all the way through${byUsd ? '' : ' · shown by unit count — no spend is attributed to these units yet'}${unverified ? ` · ${byUsd ? '$' + money(unverified.costUsd) : unverified.units + 'u'} unverifiable — no gate signals, excluded from the funnel, never counted as realized` : ''}</div>`;
+    } else {
+      pnl = '<div style="color:var(--faint);font-family:var(--mono);font-size:12px">no matured units yet</div>';
+    }
   }
 
   const bud = d.budget;
@@ -648,26 +861,42 @@ function renderValue(d) {
   const srcLabel = (d.valueSource === 'store' ? ' · <span style="color:var(--gold)">stored snapshot</span>'
     : d.valueSource === 'git' ? ' · <span style="color:var(--muted)">live · git</span>' : '') + scopeLabel;
 
+  const scalePane = idx != null
+    ? `<div class="scalepane">
+        <div class="label">Where you sit · 0–100</div>
+        <div class="scale">
+          ${iv && iv.low != null && iv.high != null ? `<div class="sband" style="left:${Math.max(0, iv.low)}%;width:${Math.max(1, Math.min(100, iv.high) - Math.max(0, iv.low))}%"></div>` : ''}
+          <div class="smark" style="left:${Math.min(100, Math.max(0, idx))}%"></div>
+        </div>
+        <div class="scaleticks"><span>0</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
+        <div class="scalefeet">geometric mean of the connected lenses — one weak axis drags the whole index${tip('The <b>geometric mean</b> of the four value lenses, 0–100. Geometric, not an average: if any one lens nears zero the whole index collapses, so no single maxed axis can inflate it.')}</div>
+      </div>`
+    : `<div class="scalepane"><div class="label">Where you sit · 0–100</div><div style="color:var(--faint);font-family:var(--mono);font-size:12px;line-height:1.6;margin-top:8px">No index yet — connect at least one lens to place yourself on the scale.</div></div>`;
+
   setNodes(g, `
     <div class="card roihero fade">
       <div class="idxpane">
-        <div class="label">RoI Index ${tip('The <b>geometric mean</b> of the four value lenses, 0–100. Geometric, not an average: if any one lens nears zero the whole index collapses, so no single maxed axis can inflate it.')}</div>
-        <div class="roibig" style="color:${idxColor}">${idx == null ? '—' : idx}<small> / 100</small></div>
-        ${band ? `<div style="font-family:var(--mono);font-size:11.5px;color:var(--muted);margin-top:3px">range <b style="color:var(--text)">${band}</b>${tip('Lift — the "no-AI" counterfactual — can only be <b>bounded</b>, not pinned to a single number, so the Index is shown as an honest range rather than false precision.')}</div>` : ''}
-        ${upperBound ? `<div style="font-family:var(--mono);font-size:11px;color:var(--gold);margin-top:3px">↑ upper bound — measuring the rest can only lower it${tip('Some lenses aren\'t connected yet, so this is the <b>highest</b> the Index could be. Measuring the rest can only pull it down, never up — more measurement means a more honest number.')}</div>` : ''}
-        <div class="sub" style="color:var(--muted);margin-top:12px;font-size:12.5px">Realized efficiency <b style="color:var(--text);font-family:var(--mono)">${esc(eff)}</b> · ${cov}/4 lenses connected${srcLabel}${tip('<b>Realized efficiency</b>: the share of spend that became kept, durable value. <b>' + cov + '/4 lenses connected</b>: how much signal is connected — unconnected lenses are excluded, never guessed.')}</div>
+        <div class="label">Return on Intelligence</div>
+        <div class="roibig" style="color:${idxColor}">${idx == null ? '—' : idx}</div>
+        <div class="idxcap">RoI Index · 0–100${upperBound ? ' · <span style="color:var(--gold)">upper bound</span>' + tip('Some lenses aren\'t connected yet, so this is the <b>highest</b> the Index could be. Measuring the rest can only pull it down, never up — more measurement means a more honest number.') : ''}</div>
+      </div>
+      <div class="bandpane">
+        <div class="label">Honest range</div>
+        <div class="bandnum">${band || (idx == null ? '—' : idx)}</div>
+        <div class="bandcap">${band ? 'Lift can only be bounded, so the index is a range — never false precision' + tip('Lift — the "no-AI" counterfactual — can only be <b>bounded</b>, not pinned to a single number, so the Index is shown as an honest range rather than false precision.') : 'point estimate — the interval appears once Lift is bounded'}</div>
+      </div>
+      ${scalePane}
+      <div class="roinotes" style="grid-column:1/-1;border-top:1px solid var(--line-soft);padding-top:14px;margin-top:4px">
+        <div class="sub" style="color:var(--muted);font-size:12.5px">Realized efficiency <b style="color:var(--text);font-family:var(--mono)">${esc(eff)}</b> · ${cov}/4 lenses connected${srcLabel}${tip('<b>Realized efficiency</b>: the share of spend that became kept, durable value. <b>' + cov + '/4 lenses connected</b>: how much signal is connected — unconnected lenses are excluded, never guessed.')}</div>
         ${roi && roi.realizationInterval ? `<div class="sub" style="color:var(--faint);margin-top:4px;font-size:11.5px;font-family:var(--mono)">realization ${Math.round(roi.realizationInterval.low * 100)}–${Math.round(roi.realizationInterval.high * 100)}% <span style="color:var(--mint)">anytime-valid</span>${tip('A <b>confidence sequence</b>, not a classic interval. A classic interval is only valid if you look once at a pre-set sample size — but a dashboard is watched continuously, and under that use its real error rate explodes (in simulation, a 90% classic interval is wrong at some point in ~64% of runs). This one holds its guarantee <b>simultaneously at every glance</b>: peek whenever, act whenever, still valid. The honest cost is a slightly wider interval.')}</div>` : ''}
         ${d.drift ? (d.drift.alarm
           ? `<div class="sub" style="color:var(--coral);margin-top:4px;font-size:11.5px;font-family:var(--mono)">⚠ drift detected — realization moved ${Math.round((d.drift.overallRate ?? 0) * 100)}% → ${Math.round((d.drift.recentRate ?? 0) * 100)}% recently${tip('The <b>Goodhart alarm</b>: an anytime-valid test that the realization rate is NOT stable. It detects that the rate moved, not why — a genuine regime change (new model, new workflow) and a gamed metric both trip it. Its job is to force the question no dashboard asks: <b>did the work change, or did the measuring get bent?</b> False-alarm rate is capped at 5% over all of time.')}</div>`
           : `<div class="sub" style="color:var(--faint);margin-top:4px;font-size:11.5px;font-family:var(--mono)">stability <span style="color:var(--mint)">stable</span> — no drift in the realization stream${tip('The <b>Goodhart alarm</b> (anytime-valid): watches the realization stream for the signature of a bent metric — a rate that drifts while a constant-rate story fails. Currently quiet: the stream is consistent with one stable rate.')}</div>`) : ''}
         ${returnHtml}
       </div>
-      <div class="lenspane">
-        <div class="label">Value lenses · geometric mean — no axis can carry it alone ${tip('Four independent ways raw output overstates value: <b>Realization</b> (did it last?), <b>Acceptance</b> (kept first try?), <b>Lift</b> (better than no-AI?), <b>Impact</b> (did it matter?). An n/a lens is excluded, not guessed.')}</div>
-        ${heroLenses}
-      </div>
     </div>
-    <div class="card fade"><div class="label">Where the spend went ${tip('Realized-cost grouped by the <b>last gate each unit reached</b>. "stopped at tested" means it was tested but never merged or shipped — spend that stalled before becoming durable value; "realized" made it all the way through.')}</div>${pnl}</div>
+    ${lensRow}
+    <div class="card fade" style="grid-column:1/-1"><div class="label">The realization funnel · where the spend went ${tip('Dollars surviving each gate of the Realization Standard — a unit that died at a gate passed everything before it. "Realized" made it all the way through; spend that stalled at an early gate never became durable value.')}</div>${pnl}</div>
     <div class="card fade">
       <div class="label">Budget advisor ${tip('A value-aware cap from your p90 active-day spend, tightened when realized value is low. It needs a few active days of real usage before it appears — no invented numbers on day one.')}</div>
       ${budBody}
@@ -699,11 +928,11 @@ function renderGuide(g) {
   const host = $('#guide');
   if (!host || !g || !g.steps) return;
   const complete = g.stage === 'steward';
-  const steps = g.steps.map((s) => {
+  const steps = g.steps.map((s, i) => {
     const isNext = s.id === g.next.id;
     const cls = s.done ? 'done' : isNext ? 'next' : '';
-    const mark = s.done ? '✓' : isNext ? '→' : '·';
-    return `<span class="gstep ${cls}" title="${esc(s.state)}">${mark} ${esc(s.title)}</span>`;
+    const mark = s.done ? '✓' : i + 1;
+    return `${i ? '<span class="gdash"></span>' : ''}<span class="gstep ${cls}" title="${esc(s.state)}"><span class="gc">${mark}</span> ${esc(s.title)}</span>`;
   }).join('');
   const body = complete
     ? `<div class="gwhy">${esc(g.headline)}</div>`
