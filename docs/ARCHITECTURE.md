@@ -304,17 +304,19 @@ genuinely open:
    piece didn't wire in), and `src/judge/call.ts` +
    `src/judge/orchestrate.ts`'s `judgeSession` (the actual OpenAI-compatible
    call, strictly parsed, gated first, gracefully degraded on any failure) —
-   47 tests across five files (incl. the `fiscus judge` CLI wiring), none of them mocked-away: real local HTTP
+   61 tests across seven files (incl. the `fiscus judge` CLI wiring and the
+   transcript reader), none of them mocked-away: real local HTTP
    servers stand in for the judge endpoint the same way `test/proxy.test.ts`
-   already stands in for upstream providers. One honest gap surfaced by
-   building it: Fiscus never persisted prompt/response transcript text, so
-   the "full session content" tiers this item originally imagined can't
-   actually send anything richer than the structural summary yet — see
+   already stands in for upstream providers. The full-content tiers are real
+   too — resolved WITHOUT a transcript-capture feature: `src/judge/transcript.ts`
+   reads Claude Code's own on-disk `<sessionId>.jsonl` ephemerally at judge
+   time (bounded excerpt, clipping disclosed, nothing persisted — the store
+   still never stores prompt/response text), and `fiscus judge` judges real
+   sessions looked up from the store (`--session <id>` to pick). See
    [docs/LIFT-AI-SIDE-JUDGE-DESIGN.md](LIFT-AI-SIDE-JUDGE-DESIGN.md) §2's boxed
-   note. Genuinely still open: real transcript capture (a bigger, separate
-   privacy decision), a real controlled A/B, and any CLI/dashboard surface to
-   actually trigger a judgment — `judgeSession` is a library capability today,
-   called from nowhere yet.
+   note. Genuinely still open: transcript excerpts for opencode/Codex sessions
+   (structural-only today, disclosed), a real controlled A/B, and a dashboard
+   trigger / automatic invocation from `fiscus lift`.
 4. **Rust core** — only if Fiscus becomes a shared gateway under real concurrency.
    Until then it's premature.
 
