@@ -131,19 +131,25 @@ that lens already does.
 > which consults the §4 gate first and degrades to the algorithmic signal —
 > visibly, via `rationale` — on any failure.
 >
-> **The "full session content" tiers described below cannot honestly be built
-> yet, and this document undersold why.** Fiscus's store never persists
-> prompt text or the AI's response text — `RequestRow` has no content field,
-> and `ProposalRow` stores only the proposed file diffs that already feed the
-> Acceptance lens. There is no transcript sitting in the local database for a
-> "full content" tier to send. Building one for real would mean starting to
-> *capture* transcript text somewhere first — a materially bigger, more
-> privacy-sensitive decision than a judge call path, and not one this document
-> or the §4 gate resolves. Until that exists, `judgeSession` treats a
-> `sendFullContent` opt-in honestly: it sends the same structural summary
-> everything else gets, and reports the STRUCTURAL confidence tag, not the
-> full one — never claiming a richer source than what was actually
-> transmitted. `test/judge-orchestrate.test.ts` asserts this directly.
+> **The "full session content" tiers are now real (2026-07-16) — without the
+> capture decision this note originally feared.** Fiscus's store STILL never
+> persists prompt text or the AI's response text — `RequestRow` has no content
+> field, and `ProposalRow` stores only the proposed file diffs that already
+> feed the Acceptance lens. The resolution was noticing that no capture is
+> needed: the tools Fiscus imports from already keep their own transcripts on
+> disk (Claude Code writes `~/.claude/projects/<dir>/<sessionId>.jsonl` with
+> full message content). `src/judge/transcript.ts` reads that file AT JUDGE
+> TIME, read-only, into a bounded excerpt (per-turn and total character caps,
+> clipping counted and disclosed) that lives only for the one judge call —
+> nothing is ever written to Fiscus's store. Scope honesty: Claude Code
+> sessions only; opencode/Codex sessions stay structural with the rationale
+> saying so. When no on-disk transcript exists for a session, `judgeSession`
+> still downgrades honestly: it sends the structural summary and reports the
+> STRUCTURAL confidence tag — never claiming a richer source than what was
+> actually transmitted. And a structural-consent tier DROPS a transcript even
+> when handed one — the tier the user consented to caps the payload, never the
+> caller. `test/judge-orchestrate.test.ts` and `test/judge-transcript.test.ts`
+> assert all of this directly.
 
 Where the algorithmic signal is structurally blind (it can see *that* a session had
 many proposal-revision cycles, not *why*, or whether a single long uninterrupted
@@ -240,15 +246,15 @@ what the ladder allows:
 | Hosted API, structural input | Off | A proposal-count/timing summary only | Same | Two independent opt-ins: `judge.hostedEnabled: true` AND the `AEGIS_JUDGE_API_KEY` env var set (plus `judge.hostedBaseUrl` + `judge.hostedModel` configured — operationally required, not consent gates) |
 | Hosted API, full content | Off | Actual session content | ⚠ Downgrades to the structural summary — see below | The above plus `judge.hostedSendFullContent` — the loudest tier, matching ARCHITECTURE §7 item 3's "real, loud opt-in decision" language exactly |
 
-⚠ **The two "full content" rows do not yet do what their name says.** Fiscus
-never persists prompt or response transcript text (see the boxed note in §2), so
-there is nothing richer than the structural summary to send even when a user
-opts all the way up the ladder. `judgeSession`
-(`src/judge/orchestrate.ts`) handles this honestly: it sends the structural
+⚠ **The two "full content" rows now do what their name says — for Claude Code
+sessions.** The excerpt is read ephemerally from the tool's own on-disk
+transcript at judge time (see the boxed note in §2); Fiscus still never
+persists content. For sessions whose tool has no supported on-disk transcript
+(opencode, Codex, plain proxy traffic), `judgeSession`
+(`src/judge/orchestrate.ts`) degrades honestly: it sends the structural
 payload and reports the STRUCTURAL confidence tag, never claiming the `-full`
-tag for data that wasn't actually transmitted. This is a real, current
-limitation, not a design choice — building genuine full-content tiers requires
-transcript capture to exist first, which this document has never scoped.
+tag for data that wasn't actually transmitted — and the rationale says a
+transcript wasn't found rather than staying silent.
 
 Every tier above "algorithmic" requires the user to have already taken an action
 (configured a URL, set an env var, flipped an explicit flag) before anything is
@@ -271,14 +277,13 @@ can affect the other tier's behavior.
   way §7.2's algorithmic signal does — whoever wires `judgeSession`'s output
   into `boundedLift` should read §7.2's "why a fourth point-multiplier, not a
   separate interval-narrowing mechanic" reasoning first.
-- **Real transcript-capture and full-content judging.** Blocked on a
-  materially bigger, separate privacy decision (see the ⚠ note above), not on
-  anything in this document.
-- **A generic "point Fiscus at any OpenAI-compatible judge model" UI/CLI
-  surface.** `judgeSession`/`judgeSessionFromStore` exist as a library-level
-  capability (`src/judge/orchestrate.ts`) but nothing calls them yet — no
-  `fiscus judge` subcommand, no dashboard trigger, no automatic invocation
-  from `fiscus lift`. Still an open question, not decided here.
+- ~~**Real transcript-capture and full-content judging.**~~ BUILT 2026-07-16
+  without a capture decision: ephemeral read-at-judge-time from the tool's own
+  on-disk log (Claude Code only for now — see the ⚠ note above).
+- **A dashboard trigger / automatic invocation from `fiscus lift`.** The
+  `fiscus judge` subcommand exists (it judges real sessions looked up from the
+  store; `--session <id>` to pick one), but nothing invokes judging
+  automatically. Still an open question, not decided here.
 
 ## Revisit condition
 

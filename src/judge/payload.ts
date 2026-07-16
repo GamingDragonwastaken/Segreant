@@ -11,10 +11,10 @@
  * IMPORTANT — what "structural" means here in practice: Fiscus's store never
  * persists prompt text or the AI's response text (src/store/db.ts's RequestRow
  * has no content field; ProposalRow stores only the proposed file diffs for the
- * Acceptance lens). So this summary is not a redacted slice of a transcript —
- * it is genuinely ALL the session-level signal Fiscus has ever captured, full
- * stop. See judge/orchestrate.ts for what that means for the "full content"
- * judge tiers.
+ * Acceptance lens). So this summary is genuinely ALL the session-level signal
+ * the STORE holds. The full-content judge tiers get more only via
+ * judge/transcript.ts, which reads the tool's own on-disk session log
+ * ephemerally at judge time — still nothing persisted by Fiscus.
  */
 
 import type { RequestRow, ProposalRow } from '../store/db.ts';

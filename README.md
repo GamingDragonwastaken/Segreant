@@ -131,11 +131,14 @@ fiscus today | week | month  Show spend for a window        (--json)
 fiscus roi --repo <path>     Return on Intelligence — four value lenses composed
                                 into one index (--labor-rate $/hr, --tsf X, --json)
 fiscus frontier --repo <p>   What's best for you — RoI by model × task-type + routing
-fiscus usage                 RoI for non-coding usage (chat/research), from outcomes
-fiscus judge                 Score a recent window's AI-assisted efficiency —
+fiscus usage                 RoI for usage without code signals (chat/research),
+                                scored from reported outcomes
+fiscus judge                 Score a real session's AI-assisted efficiency —
                                 algorithmic by default; opt into a local/hosted LLM
-                                judge via config.judge.*  (--window D, --project
-                                <name>, --json)
+                                judge via config.judge.*. Full-content tiers read a
+                                Claude Code session's own on-disk transcript
+                                ephemerally (bounded excerpt, nothing persisted)
+                                (--session <id>, --window D, --project <name>, --json)
 fiscus team                  Per-user value extraction — opt-in, distribution-only,
                                 k-anonymous (--me <user> for your own view, --json)
 fiscus team push --url <u>   Cross-machine: sign + push this window's per-project

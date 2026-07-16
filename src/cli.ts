@@ -77,9 +77,11 @@ function cmdHelp(): void {
     usage                 RoI for usage WITHOUT code signals — chat, research,
                           drafting, plus coding tools that don't report diffs.
                           Sessions scored from reported outcomes (--days N, --json)
-    judge                 Score a recent window's AI-assisted efficiency —
+    judge                 Score a real session's AI-assisted efficiency —
                           algorithmic by default; opt into a local/hosted LLM
-                          judge via config.judge.* (--window D, --project <name>, --json)
+                          judge via config.judge.*. Full-content tiers read a
+                          Claude Code session's own transcript ephemerally.
+                          (--session <id>, --window D, --project <name>, --json)
     team                  Per-user value: how much of the spend reaches outcomes.
                           Opt-in, distribution-only, k-anonymous. --me <user> for
                           your own view (--days N, --json)

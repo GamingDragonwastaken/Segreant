@@ -6,7 +6,6 @@
  * and cmdTeamPushWatch stay module-internal.
  */
 
-import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Store } from '../store/db.ts';
@@ -227,13 +226,15 @@ export async function cmdReceipt(flags: Flags): Promise<void> {
 }
 
 /**
- * Judge a recent window's AI-assisted efficiency (src/judge/orchestrate.ts).
- * One CLI invocation is one ad-hoc judged window, not a detected session
- * boundary — real session-boundary detection doesn't exist in this codebase
- * yet, so `sessionId` is freshly generated per call, not looked up. With no
- * judge.* tier configured (the default), this always returns the zero-cost
- * algorithmic signal — that's the expected steady state, not a degraded one.
- * See docs/LIFT-AI-SIDE-JUDGE-DESIGN.md §4 for the trust-ladder this reads.
+ * Judge a REAL session's AI-assisted efficiency (src/judge/orchestrate.ts).
+ * Sessions are looked up from the store (`--session <id>` or, by default, the
+ * one with the most recent activity in the window) — never invented, so the
+ * structural summary the judge sees is built from that session's actual turns.
+ * With no judge.* tier configured (the default), this always returns the
+ * zero-cost algorithmic signal — that's the expected steady state, not a
+ * degraded one. For the full-content tiers, a Claude Code session's own
+ * on-disk transcript is read ephemerally (judge/transcript.ts) — nothing is
+ * persisted. See docs/LIFT-AI-SIDE-JUDGE-DESIGN.md §4 for the trust ladder.
  */
 export async function cmdJudge(flags: Flags): Promise<void> {
   const tty = process.stdout.isTTY ?? false;
@@ -254,11 +255,36 @@ export async function cmdJudge(flags: Flags): Promise<void> {
   const windowDays = flags.window ? Number(flags.window) : 1;
   const windowEndMs = Date.now();
   const windowStartMs = windowEndMs - windowDays * 86_400_000;
-  const sessionId = randomUUID();
 
   const cfg = loadConfig();
   const store = new Store(dbPath());
-  const judgment = await judgeSessionFromStore(store, project, sessionId, windowStartMs, windowEndMs, cfg.judge);
+
+  const sessions = store.sessionsInWindow(project, windowStartMs, windowEndMs);
+  let picked: { sessionId: string; tool: string; requestCount: number } | null = null;
+  if (typeof flags.session === 'string' && flags.session.trim()) {
+    const wanted = flags.session.trim();
+    picked = sessions.find((s) => s.sessionId === wanted) ?? { sessionId: wanted, tool: store.getSessionMeta(wanted)?.tool ?? 'unknown', requestCount: 0 };
+  } else if (sessions.length > 0) {
+    picked = sessions[0]!;
+  }
+
+  if (!picked) {
+    store.close();
+    if (flags.json) {
+      process.stdout.write(
+        JSON.stringify({ error: 'no-sessions-in-window', project, windowDays, sessions: 0 }, null, 2) + '\n',
+      );
+      return;
+    }
+    console.log('');
+    console.log(color(tty, C.bold, `  Fiscus — session judge · ${project}`));
+    console.log(color(tty, C.gray, `  No sessions with request activity in the last ${windowDays}d for this project.`));
+    console.log(color(tty, C.gray, '  Route traffic through the proxy or run fiscus scan --setup, then retry.'));
+    console.log('');
+    return;
+  }
+
+  const judgment = await judgeSessionFromStore(store, project, picked.sessionId, windowStartMs, windowEndMs, cfg.judge);
   store.close();
 
   if (flags.json) {
@@ -278,7 +304,8 @@ export async function cmdJudge(flags: Flags): Promise<void> {
   console.log('');
   console.log(color(tty, C.bold, `  Fiscus — session judge · ${project}`));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(46)));
-  console.log(color(tty, C.gray, `  window: last ${windowDays}d · session ${sessionId}`));
+  console.log(color(tty, C.gray, `  window: last ${windowDays}d · session ${picked.sessionId}`));
+  console.log(color(tty, C.gray, `  tool: ${picked.tool} · ${picked.requestCount} requests in window${sessions.length > 1 ? ` · ${sessions.length} sessions available (pick one with --session <id>)` : ''}`));
   console.log('');
   console.log(`  Efficiency    ${color(tty, judgment.efficiencyMultiplier >= 1 ? C.green : C.yellow, judgment.efficiencyMultiplier.toFixed(2) + 'x')}`);
   console.log(`  Confidence    ${color(tty, confColor, judgment.confidence)}`);

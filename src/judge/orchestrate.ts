@@ -18,6 +18,7 @@ import type { JudgeConfig } from '../config.ts';
 import { resolveJudgeTier, hasHostedJudgeApiKey, type JudgeConfidence } from './tier.ts';
 import { buildStructuralSummary } from './payload.ts';
 import { callJudgeApi, JudgeCallError, type SessionJudgment } from './call.ts';
+import { loadTranscriptExcerpt, transcriptSupport, type TranscriptExcerpt } from './transcript.ts';
 
 function isSet(s: string | null | undefined): boolean {
   return typeof s === 'string' && s.trim().length > 0;
@@ -38,6 +39,7 @@ export async function judgeSession(
   requests: RequestRow[],
   proposals: ProposalRow[],
   cfg: JudgeConfig,
+  transcript: TranscriptExcerpt | null = null,
 ): Promise<SessionJudgment> {
   const decision = resolveJudgeTier(cfg, hasHostedJudgeApiKey());
   const notes = [...decision.notes];
@@ -57,19 +59,32 @@ export async function judgeSession(
     return neutralJudgment(sessionId, notes.join(' '));
   }
 
-  // Full-content judging is not implemented: the store never persists
-  // prompt/response transcript text (payload.ts's docblock), so there is
-  // nothing beyond the structural summary to honestly send. Downgrade the
-  // ACTUAL payload (there is only ever a structural one to send) and the
-  // REPORTED confidence together — never claim a higher-fidelity source than
-  // what was truly sent.
+  // Full-content tiers send a real, bounded transcript excerpt when the caller
+  // supplied one (read ephemerally from the tool's own on-disk log — the store
+  // still never persists content). When no transcript exists for this session,
+  // downgrade the ACTUAL payload and the REPORTED confidence together — never
+  // claim a higher-fidelity source than what was truly sent. A transcript
+  // passed to a STRUCTURAL tier is deliberately ignored: the tier the user
+  // consented to caps what may be sent, never the other way around.
   const wantsFullContent = decision.tier === 'local-full' || decision.tier === 'hosted-full';
+  const sendTranscript = wantsFullContent && transcript !== null && transcript.turns.length > 0 ? transcript : null;
   const confidence: JudgeConfidence = wantsFullContent
-    ? isLocal
-      ? 'local-llm'
-      : 'hosted-llm-structural'
+    ? sendTranscript
+      ? decision.confidence // 'local-llm' or 'hosted-llm-full' — genuinely earned now
+      : isLocal
+        ? 'local-llm'
+        : 'hosted-llm-structural'
     : decision.confidence;
-  if (wantsFullContent) {
+
+  if (wantsFullContent && sendTranscript) {
+    const bounds =
+      sendTranscript.clippedTurns > 0 || sendTranscript.droppedTurns > 0
+        ? ` — bounded: ${sendTranscript.clippedTurns} turns clipped, ${sendTranscript.droppedTurns} dropped`
+        : '';
+    notes.push(
+      `Transcript excerpt (${sendTranscript.turns.length} turns) read ephemerally from the tool's own log${bounds}; nothing was persisted.`,
+    );
+  } else if (wantsFullContent) {
     // decision.notes was seeded by tier.ts based on CONFIGURED intent (before
     // this function knew the payload would be downgraded) and claims a
     // fidelity — "full session content" — that never actually gets sent.
@@ -81,18 +96,14 @@ export async function judgeSession(
     }
     notes.push(
       isLocal
-        ? 'Judge tier: local LLM (full-content configured but downgraded to structural — stays on this machine either way).'
-        : 'Judge tier: hosted API (full-content configured but downgraded to structural — only a structural summary leaves this machine, never raw content).',
-    );
-    notes.push(
-      'Full-content judging is configured but not yet implemented (Fiscus does not persist transcript text) — ' +
-        'sent the structural summary instead, labeled accordingly.',
+        ? 'Judge tier: local LLM (full-content configured but no on-disk transcript found for this session — sent the structural summary; stays on this machine either way).'
+        : 'Judge tier: hosted API (full-content configured but no on-disk transcript found for this session — only a structural summary left this machine, never raw content).',
     );
   }
 
   const summary = buildStructuralSummary(requests, proposals, sessionId);
   try {
-    const judgment = await callJudgeApi(baseUrl!, model!, apiKey, summary, confidence);
+    const judgment = await callJudgeApi(baseUrl!, model!, apiKey, summary, confidence, undefined, sendTranscript);
     return notes.length ? { ...judgment, rationale: `${judgment.rationale} (${notes.join(' ')})` } : judgment;
   } catch (err) {
     const reason = err instanceof JudgeCallError ? err.message : String(err);
@@ -105,16 +116,34 @@ export async function judgeSession(
  * Store-integrated convenience wrapper, mirroring liftOptionsFromStore's
  * relationship to liftFromData in src/value/. Project-scoped because the
  * store's only range query over proposals (Store.proposalsInWindow) is.
+ *
+ * When (and only when) the resolved tier is a full-content one, this attempts
+ * the ephemeral transcript read: the session's recorded tool says whether an
+ * on-disk transcript can exist (claude-code names its files by session id),
+ * and the excerpt — if found — is passed to judgeSession, never persisted.
+ * The tier check happens BEFORE any file is touched, so a structural-tier or
+ * algorithmic-tier run never reads a transcript it would not be allowed to send.
  */
-export function judgeSessionFromStore(
+export async function judgeSessionFromStore(
   store: Store,
   project: string,
   sessionId: string,
   windowStartMs: number,
   windowEndMs: number,
   cfg: JudgeConfig,
+  transcriptRoot?: string,
 ): Promise<SessionJudgment> {
   const requests = store.requestsInRange(windowStartMs, windowEndMs);
   const proposals = store.proposalsInWindow(project, windowStartMs, windowEndMs);
-  return judgeSession(sessionId, requests, proposals, cfg);
+
+  let transcript: TranscriptExcerpt | null = null;
+  const decision = resolveJudgeTier(cfg, hasHostedJudgeApiKey());
+  if (decision.tier === 'local-full' || decision.tier === 'hosted-full') {
+    const meta = store.getSessionMeta(sessionId);
+    const tool = meta?.tool ?? null;
+    if (transcriptSupport(tool) === 'supported') {
+      transcript = await loadTranscriptExcerpt(sessionId, tool, transcriptRoot);
+    }
+  }
+  return judgeSession(sessionId, requests, proposals, cfg, transcript);
 }

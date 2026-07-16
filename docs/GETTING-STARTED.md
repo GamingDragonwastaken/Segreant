@@ -128,7 +128,7 @@ available as the fallback:
 
 ```bash
 npx fiscus report --commit <hash> --kind tested
-npx fiscus report --session <id> --kind resolved   # non-coding usage
+npx fiscus report --session <id> --kind resolved   # usage without code signals
 ```
 
 ## 4. Govern the spend

@@ -382,6 +382,53 @@ export class Store {
       .run(sessionId, project, tool, startMs);
   }
 
+  /** One session's recorded metadata — the judge uses `tool` to know whether an
+   * on-disk transcript can exist for it (claude-code names files by session id). */
+  getSessionMeta(sessionId: string): { project: string; tool: string; startMs: number } | null {
+    const row = this.db
+      .prepare(`SELECT project, tool, start_ms FROM sessions WHERE session_id = ?`)
+      .get(sessionId) as { project: string; tool: string; start_ms: number } | undefined;
+    return row ? { project: row.project, tool: row.tool, startMs: row.start_ms } : null;
+  }
+
+  /**
+   * Real sessions with request activity in a window, newest-activity first —
+   * what `fiscus judge` enumerates so it judges sessions that actually happened
+   * (aliases folded into the project family, same as every other project read).
+   * `tool` comes from the sessions table when the session was upserted by an
+   * importer/proxy, else 'unknown' — never guessed from the request rows.
+   */
+  sessionsInWindow(
+    project: string,
+    startMs: number,
+    endMs: number,
+  ): Array<{ sessionId: string; tool: string; requestCount: number; lastMs: number; costUsd: number }> {
+    const fam = this.familyFilter('r.project', project);
+    const rows = this.db
+      .prepare(
+        `SELECT r.session_id AS sessionId,
+                COALESCE(s.tool, 'unknown') AS tool,
+                COUNT(*) AS requestCount,
+                MAX(r.ts_epoch_ms) AS lastMs,
+                SUM(r.cost_usd) AS costUsd
+           FROM requests r
+           LEFT JOIN sessions s ON s.session_id = r.session_id
+          WHERE r.session_id IS NOT NULL
+            AND r.ts_epoch_ms >= ? AND r.ts_epoch_ms < ?
+            AND ${fam.sql}
+          GROUP BY r.session_id
+          ORDER BY lastMs DESC`,
+      )
+      .all(startMs, endMs, ...fam.args) as Array<{
+      sessionId: string;
+      tool: string;
+      requestCount: number;
+      lastMs: number;
+      costUsd: number;
+    }>;
+    return rows;
+  }
+
   insertRequest(r: RequestRow): void {
     this.db
       .prepare(

@@ -132,7 +132,7 @@ export async function cmdDemo(flags: Flags): Promise<void> {
   console.log(color(tty, C.bold, '  Explore it:'));
   console.log(`    fiscus today --demo        ${color(tty, C.gray, '# spend, by-model, by-user')}`);
   console.log(`    fiscus alerts --demo       ${color(tty, C.gray, '# budget, spike, throttling')}`);
-  console.log(`    fiscus usage --demo        ${color(tty, C.gray, '# non-coding RoI from outcomes')}`);
+  console.log(`    fiscus usage --demo        ${color(tty, C.gray, '# RoI for sessions without code signals')}`);
   console.log(`    fiscus budget --recommend --demo`);
   console.log(`    fiscus start --demo        ${color(tty, C.gray, '# dashboard, pointed at the demo data')}`);
   console.log('');

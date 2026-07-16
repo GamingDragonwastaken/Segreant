@@ -13,6 +13,7 @@
 
 import type { JudgeConfidence } from './tier.ts';
 import type { StructuralSessionSummary } from './payload.ts';
+import type { TranscriptExcerpt } from './transcript.ts';
 
 export interface SessionJudgment {
   sessionId: string;
@@ -40,26 +41,49 @@ export const JUDGE_MULTIPLIER_CAP = 1.5;
 
 const CALL_TIMEOUT_MS = 30_000;
 
-function judgePrompt(summary: StructuralSessionSummary): string {
+function judgePrompt(summary: StructuralSessionSummary, transcript: TranscriptExcerpt | null): string {
+  const metrics = `Session metrics:\n${JSON.stringify(
+    {
+      requestCount: summary.requestCount,
+      proposalCount: summary.proposalCount,
+      interTurnGapsSec: summary.interTurnGapsSec,
+      requestSizeTrend: summary.requestSizeTrend,
+      spanMinutes: Math.round(summary.spanMinutes * 10) / 10,
+    },
+    null,
+    2,
+  )}`;
+
+  if (!transcript) {
+    return (
+      'You are judging how EFFICIENTLY an AI coding session used its time — not whether the code was good. ' +
+      'You will NOT see any prompt or code content, only structural session metrics. Reply with ONLY a JSON ' +
+      'object of the exact shape {"efficiencyMultiplier": number, "rationale": string}. ' +
+      `efficiencyMultiplier must be between ${JUDGE_MULTIPLIER_FLOOR} and ${JUDGE_MULTIPLIER_CAP}, where 1.0 means ` +
+      'no adjustment, above 1.0 means the session used AI-assisted time unusually well (few turns, tight timing, ' +
+      'proposals converging rather than sprawling), and below 1.0 means it looks like it flailed (many turns, ' +
+      'erratic or growing request sizes, few proposals relative to turns). rationale must be one short sentence.\n\n' +
+      metrics
+    );
+  }
+
+  // Full-content variant: same task, same JSON contract, same bounds — the
+  // ONLY difference is a bounded transcript excerpt after the metrics, so a
+  // model prompted either way is judging the same question on more evidence.
+  const turnsBlock = transcript.turns.map((t) => `${t.role.toUpperCase()}: ${t.text}`).join('\n');
+  const clipNote =
+    transcript.clippedTurns > 0 || transcript.droppedTurns > 0
+      ? `\n(Excerpt bounded: ${transcript.clippedTurns} turns clipped, ${transcript.droppedTurns} later turns dropped.)`
+      : '';
   return (
     'You are judging how EFFICIENTLY an AI coding session used its time — not whether the code was good. ' +
-    'You will NOT see any prompt or code content, only structural session metrics. Reply with ONLY a JSON ' +
-    'object of the exact shape {"efficiencyMultiplier": number, "rationale": string}. ' +
+    'You will see structural session metrics AND a bounded excerpt of the actual session transcript. Reply with ' +
+    'ONLY a JSON object of the exact shape {"efficiencyMultiplier": number, "rationale": string}. ' +
     `efficiencyMultiplier must be between ${JUDGE_MULTIPLIER_FLOOR} and ${JUDGE_MULTIPLIER_CAP}, where 1.0 means ` +
-    'no adjustment, above 1.0 means the session used AI-assisted time unusually well (few turns, tight timing, ' +
-    'proposals converging rather than sprawling), and below 1.0 means it looks like it flailed (many turns, ' +
-    'erratic or growing request sizes, few proposals relative to turns). rationale must be one short sentence.\n\n' +
-    `Session metrics:\n${JSON.stringify(
-      {
-        requestCount: summary.requestCount,
-        proposalCount: summary.proposalCount,
-        interTurnGapsSec: summary.interTurnGapsSec,
-        requestSizeTrend: summary.requestSizeTrend,
-        spanMinutes: Math.round(summary.spanMinutes * 10) / 10,
-      },
-      null,
-      2,
-    )}`
+    'no adjustment, above 1.0 means the session used AI-assisted time unusually well (clear asks, converging work, ' +
+    'little repetition), and below 1.0 means it flailed (re-asking the same thing, going in circles, long confused ' +
+    'stretches). Judge efficiency of the collaboration, not code quality. rationale must be one short sentence.\n\n' +
+    `${metrics}\n\nTranscript excerpt (${transcript.turns.length} turns):\n${turnsBlock}${clipNote}`
   );
 }
 
@@ -80,6 +104,7 @@ export async function callJudgeApi(
   summary: StructuralSessionSummary,
   confidence: JudgeConfidence,
   timeoutMs = CALL_TIMEOUT_MS,
+  transcript: TranscriptExcerpt | null = null,
 ): Promise<SessionJudgment> {
   const controller = new AbortController();
   const timeoutTimer = setTimeout(() => controller.abort(), timeoutMs);
@@ -94,7 +119,7 @@ export async function callJudgeApi(
       },
       body: JSON.stringify({
         model,
-        messages: [{ role: 'user', content: judgePrompt(summary) }],
+        messages: [{ role: 'user', content: judgePrompt(summary, transcript) }],
         response_format: { type: 'json_object' },
         temperature: 0,
       }),

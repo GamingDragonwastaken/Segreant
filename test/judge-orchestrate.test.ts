@@ -8,9 +8,10 @@
  *      proven by pointing baseUrl at an endpoint that throws if it's ever hit.
  *   2. A judge tier the user consented to but that isn't operationally
  *      configured (no model) must degrade WITHOUT attempting a call either.
- *   3. The full-content tiers, which nothing implements yet, must degrade
- *      their REPORTED confidence to match what was ACTUALLY sent — never claim
- *      a higher-fidelity source than was delivered.
+ *   3. The full-content tiers must report confidence matching what was
+ *      ACTUALLY sent: the full tag only when a real transcript excerpt went
+ *      out on the wire, the structural downgrade (visibly) when none existed —
+ *      and a structural-consent tier must drop a transcript even when handed one.
  *   4. Any failure from the call layer must degrade to a neutral algorithmic
  *      judgment, visibly explained, never thrown out of judgeSession.
  */
@@ -154,7 +155,7 @@ test('judgeSession: hosted-structural, all preconditions met, calls out with the
   }
 });
 
-test('judgeSession: a full-content tier downgrades its REPORTED confidence to structural — never claims fidelity it did not deliver', async () => {
+test('judgeSession: a full-content tier WITHOUT a transcript downgrades its REPORTED confidence to structural — never claims fidelity it did not deliver', async () => {
   const mock = await startMockJudge(() => chatCompletion(1.0, 'ok'));
   try {
     const j = await judgeSession(
@@ -164,7 +165,7 @@ test('judgeSession: a full-content tier downgrades its REPORTED confidence to st
       cfg({ localBaseUrl: mock.url, localModel: 'llama3.1', localSendFullContent: true }),
     );
     assert.equal(j.confidence, 'local-llm', 'local structural and full share one tag, so this alone does not prove the downgrade');
-    assert.ok(j.rationale.includes('not yet implemented'), 'the downgrade must be visible in the rationale, not silent');
+    assert.ok(j.rationale.includes('no on-disk transcript found'), 'the downgrade must be visible in the rationale, not silent');
     assert.doesNotMatch(j.rationale, /full session content/i, 'the rationale must not retain the pre-downgrade fidelity claim');
   } finally {
     await mock.close();
@@ -183,11 +184,77 @@ test('judgeSession: a full-content tier downgrades its REPORTED confidence to st
       // is DIFFERENT from hosted-structural's, so if the downgrade didn't happen this
       // would read 'hosted-llm-full' instead.
       assert.equal(j.confidence, 'hosted-llm-structural');
-      assert.ok(j.rationale.includes('not yet implemented'));
+      assert.ok(j.rationale.includes('no on-disk transcript found'));
       assert.doesNotMatch(j.rationale, /full session content/i, 'the rationale must not claim content left the machine when only the structural summary was sent');
     });
   } finally {
     await mock2.close();
+  }
+});
+
+test('judgeSession: a full-content tier WITH a transcript sends it and earns the full tag — and the wire payload provably contains the turns', async () => {
+  const transcript = {
+    sessionId: 's1',
+    turns: [
+      { role: 'user' as const, text: 'please fix the failing auth test' },
+      { role: 'assistant' as const, text: 'the mock clock was frozen — patched and rerun, all green' },
+    ],
+    clippedTurns: 0,
+    droppedTurns: 0,
+    sourcePath: '/fake/s1.jsonl',
+  };
+
+  let seenBody = '';
+  const mock = await startMockJudge((body) => {
+    seenBody = body;
+    return chatCompletion(1.2, 'converged fast');
+  });
+  try {
+    await withEnv('AEGIS_JUDGE_API_KEY', 'sk-test', async () => {
+      const j = await judgeSession(
+        's1',
+        REQUESTS,
+        PROPOSALS,
+        cfg({ hostedEnabled: true, hostedBaseUrl: mock.url, hostedModel: 'gpt-4o-mini', hostedSendFullContent: true }),
+        transcript,
+      );
+      assert.equal(j.confidence, 'hosted-llm-full', 'a genuinely sent transcript earns the full tag');
+      assert.ok(seenBody.includes('please fix the failing auth test'), 'the transcript turns must actually be on the wire');
+      assert.ok(j.rationale.includes('read ephemerally'), 'the rationale must disclose the ephemeral read');
+    });
+  } finally {
+    await mock.close();
+  }
+});
+
+test('judgeSession: a STRUCTURAL tier ignores a provided transcript — consent caps the payload, not the caller', async () => {
+  const transcript = {
+    sessionId: 's1',
+    turns: [{ role: 'user' as const, text: 'SECRET-SENTINEL-MUST-NOT-LEAVE' }],
+    clippedTurns: 0,
+    droppedTurns: 0,
+    sourcePath: '/fake/s1.jsonl',
+  };
+
+  let seenBody = '';
+  const mock = await startMockJudge((body) => {
+    seenBody = body;
+    return chatCompletion(1.0, 'ok');
+  });
+  try {
+    await withEnv('AEGIS_JUDGE_API_KEY', 'sk-test', async () => {
+      const j = await judgeSession(
+        's1',
+        REQUESTS,
+        PROPOSALS,
+        cfg({ hostedEnabled: true, hostedBaseUrl: mock.url, hostedModel: 'gpt-4o-mini' }), // NO hostedSendFullContent
+        transcript,
+      );
+      assert.equal(j.confidence, 'hosted-llm-structural');
+      assert.ok(!seenBody.includes('SECRET-SENTINEL-MUST-NOT-LEAVE'), 'content must never ride along on a structural-consent tier');
+    });
+  } finally {
+    await mock.close();
   }
 });
 

@@ -101,7 +101,7 @@ Reliability shrinkage. Two-of-two successes isn't the same evidence as 140-of-20
 thin results are shrunk toward the population average until there's enough data. It
 stops the tool from chasing luck.
 
-**How do you value non-coding AI use (chat, research, drafting)?**
+**How do you value AI use without code signals (chat, research, drafting)?**
 The same funnel, with the outcome reported instead of read from git. But it's
 *graded*, not pass/fail: an answer you merely *used* counts less than one you
 *resolved* a ticket with, which counts less than something you *published* —

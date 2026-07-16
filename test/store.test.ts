@@ -195,3 +195,32 @@ test('project aliases: realization units and projects list follow the canonical 
   assert.deepEqual(store.realizationProjects(), ['aegisflow']);
   store.close();
 });
+
+test('store.sessionsInWindow: real sessions only, newest activity first, tool from the sessions table, aliases folded', () => {
+  const store = new Store(':memory:');
+  // Session s1 (claude-code, project aegisflow): two requests.
+  store.upsertSession('s1', 'aegisflow', 'claude-code', 1000);
+  store.insertRequest(req({ sessionId: 's1', project: 'aegisflow', tsEpochMs: 1000, costUsd: 1 }));
+  store.insertRequest(req({ sessionId: 's1', project: 'aegisflow', tsEpochMs: 2000, costUsd: 2 }));
+  // Session s2 under the ALIASED name, never upserted into sessions → tool 'unknown'.
+  store.insertRequest(req({ sessionId: 's2', project: 'aegisflow-ts', tsEpochMs: 3000, costUsd: 4 }));
+  // Sessionless request: must not appear at all.
+  store.insertRequest(req({ sessionId: null, project: 'aegisflow', tsEpochMs: 2500, costUsd: 8 }));
+  // Out-of-window activity: excluded.
+  store.insertRequest(req({ sessionId: 's3', project: 'aegisflow', tsEpochMs: 99_000, costUsd: 16 }));
+  store.setProjectAlias('aegisflow-ts', 'aegisflow');
+
+  const rows = store.sessionsInWindow('aegisflow', 0, 5000);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0]!.sessionId, 's2'); // newest activity first
+  assert.equal(rows[0]!.tool, 'unknown');
+  assert.equal(rows[0]!.costUsd, 4);
+  assert.equal(rows[1]!.sessionId, 's1');
+  assert.equal(rows[1]!.tool, 'claude-code');
+  assert.equal(rows[1]!.requestCount, 2);
+  assert.equal(rows[1]!.costUsd, 3);
+
+  assert.deepEqual(store.getSessionMeta('s1'), { project: 'aegisflow', tool: 'claude-code', startMs: 1000 });
+  assert.equal(store.getSessionMeta('nope'), null);
+  store.close();
+});
