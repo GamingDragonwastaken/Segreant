@@ -54,10 +54,18 @@ export function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void 
   }
 
   if (cfg.budget.dailyUsd !== null) {
-    const remaining = Math.max(0, cfg.budget.dailyUsd - todaySpend);
-    const pct = Math.min(100, (todaySpend / cfg.budget.dailyUsd) * 100);
+    // The cap line reads the ENFORCEMENT basis (live proxy spend unless
+    // capIncludesImported), so "% used" matches when requests actually block.
+    const liveOnly = !cfg.budget.capIncludesImported;
+    const capSpend = liveOnly ? store.spendBetween(startOfLocalDay(), Date.now() + 1000, true) : todaySpend;
+    const importedToday = todaySpend - capSpend;
+    const remaining = Math.max(0, cfg.budget.dailyUsd - capSpend);
+    const pct = Math.min(100, (capSpend / cfg.budget.dailyUsd) * 100);
     console.log('');
     console.log(`  Daily cap   ${usd(cfg.budget.dailyUsd)}   ${color(tty, pct > 90 ? C.red : pct > 70 ? C.yellow : C.green, `${pct.toFixed(0)}% used`)}   ${color(tty, C.gray, `${usd(remaining)} left`)}`);
+    if (liveOnly && importedToday > 0.005) {
+      console.log(color(tty, C.gray, `              + ${usd(importedToday)} imported today — outside the cap (include it: fiscus budget --include-imported on)`));
+    }
   }
 
   if (byModel.length) {
@@ -210,6 +218,10 @@ export function cmdBudget(flags: Flags): void {
   setNum('sessionUsd', 'session');
   setNum('runawayMaxUsd', 'runaway');
   if (flags.window !== undefined) next.budget.runawayWindowSec = Number(flags.window);
+  if (flags['include-imported'] !== undefined) {
+    const v = String(flags['include-imported']);
+    next.budget.capIncludesImported = !(v === 'off' || v === 'false' || v === 'no');
+  }
   saveConfig(next);
 
   console.log('');
@@ -218,6 +230,7 @@ export function cmdBudget(flags: Flags): void {
   console.log(`    Daily soft warn:  ${next.budget.dailySoftUsd === null ? 'off' : usd(next.budget.dailySoftUsd)}`);
   console.log(`    Per-session cap:  ${next.budget.sessionUsd === null ? 'off' : usd(next.budget.sessionUsd)}`);
   console.log(`    Runaway guard:    ${next.budget.runawayMaxUsd === null ? 'off' : `${usd(next.budget.runawayMaxUsd)} / ${next.budget.runawayWindowSec}s`}`);
+  console.log(`    Cap counts:       ${next.budget.capIncludesImported ? 'ALL observed spend (live + imported)' : 'live proxy spend only (imported excluded — it cannot be blocked)'}`);
   console.log('');
 }
 
@@ -228,4 +241,80 @@ export function cmdPrune(): void {
   const removed = store.prune(before);
   console.log(`  Pruned ${removed} request rows older than ${cfg.retentionDays} days and compacted the database.`);
   store.close();
+}
+
+/**
+ * Project label management. Tool launch cwds fragment one real project across
+ * labels; aliases merge them AT QUERY TIME — raw ledger rows are never rewritten,
+ * so a merge is reversible (`unalias`) and the record stays honest.
+ *
+ *   fiscus project                      list projects (canonical) + alias table
+ *   fiscus project merge <from...> --into <name>
+ *   fiscus project alias <alias> <canonical>
+ *   fiscus project unalias <alias>
+ */
+export function cmdProject(flags: Flags): void {
+  const store = new Store(dbPath());
+  const tty = process.stdout.isTTY ?? false;
+  const sub = flags._[0] ?? 'list';
+  try {
+    if (sub === 'merge' || sub === 'alias') {
+      const args = flags._.slice(1);
+      const into = sub === 'merge' ? flags.into : args[1];
+      const froms = sub === 'merge' ? args : args.slice(0, 1);
+      if (typeof into !== 'string' || !into || froms.length === 0 || froms.some((f) => !f)) {
+        console.error(
+          sub === 'merge'
+            ? '  Usage: fiscus project merge <label...> --into <canonical>'
+            : '  Usage: fiscus project alias <alias> <canonical>',
+        );
+        process.exitCode = 1;
+        return;
+      }
+      for (const from of froms) {
+        try {
+          store.setProjectAlias(from, into);
+          console.log(`  ${color(tty, C.green, '✓')} "${from}" → "${store.canonicalProject(from)}"`);
+        } catch (e) {
+          console.error(`  ✗ ${from}: ${(e as Error).message}`);
+          process.exitCode = 1;
+        }
+      }
+      console.log(color(tty, C.gray, '  Merged at query time only — raw rows unchanged. Undo: fiscus project unalias <label>'));
+      return;
+    }
+    if (sub === 'unalias') {
+      const alias = flags._[1];
+      if (!alias) {
+        console.error('  Usage: fiscus project unalias <alias>');
+        process.exitCode = 1;
+        return;
+      }
+      console.log(store.removeProjectAlias(alias) ? `  Removed alias "${alias}".` : `  No alias "${alias}" exists.`);
+      return;
+    }
+    // list (default)
+    const byProject = store.byProject(0, Date.now() + 1000);
+    const aliases = store.listProjectAliases();
+    if (flags.json) {
+      process.stdout.write(JSON.stringify({ projects: byProject, aliases }, null, 2) + '\n');
+      return;
+    }
+    console.log('');
+    console.log(color(tty, C.bold, '  Projects — all time (aliases applied)'));
+    for (const p of byProject.slice(0, 20)) {
+      console.log(`  ${p.label.padEnd(34)} ${usd(p.costUsd).padStart(11)}  ${color(tty, C.gray, `${num(p.requests)} req`)}`);
+    }
+    if (aliases.length) {
+      console.log('');
+      console.log(color(tty, C.bold, '  Aliases'));
+      for (const a of aliases) console.log(`  ${a.alias.padEnd(34)} → ${a.canonical}`);
+    } else {
+      console.log('');
+      console.log(color(tty, C.gray, '  No aliases. Merge fragmented labels: fiscus project merge <label...> --into <name>'));
+    }
+    console.log('');
+  } finally {
+    store.close();
+  }
 }

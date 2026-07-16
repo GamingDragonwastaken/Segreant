@@ -22,8 +22,8 @@ import { cmdYield, cmdRealize, cmdReport, cmdExec, cmdUsage, cmdRoi, cmdBudgetAd
 import { cmdTeam, cmdReceipt, cmdJudge, cmdTeamPush } from './cli/teamCmd.ts';
 import { cmdConnect } from './cli/connectCmd.ts';
 import { cmdAlerts, cmdDoctor, cmdInit, cmdGuide, cmdAudit } from './cli/opsCmd.ts';
-import { cmdShow, cmdSources, cmdExport, cmdConfig, cmdBudget, cmdPrune } from './cli/showCmd.ts';
-import { cmdStart, cmdDemo, cmdPricing, cmdBaseline } from './cli/runCmd.ts';
+import { cmdShow, cmdSources, cmdExport, cmdConfig, cmdBudget, cmdPrune, cmdProject } from './cli/showCmd.ts';
+import { cmdStart, cmdDemo, cmdPricing, cmdBaseline, cmdReprice } from './cli/runCmd.ts';
 
 /** This package's version, read from package.json — the single source of truth. */
 function packageVersion(): string {
@@ -74,8 +74,9 @@ function cmdHelp(): void {
                           (--labor-rate $/hr, --tsf <multiplier> for Lift, --json)
     frontier --repo <p>   What's best for you: RoI by model × task-type, with
                           routing recommendations (--window D, --json)
-    usage                 RoI for non-coding usage (chat, research, drafting) —
-                          sessions scored from reported outcomes (--days N, --json)
+    usage                 RoI for usage WITHOUT code signals — chat, research,
+                          drafting, plus coding tools that don't report diffs.
+                          Sessions scored from reported outcomes (--days N, --json)
     judge                 Score a recent window's AI-assisted efficiency —
                           algorithmic by default; opt into a local/hosted LLM
                           judge via config.judge.* (--window D, --project <name>, --json)
@@ -101,6 +102,9 @@ function cmdHelp(): void {
     yield --repo <path>   AI Yield (survival lens): durable lines per $ — survival, churn
                           (--window DAYS, --limit N, --json)
     budget                Set caps: --daily N --soft N --session N --runaway N --window S
+                          --include-imported on|off: whether imported subscription
+                          spend counts toward cap ENFORCEMENT (default off — the
+                          cap governs live proxy traffic, the spend it can block)
     budget --recommend    Suggest a value-aware budget from usage + realized value
                           (--repo <path> for value-based, --apply to write, --json)
     alerts                Active governance alerts: spend spikes, throttling, runaway,
@@ -118,10 +122,20 @@ function cmdHelp(): void {
                           override the source)
                           Self-maintaining: pricing --auto  (refresh on start
                           when stale; --auto off to disable)
+    reprice               Re-cost rows that were priced with a fallback estimate,
+                          using the current rate card — only rows the card now
+                          resolves EXACTLY are rewritten; remaining estimates are
+                          left alone. Dry-run by default; --apply writes (--json)
     baseline               Show the Lift manual-minutes population prior: source,
                           age, task-type count (--json). Update it: baseline
                           --refresh --url <manifest>  (no default source exists —
                           unlike pricing, METR publishes research, not a feed)
+    project               Manage project labels. Launch dirs fragment one real
+                          project across labels; merge them at query time (raw
+                          rows never rewritten):
+                            project merge <label...> --into <name>
+                            project alias <alias> <canonical> · unalias <alias>
+                          Bare "project" lists spend by (merged) project (--json)
     prune                 Prune old rows and compact the database
     demo                  Generate isolated, clearly-labeled synthetic data so every
                           surface populates without an API key (--serve to launch the
@@ -260,11 +274,18 @@ async function main(): Promise<void> {
     case 'receipts':
       await cmdReceipt(flags);
       break;
+    case 'project':
+    case 'projects':
+      cmdProject(flags);
+      break;
     case 'prune':
       cmdPrune();
       break;
     case 'pricing':
       await cmdPricing(flags);
+      break;
+    case 'reprice':
+      cmdReprice(flags);
       break;
     case 'baseline':
     case 'baselines':

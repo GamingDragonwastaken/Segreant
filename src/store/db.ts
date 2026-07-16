@@ -38,6 +38,9 @@ export interface RequestRow {
   cwd?: string | null; // full working-directory path this request was made from; null = unknown. The
   // link that lets Fiscus find the git repo behind a project and auto-correlate
   // its spend into RoI with no --repo — the "no wiring" path. `project` is its basename.
+  via?: 'proxy' | 'import'; // how the row entered the ledger: live proxy traffic
+  // (blockable, marginal API cost) vs a native importer reading a tool's own logs
+  // (sunk subscription cost, observed after the fact). Cap ENFORCEMENT keys on this.
 }
 
 export interface SpendBucket {
@@ -218,6 +221,12 @@ CREATE TABLE IF NOT EXISTS lift_baselines (
   project      TEXT PRIMARY KEY NOT NULL,
   buckets_json TEXT NOT NULL,
   at_ms        INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS project_aliases (
+  alias     TEXT PRIMARY KEY NOT NULL,
+  canonical TEXT NOT NULL,
+  at_ms     INTEGER NOT NULL
 )`;
 
 export class Store {
@@ -249,6 +258,21 @@ export class Store {
     }
     if (!cols.some((c) => c.name === 'cwd')) {
       this.db.prepare('ALTER TABLE requests ADD COLUMN cwd TEXT').run();
+    }
+    if (!cols.some((c) => c.name === 'via')) {
+      this.db.prepare('ALTER TABLE requests ADD COLUMN via TEXT').run();
+      // One-time backfill for rows metered before the column existed. Importer
+      // source tags identify imported rows; everything else came through the
+      // proxy. (A historical proxy row that was ALSO source-tagged with an
+      // importer id would be mis-bucketed here — acceptable one-time
+      // approximation; every new row is stamped explicitly at insert.)
+      this.db
+        .prepare(
+          `UPDATE requests SET via = CASE
+             WHEN source IN ('claude-code','opencode','codex') THEN 'import' ELSE 'proxy' END
+           WHERE via IS NULL`,
+        )
+        .run();
     }
     this.runScript('CREATE INDEX IF NOT EXISTS idx_requests_user ON requests(user)');
     this.runScript('CREATE INDEX IF NOT EXISTS idx_requests_source ON requests(source)');
@@ -326,6 +350,7 @@ export class Store {
    * saveRealizationUnits/realizationUnitRows keep the typed shape in value/.
    */
   saveLiftBaseline(project: string, bucketsJson: string, atMs: number): void {
+    project = this.canonicalProject(project); // merged projects share one baseline
     this.db
       .prepare(
         `INSERT INTO lift_baselines (project, buckets_json, at_ms)
@@ -339,7 +364,9 @@ export class Store {
 
   /** The last computed personal Lift-baseline for a project, or null if never computed. */
   loadLiftBaseline(project: string): { bucketsJson: string; atMs: number } | null {
-    const row = this.db.prepare(`SELECT buckets_json, at_ms FROM lift_baselines WHERE project = ?`).get(project) as
+    const row = this.db
+      .prepare(`SELECT buckets_json, at_ms FROM lift_baselines WHERE project = ?`)
+      .get(this.canonicalProject(project)) as
       | { buckets_json: string; at_ms: number }
       | undefined;
     return row ? { bucketsJson: row.buckets_json, atMs: row.at_ms } : null;
@@ -361,8 +388,8 @@ export class Store {
         `INSERT INTO requests (
             request_id, session_id, ts_iso, ts_epoch_ms, provider, model, project,
             task_weight, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens,
-            reasoning_tokens, cost_usd, estimated, streamed, status_code, duration_ms, user, source, cwd
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            reasoning_tokens, cost_usd, estimated, streamed, status_code, duration_ms, user, source, cwd, via
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       )
       .run(
         r.requestId,
@@ -386,6 +413,7 @@ export class Store {
         r.user ?? null,
         r.source ?? null,
         r.cwd ?? null,
+        r.via ?? 'proxy',
       );
   }
 
@@ -400,8 +428,8 @@ export class Store {
         `INSERT INTO requests (
             request_id, session_id, ts_iso, ts_epoch_ms, provider, model, project,
             task_weight, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens,
-            reasoning_tokens, cost_usd, estimated, streamed, status_code, duration_ms, user, source, cwd
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            reasoning_tokens, cost_usd, estimated, streamed, status_code, duration_ms, user, source, cwd, via
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
          ON CONFLICT(request_id) DO NOTHING`,
       )
       .run(
@@ -426,31 +454,43 @@ export class Store {
         r.user ?? null,
         r.source ?? null,
         r.cwd ?? null,
+        r.via ?? 'proxy',
       );
     return Number(info.changes ?? 0) > 0;
   }
 
+  // `liveOnly` restricts a spend reading to rows that arrived through the proxy —
+  // the traffic a cap can actually BLOCK. Imported subscription spend is sunk cost
+  // observed after the fact; counting it toward enforcement froze live traffic in
+  // dogfooding. Legacy NULL via reads as proxy (the conservative direction).
+  private viaClause(liveOnly: boolean): string {
+    return liveOnly ? ` AND COALESCE(via,'proxy') = 'proxy'` : '';
+  }
+
   /** Total USD spend across [startMs, endMs). */
-  spendBetween(startMs: number, endMs: number): number {
+  spendBetween(startMs: number, endMs: number, liveOnly = false): number {
     const row = this.db
-      .prepare(`SELECT COALESCE(SUM(cost_usd), 0) AS total FROM requests WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ?`)
+      .prepare(
+        `SELECT COALESCE(SUM(cost_usd), 0) AS total FROM requests WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ?` +
+          this.viaClause(liveOnly),
+      )
       .get(startMs, endMs) as { total: number };
     return row.total;
   }
 
-  spendForSession(sessionId: string): number {
+  spendForSession(sessionId: string, liveOnly = false): number {
     const row = this.db
-      .prepare(`SELECT COALESCE(SUM(cost_usd), 0) AS total FROM requests WHERE session_id = ?`)
+      .prepare(`SELECT COALESCE(SUM(cost_usd), 0) AS total FROM requests WHERE session_id = ?` + this.viaClause(liveOnly))
       .get(sessionId) as { total: number };
     return row.total;
   }
 
   /** Spend within the last windowMs — used for runaway-loop detection. */
-  spendInWindow(nowMs: number, windowMs: number): { costUsd: number; requests: number } {
+  spendInWindow(nowMs: number, windowMs: number, liveOnly = false): { costUsd: number; requests: number } {
     const row = this.db
       .prepare(
         `SELECT COALESCE(SUM(cost_usd),0) AS total, COUNT(*) AS n
-         FROM requests WHERE ts_epoch_ms >= ?`,
+         FROM requests WHERE ts_epoch_ms >= ?` + this.viaClause(liveOnly),
       )
       .get(nowMs - windowMs) as { total: number; n: number };
     return { costUsd: row.total, requests: row.n };
@@ -477,13 +517,15 @@ export class Store {
    * unchanged for every existing caller).
    */
   summary(startMs: number, endMs: number, project?: string): SpendBucket {
-    const args: Array<number | string> = project !== undefined ? [startMs, endMs, project] : [startMs, endMs];
+    // A project filter matches the whole alias family, so merged labels stay merged.
+    const fam = project !== undefined ? this.familyFilter('project', project) : null;
+    const args: Array<number | string> = fam ? [startMs, endMs, ...fam.args] : [startMs, endMs];
     const row = this.db
       .prepare(
         `SELECT COALESCE(SUM(cost_usd),0) AS cost, COUNT(*) AS n,
                 COALESCE(SUM(input_tokens),0) AS inp, COALESCE(SUM(output_tokens),0) AS outp
          FROM requests WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ?` +
-          (project !== undefined ? ` AND project = ?` : ``),
+          (fam ? ` AND ${fam.sql}` : ``),
       )
       .get(...args) as { cost: number; n: number; inp: number; outp: number };
     return { label: project ?? 'range', costUsd: row.cost, requests: row.n, inputTokens: row.inp, outputTokens: row.outp };
@@ -497,10 +539,66 @@ export class Store {
    * project-blind store keeps its original window-wide behavior, no regression.
    */
   hasProjectSpend(project: string): boolean {
-    const row = this.db.prepare(`SELECT 1 AS present FROM requests WHERE project = ? LIMIT 1`).get(project) as
+    const fam = this.familyFilter('project', project);
+    const row = this.db.prepare(`SELECT 1 AS present FROM requests WHERE ${fam.sql} LIMIT 1`).get(...fam.args) as
       | { present: number }
       | undefined;
     return row !== undefined;
+  }
+
+  // ---- Project aliasing ------------------------------------------------------
+  // Tool launch cwds fragment one real project across labels ("aegisflow" vs
+  // "aegisflow-ts", editor-named dirs, etc.). Aliases fix the LABELS at query
+  // time; raw ledger rows are never rewritten, so the underlying record stays
+  // honest and an alias can be removed without loss. The mapping is kept FLAT
+  // (an alias always points at a real canonical, never at another alias).
+
+  /** Map `alias` → `canonical`. Flattens transitively and re-points anything aliased to `alias`. */
+  setProjectAlias(alias: string, canonical: string): void {
+    const target = this.canonicalProject(canonical); // flatten: never chain alias→alias
+    if (alias === target) throw new Error(`"${alias}" cannot alias itself`);
+    this.db
+      .prepare(
+        `INSERT INTO project_aliases (alias, canonical, at_ms) VALUES (?,?,?)
+         ON CONFLICT(alias) DO UPDATE SET canonical=excluded.canonical, at_ms=excluded.at_ms`,
+      )
+      .run(alias, target, Date.now());
+    // Anything previously merged INTO `alias` follows it to the new canonical.
+    this.db.prepare(`UPDATE project_aliases SET canonical = ? WHERE canonical = ?`).run(target, alias);
+  }
+
+  removeProjectAlias(alias: string): boolean {
+    const info = this.db.prepare(`DELETE FROM project_aliases WHERE alias = ?`).run(alias);
+    return Number(info.changes) > 0;
+  }
+
+  listProjectAliases(): Array<{ alias: string; canonical: string }> {
+    return this.db
+      .prepare(`SELECT alias, canonical FROM project_aliases ORDER BY canonical, alias`)
+      .all() as Array<{ alias: string; canonical: string }>;
+  }
+
+  /** The canonical label for a project name (itself when unaliased). */
+  canonicalProject(name: string): string {
+    const row = this.db.prepare(`SELECT canonical FROM project_aliases WHERE alias = ?`).get(name) as
+      | { canonical: string }
+      | undefined;
+    return row ? row.canonical : name;
+  }
+
+  /** Every raw label that resolves to this project: [canonical, ...its aliases]. */
+  projectFamily(name: string): string[] {
+    const canonical = this.canonicalProject(name);
+    const rows = this.db.prepare(`SELECT alias FROM project_aliases WHERE canonical = ?`).all(canonical) as Array<{
+      alias: string;
+    }>;
+    return [canonical, ...rows.map((r) => r.alias)];
+  }
+
+  /** SQL fragment + args matching a column against a project's whole family. */
+  private familyFilter(column: string, project: string): { sql: string; args: string[] } {
+    const family = this.projectFamily(project);
+    return { sql: `${column} IN (${family.map(() => '?').join(',')})`, args: family };
   }
 
   /** One typed breakdown across the flat characterization axes (project/model/source/user). */
@@ -526,15 +624,17 @@ export class Store {
   projectPaths(): Array<{ project: string; cwd: string; sources: string[]; costUsd: number; requests: number }> {
     const cwdRows = this.db
       .prepare(
-        `SELECT project, cwd, COUNT(*) AS n, COALESCE(SUM(cost_usd),0) AS cost
-         FROM requests WHERE cwd IS NOT NULL AND cwd <> ''
-         GROUP BY project, cwd`,
+        `SELECT COALESCE(a.canonical, r.project) AS project, r.cwd, COUNT(*) AS n, COALESCE(SUM(r.cost_usd),0) AS cost
+         FROM requests r LEFT JOIN project_aliases a ON a.alias = r.project
+         WHERE r.cwd IS NOT NULL AND r.cwd <> ''
+         GROUP BY project, r.cwd`,
       )
       .all() as Array<{ project: string; cwd: string; n: number; cost: number }>;
     const srcRows = this.db
       .prepare(
-        `SELECT DISTINCT project, COALESCE(source, 'direct') AS source
-         FROM requests WHERE cwd IS NOT NULL AND cwd <> ''`,
+        `SELECT DISTINCT COALESCE(a.canonical, r.project) AS project, COALESCE(r.source, 'direct') AS source
+         FROM requests r LEFT JOIN project_aliases a ON a.alias = r.project
+         WHERE r.cwd IS NOT NULL AND r.cwd <> ''`,
       )
       .all() as Array<{ project: string; source: string }>;
 
@@ -570,27 +670,37 @@ export class Store {
       .sort((a, b) => b.costUsd - a.costUsd);
   }
 
-  byModel(startMs: number, endMs: number): Array<SpendBucket & { provider: string }> {
+  byModel(
+    startMs: number,
+    endMs: number,
+  ): Array<SpendBucket & { provider: string; cacheReadTokens: number; cacheWriteTokens: number }> {
+    // Cache columns surface the cache economics (reads are ~10x cheaper than
+    // fresh input; writes carry a premium) that plain in/out totals hide.
     const rows = this.db
       .prepare(
         `SELECT provider, model AS label,
                 COALESCE(SUM(cost_usd),0) AS costUsd, COUNT(*) AS requests,
-                COALESCE(SUM(input_tokens),0) AS inputTokens, COALESCE(SUM(output_tokens),0) AS outputTokens
+                COALESCE(SUM(input_tokens),0) AS inputTokens, COALESCE(SUM(output_tokens),0) AS outputTokens,
+                COALESCE(SUM(cache_read_tokens),0) AS cacheReadTokens, COALESCE(SUM(cache_write_tokens),0) AS cacheWriteTokens
          FROM requests WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ?
          GROUP BY provider, model ORDER BY costUsd DESC`,
       )
-      .all(startMs, endMs) as unknown as Array<SpendBucket & { provider: string }>;
+      .all(startMs, endMs) as unknown as Array<
+      SpendBucket & { provider: string; cacheReadTokens: number; cacheWriteTokens: number }
+    >;
     return rows;
   }
 
   byProject(startMs: number, endMs: number): SpendBucket[] {
+    // Aliased labels roll up into their canonical project at read time.
     return this.db
       .prepare(
-        `SELECT project AS label,
-                COALESCE(SUM(cost_usd),0) AS costUsd, COUNT(*) AS requests,
-                COALESCE(SUM(input_tokens),0) AS inputTokens, COALESCE(SUM(output_tokens),0) AS outputTokens
-         FROM requests WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ?
-         GROUP BY project ORDER BY costUsd DESC`,
+        `SELECT COALESCE(a.canonical, r.project) AS label,
+                COALESCE(SUM(r.cost_usd),0) AS costUsd, COUNT(*) AS requests,
+                COALESCE(SUM(r.input_tokens),0) AS inputTokens, COALESCE(SUM(r.output_tokens),0) AS outputTokens
+         FROM requests r LEFT JOIN project_aliases a ON a.alias = r.project
+         WHERE r.ts_epoch_ms >= ? AND r.ts_epoch_ms < ?
+         GROUP BY label ORDER BY costUsd DESC`,
       )
       .all(startMs, endMs) as unknown as SpendBucket[];
   }
@@ -815,14 +925,15 @@ export class Store {
 
   /** Proposals logged for a project within [startMs, endMs). */
   proposalsInWindow(project: string, startMs: number, endMs: number): ProposalRow[] {
+    const fam = this.familyFilter('project', project);
     const rows = this.db
       .prepare(
         `SELECT proposal_id AS proposalId, request_id AS requestId, session_id AS sessionId,
                 ts_epoch_ms AS tsEpochMs, provider, model, project, files_json AS filesJson
-         FROM proposals WHERE project = ? AND ts_epoch_ms >= ? AND ts_epoch_ms < ?
+         FROM proposals WHERE ${fam.sql} AND ts_epoch_ms >= ? AND ts_epoch_ms < ?
          ORDER BY ts_epoch_ms ASC`,
       )
-      .all(project, startMs, endMs) as Array<Record<string, unknown>>;
+      .all(...fam.args, startMs, endMs) as Array<Record<string, unknown>>;
     return rows.map((r) => ({
       proposalId: r.proposalId as string,
       requestId: (r.requestId as string) ?? null,
@@ -859,14 +970,15 @@ export class Store {
 
   /** Project-wide signals not tied to a specific commit, within a window. */
   signalsInWindow(project: string, startMs: number, endMs: number): GateSignalRow[] {
+    const fam = this.familyFilter('project', project);
     const rows = this.db
       .prepare(
         `SELECT signal_id AS signalId, kind, commit_hash AS commitHash, project,
                 ts_epoch_ms AS tsEpochMs, verdict, detail
-         FROM gate_signals WHERE project = ? AND commit_hash IS NULL
+         FROM gate_signals WHERE ${fam.sql} AND commit_hash IS NULL
            AND ts_epoch_ms >= ? AND ts_epoch_ms < ?`,
       )
-      .all(project, startMs, endMs) as unknown as GateSignalRow[];
+      .all(...fam.args, startMs, endMs) as unknown as GateSignalRow[];
     return rows;
   }
 
@@ -964,19 +1076,21 @@ export class Store {
 
   /** Rehydrate stored work-unit snapshots (newest commit first), optionally one project. */
   realizationUnitRows(project?: string): Array<{ unitJson: string; computedAtMs: number }> {
+    const fam = project ? this.familyFilter('project', project) : null;
     const sql =
       `SELECT unit_json AS unitJson, computed_at_ms AS computedAtMs FROM realization_units` +
-      (project ? ` WHERE project = ?` : ``) +
+      (fam ? ` WHERE ${fam.sql}` : ``) +
       ` ORDER BY ts_epoch_ms DESC`;
     const stmt = this.db.prepare(sql);
-    return (project ? stmt.all(project) : stmt.all()) as Array<{ unitJson: string; computedAtMs: number }>;
+    return (fam ? stmt.all(...fam.args) : stmt.all()) as Array<{ unitJson: string; computedAtMs: number }>;
   }
 
   /** How many stored realization units exist (optionally scoped to one project). */
   countRealizationUnits(project?: string): number {
-    const sql = `SELECT COUNT(*) AS n FROM realization_units` + (project ? ` WHERE project = ?` : ``);
+    const fam = project ? this.familyFilter('project', project) : null;
+    const sql = `SELECT COUNT(*) AS n FROM realization_units` + (fam ? ` WHERE ${fam.sql}` : ``);
     const stmt = this.db.prepare(sql);
-    const row = (project ? stmt.get(project) : stmt.get()) as { n: number };
+    const row = (fam ? stmt.get(...fam.args) : stmt.get()) as { n: number };
     return row.n;
   }
 
@@ -989,9 +1103,57 @@ export class Store {
   /** Distinct projects that have stored realization snapshots — the budget owner's rows. */
   realizationProjects(): string[] {
     const rows = this.db
-      .prepare(`SELECT DISTINCT project FROM realization_units ORDER BY project`)
+      .prepare(
+        `SELECT DISTINCT COALESCE(a.canonical, u.project) AS project
+         FROM realization_units u LEFT JOIN project_aliases a ON a.alias = u.project
+         ORDER BY project`,
+      )
       .all() as Array<{ project: string }>;
     return rows.map((r) => r.project);
+  }
+
+  /** Every row priced with a fallback/family-match rate — the reprice candidates. */
+  estimatedRequestRows(): Array<{
+    requestId: string;
+    provider: string;
+    model: string;
+    inputTokens: number;
+    outputTokens: number;
+    cacheWriteTokens: number;
+    cacheReadTokens: number;
+    costUsd: number;
+  }> {
+    return this.db
+      .prepare(
+        `SELECT request_id AS requestId, provider, model,
+                input_tokens AS inputTokens, output_tokens AS outputTokens,
+                cache_write_tokens AS cacheWriteTokens, cache_read_tokens AS cacheReadTokens,
+                cost_usd AS costUsd
+         FROM requests WHERE estimated = 1`,
+      )
+      .all() as Array<{
+      requestId: string;
+      provider: string;
+      model: string;
+      inputTokens: number;
+      outputTokens: number;
+      cacheWriteTokens: number;
+      cacheReadTokens: number;
+      costUsd: number;
+    }>;
+  }
+
+  /** Re-cost rows in one transaction, clearing their estimated flag (reprice --apply). */
+  applyRepricedCosts(updates: Array<{ requestId: string; costUsd: number }>): void {
+    const stmt = this.db.prepare(`UPDATE requests SET cost_usd = ?, estimated = 0 WHERE request_id = ?`);
+    this.runScript('BEGIN');
+    try {
+      for (const u of updates) stmt.run(u.costUsd, u.requestId);
+      this.runScript('COMMIT');
+    } catch (e) {
+      this.runScript('ROLLBACK');
+      throw e;
+    }
   }
 
   /** Maintenance: prune old requests and compact. Returns rows removed. */

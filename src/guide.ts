@@ -114,7 +114,7 @@ export function buildGuide(f: GuideFacts): GuideReport {
         ? `${fmtInt(f.realizationUnits)} units of work scored`
         : 'outcomes recorded but never scored against the spend',
     why: 'Four lenses — did it stick, did you keep it, did it save time, did it matter — one honest index.',
-    commands: ['fiscus roi --repo .', 'fiscus usage        (non-coding sessions: chat, research, drafting)'],
+    commands: ['fiscus roi --repo .', 'fiscus usage        (sessions without code signals: chat, research, drafting)'],
   };
 
   const price: GuideStep = {

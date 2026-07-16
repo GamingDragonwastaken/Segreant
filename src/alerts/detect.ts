@@ -27,7 +27,13 @@ export interface Alert {
 }
 
 export interface AlertInputs {
+  /** Today's spend on the cap-ENFORCEMENT basis (live-only unless capIncludesImported). */
   todaySpendUsd: number;
+  /** Today's TOTAL observed spend (live + imported) — the spike alert compares this
+   *  against the baseline, which is also total. Defaults to todaySpendUsd. */
+  todayTotalSpendUsd?: number;
+  /** True when imported spend is excluded from enforcement — cap alerts say so. */
+  capExcludesImported?: boolean;
   dailyCapUsd: number | null;
   dailySoftUsd: number | null;
   baselineActiveDaySpends: number[]; // trailing per-active-day spend, excluding today
@@ -56,12 +62,13 @@ export function detectAlerts(inp: AlertInputs): Alert[] {
   const out: Alert[] = [];
 
   // Budget pressure — critical once the hard cap is reached (requests now blocked).
+  const basisNote = inp.capExcludesImported ? ' The cap counts live proxy spend only; imported subscription spend is excluded.' : '';
   if (inp.dailyCapUsd !== null && inp.todaySpendUsd >= inp.dailyCapUsd) {
     out.push({
       id: 'budget-exhausted',
       severity: 'critical',
       title: 'Daily budget reached',
-      detail: 'New requests are being blocked until the daily cap resets.',
+      detail: 'New requests are being blocked until the daily cap resets.' + basisNote,
       metric: `$${fmt(inp.todaySpendUsd)} / $${fmt(inp.dailyCapUsd)}`,
     });
   } else if (inp.dailySoftUsd !== null && inp.todaySpendUsd >= inp.dailySoftUsd) {
@@ -69,7 +76,7 @@ export function detectAlerts(inp: AlertInputs): Alert[] {
       id: 'budget-soft',
       severity: 'warn',
       title: 'Approaching daily cap',
-      detail: 'Spend has crossed the soft-warn threshold for today.',
+      detail: 'Spend has crossed the soft-warn threshold for today.' + basisNote,
       metric: `$${fmt(inp.todaySpendUsd)} / $${fmt(inp.dailySoftUsd)} soft`,
     });
   }
@@ -85,15 +92,17 @@ export function detectAlerts(inp: AlertInputs): Alert[] {
     });
   }
 
-  // Spend spike — today is well above the typical active day.
+  // Spend spike — today is well above the typical active day. Compared on TOTAL
+  // spend, because the baseline series is total (like-for-like regardless of basis).
+  const todayTotal = inp.todayTotalSpendUsd ?? inp.todaySpendUsd;
   const base = percentile([...inp.baselineActiveDaySpends].sort((a, b) => a - b), 0.9);
-  if (base > 0 && inp.todaySpendUsd >= 0.01 && inp.todaySpendUsd > base * 2) {
+  if (base > 0 && todayTotal >= 0.01 && todayTotal > base * 2) {
     out.push({
       id: 'spend-spike',
       severity: 'warn',
       title: 'Spend spike',
       detail: 'Today is well above your typical active day — worth a look before it compounds.',
-      metric: `${(inp.todaySpendUsd / base).toFixed(1)}× your p90 day ($${fmt(base)})`,
+      metric: `${(todayTotal / base).toFixed(1)}× your p90 day ($${fmt(base)})`,
     });
   }
 
@@ -143,7 +152,10 @@ export function computeAlerts(
   const day = 24 * 60 * 60 * 1000;
   const dayStart = startOfLocalDay(now);
 
-  const todaySpendUsd = store.spendBetween(dayStart, now + 1000);
+  // Cap-related alerts must read the same basis the guard ENFORCES on, or the
+  // dashboard would warn about a block that will never happen (or miss one that will).
+  const liveOnly = !config.budget.capIncludesImported;
+  const todaySpendUsd = store.spendBetween(dayStart, now + 1000, liveOnly);
 
   // Baseline = prior active days (exclude today), so a spike compares like-for-like.
   const priorSeries = store.series(now - 30 * day, dayStart, day);
@@ -155,7 +167,7 @@ export function computeAlerts(
 
   let runaway: AlertInputs['runaway'] = null;
   if (config.budget.runawayMaxUsd !== null) {
-    const w = store.spendInWindow(now, config.budget.runawayWindowSec * 1000);
+    const w = store.spendInWindow(now, config.budget.runawayWindowSec * 1000, liveOnly);
     runaway = {
       tripped: w.costUsd >= config.budget.runawayMaxUsd,
       windowCostUsd: w.costUsd,
@@ -165,6 +177,8 @@ export function computeAlerts(
 
   return detectAlerts({
     todaySpendUsd,
+    todayTotalSpendUsd: liveOnly ? store.spendBetween(dayStart, now + 1000) : todaySpendUsd,
+    capExcludesImported: liveOnly,
     dailyCapUsd: config.budget.dailyUsd,
     dailySoftUsd: config.budget.dailySoftUsd,
     baselineActiveDaySpends,

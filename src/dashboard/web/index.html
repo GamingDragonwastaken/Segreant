@@ -520,16 +520,28 @@ function render(d) {
     return;
   }
 
+  // When the cap excludes imported subscription spend (the default), say so the
+  // moment imported spend exists today — the bar must read like the blocker acts.
+  const basisNote = cap != null && b.capExcludesImported && (b.todayImportedUsd || 0) > 0.005
+    ? `<div class="bunder" style="margin-top:3px"><span>+ $${usd(b.todayImportedUsd)} imported today — outside the cap${tip('The cap governs <b>live proxy traffic</b> (the spend it can actually block). Imported subscription usage is sunk cost read from your tools\' own logs after the fact; it is metered and shown everywhere, but does not trip the cap. Include it: set <code>budget.capIncludesImported</code> via <code>fiscus budget --include-imported on</code>.')}</span></div>`
+    : '';
   const budgetPane = cap != null
     ? `<div class="budgetbar">
-        <div class="brow"><span class="bl">Daily budget</span><span class="bp">${Math.round(pct)}% used${over ? ' · OVER CAP' : ''}</span></div>
+        <div class="brow"><span class="bl">Daily budget${b.capExcludesImported ? ' · live traffic' : ''}</span><span class="bp">${Math.round(pct)}% used${over ? ' · OVER CAP' : ''}</span></div>
         <div class="btrack"><div class="bfill${over ? ' over' : ''}" style="width:${Math.min(100, pct)}%"></div></div>
         <div class="bunder"><span class="used">$${usd(b.todaySpendUsd)} today</span><span>$${usd(Math.max(0, b.remainingDailyUsd))} left of $${usd(cap)}</span></div>
+        ${basisNote}
       </div>`
     : `<div class="nocap">No daily cap set — metering, not enforcing. Set one: <code>fiscus budget --daily 25</code></div>`;
 
   const top = d.byModel[0];
   const topShare = top && s.costUsd > 0 ? Math.round((top.costUsd / s.costUsd) * 100) : 0;
+  // Cache tokens are shown when any model used caching — reads are ~10x cheaper
+  // than fresh input, so this is where subscription-import economics become visible.
+  const anyCache = d.byModel.some((m) => (m.cacheReadTokens || 0) + (m.cacheWriteTokens || 0) > 0);
+  const cacheCell = (m) => anyCache
+    ? `<td class="num" style="color:var(--muted)">${(m.cacheReadTokens || 0) + (m.cacheWriteTokens || 0) > 0 ? tok(m.cacheReadTokens || 0) + ' / ' + tok(m.cacheWriteTokens || 0) : '—'}</td>`
+    : '';
   const modelTable = d.byModel.slice(0, 7).map((m) => {
     const kTok = (m.inputTokens + m.outputTokens) / 1000;
     const avg = kTok > 0 ? m.costUsd / kTok : null;
@@ -538,15 +550,21 @@ function render(d) {
       <td class="model">${provChip(m.provider)}${esc(m.label)}<span style="color:var(--faint)"> · ${esc(m.provider)}</span></td>
       <td class="num">${m.requests.toLocaleString()}</td>
       <td class="num">${tok(m.inputTokens)} / ${tok(m.outputTokens)}</td>
+      ${cacheCell(m)}
       <td class="num">${avg == null ? '—' : '$' + avg.toFixed(avg >= 0.1 ? 2 : 4)}</td>
       <td class="num" style="color:var(--muted)">${share >= 1 ? Math.round(share) : share.toFixed(1)}%</td>
       <td class="cost">$${usd(m.costUsd)}</td>
     </tr>`;
   }).join('');
+  const cacheTotals = d.byModel.reduce(
+    (a, m) => ({ r: a.r + (m.cacheReadTokens || 0), w: a.w + (m.cacheWriteTokens || 0) }),
+    { r: 0, w: 0 },
+  );
   const totalRow = `<tr class="total">
     <td>TOTAL${d.byModel.length > 7 ? ` <span style="color:var(--faint)">· all ${d.byModel.length} models</span>` : ''}</td>
     <td class="num">${s.requests.toLocaleString()}</td>
     <td class="num">${tok(s.inputTokens)} / ${tok(s.outputTokens)}</td>
+    ${anyCache ? `<td class="num" style="color:var(--muted)">${tok(cacheTotals.r)} / ${tok(cacheTotals.w)}</td>` : ''}
     <td class="num"></td><td class="num"></td>
     <td class="cost">$${usd(s.costUsd)}</td>
   </tr>`;
@@ -614,8 +632,8 @@ function render(d) {
     <div class="card fade" style="grid-column:1/-1">
       <div class="label">By model</div>
       <table>
-        <thead><tr><th>Model</th><th class="num">Reqs</th><th class="num">Tokens in / out</th><th class="num">$ / 1k tok</th><th class="num">Share</th><th class="num">Cost</th></tr></thead>
-        <tbody>${modelTable || '<tr><td colspan="6" style="color:var(--faint)">no data</td></tr>'}${modelTable ? totalRow : ''}</tbody>
+        <thead><tr><th>Model</th><th class="num">Reqs</th><th class="num">Tokens in / out</th>${anyCache ? '<th class="num">Cache read / write</th>' : ''}<th class="num">$ / 1k tok</th><th class="num">Share</th><th class="num">Cost</th></tr></thead>
+        <tbody>${modelTable || `<tr><td colspan="${anyCache ? 7 : 6}" style="color:var(--faint)">no data</td></tr>`}${modelTable ? totalRow : ''}</tbody>
       </table>
     </div>
     <div class="card fade"><div class="label">By project</div><div class="bars">${projectBars || '<span style="color:var(--faint)">no data</span>'}</div></div>
@@ -732,7 +750,7 @@ function renderValue(d) {
 
   const lensRow = roi
     ? `<div class="lensrow fade" style="grid-column:1/-1">${['realization', 'acceptance', 'lift', 'impact'].map((k) => lensCard(cap1(k), roi.lenses[k])).join('')}</div>`
-    : `<div class="card fade" style="grid-column:1/-1;color:var(--faint);font-family:var(--mono);font-size:12px;line-height:1.6">No git repo at the dashboard root, so the coding lenses are unavailable. Non-coding usage is measured below.</div>`;
+    : `<div class="card fade" style="grid-column:1/-1;color:var(--faint);font-family:var(--mono);font-size:12px;line-height:1.6">No git repo at the dashboard root, so the coding lenses are unavailable. Sessions without code signals are measured below.</div>`;
 
   // The realization funnel (mockup U2): survivors-in-dollars at each gate, gold
   // tapering to sage. A bucket that died AT gate g passed everything before g;
@@ -834,7 +852,7 @@ function renderValue(d) {
       <div class="rrow"><span style="color:var(--muted)">Extraction (median)</span><span style="font-family:var(--mono)">${Math.round(t.medianExtraction * 100)}% <span style="color:var(--faint)">· ${Math.round(t.p25Extraction * 100)}–${Math.round(t.p75Extraction * 100)}% p25–p75</span></span></div>
       <div class="rrow"><span style="color:var(--muted)">Spread</span><span style="font-family:var(--mono)">${spread} <span style="color:var(--faint)">· ${t.cohortSize} people, unidentified</span></span></div>
       <div class="rrow"><span style="color:var(--muted)">Coaching headroom ${tip('Latent value if everyone below the median were enabled up to it, at their own current spend. A case for training/support — <b>not</b> a ranking of people.')}</span><span style="font-family:var(--mono);color:var(--mint)">+$${money(t.coachingHeadroomUsd)}</span></div>
-      <div class="lenshow">Realized value $${money(t.totalRealizedValueUsd)} of $${money(t.totalCostUsd)} spent (non-coding). A person sees their own number with <span style="color:var(--gold)">fiscus team --me &lt;user&gt;</span>.</div>
+      <div class="lenshow">Realized value $${money(t.totalRealizedValueUsd)} of $${money(t.totalCostUsd)} spent (sessions without code signals). A person sees their own number with <span style="color:var(--gold)">fiscus team --me &lt;user&gt;</span>.</div>
     </div>`;
   } else if (team && team.enabled && team.suppressed) {
     teamCard = `<div class="card fade" style="grid-column:1/-1">
@@ -903,10 +921,10 @@ function renderValue(d) {
     </div>
     ${projectCard}
     <div class="card fade" style="grid-column:1/-1">
-      <div class="label">Non-coding usage · chat · research · drafting</div>
+      <div class="label">Usage without code signals · chat · research · drafting ${tip('Sessions with <b>no captured code proposals</b>. A coding session lands here too when its tool never reports diffs — route it through the proxy to move it into the git-based RoI above.')}</div>
       <div class="rrow"><span style="color:var(--muted)">RoI Index</span><span style="font-family:var(--mono);color:${uidx == null ? 'var(--faint)' : 'var(--mint)'}">${uidx == null ? 'n/a' : uidx + ' / 100'}</span></div>
       <div class="rrow"><span style="color:var(--muted)">Realized sessions</span><span style="font-family:var(--mono)">${u.realizedUnits}/${u.units.length} · $${money(u.totalCostUsd)}</span></div>
-      <div class="lenshow">Acceptance &amp; survival are n/a for non-code (no diff, no git) — realized = a reported, no-incident outcome. Record with: <span style="color:var(--gold)">fiscus report --session &lt;id&gt; --kind used</span></div>
+      <div class="lenshow">Acceptance &amp; survival are n/a here (no diff, no git) — realized = a reported, no-incident outcome. Record with: <span style="color:var(--gold)">fiscus report --session &lt;id&gt; --kind used</span></div>
     </div>
     ${teamCard}`);
 }

@@ -171,10 +171,18 @@ fiscus doctor                First-run health check — config, DB, proxy, caps,
 fiscus config                Show config and file paths      (--json)
 fiscus pricing --refresh     Update the rate card from the community price feed
                                 (--auto to self-refresh on start when stale)
+fiscus reprice               Re-cost estimated rows against the current rate card
+                                (only rows the card now resolves exactly; dry-run
+                                by default, --apply writes)
 fiscus baseline              Show the Lift manual-minutes population prior: source,
                                 age, task-type count (--json). Update it: baseline
                                 --refresh --url <manifest> — no default source exists;
                                 unlike pricing, METR publishes research, not a feed
+fiscus project               Spend by project with aliases applied (--json). Tool
+                                launch dirs fragment one real project across labels;
+                                merge them: project merge <label...> --into <name>
+                                (query-time only, raw rows untouched — undo with
+                                project unalias <label>)
 fiscus prune                 Prune old rows and compact the DB
 fiscus demo                  Seed isolated, labeled synthetic data so every surface
                                 populates with no API key (--serve opens the dashboard
@@ -187,6 +195,13 @@ fiscus demo                  Seed isolated, labeled synthetic data so every surf
 ```bash
 fiscus budget --daily 25 --soft 18 --session 5 --runaway 2 --window 60
 ```
+
+By default the cap enforces on **live proxy spend only** — the traffic it can
+actually block. Imported subscription usage (Claude Code/opencode/codex logs) is
+metered and shown everywhere, but doesn't trip the cap: it's sunk cost observed
+after the fact, and letting it block live traffic froze a proxy that had spent
+almost nothing. Prefer one cap over total observed spend?
+`fiscus budget --include-imported on`.
 
 | Flag | Meaning |
 |---|---|

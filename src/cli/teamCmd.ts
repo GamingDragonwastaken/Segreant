@@ -62,7 +62,7 @@ export async function cmdTeam(flags: Flags): Promise<void> {
     }
     console.log(color(tty, C.bold, `  Your AI value — ${view.user}`));
     console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
-    console.log(`  Extraction          ${color(tty, C.cyan, pct(view.extraction))}   ${color(tty, C.gray, 'of your non-coding AI spend reached a realized outcome')}`);
+    console.log(`  Extraction          ${color(tty, C.cyan, pct(view.extraction))}   ${color(tty, C.gray, 'of your session-scored AI spend (usage without code signals) reached a realized outcome')}`);
     console.log(`  Confidence          ${pct(view.reliability)}   ${color(tty, C.gray, `${view.sessions} sessions of evidence`)}`);
     if (view.cohortComparable && view.percentile !== null && view.vsMedianPct !== null) {
       const sign = view.vsMedianPct >= 0 ? '+' : '';
@@ -84,7 +84,7 @@ export async function cmdTeam(flags: Flags): Promise<void> {
     return;
   }
   console.log('');
-  console.log(color(tty, C.bold, '  Team value — how non-coding AI spend converts to outcomes across people'));
+  console.log(color(tty, C.bold, '  Team value — how session-scored AI spend (usage without code signals) converts to outcomes'));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
   if (rep.suppressed || !rep.distribution) {
     console.log(color(tty, C.yellow, '  Per-user value is withheld.'));

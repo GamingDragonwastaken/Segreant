@@ -53,15 +53,20 @@ export class BudgetGuard {
     const now = opts.nowMs ?? Date.now();
     const dayStart = startOfLocalDay(now);
     const dayEnd = endOfLocalDay(now);
-    const daySpend = this.store.spendBetween(dayStart, dayEnd);
+    // Enforcement basis: by default only LIVE proxy spend counts — a cap can only
+    // block live traffic, and imported subscription spend tripping it froze a
+    // proxy that had spent almost nothing (dogfood). capIncludesImported opts
+    // into governing total observed spend instead.
+    const liveOnly = !this.cfg.capIncludesImported;
+    const daySpend = this.store.spendBetween(dayStart, dayEnd, liveOnly);
 
     const dailyLimit = this.cfg.dailyUsd;
     const remainingDaily = dailyLimit === null ? null : Math.max(0, dailyLimit - daySpend);
 
-    const sessionSpend = opts.sessionId ? this.store.spendForSession(opts.sessionId) : null;
+    const sessionSpend = opts.sessionId ? this.store.spendForSession(opts.sessionId, liveOnly) : null;
 
     const windowMs = this.cfg.runawayWindowSec * 1000;
-    const window = this.store.spendInWindow(now, windowMs);
+    const window = this.store.spendInWindow(now, windowMs, liveOnly);
     const runawayTripped =
       this.cfg.runawayMaxUsd !== null && window.costUsd >= this.cfg.runawayMaxUsd;
 
@@ -82,7 +87,9 @@ export class BudgetGuard {
       return {
         ...base,
         action: 'block',
-        reason: `Daily budget reached: $${daySpend.toFixed(2)} of $${dailyLimit.toFixed(2)} cap.`,
+        reason:
+          `Daily budget reached: $${daySpend.toFixed(2)} of $${dailyLimit.toFixed(2)} cap` +
+          (liveOnly ? ' (live proxy spend; imported spend excluded).' : ' (includes imported spend).'),
       };
     }
     if (this.cfg.sessionUsd !== null && sessionSpend !== null && sessionSpend >= this.cfg.sessionUsd) {

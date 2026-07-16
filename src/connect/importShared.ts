@@ -48,7 +48,9 @@ export interface ImportOptions {
  */
 export function recordInsert(store: Store, summary: ImportSummary, row: RequestRow, estimated: boolean): boolean {
   summary.eventsSeen += 1;
-  if (!store.insertRequestIfNew(row)) return false;
+  // Every imported row is stamped once here: sunk subscription cost, observed
+  // after the fact — cap enforcement excludes it by default (budget.capIncludesImported).
+  if (!store.insertRequestIfNew({ ...row, via: 'import' })) return false;
   summary.inserted += 1;
   summary.costUsd += row.costUsd;
   if (estimated) summary.estimatedCostUsd += row.costUsd;

@@ -24,6 +24,14 @@ export interface BudgetConfig {
   runawayWindowSec: number;
   /** Spend within the window that flags a runaway loop. null = off. */
   runawayMaxUsd: number | null;
+  /**
+   * Whether IMPORTED spend (native importers reading a tool's own logs) counts
+   * toward cap ENFORCEMENT. Default false: imported subscription usage is sunk
+   * cost observed after the fact — in dogfooding it tripped the daily cap and
+   * blocked live proxy traffic that had spent almost nothing. Set true to make
+   * the cap govern total observed AI spend instead of blockable spend.
+   */
+  capIncludesImported: boolean;
 }
 
 export interface AlertsConfig {
@@ -202,6 +210,7 @@ export const DEFAULT_CONFIG: AegisConfig = {
     sessionUsd: null,
     runawayWindowSec: 60,
     runawayMaxUsd: null,
+    capIncludesImported: false,
   },
   alerts: {
     webhookUrl: null,

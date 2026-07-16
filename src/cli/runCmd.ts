@@ -12,7 +12,7 @@ import { createDashboardServer } from '../dashboard/server.ts';
 import { loadConfig, saveConfig, dbPath, demoDbPath, isDemo, unlinkDemoDb, aegisHome, type AegisConfig } from '../config.ts';
 import { seedDemo } from '../demo/seed.ts';
 import { startOfLocalDay } from '../budget/guard.ts';
-import { refreshPricing, pricingStatus, DEFAULT_MANIFEST_URL } from '../cost/pricing.ts';
+import { refreshPricing, pricingStatus, computeCost, DEFAULT_MANIFEST_URL, type Provider } from '../cost/pricing.ts';
 import { refreshBaselineManifest, baselineManifestStatus } from '../value/liftBaseline.ts';
 import { C, color, usd, num } from './ui.ts';
 import { type Flags } from './flags.ts';
@@ -263,4 +263,88 @@ export async function cmdBaseline(flags: Flags): Promise<void> {
   console.log(`\n  ${color(on, C.dim, 'Refresh from a source you trust:  fiscus baseline --refresh --url <url>')}`);
   console.log(`  ${color(on, C.dim, 'No default source exists for this — unlike pricing, METR publishes research, not a feed.')}`);
   console.log('');
+}
+
+/**
+ * Re-cost stored ESTIMATED rows against the current rate card. Rows priced with
+ * an exact rate are never touched — their price was right when metered. A row is
+ * rewritten only when the current card resolves its model to an EXACT rate
+ * (refreshed feed learned the model); rows that would still be estimates keep
+ * their original number, because swapping one guess for another adds no honesty.
+ * Dry-run by default; --apply writes, in one transaction.
+ */
+export function cmdReprice(flags: Flags): void {
+  const store = new Store(dbPath());
+  const tty = process.stdout.isTTY ?? false;
+  try {
+    const rows = store.estimatedRequestRows();
+    const updates: Array<{ requestId: string; costUsd: number }> = [];
+    const byModel = new Map<string, { n: number; before: number; after: number }>();
+    let stillEstimated = 0;
+
+    for (const r of rows) {
+      const c = computeCost(r.provider as Provider, r.model, {
+        inputTokens: r.inputTokens,
+        outputTokens: r.outputTokens,
+        cacheWriteTokens: r.cacheWriteTokens,
+        cacheReadTokens: r.cacheReadTokens,
+      });
+      if (c.estimated) {
+        stillEstimated++;
+        continue; // still a guess — keep the original guess rather than churn numbers
+      }
+      updates.push({ requestId: r.requestId, costUsd: c.costUsd });
+      const key = `${r.provider}/${r.model}`;
+      const agg = byModel.get(key) ?? { n: 0, before: 0, after: 0 };
+      agg.n++;
+      agg.before += r.costUsd;
+      agg.after += c.costUsd;
+      byModel.set(key, agg);
+    }
+
+    const before = [...byModel.values()].reduce((a, v) => a + v.before, 0);
+    const after = [...byModel.values()].reduce((a, v) => a + v.after, 0);
+
+    if (flags.json) {
+      console.log(JSON.stringify({
+        applied: !!flags.apply, estimatedRows: rows.length, repriceable: updates.length,
+        stillEstimated, totalBeforeUsd: before, totalAfterUsd: after,
+        byModel: [...byModel.entries()].map(([model, v]) => ({ model, rows: v.n, beforeUsd: v.before, afterUsd: v.after })),
+      }, null, 2));
+      if (flags.apply && updates.length) store.applyRepricedCosts(updates);
+      return;
+    }
+
+    console.log('');
+    console.log(color(tty, C.bold, '  Reprice — estimated rows vs the current rate card'));
+    if (!rows.length) {
+      console.log('  Nothing to do: no stored rows carry an estimated price.');
+      console.log('');
+      return;
+    }
+    console.log(`  Estimated rows       ${num(rows.length)}`);
+    console.log(`  Now exactly priced   ${num(updates.length)}  ${color(tty, C.gray, '(current card has an exact rate for these models)')}`);
+    if (stillEstimated) console.log(`  Still estimates      ${num(stillEstimated)}  ${color(tty, C.gray, 'left untouched — a new guess is not more honest than the old one')}`);
+    if (updates.length) {
+      console.log('');
+      for (const [model, v] of [...byModel.entries()].sort((a, b) => b[1].after - a[1].after).slice(0, 10)) {
+        const delta = v.after - v.before;
+        const dc = delta > 0 ? C.red : C.green;
+        console.log(`  ${model.padEnd(40)} ${num(v.n).padStart(6)} rows  ${usd(v.before).padStart(10)} → ${usd(v.after).padStart(10)}  ${color(tty, dc, (delta >= 0 ? '+' : '') + usd(delta))}`);
+      }
+      console.log('');
+      console.log(`  Total                ${usd(before)} → ${usd(after)}  ${color(tty, after - before >= 0 ? C.red : C.green, (after - before >= 0 ? '+' : '') + usd(after - before))}`);
+      if (flags.apply) {
+        store.applyRepricedCosts(updates);
+        console.log(color(tty, C.green, `  ✓ Applied — ${num(updates.length)} rows re-costed, estimated flag cleared.`));
+        console.log(color(tty, C.gray, '  Stored realized-value snapshots keep their at-compute costs until the next realize/scan --setup.'));
+      } else {
+        console.log(color(tty, C.gray, '  Dry run — nothing written. Apply with: fiscus reprice --apply'));
+        console.log(color(tty, C.gray, '  Tip: refresh the card first (fiscus pricing --refresh) so unknown models resolve.'));
+      }
+    }
+    console.log('');
+  } finally {
+    store.close();
+  }
 }

@@ -129,3 +129,69 @@ test('store migration: a DB created before the user column gains it (ALTER path)
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ---- Project aliasing: merges labels at query time, never rewrites rows ----
+
+test('project aliases: byProject rolls aliased labels into the canonical; raw rows untouched', () => {
+  const store = new Store(':memory:');
+  store.insertRequest(req({ project: 'aegisflow', costUsd: 3 }));
+  store.insertRequest(req({ project: 'aegisflow-ts', costUsd: 2 }));
+  store.insertRequest(req({ project: 'other', costUsd: 1 }));
+
+  store.setProjectAlias('aegisflow-ts', 'aegisflow');
+  const rows = store.byProject(0, 5000);
+  const map = Object.fromEntries(rows.map((r) => [r.label, r.costUsd]));
+  assert.equal(map['aegisflow'], 5); // merged
+  assert.equal(map['other'], 1);
+  assert.equal(map['aegisflow-ts'], undefined);
+
+  // Reversible: unalias restores the original split (raw rows were never rewritten).
+  store.removeProjectAlias('aegisflow-ts');
+  const split = Object.fromEntries(store.byProject(0, 5000).map((r) => [r.label, r.costUsd]));
+  assert.equal(split['aegisflow'], 3);
+  assert.equal(split['aegisflow-ts'], 2);
+  store.close();
+});
+
+test('project aliases: summary/hasProjectSpend match the whole family under either name', () => {
+  const store = new Store(':memory:');
+  store.insertRequest(req({ project: 'aegisflow', costUsd: 3 }));
+  store.insertRequest(req({ project: 'aegisflow-ts', costUsd: 2 }));
+  store.setProjectAlias('aegisflow-ts', 'aegisflow');
+
+  assert.equal(store.summary(0, 5000, 'aegisflow').costUsd, 5);
+  assert.equal(store.summary(0, 5000, 'aegisflow-ts').costUsd, 5); // alias resolves to same family
+  assert.equal(store.hasProjectSpend('aegisflow-ts'), true);
+  assert.deepEqual(store.projectFamily('aegisflow-ts').sort(), ['aegisflow', 'aegisflow-ts']);
+  store.close();
+});
+
+test('project aliases: mapping stays flat — chaining re-points, self-alias throws', () => {
+  const store = new Store(':memory:');
+  store.setProjectAlias('b', 'a'); // b → a
+  store.setProjectAlias('c', 'b'); // c → b must flatten to c → a
+  assert.equal(store.canonicalProject('c'), 'a');
+
+  // Re-pointing a former canonical drags its aliases along: a → z means b,c → z too.
+  store.setProjectAlias('a', 'z');
+  assert.equal(store.canonicalProject('b'), 'z');
+  assert.equal(store.canonicalProject('c'), 'z');
+
+  assert.throws(() => store.setProjectAlias('x', 'x'));
+  // Aliasing to a name that resolves back to yourself is also a self-alias.
+  assert.throws(() => store.setProjectAlias('z', 'b'));
+  store.close();
+});
+
+test('project aliases: realization units and projects list follow the canonical label', () => {
+  const store = new Store(':memory:');
+  store.saveRealizationUnits([
+    { commitHash: 'c1', project: 'aegisflow', tsEpochMs: 1000, computedAtMs: 1000, attributedCostUsd: 1, maturing: false, realized: true, unitJson: '{}' },
+    { commitHash: 'c2', project: 'aegisflow-ts', tsEpochMs: 2000, computedAtMs: 2000, attributedCostUsd: 2, maturing: false, realized: false, unitJson: '{}' },
+  ]);
+  store.setProjectAlias('aegisflow-ts', 'aegisflow');
+  assert.equal(store.countRealizationUnits('aegisflow'), 2);
+  assert.equal(store.realizationUnitRows('aegisflow-ts').length, 2);
+  assert.deepEqual(store.realizationProjects(), ['aegisflow']);
+  store.close();
+});

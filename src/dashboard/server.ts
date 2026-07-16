@@ -83,7 +83,11 @@ function buildOverview(store: Store, config: AegisConfig, range: RangeKey) {
   const { startMs, endMs, bucketMs } = resolveRange(range, now);
 
   const dayStart = startOfLocalDay(now);
-  const todaySpend = store.spendBetween(dayStart, now + 1000);
+  // The budget panel reads the same basis the guard ENFORCES on (live proxy spend
+  // unless capIncludesImported) — a bar that disagrees with the blocker is a lie.
+  const liveOnly = !config.budget.capIncludesImported;
+  const todaySpend = store.spendBetween(dayStart, now + 1000, liveOnly);
+  const todayTotal = liveOnly ? store.spendBetween(dayStart, now + 1000) : todaySpend;
 
   return {
     range,
@@ -93,6 +97,8 @@ function buildOverview(store: Store, config: AegisConfig, range: RangeKey) {
       dailyUsd: config.budget.dailyUsd,
       dailySoftUsd: config.budget.dailySoftUsd,
       todaySpendUsd: todaySpend,
+      todayImportedUsd: Math.max(0, todayTotal - todaySpend),
+      capExcludesImported: liveOnly,
       remainingDailyUsd: config.budget.dailyUsd === null ? null : Math.max(0, config.budget.dailyUsd - todaySpend),
     },
     summary: store.summary(startMs, endMs),
