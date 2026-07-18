@@ -130,6 +130,8 @@ fiscus start                 Start the proxy (:8090) + dashboard (:8091)
 fiscus today | week | month  Show spend for a window        (--json)
 fiscus roi --repo <path>     Return on Intelligence — four value lenses composed
                                 into one index (--labor-rate $/hr, --tsf X, --json)
+fiscus saved --repo <path>   Manual work-weeks reclaimed vs measured AI hours —
+                                honestly banded, split by task type (--window D, --json)
 fiscus frontier --repo <p>   What's best for you — RoI by model × task-type + routing
 fiscus usage                 RoI for usage without code signals (chat/research),
                                 scored from reported outcomes

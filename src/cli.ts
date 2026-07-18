@@ -18,7 +18,7 @@ import { demoDbPath } from './config.ts';
 
 import { parseFlags } from './cli/flags.ts';
 import { cmdImport, cmdDiscover, cmdScan } from './cli/importCmd.ts';
-import { cmdYield, cmdRealize, cmdReport, cmdExec, cmdUsage, cmdRoi, cmdBudgetAdvisor, cmdFrontier } from './cli/valueCmd.ts';
+import { cmdYield, cmdRealize, cmdReport, cmdExec, cmdUsage, cmdRoi, cmdSaved, cmdBudgetAdvisor, cmdFrontier } from './cli/valueCmd.ts';
 import { cmdTeam, cmdReceipt, cmdJudge, cmdTeamPush } from './cli/teamCmd.ts';
 import { cmdConnect } from './cli/connectCmd.ts';
 import { cmdAlerts, cmdDoctor, cmdInit, cmdGuide, cmdAudit } from './cli/opsCmd.ts';
@@ -72,6 +72,8 @@ function cmdHelp(): void {
     roi --repo <path>     Return on Intelligence: four value lenses (Realization,
                           Acceptance, Lift, Impact) → one composite index
                           (--labor-rate $/hr, --tsf <multiplier> for Lift, --json)
+    saved --repo <path>   Manual work-weeks reclaimed vs measured AI hours,
+                          honestly banded and split by task type (--window D, --json)
     frontier --repo <p>   What's best for you: RoI by model × task-type, with
                           routing recommendations (--window D, --json)
     usage                 RoI for usage WITHOUT code signals — chat, research,
@@ -235,6 +237,9 @@ async function main(): Promise<void> {
       break;
     case 'roi':
       await cmdRoi(flags);
+      break;
+    case 'saved':
+      await cmdSaved(flags);
       break;
     case 'frontier':
       await cmdFrontier(flags);

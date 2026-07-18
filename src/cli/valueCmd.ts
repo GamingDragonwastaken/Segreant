@@ -13,6 +13,7 @@ import { demoLiftOptions } from '../demo/seed.ts';
 import { isGitRepo, projectName, resolveCommit } from '../git/correlate.ts';
 import { computeQuality } from '../git/quality.ts';
 import { loadRealization, liftOptionsFromStore, moneyInputsFromStore } from '../value/realization.ts';
+import { timeReclaimedFromStore, WORK_WEEK_MINUTES } from '../value/timeReclaimed.ts';
 import { computeReturnOnIntelligence } from '../value/lenses.ts';
 import { boundedLift } from '../value/lift.ts';
 import { resolveBaselineMinutesForRepo } from '../value/liftBaseline.ts';
@@ -496,6 +497,72 @@ export async function cmdRoi(flags: Flags): Promise<void> {
     console.log('');
     for (const n of roi.notes) console.log(color(tty, C.gray, `  · ${n}`));
   }
+  console.log('');
+  store.close();
+}
+
+/**
+ * Time Reclaimed as a calendar-unit headline: manual work-weeks your REALIZED
+ * work would have cost at your task baselines, vs the AI-assisted time
+ * actually measured. Mirrors cmdRoi's repo/baseline resolution exactly so the
+ * two commands never disagree about what "this project's baseline" means.
+ */
+export async function cmdSaved(flags: Flags): Promise<void> {
+  const repo = (flags.repo as string) ?? process.cwd();
+  const windowDays = flags.window ? Number(flags.window) : 14;
+  const cfg = loadConfig();
+  const store = new Store(dbPath());
+  const loaded = await loadRealization(store, repo, { windowDays, persist: true });
+  if (!loaded) {
+    printNotAGitRepo(repo);
+    process.exitCode = 1;
+    store.close();
+    return;
+  }
+  const report = loaded.report;
+  const project = isDemo() ? 'demo' : await projectName(repo);
+  const resolvedBaseline = isDemo()
+    ? { minutes: cfg.lift.baselineMinutes, minutesLow: cfg.lift.baselineMinutes, minutesHigh: cfg.lift.baselineMinutes, basis: {}, notes: [] as string[] }
+    : await resolveBaselineMinutesForRepo(store, repo, project, cfg.lift.baselineMinutes, DEFAULT_CONFIG.lift.baselineMinutes);
+  const rec = timeReclaimedFromStore(store, report, resolvedBaseline.minutes, { low: resolvedBaseline.minutesLow, high: resolvedBaseline.minutesHigh });
+
+  if (flags.json) {
+    process.stdout.write(JSON.stringify(rec, null, 2) + '\n');
+    store.close();
+    return;
+  }
+
+  const tty = process.stdout.isTTY ?? false;
+  console.log('');
+  console.log(color(tty, C.bold, `  Fiscus — time reclaimed · ${project}`));
+  console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
+  noteSource(tty, loaded.source, loaded.report.projectScoped);
+
+  if (rec.workWeeksSaved === null || rec.workWeeksRange === null) {
+    console.log(color(tty, C.gray, '  Uninstrumented — needs realized work with a task baseline and measured AI time.'));
+    console.log('');
+    for (const n of rec.notes) console.log(color(tty, C.gray, `  · ${n}`));
+    console.log('');
+    console.log(color(tty, C.gray, '  Route real traffic through the proxy, then: fiscus exec -- npm test   fiscus roi --repo .'));
+    console.log('');
+    store.close();
+    return;
+  }
+
+  console.log(`  ${color(tty, C.bold, `≈ ${num(rec.manualMinutes)} manual minutes of realized work`)}   ${color(tty, C.gray, `[${num(rec.manualMinutesLow)} – ${num(rec.manualMinutesHigh)}]`)}`);
+  console.log(color(tty, C.gray, `  delivered in ${num(rec.aiMinutes)} measured AI-minutes`));
+  const weeksCol = rec.workWeeksSaved >= 0 ? C.green : C.red;
+  console.log(`  ${color(tty, C.bold, `≈ ${(rec.savedMinutes! / 60).toFixed(1)} manual hours reclaimed`)}       ${color(tty, C.gray, `[${(rec.savedRange!.low / 60).toFixed(1)} – ${(rec.savedRange!.high / 60).toFixed(1)}]`)}`);
+  console.log(`  ≈ ${color(tty, weeksCol, `${rec.workWeeksSaved.toFixed(2)} work-weeks`)}                       ${color(tty, C.gray, `(${WORK_WEEK_MINUTES / 60}h week)`)}`);
+  console.log('');
+  console.log(color(tty, C.bold, '  By task type'));
+  for (const s of rec.strata) {
+    if (s.manualMinutes === 0 && s.diedUnits === 0 && s.realizedUnits === 0) continue;
+    const label = s.baselined ? s.taskType : `${s.taskType} (no baseline)`;
+    console.log(`    ${label.padEnd(22)} ${String(s.realizedUnits).padStart(3)} realized  ${String(s.diedUnits).padStart(3)} died   ${num(s.manualMinutes).padStart(6)} min [${num(s.manualMinutesLow)}–${num(s.manualMinutesHigh)}]   ${usd(s.costUsd)}`);
+  }
+  console.log('');
+  for (const n of rec.notes) console.log(color(tty, C.gray, `  · ${n}`));
   console.log('');
   store.close();
 }
