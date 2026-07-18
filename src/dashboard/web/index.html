@@ -795,6 +795,29 @@ function renderValue(d) {
     }
   }
 
+  // Time Reclaimed — the calendar-unit headline ("months of manual work
+  // delivered in hours"). Only realized+baselined units earn credit; died
+  // units and unbaselined task types are counted (their AI time still sits
+  // in the denominator) but never credited — the per-type rows are the
+  // "where did AI actually matter" split.
+  const rec = d.reclaimed;
+  let recCard = '';
+  if (rec) {
+    const body = rec.workWeeksSaved == null
+      ? `<div class="lenshow">${(rec.notes || []).map(esc).join(' ')}</div>`
+      : `<div class="rrow"><span style="font-family:var(--mono);font-size:22px;color:${rec.workWeeksSaved >= 0 ? 'var(--gold)' : 'var(--coral)'}">≈ ${rec.workWeeksSaved.toFixed(1)} work-weeks reclaimed</span>
+           <span style="color:var(--faint)">[${rec.workWeeksRange.low.toFixed(1)} – ${rec.workWeeksRange.high.toFixed(1)}]</span></div>
+         <div class="rrow"><span style="color:var(--muted)">${Math.round(rec.manualMinutes / 60)}h of baseline manual work · delivered in ${Math.round(rec.aiMinutes / 60)}h measured AI time</span></div>
+         ${rec.strata.filter((s) => s.manualMinutes > 0 || s.diedUnits > 0).map((s) =>
+           `<div class="rrow"><span style="color:var(--muted)">${esc(s.taskType)}${s.baselined ? '' : ' · no baseline'}</span>
+              <span style="font-family:var(--mono)">${s.realizedUnits} realized · ${s.diedUnits} died · ${Math.round(s.manualMinutes / 60)}h credited</span></div>`).join('')}
+         <div class="lenshow">${esc(rec.notes[0] ?? '')}</div>`;
+    recCard = `<div class="card fade" style="grid-column:1/-1">
+      <div class="label">Time reclaimed ${tip('Manual work-weeks your REALIZED work would have cost at your task baselines, vs the AI-assisted time actually measured. Only realized work earns credit; work that died still counts its AI time. The band is baseline uncertainty, propagated.')}</div>
+      ${body}
+    </div>`;
+  }
+
   const bud = d.budget;
   // Prefer the quantified allocation plan (concrete $ moves + projected value
   // gain); fall back to the qualitative trim/grow when there isn't enough data.
@@ -913,6 +936,7 @@ function renderValue(d) {
         ${returnHtml}
       </div>
     </div>
+    ${recCard}
     ${lensRow}
     <div class="card fade" style="grid-column:1/-1"><div class="label">The realization funnel · where the spend went ${tip('Dollars surviving each gate of the Realization Standard — a unit that died at a gate passed everything before it. "Realized" made it all the way through; spend that stalled at an early gate never became durable value.')}</div>${pnl}</div>
     <div class="card fade" style="grid-column:1/-1">

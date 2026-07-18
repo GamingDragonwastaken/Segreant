@@ -14,6 +14,7 @@ import type { Store } from '../store/db.ts';
 import { isDemo, DEFAULT_CONFIG, type AegisConfig } from '../config.ts';
 import { startOfLocalDay } from '../budget/guard.ts';
 import { loadRealization, projectValueBreakdown, liftOptionsFromStore, moneyInputsFromStore, realizeDiscoveredProjects } from '../value/realization.ts';
+import { timeReclaimedFromStore } from '../value/timeReclaimed.ts';
 import { projectName } from '../git/correlate.ts';
 import { resolveBaselineMinutesForRepo } from '../value/liftBaseline.ts';
 import { scanWithDiff, saveScan } from '../scan/scan.ts';
@@ -484,6 +485,7 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
           let projects = null;
           let projectAllocation = null;
           let drift = null;
+          let reclaimed = null;
           if (loaded) {
             const rep = loaded.report;
             // Goodhart drift alarm (docs §11) over mature units in time order —
@@ -530,6 +532,9 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
               supervisionMinutes: money.supervisionMinutes,
             });
             roi.notes.unshift(...liftNotes);
+            // Time Reclaimed — the calendar-unit headline, same baseline resolution
+            // as the RoI lens above so the two numbers never disagree.
+            reclaimed = timeReclaimedFromStore(store, rep, baselineMinutes, { low: resolvedBaseline.minutesLow, high: resolvedBaseline.minutesHigh });
             frontier = computeFrontier(rep.units);
             // Per-project value (the budget owner's view) + cross-project allocation.
             projects = projectValueBreakdown(store, { windowDays, roiOptions: roiOpts });
@@ -570,6 +575,7 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
             usage,
             team,
             drift,
+            reclaimed,
           });
         } catch (err) {
           return json(res, 500, { error: String(err) });
