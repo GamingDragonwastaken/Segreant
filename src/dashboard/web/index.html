@@ -915,6 +915,11 @@ function renderValue(d) {
     </div>
     ${lensRow}
     <div class="card fade" style="grid-column:1/-1"><div class="label">The realization funnel · where the spend went ${tip('Dollars surviving each gate of the Realization Standard — a unit that died at a gate passed everything before it. "Realized" made it all the way through; spend that stalled at an early gate never became durable value.')}</div>${pnl}</div>
+    <div class="card fade" style="grid-column:1/-1">
+      <div class="label">Session judge ${tip('Judges one real session — yours, from this proxy\'s own store — for whether the AI\'s work actually helped. <b>Algorithmic</b> by default: a structural signal computed on-device from your own metered data, nothing leaves this machine. A hosted judge (if you\'ve configured one) reads a bounded excerpt of the session transcript and sends it off-device — you\'ll see a warning here before that happens.')}</div>
+      <button class="vbtn" id="judgebtn">Judge latest session</button>
+      <span id="judgeout" style="display:block;margin-top:10px;font-family:var(--mono);font-size:12.5px;color:var(--muted);line-height:1.6"></span>
+    </div>
     <div class="card fade">
       <div class="label">Budget advisor ${tip('A value-aware cap from your p90 active-day spend, tightened when realized value is low. It needs a few active days of real usage before it appears — no invented numbers on day one.')}</div>
       ${budBody}
@@ -927,6 +932,34 @@ function renderValue(d) {
       <div class="lenshow">Acceptance &amp; survival are n/a here (no diff, no git) — realized = a reported, no-incident outcome. Record with: <span style="color:var(--gold)">fiscus report --session &lt;id&gt; --kind used</span></div>
     </div>
     ${teamCard}`);
+
+  const jbtn = $('#judgebtn');
+  if (jbtn) jbtn.addEventListener('click', async () => {
+    const out = $('#judgeout');
+    jbtn.disabled = true;
+    out.textContent = 'judging…';
+    try {
+      const res = await fetch('/api/judge', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-aegis-local': '1' },
+        body: JSON.stringify({}),
+      });
+      const body = await res.json();
+      if (body.error === 'no-sessions-in-window') {
+        out.textContent = `no sessions in the last ${body.windowDays} days for "${body.project}" — run some real traffic through the proxy first`;
+      } else if (!res.ok) {
+        out.textContent = `judge failed: ${body.error || res.status}`;
+      } else {
+        const j = body.judgment; const t = body.tier;
+        const warn = t && t.sendsContentOffDevice ? '<span style="color:var(--coral)">⚠ sent a transcript excerpt off-device</span> · ' : '';
+        out.innerHTML = `${warn}<b style="color:var(--text)">${j.efficiencyMultiplier.toFixed(2)}×</b> · ${esc(j.confidence)} · ${esc(j.rationale)}`;
+      }
+    } catch (e) {
+      out.textContent = `judge failed: ${e && e.message ? e.message : 'network error'}`;
+    } finally {
+      jbtn.disabled = false;
+    }
+  });
 }
 
 async function loadValue() {

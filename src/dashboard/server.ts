@@ -34,6 +34,8 @@ import { IMPORTERS, type ImportSummary } from '../connect/importShared.ts';
 import { importClaudeCode, defaultClaudeCodeRoot } from '../connect/claudeCode.ts';
 import { importOpencode, defaultOpencodeDbPath } from '../connect/opencode.ts';
 import { importCodex, defaultCodexRoot } from '../connect/codex.ts';
+import { judgeSessionFromStore } from '../judge/orchestrate.ts';
+import { resolveJudgeTier, hasHostedJudgeApiKey } from '../judge/tier.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const INDEX_HTML = join(__dirname, 'web', 'index.html');
@@ -383,6 +385,56 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
             realizationUnits: store.countRealizationUnits(),
             laborRateSet: config.lift.laborRatePerHour !== null,
           }));
+        } catch (err) {
+          return json(res, 500, { error: String(err) });
+        }
+      })();
+      return;
+    }
+
+    // Judge a real session on demand from the Value view. POST-only + the same
+    // same-origin header guard as the other action routes: with an LLM judge
+    // tier configured this can reach a user-chosen endpoint, so a cross-site
+    // page must never be able to trigger it. Judges the newest-activity session
+    // in the window unless the body names one; the resolved tier's
+    // sendsContentOffDevice bit rides along so the UI can warn before the fact.
+    if (url.pathname === '/api/judge') {
+      if (req.method !== 'POST') {
+        res.writeHead(405, { 'content-type': 'text/plain', allow: 'POST' });
+        res.end('method not allowed');
+        return;
+      }
+      if (req.headers['x-aegis-local'] !== '1') {
+        res.writeHead(403, { 'content-type': 'text/plain' });
+        res.end('forbidden');
+        return;
+      }
+      void (async () => {
+        try {
+          const chunks: Buffer[] = [];
+          for await (const c of req) chunks.push(c as Buffer);
+          let body: { project?: string; sessionId?: string; windowDays?: number } = {};
+          try {
+            body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+          } catch {
+            /* an empty/invalid body means "use the defaults" */
+          }
+          const project = typeof body.project === 'string' && body.project ? body.project : await projectName(safeRepo(null));
+          const windowDays = Math.min(90, Math.max(1, Number(body.windowDays) || 7));
+          const endMs = Date.now();
+          const startMs = endMs - windowDays * 86_400_000;
+          const sessions = store.sessionsInWindow(project, startMs, endMs);
+          const picked = body.sessionId ? (sessions.find((s) => s.sessionId === body.sessionId) ?? null) : (sessions[0] ?? null);
+          if (!picked) {
+            return json(res, 200, { error: 'no-sessions-in-window', project, windowDays });
+          }
+          const tier = resolveJudgeTier(config.judge, hasHostedJudgeApiKey());
+          const judgment = await judgeSessionFromStore(store, project, picked.sessionId, startMs, endMs, config.judge);
+          return json(res, 200, {
+            judgment,
+            session: { sessionId: picked.sessionId, tool: picked.tool, requestCount: picked.requestCount },
+            tier: { tier: tier.tier, sendsContentOffDevice: tier.sendsContentOffDevice },
+          });
         } catch (err) {
           return json(res, 500, { error: String(err) });
         }

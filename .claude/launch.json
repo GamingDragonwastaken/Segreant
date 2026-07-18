@@ -4,7 +4,7 @@
     {
       "name": "demo",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["--disable-warning=ExperimentalWarning", "bin/aegisflow.mjs", "demo", "--serve"],
+      "runtimeArgs": ["--disable-warning=ExperimentalWarning", "bin/fiscus.mjs", "demo", "--serve"],
       "port": 8091
     }
   ]
