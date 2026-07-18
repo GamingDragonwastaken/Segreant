@@ -470,6 +470,16 @@ choice over pretending to fit one from too little data. None of this touches
 `liftFromData`, `boundedLift`, or the Manski interval mechanics above — it only
 sharpens one of their inputs.
 
+**Time Reclaimed** (`src/value/timeReclaimed.ts`, `fiscus saved`) is this same
+baseline math read as a calendar unit instead of a ratio: manual minutes of
+REALIZED work at these resolved task-type baselines, minus measured
+time-with-AI, in work-weeks — with the baseline band above as the interval,
+never a false point. It inherits every caveat here unchanged: baseline-
+estimated, not a controlled A/B; a unit that died before realizing (or whose
+task type has no baseline) earns zero credit while its AI time still counts
+against the total, so a workflow that mostly produces unrealized churn can't
+show a headline number it didn't earn.
+
 ### 7.2 AI-side efficiency: the Acceptance-driven Lift discount
 
 §7.1 sharpened the manual-baseline side of the TSF ratio. It never touched the

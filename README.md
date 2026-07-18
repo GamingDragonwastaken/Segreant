@@ -466,12 +466,16 @@ repo-less realized-value with a **per-project budget-owner view**, and **opt-in,
 k-anonymous per-user value**. **Lift** derives from measured time-with-AI × task
 baselines that blend a cited population prior (METR's published human-timed task
 scale) with your own pre-tracking git history via empirical-Bayes shrinkage — no
-synthetic constant, no unsourced table. A state-aware `fiscus guide` (and bare
+synthetic constant, no unsourced table. **`fiscus saved`** turns that same math
+into the calendar-unit headline — manual work-weeks your realized work would
+have cost at your task baselines, vs the AI-assisted time actually measured,
+banded and split by task type so work that died (AI time spent, no savings
+credited) never inflates the number. A state-aware `fiscus guide` (and bare
 `fiscus`) tells you the single next step from your actual data. Terminal + a
 **fully self-contained** web dashboard (zero external requests) mirror every
 surface.
 
-**335/336 tests (1 skipped — POSIX-only permission semantics), `tsc` clean, CI on
+**359/360 tests (1 skipped — POSIX-only permission semantics), `tsc` clean, CI on
 Linux/macOS/Windows.** Installable via `npx fiscus`. See [docs/ARCHITECTURE.md §7](docs/ARCHITECTURE.md) for what's
 deliberately still open — `fiscus team push` can sign and push a numeric-only
 project rollup to [`team-server/`](team-server/README.md), a separate,
