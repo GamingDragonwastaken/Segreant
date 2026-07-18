@@ -17,10 +17,14 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import {
   findClaudeCodeTranscript,
   extractTranscriptTurns,
+  extractOpencodeTranscript,
+  extractCodexTranscript,
   loadTranscriptExcerpt,
+  transcriptSupport,
   MAX_TURN_CHARS,
   MAX_TOTAL_CHARS,
 } from '../src/judge/transcript.ts';
@@ -117,20 +121,107 @@ test('transcript: per-turn and total caps are enforced and DISCLOSED — clipped
   }
 });
 
-test('loadTranscriptExcerpt: reads only for supported tools; unknown tools and missing files are honest nulls', async () => {
+test('loadTranscriptExcerpt: routes by tool — claude-code, opencode, codex all supported; unknown tools honest null', async () => {
   const root = makeRoot();
   try {
-    const dir = join(root, 'proj');
+    const ccDir = join(root, 'cc', 'proj');
+    mkdirSync(ccDir, { recursive: true });
+    writeFileSync(join(ccDir, 'abcd1234-ef56-7890-abcd-1234567890ab.jsonl'), userLine('cc content'));
+    const dbPath = makeOpencodeDb(root); // has ses_abc
+    const cxDir = join(root, 'cx', 'sessions', '2026', '07', '18');
+    mkdirSync(cxDir, { recursive: true });
+    const sid = '019dee5a-91ee-7ce1-8891-db48d6d052fd';
+    writeFileSync(
+      join(cxDir, `rollout-x-${sid}.jsonl`),
+      line({ type: 'session_meta', payload: { id: sid } }) +
+        line({ type: 'event_msg', payload: { type: 'user_message', message: 'cx content' } }),
+    );
+
+    const roots = { claudeCode: join(root, 'cc'), opencodeDb: dbPath, codexRoot: join(root, 'cx') };
+    assert.equal((await loadTranscriptExcerpt('abcd1234-ef56-7890-abcd-1234567890ab', 'claude-code', roots))!.turns[0]!.text, 'cc content');
+    assert.equal((await loadTranscriptExcerpt('ses_abc', 'opencode', roots))!.turns[0]!.text, 'refactor the login flow');
+    assert.equal((await loadTranscriptExcerpt(sid, 'codex', roots))!.turns[0]!.text, 'cx content');
+    assert.equal(await loadTranscriptExcerpt('anything', 'cursor', roots), null, 'unknown tool → null');
+    assert.equal(await loadTranscriptExcerpt('ffff0000-0000-0000-0000-000000000000', 'claude-code', roots), null, 'supported tool but no file → null');
+    assert.equal(transcriptSupport('opencode'), 'supported');
+    assert.equal(transcriptSupport('codex'), 'supported');
+    assert.equal(transcriptSupport('proxy'), 'unsupported-tool');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ── opencode + Codex extractors (plan Tasks 1–2) ────────────────────────────
+
+function makeOpencodeDb(dir: string): string {
+  const p = join(dir, 'opencode.db');
+  const db = new DatabaseSync(p);
+  db.exec(`CREATE TABLE message (id TEXT PRIMARY KEY, session_id TEXT, time_created INTEGER, data TEXT);
+           CREATE TABLE part (id TEXT PRIMARY KEY, message_id TEXT, session_id TEXT, time_created INTEGER, data TEXT);`);
+  const msg = db.prepare('INSERT INTO message VALUES (?,?,?,?)');
+  const part = db.prepare('INSERT INTO part VALUES (?,?,?,?,?)');
+  msg.run('m1', 'ses_abc', 1000, JSON.stringify({ role: 'user' }));
+  part.run('p1', 'm1', 'ses_abc', 1000, JSON.stringify({ type: 'text', text: 'refactor the login flow' }));
+  msg.run('m2', 'ses_abc', 2000, JSON.stringify({ role: 'assistant' }));
+  part.run('p2', 'm2', 'ses_abc', 2000, JSON.stringify({ type: 'text', text: 'Extracted the auth guard.' }));
+  part.run('p3', 'm2', 'ses_abc', 2100, JSON.stringify({ type: 'tool', tool: 'edit' }));
+  part.run('p4', 'm2', 'ses_abc', 2200, JSON.stringify({ type: 'reasoning', text: 'hidden chain' }));
+  // A different session that must NOT leak in:
+  msg.run('m3', 'ses_other', 3000, JSON.stringify({ role: 'user' }));
+  part.run('p5', 'm3', 'ses_other', 3000, JSON.stringify({ type: 'text', text: 'OTHER-SESSION-SENTINEL' }));
+  db.close();
+  return p;
+}
+
+test('opencode transcript: session-scoped user/assistant text, tool markers, reasoning skipped', () => {
+  const dir = makeRoot();
+  try {
+    const dbPath = makeOpencodeDb(dir);
+    const ex = extractOpencodeTranscript('ses_abc', dbPath);
+    assert.ok(ex);
+    assert.equal(ex!.turns.length, 2);
+    assert.deepEqual(ex!.turns[0], { role: 'user', text: 'refactor the login flow' });
+    assert.ok(ex!.turns[1]!.text.includes('Extracted the auth guard.'));
+    assert.ok(ex!.turns[1]!.text.includes('[tool]'), 'tool parts appear as structural markers');
+    assert.ok(!ex!.turns[1]!.text.includes('hidden chain'), 'reasoning parts never ride along');
+    assert.ok(!JSON.stringify(ex).includes('OTHER-SESSION-SENTINEL'), 'strictly session-scoped');
+    assert.equal(extractOpencodeTranscript('ses_missing', dbPath), null);
+    assert.equal(extractOpencodeTranscript('ses_abc', join(dir, 'nope.db')), null, 'missing DB is an honest null');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('codex transcript: finds the rollout by session id, extracts user/agent messages + tool markers', async () => {
+  const root = makeRoot();
+  try {
+    const dir = join(root, 'sessions', '2026', '07', '18');
     mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, 'abcd1234-ef56-7890-abcd-1234567890ab.jsonl'), userLine('real content'));
+    const sid = '019dee5a-91ee-7ce1-8891-db48d6d052fd';
+    writeFileSync(
+      join(dir, `rollout-2026-07-18T10-00-00-${sid}.jsonl`),
+      line({ type: 'session_meta', payload: { id: sid, cwd: 'C:/proj' } }) +
+        line({ type: 'event_msg', payload: { type: 'user_message', message: 'port the importer to streaming' } }) +
+        line({ type: 'response_item', payload: { type: 'function_call', name: 'shell' } }) +
+        line({ type: 'event_msg', payload: { type: 'agent_message', message: 'Done — reads line by line now.' } }) +
+        line({ type: 'event_msg', payload: { type: 'token_count', info: {} } }),
+    );
+    // A decoy rollout for another session:
+    writeFileSync(
+      join(dir, 'rollout-2026-07-18T11-00-00-ffffffff-0000-0000-0000-000000000000.jsonl'),
+      line({ type: 'session_meta', payload: { id: 'ffffffff-0000-0000-0000-000000000000' } }) +
+        line({ type: 'event_msg', payload: { type: 'user_message', message: 'DECOY-SENTINEL' } }),
+    );
 
-    const found = await loadTranscriptExcerpt('abcd1234-ef56-7890-abcd-1234567890ab', 'claude-code', root);
-    assert.ok(found);
-    assert.equal(found!.turns[0]!.text, 'real content');
-
-    assert.equal(await loadTranscriptExcerpt('abcd1234-ef56-7890-abcd-1234567890ab', 'opencode', root), null, 'unsupported tool → null, even when a file with that name exists');
-    assert.equal(await loadTranscriptExcerpt('abcd1234-ef56-7890-abcd-1234567890ab', null, root), null);
-    assert.equal(await loadTranscriptExcerpt('ffff0000-0000-0000-0000-000000000000', 'claude-code', root), null, 'supported tool but no file → null');
+    const ex = await extractCodexTranscript(sid, root);
+    assert.ok(ex);
+    assert.equal(ex!.turns.length, 3);
+    assert.deepEqual(ex!.turns[0], { role: 'user', text: 'port the importer to streaming' });
+    assert.equal(ex!.turns[1]!.text, '[tool: shell]');
+    assert.equal(ex!.turns[1]!.role, 'assistant');
+    assert.ok(!JSON.stringify(ex).includes('DECOY-SENTINEL'));
+    assert.equal(await extractCodexTranscript('00000000-aaaa-bbbb-cccc-000000000000', root), null);
+    assert.equal(await extractCodexTranscript(sid, join(root, 'nope')), null);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

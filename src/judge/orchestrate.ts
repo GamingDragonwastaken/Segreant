@@ -18,7 +18,7 @@ import type { JudgeConfig } from '../config.ts';
 import { resolveJudgeTier, hasHostedJudgeApiKey, type JudgeConfidence } from './tier.ts';
 import { buildStructuralSummary } from './payload.ts';
 import { callJudgeApi, JudgeCallError, type SessionJudgment } from './call.ts';
-import { loadTranscriptExcerpt, transcriptSupport, type TranscriptExcerpt } from './transcript.ts';
+import { loadTranscriptExcerpt, transcriptSupport, type TranscriptExcerpt, type TranscriptRoots } from './transcript.ts';
 
 function isSet(s: string | null | undefined): boolean {
   return typeof s === 'string' && s.trim().length > 0;
@@ -131,7 +131,7 @@ export async function judgeSessionFromStore(
   windowStartMs: number,
   windowEndMs: number,
   cfg: JudgeConfig,
-  transcriptRoot?: string,
+  transcriptRoots?: TranscriptRoots,
 ): Promise<SessionJudgment> {
   const requests = store.requestsInRange(windowStartMs, windowEndMs);
   const proposals = store.proposalsInWindow(project, windowStartMs, windowEndMs);
@@ -142,7 +142,7 @@ export async function judgeSessionFromStore(
     const meta = store.getSessionMeta(sessionId);
     const tool = meta?.tool ?? null;
     if (transcriptSupport(tool) === 'supported') {
-      transcript = await loadTranscriptExcerpt(sessionId, tool, transcriptRoot);
+      transcript = await loadTranscriptExcerpt(sessionId, tool, transcriptRoots ?? {});
     }
   }
   return judgeSession(sessionId, requests, proposals, cfg, transcript);

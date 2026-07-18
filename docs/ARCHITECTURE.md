@@ -309,14 +309,14 @@ genuinely open:
    servers stand in for the judge endpoint the same way `test/proxy.test.ts`
    already stands in for upstream providers. The full-content tiers are real
    too — resolved WITHOUT a transcript-capture feature: `src/judge/transcript.ts`
-   reads Claude Code's own on-disk `<sessionId>.jsonl` ephemerally at judge
-   time (bounded excerpt, clipping disclosed, nothing persisted — the store
-   still never stores prompt/response text), and `fiscus judge` judges real
-   sessions looked up from the store (`--session <id>` to pick). See
-   [docs/LIFT-AI-SIDE-JUDGE-DESIGN.md](LIFT-AI-SIDE-JUDGE-DESIGN.md) §2's boxed
-   note. Genuinely still open: transcript excerpts for opencode/Codex sessions
-   (structural-only today, disclosed), a real controlled A/B, and a dashboard
-   trigger / automatic invocation from `fiscus lift`.
+   reads each tool's own on-disk session log ephemerally at judge time
+   (Claude Code's `<sessionId>.jsonl`, opencode's session database, Codex's
+   rollout JSONL — bounded excerpt, clipping disclosed, nothing persisted;
+   the store still never stores prompt/response text), and `fiscus judge`
+   judges real sessions looked up from the store (`--session <id>` to pick).
+   See [docs/LIFT-AI-SIDE-JUDGE-DESIGN.md](LIFT-AI-SIDE-JUDGE-DESIGN.md) §2's
+   boxed note. Genuinely still open: a real controlled A/B and automatic
+   invocation from `fiscus lift`.
 4. **Rust core** — only if Fiscus becomes a shared gateway under real concurrency.
    Until then it's premature.
 

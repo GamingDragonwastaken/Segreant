@@ -141,9 +141,12 @@ that lens already does.
 > full message content). `src/judge/transcript.ts` reads that file AT JUDGE
 > TIME, read-only, into a bounded excerpt (per-turn and total character caps,
 > clipping counted and disclosed) that lives only for the one judge call —
-> nothing is ever written to Fiscus's store. Scope honesty: Claude Code
-> sessions only; opencode/Codex sessions stay structural with the rationale
-> saying so. When no on-disk transcript exists for a session, `judgeSession`
+> nothing is ever written to Fiscus's store. All three importers' tools are
+> covered: Claude Code (`<sessionId>.jsonl`), opencode (its session database's
+> `part`/`message` tables, read-only WAL snapshot), and Codex (rollout JSONL
+> located by the session uuid). Plain proxy traffic has no on-disk transcript
+> and stays structural, with the rationale saying so. When no on-disk
+> transcript exists for a session, `judgeSession`
 > still downgrades honestly: it sends the structural summary and reports the
 > STRUCTURAL confidence tag — never claiming a richer source than what was
 > actually transmitted. And a structural-consent tier DROPS a transcript even
@@ -246,11 +249,11 @@ what the ladder allows:
 | Hosted API, structural input | Off | A proposal-count/timing summary only | Same | Two independent opt-ins: `judge.hostedEnabled: true` AND the `AEGIS_JUDGE_API_KEY` env var set (plus `judge.hostedBaseUrl` + `judge.hostedModel` configured — operationally required, not consent gates) |
 | Hosted API, full content | Off | Actual session content | ⚠ Downgrades to the structural summary — see below | The above plus `judge.hostedSendFullContent` — the loudest tier, matching ARCHITECTURE §7 item 3's "real, loud opt-in decision" language exactly |
 
-⚠ **The two "full content" rows now do what their name says — for Claude Code
-sessions.** The excerpt is read ephemerally from the tool's own on-disk
-transcript at judge time (see the boxed note in §2); Fiscus still never
-persists content. For sessions whose tool has no supported on-disk transcript
-(opencode, Codex, plain proxy traffic), `judgeSession`
+⚠ **The two "full content" rows now do what their name says — for Claude Code,
+opencode, and Codex sessions.** The excerpt is read ephemerally from the
+tool's own on-disk transcript at judge time (see the boxed note in §2); Fiscus
+still never persists content. For sessions whose tool has no supported
+on-disk transcript (plain proxy traffic), `judgeSession`
 (`src/judge/orchestrate.ts`) degrades honestly: it sends the structural
 payload and reports the STRUCTURAL confidence tag, never claiming the `-full`
 tag for data that wasn't actually transmitted — and the rationale says a
@@ -278,8 +281,8 @@ can affect the other tier's behavior.
   into `boundedLift` should read §7.2's "why a fourth point-multiplier, not a
   separate interval-narrowing mechanic" reasoning first.
 - ~~**Real transcript-capture and full-content judging.**~~ BUILT 2026-07-16
-  without a capture decision: ephemeral read-at-judge-time from the tool's own
-  on-disk log (Claude Code only for now — see the ⚠ note above).
+  (Claude Code) and 2026-07-18 (opencode + Codex) without a capture decision:
+  ephemeral read-at-judge-time from each tool's own on-disk log.
 - **A dashboard trigger / automatic invocation from `fiscus lift`.** The
   `fiscus judge` subcommand exists (it judges real sessions looked up from the
   store; `--session <id>` to pick one), but nothing invokes judging

@@ -19,10 +19,13 @@
  * saying so rather than pretending. Widen deliberately, per source, with tests.
  */
 
-import { createReadStream, readdirSync, statSync } from 'node:fs';
+import { createReadStream, readdirSync, statSync, existsSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { join, basename } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { defaultClaudeCodeRoot } from '../connect/claudeCode.ts';
+import { defaultOpencodeDbPath } from '../connect/opencode.ts';
+import { defaultCodexRoot, codexRolloutFiles } from '../connect/codex.ts';
 
 /** One conversational turn, already truncated to the caps below. */
 export interface TranscriptTurn {
@@ -139,24 +142,179 @@ export async function extractTranscriptTurns(sourcePath: string, sessionId: stri
 }
 
 /**
- * The one-call convenience the orchestrator's store wrapper uses: find the
- * session's on-disk transcript for a supported tool and read it, or return
- * null — with the caller saying honestly WHY (unsupported tool vs not found)
- * via `transcriptSupport` below.
+ * opencode transcript, read ephemerally from its own session database
+ * (READ-ONLY — same WAL-snapshot posture as the importer). Text parts become
+ * turns; tool parts become structural markers; reasoning/step parts are
+ * internal machinery, not conversation, and are skipped entirely.
+ */
+export function extractOpencodeTranscript(
+  sessionId: string,
+  dbPath: string | null = defaultOpencodeDbPath(),
+): TranscriptExcerpt | null {
+  if (!dbPath || !existsSync(dbPath)) return null;
+  let db: DatabaseSync;
+  try {
+    db = new DatabaseSync(dbPath, { readOnly: true });
+  } catch {
+    return null; // locked/absent — honest null, never a crash
+  }
+  try {
+    const rows = db
+      .prepare(
+        `SELECT m.data AS msgData, p.data AS partData
+           FROM part p JOIN message m ON m.id = p.message_id
+          WHERE p.session_id = ?
+          ORDER BY p.time_created ASC, p.id ASC`,
+      )
+      .all(sessionId) as Array<{ msgData: string; partData: string }>;
+
+    const turns: TranscriptTurn[] = [];
+    let clippedTurns = 0;
+    let droppedTurns = 0;
+    let totalChars = 0;
+    for (const r of rows) {
+      let role: string | undefined;
+      let part: { type?: string; text?: unknown };
+      try {
+        role = (JSON.parse(r.msgData) as { role?: string }).role;
+        part = JSON.parse(r.partData) as { type?: string; text?: unknown };
+      } catch {
+        continue;
+      }
+      if (role !== 'user' && role !== 'assistant') continue;
+      let raw = '';
+      if (part.type === 'text' && typeof part.text === 'string') raw = part.text.trim();
+      else if (part.type === 'tool') raw = '[tool]';
+      if (!raw) continue;
+
+      if (totalChars >= MAX_TOTAL_CHARS) {
+        droppedTurns++;
+        continue;
+      }
+      let text = raw;
+      if (text.length > MAX_TURN_CHARS) {
+        text = text.slice(0, MAX_TURN_CHARS) + ' …[clipped]';
+        clippedTurns++;
+      }
+      totalChars += text.length;
+      // Consecutive same-role parts merge into one turn (a message has many parts).
+      const last = turns[turns.length - 1];
+      if (last && last.role === role) last.text += ' ' + text;
+      else turns.push({ role, text });
+    }
+    return turns.length > 0 ? { sessionId, turns, clippedTurns, droppedTurns, sourcePath: dbPath } : null;
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * Find the rollout file for a Codex session. The filename carries the session
+ * uuid as its trailing segment (rollout-<timestamp>-<uuid>.jsonl); when no
+ * filename matches (older Codex versions), fall back to reading each file's
+ * first line for its session_meta id.
+ */
+async function findCodexRollout(sessionId: string, root: string): Promise<string | null> {
+  const files = codexRolloutFiles(root);
+  const byName = files.find((f) => basename(f).endsWith(`-${sessionId}.jsonl`));
+  if (byName) return byName;
+  for (const f of files) {
+    const rl = createInterface({ input: createReadStream(f), crlfDelay: Infinity });
+    for await (const lineText of rl) {
+      let o: { type?: string; payload?: { id?: string } };
+      try {
+        o = JSON.parse(lineText);
+      } catch {
+        break;
+      }
+      rl.close();
+      if (o.type === 'session_meta' && o.payload?.id === sessionId) return f;
+      break; // session_meta is the first line; anything else → next file
+    }
+  }
+  return null;
+}
+
+/** Codex transcript, read ephemerally from the session's own rollout log. */
+export async function extractCodexTranscript(
+  sessionId: string,
+  root: string | null = defaultCodexRoot(),
+): Promise<TranscriptExcerpt | null> {
+  if (!root || !existsSync(root)) return null;
+  const file = await findCodexRollout(sessionId, root);
+  if (!file) return null;
+
+  const turns: TranscriptTurn[] = [];
+  let clippedTurns = 0;
+  let droppedTurns = 0;
+  let totalChars = 0;
+  const push = (role: 'user' | 'assistant', raw: string): void => {
+    const trimmed = raw.trim();
+    if (!trimmed) return;
+    if (totalChars >= MAX_TOTAL_CHARS) {
+      droppedTurns++;
+      return;
+    }
+    let text = trimmed;
+    if (text.length > MAX_TURN_CHARS) {
+      text = text.slice(0, MAX_TURN_CHARS) + ' …[clipped]';
+      clippedTurns++;
+    }
+    totalChars += text.length;
+    turns.push({ role, text });
+  };
+
+  const rl = createInterface({ input: createReadStream(file), crlfDelay: Infinity });
+  for await (const lineText of rl) {
+    let o: { type?: string; payload?: Record<string, unknown> };
+    try {
+      o = JSON.parse(lineText);
+    } catch {
+      continue; // torn tail of a live session
+    }
+    const p = o.payload ?? {};
+    if (o.type === 'event_msg' && p.type === 'user_message' && typeof p.message === 'string') push('user', p.message);
+    else if (o.type === 'event_msg' && p.type === 'agent_message' && typeof p.message === 'string') push('assistant', p.message);
+    else if (o.type === 'response_item' && p.type === 'function_call')
+      push('assistant', `[tool: ${typeof p.name === 'string' ? p.name : 'unknown'}]`);
+  }
+  return turns.length > 0 ? { sessionId, turns, clippedTurns, droppedTurns, sourcePath: file } : null;
+}
+
+/** Per-tool transcript locations, overridable for tests. Each default resolves
+ * to the tool's real install location on this machine. */
+export interface TranscriptRoots {
+  claudeCode?: string;
+  opencodeDb?: string | null;
+  codexRoot?: string | null;
+}
+
+/**
+ * The one-call convenience the orchestrator's store wrapper uses: route to the
+ * session's tool's own on-disk transcript store and read it, or return null —
+ * with the caller saying honestly WHY (unsupported tool vs not found) via
+ * `transcriptSupport` below. Every path is ephemeral and read-only; an unknown
+ * tool is an honest null, never a guess.
  */
 export async function loadTranscriptExcerpt(
   sessionId: string,
   tool: string | null,
-  root?: string,
+  roots: TranscriptRoots | string = {},
 ): Promise<TranscriptExcerpt | null> {
-  if (tool !== 'claude-code') return null;
-  const path = findClaudeCodeTranscript(sessionId, root);
-  if (!path) return null;
-  const excerpt = await extractTranscriptTurns(path, sessionId);
-  return excerpt.turns.length > 0 ? excerpt : null;
+  // Back-compat: a plain string is the old claude-code root parameter.
+  const r: TranscriptRoots = typeof roots === 'string' ? { claudeCode: roots } : roots;
+  if (tool === 'claude-code') {
+    const path = findClaudeCodeTranscript(sessionId, r.claudeCode);
+    if (!path) return null;
+    const excerpt = await extractTranscriptTurns(path, sessionId);
+    return excerpt.turns.length > 0 ? excerpt : null;
+  }
+  if (tool === 'opencode') return extractOpencodeTranscript(sessionId, r.opencodeDb ?? defaultOpencodeDbPath());
+  if (tool === 'codex') return extractCodexTranscript(sessionId, r.codexRoot ?? defaultCodexRoot());
+  return null;
 }
 
 /** One line for rationale/notes: is full-content even possible for this tool? */
 export function transcriptSupport(tool: string | null): 'supported' | 'unsupported-tool' {
-  return tool === 'claude-code' ? 'supported' : 'unsupported-tool';
+  return tool === 'claude-code' || tool === 'opencode' || tool === 'codex' ? 'supported' : 'unsupported-tool';
 }
