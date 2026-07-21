@@ -10,6 +10,16 @@ off-by-default* things: a public pricing-table refresh (a plain GET, sends nothi
 about you) and alert webhooks you configure (which carry alert titles/severity only,
 never content).
 
+**Is my proposed code stored anywhere, even locally?**
+Yes, temporarily. To measure whether an AI's proposed edit was actually
+accepted (the "First-Pass Acceptance" signal), Fiscus stores the proposed
+code text in your local database for up to 30 days by default
+(`proposalRetentionDays` in config) — long enough to match it against a
+later git commit. It is never transmitted anywhere. Set `metadataOnly: true`
+to turn this off entirely (you lose Acceptance tracking, keep everything
+else), or run `fiscus prune` / use the dashboard Settings page to purge it
+early.
+
 **Do you see my API keys?**
 No. Keys stay in your environment / your tool's config. The proxy forwards the auth
 header upstream unchanged and never stores it. Fiscus's author never sees it.

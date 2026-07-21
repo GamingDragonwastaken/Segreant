@@ -37,6 +37,10 @@ Anthropic reports input/cache in `message_start` and cumulative output in `messa
 Reasonable as a goal, but `node:sqlite` doesn't bundle SQLCipher, and adding it means a native dependency — which breaks the zero-build promise. The brief overstates this as shipped.
 **Build**: not implemented in v1. The DB lives in the user's home dir under OS file permissions; honest about that. SQLCipher (or an encrypted volume) is a documented future option, not a current claim.
 
+### ⚠️ Local proposal storage — a real trade-off, not a gap
+First-Pass Acceptance (whether an AI's proposed edit survives into a real commit) requires comparing the AI's proposed code against the eventual git diff. That comparison needs the proposed code to still be on disk when the matching commit lands, which can be days later. So `proposals.files_json` stores the AI's literal proposed lines in the local SQLite database — not hashed, not transmitted, but genuinely present in cleartext on disk for a bounded window.
+**Build**: `proposalRetentionDays` (default 30 days) bounds it; `fiscus prune` and the dashboard Settings page both purge it early on demand; `metadataOnly: true` disables the capture entirely at the cost of losing the Acceptance signal. This is an honest, disclosed trade-off, not a violation of "no prompt/code storage, ever" — that line describes non-transmission, not zero local persistence — but it went undocumented here until this pass. It's now called out in the README Privacy section and FAQ too.
+
 ### ⚠️ "Over 1,000 distinct models" / auto-updating community pricing DB
 Aspirational. We ship a curated snapshot of the models that matter, clearly marking Anthropic as verified and OpenAI as community-maintained. Auto-update is listed as future work, not pretended-present.
 

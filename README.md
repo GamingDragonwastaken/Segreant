@@ -415,6 +415,14 @@ number.
 
 - No prompt text, source code, or credentials are transmitted anywhere.
 - Provider API keys pass through to the provider and are **never stored**.
+- **Locally stored, not transmitted:** to detect First-Pass Acceptance (whether
+  the AI's proposed edit matches what you actually committed), Fiscus
+  temporarily stores the AI's proposed code **on your own disk**
+  (`~/.aegisflow/aegis.db`) for up to `proposalRetentionDays` (default 30
+  days) — long enough to correlate against a later git commit, never
+  transmitted anywhere. Set `metadataOnly: true` in your config to disable
+  this and store only token/cost metadata (Acceptance tracking turns off).
+  `fiscus prune`, or the dashboard Settings page, purges it early on demand.
 - All cost computation happens on-device against a local pricing table.
 - The dashboard itself makes **zero external requests** — no web fonts, no CDNs,
   no analytics. Open your browser's network tab and confirm it.
