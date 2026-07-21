@@ -76,6 +76,14 @@ export interface ProposalRow {
   files: Array<{ path: string | null; addedLines: string[] }>;
 }
 
+/** A provider/model that has routed proxy traffic recently — dashboard connection status. */
+export interface ProviderConnection {
+  provider: string;
+  model: string;
+  lastSeenMs: number;
+  requestCount: number;
+}
+
 export interface GateSignalRow {
   signalId: string;
   kind: string; // 'tested' | 'merged' | 'shipped' | 'incident'
@@ -1208,5 +1216,38 @@ export class Store {
     const info = this.db.prepare(`DELETE FROM requests WHERE ts_epoch_ms < ?`).run(beforeMs);
     this.db.prepare('VACUUM').run();
     return Number(info.changes ?? 0);
+  }
+
+  /**
+   * Privacy maintenance: prune PROPOSAL rows (the AI's literal proposed code) older
+   * than beforeMs. Kept separate from prune() — proposals have a much shorter honest
+   * retention need (the git-correlation window) than request/cost history.
+   */
+  pruneProposals(beforeMs: number): number {
+    const info = this.db.prepare(`DELETE FROM proposals WHERE ts_epoch_ms < ?`).run(beforeMs);
+    this.db.prepare('VACUUM').run();
+    return Number(info.changes ?? 0);
+  }
+
+  /** Privacy control: delete every stored proposal immediately, regardless of age. */
+  clearProposals(): number {
+    const info = this.db.prepare(`DELETE FROM proposals`).run();
+    this.db.prepare('VACUUM').run();
+    return Number(info.changes ?? 0);
+  }
+
+  /**
+   * Which provider(s)/model(s) have routed traffic through the proxy recently — the
+   * dashboard Settings page's "connection status". Never a literal API key; Fiscus
+   * never sees one (src/proxy/server.ts only forwards per-request headers).
+   */
+  recentProviderConnections(sinceMs: number): ProviderConnection[] {
+    return this.db
+      .prepare(
+        `SELECT provider, model, MAX(ts_epoch_ms) AS lastSeenMs, COUNT(*) AS requestCount
+         FROM requests WHERE ts_epoch_ms >= ?
+         GROUP BY provider, model ORDER BY lastSeenMs DESC`,
+      )
+      .all(sinceMs) as unknown as ProviderConnection[];
   }
 }

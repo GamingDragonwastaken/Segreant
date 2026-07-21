@@ -224,3 +224,50 @@ test('store.sessionsInWindow: real sessions only, newest activity first, tool fr
   assert.equal(store.getSessionMeta('nope'), null);
   store.close();
 });
+
+test('store.pruneProposals: removes only proposal rows older than the cutoff', () => {
+  const store = new Store(':memory:');
+  store.insertProposal({
+    proposalId: 'p-old', requestId: 'r-old', sessionId: null, tsEpochMs: 1000,
+    provider: 'anthropic', model: 'claude-3', project: 'demo', files: [{ path: 'a.ts', addedLines: ['const x = 1;'] }],
+  });
+  store.insertProposal({
+    proposalId: 'p-new', requestId: 'r-new', sessionId: null, tsEpochMs: 9000,
+    provider: 'anthropic', model: 'claude-3', project: 'demo', files: [{ path: 'b.ts', addedLines: ['const y = 2;'] }],
+  });
+  const removed = store.pruneProposals(5000);
+  assert.equal(removed, 1);
+  const remaining = store.proposalsInWindow('demo', 0, 10_000);
+  assert.equal(remaining.length, 1);
+  assert.equal(remaining[0]!.proposalId, 'p-new');
+  store.close();
+});
+
+test('store.clearProposals: removes every proposal row regardless of age', () => {
+  const store = new Store(':memory:');
+  store.insertProposal({
+    proposalId: 'p-1', requestId: 'r-1', sessionId: null, tsEpochMs: Date.now(),
+    provider: 'anthropic', model: 'claude-3', project: 'demo', files: [{ path: 'a.ts', addedLines: ['x'] }],
+  });
+  const removed = store.clearProposals();
+  assert.equal(removed, 1);
+  assert.equal(store.proposalsInWindow('demo', 0, Date.now() + 1000).length, 0);
+  store.close();
+});
+
+test('store.recentProviderConnections: groups requests by provider+model within the window, newest first', () => {
+  const store = new Store(':memory:');
+  store.insertRequest(req({ provider: 'anthropic', model: 'claude-3', tsEpochMs: 1000 }));
+  store.insertRequest(req({ provider: 'anthropic', model: 'claude-3', tsEpochMs: 2000 }));
+  store.insertRequest(req({ provider: 'openai', model: 'gpt-4o', tsEpochMs: 3000 }));
+  store.insertRequest(req({ provider: 'anthropic', model: 'claude-3', tsEpochMs: 100 })); // outside window below
+  const conns = store.recentProviderConnections(500);
+  const anthropic = conns.find((c) => c.provider === 'anthropic' && c.model === 'claude-3');
+  const openai = conns.find((c) => c.provider === 'openai');
+  assert.ok(anthropic);
+  assert.equal(anthropic!.requestCount, 2); // the ts=100 row is excluded by the sinceMs cutoff
+  assert.equal(anthropic!.lastSeenMs, 2000);
+  assert.ok(openai);
+  assert.equal(conns[0]!.provider, 'openai'); // newest lastSeenMs first
+  store.close();
+});
