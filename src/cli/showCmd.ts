@@ -237,9 +237,13 @@ export function cmdBudget(flags: Flags): void {
 export function cmdPrune(): void {
   const cfg = loadConfig();
   const store = new Store(dbPath());
-  const before = Date.now() - cfg.retentionDays * 24 * 60 * 60 * 1000;
-  const removed = store.prune(before);
-  console.log(`  Pruned ${removed} request rows older than ${cfg.retentionDays} days and compacted the database.`);
+  const requestsBefore = Date.now() - cfg.retentionDays * 24 * 60 * 60 * 1000;
+  const proposalsBefore = Date.now() - cfg.proposalRetentionDays * 24 * 60 * 60 * 1000;
+  const requestsRemoved = store.prune(requestsBefore);
+  const proposalsRemoved = store.pruneProposals(proposalsBefore);
+  console.log(`  Pruned ${requestsRemoved} request rows older than ${cfg.retentionDays} days.`);
+  console.log(`  Pruned ${proposalsRemoved} stored proposal rows older than ${cfg.proposalRetentionDays} days.`);
+  console.log('  Database compacted.');
   store.close();
 }
 

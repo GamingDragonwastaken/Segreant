@@ -193,6 +193,15 @@ export interface AegisConfig {
    * controls what is persisted in the local DB.
    */
   metadataOnly: boolean;
+  /**
+   * Prune PROPOSAL rows (the AI's literal proposed code, stored locally to correlate
+   * against a later git commit) older than this many days. Deliberately much shorter
+   * than `retentionDays`: proposals only need to survive the correlation window
+   * (`windowDays`, default 14) plus a safety margin, unlike request/cost history which
+   * has standing value for longer. This is the privacy-facing retention control —
+   * `fiscus prune` and the dashboard "clear stored proposals now" button both use it.
+   */
+  proposalRetentionDays: number;
 }
 
 export const DEFAULT_CONFIG: AegisConfig = {
@@ -252,6 +261,7 @@ export const DEFAULT_CONFIG: AegisConfig = {
   },
   retentionDays: 180,
   metadataOnly: false,
+  proposalRetentionDays: 30,
 };
 
 export function aegisHome(): string {
