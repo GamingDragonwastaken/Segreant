@@ -39,6 +39,28 @@
     --serif: 'Fraunces', 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
   }
 
+  /* Light theme — a warm "ledger paper" palette rather than stark white, to stay in
+     the same luxury-ledger register as the dark "Night Vault" identity (serif display
+     font + gold accent). Accent hues are DARKENED versions of the dark-mode accents
+     (not reused as-is) because colors like #e8b33c fail contrast on a light background. */
+  :root[data-theme="light"] {
+    --ink: #f6f4ef;
+    --ink-2: #efece4;
+    --panel: #ffffff;
+    --panel-2: #f9f7f2;
+    --line: #ded9cc;
+    --line-soft: #e8e4d8;
+    --text: #17181c;
+    --muted: #5b5f6b;
+    --faint: #8c8f99;
+    --gold: #b8842a;
+    --gold-soft: rgba(184, 132, 42, 0.12);
+    --mint: #2f9163;
+    --coral: #c0402c;
+    --sky: #3f68b0;
+    --violet: #5c62a8;
+  }
+
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
   /* Hidden-but-positioned tooltip popovers near the right edge must never widen
@@ -86,6 +108,25 @@
   .ranges button { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.05em; color: var(--muted); background: none; border: 0; padding: 6px 12px; border-radius: 7px; cursor: pointer; transition: all 0.18s ease; }
   .ranges button:hover { color: var(--text); }
   .ranges button.on { background: var(--gold-soft); color: var(--gold); }
+
+  .viewnav { display: flex; gap: var(--s2); }
+  .viewnav button { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.05em; background: transparent; border: 1px solid var(--line); color: var(--muted); border-radius: 9px; padding: 7px 14px; cursor: pointer; transition: all .18s ease; }
+  .viewnav button:hover { color: var(--text); }
+  .viewnav button.on { background: var(--gold-soft); border-color: rgba(232,179,60,0.3); color: var(--gold); }
+
+  #settings-grid { grid-template-columns: repeat(2, 1fr); }
+  #settings-grid .card h3 { font-family: var(--serif); font-size: 17px; font-weight: 600; margin-bottom: var(--s4); }
+  #settings-grid .body { display: flex; flex-direction: column; gap: var(--s3); font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  #settings-grid .body code { color: var(--text); word-break: break-all; }
+  #settings-grid .body label { display: flex; align-items: center; gap: var(--s2); color: var(--text); cursor: pointer; }
+  #settings-grid .body input[type="number"], #settings-grid .body input[type="text"] { font-family: var(--mono); font-size: 12px; color: var(--text); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; width: 110px; }
+  #settings-grid .body input[type="radio"], #settings-grid .body input[type="checkbox"] { accent-color: var(--gold); }
+  #settings-grid .body button { align-self: flex-start; font-family: var(--mono); font-size: 11.5px; color: var(--gold); background: var(--gold-soft); border: 1px solid rgba(232,179,60,0.3); border-radius: 9px; padding: 7px 14px; cursor: pointer; transition: all .18s; }
+  #settings-grid .body button:hover { background: rgba(232,179,60,0.2); }
+  #settings-grid .body .empty { color: var(--faint); font-style: italic; }
+  #settings-grid .conn-row { border-bottom: 1px solid var(--line-soft); padding-bottom: var(--s2); }
+  #settings-grid .conn-row .chip { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--sky); background: rgba(126,166,224,0.12); border-radius: 6px; padding: 2px 6px; margin-right: var(--s2); }
+  @media (max-width: 860px) { #settings-grid { grid-template-columns: 1fr; } }
 
   .grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: var(--s5); }
   @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } .wrap { padding: var(--s5) var(--s4) var(--s12); } }
@@ -319,6 +360,11 @@
       <img class="seal-mark" alt="" src="data:image/png;base64,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" />
       <div><h1>Fiscus</h1><div class="tag">local spend console</div></div>
     </div>
+    <nav class="viewnav" id="viewnav">
+      <button data-view="overview" class="on">Overview</button>
+      <button data-view="value">Value</button>
+      <button data-view="settings">Settings</button>
+    </nav>
     <div style="display:flex; align-items:center; gap:18px;">
       <div class="ranges" id="ranges">
         <button data-r="today" class="on">Today</button>
@@ -331,19 +377,42 @@
     </div>
   </header>
 
-  <div id="demobanner"></div>
-  <div id="alerts"></div>
-  <div id="guide"></div>
-  <div id="scanpanel"></div>
-  <div id="importpanel"></div>
+  <div id="view-overview" class="view">
+    <div id="demobanner"></div>
+    <div id="alerts"></div>
+    <div id="guide"></div>
+    <div id="scanpanel"></div>
+    <div id="importpanel"></div>
 
-  <div class="grid" id="grid"></div>
-
-  <div class="vhead">
-    <div><h2>Return on Intelligence</h2><div class="tag">what the spend returned · git + reported outcomes</div></div>
-    <button class="vbtn" id="vrefresh">↻ Compute</button>
+    <div class="grid" id="grid"></div>
   </div>
-  <div class="grid" id="vgrid"></div>
+
+  <div id="view-value" class="view" style="display:none">
+    <div class="vhead">
+      <div><h2>Return on Intelligence</h2><div class="tag">what the spend returned · git + reported outcomes</div></div>
+      <button class="vbtn" id="vrefresh">↻ Compute</button>
+    </div>
+    <div class="grid" id="vgrid"></div>
+  </div>
+
+  <div id="view-settings" class="view" style="display:none">
+    <div class="vhead">
+      <div><h2>Settings</h2><div class="tag">how your Fiscus setup is configured — no CLI required</div></div>
+    </div>
+    <div class="grid" id="settings-grid">
+      <div class="card" id="s-status"><h3>Setup status</h3><div class="body">Loading…</div></div>
+      <div class="card" id="s-appearance">
+        <h3>Appearance</h3>
+        <div class="body">
+          <label><input type="radio" name="theme" value="dark" checked /> Dark (Night Vault)</label>
+          <label><input type="radio" name="theme" value="light" /> Light (Ledger)</label>
+        </div>
+      </div>
+      <div class="card" id="s-connections"><h3>Provider connections</h3><div class="body">Loading…</div></div>
+      <div class="card" id="s-budget"><h3>Budget</h3><div class="body">Loading…</div></div>
+      <div class="card" id="s-privacy"><h3>Privacy</h3><div class="body">Loading…</div></div>
+    </div>
+  </div>
 
   <div class="foot">
     Fiscus runs entirely on this machine · <b>no prompt or code leaves your device</b> · <span id="gen"></span>
@@ -358,6 +427,18 @@ let RANGE = 'today';
 // names arrive from API responses / request headers, so treat them as untrusted.
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// Theme: dark ("Night Vault") stays the default identity; light is opt-in and
+// persisted per-browser. No server round-trip — pure client-side, like the
+// range buttons above.
+const THEME_KEY = 'fiscus-theme';
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem(THEME_KEY, theme);
+}
+(function initTheme() {
+  applyTheme(localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark');
+})();
 
 // Inject a fully-escaped HTML string as parsed nodes (no innerHTML sink).
 function setNodes(elNode, html) {
@@ -668,6 +749,20 @@ $('#ranges').addEventListener('click', (e) => {
   btn.classList.add('on');
   RANGE = btn.dataset.r;
   load();
+});
+
+// ---- View switching (Overview / Value / Settings) — client-side only, no
+// server routing; the dashboard stays one static HTML file. ----
+let SETTINGS_LOADED = false;
+$('#viewnav').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-view]');
+  if (!btn) return;
+  const view = btn.dataset.view;
+  document.querySelectorAll('#viewnav button').forEach((b) => b.classList.toggle('on', b === btn));
+  $('#view-overview').style.display = view === 'overview' ? '' : 'none';
+  $('#view-value').style.display = view === 'value' ? '' : 'none';
+  $('#view-settings').style.display = view === 'settings' ? '' : 'none';
+  if (view === 'settings' && !SETTINGS_LOADED) { SETTINGS_LOADED = true; loadSettings(); }
 });
 
 // ---- Return on Intelligence panels ----
@@ -1190,6 +1285,105 @@ async function loadImporters() {
     const data = await res.json();
     renderImporters(data.importers || []);
   } catch (e) { console.warn('importers unavailable', e); }
+}
+
+// ---- Settings view: setup status, appearance, provider connections, budget,
+// privacy. Loaded lazily (see the #viewnav handler above) so the CLI-free
+// configuration surface never costs anything on the default Overview view. ----
+function renderSettings(s) {
+  setNodes($('#s-status').querySelector('.body'), `
+    <div>Version: <b>${esc(s.version)}</b></div>
+    <div>Home: <code>${esc(s.home)}</code></div>
+    <div>Config: <code>${esc(s.configPath)}</code></div>
+    <div>Database: <code>${esc(s.dbPath)}</code></div>
+    <div>Proxy port: <b>${s.proxyPort}</b> · Dashboard port: <b>${s.dashboardPort}</b></div>
+  `);
+
+  const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+  const themeInput = document.querySelector(`input[name="theme"][value="${currentTheme}"]`);
+  if (themeInput) themeInput.checked = true;
+
+  const connBody = $('#s-connections').querySelector('.body');
+  setNodes(connBody, s.connections.length === 0
+    ? '<div class="empty">No provider traffic seen in the last 14 days.</div>'
+    : s.connections.map((c) => `
+        <div class="conn-row"><span class="chip">${esc(c.provider)}</span>${esc(c.model)}
+          — last seen ${esc(new Date(c.lastSeenMs).toLocaleString())} (${c.requestCount} requests)</div>`).join(''));
+
+  const b = s.budget;
+  setNodes($('#s-budget').querySelector('.body'), `
+    <form id="budget-form">
+      <label>Daily hard cap (USD, blank = off)
+        <input name="dailyUsd" type="number" step="0.01" value="${b.dailyUsd ?? ''}" /></label>
+      <label>Daily soft warn (USD, blank = off)
+        <input name="dailySoftUsd" type="number" step="0.01" value="${b.dailySoftUsd ?? ''}" /></label>
+      <label>Per-session cap (USD, blank = off)
+        <input name="sessionUsd" type="number" step="0.01" value="${b.sessionUsd ?? ''}" /></label>
+      <label>Runaway guard (USD, blank = off)
+        <input name="runawayMaxUsd" type="number" step="0.01" value="${b.runawayMaxUsd ?? ''}" /></label>
+      <label><input name="capIncludesImported" type="checkbox" ${b.capIncludesImported ? 'checked' : ''} />
+        Cap counts imported spend too</label>
+      <button type="submit">Save budget</button>
+    </form>
+  `);
+
+  setNodes($('#s-privacy').querySelector('.body'), `
+    <label><input id="metadataOnlyToggle" type="checkbox" ${s.metadataOnly ? 'checked' : ''} />
+      Metadata-only mode (never store proposed code locally — disables First-Pass Acceptance)</label>
+    <div class="tag">Stored proposals are purged automatically after ${s.proposalRetentionDays} days.</div>
+    <div style="display:flex; align-items:center; gap:var(--s3);">
+      <button id="clearProposalsBtn">Clear stored proposals now</button>
+      <span id="clearProposalsResult" class="tag"></span>
+    </div>
+  `);
+
+  wireSettingsHandlers();
+}
+
+async function loadSettings() {
+  try {
+    const res = await fetch('/api/settings');
+    renderSettings(await res.json());
+  } catch (e) { console.warn('settings unavailable', e); }
+}
+
+function wireSettingsHandlers() {
+  document.querySelectorAll('input[name="theme"]').forEach((input) =>
+    input.addEventListener('change', (e) => applyTheme(e.target.value)));
+
+  $('#budget-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const num = (k) => { const v = fd.get(k); return v === '' || v === null ? null : Number(v); };
+    const patch = {
+      budget: {
+        dailyUsd: num('dailyUsd'), dailySoftUsd: num('dailySoftUsd'),
+        sessionUsd: num('sessionUsd'), runawayMaxUsd: num('runawayMaxUsd'),
+        capIncludesImported: fd.get('capIncludesImported') === 'on',
+      },
+    };
+    const res = await fetch('/api/settings/update', {
+      method: 'POST', headers: { 'x-aegis-local': '1', 'content-type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+    renderSettings(await res.json());
+  });
+
+  $('#metadataOnlyToggle').addEventListener('change', async (e) => {
+    const res = await fetch('/api/settings/update', {
+      method: 'POST', headers: { 'x-aegis-local': '1', 'content-type': 'application/json' },
+      body: JSON.stringify({ metadataOnly: e.target.checked }),
+    });
+    renderSettings(await res.json());
+  });
+
+  $('#clearProposalsBtn').addEventListener('click', async () => {
+    const resultEl = $('#clearProposalsResult');
+    resultEl.textContent = 'clearing…';
+    const res = await fetch('/api/settings/clear-proposals', { method: 'POST', headers: { 'x-aegis-local': '1' } });
+    const out = await res.json();
+    resultEl.textContent = `cleared ${out.removed} stored proposal row(s)`;
+  });
 }
 
 load();
