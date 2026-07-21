@@ -11,7 +11,8 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import type { Store } from '../store/db.ts';
-import { isDemo, DEFAULT_CONFIG, type AegisConfig } from '../config.ts';
+import { isDemo, DEFAULT_CONFIG, loadConfig, saveConfig, type AegisConfig } from '../config.ts';
+import { buildSettingsSnapshot, applySettingsPatch, type SettingsPatch } from './settings.ts';
 import { startOfLocalDay } from '../budget/guard.ts';
 import { loadRealization, projectValueBreakdown, liftOptionsFromStore, moneyInputsFromStore, realizeDiscoveredProjects } from '../value/realization.ts';
 import { timeReclaimedFromStore } from '../value/timeReclaimed.ts';
@@ -159,10 +160,12 @@ const DASH_IMPORTERS: DashImporter[] = [
 export interface DashboardDeps {
   store: Store;
   config: AegisConfig;
+  /** This package's version — surfaced read-only in the Settings view. */
+  version: string;
 }
 
 export function createDashboardServer(deps: DashboardDeps): http.Server {
-  const { store, config } = deps;
+  const { store, config, version } = deps;
 
   return http.createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
@@ -582,6 +585,78 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
         }
       })();
       return;
+    }
+
+    // Settings snapshot for the dashboard's Settings view — read-only, no local-header
+    // guard needed (same-machine-only already enforced by the loopback Host check above).
+    if (url.pathname === '/api/settings') {
+      if (req.method !== 'GET') {
+        res.writeHead(405, { 'content-type': 'text/plain', allow: 'GET, POST' });
+        res.end('method not allowed');
+        return;
+      }
+      try {
+        return json(res, 200, buildSettingsSnapshot(store, config, version));
+      } catch (err) {
+        return json(res, 500, { error: String(err) });
+      }
+    }
+
+    // Apply a settings patch (budget / metadataOnly / retention). POST-only + the same
+    // same-origin header guard as every other mutating route.
+    if (url.pathname === '/api/settings/update') {
+      if (req.method !== 'POST') {
+        res.writeHead(405, { 'content-type': 'text/plain', allow: 'POST' });
+        res.end('method not allowed');
+        return;
+      }
+      if (req.headers['x-aegis-local'] !== '1') {
+        res.writeHead(403, { 'content-type': 'text/plain' });
+        res.end('forbidden');
+        return;
+      }
+      void (async () => {
+        try {
+          const chunks: Buffer[] = [];
+          for await (const c of req) chunks.push(c as Buffer);
+          const patch = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') as SettingsPatch;
+          const current = loadConfig();
+          const next = applySettingsPatch(current, patch);
+          saveConfig(next);
+          // Keep this process's in-memory config in sync so a later plain GET
+          // /api/settings doesn't read back stale values until a restart. Note this
+          // does NOT reach the separately-constructed proxy server's own config
+          // object — live budget enforcement still needs a restart to pick up edits,
+          // same as any existing CLI config mutation today.
+          Object.assign(config, next);
+          return json(res, 200, buildSettingsSnapshot(store, config, version));
+        } catch (err) {
+          return json(res, 500, { error: String(err) });
+        }
+      })();
+      return;
+    }
+
+    // Privacy control: purge every stored proposal (the AI's proposed code) right now,
+    // regardless of age. POST-only + the same header guard.
+    if (url.pathname === '/api/settings/clear-proposals') {
+      if (req.method !== 'POST') {
+        res.writeHead(405, { 'content-type': 'text/plain', allow: 'POST' });
+        res.end('method not allowed');
+        return;
+      }
+      if (req.headers['x-aegis-local'] !== '1') {
+        res.writeHead(403, { 'content-type': 'text/plain' });
+        res.end('forbidden');
+        return;
+      }
+      req.resume();
+      try {
+        const removed = store.clearProposals();
+        return json(res, 200, { ok: true, removed });
+      } catch (err) {
+        return json(res, 500, { error: String(err) });
+      }
     }
 
     if (url.pathname === '/' || url.pathname === '/index.html') {

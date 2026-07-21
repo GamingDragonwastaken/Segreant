@@ -10,6 +10,7 @@ import { Store } from '../store/db.ts';
 import { createProxyServer } from '../proxy/server.ts';
 import { createDashboardServer } from '../dashboard/server.ts';
 import { loadConfig, saveConfig, dbPath, demoDbPath, isDemo, unlinkDemoDb, aegisHome, type AegisConfig } from '../config.ts';
+import { packageVersion } from '../version.ts';
 import { seedDemo } from '../demo/seed.ts';
 import { startOfLocalDay } from '../budget/guard.ts';
 import { refreshPricing, pricingStatus, computeCost, DEFAULT_MANIFEST_URL, type Provider } from '../cost/pricing.ts';
@@ -56,7 +57,7 @@ export async function cmdStart(flags: Flags): Promise<void> {
       );
     },
   });
-  const dashboard = createDashboardServer({ store, config: cfg });
+  const dashboard = createDashboardServer({ store, config: cfg, version: packageVersion() });
 
   await new Promise<void>((resolve) => proxy.listen(cfg.port, '127.0.0.1', resolve));
   await new Promise<void>((resolve) => dashboard.listen(cfg.dashboardPort, '127.0.0.1', resolve));

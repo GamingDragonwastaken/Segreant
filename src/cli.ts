@@ -11,10 +11,8 @@
  */
 
 import './util/quiet.ts';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { readFileSync } from 'node:fs';
 import { demoDbPath } from './config.ts';
+import { packageVersion } from './version.ts';
 
 import { parseFlags } from './cli/flags.ts';
 import { cmdImport, cmdDiscover, cmdScan } from './cli/importCmd.ts';
@@ -24,18 +22,6 @@ import { cmdConnect } from './cli/connectCmd.ts';
 import { cmdAlerts, cmdDoctor, cmdInit, cmdGuide, cmdAudit } from './cli/opsCmd.ts';
 import { cmdShow, cmdSources, cmdExport, cmdConfig, cmdBudget, cmdPrune, cmdProject } from './cli/showCmd.ts';
 import { cmdStart, cmdDemo, cmdPricing, cmdBaseline, cmdReprice } from './cli/runCmd.ts';
-
-/** This package's version, read from package.json — the single source of truth. */
-function packageVersion(): string {
-  try {
-    const pkgPath = join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json');
-    return (JSON.parse(readFileSync(pkgPath, 'utf8')) as { version?: string }).version ?? 'unknown';
-  } catch {
-    // Version is informational only; a missing/garbled package.json must never
-    // break the CLI. Return an explicit sentinel rather than crash.
-    return 'unknown';
-  }
-}
 
 function cmdHelp(): void {
   console.log(`

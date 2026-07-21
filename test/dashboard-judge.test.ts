@@ -26,7 +26,7 @@ function req(over: Partial<RequestRow>): RequestRow {
 }
 
 function boot(store: Store): Promise<{ base: string; close: () => Promise<void> }> {
-  const server: http.Server = createDashboardServer({ store, config: structuredClone(DEFAULT_CONFIG) });
+  const server: http.Server = createDashboardServer({ store, config: structuredClone(DEFAULT_CONFIG), version: 'test' });
   return new Promise((resolve) => {
     server.listen(0, '127.0.0.1', () => {
       const port = (server.address() as AddressInfo).port;
