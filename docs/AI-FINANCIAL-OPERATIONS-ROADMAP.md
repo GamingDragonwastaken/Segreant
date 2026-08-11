@@ -287,4 +287,3 @@ This roadmap uses the following sources as architecture constraints, not as borr
 The autonomous product decision is to **keep the current coding-agent FinOps and evidence core, then build financial truth before breadth**.
 
 Fiscus should not chase a vague AI-finance platform or imitate Vanta. It should become the system that can answer, with evidence and caveats: *what did this AI work cost, which financial source supports that amount, who owns it, which policy applied, what remains unallocated or unreconciled, and what outcome evidence exists?*
-
