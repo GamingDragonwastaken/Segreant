@@ -49,6 +49,23 @@ test('cap basis: live proxy spend still blocks exactly as before', () => {
   store.close();
 });
 
+test('cap basis: advisor series can match live-only or total-observed enforcement', () => {
+  const store = new Store(':memory:');
+  try {
+    store.insertRequestIfNew(req({ costUsd: 100, via: 'import' }));
+    store.insertRequest(req({ costUsd: 4 }));
+    const day = 24 * 60 * 60 * 1000;
+    const start = Date.now() - day;
+    const end = Date.now() + day;
+    const live = store.series(start, end, day, true);
+    const all = store.series(start, end, day);
+    assert.equal(live.reduce((sum, row) => sum + row.costUsd, 0), 4);
+    assert.equal(all.reduce((sum, row) => sum + row.costUsd, 0), 104);
+  } finally {
+    store.close();
+  }
+});
+
 test('cap basis: a runtime config supplier makes an already-running guard honor a newly saved cap', () => {
   const store = new Store(':memory:');
   try {

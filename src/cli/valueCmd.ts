@@ -579,7 +579,12 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
   const now = Date.now();
   const dayMs = 24 * 60 * 60 * 1000;
   const days = flags.days ? Number(flags.days) : 30;
-  const series = store.series(now - days * dayMs, now + 1000, dayMs);
+  // A cap recommendation must use the same spend basis that its --apply action
+  // will govern. Imported usage is observed-only by default, so it is excluded
+  // unless the user explicitly opted into total-observed-spend enforcement.
+  const liveOnly = !cfg.budget.capIncludesImported;
+  const spendBasis = liveOnly ? 'live_proxy' : 'all_observed';
+  const series = store.series(now - days * dayMs, now + 1000, dayMs, liveOnly);
   const dailySpends = series.map((s) => s.costUsd);
 
   let realizedValueRate: number | null = null;
@@ -635,7 +640,7 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
   }
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify({ ...rec, allocation, shadowPrice: shadow }, null, 2) + '\n');
+    process.stdout.write(JSON.stringify({ ...rec, spendBasis, windowDays: days, allocation, shadowPrice: shadow }, null, 2) + '\n');
     store.close();
     return;
   }
@@ -645,6 +650,7 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
   console.log(color(tty, C.bold, '  Budget advisor — a cap that fits real usage and follows the value'));
   console.log(color(tty, C.gray, `  Based on ${rec.basisDays} active days${loadedValue ? ' + realized-value data' : ' (usage only — pass --repo for value-based)'}`));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
+  console.log(color(tty, C.gray, `  Cap basis: ${spendBasis === 'live_proxy' ? 'live proxy spend only (imported spend remains observed-only)' : 'all observed spend (live + imported)'}`));
   if (rec.recommendedDailyUsd === null || rec.recommendedSoftUsd === null) {
     console.log(color(tty, C.gray, `  ${rec.rationale[0] ?? 'No spend history yet — run some traffic through the proxy first.'}`));
     console.log('');
@@ -678,7 +684,9 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
           `${color(tty, C.gray, `${m.fromKey} → ${m.toKey}`)}  ${color(tty, C.green, '+' + d2(m.projectedValueGainUsd))}`,
       );
     }
-    console.log(color(tty, C.gray, `  ${allocation.assumptions[1]}`));
+    for (const assumption of allocation.assumptions) {
+      console.log(color(tty, C.gray, `  ${assumption}`));
+    }
   } else if (rec.reallocations.length) {
     console.log('');
     console.log(color(tty, C.bold, '  Reallocate'));

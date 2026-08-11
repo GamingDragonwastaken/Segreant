@@ -61,8 +61,8 @@ function cmdHelp(): void {
                           (--labor-rate $/hr, --tsf <multiplier> for Lift, --json)
     saved --repo <path>   Manual work-weeks reclaimed vs measured AI hours,
                           honestly banded and split by task type (--window D, --json)
-    frontier --repo <p>   What's best for you: RoI by model × task-type, with
-                          routing recommendations (--window D, --json)
+    frontier --repo <p>   Compare models on like tasks; surface lower-cost,
+                          same-observed-outcome trials and local headroom (--window D, --json)
     usage                 RoI for usage WITHOUT code signals — chat, research,
                           drafting, plus coding tools that don't report diffs.
                           Sessions scored from reported outcomes (--days N, --json)

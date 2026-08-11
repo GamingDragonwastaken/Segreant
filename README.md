@@ -137,7 +137,7 @@ fiscus roi --repo <path>     Return on Intelligence — four value lenses compos
                                 into one index (--labor-rate $/hr, --tsf X, --json)
 fiscus saved --repo <path>   Manual work-weeks reclaimed vs measured AI hours —
                                 honestly banded, split by task type (--window D, --json)
-fiscus frontier --repo <p>   What's best for you — RoI by model × task-type + routing
+fiscus frontier --repo <p>   Compare models on like tasks; lower-cost same-outcome trials + local headroom
 fiscus usage                 RoI for usage without code signals (chat/research),
                                 scored from reported outcomes
 fiscus judge                 Score a real session's AI-assisted efficiency —
@@ -335,8 +335,9 @@ Measuring RoI is the core; **acting on it** is the point. Fiscus turns the
 measurement into budget decisions — the capital-allocation layer:
 
 - **A value-aware cap** — `fiscus budget --recommend` derives a daily budget
-  from real usage (p90 of active days), tightened when realized value is low,
-  with projected monthly waste called out.
+  from real usage (p90 of active days, after at least seven active days),
+  tightened when realized value is low, with projected monthly waste called
+  out.
 - **Reallocation, quantified** — it re-weights the *same* budget toward the
   model × task-type contexts that return the most, and shows the projected
   realized-value gain of each move: *"move $2.77 from refactor·gpt-4o (RoI 0) to
@@ -347,6 +348,11 @@ measurement into budget decisions — the capital-allocation layer:
   RoI — *which team's AI spend is paying off* — without a single repository on
   their machine. The person who holds the budget finally gets to see whether it
   worked.
+- **Cheaper-model trials** — `fiscus frontier` compares models only within the
+  same task type. It surfaces a lower-cost candidate only when it has no worse
+  observed realized-outcome rate across at least three mature units per model,
+  quantifies historical-equivalent headroom, and labels overlapping confidence
+  intervals as a **trial**, not a proven switch. It never changes routing.
 
 Every projection states its assumption (it holds each context's realized-value
 rate at the margin — a planning estimate, re-measured after you act), the same

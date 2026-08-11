@@ -30,6 +30,10 @@ test('GET /api/value: payload always carries a reclaimed key (null when no git r
     assert.equal(res.status, 200);
     const body = (await res.json()) as Record<string, unknown>;
     assert.ok('reclaimed' in body, 'reclaimed key is always present, even when null');
+    const budget = body['budget'] as Record<string, unknown>;
+    assert.equal(budget['spendBasis'], 'live_proxy', 'advisor basis matches the default cap enforcement basis');
+    assert.equal(budget['minActiveDays'], 7, 'thin history is visible to dashboard users');
+    assert.ok('frontier' in body, 'dashboard API always carries the frontier slot, even when no Git repository is attached');
   } finally {
     await srv.close();
     store.close();

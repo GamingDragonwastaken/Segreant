@@ -921,17 +921,24 @@ function renderValue(d) {
     ? `<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Allocate the same budget by return → <b style="color:var(--mint)">+$${money(alloc.projectedValueGainUsd)}</b> realized value</div>`
       + alloc.moves.slice(0, 5).map((m) =>
           `<div class="rec"><span class="rtag grow">MOVE&nbsp;$${money(m.amountUsd)}</span>${esc(m.fromKey)} → ${esc(m.toKey)} <span style="color:var(--mint)">+$${money(m.projectedValueGainUsd)}</span></div>`).join('')
-      + `<div style="font-size:10.5px;color:var(--faint);margin-top:6px;line-height:1.45">${esc(alloc.assumptions[1])}</div>`
+      + `<div style="font-size:10.5px;color:var(--faint);margin-top:6px;line-height:1.45">${alloc.assumptions.map((a) => esc(a)).join('<br>')}</div>`
     : (bud.reallocations || []).map((r) =>
         `<div class="rec"><span class="rtag ${r.action === 'grow' ? 'grow' : 'trim'}">${esc(r.action.toUpperCase())}</span>${esc(r.context)} — ${esc(r.reason)}</div>`).join('');
 
-  // The "frontier" (best model × task-type) is intentionally NOT a dashboard
-  // panel. Recommending which model to use is an operational call, not a financial
-  // one — outside what a spend-governance console should assert. Its financial
-  // half (move budget toward higher-return contexts) already appears in the
-  // Budget advisor's allocation rows. The full table stays a *usage*, via the CLI:
-  // `fiscus frontier`. The /api/value `frontier` field is still served (it
-  // backs allocation), just not rendered here.
+  // Model changes are operational decisions, so this stays review-only: a cheaper
+  // candidate appears only for like task types with no worse observed realization
+  // rate. Overlapping confidence sequences are called trials, not proven switches.
+  const switches = d.frontier && d.frontier.modelSwitches ? d.frontier.modelSwitches : [];
+  const modelCard = switches.length
+    ? `<div class="card fade" style="grid-column:1/-1">
+        <div class="label">Cheaper model trials ${tip('Local historical comparison only. Fiscus does <b>not</b> change routing. A candidate must cost less and have no worse observed realized-outcome rate for the same task type. <b>Historical-equivalent headroom</b> is what the incumbent\'s observed units would have saved at the candidate\'s historical per-unit cost; it is not provider-billed savings or a guarantee.')}</div>
+        ${switches.slice(0, 4).map((m) => {
+          const tag = m.confidence === 'evidence_supported' ? 'EVIDENCE' : 'TRIAL';
+          const cls = m.confidence === 'evidence_supported' ? 'grow' : 'trim';
+          return `<div class="rec"><span class="rtag ${cls}">${tag}</span>${esc(m.taskType)}: try ${esc(m.candidateModel)} before ${esc(m.incumbentModel)} <span style="color:var(--mint)">+$${money(m.historicalEquivalentHeadroomUsd)} headroom</span><div style="font-size:10.5px;color:var(--faint);margin:5px 0 0 72px;line-height:1.45">${esc(m.rationale)}</div></div>`;
+        }).join('')}
+      </div>`
+    : '';
 
   // By-project value — the budget owner's view (who/what is the spend paying off).
   let projectCard = '';
@@ -979,12 +986,14 @@ function renderValue(d) {
     </div>`;
   }
 
+  const budgetBasisLine = `<div class="lenshow" style="margin-top:10px">Cap basis: ${bud.spendBasis === 'live_proxy' ? 'live proxy spend only; imported use is observed-only' : 'all observed spend, including imports'} · ${bud.windowDays}d window · ${bud.basisDays}/${bud.minActiveDays} active days</div>`;
   const budBody = bud.recommendedDailyUsd == null
-    ? `<div class="rrow" style="color:var(--muted);font-size:12.5px;line-height:1.5">Not enough spend history yet — keep metering; a value-aware cap appears once there are a few active days of real usage.</div>`
+    ? `<div class="rrow" style="color:var(--muted);font-size:12.5px;line-height:1.5">${esc((bud.rationale && bud.rationale[0]) || 'Not enough spend history yet — keep metering before applying a cap.')}</div>${budgetBasisLine}`
     : `<div class="rrow"><span style="color:var(--muted)">Recommended daily cap</span><span style="color:var(--mint);font-family:var(--mono)">$${money(bud.recommendedDailyUsd)}</span></div>
       <div class="rrow"><span style="color:var(--muted)">Soft warn</span><span style="font-family:var(--mono)">$${money(bud.recommendedSoftUsd)}</span></div>
       ${bud.projectedMonthlyWasteUsd != null ? `<div class="rrow"><span style="color:var(--muted)">Projected monthly waste</span><span style="color:var(--coral);font-family:var(--mono)">$${money(bud.projectedMonthlyWasteUsd)}</span></div>` : ''}
-      ${reallocs ? `<div style="margin-top:10px">${reallocs}</div>` : ''}`;
+      ${reallocs ? `<div style="margin-top:10px">${reallocs}</div>` : ''}
+      ${budgetBasisLine}`;
 
   // For a live repo, disclose whether realized value was attributed only from this
   // project's own spend (the ledger is characterized by project) or fell back to the
@@ -1040,9 +1049,10 @@ function renderValue(d) {
       <span id="judgeout" style="display:block;margin-top:10px;font-family:var(--mono);font-size:12.5px;color:var(--muted);line-height:1.6"></span>
     </div>
     <div class="card fade">
-      <div class="label">Budget advisor ${tip('A value-aware cap from your p90 active-day spend, tightened when realized value is low. It needs a few active days of real usage before it appears — no invented numbers on day one.')}</div>
+      <div class="label">Budget advisor ${tip('A value-aware cap from your p90 active-day spend, tightened when realized value is low. It needs at least seven active days of real usage before it can be applied — no invented numbers on day one.')}</div>
       ${budBody}
     </div>
+    ${modelCard}
     ${projectCard}
     <div class="card fade" style="grid-column:1/-1">
       <div class="label">Usage without code signals · chat · research · drafting ${tip('Sessions with <b>no captured code proposals</b>. A coding session lands here too when its tool never reports diffs — route it through the proxy to move it into the git-based RoI above.')}</div>

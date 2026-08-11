@@ -567,7 +567,10 @@ Tightly-clustered cell rates ⟹ their spread is noise ⟹ large κ ⟹ heavy sh
 genuinely spread rates ⟹ real differences ⟹ small κ ⟹ light shrinkage. Alongside
 each shrunken figure we can show the **evidence weight** `n/(n+κ) ∈ [0,1]` — a
 plain-language confidence. (`src/value/reliability.ts`, `test/reliability.test.ts`.)
-This feeds the allocation optimum below so a 2-unit cell can't steer the budget.
+This currently feeds the **shadow-price allocation scenario** below, so a 2-unit
+cell cannot steer that signal. The simple same-budget allocation plan remains a
+transparent exploratory projection based on raw observed RoI; it must not be
+read as reliability-adjusted until that path uses the same estimator.
 
 ---
 

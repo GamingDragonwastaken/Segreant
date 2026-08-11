@@ -429,6 +429,12 @@ test('frontier: recommends routing a task-type to the model that returns more pe
   const feature = fr.byModelAndTask.filter((c) => c.taskType === 'feature').sort((a, b) => (b.roiIndex ?? 0) - (a.roiIndex ?? 0));
   assert.equal(feature[0]!.model, 'claude-haiku-4-5');
   assert.ok(fr.recommendations.some((r) => r.includes('feature') && r.includes('haiku')), fr.recommendations.join(' | '));
+  const trial = fr.modelSwitches.find((r) => r.taskType === 'feature');
+  assert.ok(trial, 'a lower-cost same-outcome model becomes a review-only trial');
+  assert.equal(trial!.candidateModel, 'claude-haiku-4-5');
+  assert.equal(trial!.incumbentModel, 'claude-opus-4-8');
+  assert.ok(trial!.historicalEquivalentHeadroomUsd > 0, 'quantifies historical-equivalent headroom');
+  assert.equal(trial!.confidence, 'trial', 'three units per model are not overstated as a proven switch');
 });
 
 // ---- Value-aware budgeting ----
@@ -454,7 +460,7 @@ test('budget advisor: frontier drives trim/grow reallocation', () => {
     { key: 'feature · opus', model: 'opus', taskType: 'feature', units: 3, costUsd: 12, realizedValueUsd: 4, netRealizedValueUsd: 4, realizationRate: 0.33, acceptance: null, costPerUnit: 4, roiIndex: 40, impact: 0.33 },
     { key: 'fix · haiku', model: 'haiku', taskType: 'fix', units: 3, costUsd: 3, realizedValueUsd: 3, netRealizedValueUsd: 3, realizationRate: 1, acceptance: null, costPerUnit: 1, roiIndex: 95, impact: 1 },
   ];
-  const rec = recommendBudget({ dailySpends: [5, 5, 5], realizedValueRate: 0.6, frontier: cells });
+  const rec = recommendBudget({ dailySpends: [5, 5, 5, 5, 5, 5, 5], realizedValueRate: 0.6, frontier: cells });
   const trim = rec.reallocations.find((r) => r.action === 'trim');
   const grow = rec.reallocations.find((r) => r.action === 'grow');
   assert.ok(trim && trim.context.includes('opus'), 'trims lowest-RoI context');
@@ -472,6 +478,19 @@ test('budget advisor: cold start is honest — no spend history yields no cap, n
   const zeros = recommendBudget({ dailySpends: [0, 0, 0], realizedValueRate: null });
   assert.equal(zeros.recommendedDailyUsd, null);
   assert.equal(zeros.basisDays, 0);
+});
+
+test('budget advisor: thin history stays review-only and cannot be applied', () => {
+  const thin = recommendBudget({ dailySpends: [3, 4, 5], realizedValueRate: null });
+  assert.equal(thin.status, 'insufficient_history');
+  assert.equal(thin.canApply, false);
+  assert.equal(thin.recommendedDailyUsd, null);
+  assert.match(thin.rationale[0]!, /at least 7 active days/i);
+
+  const ready = recommendBudget({ dailySpends: [3, 4, 5, 3, 4, 5, 4], realizedValueRate: null });
+  assert.equal(ready.status, 'usage_only');
+  assert.equal(ready.canApply, true);
+  assert.ok(ready.recommendedDailyUsd !== null);
 });
 
 // ---- Cross-modality (non-coding) RoI ----

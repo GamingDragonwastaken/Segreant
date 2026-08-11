@@ -462,7 +462,10 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
         try {
           const now = Date.now();
           const day = 24 * 60 * 60 * 1000;
-          const series = store.series(now - 30 * day, now + 1000, day);
+          // Keep the advisor aligned with the basis of the cap it may recommend:
+          // live proxy spend by default, all observed spend only when configured.
+          const liveOnly = !config.budget.capIncludesImported;
+          const series = store.series(now - 30 * day, now + 1000, day, liveOnly);
           const dailySpends = series.map((s) => s.costUsd);
           // Money inputs mirror the CLI exactly (demo assumes labeled illustrative
           // values) so the two surfaces can't disagree on the non-coding dollar.
@@ -556,11 +559,15 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
               );
             }
           }
-          const budget = recommendBudget({
-            dailySpends,
-            realizedValueRate: realization?.matured.realizedValueRate ?? null,
-            frontier: frontier?.byModelAndTask ?? [],
-          });
+          const budget = {
+            ...recommendBudget({
+              dailySpends,
+              realizedValueRate: realization?.matured.realizedValueRate ?? null,
+              frontier: frontier?.byModelAndTask ?? [],
+            }),
+            spendBasis: liveOnly ? 'live_proxy' : 'all_observed',
+            windowDays: 30,
+          };
           // Forward-looking allocation over the same model×task frontier.
           const allocation =
             frontier && frontier.byModelAndTask.length >= 2

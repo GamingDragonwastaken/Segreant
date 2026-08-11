@@ -32,10 +32,35 @@ export interface FrontierCell {
   impact: number | null;
 }
 
+/**
+ * A local historical comparison between a more expensive model and a cheaper
+ * candidate on the same task type. It is review-only: Fiscus never changes
+ * provider routing from this output.
+ */
+export interface ModelSwitchRecommendation {
+  taskType: string;
+  incumbentModel: string;
+  candidateModel: string;
+  incumbentUnits: number;
+  candidateUnits: number;
+  incumbentRealizationRate: number;
+  candidateRealizationRate: number;
+  incumbentCostPerUnitUsd: number;
+  candidateCostPerUnitUsd: number;
+  savingsPerUnitUsd: number;
+  /** Savings across the incumbent's observed units at the candidate's historical rate. */
+  historicalEquivalentHeadroomUsd: number;
+  historicalHeadroomPercent: number;
+  /** A trial preserves the observed rate but its anytime-valid intervals still overlap. */
+  confidence: 'trial' | 'evidence_supported';
+  rationale: string;
+}
+
 export interface FrontierReport {
   byModel: FrontierCell[];
   byTaskType: FrontierCell[];
   byModelAndTask: FrontierCell[];
+  modelSwitches: ModelSwitchRecommendation[];
   recommendations: string[];
   // d_eff over the finest cells: how many independent dimensions the lens
   // system actually measures across contexts. Low d_eff = the lenses co-move —
@@ -118,51 +143,91 @@ export function computeFrontier(units: WorkUnit[]): FrontierReport {
     ['realization', 'acceptance', 'impact'],
   );
 
-  return { byModel, byTaskType, byModelAndTask, recommendations: buildRecommendations(mature), lensRedundancy: redundancy };
+  const modelSwitches = buildModelSwitchRecommendations(mature);
+  return {
+    byModel,
+    byTaskType,
+    byModelAndTask,
+    modelSwitches,
+    recommendations: buildModelSwitchStrings(modelSwitches),
+    lensRedundancy: redundancy,
+  };
 }
 
 /**
- * For each task-type where at least two models were used (with enough units to
- * be more than noise), recommend the model that returned the most per dollar and
- * name the trade-off against the most expensive alternative.
+ * Recommend only a cheaper candidate with an observed realized-outcome rate no
+ * lower than the expensive incumbent on the same task type. Three mature units
+ * per model is still thin evidence, so an overlapping confidence sequence means
+ * "trial", not an instruction to change the default route.
  */
-function buildRecommendations(mature: WorkUnit[]): string[] {
-  const recs: string[] = [];
-  const minUnits = 2;
+function buildModelSwitchRecommendations(mature: WorkUnit[]): ModelSwitchRecommendation[] {
+  const recs: ModelSwitchRecommendation[] = [];
+  const minUnits = 3;
   const taskGroups = [...groupBy(mature, (u) => u.taskType)].sort((a, b) => b[1].length - a[1].length);
 
-  for (const [tt, tus] of taskGroups) {
-    const cells = [...groupBy(tus, (u) => u.dominantModel ?? 'unattributed')]
-      .map(([model, us]) => makeCell(`${tt} · ${model}`, model, tt, us))
-      .filter((c) => c.units >= minUnits && c.model !== 'unattributed' && c.roiIndex !== null);
+  for (const [taskType, units] of taskGroups) {
+    const cells = [...groupBy(units, (u) => u.dominantModel ?? 'unattributed')]
+      .map(([model, grouped]) => makeCell(`${taskType} · ${model}`, model, taskType, grouped))
+      .filter((cell) => cell.units >= minUnits && cell.model !== 'unattributed' && cell.costPerUnit > 0);
     if (cells.length < 2) continue;
 
-    cells.sort(byRoiDesc);
-    const best = cells[0]!;
-    const dearest = [...cells].sort((a, b) => b.costPerUnit - a.costPerUnit)[0]!;
-    if (best.model === dearest.model) {
-      recs.push(`For ${tt}: ${best.model} both leads RoI (${best.roiIndex!.toFixed(0)}) and costs the most — paying for the best here is justified.`);
-    } else {
-      const relRoi = dearest.roiIndex && best.roiIndex ? Math.round((best.roiIndex / Math.max(1, dearest.roiIndex)) * 100) : null;
-      const relCost = dearest.costPerUnit > 0 ? best.costPerUnit / dearest.costPerUnit : 0;
-      // A routing decision is a policy change — it deserves a lower-bound check,
-      // not a point-estimate coin flip. Compare the two cells' realization rates
-      // via their anytime confidence sequences: only when the leader's LOWER
-      // bound clears the alternative's UPPER bound is the evidence separated;
-      // otherwise the recommendation says so out loud instead of feigning
-      // certainty from a handful of units.
-      const bestCs = anytimeRateInterval(Math.round(best.realizationRate * best.units), best.units, { level: 0.95 });
-      const dearCs = anytimeRateInterval(Math.round(dearest.realizationRate * dearest.units), dearest.units, { level: 0.95 });
-      const separated = bestCs.low > dearCs.high;
-      const confidence = separated
-        ? 'the separation holds at the anytime-valid lower bound — safe to act on'
-        : `provisional: the anytime intervals still overlap on ${best.units + dearest.units} units — route a few more tasks before committing`;
-      recs.push(
-        `For ${tt}: ${best.model} leads (RoI ${best.roiIndex!.toFixed(0)} vs ${dearest.model} ${dearest.roiIndex!.toFixed(0)}) ` +
-          `at ${relCost.toFixed(2)}× the per-unit cost — ${relRoi !== null ? `${relRoi}% of the return question is decided here; ` : ''}consider routing ${tt} work to ${best.model} (${confidence}).`,
-      );
-    }
+    const incumbent = [...cells].sort((a, b) => b.costPerUnit - a.costPerUnit)[0]!;
+    const candidate = cells
+      .filter(
+        (cell) =>
+          cell.model !== incumbent.model &&
+          cell.costPerUnit < incumbent.costPerUnit &&
+          cell.realizationRate >= incumbent.realizationRate,
+      )
+      .sort((a, b) => a.costPerUnit - b.costPerUnit || b.realizationRate - a.realizationRate)[0];
+    if (!candidate) continue;
+
+    const candidateCs = anytimeRateInterval(Math.round(candidate.realizationRate * candidate.units), candidate.units, { level: 0.95 });
+    const incumbentCs = anytimeRateInterval(Math.round(incumbent.realizationRate * incumbent.units), incumbent.units, { level: 0.95 });
+    const confidence = candidateCs.low > incumbentCs.high ? 'evidence_supported' : 'trial';
+    const savingsPerUnitUsd = incumbent.costPerUnit - candidate.costPerUnit;
+    const historicalEquivalentHeadroomUsd = savingsPerUnitUsd * incumbent.units;
+    const historicalHeadroomPercent = incumbent.costUsd > 0 ? historicalEquivalentHeadroomUsd / incumbent.costUsd : 0;
+    const confidenceText =
+      confidence === 'evidence_supported'
+        ? "the candidate's anytime-valid lower outcome bound exceeds the incumbent's upper bound"
+        : `observed outcome is no lower, but the anytime-valid intervals overlap across ${candidate.units + incumbent.units} units`;
+
+    recs.push({
+      taskType,
+      incumbentModel: incumbent.model!,
+      candidateModel: candidate.model!,
+      incumbentUnits: incumbent.units,
+      candidateUnits: candidate.units,
+      incumbentRealizationRate: incumbent.realizationRate,
+      candidateRealizationRate: candidate.realizationRate,
+      incumbentCostPerUnitUsd: incumbent.costPerUnit,
+      candidateCostPerUnitUsd: candidate.costPerUnit,
+      savingsPerUnitUsd,
+      historicalEquivalentHeadroomUsd,
+      historicalHeadroomPercent,
+      confidence,
+      rationale:
+        `${candidate.model} costs $${candidate.costPerUnit.toFixed(2)} per ${taskType} unit versus ` +
+        `$${incumbent.costPerUnit.toFixed(2)} for ${incumbent.model}; ${confidenceText}.`,
+    });
   }
-  if (recs.length === 0) recs.push('Not enough per-context data yet: use ≥2 models on the same task-type to unlock routing recommendations.');
   return recs;
+}
+
+function buildModelSwitchStrings(switches: ModelSwitchRecommendation[]): string[] {
+  if (switches.length === 0) {
+    return ['No lower-cost same-outcome trial yet: use at least two models on the same task type, with at least three mature units per model.'];
+  }
+  return switches.map((item) => {
+    const confidence =
+      item.confidence === 'evidence_supported'
+        ? 'evidence-supported comparison'
+        : 'review-only trial; continue measuring before changing a default';
+    return (
+      `For ${item.taskType}: try ${item.candidateModel} before ${item.incumbentModel} - ` +
+      `$${item.historicalEquivalentHeadroomUsd.toFixed(2)} historical-equivalent headroom across ` +
+      `${item.incumbentUnits} incumbent units (${confidence}).`
+    );
+  });
 }

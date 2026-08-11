@@ -28,6 +28,11 @@ export interface Reallocation {
 }
 
 export interface BudgetRecommendation {
+  /** Whether this is a cold-start, thin-history, usage-only, or value-informed review. */
+  status: 'cold_start' | 'insufficient_history' | 'usage_only' | 'review_ready';
+  /** A cap may be applied only when the active-day minimum is met. */
+  canApply: boolean;
+  minActiveDays: number;
   basisDays: number;
   observed: { medianDaily: number; p90Daily: number; maxDaily: number; avgDaily: number };
   recommendedDailyUsd: number | null; // null = not enough spend history to recommend a cap
@@ -55,16 +60,23 @@ function roundUp(n: number): number {
   return Math.ceil(n / 10) * 10;
 }
 
-export function recommendBudget(inp: BudgetInputs, opts: { headroom?: number } = {}): BudgetRecommendation {
+export function recommendBudget(
+  inp: BudgetInputs,
+  opts: { headroom?: number; minActiveDays?: number } = {},
+): BudgetRecommendation {
   // Base the recommendation on days with real metered spend — empty or zero-cost
   // days (e.g. only blocked requests) must not drag a daily cap toward zero.
   const spends = inp.dailySpends.filter((x) => x > 0);
   const headroom = opts.headroom ?? 1.2;
+  const minActiveDays = opts.minActiveDays ?? 7;
   const rvr = inp.realizedValueRate;
 
   // Cold start: nothing real to base a cap on. Say so instead of recommending $0.
   if (spends.length === 0) {
     return {
+      status: 'cold_start',
+      canApply: false,
+      minActiveDays,
       basisDays: 0,
       observed: { medianDaily: 0, p90Daily: 0, maxDaily: 0, avgDaily: 0 },
       recommendedDailyUsd: null,
@@ -72,6 +84,24 @@ export function recommendBudget(inp: BudgetInputs, opts: { headroom?: number } =
       realizedValueRate: rvr,
       projectedMonthlyWasteUsd: null,
       rationale: ['Not enough spend history yet — keep metering. A value-aware cap appears once there are a few active days of real usage.'],
+      reallocations: [],
+    };
+  }
+
+  if (spends.length < minActiveDays) {
+    return {
+      status: 'insufficient_history',
+      canApply: false,
+      minActiveDays,
+      basisDays: spends.length,
+      observed: { medianDaily: 0, p90Daily: 0, maxDaily: 0, avgDaily: 0 },
+      recommendedDailyUsd: null,
+      recommendedSoftUsd: null,
+      realizedValueRate: rvr,
+      projectedMonthlyWasteUsd: null,
+      rationale: [
+        `Only ${spends.length} active day${spends.length === 1 ? '' : 's'} of real spend observed; keep metering until at least ${minActiveDays} active days exist before applying a cap.`,
+      ],
       reallocations: [],
     };
   }
@@ -133,6 +163,9 @@ export function recommendBudget(inp: BudgetInputs, opts: { headroom?: number } =
   }
 
   return {
+    status: rvr === null ? 'usage_only' : 'review_ready',
+    canApply: true,
+    minActiveDays,
     basisDays: spends.length,
     observed: { medianDaily, p90Daily, maxDaily, avgDaily },
     recommendedDailyUsd,
