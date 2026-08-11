@@ -201,6 +201,11 @@ export async function cmdReport(flags: Flags): Promise<void> {
   const negative = ['incident', 'redone', 'discarded'].includes(kind);
   const verdict = negative ? 'fail' : String(flags.verdict ?? 'pass') === 'fail' ? 'fail' : 'pass';
   const tty = process.stdout.isTTY ?? false;
+  if (codeKinds.includes(kind) && !flags.commit) {
+    console.error(`  Code outcome "${kind}" needs --commit <hash>. Fiscus will not apply a project-wide assertion to an arbitrary commit.`);
+    process.exitCode = 1;
+    return;
+  }
 
   // Resolve the ref: a git commit (code) or a session id (non-code).
   let ref: string | null = null;
@@ -235,7 +240,8 @@ export async function cmdReport(flags: Flags): Promise<void> {
     project,
     tsEpochMs: Date.now(),
     verdict,
-    detail: flags.detail ? String(flags.detail) : null,
+    detail: JSON.stringify({ source: 'manual', assertion: flags.detail ? String(flags.detail) : null }),
+    evidenceSource: 'manual',
   });
   console.log('');
   console.log(`  Recorded ${color(tty, C.bold, kind)} = ${verdict}` + (ref ? ` for ${ref.slice(0, 12)}` : ' (project-wide)'));
@@ -814,6 +820,10 @@ export async function cmdExec(flags: Flags, command: string[]): Promise<void> {
     } else if (await isGitRepo(repo)) {
       ref = await resolveCommit(repo, 'HEAD');
       project = await projectName(repo);
+    } else if (codeKinds.includes(kind)) {
+      console.error(`  Code outcome "${kind}" needs a Git repository or --commit <ref>; no project-wide lifecycle signal was recorded.`);
+      process.exitCode = 1;
+      return;
     }
   }
 
@@ -842,7 +852,8 @@ export async function cmdExec(flags: Flags, command: string[]): Promise<void> {
     project,
     tsEpochMs: Date.now(),
     verdict,
-    detail: `ambient: "${command.join(' ')}" exit ${exitCode} in ${secs}s`,
+    detail: JSON.stringify({ source: 'local-command', command: command.join(' '), exitCode, seconds: Number(secs) }),
+    evidenceSource: 'local-command',
   });
   store.close();
 

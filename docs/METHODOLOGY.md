@@ -107,6 +107,12 @@ standard is what makes the rest credible.
 
 ## Your data never leaves your machine
 
+This historical heading means that Fiscus has no hosted collection or analytics
+by default. It does not mean a request routed through the proxy bypasses your
+configured AI provider. See **[DATA-BOUNDARIES.md](DATA-BOUNDARIES.md)** for the
+current, complete disclosure of provider traffic, local proposal retention, and
+each opt-in outbound feature.
+
 Everything is computed locally in a file-based database. No prompts, no code, no keys
 are ever transmitted. The only optional outbound traffic is a public pricing-table
 refresh (off by default) and alert webhooks you explicitly configure (which carry

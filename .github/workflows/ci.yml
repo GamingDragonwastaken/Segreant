@@ -23,6 +23,25 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
+  # A green source-tree test does not prove the published artifact can start.
+  # Build the tarball, install it into a clean directory, and invoke its real
+  # bin entrypoint without publishing anything.
+  package-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: mkdir -p ../fiscus-pack ../fiscus-install
+      - run: npm pack --pack-destination ../fiscus-pack
+      - working-directory: ../fiscus-install
+        run: npm install --ignore-scripts --no-package-lock ../fiscus-pack/fiscus-*.tgz
+      - working-directory: ../fiscus-install
+        run: ./node_modules/.bin/fiscus --help
+
   # team-server is a genuinely separate npm package (own package.json/lockfile,
   # `pg` as its only dependency) so it gets its own job rather than being folded
   # into `test` above — same OS matrix, run in parallel, never silently skipped.

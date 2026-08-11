@@ -42,14 +42,20 @@ export function endOfLocalDay(now: number = Date.now()): number {
 
 export class BudgetGuard {
   private readonly store: Store;
-  private readonly cfg: BudgetConfig;
+  private readonly getConfig: () => BudgetConfig;
 
-  constructor(store: Store, cfg: BudgetConfig) {
+  /**
+   * A function keeps a long-running proxy aligned with deliberate runtime
+   * settings edits. Passing a BudgetConfig directly remains supported for CLI
+   * and unit callers that have an immutable configuration snapshot.
+   */
+  constructor(store: Store, cfg: BudgetConfig | (() => BudgetConfig)) {
     this.store = store;
-    this.cfg = cfg;
+    this.getConfig = typeof cfg === 'function' ? cfg : () => cfg;
   }
 
   evaluate(opts: { sessionId?: string | null; nowMs?: number } = {}): GuardDecision {
+    const cfg = this.getConfig();
     const now = opts.nowMs ?? Date.now();
     const dayStart = startOfLocalDay(now);
     const dayEnd = endOfLocalDay(now);
@@ -57,21 +63,21 @@ export class BudgetGuard {
     // block live traffic, and imported subscription spend tripping it froze a
     // proxy that had spent almost nothing (dogfood). capIncludesImported opts
     // into governing total observed spend instead.
-    const liveOnly = !this.cfg.capIncludesImported;
+    const liveOnly = !cfg.capIncludesImported;
     const daySpend = this.store.spendBetween(dayStart, dayEnd, liveOnly);
 
-    const dailyLimit = this.cfg.dailyUsd;
+    const dailyLimit = cfg.dailyUsd;
     const remainingDaily = dailyLimit === null ? null : Math.max(0, dailyLimit - daySpend);
 
     const sessionSpend = opts.sessionId ? this.store.spendForSession(opts.sessionId, liveOnly) : null;
 
-    const windowMs = this.cfg.runawayWindowSec * 1000;
+    const windowMs = cfg.runawayWindowSec * 1000;
     const window = this.store.spendInWindow(now, windowMs, liveOnly);
     const runawayTripped =
-      this.cfg.runawayMaxUsd !== null && window.costUsd >= this.cfg.runawayMaxUsd;
+      cfg.runawayMaxUsd !== null && window.costUsd >= cfg.runawayMaxUsd;
 
     const softTripped =
-      this.cfg.dailySoftUsd !== null && daySpend >= this.cfg.dailySoftUsd;
+      cfg.dailySoftUsd !== null && daySpend >= cfg.dailySoftUsd;
 
     const base = {
       daySpendUsd: daySpend,
@@ -79,7 +85,7 @@ export class BudgetGuard {
       remainingDailyUsd: remainingDaily,
       sessionSpendUsd: sessionSpend,
       softTripped,
-      runaway: { tripped: runawayTripped, windowCostUsd: window.costUsd, windowSec: this.cfg.runawayWindowSec },
+      runaway: { tripped: runawayTripped, windowCostUsd: window.costUsd, windowSec: cfg.runawayWindowSec },
     };
 
     // Hard blocks first — precedence matters.
@@ -92,25 +98,25 @@ export class BudgetGuard {
           (liveOnly ? ' (live proxy spend; imported spend excluded).' : ' (includes imported spend).'),
       };
     }
-    if (this.cfg.sessionUsd !== null && sessionSpend !== null && sessionSpend >= this.cfg.sessionUsd) {
+    if (cfg.sessionUsd !== null && sessionSpend !== null && sessionSpend >= cfg.sessionUsd) {
       return {
         ...base,
         action: 'block',
-        reason: `Session budget reached: $${sessionSpend.toFixed(2)} of $${this.cfg.sessionUsd.toFixed(2)} cap.`,
+        reason: `Session budget reached: $${sessionSpend.toFixed(2)} of $${cfg.sessionUsd.toFixed(2)} cap.`,
       };
     }
     if (runawayTripped) {
       return {
         ...base,
         action: 'block',
-        reason: `Runaway loop guard: $${window.costUsd.toFixed(2)} spent in the last ${this.cfg.runawayWindowSec}s exceeds the $${this.cfg.runawayMaxUsd!.toFixed(2)} threshold.`,
+        reason: `Runaway loop guard: $${window.costUsd.toFixed(2)} spent in the last ${cfg.runawayWindowSec}s exceeds the $${cfg.runawayMaxUsd!.toFixed(2)} threshold.`,
       };
     }
     if (softTripped) {
       return {
         ...base,
         action: 'warn',
-        reason: `Soft daily threshold passed: $${daySpend.toFixed(2)} of $${this.cfg.dailySoftUsd!.toFixed(2)}.`,
+        reason: `Soft daily threshold passed: $${daySpend.toFixed(2)} of $${cfg.dailySoftUsd!.toFixed(2)}.`,
       };
     }
     return { ...base, action: 'allow', reason: null };

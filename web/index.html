@@ -288,9 +288,10 @@
     <div class="eyebrow reveal">Return on Intelligence · measured locally</div>
     <h1 class="display reveal">Govern the spend.<br><em>Not</em> the developer.</h1>
     <p class="lede reveal">Your AI coding agents bill by the token now — and an agent stuck in a loop overnight doesn't send a warning, it sends an invoice. Fiscus is a <b>local-first proxy</b> that meters every call, caps runaway spend, and — the part that actually matters — <b>measures whether that spend produced work worth keeping.</b> All on-device. No byte of your code leaves the machine.</p>
+    <p class="disclaimer reveal">Fiscus has no hosted telemetry by default. Requests routed through its proxy still go to the configured AI provider; see the repository's DATA-BOUNDARIES.md before using sensitive material.</p>
     <div class="cta-row reveal">
       <div class="install" id="install" title="Click to copy">
-        <span><span class="pr">$</span> npx fiscus start</span>
+        <span><span class="pr">$</span> node bin/fiscus.mjs start</span>
         <span class="copy" id="copyLabel">COPY</span>
       </div>
       <a class="ghost" href="#how">See how it works <span>↓</span></a>
@@ -545,7 +546,7 @@ signed    ed25519:9c3a…</pre>
       <div class="fcard reveal"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><path d="M3 3v18h18"/><path d="M7 14l3-4 3 3 5-7"/></svg></div><div><h3>Real-time cost, per request</h3><p>Watch spend accrue live in a terminal and a local web console. Cost headers come back on every response.</p></div></div>
       <div class="fcard reveal"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M3 12h6M15 12h6M12 3v6M12 15v6"/></svg></div><div><h3>Cost per commit</h3><p>Correlate spend with the git history it produced — objective cost-per-commit and tokens-per-diff. No invented "efficiency score" to game.</p></div></div>
       <div class="fcard reveal"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><path d="M12 2L4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6z"/></svg></div><div><h3>Budgets that actually enforce</h3><p>Daily, per-session, and runaway-velocity caps — soft and hard — enforced locally, before money is spent.</p></div></div>
-      <div class="fcard reveal"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg></div><div><h3>Nothing leaves the machine</h3><p>Provider-reported token counts only. No code, no prompts, no keys ever transmitted. Optional team sync is numeric metadata, opt-in.</p></div></div>
+      <div class="fcard reveal"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg></div><div><h3>Local ledger, explicit boundaries</h3><p>Fiscus sends no product telemetry by default. Proxy traffic goes to the AI provider you configure; proposal capture stays local and can be disabled. Optional team sync is numeric metadata, opt-in.</p></div></div>
     </div>
   </div>
 </section>
@@ -600,7 +601,7 @@ signed    ed25519:9c3a…</pre>
     <h2 class="head reveal">Visibility you can act on, caps you can trust.</h2>
     <div class="nums">
       <div class="nstat reveal"><div class="big">&lt;1ms</div><div class="lbl">added latency vs. the provider round-trip it wraps</div></div>
-      <div class="nstat reveal"><div class="big">0 bytes</div><div class="lbl">of prompt or source code that leave the device</div></div>
+      <div class="nstat reveal"><div class="big">0 bytes</div><div class="lbl">of default Fiscus telemetry or product analytics</div></div>
       <div class="nstat reveal"><div class="big">100%</div><div class="lbl">of calls metered — streaming and non-streaming</div></div>
       <div class="nstat reveal"><div class="big">1 cmd</div><div class="lbl">to install and run — no daemon to manage, no build step</div></div>
     </div>
@@ -614,7 +615,7 @@ signed    ed25519:9c3a…</pre>
     <p class="reveal">Run it once, point your agents at it, and watch every token turn into a number you can see — and a bill you can cap. From there the tool guides itself: <code style="color:var(--gold)">fiscus guide</code> reads your actual state and names the single next step, every time.</p>
     <div class="cta-row reveal">
       <div class="install" id="install2" title="Click to copy">
-        <span><span class="pr">$</span> npx fiscus start</span>
+        <span><span class="pr">$</span> node bin/fiscus.mjs start</span>
         <span class="copy" id="copyLabel2">COPY</span>
       </div>
       <a class="ghost" href="#math">Read the math →</a>
@@ -649,7 +650,7 @@ signed    ed25519:9c3a…</pre>
     if (!box) return;
     box.addEventListener('click', async () => {
       try {
-        await navigator.clipboard.writeText('npx fiscus start');
+        await navigator.clipboard.writeText('node bin/fiscus.mjs start');
         const prev = label.textContent;
         label.textContent = 'COPIED ✓';
         label.style.color = '#63c593';

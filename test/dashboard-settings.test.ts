@@ -69,12 +69,25 @@ test('applySettingsPatch ignores a non-positive retention value rather than acce
 
 // --- routes -------------------------------------------------------------
 
-function boot(store: Store): Promise<{ base: string; close: () => Promise<void> }> {
-  const server: http.Server = createDashboardServer({ store, config: structuredClone(DEFAULT_CONFIG), version: 'test' });
+function boot(store: Store): Promise<{ base: string; close: () => Promise<void>; readPersisted: () => typeof DEFAULT_CONFIG }> {
+  let persisted = structuredClone(DEFAULT_CONFIG);
+  const server: http.Server = createDashboardServer({
+    store,
+    config: structuredClone(DEFAULT_CONFIG),
+    version: 'test',
+    configPersistence: {
+      load: () => structuredClone(persisted),
+      save: (next) => { persisted = structuredClone(next); },
+    },
+  });
   return new Promise((resolve) => {
     server.listen(0, '127.0.0.1', () => {
       const port = (server.address() as AddressInfo).port;
-      resolve({ base: `http://127.0.0.1:${port}`, close: () => new Promise((r) => server.close(() => r())) });
+      resolve({
+        base: `http://127.0.0.1:${port}`,
+        close: () => new Promise((r) => server.close(() => r())),
+        readPersisted: () => structuredClone(persisted),
+      });
     });
   });
 }
@@ -118,6 +131,9 @@ test('POST /api/settings/update applies a patch, persists it, and requires the l
     const body = (await res.json()) as { metadataOnly: boolean; budget: { dailyUsd: number | null } };
     assert.equal(body.metadataOnly, true);
     assert.equal(body.budget.dailyUsd, 42);
+    const persisted = srv.readPersisted();
+    assert.equal(persisted.metadataOnly, true, 'the route must save through its configured persistence boundary');
+    assert.equal(persisted.budget.dailyUsd, 42);
 
     // A follow-up GET on the same running process reflects the update — no restart needed.
     const after = await fetch(`${srv.base}/api/settings`);

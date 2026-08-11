@@ -26,6 +26,16 @@ export async function cmdStart(flags: Flags): Promise<void> {
   const store = new Store(dbPath());
   const tty = process.stdout.isTTY ?? false;
 
+  // The proposal store may contain literal suggested code. Honor its short
+  // retention boundary whenever the local service starts; this does not touch
+  // the longer-lived cost ledger, and an operator can still clear proposals
+  // immediately from Settings or `fiscus prune`.
+  const expiredProposalsBefore = Date.now() - cfg.proposalRetentionDays * 24 * 60 * 60 * 1000;
+  const expiredProposals = store.pruneProposals(expiredProposalsBefore);
+  if (expiredProposals > 0) {
+    console.log(color(tty, C.gray, `  Privacy maintenance: pruned ${expiredProposals} stored proposal row(s) older than ${cfg.proposalRetentionDays} days.`));
+  }
+
   // Honor pricing.autoRefresh: if the rate card is stale and a manifest is set,
   // pull a fresh one on launch so metering prices at current rates. OFF by default
   // (keeps "zero external requests" true out of the box); a failure never blocks

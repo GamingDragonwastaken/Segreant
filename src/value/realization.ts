@@ -200,7 +200,10 @@ export async function computeRealization(
     const hadProposal = acceptance !== null;
 
     // signal gates
-    const signals = [...store.signalsForCommit(a.hash), ...store.signalsInWindow(project, a.windowStartMs, a.windowEndMs)];
+    // A coding lifecycle gate is evidence about one immutable commit. Legacy
+    // project-window assertions stay in the ledger for audit, but may not make
+    // an unrelated commit look tested, merged, shipped, or clean by timing.
+    const signals = store.signalsForCommit(a.hash);
     const incidentFail = signals.some((s) => s.kind === 'incident');
 
     const verdicts: Record<Gate, GateResult> = {

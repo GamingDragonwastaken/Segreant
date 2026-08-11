@@ -92,7 +92,26 @@ export interface GateSignalRow {
   tsEpochMs: number;
   verdict: string; // 'pass' | 'fail'
   detail: string | null;
+  /** How the outcome entered the ledger; never silently collapse provenance. */
+  evidenceSource?: 'manual' | 'local-command' | 'signed-ci';
 }
+
+/** A retained, verified external-evidence envelope plus the resulting gate signal. */
+export interface VerifiedGateEvidenceInput {
+  eventId: string;
+  source: 'github-actions';
+  evidenceClass: 'signed-ci';
+  commitHash: string;
+  repositoryId: string;
+  policyId: string;
+  bodyHash: string;
+  signerKeyId: string;
+  envelopeJson: string;
+  verifiedAtMs: number;
+  signal: Omit<GateSignalRow, 'signalId' | 'commitHash' | 'evidenceSource'>;
+}
+
+export type VerifiedGateEvidenceWrite = 'inserted' | 'duplicate' | 'conflict';
 
 /**
  * A persisted snapshot of one computed work unit. The store keeps these so
@@ -190,11 +209,28 @@ CREATE TABLE IF NOT EXISTS gate_signals (
   project     TEXT NOT NULL DEFAULT 'default',
   ts_epoch_ms INTEGER NOT NULL,
   verdict     TEXT NOT NULL,
-  detail      TEXT
+  detail      TEXT,
+  evidence_source TEXT NOT NULL DEFAULT 'manual'
 );
 
 CREATE INDEX IF NOT EXISTS idx_signals_commit ON gate_signals(commit_hash);
 CREATE INDEX IF NOT EXISTS idx_signals_ts     ON gate_signals(ts_epoch_ms);
+
+CREATE TABLE IF NOT EXISTS gate_evidence (
+  event_id       TEXT PRIMARY KEY NOT NULL,
+  source         TEXT NOT NULL,
+  evidence_class TEXT NOT NULL,
+  commit_hash    TEXT NOT NULL,
+  repository_id  TEXT NOT NULL,
+  policy_id      TEXT NOT NULL,
+  body_hash      TEXT NOT NULL,
+  signer_key_id  TEXT NOT NULL,
+  envelope_json  TEXT NOT NULL,
+  verified_at_ms INTEGER NOT NULL,
+  UNIQUE(source, body_hash)
+);
+
+CREATE INDEX IF NOT EXISTS idx_gate_evidence_commit ON gate_evidence(commit_hash);
 
 CREATE TABLE IF NOT EXISTS realization_units (
   commit_hash    TEXT PRIMARY KEY NOT NULL,
@@ -281,6 +317,10 @@ export class Store {
            WHERE via IS NULL`,
         )
         .run();
+    }
+    const signalCols = this.db.prepare('PRAGMA table_info(gate_signals)').all() as Array<{ name: string }>;
+    if (!signalCols.some((c) => c.name === 'evidence_source')) {
+      this.db.prepare("ALTER TABLE gate_signals ADD COLUMN evidence_source TEXT NOT NULL DEFAULT 'manual'").run();
     }
     this.runScript('CREATE INDEX IF NOT EXISTS idx_requests_user ON requests(user)');
     this.runScript('CREATE INDEX IF NOT EXISTS idx_requests_source ON requests(source)');
@@ -1004,11 +1044,55 @@ export class Store {
   insertSignal(s: GateSignalRow): void {
     this.db
       .prepare(
-        `INSERT INTO gate_signals (signal_id, kind, commit_hash, project, ts_epoch_ms, verdict, detail)
-         VALUES (?,?,?,?,?,?,?)
+        `INSERT INTO gate_signals (signal_id, kind, commit_hash, project, ts_epoch_ms, verdict, detail, evidence_source)
+         VALUES (?,?,?,?,?,?,?,?)
          ON CONFLICT(signal_id) DO NOTHING`,
       )
-      .run(s.signalId, s.kind, s.commitHash, s.project, s.tsEpochMs, s.verdict, s.detail);
+      .run(s.signalId, s.kind, s.commitHash, s.project, s.tsEpochMs, s.verdict, s.detail, s.evidenceSource ?? 'manual');
+  }
+
+  /**
+   * Store a full verified envelope and its eligible commit-bound signal as one
+   * operation. Replays of exactly the same signed body are harmless; reusing an
+   * event id or body hash for a different claim is rejected before any signal is
+   * written.
+   */
+  insertVerifiedGateEvidence(input: VerifiedGateEvidenceInput): VerifiedGateEvidenceWrite {
+    this.db.prepare('BEGIN IMMEDIATE').run();
+    try {
+      const existingEvent = this.db.prepare('SELECT body_hash AS bodyHash FROM gate_evidence WHERE event_id = ?').get(input.eventId) as { bodyHash: string } | undefined;
+      if (existingEvent) {
+        this.db.prepare('COMMIT').run();
+        return existingEvent.bodyHash === input.bodyHash ? 'duplicate' : 'conflict';
+      }
+      const existingBody = this.db.prepare('SELECT event_id AS eventId FROM gate_evidence WHERE source = ? AND body_hash = ?').get(input.source, input.bodyHash) as { eventId: string } | undefined;
+      if (existingBody) {
+        this.db.prepare('COMMIT').run();
+        return 'duplicate';
+      }
+      const conflictingSignal = this.db.prepare('SELECT signal_id AS signalId FROM gate_signals WHERE signal_id = ?').get(input.eventId) as { signalId: string } | undefined;
+      if (conflictingSignal) {
+        this.db.prepare('COMMIT').run();
+        return 'conflict';
+      }
+      this.db
+        .prepare(
+          `INSERT INTO gate_evidence (event_id, source, evidence_class, commit_hash, repository_id, policy_id, body_hash, signer_key_id, envelope_json, verified_at_ms)
+           VALUES (?,?,?,?,?,?,?,?,?,?)`,
+        )
+        .run(input.eventId, input.source, input.evidenceClass, input.commitHash, input.repositoryId, input.policyId, input.bodyHash, input.signerKeyId, input.envelopeJson, input.verifiedAtMs);
+      this.db
+        .prepare(
+          `INSERT INTO gate_signals (signal_id, kind, commit_hash, project, ts_epoch_ms, verdict, detail, evidence_source)
+           VALUES (?,?,?,?,?,?,?,?)`,
+        )
+        .run(input.eventId, input.signal.kind, input.commitHash, input.signal.project, input.signal.tsEpochMs, input.signal.verdict, input.signal.detail, 'signed-ci');
+      this.db.prepare('COMMIT').run();
+      return 'inserted';
+    } catch (error) {
+      try { this.db.prepare('ROLLBACK').run(); } catch { /* no active transaction */ }
+      throw error;
+    }
   }
 
   /** Signals explicitly linked to a commit hash. */
@@ -1016,7 +1100,7 @@ export class Store {
     const rows = this.db
       .prepare(
         `SELECT signal_id AS signalId, kind, commit_hash AS commitHash, project,
-                ts_epoch_ms AS tsEpochMs, verdict, detail
+                ts_epoch_ms AS tsEpochMs, verdict, detail, evidence_source AS evidenceSource
          FROM gate_signals WHERE commit_hash = ?`,
       )
       .all(commitHash) as unknown as GateSignalRow[];
@@ -1029,7 +1113,7 @@ export class Store {
     const rows = this.db
       .prepare(
         `SELECT signal_id AS signalId, kind, commit_hash AS commitHash, project,
-                ts_epoch_ms AS tsEpochMs, verdict, detail
+                ts_epoch_ms AS tsEpochMs, verdict, detail, evidence_source AS evidenceSource
          FROM gate_signals WHERE ${fam.sql} AND commit_hash IS NULL
            AND ts_epoch_ms >= ? AND ts_epoch_ms < ?`,
       )

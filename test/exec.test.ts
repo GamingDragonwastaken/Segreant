@@ -39,7 +39,12 @@ test('exec: a passing command records verdict=pass and exits 0', async () => {
     assert.equal(sigs.length, 1);
     assert.equal(sigs[0]!.kind, 'resolved');
     assert.equal(sigs[0]!.verdict, 'pass');
-    assert.match(sigs[0]!.detail ?? '', /ambient/, 'signal is labeled as ambient capture');
+    const detail = JSON.parse(sigs[0]!.detail ?? '{}');
+    assert.equal(detail.source, 'local-command', 'signal retains local-command provenance');
+    assert.equal(detail.command, 'node -e process.exit(0)');
+    assert.equal(detail.exitCode, 0);
+    assert.equal(typeof detail.seconds, 'number');
+    assert.equal(sigs[0]!.evidenceSource, 'local-command');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -73,6 +78,21 @@ test('exec: refuses bad input without running anything', async () => {
 
     const usageNoSession = await runCli(['exec', '--kind', 'published', '--', 'node', '-e', '0'], db);
     assert.notEqual(usageNoSession.code, 0, 'usage kind without --session → error');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('report: a coding lifecycle assertion without an immutable commit is rejected and not stored', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'aegis-report-'));
+  const db = join(dir, 'report.db');
+  try {
+    const r = await runCli(['report', '--kind', 'tested'], db);
+    assert.notEqual(r.code, 0, 'a code outcome without --commit must be rejected');
+    assert.match(r.stderr, /needs --commit/i);
+    const store = new Store(db);
+    assert.equal(store.signalsInWindow('default', 0, Date.now()).length, 0, 'no project-wide code signal is created');
+    store.close();
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -63,8 +63,10 @@ export function detectRoute(req: http.IncomingMessage, cfg: AegisConfig): RouteI
   // auth header to the named URL, so it must be explicitly enabled
   // (config.allowOpenAIBaseOverride). For the common case, set config.upstreams.openai
   // instead — no flag, no per-request key-exfil risk. Must be absolute http(s).
-  const ovr = cfg.allowOpenAIBaseOverride ? headerStr(req, 'x-aegis-openai-base') : undefined;
-  const openaiBase = ovr && /^https?:\/\//i.test(ovr) ? ovr : cfg.upstreams.openai;
+  // Deliberately ignore x-aegis-openai-base. This proxy forwards Authorization
+  // to its upstream, so a request-controlled destination would make it a
+  // credential-forwarding primitive. Set the one trusted destination in config.
+  const openaiBase = cfg.upstreams.openai;
 
   // Path-based detection first (most reliable).
   if (url.startsWith('/v1/messages') || url.includes('/anthropic/')) {
@@ -174,7 +176,10 @@ export interface ProxyDeps {
 
 export function createProxyServer(deps: ProxyDeps): http.Server {
   const { store, config } = deps;
-  const guard = new BudgetGuard(store, config.budget);
+  // Dashboard Settings mutates the shared config object after persisting it.
+  // Resolve budget at each pre-flight check so a newly chosen cap actually
+  // governs the already-running proxy, rather than merely looking saved in UI.
+  const guard = new BudgetGuard(store, () => config.budget);
 
   const server = http.createServer((req, res) => {
     handle(req, res, deps, guard).catch((err) => {

@@ -1330,7 +1330,7 @@ function renderSettings(s) {
   setNodes($('#s-privacy').querySelector('.body'), `
     <label><input id="metadataOnlyToggle" type="checkbox" ${s.metadataOnly ? 'checked' : ''} />
       Metadata-only mode (never store proposed code locally — disables First-Pass Acceptance)</label>
-    <div class="tag">Stored proposals are purged automatically after ${s.proposalRetentionDays} days.</div>
+    <div class="tag">Stored proposals are purged on Fiscus startup after ${s.proposalRetentionDays} days; clear them here at any time.</div>
     <div style="display:flex; align-items:center; gap:var(--s3);">
       <button id="clearProposalsBtn">Clear stored proposals now</button>
       <span id="clearProposalsResult" class="tag"></span>

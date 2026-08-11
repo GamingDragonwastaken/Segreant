@@ -49,6 +49,20 @@ test('cap basis: live proxy spend still blocks exactly as before', () => {
   store.close();
 });
 
+test('cap basis: a runtime config supplier makes an already-running guard honor a newly saved cap', () => {
+  const store = new Store(':memory:');
+  try {
+    store.insertRequest(req({ costUsd: 5 }));
+    let live = budget({ dailyUsd: null });
+    const guard = new BudgetGuard(store, () => live);
+    assert.equal(guard.evaluate().action, 'allow');
+    live = budget({ dailyUsd: 5 });
+    assert.equal(guard.evaluate().action, 'block', 'the proxy must not need a restart before a saved cap takes effect');
+  } finally {
+    store.close();
+  }
+});
+
 test('via migration: pre-existing rows are backfilled by importer source tag, once', () => {
   const dir = mkdtempSync(join(tmpdir(), 'aegis-via-'));
   const path = join(dir, 'x.db');

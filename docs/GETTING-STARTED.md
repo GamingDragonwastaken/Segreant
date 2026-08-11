@@ -1,8 +1,18 @@
 # Getting started with Fiscus
 
 Fiscus is a **local-first** proxy that meters what your AI tools spend and
-measures what that spend actually returns. Nothing leaves your machine. It needs
+measures what that spend actually returns. It needs
 **Node 24+** and has **zero runtime dependencies**.
+
+Before routing real work, read **[DATA-BOUNDARIES.md](DATA-BOUNDARIES.md)**:
+Fiscus has no hosted collection or telemetry by default, but proxy traffic still
+goes to the AI provider you configure, and proposal capture is a local storage
+choice.
+
+> **Release status:** this checkout is not yet published to npm. Run commands
+> from a clone with `node bin/fiscus.mjs ...`. The `npx fiscus ...` examples below
+> describe the intended post-publication command and must not be treated as an
+> available package until the registry release is verified.
 
 ---
 

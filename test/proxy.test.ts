@@ -464,7 +464,7 @@ test('budget: hard daily cap blocks with 429 once exceeded', async () => {
   store.close();
 });
 
-test('detectRoute: x-aegis-openai-base override is OFF by default, honored only when enabled', () => {
+test('detectRoute: x-aegis-openai-base is ignored even if legacy config enables it', () => {
   const off = DEFAULT_CONFIG; // allowOpenAIBaseOverride: false
   const on: AegisConfig = { ...DEFAULT_CONFIG, allowOpenAIBaseOverride: true };
   const mk = (headers: Record<string, string>, url = '/v1/chat/completions') =>
@@ -479,7 +479,7 @@ test('detectRoute: x-aegis-openai-base override is OFF by default, honored only 
   // Enabled → honored for any OpenAI-compatible provider.
   assert.equal(
     detectRoute(mk({ authorization: 'Bearer x', 'x-aegis-openai-base': 'https://openrouter.ai/api' }), on)?.upstreamBase,
-    'https://openrouter.ai/api',
+    on.upstreams.openai,
   );
   // The Anthropic route ignores the OpenAI override regardless.
   assert.equal(

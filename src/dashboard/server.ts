@@ -162,10 +162,19 @@ export interface DashboardDeps {
   config: AegisConfig;
   /** This package's version — surfaced read-only in the Settings view. */
   version: string;
+  /**
+   * Config persistence is injectable so the dashboard can be exercised without
+   * touching a developer's real local configuration. Production uses the
+   * normal on-disk Fiscus config functions by default.
+   */
+  configPersistence?: {
+    load: () => AegisConfig;
+    save: (config: AegisConfig) => void;
+  };
 }
 
 export function createDashboardServer(deps: DashboardDeps): http.Server {
-  const { store, config, version } = deps;
+  const { store, config, version, configPersistence = { load: loadConfig, save: saveConfig } } = deps;
 
   return http.createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
@@ -620,9 +629,9 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
           const chunks: Buffer[] = [];
           for await (const c of req) chunks.push(c as Buffer);
           const patch = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') as SettingsPatch;
-          const current = loadConfig();
+          const current = configPersistence.load();
           const next = applySettingsPatch(current, patch);
-          saveConfig(next);
+          configPersistence.save(next);
           // Keep this process's in-memory config in sync so a later plain GET
           // /api/settings doesn't read back stale values until a restart. Note this
           // does NOT reach the separately-constructed proxy server's own config

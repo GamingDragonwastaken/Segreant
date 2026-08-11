@@ -1,5 +1,5 @@
 {
-  "name": "aegisflow-team-server",
+  "name": "fiscus-team-server",
   "version": "0.1.0",
   "private": true,
   "description": "Separate, optional, BYO-Postgres team server for Fiscus's team tier. Fiscus hosts nothing — an enterprise runs this on infrastructure they already own. See docs/TEAM-TIER-DESIGN.md in the main repo.",
@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning src/index.ts",
     "test": "node --disable-warning=ExperimentalWarning --test test/*.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit"
   },
   "dependencies": {
     "pg": "^8.13.0"

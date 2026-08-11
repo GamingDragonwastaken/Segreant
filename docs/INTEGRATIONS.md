@@ -163,7 +163,9 @@ client = OpenAI(base_url="http://localhost:8090/v1", api_key="…")
 ## Beyond one provider, from one proxy
 
 To meter several OpenAI-compatible providers without restarting, enable
-`allowOpenAIBaseOverride` in config and send the upstream per request:
+Do not route providers per request with `x-aegis-openai-base`: current Fiscus
+builds ignore that legacy header because the proxy forwards provider credentials.
+Set one trusted OpenAI-compatible destination in `upstreams.openai` instead.
 
 ```
 X-Aegis-OpenAI-Base: https://openrouter.ai/api

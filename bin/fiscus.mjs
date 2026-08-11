@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Thin launcher. The CLI is TypeScript, run directly by Node's built-in type
-// stripping (Node >= 22.5, stable on 24). No build step.
+// Thin launcher for the compiled runtime. Shipping JavaScript is intentional:
+// Node does not permit TypeScript type stripping for files in node_modules.
 //
 // Node emits the "SQLite is an experimental feature" warning from an internal
 // path that a userland process.emitWarning override can't intercept, so we
@@ -10,13 +10,13 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 
-// Fail fast with a human message on too-old Node, rather than a cryptic
-// "Unknown file extension .ts" when built-in type stripping isn't available.
+// Fail fast with a human message on too-old Node before Node's SQLite runtime
+// dependency reports a less actionable error.
 const major = Number(process.versions.node.split('.')[0]);
 if (major < 24) {
   console.error(
     `Fiscus needs Node >= 24 (you have ${process.versions.node}).\n` +
-    `It runs TypeScript directly via Node's built-in type stripping, stable on 24.\n` +
+    `The packaged runtime targets Node 24 or newer.\n` +
     `Upgrade Node from https://nodejs.org/ and re-run.`,
   );
   process.exit(1);
@@ -33,5 +33,5 @@ if (!process.env.__AEGIS_CHILD) {
   process.exit(result.status ?? 0);
 } else {
   const here = dirname(self);
-  await import(pathToFileURL(join(here, '..', 'src', 'cli.ts')).href);
+  await import(pathToFileURL(join(here, '..', 'dist', 'cli.js')).href);
 }

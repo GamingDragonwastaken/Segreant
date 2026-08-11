@@ -16,6 +16,7 @@ import { packageVersion } from './version.ts';
 
 import { parseFlags } from './cli/flags.ts';
 import { cmdImport, cmdDiscover, cmdScan } from './cli/importCmd.ts';
+import { cmdEvidence } from './cli/evidenceCmd.ts';
 import { cmdYield, cmdRealize, cmdReport, cmdExec, cmdUsage, cmdRoi, cmdSaved, cmdBudgetAdvisor, cmdFrontier } from './cli/valueCmd.ts';
 import { cmdTeam, cmdReceipt, cmdJudge, cmdTeamPush } from './cli/teamCmd.ts';
 import { cmdConnect } from './cli/connectCmd.ts';
@@ -81,6 +82,9 @@ function cmdHelp(): void {
                           <name>, --every N, --json)
     report --kind K       Wire an outcome: code --commit <hash>, non-code --session <id>
                           kinds: tested|merged|shipped|incident|used|resolved|published|…
+    evidence github       Signed, offline CI evidence. 'emit' runs in a protected
+                          workflow; 'import' verifies a locally pinned key plus
+                          exact repository, branch, workflow, and policy binding.
     exec -- <command>     AMBIENT outcome capture: run any command and report its
                           exit code as the outcome — wrap "npm test" once, every
                           run reports itself ([--kind tested|shipped|…] [--commit R|--session S])
@@ -250,6 +254,9 @@ async function main(): Promise<void> {
       break;
     case 'report':
       await cmdReport(flags);
+      break;
+    case 'evidence':
+      await cmdEvidence(flags);
       break;
     case 'exec':
       await cmdExec(flags, wrapped);

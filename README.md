@@ -9,13 +9,18 @@
 Value-aware financial management for AI spend: a local-first proxy that prices
 every AI call, measures what that spend actually *returns* (Return on
 Intelligence), and **allocates your budget toward what's worth it** — in real
-time, without a single byte of your code leaving the machine.
+time, with local accounting and explicit disclosure of each optional or provider-directed egress path.
 
 `local-first` · `value-aware` · `zero data egress` · `no build step` · `MIT`
 
-[![CI](https://github.com/GamingDragonwastaken/aegisflow/actions/workflows/ci.yml/badge.svg)](https://github.com/GamingDragonwastaken/aegisflow/actions/workflows/ci.yml)
+[![CI](https://github.com/GamingDragonwastaken/Fiscus/actions/workflows/ci.yml/badge.svg)](https://github.com/GamingDragonwastaken/Fiscus/actions/workflows/ci.yml)
 
 </div>
+
+> **Data boundary:** “local-first” means Fiscus has no hosted telemetry by
+> default. Requests routed through the proxy still go to your configured AI
+> provider. See [the complete data-boundary disclosure](docs/DATA-BOUNDARIES.md)
+> before using sensitive material.
 
 ---
 
@@ -56,7 +61,7 @@ SQLite.
 **See it work in ten seconds** — no API key, no setup:
 
 ```bash
-npm install        # dev toolchain only (Fiscus has zero runtime deps)
+npm install        # compiles the local CLI; Fiscus has zero runtime dependencies
 npm run demo       # seeds labeled synthetic data and opens the dashboard
 ```
 
@@ -384,14 +389,17 @@ makes it the easiest **zero-cost way to meter a live agent**: point
 Fiscus with a `gemini-2.5-flash` model, and watch a real RoI accrue without
 spending a cent.
 
-Want to switch providers *per request* from one proxy? Enable
-`allowOpenAIBaseOverride` in config, then send the base as a header:
+Do **not** switch providers per request through a routing header. Configure one
+trusted OpenAI-compatible upstream in Fiscus instead; use separate Fiscus
+processes when you need separate upstreams. The legacy header below is retained
+only as a migration reference and is ignored by current builds.
+`allowOpenAIBaseOverride` in older configs and sent the base as a header:
 
 ```
 X-Aegis-OpenAI-Base: https://openrouter.ai/api    # then call /v1/chat/completions as usual
 ```
 
-It's **off by default on purpose**: that header would forward your provider auth
+The header is **ignored on purpose**: honoring it would forward your provider auth
 to the URL it names, so honoring it unconditionally could leak your key. The
 header is stripped before forwarding upstream and never leaves the device.
 
@@ -413,7 +421,9 @@ number.
 
 ## Privacy
 
-- No prompt text, source code, or credentials are transmitted anywhere.
+- Read the exact controls and outbound paths in **[docs/DATA-BOUNDARIES.md](docs/DATA-BOUNDARIES.md)**.
+- Fiscus operates locally and sends no Fiscus telemetry or analytics by default.
+- When you route a request through the proxy, your configured AI provider receives the normal provider request; Fiscus does not store provider API keys.
 - Provider API keys pass through to the provider and are **never stored**.
 - **Locally stored, not transmitted:** to detect First-Pass Acceptance (whether
   the AI's proposed edit matches what you actually committed), Fiscus
@@ -440,6 +450,7 @@ number.
 
 ```bash
 npm install          # dev-only: typescript + @types/node
+npm run build        # compile the distributable runtime into dist/
 npm test             # node --test (cost, usage, proxy, budget, git)
 npm run typecheck    # tsc --noEmit (strict)
 ```
@@ -453,6 +464,14 @@ CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs `typecheck` +
 ---
 
 ## Status
+
+> **Pre-release:** Fiscus is not currently verified as published to npm. Use a
+> cloned checkout (`node bin/fiscus.mjs ...`) until an authorized registry
+> release and clean-install smoke test have completed. See
+> [EVIDENCE-PROVENANCE.md](docs/EVIDENCE-PROVENANCE.md) for what its outcome
+> signals do and do not prove.
+> The current local-preview and external-release boundaries are recorded in
+> [RELEASE-GATE.md](docs/RELEASE-GATE.md).
 
 **Two ways in, and they cross-correlate.** *Proxy* metering (Anthropic, OpenAI
 (Chat Completions and Responses API), **natively-priced Gemini**, and **any
