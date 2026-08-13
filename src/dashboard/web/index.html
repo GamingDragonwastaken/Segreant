@@ -1102,7 +1102,13 @@ function renderValue(d) {
         ${switches.slice(0, 4).map((m) => {
           const tag = m.confidence === 'evidence_supported' ? 'EVIDENCE' : 'TRIAL';
           const cls = m.confidence === 'evidence_supported' ? 'grow' : 'trim';
-          return `<div class="rec"><span class="rtag ${cls}">${tag}</span>${esc(m.taskType)}: try ${esc(m.candidateModel)} before ${esc(m.incumbentModel)} <span style="color:var(--mint)">+$${money(m.historicalEquivalentHeadroomUsd)} headroom</span><div style="font-size:10.5px;color:var(--faint);margin:5px 0 0 72px;line-height:1.45">${esc(m.rationale)}</div></div>`;
+          const candidateRate = Math.round(Number(m.candidateRealizationRate || 0) * 100);
+          const incumbentRate = Math.round(Number(m.incumbentRealizationRate || 0) * 100);
+          const evidence = `${Number(m.candidateUnits || 0)} vs ${Number(m.incumbentUnits || 0)} mature units · observed realization ${candidateRate}% vs ${incumbentRate}%`;
+          const confidenceNote = m.confidence === 'evidence_supported'
+            ? 'anytime-valid outcome bounds separate'
+            : 'intervals overlap — keep this as a measured trial, not a default change';
+          return `<div class="rec"><span class="rtag ${cls}">${tag}</span>${esc(m.taskType)}: try ${esc(m.candidateModel)} before ${esc(m.incumbentModel)} <span style="color:var(--mint)">+$${money(m.historicalEquivalentHeadroomUsd)} headroom</span><div style="font-size:10.5px;color:var(--faint);margin:5px 0 0 72px;line-height:1.45">${esc(evidence)} · ${esc(confidenceNote)}<br>${esc(m.rationale)}</div></div>`;
         }).join('')}
       </div>`
     : '';

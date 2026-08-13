@@ -12,6 +12,8 @@ import { Store } from '../src/store/db.ts';
 import { DEFAULT_CONFIG } from '../src/config.ts';
 import { createDashboardServer } from '../src/dashboard/server.ts';
 import { seedDemo } from '../src/demo/seed.ts';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 function boot(store: Store): Promise<{ base: string; close: () => Promise<void> }> {
   const server: http.Server = createDashboardServer({ store, config: structuredClone(DEFAULT_CONFIG), version: 'test' });
@@ -68,4 +70,12 @@ test('GET /api/value: a synthetic demo labels itself and exposes only a review-o
     if (previousDemo === undefined) delete process.env.AEGIS_DEMO;
     else process.env.AEGIS_DEMO = previousDemo;
   }
+});
+
+test('value dashboard reveals the observed mature-unit and realization evidence behind model trials', () => {
+  const html = readFileSync(join(import.meta.dirname, '..', 'src', 'dashboard', 'web', 'index.html'), 'utf8');
+  assert.match(html, /mature units/);
+  assert.match(html, /observed realization/);
+  assert.match(html, /intervals overlap — keep this as a measured trial/);
+  assert.match(html, /Fiscus does <b>not<\/b> change routing/);
 });
