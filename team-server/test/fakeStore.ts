@@ -4,7 +4,7 @@
  * header comment for why the interface exists.
  */
 
-import type { RollupStore, RegisteredDeveloper, StoredRollup, PeriodFilter, ProjectTotals, DeveloperTotals } from '../src/store.ts';
+import type { RollupStore, RegisteredDeveloper, StoredRollup, InsertRollupResult, PeriodFilter, ProjectTotals, DeveloperTotals } from '../src/store.ts';
 import type { SignedRollup } from '../../src/team/rollup.ts';
 
 /** True if [rollup's period_from, period_to) overlaps the requested [periodFrom, periodTo) window (open bounds = unbounded). */
@@ -17,6 +17,7 @@ function overlapsWindow(periodFrom: string, periodTo: string, filter: PeriodFilt
 export class FakeRollupStore implements RollupStore {
   private readonly developers = new Map<string, RegisteredDeveloper>();
   private readonly rollups: StoredRollup[] = [];
+  private readonly rollupsBySignedIdentity = new Map<string, StoredRollup>();
   private nextId = 1;
 
   async registerDeveloper(keyId: string, publicKey: string, label: string | null): Promise<void> {
@@ -27,7 +28,10 @@ export class FakeRollupStore implements RollupStore {
     return this.developers.get(keyId) ?? null;
   }
 
-  async insertRollup(signed: SignedRollup): Promise<StoredRollup> {
+  async insertRollup(signed: SignedRollup): Promise<InsertRollupResult> {
+    const signedIdentity = `${signed.keyId}:${signed.bodyHash}`;
+    const existing = this.rollupsBySignedIdentity.get(signedIdentity);
+    if (existing) return { rollup: existing, replayed: true };
     const stored: StoredRollup = {
       id: String(this.nextId++),
       keyId: signed.keyId,
@@ -38,7 +42,8 @@ export class FakeRollupStore implements RollupStore {
       body: signed.body,
     };
     this.rollups.push(stored);
-    return stored;
+    this.rollupsBySignedIdentity.set(signedIdentity, stored);
+    return { rollup: stored, replayed: false };
   }
 
   async listRollups(opts: { keyId?: string; limit?: number } = {}): Promise<StoredRollup[]> {

@@ -197,6 +197,77 @@ test('team-server: POST /rollups from a registered key with a valid signature is
   }
 });
 
+test('team-server: POST /rollups treats an exact signed retry as an idempotent replay without changing the recorded receipt', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'aegis-team-server-'));
+  try {
+    const dev: KeyPair = loadOrCreateKeyPair(join(dir, 'dev.json'));
+    const signed = signRollup(buildRollupBody(dev, projects(), period), dev);
+    const store = new FakeRollupStore();
+    await store.registerDeveloper(dev.keyId, dev.publicPem, null);
+    const srv = await startTeamServer({ store, adminToken: null, oidc: null, aggregate: DEFAULT_TEST_AGGREGATE_CONFIG });
+    try {
+      const first = await fetch(`${srv.url}/rollups`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(signed),
+      });
+      assert.equal(first.status, 201);
+      const firstPayload = (await first.json()) as { id: string; replayed?: boolean };
+      assert.equal(firstPayload.replayed, undefined);
+      const firstStored = (await store.listRollups())[0]!;
+
+      const retry = await fetch(`${srv.url}/rollups`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(signed),
+      });
+      assert.equal(retry.status, 200);
+      const retryPayload = (await retry.json()) as { id: string; replayed?: boolean };
+      assert.equal(retryPayload.id, firstPayload.id);
+      assert.equal(retryPayload.replayed, true);
+
+      const stored = await store.listRollups();
+      assert.equal(stored.length, 1);
+      assert.equal(stored[0]!.id, firstStored.id);
+      assert.equal(stored[0]!.receivedAt, firstStored.receivedAt);
+    } finally {
+      await srv.close();
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('team-server: POST /rollups rejects self-consistently signed payloads with unsafe semantic shapes before storage', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'aegis-team-server-'));
+  try {
+    const dev: KeyPair = loadOrCreateKeyPair(join(dir, 'dev.json'));
+    const store = new FakeRollupStore();
+    await store.registerDeveloper(dev.keyId, dev.publicPem, null);
+    const srv = await startTeamServer({ store, adminToken: null, oidc: null, aggregate: DEFAULT_TEST_AGGREGATE_CONFIG });
+    try {
+      const badKeyBody = buildRollupBody(dev, projects(), period);
+      badKeyBody.keyId = 'some-other-key';
+      const badUnits = buildRollupBody(dev, [{ ...projects()[0]!, units: -1 }], period);
+      const backwardsPeriod = buildRollupBody(dev, projects(), { from: period.to, to: period.from });
+      const duplicateProjects = buildRollupBody(dev, [...projects(), { ...projects()[0]! }], period);
+      const duplicateSources = buildRollupBody(dev, [{ ...projects()[0]!, sources: ['claude-code', 'claude-code'] }], period);
+      const invalidStrata = buildRollupBody(dev, projects(), period, [
+        { project: 'fiscus', taskType: 'bugfix', units: 1, realizedUnits: 2, costUsd: 1 },
+      ]);
+      for (const candidate of [badKeyBody, badUnits, backwardsPeriod, duplicateProjects, duplicateSources, invalidStrata]) {
+        const res = await fetch(`${srv.url}/rollups`, {
+          method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(signRollup(candidate, dev)),
+        });
+        assert.equal(res.status, 400);
+        const payload = (await res.json()) as { ok: boolean; error: string };
+        assert.match(payload.error, /^malformed rollup:/);
+      }
+      assert.equal((await store.listRollups()).length, 0);
+    } finally {
+      await srv.close();
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('team-server: POST /rollups rejects a registered developer\'s rollup once its numbers are tampered', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'aegis-team-server-'));
   try {
@@ -511,7 +582,7 @@ test('team-server: GET /dashboard/projects suppresses a project below the k-anon
   }
 });
 
-test('team-server: GET /dashboard/projects treats periodFrom/periodTo as an interval-overlap filter', async () => {
+test('team-server: GET /dashboard/projects rejects periodFrom/periodTo rather than mislabeling cumulative snapshots as a partial historical window', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'aegis-team-server-'));
   const idp = await startFakeIdp();
   try {
@@ -545,15 +616,17 @@ test('team-server: GET /dashboard/projects treats periodFrom/periodTo as an inte
       const res = await fetch(`${srv.url}/dashboard/projects?periodFrom=2026-05-01T00:00:00.000Z&periodTo=2026-08-01T00:00:00.000Z`, {
         headers: { authorization: `Bearer ${token}` },
       });
-      assert.equal(res.status, 200);
-      const payload = (await res.json()) as { ok: boolean; projects: Array<{ project: string }> };
-      assert.deepEqual(
-        payload.projects.map((p) => p.project),
-        ['june-project'],
-      );
+      assert.equal(res.status, 400);
+      const payload = (await res.json()) as { ok: boolean; error: string };
+      assert.match(payload.error, /cumulative rollup snapshots/);
 
       const invalid = await fetch(`${srv.url}/dashboard/projects?periodFrom=not-a-real-date`, { headers: { authorization: `Bearer ${token}` } });
       assert.equal(invalid.status, 400);
+
+      const developers = await fetch(`${srv.url}/dashboard/developers?periodTo=2026-08-01T00:00:00.000Z`, {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      assert.equal(developers.status, 400);
     } finally {
       await srv.close();
     }

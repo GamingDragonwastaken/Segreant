@@ -95,13 +95,15 @@ async function requireOidcSubject(req: http.IncomingMessage, res: http.ServerRes
   return result.subject;
 }
 
-/** `periodFrom`/`periodTo` query params, validated as parseable timestamps. 'invalid' means the caller should 400. */
-function parsePeriodFilter(params: URLSearchParams): PeriodFilter | 'invalid' {
-  const periodFrom = params.get('periodFrom');
-  const periodTo = params.get('periodTo');
-  if (periodFrom !== null && Number.isNaN(Date.parse(periodFrom))) return 'invalid';
-  if (periodTo !== null && Number.isNaN(Date.parse(periodTo))) return 'invalid';
-  return { ...(periodFrom !== null ? { periodFrom } : {}), ...(periodTo !== null ? { periodTo } : {}) };
+/**
+ * Rollups are cumulative snapshots, not time-granular ledger rows. Filtering a
+ * snapshot by an overlapping time window would present its *whole* total as
+ * though it belonged to that partial window. Refuse that request until the
+ * team protocol has a separately designed, time-granular evidence shape.
+ */
+function parsePeriodFilter(params: URLSearchParams): PeriodFilter | 'unsupported' {
+  if (params.has('periodFrom') || params.has('periodTo')) return 'unsupported';
+  return {};
 }
 
 /** A loose structural check before handing untrusted network input to verifyRollup. */
@@ -116,6 +118,102 @@ function isPlausibleSignedRollup(x: unknown): x is SignedRollup {
   if (typeof b['period'] !== 'object' || b['period'] === null) return false;
   if (!Array.isArray(b['projects'])) return false;
   return true;
+}
+
+const MAX_PROJECTS = 1_000;
+const MAX_PROJECT_NAME_CHARS = 200;
+const MAX_SOURCES_PER_PROJECT = 32;
+const MAX_SOURCE_NAME_CHARS = 128;
+const MAX_STRATA = 4_000;
+const MAX_TASK_TYPE_CHARS = 128;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function boundedText(value: unknown, maxChars: number): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= maxChars && value.trim().length > 0 && !/[\u0000-\u001f\u007f]/.test(value);
+}
+
+function finiteNonNegative(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+function safeNonNegativeInteger(value: unknown): value is number {
+  return finiteNonNegative(value) && Number.isSafeInteger(value);
+}
+
+function validTimestamp(value: unknown): value is string {
+  return typeof value === 'string' && Number.isFinite(Date.parse(value));
+}
+
+function validateSources(value: unknown, label: string): string | null {
+  if (!Array.isArray(value) || value.length > MAX_SOURCES_PER_PROJECT) return `${label}.sources must be an array of at most ${MAX_SOURCES_PER_PROJECT} source names`;
+  const seen = new Set<string>();
+  for (const source of value) {
+    if (!boundedText(source, MAX_SOURCE_NAME_CHARS)) return `${label}.sources contains an invalid source name`;
+    if (seen.has(source)) return `${label}.sources must not contain duplicate source names`;
+    seen.add(source);
+  }
+  return null;
+}
+
+/**
+ * Validate the signed content's business shape before it reaches storage.
+ * Signature verification proves a registered machine signed these bytes; it
+ * does not by itself make NaN-like values, duplicate project rows, or an
+ * impossible time interval safe to aggregate later.
+ */
+function validateRollupSemantics(signed: SignedRollup): string | null {
+  const body = signed.body as unknown as Record<string, unknown>;
+  if (body['keyId'] !== signed.keyId) return 'body.keyId must equal the envelope keyId';
+  if (!validTimestamp(body['generatedAt'])) return 'body.generatedAt must be a valid timestamp';
+
+  const period = body['period'];
+  if (!isRecord(period) || !validTimestamp(period['from']) || !validTimestamp(period['to'])) {
+    return 'body.period must contain valid from and to timestamps';
+  }
+  if (Date.parse(period['from']) >= Date.parse(period['to'])) return 'body.period.from must be before body.period.to';
+
+  const projects = body['projects'];
+  if (!Array.isArray(projects) || projects.length > MAX_PROJECTS) return `body.projects must be an array of at most ${MAX_PROJECTS} project rows`;
+  const projectNames = new Set<string>();
+  for (let index = 0; index < projects.length; index += 1) {
+    const project = projects[index];
+    const label = `body.projects[${index}]`;
+    if (!isRecord(project)) return `${label} must be an object`;
+    if (!boundedText(project['project'], MAX_PROJECT_NAME_CHARS)) return `${label}.project must be a non-empty project name`;
+    if (projectNames.has(project['project'])) return 'body.projects must not contain duplicate project names';
+    projectNames.add(project['project']);
+    if (!safeNonNegativeInteger(project['units'])) return `${label}.units must be a finite non-negative integer`;
+    if (!finiteNonNegative(project['costUsd']) || !finiteNonNegative(project['realizedValueUsd']) || !finiteNonNegative(project['netRealizedValueUsd'])) {
+      return `${label} dollar values must be finite and non-negative`;
+    }
+    if (!finiteNonNegative(project['realizationRate']) || (project['realizationRate'] as number) > 1) return `${label}.realizationRate must be between 0 and 1`;
+    if (project['roiIndex'] !== null && (!finiteNonNegative(project['roiIndex']) || (project['roiIndex'] as number) > 100)) return `${label}.roiIndex must be null or between 0 and 100`;
+    const sourceError = validateSources(project['sources'], label);
+    if (sourceError) return sourceError;
+  }
+
+  const strata = body['strata'];
+  if (strata === undefined) return null;
+  if (!Array.isArray(strata) || strata.length > MAX_STRATA) return `body.strata must be an array of at most ${MAX_STRATA} rows`;
+  const strataKeys = new Set<string>();
+  for (let index = 0; index < strata.length; index += 1) {
+    const row = strata[index];
+    const label = `body.strata[${index}]`;
+    if (!isRecord(row)) return `${label} must be an object`;
+    if (!boundedText(row['project'], MAX_PROJECT_NAME_CHARS) || !projectNames.has(row['project'])) return `${label}.project must name a project in body.projects`;
+    if (!boundedText(row['taskType'], MAX_TASK_TYPE_CHARS)) return `${label}.taskType must be a non-empty task type`;
+    if (!safeNonNegativeInteger(row['units']) || !safeNonNegativeInteger(row['realizedUnits']) || (row['realizedUnits'] as number) > (row['units'] as number)) {
+      return `${label} units must be finite non-negative integers with realizedUnits no greater than units`;
+    }
+    if (!finiteNonNegative(row['costUsd'])) return `${label}.costUsd must be finite and non-negative`;
+    const key = `${row['project']}\u0000${row['taskType']}`;
+    if (strataKeys.has(key)) return 'body.strata must not contain duplicate project/taskType rows';
+    strataKeys.add(key);
+  }
+  return null;
 }
 
 export interface TeamServerDeps {
@@ -199,6 +297,10 @@ export function createTeamServer(deps: TeamServerDeps): http.Server {
         if (!isPlausibleSignedRollup(parsed)) {
           return json(res, 400, { ok: false, error: 'malformed rollup: expected a SignedRollup envelope' });
         }
+        const semanticError = validateRollupSemantics(parsed);
+        if (semanticError) {
+          return json(res, 400, { ok: false, error: `malformed rollup: ${semanticError}` });
+        }
         const developer = await store.findDeveloper(parsed.keyId).catch(() => null);
         if (!developer) {
           return json(res, 403, { ok: false, error: 'unregistered key — ask a team admin to register your `fiscus team push --pubkey` output first' });
@@ -208,8 +310,15 @@ export function createTeamServer(deps: TeamServerDeps): http.Server {
           return json(res, 401, { ok: false, error: result.reason });
         }
         try {
-          const stored = await store.insertRollup(parsed);
-          return json(res, 201, { ok: true, id: stored.id, keyId: stored.keyId, projects: stored.body.projects.length });
+          const result = await store.insertRollup(parsed);
+          const { rollup: stored } = result;
+          return json(res, result.replayed ? 200 : 201, {
+            ok: true,
+            id: stored.id,
+            keyId: stored.keyId,
+            projects: stored.body.projects.length,
+            ...(result.replayed ? { replayed: true } : {}),
+          });
         } catch (err) {
           console.error('team-server: insertRollup failed:', err);
           return json(res, 500, { ok: false, error: 'storage failure' });
@@ -242,8 +351,8 @@ export function createTeamServer(deps: TeamServerDeps): http.Server {
         const subject = await requireOidcSubject(req, res, oidc);
         if (subject === null) return;
         const filter = parsePeriodFilter(url.searchParams);
-        if (filter === 'invalid') {
-          return json(res, 400, { ok: false, error: 'periodFrom/periodTo must be valid ISO 8601 timestamps' });
+        if (filter === 'unsupported') {
+          return json(res, 400, { ok: false, error: 'periodFrom/periodTo are unavailable: cumulative rollup snapshots cannot support partial historical windows' });
         }
         const totals = await store.aggregateProjects(filter);
         return json(res, 200, { ok: true, projects: buildProjectReport(totals, aggregate.minCohort) });
@@ -260,13 +369,13 @@ export function createTeamServer(deps: TeamServerDeps): http.Server {
       void (async () => {
         const subject = await requireOidcSubject(req, res, oidc);
         if (subject === null) return;
+        const filter = parsePeriodFilter(url.searchParams);
+        if (filter === 'unsupported') {
+          return json(res, 400, { ok: false, error: 'periodFrom/periodTo are unavailable: cumulative rollup snapshots cannot support partial historical windows' });
+        }
         if (!aggregate.exposeDeveloperBreakdown) {
           // Skip the query entirely — the report would be suppressed anyway; no point paying for it.
           return json(res, 200, { ok: true, report: buildDeveloperReport([], aggregate) });
-        }
-        const filter = parsePeriodFilter(url.searchParams);
-        if (filter === 'invalid') {
-          return json(res, 400, { ok: false, error: 'periodFrom/periodTo must be valid ISO 8601 timestamps' });
         }
         const totals = await store.aggregateDevelopers(filter);
         return json(res, 200, { ok: true, report: buildDeveloperReport(totals, aggregate) });

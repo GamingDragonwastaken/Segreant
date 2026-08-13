@@ -15,7 +15,9 @@ Postgres driver) lives only here.
 Developers run `fiscus team push --url <this-server-url>` to sign and push a
 numeric-only, per-project value/RoI snapshot (no prompt/response content, no raw
 request log). This server verifies each push's ed25519 signature against a
-registered developer key and stores it in Postgres.
+registered developer key and stores it in Postgres. Re-sending the exact signed
+envelope is safe: it returns the original record rather than creating a new,
+later snapshot.
 
 Human-facing requests are authenticated too: `GET /me` verifies an OIDC
 ID token (RS256/ES256 — any standard-compliant issuer: Okta, Entra ID, Google
@@ -95,10 +97,16 @@ full reasoning.
 |---|---|---|---|
 | `/health` | GET | none | Liveness check. |
 | `/developers` | POST | admin bearer token | Register a developer's rollup-signing public key. |
-| `/rollups` | POST | the rollup's own signature, pinned to the registered key | What `fiscus team push` calls. |
+| `/rollups` | POST | the rollup's own signature, pinned to the registered key | What `fiscus team push` calls. Exact signed replays return `200` with `replayed: true`; a new record returns `201`. |
 | `/me` | GET | OIDC bearer ID token | Verifies your SSO login and echoes back the verified identity. |
-| `/dashboard/projects` | GET | OIDC bearer ID token | Team-wide totals per project (units, cost, realized value, RoI Index), optionally windowed with `?periodFrom=`/`?periodTo=` (ISO 8601). Any project with fewer than `TEAM_SERVER_MIN_COHORT` contributing developers reports `suppressed: true` with no numbers. |
+| `/dashboard/projects` | GET | OIDC bearer ID token | Team-wide totals per project (units, cost, realized value, RoI Index). Any project with fewer than `TEAM_SERVER_MIN_COHORT` contributing developers reports `suppressed: true` with no numbers. |
 | `/dashboard/developers` | GET | OIDC bearer ID token | A k-anonymized distribution (median/p25/p75) of per-developer spend and realization. `enabled: false` unless `TEAM_SERVER_EXPOSE_DEVELOPER_BREAKDOWN=true`; `suppressed: true` below the cohort floor either way. Never a named list. |
+
+`periodFrom` and `periodTo` are deliberately rejected by both aggregate routes.
+Each row is a cumulative local snapshot, so filtering a snapshot by overlap
+would falsely present its complete total as belonging to only the selected
+historical interval. A future time-granular evidence protocol must be designed
+and verified before those filters can be offered.
 
 ## Privacy model for the dashboard routes (`src/aggregate.ts`)
 
@@ -162,7 +170,7 @@ logic without a live database (`test/fakeStore.ts` stands in for Postgres,
 implementing the exact same weighting semantics as the real SQL — see its
 header comment) and without a real SSO provider (`test/fakeIdp.ts` runs a real
 local OIDC-shaped server, signing tokens with genuine RS256/ES256 keypairs, so
-`oidc.ts` is proven against real signatures, not just assumed to work). 39
+`oidc.ts` is proven against real signatures, not just assumed to work). 48
 tests total: `test/aggregate.test.ts` covers the privacy-gating logic in
 isolation (k-anonymity boundaries, the opt-in gate, the $0-cost rate-exclusion
 edge case), and `test/server.test.ts`'s dashboard tests push hand-computed

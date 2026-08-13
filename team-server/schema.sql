@@ -35,6 +35,12 @@ CREATE TABLE IF NOT EXISTS rollups (
 );
 CREATE INDEX IF NOT EXISTS rollups_key_id_idx ON rollups (key_id);
 CREATE INDEX IF NOT EXISTS rollups_period_idx ON rollups (period_from, period_to);
+-- Exact signed-envelope retries must preserve the original record and its
+-- receipt time rather than becoming a newer snapshot.  A pre-existing database
+-- that already contains duplicate (key_id, body_hash) rows needs an operator
+-- to reconcile those duplicates before this index can be created; startup
+-- deliberately fails rather than silently deleting historical evidence.
+CREATE UNIQUE INDEX IF NOT EXISTS rollups_key_id_body_hash_uq ON rollups (key_id, body_hash);
 
 -- One row per project within a rollup — the same per-project breakdown
 -- src/value/realization.ts's ProjectValue already computes locally, unpacked

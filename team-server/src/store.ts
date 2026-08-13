@@ -30,6 +30,19 @@ export interface StoredRollup {
   body: RollupBody;
 }
 
+/**
+ * Result of accepting a signed rollup.
+ *
+ * A client may retry after losing a response.  The database's
+ * `(key_id, body_hash)` uniqueness makes that exact retry idempotent: it
+ * returns the original immutable record rather than creating a fresh snapshot
+ * with a new `received_at` timestamp.
+ */
+export interface InsertRollupResult {
+  rollup: StoredRollup;
+  replayed: boolean;
+}
+
 /** Optional window over `rollups.period_from`/`period_to` (interval overlap, not containment). Omitted bounds are open-ended. */
 export interface PeriodFilter {
   periodFrom?: string;
@@ -73,7 +86,7 @@ export interface DeveloperTotals {
 export interface RollupStore {
   registerDeveloper(keyId: string, publicKey: string, label: string | null): Promise<void>;
   findDeveloper(keyId: string): Promise<RegisteredDeveloper | null>;
-  insertRollup(signed: SignedRollup): Promise<StoredRollup>;
+  insertRollup(signed: SignedRollup): Promise<InsertRollupResult>;
   listRollups(opts?: { keyId?: string; limit?: number }): Promise<StoredRollup[]>;
   aggregateProjects(filter?: PeriodFilter): Promise<ProjectTotals[]>;
   aggregateDevelopers(filter?: PeriodFilter): Promise<DeveloperTotals[]>;
@@ -155,17 +168,45 @@ export class PgRollupStore implements RollupStore {
     return { keyId: row.key_id, publicKey: row.public_key, label: row.label, registeredAt: row.registered_at.toISOString() };
   }
 
-  async insertRollup(signed: SignedRollup): Promise<StoredRollup> {
+  private asStoredRollup(row: RollupRow): StoredRollup {
+    return {
+      id: row.id,
+      keyId: row.key_id,
+      generatedAt: row.generated_at.toISOString(),
+      periodFrom: row.period_from.toISOString(),
+      periodTo: row.period_to.toISOString(),
+      receivedAt: row.received_at.toISOString(),
+      body: row.body,
+    };
+  }
+
+  async insertRollup(signed: SignedRollup): Promise<InsertRollupResult> {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
       const res = await client.query<RollupInsertRow>(
         `INSERT INTO rollups (key_id, generated_at, period_from, period_to, body_hash, body)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, received_at`,
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (key_id, body_hash) DO NOTHING
+         RETURNING id, received_at`,
         [signed.keyId, signed.body.generatedAt, signed.body.period.from, signed.body.period.to, signed.bodyHash, JSON.stringify(signed.body)],
       );
       const inserted = res.rows[0];
-      if (!inserted) throw new Error('rollup insert returned no row');
+      if (!inserted) {
+        // A client can receive a network failure after the server committed a
+        // valid rollup and retry it.  Return the exact old row, including its
+        // original receipt time; never turn a retry into a newer snapshot.
+        const existingResult = await client.query<RollupRow>(
+          `SELECT id, key_id, generated_at, period_from, period_to, received_at, body
+           FROM rollups
+           WHERE key_id = $1 AND body_hash = $2`,
+          [signed.keyId, signed.bodyHash],
+        );
+        const existing = existingResult.rows[0];
+        if (!existing) throw new Error('rollup replay conflict did not return the existing row');
+        await client.query('COMMIT');
+        return { rollup: this.asStoredRollup(existing), replayed: true };
+      }
       for (const p of signed.body.projects) {
         await client.query(
           `INSERT INTO rollup_projects
@@ -176,13 +217,16 @@ export class PgRollupStore implements RollupStore {
       }
       await client.query('COMMIT');
       return {
-        id: inserted.id,
-        keyId: signed.keyId,
-        generatedAt: signed.body.generatedAt,
-        periodFrom: signed.body.period.from,
-        periodTo: signed.body.period.to,
-        receivedAt: inserted.received_at.toISOString(),
-        body: signed.body,
+        rollup: {
+          id: inserted.id,
+          keyId: signed.keyId,
+          generatedAt: signed.body.generatedAt,
+          periodFrom: signed.body.period.from,
+          periodTo: signed.body.period.to,
+          receivedAt: inserted.received_at.toISOString(),
+          body: signed.body,
+        },
+        replayed: false,
       };
     } catch (err) {
       await client.query('ROLLBACK');
@@ -205,15 +249,7 @@ export class PgRollupStore implements RollupStore {
            ORDER BY received_at DESC LIMIT $1`,
           [limit],
         );
-    return res.rows.map((row) => ({
-      id: row.id,
-      keyId: row.key_id,
-      generatedAt: row.generated_at.toISOString(),
-      periodFrom: row.period_from.toISOString(),
-      periodTo: row.period_to.toISOString(),
-      receivedAt: row.received_at.toISOString(),
-      body: row.body,
-    }));
+    return res.rows.map((row) => this.asStoredRollup(row));
   }
 
   /**
