@@ -1,0 +1,161 @@
+/**
+ * The dashboard's provider-billing page is a deliberately separate evidence
+ * surface. These tests pin the boundary: an operator-supplied report is never
+ * silently mixed into request-metered spend, budget enforcement, or ROI.
+ */
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import type { AddressInfo } from 'node:net';
+import http from 'node:http';
+import { Store, type RequestRow } from '../src/store/db.ts';
+import { DEFAULT_CONFIG } from '../src/config.ts';
+import { createDashboardServer } from '../src/dashboard/server.ts';
+import { readBillingImportFile } from '../src/billing/importer.ts';
+
+const FIXTURE = join(import.meta.dirname, 'fixtures', 'billing', 'openai-operator-export.v1.json');
+
+function meteredRequest(): RequestRow {
+  return {
+    requestId: 'metered-request', sessionId: null, tsEpochMs: Date.now(), provider: 'openai', model: 'gpt-5',
+    project: 'local-project', taskWeight: 1, inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0,
+    reasoningTokens: 0, costUsd: 2.5, estimated: false, streamed: false, statusCode: 200, durationMs: 1,
+  };
+}
+
+function boot(store: Store): Promise<{ base: string; close: () => Promise<void> }> {
+  const server = createDashboardServer({ store, config: structuredClone(DEFAULT_CONFIG), version: 'test' });
+  return new Promise((resolve) => {
+    server.listen(0, '127.0.0.1', () => {
+      const port = (server.address() as AddressInfo).port;
+      resolve({ base: `http://127.0.0.1:${port}`, close: () => new Promise((r) => server.close(() => r())) });
+    });
+  });
+}
+
+function rawRequest(base: string, path: string, method: string, host: string): Promise<{ status: number; allow: string | undefined; text: string }> {
+  const url = new URL(path, base);
+  return new Promise((resolve, reject) => {
+    const req = http.request(url, { method, headers: { host } }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on('data', (chunk: Buffer) => chunks.push(chunk));
+      res.on('end', () => resolve({
+        status: res.statusCode ?? 0,
+        allow: typeof res.headers.allow === 'string' ? res.headers.allow : undefined,
+        text: Buffer.concat(chunks).toString('utf8'),
+      }));
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+test('GET /api/billing: empty evidence remains explicitly separate and unresolved', async () => {
+  const store = new Store(':memory:');
+  const srv = await boot(store);
+  try {
+    const res = await fetch(`${srv.base}/api/billing`);
+    assert.equal(res.status, 200);
+    const body = await res.json() as {
+      evidence: Record<string, unknown>;
+      summary: Record<string, unknown>;
+      imports: unknown[];
+    };
+    assert.equal(body.evidence.kind, 'provider_billing_evidence');
+    assert.equal(body.evidence.trust, 'operator_supplied_unverified');
+    assert.equal(body.evidence.reconciliationStatus, 'not_reconciled');
+    assert.equal(body.evidence.requestLedgerIncluded, false);
+    assert.deepEqual(body.evidence.usedFor, []);
+    assert.deepEqual(body.evidence.excludedFrom, [
+      'request_metered_spend', 'budget_enforcement', 'outcome_attribution', 'roi', 'model_recommendations',
+    ]);
+    assert.equal(body.summary.recordCount, 0);
+    assert.equal(body.summary.reconciliationStatus, 'not_reconciled');
+    assert.deepEqual(body.imports, []);
+  } finally {
+    await srv.close();
+    store.close();
+  }
+});
+
+test('GET /api/billing: imported evidence has provenance but never changes overview request spend', async () => {
+  const store = new Store(':memory:');
+  store.insertRequest(meteredRequest());
+  const imported = readBillingImportFile(FIXTURE).input;
+  store.applyBillingImport(imported, 1_777);
+  const srv = await boot(store);
+  try {
+    const billing = await fetch(`${srv.base}/api/billing`);
+    assert.equal(billing.status, 200);
+    const body = await billing.json() as {
+      summary: { importCount: number; recordCount: number; providerReportedUsdMicros: number };
+      imports: Array<{ sourceExportId: string; billingAccountRef: string; trust: string; rawRetention: string }>;
+    };
+    assert.deepEqual(body.summary, {
+      importCount: 1,
+      recordCount: 2,
+      providerReportedUsdMicros: 11_345_678,
+      lastImportedAtMs: 1_777,
+      reconciliationStatus: 'not_reconciled',
+    });
+    assert.equal(body.imports.length, 1);
+    assert.equal(body.imports[0]!.sourceExportId, imported.document.source.exportId);
+    assert.equal(body.imports[0]!.billingAccountRef, imported.document.source.billingAccountRef);
+    assert.equal(body.imports[0]!.trust, 'operator_supplied_unverified');
+    assert.equal(body.imports[0]!.rawRetention, 'digest_only');
+
+    const overview = await fetch(`${srv.base}/api/overview?range=all`);
+    assert.equal(overview.status, 200);
+    const overviewBody = await overview.json() as { summary: { costUsd: number; requests: number } };
+    assert.equal(overviewBody.summary.costUsd, 2.5, 'provider report does not merge into request-metered spend');
+    assert.equal(overviewBody.summary.requests, 1);
+  } finally {
+    await srv.close();
+    store.close();
+  }
+});
+
+test('/api/billing is read-only and retains the dashboard loopback host protection', async () => {
+  const store = new Store(':memory:');
+  const srv = await boot(store);
+  try {
+    const post = await rawRequest(srv.base, '/api/billing', 'POST', '127.0.0.1');
+    assert.equal(post.status, 405);
+    assert.equal(post.allow, 'GET');
+    assert.equal(post.text, 'method not allowed');
+
+    const rebound = await rawRequest(srv.base, '/api/billing', 'GET', 'untrusted.example');
+    assert.equal(rebound.status, 403);
+    assert.equal(rebound.text, 'forbidden');
+  } finally {
+    await srv.close();
+    store.close();
+  }
+});
+
+test('Billing dashboard client is a manual, separate view with no fabricated demo evidence', async () => {
+  const previousDemo = process.env.AEGIS_DEMO;
+  process.env.AEGIS_DEMO = '1';
+  const store = new Store(':memory:');
+  const srv = await boot(store);
+  try {
+    const res = await fetch(`${srv.base}/api/billing`);
+    const body = await res.json() as { demo: boolean; summary: { recordCount: number; importCount: number } };
+    assert.equal(body.demo, true);
+    assert.equal(body.summary.recordCount, 0, 'demo mode does not fabricate billing charge lines');
+    assert.equal(body.summary.importCount, 0, 'demo mode does not fabricate billing import provenance');
+
+    const html = readFileSync(join(import.meta.dirname, '..', 'src', 'dashboard', 'web', 'index.html'), 'utf8');
+    assert.match(html, /data-view="billing"/);
+    assert.match(html, /fetch\('\/api\/billing'\)/);
+    assert.match(html, /NOT RECONCILED/);
+    assert.match(html, /CURRENT_VIEW === 'overview'/);
+    assert.doesNotMatch(html, /setInterval\(load, 4000\)/, 'Billing does not inherit the overview polling loop');
+  } finally {
+    await srv.close();
+    store.close();
+    if (previousDemo === undefined) delete process.env.AEGIS_DEMO;
+    else process.env.AEGIS_DEMO = previousDemo;
+  }
+});

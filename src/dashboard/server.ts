@@ -339,6 +339,45 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
       }
     }
 
+    // Provider billing evidence has a different truth contract from the local
+    // request ledger: an operator supplied it, Fiscus has not verified it with
+    // the provider, and there is no account-bound reconciliation yet. Keep this
+    // deliberately separate from /api/overview and /api/value so an imported
+    // charge line cannot silently affect metering, budgets, ROI, or advice.
+    if (url.pathname === '/api/billing') {
+      if (req.method !== 'GET') {
+        res.writeHead(405, { 'content-type': 'text/plain', allow: 'GET' });
+        res.end('method not allowed');
+        return;
+      }
+      try {
+        return json(res, 200, {
+          demo: isDemo(),
+          generatedAt: new Date().toISOString(),
+          evidence: {
+            kind: 'provider_billing_evidence',
+            sourceKind: 'operator_supplied_provider_report',
+            trust: 'operator_supplied_unverified',
+            rawRetention: 'digest_only',
+            reconciliationStatus: 'not_reconciled',
+            requestLedgerIncluded: false,
+            usedFor: [],
+            excludedFrom: [
+              'request_metered_spend',
+              'budget_enforcement',
+              'outcome_attribution',
+              'roi',
+              'model_recommendations',
+            ],
+          },
+          summary: store.billingSummary(),
+          imports: store.billingImportRuns(25),
+        });
+      } catch (err) {
+        return json(res, 500, { error: String(err) });
+      }
+    }
+
     if (url.pathname === '/api/export.csv') {
       const range = (url.searchParams.get('range') as RangeKey) ?? '30d';
       const valid: RangeKey[] = ['today', '7d', '30d', 'all'];

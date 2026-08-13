@@ -283,6 +283,20 @@
   .vhead .tag { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); margin-top: 3px; }
   .vbtn { font-family: var(--mono); font-size: 11.5px; color: var(--gold); background: var(--gold-soft); border: 1px solid rgba(232,179,60,0.3); border-radius: 9px; padding: 7px 14px; cursor: pointer; transition: all .18s; }
   .vbtn:hover { background: rgba(232,179,60,0.2); }
+  /* Provider billing evidence must always read as a separate, unresolved truth
+     source. Coral is intentionally never used as a success state here. */
+  .billing-state { display: inline-flex; align-items: center; gap: 7px; border: 1px solid rgba(226,93,74,0.42); background: rgba(226,93,74,0.1); color: var(--coral); border-radius: 8px; padding: 7px 10px; font-family: var(--mono); font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; }
+  .billing-state::before { content: '!'; display: grid; place-items: center; width: 14px; height: 14px; border-radius: 50%; background: var(--coral); color: var(--ink); font-size: 10px; }
+  .billing-note { grid-column: 1 / -1; border-color: rgba(226,93,74,0.42); background: linear-gradient(180deg, rgba(226,93,74,0.08), var(--ink-2) 78%); }
+  .billing-note h3 { font-family: var(--serif); font-size: 20px; font-weight: 500; margin-bottom: var(--s2); }
+  .billing-note p { color: var(--muted); max-width: 78ch; }
+  .billing-stat { font-family: var(--mono); font-size: clamp(25px, 3vw, 38px); font-weight: 700; line-height: 1; color: var(--gold); font-variant-numeric: tabular-nums; }
+  .billing-stat.coral { color: var(--coral); }
+  #billing-grid .card { overflow: visible; }
+  #billing-grid table { width: 100%; min-width: 760px; }
+  #billing-grid .table-wrap { overflow-x: auto; border: 1px solid var(--line-soft); border-radius: 10px; }
+  #billing-grid code { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+  #billing-grid .bsub { color: var(--faint); font-family: var(--mono); font-size: 10.5px; margin-top: var(--s2); line-height: 1.55; }
   /* RoI hero — mockup U4: giant index · uncertainty band · position scale */
   .roihero { grid-column: 1/-1; display: grid; grid-template-columns: auto 1fr 1.2fr; gap: var(--s8); padding: var(--s6); align-items: center; border-color: rgba(232,179,60,0.22); background: linear-gradient(180deg, rgba(232,179,60,0.05), var(--ink-2) 70%); }
   @media (max-width: 960px) { .roihero { grid-template-columns: auto 1fr; } .roihero .scalepane { grid-column: 1 / -1; } }
@@ -362,6 +376,7 @@
     </div>
     <nav class="viewnav" id="viewnav">
       <button data-view="overview" class="on">Overview</button>
+      <button data-view="billing">Billing</button>
       <button data-view="value">Value</button>
       <button data-view="settings">Settings</button>
     </nav>
@@ -373,7 +388,7 @@
         <button data-r="all">All</button>
       </div>
       <a class="dlcsv" id="dlcsv" href="/api/export.csv?range=today" download title="Download the request ledger as CSV">↓ CSV</a>
-      <span class="live"><span class="dot"></span> LIVE</span>
+      <span class="live" id="live-indicator"><span class="dot"></span> LIVE</span>
     </div>
   </header>
 
@@ -393,6 +408,16 @@
       <button class="vbtn" id="vrefresh">↻ Compute</button>
     </div>
     <div class="grid" id="vgrid"></div>
+  </div>
+
+  <div id="view-billing" class="view" style="display:none">
+    <div class="vhead">
+      <div><h2>Provider billing evidence</h2><div class="tag">separate operator-supplied report ledger</div></div>
+      <button class="vbtn" id="brefresh">↻ Refresh evidence</button>
+    </div>
+    <div id="billing-grid" class="grid">
+      <div class="card" style="grid-column:1/-1;color:var(--faint);font-family:var(--mono);font-size:12px">Load Billing to inspect locally imported evidence.</div>
+    </div>
   </div>
 
   <div id="view-settings" class="view" style="display:none">
@@ -422,6 +447,7 @@
 <script>
 const $ = (s, el = document) => el.querySelector(s);
 let RANGE = 'today';
+let CURRENT_VIEW = 'overview';
 
 // Escape every dynamic string before it enters markup. Model ids and project
 // names arrive from API responses / request headers, so treat them as untrusted.
@@ -732,6 +758,7 @@ function render(d) {
 }
 
 async function load() {
+  if (CURRENT_VIEW !== 'overview') return;
   const dl = $('#dlcsv');
   if (dl) dl.href = '/api/export.csv?range=' + RANGE;
   try {
@@ -758,12 +785,89 @@ $('#viewnav').addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-view]');
   if (!btn) return;
   const view = btn.dataset.view;
+  CURRENT_VIEW = view;
   document.querySelectorAll('#viewnav button').forEach((b) => b.classList.toggle('on', b === btn));
   $('#view-overview').style.display = view === 'overview' ? '' : 'none';
+  $('#view-billing').style.display = view === 'billing' ? '' : 'none';
   $('#view-value').style.display = view === 'value' ? '' : 'none';
   $('#view-settings').style.display = view === 'settings' ? '' : 'none';
+  const isBilling = view === 'billing';
+  $('#ranges').hidden = isBilling;
+  $('#dlcsv').hidden = isBilling;
+  $('#live-indicator').hidden = isBilling;
+  if (view === 'overview') load();
+  if (isBilling) loadBilling();
   if (view === 'settings' && !SETTINGS_LOADED) { SETTINGS_LOADED = true; loadSettings(); }
 });
+
+// ---- Provider billing evidence ----
+// This is intentionally not an extension of the spend/ROI views. It represents
+// an operator-imported provider report, not verified provider API data or a
+// reconciled mapping to the local request ledger.
+const billingTime = (ms) => {
+  const n = Number(ms);
+  return Number.isFinite(n) ? new Date(n).toLocaleString() : '—';
+};
+const billingUsd = (micros) => {
+  const n = Number(micros);
+  return Number.isFinite(n) ? '$' + money(n / 1000000) : '—';
+};
+const shortDigest = (value) => {
+  const s = String(value || '');
+  return s.length > 14 ? s.slice(0, 14) + '…' : s || '—';
+};
+
+function renderBilling(d) {
+  const summary = d && typeof d.summary === 'object' && d.summary ? d.summary : {};
+  const evidence = d && typeof d.evidence === 'object' && d.evidence ? d.evidence : {};
+  const imports = Array.isArray(d && d.imports) ? d.imports : [];
+  const declared = billingUsd(summary.providerReportedUsdMicros);
+  const exclusion = Array.isArray(evidence.excludedFrom) ? evidence.excludedFrom.map((x) => esc(x)).join(', ') : 'request-metered spend, budget enforcement, outcome attribution, ROI, model recommendations';
+  const rows = imports.map((run) => {
+    const item = run && typeof run === 'object' ? run : {};
+    const hash = String(item.fileSha256 || '');
+    return `<tr>
+      <td><b>${esc(item.provider || '—')}</b><div class="bsub">${esc(item.sourceSystem || '—')}</div></td>
+      <td>${esc(item.billingAccountRef || '—')}</td>
+      <td>${esc(item.sourceExportId || '—')}</td>
+      <td>${esc(billingTime(item.periodStartMs))}<div class="bsub">to ${esc(billingTime(item.periodEndMs))}</div></td>
+      <td>${esc(item.coverage || 'unknown')}<div class="bsub">operator declaration</div></td>
+      <td>${Number(item.recordsInserted || 0).toLocaleString()} inserted<div class="bsub">${Number(item.recordsDuplicate || 0).toLocaleString()} replayed</div></td>
+      <td title="${esc(hash)}"><code>${esc(shortDigest(hash))}</code><div class="bsub">${esc(item.fileName || '—')}</div></td>
+      <td>${esc(billingTime(item.importedAtMs))}</td>
+    </tr>`;
+  }).join('');
+  const empty = `<div class="card empty"><h3>No provider billing evidence imported</h3><p>This dashboard does not upload billing files or connect to a provider. Validate and deliberately retain a local report with <code>fiscus billing import --file .\\openai-costs.fiscus.json --apply</code>, then refresh this view.</p></div>`;
+  const demoNote = d && d.demo ? '<div class="bsub">Demo mode does not invent provider billing evidence.</div>' : '';
+
+  setNodes($('#billing-grid'), `
+    <div class="card billing-note fade">
+      <div class="billing-state">NOT RECONCILED</div>
+      <h3>Declared provider charges, not verified financial truth</h3>
+      <p>Each line originates in a local, operator-supplied provider report. Fiscus retains only the declared evidence and digest; it has not verified the report with the provider or matched it to a billing account, invoice, or local request.</p>
+      <div class="bsub">Excluded from: ${exclusion}.</div>${demoNote}
+    </div>
+    <div class="card fade"><div class="label">Declared USD</div><div class="billing-stat">${declared}</div><div class="bsub">all imported periods and accounts</div></div>
+    <div class="card fade"><div class="label">Immutable charge lines</div><div class="billing-stat">${Number(summary.recordCount || 0).toLocaleString()}</div><div class="bsub">provider-declared lines; never request rows</div></div>
+    <div class="card fade"><div class="label">Evidence imports</div><div class="billing-stat coral">${Number(summary.importCount || 0).toLocaleString()}</div><div class="bsub">latest ${esc(billingTime(summary.lastImportedAtMs))}</div></div>
+    ${imports.length ? `<div class="card fade" style="grid-column:1/-1"><div class="label">Evidence import provenance</div><div class="table-wrap"><table><thead><tr><th>Provider</th><th>Account ref</th><th>Export ID</th><th>Source period</th><th>Coverage</th><th>Rows</th><th>File digest</th><th>Imported</th></tr></thead><tbody>${rows}</tbody></table></div><div class="bsub">Coverage is an operator declaration, even when marked complete. Replayed rows were recognized without changing immutable charge-line totals.</div></div>` : empty}
+  `);
+  $('#gen').textContent = 'billing evidence refreshed ' + new Date(d.generatedAt || Date.now()).toLocaleTimeString();
+}
+
+async function loadBilling() {
+  const grid = $('#billing-grid');
+  setNodes(grid, '<div class="card" style="grid-column:1/-1;color:var(--faint);font-family:var(--mono);font-size:12px">Loading separate billing evidence…</div>');
+  try {
+    const res = await fetch('/api/billing');
+    if (!res.ok) throw new Error('billing evidence unavailable');
+    renderBilling(await res.json());
+  } catch (e) {
+    setNodes(grid, '<div class="card empty"><h3>Billing evidence unavailable</h3><p>The local dashboard could not read the separate provider-billing evidence ledger. Your request-ledger spend and budget data remain separate.</p></div>');
+  }
+}
+
+$('#brefresh').addEventListener('click', loadBilling);
 
 // ---- Return on Intelligence panels ----
 const cap1 = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
@@ -1400,7 +1504,9 @@ function wireSettingsHandlers() {
 }
 
 load();
-setInterval(load, 4000);
+// The Billing surface is intentionally manual-refresh only. Do not keep polling
+// request-metering data while the user is reviewing a different evidence basis.
+setInterval(() => { if (CURRENT_VIEW === 'overview') load(); }, 4000);
 loadValue();
 loadGuide();
 setInterval(loadGuide, 8000);
