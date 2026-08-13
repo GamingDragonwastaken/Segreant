@@ -142,6 +142,14 @@ The local collector retains detailed code-agent context. A central deployment sh
 
 **Result:** one organization can compare Fiscus observations with one authoritative provider cost source.
 
+**Current increment (local v1):** Fiscus has a strict operator-supplied OpenAI
+billing-evidence import with immutable normalized provider-declared charge
+records, source-file digest, account reference, period, coverage declaration,
+and separate CSV/JSON export. It is intentionally `not_reconciled`: no verified
+provider-account mapping exists on request rows yet, and no provider credential,
+raw-provider parser, or claimed variance has been introduced. See
+[BILLING-EVIDENCE-IMPORT.md](BILLING-EVIDENCE-IMPORT.md).
+
 1. Introduce the cost-source taxonomy and immutable financial ledger entities.
 2. Ship one read-only authoritative connector first. Start with OpenAI organization cost/usage, or a customer-owned cloud billing export selected with a design partner; do not build five shallow connectors at once.
 3. Store account/project scope, source cursor or export ID, collection time, source update time, raw-evidence digest, pagination state, and connector version.

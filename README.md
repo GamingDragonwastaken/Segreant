@@ -399,6 +399,28 @@ provider-invoiced, discounted, credited, taxed, or reconciled cost.
 
 Full design in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
+### Provider billing evidence (local import v1)
+
+Fiscus can now retain a separate, immutable ledger of **operator-supplied
+OpenAI provider-cost evidence**. This is the first step beyond a local price
+card: it gives a finance owner a source digest, account reference, source
+period, coverage declaration, and provider-declared positive/negative charge lines without
+turning them into proxy requests.
+
+```powershell
+fiscus billing import --file .\openai-costs.fiscus.json       # validate/dry-run
+fiscus billing import --file .\openai-costs.fiscus.json --apply
+fiscus billing status
+fiscus billing export --csv --out .\provider-cost-evidence.csv
+```
+
+V1 is deliberately a strict local JSON contract, not a guessed CSV/PDF parser
+or a credentialed provider sync. It does not overwrite metered estimates, add
+provider totals to `today`, claim invoice accuracy, or calculate a variance:
+local request rows do not yet have a verified provider billing-account binding.
+See [BILLING-EVIDENCE-IMPORT.md](docs/BILLING-EVIDENCE-IMPORT.md) for the exact
+schema, idempotency rules, retention model, and the gate before reconciliation.
+
 ### Beyond Anthropic & OpenAI
 
 The OpenAI route speaks the wire format most of the ecosystem now exposes, so
@@ -490,9 +512,10 @@ CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs `typecheck` +
 > See [RELEASE-GATE.md](docs/RELEASE-GATE.md) for the current evidence boundary.
 
 Fiscus currently provides configured proxy metering, supported local-log import,
-local list-price estimates with per-request rate-card lineage, proxy budget
-controls, outcome-evidence views, and review-only within-task cheaper-model
-trials. Pricing refresh and all non-provider egress are operator-controlled.
+local list-price estimates with per-request rate-card lineage, an immutable
+operator-supplied OpenAI provider-cost-evidence import, proxy budget controls,
+outcome-evidence views, and review-only within-task cheaper-model trials.
+Pricing refresh and all non-provider egress are operator-controlled.
 
 Generic cross-task or cross-project allocation, provider billing reconciliation,
 and automatic model routing are deliberately not product actions. The optional

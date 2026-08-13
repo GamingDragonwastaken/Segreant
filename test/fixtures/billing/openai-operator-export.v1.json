@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "system": "operator-export",
+    "provider": "openai",
+    "exportId": "synthetic-openai-cost-export-2026-08",
+    "billingAccountRef": "acct-example-001",
+    "exportedAt": "2026-09-02T09:00:00Z",
+    "periodStart": "2026-08-01T00:00:00Z",
+    "periodEnd": "2026-09-01T00:00:00Z",
+    "coverage": "partial"
+  },
+  "records": [
+    {
+      "sourceRecordId": "cost-2026-08-01-project-alpha",
+      "observedAt": "2026-08-02T04:00:00Z",
+      "chargePeriodStart": "2026-08-01T00:00:00Z",
+      "chargePeriodEnd": "2026-08-02T00:00:00Z",
+      "service": "api",
+      "sku": "model-usage",
+      "model": "gpt-5",
+      "region": null,
+      "providerProjectRef": "proj_alpha",
+      "chargeType": "usage",
+      "currency": "USD",
+      "amount": "12.345678",
+      "usageUnit": "tokens",
+      "usageQuantity": "1234567"
+    },
+    {
+      "sourceRecordId": "credit-2026-08-01-account",
+      "observedAt": "2026-08-02T04:00:00Z",
+      "chargePeriodStart": "2026-08-01T00:00:00Z",
+      "chargePeriodEnd": "2026-08-02T00:00:00Z",
+      "service": "api",
+      "sku": "account-credit",
+      "model": null,
+      "region": null,
+      "providerProjectRef": null,
+      "chargeType": "credit",
+      "currency": "USD",
+      "amount": "-1.000000",
+      "usageUnit": null,
+      "usageQuantity": null
+    }
+  ]
+}

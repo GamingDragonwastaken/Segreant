@@ -24,7 +24,8 @@
     "bin",
     "dist",
     "pricing",
-    "baselines"
+    "baselines",
+    "docs"
   ],
   "keywords": [
     "finops",

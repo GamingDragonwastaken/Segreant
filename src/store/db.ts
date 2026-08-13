@@ -14,7 +14,14 @@ import '../util/quiet.ts';
 import { DatabaseSync } from 'node:sqlite';
 import { dirname } from 'node:path';
 import { existsSync, mkdirSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { legacyPricingEvidence, type RequestPricingEvidence } from '../cost/pricing.ts';
+import {
+  BILLING_IMPORTER_VERSION,
+  type BillingChargeType,
+  type BillingCoverage,
+  type NormalizedBillingImport,
+} from '../billing/types.ts';
 
 export interface RequestRow {
   requestId: string;
@@ -63,6 +70,79 @@ export interface RepriceUpdate {
   requestId: string;
   costUsd: number;
   pricing: RequestPricingEvidence;
+}
+
+/** File-level provenance supplied with a validated, local billing-evidence import. */
+export interface BillingImportInput {
+  document: NormalizedBillingImport;
+  fileName: string;
+  fileSha256: string;
+  fileSizeBytes: number;
+  format: 'json';
+}
+
+export interface BillingImportRun {
+  importId: string;
+  importedAtMs: number;
+  format: 'json';
+  schemaVersion: number;
+  importerVersion: string;
+  fileName: string;
+  fileSha256: string;
+  fileSizeBytes: number;
+  sourceSystem: 'operator-export';
+  sourceExportId: string;
+  provider: 'openai';
+  billingAccountRef: string;
+  exportedAtMs: number;
+  periodStartMs: number;
+  periodEndMs: number;
+  coverage: BillingCoverage;
+  trust: 'operator_supplied_unverified';
+  rawRetention: 'digest_only';
+  recordsSeen: number;
+  recordsInserted: number;
+  recordsDuplicate: number;
+}
+
+/** One immutable provider-declared charge line. It is never a request-ledger row. */
+export interface BillingEvidenceRecord {
+  recordId: string;
+  sourceSystem: 'operator-export';
+  billingAccountRef: string;
+  sourceRecordId: string;
+  sourceRecordSha256: string;
+  firstImportId: string;
+  sourceExportId: string;
+  provider: 'openai';
+  providerProjectRef: string | null;
+  service: string;
+  sku: string;
+  model: string | null;
+  region: string | null;
+  observedAtMs: number;
+  chargePeriodStartMs: number;
+  chargePeriodEndMs: number;
+  chargeType: BillingChargeType;
+  currency: 'USD';
+  amountMicros: number;
+  usageUnit: string | null;
+  usageQuantity: string | null;
+  costBasis: 'provider_reported';
+  trust: 'operator_supplied_unverified';
+}
+
+export interface BillingImportResult {
+  run: BillingImportRun;
+  duplicateFile: boolean;
+}
+
+export interface BillingSummary {
+  importCount: number;
+  recordCount: number;
+  providerReportedUsdMicros: number;
+  lastImportedAtMs: number | null;
+  reconciliationStatus: 'not_reconciled';
 }
 
 export interface SpendBucket {
@@ -325,7 +405,69 @@ CREATE TABLE IF NOT EXISTS project_aliases (
   alias     TEXT PRIMARY KEY NOT NULL,
   canonical TEXT NOT NULL,
   at_ms     INTEGER NOT NULL
-)`;
+);
+
+-- Provider cost evidence has a deliberately separate grain and provenance from
+-- request rows: it must never be double-counted as metered agent traffic.
+CREATE TABLE IF NOT EXISTS billing_import_runs (
+  import_id           TEXT PRIMARY KEY NOT NULL,
+  imported_at_ms      INTEGER NOT NULL,
+  format              TEXT NOT NULL,
+  schema_version      INTEGER NOT NULL,
+  importer_version    TEXT NOT NULL,
+  file_name           TEXT NOT NULL,
+  file_sha256         TEXT NOT NULL UNIQUE,
+  file_size_bytes     INTEGER NOT NULL,
+  source_system       TEXT NOT NULL,
+  source_export_id    TEXT NOT NULL,
+  provider            TEXT NOT NULL,
+  billing_account_ref TEXT NOT NULL,
+  exported_at_ms      INTEGER NOT NULL,
+  period_start_ms     INTEGER NOT NULL,
+  period_end_ms       INTEGER NOT NULL,
+  coverage            TEXT NOT NULL,
+  trust               TEXT NOT NULL,
+  raw_retention       TEXT NOT NULL,
+  records_seen        INTEGER NOT NULL,
+  records_inserted    INTEGER NOT NULL,
+  records_duplicate   INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_billing_import_runs_scope
+  ON billing_import_runs(provider, billing_account_ref, period_start_ms, period_end_ms);
+
+CREATE TABLE IF NOT EXISTS billing_evidence_records (
+  record_id              TEXT PRIMARY KEY NOT NULL,
+  source_system          TEXT NOT NULL,
+  billing_account_ref    TEXT NOT NULL,
+  source_record_id       TEXT NOT NULL,
+  source_record_sha256   TEXT NOT NULL,
+  first_import_id        TEXT NOT NULL,
+  source_export_id       TEXT NOT NULL,
+  provider               TEXT NOT NULL,
+  provider_project_ref   TEXT,
+  service                TEXT NOT NULL,
+  sku                    TEXT NOT NULL,
+  model                  TEXT,
+  region                 TEXT,
+  observed_at_ms         INTEGER NOT NULL,
+  charge_period_start_ms INTEGER NOT NULL,
+  charge_period_end_ms   INTEGER NOT NULL,
+  charge_type            TEXT NOT NULL,
+  currency               TEXT NOT NULL,
+  amount_micros          INTEGER NOT NULL,
+  usage_unit             TEXT,
+  usage_quantity         TEXT,
+  cost_basis             TEXT NOT NULL,
+  trust                  TEXT NOT NULL,
+  UNIQUE(source_system, provider, billing_account_ref, source_record_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_billing_evidence_scope
+  ON billing_evidence_records(provider, billing_account_ref, charge_period_start_ms, charge_period_end_ms);
+CREATE INDEX IF NOT EXISTS idx_billing_evidence_import
+  ON billing_evidence_records(first_import_id);
+`;
 
 function pricingEvidenceFromRecord(record: Record<string, unknown>, prefix = ''): RequestPricingEvidence {
   const fallback = legacyPricingEvidence();
@@ -363,6 +505,60 @@ function requestRowFromRecord(record: Record<string, unknown>): RequestRow {
     estimated: Boolean(record.estimated),
     streamed: Boolean(record.streamed),
     pricing: pricingEvidenceFromRecord(record),
+  };
+}
+
+function billingRunFromRecord(row: Record<string, unknown>): BillingImportRun {
+  return {
+    importId: String(row.importId),
+    importedAtMs: Number(row.importedAtMs),
+    format: 'json',
+    schemaVersion: Number(row.schemaVersion),
+    importerVersion: String(row.importerVersion),
+    fileName: String(row.fileName),
+    fileSha256: String(row.fileSha256),
+    fileSizeBytes: Number(row.fileSizeBytes),
+    sourceSystem: 'operator-export',
+    sourceExportId: String(row.sourceExportId),
+    provider: 'openai',
+    billingAccountRef: String(row.billingAccountRef),
+    exportedAtMs: Number(row.exportedAtMs),
+    periodStartMs: Number(row.periodStartMs),
+    periodEndMs: Number(row.periodEndMs),
+    coverage: String(row.coverage) as BillingCoverage,
+    trust: 'operator_supplied_unverified',
+    rawRetention: 'digest_only',
+    recordsSeen: Number(row.recordsSeen),
+    recordsInserted: Number(row.recordsInserted),
+    recordsDuplicate: Number(row.recordsDuplicate),
+  };
+}
+
+function billingRecordFromRecord(row: Record<string, unknown>): BillingEvidenceRecord {
+  return {
+    recordId: String(row.recordId),
+    sourceSystem: 'operator-export',
+    billingAccountRef: String(row.billingAccountRef),
+    sourceRecordId: String(row.sourceRecordId),
+    sourceRecordSha256: String(row.sourceRecordSha256),
+    firstImportId: String(row.firstImportId),
+    sourceExportId: String(row.sourceExportId),
+    provider: 'openai',
+    providerProjectRef: typeof row.providerProjectRef === 'string' ? row.providerProjectRef : null,
+    service: String(row.service),
+    sku: String(row.sku),
+    model: typeof row.model === 'string' ? row.model : null,
+    region: typeof row.region === 'string' ? row.region : null,
+    observedAtMs: Number(row.observedAtMs),
+    chargePeriodStartMs: Number(row.chargePeriodStartMs),
+    chargePeriodEndMs: Number(row.chargePeriodEndMs),
+    chargeType: String(row.chargeType) as BillingChargeType,
+    currency: 'USD',
+    amountMicros: Number(row.amountMicros),
+    usageUnit: typeof row.usageUnit === 'string' ? row.usageUnit : null,
+    usageQuantity: typeof row.usageQuantity === 'string' ? row.usageQuantity : null,
+    costBasis: 'provider_reported',
+    trust: 'operator_supplied_unverified',
   };
 }
 
@@ -1495,6 +1691,160 @@ export class Store {
       newEstimated: Boolean(row.newEstimated),
       newPricing: pricingEvidenceFromRecord(row, 'new'),
     }));
+  }
+
+  /**
+   * Write one validated provider-cost export as immutable evidence. This never
+   * creates or changes request rows: local metering and provider reports have
+   * different scopes and cannot be silently added together.
+   */
+  applyBillingImport(input: BillingImportInput, importedAtMs = Date.now()): BillingImportResult {
+    if (!/^[a-f0-9]{64}$/.test(input.fileSha256)) throw new Error('billing fileSha256 must be a lowercase SHA-256 digest');
+    if (!Number.isSafeInteger(input.fileSizeBytes) || input.fileSizeBytes < 0) throw new Error('billing file size is invalid');
+    const d = input.document;
+    const priorFile = this.db.prepare(
+      `SELECT import_id AS importId, imported_at_ms AS importedAtMs, format, schema_version AS schemaVersion,
+              importer_version AS importerVersion, file_name AS fileName, file_sha256 AS fileSha256,
+              file_size_bytes AS fileSizeBytes, source_system AS sourceSystem, source_export_id AS sourceExportId,
+              provider, billing_account_ref AS billingAccountRef, exported_at_ms AS exportedAtMs,
+              period_start_ms AS periodStartMs, period_end_ms AS periodEndMs, coverage, trust, raw_retention AS rawRetention,
+              records_seen AS recordsSeen, records_inserted AS recordsInserted, records_duplicate AS recordsDuplicate
+       FROM billing_import_runs WHERE file_sha256 = ?`,
+    ).get(input.fileSha256) as Record<string, unknown> | undefined;
+    if (priorFile) return { run: billingRunFromRecord(priorFile), duplicateFile: true };
+
+    const existing = this.db.prepare(
+      `SELECT source_record_sha256 AS sourceRecordSha256
+       FROM billing_evidence_records
+       WHERE source_system = ? AND provider = ? AND billing_account_ref = ? AND source_record_id = ?`,
+    );
+    let recordsDuplicate = 0;
+    const recordsToInsert = [] as typeof d.records;
+    for (const record of d.records) {
+      const row = existing.get(d.source.system, d.source.provider, d.source.billingAccountRef, record.sourceRecordId) as
+        | { sourceRecordSha256: string }
+        | undefined;
+      if (!row) {
+        recordsToInsert.push(record);
+      } else if (row.sourceRecordSha256 === record.sourceRecordSha256) {
+        recordsDuplicate++;
+      } else {
+        throw new Error(
+          `billing source-record conflict for ${record.sourceRecordId}: the same provider/account record id has different content`,
+        );
+      }
+    }
+
+    const run: BillingImportRun = {
+      importId: randomUUID(),
+      importedAtMs,
+      format: input.format,
+      schemaVersion: d.schemaVersion,
+      importerVersion: BILLING_IMPORTER_VERSION,
+      fileName: input.fileName,
+      fileSha256: input.fileSha256,
+      fileSizeBytes: input.fileSizeBytes,
+      sourceSystem: d.source.system,
+      sourceExportId: d.source.exportId,
+      provider: d.source.provider,
+      billingAccountRef: d.source.billingAccountRef,
+      exportedAtMs: d.exportedAtMs,
+      periodStartMs: d.periodStartMs,
+      periodEndMs: d.periodEndMs,
+      coverage: d.source.coverage,
+      trust: 'operator_supplied_unverified',
+      rawRetention: 'digest_only',
+      recordsSeen: d.records.length,
+      recordsInserted: recordsToInsert.length,
+      recordsDuplicate,
+    };
+    const writeRun = this.db.prepare(
+      `INSERT INTO billing_import_runs (
+         import_id, imported_at_ms, format, schema_version, importer_version, file_name, file_sha256, file_size_bytes,
+         source_system, source_export_id, provider, billing_account_ref, exported_at_ms, period_start_ms, period_end_ms,
+         coverage, trust, raw_retention, records_seen, records_inserted, records_duplicate
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    );
+    const writeRecord = this.db.prepare(
+      `INSERT INTO billing_evidence_records (
+         record_id, source_system, billing_account_ref, source_record_id, source_record_sha256, first_import_id,
+         source_export_id, provider, provider_project_ref, service, sku, model, region, observed_at_ms,
+         charge_period_start_ms, charge_period_end_ms, charge_type, currency, amount_micros, usage_unit,
+         usage_quantity, cost_basis, trust
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    );
+    this.runScript('BEGIN');
+    try {
+      writeRun.run(
+        run.importId, run.importedAtMs, run.format, run.schemaVersion, run.importerVersion, run.fileName, run.fileSha256,
+        run.fileSizeBytes, run.sourceSystem, run.sourceExportId, run.provider, run.billingAccountRef, run.exportedAtMs,
+        run.periodStartMs, run.periodEndMs, run.coverage, run.trust, run.rawRetention, run.recordsSeen,
+        run.recordsInserted, run.recordsDuplicate,
+      );
+      for (const record of recordsToInsert) {
+        writeRecord.run(
+          randomUUID(), d.source.system, d.source.billingAccountRef, record.sourceRecordId, record.sourceRecordSha256,
+          run.importId, d.source.exportId, d.source.provider, record.providerProjectRef, record.service, record.sku,
+          record.model, record.region, record.observedAtMs, record.chargePeriodStartMs, record.chargePeriodEndMs,
+          record.chargeType, record.currency, record.amountMicros, record.usageUnit, record.usageQuantity,
+          'provider_reported', 'operator_supplied_unverified',
+        );
+      }
+      this.runScript('COMMIT');
+    } catch (error) {
+      this.runScript('ROLLBACK');
+      throw error;
+    }
+    return { run, duplicateFile: false };
+  }
+
+  /** Newest first, including empty/replay-only evidence runs for auditability. */
+  billingImportRuns(limit = 50): BillingImportRun[] {
+    const safeLimit = Math.max(1, Math.min(500, Math.floor(limit)));
+    const rows = this.db.prepare(
+      `SELECT import_id AS importId, imported_at_ms AS importedAtMs, format, schema_version AS schemaVersion,
+              importer_version AS importerVersion, file_name AS fileName, file_sha256 AS fileSha256,
+              file_size_bytes AS fileSizeBytes, source_system AS sourceSystem, source_export_id AS sourceExportId,
+              provider, billing_account_ref AS billingAccountRef, exported_at_ms AS exportedAtMs,
+              period_start_ms AS periodStartMs, period_end_ms AS periodEndMs, coverage, trust, raw_retention AS rawRetention,
+              records_seen AS recordsSeen, records_inserted AS recordsInserted, records_duplicate AS recordsDuplicate
+       FROM billing_import_runs ORDER BY imported_at_ms DESC, import_id DESC LIMIT ?`,
+    ).all(safeLimit) as Array<Record<string, unknown>>;
+    return rows.map(billingRunFromRecord);
+  }
+
+  /** Immutable provider-declared lines, deliberately separate from requestsInRange(). */
+  billingEvidenceRecords(): BillingEvidenceRecord[] {
+    const rows = this.db.prepare(
+      `SELECT record_id AS recordId, source_system AS sourceSystem, billing_account_ref AS billingAccountRef,
+              source_record_id AS sourceRecordId, source_record_sha256 AS sourceRecordSha256,
+              first_import_id AS firstImportId, source_export_id AS sourceExportId, provider,
+              provider_project_ref AS providerProjectRef, service, sku, model, region, observed_at_ms AS observedAtMs,
+              charge_period_start_ms AS chargePeriodStartMs, charge_period_end_ms AS chargePeriodEndMs,
+              charge_type AS chargeType, currency, amount_micros AS amountMicros, usage_unit AS usageUnit,
+              usage_quantity AS usageQuantity, cost_basis AS costBasis, trust
+       FROM billing_evidence_records
+       ORDER BY charge_period_start_ms ASC, source_record_id ASC`,
+    ).all() as Array<Record<string, unknown>>;
+    return rows.map(billingRecordFromRecord);
+  }
+
+  /** Provider-declared USD total only. It is not a reconciliation or a request-ledger total. */
+  billingSummary(): BillingSummary {
+    const imports = this.db.prepare(
+      `SELECT COUNT(*) AS importCount, MAX(imported_at_ms) AS lastImportedAtMs FROM billing_import_runs`,
+    ).get() as { importCount: number; lastImportedAtMs: number | null };
+    const records = this.db.prepare(
+      `SELECT COUNT(*) AS recordCount, COALESCE(SUM(amount_micros), 0) AS providerReportedUsdMicros
+       FROM billing_evidence_records`,
+    ).get() as { recordCount: number; providerReportedUsdMicros: number };
+    return {
+      importCount: Number(imports.importCount),
+      recordCount: Number(records.recordCount),
+      providerReportedUsdMicros: Number(records.providerReportedUsdMicros),
+      lastImportedAtMs: imports.lastImportedAtMs === null ? null : Number(imports.lastImportedAtMs),
+      reconciliationStatus: 'not_reconciled',
+    };
   }
 
   /** Maintenance: prune old requests and compact. Returns rows removed. */

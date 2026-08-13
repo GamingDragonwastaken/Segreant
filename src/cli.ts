@@ -16,6 +16,7 @@ import { packageVersion } from './version.ts';
 
 import { parseFlags } from './cli/flags.ts';
 import { cmdImport, cmdDiscover, cmdScan } from './cli/importCmd.ts';
+import { cmdBilling } from './cli/billingCmd.ts';
 import { cmdEvidence } from './cli/evidenceCmd.ts';
 import { cmdYield, cmdRealize, cmdReport, cmdExec, cmdUsage, cmdRoi, cmdSaved, cmdBudgetAdvisor, cmdFrontier } from './cli/valueCmd.ts';
 import { cmdTeam, cmdReceipt, cmdJudge, cmdTeamPush } from './cli/teamCmd.ts';
@@ -47,6 +48,11 @@ function cmdHelp(): void {
                           can never see. Tools: claude-code, opencode, codex (or
                           all). Idempotent. --watch keeps it live (poll every N
                           sec: --every N). (--root <dir>, --days N, --json)
+    billing <action>      Import, inspect, or export LOCAL operator-supplied
+                          provider billing evidence. V1 accepts a strict OpenAI
+                          evidence JSON only; it never overwrites metered estimates
+                          or claims invoice reconciliation. Actions: import --file
+                          <file> [--apply], status, export [--csv|--json] [--out file]
     scan [path]           One-command onboarding: find the AI tools + git repos on
                           this machine and preview a setup plan (read-only). --setup
                           imports every detected tool and correlates every repo into
@@ -263,6 +269,9 @@ async function main(): Promise<void> {
       break;
     case 'import':
       await cmdImport(flags);
+      break;
+    case 'billing':
+      cmdBilling(flags);
       break;
     case 'discover':
       await cmdDiscover(flags);

@@ -35,6 +35,18 @@ pre-lineage historical rows are separately labelled. These are local pricing
 evidence labels, not provider invoice, discount, credit, tax, or reconciliation
 data. The ledger does not intentionally store provider API keys.
 
+When an operator explicitly runs `fiscus billing import --file ... --apply`,
+Fiscus also stores an immutable, provider-declared billing-evidence ledger. V1
+accepts only a strict local OpenAI evidence JSON contract. It retains the file
+basename, SHA-256 digest, size, import/source-period metadata, non-secret local
+billing-account reference, coverage declaration, and allowlisted normalized
+charge fields. It does **not** retain the raw file by default and does not read
+provider credentials, browser sessions, or billing pages. These records remain
+separate from proxy/local-tool requests: they do not affect caps, RoI, request
+estimates, or `today` totals, and their status is `not_reconciled`. See
+[BILLING-EVIDENCE-IMPORT.md](BILLING-EVIDENCE-IMPORT.md) for the exact local
+schema and retention implications.
+
 With the default `metadataOnly: false`, Fiscus may also retain parsed proposed
 code lines locally to measure whether an AI proposal later appeared in a Git
 commit. This is a local-only convenience signal, not a claim that source never
