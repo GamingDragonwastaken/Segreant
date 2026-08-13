@@ -51,6 +51,8 @@ jobs:
           set -euo pipefail
           export AEGIS_HOME="$PWD/.fiscus-home"
           ./node_modules/.bin/fiscus billing scope set --account-ref ci-package-smoke --json >scope-preview.json
+          ./node_modules/.bin/fiscus billing scope set --account-ref ci-package-smoke --project-ref proj_ci_package --apply --json >scope-active.json
+          ./node_modules/.bin/fiscus billing openai-costs preview --from 2026-01-01 --to 2026-01-02 --json >costs-preview.json
           ./node_modules/.bin/fiscus demo >/dev/null
           ./node_modules/.bin/fiscus start --demo --port 18090 --dashboard-port 18091 >fiscus-dashboard.log 2>&1 &
           pid=$!
@@ -67,10 +69,14 @@ jobs:
           const billing = await (await fetch(`${base}/api/billing`)).json();
           const html = await (await fetch(`${base}/`)).text();
           const scope = JSON.parse(await (await import('node:fs/promises')).readFile('scope-preview.json', 'utf8'));
+          const activeScope = JSON.parse(await (await import('node:fs/promises')).readFile('scope-active.json', 'utf8'));
+          const costs = JSON.parse(await (await import('node:fs/promises')).readFile('costs-preview.json', 'utf8'));
           if (overview.demo !== true || !(overview.summary?.requests > 0)) throw new Error('packaged demo overview missing labelled synthetic traffic');
           if (value.demo !== true || !Array.isArray(value.frontier?.modelSwitches) || value.frontier.modelSwitches.length === 0) throw new Error('packaged dashboard value API missing model trial');
           if (!value.frontier.modelSwitches.every((item) => item.confidence === 'trial')) throw new Error('synthetic model trial was overstated as evidence');
           if (scope.applied !== false || scope.preview?.trust !== 'operator_declared_unverified') throw new Error('packaged billing-scope preview did not preserve dry-run/unverified boundary');
+          if (activeScope.applied !== true || activeScope.declaration?.providerProjectRef !== 'proj_ci_package') throw new Error('packaged scope activation did not preserve declared project provenance');
+          if (costs.applied !== false || costs.networkAttempted !== false || costs.credentialRead !== false || costs.preview?.projectRef !== 'proj_ci_package') throw new Error('packaged OpenAI Costs preview lost its secret-free/no-network boundary');
           if (billing.demo !== true || billing.summary?.recordCount !== 0 || billing.evidence?.reconciliationStatus !== 'not_reconciled') throw new Error('packaged demo billing surface fabricated evidence or lost its unresolved boundary');
           if (!html.includes('DEMO DATA') || !html.includes('Cheaper model trials') || !html.includes('NOT RECONCILED')) throw new Error('packaged dashboard HTML missing labelled model-trial or billing renderer');
           NODE
