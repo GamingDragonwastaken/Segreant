@@ -200,6 +200,9 @@ export async function verifyIdToken(token: string, cfg: OidcConfig): Promise<Ver
   if (typeof payload['iat'] === 'number' && payload['iat'] > now + 60) {
     return { valid: false, reason: 'token issued in the future (iat) — clock skew beyond tolerance' };
   }
+  if (typeof payload['nbf'] === 'number' && payload['nbf'] > now + 60) {
+    return { valid: false, reason: 'token is not valid yet (nbf) — clock skew beyond tolerance' };
+  }
   const iss = payload['iss'];
   if (iss !== cfg.issuerUrl && iss !== cfg.issuerUrl.replace(/\/$/, '')) {
     return { valid: false, reason: `issuer mismatch: token claims iss=${JSON.stringify(iss)}, expected ${cfg.issuerUrl}` };
@@ -208,6 +211,12 @@ export async function verifyIdToken(token: string, cfg: OidcConfig): Promise<Ver
   const audMatches = aud === cfg.clientId || (Array.isArray(aud) && aud.includes(cfg.clientId));
   if (!audMatches) {
     return { valid: false, reason: `audience mismatch: token aud=${JSON.stringify(aud)}, expected ${cfg.clientId}` };
+  }
+  // OpenID Connect requires `azp` when an ID token names multiple audiences,
+  // so a token minted for several applications cannot be replayed here merely
+  // because our client ID appears somewhere in its `aud` array.
+  if (Array.isArray(aud) && aud.length > 1 && payload['azp'] !== cfg.clientId) {
+    return { valid: false, reason: `authorized party mismatch: token azp=${JSON.stringify(payload['azp'])}, expected ${cfg.clientId} for multiple audiences` };
   }
 
   const sub = payload['sub'];

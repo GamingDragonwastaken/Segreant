@@ -158,6 +158,11 @@ explicitly:
   handled via the `dsaEncoding: 'ieee-p1363'` option. Getting this wrong
   silently rejects every genuine ES256 token.
 
+Time claims use a 60-second clock-skew allowance for future-issued and
+not-before tokens. When an ID token has more than one `aud` value, its `azp`
+claim must name this configured client; merely appearing in a shared audience
+array is not sufficient.
+
 ## Testing
 
 ```sh

@@ -60,6 +60,31 @@ test('verifyIdToken: an expired token is rejected', async () => {
   }
 });
 
+test('verifyIdToken: a token with nbf inside the 60-second clock-skew allowance is accepted', async () => {
+  const idp = await startFakeIdp();
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const token = idp.sign(validPayload(idp, { nbf: now + 30 }));
+    const result = await verifyIdToken(token, cfg(idp));
+    assert.equal(result.valid, true);
+  } finally {
+    await idp.close();
+  }
+});
+
+test('verifyIdToken: a token with nbf beyond the clock-skew allowance is rejected', async () => {
+  const idp = await startFakeIdp();
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const token = idp.sign(validPayload(idp, { nbf: now + 61 }));
+    const result = await verifyIdToken(token, cfg(idp));
+    assert.equal(result.valid, false);
+    if (!result.valid) assert.match(result.reason, /not valid yet \(nbf\)/);
+  } finally {
+    await idp.close();
+  }
+});
+
 test('verifyIdToken: a wrong issuer is rejected', async () => {
   const idp = await startFakeIdp();
   try {
@@ -79,6 +104,29 @@ test('verifyIdToken: a wrong audience is rejected', async () => {
     const result = await verifyIdToken(token, cfg(idp));
     assert.equal(result.valid, false);
     if (!result.valid) assert.match(result.reason, /audience mismatch/);
+  } finally {
+    await idp.close();
+  }
+});
+
+test('verifyIdToken: a multi-audience token with a matching azp is accepted', async () => {
+  const idp = await startFakeIdp();
+  try {
+    const token = idp.sign(validPayload(idp, { aud: [CLIENT_ID, 'another-application'], azp: CLIENT_ID }));
+    const result = await verifyIdToken(token, cfg(idp));
+    assert.equal(result.valid, true);
+  } finally {
+    await idp.close();
+  }
+});
+
+test('verifyIdToken: a multi-audience token without a matching azp is rejected', async () => {
+  const idp = await startFakeIdp();
+  try {
+    const token = idp.sign(validPayload(idp, { aud: [CLIENT_ID, 'another-application'] }));
+    const result = await verifyIdToken(token, cfg(idp));
+    assert.equal(result.valid, false);
+    if (!result.valid) assert.match(result.reason, /authorized party mismatch/);
   } finally {
     await idp.close();
   }
