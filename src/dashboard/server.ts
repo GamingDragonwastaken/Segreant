@@ -118,6 +118,10 @@ function buildOverview(store: Store, config: AegisConfig, range: RangeKey) {
       estimatedSpendShare: pricingWindow.totalCostUsd > 0
         ? pricingWindow.estimatedCostUsd / pricingWindow.totalCostUsd
         : 0,
+      // Per-row provenance, grouped without mixing cards or match paths. This
+      // is deliberately separate from the active card above: a refresh never
+      // rewrites the evidence captured for historical requests.
+      provenance: store.pricingEvidenceByModel(startMs, endMs),
     },
     byModel: store.byModel(startMs, endMs),
     byProject: store.byProject(startMs, endMs),

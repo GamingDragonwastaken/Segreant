@@ -64,6 +64,27 @@ export interface RequestRow {
   providerScopeDeclarationId?: string | null;
 }
 
+/**
+ * One immutable pricing-evidence cohort in the local request ledger. A cohort
+ * never blends two cards, source kinds, or match paths: that would make a
+ * later rate-card refresh look like it had priced an older request.
+ */
+export interface PricingEvidenceBucket {
+  provider: string;
+  model: string;
+  costBasis: RequestPricingEvidence['costBasis'];
+  rateCardSha256: string | null;
+  rateCardSourceKind: RequestPricingEvidence['rateCardSourceKind'];
+  rateMatchKind: RequestPricingEvidence['rateMatchKind'];
+  rateMatchProvider: string | null;
+  rateMatchModel: string | null;
+  requests: number;
+  costUsd: number;
+  estimatedCostUsd: number;
+  inputTokens: number;
+  outputTokens: number;
+}
+
 export interface RequestPriceEvent {
   eventId: number;
   requestId: string;
@@ -1126,6 +1147,29 @@ export class Store {
       )
       .get(startMs, endMs) as { blocked: number; estCost: number; total: number };
     return { blocked: row.blocked, estimatedCostUsd: row.estCost, totalCostUsd: row.total };
+  }
+
+  /**
+   * Local rate-card lineage grouped strictly by the evidence captured when each
+   * request was priced. This is not provider billing and intentionally does not
+   * call the current pricing table: rows retain their historical evidence.
+   */
+  pricingEvidenceByModel(startMs: number, endMs: number): PricingEvidenceBucket[] {
+    return this.db
+      .prepare(
+        `SELECT provider, model,
+                cost_basis AS costBasis, rate_card_sha256 AS rateCardSha256,
+                rate_card_source_kind AS rateCardSourceKind, rate_match_kind AS rateMatchKind,
+                rate_match_provider AS rateMatchProvider, rate_match_model AS rateMatchModel,
+                COUNT(*) AS requests, COALESCE(SUM(cost_usd),0) AS costUsd,
+                COALESCE(SUM(CASE WHEN estimated = 1 THEN cost_usd ELSE 0 END),0) AS estimatedCostUsd,
+                COALESCE(SUM(input_tokens),0) AS inputTokens, COALESCE(SUM(output_tokens),0) AS outputTokens
+         FROM requests WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ?
+         GROUP BY provider, model, cost_basis, rate_card_sha256, rate_card_source_kind,
+                  rate_match_kind, rate_match_provider, rate_match_model
+         ORDER BY costUsd DESC, requests DESC`,
+      )
+      .all(startMs, endMs) as unknown as PricingEvidenceBucket[];
   }
 
   /**

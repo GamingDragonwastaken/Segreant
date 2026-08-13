@@ -397,6 +397,11 @@ before/after event instead of silently overwriting the estimate. Tool-reported
 and demo values are labelled separately. None of these labels claim
 provider-invoiced, discounted, credited, taxed, or reconciled cost.
 
+The dashboard's **Rate-card health** panel shows the active card separately
+from the historical, per-model evidence cohorts that produced the amounts in
+the selected window. It never merges different card revisions or match paths,
+and it never refreshes pricing or reprices history.
+
 Full design in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
 ### Provider billing evidence (local import v1)
