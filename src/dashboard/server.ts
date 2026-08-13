@@ -37,6 +37,7 @@ import { importOpencode, defaultOpencodeDbPath } from '../connect/opencode.ts';
 import { importCodex, defaultCodexRoot } from '../connect/codex.ts';
 import { judgeSessionFromStore } from '../judge/orchestrate.ts';
 import { resolveJudgeTier, hasHostedJudgeApiKey } from '../judge/tier.ts';
+import { pricingStatus } from '../cost/pricing.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const INDEX_HTML = join(__dirname, 'web', 'index.html');
@@ -91,6 +92,8 @@ function buildOverview(store: Store, config: AegisConfig, range: RangeKey) {
   const liveOnly = !config.budget.capIncludesImported;
   const todaySpend = store.spendBetween(dayStart, now + 1000, liveOnly);
   const todayTotal = liveOnly ? store.spendBetween(dayStart, now + 1000) : todaySpend;
+  const summary = store.summary(startMs, endMs);
+  const pricingWindow = store.healthStats(startMs, endMs);
 
   return {
     range,
@@ -104,7 +107,18 @@ function buildOverview(store: Store, config: AegisConfig, range: RangeKey) {
       capExcludesImported: liveOnly,
       remainingDailyUsd: config.budget.dailyUsd === null ? null : Math.max(0, config.budget.dailyUsd - todaySpend),
     },
-    summary: store.summary(startMs, endMs),
+    summary,
+    // Rate-card freshness and estimate share are local evidence about the
+    // numbers shown in this Overview. They do not trigger a refresh, reprice
+    // historical rows, or turn a list-price estimate into provider billing.
+    pricing: {
+      status: pricingStatus(config.pricing.maxAgeDays),
+      autoRefresh: config.pricing.autoRefresh,
+      estimatedCostUsd: pricingWindow.estimatedCostUsd,
+      estimatedSpendShare: pricingWindow.totalCostUsd > 0
+        ? pricingWindow.estimatedCostUsd / pricingWindow.totalCostUsd
+        : 0,
+    },
     byModel: store.byModel(startMs, endMs),
     byProject: store.byProject(startMs, endMs),
     byUser: store.byUser(startMs, endMs),
