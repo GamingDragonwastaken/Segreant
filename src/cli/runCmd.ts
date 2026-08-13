@@ -158,6 +158,55 @@ export async function cmdPricing(flags: Flags): Promise<void> {
   const cfg = loadConfig();
   const on = process.stdout.isTTY ?? false;
 
+  // Ledger evidence is deliberately a separate read-only surface from the
+  // active rate-card status below. It neither fetches a card nor recalculates
+  // prior rows, so automations can inspect how amounts were produced safely.
+  if (flags.coverage) {
+    const days = flags.days === undefined ? 30 : Number(flags.days);
+    if (!flags.all && (!Number.isFinite(days) || days <= 0)) {
+      console.error('  --days must be a positive number (or use --all).');
+      process.exitCode = 1;
+      return;
+    }
+    const now = Date.now();
+    const startMs = flags.all ? 0 : now - days * 24 * 60 * 60 * 1000;
+    const endMs = now + 1000;
+    const label = flags.all ? 'all recorded time' : `last ${days} day${days === 1 ? '' : 's'}`;
+    const store = new Store(dbPath());
+    try {
+      const provenance = store.pricingEvidenceByModel(startMs, endMs);
+      const total = store.summary(startMs, endMs);
+      const payload = {
+        window: { startMs, endMs, label },
+        activeRateCard: pricingStatus(cfg.pricing.maxAgeDays),
+        total: { costUsd: total.costUsd, requests: total.requests },
+        provenance,
+        boundary: 'Captured local pricing evidence only. It does not fetch pricing, reprice history, or represent any amount as provider-billed or reconciled cost.',
+      };
+      if (flags.json) {
+        console.log(JSON.stringify(payload, null, 2));
+        return;
+      }
+      console.log(`\n  ${color(on, C.bold, 'Fiscus pricing provenance')} — ${label}`);
+      console.log(`  ${color(on, C.dim, 'Every row is grouped by the local evidence captured at metering time; card revisions and match paths are never merged.')}`);
+      if (provenance.length === 0) {
+        console.log(`  ${color(on, C.gray, 'No metered requests in this window.')}`);
+      } else {
+        for (const row of provenance.slice(0, 25)) {
+          const match = row.rateMatchKind.replaceAll('_', ' ');
+          const card = row.rateCardSha256?.slice(0, 12) ?? 'no-card';
+          console.log(`  ${usd(row.costUsd).padStart(10)}  ${num(row.requests).padStart(5)} req  ${row.provider}/${row.model}`);
+          console.log(`                 ${row.costBasis.replaceAll('_', ' ')} · ${match} · ${row.rateCardSourceKind} · ${card}`);
+        }
+        if (provenance.length > 25) console.log(`  ${color(on, C.dim, `… ${provenance.length - 25} more evidence cohorts (use --json for the complete result)`)}`);
+      }
+      console.log(`  ${color(on, C.dim, `Recorded amount: ${usd(total.costUsd)} across ${num(total.requests)} request(s). Local list-price evidence only — not provider billing or reconciliation.`)}\n`);
+    } finally {
+      store.close();
+    }
+    return;
+  }
+
   // One-command self-maintenance: `pricing --auto` opts into refreshing the
   // rate card on every `start` when it's stale (a plain GET of a public price
   // file — nothing about the user). `--auto off` turns it back off.

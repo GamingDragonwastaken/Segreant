@@ -185,6 +185,8 @@ fiscus doctor                First-run health check — config, DB, proxy, caps,
 fiscus config                Show config and file paths      (--json)
 fiscus pricing --refresh     Update the rate card from the community price feed
                                 (--auto opts into a refresh check on start when stale)
+fiscus pricing --coverage    Read-only per-model historical rate-card and match
+                                evidence (--days N or --all; --json for automation)
 fiscus reprice               Re-cost estimated rows against the current rate card
                                 (only rows the card now resolves exactly; dry-run
                                 by default, --apply writes)

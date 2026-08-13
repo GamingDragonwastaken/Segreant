@@ -125,6 +125,8 @@ function cmdHelp(): void {
                           override the source)
                           Self-maintaining: pricing --auto  (refresh on start
                           when stale; --auto off to disable)
+                          Evidence: pricing --coverage [--days N|--all] (--json;
+                          read-only historical card/match cohorts)
     reprice               Re-cost rows that were priced with a fallback estimate,
                           using the current rate card — only rows the card now
                           resolves EXACTLY are rewritten; remaining estimates are
