@@ -219,10 +219,13 @@ export async function verifyIdToken(token: string, cfg: OidcConfig): Promise<Ver
     return { valid: false, reason: `authorized party mismatch: token azp=${JSON.stringify(payload['azp'])}, expected ${cfg.clientId} for multiple audiences` };
   }
 
-  const sub = payload['sub'];
-  const email = payload['email'];
-  const subject = typeof sub === 'string' ? sub : typeof email === 'string' ? email : null;
-  if (!subject) return { valid: false, reason: 'token has no usable identity claim (sub or email)' };
+  // OIDC `sub` is the stable identifier whose uniqueness is scoped to the
+  // issuer. Do not fall back to email: email can change, be absent, and is not
+  // the exact identity an operator configures for aggregate authorization.
+  const subject = payload['sub'];
+  if (typeof subject !== 'string' || subject.length === 0) {
+    return { valid: false, reason: 'token has no non-empty OIDC subject claim (sub)' };
+  }
 
   return { valid: true, claims: payload, subject };
 }

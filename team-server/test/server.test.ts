@@ -41,7 +41,14 @@ const period = { from: '2026-06-01T00:00:00.000Z', to: '2026-07-01T00:00:00.000Z
 const DEFAULT_TEST_AGGREGATE_CONFIG = { minCohort: 5, exposeDeveloperBreakdown: false };
 
 function startTeamServer(deps: TeamServerDeps): Promise<{ url: string; close: () => Promise<void> }> {
-  const server: http.Server = createTeamServer(deps);
+  // Existing aggregate fixtures use lead@example.com. Production never gets
+  // this default: src/index.ts explicitly resolves an env policy and the
+  // server treats omission as disabled. Tests that exercise missing policy
+  // pass null explicitly below.
+  const server: http.Server = createTeamServer({
+    ...deps,
+    dashboardAllowedSubjects: deps.dashboardAllowedSubjects === undefined ? new Set(['lead@example.com']) : deps.dashboardAllowedSubjects,
+  });
   return new Promise((resolve) => {
     server.listen(0, () => {
       const addr = server.address();
@@ -707,5 +714,68 @@ test('team-server: GET /dashboard/developers returns a k-anonymized distribution
   } finally {
     await idp.close();
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('team-server: dashboard routes require an explicit operator subject policy even with a genuine valid OIDC token, while /me remains identity-only', async () => {
+  const idp = await startFakeIdp();
+  try {
+    const srv = await startTeamServer({
+      store: new FakeRollupStore(),
+      adminToken: null,
+      oidc: { issuerUrl: idp.issuer, clientId: 'team-dashboard', jwksUrl: idp.jwksUrl },
+      dashboardAllowedSubjects: null,
+      aggregate: DEFAULT_TEST_AGGREGATE_CONFIG,
+    });
+    try {
+      const now = Math.floor(Date.now() / 1000);
+      const token = idp.sign({ iss: idp.issuer, aud: 'team-dashboard', sub: 'lead@example.com', iat: now, exp: now + 3600 });
+      const dashboard = await fetch(`${srv.url}/dashboard/projects`, { headers: { authorization: `Bearer ${token}` } });
+      assert.equal(dashboard.status, 503);
+      const payload = (await dashboard.json()) as { ok: boolean; error: string };
+      assert.equal(payload.ok, false);
+      assert.match(payload.error, /OIDC_DASHBOARD_ALLOWED_SUBJECTS/);
+
+      const me = await fetch(`${srv.url}/me`, { headers: { authorization: `Bearer ${token}` } });
+      assert.equal(me.status, 200);
+      assert.deepEqual(await me.json(), { ok: true, subject: 'lead@example.com' });
+    } finally {
+      await srv.close();
+    }
+  } finally {
+    await idp.close();
+  }
+});
+
+test('team-server: dashboard routes authorize only an exact configured OIDC subject', async () => {
+  const idp = await startFakeIdp();
+  try {
+    const srv = await startTeamServer({
+      store: new FakeRollupStore(),
+      adminToken: null,
+      oidc: { issuerUrl: idp.issuer, clientId: 'team-dashboard', jwksUrl: idp.jwksUrl },
+      dashboardAllowedSubjects: new Set(['lead@example.com']),
+      aggregate: DEFAULT_TEST_AGGREGATE_CONFIG,
+    });
+    try {
+      const now = Math.floor(Date.now() / 1000);
+      const allowed = idp.sign({ iss: idp.issuer, aud: 'team-dashboard', sub: 'lead@example.com', iat: now, exp: now + 3600 });
+      const denied = idp.sign({ iss: idp.issuer, aud: 'team-dashboard', sub: 'analyst@example.com', iat: now, exp: now + 3600 });
+      const prefixBypass = idp.sign({ iss: idp.issuer, aud: 'team-dashboard', sub: 'lead@example.com.attacker', iat: now, exp: now + 3600 });
+
+      const allowedResponse = await fetch(`${srv.url}/dashboard/projects`, { headers: { authorization: `Bearer ${allowed}` } });
+      assert.equal(allowedResponse.status, 200);
+
+      for (const token of [denied, prefixBypass]) {
+        const response = await fetch(`${srv.url}/dashboard/projects`, { headers: { authorization: `Bearer ${token}` } });
+        assert.equal(response.status, 403);
+        const payload = (await response.json()) as { ok: boolean; error: string };
+        assert.deepEqual(payload, { ok: false, error: 'dashboard access denied for this authenticated OIDC subject' });
+      }
+    } finally {
+      await srv.close();
+    }
+  } finally {
+    await idp.close();
   }
 });

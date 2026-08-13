@@ -231,6 +231,17 @@ rejection in [docs/RESEARCH-REVIEW.md](RESEARCH-REVIEW.md)).
 
 ## 3. SSO extension point: one generic protocol, not N integrations
 
+**Implemented dashboard authorization boundary.** OIDC verification proves a
+human identity but does not itself grant that identity access to team financial
+aggregates. The deployed team server requires
+`OIDC_DASHBOARD_ALLOWED_SUBJECTS`, a comma-separated allowlist of exact OIDC
+`sub` values, before either aggregate route is available. Missing or blank
+policy fails closed with HTTP 503; a genuine verified token whose subject is
+not listed receives HTTP 403. Fiscus deliberately does not infer groups or
+generic roles from provider-specific claims. `GET /me` remains an
+identity-verification endpoint only. See `team-server/README.md` for the
+operator configuration.
+
 "Bring your own SSO provider" only stays zero-maintenance if Fiscus implements
 **one** thing — a standard protocol — rather than N provider-specific integrations
 (Okta SDK, Azure AD SDK, Google Workspace SDK, ...), each with its own quirks and

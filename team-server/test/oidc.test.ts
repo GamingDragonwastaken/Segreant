@@ -47,6 +47,18 @@ test('verifyIdToken: a genuine ES256 token is accepted (proves IEEE-P1363 signat
   }
 });
 
+test('verifyIdToken: a signed token without sub is rejected even if it has an email claim', async () => {
+  const idp = await startFakeIdp();
+  try {
+    const token = idp.sign(validPayload(idp, { sub: undefined, email: 'alice@example.com' }));
+    const result = await verifyIdToken(token, cfg(idp));
+    assert.equal(result.valid, false);
+    if (!result.valid) assert.match(result.reason, /non-empty OIDC subject claim/);
+  } finally {
+    await idp.close();
+  }
+});
+
 test('verifyIdToken: an expired token is rejected', async () => {
   const idp = await startFakeIdp();
   try {

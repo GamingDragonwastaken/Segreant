@@ -96,6 +96,36 @@ async function requireOidcSubject(req: http.IncomingMessage, res: http.ServerRes
 }
 
 /**
+ * Dashboard aggregates are more sensitive than proving a caller's identity.
+ * A valid token alone must not grant them access: an operator must explicitly
+ * configure exact OIDC `sub` values. An absent or empty policy is a server
+ * configuration problem (503), while an authenticated subject not in that
+ * policy is an authorization denial (403). `/me` intentionally uses only
+ * requireOidcSubject so it remains an identity-verification diagnostic.
+ */
+async function requireDashboardSubject(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  oidc: OidcConfig | null,
+  dashboardAllowedSubjects: ReadonlySet<string> | null | undefined,
+): Promise<string | null> {
+  if (!dashboardAllowedSubjects || dashboardAllowedSubjects.size === 0) {
+    json(res, 503, {
+      ok: false,
+      error: 'dashboard access is disabled: OIDC_DASHBOARD_ALLOWED_SUBJECTS must contain at least one allowed OIDC subject',
+    });
+    return null;
+  }
+  const subject = await requireOidcSubject(req, res, oidc);
+  if (subject === null) return null;
+  if (!dashboardAllowedSubjects.has(subject)) {
+    json(res, 403, { ok: false, error: 'dashboard access denied for this authenticated OIDC subject' });
+    return null;
+  }
+  return subject;
+}
+
+/**
  * Rollups are cumulative snapshots, not time-granular ledger rows. Filtering a
  * snapshot by an overlapping time window would present its *whole* total as
  * though it belonged to that partial window. Refuse that request until the
@@ -222,6 +252,12 @@ export interface TeamServerDeps {
   adminToken: string | null;
   /** OIDC issuer/audience for human-facing routes (GET /me and beyond). null disables them (fail-closed). */
   oidc: OidcConfig | null;
+  /**
+   * Exact OIDC `sub` values allowed to read /dashboard/* aggregates. Omit,
+   * null, or an empty set to disable those routes (503); this is deliberately
+   * distinct from OIDC authentication and from generic role/group inference.
+   */
+  dashboardAllowedSubjects?: ReadonlySet<string> | null;
   /** k-anonymity floor + developer-breakdown opt-in for the /dashboard/* routes. See aggregate.ts. */
   aggregate: TeamAggregateConfig;
   /** Caps request bodies well above any realistic rollup (many projects, still numeric-only). */
@@ -229,7 +265,7 @@ export interface TeamServerDeps {
 }
 
 export function createTeamServer(deps: TeamServerDeps): http.Server {
-  const { store, adminToken, oidc, aggregate } = deps;
+  const { store, adminToken, oidc, dashboardAllowedSubjects, aggregate } = deps;
   const maxBodyBytes = deps.maxBodyBytes ?? 2 * 1024 * 1024;
 
   return http.createServer((req, res) => {
@@ -348,7 +384,7 @@ export function createTeamServer(deps: TeamServerDeps): http.Server {
         return;
       }
       void (async () => {
-        const subject = await requireOidcSubject(req, res, oidc);
+        const subject = await requireDashboardSubject(req, res, oidc, dashboardAllowedSubjects);
         if (subject === null) return;
         const filter = parsePeriodFilter(url.searchParams);
         if (filter === 'unsupported') {
@@ -367,7 +403,7 @@ export function createTeamServer(deps: TeamServerDeps): http.Server {
         return;
       }
       void (async () => {
-        const subject = await requireOidcSubject(req, res, oidc);
+        const subject = await requireDashboardSubject(req, res, oidc, dashboardAllowedSubjects);
         if (subject === null) return;
         const filter = parsePeriodFilter(url.searchParams);
         if (filter === 'unsupported') {

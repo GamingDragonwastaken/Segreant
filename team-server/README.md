@@ -62,6 +62,23 @@ Environment variables:
 | `PORT` | no (default `8092`) | Listen port. |
 | `HOST` | no (default `0.0.0.0`) | Listen address. Unlike Fiscus's own local dashboard, this server is *meant* to be reached across your network. |
 
+### Dashboard aggregate authorization
+
+`OIDC_DASHBOARD_ALLOWED_SUBJECTS` is required before either `/dashboard/*`
+route is available. Set it to a comma-separated list of exact, non-empty OIDC
+`sub` values, for example:
+
+```sh
+OIDC_DASHBOARD_ALLOWED_SUBJECTS="alice@example.com,finance-lead@example.com"
+```
+
+Whitespace around configured entries is ignored, but comparisons with the
+verified token `sub` are exact and case-sensitive. A missing or blank setting
+returns `503` for dashboard aggregate routes; a genuine, verified OIDC token
+for a subject outside the list returns `403`. Fiscus intentionally does not
+infer group membership or generic roles from provider-specific claims. `GET
+/me` remains an identity-verification endpoint and does not use this list.
+
 This process speaks plain HTTP. Put a reverse proxy (nginx, Caddy, your cloud
 load balancer) in front of it for TLS — that's your infrastructure's job, not
 this process's; see `docs/TEAM-TIER-DESIGN.md` §1's "Fiscus provides the
@@ -93,6 +110,10 @@ full reasoning.
 
 ## Endpoints
 
+The dashboard aggregate routes require both a verified OIDC bearer token and
+an exact `OIDC_DASHBOARD_ALLOWED_SUBJECTS` match. OIDC verification alone
+never grants aggregate access.
+
 | Route | Method | Auth | Purpose |
 |---|---|---|---|
 | `/health` | GET | none | Liveness check. |
@@ -109,6 +130,12 @@ historical interval. A future time-granular evidence protocol must be designed
 and verified before those filters can be offered.
 
 ## Privacy model for the dashboard routes (`src/aggregate.ts`)
+
+Before this privacy layer runs, the server applies an explicit authorization
+layer: a verified OIDC identity must have an exact `sub` match in
+`OIDC_DASHBOARD_ALLOWED_SUBJECTS`. This is deliberately a small operator
+allowlist rather than inferred SSO groups or generic RBAC. Missing policy
+fails closed with 503; an authenticated unlisted subject receives 403.
 
 OIDC answers "is this a real, authenticated team member?" — it does not by
 itself answer "is this specific number safe to hand back even to a real team
