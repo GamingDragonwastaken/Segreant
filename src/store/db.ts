@@ -29,6 +29,7 @@ import {
   type ScopeCaptureStatus,
 } from '../billing/scope.ts';
 import type { OpenAiCostObservation, OpenAiCostsFailureCode } from '../billing/openaiCosts.ts';
+import { buildOpenAiCostsCaptureCoverage, type OpenAiCostsCaptureCoverage } from '../billing/openaiCostsCoverage.ts';
 
 export interface RequestRow {
   requestId: string;
@@ -2194,6 +2195,21 @@ export class Store {
     const latest = this.openAiCostsObservationRuns(1)[0] ?? null;
     const latestComplete = this.latestCompleteOpenAiCostsObservation()?.run ?? null;
     return { latestRun: latest, latestCompleteRun: latestComplete, reconciliationStatus: 'not_reconciled' };
+  }
+
+  /**
+   * Read-only local capture coverage for the newest complete Costs snapshot.
+   * It deliberately returns no provider total and no variance: a local route
+   * declaration does not prove provider-account ownership or off-path coverage.
+   */
+  openAiCostsCaptureCoverage(): OpenAiCostsCaptureCoverage | null {
+    const latest = this.latestCompleteOpenAiCostsObservation();
+    if (!latest) return null;
+    return buildOpenAiCostsCaptureCoverage({
+      run: latest.run,
+      observations: latest.observations,
+      requests: this.requestsInRange(latest.run.periodStartMs, latest.run.periodEndMs),
+    });
   }
 
   /**

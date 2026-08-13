@@ -211,6 +211,26 @@ recommendations. Provider finality and billing lag are not asserted by this
 connector. A local scope declaration is still operator-declared provenance—not
 provider-account ownership or a verified traffic-to-provider binding.
 
+### Local capture-coverage report
+
+After one fully paginated successful observation, this local-only command can
+show which Fiscus request rows fall inside the exact same immutable declared
+route and UTC period:
+
+```powershell
+fiscus billing openai-costs coverage
+```
+
+It performs no network request, reads no credential, and writes nothing. The
+report separately counts live proxy rows carrying the snapshot's declaration,
+imports/native rows, unscoped or legacy OpenAI proxy rows, rows on another
+declared OpenAI route, and rows for other providers. Its local-dollar figure is
+still a Fiscus rate-card estimate. Provider line-item values are intentionally
+not summed and no variance is calculated. The report stays
+`blocked_not_reconciled` because the declaration is not provider verification,
+off-path provider usage is not visible, provider finality is undocumented, and
+provider line items do not join to individual Fiscus requests/models.
+
 ## Reconciliation requires more
 
 Reconciliation needs more than a report total. Fiscus must establish a verified

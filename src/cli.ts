@@ -52,7 +52,8 @@ function cmdHelp(): void {
                           provider billing evidence. V1 accepts a strict OpenAI
                           evidence JSON only; it never overwrites metered estimates
                           or claims invoice reconciliation. Actions: import --file,
-                          status, export, scope set|status|clear. scope set records
+                          status, export, scope set|status|clear, and openai-costs
+                          preview|pull|status|coverage. scope set records
                           a local, unverified account reference for future matching
                           OpenAI-proxy traffic only (requires --apply).
     scan [path]           One-command onboarding: find the AI tools + git repos on

@@ -449,6 +449,10 @@ fiscus billing openai-costs preview --from 2026-01-01 --to 2026-01-08
 $env:OPENAI_ADMIN_API_KEY = '...'
 fiscus billing openai-costs pull --from 2026-01-01 --to 2026-01-08 --apply
 fiscus billing openai-costs status
+
+# Reads only the newest complete local provider snapshot and local request ledger.
+# It performs no network request, credential lookup, database write, or variance calculation.
+fiscus billing openai-costs coverage
 ```
 
 The connector uses only `GET https://api.openai.com/v1/organization/costs`, with
@@ -457,6 +461,11 @@ days. It retains a digest chain, allowed normalized daily project/line-item
 observations, and successful or failed run metadata—never the API key or raw
 response body. It is still a provider observation, **not reconciliation**: its
 snapshots remain outside request totals, budgets, RoI, and model recommendations.
+The coverage report can make local capture gaps visible by separating matching
+declared-route proxy rows from imports, unscoped/legacy rows, another declared
+route, and other providers. It does not sum provider line items or produce a
+provider/request variance: a local route declaration is not provider-account
+verification and cannot see off-path usage.
 
 ### Beyond Anthropic & OpenAI
 

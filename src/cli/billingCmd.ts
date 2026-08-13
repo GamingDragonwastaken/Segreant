@@ -25,7 +25,8 @@ function usage(): void {
   console.error('         fiscus billing status [--json]');
   console.error('         fiscus billing export [--csv|--json] [--out <file>]');
   console.error('         fiscus billing scope <set|status|clear> [--account-ref <local-ref>] [--project-ref <local-ref>] [--apply] [--json]');
-  console.error('         fiscus billing openai-costs <preview|pull|status> --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--apply] [--json]');
+  console.error('         fiscus billing openai-costs <preview|pull> --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--apply] [--json]');
+  console.error('         fiscus billing openai-costs <status|coverage> [--json]');
   console.error('  Local operator-supplied OpenAI billing evidence only. It never overwrites request estimates or claims reconciliation.');
 }
 
@@ -33,6 +34,7 @@ function costsUsage(): void {
   console.error('  Usage: fiscus billing openai-costs preview --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--json]');
   console.error('         fiscus billing openai-costs pull --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--apply] [--json]');
   console.error('         fiscus billing openai-costs status [--json]');
+  console.error('         fiscus billing openai-costs coverage [--json]');
   console.error('  Pull is an explicit, read-only GET to OpenAI Organization Costs. It requires OPENAI_ADMIN_API_KEY only with pull --apply.');
   console.error('  Provider observations stay separate from request spend, budgets, RoI, and model recommendations; they are not reconciliation.');
 }
@@ -42,6 +44,25 @@ function costsRange(flags: Flags): { from: string; to: string } | null {
   const to = typeof flags.to === 'string' ? flags.to : null;
   if (!from || !to) return null;
   return { from, to };
+}
+
+function formatLocalEstimate(value: number): string {
+  const text = value.toFixed(6);
+  return text.includes('.') ? text.replace(/0+$/, '').replace(/\.$/, '') : text;
+}
+
+function printCostsCoverage(coverage: NonNullable<ReturnType<Store['openAiCostsCaptureCoverage']>>): void {
+  const captured = coverage.capturedOnDeclaredRoute;
+  const excluded = coverage.excludedFromDeclaredRoute;
+  console.log('');
+  console.log('  OpenAI Costs capture coverage — local readiness only');
+  console.log(`  Snapshot      ${coverage.observation.observationRunId}`);
+  console.log(`  Period        ${new Date(coverage.observation.periodStartMs).toISOString().slice(0, 10)} → ${new Date(coverage.observation.periodEndMs).toISOString().slice(0, 10)} (UTC, exclusive end)`);
+  console.log(`  Provider rows ${coverage.observation.providerLineCount} (${coverage.observation.currencies.join(', ') || 'none'}); values intentionally not summed here`);
+  console.log(`  Declared route ${captured.requestCount} live proxy request(s), $${formatLocalEstimate(captured.costUsd)} local rate-card estimate (${captured.estimatedRequestCount} estimated)`);
+  console.log(`  Excluded      ${excluded.importedOrNative.requestCount} imported/native; ${excluded.unscopedOrLegacyOpenAiProxy.requestCount} unscoped/legacy OpenAI proxy; ${excluded.differentDeclaredOpenAiScope.requestCount} different OpenAI scope; ${excluded.otherProvider.requestCount} other provider`);
+  console.log('  Comparison    blocked_not_reconciled — no provider/request variance is calculated.');
+  console.log(`  Blockers      ${coverage.blockers.join(', ')}`);
 }
 
 function printCostsPreview(preview: OpenAiCostsPreview): void {
@@ -58,6 +79,24 @@ function printCostsPreview(preview: OpenAiCostsPreview): void {
 /** Read-only provider observation commands. Preview deliberately never reads process.env. */
 async function cmdOpenAiCosts(flags: Flags): Promise<void> {
   const action = typeof flags._[1] === 'string' ? flags._[1] : 'preview';
+  if (action === 'coverage') {
+    const store = new Store(dbPath());
+    try {
+      const coverage = store.openAiCostsCaptureCoverage();
+      const payload = {
+        coverage,
+        reconciliationStatus: 'not_reconciled' as const,
+        networkAttempted: false,
+        credentialRead: false,
+      };
+      if (flags.json) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+      else if (!coverage) console.log('  No fully paginated OpenAI Costs snapshot is available for a local capture-coverage report.');
+      else printCostsCoverage(coverage);
+    } finally {
+      store.close();
+    }
+    return;
+  }
   if (action === 'status') {
     const store = new Store(dbPath());
     try {
