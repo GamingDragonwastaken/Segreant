@@ -233,6 +233,27 @@ async function handle(
   }
 
   const { provider, upstreamBase } = route;
+  // This is a local, operator-declared routing statement only. Capture it
+  // before budget blocking/forwarding so normal, blocked, and failed attempts
+  // all receive the same immutable snapshot. A mismatch or store error must
+  // never interrupt proxy traffic or manufacture a provider-account claim.
+  let scopeCapture: Pick<RequestRow, 'scopeCaptureStatus' | 'providerScopeDeclarationId'> = {
+    scopeCaptureStatus: 'unscoped',
+    providerScopeDeclarationId: null,
+  };
+  if (provider === 'openai') {
+    try {
+      const declaration = store.matchingOpenAiScope(upstreamBase);
+      if (declaration) {
+        scopeCapture = {
+          scopeCaptureStatus: 'declared_unverified',
+          providerScopeDeclarationId: declaration.declarationId,
+        };
+      }
+    } catch {
+      // Local provenance is best-effort; unscoped is the conservative result.
+    }
+  }
   const parsed = parseRequestBody(body);
 
   // --- Metadata from custom headers (attribution) ---
@@ -300,6 +321,7 @@ async function handle(
       streamed: parsed.stream,
       statusCode: 429,
       durationMs: 0,
+      ...scopeCapture,
     }, decision);
     return;
   }
@@ -356,6 +378,7 @@ async function handle(
       streamed: parsed.stream,
       statusCode: status,
       durationMs: Date.now() - startedAt,
+      ...scopeCapture,
     }, decision);
     return;
   }
@@ -453,6 +476,7 @@ async function handle(
     streamed: isStream,
     statusCode: upstream.status,
     durationMs: Date.now() - startedAt,
+    ...scopeCapture,
   }, decision);
 }
 

@@ -8,12 +8,12 @@ import { join } from 'node:path';
 const CLI = join(import.meta.dirname, '..', 'src', 'cli.ts');
 const FIXTURE = join(import.meta.dirname, 'fixtures', 'billing', 'openai-operator-export.v1.json');
 
-function runCli(args: string[], dbPath: string): Promise<{ code: number; stdout: string; stderr: string }> {
+function runCli(args: string[], dbPath: string, home?: string): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     execFile(
       process.execPath,
       [CLI, ...args],
-      { env: { ...process.env, AEGIS_DB: dbPath, NODE_OPTIONS: '' } },
+      { env: { ...process.env, AEGIS_DB: dbPath, ...(home ? { AEGIS_HOME: home } : {}), NODE_OPTIONS: '' } },
       (err, stdout, stderr) => {
         const code = err && typeof (err as NodeJS.ErrnoException & { code?: unknown }).code === 'number'
           ? ((err as unknown as { code: number }).code)
@@ -57,6 +57,35 @@ test('billing CLI dry-runs by default, applies only with --apply, and exports a 
     const exportPayload = JSON.parse(exported.stdout) as { summary: { recordCount: number }; records: unknown[] };
     assert.equal(exportPayload.summary.recordCount, 2);
     assert.equal(exportPayload.records.length, 2);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('billing scope is an explicit local declaration and changes only on --apply', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-billing-scope-cli-'));
+  const db = join(dir, 'fiscus.db');
+  try {
+    const preview = await runCli(['billing', 'scope', 'set', '--account-ref', 'finops-test', '--json'], db, join(dir, 'home'));
+    assert.equal(preview.code, 0, preview.stderr);
+    const previewPayload = JSON.parse(preview.stdout) as { applied: boolean; preview: { trust: string; upstreamDisplay: string } };
+    assert.equal(previewPayload.applied, false);
+    assert.equal(previewPayload.preview.trust, 'operator_declared_unverified');
+    assert.equal(previewPayload.preview.upstreamDisplay, 'https://api.openai.com');
+
+    const before = await runCli(['billing', 'scope', 'status', '--json'], db);
+    assert.equal((JSON.parse(before.stdout) as { active: unknown }).active, null);
+
+    const apply = await runCli(['billing', 'scope', 'set', '--account-ref', 'finops-test', '--project-ref', 'proj_local', '--apply', '--json'], db, join(dir, 'home'));
+    assert.equal(apply.code, 0, apply.stderr);
+    const appliedPayload = JSON.parse(apply.stdout) as { applied: boolean; declaration: { trust: string; billingAccountRef: string } };
+    assert.equal(appliedPayload.applied, true);
+    assert.equal(appliedPayload.declaration.trust, 'operator_declared_unverified');
+    assert.equal(appliedPayload.declaration.billingAccountRef, 'finops-test');
+
+    const clear = await runCli(['billing', 'scope', 'clear', '--apply', '--json'], db);
+    assert.equal(clear.code, 0, clear.stderr);
+    assert.equal((JSON.parse(clear.stdout) as { cleared: boolean }).cleared, true);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

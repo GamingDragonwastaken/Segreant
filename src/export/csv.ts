@@ -25,7 +25,8 @@ const REQUEST_COLUMNS = [
   'tsIso', 'tsEpochMs', 'provider', 'model', 'project', 'user', 'source', 'sessionId',
   'inputTokens', 'outputTokens', 'cacheWriteTokens', 'cacheReadTokens', 'reasoningTokens',
   'costUsd', 'estimated', 'costBasis', 'rateCardSha256', 'rateCardSourceKind',
-  'rateMatchKind', 'rateMatchProvider', 'rateMatchModel', 'streamed', 'statusCode', 'durationMs', 'requestId',
+  'rateMatchKind', 'rateMatchProvider', 'rateMatchModel', 'streamed', 'statusCode', 'durationMs',
+  'scopeCaptureStatus', 'providerScopeDeclarationId', 'requestId',
 ];
 
 /** The request ledger as CSV — one row per metered request, BI-ready. */
@@ -38,7 +39,7 @@ export function requestsToCsv(rows: RequestRow[]): string {
       r.costUsd, r.estimated ? 1 : 0, r.pricing?.costBasis ?? 'legacy_unknown', r.pricing?.rateCardSha256 ?? '',
       r.pricing?.rateCardSourceKind ?? 'legacy_unknown', r.pricing?.rateMatchKind ?? 'legacy_unknown',
       r.pricing?.rateMatchProvider ?? '', r.pricing?.rateMatchModel ?? '', r.streamed ? 1 : 0,
-      r.statusCode ?? '', r.durationMs ?? '', r.requestId,
+      r.statusCode ?? '', r.durationMs ?? '', r.scopeCaptureStatus ?? 'legacy_unknown', r.providerScopeDeclarationId ?? '', r.requestId,
     ]),
   );
 }

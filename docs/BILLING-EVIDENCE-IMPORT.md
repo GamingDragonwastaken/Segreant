@@ -33,6 +33,35 @@ fiscus billing export --csv --out .\fiscus-provider-cost-evidence.csv
 fiscus billing export --json
 ```
 
+## Optional local route-scope declaration
+
+Before a customer grants access to a provider account, an operator can make a
+small, auditable **local routing declaration** for future proxy traffic:
+
+```powershell
+# Preview only; no database write.
+fiscus billing scope set --account-ref finops-production --project-ref proj_123
+
+# Activate after checking the displayed configured endpoint and local references.
+fiscus billing scope set --account-ref finops-production --project-ref proj_123 --apply
+fiscus billing scope status
+fiscus billing scope clear --apply
+```
+
+The declaration stores non-secret local references, a sanitized configured
+OpenAI upstream display, and a SHA-256 endpoint fingerprint. It applies only
+to **new** requests entering the Fiscus proxy on the OpenAI route whose resolved
+configured upstream exactly matches that fingerprint. Those rows receive the
+immutable status `declared_unverified` and a declaration ID. A changed endpoint,
+no active declaration, or a non-OpenAI proxy route is `unscoped`; native
+Claude/Codex/OpenCode imports are `not_observed`; pre-feature history stays
+`legacy_unknown`. Clearing a declaration affects future rows only.
+
+This is not proof of account ownership, an API login, a provider project
+assignment, invoice coverage, or request-level cost. It never reads credentials,
+changes the configured upstream, sends a request to a provider, changes caps,
+or turns a billing import into reconciliation.
+
 `billing status` always reports `not_reconciled` in v1. A local request record
 does not yet hold a verified OpenAI billing-account or provider-project binding,
 so Fiscus has no defensible basis to calculate an apparent variance between the

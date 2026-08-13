@@ -47,6 +47,14 @@ estimates, or `today` totals, and their status is `not_reconciled`. See
 [BILLING-EVIDENCE-IMPORT.md](BILLING-EVIDENCE-IMPORT.md) for the exact local
 schema and retention implications.
 
+`fiscus billing scope set ... --apply` separately records only an operator's
+non-secret local statement that future OpenAI-proxy traffic is routed to the
+exact configured endpoint for a named account/project reference. Fiscus stores
+the sanitized endpoint display and fingerprint, never an endpoint credential,
+provider session, or API key. The status is always
+`operator_declared_unverified`; it is not provider-account verification,
+reconciliation, or an instruction to change routing.
+
 With the default `metadataOnly: false`, Fiscus may also retain parsed proposed
 code lines locally to measure whether an AI proposal later appeared in a Git
 commit. This is a local-only convenience signal, not a claim that source never

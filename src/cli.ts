@@ -51,8 +51,10 @@ function cmdHelp(): void {
     billing <action>      Import, inspect, or export LOCAL operator-supplied
                           provider billing evidence. V1 accepts a strict OpenAI
                           evidence JSON only; it never overwrites metered estimates
-                          or claims invoice reconciliation. Actions: import --file
-                          <file> [--apply], status, export [--csv|--json] [--out file]
+                          or claims invoice reconciliation. Actions: import --file,
+                          status, export, scope set|status|clear. scope set records
+                          a local, unverified account reference for future matching
+                          OpenAI-proxy traffic only (requires --apply).
     scan [path]           One-command onboarding: find the AI tools + git repos on
                           this machine and preview a setup plan (read-only). --setup
                           imports every detected tool and correlates every repo into

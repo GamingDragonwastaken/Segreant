@@ -5,7 +5,8 @@
  */
 
 import { writeFileSync } from 'node:fs';
-import { dbPath } from '../config.ts';
+import { dbPath, loadConfig } from '../config.ts';
+import { newOpenAiScopeDeclaration } from '../billing/scope.ts';
 import { formatUsdMicros } from '../billing/types.ts';
 import { readBillingImportFile } from '../billing/importer.ts';
 import { billingEvidenceToCsv } from '../export/billingCsv.ts';
@@ -13,11 +14,102 @@ import { Store } from '../store/db.ts';
 import type { Flags } from './flags.ts';
 
 function usage(): void {
-  console.error('  Usage: fiscus billing <import|status|export> [options]');
+  console.error('  Usage: fiscus billing <import|status|export|scope> [options]');
   console.error('         fiscus billing import --file <evidence.json> [--apply] [--json]');
   console.error('         fiscus billing status [--json]');
   console.error('         fiscus billing export [--csv|--json] [--out <file>]');
+  console.error('         fiscus billing scope <set|status|clear> [--account-ref <local-ref>] [--project-ref <local-ref>] [--apply] [--json]');
   console.error('  Local operator-supplied OpenAI billing evidence only. It never overwrites request estimates or claims reconciliation.');
+}
+
+function scopeUsage(): void {
+  console.error('  Usage: fiscus billing scope set --account-ref <non-secret-local-ref> [--project-ref <non-secret-local-ref>] [--apply] [--json]');
+  console.error('         fiscus billing scope status [--json]');
+  console.error('         fiscus billing scope clear [--apply] [--json]');
+  console.error('  Scope covers only future OpenAI-proxy rows routed to the exact configured upstream. It is operator-declared and unverified.');
+}
+
+function cmdScope(flags: Flags): void {
+  const action = typeof flags._[1] === 'string' ? flags._[1] : 'status';
+  if (action === 'set') {
+    const accountRef = typeof flags['account-ref'] === 'string' ? flags['account-ref'] : null;
+    const projectRef = typeof flags['project-ref'] === 'string' ? flags['project-ref'] : null;
+    if (!accountRef) {
+      scopeUsage();
+      process.exitCode = 1;
+      return;
+    }
+    try {
+      const upstreamBase = loadConfig().upstreams.openai;
+      const preview = newOpenAiScopeDeclaration({ billingAccountRef: accountRef, providerProjectRef: projectRef, upstreamBase });
+      if (!flags.apply) {
+        const payload = {
+          applied: false,
+          preview: {
+            ...preview,
+            capture: 'future OpenAI proxy rows only when the resolved configured endpoint exactly matches',
+            trust: 'operator_declared_unverified',
+            reconciliationStatus: 'not_reconciled',
+          },
+        };
+        if (flags.json) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+        else {
+          console.log(`  Scope preview  OpenAI → ${preview.upstreamDisplay}`);
+          console.log(`  Account ref    ${preview.billingAccountRef}${preview.providerProjectRef ? ` / ${preview.providerProjectRef}` : ''}`);
+          console.log('  Trust          operator_declared_unverified — no provider login, credential, or invoice was checked');
+          console.log('  No data written. Apply with: fiscus billing scope set ... --apply');
+        }
+        return;
+      }
+      const store = new Store(dbPath());
+      try {
+        const declaration = store.setOpenAiScope({ billingAccountRef: accountRef, providerProjectRef: projectRef, upstreamBase });
+        const payload = { applied: true, declaration, reconciliationStatus: 'not_reconciled' };
+        if (flags.json) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+        else {
+          console.log(`  Active local OpenAI scope ${declaration.declarationId}`);
+          console.log(`  ${declaration.billingAccountRef} → ${declaration.upstreamDisplay}`);
+          console.log('  Future matching proxy rows are declared_unverified; historical and imported rows are unchanged.');
+        }
+      } finally {
+        store.close();
+      }
+    } catch (error) {
+      console.error(`  Billing scope failed: ${error instanceof Error ? error.message : String(error)}`);
+      process.exitCode = 1;
+    }
+    return;
+  }
+  const store = new Store(dbPath());
+  try {
+    if (action === 'status') {
+      const active = store.activeOpenAiScope();
+      const payload = { active, trust: 'operator_declared_unverified', reconciliationStatus: 'not_reconciled' };
+      if (flags.json) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+      else if (active) {
+        console.log(`  Active local OpenAI scope: ${active.billingAccountRef} → ${active.upstreamDisplay}`);
+        console.log('  Status: operator_declared_unverified; it applies only to future matching proxy traffic.');
+      } else console.log('  No active local OpenAI scope. New proxy rows remain unscoped.');
+      return;
+    }
+    if (action === 'clear') {
+      const active = store.activeOpenAiScope();
+      if (!flags.apply) {
+        const payload = { applied: false, active, message: 'No data written; only future matching proxy rows would become unscoped.' };
+        if (flags.json) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+        else console.log(active ? `  Would clear local scope ${active.declarationId}; historical request snapshots remain unchanged.` : '  No active local OpenAI scope to clear.');
+        return;
+      }
+      const cleared = store.clearOpenAiScope();
+      if (flags.json) process.stdout.write(JSON.stringify({ applied: true, cleared, reconciliationStatus: 'not_reconciled' }, null, 2) + '\n');
+      else console.log(cleared ? '  Cleared active local OpenAI scope. Future matching proxy rows are unscoped.' : '  No active local OpenAI scope to clear.');
+      return;
+    }
+  } finally {
+    store.close();
+  }
+  scopeUsage();
+  process.exitCode = 1;
 }
 
 function writeOrPrint(value: string, out: unknown): void {
@@ -47,6 +139,10 @@ function renderPreview(preview: ReturnType<typeof readBillingImportFile>['previe
 /** `fiscus billing` — immutable local provider-cost evidence, never an implicit reconciliation. */
 export function cmdBilling(flags: Flags): void {
   const action = typeof flags._[0] === 'string' ? flags._[0] : 'status';
+  if (action === 'scope') {
+    cmdScope(flags);
+    return;
+  }
   if (action === 'import') {
     if (typeof flags.file !== 'string') {
       usage();

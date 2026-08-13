@@ -22,6 +22,12 @@ import {
   type BillingCoverage,
   type NormalizedBillingImport,
 } from '../billing/types.ts';
+import {
+  newOpenAiScopeDeclaration,
+  normalizeOpenAiUpstream,
+  type ProviderScopeDeclaration,
+  type ScopeCaptureStatus,
+} from '../billing/scope.ts';
 
 export interface RequestRow {
   requestId: string;
@@ -51,6 +57,9 @@ export interface RequestRow {
   // (sunk subscription cost, observed after the fact). Cap ENFORCEMENT keys on this.
   /** Evidence for the amount above. Missing only means a pre-lineage/legacy row. */
   pricing?: RequestPricingEvidence;
+  /** Local route-scope provenance. Never a provider-account verification. */
+  scopeCaptureStatus?: ScopeCaptureStatus;
+  providerScopeDeclarationId?: string | null;
 }
 
 export interface RequestPriceEvent {
@@ -269,13 +278,34 @@ CREATE TABLE IF NOT EXISTS requests (
   rate_card_source_kind TEXT NOT NULL DEFAULT 'legacy_unknown',
   rate_match_kind   TEXT NOT NULL DEFAULT 'legacy_unknown',
   rate_match_provider TEXT,
-  rate_match_model  TEXT
+  rate_match_model  TEXT,
+  scope_capture_status TEXT NOT NULL DEFAULT 'legacy_unknown',
+  provider_scope_declaration_id TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_requests_ts      ON requests(ts_epoch_ms);
 CREATE INDEX IF NOT EXISTS idx_requests_session ON requests(session_id);
 CREATE INDEX IF NOT EXISTS idx_requests_project ON requests(project);
 CREATE INDEX IF NOT EXISTS idx_requests_model   ON requests(model);
+
+CREATE TABLE IF NOT EXISTS provider_scope_declarations (
+  declaration_id      TEXT PRIMARY KEY NOT NULL,
+  provider            TEXT NOT NULL CHECK (provider = 'openai'),
+  billing_account_ref TEXT NOT NULL,
+  provider_project_ref TEXT,
+  upstream_fingerprint TEXT NOT NULL,
+  upstream_display    TEXT NOT NULL,
+  declared_at_ms      INTEGER NOT NULL,
+  trust               TEXT NOT NULL DEFAULT 'operator_declared_unverified',
+  UNIQUE(provider, billing_account_ref, provider_project_ref, upstream_fingerprint)
+);
+
+CREATE TABLE IF NOT EXISTS active_provider_scope_routes (
+  provider            TEXT PRIMARY KEY NOT NULL CHECK (provider = 'openai'),
+  declaration_id      TEXT NOT NULL,
+  upstream_fingerprint TEXT NOT NULL,
+  activated_at_ms     INTEGER NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS request_price_events (
   event_id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -505,7 +535,35 @@ function requestRowFromRecord(record: Record<string, unknown>): RequestRow {
     estimated: Boolean(record.estimated),
     streamed: Boolean(record.streamed),
     pricing: pricingEvidenceFromRecord(record),
+    scopeCaptureStatus: typeof record.scopeCaptureStatus === 'string'
+      ? record.scopeCaptureStatus as ScopeCaptureStatus
+      : 'legacy_unknown',
+    providerScopeDeclarationId: typeof record.providerScopeDeclarationId === 'string'
+      ? record.providerScopeDeclarationId
+      : null,
   };
+}
+
+function scopeDeclarationFromRecord(row: Record<string, unknown>): ProviderScopeDeclaration {
+  return {
+    declarationId: String(row.declarationId),
+    provider: 'openai',
+    billingAccountRef: String(row.billingAccountRef),
+    providerProjectRef: typeof row.providerProjectRef === 'string' ? row.providerProjectRef : null,
+    upstreamFingerprint: String(row.upstreamFingerprint),
+    upstreamDisplay: String(row.upstreamDisplay),
+    declaredAtMs: Number(row.declaredAtMs),
+    trust: 'operator_declared_unverified',
+  };
+}
+
+function scopeCaptureForInsert(row: RequestRow): { status: ScopeCaptureStatus; declarationId: string | null } {
+  if (row.scopeCaptureStatus) {
+    return { status: row.scopeCaptureStatus, declarationId: row.providerScopeDeclarationId ?? null };
+  }
+  // Native importer traffic cannot attest to the endpoint it originally used.
+  // New proxy rows are deliberately not given an account identity by default.
+  return { status: row.via === 'import' ? 'not_observed' : 'unscoped', declarationId: null };
 }
 
 function billingRunFromRecord(row: Record<string, unknown>): BillingImportRun {
@@ -625,12 +683,19 @@ export class Store {
     if (!cols.some((c) => c.name === 'rate_match_model')) {
       this.db.prepare('ALTER TABLE requests ADD COLUMN rate_match_model TEXT').run();
     }
+    if (!cols.some((c) => c.name === 'scope_capture_status')) {
+      this.db.prepare("ALTER TABLE requests ADD COLUMN scope_capture_status TEXT NOT NULL DEFAULT 'legacy_unknown'").run();
+    }
+    if (!cols.some((c) => c.name === 'provider_scope_declaration_id')) {
+      this.db.prepare('ALTER TABLE requests ADD COLUMN provider_scope_declaration_id TEXT').run();
+    }
     const signalCols = this.db.prepare('PRAGMA table_info(gate_signals)').all() as Array<{ name: string }>;
     if (!signalCols.some((c) => c.name === 'evidence_source')) {
       this.db.prepare("ALTER TABLE gate_signals ADD COLUMN evidence_source TEXT NOT NULL DEFAULT 'manual'").run();
     }
     this.runScript('CREATE INDEX IF NOT EXISTS idx_requests_user ON requests(user)');
     this.runScript('CREATE INDEX IF NOT EXISTS idx_requests_source ON requests(source)');
+    this.runScript('CREATE INDEX IF NOT EXISTS idx_requests_scope_declaration ON requests(provider_scope_declaration_id)');
   }
 
   /** Run one or more `;`-separated statements via prepared statements. */
@@ -786,14 +851,16 @@ export class Store {
 
   insertRequest(r: RequestRow): void {
     const pricing = r.pricing ?? legacyPricingEvidence();
+    const scope = scopeCaptureForInsert(r);
     this.db
       .prepare(
         `INSERT INTO requests (
             request_id, session_id, ts_iso, ts_epoch_ms, provider, model, project,
             task_weight, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens,
             reasoning_tokens, cost_usd, estimated, streamed, status_code, duration_ms, user, source, cwd, via,
-            cost_basis, rate_card_sha256, rate_card_source_kind, rate_match_kind, rate_match_provider, rate_match_model
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            cost_basis, rate_card_sha256, rate_card_source_kind, rate_match_kind, rate_match_provider, rate_match_model,
+            scope_capture_status, provider_scope_declaration_id
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       )
       .run(
         r.requestId,
@@ -824,6 +891,8 @@ export class Store {
         pricing.rateMatchKind,
         pricing.rateMatchProvider,
         pricing.rateMatchModel,
+        scope.status,
+        scope.declarationId,
       );
   }
 
@@ -834,14 +903,16 @@ export class Store {
    */
   insertRequestIfNew(r: RequestRow): boolean {
     const pricing = r.pricing ?? legacyPricingEvidence();
+    const scope = scopeCaptureForInsert(r);
     const info = this.db
       .prepare(
         `INSERT INTO requests (
             request_id, session_id, ts_iso, ts_epoch_ms, provider, model, project,
             task_weight, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens,
             reasoning_tokens, cost_usd, estimated, streamed, status_code, duration_ms, user, source, cwd, via,
-            cost_basis, rate_card_sha256, rate_card_source_kind, rate_match_kind, rate_match_provider, rate_match_model
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            cost_basis, rate_card_sha256, rate_card_source_kind, rate_match_kind, rate_match_provider, rate_match_model,
+            scope_capture_status, provider_scope_declaration_id
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
          ON CONFLICT(request_id) DO NOTHING`,
       )
       .run(
@@ -873,6 +944,8 @@ export class Store {
         pricing.rateMatchKind,
         pricing.rateMatchProvider,
         pricing.rateMatchModel,
+        scope.status,
+        scope.declarationId,
       );
     return Number(info.changes ?? 0) > 0;
   }
@@ -1260,7 +1333,9 @@ export class Store {
                 estimated, streamed, status_code AS statusCode, duration_ms AS durationMs, user, source, cwd, via,
                 cost_basis AS costBasis, rate_card_sha256 AS rateCardSha256,
                 rate_card_source_kind AS rateCardSourceKind, rate_match_kind AS rateMatchKind,
-                rate_match_provider AS rateMatchProvider, rate_match_model AS rateMatchModel
+                rate_match_provider AS rateMatchProvider, rate_match_model AS rateMatchModel,
+                scope_capture_status AS scopeCaptureStatus,
+                provider_scope_declaration_id AS providerScopeDeclarationId
          FROM requests ORDER BY ts_epoch_ms DESC LIMIT ?`,
       )
       .all(limit) as Array<Record<string, unknown>>;
@@ -1279,7 +1354,9 @@ export class Store {
                 estimated, streamed, status_code AS statusCode, duration_ms AS durationMs, user, source, cwd, via,
                 cost_basis AS costBasis, rate_card_sha256 AS rateCardSha256,
                 rate_card_source_kind AS rateCardSourceKind, rate_match_kind AS rateMatchKind,
-                rate_match_provider AS rateMatchProvider, rate_match_model AS rateMatchModel
+                rate_match_provider AS rateMatchProvider, rate_match_model AS rateMatchModel,
+                scope_capture_status AS scopeCaptureStatus,
+                provider_scope_declaration_id AS providerScopeDeclarationId
          FROM requests WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ? ORDER BY ts_epoch_ms ASC`,
       )
       .all(startMs, endMs) as Array<Record<string, unknown>>;
@@ -1845,6 +1922,100 @@ export class Store {
       lastImportedAtMs: imports.lastImportedAtMs === null ? null : Number(imports.lastImportedAtMs),
       reconciliationStatus: 'not_reconciled',
     };
+  }
+
+  /**
+   * Create (or recover) an immutable local OpenAI route declaration and make it
+   * active for future matching proxy rows. This is intentionally local operator
+   * provenance, never a provider credential/account verification.
+   */
+  setOpenAiScope(input: {
+    billingAccountRef: string;
+    providerProjectRef?: string | null;
+    upstreamBase: string;
+    declaredAtMs?: number;
+    activatedAtMs?: number;
+  }): ProviderScopeDeclaration {
+    const declaration = newOpenAiScopeDeclaration(input);
+    const select = this.db.prepare(
+      `SELECT declaration_id AS declarationId, billing_account_ref AS billingAccountRef,
+              provider_project_ref AS providerProjectRef, upstream_fingerprint AS upstreamFingerprint,
+              upstream_display AS upstreamDisplay, declared_at_ms AS declaredAtMs
+         FROM provider_scope_declarations
+        WHERE provider = 'openai' AND billing_account_ref = ?
+          AND provider_project_ref IS ? AND upstream_fingerprint = ?`,
+    );
+    this.runScript('BEGIN');
+    try {
+      let record = select.get(
+        declaration.billingAccountRef,
+        declaration.providerProjectRef,
+        declaration.upstreamFingerprint,
+      ) as Record<string, unknown> | undefined;
+      // SQLite's UNIQUE treats NULL values as distinct. Look up first so the
+      // optional provider project cannot create duplicate declarations on each
+      // idempotent `scope set` invocation.
+      if (!record) {
+        this.db.prepare(
+          `INSERT INTO provider_scope_declarations (
+             declaration_id, provider, billing_account_ref, provider_project_ref, upstream_fingerprint,
+             upstream_display, declared_at_ms, trust
+           ) VALUES (?,?,?,?,?,?,?,?)`,
+        ).run(
+          declaration.declarationId, declaration.provider, declaration.billingAccountRef, declaration.providerProjectRef,
+          declaration.upstreamFingerprint, declaration.upstreamDisplay, declaration.declaredAtMs, declaration.trust,
+        );
+        record = select.get(
+          declaration.billingAccountRef,
+          declaration.providerProjectRef,
+          declaration.upstreamFingerprint,
+        ) as Record<string, unknown> | undefined;
+      }
+      if (!record) throw new Error('could not persist the local OpenAI scope declaration');
+      const persisted = scopeDeclarationFromRecord(record);
+      this.db.prepare(
+        `INSERT INTO active_provider_scope_routes (provider, declaration_id, upstream_fingerprint, activated_at_ms)
+         VALUES ('openai',?,?,?)
+         ON CONFLICT(provider) DO UPDATE SET declaration_id=excluded.declaration_id,
+           upstream_fingerprint=excluded.upstream_fingerprint, activated_at_ms=excluded.activated_at_ms`,
+      ).run(persisted.declarationId, persisted.upstreamFingerprint, input.activatedAtMs ?? Date.now());
+      this.runScript('COMMIT');
+      return persisted;
+    } catch (error) {
+      this.runScript('ROLLBACK');
+      throw error;
+    }
+  }
+
+  /** Stop attaching the local scope to future OpenAI-proxy rows. Historical rows are immutable. */
+  clearOpenAiScope(): boolean {
+    const info = this.db.prepare(`DELETE FROM active_provider_scope_routes WHERE provider = 'openai'`).run();
+    return Number(info.changes ?? 0) > 0;
+  }
+
+  /** Active local declaration, if one exists. It still has unverified trust. */
+  activeOpenAiScope(): ProviderScopeDeclaration | null {
+    const row = this.db.prepare(
+      `SELECT d.declaration_id AS declarationId, d.billing_account_ref AS billingAccountRef,
+              d.provider_project_ref AS providerProjectRef, d.upstream_fingerprint AS upstreamFingerprint,
+              d.upstream_display AS upstreamDisplay, d.declared_at_ms AS declaredAtMs
+         FROM active_provider_scope_routes a
+         JOIN provider_scope_declarations d ON d.declaration_id = a.declaration_id
+        WHERE a.provider = 'openai'`,
+    ).get() as Record<string, unknown> | undefined;
+    return row ? scopeDeclarationFromRecord(row) : null;
+  }
+
+  /** Snapshot only when a request's resolved OpenAI endpoint exactly matches the active declaration. */
+  matchingOpenAiScope(upstreamBase: string): ProviderScopeDeclaration | null {
+    let fingerprint: string;
+    try {
+      fingerprint = normalizeOpenAiUpstream(upstreamBase).fingerprint;
+    } catch {
+      return null;
+    }
+    const active = this.activeOpenAiScope();
+    return active?.upstreamFingerprint === fingerprint ? active : null;
   }
 
   /** Maintenance: prune old requests and compact. Returns rows removed. */

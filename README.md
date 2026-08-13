@@ -414,6 +414,19 @@ fiscus billing status
 fiscus billing export --csv --out .\provider-cost-evidence.csv
 ```
 
+If you operate the local proxy, you may additionally attach an **operator-declared,
+unverified** account/project reference to future OpenAI-proxy rows that use the
+exact configured upstream:
+
+```powershell
+fiscus billing scope set --account-ref finops-production --project-ref proj_123 # preview
+fiscus billing scope set --account-ref finops-production --project-ref proj_123 --apply
+```
+
+It is local routing provenance, not provider authentication or reconciliation:
+imports remain separate, historical rows are never backfilled, and a route-scope
+declaration never changes caps, RoI, or `today` totals.
+
 V1 is deliberately a strict local JSON contract, not a guessed CSV/PDF parser
 or a credentialed provider sync. It does not overwrite metered estimates, add
 provider totals to `today`, claim invoice accuracy, or calculate a variance:

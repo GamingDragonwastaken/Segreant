@@ -244,6 +244,69 @@ test('streaming OpenAI: proxy injects stream_options so usage is captured', asyn
   store.close();
 });
 
+test('OpenAI proxy snapshots only a matching active local scope and never treats it as verified billing', async () => {
+  const upstream = await startMockUpstream();
+  const store = new Store(':memory:');
+  const declaration = store.setOpenAiScope({ billingAccountRef: 'finops-test', upstreamBase: upstream.url });
+  const proxy = await startProxy(store, {}, upstream.url);
+
+  const res = await fetch(`${proxy.base}/v1/chat/completions`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: 'Bearer sk-test' },
+    body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: 'hi' }] }),
+  });
+  assert.equal(res.status, 200);
+  await res.text();
+  await new Promise((r) => setTimeout(r, 20));
+  const logged = store.recent(1)[0]!;
+  assert.equal(logged.scopeCaptureStatus, 'declared_unverified');
+  assert.equal(logged.providerScopeDeclarationId, declaration.declarationId);
+
+  await proxy.close();
+  await upstream.close();
+  store.close();
+});
+
+test('OpenAI proxy retains the ingress scope on a budget block and an upstream failure', async () => {
+  const upstream = await startMockUpstream();
+  const store = new Store(':memory:');
+  const declaration = store.setOpenAiScope({ billingAccountRef: 'finops-test', upstreamBase: upstream.url });
+  store.insertRequest({
+    requestId: 'budget-seed', sessionId: null, tsEpochMs: Date.now(), provider: 'openai', model: 'gpt-4o', project: 'default',
+    taskWeight: 1, inputTokens: 0, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, reasoningTokens: 0,
+    costUsd: 1, estimated: false, streamed: false, statusCode: 200, durationMs: 1,
+  });
+  const blockedProxy = await startProxy(store, { budget: { ...DEFAULT_CONFIG.budget, dailyUsd: 0.01 } }, upstream.url);
+  const blocked = await fetch(`${blockedProxy.base}/v1/chat/completions`, {
+    method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer sk-test' },
+    body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: 'hi' }] }),
+  });
+  assert.equal(blocked.status, 429);
+  const blockedRow = store.recent(1)[0]!;
+  assert.equal(blockedRow.scopeCaptureStatus, 'declared_unverified');
+  assert.equal(blockedRow.providerScopeDeclarationId, declaration.declarationId);
+  assert.equal(blockedRow.costUsd, 0);
+  await blockedProxy.close();
+  await upstream.close();
+
+  const dead = await startMockUpstream();
+  const deadUrl = dead.url;
+  await dead.close();
+  const failureDeclaration = store.setOpenAiScope({ billingAccountRef: 'finops-test', upstreamBase: deadUrl });
+  const failureProxy = await startProxy(store, {}, deadUrl);
+  const failed = await fetch(`${failureProxy.base}/v1/chat/completions`, {
+    method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer sk-test' },
+    body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: 'hi' }] }),
+  });
+  assert.equal(failed.status, 502);
+  const failedRow = store.recent(1)[0]!;
+  assert.equal(failedRow.scopeCaptureStatus, 'declared_unverified');
+  assert.equal(failedRow.providerScopeDeclarationId, failureDeclaration.declarationId);
+  assert.equal(failedRow.costUsd, 0);
+  await failureProxy.close();
+  store.close();
+});
+
 test('non-streaming OpenAI Responses API: input_tokens/output_tokens shape normalizes like Chat Completions', async () => {
   const upstream = await startMockUpstream();
   const store = new Store(':memory:');
