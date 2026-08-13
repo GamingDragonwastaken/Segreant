@@ -20,11 +20,8 @@ import { resolveBaselineMinutesForRepo } from '../value/liftBaseline.ts';
 import { computeFrontier } from '../value/frontier.ts';
 import { computeUsageRoI } from '../value/usage.ts';
 import { recommendBudget } from '../budget/recommend.ts';
-import { recommendAllocation } from '../budget/allocate.ts';
-import { shadowPriceOfIntelligence, estimateBetaFromPairs } from '../value/marginal.ts';
 import { goodhartStreams } from '../value/drift.ts';
 import { instrumentationPriority } from '../value/voi.ts';
-import { estimateBetaPrior, shrinkRate } from '../value/reliability.ts';
 import { GATE_LADDER, GATE_META } from '../value/gates.ts';
 import { C, color, usd, num, pct, glyph, noteSource, printNotAGitRepo } from './ui.ts';
 import { type Flags } from './flags.ts';
@@ -597,50 +594,12 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
   }
 
   const rec = recommendBudget({ dailySpends, realizedValueRate, frontier: frontierCells });
-  // Forward-looking allocation: re-weight the same budget by return + quantify the moves.
-  const allocation =
-    frontierCells.length >= 2
-      ? recommendAllocation(
-          frontierCells.map((c) => ({ key: c.key, costUsd: c.costUsd, roiIndex: c.roiIndex, realizedValueUsd: c.netRealizedValueUsd })),
-        )
-      : null;
-
-  // The shadow price of intelligence — what one more AI dollar returns, optimally
-  // deployed. Reliability-adjust each context's value first (empirical-Bayes
-  // shrinkage of its realization rate) so a noisy 2-unit cell can't distort the
-  // optimum. (docs/RETURN-ON-INTELLIGENCE.md §8–9.)
-  let shadow: ReturnType<typeof shadowPriceOfIntelligence> | null = null;
-  let betaEstimate: ReturnType<typeof estimateBetaFromPairs> | null = null;
-  if (frontierCells.length >= 2) {
-    // β from the org's OWN curvature when history supports it: the same contexts
-    // observed in the window's two halves; within-context slopes cancel context
-    // quality, so heterogeneous contexts can't bias the elasticity. Falls back to
-    // the disclosed planning default (0.5) when not estimable. (docs §9.)
-    const units = loadedValue!.report.units;
-    let betaOpts: { beta?: number; betaHow?: string } = {};
-    if (units.length >= 6) {
-      const ts = units.map((u) => u.tsEpochMs).sort((a, b) => a - b);
-      const cut = ts[ts.length >> 1]!;
-      const early = computeFrontier(units.filter((u) => u.tsEpochMs < cut)).byModelAndTask;
-      const late = new Map(computeFrontier(units.filter((u) => u.tsEpochMs >= cut)).byModelAndTask.map((c) => [c.key, c]));
-      const pairs = early.flatMap((c) => {
-        const l = late.get(c.key);
-        return l ? [{ key: c.key, spend1: c.costUsd, value1: c.netRealizedValueUsd, spend2: l.costUsd, value2: l.netRealizedValueUsd }] : [];
-      });
-      betaEstimate = estimateBetaFromPairs(pairs);
-      if (betaEstimate.beta !== null) betaOpts = { beta: betaEstimate.beta, betaHow: betaEstimate.how };
-    }
-    const prior = estimateBetaPrior(frontierCells.map((c) => ({ k: Math.round(c.realizationRate * c.units), n: c.units })));
-    const marginalCells = frontierCells.map((c) => {
-      const shrunk = shrinkRate(Math.round(c.realizationRate * c.units), c.units, prior);
-      const adj = c.realizationRate > 0 ? shrunk / c.realizationRate : 1; // scale value by the reliable/raw ratio
-      return { key: c.key, costUsd: c.costUsd, realizedValueUsd: c.netRealizedValueUsd * adj };
-    });
-    shadow = shadowPriceOfIntelligence(marginalCells, betaOpts);
-  }
+  // Raw RoI cells can mix unlike tasks. The actionable guidance is the
+  // separately gated same-task model-switch trial, never a generic allocator.
+  const allocation = null;
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify({ ...rec, spendBasis, windowDays: days, allocation, shadowPrice: shadow }, null, 2) + '\n');
+    process.stdout.write(JSON.stringify({ ...rec, spendBasis, windowDays: days, allocation, shadowPrice: null }, null, 2) + '\n');
     store.close();
     return;
   }
@@ -671,17 +630,21 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
   for (const r of rec.rationale) console.log(color(tty, C.gray, `  · ${r}`));
   // Prefer the quantified allocation (concrete $ moves + projected value gain);
   // fall back to the qualitative trim/grow when there isn't enough frontier data.
+  /*
+   * Raw allocation is intentionally withheld from the CLI. The retained helper
+   * is an offline `exploratory_raw` scenario only; generic contexts can be
+   * unlike work and its arithmetic is not a recommendation or forecast.
   if (allocation && allocation.moves.length) {
     const d2 = (n: number) => '$' + n.toFixed(2); // aggregate dollars read best at 2dp
     console.log('');
     console.log(
-      color(tty, C.bold, '  Allocate the same budget by return') +
-        color(tty, C.gray, `   → ≈ +${d2(allocation.projectedValueGainUsd)} realized value`),
+      color(tty, C.bold, '  Exploratory raw allocation scenario') +
+        color(tty, C.gray, `   → raw arithmetic ${d2(allocation.rawRateScenarioGainUsd)} (not a recommendation)`),
     );
     for (const m of allocation.moves.slice(0, 5)) {
       console.log(
         `    ${color(tty, C.yellow, 'MOVE')} ${d2(m.amountUsd).padStart(8)}  ` +
-          `${color(tty, C.gray, `${m.fromKey} → ${m.toKey}`)}  ${color(tty, C.green, '+' + d2(m.projectedValueGainUsd))}`,
+          `${color(tty, C.gray, `${m.fromKey} → ${m.toKey}`)}  ${color(tty, C.green, d2(m.rawRateScenarioGainUsd))}`,
       );
     }
     for (const assumption of allocation.assumptions) {
@@ -695,21 +658,8 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
       console.log(`    ${tag}  ${re.context.padEnd(28)} ${color(tty, C.gray, re.reason)}`);
     }
   }
-  // The headline scalar: the marginal return on the next AI dollar at the optimum.
-  if (shadow && shadow.budgetUsd > 0 && shadow.optimalValueUsd > 0) {
-    const d2 = (n: number) => '$' + n.toFixed(2);
-    console.log('');
-    console.log(color(tty, C.bold, '  Shadow price of intelligence') + color(tty, C.gray, '   what one more AI $ returns, optimally spent'));
-    console.log(
-      `    ${color(tty, shadow.paysAtMargin ? C.green : C.red, d2(shadow.shadowPriceUsd) + ' per AI $')}   ` +
-        color(tty, C.gray, shadow.paysAtMargin ? 'the next dollar still pays for itself — room to grow' : 'past positive margin — cut before you grow'),
-    );
-    console.log(color(tty, C.gray, `    same ${d2(shadow.budgetUsd)} budget split optimally: ${d2(shadow.currentValueUsd)} → ${d2(shadow.optimalValueUsd)} realized value (+${d2(shadow.upliftUsd)})`));
-    const betaLine = betaEstimate && betaEstimate.beta !== null
-      ? `β=${shadow.beta.toFixed(2)} — ${betaEstimate.how}`
-      : `β=${shadow.beta.toFixed(2)} — disclosed planning default${betaEstimate ? ` (${betaEstimate.how})` : ''}`;
-    console.log(color(tty, C.gray, `    ${betaLine}`));
   }
+  */
   if (flags.apply) {
     cfg.budget.dailyUsd = dailyCap;
     cfg.budget.dailySoftUsd = softCap;

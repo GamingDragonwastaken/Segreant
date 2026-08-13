@@ -916,7 +916,9 @@ function renderValue(d) {
   const bud = d.budget;
   // Prefer the quantified allocation plan (concrete $ moves + projected value
   // gain); fall back to the qualitative trim/grow when there isn't enough data.
-  const alloc = d.allocation;
+  // Generic raw-RoI allocation can mix unlike work. Do not render it as an
+  // action even if an older/local API response happens to carry one.
+  const alloc = null;
   const reallocs = (alloc && alloc.moves && alloc.moves.length)
     ? `<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Allocate the same budget by return → <b style="color:var(--mint)">+$${money(alloc.projectedValueGainUsd)}</b> realized value</div>`
       + alloc.moves.slice(0, 5).map((m) =>
@@ -945,7 +947,8 @@ function renderValue(d) {
   if (d.projects && d.projects.length) {
     const prows = d.projects.map((p) =>
       `<tr><td class="model">${esc(p.project)}${p.sources && p.sources.length ? `<div style="font-size:10.5px;color:var(--faint);font-family:var(--mono)">coded with ${esc(p.sources.join(' · '))}</div>` : ''}</td><td>${p.units}</td><td class="cost">$${money(p.costUsd)}</td><td>${Math.round(p.realizationRate * 100)}%</td><td class="roi">${p.roiIndex == null ? '—' : Math.round(p.roiIndex)}</td></tr>`).join('');
-    const pa = d.projectAllocation;
+    // Cross-project raw allocation is descriptive at best, never a UI action.
+    const pa = null;
     const paHtml = (pa && pa.moves && pa.moves.length)
       ? `<div style="margin-top:12px"><div style="font-size:12px;color:var(--muted);margin-bottom:6px">Reallocate across projects → <b style="color:var(--mint)">+$${money(pa.projectedValueGainUsd)}</b> realized value</div>`
         + pa.moves.slice(0, 4).map((m) =>

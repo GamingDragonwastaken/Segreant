@@ -34,15 +34,17 @@ test('allocation: tilt=0 is a no-op; tilt scales the move', () => {
   assert.ok(hOpus > 0 && hOpus < fOpus, 'half tilt moves less than full');
 });
 
-test('allocation: projects realized-value gain from trim→grow moves', () => {
+test('allocation: labels raw trim→grow arithmetic as an exploratory, non-causal scenario', () => {
   const plan = recommendAllocation(cells());
+  assert.equal(plan.evidenceClass, 'exploratory_raw');
   assert.ok(plan.moves.length >= 1, 'a concrete move is proposed');
   const m = plan.moves[0]!;
   assert.equal(m.fromKey, 'gpt-4o·refactor', 'trims the laggard');
   assert.equal(m.toKey, 'opus·feature', 'feeds the leader');
   // gain = amount × (rvr_to − rvr_from) = amount × (1 − 0)
-  assert.ok(Math.abs(m.projectedValueGainUsd - m.amountUsd) < 1e-6, 'gain equals the move at these rates');
-  assert.ok(plan.projectedValueGainUsd > 0);
+  assert.ok(Math.abs(m.rawRateScenarioGainUsd - m.amountUsd) < 1e-6, 'raw arithmetic equals the move at these rates');
+  assert.equal(plan.rawRateScenarioGainUsd, plan.projectedValueGainUsd, 'legacy field is retained only as the same explicitly raw arithmetic');
+  assert.match(plan.assumptions[0]!, /EXPLORATORY RAW/i);
 });
 
 test('allocation: unscored (no-RoI) contexts are held at status quo', () => {

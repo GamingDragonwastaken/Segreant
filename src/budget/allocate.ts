@@ -36,14 +36,20 @@ export interface AllocationMove {
   fromKey: string;
   toKey: string;
   amountUsd: number;
+  /** Explicit name for the raw arithmetic; never a forecast or realized value. */
+  rawRateScenarioGainUsd: number;
   projectedValueGainUsd: number; // amount × (rvr_to − rvr_from)
   rationale: string;
 }
 
 export interface AllocationPlan {
+  /** Generic contexts may be incomparable; this output is never an action recommendation. */
+  evidenceClass: 'exploratory_raw';
   totalUsd: number;
   items: AllocationItem[];
   moves: AllocationMove[];
+  /** Same arithmetic as legacy projectedValueGainUsd, with an honest semantic name. */
+  rawRateScenarioGainUsd: number;
   projectedValueGainUsd: number;
   assumptions: string[];
 }
@@ -121,6 +127,7 @@ export function recommendAllocation(
         fromKey: t.key,
         toKey: g.key,
         amountUsd: amount,
+        rawRateScenarioGainUsd: gain,
         projectedValueGainUsd: gain,
         rationale: `Move ${fmt(amount)} from "${t.key}" to "${g.key}" → ≈ ${fmt(gain)} more realized value at current rates.`,
       });
@@ -137,5 +144,10 @@ export function recommendAllocation(
     'Projected gains assume each context’s realized-value rate holds at the margin — a planning estimate under "RoI persists", not a guarantee. Re-measure after reallocating.',
   ];
 
-  return { totalUsd, items, moves, projectedValueGainUsd, assumptions };
+  assumptions.unshift(
+    'EXPLORATORY RAW SCENARIO ONLY: generic model/task or project cells can be unlike work and are not actionable allocation evidence.',
+    'This arithmetic does not establish causal uplift, comparable marginal returns, or a recommendation to change routing, budget, or spend.',
+  );
+
+  return { evidenceClass: 'exploratory_raw', totalUsd, items, moves, rawRateScenarioGainUsd: projectedValueGainUsd, projectedValueGainUsd, assumptions };
 }

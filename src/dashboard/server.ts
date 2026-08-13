@@ -20,7 +20,6 @@ import { projectName } from '../git/correlate.ts';
 import { resolveBaselineMinutesForRepo } from '../value/liftBaseline.ts';
 import { scanWithDiff, saveScan } from '../scan/scan.ts';
 import { demoLiftOptions } from '../demo/seed.ts';
-import { recommendAllocation } from '../budget/allocate.ts';
 import { computeReturnOnIntelligence } from '../value/lenses.ts';
 import { describeSourceDepth } from '../value/sourceDepth.ts';
 import { computeFrontier } from '../value/frontier.ts';
@@ -498,7 +497,7 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
           let roi = null;
           let frontier = null;
           let projects = null;
-          let projectAllocation = null;
+          const projectAllocation = null;
           let drift = null;
           let reclaimed = null;
           if (loaded) {
@@ -551,13 +550,9 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
             // as the RoI lens above so the two numbers never disagree.
             reclaimed = timeReclaimedFromStore(store, rep, baselineMinutes, { low: resolvedBaseline.minutesLow, high: resolvedBaseline.minutesHigh });
             frontier = computeFrontier(rep.units);
-            // Per-project value (the budget owner's view) + cross-project allocation.
+            // Per-project value is descriptive. Cross-project allocation is not
+            // comparable/reliable enough to recommend from raw RoI alone.
             projects = projectValueBreakdown(store, { windowDays, roiOptions: roiOpts });
-            if (projects.length >= 2) {
-              projectAllocation = recommendAllocation(
-                projects.map((p) => ({ key: p.project, costUsd: p.costUsd, roiIndex: p.roiIndex, realizedValueUsd: p.netRealizedValueUsd })),
-              );
-            }
           }
           const budget = {
             ...recommendBudget({
@@ -568,13 +563,9 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
             spendBasis: liveOnly ? 'live_proxy' : 'all_observed',
             windowDays: 30,
           };
-          // Forward-looking allocation over the same model×task frontier.
-          const allocation =
-            frontier && frontier.byModelAndTask.length >= 2
-              ? recommendAllocation(
-                  frontier.byModelAndTask.map((c) => ({ key: c.key, costUsd: c.costUsd, roiIndex: c.roiIndex, realizedValueUsd: c.netRealizedValueUsd })),
-                )
-              : null;
+          // Raw frontier cells may be unlike tasks. The dashboard exposes only
+          // the separately gated, within-task model trials from `frontier`.
+          const allocation = null;
           return json(res, 200, {
             gitRepo: loaded?.source === 'git',
             valueSource: loaded?.source ?? null,

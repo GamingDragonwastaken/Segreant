@@ -139,7 +139,11 @@ export function recommendBudget(
   }
 
   const reallocations: Reallocation[] = [];
-  const cells = (inp.frontier ?? []).filter((c) => c.units >= 2 && c.roiIndex !== null && c.costUsd > 0);
+  // Do not convert raw frontier ranking into an action. Generic model×task cells
+  // can represent unlike work, and a two-unit threshold is not allocation-grade
+  // evidence. Comparable model guidance is emitted only by the within-task,
+  // review-only frontier trial contract instead.
+  const cells: FrontierCell[] = [];
   if (cells.length >= 2) {
     const byRoi = [...cells].sort((a, b) => (a.roiIndex ?? 0) - (b.roiIndex ?? 0));
     const worst = byRoi[0]!;

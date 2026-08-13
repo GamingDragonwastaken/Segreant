@@ -567,10 +567,11 @@ Tightly-clustered cell rates ⟹ their spread is noise ⟹ large κ ⟹ heavy sh
 genuinely spread rates ⟹ real differences ⟹ small κ ⟹ light shrinkage. Alongside
 each shrunken figure we can show the **evidence weight** `n/(n+κ) ∈ [0,1]` — a
 plain-language confidence. (`src/value/reliability.ts`, `test/reliability.test.ts`.)
-This currently feeds the **shadow-price allocation scenario** below, so a 2-unit
-cell cannot steer that signal. The simple same-budget allocation plan remains a
-transparent exploratory projection based on raw observed RoI; it must not be
-read as reliability-adjusted until that path uses the same estimator.
+This supports offline research only. Fiscus does not currently expose a
+shadow-price or generic same-budget allocation decision: model×task and project
+cells can still be unlike work, so shrinkage alone cannot make a cross-context
+optimization causal or comparable. The retained raw allocator is explicitly
+`exploratory_raw`, not reliability-adjusted decision support.
 
 ---
 
@@ -607,7 +608,8 @@ otherwise answer. And because the split follows `aᵢ^{1/(1−β)}` rather than 
 of it — the honest antidote to "pour everything into the top-scoring model." β is
 disclosed like the Index's weights and θ; the concave shape is a planning
 assumption that travels with the output. (`src/value/marginal.ts`,
-`test/marginal.test.ts`; surfaced in `fiscus budget --recommend`.)
+`test/marginal.test.ts`; currently withheld from `fiscus budget --recommend`
+until a within-task, controlled allocation contract exists.)
 
 ### 9.1 β estimated from your own curvature (never silently assumed)
 
@@ -629,7 +631,9 @@ disclosed in the output: positive spend and value in both halves; spend moved
 land inside (0.05, 0.95) — a median at or above 1 means *no diminishing returns
 were detected*, and the honest response is to keep the disclosed default and say
 why, not to clamp an estimate the data rejects. β's provenance (estimated vs.
-default, and from how many contexts) prints next to the shadow price.
+default, and from how many contexts) belongs with any future, controlled
+within-task allocation experiment; it is not currently presented as a product
+allocation recommendation.
 (`estimateBetaFromPairs` in `src/value/marginal.ts`.)
 
 ## 10. Anytime-valid — the number you are allowed to watch

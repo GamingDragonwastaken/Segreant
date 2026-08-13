@@ -331,6 +331,14 @@ both rebuilt is in [docs/RESEARCH-REVIEW.md §3](docs/RESEARCH-REVIEW.md).
 
 ## Allocate by return
 
+**Current evidence boundary (supersedes the historic generic-allocation wording
+below):** Fiscus does **not** issue a default reallocation instruction across
+unlike task types or projects. Raw RoI cells are not causal or generally
+comparable, so the CLI and dashboard withhold those actions. The current
+actionable decision support is the within-task, review-only cheaper-model trial
+below; any generic raw allocation arithmetic is retained only as an explicitly
+`exploratory_raw` offline scenario, never a forecast or applied budget change.
+
 Measuring RoI is the core; **acting on it** is the point. Fiscus turns the
 measurement into budget decisions — the capital-allocation layer:
 
@@ -338,11 +346,15 @@ measurement into budget decisions — the capital-allocation layer:
   from real usage (p90 of active days, after at least seven active days),
   tightened when realized value is low, with projected monthly waste called
   out.
+<!-- Historic raw-allocation description: deliberately withheld from all Fiscus
+product surfaces because model/task and project cells can be unlike work. -->
+<!--
 - **Reallocation, quantified** — it re-weights the *same* budget toward the
   model × task-type contexts that return the most, and shows the projected
   realized-value gain of each move: *"move $2.77 from refactor·gpt-4o (RoI 0) to
   feature·opus (RoI 97) → ≈ +$2.77 realized value."* Not a vague "use less" — a
   concrete allocation, in the CLI and the dashboard.
+-->
 - **The budget owner's view** — because realized value is **persisted** (not
   recomputed live from a working copy), a manager's dashboard shows per-project
   RoI — *which team's AI spend is paying off* — without a single repository on
