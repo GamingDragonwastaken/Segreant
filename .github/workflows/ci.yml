@@ -41,6 +41,34 @@ jobs:
         run: npm install --ignore-scripts --no-package-lock ../fiscus-pack/fiscus-*.tgz
       - working-directory: ../fiscus-install
         run: ./node_modules/.bin/fiscus --help
+      # Prove the packed executable, compiled dashboard, static HTML, and isolated
+      # synthetic ledger work together. The trial is intentionally synthetic and
+      # must remain review-only — this is a package/runtime proof, not model evidence.
+      - name: Packaged demo dashboard smoke
+        working-directory: ../fiscus-install
+        shell: bash
+        run: |
+          set -euo pipefail
+          export AEGIS_HOME="$PWD/.fiscus-home"
+          ./node_modules/.bin/fiscus demo >/dev/null
+          ./node_modules/.bin/fiscus start --demo --port 18090 --dashboard-port 18091 >fiscus-dashboard.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 40); do
+            if curl --fail --silent --show-error http://127.0.0.1:18091/api/health >/dev/null; then break; fi
+            sleep 0.25
+          done
+          curl --fail --silent --show-error http://127.0.0.1:18091/api/health >/dev/null
+          node --input-type=module <<'NODE'
+          const base = 'http://127.0.0.1:18091';
+          const overview = await (await fetch(`${base}/api/overview`)).json();
+          const value = await (await fetch(`${base}/api/value`)).json();
+          const html = await (await fetch(`${base}/`)).text();
+          if (overview.demo !== true || !(overview.summary?.requests > 0)) throw new Error('packaged demo overview missing labelled synthetic traffic');
+          if (value.demo !== true || !Array.isArray(value.frontier?.modelSwitches) || value.frontier.modelSwitches.length === 0) throw new Error('packaged dashboard value API missing model trial');
+          if (!value.frontier.modelSwitches.every((item) => item.confidence === 'trial')) throw new Error('synthetic model trial was overstated as evidence');
+          if (!html.includes('DEMO DATA') || !html.includes('Cheaper model trials')) throw new Error('packaged dashboard HTML missing labelled model-trial renderer');
+          NODE
 
   # team-server is a genuinely separate npm package (own package.json/lockfile,
   # `pg` as its only dependency) so it gets its own job rather than being folded

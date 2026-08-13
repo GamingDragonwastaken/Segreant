@@ -1,60 +1,83 @@
-# Handoff — Fiscus (npm: `fiscus` v0.1.0, formerly AegisFlow)
+# Handoff — Fiscus
 
-**State (2026-07-20): publish-ready, awaiting user actions.** `npm test` →
-371 tests, 370 pass, 1 skipped by design (POSIX-only permission semantics).
-`npx tsc --noEmit` clean.
-`team-server/` is a separate package with its own suite (39/39, tsc clean).
+**State:** active local development candidate. The package version is `0.1.0`,
+but no npm publication, GitHub release, external deployment, or provider-billing
+reconciliation has been verified. Treat [docs/RELEASE-GATE.md](docs/RELEASE-GATE.md)
+as the release authority; it must be refreshed against the exact final commit
+before any public claim.
 
-## Location & repository
-- **Canonical path:** `C:\Users\anasa\Documents\PROJECTS\Side projects, maybe even main but who knows\aegisflow-ts`
-- **GitHub (private):** https://github.com/GamingDragonwastaken/aegisflow —
-  branch `main`. Repo rename to `fiscus` is a pending USER action (R6).
-- Local commits are unpushed — push only on the user's explicit OK.
-  Batched-commit rule: user reviews before commit/push. This session's changes
-  (R9, below) are **uncommitted** — pending user review.
+## Canonical checkout
 
-## What's done (headlines — details in README Status + docs/ARCHITECTURE.md §7)
-Reverse proxy (Anthropic/OpenAI/Gemini/any OpenAI-compatible base) + native
-import (Claude Code / opencode / Codex), `scan --setup` onboarding,
-self-refreshing pricing + `reprice`, budget guard (cap governs LIVE proxy
-spend by default; `budget --include-imported on` for total), project
-aliasing (`fiscus project merge`), RoI Index with partial-identification
-math, Lift judge ladder with REAL transcript excerpts for **all three**
-importers (ephemeral read of each tool's own on-disk log — nothing
-persisted), a dashboard judge trigger (`POST /api/judge`), **Time
-Reclaimed** (`fiscus saved` + a dashboard card) — manual work-weeks a
-project's realized work would have cost at its task baselines vs the
-AI-assisted time actually measured, honestly banded and split by task type
-so died/unrealized work never inflates the number — signed receipts,
-opt-in k-anonymous team tier + separate team-server. Dashboard rebuilt from
-the user's picked mockups (R2) — user eye-check PASSED 2026-07-16. A
-dashboard **Settings page** (Overview/Value/Settings nav, real light/dark
-theme, setup status, masked provider connection status, budget read/write,
-privacy controls) replaces the CLI-only config experience (R9, 2026-07-20).
+- **Path:** `C:\Users\Null_\Documents\Projects & Learning\Fiscus`
+- **Origin:** `https://github.com/GamingDragonwastaken/Fiscus.git`
+- **Branch:** `main`
 
-## Verified this session (2026-07-20)
-- R9: proposal-storage retention/purge (privacy fix), README/FAQ/
-  RESEARCH-REVIEW.md disclosure, dashboard Settings API + view, dashboard
-  nav, light/dark theme system. Browser-probed live against `fiscus-demo`:
-  budget edits persist to `config.json`, theme toggle changes computed CSS,
-  provider connections show real demo traffic, clear-proposals removes real
-  rows, zero non-localhost requests, zero console errors.
+Before handoff, release, or debugging a new report, record `git rev-parse HEAD`
+and `git status --short`. Do not infer GitHub publication or npm availability
+from the local package version, a historical CI run, or an old handoff.
 
-## Remaining — ALL user-blocked
-1. Review + commit this session's R9 changes (uncommitted).
-2. `npm publish --access public --otp=<code>` as 2am_seeker (from repo root).
-3. Push the local commits (user OK).
-4. Landing-page eye-check (same standard as the dashboard eye-check).
-5. R6: GitHub repo rename + later ~/.aegisflow→~/.fiscus migration.
-6. R7: 3-min demo recording; deploy landing (GitHub Pages, free tier).
+## Product boundary
 
-Bedrock/Vertex stays documented-as-unsupported (needs live cloud accounts —
-out of scope per the zero-cost ceiling; revisit on real user signal).
+Fiscus is a local-first FinOps and outcome-evidence tool for AI coding-agent
+spend. It meters configured proxy traffic and selected local tool logs, assigns
+local list-price estimates, applies local proxy budget controls, and presents
+evidence-limited Return on Intelligence views.
 
-## Working preferences
-- Batched commits; never push without explicit user OK. Never handle OTP.
-- `docs/planning/` is gitignored (internal diligence pack) — keep it so.
-- Compat-keep: `~/.aegisflow`, `AEGIS_*` env vars, `aegis.db`,
-  `X-Aegis-Source`, GitHub URLs.
-- Global hooks from other projects can false-fire here (see
-  `cursor-workspace-hooks` memory).
+It is not general AI financial services, financial advice, a compliance
+certification, a provider invoice reconciler, a generic Vanta replacement, or
+an automatic model-routing or budget-allocation system. The only current
+action-like comparison is a review-only, within-task cheaper-model trial with
+explicit evidence limits.
+
+## Local evidence and release boundary
+
+The current codebase includes source tests, a TypeScript check, a build, a clean
+tarball install smoke, and a packaged demo-dashboard probe. Exact commands,
+results, exclusions, and the commit-bound validation table belong in
+[docs/RELEASE-GATE.md](docs/RELEASE-GATE.md), not in this handoff.
+
+Local rate-card figures are not provider billing data. Newly locally priced rows
+retain rate-card lineage; tool-reported, unpriced audit, synthetic-demo, and
+pre-lineage values remain explicitly labelled. An explicit reprice is retained
+as a before/after local-ledger event.
+
+## Before a fresh local candidate claim
+
+1. Record the exact final SHA and clean/known worktree state.
+2. Run the source typecheck, full root test suite, and build.
+3. Pack the artifact, inspect the file list and digest, clean-install it, then
+   probe its CLI and labelled demo dashboard/API from an isolated Fiscus home.
+4. Update [docs/RELEASE-GATE.md](docs/RELEASE-GATE.md) with only evidence from
+   that exact candidate.
+5. Keep all product copy aligned with
+   [docs/DATA-BOUNDARIES.md](docs/DATA-BOUNDARIES.md) and the documented
+   local-list-price limitation.
+
+## Owner-authorized external actions
+
+These actions require the repository/package owner; do not perform or claim
+them from a local coding task:
+
+1. Confirm npm package ownership/name, release version, changelog, support and
+   security contacts, and license attribution.
+2. Push the intended commit and verify the intended GitHub Actions jobs for that
+   exact SHA.
+3. Publish intentionally, then install the registry package into a clean
+   directory and repeat the CLI/dashboard smoke.
+4. Create tags/releases and announce availability only after the registry check
+   succeeds.
+
+## Separately gated team server
+
+`team-server/` is an optional operator-run service. It is not approved for an
+internet-facing or production deployment until a disposable environment proves
+real PostgreSQL schema/transactions/replay policy, real OIDC authentication and
+authorization, TLS, secrets/rotation, backups/restore, retention/incident
+controls, and a complete synthetic client-to-server flow. See
+[docs/RELEASE-GATE.md](docs/RELEASE-GATE.md).
+
+## Compatibility
+
+Historical local paths and controls retain the `aegisflow` / `AEGIS_*` names for
+compatibility. They are not the canonical Fiscus product identity or evidence of
+an earlier release state.

@@ -51,7 +51,15 @@ test('store round-trip: rehydrated snapshots feed the SAME rollup (no parallel m
     })),
   );
   const repB = realizationFromStore(b, { windowDays: 14 });
-  assert.deepEqual(repB.matured, repA.matured);
+  // SQLite aggregates floating-point values in a different order from the JS
+  // reducer. Preserve the meaningful bit-for-bit structural comparison while
+  // comparing the two order-sensitive decimal aggregates numerically.
+  const { totalCostUsd: totalA, realizedValueRate: rateA, ...stableA } = repA.matured;
+  const { totalCostUsd: totalB, realizedValueRate: rateB, ...stableB } = repB.matured;
+  assert.deepEqual(stableB, stableA);
+  assert.ok(Math.abs(totalB - totalA) < 1e-9);
+  assert.ok(rateA !== null && rateB !== null, 'both persisted rollups have a realized-value rate');
+  assert.ok(Math.abs(rateB - rateA) < 1e-12);
   a.close();
   b.close();
 });
@@ -60,14 +68,14 @@ test('demo seed: git-correlated value surfaces light up via the real pipeline', 
   const store = new Store(':memory:');
   const now = noonToday();
   const res = seedDemo(store, { now });
-  assert.equal(res.realizationUnits, 16);
-  assert.equal(store.countRealizationUnits(), 16);
-  assert.equal(store.countRealizationUnits('backend-api'), 6, 'project filter works');
+  assert.equal(res.realizationUnits, 19);
+  assert.equal(store.countRealizationUnits(), 19);
+  assert.equal(store.countRealizationUnits('backend-api'), 9, 'project filter works');
 
   const rep = realizationFromStore(store, { windowDays: 14 });
-  assert.equal(rep.matured.units, 12, 'units older than the 14d window');
-  assert.equal(rep.matured.realizedUnits, 7);
-  assert.ok(Math.abs(rep.matured.realizationRate - 7 / 12) < 1e-9);
+  assert.equal(rep.matured.units, 15, 'units older than the 14d window');
+  assert.equal(rep.matured.realizedUnits, 10);
+  assert.ok(Math.abs(rep.matured.realizationRate - 10 / 15) < 1e-9);
 
   // The waste P&L spans several real funnel outcomes, not just "realized".
   const stages = new Set(rep.matured.wasteByStage.map((b) => b.stage));
@@ -84,6 +92,14 @@ test('demo seed: git-correlated value surfaces light up via the real pipeline', 
   const gptRefactor = fr.byModelAndTask.find((c) => c.model === 'gpt-4o' && c.taskType === 'refactor');
   assert.ok(opusFeat && opusFeat.roiIndex !== null && opusFeat.roiIndex > 80, 'opus·feature leads RoI');
   assert.ok(gptRefactor && gptRefactor.roiIndex === 0, 'gpt-4o·refactor realizes nothing');
+  const trial = fr.modelSwitches.find((item) => item.taskType === 'feature');
+  assert.ok(trial, 'the seeded demo exposes a like-for-like cheaper-model comparison');
+  assert.equal(trial!.incumbentModel, 'claude-opus-4-8');
+  assert.equal(trial!.candidateModel, 'claude-haiku-4-5');
+  assert.equal(trial!.incumbentUnits, 3);
+  assert.equal(trial!.candidateUnits, 3);
+  assert.ok(trial!.historicalEquivalentHeadroomUsd > 0);
+  assert.equal(trial!.confidence, 'trial', 'a six-unit synthetic comparison is never evidence-supported');
   store.close();
 });
 
@@ -98,7 +114,7 @@ test('loadRealization: demo mode serves stored snapshots, never the cwd repo', a
     const loaded = await loadRealization(store, process.cwd(), { windowDays: 14 });
     assert.ok(loaded, 'snapshots exist → resolves');
     assert.equal(loaded!.source, 'store');
-    assert.equal(loaded!.report.matured.units, 12);
+    assert.equal(loaded!.report.matured.units, 15);
   } finally {
     if (prev === undefined) delete process.env.AEGIS_DEMO;
     else process.env.AEGIS_DEMO = prev;

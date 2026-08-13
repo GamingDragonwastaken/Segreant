@@ -6,25 +6,24 @@ registry ownership, production infrastructure, or customer evidence.
 
 ## Local CLI and dashboard candidate
 
-The following checks were completed on 2026-08-11 against the recovered Fiscus
-checkout:
+Historical check counts and screenshots are not release authority. Before making
+a fresh local-candidate claim, record the exact candidate commit and the results
+for this checklist against that source tree:
 
-- root typecheck passed;
-- full root test suite passed: 380 pass, 1 expected platform-specific skip;
-- the normal parallel run also passed after the focused evidence, runtime, and
-  package changes;
-- optional team package typecheck/tests passed: 46 pass;
-- `npm pack` created a `fiscus@0.1.0` tarball containing compiled `dist`, the
-  real bin entrypoint, pricing/baseline data, and dashboard HTML;
-- a clean local tarball install successfully ran `fiscus --help`;
-- an isolated packaged `demo --serve` process returned dashboard health, HTML,
-  and overview JSON on localhost; and
-- an HTTP integration test proved that a hard cap saved from the dashboard
-  governs an already-running proxy.
+| Requirement | Required proof |
+| --- | --- |
+| Candidate identity | `git rev-parse HEAD` and `git status --short` recorded before and after validation |
+| Source validation | `npm ci`, `npm run typecheck`, `npm test`, and `npm run build` with exact totals/results |
+| Packed artifact | `npm pack`; record the tarball digest and inspect that `bin`, compiled `dist`, pricing, baselines, and dashboard HTML are present |
+| Clean installed CLI | Install the tarball with `--ignore-scripts` in a fresh directory and run `fiscus --help` |
+| Packaged dashboard/API | Use an isolated `AEGIS_HOME`; seed labelled demo data; start the installed dashboard; probe health, overview, value, and HTML; terminate it cleanly |
+| Model-trial truthfulness | The packaged value payload must self-label `demo: true`; any seeded model switch must be `trial`, never evidence-supported; HTML must contain the labelled renderer |
+| Intended CI | Inspect the CI jobs for the intended commit, not merely a workflow definition or an old run |
+| Visual check | Inspect the non-empty labelled packaged dashboard in a browser as a supplement to, not a substitute for, the HTTP/API proof |
 
-This validates a local developer preview. It does **not** validate a provider's
-billing statement, production customer data, an npm publication, an external
-deployment, or the optional team service.
+This validates a local developer preview only. It does **not** validate a
+provider billing statement, production customer data, an npm publication, an
+external deployment, or the optional team service.
 
 ## Product claims allowed at this stage
 
@@ -56,7 +55,7 @@ actions below. They are intentionally not automated from a local coding task.
    contact. Verify LICENSE ownership/attribution before changing historical
    copyright text.
 3. Re-run this document's local checks from a clean checkout and inspect the
-   GitHub CI artifact-smoke job on the intended commit.
+   intended commit's GitHub CI jobs, including the packed-dashboard smoke.
 4. Confirm public README/landing-page copy and all outbound data boundaries
    against the provider/optional-service configuration actually shipped.
 5. Inspect the generated tarball one final time, publish intentionally, then
@@ -68,8 +67,8 @@ actions below. They are intentionally not automated from a local coding task.
 ## Separate gate: optional team server
 
 `team-server/` is not approved for an internet-facing or production team
-deployment. Its unit/API tests use a fake store; this workstation has no Docker
-daemon or `psql`, so a real PostgreSQL schema/transaction test was not possible.
+deployment. Its unit/API tests use a fake store; no real PostgreSQL
+schema/transaction validation is recorded for this candidate.
 Before it is exposed, complete all of the following in a disposable environment:
 
 1. Apply the exact schema to a real supported PostgreSQL version and exercise

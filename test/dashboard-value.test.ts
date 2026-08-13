@@ -11,6 +11,7 @@ import type http from 'node:http';
 import { Store } from '../src/store/db.ts';
 import { DEFAULT_CONFIG } from '../src/config.ts';
 import { createDashboardServer } from '../src/dashboard/server.ts';
+import { seedDemo } from '../src/demo/seed.ts';
 
 function boot(store: Store): Promise<{ base: string; close: () => Promise<void> }> {
   const server: http.Server = createDashboardServer({ store, config: structuredClone(DEFAULT_CONFIG), version: 'test' });
@@ -37,5 +38,34 @@ test('GET /api/value: payload always carries a reclaimed key (null when no git r
   } finally {
     await srv.close();
     store.close();
+  }
+});
+
+test('GET /api/value: a synthetic demo labels itself and exposes only a review-only cheaper-model trial', async () => {
+  const previousDemo = process.env.AEGIS_DEMO;
+  process.env.AEGIS_DEMO = '1';
+  const store = new Store(':memory:');
+  const now = new Date();
+  now.setHours(12, 0, 0, 0);
+  seedDemo(store, { now: now.getTime() });
+  const srv = await boot(store);
+  try {
+    const res = await fetch(`${srv.base}/api/value`);
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as {
+      demo: boolean;
+      valueSource: string | null;
+      frontier: { modelSwitches: Array<{ confidence: string; candidateModel: string; incumbentModel: string }> } | null;
+    };
+    assert.equal(body.demo, true);
+    assert.equal(body.valueSource, 'store');
+    assert.ok(body.frontier && body.frontier.modelSwitches.length > 0);
+    assert.ok(body.frontier!.modelSwitches.every((item) => item.confidence === 'trial'));
+    assert.ok(body.frontier!.modelSwitches.some((item) => item.candidateModel === 'claude-haiku-4-5' && item.incumbentModel === 'claude-opus-4-8'));
+  } finally {
+    await srv.close();
+    store.close();
+    if (previousDemo === undefined) delete process.env.AEGIS_DEMO;
+    else process.env.AEGIS_DEMO = previousDemo;
   }
 });

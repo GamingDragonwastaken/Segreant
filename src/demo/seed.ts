@@ -332,6 +332,11 @@ const REALIZATION_ROSTER: UnitSpec[] = [
   { project: 'backend-api',   model: 'claude-opus-4-8',   subject: 'feat: streaming proposal reassembly', daysAgo: 24, costUsd: 4.8,  linesAdded: 320, acceptance: 0.92, arch: 'realized' },
   { project: 'backend-api',   model: 'claude-opus-4-8',   subject: 'feat: per-user attribution',          daysAgo: 21, costUsd: 3.4,  linesAdded: 240, acceptance: 0.88, arch: 'realized' },
   { project: 'backend-api',   model: 'claude-opus-4-8',   subject: 'feat: signed value receipts',         daysAgo: 18, costUsd: 3.9,  linesAdded: 280, acceptance: 0.85, arch: 'realized_light' },
+  // A deliberately small like-for-like synthetic cohort. It must remain a TRIAL:
+  // the demo exercises presentation/flow, never validates a user routing choice.
+  { project: 'backend-api',   model: 'claude-haiku-4-5',  subject: 'feat: status-feed cache key',         daysAgo: 23, costUsd: 0.62, linesAdded: 75,  acceptance: 0.90, arch: 'realized_light' },
+  { project: 'backend-api',   model: 'claude-haiku-4-5',  subject: 'feat: scoped webhook retry',          daysAgo: 20, costUsd: 0.54, linesAdded: 68,  acceptance: 0.88, arch: 'realized' },
+  { project: 'backend-api',   model: 'claude-haiku-4-5',  subject: 'feat: audit event filter',            daysAgo: 17, costUsd: 0.58, linesAdded: 72,  acceptance: 0.87, arch: 'realized_light' },
   { project: 'data-pipeline', model: 'gpt-4o',            subject: 'refactor: rework series bucketing',   daysAgo: 23, costUsd: 1.2,  linesAdded: 180, acceptance: 0.68, arch: 'churned' },
   { project: 'data-pipeline', model: 'gpt-4o',            subject: 'refactor: split correlate module',    daysAgo: 20, costUsd: 1.05, linesAdded: 150, acceptance: 0.62, arch: 'reverted' },
   { project: 'data-pipeline', model: 'gpt-4o',            subject: 'refactor: dedupe attribution',        daysAgo: 17, costUsd: 0.95, linesAdded: 130, acceptance: 0.58, arch: 'churned' },

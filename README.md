@@ -6,12 +6,13 @@
 
 **Govern the spend. Not the developer.**
 
-Value-aware financial management for AI spend: a local-first proxy that prices
-every AI call, measures what that spend actually *returns* (Return on
-Intelligence), and **allocates your budget toward what's worth it** — in real
-time, with local accounting and explicit disclosure of each optional or provider-directed egress path.
+Local-first financial control and outcome evidence for AI coding-agent spend: a
+proxy that meters configured traffic, assigns a local list-price estimate,
+measures evidence of what that spend actually *returns* (Return on
+Intelligence), and presents review-only within-task model trials with explicit
+provider and operator-controlled egress boundaries.
 
-`local-first` · `value-aware` · `zero data egress` · `no build step` · `MIT`
+`local-first` · `evidence-limited` · `explicit egress boundaries` · `MIT`
 
 [![CI](https://github.com/GamingDragonwastaken/Fiscus/actions/workflows/ci.yml/badge.svg)](https://github.com/GamingDragonwastaken/Fiscus/actions/workflows/ci.yml)
 
@@ -31,15 +32,15 @@ doesn't send a warning — it sends an invoice. Traditional monitoring is blind 
 this: a request that costs `$0.002` and a bloated loop that costs `$0.40` look
 identical when you only measure latency and errors.
 
-Fiscus sits in the path, prices every call locally, and caps runaway spend
-**before** the bill — while treating prompts and source code as things that never
-leave your device.
+Fiscus sits in the path, assigns a local price estimate, and can cap further
+proxy-routed usage before it grows. It has no Fiscus-hosted telemetry by default;
+requests still travel to the AI provider configured by the operator.
 
 But capping waste is only the floor. The question a budget owner actually has is
-*"is this spend worth it, and where should the next dollar go?"* — and "tokens
-consumed" never answered it. Fiscus measures the return on every dollar of AI
-spend and reallocates the budget toward the contexts that pay off. It's the
-capital-allocation layer for AI, not another usage chart.
+*"is this spend worth it?"* — and tokens alone never answer it. Fiscus measures
+outcome evidence and offers conservative, review-only comparisons within the
+same task type. It does not automatically reallocate budgets, route providers,
+or present raw RoI rankings as causal allocation evidence.
 
 It is deliberately **not** a surveillance tool. Personal dashboards are for
 self-optimization; team views (when enabled) are aggregate-only; and the
@@ -54,20 +55,20 @@ measurement in plain language (the CFO version) see
 **[docs/METHODOLOGY.md](docs/METHODOLOGY.md)**; common questions are in
 **[docs/FAQ.md](docs/FAQ.md)**.
 
-Requires **Node.js ≥ 24**. No build step, no native modules — it runs the
-TypeScript directly via Node's built-in type stripping and uses Node's built-in
-SQLite.
+Requires **Node.js >= 24**. A cloned checkout builds the distributable runtime
+during `npm install`; the packaged runtime needs no build at use time and uses
+only Node's built-in SQLite.
 
 **See it work in ten seconds** — no API key, no setup:
 
 ```bash
 npm install        # compiles the local CLI; Fiscus has zero runtime dependencies
-npm run demo       # seeds labeled synthetic data and opens the dashboard
+npm run demo       # seeds labelled synthetic data and starts the local dashboard
 ```
 
-That lights up every surface — spend, governance alerts, the RoI index and its
-four value lenses, the per-model×task frontier, the budget allocator — all priced
-by the real cost engine in an isolated `demo.db`. Clear it with `fiscus demo --clear`.
+That lights up spend, governance alerts, the RoI index and its four value
+lenses, the model-by-task frontier, budget controls, and a review-only synthetic
+model trial in an isolated `demo.db`. Clear it with `fiscus demo --clear`.
 
 **Then meter your real traffic:**
 
@@ -154,7 +155,9 @@ fiscus team push --url <u>   Cross-machine: sign + push this window's per-projec
                                 nothing). --dry-run to preview, --pubkey to publish
                                 this machine's rollup identity (--window D, --project
                                 <name>, --json)
-fiscus budget --recommend    Value-aware budget from usage + realized value (--apply)
+fiscus budget --recommend    Evidence-limited cap recommendation from usage +
+                                realized value (applies a cap only; no routing or
+                                budget reallocation)
 fiscus alerts                Governance alerts — spikes, throttling, runaway, value
                                 craters (--repo for value; --json; exits 1 if critical).
                                 Deliver to your webhook: --set-webhook <url>, then --notify
@@ -181,7 +184,7 @@ fiscus init                  Write default config + print setup steps
 fiscus doctor                First-run health check — config, DB, proxy, caps, pricing
 fiscus config                Show config and file paths      (--json)
 fiscus pricing --refresh     Update the rate card from the community price feed
-                                (--auto to self-refresh on start when stale)
+                                (--auto opts into a refresh check on start when stale)
 fiscus reprice               Re-cost estimated rows against the current rate card
                                 (only rows the card now resolves exactly; dry-run
                                 by default, --apply writes)
@@ -196,7 +199,7 @@ fiscus project               Spend by project with aliases applied (--json). Too
                                 project unalias <label>)
 fiscus prune                 Prune old rows and compact the DB
 fiscus demo                  Seed isolated, labeled synthetic data so every surface
-                                populates with no API key (--serve opens the dashboard
+                                populates with no API key (--serve starts the dashboard
                                 on it; --clear removes it). Append --demo to today,
                                 alerts, usage, or start to view the demo data.
 ```
@@ -329,7 +332,7 @@ dollar — but the Standard, not Yield, is the headline. The honest account of w
 the research's "AI Efficiency Score" and our own first Yield-only attempt were
 both rebuilt is in [docs/RESEARCH-REVIEW.md §3](docs/RESEARCH-REVIEW.md).
 
-## Allocate by return
+## Budget controls and model trials
 
 **Current evidence boundary (supersedes the historic generic-allocation wording
 below):** Fiscus does **not** issue a default reallocation instruction across
@@ -339,8 +342,8 @@ actionable decision support is the within-task, review-only cheaper-model trial
 below; any generic raw allocation arithmetic is retained only as an explicitly
 `exploratory_raw` offline scenario, never a forecast or applied budget change.
 
-Measuring RoI is the core; **acting on it** is the point. Fiscus turns the
-measurement into budget decisions — the capital-allocation layer:
+Measuring RoI informs the controls and experiments below. It does not turn raw
+historical rankings into a default budget-allocation action:
 
 - **A value-aware cap** — `fiscus budget --recommend` derives a daily budget
   from real usage (p90 of active days, after at least seven active days),
@@ -366,9 +369,9 @@ product surfaces because model/task and project cells can be unlike work. -->
   quantifies historical-equivalent headroom, and labels overlapping confidence
   intervals as a **trial**, not a proven switch. It never changes routing.
 
-Every projection states its assumption (it holds each context's realized-value
-rate at the margin — a planning estimate, re-measured after you act), the same
-way the lenses stay honest about coverage.
+Historical-equivalent headroom is disclosed as a local planning comparison, not
+a forecast, provider-billed saving, or guarantee. The result must be re-measured
+after any operator-led trial.
 
 ## How it works
 
@@ -380,11 +383,12 @@ IDE / Agent → ANTHROPIC_BASE_URL/OPENAI_BASE_URL → Fiscus proxy (:8090)
 ```
 
 1. **Point your tools at it** — base-URL override. No certificate to install.
-2. **Every call is metered** — the proxy reads the exact usage each provider
-   returns (streaming or not), prices it against a versioned rate card, and logs
-   it on-device. Prompt bodies are parsed for nothing but never stored.
+2. **Configured traffic is metered when usage is available** — the proxy reads
+   usable upstream usage (streaming or not), assigns a local estimate from a
+   versioned rate card, and logs it on-device. Prompt bodies are not stored by
+   this metering path.
 3. **Runaway spend is capped** — soft warnings, hard caps, and a velocity guard
-   that halts a looping agent before the bill.
+   can halt a looping agent before further proxy-routed provider usage.
 
 The rate card is a local list-price estimate. Every newly calculated ledger row
 retains the exact rate-card SHA-256, source kind, and exact/family/fallback
@@ -398,35 +402,23 @@ Full design in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 ### Beyond Anthropic & OpenAI
 
 The OpenAI route speaks the wire format most of the ecosystem now exposes, so
-Fiscus meters far more than two vendors. The simplest way: point
+Fiscus can meter more than two vendors. The simplest way: point
 `upstreams.openai` at any compatible base — **OpenRouter** (which itself fronts
 Gemini, Claude, Llama, Mistral, DeepSeek, and more), **Ollama** and other local
-model servers, **DeepSeek**, **Mistral** — and every call is metered, priced, and
-capped locally. No flag, nothing else to change.
+model servers, **DeepSeek**, **Mistral** — and configured traffic is metered,
+assigned a local estimate, and subject to proxy budget controls.
 
-**Pricing follows the model, not the wire.** The cost engine resolves a rate by
-model family *across* providers, so a `gemini-*` model carried over the
-OpenAI-compatible path is billed at Google's real published rate — Gemini is a
-first-class, verified entry in the rate card, not a generic fallback. That also
-makes it the easiest **zero-cost way to meter a live agent**: point
-`upstreams.openai` at Google's free-tier OpenAI-compatible endpoint
-(`https://generativelanguage.googleapis.com/v1beta/openai/`), run any tool through
-Fiscus with a `gemini-2.5-flash` model, and watch a real RoI accrue without
-spending a cent.
+**Pricing follows the local rate card, not the wire format.** The cost engine
+records whether a local estimate used an exact, family, or fallback match,
+together with the card identity used at calculation time. It does not represent
+that estimate as the configured upstream's billed, discounted, credited, taxed,
+or reconciled amount.
 
 Do **not** switch providers per request through a routing header. Configure one
 trusted OpenAI-compatible upstream in Fiscus instead; use separate Fiscus
-processes when you need separate upstreams. The legacy header below is retained
-only as a migration reference and is ignored by current builds.
-`allowOpenAIBaseOverride` in older configs and sent the base as a header:
-
-```
-X-Aegis-OpenAI-Base: https://openrouter.ai/api    # then call /v1/chat/completions as usual
-```
-
-The header is **ignored on purpose**: honoring it would forward your provider auth
-to the URL it names, so honoring it unconditionally could leak your key. The
-header is stripped before forwarding upstream and never leaves the device.
+processes when you need separate upstreams. The legacy
+`X-Aegis-OpenAI-Base` header is ignored on purpose: honoring a request-controlled
+destination could forward provider authorization to an untrusted URL.
 
 ---
 
@@ -459,8 +451,9 @@ number.
   this and store only token/cost metadata (Acceptance tracking turns off).
   `fiscus prune`, or the dashboard Settings page, purges it early on demand.
 - All cost computation happens on-device against a local pricing table.
-- The dashboard itself makes **zero external requests** — no web fonts, no CDNs,
-  no analytics. Open your browser's network tab and confirm it.
+- The dashboard itself makes no third-party browser requests: no web fonts, CDNs,
+  or Fiscus analytics. This does not remove the explicit provider and
+  operator-configured outbound paths described in the data-boundary disclosure.
 - The local store lives under `~/.aegisflow` (`%USERPROFILE%\.aegisflow` on
   Windows) under your OS file permissions.
 - **The one thing that can leave the device is opt-in and metadata-only:** if you
@@ -490,55 +483,22 @@ CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs `typecheck` +
 
 ## Status
 
-> **Pre-release:** Fiscus is not currently verified as published to npm. Use a
-> cloned checkout (`node bin/fiscus.mjs ...`) until an authorized registry
-> release and clean-install smoke test have completed. See
-> [EVIDENCE-PROVENANCE.md](docs/EVIDENCE-PROVENANCE.md) for what its outcome
-> signals do and do not prove.
-> The current local-preview and external-release boundaries are recorded in
-> [RELEASE-GATE.md](docs/RELEASE-GATE.md).
+> **Active local development candidate:** Fiscus is not verified as published
+> to npm, externally deployed, or reconciled against provider invoices. Use a
+> cloned checkout (`node bin/fiscus.mjs ...`) or a locally packed tarball until
+> an authorized registry release and registry clean-install check have completed.
+> See [RELEASE-GATE.md](docs/RELEASE-GATE.md) for the current evidence boundary.
 
-**Two ways in, and they cross-correlate.** *Proxy* metering (Anthropic, OpenAI
-(Chat Completions and Responses API), **natively-priced Gemini**, and **any
-OpenAI-compatible provider** via `x-aegis-openai-base` — OpenRouter, Ollama,
-DeepSeek, Mistral, …) covers anything
-you point at it live, with transparent fail-open on upstream errors and a
-connect/TTFB timeout so a hung provider can't hang you. **Native import** (`fiscus
-import` — Claude Code, opencode, Codex CLI) reads what those tools already log
-locally, with **zero base-URL wiring**. `fiscus scan` finds both the tools and the
-git repos on your machine — plus a wider, read-only inventory of other AI coding
-tools it sees installed (Cursor, Windsurf, Aider, Continue, Zed) but doesn't import
-from yet — and can set the whole thing up in one command; `discover` auto-correlates
-whatever it finds into **per-project Return on Intelligence**, tagged with which tool
-coded it — no `--repo` needed either way.
+Fiscus currently provides configured proxy metering, supported local-log import,
+local list-price estimates with per-request rate-card lineage, proxy budget
+controls, outcome-evidence views, and review-only within-task cheaper-model
+trials. Pricing refresh and all non-provider egress are operator-controlled.
 
-Cost engine with **cross-provider, model-family pricing** that **self-refreshes**
-from a community feed, budget enforcement + **value-aware allocation**, persisted
-repo-less realized-value with a **per-project budget-owner view**, and **opt-in,
-k-anonymous per-user value**. **Lift** derives from measured time-with-AI × task
-baselines that blend a cited population prior (METR's published human-timed task
-scale) with your own pre-tracking git history via empirical-Bayes shrinkage — no
-synthetic constant, no unsourced table. **`fiscus saved`** turns that same math
-into the calendar-unit headline — manual work-weeks your realized work would
-have cost at your task baselines, vs the AI-assisted time actually measured,
-banded and split by task type so work that died (AI time spent, no savings
-credited) never inflates the number. A state-aware `fiscus guide` (and bare
-`fiscus`) tells you the single next step from your actual data. Terminal + a
-**fully self-contained** web dashboard (zero external requests) mirror every
-surface.
-
-**359/360 tests (1 skipped — POSIX-only permission semantics), `tsc` clean, CI on
-Linux/macOS/Windows.** Installable via `npx fiscus`. See [docs/ARCHITECTURE.md §7](docs/ARCHITECTURE.md) for what's
-deliberately still open — `fiscus team push` can sign and push a numeric-only
-project rollup to [`team-server/`](team-server/README.md), a separate,
-optional, BYO-Postgres server an operator runs themselves (Fiscus hosts
-nothing; its own `package.json` keeps `pg` out of the main CLI's dependency
-tree). The server verifies and stores what's pushed, verifies a human's SSO
-login via OIDC (`node:crypto` only, RS256/ES256), and now serves a real,
-OIDC-gated aggregate dashboard API back out — team-wide spend/RoI by project,
-and an opt-in, k-anonymized distribution by developer, never a named list
-(team-server's own 46-test suite). Still out of scope: a rendered dashboard UI
-over that API, and linking an OIDC identity to a specific developer for a
-self-view.
+Generic cross-task or cross-project allocation, provider billing reconciliation,
+and automatic model routing are deliberately not product actions. The optional
+[team server](team-server/README.md) is a separately gated, operator-run service;
+it is not approved for an internet-facing production deployment. See
+[EVIDENCE-PROVENANCE.md](docs/EVIDENCE-PROVENANCE.md) for what outcome signals do
+and do not prove.
 
 MIT licensed.

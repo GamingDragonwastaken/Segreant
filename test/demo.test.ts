@@ -5,6 +5,8 @@ import { Store } from '../src/store/db.ts';
 import { computeAlerts } from '../src/alerts/detect.ts';
 import { computeUsageRoI } from '../src/value/usage.ts';
 import { computeCohort } from '../src/value/cohort.ts';
+import { realizationFromStore } from '../src/value/realization.ts';
+import { computeFrontier } from '../src/value/frontier.ts';
 import { startOfLocalDay } from '../src/budget/guard.ts';
 import { DEFAULT_CONFIG, type AegisConfig } from '../src/config.ts';
 
@@ -48,6 +50,20 @@ test('demo seed: costs are priced by the real engine, never invented or NaN', ()
     // Blocked rows are zero-cost; everything else with tokens must cost something.
     if (r.statusCode !== 429 && r.outputTokens > 0) assert.ok(r.costUsd > 0, 'metered row has a cost');
   }
+  store.close();
+});
+
+test('demo seed: provides a clearly review-only cheaper-model trial, not a routing decision', () => {
+  const store = new Store(':memory:');
+  seedDemo(store, { now: noonToday() });
+  const trial = computeFrontier(realizationFromStore(store).units).modelSwitches.find((item) => item.taskType === 'feature');
+  assert.ok(trial, 'the synthetic demo has two like-for-like mature feature cohorts');
+  assert.equal(trial!.incumbentModel, 'claude-opus-4-8');
+  assert.equal(trial!.candidateModel, 'claude-haiku-4-5');
+  assert.equal(trial!.incumbentUnits, 3);
+  assert.equal(trial!.candidateUnits, 3);
+  assert.ok(trial!.historicalEquivalentHeadroomUsd > 0, 'candidate is genuinely cheaper in the synthetic cohort');
+  assert.equal(trial!.confidence, 'trial', 'six tiny synthetic units must not render as evidence-supported');
   store.close();
 });
 

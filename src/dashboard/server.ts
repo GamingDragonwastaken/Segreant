@@ -567,6 +567,7 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
           // the separately gated, within-task model trials from `frontier`.
           const allocation = null;
           return json(res, 200, {
+            demo: isDemo(),
             gitRepo: loaded?.source === 'git',
             valueSource: loaded?.source ?? null,
             // Whether the realized-value dollars came from spend SCOPED to this
