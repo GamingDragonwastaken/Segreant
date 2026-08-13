@@ -434,6 +434,30 @@ local request rows do not yet have a verified provider billing-account binding.
 See [BILLING-EVIDENCE-IMPORT.md](docs/BILLING-EVIDENCE-IMPORT.md) for the exact
 schema, idempotency rules, retention model, and the gate before reconciliation.
 
+### Optional OpenAI Costs observation (read-only, preview first)
+
+With an active local declaration for the exact `https://api.openai.com` endpoint
+and an exact OpenAI `proj_...` project reference, Fiscus can make one explicit,
+read-only observation of the documented Organization Costs daily buckets:
+
+```powershell
+# Validates only — no credential lookup, no network request, no database write.
+fiscus billing openai-costs preview --from 2026-01-01 --to 2026-01-08
+
+# Dry pull is also a preview. --apply is required before any network call.
+# The process-only OPENAI_ADMIN_API_KEY is never written to config or SQLite.
+$env:OPENAI_ADMIN_API_KEY = '...'
+fiscus billing openai-costs pull --from 2026-01-01 --to 2026-01-08 --apply
+fiscus billing openai-costs status
+```
+
+The connector uses only `GET https://api.openai.com/v1/organization/costs`, with
+UTC daily `[from,to)` buckets, the declared project filter, and a maximum of 180
+days. It retains a digest chain, allowed normalized daily project/line-item
+observations, and successful or failed run metadata—never the API key or raw
+response body. It is still a provider observation, **not reconciliation**: its
+snapshots remain outside request totals, budgets, RoI, and model recommendations.
+
 ### Beyond Anthropic & OpenAI
 
 The OpenAI route speaks the wire format most of the ecosystem now exposes, so

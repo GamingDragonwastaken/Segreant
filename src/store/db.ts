@@ -28,6 +28,7 @@ import {
   type ProviderScopeDeclaration,
   type ScopeCaptureStatus,
 } from '../billing/scope.ts';
+import type { OpenAiCostObservation, OpenAiCostsFailureCode } from '../billing/openaiCosts.ts';
 
 export interface RequestRow {
   requestId: string;
@@ -151,6 +152,58 @@ export interface BillingSummary {
   recordCount: number;
   providerReportedUsdMicros: number;
   lastImportedAtMs: number | null;
+  reconciliationStatus: 'not_reconciled';
+}
+
+/**
+ * An immutable record of one direct, read-only OpenAI Costs API attempt. This
+ * collection is intentionally separate from both operator file imports and the
+ * request ledger. A successful later pull can restate or change a provider day;
+ * it is retained as a new observation rather than an overwrite or a sum.
+ */
+export interface OpenAiCostsObservationRun {
+  observationRunId: string;
+  declaredScopeId: string;
+  providerProjectRef: string;
+  periodStartMs: number;
+  periodEndMs: number;
+  fetchedAtMs: number;
+  paginationComplete: boolean;
+  pageCount: number;
+  pageDigestChainSha256: string | null;
+  resultState: 'succeeded' | 'failed';
+  failureCode: OpenAiCostsFailureCode | null;
+  providerFinality: 'undocumented';
+  trust: 'provider_observation_unreconciled';
+  rawRetention: 'digest_only';
+  observationsStored: number;
+}
+
+/** A retained provider daily grouping from exactly one completed observation run. */
+export interface OpenAiCostsObservationLine extends OpenAiCostObservation {
+  observationId: string;
+  observationRunId: string;
+  declaredScopeId: string;
+  fetchedAtMs: number;
+}
+
+export interface OpenAiCostsObservationInput {
+  declaredScopeId: string;
+  providerProjectRef: string;
+  periodStartMs: number;
+  periodEndMs: number;
+  fetchedAtMs: number;
+  paginationComplete: boolean;
+  pageCount: number;
+  pageDigestChainSha256: string | null;
+  resultState: 'succeeded' | 'failed';
+  failureCode: OpenAiCostsFailureCode | null;
+  observations: OpenAiCostObservation[];
+}
+
+export interface OpenAiCostsObservationStatus {
+  latestRun: OpenAiCostsObservationRun | null;
+  latestCompleteRun: OpenAiCostsObservationRun | null;
   reconciliationStatus: 'not_reconciled';
 }
 
@@ -497,6 +550,45 @@ CREATE INDEX IF NOT EXISTS idx_billing_evidence_scope
   ON billing_evidence_records(provider, billing_account_ref, charge_period_start_ms, charge_period_end_ms);
 CREATE INDEX IF NOT EXISTS idx_billing_evidence_import
   ON billing_evidence_records(first_import_id);
+
+-- Direct OpenAI Organization Costs observations have their own immutable grain.
+-- They are not billing_evidence_records and never join/sum with requests.
+CREATE TABLE IF NOT EXISTS openai_cost_observation_runs (
+  observation_run_id       TEXT PRIMARY KEY NOT NULL,
+  declared_scope_id        TEXT NOT NULL,
+  provider_project_ref     TEXT NOT NULL,
+  period_start_ms          INTEGER NOT NULL,
+  period_end_ms            INTEGER NOT NULL,
+  fetched_at_ms            INTEGER NOT NULL,
+  pagination_complete      INTEGER NOT NULL,
+  page_count               INTEGER NOT NULL,
+  page_digest_chain_sha256 TEXT,
+  result_state             TEXT NOT NULL,
+  failure_code             TEXT,
+  provider_finality        TEXT NOT NULL,
+  trust                    TEXT NOT NULL,
+  raw_retention            TEXT NOT NULL,
+  observations_stored      INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_openai_cost_observation_runs_latest
+  ON openai_cost_observation_runs(result_state, pagination_complete, fetched_at_ms DESC, observation_run_id DESC);
+
+CREATE TABLE IF NOT EXISTS openai_cost_observation_lines (
+  observation_id       TEXT PRIMARY KEY NOT NULL,
+  observation_run_id   TEXT NOT NULL,
+  declared_scope_id    TEXT NOT NULL,
+  provider_project_ref TEXT NOT NULL,
+  fetched_at_ms        INTEGER NOT NULL,
+  bucket_start_ms      INTEGER NOT NULL,
+  bucket_end_ms        INTEGER NOT NULL,
+  line_item            TEXT NOT NULL,
+  currency             TEXT NOT NULL,
+  amount_decimal       TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_openai_cost_observation_lines_run
+  ON openai_cost_observation_lines(observation_run_id, bucket_start_ms, line_item);
 `;
 
 function pricingEvidenceFromRecord(record: Record<string, unknown>, prefix = ''): RequestPricingEvidence {
@@ -617,6 +709,41 @@ function billingRecordFromRecord(row: Record<string, unknown>): BillingEvidenceR
     usageQuantity: typeof row.usageQuantity === 'string' ? row.usageQuantity : null,
     costBasis: 'provider_reported',
     trust: 'operator_supplied_unverified',
+  };
+}
+
+function openAiCostsRunFromRecord(row: Record<string, unknown>): OpenAiCostsObservationRun {
+  return {
+    observationRunId: String(row.observationRunId),
+    declaredScopeId: String(row.declaredScopeId),
+    providerProjectRef: String(row.providerProjectRef),
+    periodStartMs: Number(row.periodStartMs),
+    periodEndMs: Number(row.periodEndMs),
+    fetchedAtMs: Number(row.fetchedAtMs),
+    paginationComplete: Boolean(row.paginationComplete),
+    pageCount: Number(row.pageCount),
+    pageDigestChainSha256: typeof row.pageDigestChainSha256 === 'string' ? row.pageDigestChainSha256 : null,
+    resultState: String(row.resultState) as OpenAiCostsObservationRun['resultState'],
+    failureCode: typeof row.failureCode === 'string' ? row.failureCode as OpenAiCostsFailureCode : null,
+    providerFinality: 'undocumented',
+    trust: 'provider_observation_unreconciled',
+    rawRetention: 'digest_only',
+    observationsStored: Number(row.observationsStored),
+  };
+}
+
+function openAiCostsLineFromRecord(row: Record<string, unknown>): OpenAiCostsObservationLine {
+  return {
+    observationId: String(row.observationId),
+    observationRunId: String(row.observationRunId),
+    declaredScopeId: String(row.declaredScopeId),
+    fetchedAtMs: Number(row.fetchedAtMs),
+    providerProjectRef: String(row.providerProjectRef),
+    bucketStartMs: Number(row.bucketStartMs),
+    bucketEndMs: Number(row.bucketEndMs),
+    lineItem: String(row.lineItem),
+    currency: String(row.currency),
+    amountDecimal: String(row.amountDecimal),
   };
 }
 
@@ -1922,6 +2049,151 @@ export class Store {
       lastImportedAtMs: imports.lastImportedAtMs === null ? null : Number(imports.lastImportedAtMs),
       reconciliationStatus: 'not_reconciled',
     };
+  }
+
+  /**
+   * Retain one direct OpenAI Costs API attempt. Failed and partial attempts are
+   * audit rows only: they store no usable provider observations. Successful
+   * attempts retain their own snapshot lines, even when a later pull changes a
+   * daily provider line. Nothing here mutates or contributes to request spend.
+   */
+  recordOpenAiCostsObservation(input: OpenAiCostsObservationInput): OpenAiCostsObservationRun {
+    const text = (value: string, label: string, pattern: RegExp): void => {
+      if (!pattern.test(value)) throw new Error(`OpenAI Costs ${label} is invalid`);
+    };
+    text(input.declaredScopeId, 'declared scope id', /^[A-Za-z0-9_-]{8,200}$/);
+    text(input.providerProjectRef, 'project reference', /^proj_[A-Za-z0-9_-]+$/);
+    if (!Number.isSafeInteger(input.periodStartMs) || !Number.isSafeInteger(input.periodEndMs)
+      || input.periodEndMs <= input.periodStartMs || (input.periodEndMs - input.periodStartMs) % 86_400_000 !== 0) {
+      throw new Error('OpenAI Costs observation range must be whole UTC days');
+    }
+    if (!Number.isSafeInteger(input.fetchedAtMs) || input.fetchedAtMs < 0) throw new Error('OpenAI Costs fetched time is invalid');
+    if (!Number.isSafeInteger(input.pageCount) || input.pageCount < 0 || input.pageCount > 64) {
+      throw new Error('OpenAI Costs page count is invalid');
+    }
+    if (input.pageDigestChainSha256 !== null) text(input.pageDigestChainSha256, 'page digest chain', /^[a-f0-9]{64}$/);
+    const succeeded = input.resultState === 'succeeded';
+    if (succeeded !== input.paginationComplete) throw new Error('OpenAI Costs success state must match complete pagination');
+    if (succeeded && (input.failureCode !== null || input.pageCount < 1 || input.pageDigestChainSha256 === null)) {
+      throw new Error('OpenAI Costs successful observation is incomplete');
+    }
+    if (!succeeded && (input.failureCode === null || input.observations.length !== 0)) {
+      throw new Error('OpenAI Costs failed observation cannot expose provider lines');
+    }
+    const run: OpenAiCostsObservationRun = {
+      observationRunId: randomUUID(),
+      declaredScopeId: input.declaredScopeId,
+      providerProjectRef: input.providerProjectRef,
+      periodStartMs: input.periodStartMs,
+      periodEndMs: input.periodEndMs,
+      fetchedAtMs: input.fetchedAtMs,
+      paginationComplete: input.paginationComplete,
+      pageCount: input.pageCount,
+      pageDigestChainSha256: input.pageDigestChainSha256,
+      resultState: input.resultState,
+      failureCode: input.failureCode,
+      providerFinality: 'undocumented',
+      trust: 'provider_observation_unreconciled',
+      rawRetention: 'digest_only',
+      observationsStored: input.observations.length,
+    };
+    const seen = new Set<string>();
+    for (const observation of input.observations) {
+      if (observation.providerProjectRef !== run.providerProjectRef) throw new Error('OpenAI Costs observation project does not match its declared scope');
+      if (!Number.isSafeInteger(observation.bucketStartMs) || !Number.isSafeInteger(observation.bucketEndMs)
+        || observation.bucketEndMs - observation.bucketStartMs !== 86_400_000
+        || observation.bucketStartMs < run.periodStartMs || observation.bucketEndMs > run.periodEndMs) {
+        throw new Error('OpenAI Costs observation bucket is invalid');
+      }
+      text(observation.lineItem, 'line item', /^[^\u0000-\u001F\u007F]{1,500}$/);
+      text(observation.currency, 'currency', /^[A-Z]{3}$/);
+      text(observation.amountDecimal, 'amount decimal', /^-?(?:0|[1-9]\d*)(?:\.\d+)?$/);
+      const key = `${observation.bucketStartMs}\u0000${observation.bucketEndMs}\u0000${observation.lineItem}\u0000${observation.currency}`;
+      if (seen.has(key)) throw new Error('OpenAI Costs observation has duplicate daily line grouping');
+      seen.add(key);
+    }
+    const writeRun = this.db.prepare(
+      `INSERT INTO openai_cost_observation_runs (
+         observation_run_id, declared_scope_id, provider_project_ref, period_start_ms, period_end_ms, fetched_at_ms,
+         pagination_complete, page_count, page_digest_chain_sha256, result_state, failure_code, provider_finality,
+         trust, raw_retention, observations_stored
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    );
+    const writeLine = this.db.prepare(
+      `INSERT INTO openai_cost_observation_lines (
+         observation_id, observation_run_id, declared_scope_id, provider_project_ref, fetched_at_ms,
+         bucket_start_ms, bucket_end_ms, line_item, currency, amount_decimal
+       ) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    );
+    this.runScript('BEGIN');
+    try {
+      writeRun.run(
+        run.observationRunId, run.declaredScopeId, run.providerProjectRef, run.periodStartMs, run.periodEndMs,
+        run.fetchedAtMs, run.paginationComplete ? 1 : 0, run.pageCount, run.pageDigestChainSha256, run.resultState,
+        run.failureCode, run.providerFinality, run.trust, run.rawRetention, run.observationsStored,
+      );
+      for (const observation of input.observations) {
+        writeLine.run(
+          randomUUID(), run.observationRunId, run.declaredScopeId, run.providerProjectRef, run.fetchedAtMs,
+          observation.bucketStartMs, observation.bucketEndMs, observation.lineItem, observation.currency,
+          observation.amountDecimal,
+        );
+      }
+      this.runScript('COMMIT');
+    } catch (error) {
+      this.runScript('ROLLBACK');
+      throw error;
+    }
+    return run;
+  }
+
+  /** Newest first; includes failed pulls so a finance owner can see freshness failures. */
+  openAiCostsObservationRuns(limit = 50): OpenAiCostsObservationRun[] {
+    const safeLimit = Math.max(1, Math.min(500, Math.floor(limit)));
+    const rows = this.db.prepare(
+      `SELECT observation_run_id AS observationRunId, declared_scope_id AS declaredScopeId,
+              provider_project_ref AS providerProjectRef, period_start_ms AS periodStartMs, period_end_ms AS periodEndMs,
+              fetched_at_ms AS fetchedAtMs, pagination_complete AS paginationComplete, page_count AS pageCount,
+              page_digest_chain_sha256 AS pageDigestChainSha256, result_state AS resultState, failure_code AS failureCode,
+              provider_finality AS providerFinality, trust, raw_retention AS rawRetention,
+              observations_stored AS observationsStored
+         FROM openai_cost_observation_runs
+        ORDER BY fetched_at_ms DESC, observation_run_id DESC LIMIT ?`,
+    ).all(safeLimit) as Array<Record<string, unknown>>;
+    return rows.map(openAiCostsRunFromRecord);
+  }
+
+  /** Latest fully paginated successful snapshot only; failed runs never become a projection. */
+  latestCompleteOpenAiCostsObservation(): { run: OpenAiCostsObservationRun; observations: OpenAiCostsObservationLine[] } | null {
+    const row = this.db.prepare(
+      `SELECT observation_run_id AS observationRunId, declared_scope_id AS declaredScopeId,
+              provider_project_ref AS providerProjectRef, period_start_ms AS periodStartMs, period_end_ms AS periodEndMs,
+              fetched_at_ms AS fetchedAtMs, pagination_complete AS paginationComplete, page_count AS pageCount,
+              page_digest_chain_sha256 AS pageDigestChainSha256, result_state AS resultState, failure_code AS failureCode,
+              provider_finality AS providerFinality, trust, raw_retention AS rawRetention,
+              observations_stored AS observationsStored
+         FROM openai_cost_observation_runs
+        WHERE result_state = 'succeeded' AND pagination_complete = 1
+        ORDER BY fetched_at_ms DESC, observation_run_id DESC LIMIT 1`,
+    ).get() as Record<string, unknown> | undefined;
+    if (!row) return null;
+    const run = openAiCostsRunFromRecord(row);
+    const observations = this.db.prepare(
+      `SELECT observation_id AS observationId, observation_run_id AS observationRunId, declared_scope_id AS declaredScopeId,
+              provider_project_ref AS providerProjectRef, fetched_at_ms AS fetchedAtMs, bucket_start_ms AS bucketStartMs,
+              bucket_end_ms AS bucketEndMs, line_item AS lineItem, currency, amount_decimal AS amountDecimal
+         FROM openai_cost_observation_lines
+        WHERE observation_run_id = ?
+        ORDER BY bucket_start_ms ASC, line_item ASC, currency ASC`,
+    ).all(run.observationRunId) as Array<Record<string, unknown>>;
+    return { run, observations: observations.map(openAiCostsLineFromRecord) };
+  }
+
+  /** Status has no financial total by design, so independent snapshots cannot be double counted. */
+  openAiCostsObservationStatus(): OpenAiCostsObservationStatus {
+    const latest = this.openAiCostsObservationRuns(1)[0] ?? null;
+    const latestComplete = this.latestCompleteOpenAiCostsObservation()?.run ?? null;
+    return { latestRun: latest, latestCompleteRun: latestComplete, reconciliationStatus: 'not_reconciled' };
   }
 
   /**

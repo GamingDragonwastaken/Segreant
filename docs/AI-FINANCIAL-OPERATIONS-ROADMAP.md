@@ -150,6 +150,18 @@ provider-account mapping exists on request rows yet, and no provider credential,
 raw-provider parser, or claimed variance has been introduced. See
 [BILLING-EVIDENCE-IMPORT.md](BILLING-EVIDENCE-IMPORT.md).
 
+**Current authenticated observation increment (local v1):** Fiscus also has a
+fixture-verified, explicitly invoked read-only OpenAI Organization Costs
+collector. It accepts only an active local declaration for exactly
+`https://api.openai.com` with a `proj_...` project reference; a preview never
+reads credentials or contacts a network, while `pull --apply` permits only the
+fixed Costs `GET`. It records immutable success/failure runs and normalized
+daily project/line-item/currency observations with page digest chains, never an
+Admin key or raw response. This proves neither provider account ownership nor
+reconciliation, provider finality, invoice close, request-level cost, variance,
+allocation, or a budget/recommendation action. A later changed provider day is
+a new snapshot, not a silent overwrite or additive total.
+
 1. Introduce the cost-source taxonomy and immutable financial ledger entities.
 2. Ship one read-only authoritative connector first. Start with OpenAI organization cost/usage, or a customer-owned cloud billing export selected with a design partner; do not build five shallow connectors at once.
 3. Store account/project scope, source cursor or export ID, collection time, source update time, raw-evidence digest, pagination state, and connector version.

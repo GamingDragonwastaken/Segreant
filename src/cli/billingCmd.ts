@@ -6,6 +6,12 @@
 
 import { writeFileSync } from 'node:fs';
 import { dbPath, loadConfig } from '../config.ts';
+import {
+  OpenAiCostsPullError,
+  previewOpenAiCosts,
+  pullOpenAiCosts,
+  type OpenAiCostsPreview,
+} from '../billing/openaiCosts.ts';
 import { newOpenAiScopeDeclaration } from '../billing/scope.ts';
 import { formatUsdMicros } from '../billing/types.ts';
 import { readBillingImportFile } from '../billing/importer.ts';
@@ -14,12 +20,176 @@ import { Store } from '../store/db.ts';
 import type { Flags } from './flags.ts';
 
 function usage(): void {
-  console.error('  Usage: fiscus billing <import|status|export|scope> [options]');
+  console.error('  Usage: fiscus billing <import|status|export|scope|openai-costs> [options]');
   console.error('         fiscus billing import --file <evidence.json> [--apply] [--json]');
   console.error('         fiscus billing status [--json]');
   console.error('         fiscus billing export [--csv|--json] [--out <file>]');
   console.error('         fiscus billing scope <set|status|clear> [--account-ref <local-ref>] [--project-ref <local-ref>] [--apply] [--json]');
+  console.error('         fiscus billing openai-costs <preview|pull|status> --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--apply] [--json]');
   console.error('  Local operator-supplied OpenAI billing evidence only. It never overwrites request estimates or claims reconciliation.');
+}
+
+function costsUsage(): void {
+  console.error('  Usage: fiscus billing openai-costs preview --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--json]');
+  console.error('         fiscus billing openai-costs pull --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--apply] [--json]');
+  console.error('         fiscus billing openai-costs status [--json]');
+  console.error('  Pull is an explicit, read-only GET to OpenAI Organization Costs. It requires OPENAI_ADMIN_API_KEY only with pull --apply.');
+  console.error('  Provider observations stay separate from request spend, budgets, RoI, and model recommendations; they are not reconciliation.');
+}
+
+function costsRange(flags: Flags): { from: string; to: string } | null {
+  const from = typeof flags.from === 'string' ? flags.from : null;
+  const to = typeof flags.to === 'string' ? flags.to : null;
+  if (!from || !to) return null;
+  return { from, to };
+}
+
+function printCostsPreview(preview: OpenAiCostsPreview): void {
+  console.log('');
+  console.log('  OpenAI Organization Costs observation — dry run');
+  console.log(`  Scope         ${preview.declaredScopeId} / ${preview.projectRef}`);
+  console.log(`  Period        ${preview.range.from} → ${preview.range.to} (${preview.range.bucketCount} UTC daily bucket(s))`);
+  console.log(`  Endpoint      ${preview.endpoint} (GET only)`);
+  console.log('  Trust         provider_observation_unreconciled; provider finality is undocumented');
+  console.log('  Excluded      request spend, budget enforcement, RoI, and model recommendations');
+  console.log('  No credential was read and no network request was made. Apply with: fiscus billing openai-costs pull ... --apply');
+}
+
+/** Read-only provider observation commands. Preview deliberately never reads process.env. */
+async function cmdOpenAiCosts(flags: Flags): Promise<void> {
+  const action = typeof flags._[1] === 'string' ? flags._[1] : 'preview';
+  if (action === 'status') {
+    const store = new Store(dbPath());
+    try {
+      const status = store.openAiCostsObservationStatus();
+      const latestComplete = store.latestCompleteOpenAiCostsObservation();
+      if (flags.json) {
+        process.stdout.write(JSON.stringify({ status, latestComplete }, null, 2) + '\n');
+      } else {
+        console.log('');
+        console.log('  OpenAI Organization Costs observation status');
+        if (!status.latestRun) console.log('  No direct provider observation runs recorded.');
+        else {
+          console.log(`  Latest run    ${status.latestRun.resultState} / ${new Date(status.latestRun.fetchedAtMs).toISOString()}`);
+          console.log(`  Pagination    ${status.latestRun.paginationComplete ? 'complete' : 'incomplete'} (${status.latestRun.pageCount} page(s))`);
+          if (status.latestRun.failureCode) console.log(`  Failure code  ${status.latestRun.failureCode}`);
+          console.log(`  Latest full   ${status.latestCompleteRun ? status.latestCompleteRun.observationRunId : 'none'}`);
+        }
+        console.log('  Reconcile     not_reconciled — no variance or request/billing match is calculated.');
+      }
+    } finally {
+      store.close();
+    }
+    return;
+  }
+  if (action !== 'preview' && action !== 'pull') {
+    costsUsage();
+    process.exitCode = 1;
+    return;
+  }
+  const range = costsRange(flags);
+  if (!range) {
+    costsUsage();
+    process.exitCode = 1;
+    return;
+  }
+  const store = new Store(dbPath());
+  try {
+    const preview = previewOpenAiCosts(store.activeOpenAiScope(), range.from, range.to);
+    // `preview` is always non-operational, even if --apply was accidentally supplied.
+    if (action === 'preview' || !flags.apply) {
+      const payload = {
+        applied: false,
+        preview,
+        networkAttempted: false,
+        credentialRead: false,
+        message: action === 'pull'
+          ? 'No data written. Add --apply to execute the fixed read-only request.'
+          : 'No data written. Preview never reads a credential or makes a network request.',
+      };
+      if (flags.json) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+      else printCostsPreview(preview);
+      return;
+    }
+
+    // The only credential read in this file is after a valid --apply pull preview.
+    const apiKey = process.env.OPENAI_ADMIN_API_KEY?.trim();
+    if (!apiKey) {
+      const run = store.recordOpenAiCostsObservation({
+        declaredScopeId: preview.declaredScopeId,
+        providerProjectRef: preview.projectRef,
+        periodStartMs: preview.range.startMs,
+        periodEndMs: preview.range.endMs,
+        fetchedAtMs: Date.now(),
+        paginationComplete: false,
+        pageCount: 0,
+        pageDigestChainSha256: null,
+        resultState: 'failed',
+        failureCode: 'missing_credential',
+        observations: [],
+      });
+      const payload = { applied: true, resultState: 'failed', run, error: 'OPENAI_ADMIN_API_KEY is required for pull --apply' };
+      if (flags.json) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+      else console.error('  OpenAI Costs pull was not attempted: OPENAI_ADMIN_API_KEY is required for pull --apply.');
+      process.exitCode = 1;
+      return;
+    }
+    try {
+      const collected = await pullOpenAiCosts({ preview, apiKey });
+      const run = store.recordOpenAiCostsObservation({
+        declaredScopeId: preview.declaredScopeId,
+        providerProjectRef: preview.projectRef,
+        periodStartMs: preview.range.startMs,
+        periodEndMs: preview.range.endMs,
+        fetchedAtMs: collected.fetchedAtMs,
+        paginationComplete: collected.paginationComplete,
+        pageCount: collected.pageCount,
+        pageDigestChainSha256: collected.pageDigestChainSha256,
+        resultState: 'succeeded',
+        failureCode: null,
+        observations: collected.observations,
+      });
+      const payload = { applied: true, resultState: 'succeeded', run, observationCount: collected.observations.length };
+      if (flags.json) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+      else {
+        console.log(`  Recorded ${collected.observations.length} immutable OpenAI daily cost observation(s) in run ${run.observationRunId}.`);
+        console.log('  They remain unreconciled and are excluded from request spend, caps, RoI, and recommendations.');
+      }
+    } catch (error) {
+      const failed = error instanceof OpenAiCostsPullError
+        ? error.failure
+        : {
+            preview,
+            fetchedAtMs: Date.now(),
+            paginationComplete: false as const,
+            pageCount: 0,
+            pageDigestChainSha256: null,
+            failureCode: 'network_error' as const,
+          };
+      const run = store.recordOpenAiCostsObservation({
+        declaredScopeId: failed.preview.declaredScopeId,
+        providerProjectRef: failed.preview.projectRef,
+        periodStartMs: failed.preview.range.startMs,
+        periodEndMs: failed.preview.range.endMs,
+        fetchedAtMs: failed.fetchedAtMs,
+        paginationComplete: false,
+        pageCount: failed.pageCount,
+        pageDigestChainSha256: failed.pageDigestChainSha256,
+        resultState: 'failed',
+        failureCode: failed.failureCode,
+        observations: [],
+      });
+      const payload = { applied: true, resultState: 'failed', run, error: `OpenAI Costs pull failed (${failed.failureCode})` };
+      if (flags.json) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+      else console.error(`  OpenAI Costs pull failed (${failed.failureCode}); the failed audit run was retained without a response body or credential.`);
+      process.exitCode = 1;
+    }
+  } catch (error) {
+    console.error(`  OpenAI Costs observation failed: ${error instanceof Error ? error.message : String(error)}`);
+    process.exitCode = 1;
+  } finally {
+    store.close();
+  }
 }
 
 function scopeUsage(): void {
@@ -137,10 +307,14 @@ function renderPreview(preview: ReturnType<typeof readBillingImportFile>['previe
 }
 
 /** `fiscus billing` — immutable local provider-cost evidence, never an implicit reconciliation. */
-export function cmdBilling(flags: Flags): void {
+export async function cmdBilling(flags: Flags): Promise<void> {
   const action = typeof flags._[0] === 'string' ? flags._[0] : 'status';
   if (action === 'scope') {
     cmdScope(flags);
+    return;
+  }
+  if (action === 'openai-costs') {
+    await cmdOpenAiCosts(flags);
     return;
   }
   if (action === 'import') {

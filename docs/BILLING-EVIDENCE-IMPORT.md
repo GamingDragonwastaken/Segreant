@@ -1,8 +1,9 @@
 # Provider billing evidence import (v1)
 
 This is Fiscus's first financial-truth building block: a **local, immutable
-ledger for operator-supplied OpenAI provider-cost evidence**. It is not a
-provider connector, an invoice parser, or a reconciliation result.
+ledger for operator-supplied OpenAI provider-cost evidence**. The local-file
+import itself is not a provider connector, an invoice parser, or a
+reconciliation result.
 
 It exists because these are different claims:
 
@@ -156,6 +157,61 @@ provide an Admin API credential in a customer-controlled environment; a normal
 model-serving key must not be reused. That connector must retain cursor/page
 state, source scope, collection time, raw-evidence digest, connector version,
 and partial/failure state.
+
+## Optional direct OpenAI Costs observation (local v1)
+
+Fiscus also provides one deliberately narrow authenticated path:
+`fiscus billing openai-costs`. It is distinct from the local-file import above;
+its separate immutable run/line collection must not be combined with either
+`billing_evidence_records` or request rows.
+
+Before any network call, create and apply a local scope declaration whose
+sanitized upstream is exactly `https://api.openai.com` and whose project
+reference is an exact `proj_...` identifier. Then choose a UTC day-aligned,
+exclusive-end range of no more than 180 days:
+
+```powershell
+# No environment credential read, no network request, no database write.
+fiscus billing openai-costs preview --from 2026-01-01 --to 2026-01-08
+
+# Also non-operational without --apply.
+fiscus billing openai-costs pull --from 2026-01-01 --to 2026-01-08
+
+# Only this explicit form reads the process environment and makes a request.
+$env:OPENAI_ADMIN_API_KEY = 'customer-controlled-admin-key'
+fiscus billing openai-costs pull --from 2026-01-01 --to 2026-01-08 --apply
+```
+
+The applied pull is restricted to a read-only `GET` of
+`https://api.openai.com/v1/organization/costs`; there is no project-listing,
+configuration, write, or alternate-host operation. It requests daily buckets,
+project and line-item grouping, and the declared project filter. The process
+environment is the only credential source; Fiscus never puts the key in a flag,
+config file, SQLite row, exception, or normal output. A normal model-serving key
+must not be reused for this organization-level observation.
+
+Each attempt records the local declaration ID, project reference, requested
+period, fetch time, pagination completion, page count, digest chain, result
+state, and a provider-finality value of `undocumented`. Successful, fully
+paginated attempts retain only allowlisted daily `project × line item × currency`
+amount observations. Failed, malformed, timed-out, rate-limited, unauthorized,
+looping, oversized, or partial responses retain a **failed run only** and no
+usable observation. Raw response bodies are not retained.
+
+The API documents a JSON numeric cost value. Fiscus performs no arithmetic for
+this connector and retains each finite value as canonical decimal text; currencies
+remain separate. A changed daily provider line is a new immutable snapshot in a
+new run, not an overwrite and not an additive total. `billing openai-costs
+status` exposes the latest completed snapshot, but deliberately has no combined
+financial total or variance.
+
+This remains `not_reconciled`: the direct provider snapshot does not affect
+request-metered spend, budget enforcement, RoI, allocation, or model
+recommendations. Provider finality and billing lag are not asserted by this
+connector. A local scope declaration is still operator-declared provenance—not
+provider-account ownership or a verified traffic-to-provider binding.
+
+## Reconciliation requires more
 
 Reconciliation needs more than a report total. Fiscus must establish a verified
 provider-account/project mapping for captured local traffic, a compatible

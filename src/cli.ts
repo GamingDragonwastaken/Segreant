@@ -273,7 +273,7 @@ async function main(): Promise<void> {
       await cmdImport(flags);
       break;
     case 'billing':
-      cmdBilling(flags);
+      await cmdBilling(flags);
       break;
     case 'discover':
       await cmdDiscover(flags);

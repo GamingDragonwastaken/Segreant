@@ -55,6 +55,21 @@ provider session, or API key. The status is always
 `operator_declared_unverified`; it is not provider-account verification,
 reconciliation, or an instruction to change routing.
 
+When an operator runs `fiscus billing openai-costs pull ... --apply`, Fiscus
+may make exactly one additional outbound type: a read-only `GET` to the fixed
+OpenAI Organization Costs endpoint at `https://api.openai.com/v1/organization/costs`.
+The command first requires a local scope for exactly that endpoint plus a
+`proj_...` project reference, and requires a UTC day range of no more than 180
+days. Preview and a pull without `--apply` do not read a credential or contact
+OpenAI. On an applied pull only, `OPENAI_ADMIN_API_KEY` is read from the current
+process environment; it is never persisted, printed, included in an error, or
+sent to any destination other than the fixed OpenAI request. Fiscus retains only
+allowlisted normalized daily observations plus a digest chain/run status; it
+does not retain raw response bodies. Direct provider observations are a separate
+unreconciled collection, not request spend, and do not affect caps, RoI, or
+recommendations. Failed/partial pulls retain failure metadata with no usable
+provider observations.
+
 With the default `metadataOnly: false`, Fiscus may also retain parsed proposed
 code lines locally to measure whether an AI proposal later appeared in a Git
 commit. This is a local-only convenience signal, not a claim that source never
