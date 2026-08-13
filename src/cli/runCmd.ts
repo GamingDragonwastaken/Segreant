@@ -186,9 +186,11 @@ export async function cmdPricing(flags: Flags): Promise<void> {
       return;
     }
     if (result.ok) {
-      console.log(`  ${color(on, C.green, '✓')} Pricing updated — ${result.modelCount} models, table dated ${result.updated}.`);
+      const action = result.unchanged ? 'Pricing source rechecked — card unchanged' : 'Pricing cached';
+      console.log(`  ${color(on, C.green, '✓')} ${action} — ${result.modelCount} models, declared card date ${result.updated}.`);
       console.log(`  ${color(on, C.dim, `Saved to ${join(aegisHome(), 'pricing', 'models.json')} (overrides the bundled table).`)}`);
-      console.log(`  ${color(on, C.dim, 'Applies to new traffic and future imports; rows already metered keep the price recorded at the time.')}`);
+      console.log(`  ${color(on, C.dim, `Provenance: ${result.sourceKind ?? 'unknown'} · ${result.sourceUrl ?? 'local input'} · card ${result.cardSha256?.slice(0, 12) ?? 'unknown'}`)}`);
+      console.log(`  ${color(on, C.dim, 'List-price estimate only — not a provider invoice, contract, discount, tax, credit, or reconciliation result. Applies to new traffic and future imports; rows already metered keep their recorded price.')}`);
     } else {
       console.error(`  ${color(on, C.yellow, '✗')} Refresh failed: ${result.error}`);
       console.error(`  ${color(on, C.dim, 'Keeping the current table — pricing still works; only the update was skipped.')}`);
@@ -203,11 +205,15 @@ export async function cmdPricing(flags: Flags): Promise<void> {
     return;
   }
   console.log(`\n  ${color(on, C.bold, 'Fiscus pricing')}`);
-  console.log(`  Source     ${st.source === 'cache' ? 'refreshed cache (~/.aegisflow/pricing)' : 'bundled with the package'}`);
+  console.log(`  Source     ${st.source === 'cache' ? `${st.sourceKind} local cache (~/.aegisflow/pricing)` : 'bundled with the package'}`);
+  if (st.sourceUrl) console.log(`  Origin     ${st.sourceUrl}`);
   const age = st.ageDays === null ? '' : `  (${num(st.ageDays)}d ago)`;
   const stale = st.stale ? color(on, C.yellow, '  — STALE') : '';
-  console.log(`  Updated    ${st.updated}${age}${stale}`);
+  console.log(`  Freshness  ${st.freshnessBasis === 'local_fetch' ? `accepted locally ${st.fetchedAt}` : `declared card date ${st.updated}`}${age}${stale}`);
+  console.log(`  Integrity  ${st.cacheIntegrity} · card ${st.cardSha256.slice(0, 12)}`);
+  if (st.upstreamDeclaredUpdated && st.freshnessBasis === 'local_fetch') console.log(`  Declared   ${st.upstreamDeclaredUpdated} (source-provided card date)`);
   console.log(`  Models     ${num(st.modelCount)} across ${st.providers.join(', ')}`);
+  console.log(`  ${color(on, C.dim, 'Basis      local list-price estimate; not provider-billed or reconciled spend')}`);
   if (st.stale || st.source === 'bundled') {
     console.log(`\n  ${color(on, C.dim, 'Refresh now:   fiscus pricing --refresh')}`);
     console.log(`  ${color(on, C.dim, 'Keep current:  fiscus pricing --auto     (refreshes on start when stale)')}`);

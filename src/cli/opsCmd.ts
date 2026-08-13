@@ -96,7 +96,6 @@ export async function cmdAlerts(flags: Flags): Promise<void> {
   if (alerts.some((a) => a.severity === 'critical')) process.exitCode = 1;
   store.close();
 }
-
 export async function cmdDoctor(): Promise<void> {
   const tty = process.stdout.isTTY ?? false;
   const cfg = loadConfig();
@@ -128,11 +127,14 @@ export async function cmdDoctor(): Promise<void> {
   console.log(`  ${mark(estShare <= 0.2)} Pricing     ${estShare > 0 ? `${Math.round(estShare * 100)}% of 30d spend used estimated rates` : 'all spend priced from the rate card'}`);
   const price = pricingStatus(cfg.pricing.maxAgeDays);
   const priceAge = price.ageDays === null ? '' : ` · ${price.ageDays}d old`;
+  const priceEvidence = price.source === 'cache'
+    ? `${price.sourceKind} cache · ${price.cacheIntegrity} integrity · local list-price estimate`
+    : 'bundled package card · local list-price estimate';
   console.log(
     `  ${mark(!price.stale)} Rate card   ${
       price.stale
-        ? color(tty, C.yellow, `stale (>${cfg.pricing.maxAgeDays}d${priceAge}) — refresh with "fiscus pricing --refresh"`)
-        : `${price.source === 'cache' ? 'refreshed' : 'bundled'}${priceAge} · ${price.modelCount} models`
+        ? color(tty, C.yellow, `stale (>${cfg.pricing.maxAgeDays}d${priceAge}) · ${priceEvidence} — refresh with "fiscus pricing --refresh"`)
+        : `${priceEvidence}${priceAge} · ${price.modelCount} models`
     }`,
   );
   const base = baselineManifestStatus();
@@ -279,4 +281,3 @@ export async function cmdAudit(flags: Flags): Promise<void> {
   console.log('');
   store.close();
 }
-

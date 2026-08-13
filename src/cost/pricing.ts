@@ -11,7 +11,8 @@
  * reasoningTokens field for reporting only — it never changes the price.
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync, unlinkSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { aegisHome } from '../config.ts';
@@ -32,6 +33,16 @@ function cachePath(): string {
   return join(aegisHome(), 'pricing', 'models.json');
 }
 
+/** Sidecar for verifiable local cache provenance. It intentionally stores only
+ * a redacted source identity, never a URL query string or credentials. */
+function provenancePath(): string {
+  return join(aegisHome(), 'pricing', 'provenance.json');
+}
+
+function archivePath(cardSha256: string): string {
+  return join(aegisHome(), 'pricing', 'cards', `${cardSha256}.json`);
+}
+
 export type Provider = 'anthropic' | 'openai';
 
 export interface ModelRate {
@@ -50,10 +61,35 @@ export interface ModelRate {
 interface PricingFile {
   schema_version: number;
   updated: string;
+  currency: 'USD';
   unit: string;
   providers: Record<string, { verified: boolean; models: Record<string, ModelRate> }>;
   fallbacks: { unknown: ModelRate };
 }
+
+type PricingSourceKind = 'manual' | 'native_manifest' | 'litellm_transformed';
+
+interface PricingProvenance {
+  schemaVersion: 1;
+  /** Safe URL identity: origin + pathname only, without credentials/query/hash. */
+  sourceUrl: string | null;
+  /** Hash of the full fetch target, used only locally for conditional requests. */
+  sourceUrlSha256: string | null;
+  sourceKind: PricingSourceKind;
+  /** When Fiscus actually accepted this rate-card content, not a provider claim. */
+  fetchedAt: string;
+  /** Last successful conditional or full check of this source. */
+  lastCheckedAt: string;
+  /** A declared native-manifest date, never inferred for a transformed feed. */
+  upstreamDeclaredUpdated: string | null;
+  /** SHA-256 of the normalized cached rate card. */
+  cardSha256: string;
+  modelCount: number;
+  etag: string | null;
+  lastModified: string | null;
+}
+
+export const MAX_PRICING_MANIFEST_BYTES = 5 * 1024 * 1024;
 
 /** Tokens for one request, normalized across providers. */
 export interface NormalizedUsage {
@@ -87,17 +123,97 @@ export interface CostBreakdown {
 let cached: PricingFile | null = null;
 let cachedSource: 'cache' | 'bundled' = 'bundled';
 
+function sha256(text: string): string {
+  return createHash('sha256').update(text, 'utf8').digest('hex');
+}
+
+function pricingCardHash(file: PricingFile): string {
+  return sha256(JSON.stringify(file));
+}
+
+function redactedUrl(raw: string): string | null {
+  try {
+    const url = new URL(raw);
+    return `${url.protocol}//${url.host}${url.pathname}`;
+  } catch {
+    return null;
+  }
+}
+
+function validTimestamp(value: unknown, allowFuture = false): value is string {
+  if (typeof value !== 'string' || Number.isNaN(Date.parse(value))) return false;
+  return allowFuture || Date.parse(value) <= Date.now() + 86_400_000;
+}
+
+function validRate(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+
 /** Structural check before we trust a pricing table — a refresh must never let a
  *  truncated download or a wrong-shaped file silently corrupt every cost. */
-function isValidPricing(obj: unknown): obj is PricingFile {
-  if (!obj || typeof obj !== 'object') return false;
+function pricingValidationError(obj: unknown): string | null {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return 'manifest is not an object';
   const o = obj as Record<string, unknown>;
-  if (typeof o['schema_version'] !== 'number') return false;
-  if (!o['providers'] || typeof o['providers'] !== 'object') return false;
-  const unk = (o['fallbacks'] as { unknown?: Record<string, unknown> } | undefined)?.unknown;
-  if (!unk || typeof unk['input'] !== 'number' || typeof unk['output'] !== 'number') return false;
-  const provs = Object.values(o['providers'] as Record<string, { models?: Record<string, unknown> }>);
-  return provs.some((p) => p && p.models && Object.keys(p.models).length > 0);
+  if (o['schema_version'] !== 1) return 'unsupported schema_version (expected 1)';
+  if (!validTimestamp(o['updated'])) return 'updated must be a valid non-future timestamp';
+  if (o['currency'] !== 'USD') return 'currency must be USD';
+  if (o['unit'] !== 'per_million_tokens') return 'unit must be per_million_tokens';
+  const unknown = (o['fallbacks'] as { unknown?: unknown } | undefined)?.unknown;
+  if (!unknown || typeof unknown !== 'object') return 'fallbacks.unknown is required';
+  const unknownRate = unknown as Record<string, unknown>;
+  if (!validRate(unknownRate['input']) || !validRate(unknownRate['output'])) return 'fallback rates must be finite positive numbers';
+  const providers = o['providers'];
+  if (!providers || typeof providers !== 'object' || Array.isArray(providers)) return 'providers must be an object';
+
+  let modelCount = 0;
+  for (const [provider, rawProvider] of Object.entries(providers as Record<string, unknown>)) {
+    if (!provider || !rawProvider || typeof rawProvider !== 'object' || Array.isArray(rawProvider)) return 'each provider must be an object';
+    const p = rawProvider as Record<string, unknown>;
+    if (typeof p['verified'] !== 'boolean') return `provider ${provider} is missing boolean verified`;
+    const models = p['models'];
+    if (!models || typeof models !== 'object' || Array.isArray(models)) return `provider ${provider} is missing models`;
+    for (const [model, rawRate] of Object.entries(models as Record<string, unknown>)) {
+      if (!model || !rawRate || typeof rawRate !== 'object' || Array.isArray(rawRate)) return `provider ${provider} has an invalid model entry`;
+      const rate = rawRate as Record<string, unknown>;
+      if (!validRate(rate['input']) || !validRate(rate['output'])) return `model ${model} must have finite positive input/output rates`;
+      for (const key of ['cache_write_5m', 'cache_write_1h', 'cache_read']) {
+        if (rate[key] !== undefined && !validRate(rate[key])) return `model ${model} has an invalid ${key} rate`;
+      }
+      modelCount += 1;
+    }
+  }
+  return modelCount > 0 ? null : 'manifest contains no models';
+}
+
+function isValidPricing(obj: unknown): obj is PricingFile {
+  return pricingValidationError(obj) === null;
+}
+
+function isValidProvenance(obj: unknown): obj is PricingProvenance {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
+  const p = obj as Record<string, unknown>;
+  return (
+    p['schemaVersion'] === 1 &&
+    (p['sourceUrl'] === null || typeof p['sourceUrl'] === 'string') &&
+    (p['sourceUrlSha256'] === null || typeof p['sourceUrlSha256'] === 'string') &&
+    (p['sourceKind'] === 'manual' || p['sourceKind'] === 'native_manifest' || p['sourceKind'] === 'litellm_transformed') &&
+    validTimestamp(p['fetchedAt']) &&
+    validTimestamp(p['lastCheckedAt']) &&
+    (p['upstreamDeclaredUpdated'] === null || validTimestamp(p['upstreamDeclaredUpdated'])) &&
+    typeof p['cardSha256'] === 'string' &&
+    typeof p['modelCount'] === 'number' && Number.isInteger(p['modelCount']) && p['modelCount'] > 0 &&
+    (p['etag'] === null || typeof p['etag'] === 'string') &&
+    (p['lastModified'] === null || typeof p['lastModified'] === 'string')
+  );
+}
+
+function readProvenance(): PricingProvenance | null {
+  try {
+    const value: unknown = JSON.parse(readFileSync(provenancePath(), 'utf8'));
+    return isValidProvenance(value) ? value : null;
+  } catch {
+    return null;
+  }
 }
 
 function readValidPricing(path: string): PricingFile | null {
@@ -113,20 +229,56 @@ function countModels(file: PricingFile): number {
   return Object.values(file.providers).reduce((n, p) => n + Object.keys(p.models).length, 0);
 }
 
+type CacheIntegrity = 'verified' | 'legacy_unknown' | 'archive_recovered' | 'mismatch' | 'bundled';
+
+let cachedProvenance: PricingProvenance | null = null;
+let cachedIntegrity: CacheIntegrity = 'bundled';
+
+function writeAtomically(path: string, text: string): void {
+  const temporary = `${path}.${process.pid}.${Date.now()}.tmp`;
+  writeFileSync(temporary, text, 'utf8');
+  try {
+    renameSync(temporary, path);
+  } catch (error) {
+    try { unlinkSync(temporary); } catch { /* best-effort cleanup */ }
+    throw error;
+  }
+}
+
+function loadVerifiedCache(): { file: PricingFile; provenance: PricingProvenance | null; integrity: CacheIntegrity } | null {
+  const active = readValidPricing(cachePath());
+  const provenance = readProvenance();
+  if (!active) return null;
+  if (!provenance) return { file: active, provenance: null, integrity: 'legacy_unknown' };
+  if (pricingCardHash(active) === provenance.cardSha256) return { file: active, provenance, integrity: 'verified' };
+
+  // A crash or interrupted external edit must not make a partial active file look
+  // current. Recover only the immutable card whose hash the prior state names.
+  const archived = readValidPricing(archivePath(provenance.cardSha256));
+  if (archived && pricingCardHash(archived) === provenance.cardSha256) {
+    return { file: archived, provenance, integrity: 'archive_recovered' };
+  }
+  return null;
+}
+
 export function loadPricing(force = false): PricingFile {
   if (cached && !force) return cached;
   // Prefer the refreshed cache when present AND structurally valid; otherwise
   // fall back to the bundled table. A corrupt cache degrades to bundled rather
   // than breaking pricing — and `pricingStatus()` always reports which won, so
   // the fallback is visible, never silent.
-  const fromCache = readValidPricing(cachePath());
+  const fromCache = loadVerifiedCache();
   if (fromCache) {
-    cached = fromCache;
+    cached = fromCache.file;
     cachedSource = 'cache';
+    cachedProvenance = fromCache.provenance;
+    cachedIntegrity = fromCache.integrity;
     return cached;
   }
   cached = JSON.parse(readFileSync(BUNDLED_PRICING_PATH, 'utf8')) as PricingFile;
   cachedSource = 'bundled';
+  cachedProvenance = null;
+  cachedIntegrity = existsSync(cachePath()) && readProvenance() !== null ? 'mismatch' : 'bundled';
   return cached;
 }
 
@@ -134,6 +286,11 @@ export interface RefreshResult {
   ok: boolean;
   updated?: string;
   modelCount?: number;
+  sourceUrl?: string | null;
+  sourceKind?: PricingSourceKind;
+  fetchedAt?: string;
+  cardSha256?: string;
+  unchanged?: boolean;
   error?: string;
 }
 
@@ -224,6 +381,7 @@ export function transformLiteLLMManifest(rawText: string): { ok: boolean; file?:
   const file: PricingFile = {
     schema_version: 1,
     updated: new Date().toISOString().slice(0, 10),
+    currency: 'USD',
     unit: 'per_million_tokens',
     providers,
     fallbacks: loadPricing().fallbacks,
@@ -239,32 +397,82 @@ export function transformLiteLLMManifest(rawText: string): { ok: boolean; file?:
  * On any failure the existing cache is left untouched — a bad refresh never
  * downgrades you to worse pricing data.
  */
-export function applyPricingManifest(rawText: string): RefreshResult {
+interface ApplyPricingOptions {
+  sourceUrl?: string | null;
+  sourceKind?: PricingSourceKind;
+  fetchedAt?: string;
+  etag?: string | null;
+  lastModified?: string | null;
+}
+
+/** Apply a local or fetched card after complete validation and archive it under
+ * its normalized-card hash. Historical request rows are never changed here. */
+export function applyPricingManifest(rawText: string, options: ApplyPricingOptions = {}): RefreshResult {
+  if (Buffer.byteLength(rawText, 'utf8') > MAX_PRICING_MANIFEST_BYTES) {
+    return { ok: false, error: `manifest exceeds ${MAX_PRICING_MANIFEST_BYTES} byte limit` };
+  }
   let obj: unknown;
   try {
     obj = JSON.parse(rawText);
   } catch (e) {
     return { ok: false, error: `not valid JSON: ${String(e)}` };
   }
+
   let file: PricingFile;
+  let sourceKind = options.sourceKind ?? 'manual';
   if (isValidPricing(obj)) {
     file = obj;
+  } else if (obj && typeof obj === 'object' && !Array.isArray(obj) && 'schema_version' in obj) {
+    return { ok: false, error: pricingValidationError(obj) ?? 'manifest failed validation' };
   } else {
-    const t = transformLiteLLMManifest(rawText);
-    if (!t.ok || !t.file || !isValidPricing(t.file)) {
-      return { ok: false, error: t.error ?? 'manifest failed shape check (schema_version / providers / fallbacks.unknown)' };
+    const transformed = transformLiteLLMManifest(rawText);
+    if (!transformed.ok || !transformed.file || !isValidPricing(transformed.file)) {
+      return { ok: false, error: transformed.error ?? 'manifest failed validation' };
     }
-    file = t.file;
+    file = transformed.file;
+    sourceKind = 'litellm_transformed';
   }
+
+  const fetchedAt = options.fetchedAt ?? new Date().toISOString();
+  const cardSha256 = pricingCardHash(file);
+  const sourceUrl = options.sourceUrl ?? null;
+  const provenance: PricingProvenance = {
+    schemaVersion: 1,
+    sourceUrl: sourceUrl === null ? null : redactedUrl(sourceUrl),
+    sourceUrlSha256: sourceUrl === null ? null : sha256(sourceUrl),
+    sourceKind,
+    fetchedAt,
+    lastCheckedAt: fetchedAt,
+    upstreamDeclaredUpdated: sourceKind === 'litellm_transformed' ? null : file.updated,
+    cardSha256,
+    modelCount: countModels(file),
+    etag: options.etag ?? null,
+    lastModified: options.lastModified ?? null,
+  };
+
   try {
     const dir = join(aegisHome(), 'pricing');
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    writeFileSync(cachePath(), JSON.stringify(file, null, 2) + '\n', 'utf8');
+    const archiveDir = join(dir, 'cards');
+    if (!existsSync(archiveDir)) mkdirSync(archiveDir, { recursive: true });
+    const cardText = JSON.stringify(file, null, 2) + '\n';
+    // Archive first: a later interrupted active-cache write still has a named,
+    // immutable last-valid card. All files are individually temp+rename writes.
+    if (!existsSync(archivePath(cardSha256))) writeAtomically(archivePath(cardSha256), cardText);
+    writeAtomically(cachePath(), cardText);
+    writeAtomically(provenancePath(), JSON.stringify(provenance, null, 2) + '\n');
   } catch (e) {
-    return { ok: false, error: `could not write cache: ${String(e)}` };
+    return { ok: false, error: `could not write verified pricing cache: ${String(e)}` };
   }
-  cached = null; // invalidate the memo so the next load picks up the new table
-  return { ok: true, updated: file.updated, modelCount: countModels(file) };
+  cached = null;
+  return {
+    ok: true,
+    updated: file.updated,
+    modelCount: provenance.modelCount,
+    sourceUrl: provenance.sourceUrl,
+    sourceKind,
+    fetchedAt,
+    cardSha256,
+  };
 }
 
 /**
@@ -274,12 +482,100 @@ export function applyPricingManifest(rawText: string): RefreshResult {
  * gracefully: any network or HTTP error returns `{ ok: false }` and keeps the
  * current table.
  */
+function safeRemoteTarget(raw: string): { url?: URL; error?: string } {
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'https:') return { error: 'pricing refresh requires an https URL' };
+    if (url.username || url.password) return { error: 'pricing refresh refuses URLs with embedded credentials' };
+    return { url };
+  } catch {
+    return { error: 'pricing refresh requires an absolute https URL' };
+  }
+}
+
+async function readPricingResponse(res: Response): Promise<string> {
+  const declaredLength = res.headers.get('content-length');
+  if (declaredLength !== null && Number(declaredLength) > MAX_PRICING_MANIFEST_BYTES) {
+    throw new Error(`manifest exceeds ${MAX_PRICING_MANIFEST_BYTES} byte limit`);
+  }
+  if (!res.body) return '';
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const next = await reader.read();
+      if (next.done) break;
+      total += next.value.byteLength;
+      if (total > MAX_PRICING_MANIFEST_BYTES) throw new Error(`manifest exceeds ${MAX_PRICING_MANIFEST_BYTES} byte limit`);
+      chunks.push(next.value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
+/**
+ * Pull a fresh pricing manifest only from a secure explicit/default endpoint.
+ * Conditional requests identify an unchanged *local card*; they never claim a
+ * provider invoice or silently mutate historical measured rows.
+ */
 export async function refreshPricing(url: string | null, timeoutMs = 20_000): Promise<RefreshResult> {
   const target = url ?? DEFAULT_MANIFEST_URL;
+  const parsed = safeRemoteTarget(target);
+  if (!parsed.url) return { ok: false, error: parsed.error };
+
+  const prior = readProvenance();
+  const sameSource = prior?.sourceUrlSha256 === sha256(target);
+  const headers: Record<string, string> = { accept: 'application/json' };
+  if (sameSource && prior?.etag) headers['if-none-match'] = prior.etag;
+  if (sameSource && prior?.lastModified) headers['if-modified-since'] = prior.lastModified;
   try {
-    const res = await fetch(target, { signal: AbortSignal.timeout(timeoutMs), headers: { accept: 'application/json' } });
-    if (!res.ok) return { ok: false, error: `HTTP ${res.status} from ${target}` };
-    return applyPricingManifest(await res.text());
+    const res = await fetch(parsed.url, {
+      signal: AbortSignal.timeout(timeoutMs),
+      headers,
+      redirect: 'error',
+    });
+    if (res.status === 304) {
+      const active = loadVerifiedCache();
+      if (!prior || !sameSource || !active || (active.integrity !== 'verified' && active.integrity !== 'archive_recovered') || active.provenance?.cardSha256 !== prior.cardSha256) {
+        return { ok: false, error: 'source returned 304 but no matching verified local card exists' };
+      }
+      const checkedAt = new Date().toISOString();
+      const checked: PricingProvenance = { ...prior, lastCheckedAt: checkedAt };
+      try {
+        writeAtomically(provenancePath(), JSON.stringify(checked, null, 2) + '\n');
+        cached = null;
+      } catch (e) {
+        return { ok: false, error: `could not record successful pricing check: ${String(e)}` };
+      }
+      return {
+        ok: true,
+        unchanged: true,
+        updated: active.file.updated,
+        modelCount: prior.modelCount,
+        sourceUrl: prior.sourceUrl,
+        sourceKind: prior.sourceKind,
+        fetchedAt: prior.fetchedAt,
+        cardSha256: prior.cardSha256,
+      };
+    }
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status} from ${redactedUrl(target) ?? 'pricing source'}` };
+    const body = await readPricingResponse(res);
+    return applyPricingManifest(body, {
+      sourceUrl: target,
+      sourceKind: 'native_manifest',
+      fetchedAt: new Date().toISOString(),
+      etag: res.headers.get('etag'),
+      lastModified: res.headers.get('last-modified'),
+    });
   } catch (e) {
     return { ok: false, error: `fetch failed: ${String(e)}` };
   }
@@ -287,26 +583,47 @@ export async function refreshPricing(url: string | null, timeoutMs = 20_000): Pr
 
 export interface PricingStatus {
   source: 'cache' | 'bundled';
+  /** Declared rate-card date (not necessarily the time Fiscus retrieved it). */
   updated: string;
   ageDays: number | null;
   stale: boolean;
   modelCount: number;
   providers: string[];
+  cacheIntegrity: CacheIntegrity;
+  /** The clock used for freshness: accepted-cache time when verified, otherwise declared card date. */
+  freshnessBasis: 'local_fetch' | 'declared_card_date';
+  fetchedAt: string | null;
+  lastCheckedAt: string | null;
+  upstreamDeclaredUpdated: string | null;
+  sourceUrl: string | null;
+  sourceKind: PricingSourceKind | 'bundled' | 'legacy_unknown';
+  cardSha256: string;
 }
 
 /** Where the active table came from, how old it is, and whether it's stale. */
 export function pricingStatus(maxAgeDays = 30): PricingStatus {
   const file = loadPricing(true); // fresh read so `source` reflects current disk
   const updated = file.updated ?? 'unknown';
-  const t = Date.parse(updated);
+  const provenance = cachedProvenance;
+  const verified = cachedSource === 'cache' && (cachedIntegrity === 'verified' || cachedIntegrity === 'archive_recovered') && provenance !== null;
+  const freshnessAt = verified ? provenance.fetchedAt : updated;
+  const t = Date.parse(freshnessAt);
   const ageDays = Number.isNaN(t) ? null : Math.floor((Date.now() - t) / 86_400_000);
   return {
     source: cachedSource,
     updated,
     ageDays,
-    stale: ageDays !== null && ageDays > maxAgeDays,
+    stale: ageDays === null || ageDays < 0 || ageDays > maxAgeDays,
     modelCount: countModels(file),
     providers: Object.keys(file.providers),
+    cacheIntegrity: cachedIntegrity,
+    freshnessBasis: verified ? 'local_fetch' : 'declared_card_date',
+    fetchedAt: cachedProvenance?.fetchedAt ?? null,
+    lastCheckedAt: cachedProvenance?.lastCheckedAt ?? null,
+    upstreamDeclaredUpdated: cachedProvenance?.upstreamDeclaredUpdated ?? (cachedSource === 'bundled' ? updated : null),
+    sourceUrl: cachedProvenance?.sourceUrl ?? null,
+    sourceKind: cachedSource === 'bundled' ? 'bundled' : cachedProvenance?.sourceKind ?? 'legacy_unknown',
+    cardSha256: pricingCardHash(file),
   };
 }
 

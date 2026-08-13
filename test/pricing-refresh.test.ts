@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, existsSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { applyPricingManifest, loadPricing, pricingStatus, rateFor, transformLiteLLMManifest } from '../src/cost/pricing.ts';
+import { applyPricingManifest, loadPricing, MAX_PRICING_MANIFEST_BYTES, pricingStatus, rateFor, refreshPricing, transformLiteLLMManifest } from '../src/cost/pricing.ts';
 
 // These exercise the refresh/override path against an isolated AEGIS_HOME so the
 // real ~/.aegisflow is never touched. node's test runner isolates each FILE in
@@ -16,10 +16,11 @@ function freshHome(): string {
   return dir;
 }
 
-function manifest(opusInput: number, updated = '2099-01-01'): string {
+function manifest(opusInput: number, updated = '2020-01-01'): string {
   return JSON.stringify({
     schema_version: 1,
     updated,
+    currency: 'USD',
     unit: 'per_million_tokens',
     providers: {
       anthropic: { verified: true, models: { 'claude-opus-4-8': { input: opusInput, output: 25 } } },
@@ -57,12 +58,16 @@ test('with no cache, loadPricing falls back to the bundled table', () => {
   assert.equal(rateFor('anthropic', 'claude-opus-4-8').rate.input, 5); // the real bundled rate
 });
 
-test('pricingStatus flags a stale table by its updated date', () => {
+test('pricingStatus distinguishes local accepted-cache freshness from a source-declared date', () => {
   freshHome();
   applyPricingManifest(manifest(5, '2000-01-01'));
   const st = pricingStatus(30);
-  assert.equal(st.stale, true);
-  assert.ok((st.ageDays ?? 0) > 1000);
+  assert.equal(st.stale, false, 'a card accepted moments ago is locally fresh even when the native source declared an old date');
+  assert.equal(st.freshnessBasis, 'local_fetch');
+  assert.equal(st.upstreamDeclaredUpdated, '2000-01-01');
+  assert.equal(st.cacheIntegrity, 'verified');
+  assert.match(st.cardSha256, /^[a-f0-9]{64}$/);
+  assert.ok(st.fetchedAt);
 });
 
 // ---- LiteLLM feed transformation (the autonomous-pricing path) ----
@@ -127,6 +132,104 @@ test('litellm: a shape-shifted feed is refused and never touches the table', () 
   assert.equal(res.ok, false);
   assert.match(res.error ?? '', /not recognized/);
   assert.equal(rateFor('anthropic', 'claude-opus-4-8').rate.input, 222, 'previous cache intact');
+});
+
+test('pricing manifest validation refuses impossible native rates and future dates without replacing the active card', () => {
+  freshHome();
+  assert.equal(applyPricingManifest(manifest(77)).ok, true);
+  assert.equal(applyPricingManifest(manifest(88, '2099-01-01')).ok, false, 'a future declared card date is not credible freshness evidence');
+  const zeroRate = JSON.parse(manifest(88)) as { providers: { anthropic: { models: { 'claude-opus-4-8': { input: number } } } } };
+  zeroRate.providers.anthropic.models['claude-opus-4-8'].input = 0;
+  const result = applyPricingManifest(JSON.stringify(zeroRate));
+  assert.equal(result.ok, false);
+  assert.match(result.error ?? '', /finite positive/i);
+  assert.equal(rateFor('anthropic', 'claude-opus-4-8').rate.input, 77, 'the last verified card remains active');
+});
+
+test('accepted cards retain a hash-addressed local archive and verified provenance', () => {
+  const home = freshHome();
+  const result = applyPricingManifest(manifest(66));
+  assert.equal(result.ok, true);
+  assert.match(result.cardSha256 ?? '', /^[a-f0-9]{64}$/);
+  assert.equal(existsSync(join(home, 'pricing', 'models.json')), true);
+  assert.equal(existsSync(join(home, 'pricing', 'provenance.json')), true);
+  assert.equal(existsSync(join(home, 'pricing', 'cards', `${result.cardSha256}.json`)), true);
+  const status = pricingStatus();
+  assert.equal(status.cacheIntegrity, 'verified');
+  assert.equal(status.cardSha256, result.cardSha256);
+});
+
+test('a mismatched active cache recovers only the provenance-named archived card', () => {
+  const home = freshHome();
+  const original = applyPricingManifest(manifest(55));
+  assert.equal(original.ok, true);
+  // Model an interrupted/external replacement: active card changed, state and
+  // immutable archive still name the last verified card.
+  writeFileSync(join(home, 'pricing', 'models.json'), manifest(999), 'utf8');
+  assert.equal(loadPricing(true).providers.anthropic!.models['claude-opus-4-8']!.input, 55);
+  assert.equal(pricingStatus().cacheIntegrity, 'archive_recovered');
+});
+
+test('remote refresh is HTTPS-only, records a redacted source identity, and revalidates unchanged cards with ETag', async () => {
+  freshHome();
+  const originalFetch = globalThis.fetch;
+  let conditionalEtag: string | null = null;
+  let redirectMode: string | undefined;
+  try {
+    globalThis.fetch = (async (_input, init) => {
+      redirectMode = init?.redirect;
+      return new Response(litellmFeed(), {
+      status: 200,
+      headers: { etag: '"price-v1"', 'last-modified': 'Wed, 12 Aug 2026 00:00:00 GMT' },
+      });
+    }) as typeof fetch;
+    const first = await refreshPricing('https://pricing.example.test/models.json?private=never-display');
+    assert.equal(first.ok, true);
+    assert.equal(first.sourceKind, 'litellm_transformed');
+    assert.equal(first.sourceUrl, 'https://pricing.example.test/models.json');
+    assert.equal(redirectMode, 'error', 'a pricing refresh cannot silently follow to another URL');
+    const before = pricingStatus();
+    assert.equal(before.sourceKind, 'litellm_transformed');
+    assert.equal(before.sourceUrl, 'https://pricing.example.test/models.json');
+    assert.equal(before.freshnessBasis, 'local_fetch');
+
+    globalThis.fetch = (async (_input, init) => {
+      conditionalEtag = new Headers(init?.headers).get('if-none-match');
+      return new Response(null, { status: 304 });
+    }) as typeof fetch;
+    const second = await refreshPricing('https://pricing.example.test/models.json?private=never-display');
+    assert.equal(second.ok, true);
+    assert.equal(second.unchanged, true);
+    assert.equal(second.cardSha256, first.cardSha256, '304 never rewrites the active rate card');
+    assert.equal(conditionalEtag, '"price-v1"');
+
+    let calls = 0;
+    globalThis.fetch = (async () => { calls += 1; return new Response('{}'); }) as typeof fetch;
+    const insecure = await refreshPricing('http://pricing.example.test/models.json');
+    assert.equal(insecure.ok, false);
+    assert.match(insecure.error ?? '', /https/i);
+    assert.equal(calls, 0, 'insecure URL is rejected before an outbound request');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('an oversized remote manifest is refused before it can replace a verified card', async () => {
+  freshHome();
+  assert.equal(applyPricingManifest(manifest(73)).ok, true);
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = (async () => new Response('{}', {
+      status: 200,
+      headers: { 'content-length': String(MAX_PRICING_MANIFEST_BYTES + 1) },
+    })) as typeof fetch;
+    const result = await refreshPricing('https://pricing.example.test/too-large.json');
+    assert.equal(result.ok, false);
+    assert.match(result.error ?? '', /byte limit/i);
+    assert.equal(rateFor('anthropic', 'claude-opus-4-8').rate.input, 73);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test.after(() => {

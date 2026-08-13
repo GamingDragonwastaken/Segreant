@@ -374,6 +374,11 @@ IDE / Agent → ANTHROPIC_BASE_URL/OPENAI_BASE_URL → Fiscus proxy (:8090)
 3. **Runaway spend is capped** — soft warnings, hard caps, and a velocity guard
    that halts a looping agent before the bill.
 
+The rate card is a local list-price estimate. Each accepted refresh records a
+redacted source identity, local acceptance time, and SHA-256 card identity; it
+does **not** claim provider-invoiced, discounted, credited, taxed, or reconciled
+cost.
+
 Full design in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
 ### Beyond Anthropic & OpenAI

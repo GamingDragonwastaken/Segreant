@@ -46,7 +46,9 @@ immediate deletion deadline matters.
 These paths are off unless an operator deliberately invokes or configures them:
 
 - `fiscus pricing --refresh`, or `pricing.autoRefresh` with a configured manifest,
-  downloads a public pricing manifest from the selected URL.
+  downloads a public pricing manifest from the selected HTTPS URL. The request is
+  a plain GET with no usage, prompt, or customer data; the accepted normalized
+  card and redacted source provenance remain local under the Fiscus home.
 - `fiscus baseline --refresh --url ...` downloads a baseline manifest from the
   URL supplied by the operator.
 - `fiscus alerts --set-webhook ...` sends configured alert summaries to the

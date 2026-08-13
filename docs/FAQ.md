@@ -189,6 +189,15 @@ you). For self-maintenance, `fiscus pricing --auto` refreshes on start
 whenever the table goes stale. A malformed or shrunken feed is refused and the
 current table kept — a bad refresh can never corrupt your pricing.
 
+Pricing updates accept only HTTPS sources without embedded credentials, refuse
+redirects and oversized responses, and archive every accepted normalized card
+under a SHA-256 identity before activating it. `fiscus pricing --json` shows the
+redacted source identity, accepted-cache time, declared source date (when
+provided), and integrity state. A successful 304 response means the source
+revalidated the same local card; it is not presented as a newly published price.
+Every Fiscus rate remains a local list-price estimate, not a provider invoice,
+contractual discount, credit, tax, or reconciliation result.
+
 **How does pricing stay correct as new models launch?**
 Three layers, in order: the refreshed community feed above (170+ models across
 Anthropic, OpenAI, Google); substring family-matching when an exact name is
