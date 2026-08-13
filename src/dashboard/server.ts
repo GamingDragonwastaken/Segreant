@@ -386,6 +386,18 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
           },
           summary: store.billingSummary(),
           imports: store.billingImportRuns(25),
+          // Explicit, read-only provider API observations use a different
+          // source contract from imported operator reports. They remain a
+          // separate snapshot/status surface and never become overview spend.
+          directOpenAiCosts: {
+            kind: 'openai_organization_costs_observation',
+            sourceKind: 'provider_api_observation',
+            trust: 'provider_observation_unreconciled',
+            rawRetention: 'digest_only',
+            reconciliationStatus: 'not_reconciled',
+            status: store.openAiCostsObservationStatus(),
+            coverage: store.openAiCostsCaptureCoverage(),
+          },
         });
       } catch (err) {
         return json(res, 500, { error: String(err) });

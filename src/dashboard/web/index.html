@@ -412,7 +412,7 @@
 
   <div id="view-billing" class="view" style="display:none">
     <div class="vhead">
-      <div><h2>Provider billing evidence</h2><div class="tag">separate operator-supplied report ledger</div></div>
+      <div><h2>Provider cost evidence</h2><div class="tag">separate report and direct-observation ledgers</div></div>
       <button class="vbtn" id="brefresh">↻ Refresh evidence</button>
     </div>
     <div id="billing-grid" class="grid">
@@ -846,6 +846,10 @@ function renderBilling(d) {
   const summary = d && typeof d.summary === 'object' && d.summary ? d.summary : {};
   const evidence = d && typeof d.evidence === 'object' && d.evidence ? d.evidence : {};
   const imports = Array.isArray(d && d.imports) ? d.imports : [];
+  const direct = d && typeof d.directOpenAiCosts === 'object' && d.directOpenAiCosts ? d.directOpenAiCosts : {};
+  const directStatus = direct && typeof direct.status === 'object' && direct.status ? direct.status : {};
+  const directRun = directStatus.latestRun && typeof directStatus.latestRun === 'object' ? directStatus.latestRun : null;
+  const coverage = direct && typeof direct.coverage === 'object' && direct.coverage ? direct.coverage : null;
   const declared = billingUsd(summary.providerReportedUsdMicros);
   const exclusion = Array.isArray(evidence.excludedFrom) ? evidence.excludedFrom.map((x) => esc(x)).join(', ') : 'request-metered spend, budget enforcement, outcome attribution, ROI, model recommendations';
   const rows = imports.map((run) => {
@@ -864,6 +868,20 @@ function renderBilling(d) {
   }).join('');
   const empty = `<div class="card empty"><h3>No provider billing evidence imported</h3><p>This dashboard does not upload billing files or connect to a provider. Validate and deliberately retain a local report with <code>fiscus billing import --file .\\openai-costs.fiscus.json --apply</code>, then refresh this view.</p></div>`;
   const demoNote = d && d.demo ? '<div class="bsub">Demo mode does not invent provider billing evidence.</div>' : '';
+  const directCard = (() => {
+    if (!directRun) return `<div class="card fade" style="grid-column:1/-1"><div class="label">Direct OpenAI Costs observations</div><div class="billing-state">NO SNAPSHOT</div><p class="bsub" style="margin-top:var(--s3)">No direct provider observation is stored. This page never contacts OpenAI or reads an Admin key; only an explicit local <code>fiscus billing openai-costs pull … --apply</code> can record one.</p></div>`;
+    const state = String(directRun.resultState || 'unknown').toUpperCase();
+    const failed = directRun.resultState === 'failed';
+    const captured = coverage && coverage.capturedOnDeclaredRoute ? coverage.capturedOnDeclaredRoute : null;
+    const excluded = coverage && coverage.excludedFromDeclaredRoute ? coverage.excludedFromDeclaredRoute : null;
+    const captureLine = captured
+      ? `${Number(captured.requestCount || 0).toLocaleString()} matching declared-route proxy request(s), $${usd(Number(captured.costUsd || 0))} local rate-card estimate`
+      : 'No complete snapshot is available for local capture coverage.';
+    const exclusions = excluded
+      ? `${Number(excluded.importedOrNative?.requestCount || 0)} imported/native · ${Number(excluded.unscopedOrLegacyOpenAiProxy?.requestCount || 0)} unscoped/legacy · ${Number(excluded.differentDeclaredOpenAiScope?.requestCount || 0)} another OpenAI scope · ${Number(excluded.otherProvider?.requestCount || 0)} other provider`
+      : '';
+    return `<div class="card billing-note fade" style="grid-column:1/-1"><div class="label">Direct OpenAI Costs observations</div><div class="billing-state">${esc(state)} · NOT RECONCILED</div><h3 style="margin-top:var(--s3)">Provider snapshot status, never a request-level match</h3><p>Latest run: ${esc(billingTime(directRun.fetchedAtMs))} · ${Number(directRun.pageCount || 0).toLocaleString()} page(s) · ${directRun.paginationComplete ? 'complete pagination' : 'incomplete pagination'}${failed && directRun.failureCode ? ' · ' + esc(directRun.failureCode) : ''}.</p><div class="bsub">Local capture: ${esc(captureLine)}${exclusions ? `<br>Excluded local traffic: ${esc(exclusions)}.` : ''}<br>No provider line-item total or provider/request variance is displayed. Route scope is operator-declared, provider finality is undocumented, and off-path usage is not observable.</div></div>`;
+  })();
 
   setNodes($('#billing-grid'), `
     <div class="card billing-note fade">
@@ -876,6 +894,7 @@ function renderBilling(d) {
     <div class="card fade"><div class="label">Immutable charge lines</div><div class="billing-stat">${Number(summary.recordCount || 0).toLocaleString()}</div><div class="bsub">provider-declared lines; never request rows</div></div>
     <div class="card fade"><div class="label">Evidence imports</div><div class="billing-stat coral">${Number(summary.importCount || 0).toLocaleString()}</div><div class="bsub">latest ${esc(billingTime(summary.lastImportedAtMs))}</div></div>
     ${imports.length ? `<div class="card fade" style="grid-column:1/-1"><div class="label">Evidence import provenance</div><div class="table-wrap"><table><thead><tr><th>Provider</th><th>Account ref</th><th>Export ID</th><th>Source period</th><th>Coverage</th><th>Rows</th><th>File digest</th><th>Imported</th></tr></thead><tbody>${rows}</tbody></table></div><div class="bsub">Coverage is an operator declaration, even when marked complete. Replayed rows were recognized without changing immutable charge-line totals.</div></div>` : empty}
+    ${directCard}
   `);
   $('#gen').textContent = 'billing evidence refreshed ' + new Date(d.generatedAt || Date.now()).toLocaleTimeString();
 }
