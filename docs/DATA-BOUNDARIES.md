@@ -83,7 +83,10 @@ These paths are off unless an operator deliberately invokes or configures them:
   session excerpt described by the selected judge tier to that configured judge
   provider. The local judge tier remains on-device.
 - `fiscus team push --url ...` sends a signed, numeric rollup to an operator-run
-  team server. It is opt-in and separate from the local product.
+  team server. It is opt-in and separate from the local product. Fiscus refuses
+  a non-loopback `http://` endpoint for this command; use HTTPS in deployment,
+  or `http://localhost`, `http://127.0.0.1`, or `http://[::1]` only for local
+  development.
 
 The signed GitHub Actions outcome importer is offline: it reads an artifact from
 disk, verifies it against a locally pinned public key and explicit policy flags,

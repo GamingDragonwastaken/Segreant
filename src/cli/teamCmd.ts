@@ -326,6 +326,36 @@ type PushResult =
   | { status: 'error'; message: string };
 
 /**
+ * Team rollups can include the local developer's numeric usage and outcome
+ * evidence. Refuse to send that payload over plaintext outside a local
+ * development loopback endpoint. This is deliberately hostname-based rather
+ * than DNS-based: resolving a name here would make the safety check dependent
+ * on mutable network state.
+ */
+function teamPushTransportError(rawUrl: string): string | null {
+  let target: URL;
+  try {
+    target = new URL(rawUrl);
+  } catch {
+    // Preserve the existing fetch error for malformed URLs. This guard only
+    // adds a safety boundary for otherwise-valid plaintext HTTP endpoints.
+    return null;
+  }
+
+  if (target.protocol !== 'http:') return null;
+
+  // URL.hostname normalizes DNS names and keeps IPv6 literals bracketed.
+  // Permit local development with or without an explicit port, but never
+  // treat a lookalike hostname (for example localhost.example.com) as local.
+  const isLoopback = target.hostname === 'localhost'
+    || target.hostname === '127.0.0.1'
+    || target.hostname === '[::1]';
+  if (isLoopback) return null;
+
+  return `refusing plaintext HTTP team push to non-loopback endpoint "${target.origin}" — use HTTPS, or a local loopback URL such as http://127.0.0.1:8787`;
+}
+
+/**
  * Sign and (unless dryRun) push a rollup of the given projects. Pure: no
  * printing, no process.exitCode — callers decide how to present each
  * PushResult. Shared by the one-shot and --watch paths (cmdTeamPush,
@@ -423,6 +453,19 @@ export async function cmdTeamPush(flags: Flags): Promise<void> {
     console.error(`  ${color(tty, C.yellow, '✗')} ${msg}`);
     process.exitCode = 1;
     return;
+  }
+
+  if (url) {
+    const transportError = teamPushTransportError(url);
+    if (transportError) {
+      if (flags.json) {
+        console.log(JSON.stringify({ ok: false, error: transportError }, null, 2));
+      } else {
+        console.error(`  ${color(tty, C.red, 'âœ—')} ${transportError}`);
+      }
+      process.exitCode = 1;
+      return;
+    }
   }
 
   const windowDays = flags.window ? Number(flags.window) : 30;
@@ -578,4 +621,3 @@ async function cmdTeamPushWatch(opts: {
     process.on('SIGTERM', stop);
   });
 }
-
