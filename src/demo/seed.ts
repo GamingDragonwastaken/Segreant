@@ -23,7 +23,7 @@
  */
 
 import type { Store, RequestRow, RealizationUnitRecord } from '../store/db.ts';
-import { computeCost, type Provider } from '../cost/pricing.ts';
+import { computeCost, syntheticPricingEvidence, unpricedPricingEvidence, type Provider } from '../cost/pricing.ts';
 import { startOfLocalDay } from '../budget/guard.ts';
 import type { WorkUnit } from '../value/realization.ts';
 import { GATE_LADDER, scoreFunnel, type Gate, type GateResult, type Verdict } from '../value/gates.ts';
@@ -140,14 +140,15 @@ function addRequest(ctx: Ctx, spec: ReqSpec): void {
   const cacheWriteTokens = blocked ? 0 : spec.cacheWriteTokens ?? 0;
   const cacheReadTokens = blocked ? 0 : spec.cacheReadTokens ?? 0;
 
-  const cost = blocked
-    ? { costUsd: 0, estimated: false }
+  const calculated = blocked
+    ? null
     : computeCost(spec.model.provider, spec.model.model, {
         inputTokens,
         outputTokens,
         cacheWriteTokens,
         cacheReadTokens,
       });
+  const cost = calculated ?? { costUsd: 0, estimated: false, pricing: unpricedPricingEvidence() };
 
   const row: RequestRow = {
     requestId: `demo-req-${ctx.n++}`,
@@ -164,6 +165,7 @@ function addRequest(ctx: Ctx, spec: ReqSpec): void {
     reasoningTokens: 0,
     costUsd: cost.costUsd,
     estimated: cost.estimated,
+    pricing: calculated ? syntheticPricingEvidence(calculated) : cost.pricing,
     streamed: !blocked,
     statusCode: spec.statusCode ?? 200,
     durationMs: blocked ? 2 : int(ctx.rng, 600, 9000),

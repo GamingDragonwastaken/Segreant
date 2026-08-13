@@ -18,7 +18,7 @@ import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type { Store, RequestRow } from '../store/db.ts';
-import { computeCost, type Provider } from '../cost/pricing.ts';
+import { computeCost, unpricedPricingEvidence, type Provider } from '../cost/pricing.ts';
 import { projectKey } from '../value/characterization.ts';
 import { type ImportSummary, type ImportOptions, emptyImportSummary, recordInsert } from './importShared.ts';
 
@@ -187,7 +187,7 @@ export async function importCodex(store: Store, opts: ImportOptions = {}): Promi
             cacheWriteTokens: 0,
             cacheReadTokens: ev.cacheReadTokens,
           })
-        : { costUsd: 0, estimated: true };
+        : { costUsd: 0, estimated: true, pricing: unpricedPricingEvidence() };
 
       const row: RequestRow = {
         requestId: ev.requestId,
@@ -204,6 +204,7 @@ export async function importCodex(store: Store, opts: ImportOptions = {}): Promi
         reasoningTokens: ev.reasoningTokens,
         costUsd: c.costUsd,
         estimated: c.estimated,
+        pricing: c.pricing,
         streamed: true,
         statusCode: 200,
         durationMs: null,

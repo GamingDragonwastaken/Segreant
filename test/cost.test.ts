@@ -13,15 +13,24 @@ import { computeCost, rateFor } from '../src/cost/pricing.ts';
 import { normalizeAnthropicUsage, normalizeOpenAIUsage } from '../src/proxy/usage.ts';
 
 test('Anthropic rate is exact for a known model', () => {
-  const { rate, estimated } = rateFor('anthropic', 'claude-opus-4-8');
+  const { rate, estimated, pricing } = rateFor('anthropic', 'claude-opus-4-8');
   assert.equal(estimated, false);
   assert.equal(rate.input, 5);
   assert.equal(rate.output, 25);
+  assert.equal(pricing.costBasis, 'local_list_price');
+  assert.equal(pricing.rateCardSourceKind, 'bundled');
+  assert.equal(pricing.rateMatchKind, 'exact_provider');
+  assert.equal(pricing.rateMatchProvider, 'anthropic');
+  assert.equal(pricing.rateMatchModel, 'claude-opus-4-8');
+  assert.match(pricing.rateCardSha256!, /^[a-f0-9]{64}$/);
 });
 
-test('unknown model falls back and is flagged estimated', () => {
-  const { estimated } = rateFor('anthropic', 'totally-made-up-model');
+test('unknown model falls back with explicit local-card evidence', () => {
+  const { estimated, pricing } = rateFor('anthropic', 'totally-made-up-model');
   assert.equal(estimated, true);
+  assert.equal(pricing.costBasis, 'fallback_estimate');
+  assert.equal(pricing.rateMatchKind, 'fallback');
+  assert.equal(pricing.rateMatchProvider, null);
 });
 
 test('heuristic match resolves a versioned id by family substring', () => {
@@ -91,10 +100,12 @@ test('Gemini on the OpenAI-compatible path: exact rate by model, not estimated',
   // A request to Google's .../v1beta/openai/ base arrives on the OpenAI path,
   // but the model id is a Gemini one. The price must follow the MODEL: an exact
   // cross-provider id match is an exact price, so estimated stays false.
-  const { rate, estimated } = rateFor('openai', 'gemini-2.5-flash');
+  const { rate, estimated, pricing } = rateFor('openai', 'gemini-2.5-flash');
   assert.equal(estimated, false);
   assert.equal(rate.input, 0.3);
   assert.equal(rate.output, 2.5);
+  assert.equal(pricing.rateMatchKind, 'exact_cross_provider');
+  assert.equal(pricing.rateMatchProvider, 'google');
 });
 
 test('Flash-Lite resolves to its own rate, not Flash (longest key wins)', () => {
@@ -104,9 +115,11 @@ test('Flash-Lite resolves to its own rate, not Flash (longest key wins)', () => 
 });
 
 test('A dated Gemini id matches its family across providers, flagged estimated', () => {
-  const { rate, estimated } = rateFor('openai', 'gemini-2.5-flash-preview-09-2026');
+  const { rate, estimated, pricing } = rateFor('openai', 'gemini-2.5-flash-preview-09-2026');
   assert.equal(rate.input, 0.3);
   assert.equal(estimated, true); // family (substring) match, not an exact id
+  assert.equal(pricing.rateMatchKind, 'family_cross_provider');
+  assert.equal(pricing.rateMatchProvider, 'google');
 });
 
 test('Native OpenAI model still resolves in its own provider (no cross-provider drift)', () => {

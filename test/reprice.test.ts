@@ -8,7 +8,8 @@ import { join } from 'node:path';
 process.env.AEGIS_HOME = mkdtempSync(join(tmpdir(), 'aegis-home-'));
 
 import { Store, type RequestRow } from '../src/store/db.ts';
-import { computeCost, type Provider } from '../src/cost/pricing.ts';
+import { computeCost, legacyPricingEvidence, type Provider } from '../src/cost/pricing.ts';
+import type { RepriceUpdate } from '../src/store/db.ts';
 
 function req(over: Partial<RequestRow>): RequestRow {
   return {
@@ -29,24 +30,24 @@ test('reprice: only estimated rows are candidates; exact-priced rows never touch
   store.close();
 });
 
-test('reprice: a row whose model the card now resolves EXACTLY is re-costed and un-flagged; a still-fuzzy model is left alone', () => {
+test('reprice: an exact result is re-costed with a retained before/after evidence event; a fuzzy row is left alone', () => {
   const store = new Store(':memory:');
   // Metered when the card lacked the model → priced at the unknown fallback, flagged.
   store.insertRequest(req({ requestId: 'nowExact', model: 'claude-opus-4-8', estimated: true, costUsd: 3 }));
   // A dated id that only family-matches → still an estimate under the current card.
   store.insertRequest(req({ requestId: 'stillFuzzy', model: 'claude-sonnet-4-6-20990101', estimated: true, costUsd: 7 }));
 
-  const updates: Array<{ requestId: string; costUsd: number }> = [];
+  const updates: RepriceUpdate[] = [];
   for (const r of store.estimatedRequestRows()) {
     const c = computeCost(r.provider as Provider, r.model, {
       inputTokens: r.inputTokens, outputTokens: r.outputTokens,
       cacheWriteTokens: r.cacheWriteTokens, cacheReadTokens: r.cacheReadTokens,
     });
-    if (!c.estimated) updates.push({ requestId: r.requestId, costUsd: c.costUsd });
+    if (!c.estimated) updates.push({ requestId: r.requestId, costUsd: c.costUsd, pricing: c.pricing });
   }
   assert.deepEqual(updates.map((u) => u.requestId), ['nowExact']); // fuzzy row excluded
 
-  store.applyRepricedCosts(updates);
+  store.applyRepricedCosts(updates, 1_234);
   const after = store.estimatedRequestRows();
   assert.deepEqual(after.map((r) => r.requestId), ['stillFuzzy']); // flag cleared on the repriced row only
 
@@ -56,5 +57,22 @@ test('reprice: a row whose model the card now resolves EXACTLY is re-costed and 
   }).costUsd;
   const total = store.summary(0, 5000).costUsd;
   assert.ok(Math.abs(total - (expected + 7)) < 1e-9, `summary ${total} should be exact ${expected} + untouched 7`);
+
+  const current = store.requestsInRange(0, 5000).find((r) => r.requestId === 'nowExact')!;
+  assert.equal(current.pricing!.rateMatchKind, 'exact_provider');
+  assert.equal(current.pricing!.costBasis, 'local_list_price');
+  const events = store.requestPriceEvents('nowExact');
+  assert.equal(events.length, 1);
+  assert.equal(events[0]!.appliedAtMs, 1_234);
+  assert.equal(events[0]!.previousCostUsd, 3);
+  assert.equal(events[0]!.previousPricing.costBasis, 'legacy_unknown');
+  assert.deepEqual(events[0]!.newPricing, current.pricing);
+  store.close();
+});
+
+test('reprice: no write means no event', () => {
+  const store = new Store(':memory:');
+  store.insertRequest(req({ requestId: 'estimated', estimated: true, pricing: legacyPricingEvidence() }));
+  assert.deepEqual(store.requestPriceEvents('estimated'), []);
   store.close();
 });

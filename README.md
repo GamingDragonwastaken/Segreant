@@ -386,10 +386,12 @@ IDE / Agent → ANTHROPIC_BASE_URL/OPENAI_BASE_URL → Fiscus proxy (:8090)
 3. **Runaway spend is capped** — soft warnings, hard caps, and a velocity guard
    that halts a looping agent before the bill.
 
-The rate card is a local list-price estimate. Each accepted refresh records a
-redacted source identity, local acceptance time, and SHA-256 card identity; it
-does **not** claim provider-invoiced, discounted, credited, taxed, or reconciled
-cost.
+The rate card is a local list-price estimate. Every newly calculated ledger row
+retains the exact rate-card SHA-256, source kind, and exact/family/fallback
+match path that produced it; `fiscus reprice --apply` keeps an append-only
+before/after event instead of silently overwriting the estimate. Tool-reported
+and demo values are labelled separately. None of these labels claim
+provider-invoiced, discounted, credited, taxed, or reconciled cost.
 
 Full design in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 

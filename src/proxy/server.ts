@@ -24,7 +24,7 @@ import { randomUUID } from 'node:crypto';
 import type { Store, RequestRow } from '../store/db.ts';
 import type { AegisConfig } from '../config.ts';
 import { BudgetGuard, type GuardDecision } from '../budget/guard.ts';
-import { computeCost, type NormalizedUsage, type Provider } from '../cost/pricing.ts';
+import { computeCost, unpricedPricingEvidence, type NormalizedUsage, type Provider } from '../cost/pricing.ts';
 import {
   StreamUsageAccumulator,
   normalizeAnthropicUsage,
@@ -296,6 +296,7 @@ async function handle(
       reasoningTokens: 0,
       costUsd: 0,
       estimated: false,
+      pricing: unpricedPricingEvidence(),
       streamed: parsed.stream,
       statusCode: 429,
       durationMs: 0,
@@ -351,6 +352,7 @@ async function handle(
       reasoningTokens: 0,
       costUsd: 0,
       estimated: false,
+      pricing: unpricedPricingEvidence(),
       streamed: parsed.stream,
       statusCode: status,
       durationMs: Date.now() - startedAt,
@@ -447,6 +449,7 @@ async function handle(
     reasoningTokens: usage.reasoningTokens ?? 0,
     costUsd: cost.costUsd,
     estimated: cost.estimated,
+    pricing: cost.pricing,
     streamed: isStream,
     statusCode: upstream.status,
     durationMs: Date.now() - startedAt,

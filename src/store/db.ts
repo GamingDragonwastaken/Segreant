@@ -14,6 +14,7 @@ import '../util/quiet.ts';
 import { DatabaseSync } from 'node:sqlite';
 import { dirname } from 'node:path';
 import { existsSync, mkdirSync } from 'node:fs';
+import { legacyPricingEvidence, type RequestPricingEvidence } from '../cost/pricing.ts';
 
 export interface RequestRow {
   requestId: string;
@@ -41,6 +42,27 @@ export interface RequestRow {
   via?: 'proxy' | 'import'; // how the row entered the ledger: live proxy traffic
   // (blockable, marginal API cost) vs a native importer reading a tool's own logs
   // (sunk subscription cost, observed after the fact). Cap ENFORCEMENT keys on this.
+  /** Evidence for the amount above. Missing only means a pre-lineage/legacy row. */
+  pricing?: RequestPricingEvidence;
+}
+
+export interface RequestPriceEvent {
+  eventId: number;
+  requestId: string;
+  action: 'reprice';
+  appliedAtMs: number;
+  previousCostUsd: number;
+  previousEstimated: boolean;
+  previousPricing: RequestPricingEvidence;
+  newCostUsd: number;
+  newEstimated: boolean;
+  newPricing: RequestPricingEvidence;
+}
+
+export interface RepriceUpdate {
+  requestId: string;
+  costUsd: number;
+  pricing: RequestPricingEvidence;
 }
 
 export interface SpendBucket {
@@ -160,13 +182,45 @@ CREATE TABLE IF NOT EXISTS requests (
   duration_ms       INTEGER,
   user              TEXT,
   source            TEXT,
-  cwd               TEXT
+  cwd               TEXT,
+  via               TEXT,
+  cost_basis        TEXT NOT NULL DEFAULT 'legacy_unknown',
+  rate_card_sha256  TEXT,
+  rate_card_source_kind TEXT NOT NULL DEFAULT 'legacy_unknown',
+  rate_match_kind   TEXT NOT NULL DEFAULT 'legacy_unknown',
+  rate_match_provider TEXT,
+  rate_match_model  TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_requests_ts      ON requests(ts_epoch_ms);
 CREATE INDEX IF NOT EXISTS idx_requests_session ON requests(session_id);
 CREATE INDEX IF NOT EXISTS idx_requests_project ON requests(project);
 CREATE INDEX IF NOT EXISTS idx_requests_model   ON requests(model);
+
+CREATE TABLE IF NOT EXISTS request_price_events (
+  event_id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  request_id        TEXT NOT NULL,
+  action            TEXT NOT NULL,
+  applied_at_ms     INTEGER NOT NULL,
+  previous_cost_usd REAL NOT NULL,
+  previous_estimated INTEGER NOT NULL,
+  previous_cost_basis TEXT NOT NULL,
+  previous_rate_card_sha256 TEXT,
+  previous_rate_card_source_kind TEXT NOT NULL,
+  previous_rate_match_kind TEXT NOT NULL,
+  previous_rate_match_provider TEXT,
+  previous_rate_match_model TEXT,
+  new_cost_usd      REAL NOT NULL,
+  new_estimated     INTEGER NOT NULL,
+  new_cost_basis    TEXT NOT NULL,
+  new_rate_card_sha256 TEXT,
+  new_rate_card_source_kind TEXT NOT NULL,
+  new_rate_match_kind TEXT NOT NULL,
+  new_rate_match_provider TEXT,
+  new_rate_match_model TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_request_price_events_request ON request_price_events(request_id, event_id);
 
 CREATE TABLE IF NOT EXISTS git_commits (
   commit_hash  TEXT PRIMARY KEY NOT NULL,
@@ -273,6 +327,45 @@ CREATE TABLE IF NOT EXISTS project_aliases (
   at_ms     INTEGER NOT NULL
 )`;
 
+function pricingEvidenceFromRecord(record: Record<string, unknown>, prefix = ''): RequestPricingEvidence {
+  const fallback = legacyPricingEvidence();
+  const value = (name: string): unknown => record[prefix ? `${prefix}${name}` : `${name[0]!.toLowerCase()}${name.slice(1)}`];
+  const costBasis = value('CostBasis');
+  const rateCardSha256 = value('RateCardSha256');
+  const rateCardSourceKind = value('RateCardSourceKind');
+  const rateMatchKind = value('RateMatchKind');
+  const rateMatchProvider = value('RateMatchProvider');
+  const rateMatchModel = value('RateMatchModel');
+  return {
+    costBasis: typeof costBasis === 'string' ? costBasis as RequestPricingEvidence['costBasis'] : fallback.costBasis,
+    rateCardSha256: typeof rateCardSha256 === 'string' ? rateCardSha256 : null,
+    rateCardSourceKind: typeof rateCardSourceKind === 'string'
+      ? rateCardSourceKind as RequestPricingEvidence['rateCardSourceKind']
+      : fallback.rateCardSourceKind,
+    rateMatchKind: typeof rateMatchKind === 'string' ? rateMatchKind as RequestPricingEvidence['rateMatchKind'] : fallback.rateMatchKind,
+    rateMatchProvider: typeof rateMatchProvider === 'string' ? rateMatchProvider : null,
+    rateMatchModel: typeof rateMatchModel === 'string' ? rateMatchModel : null,
+  };
+}
+
+function requestRowFromRecord(record: Record<string, unknown>): RequestRow {
+  const {
+    costBasis,
+    rateCardSha256,
+    rateCardSourceKind,
+    rateMatchKind,
+    rateMatchProvider,
+    rateMatchModel,
+    ...row
+  } = record;
+  return {
+    ...(row as unknown as RequestRow),
+    estimated: Boolean(record.estimated),
+    streamed: Boolean(record.streamed),
+    pricing: pricingEvidenceFromRecord(record),
+  };
+}
+
 export class Store {
   private db: DatabaseSync;
 
@@ -317,6 +410,24 @@ export class Store {
            WHERE via IS NULL`,
         )
         .run();
+    }
+    if (!cols.some((c) => c.name === 'cost_basis')) {
+      this.db.prepare("ALTER TABLE requests ADD COLUMN cost_basis TEXT NOT NULL DEFAULT 'legacy_unknown'").run();
+    }
+    if (!cols.some((c) => c.name === 'rate_card_sha256')) {
+      this.db.prepare('ALTER TABLE requests ADD COLUMN rate_card_sha256 TEXT').run();
+    }
+    if (!cols.some((c) => c.name === 'rate_card_source_kind')) {
+      this.db.prepare("ALTER TABLE requests ADD COLUMN rate_card_source_kind TEXT NOT NULL DEFAULT 'legacy_unknown'").run();
+    }
+    if (!cols.some((c) => c.name === 'rate_match_kind')) {
+      this.db.prepare("ALTER TABLE requests ADD COLUMN rate_match_kind TEXT NOT NULL DEFAULT 'legacy_unknown'").run();
+    }
+    if (!cols.some((c) => c.name === 'rate_match_provider')) {
+      this.db.prepare('ALTER TABLE requests ADD COLUMN rate_match_provider TEXT').run();
+    }
+    if (!cols.some((c) => c.name === 'rate_match_model')) {
+      this.db.prepare('ALTER TABLE requests ADD COLUMN rate_match_model TEXT').run();
     }
     const signalCols = this.db.prepare('PRAGMA table_info(gate_signals)').all() as Array<{ name: string }>;
     if (!signalCols.some((c) => c.name === 'evidence_source')) {
@@ -478,13 +589,15 @@ export class Store {
   }
 
   insertRequest(r: RequestRow): void {
+    const pricing = r.pricing ?? legacyPricingEvidence();
     this.db
       .prepare(
         `INSERT INTO requests (
             request_id, session_id, ts_iso, ts_epoch_ms, provider, model, project,
             task_weight, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens,
-            reasoning_tokens, cost_usd, estimated, streamed, status_code, duration_ms, user, source, cwd, via
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            reasoning_tokens, cost_usd, estimated, streamed, status_code, duration_ms, user, source, cwd, via,
+            cost_basis, rate_card_sha256, rate_card_source_kind, rate_match_kind, rate_match_provider, rate_match_model
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       )
       .run(
         r.requestId,
@@ -509,6 +622,12 @@ export class Store {
         r.source ?? null,
         r.cwd ?? null,
         r.via ?? 'proxy',
+        pricing.costBasis,
+        pricing.rateCardSha256,
+        pricing.rateCardSourceKind,
+        pricing.rateMatchKind,
+        pricing.rateMatchProvider,
+        pricing.rateMatchModel,
       );
   }
 
@@ -518,13 +637,15 @@ export class Store {
    * Returns true when the row was actually new.
    */
   insertRequestIfNew(r: RequestRow): boolean {
+    const pricing = r.pricing ?? legacyPricingEvidence();
     const info = this.db
       .prepare(
         `INSERT INTO requests (
             request_id, session_id, ts_iso, ts_epoch_ms, provider, model, project,
             task_weight, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens,
-            reasoning_tokens, cost_usd, estimated, streamed, status_code, duration_ms, user, source, cwd, via
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            reasoning_tokens, cost_usd, estimated, streamed, status_code, duration_ms, user, source, cwd, via,
+            cost_basis, rate_card_sha256, rate_card_source_kind, rate_match_kind, rate_match_provider, rate_match_model
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
          ON CONFLICT(request_id) DO NOTHING`,
       )
       .run(
@@ -550,6 +671,12 @@ export class Store {
         r.source ?? null,
         r.cwd ?? null,
         r.via ?? 'proxy',
+        pricing.costBasis,
+        pricing.rateCardSha256,
+        pricing.rateCardSourceKind,
+        pricing.rateMatchKind,
+        pricing.rateMatchProvider,
+        pricing.rateMatchModel,
       );
     return Number(info.changes ?? 0) > 0;
   }
@@ -934,15 +1061,14 @@ export class Store {
                 input_tokens AS inputTokens, output_tokens AS outputTokens,
                 cache_write_tokens AS cacheWriteTokens, cache_read_tokens AS cacheReadTokens,
                 reasoning_tokens AS reasoningTokens, cost_usd AS costUsd,
-                estimated, streamed, status_code AS statusCode, duration_ms AS durationMs, user, source
+                estimated, streamed, status_code AS statusCode, duration_ms AS durationMs, user, source, cwd, via,
+                cost_basis AS costBasis, rate_card_sha256 AS rateCardSha256,
+                rate_card_source_kind AS rateCardSourceKind, rate_match_kind AS rateMatchKind,
+                rate_match_provider AS rateMatchProvider, rate_match_model AS rateMatchModel
          FROM requests ORDER BY ts_epoch_ms DESC LIMIT ?`,
       )
       .all(limit) as Array<Record<string, unknown>>;
-    return rows.map((r) => ({
-      ...(r as unknown as RequestRow),
-      estimated: Boolean(r.estimated),
-      streamed: Boolean(r.streamed),
-    }));
+    return rows.map(requestRowFromRecord);
   }
 
   /** Every metered request in [startMs, endMs), oldest first — for data export. */
@@ -954,15 +1080,14 @@ export class Store {
                 input_tokens AS inputTokens, output_tokens AS outputTokens,
                 cache_write_tokens AS cacheWriteTokens, cache_read_tokens AS cacheReadTokens,
                 reasoning_tokens AS reasoningTokens, cost_usd AS costUsd,
-                estimated, streamed, status_code AS statusCode, duration_ms AS durationMs, user, source
+                estimated, streamed, status_code AS statusCode, duration_ms AS durationMs, user, source, cwd, via,
+                cost_basis AS costBasis, rate_card_sha256 AS rateCardSha256,
+                rate_card_source_kind AS rateCardSourceKind, rate_match_kind AS rateMatchKind,
+                rate_match_provider AS rateMatchProvider, rate_match_model AS rateMatchModel
          FROM requests WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ? ORDER BY ts_epoch_ms ASC`,
       )
       .all(startMs, endMs) as Array<Record<string, unknown>>;
-    return rows.map((r) => ({
-      ...(r as unknown as RequestRow),
-      estimated: Boolean(r.estimated),
-      streamed: Boolean(r.streamed),
-    }));
+    return rows.map(requestRowFromRecord);
   }
 
   insertCommit(c: {
@@ -1287,17 +1412,89 @@ export class Store {
     }>;
   }
 
-  /** Re-cost rows in one transaction, clearing their estimated flag (reprice --apply). */
-  applyRepricedCosts(updates: Array<{ requestId: string; costUsd: number }>): void {
-    const stmt = this.db.prepare(`UPDATE requests SET cost_usd = ?, estimated = 0 WHERE request_id = ?`);
+  /** Re-cost estimated rows in one transaction and retain the previous amount/evidence as an audit event. */
+  applyRepricedCosts(updates: RepriceUpdate[], appliedAtMs = Date.now()): void {
+    const prior = this.db.prepare(
+      `SELECT cost_usd AS costUsd, estimated,
+              cost_basis AS CostBasis, rate_card_sha256 AS RateCardSha256,
+              rate_card_source_kind AS RateCardSourceKind, rate_match_kind AS RateMatchKind,
+              rate_match_provider AS RateMatchProvider, rate_match_model AS RateMatchModel
+       FROM requests WHERE request_id = ?`,
+    );
+    const update = this.db.prepare(
+      `UPDATE requests
+       SET cost_usd = ?, estimated = 0,
+           cost_basis = ?, rate_card_sha256 = ?, rate_card_source_kind = ?, rate_match_kind = ?,
+           rate_match_provider = ?, rate_match_model = ?
+       WHERE request_id = ? AND estimated = 1`,
+    );
+    const event = this.db.prepare(
+      `INSERT INTO request_price_events (
+         request_id, action, applied_at_ms, previous_cost_usd, previous_estimated,
+         previous_cost_basis, previous_rate_card_sha256, previous_rate_card_source_kind,
+         previous_rate_match_kind, previous_rate_match_provider, previous_rate_match_model,
+         new_cost_usd, new_estimated, new_cost_basis, new_rate_card_sha256,
+         new_rate_card_source_kind, new_rate_match_kind, new_rate_match_provider, new_rate_match_model
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    );
     this.runScript('BEGIN');
     try {
-      for (const u of updates) stmt.run(u.costUsd, u.requestId);
+      for (const u of updates) {
+        const old = prior.get(u.requestId) as Record<string, unknown> | undefined;
+        if (!old || !Boolean(old.estimated)) continue;
+        const oldPricing = pricingEvidenceFromRecord(old);
+        const written = update.run(
+          u.costUsd,
+          u.pricing.costBasis,
+          u.pricing.rateCardSha256,
+          u.pricing.rateCardSourceKind,
+          u.pricing.rateMatchKind,
+          u.pricing.rateMatchProvider,
+          u.pricing.rateMatchModel,
+          u.requestId,
+        );
+        if (Number(written.changes ?? 0) !== 1) continue;
+        event.run(
+          u.requestId, 'reprice', appliedAtMs, Number(old.costUsd), Boolean(old.estimated) ? 1 : 0,
+          oldPricing.costBasis, oldPricing.rateCardSha256, oldPricing.rateCardSourceKind,
+          oldPricing.rateMatchKind, oldPricing.rateMatchProvider, oldPricing.rateMatchModel,
+          u.costUsd, 0, u.pricing.costBasis, u.pricing.rateCardSha256,
+          u.pricing.rateCardSourceKind, u.pricing.rateMatchKind, u.pricing.rateMatchProvider, u.pricing.rateMatchModel,
+        );
+      }
       this.runScript('COMMIT');
     } catch (e) {
       this.runScript('ROLLBACK');
       throw e;
     }
+  }
+
+  /** Append-only price changes for one request, oldest first. */
+  requestPriceEvents(requestId: string): RequestPriceEvent[] {
+    const rows = this.db.prepare(
+      `SELECT event_id AS eventId, request_id AS requestId, action, applied_at_ms AS appliedAtMs,
+              previous_cost_usd AS previousCostUsd, previous_estimated AS previousEstimated,
+              previous_cost_basis AS previousCostBasis, previous_rate_card_sha256 AS previousRateCardSha256,
+              previous_rate_card_source_kind AS previousRateCardSourceKind, previous_rate_match_kind AS previousRateMatchKind,
+              previous_rate_match_provider AS previousRateMatchProvider, previous_rate_match_model AS previousRateMatchModel,
+              new_cost_usd AS newCostUsd, new_estimated AS newEstimated,
+              new_cost_basis AS newCostBasis, new_rate_card_sha256 AS newRateCardSha256,
+              new_rate_card_source_kind AS newRateCardSourceKind, new_rate_match_kind AS newRateMatchKind,
+              new_rate_match_provider AS newRateMatchProvider, new_rate_match_model AS newRateMatchModel
+       FROM request_price_events WHERE request_id = ? ORDER BY event_id ASC`,
+    ).all(requestId) as Array<Record<string, unknown>>;
+    return rows.map((row) => ({
+      eventId: Number(row.eventId),
+      requestId: String(row.requestId),
+      action: 'reprice',
+      appliedAtMs: Number(row.appliedAtMs),
+      previousCostUsd: Number(row.previousCostUsd),
+      previousEstimated: Boolean(row.previousEstimated),
+      previousPricing: pricingEvidenceFromRecord(row, 'previous'),
+      newCostUsd: Number(row.newCostUsd),
+      newEstimated: Boolean(row.newEstimated),
+      newPricing: pricingEvidenceFromRecord(row, 'new'),
+    }));
   }
 
   /** Maintenance: prune old requests and compact. Returns rows removed. */

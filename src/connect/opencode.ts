@@ -20,7 +20,7 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import type { Store, RequestRow } from '../store/db.ts';
-import { computeCost, type Provider } from '../cost/pricing.ts';
+import { computeCost, toolReportedPricingEvidence, type Provider } from '../cost/pricing.ts';
 import { projectKey } from '../value/characterization.ts';
 import { type ImportSummary, type ImportOptions, emptyImportSummary, recordInsert } from './importShared.ts';
 
@@ -140,9 +140,12 @@ export function importOpencode(store: Store, opts: ImportOptions = {}): ImportSu
       const ev = parseOpencodeMessage(r.id, r.data, r.tc ?? undefined);
       if (!ev || ev.tsEpochMs < sinceMs) continue;
 
-      // Trust opencode's cost; re-price only when it's 0 and we have an exact rate.
+      // OpenCode supplies this number; Fiscus records it as tool-reported rather
+      // than calling it an invoice. Only a zero amount with an exact local match
+      // is replaced by a local list-price calculation.
       let costUsd = ev.reportedCostUsd;
       let estimated = false;
+      let pricing = toolReportedPricingEvidence();
       if (costUsd === 0 && REPRICEABLE[ev.provider]) {
         const c = computeCost(REPRICEABLE[ev.provider]!, ev.model, {
           inputTokens: ev.inputTokens,
@@ -150,7 +153,10 @@ export function importOpencode(store: Store, opts: ImportOptions = {}): ImportSu
           cacheWriteTokens: ev.cacheWriteTokens,
           cacheReadTokens: ev.cacheReadTokens,
         });
-        if (!c.estimated) costUsd = c.costUsd; // only adopt an EXACT match; never the fallback rate
+        if (!c.estimated) {
+          costUsd = c.costUsd; // only adopt an EXACT match; never the fallback rate
+          pricing = c.pricing;
+        }
       }
 
       const row: RequestRow = {
@@ -168,6 +174,7 @@ export function importOpencode(store: Store, opts: ImportOptions = {}): ImportSu
         reasoningTokens: ev.reasoningTokens,
         costUsd,
         estimated,
+        pricing,
         streamed: true,
         statusCode: 200,
         durationMs: null,

@@ -19,12 +19,18 @@ test('requestsToCsv: header + one row, model with a comma stays one field', () =
     requestId: 'r1', sessionId: 's1', tsEpochMs: 0, provider: 'anthropic', model: 'claude, opus',
     project: 'p', taskWeight: 1, inputTokens: 10, outputTokens: 2, cacheWriteTokens: 0, cacheReadTokens: 0,
     reasoningTokens: 0, costUsd: 0.01, estimated: true, streamed: false, statusCode: 200, durationMs: 5,
+    pricing: {
+      costBasis: 'fallback_estimate', rateCardSha256: 'a'.repeat(64), rateCardSourceKind: 'bundled',
+      rateMatchKind: 'fallback', rateMatchProvider: null, rateMatchModel: null,
+    },
   }];
   const csv = requestsToCsv(rows);
   const lines = csv.trim().split('\r\n');
   assert.ok(lines[0]!.startsWith('tsIso,tsEpochMs,provider,model,'));
   assert.ok(lines[1]!.includes('"claude, opus"'), 'comma in model is quoted');
   assert.ok(lines[1]!.includes(',anthropic,'));
+  assert.ok(lines[0]!.includes('costBasis,rateCardSha256,rateCardSourceKind,rateMatchKind'));
+  assert.ok(lines[1]!.includes('fallback_estimate,' + 'a'.repeat(64) + ',bundled,fallback'));
   assert.ok(lines[1]!.endsWith(',r1'));
 });
 

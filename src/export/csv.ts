@@ -24,7 +24,8 @@ export function toCsv(headers: string[], rows: Array<Array<unknown>>): string {
 const REQUEST_COLUMNS = [
   'tsIso', 'tsEpochMs', 'provider', 'model', 'project', 'user', 'source', 'sessionId',
   'inputTokens', 'outputTokens', 'cacheWriteTokens', 'cacheReadTokens', 'reasoningTokens',
-  'costUsd', 'estimated', 'streamed', 'statusCode', 'durationMs', 'requestId',
+  'costUsd', 'estimated', 'costBasis', 'rateCardSha256', 'rateCardSourceKind',
+  'rateMatchKind', 'rateMatchProvider', 'rateMatchModel', 'streamed', 'statusCode', 'durationMs', 'requestId',
 ];
 
 /** The request ledger as CSV — one row per metered request, BI-ready. */
@@ -34,7 +35,10 @@ export function requestsToCsv(rows: RequestRow[]): string {
     rows.map((r) => [
       new Date(r.tsEpochMs).toISOString(), r.tsEpochMs, r.provider, r.model, r.project, r.user ?? '', r.source ?? '', r.sessionId ?? '',
       r.inputTokens, r.outputTokens, r.cacheWriteTokens, r.cacheReadTokens, r.reasoningTokens ?? 0,
-      r.costUsd, r.estimated ? 1 : 0, r.streamed ? 1 : 0, r.statusCode ?? '', r.durationMs ?? '', r.requestId,
+      r.costUsd, r.estimated ? 1 : 0, r.pricing?.costBasis ?? 'legacy_unknown', r.pricing?.rateCardSha256 ?? '',
+      r.pricing?.rateCardSourceKind ?? 'legacy_unknown', r.pricing?.rateMatchKind ?? 'legacy_unknown',
+      r.pricing?.rateMatchProvider ?? '', r.pricing?.rateMatchModel ?? '', r.streamed ? 1 : 0,
+      r.statusCode ?? '', r.durationMs ?? '', r.requestId,
     ]),
   );
 }

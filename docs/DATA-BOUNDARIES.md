@@ -26,8 +26,14 @@ upstream or run a separate Fiscus process with its own configuration.
 
 The local SQLite ledger records metering and outcome information: timestamps,
 provider/model labels, token counts, calculated cost, project/session labels,
-and configured outcome signals. It does not intentionally store provider API
-keys.
+and configured outcome signals. For every newly local-priced row it also keeps
+the SHA-256 of the local rate card, card source kind, and whether the model
+matched exactly, by family, or by fallback. An explicit `fiscus reprice --apply`
+adds an append-only before/after event; it does not silently reinterpret an old
+amount. Tool-reported amounts, zero-cost audit events, synthetic demo data, and
+pre-lineage historical rows are separately labelled. These are local pricing
+evidence labels, not provider invoice, discount, credit, tax, or reconciliation
+data. The ledger does not intentionally store provider API keys.
 
 With the default `metadataOnly: false`, Fiscus may also retain parsed proposed
 code lines locally to measure whether an AI proposal later appeared in a Git

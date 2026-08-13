@@ -166,6 +166,7 @@ export async function importClaudeCode(store: Store, opts: ImportOptions = {}): 
         reasoningTokens: 0,
         costUsd: cost.costUsd,
         estimated: cost.estimated,
+        pricing: cost.pricing,
         streamed: true,
         statusCode: 200,
         durationMs: null,

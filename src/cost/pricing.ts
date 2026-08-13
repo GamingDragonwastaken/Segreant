@@ -67,7 +67,49 @@ interface PricingFile {
   fallbacks: { unknown: ModelRate };
 }
 
-type PricingSourceKind = 'manual' | 'native_manifest' | 'litellm_transformed';
+export type PricingSourceKind = 'manual' | 'native_manifest' | 'litellm_transformed';
+
+/**
+ * What kind of number a ledger row contains. These are evidence labels, not
+ * billing states: Fiscus does not receive provider invoices, discounts, taxes,
+ * credits, or reconciliation data.
+ */
+export type CostBasis =
+  | 'local_list_price'
+  | 'fallback_estimate'
+  | 'tool_reported_unverified'
+  | 'synthetic_demo'
+  | 'unpriced'
+  | 'legacy_unknown';
+
+/** Source of an attached rate-card hash. `none` is deliberately explicit for
+ * tool-reported and unpriced rows, so a null hash is never mistaken for a lost
+ * local rate card. */
+export type RateCardSourceKind = PricingSourceKind | 'bundled' | 'legacy_unknown' | 'none';
+
+/** How the observed model was resolved against a local rate card, if any. */
+export type RateMatchKind =
+  | 'exact_provider'
+  | 'exact_cross_provider'
+  | 'family_provider'
+  | 'family_cross_provider'
+  | 'fallback'
+  | 'reported'
+  | 'unpriced'
+  | 'legacy_unknown';
+
+/**
+ * Request-level pricing lineage. It is captured at calculation time so a later
+ * price-card refresh cannot reinterpret a historical ledger amount.
+ */
+export interface RequestPricingEvidence {
+  costBasis: CostBasis;
+  rateCardSha256: string | null;
+  rateCardSourceKind: RateCardSourceKind;
+  rateMatchKind: RateMatchKind;
+  rateMatchProvider: string | null;
+  rateMatchModel: string | null;
+}
 
 interface PricingProvenance {
   schemaVersion: 1;
@@ -111,6 +153,8 @@ export interface CostBreakdown {
   costUsd: number;
   /** True when no exact model rate matched and a fallback was used. */
   estimated: boolean;
+  /** Rate-card and matching evidence for this calculation, never an invoice. */
+  pricing: RequestPricingEvidence;
   rate: ModelRate;
   components: {
     input: number;
@@ -632,12 +676,12 @@ export function pricingStatus(maxAgeDays = 30): PricingStatus {
  * Prefers the longest matching key so "gemini-2.5-flash-lite" wins over
  * "gemini-2.5-flash", and "claude-opus-4-8" wins over a bare "claude".
  */
-function heuristicMatch(models: Record<string, ModelRate> | undefined, model: string): ModelRate | null {
+function heuristicMatch(models: Record<string, ModelRate> | undefined, model: string): { model: string; rate: ModelRate } | null {
   if (!models) return null;
   const m = model.toLowerCase();
   const keys = Object.keys(models).sort((a, b) => b.length - a.length);
   for (const key of keys) {
-    if (m.includes(key.toLowerCase())) return models[key]!;
+    if (m.includes(key.toLowerCase())) return { model: key, rate: models[key]! };
   }
   return null;
 }
@@ -645,6 +689,75 @@ function heuristicMatch(models: Record<string, ModelRate> | undefined, model: st
 export interface ResolvedRate {
   rate: ModelRate;
   estimated: boolean;
+  pricing: RequestPricingEvidence;
+}
+
+function activeRateCardSourceKind(): Exclude<RateCardSourceKind, 'none'> {
+  return cachedSource === 'bundled' ? 'bundled' : cachedProvenance?.sourceKind ?? 'legacy_unknown';
+}
+
+function resolved(
+  rate: ModelRate,
+  rateMatchKind: Extract<RateMatchKind, 'exact_provider' | 'exact_cross_provider' | 'family_provider' | 'family_cross_provider' | 'fallback'>,
+  rateMatchProvider: string | null,
+  rateMatchModel: string | null,
+): ResolvedRate {
+  // rateFor always loads the active card first, so the card identity and source
+  // describe this exact local computation rather than a later refresh.
+  const card = loadPricing();
+  return {
+    rate,
+    estimated: rateMatchKind !== 'exact_provider' && rateMatchKind !== 'exact_cross_provider',
+    pricing: {
+      costBasis: rateMatchKind === 'fallback' ? 'fallback_estimate' : 'local_list_price',
+      rateCardSha256: pricingCardHash(card),
+      rateCardSourceKind: activeRateCardSourceKind(),
+      rateMatchKind,
+      rateMatchProvider,
+      rateMatchModel,
+    },
+  };
+}
+
+/** Use when a connected tool supplies a nonzero amount that Fiscus did not calculate. */
+export function toolReportedPricingEvidence(): RequestPricingEvidence {
+  return {
+    costBasis: 'tool_reported_unverified',
+    rateCardSha256: null,
+    rateCardSourceKind: 'none',
+    rateMatchKind: 'reported',
+    rateMatchProvider: null,
+    rateMatchModel: null,
+  };
+}
+
+/** Use for a zero-cost audit event where no provider response was priced. */
+export function unpricedPricingEvidence(): RequestPricingEvidence {
+  return {
+    costBasis: 'unpriced',
+    rateCardSha256: null,
+    rateCardSourceKind: 'none',
+    rateMatchKind: 'unpriced',
+    rateMatchProvider: null,
+    rateMatchModel: null,
+  };
+}
+
+/** The only default for records created before per-request pricing lineage existed. */
+export function legacyPricingEvidence(): RequestPricingEvidence {
+  return {
+    costBasis: 'legacy_unknown',
+    rateCardSha256: null,
+    rateCardSourceKind: 'legacy_unknown',
+    rateMatchKind: 'legacy_unknown',
+    rateMatchProvider: null,
+    rateMatchModel: null,
+  };
+}
+
+/** Preserve the rate-card details used by a synthetic demo while keeping it unmistakably synthetic. */
+export function syntheticPricingEvidence(cost: CostBreakdown): RequestPricingEvidence {
+  return { ...cost.pricing, costBasis: 'synthetic_demo' };
 }
 
 export function rateFor(provider: Provider, model: string): ResolvedRate {
@@ -653,7 +766,7 @@ export function rateFor(provider: Provider, model: string): ResolvedRate {
 
   // 1) Exact id in the named provider — the price we're surest about.
   const exact = here?.[model];
-  if (exact) return { rate: exact, estimated: false };
+  if (exact) return resolved(exact, 'exact_provider', provider, model);
 
   // 2) Exact id in ANY provider — an EXACT price always beats a fuzzy family
   //    guess, so this is tried before any substring match. An OpenAI-compatible
@@ -663,21 +776,21 @@ export function rateFor(provider: Provider, model: string): ResolvedRate {
   //    so `estimated` stays false; only the path differed, not the rate.
   for (const p of Object.keys(pricing.providers)) {
     const r = pricing.providers[p]?.models[model];
-    if (r) return { rate: r, estimated: false };
+    if (r) return resolved(r, 'exact_cross_provider', p, model);
   }
 
   // 3) Family (substring) match within the named provider.
   const family = heuristicMatch(here, model);
-  if (family) return { rate: family, estimated: true };
+  if (family) return resolved(family.rate, 'family_provider', provider, family.model);
 
   // 4) Family match in ANY provider (e.g. a dated gemini id on the OpenAI path).
   for (const p of Object.keys(pricing.providers)) {
     const r = heuristicMatch(pricing.providers[p]?.models, model);
-    if (r) return { rate: r, estimated: true };
+    if (r) return resolved(r.rate, 'family_cross_provider', p, r.model);
   }
 
   // 5) Nothing matched — conservative mid-tier rate, flagged estimated.
-  return { rate: pricing.fallbacks.unknown, estimated: true };
+  return resolved(pricing.fallbacks.unknown, 'fallback', null, null);
 }
 
 function per(tokens: number, rate: number | undefined): number {
@@ -686,7 +799,7 @@ function per(tokens: number, rate: number | undefined): number {
 }
 
 export function computeCost(provider: Provider, model: string, usage: NormalizedUsage): CostBreakdown {
-  const { rate, estimated } = rateFor(provider, model);
+  const { rate, estimated, pricing } = rateFor(provider, model);
 
   // Cache-write rate: prefer the TTL-specific rate, else default to 1.25x input
   // (the standard Anthropic 5-minute write premium) so we never silently bill $0.
@@ -708,5 +821,5 @@ export function computeCost(provider: Provider, model: string, usage: Normalized
   const costUsd =
     components.input + components.output + components.cacheWrite + components.cacheRead;
 
-  return { costUsd, estimated, rate, components };
+  return { costUsd, estimated, pricing, rate, components };
 }

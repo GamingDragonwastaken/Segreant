@@ -6,7 +6,7 @@
  */
 
 import { join } from 'node:path';
-import { Store } from '../store/db.ts';
+import { Store, type RepriceUpdate } from '../store/db.ts';
 import { createProxyServer } from '../proxy/server.ts';
 import { createDashboardServer } from '../dashboard/server.ts';
 import { loadConfig, saveConfig, dbPath, demoDbPath, isDemo, unlinkDemoDb, aegisHome, type AegisConfig } from '../config.ts';
@@ -295,7 +295,7 @@ export function cmdReprice(flags: Flags): void {
   const tty = process.stdout.isTTY ?? false;
   try {
     const rows = store.estimatedRequestRows();
-    const updates: Array<{ requestId: string; costUsd: number }> = [];
+    const updates: RepriceUpdate[] = [];
     const byModel = new Map<string, { n: number; before: number; after: number }>();
     let stillEstimated = 0;
 
@@ -310,7 +310,7 @@ export function cmdReprice(flags: Flags): void {
         stillEstimated++;
         continue; // still a guess — keep the original guess rather than churn numbers
       }
-      updates.push({ requestId: r.requestId, costUsd: c.costUsd });
+      updates.push({ requestId: r.requestId, costUsd: c.costUsd, pricing: c.pricing });
       const key = `${r.provider}/${r.model}`;
       const agg = byModel.get(key) ?? { n: 0, before: 0, after: 0 };
       agg.n++;
@@ -326,6 +326,12 @@ export function cmdReprice(flags: Flags): void {
       console.log(JSON.stringify({
         applied: !!flags.apply, estimatedRows: rows.length, repriceable: updates.length,
         stillEstimated, totalBeforeUsd: before, totalAfterUsd: after,
+        priceEvidence: updates.length ? {
+          localRateCardOnly: true,
+          cardSha256: updates[0]!.pricing.rateCardSha256,
+          sourceKind: updates[0]!.pricing.rateCardSourceKind,
+          note: 'Local list-price estimate only; never provider invoice, discount, tax, credit, or reconciliation.',
+        } : null,
         byModel: [...byModel.entries()].map(([model, v]) => ({ model, rows: v.n, beforeUsd: v.before, afterUsd: v.after })),
       }, null, 2));
       if (flags.apply && updates.length) store.applyRepricedCosts(updates);
