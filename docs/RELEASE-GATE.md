@@ -27,6 +27,31 @@ This validates a local developer preview only. It does **not** validate a
 provider billing statement, production customer data, an npm publication, an
 external deployment, or the optional team service.
 
+### Candidate record — commit `c9e08d7`, 2026-08-16
+
+Run against `c9e08d792cc6afe08c1d1906c5ec5b35cd6f0db0`, worktree clean before and
+after validation. **This candidate does not pass the gate**: the CI row cannot be
+satisfied, because the commit is local-only. Every other row passed.
+
+| Requirement | Result |
+| --- | --- |
+| Candidate identity | **Pass.** `git rev-parse HEAD` = `c9e08d792cc6afe08c1d1906c5ec5b35cd6f0db0`; `git status --short` empty before and after. 33 commits ahead of `origin/main`, unpushed. |
+| Source validation | **Pass.** `npm ci` (3 packages, 0 vulnerabilities), `npm run typecheck` clean, `npm test` **460 tests / 459 pass / 1 expected platform skip / 0 fail**, `npm run build` clean. |
+| Packed artifact | **Pass.** `npm pack` → 97 files, SHA-256 `5c78b320a73e279c77c2a4bb76d56685e06c67300ac33c9bb00e3a179a68f548`. Listing confirms `package/bin/fiscus.mjs`, `package/dist/cli.js`, `package/dist/store/db.js`, `package/dist/dashboard/web/index.html`, `package/pricing/models.json`, `package/baselines/lift-baselines.json`. |
+| Clean installed CLI | **Pass.** Installed with `--ignore-scripts` into a fresh directory; `fiscus --help` renders. |
+| Packaged dashboard/API | **Pass.** Isolated `AEGIS_HOME`, seeded demo, packaged dashboard on :8091. `/api/health` → `{"ok":true}`; `/api/overview` → `demo: true`, 101 requests, 3 attribution-evidence cohorts; HTML served. Terminated cleanly, port confirmed closed. |
+| Model-trial truthfulness | **Pass.** `/api/value` self-labels `demo: true`; exactly one model switch, `confidence: trial`, no `evidence_supported`; it carries 1 confounder and 4 disclosed assumptions. HTML contains the labelled "Cheaper model trials" renderer. |
+| Billing-boundary truthfulness | **Pass.** `billing scope set --account-ref … --json` returned `applied: false` with `trust: operator_declared_unverified` and `reconciliationStatus: not_reconciled`. Packaged `/api/billing` → `demo: true`, `not_reconciled`, `recordCount: 0`, `excludedFrom` = request spend, budget enforcement, outcome attribution, RoI, model recommendations. |
+| Direct-Costs connector boundary | **Pass.** With an applied `proj_…` scope, `billing openai-costs preview --from/--to --json` returned `networkAttempted: false`, `credentialRead: false`. |
+| Intended CI | **NOT SATISFIED.** `git branch -r --contains c9e08d7` is empty — the commit exists only locally, so no CI run exists to inspect. `.github/workflows/ci.yml` is present but a workflow definition is not a run. This row can only be closed after an authorized push. |
+| Visual check | **Pass.** Browser inspection of the packaged dashboard: DEMO banner present; By-project card shows the attribution basis per bar; rate-card health reads STALE; Value view renders exactly one card tagged TRIAL, none tagged EVIDENCE, with the confounder warning visible. |
+
+**Standing exclusions for this candidate:** no npm publication, no GitHub release
+or tag, no external deployment, no provider credential used, and no team-server
+infrastructure validation. The team-server suites were re-run at this tree
+(typecheck clean, 55/55) — that is source validation only and does not touch the
+separate gate below.
+
 ## Product claims allowed at this stage
 
 Use the following precise language:
@@ -70,7 +95,9 @@ actions below. They are intentionally not automated from a local coding task.
 
 `team-server/` is not approved for an internet-facing or production team
 deployment. Its unit/API tests use a fake store; no real PostgreSQL
-schema/transaction validation is recorded for this candidate.
+schema/transaction validation is recorded for this candidate. At commit
+`c9e08d7` its typecheck is clean and all 55 tests pass — which validates source
+only, and moves none of the five infrastructure requirements below.
 Before it is exposed, complete all of the following in a disposable environment:
 
 1. Apply the exact schema to a real supported PostgreSQL version and exercise
