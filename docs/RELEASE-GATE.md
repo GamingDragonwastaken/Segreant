@@ -27,36 +27,46 @@ This validates a local developer preview only. It does **not** validate a
 provider billing statement, production customer data, an npm publication, an
 external deployment, or the optional team service.
 
-### Candidate record — commit `91b468b`, 2026-08-16
+### Candidate record — commit `669cb3d`, 2026-08-17
 
-Run against `91b468b573ec5b9eaa18693aae022f560af32055`, worktree clean before and
-after validation. **All ten rows pass.** This is a validated local candidate; it
-is still not an npm publication, a release, or an external deployment.
+Run against `669cb3d7d7285e713a885861873ecd3f1b0db9da`, worktree clean before and
+after validation. **Nine rows pass; the CI row is pending at the time of
+writing** — see below. This supersedes the `91b468b` record (which passed all ten)
+because that candidate has been overtaken by a money-facing change: a record is
+bound to one commit and is not inherited by its successors.
 
 | Requirement | Result |
 | --- | --- |
-| Candidate identity | **Pass.** `git rev-parse HEAD` = `91b468b573ec5b9eaa18693aae022f560af32055`; `git status --short` empty before and after. Pushed to `origin/main` (`0674634..91b468b`) with owner authorization; local and remote now agree. |
-| Source validation | **Pass.** `npm ci` (3 packages, 0 vulnerabilities), `npm run typecheck` clean, `npm test` **460 tests / 459 pass / 1 expected platform skip / 0 fail**, `npm run build` clean. |
-| Packed artifact | **Pass.** `npm pack` → 97 files, SHA-256 `eca192ae1fde100d5dfc002398ac0c2eed854c4e0f2c11598b3ee9da838d3b29`. Listing confirms `package/bin/fiscus.mjs`, `package/dist/cli.js`, `package/dist/dashboard/web/index.html`, `package/pricing/models.json`, `package/baselines/lift-baselines.json`. |
+| Candidate identity | **Pass.** `git rev-parse HEAD` = `669cb3d7d7285e713a885861873ecd3f1b0db9da`; `git status --short` empty before and after. |
+| Source validation | **Pass.** `npm ci` (3 packages, 0 vulnerabilities), `npm run typecheck` clean, `npm test` **470 tests / 469 pass / 1 expected platform skip / 0 fail**, `npm run build` clean. |
+| Packed artifact | **Pass.** `npm pack` → 97 files, SHA-256 `b3d401d2de694fda464bdc56635e957639010a0fefd95c413d6d6d74cfc87a50`. Listing confirms `package/bin/fiscus.mjs`, `package/dist/cli.js`, `package/dist/store/db.js`, `package/dist/dashboard/web/index.html`, `package/pricing/models.json`, `package/baselines/lift-baselines.json`. |
 | Clean installed CLI | **Pass.** Installed with `--ignore-scripts` into a fresh directory; `fiscus --help` renders. |
-| Packaged dashboard/API | **Pass.** Isolated `AEGIS_HOME`, seeded demo, packaged dashboard on :8091. `/api/health` → `{"ok":true}`; `/api/overview` → `demo: true`, 101 requests. Terminated cleanly, port confirmed closed. |
-| Model-trial truthfulness | **Pass.** `/api/value` self-labels `demo: true`; exactly one model switch, `confidence: trial`, no `evidence_supported`; zero confounders (the cohort is now size-comparable) and 4 disclosed assumptions. HTML contains the labelled "Cheaper model trials" renderer. |
-| Billing-boundary truthfulness | **Pass.** `billing scope set --account-ref … --json` returned `applied: false` with `trust: operator_declared_unverified` and `reconciliationStatus: not_reconciled`. Packaged `/api/billing` → `demo: true`, `not_reconciled`, `recordCount: 0`. |
-| Direct-Costs connector boundary | **Pass.** With an applied `proj_…` scope, `billing openai-costs preview --from/--to --json` returned `networkAttempted: false`, `credentialRead: false`. |
-| Intended CI | **Pass.** Run **CI #16** for this exact commit (`.../actions/runs/31971737017`): status **Success**, total duration 1m 30s, 7 jobs — `package-smoke` plus the 3-job `test` and 3-job `team-server-test` matrices, all completed. Inspected as a run for `91b468b`, not as a workflow definition and not as an older run. |
-| Visual check | **Pass.** Browser inspection of the packaged dashboard: DEMO banner present; By-project card shows the attribution basis under each bar; rate-card health reads STALE; Value view renders exactly one card tagged TRIAL, none tagged EVIDENCE, and no confounder warning. |
+| Packaged dashboard/API | **Pass.** Isolated `AEGIS_HOME`, seeded demo, packaged dashboard on :8095. `/api/health` → `{"ok":true}`; `/api/overview` → `demo: true`, non-empty (77 requests at the default range, 552 over the full range after seeding). Terminated cleanly, port confirmed closed. |
+| Model-trial truthfulness | **Pass.** `/api/value` self-labels `demo: true`; exactly one model switch, `confidence: trial`, no `evidence_supported`; zero confounders, 4 disclosed assumptions, and `unitsExcludedStalePricing: 0` with `costStaleUnits: 0` (the demo is never repriced). HTML contains the labelled "Cheaper model trials" renderer. |
+| Billing-boundary truthfulness | **Pass.** `billing scope set --account-ref … --json` returned `applied: false` with `trust: operator_declared_unverified` and `reconciliationStatus: not_reconciled`. Packaged `/api/billing` → `demo: true`, `not_reconciled`, `recordCount: 0`, `excludedFrom` = request spend, budget enforcement, outcome attribution, RoI, model recommendations. |
+| Direct-Costs connector boundary | **Pass.** With an applied `org_…`/`proj_…` scope, `billing openai-costs preview --from/--to --json` returned `networkAttempted: false`, `credentialRead: false`. Without an exact `proj_…` reference it refuses outright rather than observing at a looser grain. |
+| Intended CI | **Pending.** The commit is being pushed with this record; the run for `669cb3d` must be inspected before this row may be marked passed. It is not inherited from CI #16 (`91b468b`) — a green run on an ancestor is not a run on this commit. |
+| Visual check | **Pass.** Browser inspection of the packaged dashboard: DEMO banner present; By-project card shows the attribution basis under each bar; rate-card health reads STALE; Value view renders exactly one card tagged TRIAL, none tagged EVIDENCE, no confounder warning, and no pre-reprice badge. |
+
+**Reprice/realized-value consistency** was additionally exercised outside the
+packaged demo, because the demo deliberately never reprices: on a scratch store a
+$3 → $5 reprice moved the request ledger and the persisted snapshot together
+(both $5, per-model attribution re-derived, funnel byte-identical), and a store
+holding a pre-provenance snapshot produced the stale warning on the CLI, a
+`1 pre-reprice` badge on the dashboard's provenance line, and
+`1 unit(s) excluded — pre-reprice cost` on the trial card.
 
 **Standing exclusions for this candidate:** no npm publication, no GitHub release
 or tag, no external deployment, no provider credential used, and no team-server
 infrastructure validation. The team-server suites are clean at this tree
-(typecheck, 55/55) and its CI matrix passed — that is source validation only and
-moves none of the five infrastructure requirements in the separate gate below.
+(typecheck, 55/55) — that is source validation only and moves none of the five
+infrastructure requirements in the separate gate below.
 
 **Repository visibility:** the GitHub repository is **public** (its Actions page
 loads without authentication). Anything committed here is published on push, so
 the pre-push check must include a scan for credentials, personal data, and local
 filesystem paths. The absolute working-copy path was removed from `HANDOFF.md`
-before this push for exactly that reason.
+before the `91b468b` push for exactly that reason.
 
 ## Product claims allowed at this stage
 
@@ -102,9 +112,14 @@ actions below. They are intentionally not automated from a local coding task.
 `team-server/` is not approved for an internet-facing or production team
 deployment. Its unit/API tests use a fake store; no real PostgreSQL
 schema/transaction validation is recorded for this candidate. At commit
-`91b468b` its typecheck is clean, all 55 tests pass, and its 3-job CI matrix
-passed — which validates source only, and moves none of the five infrastructure
-requirements below.
+`669cb3d` its typecheck is clean and all 55 tests pass — which validates source
+only, and moves none of the five infrastructure requirements below.
+
+**Re-tested on 2026-08-17, still blocked at the environment level:** this host has
+the `docker` CLI (29.6.2) but no daemon — Docker Desktop is not installed and
+`com.docker.service` does not exist — and no `psql`, `pg_ctl`, or `initdb`. There
+is no container runtime and no PostgreSQL here, so requirement 1 below cannot be
+executed at all. That is a missing environment, not a passing check.
 Before it is exposed, complete all of the following in a disposable environment:
 
 1. Apply the exact schema to a real supported PostgreSQL version and exercise
