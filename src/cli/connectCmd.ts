@@ -313,8 +313,12 @@ function connectAntigravity(cfg: AegisConfig, flags: Flags, tty: boolean): void 
   console.log(`  3) ${color(tty, C.bold, 'Run it')}: fiscus start, use Antigravity with that model, then:`);
   console.log(color(tty, C.green, '       fiscus today') + color(tty, C.gray, '   — the requests and their cost appear live'));
   console.log('');
-  console.log(color(tty, C.gray, '  Note: without a custom-headers field the spend lands under the "direct"'));
-  console.log(color(tty, C.gray, '  source. Metering, caps, and RoI all work the same.'));
+  console.log(color(tty, C.gray, '  Note: Antigravity\'s custom-provider form has no custom-headers field, so'));
+  console.log(color(tty, C.gray, '  Fiscus cannot tag this traffic. It lands under the "direct" source and'));
+  console.log(color(tty, C.gray, '  meters as "unattributed" — the spend, caps, and cost are exact, but Fiscus'));
+  console.log(color(tty, C.gray, '  cannot say which project it belongs to, and will not guess one.'));
+  console.log(color(tty, C.gray, `  If a headers field is available, add  ${SOURCE_HEADER}: antigravity  and`));
+  console.log(color(tty, C.gray, `  ${PROJECT_HEADER}: <project>. Check with:  fiscus project --coverage`));
   console.log('');
 }
 

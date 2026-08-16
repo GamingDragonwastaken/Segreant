@@ -121,3 +121,29 @@ test('import: --days cutoff drops older traffic', async () => {
   assert.equal(sum.inserted, 1, 'only the recent request clears the cutoff');
   store.close();
 });
+
+test('import: a transcript cwd becomes an INFERRED attribution; a missing one is an honest fallback', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-basis-'));
+  const proj = join(root, 'proj-basis');
+  mkdirSync(proj, { recursive: true });
+  writeFileSync(
+    join(proj, 'sess-basis.jsonl'),
+    [
+      // A real recorded working directory → the project is evidence, not a guess.
+      assistantLine({ uuid: 'b1', requestId: 'req_withCwd', cwd: 'C:\\Users\\dev\\projects\\my-app' }),
+      // No cwd at all → the label can only be the tool's own name, and must say so.
+      assistantLine({ uuid: 'b2', requestId: 'req_noCwd', cwd: undefined }),
+    ].join('\n'),
+    'utf8',
+  );
+
+  const store = new Store(join(mkdtempSync(join(tmpdir(), 'cc-basis-db-')), 'test.db'));
+  await importClaudeCode(store, { root });
+
+  const byBasis = new Map(
+    store.attributionEvidenceByProject(0, Date.now() + 1000).map((e) => [e.project, e.attributionBasis]),
+  );
+  assert.equal(byBasis.get('my-app'), 'tool_log_inferred', 'a recorded path is real attribution evidence');
+  assert.equal(byBasis.get('claude-code'), 'tool_log_fallback', 'the tool name is a placeholder, not a project');
+  store.close();
+});
