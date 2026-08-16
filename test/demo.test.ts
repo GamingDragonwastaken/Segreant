@@ -64,6 +64,19 @@ test('demo seed: provides a clearly review-only cheaper-model trial, not a routi
   assert.equal(trial!.candidateUnits, 3);
   assert.ok(trial!.historicalEquivalentHeadroomUsd > 0, 'candidate is genuinely cheaper in the synthetic cohort');
   assert.equal(trial!.confidence, 'trial', 'six tiny synthetic units must not render as evidence-supported');
+
+  // The cohort must be a LIKE-FOR-LIKE comparison, not a cheap model handed
+  // smaller work. Cost-per-unit is blind to unit size, so if the seed drifts to
+  // wildly different sizes the demo would showcase a confounded result — which is
+  // exactly what it did before this was pinned (85 vs 330 median lines, 3.9x).
+  assert.deepEqual(trial!.confounders, [], 'the showcase cohort must not be confounded');
+  const sizeRatio =
+    Math.max(trial!.candidateMedianUnitLines, trial!.incumbentMedianUnitLines) /
+    Math.min(trial!.candidateMedianUnitLines, trial!.incumbentMedianUnitLines);
+  assert.ok(sizeRatio < 1.5, `demo cohort unit sizes must stay comparable (got ${sizeRatio.toFixed(2)}x)`);
+  // Assumptions are always disclosed even on a clean cohort — they are limits of
+  // the method, not defects of this data.
+  assert.ok(trial!.assumptions.length >= 4, 'the method still ships what it cannot verify');
   store.close();
 });
 
