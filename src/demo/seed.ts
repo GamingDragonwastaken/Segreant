@@ -398,6 +398,11 @@ function makeRealizationUnit(ctx: Ctx, now: number, spec: UnitSpec, hash: string
     dominantModelCostUsd: spec.costUsd,
     dominantModelCostShare: 1,
     costStale: false, // seeded fresh; the demo has never been repriced
+    // Every seeded unit is priced the same way — asserted by the seed, under no
+    // rate card at all. So the two demo cohorts ARE comparably priced, and saying
+    // so is accurate rather than convenient; a real cohort has to earn it.
+    dominantModelCostBasis: 'synthetic_demo',
+    dominantModelRateCard: null,
     funnel: scoreFunnel(verdicts),
   };
 }

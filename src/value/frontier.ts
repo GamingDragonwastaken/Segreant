@@ -90,9 +90,19 @@ export interface ModelSwitchRecommendation {
   /** Median changed lines per unit on each side — the size axis cost-per-unit ignores. */
   candidateMedianUnitLines: number;
   incumbentMedianUnitLines: number;
-  /** Confidence level actually used, after splitting 5% across the task types scanned. */
+  /**
+   * The same dollars divided by work volume rather than commit count. Reported
+   * beside the per-unit figures so a reader can see whether the saving is a price
+   * difference or a size difference. `null` when a side changed no lines.
+   */
+  candidateCostPerHundredLinesUsd: number | null;
+  incumbentCostPerHundredLinesUsd: number | null;
+  /** Distinct working sessions behind each side's units — the clustering the intervals ignore. */
+  candidateSessions: number;
+  incumbentSessions: number;
+  /** Confidence level actually used, after splitting 5% across every comparison scanned. */
   appliedConfidenceLevel: number;
-  /** How many task-type comparisons the level was split across. */
+  /** How many model-vs-model comparisons the level was split across, across all task types. */
   comparisonsConsidered: number;
   rationale: string;
 }
@@ -103,9 +113,9 @@ export interface ModelSwitchRecommendation {
  * otherwise have no way to know these hold.
  */
 const MODEL_SWITCH_ASSUMPTIONS: readonly string[] = [
-  'commits are treated as independent trials, but several from one session share a task, a codebase state, and an author — so the intervals are narrower than clustered evidence warrants',
-  'costs are summed across pricing bases (local list-price estimates, fallback rates for unrecognized models, tool-reported amounts) without separating them',
+  'the intervals still treat each commit as an independent trial; session clustering is detected and caps the result at a trial, but it is not corrected for inside the interval math',
   'which model was used was chosen by an operator, not assigned, so easier work may have systematically gone to the cheaper model',
+  'the pair being tested was chosen by searching on the very outcome under test, the sample slides with the window rather than accumulating, and a past unit\'s realized verdict can change on re-run — each weakens the anytime-valid guarantee the interval would otherwise carry',
   'a local list-price estimate is not provider-billed cost, and past cost is not a forecast of future cost',
 ] as const;
 
@@ -250,6 +260,22 @@ interface SwitchCell {
   realizationRate: number;
   /** Median changed lines per unit — the size axis cost-per-unit is blind to. */
   medianUnitLines: number;
+  /**
+   * Cost per 100 changed lines: the same dollars divided by work volume instead
+   * of by commit count. `null` when the cell changed no lines, which cannot be
+   * normalized rather than being infinitely cheap.
+   */
+  costPerHundredLines: number | null;
+  /**
+   * How many distinct working sessions these units came from, clustering commits
+   * separated by less than SESSION_GAP_MS. Three commits from one afternoon are
+   * one session's worth of evidence, not three independent trials.
+   */
+  sessions: number;
+  /** Distinct cost bases behind this cell's dollars — one value means comparable pricing. */
+  costBases: string[];
+  /** Distinct rate-card revisions behind them — more than one means the cell spans a price change. */
+  rateCards: string[];
   /** Observation span of this cell's units, for detecting era-separated samples. */
   firstUnitMs: number;
   lastUnitMs: number;
@@ -262,6 +288,29 @@ interface SwitchCell {
  */
 const MAX_UNIT_SIZE_RATIO = 2;
 
+/**
+ * Commits closer together than this are treated as one working session. It
+ * matches the 8-hour lookback `attributeCommits` already uses to decide how much
+ * spend a commit may absorb, so "one session" means the same span on both sides
+ * of the pipeline. A judgement call, disclosed as one.
+ */
+const SESSION_GAP_MS = 8 * 60 * 60 * 1000;
+
+/**
+ * How many distinct working sessions a set of units represents. Commits within
+ * one session share an author, a task, a codebase state, and usually a single
+ * decision to use a particular model — so they are not independent draws, and a
+ * cell of three commits from one afternoon carries roughly one session's worth
+ * of evidence. Counting them is what lets that be said out loud.
+ */
+function sessionCount(units: WorkUnit[]): number {
+  if (units.length === 0) return 0;
+  const times = units.map((u) => u.tsEpochMs).sort((a, b) => a - b);
+  let n = 1;
+  for (let i = 1; i < times.length; i++) if (times[i]! - times[i - 1]! >= SESSION_GAP_MS) n += 1;
+  return n;
+}
+
 function median(xs: number[]): number {
   if (xs.length === 0) return 0;
   const s = [...xs].sort((a, b) => a - b);
@@ -269,10 +318,21 @@ function median(xs: number[]): number {
   return s.length % 2 === 0 ? (s[mid - 1]! + s[mid]!) / 2 : s[mid]!;
 }
 
+/** Distinct non-null values of one pricing-lineage field across a cell's units. */
+function lineageValues(units: WorkUnit[], pick: (u: WorkUnit) => string | null): string[] {
+  const out = new Set<string>();
+  for (const u of units) {
+    const v = pick(u);
+    if (v !== null) out.add(v);
+  }
+  return [...out].sort();
+}
+
 function makeSwitchCell(model: string, units: WorkUnit[]): SwitchCell {
   const modelCostUsd = units.reduce((s, u) => s + (u.dominantModelCostUsd ?? 0), 0);
   const realized = units.filter((u) => u.funnel.realized).length;
   const times = units.map((u) => u.tsEpochMs);
+  const totalLines = units.reduce((s, u) => s + u.linesAdded + u.linesDeleted, 0);
   return {
     model,
     units: units.length,
@@ -281,6 +341,10 @@ function makeSwitchCell(model: string, units: WorkUnit[]): SwitchCell {
     costPerUnit: units.length > 0 ? modelCostUsd / units.length : 0,
     realizationRate: units.length > 0 ? realized / units.length : 0,
     medianUnitLines: median(units.map((u) => u.linesAdded + u.linesDeleted)),
+    costPerHundredLines: totalLines > 0 ? (modelCostUsd / totalLines) * 100 : null,
+    sessions: sessionCount(units),
+    costBases: lineageValues(units, (u) => u.dominantModelCostBasis),
+    rateCards: lineageValues(units, (u) => u.dominantModelRateCard),
     firstUnitMs: times.length > 0 ? Math.min(...times) : 0,
     lastUnitMs: times.length > 0 ? Math.max(...times) : 0,
   };
@@ -310,17 +374,24 @@ function buildModelSwitchRecommendations(mature: WorkUnit[]): ModelSwitchRecomme
     .filter(([taskType]) => taskType !== 'other')
     .sort((a, b) => b[1].length - a[1].length);
 
-  // How many task types could produce a comparison at all. Each one is another
-  // chance for a false positive, so the confidence level is split across them
-  // (Bonferroni) instead of every cohort independently spending the full 5%.
+  /**
+   * How many model-vs-model comparisons this scan could produce, across every
+   * task type. The level is split across all of them (Bonferroni) rather than
+   * each cohort independently spending the full 5%.
+   *
+   * Counting TASK TYPES undercounts the search. Within one task type the
+   * incumbent is the priciest model and the candidate is then chosen from the
+   * others by searching on cost and outcome — with k eligible models that is k-1
+   * comparisons, not one. Charging for k-1 makes the correction match what was
+   * actually looked at.
+   */
   const eligibleComparisons = Math.max(
     1,
-    taskGroups.filter(([, units]) => {
-      const attributable = units.filter(isPriceable);
-      const models = new Set(attributable.map((u) => u.dominantModel ?? 'unattributed'));
+    taskGroups.reduce((total, [, units]) => {
+      const models = new Set(units.filter(isPriceable).map((u) => u.dominantModel ?? 'unattributed'));
       models.delete('unattributed');
-      return models.size >= 2;
-    }).length,
+      return total + (models.size >= 2 ? models.size - 1 : 0);
+    }, 0),
   );
   const familyAlpha = (1 - 0.95) / eligibleComparisons;
   const adjustedLevel = 1 - familyAlpha;
@@ -403,6 +474,54 @@ function buildModelSwitchRecommendations(mature: WorkUnit[]): ModelSwitchRecomme
           'so cheaper-per-unit is confounded with smaller work',
       );
     }
+    // The size ratio above says the cohorts differ; this says whether that
+    // difference IS the saving. Dividing the same dollars by work volume instead
+    // of commit count answers the question directly: if the candidate is cheaper
+    // per commit but not per hundred changed lines, what was measured was smaller
+    // work, not a cheaper model.
+    if (candidate.costPerHundredLines !== null && incumbent.costPerHundredLines !== null) {
+      if (candidate.costPerHundredLines >= incumbent.costPerHundredLines) {
+        confounders.push(
+          `the saving does not survive normalizing by work volume — $${candidate.costPerHundredLines.toFixed(2)} ` +
+            `vs $${incumbent.costPerHundredLines.toFixed(2)} per 100 changed lines, so cheaper-per-commit is a size ` +
+            'difference rather than a price difference',
+        );
+      }
+    } else {
+      confounders.push(
+        'one side changed no lines, so the per-commit saving cannot be checked against work volume',
+      );
+    }
+    // Commits inside one session share an author, a task, a codebase state and a
+    // single decision to use this model. A cell that clears the unit floor on one
+    // afternoon has not cleared it on independent evidence.
+    if (candidate.sessions < minUnits || incumbent.sessions < minUnits) {
+      confounders.push(
+        `the units are clustered in time — ${candidate.units} candidate units span ${candidate.sessions} working ` +
+          `session(s) and ${incumbent.units} incumbent units span ${incumbent.sessions}, so they are not ` +
+          `${candidate.units + incumbent.units} independent trials`,
+      );
+    }
+    // Both sides' dollars must be the same KIND of price, or the difference is
+    // partly a difference of pricing method.
+    const bases = [...new Set([...candidate.costBases, ...incumbent.costBases])];
+    if (bases.length === 0) {
+      confounders.push(
+        'the pricing basis behind these dollars was not recorded, so the two sides cannot be shown to be priced the same way — re-run `fiscus realize` to record it',
+      );
+    } else if (bases.length > 1 || bases.includes('mixed')) {
+      confounders.push(
+        `the two sides are priced on different bases (${bases.join(', ')}), so part of the gap is a difference in how cost was determined rather than what was charged`,
+      );
+    }
+    // A cell spanning a rate-card refresh has pre- and post-change dollars pooled
+    // into one per-unit cost. That is a pricing era, not a model.
+    const cards = [...new Set([...candidate.rateCards, ...incumbent.rateCards])];
+    if (cards.length > 1 || cards.includes('mixed')) {
+      confounders.push(
+        'the sample spans more than one rate-card revision, so per-unit costs pool amounts calculated before and after a price change',
+      );
+    }
     // Non-overlapping observation spans mean the models were used in different
     // periods — different prices, different codebase, different task mix. That
     // is a comparison of eras as much as of models.
@@ -453,6 +572,10 @@ function buildModelSwitchRecommendations(mature: WorkUnit[]): ModelSwitchRecomme
       assumptions: [...MODEL_SWITCH_ASSUMPTIONS],
       candidateMedianUnitLines: candidate.medianUnitLines,
       incumbentMedianUnitLines: incumbent.medianUnitLines,
+      candidateCostPerHundredLinesUsd: candidate.costPerHundredLines,
+      incumbentCostPerHundredLinesUsd: incumbent.costPerHundredLines,
+      candidateSessions: candidate.sessions,
+      incumbentSessions: incumbent.sessions,
       appliedConfidenceLevel: adjustedLevel,
       comparisonsConsidered: eligibleComparisons,
       rationale:

@@ -409,16 +409,32 @@ product surfaces because model/task and project cells can be unlike work. -->
 - **It says when a comparison is confounded.** Cost-per-unit is blind to how big
   each unit was, so if the two models' median changed lines differ by more than
   2×, "cheaper" may just mean "smaller work" — that is named on the result and
-  caps it at a trial no matter how cleanly the statistics separate. The same
-  applies when the two models were used in non-overlapping periods, which makes
-  it an era comparison as much as a model one. Unclassified (`other`) work is
-  never treated as a like-work cohort, and because scanning several task types
-  is several chances at a false positive, the 5% is split across the
-  comparisons actually considered rather than spent in full on each.
-- **It ships the assumptions it cannot check** on every result: commits are
-  treated as independent trials though several may come from one session; costs
-  are summed across pricing bases; and the model was chosen by an operator, not
-  assigned, so easier work may have gone to the cheaper one.
+  caps it at a trial no matter how cleanly the statistics separate. Beyond
+  flagging the size gap, the saving is **re-checked against work volume**: the
+  same dollars are divided by changed lines as well as by commit count, and if
+  the candidate is cheaper per commit but not per hundred lines, what was
+  measured was smaller work rather than a cheaper model. Both figures are shown.
+  A cohort is also capped when its commits come from **too few working
+  sessions** — commits within eight hours of each other share an author, a task,
+  a codebase state and one decision to use that model, so forty-eight commits
+  from one sitting are not forty-eight trials. And because a price comparison is
+  only meaningful between comparable prices, a result is capped when the two
+  sides were **priced on different bases** (an exact list price against a
+  fallback rate for an unrecognized model), when the sample **spans a rate-card
+  revision** so pre- and post-change amounts pool into one per-unit cost, or
+  when the pricing lineage was never recorded at all. The same applies when the
+  two models were used in non-overlapping periods, which makes it an era
+  comparison as much as a model one. Unclassified (`other`) work is never
+  treated as a like-work cohort, and because every model pair scanned is another
+  chance at a false positive, the 5% is split across all of them — three models
+  in one task type is two comparisons, not one.
+- **It ships the assumptions it cannot check** on every result: the intervals
+  still treat each commit as an independent trial even though clustering now
+  caps the label; the model was chosen by an operator, not assigned, so easier
+  work may have gone to the cheaper one; and the pair under test was chosen by
+  searching on the very outcome being tested, over a sliding window whose past
+  verdicts can change on re-run, each of which weakens the anytime-valid
+  guarantee the interval would otherwise carry.
 
 Historical-equivalent headroom is disclosed as a local planning comparison, not
 a forecast, provider-billed saving, or guarantee. It is computed from local

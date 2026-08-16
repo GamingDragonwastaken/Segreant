@@ -1123,7 +1123,7 @@ function renderValue(d) {
   const switches = d.frontier && d.frontier.modelSwitches ? d.frontier.modelSwitches : [];
   const modelCard = switches.length
     ? `<div class="card fade" style="grid-column:1/-1">
-        <div class="label">Cheaper model trials ${tip('Local historical comparison only. Fiscus does <b>not</b> change routing. A candidate must cost less and have no worse observed realized-outcome rate for the same task type. Each model is priced by <b>its own attributed spend</b>, not by the whole window it worked in — a unit whose window is more than 20% other models cannot price a model and is excluded and counted. <b>Historical-equivalent headroom</b> is what the incumbent\'s observed units would have saved at the candidate\'s historical per-unit cost; it is a local list-price estimate, not provider-billed savings and not a guarantee of future cost.')}</div>
+        <div class="label">Cheaper model trials ${tip('Local historical comparison only. Fiscus does <b>not</b> change routing. A candidate must cost less and have no worse observed realized-outcome rate for the same task type. Each model is priced by <b>its own attributed spend</b>, not by the whole window it worked in — a unit whose window is more than 20% other models cannot price a model and is excluded and counted. <b>Historical-equivalent headroom</b> is what the incumbent\'s observed units would have saved at the candidate\'s historical per-unit cost; it is a local list-price estimate, not provider-billed savings and not a guarantee of future cost.<br><br>A result is capped at <b>TRIAL</b> whenever the comparison cannot isolate the model: the saving does not survive dividing by changed lines, the units come from too few working sessions to be independent, the two sides were priced on different bases or across a rate-card change, the cohorts differ sharply in unit size, or the models were used in non-overlapping periods. Each reason is named on the card.')}</div>
         ${switches.slice(0, 4).map((m) => {
           const tag = m.confidence === 'evidence_supported' ? 'EVIDENCE' : 'TRIAL';
           const cls = m.confidence === 'evidence_supported' ? 'grow' : 'trim';
@@ -1137,7 +1137,15 @@ function renderValue(d) {
           // Kept separate from the attribution exclusions: those units could never
           // price a model, these carry a price that has since been superseded.
           const staleNote = staleDropped > 0 ? ` · ${staleDropped} unit(s) excluded — pre-reprice cost` : '';
-          const evidence = `${Number(m.candidateUnits || 0)} vs ${Number(m.incumbentUnits || 0)} mature units · observed realization ${candidateRate}% vs ${incumbentRate}%${droppedNote}${staleNote}`;
+          // Per-commit cost is what a budget owner feels; per-100-lines is the
+          // check on whether the saving is a price or just smaller work. Both are
+          // shown, because seeing only the first is how a size effect gets read as
+          // a discount. Sessions say how many independent sittings are behind it.
+          const perLine = m.candidateCostPerHundredLinesUsd != null && m.incumbentCostPerHundredLinesUsd != null
+            ? ` · $${money(m.candidateCostPerHundredLinesUsd)} vs $${money(m.incumbentCostPerHundredLinesUsd)} per 100 changed lines`
+            : '';
+          const sessions = ` · from ${Number(m.candidateSessions || 0)} vs ${Number(m.incumbentSessions || 0)} working sessions`;
+          const evidence = `${Number(m.candidateUnits || 0)} vs ${Number(m.incumbentUnits || 0)} mature units · observed realization ${candidateRate}% vs ${incumbentRate}%${perLine}${sessions}${droppedNote}${staleNote}`;
           const confounders = m.confounders || [];
           const confidenceNote = m.confidence === 'evidence_supported'
             ? 'anytime-valid outcome bounds separate'

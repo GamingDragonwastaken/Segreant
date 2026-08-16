@@ -123,6 +123,25 @@ export interface WorkUnit extends CommitAttribution {
    * git path, which prices from the ledger as it stands.
    */
   costStale: boolean;
+  /**
+   * The cost basis behind the dominant model's spend in this window — one of the
+   * ledger's `cost_basis` values, or `'mixed'` when its rows were priced more than
+   * one way. `null` when nothing was observed, or on a snapshot written before
+   * this was recorded.
+   *
+   * Model comparison is a claim about PRICE, so it is only meaningful when both
+   * sides' dollars are the same kind of price. A cell pooling exact list prices
+   * with fallback guesses for unrecognized models is comparing pricing methods as
+   * much as models.
+   */
+  dominantModelCostBasis: string | null;
+  /**
+   * The rate-card revision behind that spend, or `'mixed'` when the window spans
+   * more than one. A cell whose units straddle a card refresh has pre- and
+   * post-change dollars pooled into one per-unit cost, which is a comparison of
+   * pricing eras. `null` when unobserved or unrecorded.
+   */
+  dominantModelRateCard: string | null;
   funnel: FunnelOutcome;
 }
 
@@ -274,6 +293,23 @@ export async function computeRealization(
     const dominantModelCostUsd = modelSpend.length > 0 ? modelSpend[0]!.costUsd : null;
     const dominantModelCostShare =
       modelSpend.length > 0 && windowModelTotal > 0 ? modelSpend[0]!.costUsd / windowModelTotal : null;
+    // Record HOW that model's dollars were priced, not just how many there were.
+    // Collapsed to one value or the sentinel 'mixed' here so every reader applies
+    // the same rule; the raw sets stay in the ledger for `fiscus pricing --coverage`.
+    let dominantModelCostBasis: string | null = null;
+    let dominantModelRateCard: string | null = null;
+    if (dominantModel !== null) {
+      const lineage = store.modelPricingBasis(
+        a.windowStartMs,
+        a.windowEndMs,
+        dominantModel,
+        projectScoped ? project : undefined,
+      );
+      dominantModelCostBasis =
+        lineage.costBases.length === 1 ? lineage.costBases[0]! : lineage.costBases.length > 1 ? 'mixed' : null;
+      dominantModelRateCard =
+        lineage.rateCardShas.length === 1 ? lineage.rateCardShas[0]! : lineage.rateCardShas.length > 1 ? 'mixed' : null;
+    }
 
     units.push({
       ...a,
@@ -287,6 +323,8 @@ export async function computeRealization(
       dominantModel,
       dominantModelCostUsd,
       dominantModelCostShare,
+      dominantModelCostBasis,
+      dominantModelRateCard,
       costStale: false, // priced from the ledger as it stands right now
       funnel: scoreFunnel(verdicts),
     });
@@ -339,6 +377,10 @@ export function realizationFromStore(
       ...u,
       dominantModelCostUsd: u.dominantModelCostUsd ?? null,
       dominantModelCostShare: u.dominantModelCostShare ?? null,
+      // Same normalization, same reason: a snapshot that predates pricing lineage
+      // has genuinely unknown comparability, and `undefined` would read as "fine".
+      dominantModelCostBasis: u.dominantModelCostBasis ?? null,
+      dominantModelRateCard: u.dominantModelRateCard ?? null,
       // Staleness lives on the stored ROW, not in the serialized unit: a reprice
       // changes whether the snapshot's dollars are current without changing the
       // work it describes.

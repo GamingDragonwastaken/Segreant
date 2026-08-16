@@ -426,10 +426,18 @@ function wu(
   // Deterministic ids: a random hash makes a failure impossible to reproduce.
   wuSeq += 1;
   return {
-    hash: `wu${wuSeq}`, tsEpochMs: 0, subject: '', linesAdded: 10, linesDeleted: 0, filesChanged: 1,
+    // Each default unit lands on its own day, SCATTERED rather than sequential:
+    // distinct days keep the cohort from reading as one clustered session, and
+    // scattering keeps cohorts built in blocks from occupying disjoint periods —
+    // both of which are separate confounders with their own tests. 7919 and 997
+    // are coprime, so seq → day is injective and reproducible.
+    hash: `wu${wuSeq}`, tsEpochMs: ((wuSeq * 7919) % 997) * 24 * 60 * 60 * 1000, subject: '', linesAdded: 10, linesDeleted: 0, filesChanged: 1,
     windowStartMs: 0, windowEndMs: 0, attributedCostUsd: cost, attributedRequests: 1, attributedOutputTokens: 0, costPerHundredLines: null,
     ageDays: 30, maturing: false, survivalRatio: 1, reverted: false, hadProposal: false, acceptance: null,
     taskType, dominantModel: model, dominantModelCostUsd: modelCost, dominantModelCostShare: share, costStale,
+    // A comparably-priced baseline: one basis, one rate card on both sides. Tests
+    // for the pricing-comparability gate override these.
+    dominantModelCostBasis: 'local_list_price', dominantModelRateCard: 'card-a',
     funnel: { realized, results: [{ gate: 'shipped', verdict: 'unknown', detail: '' }], reachedIndex: 0, reached: null, diedAt: null, diedAtIndex: null, passes: 0, fails: 0, unknowns: 0, instrumented: 0, realizationScore: 0 },
   } as WorkUnit;
 }
@@ -621,6 +629,137 @@ test('model switch: scanning more task types tightens the level each one gets', 
   assert.ok(Math.abs(three.appliedConfidenceLevel - (1 - 0.05 / 3)) < 1e-9);
 });
 
+test('model switch: a per-commit saving that vanishes per changed line is a size difference, not a price one', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  // Haiku is cheaper per commit ($1 vs $4) but its commits are a TENTH the size,
+  // so per 100 changed lines it is dearer ($10 vs $4). The headline saving is
+  // entirely the size of the work handed to it.
+  const units: WorkUnit[] = [
+    ...Array.from({ length: 8 }, (_, i) => wuAt('feature', 'claude-haiku-4-5', true, 1, 10, i * DAY)),
+    ...Array.from({ length: 2 }, (_, i) => wuAt('feature', 'claude-opus-4-8', true, 4, 100, i * DAY)),
+    ...Array.from({ length: 38 }, (_, i) => wuAt('feature', 'claude-opus-4-8', false, 4, 100, i * DAY)),
+  ];
+  const trial = computeFrontier(units).modelSwitches.find((r) => r.taskType === 'feature');
+  assert.ok(trial);
+  // The outcome statistics separate robustly here (8/8 vs 2/40), so without this
+  // gate it would read as EVIDENCE for a saving that does not exist.
+  assert.equal(trial!.confidence, 'trial');
+  assert.ok(trial!.confounders.some((c) => c.includes('normalizing by work volume')), trial!.confounders.join(' | '));
+  assert.equal(trial!.candidateCostPerHundredLinesUsd, 10);
+  assert.equal(trial!.incumbentCostPerHundredLinesUsd, 4);
+});
+
+test('model switch: a saving that survives per-line normalization keeps its evidence label', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  // Same cohort shape, but the work is the same size on both sides, so the gap
+  // is a price gap on either basis.
+  const units: WorkUnit[] = [
+    ...Array.from({ length: 8 }, (_, i) => wuAt('feature', 'claude-haiku-4-5', true, 1, 100, i * DAY)),
+    ...Array.from({ length: 2 }, (_, i) => wuAt('feature', 'claude-opus-4-8', true, 4, 100, i * DAY)),
+    ...Array.from({ length: 38 }, (_, i) => wuAt('feature', 'claude-opus-4-8', false, 4, 100, i * DAY)),
+  ];
+  const rec = computeFrontier(units).modelSwitches.find((r) => r.taskType === 'feature');
+  assert.ok(rec);
+  assert.equal(rec!.confidence, 'evidence_supported');
+  assert.deepEqual(rec!.confounders, []);
+  assert.equal(rec!.candidateCostPerHundredLinesUsd, 1);
+  assert.equal(rec!.incumbentCostPerHundredLinesUsd, 4);
+});
+
+test('model switch: units from a single working session are not independent trials', () => {
+  const MIN = 60 * 1000;
+  // Every commit within minutes of the last: one sitting, one task, one codebase
+  // state, one decision to use this model. The unit floor is cleared on paper
+  // and not in substance.
+  const units: WorkUnit[] = [
+    ...Array.from({ length: 8 }, (_, i) => wuAt('feature', 'claude-haiku-4-5', true, 1, 100, i * 10 * MIN)),
+    ...Array.from({ length: 2 }, (_, i) => wuAt('feature', 'claude-opus-4-8', true, 4, 100, i * 10 * MIN)),
+    ...Array.from({ length: 38 }, (_, i) => wuAt('feature', 'claude-opus-4-8', false, 4, 100, i * 10 * MIN)),
+  ];
+  const trial = computeFrontier(units).modelSwitches.find((r) => r.taskType === 'feature');
+  assert.ok(trial);
+  assert.equal(trial!.confidence, 'trial', '48 commits from one sitting is not 48 trials');
+  assert.ok(trial!.confounders.some((c) => c.includes('clustered in time')), trial!.confounders.join(' | '));
+  assert.equal(trial!.candidateSessions, 1);
+  assert.equal(trial!.incumbentSessions, 1);
+});
+
+test('model switch: an 8-hour gap starts a new working session', () => {
+  const HOUR = 60 * 60 * 1000;
+  // The same commit counts spread one per nine hours: genuinely separate
+  // sittings, so the clustering gate must NOT fire.
+  const units: WorkUnit[] = [
+    ...Array.from({ length: 8 }, (_, i) => wuAt('feature', 'claude-haiku-4-5', true, 1, 100, i * 9 * HOUR)),
+    ...Array.from({ length: 2 }, (_, i) => wuAt('feature', 'claude-opus-4-8', true, 4, 100, i * 9 * HOUR)),
+    ...Array.from({ length: 38 }, (_, i) => wuAt('feature', 'claude-opus-4-8', false, 4, 100, i * 9 * HOUR)),
+  ];
+  const rec = computeFrontier(units).modelSwitches.find((r) => r.taskType === 'feature');
+  assert.ok(rec);
+  assert.equal(rec!.candidateSessions, 8);
+  assert.ok(!rec!.confounders.some((c) => c.includes('clustered in time')), rec!.confounders.join(' | '));
+});
+
+test('model switch: dollars priced two different ways are not a price comparison', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  // The cheap side was priced by a FALLBACK rate for a model the card did not
+  // recognize; the expensive side by an exact list price. Part of that gap is the
+  // pricing method, not the provider's price.
+  const asBasis = (u: WorkUnit, basis: string): WorkUnit => ({ ...u, dominantModelCostBasis: basis });
+  const units: WorkUnit[] = [
+    ...Array.from({ length: 8 }, (_, i) => asBasis(wuAt('feature', 'claude-haiku-4-5', true, 1, 100, i * DAY), 'fallback_estimate')),
+    ...Array.from({ length: 2 }, (_, i) => wuAt('feature', 'claude-opus-4-8', true, 4, 100, i * DAY)),
+    ...Array.from({ length: 38 }, (_, i) => wuAt('feature', 'claude-opus-4-8', false, 4, 100, i * DAY)),
+  ];
+  const trial = computeFrontier(units).modelSwitches.find((r) => r.taskType === 'feature');
+  assert.ok(trial);
+  assert.equal(trial!.confidence, 'trial');
+  assert.ok(trial!.confounders.some((c) => c.includes('priced on different bases')), trial!.confounders.join(' | '));
+});
+
+test('model switch: a sample spanning a rate-card change pools two pricing eras', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const onCard = (u: WorkUnit, card: string): WorkUnit => ({ ...u, dominantModelRateCard: card });
+  const units: WorkUnit[] = [
+    ...Array.from({ length: 8 }, (_, i) => onCard(wuAt('feature', 'claude-haiku-4-5', true, 1, 100, i * DAY), i < 4 ? 'card-a' : 'card-b')),
+    ...Array.from({ length: 2 }, (_, i) => wuAt('feature', 'claude-opus-4-8', true, 4, 100, i * DAY)),
+    ...Array.from({ length: 38 }, (_, i) => wuAt('feature', 'claude-opus-4-8', false, 4, 100, i * DAY)),
+  ];
+  const trial = computeFrontier(units).modelSwitches.find((r) => r.taskType === 'feature');
+  assert.ok(trial);
+  assert.equal(trial!.confidence, 'trial');
+  assert.ok(trial!.confounders.some((c) => c.includes('more than one rate-card revision')), trial!.confounders.join(' | '));
+});
+
+test('model switch: a legacy snapshot with no recorded pricing basis cannot claim comparability', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const legacy = (u: WorkUnit): WorkUnit => ({ ...u, dominantModelCostBasis: null, dominantModelRateCard: null });
+  const units: WorkUnit[] = [
+    ...Array.from({ length: 8 }, (_, i) => legacy(wuAt('feature', 'claude-haiku-4-5', true, 1, 100, i * DAY))),
+    ...Array.from({ length: 2 }, (_, i) => legacy(wuAt('feature', 'claude-opus-4-8', true, 4, 100, i * DAY))),
+    ...Array.from({ length: 38 }, (_, i) => legacy(wuAt('feature', 'claude-opus-4-8', false, 4, 100, i * DAY))),
+  ];
+  const trial = computeFrontier(units).modelSwitches.find((r) => r.taskType === 'feature');
+  assert.ok(trial);
+  assert.equal(trial!.confidence, 'trial', 'unverifiable comparability is not verified comparability');
+  assert.ok(trial!.confounders.some((c) => c.includes('was not recorded')), trial!.confounders.join(' | '));
+});
+
+test('model switch: the level is split across model PAIRS, not just task types', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  // One task type, three models → the incumbent is searched against two
+  // candidates. Charging for one comparison would understate the search.
+  const units: WorkUnit[] = [
+    ...Array.from({ length: 8 }, (_, i) => wuAt('feature', 'claude-haiku-4-5', true, 1, 100, i * DAY)),
+    ...Array.from({ length: 8 }, (_, i) => wuAt('feature', 'claude-sonnet-4-6', true, 2, 100, i * DAY)),
+    ...Array.from({ length: 2 }, (_, i) => wuAt('feature', 'claude-opus-4-8', true, 4, 100, i * DAY)),
+    ...Array.from({ length: 38 }, (_, i) => wuAt('feature', 'claude-opus-4-8', false, 4, 100, i * DAY)),
+  ];
+  const rec = computeFrontier(units).modelSwitches.find((r) => r.taskType === 'feature');
+  assert.ok(rec);
+  assert.equal(rec!.comparisonsConsidered, 2, 'three models in one task type is two comparisons, not one');
+  assert.ok(Math.abs(rec!.appliedConfidenceLevel - (1 - 0.05 / 2)) < 1e-9);
+});
+
 test('model switch: the unclassified "other" bucket is never a like-work cohort', () => {
   const DAY = 24 * 60 * 60 * 1000;
   // 'wibble wobble' classifies as 'other' — the catch-all sink.
@@ -639,9 +778,20 @@ test('model switch: every recommendation carries the assumptions it cannot verif
   ];
   const trial = computeFrontier(units).modelSwitches[0]!;
   assert.ok(trial.assumptions.length >= 4);
-  assert.ok(trial.assumptions.some((a) => a.includes('independent trials')), 'session clustering is disclosed');
-  assert.ok(trial.assumptions.some((a) => a.includes('pricing bases')), 'mixed cost bases are disclosed');
+  assert.ok(
+    trial.assumptions.some((a) => a.includes('independent trial')),
+    'the intervals still treat commits as independent even though clustering is now gated',
+  );
   assert.ok(trial.assumptions.some((a) => a.includes('chosen by an operator')), 'selection bias is disclosed');
+  assert.ok(
+    trial.assumptions.some((a) => a.includes('searching on the very outcome')),
+    'the post-selection weakening of the anytime-valid guarantee is disclosed',
+  );
+  assert.ok(trial.assumptions.some((a) => a.includes('not provider-billed cost')), 'the pricing boundary is disclosed');
+  // Mixed pricing bases USED to be an assumption. They are now a confounder that
+  // caps the result, so they must NOT still be listed as something merely assumed
+  // away — a limit that has been turned into a gate should stop being disclaimed.
+  assert.ok(!trial.assumptions.some((a) => a.includes('pricing bases')), 'a gated limit is no longer an assumption');
 });
 
 test('model switch: does not compare across different task types', () => {

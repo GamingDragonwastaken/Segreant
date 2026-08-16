@@ -1490,6 +1490,43 @@ export class Store {
     return rows;
   }
 
+  /**
+   * The pricing lineage behind ONE model's spend in a window: which cost bases
+   * priced it, and which rate-card revisions produced those amounts.
+   *
+   * Model-vs-model comparison is a claim about price, so it can only mean
+   * something if both sides' dollars came from the same kind of price. A cell
+   * pooling `local_list_price` rows with `fallback_estimate` guesses, or spanning
+   * a rate-card refresh, is comparing eras and methods as much as models. Returns
+   * distinct sorted values so the caller can collapse them to "one" or "mixed"
+   * without re-deriving the rule.
+   */
+  modelPricingBasis(
+    startMs: number,
+    endMs: number,
+    model: string,
+    project?: string,
+  ): { costBases: string[]; rateCardShas: string[] } {
+    const fam = project !== undefined ? this.familyFilter('project', project) : null;
+    const args: Array<number | string> = fam ? [startMs, endMs, model, ...fam.args] : [startMs, endMs, model];
+    const rows = this.db
+      .prepare(
+        `SELECT DISTINCT cost_basis AS costBasis, rate_card_sha256 AS rateCardSha256
+         FROM requests
+         WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ? AND model = ?` + (fam ? ` AND ${fam.sql}` : ``),
+      )
+      .all(...args) as Array<{ costBasis: string; rateCardSha256: string | null }>;
+    const bases = new Set<string>();
+    const cards = new Set<string>();
+    for (const r of rows) {
+      bases.add(r.costBasis);
+      // A null card is not a distinct revision — plenty of bases (tool-reported,
+      // unpriced) legitimately have none. Only real revisions count as a span.
+      if (r.rateCardSha256) cards.add(r.rateCardSha256);
+    }
+    return { costBases: [...bases].sort(), rateCardShas: [...cards].sort() };
+  }
+
   byProject(startMs: number, endMs: number): SpendBucket[] {
     // Aliased labels roll up into their canonical project at read time.
     return this.db
