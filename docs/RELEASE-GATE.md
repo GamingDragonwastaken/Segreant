@@ -27,13 +27,38 @@ This validates a local developer preview only. It does **not** validate a
 provider billing statement, production customer data, an npm publication, an
 external deployment, or the optional team service.
 
-### Candidate record — commit `669cb3d`, 2026-08-17
+### Candidate record — commit `e3eb407`, 2026-08-17
+
+Run against `e3eb407858f20e6dae2e4dae3375b70bc7ed4771`, worktree clean before and
+after validation. **Nine rows pass; the CI row is unobserved at the time of
+writing** and is filled in below once the run exists. Supersedes the `669cb3d`
+record, retained for history: that candidate has been overtaken by a change to
+what the model trial is willing to claim.
+
+| Requirement | Result |
+| --- | --- |
+| Candidate identity | **Pass.** `git rev-parse HEAD` = `e3eb407858f20e6dae2e4dae3375b70bc7ed4771`; `git status --short` empty before and after. |
+| Source validation | **Pass.** `npm ci` (3 packages, 0 vulnerabilities), `npm run typecheck` clean, `npm test` **478 tests / 477 pass / 1 expected platform skip / 0 fail**, `npm run build` clean. |
+| Packed artifact | **Pass.** `npm pack` → 97 files, SHA-256 `1a4ddf8923cd814b2e6fa8174180775d5f674237fb6d66f52403b72f5761aba8`; all 6 key paths present (`bin/fiscus.mjs`, `dist/cli.js`, `dist/store/db.js`, `dist/dashboard/web/index.html`, `pricing/models.json`, `baselines/lift-baselines.json`). |
+| Clean installed CLI | **Pass.** Installed with `--ignore-scripts` into a fresh directory; `fiscus --help` renders. |
+| Packaged dashboard/API | **Pass.** Isolated `AEGIS_HOME`, seeded demo, packaged dashboard on :8099. `/api/health` → `{"ok":true}`; `/api/overview` → `demo: true`, 77 requests. Terminated cleanly, port confirmed closed. |
+| Model-trial truthfulness | **Pass.** `/api/value` self-labels `demo: true`; exactly one switch, `confidence: trial`, no `evidence_supported`; `costStaleUnits: 0`. The demo cohort clears the new gates on its own merits rather than by exemption: **$0.20 vs $1.22 per 100 changed lines** (the saving survives normalizing by work volume), **3 vs 3 working sessions**, one recorded cost basis, no confounders, 4 assumptions, and the level split across **2** model-pair comparisons. |
+| Billing-boundary truthfulness | **Pass.** `billing scope set --account-ref … --json` → `applied: false`, `trust: operator_declared_unverified`, `reconciliationStatus: not_reconciled`. Packaged `/api/billing` → `demo: true`, `not_reconciled`, `recordCount: 0`, 5 `excludedFrom` entries. |
+| Direct-Costs connector boundary | **Pass.** With an applied `org_…`/`proj_…` scope, `billing openai-costs preview --from/--to --json` → `networkAttempted: false`, `credentialRead: false`. |
+| Intended CI | **Pending.** Not yet observed. This row is filled in only after the run for the pushed tip exists and has been inspected — writing a result before seeing it is the failure this document exists to prevent. |
+| Visual check | **Pass.** Browser inspection of the packaged dashboard: DEMO banner present; By-project card shows the attribution basis per bar; rate-card health reads STALE; Value view renders exactly one TRIAL card, no EVIDENCE card, no confounder warning, no pre-reprice badge — and the card now carries both cost bases and the session counts. |
+
+**Team server at this tree:** typecheck clean, **55/55**. Source validation only;
+it moves none of the five infrastructure requirements in the separate gate below,
+which remain unexecutable on this host (no container runtime, no PostgreSQL).
+
+### Superseded record — commit `669cb3d`, 2026-08-17
 
 Run against `669cb3d7d7285e713a885861873ecd3f1b0db9da`, worktree clean before and
-after validation. **All ten rows pass**, with the CI row's commit delta stated
-explicitly. This supersedes the `91b468b` record (which also passed all ten)
-because that candidate has been overtaken by a money-facing change: a record is
-bound to one commit and is not inherited by its successors.
+after validation. **All ten rows passed**, with the CI row's commit delta stated
+explicitly. Superseded by the `e3eb407` record above; retained for history. It in
+turn superseded the `91b468b` record, because a record is bound to one commit and
+is not inherited by its successors.
 
 | Requirement | Result |
 | --- | --- |
