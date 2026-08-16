@@ -282,6 +282,15 @@ Alongside, **the frontier ("what's best for you")** breaks RoI Index and cost
 down by model × task-type, so *"is Opus worth 5× Haiku for my refactors?"* is a
 number, not a guess.
 
+The cost column in that breakdown is the **attribution window's total spend** —
+what the work cost — booked to the model that spent the most in the window. That
+is the right basis for "what did this context cost" and the wrong one for "what
+does this model cost", because a window containing two models charges both to
+the top spender. The cheaper-model trial therefore does **not** use it: it prices
+each model from that model's own attributed spend and refuses any unit whose
+window is too mixed to attribute (see `src/value/frontier.ts`). Read the
+model × task-type table as a cost-of-context view, not as a model price list.
+
 ### 4.6 Risk — two named treatments (a return needs more than a mean)
 
 A point estimate is not a decision. RoI prices risk twice, on purpose:

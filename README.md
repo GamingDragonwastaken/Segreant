@@ -367,13 +367,20 @@ product surfaces because model/task and project cells can be unlike work. -->
   worked.
 - **Cheaper-model trials** — `fiscus frontier` compares models only within the
   same task type. It surfaces a lower-cost candidate only when it has no worse
-  observed realized-outcome rate across at least three mature units per model,
-  quantifies historical-equivalent headroom, and labels overlapping confidence
-  intervals as a **trial**, not a proven switch. It never changes routing.
+  observed realized-outcome rate across at least three mature units per model.
+  Each model is priced by **its own attributed spend**, never by the whole
+  attribution window it worked in: a unit whose window is more than 20% other
+  models cannot price a single model, so it is excluded — and the excluded count
+  is reported alongside the result rather than quietly shrinking the sample.
+  A result is labelled **evidence-supported** only when the anytime-valid outcome
+  bounds separate *and* that separation survives one outcome flipping the wrong
+  way on each side; anything resting on a single observation stays a **trial**,
+  not a proven switch. It never changes routing.
 
 Historical-equivalent headroom is disclosed as a local planning comparison, not
-a forecast, provider-billed saving, or guarantee. The result must be re-measured
-after any operator-led trial.
+a forecast, provider-billed saving, or guarantee. It is computed from local
+list-price estimates, so it is not provider-billed cost. The result must be
+re-measured after any operator-led trial.
 
 ## How it works
 
