@@ -20,7 +20,7 @@ for this checklist against that source tree:
 | Model-trial truthfulness | The packaged value payload must self-label `demo: true`; any seeded model switch must be `trial`, never evidence-supported; HTML must contain the labelled renderer |
 | Billing-boundary truthfulness | `fiscus billing scope set --account-ref <test-ref> --json` must remain a no-write, `operator_declared_unverified` preview; packaged demo `/api/billing` must self-label `demo: true`, retain `not_reconciled`, and show zero fabricated billing records |
 | Direct-Costs connector boundary | A packaged local scope with `proj_…` must yield an OpenAI Costs **preview** with `networkAttempted: false` and `credentialRead: false`. It does not validate a provider account, authorize a live pull, or reconcile a provider amount. |
-| Intended CI | Inspect the CI jobs for the intended commit, not merely a workflow definition or an old run |
+| Intended CI | Inspect the CI jobs for the intended commit, not merely a workflow definition or an old run. If the candidate reached the remote inside a multi-commit push, CI ran on the tip; cite that run and record `git diff --stat <candidate> <tip>` so the delta is stated rather than assumed. A tip that differs only by this document does not need its own run — otherwise recording a result would forever require another commit |
 | Visual check | Inspect the non-empty labelled packaged dashboard in a browser as a supplement to, not a substitute for, the HTTP/API proof |
 
 This validates a local developer preview only. It does **not** validate a
@@ -30,8 +30,8 @@ external deployment, or the optional team service.
 ### Candidate record — commit `669cb3d`, 2026-08-17
 
 Run against `669cb3d7d7285e713a885861873ecd3f1b0db9da`, worktree clean before and
-after validation. **Nine rows pass; the CI row is pending at the time of
-writing** — see below. This supersedes the `91b468b` record (which passed all ten)
+after validation. **All ten rows pass**, with the CI row's commit delta stated
+explicitly. This supersedes the `91b468b` record (which also passed all ten)
 because that candidate has been overtaken by a money-facing change: a record is
 bound to one commit and is not inherited by its successors.
 
@@ -45,7 +45,7 @@ bound to one commit and is not inherited by its successors.
 | Model-trial truthfulness | **Pass.** `/api/value` self-labels `demo: true`; exactly one model switch, `confidence: trial`, no `evidence_supported`; zero confounders, 4 disclosed assumptions, and `unitsExcludedStalePricing: 0` with `costStaleUnits: 0` (the demo is never repriced). HTML contains the labelled "Cheaper model trials" renderer. |
 | Billing-boundary truthfulness | **Pass.** `billing scope set --account-ref … --json` returned `applied: false` with `trust: operator_declared_unverified` and `reconciliationStatus: not_reconciled`. Packaged `/api/billing` → `demo: true`, `not_reconciled`, `recordCount: 0`, `excludedFrom` = request spend, budget enforcement, outcome attribution, RoI, model recommendations. |
 | Direct-Costs connector boundary | **Pass.** With an applied `org_…`/`proj_…` scope, `billing openai-costs preview --from/--to --json` returned `networkAttempted: false`, `credentialRead: false`. Without an exact `proj_…` reference it refuses outright rather than observing at a looser grain. |
-| Intended CI | **Pending.** The commit is being pushed with this record; the run for `669cb3d` must be inspected before this row may be marked passed. It is not inherited from CI #16 (`91b468b`) — a green run on an ancestor is not a run on this commit. |
+| Intended CI | **Pass, with the delta stated.** Run **CI #18** (`.../actions/runs/31974003284`): status **Success**, 58s, 7 jobs — `package-smoke` plus the 3-job `test` and 3-job `team-server-test` matrices. That run is for `82a17c7`, not `669cb3d`: both commits went in one push and GitHub runs the tip. `git diff --stat 669cb3d 82a17c7` is **this file alone**, 1 file changed — no source, no test, no packaged code. Explicitly not inherited from CI #16 (`91b468b`), which is a different tree. |
 | Visual check | **Pass.** Browser inspection of the packaged dashboard: DEMO banner present; By-project card shows the attribution basis under each bar; rate-card health reads STALE; Value view renders exactly one card tagged TRIAL, none tagged EVIDENCE, no confounder warning, and no pre-reprice badge. |
 
 **Reprice/realized-value consistency** was additionally exercised outside the
