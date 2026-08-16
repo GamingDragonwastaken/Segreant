@@ -406,6 +406,19 @@ product surfaces because model/task and project cells can be unlike work. -->
   bounds separate *and* that separation survives one outcome flipping the wrong
   way on each side; anything resting on a single observation stays a **trial**,
   not a proven switch. It never changes routing.
+- **It says when a comparison is confounded.** Cost-per-unit is blind to how big
+  each unit was, so if the two models' median changed lines differ by more than
+  2×, "cheaper" may just mean "smaller work" — that is named on the result and
+  caps it at a trial no matter how cleanly the statistics separate. The same
+  applies when the two models were used in non-overlapping periods, which makes
+  it an era comparison as much as a model one. Unclassified (`other`) work is
+  never treated as a like-work cohort, and because scanning several task types
+  is several chances at a false positive, the 5% is split across the
+  comparisons actually considered rather than spent in full on each.
+- **It ships the assumptions it cannot check** on every result: commits are
+  treated as independent trials though several may come from one session; costs
+  are summed across pricing bases; and the model was chosen by an operator, not
+  assigned, so easier work may have gone to the cheaper one.
 
 Historical-equivalent headroom is disclosed as a local planning comparison, not
 a forecast, provider-billed saving, or guarantee. It is computed from local

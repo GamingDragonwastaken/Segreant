@@ -70,8 +70,38 @@ export interface ModelSwitchRecommendation {
   unitsExcludedMixedAttribution: number;
   /** Units dropped because no model attribution was recorded (e.g. legacy snapshots). */
   unitsExcludedUnknownAttribution: number;
+  /**
+   * Reasons this comparison cannot isolate the model even if the outcome
+   * statistics separate. Non-empty always caps `confidence` at `trial`.
+   */
+  confounders: string[];
+  /**
+   * Assumptions the method makes and does NOT verify. These do not block a
+   * result — they are the known limits of what it can mean, stated rather than
+   * left for a reader to discover.
+   */
+  assumptions: string[];
+  /** Median changed lines per unit on each side — the size axis cost-per-unit ignores. */
+  candidateMedianUnitLines: number;
+  incumbentMedianUnitLines: number;
+  /** Confidence level actually used, after splitting 5% across the task types scanned. */
+  appliedConfidenceLevel: number;
+  /** How many task-type comparisons the level was split across. */
+  comparisonsConsidered: number;
   rationale: string;
 }
+
+/**
+ * What the comparison assumes and cannot check. Fixed text, attached to every
+ * recommendation: a reader who sees only a dollar figure and a label would
+ * otherwise have no way to know these hold.
+ */
+const MODEL_SWITCH_ASSUMPTIONS: readonly string[] = [
+  'commits are treated as independent trials, but several from one session share a task, a codebase state, and an author — so the intervals are narrower than clustered evidence warrants',
+  'costs are summed across pricing bases (local list-price estimates, fallback rates for unrecognized models, tool-reported amounts) without separating them',
+  'which model was used was chosen by an operator, not assigned, so easier work may have systematically gone to the cheaper model',
+  'a local list-price estimate is not provider-billed cost, and past cost is not a forecast of future cost',
+] as const;
 
 export interface FrontierReport {
   byModel: FrontierCell[];
@@ -196,11 +226,31 @@ interface SwitchCell {
   /** Per-unit cost on the model-attributed basis. */
   costPerUnit: number;
   realizationRate: number;
+  /** Median changed lines per unit — the size axis cost-per-unit is blind to. */
+  medianUnitLines: number;
+  /** Observation span of this cell's units, for detecting era-separated samples. */
+  firstUnitMs: number;
+  lastUnitMs: number;
+}
+
+/**
+ * Beyond this ratio between the two cells' median unit sizes, "cheaper per unit"
+ * is confounded with "did smaller pieces of work" and the comparison cannot
+ * separate model price from task size. 2x is a judgement call, disclosed as one.
+ */
+const MAX_UNIT_SIZE_RATIO = 2;
+
+function median(xs: number[]): number {
+  if (xs.length === 0) return 0;
+  const s = [...xs].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 === 0 ? (s[mid - 1]! + s[mid]!) / 2 : s[mid]!;
 }
 
 function makeSwitchCell(model: string, units: WorkUnit[]): SwitchCell {
   const modelCostUsd = units.reduce((s, u) => s + (u.dominantModelCostUsd ?? 0), 0);
   const realized = units.filter((u) => u.funnel.realized).length;
+  const times = units.map((u) => u.tsEpochMs);
   return {
     model,
     units: units.length,
@@ -208,6 +258,9 @@ function makeSwitchCell(model: string, units: WorkUnit[]): SwitchCell {
     modelCostUsd,
     costPerUnit: units.length > 0 ? modelCostUsd / units.length : 0,
     realizationRate: units.length > 0 ? realized / units.length : 0,
+    medianUnitLines: median(units.map((u) => u.linesAdded + u.linesDeleted)),
+    firstUnitMs: times.length > 0 ? Math.min(...times) : 0,
+    lastUnitMs: times.length > 0 ? Math.max(...times) : 0,
   };
 }
 
@@ -227,7 +280,33 @@ function makeSwitchCell(model: string, units: WorkUnit[]): SwitchCell {
 function buildModelSwitchRecommendations(mature: WorkUnit[]): ModelSwitchRecommendation[] {
   const recs: ModelSwitchRecommendation[] = [];
   const minUnits = 3;
-  const taskGroups = [...groupBy(mature, (u) => u.taskType)].sort((a, b) => b[1].length - a[1].length);
+  const taskGroups = [...groupBy(mature, (u) => u.taskType)]
+    // `other` is the classifier's catch-all sink (see taskType.ts): a team that
+    // does not write conventional-commit subjects funnels nearly everything into
+    // it, so "the same task type" would stop meaning anything. Excluded outright,
+    // the way `unattributed` is — an unclassified cohort is not a like-work cohort.
+    .filter(([taskType]) => taskType !== 'other')
+    .sort((a, b) => b[1].length - a[1].length);
+
+  // How many task types could produce a comparison at all. Each one is another
+  // chance for a false positive, so the confidence level is split across them
+  // (Bonferroni) instead of every cohort independently spending the full 5%.
+  const eligibleComparisons = Math.max(
+    1,
+    taskGroups.filter(([, units]) => {
+      const attributable = units.filter(
+        (u) =>
+          u.dominantModelCostShare !== null &&
+          u.dominantModelCostUsd !== null &&
+          u.dominantModelCostShare >= MIN_DOMINANT_COST_SHARE,
+      );
+      const models = new Set(attributable.map((u) => u.dominantModel ?? 'unattributed'));
+      models.delete('unattributed');
+      return models.size >= 2;
+    }).length,
+  );
+  const familyAlpha = (1 - 0.95) / eligibleComparisons;
+  const adjustedLevel = 1 - familyAlpha;
 
   for (const [taskType, units] of taskGroups) {
     // Partition before pricing so the exclusions can be reported rather than
@@ -262,8 +341,8 @@ function buildModelSwitchRecommendations(mature: WorkUnit[]): ModelSwitchRecomme
       .sort((a, b) => a.costPerUnit - b.costPerUnit || b.realizationRate - a.realizationRate)[0];
     if (!candidate) continue;
 
-    const candidateCs = anytimeRateInterval(candidate.realized, candidate.units, { level: 0.95 });
-    const incumbentCs = anytimeRateInterval(incumbent.realized, incumbent.units, { level: 0.95 });
+    const candidateCs = anytimeRateInterval(candidate.realized, candidate.units, { level: adjustedLevel });
+    const incumbentCs = anytimeRateInterval(incumbent.realized, incumbent.units, { level: adjustedLevel });
     const separates = candidateCs.low > incumbentCs.high;
     /**
      * Separation alone is not enough to call something evidence.
@@ -283,10 +362,41 @@ function buildModelSwitchRecommendations(mature: WorkUnit[]): ModelSwitchRecomme
      * the doc-comment intent above ("three mature units is still thin evidence")
      * true in the code rather than only in prose.
      */
-    const flippedCandidateLow = anytimeRateInterval(Math.max(0, candidate.realized - 1), candidate.units, { level: 0.95 }).low;
-    const flippedIncumbentHigh = anytimeRateInterval(Math.min(incumbent.units, incumbent.realized + 1), incumbent.units, { level: 0.95 }).high;
+    const flippedCandidateLow = anytimeRateInterval(Math.max(0, candidate.realized - 1), candidate.units, { level: adjustedLevel }).low;
+    const flippedIncumbentHigh = anytimeRateInterval(Math.min(incumbent.units, incumbent.realized + 1), incumbent.units, { level: adjustedLevel }).high;
     const survivesOneFlip = flippedCandidateLow > flippedIncumbentHigh;
-    const confidence = separates && survivesOneFlip ? 'evidence_supported' : 'trial';
+
+    /**
+     * Confounders: reasons this comparison cannot isolate the model, even when
+     * the outcome statistics separate cleanly. Each one is named rather than
+     * silently absorbed, and any of them caps the result at `trial` — the
+     * statistics can only be as good as the comparison underneath them.
+     */
+    const confounders: string[] = [];
+    // Cost-per-unit is blind to unit size, so a model that happened to take the
+    // smaller pieces of work looks cheaper for a reason that is not its price.
+    const sizeRatio =
+      candidate.medianUnitLines > 0 && incumbent.medianUnitLines > 0
+        ? Math.max(candidate.medianUnitLines, incumbent.medianUnitLines) /
+          Math.min(candidate.medianUnitLines, incumbent.medianUnitLines)
+        : 1;
+    if (sizeRatio > MAX_UNIT_SIZE_RATIO) {
+      confounders.push(
+        `unit sizes differ ${sizeRatio.toFixed(1)}x by median changed lines ` +
+          `(${Math.round(candidate.medianUnitLines)} vs ${Math.round(incumbent.medianUnitLines)}), ` +
+          'so cheaper-per-unit is confounded with smaller work',
+      );
+    }
+    // Non-overlapping observation spans mean the models were used in different
+    // periods — different prices, different codebase, different task mix. That
+    // is a comparison of eras as much as of models.
+    if (candidate.lastUnitMs < incumbent.firstUnitMs || incumbent.lastUnitMs < candidate.firstUnitMs) {
+      confounders.push(
+        'the two models were observed in non-overlapping periods, so the comparison also spans a change in prices, codebase, and task mix',
+      );
+    }
+
+    const confidence = separates && survivesOneFlip && confounders.length === 0 ? 'evidence_supported' : 'trial';
     const savingsPerUnitUsd = incumbent.costPerUnit - candidate.costPerUnit;
     const historicalEquivalentHeadroomUsd = savingsPerUnitUsd * incumbent.units;
     // Percent of the incumbent MODEL's own attributed spend — the same basis the
@@ -298,9 +408,11 @@ function buildModelSwitchRecommendations(mature: WorkUnit[]): ModelSwitchRecomme
     const confidenceText =
       confidence === 'evidence_supported'
         ? "the candidate's anytime-valid lower outcome bound exceeds the incumbent's upper bound, and still does if one outcome flips either way"
-        : separates
-          ? `the anytime-valid bounds separate, but the separation does not survive a single flipped outcome across ${candidate.units + incumbent.units} units`
-          : `observed outcome is no lower, but the anytime-valid intervals overlap across ${candidate.units + incumbent.units} units`;
+        : confounders.length > 0
+          ? `the comparison is confounded — ${confounders[0]}`
+          : separates
+            ? `the anytime-valid bounds separate, but the separation does not survive a single flipped outcome across ${candidate.units + incumbent.units} units`
+            : `observed outcome is no lower, but the anytime-valid intervals overlap across ${candidate.units + incumbent.units} units`;
 
     recs.push({
       taskType,
@@ -320,6 +432,12 @@ function buildModelSwitchRecommendations(mature: WorkUnit[]): ModelSwitchRecomme
       minimumDominantCostShare: MIN_DOMINANT_COST_SHARE,
       unitsExcludedMixedAttribution: mixedAttribution.length,
       unitsExcludedUnknownAttribution: unknownAttribution.length,
+      confounders,
+      assumptions: [...MODEL_SWITCH_ASSUMPTIONS],
+      candidateMedianUnitLines: candidate.medianUnitLines,
+      incumbentMedianUnitLines: incumbent.medianUnitLines,
+      appliedConfidenceLevel: adjustedLevel,
+      comparisonsConsidered: eligibleComparisons,
       rationale:
         `${candidate.model} costs $${candidate.costPerUnit.toFixed(2)} per ${taskType} unit versus ` +
         `$${incumbent.costPerUnit.toFixed(2)} for ${incumbent.model}, priced from each model's own ` +
@@ -338,10 +456,14 @@ function buildModelSwitchStrings(switches: ModelSwitchRecommendation[]): string[
       item.confidence === 'evidence_supported'
         ? 'evidence-supported comparison'
         : 'review-only trial; continue measuring before changing a default';
+    // A confounder is the single most decision-relevant thing about the result —
+    // it is why the number may not be about the model at all — so it goes in the
+    // one-line summary rather than only in the detail payload.
+    const confounded = item.confounders.length > 0 ? `  [confounded: ${item.confounders.join('; ')}]` : '';
     return (
       `For ${item.taskType}: try ${item.candidateModel} before ${item.incumbentModel} - ` +
       `$${item.historicalEquivalentHeadroomUsd.toFixed(2)} historical-equivalent headroom across ` +
-      `${item.incumbentUnits} incumbent units (${confidence}).`
+      `${item.incumbentUnits} incumbent units (${confidence}).${confounded}`
     );
   });
 }

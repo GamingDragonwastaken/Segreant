@@ -1134,10 +1134,18 @@ function renderValue(d) {
           const dropped = Number(m.unitsExcludedMixedAttribution || 0) + Number(m.unitsExcludedUnknownAttribution || 0);
           const droppedNote = dropped > 0 ? ` · ${dropped} unit(s) excluded — window too mixed or unattributed to price a model` : '';
           const evidence = `${Number(m.candidateUnits || 0)} vs ${Number(m.incumbentUnits || 0)} mature units · observed realization ${candidateRate}% vs ${incumbentRate}%${droppedNote}`;
+          const confounders = m.confounders || [];
           const confidenceNote = m.confidence === 'evidence_supported'
             ? 'anytime-valid outcome bounds separate'
-            : 'intervals overlap — keep this as a measured trial, not a default change';
-          return `<div class="rec"><span class="rtag ${cls}">${tag}</span>${esc(m.taskType)}: try ${esc(m.candidateModel)} before ${esc(m.incumbentModel)} <span style="color:var(--mint)">+$${money(m.historicalEquivalentHeadroomUsd)} headroom</span><div style="font-size:10.5px;color:var(--faint);margin:5px 0 0 72px;line-height:1.45">${esc(evidence)} · ${esc(confidenceNote)}<br>${esc(m.rationale)}</div></div>`;
+            : confounders.length
+              ? 'confounded — see below; kept as a trial regardless of the statistics'
+              : 'intervals overlap — keep this as a measured trial, not a default change';
+          // A confounder means the comparison may not be about the model at all.
+          // That belongs on the card, not buried in the JSON.
+          const confoundNote = confounders.length
+            ? `<div style="font-size:10.5px;color:var(--amber,#d98b32);margin:4px 0 0 72px;line-height:1.45">⚠ ${confounders.map(esc).join('<br>⚠ ')}</div>`
+            : '';
+          return `<div class="rec"><span class="rtag ${cls}">${tag}</span>${esc(m.taskType)}: try ${esc(m.candidateModel)} before ${esc(m.incumbentModel)} <span style="color:var(--mint)">+$${money(m.historicalEquivalentHeadroomUsd)} headroom</span><div style="font-size:10.5px;color:var(--faint);margin:5px 0 0 72px;line-height:1.45">${esc(evidence)} · ${esc(confidenceNote)}<br>${esc(m.rationale)}</div>${confoundNote}</div>`;
         }).join('')}
       </div>`
     : '';

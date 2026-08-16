@@ -561,6 +561,88 @@ test('model switch: a large, robust separation IS evidence-supported', () => {
   assert.match(trial!.rationale, /still does if one outcome flips/);
 });
 
+/** A unit with explicit size and timestamp, for the confounder gates. */
+function wuAt(
+  taskType: TaskType,
+  model: string,
+  realized: boolean,
+  cost: number,
+  lines: number,
+  tsEpochMs: number,
+): WorkUnit {
+  return { ...wu(taskType, model, realized, cost), linesAdded: lines, linesDeleted: 0, tsEpochMs };
+}
+
+test('model switch: a large unit-size gap caps the result at trial — cheaper may just mean smaller', () => {
+  // Statistically this would separate (8/8 vs 2/40), but the candidate's commits
+  // are a tenth the size, so "cheaper per unit" is confounded with "smaller work".
+  const units: WorkUnit[] = [
+    ...Array.from({ length: 8 }, (_, i) => wuAt('feature', 'claude-haiku-4-5', true, 1, 10, 1000 + i)),
+    ...Array.from({ length: 2 }, (_, i) => wuAt('feature', 'claude-opus-4-8', true, 4, 200, 1000 + i)),
+    ...Array.from({ length: 38 }, (_, i) => wuAt('feature', 'claude-opus-4-8', false, 4, 200, 1000 + i)),
+  ];
+  const trial = computeFrontier(units).modelSwitches.find((r) => r.taskType === 'feature');
+  assert.ok(trial);
+  assert.equal(trial!.confidence, 'trial', 'a size-confounded comparison is never evidence');
+  assert.ok(trial!.confounders.some((c) => c.includes('unit sizes differ')), trial!.confounders.join(' | '));
+  assert.match(trial!.rationale, /confounded/);
+});
+
+test('model switch: models observed in non-overlapping periods cannot be evidence', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  // Opus used only in month 1, Haiku only in month 2 — an era comparison as much
+  // as a model comparison (prices, codebase, and task mix all moved).
+  const units: WorkUnit[] = [
+    ...Array.from({ length: 2 }, (_, i) => wuAt('feature', 'claude-opus-4-8', true, 4, 100, i * DAY)),
+    ...Array.from({ length: 38 }, (_, i) => wuAt('feature', 'claude-opus-4-8', false, 4, 100, i * DAY)),
+    ...Array.from({ length: 8 }, (_, i) => wuAt('feature', 'claude-haiku-4-5', true, 1, 100, 90 * DAY + i * DAY)),
+  ];
+  const trial = computeFrontier(units).modelSwitches.find((r) => r.taskType === 'feature');
+  assert.ok(trial);
+  assert.equal(trial!.confidence, 'trial');
+  assert.ok(trial!.confounders.some((c) => c.includes('non-overlapping periods')), trial!.confounders.join(' | '));
+});
+
+test('model switch: scanning more task types tightens the level each one gets', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const cohort = (t: TaskType): WorkUnit[] => [
+    ...Array.from({ length: 8 }, (_, i) => wuAt(t, 'claude-haiku-4-5', true, 1, 100, i * DAY)),
+    ...Array.from({ length: 2 }, (_, i) => wuAt(t, 'claude-opus-4-8', true, 4, 100, i * DAY)),
+    ...Array.from({ length: 38 }, (_, i) => wuAt(t, 'claude-opus-4-8', false, 4, 100, i * DAY)),
+  ];
+  const one = computeFrontier(cohort('feature')).modelSwitches[0]!;
+  assert.equal(one.comparisonsConsidered, 1);
+  assert.ok(Math.abs(one.appliedConfidenceLevel - 0.95) < 1e-9, 'a single comparison spends the full 5%');
+
+  const three = computeFrontier([...cohort('feature'), ...cohort('fix'), ...cohort('perf')]).modelSwitches[0]!;
+  assert.equal(three.comparisonsConsidered, 3);
+  assert.ok(three.appliedConfidenceLevel > one.appliedConfidenceLevel, 'more searching → a stricter bar per comparison');
+  assert.ok(Math.abs(three.appliedConfidenceLevel - (1 - 0.05 / 3)) < 1e-9);
+});
+
+test('model switch: the unclassified "other" bucket is never a like-work cohort', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  // 'wibble wobble' classifies as 'other' — the catch-all sink.
+  const units: WorkUnit[] = [
+    ...Array.from({ length: 8 }, (_, i) => wuAt('other', 'claude-haiku-4-5', true, 1, 100, i * DAY)),
+    ...Array.from({ length: 8 }, (_, i) => wuAt('other', 'claude-opus-4-8', true, 4, 100, i * DAY)),
+  ];
+  assert.equal(computeFrontier(units).modelSwitches.length, 0, 'unclassified work is not one task type');
+});
+
+test('model switch: every recommendation carries the assumptions it cannot verify', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const units: WorkUnit[] = [
+    ...Array.from({ length: 3 }, (_, i) => wuAt('feature', 'claude-haiku-4-5', true, 1, 100, i * DAY)),
+    ...Array.from({ length: 3 }, (_, i) => wuAt('feature', 'claude-opus-4-8', true, 4, 100, i * DAY)),
+  ];
+  const trial = computeFrontier(units).modelSwitches[0]!;
+  assert.ok(trial.assumptions.length >= 4);
+  assert.ok(trial.assumptions.some((a) => a.includes('independent trials')), 'session clustering is disclosed');
+  assert.ok(trial.assumptions.some((a) => a.includes('pricing bases')), 'mixed cost bases are disclosed');
+  assert.ok(trial.assumptions.some((a) => a.includes('chosen by an operator')), 'selection bias is disclosed');
+});
+
 test('model switch: does not compare across different task types', () => {
   // Cheap model only ever did fixes; expensive model only ever did features.
   const units: WorkUnit[] = [
