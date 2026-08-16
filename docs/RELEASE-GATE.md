@@ -27,30 +27,36 @@ This validates a local developer preview only. It does **not** validate a
 provider billing statement, production customer data, an npm publication, an
 external deployment, or the optional team service.
 
-### Candidate record — commit `c9e08d7`, 2026-08-16
+### Candidate record — commit `91b468b`, 2026-08-16
 
-Run against `c9e08d792cc6afe08c1d1906c5ec5b35cd6f0db0`, worktree clean before and
-after validation. **This candidate does not pass the gate**: the CI row cannot be
-satisfied, because the commit is local-only. Every other row passed.
+Run against `91b468b573ec5b9eaa18693aae022f560af32055`, worktree clean before and
+after validation. **All ten rows pass.** This is a validated local candidate; it
+is still not an npm publication, a release, or an external deployment.
 
 | Requirement | Result |
 | --- | --- |
-| Candidate identity | **Pass.** `git rev-parse HEAD` = `c9e08d792cc6afe08c1d1906c5ec5b35cd6f0db0`; `git status --short` empty before and after. 33 commits ahead of `origin/main`, unpushed. |
+| Candidate identity | **Pass.** `git rev-parse HEAD` = `91b468b573ec5b9eaa18693aae022f560af32055`; `git status --short` empty before and after. Pushed to `origin/main` (`0674634..91b468b`) with owner authorization; local and remote now agree. |
 | Source validation | **Pass.** `npm ci` (3 packages, 0 vulnerabilities), `npm run typecheck` clean, `npm test` **460 tests / 459 pass / 1 expected platform skip / 0 fail**, `npm run build` clean. |
-| Packed artifact | **Pass.** `npm pack` → 97 files, SHA-256 `5c78b320a73e279c77c2a4bb76d56685e06c67300ac33c9bb00e3a179a68f548`. Listing confirms `package/bin/fiscus.mjs`, `package/dist/cli.js`, `package/dist/store/db.js`, `package/dist/dashboard/web/index.html`, `package/pricing/models.json`, `package/baselines/lift-baselines.json`. |
+| Packed artifact | **Pass.** `npm pack` → 97 files, SHA-256 `eca192ae1fde100d5dfc002398ac0c2eed854c4e0f2c11598b3ee9da838d3b29`. Listing confirms `package/bin/fiscus.mjs`, `package/dist/cli.js`, `package/dist/dashboard/web/index.html`, `package/pricing/models.json`, `package/baselines/lift-baselines.json`. |
 | Clean installed CLI | **Pass.** Installed with `--ignore-scripts` into a fresh directory; `fiscus --help` renders. |
-| Packaged dashboard/API | **Pass.** Isolated `AEGIS_HOME`, seeded demo, packaged dashboard on :8091. `/api/health` → `{"ok":true}`; `/api/overview` → `demo: true`, 101 requests, 3 attribution-evidence cohorts; HTML served. Terminated cleanly, port confirmed closed. |
-| Model-trial truthfulness | **Pass.** `/api/value` self-labels `demo: true`; exactly one model switch, `confidence: trial`, no `evidence_supported`; it carries 1 confounder and 4 disclosed assumptions. HTML contains the labelled "Cheaper model trials" renderer. |
-| Billing-boundary truthfulness | **Pass.** `billing scope set --account-ref … --json` returned `applied: false` with `trust: operator_declared_unverified` and `reconciliationStatus: not_reconciled`. Packaged `/api/billing` → `demo: true`, `not_reconciled`, `recordCount: 0`, `excludedFrom` = request spend, budget enforcement, outcome attribution, RoI, model recommendations. |
+| Packaged dashboard/API | **Pass.** Isolated `AEGIS_HOME`, seeded demo, packaged dashboard on :8091. `/api/health` → `{"ok":true}`; `/api/overview` → `demo: true`, 101 requests. Terminated cleanly, port confirmed closed. |
+| Model-trial truthfulness | **Pass.** `/api/value` self-labels `demo: true`; exactly one model switch, `confidence: trial`, no `evidence_supported`; zero confounders (the cohort is now size-comparable) and 4 disclosed assumptions. HTML contains the labelled "Cheaper model trials" renderer. |
+| Billing-boundary truthfulness | **Pass.** `billing scope set --account-ref … --json` returned `applied: false` with `trust: operator_declared_unverified` and `reconciliationStatus: not_reconciled`. Packaged `/api/billing` → `demo: true`, `not_reconciled`, `recordCount: 0`. |
 | Direct-Costs connector boundary | **Pass.** With an applied `proj_…` scope, `billing openai-costs preview --from/--to --json` returned `networkAttempted: false`, `credentialRead: false`. |
-| Intended CI | **NOT SATISFIED.** `git branch -r --contains c9e08d7` is empty — the commit exists only locally, so no CI run exists to inspect. `.github/workflows/ci.yml` is present but a workflow definition is not a run. This row can only be closed after an authorized push. |
-| Visual check | **Pass.** Browser inspection of the packaged dashboard: DEMO banner present; By-project card shows the attribution basis per bar; rate-card health reads STALE; Value view renders exactly one card tagged TRIAL, none tagged EVIDENCE, with the confounder warning visible. |
+| Intended CI | **Pass.** Run **CI #16** for this exact commit (`.../actions/runs/31971737017`): status **Success**, total duration 1m 30s, 7 jobs — `package-smoke` plus the 3-job `test` and 3-job `team-server-test` matrices, all completed. Inspected as a run for `91b468b`, not as a workflow definition and not as an older run. |
+| Visual check | **Pass.** Browser inspection of the packaged dashboard: DEMO banner present; By-project card shows the attribution basis under each bar; rate-card health reads STALE; Value view renders exactly one card tagged TRIAL, none tagged EVIDENCE, and no confounder warning. |
 
 **Standing exclusions for this candidate:** no npm publication, no GitHub release
 or tag, no external deployment, no provider credential used, and no team-server
-infrastructure validation. The team-server suites were re-run at this tree
-(typecheck clean, 55/55) — that is source validation only and does not touch the
-separate gate below.
+infrastructure validation. The team-server suites are clean at this tree
+(typecheck, 55/55) and its CI matrix passed — that is source validation only and
+moves none of the five infrastructure requirements in the separate gate below.
+
+**Repository visibility:** the GitHub repository is **public** (its Actions page
+loads without authentication). Anything committed here is published on push, so
+the pre-push check must include a scan for credentials, personal data, and local
+filesystem paths. The absolute working-copy path was removed from `HANDOFF.md`
+before this push for exactly that reason.
 
 ## Product claims allowed at this stage
 
@@ -96,8 +102,9 @@ actions below. They are intentionally not automated from a local coding task.
 `team-server/` is not approved for an internet-facing or production team
 deployment. Its unit/API tests use a fake store; no real PostgreSQL
 schema/transaction validation is recorded for this candidate. At commit
-`c9e08d7` its typecheck is clean and all 55 tests pass — which validates source
-only, and moves none of the five infrastructure requirements below.
+`91b468b` its typecheck is clean, all 55 tests pass, and its 3-job CI matrix
+passed — which validates source only, and moves none of the five infrastructure
+requirements below.
 Before it is exposed, complete all of the following in a disposable environment:
 
 1. Apply the exact schema to a real supported PostgreSQL version and exercise
