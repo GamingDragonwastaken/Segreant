@@ -53,6 +53,18 @@ export interface ModelSwitchRecommendation {
   historicalHeadroomPercent: number;
   /** A trial preserves the observed rate but its anytime-valid intervals still overlap. */
   confidence: 'trial' | 'evidence_supported';
+  /**
+   * How the per-unit costs above were priced. `dominant_model_attributed` means
+   * each model was charged only its own spend in the unit's window — a local
+   * list-price estimate, never provider-billed cost.
+   */
+  costBasis: 'dominant_model_attributed';
+  /** The dominant-model cost share a unit needed to be priced at all. */
+  minimumDominantCostShare: number;
+  /** Units dropped because their window was too mixed to price one model. */
+  unitsExcludedMixedAttribution: number;
+  /** Units dropped because no model attribution was recorded (e.g. legacy snapshots). */
+  unitsExcludedUnknownAttribution: number;
   rationale: string;
 }
 
@@ -155,10 +167,54 @@ export function computeFrontier(units: WorkUnit[]): FrontierReport {
 }
 
 /**
+ * The share of a unit's window spend that must belong to its dominant model
+ * before the unit may be used to price that model.
+ *
+ * This is a disclosed assumption, not a derived constant. A commit's window
+ * frequently contains more than one model; booking the whole window to the
+ * top spender would charge one model for another's tokens and make the
+ * "cheaper model" difference an artifact of the mix rather than of price. At
+ * 0.8 a qualifying unit is at most one-fifth other models, so the residual
+ * contamination is small relative to the price gaps this surfaces. Units below
+ * the bar are not deleted — they are counted and reported as excluded.
+ */
+const MIN_DOMINANT_COST_SHARE = 0.8;
+
+/** A model-vs-model cell priced by the model's OWN spend, not the window total. */
+interface SwitchCell {
+  model: string;
+  units: number;
+  /** Sum of the dominant model's own spend across this cell's units. */
+  modelCostUsd: number;
+  /** Per-unit cost on the model-attributed basis. */
+  costPerUnit: number;
+  realizationRate: number;
+}
+
+function makeSwitchCell(model: string, units: WorkUnit[]): SwitchCell {
+  const modelCostUsd = units.reduce((s, u) => s + (u.dominantModelCostUsd ?? 0), 0);
+  const realized = units.filter((u) => u.funnel.realized).length;
+  return {
+    model,
+    units: units.length,
+    modelCostUsd,
+    costPerUnit: units.length > 0 ? modelCostUsd / units.length : 0,
+    realizationRate: units.length > 0 ? realized / units.length : 0,
+  };
+}
+
+/**
  * Recommend only a cheaper candidate with an observed realized-outcome rate no
  * lower than the expensive incumbent on the same task type. Three mature units
  * per model is still thin evidence, so an overlapping confidence sequence means
  * "trial", not an instruction to change the default route.
+ *
+ * Cost here is the model's OWN attributed spend (`dominantModelCostUsd`), never
+ * the unit's window total (`attributedCostUsd`). The window total is the right
+ * answer to "what did this commit cost" and the wrong answer to "what does this
+ * model cost", because a mixed window books every model's dollars to the top
+ * spender. Units whose attribution is unknown or too mixed to price a single
+ * model are excluded and counted, not quietly folded in.
  */
 function buildModelSwitchRecommendations(mature: WorkUnit[]): ModelSwitchRecommendation[] {
   const recs: ModelSwitchRecommendation[] = [];
@@ -166,8 +222,24 @@ function buildModelSwitchRecommendations(mature: WorkUnit[]): ModelSwitchRecomme
   const taskGroups = [...groupBy(mature, (u) => u.taskType)].sort((a, b) => b[1].length - a[1].length);
 
   for (const [taskType, units] of taskGroups) {
-    const cells = [...groupBy(units, (u) => u.dominantModel ?? 'unattributed')]
-      .map(([model, grouped]) => makeCell(`${taskType} · ${model}`, model, taskType, grouped))
+    // Partition before pricing so the exclusions can be reported rather than
+    // silently shrinking the sample.
+    const unknownAttribution = units.filter((u) => u.dominantModelCostShare === null || u.dominantModelCostUsd === null);
+    const mixedAttribution = units.filter(
+      (u) =>
+        u.dominantModelCostShare !== null &&
+        u.dominantModelCostUsd !== null &&
+        u.dominantModelCostShare < MIN_DOMINANT_COST_SHARE,
+    );
+    const attributable = units.filter(
+      (u) =>
+        u.dominantModelCostShare !== null &&
+        u.dominantModelCostUsd !== null &&
+        u.dominantModelCostShare >= MIN_DOMINANT_COST_SHARE,
+    );
+
+    const cells = [...groupBy(attributable, (u) => u.dominantModel ?? 'unattributed')]
+      .map(([model, grouped]) => makeSwitchCell(model, grouped))
       .filter((cell) => cell.units >= minUnits && cell.model !== 'unattributed' && cell.costPerUnit > 0);
     if (cells.length < 2) continue;
 
@@ -187,7 +259,10 @@ function buildModelSwitchRecommendations(mature: WorkUnit[]): ModelSwitchRecomme
     const confidence = candidateCs.low > incumbentCs.high ? 'evidence_supported' : 'trial';
     const savingsPerUnitUsd = incumbent.costPerUnit - candidate.costPerUnit;
     const historicalEquivalentHeadroomUsd = savingsPerUnitUsd * incumbent.units;
-    const historicalHeadroomPercent = incumbent.costUsd > 0 ? historicalEquivalentHeadroomUsd / incumbent.costUsd : 0;
+    // Percent of the incumbent MODEL's own attributed spend — the same basis the
+    // headroom dollars were computed on, so the ratio stays internally consistent.
+    const historicalHeadroomPercent =
+      incumbent.modelCostUsd > 0 ? historicalEquivalentHeadroomUsd / incumbent.modelCostUsd : 0;
     const confidenceText =
       confidence === 'evidence_supported'
         ? "the candidate's anytime-valid lower outcome bound exceeds the incumbent's upper bound"
@@ -207,9 +282,14 @@ function buildModelSwitchRecommendations(mature: WorkUnit[]): ModelSwitchRecomme
       historicalEquivalentHeadroomUsd,
       historicalHeadroomPercent,
       confidence,
+      costBasis: 'dominant_model_attributed',
+      minimumDominantCostShare: MIN_DOMINANT_COST_SHARE,
+      unitsExcludedMixedAttribution: mixedAttribution.length,
+      unitsExcludedUnknownAttribution: unknownAttribution.length,
       rationale:
         `${candidate.model} costs $${candidate.costPerUnit.toFixed(2)} per ${taskType} unit versus ` +
-        `$${incumbent.costPerUnit.toFixed(2)} for ${incumbent.model}; ${confidenceText}.`,
+        `$${incumbent.costPerUnit.toFixed(2)} for ${incumbent.model}, priced from each model's own ` +
+        `attributed spend; ${confidenceText}.`,
     });
   }
   return recs;

@@ -1098,13 +1098,17 @@ function renderValue(d) {
   const switches = d.frontier && d.frontier.modelSwitches ? d.frontier.modelSwitches : [];
   const modelCard = switches.length
     ? `<div class="card fade" style="grid-column:1/-1">
-        <div class="label">Cheaper model trials ${tip('Local historical comparison only. Fiscus does <b>not</b> change routing. A candidate must cost less and have no worse observed realized-outcome rate for the same task type. <b>Historical-equivalent headroom</b> is what the incumbent\'s observed units would have saved at the candidate\'s historical per-unit cost; it is not provider-billed savings or a guarantee.')}</div>
+        <div class="label">Cheaper model trials ${tip('Local historical comparison only. Fiscus does <b>not</b> change routing. A candidate must cost less and have no worse observed realized-outcome rate for the same task type. Each model is priced by <b>its own attributed spend</b>, not by the whole window it worked in — a unit whose window is more than 20% other models cannot price a model and is excluded and counted. <b>Historical-equivalent headroom</b> is what the incumbent\'s observed units would have saved at the candidate\'s historical per-unit cost; it is a local list-price estimate, not provider-billed savings and not a guarantee of future cost.')}</div>
         ${switches.slice(0, 4).map((m) => {
           const tag = m.confidence === 'evidence_supported' ? 'EVIDENCE' : 'TRIAL';
           const cls = m.confidence === 'evidence_supported' ? 'grow' : 'trim';
           const candidateRate = Math.round(Number(m.candidateRealizationRate || 0) * 100);
           const incumbentRate = Math.round(Number(m.incumbentRealizationRate || 0) * 100);
-          const evidence = `${Number(m.candidateUnits || 0)} vs ${Number(m.incumbentUnits || 0)} mature units · observed realization ${candidateRate}% vs ${incumbentRate}%`;
+          // Surface the excluded units on the card itself: a sample that silently
+          // shrank is indistinguishable from one that never had those units.
+          const dropped = Number(m.unitsExcludedMixedAttribution || 0) + Number(m.unitsExcludedUnknownAttribution || 0);
+          const droppedNote = dropped > 0 ? ` · ${dropped} unit(s) excluded — window too mixed or unattributed to price a model` : '';
+          const evidence = `${Number(m.candidateUnits || 0)} vs ${Number(m.incumbentUnits || 0)} mature units · observed realization ${candidateRate}% vs ${incumbentRate}%${droppedNote}`;
           const confidenceNote = m.confidence === 'evidence_supported'
             ? 'anytime-valid outcome bounds separate'
             : 'intervals overlap — keep this as a measured trial, not a default change';

@@ -406,12 +406,29 @@ test('classifyTaskType: conventional prefixes and keyword fallback', () => {
   assert.equal(classifyTaskType('wibble wobble'), 'other');
 });
 
-function wu(taskType: TaskType, model: string, realized: boolean, cost: number): WorkUnit {
+let wuSeq = 0;
+
+/**
+ * A mature work unit. `share` is the dominant model's portion of the window spend:
+ * it defaults to a model-pure window (1) so the common case reads cleanly, and is
+ * lowered or nulled by the tests that exercise the mixed/unknown exclusions.
+ * `modelCost` defaults to the window total, which is only correct when share is 1.
+ */
+function wu(
+  taskType: TaskType,
+  model: string,
+  realized: boolean,
+  cost: number,
+  share: number | null = 1,
+  modelCost: number | null = cost,
+): WorkUnit {
+  // Deterministic ids: a random hash makes a failure impossible to reproduce.
+  wuSeq += 1;
   return {
-    hash: Math.random().toString(36).slice(2), tsEpochMs: 0, subject: '', linesAdded: 10, linesDeleted: 0, filesChanged: 1,
+    hash: `wu${wuSeq}`, tsEpochMs: 0, subject: '', linesAdded: 10, linesDeleted: 0, filesChanged: 1,
     windowStartMs: 0, windowEndMs: 0, attributedCostUsd: cost, attributedRequests: 1, attributedOutputTokens: 0, costPerHundredLines: null,
     ageDays: 30, maturing: false, survivalRatio: 1, reverted: false, hadProposal: false, acceptance: null,
-    taskType, dominantModel: model,
+    taskType, dominantModel: model, dominantModelCostUsd: modelCost, dominantModelCostShare: share,
     funnel: { realized, results: [{ gate: 'shipped', verdict: 'unknown', detail: '' }], reachedIndex: 0, reached: null, diedAt: null, diedAtIndex: null, passes: 0, fails: 0, unknowns: 0, instrumented: 0, realizationScore: 0 },
   } as WorkUnit;
 }
@@ -435,6 +452,93 @@ test('frontier: recommends routing a task-type to the model that returns more pe
   assert.equal(trial!.incumbentModel, 'claude-opus-4-8');
   assert.ok(trial!.historicalEquivalentHeadroomUsd > 0, 'quantifies historical-equivalent headroom');
   assert.equal(trial!.confidence, 'trial', 'three units per model are not overstated as a proven switch');
+  assert.equal(trial!.costBasis, 'dominant_model_attributed', 'the per-unit cost is the model\'s own spend');
+  assert.equal(trial!.unitsExcludedMixedAttribution, 0);
+  assert.equal(trial!.unitsExcludedUnknownAttribution, 0);
+});
+
+// ---- Cheaper-model trial: the refusals ----
+// The advisor's whole premise is restraint, so each gate needs a test that it
+// actually WITHHOLDS. A happy-path test alone cannot distinguish a working gate
+// from an absent one.
+
+test('model switch: prices each model by its OWN spend, never the mixed window total', () => {
+  // Both models run in every window. Opus dominates spend (share 0.8) but the
+  // window total is identical for both, so a window-total basis would report a
+  // $0 gap. On the correct per-model basis Opus costs 8x Haiku per unit.
+  const units: WorkUnit[] = [
+    ...Array.from({ length: 3 }, () => wu('feature', 'claude-opus-4-8', true, 10, 0.8, 8)),
+    ...Array.from({ length: 3 }, () => wu('feature', 'claude-haiku-4-5', true, 10, 0.8, 1)),
+  ];
+  const trial = computeFrontier(units).modelSwitches.find((r) => r.taskType === 'feature');
+  assert.ok(trial, 'a real per-model price gap is still found when window totals are equal');
+  assert.equal(trial!.incumbentModel, 'claude-opus-4-8');
+  assert.equal(trial!.candidateModel, 'claude-haiku-4-5');
+  assert.equal(trial!.incumbentCostPerUnitUsd, 8, 'incumbent priced from its own spend, not the $10 window');
+  assert.equal(trial!.candidateCostPerUnitUsd, 1, 'candidate priced from its own spend, not the $10 window');
+  assert.equal(trial!.savingsPerUnitUsd, 7);
+  assert.equal(trial!.historicalEquivalentHeadroomUsd, 21, '7/unit across 3 incumbent units');
+});
+
+test('model switch: refuses a cheaper candidate whose observed outcome is WORSE', () => {
+  const units: WorkUnit[] = [
+    wu('feature', 'claude-opus-4-8', true, 4), wu('feature', 'claude-opus-4-8', true, 4), wu('feature', 'claude-opus-4-8', true, 4),
+    // Cheaper, but only 1/3 realized against the incumbent's 3/3.
+    wu('feature', 'claude-haiku-4-5', true, 1), wu('feature', 'claude-haiku-4-5', false, 1), wu('feature', 'claude-haiku-4-5', false, 1),
+  ];
+  const fr = computeFrontier(units);
+  assert.equal(fr.modelSwitches.length, 0, 'cheaper is not enough — the outcome rate may not be lower');
+  assert.ok(fr.recommendations[0]!.includes('No lower-cost same-outcome trial yet'));
+});
+
+test('model switch: refuses a two-unit cell — the minimum cohort is three per model', () => {
+  const units: WorkUnit[] = [
+    wu('feature', 'claude-opus-4-8', true, 4), wu('feature', 'claude-opus-4-8', true, 4), wu('feature', 'claude-opus-4-8', true, 4),
+    wu('feature', 'claude-haiku-4-5', true, 1), wu('feature', 'claude-haiku-4-5', true, 1),
+  ];
+  assert.equal(computeFrontier(units).modelSwitches.length, 0);
+});
+
+test('model switch: refuses units whose window is too mixed to price one model', () => {
+  // A qualifying price gap, but every window is a near coin-flip between models
+  // (share 0.5), so no unit can honestly price either model.
+  const units: WorkUnit[] = [
+    ...Array.from({ length: 3 }, () => wu('feature', 'claude-opus-4-8', true, 4, 0.5, 2)),
+    ...Array.from({ length: 3 }, () => wu('feature', 'claude-haiku-4-5', true, 1, 0.5, 0.5)),
+  ];
+  assert.equal(computeFrontier(units).modelSwitches.length, 0, 'mixed attribution cannot price a model');
+});
+
+test('model switch: refuses legacy units that carry no model-cost attribution at all', () => {
+  const units: WorkUnit[] = [
+    ...Array.from({ length: 3 }, () => wu('feature', 'claude-opus-4-8', true, 4, null, null)),
+    ...Array.from({ length: 3 }, () => wu('feature', 'claude-haiku-4-5', true, 1, null, null)),
+  ];
+  assert.equal(computeFrontier(units).modelSwitches.length, 0, 'unknown attribution stays unknown');
+});
+
+test('model switch: excluded units are counted and reported, not silently dropped', () => {
+  const units: WorkUnit[] = [
+    ...Array.from({ length: 3 }, () => wu('feature', 'claude-opus-4-8', true, 4)),
+    ...Array.from({ length: 3 }, () => wu('feature', 'claude-haiku-4-5', true, 1)),
+    // Two more that cannot be priced: one too mixed, one unattributed.
+    wu('feature', 'claude-opus-4-8', true, 4, 0.5, 2),
+    wu('feature', 'claude-haiku-4-5', true, 1, null, null),
+  ];
+  const trial = computeFrontier(units).modelSwitches.find((r) => r.taskType === 'feature');
+  assert.ok(trial);
+  assert.equal(trial!.unitsExcludedMixedAttribution, 1);
+  assert.equal(trial!.unitsExcludedUnknownAttribution, 1);
+  assert.equal(trial!.minimumDominantCostShare, 0.8, 'the exclusion threshold is disclosed, not hidden');
+});
+
+test('model switch: does not compare across different task types', () => {
+  // Cheap model only ever did fixes; expensive model only ever did features.
+  const units: WorkUnit[] = [
+    ...Array.from({ length: 3 }, () => wu('feature', 'claude-opus-4-8', true, 4)),
+    ...Array.from({ length: 3 }, () => wu('fix', 'claude-haiku-4-5', true, 1)),
+  ];
+  assert.equal(computeFrontier(units).modelSwitches.length, 0, 'unlike work is not a comparison');
 });
 
 // ---- Value-aware budgeting ----

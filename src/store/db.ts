@@ -1333,22 +1333,36 @@ export class Store {
       .sort((a, b) => b.costUsd - a.costUsd);
   }
 
+  /**
+   * Spend per model over [startMs, endMs), optionally scoped to one project key.
+   *
+   * The `project` filter mirrors `summary()` exactly — same alias family expansion —
+   * because the two are read together when a work unit's cost is attributed to a
+   * model. Without it the dollars could be project-scoped while the model label was
+   * taken from another project's concurrent traffic, which silently mislabels whose
+   * model spent the money. Omit `project` for the project-blind total (the default,
+   * unchanged for every existing caller).
+   */
   byModel(
     startMs: number,
     endMs: number,
+    project?: string,
   ): Array<SpendBucket & { provider: string; cacheReadTokens: number; cacheWriteTokens: number }> {
     // Cache columns surface the cache economics (reads are ~10x cheaper than
     // fresh input; writes carry a premium) that plain in/out totals hide.
+    const fam = project !== undefined ? this.familyFilter('project', project) : null;
+    const args: Array<number | string> = fam ? [startMs, endMs, ...fam.args] : [startMs, endMs];
     const rows = this.db
       .prepare(
         `SELECT provider, model AS label,
                 COALESCE(SUM(cost_usd),0) AS costUsd, COUNT(*) AS requests,
                 COALESCE(SUM(input_tokens),0) AS inputTokens, COALESCE(SUM(output_tokens),0) AS outputTokens,
                 COALESCE(SUM(cache_read_tokens),0) AS cacheReadTokens, COALESCE(SUM(cache_write_tokens),0) AS cacheWriteTokens
-         FROM requests WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ?
-         GROUP BY provider, model ORDER BY costUsd DESC`,
+         FROM requests WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ?` +
+          (fam ? ` AND ${fam.sql}` : ``) +
+          ` GROUP BY provider, model ORDER BY costUsd DESC`,
       )
-      .all(startMs, endMs) as unknown as Array<
+      .all(...args) as unknown as Array<
       SpendBucket & { provider: string; cacheReadTokens: number; cacheWriteTokens: number }
     >;
     return rows;

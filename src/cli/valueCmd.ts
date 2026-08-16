@@ -716,8 +716,14 @@ export async function cmdFrontier(flags: Flags): Promise<void> {
   }
 
   console.log('');
-  console.log(color(tty, C.bold, '  What to route where'));
+  // Review-only: this surface never changes routing, so it must not be headed
+  // like an instruction. See frontier.ts — the recommendation is a comparison of
+  // local historical evidence, not a directive.
+  console.log(color(tty, C.bold, '  Cheaper-model trials to review'));
   for (const r of fr.recommendations) console.log(color(tty, C.gray, `  → ${r}`));
+  console.log(
+    color(tty, C.dim, '    Local historical comparison only — Fiscus does not change provider routing.'),
+  );
   console.log('');
   store.close();
 }

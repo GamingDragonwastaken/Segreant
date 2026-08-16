@@ -378,6 +378,12 @@ function makeRealizationUnit(ctx: Ctx, now: number, spec: UnitSpec, hash: string
     acceptance: spec.acceptance,
     taskType: classifyTaskType(spec.subject),
     dominantModel: spec.model,
+    // Each synthetic unit is seeded from exactly one model (`spec.model`), so its
+    // window is model-pure by construction and the whole cost is genuinely that
+    // model's. Real units are rarely this clean — see realization.ts, where the
+    // share is measured from the ledger rather than asserted.
+    dominantModelCostUsd: spec.costUsd,
+    dominantModelCostShare: 1,
     funnel: scoreFunnel(verdicts),
   };
 }

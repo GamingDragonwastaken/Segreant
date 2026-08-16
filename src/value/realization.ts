@@ -96,6 +96,24 @@ export interface WorkUnit extends CommitAttribution {
   acceptance: number | null;
   taskType: TaskType; // the "context" axis of the frontier
   dominantModel: string | null; // model that spent the most in this unit's window
+  /**
+   * The dominant model's OWN spend in this unit's window — not the window total.
+   *
+   * `attributedCostUsd` is every model's spend in the window, which is the right
+   * basis for "what did this commit cost" but the wrong one for "what does this
+   * model cost", because a mixed window books the other models' dollars to
+   * whichever one happened to spend most. Model-vs-model comparison must use this
+   * field. `null` when no spend was observed in the window.
+   */
+  dominantModelCostUsd: number | null;
+  /**
+   * The dominant model's share of the window's total spend, 0..1. A share near 1
+   * means the window was effectively one model's work, so attributing the unit to
+   * that model is meaningful; a share near 0.5 means the label is close to a
+   * coin flip between two models. Model comparison gates on this. `null` when no
+   * spend was observed in the window.
+   */
+  dominantModelCostShare: number | null;
   funnel: FunnelOutcome;
 }
 
@@ -229,9 +247,19 @@ export async function computeRealization(
       ),
     };
 
-    // Attribute the unit to the model that spent the most in its window.
-    const modelSpend = store.byModel(a.windowStartMs, a.windowEndMs);
+    // Attribute the unit to the model that spent the most in its window. Scope the
+    // model read to the SAME project the dollars were scoped to, or the label could
+    // be taken from another project's concurrent traffic.
+    const modelSpend = store.byModel(a.windowStartMs, a.windowEndMs, projectScoped ? project : undefined);
     const dominantModel = modelSpend.length > 0 ? modelSpend[0]!.label : null;
+    // Keep the dominant model's OWN spend and its share of the window separately
+    // from the window total: the total is what the commit cost, the share is how
+    // much of that is really attributable to this model. Model comparison needs
+    // both, and conflating them books one model's dollars to another.
+    const windowModelTotal = modelSpend.reduce((s, m) => s + m.costUsd, 0);
+    const dominantModelCostUsd = modelSpend.length > 0 ? modelSpend[0]!.costUsd : null;
+    const dominantModelCostShare =
+      modelSpend.length > 0 && windowModelTotal > 0 ? modelSpend[0]!.costUsd / windowModelTotal : null;
 
     units.push({
       ...a,
@@ -243,6 +271,8 @@ export async function computeRealization(
       acceptance,
       taskType: classifyTaskType(a.subject),
       dominantModel,
+      dominantModelCostUsd,
+      dominantModelCostShare,
       funnel: scoreFunnel(verdicts),
     });
   }
@@ -279,7 +309,19 @@ export function realizationFromStore(
   opts: { project?: string; windowDays?: number; acceptanceThreshold?: number; survivalThreshold?: number } = {},
 ): RealizationReport {
   const rows = store.realizationUnitRows(opts.project);
-  const units = rows.map((r) => JSON.parse(r.unitJson) as WorkUnit);
+  // Snapshots persisted before per-model cost attribution existed carry neither
+  // field. Normalize the absence to an explicit null rather than leaving it
+  // `undefined`: a legacy unit's model attribution is genuinely unknown, and the
+  // model-comparison purity gate must exclude it instead of silently treating a
+  // missing share as a qualifying one.
+  const units = rows.map((r) => {
+    const u = JSON.parse(r.unitJson) as WorkUnit;
+    return {
+      ...u,
+      dominantModelCostUsd: u.dominantModelCostUsd ?? null,
+      dominantModelCostShare: u.dominantModelCostShare ?? null,
+    };
+  });
   const generatedAt = rows.length > 0 ? Math.max(...rows.map((r) => r.computedAtMs)) : Date.now();
   return rollupRealization(units, {
     generatedAt,
