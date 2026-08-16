@@ -421,6 +421,7 @@ function wu(
   cost: number,
   share: number | null = 1,
   modelCost: number | null = cost,
+  costStale = false,
 ): WorkUnit {
   // Deterministic ids: a random hash makes a failure impossible to reproduce.
   wuSeq += 1;
@@ -428,7 +429,7 @@ function wu(
     hash: `wu${wuSeq}`, tsEpochMs: 0, subject: '', linesAdded: 10, linesDeleted: 0, filesChanged: 1,
     windowStartMs: 0, windowEndMs: 0, attributedCostUsd: cost, attributedRequests: 1, attributedOutputTokens: 0, costPerHundredLines: null,
     ageDays: 30, maturing: false, survivalRatio: 1, reverted: false, hadProposal: false, acceptance: null,
-    taskType, dominantModel: model, dominantModelCostUsd: modelCost, dominantModelCostShare: share,
+    taskType, dominantModel: model, dominantModelCostUsd: modelCost, dominantModelCostShare: share, costStale,
     funnel: { realized, results: [{ gate: 'shipped', verdict: 'unknown', detail: '' }], reachedIndex: 0, reached: null, diedAt: null, diedAtIndex: null, passes: 0, fails: 0, unknowns: 0, instrumented: 0, realizationScore: 0 },
   } as WorkUnit;
 }

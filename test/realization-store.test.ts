@@ -48,6 +48,7 @@ test('store round-trip: rehydrated snapshots feed the SAME rollup (no parallel m
       maturing: u.maturing,
       realized: u.funnel.realized,
       unitJson: JSON.stringify(u),
+      costScope: 'window' as const,
     })),
   );
   const repB = realizationFromStore(b, { windowDays: 14 });

@@ -118,7 +118,7 @@ export async function cmdRealize(flags: Flags): Promise<void> {
   console.log(color(tty, C.bold, '  The Realization Standard — did AI spend become real outcomes?'));
   console.log(color(tty, C.gray, `  ${m.units} matured units (older than ${windowDays}d) · ${wiredGates} of ${GATE_LADDER.length} gates instrumented`));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
-  noteSource(tty, loaded.source, loaded.report.projectScoped);
+  noteSource(tty, loaded.source, loaded.report.projectScoped, loaded.report.costStaleUnits);
 
   if (m.units === 0) {
     console.log(color(tty, C.gray, `  No units older than ${windowDays}d yet — realization needs the window to elapse.`));
@@ -415,7 +415,7 @@ export async function cmdRoi(flags: Flags): Promise<void> {
   console.log(color(tty, C.bold, '  Return on Intelligence — how much you actually got from the AI'));
   console.log(color(tty, C.gray, `  ${Math.round(roi.coverage * 4)} of 4 value lenses instrumented · docs/RETURN-ON-INTELLIGENCE.md`));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
-  noteSource(tty, loaded.source, loaded.report.projectScoped);
+  noteSource(tty, loaded.source, loaded.report.projectScoped, loaded.report.costStaleUnits);
 
   const idx = roi.roiIndex;
   const iv = roi.roiInterval;
@@ -539,7 +539,7 @@ export async function cmdSaved(flags: Flags): Promise<void> {
   console.log('');
   console.log(color(tty, C.bold, `  Fiscus — time reclaimed · ${project}`));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
-  noteSource(tty, loaded.source, loaded.report.projectScoped);
+  noteSource(tty, loaded.source, loaded.report.projectScoped, loaded.report.costStaleUnits);
 
   if (rec.workWeeksSaved === null || rec.workWeeksRange === null) {
     console.log(color(tty, C.gray, '  Uninstrumented — needs realized work with a task baseline and measured AI time.'));
@@ -700,7 +700,7 @@ export async function cmdFrontier(flags: Flags): Promise<void> {
   console.log(color(tty, C.bold, '  The per-context frontier — what AI is worth it, for what'));
   console.log(color(tty, C.gray, '  RoI compared within like-for-like work · docs/RETURN-ON-INTELLIGENCE.md'));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
-  noteSource(tty, loaded.source, loaded.report.projectScoped);
+  noteSource(tty, loaded.source, loaded.report.projectScoped, loaded.report.costStaleUnits);
 
   console.log(color(tty, C.bold, '  By model'));
   console.log(color(tty, C.gray, '    model                        units   cost      realized   RoI'));

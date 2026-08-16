@@ -372,6 +372,10 @@ export function cmdReprice(flags: Flags): void {
     const after = [...byModel.values()].reduce((a, v) => a + v.after, 0);
 
     if (flags.json) {
+      // Write BEFORE serializing, so the payload can report what the reprice did
+      // to the stored realized-value snapshots rather than describing the request
+      // rows alone and leaving the snapshots' state to be discovered elsewhere.
+      const sync = flags.apply && updates.length ? store.applyRepricedCosts(updates) : null;
       console.log(JSON.stringify({
         applied: !!flags.apply, estimatedRows: rows.length, repriceable: updates.length,
         stillEstimated, totalBeforeUsd: before, totalAfterUsd: after,
@@ -382,8 +386,8 @@ export function cmdReprice(flags: Flags): void {
           note: 'Local list-price estimate only; never provider invoice, discount, tax, credit, or reconciliation.',
         } : null,
         byModel: [...byModel.entries()].map(([model, v]) => ({ model, rows: v.n, beforeUsd: v.before, afterUsd: v.after })),
+        realizationSync: sync,
       }, null, 2));
-      if (flags.apply && updates.length) store.applyRepricedCosts(updates);
       return;
     }
 
@@ -407,9 +411,21 @@ export function cmdReprice(flags: Flags): void {
       console.log('');
       console.log(`  Total                ${usd(before)} → ${usd(after)}  ${color(tty, after - before >= 0 ? C.red : C.green, (after - before >= 0 ? '+' : '') + usd(after - before))}`);
       if (flags.apply) {
-        store.applyRepricedCosts(updates);
+        const sync = store.applyRepricedCosts(updates);
         console.log(color(tty, C.green, `  ✓ Applied — ${num(updates.length)} rows re-costed, estimated flag cleared.`));
-        console.log(color(tty, C.gray, '  Stored realized-value snapshots keep their at-compute costs until the next realize/scan --setup.'));
+        if (sync.resynced) {
+          const delta = sync.costUsdAfter - sync.costUsdBefore;
+          console.log(
+            `  ✓ Re-attributed ${num(sync.resynced)} realized-value snapshot${sync.resynced === 1 ? ' on its' : 's on their'} ` +
+              `recorded basis  ${usd(sync.costUsdBefore)} → ${usd(sync.costUsdAfter)}  ` +
+              color(tty, delta >= 0 ? C.red : C.green, (delta >= 0 ? '+' : '') + usd(delta)),
+          );
+          console.log(color(tty, C.gray, '  Costs only — gate verdicts, maturity, and realized outcomes are unchanged by a price.'));
+        }
+        if (sync.unresolvable) {
+          console.log(color(tty, C.yellow, `  ! ${num(sync.unresolvable)} older snapshot${sync.unresolvable === 1 ? ' keeps its pre-reprice cost and is' : 's keep their pre-reprice costs and are'} marked stale.`));
+          console.log(color(tty, C.gray, '  They predate the recorded cost basis, so re-attributing them would guess. Re-run: fiscus realize'));
+        }
       } else {
         console.log(color(tty, C.gray, '  Dry run — nothing written. Apply with: fiscus reprice --apply'));
         console.log(color(tty, C.gray, '  Tip: refresh the card first (fiscus pricing --refresh) so unknown models resolve.'));

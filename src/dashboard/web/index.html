@@ -1132,8 +1132,12 @@ function renderValue(d) {
           // Surface the excluded units on the card itself: a sample that silently
           // shrank is indistinguishable from one that never had those units.
           const dropped = Number(m.unitsExcludedMixedAttribution || 0) + Number(m.unitsExcludedUnknownAttribution || 0);
+          const staleDropped = Number(m.unitsExcludedStalePricing || 0);
           const droppedNote = dropped > 0 ? ` · ${dropped} unit(s) excluded — window too mixed or unattributed to price a model` : '';
-          const evidence = `${Number(m.candidateUnits || 0)} vs ${Number(m.incumbentUnits || 0)} mature units · observed realization ${candidateRate}% vs ${incumbentRate}%${droppedNote}`;
+          // Kept separate from the attribution exclusions: those units could never
+          // price a model, these carry a price that has since been superseded.
+          const staleNote = staleDropped > 0 ? ` · ${staleDropped} unit(s) excluded — pre-reprice cost` : '';
+          const evidence = `${Number(m.candidateUnits || 0)} vs ${Number(m.incumbentUnits || 0)} mature units · observed realization ${candidateRate}% vs ${incumbentRate}%${droppedNote}${staleNote}`;
           const confounders = m.confounders || [];
           const confidenceNote = m.confidence === 'evidence_supported'
             ? 'anytime-valid outcome bounds separate'
@@ -1214,8 +1218,18 @@ function renderValue(d) {
         ? ' · <span style="color:var(--mint)">scoped to project</span>' + tip('This project\'s realized value is attributed only from spend tagged to it (native imports or tagged traffic) — never other projects\' concurrent spend.')
         : ' · <span style="color:var(--muted)">window-wide</span>' + tip('Spend here isn\'t tagged by project, so value is attributed across the whole time window. Import your tools (or tag traffic) to scope value to this project.'))
     : '';
+  // A reprice moves the request ledger's dollars. Snapshots it could re-attribute
+  // were brought along; ones written before the cost basis was recorded could not
+  // be, and still carry the old price. Say so on the same line that already
+  // discloses where these numbers came from, rather than letting this view and
+  // the spend view differ in silence.
+  const staleUnits = d.realization ? Number(d.realization.costStaleUnits || 0) : 0;
+  const staleLabel = staleUnits > 0
+    ? ' · <span style="color:var(--amber,#d98b32)">' + staleUnits + ' pre-reprice</span>' +
+      tip('A reprice re-costed the request ledger. ' + staleUnits + ' stored work unit(s) predate the recorded cost basis, so their dollars could not be re-attributed without guessing and are still the old ones. They are excluded from model comparison. Re-run <b>fiscus realize</b> to recompute them from the current ledger.')
+    : '';
   const srcLabel = (d.valueSource === 'store' ? ' · <span style="color:var(--gold)">stored snapshot</span>'
-    : d.valueSource === 'git' ? ' · <span style="color:var(--muted)">live · git</span>' : '') + scopeLabel;
+    : d.valueSource === 'git' ? ' · <span style="color:var(--muted)">live · git</span>' : '') + scopeLabel + staleLabel;
 
   const scalePane = idx != null
     ? `<div class="scalepane">

@@ -579,7 +579,7 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
             // same computation as the CLI so the two surfaces can't disagree.
             const matureOrdered = rep.units.filter((u) => !u.maturing).sort((a, b) => a.tsEpochMs - b.tsEpochMs);
             if (matureOrdered.length >= 10) drift = driftEProcess(matureOrdered.map((u) => u.funnel.realized));
-            realization = { matured: rep.matured, firstPassAcceptance: rep.firstPassAcceptance, proposalCoverage: rep.proposalCoverage, projectScoped: rep.projectScoped, units: rep.units };
+            realization = { matured: rep.matured, firstPassAcceptance: rep.firstPassAcceptance, proposalCoverage: rep.proposalCoverage, projectScoped: rep.projectScoped, costStaleUnits: rep.costStaleUnits, units: rep.units };
             // Baseline minutes, resolved exactly like the CLI (config override >
             // personal git history, shrunk toward a cited population prior >
             // population prior alone). `repo` is never empty — `safeRepo` falls back

@@ -449,6 +449,18 @@ before/after event instead of silently overwriting the estimate. Tool-reported
 and demo values are labelled separately. None of these labels claim
 provider-invoiced, discounted, credited, taxed, or reconciled cost.
 
+A reprice also moves the money that stored realized-value snapshots were built
+from, so `--apply` re-attributes those snapshots in the same transaction, on the
+basis each one recorded (its own project's spend, or the project-blind window
+sum). Only the dollars are recomputed — gate verdicts, maturity, and realized
+outcomes are independent of price and are never touched, so a reprice cannot
+change whether work realized. Snapshots written before that basis was recorded
+cannot be reproduced faithfully; rather than guess, they keep their original
+amounts, are marked as carrying pre-reprice costs on the CLI and the dashboard,
+and are excluded from cheaper-model comparison until `fiscus realize` recomputes
+them. Seeded demo units are neither: their costs are asserted by the seed, not
+summed from the ledger, so a ledger reprice leaves them alone.
+
 The dashboard's **Rate-card health** panel shows the active card separately
 from the historical, per-model evidence cohorts that produced the amounts in
 the selected window. It never merges different card revisions or match paths,

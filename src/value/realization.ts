@@ -114,6 +114,15 @@ export interface WorkUnit extends CommitAttribution {
    * spend was observed in the window.
    */
   dominantModelCostShare: number | null;
+  /**
+   * True when this unit was rehydrated from a snapshot whose dollars predate a
+   * reprice that touched its window and could not be re-attributed (its snapshot
+   * predates `cost_scope`, so the basis it used is unrecoverable). Its cost is a
+   * real observation of a superseded price, not a current one — disclosed rather
+   * than dropped, and excluded from model comparison. Always false on the live
+   * git path, which prices from the ledger as it stands.
+   */
+  costStale: boolean;
   funnel: FunnelOutcome;
 }
 
@@ -136,6 +145,11 @@ export interface RealizationReport {
   units: WorkUnit[];
   firstPassAcceptance: number | null;
   proposalCoverage: number; // units with a captured proposal / total units
+  // Units whose dollars predate a reprice and could not be re-attributed (their
+  // snapshot predates the recorded cost basis). Non-zero means this report's
+  // money numbers and the request ledger's totals are answering with different
+  // prices — surfaced here so no surface has to imply agreement it does not have.
+  costStaleUnits: number;
   matured: {
     units: number;
     realizedUnits: number;
@@ -273,6 +287,7 @@ export async function computeRealization(
       dominantModel,
       dominantModelCostUsd,
       dominantModelCostShare,
+      costStale: false, // priced from the ledger as it stands right now
       funnel: scoreFunnel(verdicts),
     });
   }
@@ -290,6 +305,10 @@ export async function computeRealization(
         maturing: u.maturing,
         realized: u.funnel.realized,
         unitJson: JSON.stringify(u),
+        // Record WHICH spend basis produced these dollars, so a later reprice can
+        // re-attribute the snapshot the same way instead of guessing between the
+        // project-scoped and project-blind sums.
+        costScope: projectScoped ? 'project' : 'window',
       })),
     );
   }
@@ -320,6 +339,10 @@ export function realizationFromStore(
       ...u,
       dominantModelCostUsd: u.dominantModelCostUsd ?? null,
       dominantModelCostShare: u.dominantModelCostShare ?? null,
+      // Staleness lives on the stored ROW, not in the serialized unit: a reprice
+      // changes whether the snapshot's dollars are current without changing the
+      // work it describes.
+      costStale: r.costStale,
     };
   });
   const generatedAt = rows.length > 0 ? Math.max(...rows.map((r) => r.computedAtMs)) : Date.now();
@@ -561,6 +584,7 @@ export function rollupRealization(
     units,
     firstPassAcceptance,
     proposalCoverage: units.length > 0 ? withProposal.length / units.length : 0,
+    costStaleUnits: units.filter((u) => u.costStale).length,
     matured: {
       units: mature.length,
       realizedUnits: realizedUnits.length,

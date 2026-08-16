@@ -57,7 +57,7 @@ test('store.bySourceWithDepth: depth is read from real signals (proposals → ac
   store.insertRequest(req({ source: 'cursor', sessionId: null, project: 'pRealized', costUsd: 2 }));
   store.saveRealizationUnits([{
     commitHash: 'c1', project: 'pRealized', tsEpochMs: 1000, computedAtMs: 1000,
-    attributedCostUsd: 1, maturing: false, realized: true, unitJson: '{}',
+    attributedCostUsd: 1, maturing: false, realized: true, unitJson: '{}', costScope: 'project',
   }]);
   // direct: untagged traffic, spend only.
   store.insertRequest(req({ source: null, sessionId: null, project: 'pA', costUsd: 1 }));
@@ -186,8 +186,8 @@ test('project aliases: mapping stays flat — chaining re-points, self-alias thr
 test('project aliases: realization units and projects list follow the canonical label', () => {
   const store = new Store(':memory:');
   store.saveRealizationUnits([
-    { commitHash: 'c1', project: 'aegisflow', tsEpochMs: 1000, computedAtMs: 1000, attributedCostUsd: 1, maturing: false, realized: true, unitJson: '{}' },
-    { commitHash: 'c2', project: 'aegisflow-ts', tsEpochMs: 2000, computedAtMs: 2000, attributedCostUsd: 2, maturing: false, realized: false, unitJson: '{}' },
+    { commitHash: 'c1', project: 'aegisflow', tsEpochMs: 1000, computedAtMs: 1000, attributedCostUsd: 1, maturing: false, realized: true, unitJson: '{}', costScope: 'project' },
+    { commitHash: 'c2', project: 'aegisflow-ts', tsEpochMs: 2000, computedAtMs: 2000, attributedCostUsd: 2, maturing: false, realized: false, unitJson: '{}', costScope: 'project' },
   ]);
   store.setProjectAlias('aegisflow-ts', 'aegisflow');
   assert.equal(store.countRealizationUnits('aegisflow'), 2);

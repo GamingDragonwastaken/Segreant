@@ -103,7 +103,7 @@ test('bySourceWithDepth: an aliased project still credits its source with outcom
   store.setProjectAlias('aegisflow-ts', 'aegisflow');
   // A realization snapshot stored under the canonical label.
   store.saveRealizationUnits([
-    { commitHash: 'h1', project: 'aegisflow', tsEpochMs: 1000, computedAtMs: 1000, attributedCostUsd: 1, maturing: false, realized: true, unitJson: '{}' },
+    { commitHash: 'h1', project: 'aegisflow', tsEpochMs: 1000, computedAtMs: 1000, attributedCostUsd: 1, maturing: false, realized: true, unitJson: '{}', costScope: 'project' },
   ]);
   const src = store.bySourceWithDepth(0, 5000).find((s) => s.label === 'claude-code');
   assert.ok(src, 'the source is present');

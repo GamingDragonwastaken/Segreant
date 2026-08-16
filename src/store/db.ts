@@ -345,6 +345,36 @@ export interface RealizationUnitRecord {
   maturing: boolean;
   realized: boolean;
   unitJson: string; // serialized WorkUnit (funnel + attribution + taskType + dominantModel)
+  /**
+   * Which spend basis produced this snapshot's dollars: `project` when the
+   * window was scoped to the unit's own project family, `window` when it was the
+   * project-blind sum (the classic proxy default). Recorded so a later reprice
+   * can re-attribute on the SAME basis — recomputing a project-scoped unit as a
+   * window sum (or the reverse) would move its cost for a reason that has
+   * nothing to do with the price change.
+   */
+  costScope: CostScope;
+}
+
+/**
+ * How a persisted unit's dollars were attributed.
+ *
+ * `project` and `window` are the two real bases and are the only ones a reprice
+ * can reproduce. `synthetic_demo` marks seeded units whose cost is asserted
+ * rather than summed from any window — no re-attribution reproduces them, and a
+ * reprice of the ledger does not make them wrong, because the ledger was never
+ * their source. `legacy_unknown` predates the column: the basis is unrecoverable,
+ * so such a unit is marked stale but never recomputed.
+ */
+export type CostScope = 'project' | 'window' | 'synthetic_demo' | 'legacy_unknown';
+
+/** What a reprice did to the persisted realized-value snapshots. */
+export interface RealizationCostSync {
+  markedStale: number; // units whose window contained a repriced request
+  resynced: number; // of those, re-attributed on their recorded basis
+  unresolvable: number; // stale but pre-dating `cost_scope`, so left stale on purpose
+  costUsdBefore: number; // Σ attributed cost of the resynced units, before
+  costUsdAfter: number; // …and after
 }
 
 const SCHEMA = `
@@ -512,7 +542,9 @@ CREATE TABLE IF NOT EXISTS realization_units (
   attributed_cost_usd REAL NOT NULL DEFAULT 0,
   maturing       INTEGER NOT NULL DEFAULT 0,
   realized       INTEGER NOT NULL DEFAULT 0,
-  unit_json      TEXT NOT NULL
+  unit_json      TEXT NOT NULL,
+  cost_scope     TEXT NOT NULL DEFAULT 'legacy_unknown',
+  cost_stale     INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_realization_project ON realization_units(project);
@@ -884,6 +916,23 @@ export class Store {
       // it stays `legacy_unknown`. Guessing here would manufacture exactly the
       // certainty this column exists to remove. New rows are stamped at insert.
       this.db.prepare("ALTER TABLE requests ADD COLUMN attribution_basis TEXT NOT NULL DEFAULT 'legacy_unknown'").run();
+    }
+    const unitCols = this.db.prepare('PRAGMA table_info(realization_units)').all() as Array<{ name: string }>;
+    if (!unitCols.some((c) => c.name === 'cost_scope')) {
+      // No backfill. A snapshot written before this column does not record
+      // whether its dollars came from a project-scoped or a project-blind window,
+      // and the answer cannot be recovered — `hasProjectSpend` is evaluated at
+      // compute time and may since have flipped. Re-attributing it on a guessed
+      // basis would move real money for a reason unrelated to any price change,
+      // so such units stay `legacy_unknown` and are excluded from resync.
+      this.db.prepare("ALTER TABLE realization_units ADD COLUMN cost_scope TEXT NOT NULL DEFAULT 'legacy_unknown'").run();
+    }
+    if (!unitCols.some((c) => c.name === 'cost_stale')) {
+      // Pre-existing snapshots are NOT marked stale: a reprice that happened
+      // before this column existed left no record, and asserting staleness we
+      // cannot prove would be as invented as asserting freshness. Only reprices
+      // from here on mark units.
+      this.db.prepare('ALTER TABLE realization_units ADD COLUMN cost_stale INTEGER NOT NULL DEFAULT 0').run();
     }
     const signalCols = this.db.prepare('PRAGMA table_info(gate_signals)').all() as Array<{ name: string }>;
     if (!signalCols.some((c) => c.name === 'evidence_source')) {
@@ -1654,6 +1703,18 @@ export class Store {
       .run(c.commitHash, c.project, c.tsEpochMs, c.linesAdded, c.linesDeleted, c.filesChanged, c.subject);
   }
 
+  /**
+   * Record what one commit's window absorbed, as observed at compute time.
+   *
+   * `commit_attribution` has no reader today — it is a written audit trail, not a
+   * serving surface, and it is deliberately NOT re-attributed by a reprice: the
+   * row states what the window cost when it was computed, and the reprice audit
+   * (`request_price_events`) states what changed since. The realized-value
+   * snapshots in `realization_units`, which ARE served, carry a `cost_scope` and
+   * are resynced instead. If this table ever gains a reader, it needs the same
+   * scope column first — otherwise it would serve pre-reprice dollars with
+   * nothing marking them.
+   */
   saveAttribution(a: {
     commitHash: string;
     windowStartMs: number;
@@ -1866,12 +1927,14 @@ export class Store {
   saveRealizationUnits(records: RealizationUnitRecord[]): void {
     const stmt = this.db.prepare(
       `INSERT INTO realization_units
-         (commit_hash, project, ts_epoch_ms, computed_at_ms, attributed_cost_usd, maturing, realized, unit_json)
-       VALUES (?,?,?,?,?,?,?,?)
+         (commit_hash, project, ts_epoch_ms, computed_at_ms, attributed_cost_usd, maturing, realized, unit_json,
+          cost_scope, cost_stale)
+       VALUES (?,?,?,?,?,?,?,?,?,0)
        ON CONFLICT(commit_hash) DO UPDATE SET
          project=excluded.project, ts_epoch_ms=excluded.ts_epoch_ms, computed_at_ms=excluded.computed_at_ms,
          attributed_cost_usd=excluded.attributed_cost_usd, maturing=excluded.maturing,
-         realized=excluded.realized, unit_json=excluded.unit_json`,
+         realized=excluded.realized, unit_json=excluded.unit_json,
+         cost_scope=excluded.cost_scope, cost_stale=0`,
     );
     for (const r of records) {
       stmt.run(
@@ -1883,19 +1946,30 @@ export class Store {
         r.maturing ? 1 : 0,
         r.realized ? 1 : 0,
         r.unitJson,
+        r.costScope,
       );
     }
   }
 
-  /** Rehydrate stored work-unit snapshots (newest commit first), optionally one project. */
-  realizationUnitRows(project?: string): Array<{ unitJson: string; computedAtMs: number }> {
+  /**
+   * Rehydrate stored work-unit snapshots (newest commit first), optionally one
+   * project. `costStale` travels with the row rather than inside `unitJson`: a
+   * reprice changes whether a snapshot's dollars are current WITHOUT changing the
+   * unit it describes, so it is a property of the stored record, not of the work.
+   */
+  realizationUnitRows(project?: string): Array<{ unitJson: string; computedAtMs: number; costStale: boolean }> {
     const fam = project ? this.familyFilter('project', project) : null;
     const sql =
-      `SELECT unit_json AS unitJson, computed_at_ms AS computedAtMs FROM realization_units` +
+      `SELECT unit_json AS unitJson, computed_at_ms AS computedAtMs, cost_stale AS costStale FROM realization_units` +
       (fam ? ` WHERE ${fam.sql}` : ``) +
       ` ORDER BY ts_epoch_ms DESC`;
     const stmt = this.db.prepare(sql);
-    return (fam ? stmt.all(...fam.args) : stmt.all()) as Array<{ unitJson: string; computedAtMs: number }>;
+    const rows = (fam ? stmt.all(...fam.args) : stmt.all()) as Array<{
+      unitJson: string;
+      computedAtMs: number;
+      costStale: number;
+    }>;
+    return rows.map((r) => ({ unitJson: r.unitJson, computedAtMs: r.computedAtMs, costStale: Boolean(r.costStale) }));
   }
 
   /** How many stored realization units exist (optionally scoped to one project). */
@@ -1956,10 +2030,23 @@ export class Store {
     }>;
   }
 
-  /** Re-cost estimated rows in one transaction and retain the previous amount/evidence as an audit event. */
-  applyRepricedCosts(updates: RepriceUpdate[], appliedAtMs = Date.now()): void {
+  /**
+   * Re-cost estimated rows in one transaction and retain the previous
+   * amount/evidence as an audit event.
+   *
+   * A reprice moves money that persisted realized-value snapshots were already
+   * built from, so the request ledger and `realization_units` would otherwise
+   * disagree: `/api/overview` would show the corrected spend while `/api/value`
+   * served RoI, realized value, and per-model trial prices computed from the old
+   * one, with nothing on either surface saying which. The snapshots are therefore
+   * re-attributed HERE, inside the same transaction, on each unit's own recorded
+   * basis — the same rule applied to corrected prices, never a new rule. Units
+   * whose basis predates `cost_scope` cannot be reproduced faithfully, so they are
+   * left marked stale for disclosure instead of being recomputed on a guess.
+   */
+  applyRepricedCosts(updates: RepriceUpdate[], appliedAtMs = Date.now()): RealizationCostSync {
     const prior = this.db.prepare(
-      `SELECT cost_usd AS costUsd, estimated,
+      `SELECT cost_usd AS costUsd, estimated, ts_epoch_ms AS tsEpochMs, project,
               cost_basis AS CostBasis, rate_card_sha256 AS RateCardSha256,
               rate_card_source_kind AS RateCardSourceKind, rate_match_kind AS RateMatchKind,
               rate_match_provider AS RateMatchProvider, rate_match_model AS RateMatchModel
@@ -1981,6 +2068,7 @@ export class Store {
          new_rate_card_source_kind, new_rate_match_kind, new_rate_match_provider, new_rate_match_model
        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     );
+    const touched: Array<{ tsEpochMs: number; project: string }> = [];
     this.runScript('BEGIN');
     try {
       for (const u of updates) {
@@ -2005,12 +2093,125 @@ export class Store {
           u.costUsd, 0, u.pricing.costBasis, u.pricing.rateCardSha256,
           u.pricing.rateCardSourceKind, u.pricing.rateMatchKind, u.pricing.rateMatchProvider, u.pricing.rateMatchModel,
         );
+        touched.push({ tsEpochMs: Number(old.tsEpochMs), project: String(old.project) });
       }
+      const sync = this.syncRealizationCosts(touched);
       this.runScript('COMMIT');
+      return sync;
     } catch (e) {
       this.runScript('ROLLBACK');
       throw e;
     }
+  }
+
+  /**
+   * Bring persisted realized-value snapshots back in step with repriced requests.
+   *
+   * A unit is affected when one of the repriced requests falls inside its
+   * attribution window — the same half-open `[windowStartMs, windowEndMs)` test
+   * `summary()` applies, so a request on a boundary is counted by exactly one
+   * side here and there. A `project`-scoped unit absorbed only its own project
+   * family's spend, so a repriced request from elsewhere leaves it untouched; a
+   * `window`-scoped unit took the project-blind sum and is affected by any of
+   * them. A `legacy_unknown` unit is treated as affected either way (the
+   * conservative direction: it may be wrong, and saying so beats a silent guess)
+   * but is never recomputed.
+   *
+   * Recomputation re-runs only the MONEY half of attribution. Gate verdicts,
+   * survival, acceptance, maturity, and the realized flag are all independent of
+   * price and are left exactly as computed — this is a re-attribution, not a
+   * re-scoring, so a reprice can never change whether work realized.
+   *
+   * Caller must already be inside a transaction.
+   */
+  private syncRealizationCosts(repriced: Array<{ tsEpochMs: number; project: string }>): RealizationCostSync {
+    const empty: RealizationCostSync = { markedStale: 0, resynced: 0, unresolvable: 0, costUsdBefore: 0, costUsdAfter: 0 };
+    if (repriced.length === 0) return empty;
+
+    const rows = this.db
+      .prepare(
+        `SELECT commit_hash AS commitHash, project, cost_scope AS costScope,
+                attributed_cost_usd AS attributedCostUsd, unit_json AS unitJson
+         FROM realization_units`,
+      )
+      .all() as Array<{ commitHash: string; project: string; costScope: string; attributedCostUsd: number; unitJson: string }>;
+    if (rows.length === 0) return empty;
+
+    // Canonicalize once: a unit and a request can name the same project through
+    // different aliases, and project scoping is defined over the alias family.
+    const canonical = new Map<string, string>();
+    const canon = (name: string): string => {
+      const hit = canonical.get(name);
+      if (hit !== undefined) return hit;
+      const c = this.canonicalProject(name);
+      canonical.set(name, c);
+      return c;
+    };
+    const priced = repriced.map((r) => ({ tsEpochMs: r.tsEpochMs, project: canon(r.project) }));
+
+    const markStale = this.db.prepare(`UPDATE realization_units SET cost_stale = 1 WHERE commit_hash = ?`);
+    const writeBack = this.db.prepare(
+      `UPDATE realization_units SET attributed_cost_usd = ?, unit_json = ?, cost_stale = 0 WHERE commit_hash = ?`,
+    );
+
+    const out: RealizationCostSync = { ...empty };
+    for (const row of rows) {
+      let unit: Record<string, unknown>;
+      try {
+        unit = JSON.parse(row.unitJson) as Record<string, unknown>;
+      } catch {
+        continue; // an unparseable snapshot is not something to rewrite blind
+      }
+      const startMs = Number(unit.windowStartMs);
+      const endMs = Number(unit.windowEndMs);
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) continue;
+      const scope: CostScope =
+        row.costScope === 'project' || row.costScope === 'window' || row.costScope === 'synthetic_demo'
+          ? row.costScope
+          : 'legacy_unknown';
+      // A synthetic unit's dollars were asserted, never summed from the ledger, so
+      // repricing the ledger cannot have staled them. Skipped rather than marked.
+      if (scope === 'synthetic_demo') continue;
+      const unitProject = canon(row.project);
+      const affected = priced.some(
+        (p) => p.tsEpochMs >= startMs && p.tsEpochMs < endMs && (scope !== 'project' || p.project === unitProject),
+      );
+      if (!affected) continue;
+
+      out.markedStale += 1;
+      if (scope === 'legacy_unknown') {
+        markStale.run(row.commitHash);
+        out.unresolvable += 1;
+        continue;
+      }
+
+      const scoped = scope === 'project' ? row.project : undefined;
+      const spend = this.summary(startMs, endMs, scoped);
+      const modelSpend = this.byModel(startMs, endMs, scoped);
+      const windowModelTotal = modelSpend.reduce((s, m) => s + m.costUsd, 0);
+      const totalLines = Number(unit.linesAdded ?? 0) + Number(unit.linesDeleted ?? 0);
+
+      unit.attributedCostUsd = spend.costUsd;
+      unit.attributedRequests = spend.requests;
+      unit.attributedOutputTokens = spend.outputTokens;
+      unit.costPerHundredLines = totalLines > 0 ? (spend.costUsd / totalLines) * 100 : null;
+      unit.dominantModel = modelSpend.length > 0 ? modelSpend[0]!.label : null;
+      unit.dominantModelCostUsd = modelSpend.length > 0 ? modelSpend[0]!.costUsd : null;
+      unit.dominantModelCostShare =
+        modelSpend.length > 0 && windowModelTotal > 0 ? modelSpend[0]!.costUsd / windowModelTotal : null;
+
+      writeBack.run(spend.costUsd, JSON.stringify(unit), row.commitHash);
+      out.resynced += 1;
+      out.costUsdBefore += row.attributedCostUsd;
+      out.costUsdAfter += spend.costUsd;
+    }
+    return out;
+  }
+
+  /** How many persisted snapshots are carrying pre-reprice dollars. */
+  countStaleRealizationUnits(): number {
+    const row = this.db.prepare(`SELECT COUNT(*) AS n FROM realization_units WHERE cost_stale = 1`).get() as { n: number };
+    return row.n;
   }
 
   /** Append-only price changes for one request, oldest first. */

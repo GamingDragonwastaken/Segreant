@@ -56,7 +56,16 @@ export function printNotAGitRepo(repo: string): void {
  * native imports or tagged traffic) or fell back to the project-blind window sum
  * (untagged proxy). Discloses the basis so the number is never silently mixed.
  */
-export function noteSource(tty: boolean, source: 'git' | 'store', projectScoped?: boolean): void {
+export function noteSource(tty: boolean, source: 'git' | 'store', projectScoped?: boolean, costStaleUnits = 0): void {
+  if (costStaleUnits > 0) {
+    // A reprice re-costed the request ledger. These units predate the recorded
+    // cost basis, so they could not be re-attributed without guessing which basis
+    // produced them — they still carry the old dollars, and this view and
+    // `fiscus spend` will not agree until they are recomputed.
+    console.log(
+      color(tty, C.yellow, `  ● ${costStaleUnits} unit(s) carry pre-reprice costs — excluded from model comparison. Recompute with: fiscus realize`),
+    );
+  }
   if (source === 'store') {
     console.log(color(tty, C.gray, '  ● stored realization snapshot — no live repo attached; figures are as of the last realize run.'));
     return;

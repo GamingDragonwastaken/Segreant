@@ -397,6 +397,7 @@ function makeRealizationUnit(ctx: Ctx, now: number, spec: UnitSpec, hash: string
     // share is measured from the ledger rather than asserted.
     dominantModelCostUsd: spec.costUsd,
     dominantModelCostShare: 1,
+    costStale: false, // seeded fresh; the demo has never been repriced
     funnel: scoreFunnel(verdicts),
   };
 }
@@ -452,6 +453,12 @@ function seedRealizationUnits(ctx: Ctx, now: number): number {
       maturing: u.maturing,
       realized: u.funnel.realized,
       unitJson: JSON.stringify(u),
+      // A seeded unit's cost is ASSERTED (`spec.costUsd`), not summed from the
+      // window — seedUnitTraffic writes illustrative traffic, not the exact
+      // dollars. So no re-attribution can reproduce these numbers, and claiming a
+      // project or window basis would invite a reprice to silently rewrite the
+      // demo from traffic that was never its source. Labelled for what it is.
+      costScope: 'synthetic_demo' as const,
     };
   });
   ctx.store.saveRealizationUnits(records);

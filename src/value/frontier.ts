@@ -71,6 +71,12 @@ export interface ModelSwitchRecommendation {
   /** Units dropped because no model attribution was recorded (e.g. legacy snapshots). */
   unitsExcludedUnknownAttribution: number;
   /**
+   * Units dropped because their snapshot carries pre-reprice dollars. A model
+   * comparison is a price difference; a superseded price on one side would move
+   * the headroom for a reason that has nothing to do with the models.
+   */
+  unitsExcludedStalePricing: number;
+  /**
    * Reasons this comparison cannot isolate the model even if the outcome
    * statistics separate. Non-empty always caps `confidence` at `trial`.
    */
@@ -215,6 +221,22 @@ export function computeFrontier(units: WorkUnit[]): FrontierReport {
  */
 const MIN_DOMINANT_COST_SHARE = 0.8;
 
+/**
+ * Can this unit's dollars be charged to one model at all? It needs a recorded
+ * model attribution, a dominant share above the purity bar, and a price that has
+ * not been superseded by a reprice. Used both to count how many task types could
+ * produce a comparison (the Bonferroni denominator) and to build the cells, so
+ * the correction is split across exactly the comparisons that can happen.
+ */
+function isPriceable(u: WorkUnit): boolean {
+  return (
+    !u.costStale &&
+    u.dominantModelCostShare !== null &&
+    u.dominantModelCostUsd !== null &&
+    u.dominantModelCostShare >= MIN_DOMINANT_COST_SHARE
+  );
+}
+
 /** A model-vs-model cell priced by the model's OWN spend, not the window total. */
 interface SwitchCell {
   model: string;
@@ -294,12 +316,7 @@ function buildModelSwitchRecommendations(mature: WorkUnit[]): ModelSwitchRecomme
   const eligibleComparisons = Math.max(
     1,
     taskGroups.filter(([, units]) => {
-      const attributable = units.filter(
-        (u) =>
-          u.dominantModelCostShare !== null &&
-          u.dominantModelCostUsd !== null &&
-          u.dominantModelCostShare >= MIN_DOMINANT_COST_SHARE,
-      );
+      const attributable = units.filter(isPriceable);
       const models = new Set(attributable.map((u) => u.dominantModel ?? 'unattributed'));
       models.delete('unattributed');
       return models.size >= 2;
@@ -310,20 +327,19 @@ function buildModelSwitchRecommendations(mature: WorkUnit[]): ModelSwitchRecomme
 
   for (const [taskType, units] of taskGroups) {
     // Partition before pricing so the exclusions can be reported rather than
-    // silently shrinking the sample.
-    const unknownAttribution = units.filter((u) => u.dominantModelCostShare === null || u.dominantModelCostUsd === null);
-    const mixedAttribution = units.filter(
+    // silently shrinking the sample. Stale pricing is checked FIRST so a unit is
+    // counted under exactly one reason — a superseded price is why it is out,
+    // whatever its attribution share happens to say.
+    const stalePricing = units.filter((u) => u.costStale);
+    const priced = units.filter((u) => !u.costStale);
+    const unknownAttribution = priced.filter((u) => u.dominantModelCostShare === null || u.dominantModelCostUsd === null);
+    const mixedAttribution = priced.filter(
       (u) =>
         u.dominantModelCostShare !== null &&
         u.dominantModelCostUsd !== null &&
         u.dominantModelCostShare < MIN_DOMINANT_COST_SHARE,
     );
-    const attributable = units.filter(
-      (u) =>
-        u.dominantModelCostShare !== null &&
-        u.dominantModelCostUsd !== null &&
-        u.dominantModelCostShare >= MIN_DOMINANT_COST_SHARE,
-    );
+    const attributable = priced.filter(isPriceable);
 
     const cells = [...groupBy(attributable, (u) => u.dominantModel ?? 'unattributed')]
       .map(([model, grouped]) => makeSwitchCell(model, grouped))
@@ -432,6 +448,7 @@ function buildModelSwitchRecommendations(mature: WorkUnit[]): ModelSwitchRecomme
       minimumDominantCostShare: MIN_DOMINANT_COST_SHARE,
       unitsExcludedMixedAttribution: mixedAttribution.length,
       unitsExcludedUnknownAttribution: unknownAttribution.length,
+      unitsExcludedStalePricing: stalePricing.length,
       confounders,
       assumptions: [...MODEL_SWITCH_ASSUMPTIONS],
       candidateMedianUnitLines: candidate.medianUnitLines,
