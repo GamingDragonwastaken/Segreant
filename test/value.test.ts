@@ -532,6 +532,35 @@ test('model switch: excluded units are counted and reported, not silently droppe
   assert.equal(trial!.minimumDominantCostShare, 0.8, 'the exclusion threshold is disclosed, not hidden');
 });
 
+test('model switch: a perfect 3-unit streak is NOT evidence — the separation must survive one flipped outcome', () => {
+  // 3/3 candidate vs 2/40 incumbent: the anytime-valid bounds genuinely separate
+  // (0.2500 > 0.2339), but flipping one candidate success collapses it. Three
+  // commits from one afternoon must not read as EVIDENCE.
+  const units: WorkUnit[] = [
+    ...Array.from({ length: 3 }, () => wu('feature', 'claude-haiku-4-5', true, 1)),
+    ...Array.from({ length: 2 }, () => wu('feature', 'claude-opus-4-8', true, 4)),
+    ...Array.from({ length: 38 }, () => wu('feature', 'claude-opus-4-8', false, 4)),
+  ];
+  const trial = computeFrontier(units).modelSwitches.find((r) => r.taskType === 'feature');
+  assert.ok(trial);
+  assert.equal(trial!.candidateModel, 'claude-haiku-4-5');
+  assert.equal(trial!.confidence, 'trial', 'a conclusion resting on one observation is not evidence');
+  assert.match(trial!.rationale, /does not survive a single flipped outcome/);
+});
+
+test('model switch: a large, robust separation IS evidence-supported', () => {
+  // 8/8 candidate vs 2/40 incumbent survives a flip on each side.
+  const units: WorkUnit[] = [
+    ...Array.from({ length: 8 }, () => wu('feature', 'claude-haiku-4-5', true, 1)),
+    ...Array.from({ length: 2 }, () => wu('feature', 'claude-opus-4-8', true, 4)),
+    ...Array.from({ length: 38 }, () => wu('feature', 'claude-opus-4-8', false, 4)),
+  ];
+  const trial = computeFrontier(units).modelSwitches.find((r) => r.taskType === 'feature');
+  assert.ok(trial);
+  assert.equal(trial!.confidence, 'evidence_supported');
+  assert.match(trial!.rationale, /still does if one outcome flips/);
+});
+
 test('model switch: does not compare across different task types', () => {
   // Cheap model only ever did fixes; expensive model only ever did features.
   const units: WorkUnit[] = [

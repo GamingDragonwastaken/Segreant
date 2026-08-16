@@ -51,7 +51,12 @@ export interface ModelSwitchRecommendation {
   /** Savings across the incumbent's observed units at the candidate's historical rate. */
   historicalEquivalentHeadroomUsd: number;
   historicalHeadroomPercent: number;
-  /** A trial preserves the observed rate but its anytime-valid intervals still overlap. */
+  /**
+   * `evidence_supported` requires the anytime-valid bounds to separate AND the
+   * separation to survive one outcome flipping the wrong way on each side.
+   * Everything else — overlapping bounds, or a separation that hinges on a single
+   * observation — is a `trial`.
+   */
   confidence: 'trial' | 'evidence_supported';
   /**
    * How the per-unit costs above were priced. `dominant_model_attributed` means
@@ -184,6 +189,8 @@ const MIN_DOMINANT_COST_SHARE = 0.8;
 interface SwitchCell {
   model: string;
   units: number;
+  /** Realized-outcome count — kept as a raw count so the interval math never round-trips through a rate. */
+  realized: number;
   /** Sum of the dominant model's own spend across this cell's units. */
   modelCostUsd: number;
   /** Per-unit cost on the model-attributed basis. */
@@ -197,6 +204,7 @@ function makeSwitchCell(model: string, units: WorkUnit[]): SwitchCell {
   return {
     model,
     units: units.length,
+    realized,
     modelCostUsd,
     costPerUnit: units.length > 0 ? modelCostUsd / units.length : 0,
     realizationRate: units.length > 0 ? realized / units.length : 0,
@@ -254,19 +262,45 @@ function buildModelSwitchRecommendations(mature: WorkUnit[]): ModelSwitchRecomme
       .sort((a, b) => a.costPerUnit - b.costPerUnit || b.realizationRate - a.realizationRate)[0];
     if (!candidate) continue;
 
-    const candidateCs = anytimeRateInterval(Math.round(candidate.realizationRate * candidate.units), candidate.units, { level: 0.95 });
-    const incumbentCs = anytimeRateInterval(Math.round(incumbent.realizationRate * incumbent.units), incumbent.units, { level: 0.95 });
-    const confidence = candidateCs.low > incumbentCs.high ? 'evidence_supported' : 'trial';
+    const candidateCs = anytimeRateInterval(candidate.realized, candidate.units, { level: 0.95 });
+    const incumbentCs = anytimeRateInterval(incumbent.realized, incumbent.units, { level: 0.95 });
+    const separates = candidateCs.low > incumbentCs.high;
+    /**
+     * Separation alone is not enough to call something evidence.
+     *
+     * A 3-of-3 candidate produces a lower bound of 0.25, which clears the upper
+     * bound of a 2-of-40 incumbent — so three commits from one afternoon would be
+     * labelled EVIDENCE. The interval math is sound, but the conclusion rests on a
+     * single observation, and the surrounding pipeline already weakens the
+     * confidence sequence's guarantee (the pair is chosen by searching on the very
+     * outcome being tested, the sample slides rather than accumulates, and a past
+     * unit's realized verdict can change on re-run).
+     *
+     * So require the separation to survive one outcome flipping the wrong way on
+     * each side: one candidate success becomes a failure, one incumbent failure
+     * becomes a success. This is a sensitivity check, not an arbitrary minimum
+     * sample — it scales with how close the call already is, and it is what makes
+     * the doc-comment intent above ("three mature units is still thin evidence")
+     * true in the code rather than only in prose.
+     */
+    const flippedCandidateLow = anytimeRateInterval(Math.max(0, candidate.realized - 1), candidate.units, { level: 0.95 }).low;
+    const flippedIncumbentHigh = anytimeRateInterval(Math.min(incumbent.units, incumbent.realized + 1), incumbent.units, { level: 0.95 }).high;
+    const survivesOneFlip = flippedCandidateLow > flippedIncumbentHigh;
+    const confidence = separates && survivesOneFlip ? 'evidence_supported' : 'trial';
     const savingsPerUnitUsd = incumbent.costPerUnit - candidate.costPerUnit;
     const historicalEquivalentHeadroomUsd = savingsPerUnitUsd * incumbent.units;
     // Percent of the incumbent MODEL's own attributed spend — the same basis the
     // headroom dollars were computed on, so the ratio stays internally consistent.
     const historicalHeadroomPercent =
       incumbent.modelCostUsd > 0 ? historicalEquivalentHeadroomUsd / incumbent.modelCostUsd : 0;
+    // A trial now arises two different ways, and saying "the intervals overlap"
+    // when they in fact separated would be a false rationale.
     const confidenceText =
       confidence === 'evidence_supported'
-        ? "the candidate's anytime-valid lower outcome bound exceeds the incumbent's upper bound"
-        : `observed outcome is no lower, but the anytime-valid intervals overlap across ${candidate.units + incumbent.units} units`;
+        ? "the candidate's anytime-valid lower outcome bound exceeds the incumbent's upper bound, and still does if one outcome flips either way"
+        : separates
+          ? `the anytime-valid bounds separate, but the separation does not survive a single flipped outcome across ${candidate.units + incumbent.units} units`
+          : `observed outcome is no lower, but the anytime-valid intervals overlap across ${candidate.units + incumbent.units} units`;
 
     recs.push({
       taskType,
