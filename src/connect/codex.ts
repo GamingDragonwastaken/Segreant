@@ -19,7 +19,7 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type { Store, RequestRow } from '../store/db.ts';
 import { computeCost, unpricedPricingEvidence, type Provider } from '../cost/pricing.ts';
-import { projectKey } from '../value/characterization.ts';
+import { projectKeyWithBasis, type AttributionBasis } from '../value/characterization.ts';
 import { type ImportSummary, type ImportOptions, emptyImportSummary, recordInsert } from './importShared.ts';
 
 /** Codex home: ~/.codex (override with CODEX_HOME). null = not installed. */
@@ -81,6 +81,8 @@ export async function parseCodexRollout(file: string): Promise<
     provider: string;
     model: string;
     project: string;
+    /** Whether that project came from a real recorded cwd or the tool-name fallback. */
+    attributionBasis: AttributionBasis;
     cwd: string | null;
     inputTokens: number;
     outputTokens: number;
@@ -93,12 +95,15 @@ export async function parseCodexRollout(file: string): Promise<
   let provider = 'openai';
   let model = 'gpt-5';
   let project = 'codex';
+  // A rollout that never emits a cwd keeps the tool-name placeholder, so the
+  // basis starts as a fallback and is upgraded only when a real path arrives.
+  let attributionBasis: AttributionBasis = 'tool_log_fallback';
   let cwd: string | null = null;
   let ordinal = 0;
   let prev: TokenTotals = { input: 0, cachedInput: 0, output: 0, reasoning: 0 };
   const rows: Awaited<ReturnType<typeof parseCodexRollout>> = [];
 
-  const projFromCwd = (cwd: string): string => projectKey(cwd, 'codex');
+  const projFromCwd = (cwd: string) => projectKeyWithBasis(cwd, 'codex');
 
   for await (const line of rl) {
     let o: { type?: string; timestamp?: string; payload?: Record<string, unknown> };
@@ -112,7 +117,7 @@ export async function parseCodexRollout(file: string): Promise<
       sessionId = (p.id as string) ?? sessionId;
       if (typeof p.cwd === 'string') {
         cwd = p.cwd;
-        project = projFromCwd(p.cwd);
+        ({ project, basis: attributionBasis } = projFromCwd(p.cwd));
       }
       if (typeof p.model_provider === 'string') provider = p.model_provider;
       if (typeof p.model === 'string') model = p.model as string;
@@ -122,7 +127,7 @@ export async function parseCodexRollout(file: string): Promise<
       if (typeof p.model === 'string') model = p.model as string;
       if (typeof p.cwd === 'string') {
         cwd = p.cwd;
-        project = projFromCwd(p.cwd);
+        ({ project, basis: attributionBasis } = projFromCwd(p.cwd));
       }
       continue;
     }
@@ -147,6 +152,7 @@ export async function parseCodexRollout(file: string): Promise<
         provider,
         model,
         project,
+        attributionBasis,
         cwd,
         inputTokens: uncachedIn,
         outputTokens: dOut,
@@ -196,6 +202,7 @@ export async function importCodex(store: Store, opts: ImportOptions = {}): Promi
         provider: ev.provider,
         model: ev.model,
         project: ev.project,
+        attributionBasis: ev.attributionBasis,
         taskWeight: 1,
         inputTokens: ev.inputTokens,
         outputTokens: ev.outputTokens,

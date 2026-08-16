@@ -733,9 +733,34 @@ function render(d) {
     </tr>`;
   }).join('');
 
-  const projectBars = d.byProject.map((p) => `
+  // Attribution basis per project. Money is reported per project, so "which
+  // project does this belong to" is a financial claim — and a header a tool set
+  // itself is not the same evidence as a recorded working directory, nor as
+  // nothing at all. Shown per bar so the weakest basis cannot hide in a total.
+  const ATTRIBUTION_LABEL = {
+    client_declared: 'self-declared by the tool',
+    tool_log_inferred: 'inferred from the tool\'s recorded path',
+    tool_log_fallback: 'tool-name placeholder — no path recorded',
+    unattributed: 'unattributed — no project declared',
+    synthetic_demo: 'synthetic demo',
+    legacy_unknown: 'recorded before attribution lineage',
+  };
+  const evidenceByProject = new Map();
+  for (const e of (d.attributionEvidence || [])) {
+    const list = evidenceByProject.get(e.project) || [];
+    list.push(e);
+    evidenceByProject.set(e.project, list);
+  }
+  const projectBars = d.byProject.map((p) => {
+    const ev = (evidenceByProject.get(p.label) || []).slice().sort((a, b) => b.costUsd - a.costUsd);
+    const basisNote = ev.length
+      ? ev.map((e) => `${esc(ATTRIBUTION_LABEL[e.attributionBasis] || e.attributionBasis)}${ev.length > 1 ? ` ($${usd(e.costUsd)})` : ''}`).join(' · ')
+      : '';
+    return `
     <div class="bar"><div class="top"><span class="name">${esc(p.label)}</span><span class="cost">$${usd(p.costUsd)}</span></div>
-    <div class="meta">${p.requests} req</div></div>`).join('');
+    <div class="meta">${p.requests} req</div>
+    ${basisNote ? `<div class="meta" style="color:var(--faint)">${basisNote}</div>` : ''}</div>`;
+  }).join('');
 
   const hasUsers = (d.byUser || []).some((u) => u.label !== 'unassigned');
   const userBars = (d.byUser || []).map((u) => `
@@ -785,7 +810,7 @@ function render(d) {
         <tbody>${modelTable || `<tr><td colspan="${anyCache ? 7 : 6}" style="color:var(--faint)">no data</td></tr>`}${modelTable ? totalRow : ''}</tbody>
       </table>
     </div>
-    <div class="card fade"><div class="label">By project</div><div class="bars">${projectBars || '<span style="color:var(--faint)">no data</span>'}</div></div>
+    <div class="card fade"><div class="label">By project ${tip('Spend grouped by project label, with the <b>basis</b> each label was obtained by underneath. A <b>self-declared</b> label is set by the calling tool via the <code>X-Aegis-Project</code> header — anything on this machine that can reach the proxy can set it, so it is an assertion, not a verified identity. <b>Unattributed</b> means the request declared no project at all; it is stored under the <code>default</code> label but is not a project. This is not chargeback-grade attribution. Merge fragmented labels with <code>fiscus project merge</code>; inspect the full split with <code>fiscus project --coverage</code>.')}</div><div class="bars">${projectBars || '<span style="color:var(--faint)">no data</span>'}</div></div>
     ${userCard}
     ${sourceCard}
     <div class="card recent fade">

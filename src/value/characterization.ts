@@ -54,3 +54,76 @@ export function projectKey(dir: string | null | undefined, fallback = 'default')
     .pop();
   return base && base.trim() ? base.trim() : fallback;
 }
+
+/**
+ * `projectKey`, plus how the key was arrived at — for importers, which read a
+ * working directory out of a tool's own local log.
+ *
+ * Kept beside `projectKey` so the two can never disagree: the basis is decided by
+ * the same emptiness test that chooses the fallback. A caller that computed the
+ * key here and the basis somewhere else would eventually drift.
+ */
+export function projectKeyWithBasis(
+  dir: string | null | undefined,
+  fallback: string,
+): { project: string; basis: AttributionBasis } {
+  const project = projectKey(dir, fallback);
+  // Probe with an empty fallback: only a genuinely unusable path yields ''. This
+  // matters because a real directory can legitimately be named after its tool —
+  // `/home/me/codex` infers `codex`, which must NOT read as a fallback.
+  //
+  // The fallback label is the tool's own name: a placeholder, not a project the
+  // operator named. Saying so is the difference between "work in repo `codex`"
+  // and "Codex logged work but never recorded where".
+  const usable = projectKey(dir, '') !== '';
+  return { project, basis: usable ? 'tool_log_inferred' : 'tool_log_fallback' };
+}
+
+/**
+ * How a row's `project` label was obtained — the attribution counterpart to the
+ * ledger's pricing lineage (`cost_basis`, `rate_match_kind`) and route-scope
+ * lineage (`scope_capture_status`).
+ *
+ * Money is reported per project, so "which project did this cost belong to" is a
+ * financial claim, and it was previously unfalsifiable: a header a client set
+ * itself, a folder basename, and a row that carried no signal at all were stored
+ * in one indistinguishable TEXT column. In particular an untagged proxy request
+ * is stored under the literal label `default`, which cannot be told apart from a
+ * project someone genuinely named `default`.
+ *
+ * This records the basis WITHOUT changing the stored label, so no total moves —
+ * the same dollars roll up the same way, but a reader can now ask what the
+ * attribution rests on.
+ *
+ * **None of these values is an identity verification.** `client_declared` is a
+ * self-assertion by whatever process set the header; anything on this machine
+ * that can reach the proxy can set it. Chargeback-grade attribution would need a
+ * verified collector identity, which Fiscus does not have. See the roadmap's
+ * Stage 2: client-supplied headers "are not trusted alone for chargeback".
+ */
+export type AttributionBasis =
+  /** An explicit `x-aegis-project` header on a proxied request. Self-asserted, unverified. */
+  | 'client_declared'
+  /** Derived from a working-directory path the tool recorded in its own local log. */
+  | 'tool_log_inferred'
+  /** The tool recorded no usable path, so its own name was used as the label. Not a real project. */
+  | 'tool_log_fallback'
+  /** Proxied traffic that declared no project. Stored under the default label, but it is not one. */
+  | 'unattributed'
+  /** Seeded demo data. Never a real attribution. */
+  | 'synthetic_demo'
+  /** Recorded before attribution basis existed. Genuinely unknown; never assume it was declared. */
+  | 'legacy_unknown';
+
+export const ATTRIBUTION_BASES: readonly AttributionBasis[] = [
+  'client_declared', 'tool_log_inferred', 'tool_log_fallback', 'unattributed', 'synthetic_demo', 'legacy_unknown',
+] as const;
+
+/**
+ * True when the basis reflects a deliberate attribution act by the operator or
+ * their tooling, rather than a fallback, a demo, or an absence. Deliberately NOT
+ * called "trusted": a declared label is still unverified.
+ */
+export function isDeclaredAttribution(basis: AttributionBasis): boolean {
+  return basis === 'client_declared' || basis === 'tool_log_inferred';
+}

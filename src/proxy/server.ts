@@ -22,6 +22,7 @@
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import type { Store, RequestRow } from '../store/db.ts';
+import type { AttributionBasis } from '../value/characterization.ts';
 import type { AegisConfig } from '../config.ts';
 import { BudgetGuard, type GuardDecision } from '../budget/guard.ts';
 import { computeCost, unpricedPricingEvidence, type NormalizedUsage, type Provider } from '../cost/pricing.ts';
@@ -257,7 +258,14 @@ async function handle(
   const parsed = parseRequestBody(body);
 
   // --- Metadata from custom headers (attribution) ---
-  const project = headerStr(req, 'x-aegis-project') ?? 'default';
+  // The declared label and WHY we have it are captured together. An absent header
+  // still stores the `default` label so no rollup moves, but the basis records
+  // that nothing was declared — otherwise untagged traffic is indistinguishable
+  // from a project someone genuinely named `default`. A present header is a
+  // self-assertion by the calling process, never a verified identity.
+  const declaredProject = headerStr(req, 'x-aegis-project');
+  const project = declaredProject ?? 'default';
+  const attributionBasis: AttributionBasis = declaredProject ? 'client_declared' : 'unattributed';
   const sessionId = headerStr(req, 'x-aegis-session-id') ?? null;
   const user = headerStr(req, 'x-aegis-user') ?? null;
   // The connected source/feed (set by `fiscus connect <tool>`). Like every
@@ -306,6 +314,7 @@ async function handle(
       provider,
       model: parsed.model,
       project,
+      attributionBasis,
       user,
       source,
       cwd,
@@ -363,6 +372,7 @@ async function handle(
       provider,
       model: parsed.model,
       project,
+      attributionBasis,
       user,
       source,
       cwd,
@@ -461,6 +471,7 @@ async function handle(
     provider,
     model: resolvedModel,
     project,
+    attributionBasis,
     user,
     source,
     cwd,

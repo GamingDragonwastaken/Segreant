@@ -157,6 +157,9 @@ function addRequest(ctx: Ctx, spec: ReqSpec): void {
     provider: spec.model.provider,
     model: spec.model.model,
     project: spec.project,
+    // Seeded labels are chosen by the generator, not observed from any tool, so
+    // they must never read as a declared or inferred attribution.
+    attributionBasis: 'synthetic_demo',
     taskWeight: 1,
     inputTokens,
     outputTokens,

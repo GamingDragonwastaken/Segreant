@@ -140,7 +140,10 @@ function cmdHelp(): void {
                           rows never rewritten):
                             project merge <label...> --into <name>
                             project alias <alias> <canonical> · unalias <alias>
-                          Bare "project" lists spend by (merged) project (--json)
+                          Bare "project" lists spend by (merged) project (--json).
+                          --coverage reports how each label was obtained: declared
+                          by the tool, inferred from its recorded path, or never
+                          attributed at all — an assertion, never verified identity
     prune                 Prune old rows and compact the database
     demo                  Generate isolated, clearly-labeled synthetic data so every
                           surface populates without an API key (--serve to launch the

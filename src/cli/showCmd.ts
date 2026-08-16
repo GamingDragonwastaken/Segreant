@@ -11,6 +11,7 @@ import { startOfLocalDay } from '../budget/guard.ts';
 import { requestsToCsv } from '../export/csv.ts';
 import { computeAlerts } from '../alerts/detect.ts';
 import { describeSourceDepth } from '../value/sourceDepth.ts';
+import { isDeclaredAttribution } from '../value/characterization.ts';
 import { C, color, usd, num, pct } from './ui.ts';
 import { rangeFor, type Flags } from './flags.ts';
 
@@ -297,6 +298,43 @@ export function cmdProject(flags: Flags): void {
       console.log(store.removeProjectAlias(alias) ? `  Removed alias "${alias}".` : `  No alias "${alias}" exists.`);
       return;
     }
+    // Attribution evidence is a separate read-only surface from the project list
+    // below: it answers "on what basis does this project's cost belong to it",
+    // which the list itself cannot show. It re-derives nothing.
+    if (flags.coverage) {
+      const endMs = Date.now() + 1000;
+      const rows = store.attributionEvidenceByProject(0, endMs);
+      const total = rows.reduce((s, r) => s + r.costUsd, 0);
+      const declared = rows.filter((r) => isDeclaredAttribution(r.attributionBasis)).reduce((s, r) => s + r.costUsd, 0);
+      if (flags.json) {
+        process.stdout.write(JSON.stringify({
+          window: { startMs: 0, endMs, label: 'all recorded time' },
+          total: { costUsd: total, declaredCostUsd: declared },
+          evidence: rows,
+          boundary:
+            'How each project label was obtained. A declared label is a self-assertion by the calling tool, '
+            + 'never a verified identity, and this is not chargeback-grade attribution.',
+        }, null, 2) + '\n');
+        return;
+      }
+      console.log('');
+      console.log(color(tty, C.bold, '  Attribution evidence — all recorded time'));
+      console.log(color(tty, C.dim, '  How each project label was obtained. A declared label is self-asserted, never verified.'));
+      if (rows.length === 0) {
+        console.log(color(tty, C.gray, '  No metered requests yet.'));
+      } else {
+        for (const r of rows.slice(0, 25)) {
+          console.log(`  ${usd(r.costUsd).padStart(11)}  ${num(r.requests).padStart(5)} req  ${r.project.padEnd(26)} ${r.attributionBasis.replaceAll('_', ' ')}`);
+        }
+        if (rows.length > 25) console.log(color(tty, C.dim, `  … ${rows.length - 25} more cohorts (use --json for the complete result)`));
+      }
+      const share = total > 0 ? declared / total : 0;
+      console.log('');
+      console.log(color(tty, C.dim, `  ${usd(declared)} of ${usd(total)} (${pct(share)}) carries a declared or path-inferred label; the rest is unattributed, a tool-name placeholder, demo, or pre-lineage.`));
+      console.log('');
+      return;
+    }
+
     // list (default)
     const byProject = store.byProject(0, Date.now() + 1000);
     const aliases = store.listProjectAliases();

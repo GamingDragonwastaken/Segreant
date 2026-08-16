@@ -21,7 +21,7 @@ import { homedir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import type { Store, RequestRow } from '../store/db.ts';
 import { computeCost, toolReportedPricingEvidence, type Provider } from '../cost/pricing.ts';
-import { projectKey } from '../value/characterization.ts';
+import { projectKeyWithBasis, type AttributionBasis } from '../value/characterization.ts';
 import { type ImportSummary, type ImportOptions, emptyImportSummary, recordInsert } from './importShared.ts';
 
 /** Locate opencode's data dir across platforms; first existing wins. null = not installed. */
@@ -44,6 +44,8 @@ export interface OpencodeUsageEvent {
   provider: string;
   model: string;
   project: string;
+  /** Whether that project came from a real recorded path or from the tool-name fallback. */
+  attributionBasis: AttributionBasis;
   /** Full working-directory path — the repo Fiscus can find and auto-correlate. */
   cwd: string | null;
   inputTokens: number;
@@ -88,7 +90,7 @@ export function parseOpencodeMessage(id: string, dataJson: string, fallbackTsMs?
   const ts = d.time?.created ?? fallbackTsMs;
   if (typeof ts !== 'number' || !Number.isFinite(ts)) return null;
   const cwd = d.path?.cwd ?? '';
-  const project = projectKey(cwd, 'opencode');
+  const { project, basis: attributionBasis } = projectKeyWithBasis(cwd, 'opencode');
 
   return {
     requestId: id,
@@ -97,6 +99,7 @@ export function parseOpencodeMessage(id: string, dataJson: string, fallbackTsMs?
     provider: d.providerID ?? 'opencode',
     model,
     project,
+    attributionBasis,
     cwd: cwd || null,
     inputTokens: input,
     outputTokens: output,
@@ -166,6 +169,7 @@ export function importOpencode(store: Store, opts: ImportOptions = {}): ImportSu
         provider: ev.provider,
         model: ev.model,
         project: ev.project,
+        attributionBasis: ev.attributionBasis,
         taskWeight: 1,
         inputTokens: ev.inputTokens,
         outputTokens: ev.outputTokens,

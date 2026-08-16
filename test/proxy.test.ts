@@ -635,3 +635,43 @@ test('upstream hangs past the timeout: transparent 504, fails fast, attempt reco
   await hung.close();
   store.close();
 });
+
+test('proxy records WHY a project label exists: declared vs never declared', async () => {
+  // The financial claim "this cost belongs to project X" must be inspectable.
+  // An untagged request still stores the `default` label so no rollup moves,
+  // but it must not be indistinguishable from a project genuinely named that.
+  const upstream = await startMockUpstream();
+  const store = new Store(':memory:');
+  const proxy = await startProxy(store, {}, upstream.url);
+  const send = (headers: Record<string, string>) =>
+    fetch(`${proxy.base}/v1/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': 'sk-test', ...headers },
+      body: JSON.stringify({ model: 'claude-opus-4-8', messages: [{ role: 'user', content: 'hi' }] }),
+    });
+
+  await send({ 'x-aegis-project': 'backend-api' });
+  await send({}); // no project header at all
+  await send({ 'x-aegis-project': 'default' }); // deliberately named 'default'
+  await new Promise((r) => setTimeout(r, 30));
+
+  const ev = store.attributionEvidenceByProject(0, Date.now() + 1000);
+  const declared = ev.find((e) => e.project === 'backend-api');
+  assert.equal(declared?.attributionBasis, 'client_declared', 'a header is a self-assertion, and is recorded as one');
+
+  const underDefault = ev.filter((e) => e.project === 'default');
+  assert.equal(underDefault.length, 2, 'one label, two different bases — kept apart');
+  assert.deepEqual(
+    underDefault.map((e) => e.attributionBasis).sort(),
+    ['client_declared', 'unattributed'],
+    'an undeclared request is distinguishable from one that chose the name "default"',
+  );
+
+  // The label itself is untouched, so per-project totals are unchanged.
+  const byProject = new Map(store.byProject(0, Date.now() + 1000).map((b) => [b.label, b.requests]));
+  assert.equal(byProject.get('default'), 2, 'recording the basis moved no spend');
+
+  await proxy.close();
+  await upstream.close();
+  store.close();
+});

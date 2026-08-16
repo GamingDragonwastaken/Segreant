@@ -125,6 +125,10 @@ function buildOverview(store: Store, config: AegisConfig, range: RangeKey) {
     },
     byModel: store.byModel(startMs, endMs),
     byProject: store.byProject(startMs, endMs),
+    // Same grouping as byProject, split by how each label was obtained, so the
+    // per-project money panel can say what its attribution rests on instead of
+    // presenting a self-declared header as settled fact.
+    attributionEvidence: store.attributionEvidenceByProject(startMs, endMs),
     byUser: store.byUser(startMs, endMs),
     // Each source carries its measured depth (spend / + acceptance / + RoI),
     // computed server-side so the dashboard and CLI render identical wording.

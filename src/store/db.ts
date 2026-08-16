@@ -28,6 +28,7 @@ import {
   type ProviderScopeDeclaration,
   type ScopeCaptureStatus,
 } from '../billing/scope.ts';
+import { ATTRIBUTION_BASES, type AttributionBasis } from '../value/characterization.ts';
 import type { OpenAiCostObservation, OpenAiCostsFailureCode } from '../billing/openaiCosts.ts';
 import { buildOpenAiCostsCaptureCoverage, type OpenAiCostsCaptureCoverage } from '../billing/openaiCostsCoverage.ts';
 
@@ -74,6 +75,11 @@ export interface RequestRow {
   /** Local route-scope provenance. Never a provider-account verification. */
   scopeCaptureStatus?: ScopeCaptureStatus;
   providerScopeDeclarationId?: string | null;
+  /**
+   * How `project` above was obtained. Never an identity verification — a declared
+   * label is a self-assertion. Missing only means a pre-lineage/legacy row.
+   */
+  attributionBasis?: AttributionBasis;
 }
 
 /**
@@ -95,6 +101,20 @@ export interface PricingEvidenceBucket {
   estimatedCostUsd: number;
   inputTokens: number;
   outputTokens: number;
+}
+
+/**
+ * One attribution-evidence cohort: a project label paired with the basis it was
+ * obtained by. A project that appears under two bases yields two rows — merging
+ * them would hide that part of its cost is self-declared and part is unattributed,
+ * which is the whole question this answers.
+ */
+export interface AttributionEvidenceBucket {
+  /** The canonical project label, so this reconciles with `byProject`. */
+  project: string;
+  attributionBasis: AttributionBasis;
+  requests: number;
+  costUsd: number;
 }
 
 export interface RequestPriceEvent {
@@ -367,7 +387,8 @@ CREATE TABLE IF NOT EXISTS requests (
   rate_match_provider TEXT,
   rate_match_model  TEXT,
   scope_capture_status TEXT NOT NULL DEFAULT 'legacy_unknown',
-  provider_scope_declaration_id TEXT
+  provider_scope_declaration_id TEXT,
+  attribution_basis TEXT NOT NULL DEFAULT 'legacy_unknown'
 );
 
 CREATE INDEX IF NOT EXISTS idx_requests_ts      ON requests(ts_epoch_ms);
@@ -664,6 +685,13 @@ function requestRowFromRecord(record: Record<string, unknown>): RequestRow {
     scopeCaptureStatus: typeof record.scopeCaptureStatus === 'string'
       ? record.scopeCaptureStatus as ScopeCaptureStatus
       : 'legacy_unknown',
+    // An unrecognized value reads as legacy_unknown rather than being passed
+    // through: a label nobody can interpret must not look like a real basis.
+    attributionBasis:
+      typeof record.attributionBasis === 'string'
+        && (ATTRIBUTION_BASES as readonly string[]).includes(record.attributionBasis)
+        ? record.attributionBasis as AttributionBasis
+        : 'legacy_unknown',
     providerScopeDeclarationId: typeof record.providerScopeDeclarationId === 'string'
       ? record.providerScopeDeclarationId
       : null,
@@ -850,6 +878,13 @@ export class Store {
     if (!cols.some((c) => c.name === 'provider_scope_declaration_id')) {
       this.db.prepare('ALTER TABLE requests ADD COLUMN provider_scope_declaration_id TEXT').run();
     }
+    if (!cols.some((c) => c.name === 'attribution_basis')) {
+      // No backfill. A pre-existing row's label could have come from a header, a
+      // cwd basename, or nothing at all, and the row does not record which — so
+      // it stays `legacy_unknown`. Guessing here would manufacture exactly the
+      // certainty this column exists to remove. New rows are stamped at insert.
+      this.db.prepare("ALTER TABLE requests ADD COLUMN attribution_basis TEXT NOT NULL DEFAULT 'legacy_unknown'").run();
+    }
     const signalCols = this.db.prepare('PRAGMA table_info(gate_signals)').all() as Array<{ name: string }>;
     if (!signalCols.some((c) => c.name === 'evidence_source')) {
       this.db.prepare("ALTER TABLE gate_signals ADD COLUMN evidence_source TEXT NOT NULL DEFAULT 'manual'").run();
@@ -1020,8 +1055,8 @@ export class Store {
             task_weight, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens,
             reasoning_tokens, cost_usd, estimated, streamed, status_code, duration_ms, user, source, cwd, via,
             cost_basis, rate_card_sha256, rate_card_source_kind, rate_match_kind, rate_match_provider, rate_match_model,
-            scope_capture_status, provider_scope_declaration_id
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            scope_capture_status, provider_scope_declaration_id, attribution_basis
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       )
       .run(
         r.requestId,
@@ -1054,6 +1089,7 @@ export class Store {
         pricing.rateMatchModel,
         scope.status,
         scope.declarationId,
+        r.attributionBasis ?? 'legacy_unknown',
       );
   }
 
@@ -1072,8 +1108,8 @@ export class Store {
             task_weight, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens,
             reasoning_tokens, cost_usd, estimated, streamed, status_code, duration_ms, user, source, cwd, via,
             cost_basis, rate_card_sha256, rate_card_source_kind, rate_match_kind, rate_match_provider, rate_match_model,
-            scope_capture_status, provider_scope_declaration_id
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            scope_capture_status, provider_scope_declaration_id, attribution_basis
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
          ON CONFLICT(request_id) DO NOTHING`,
       )
       .run(
@@ -1107,6 +1143,7 @@ export class Store {
         pricing.rateMatchModel,
         scope.status,
         scope.declarationId,
+        r.attributionBasis ?? 'legacy_unknown',
       );
     return Number(info.changes ?? 0) > 0;
   }
@@ -1182,6 +1219,30 @@ export class Store {
          ORDER BY costUsd DESC, requests DESC`,
       )
       .all(startMs, endMs) as unknown as PricingEvidenceBucket[];
+  }
+
+  /**
+   * Spend grouped by project AND the basis its label was obtained by.
+   *
+   * Grouped on the alias-canonical label so the totals reconcile with `byProject`
+   * exactly. This reads the ledger only: it never re-derives an attribution, and
+   * a `legacy_unknown` row stays unknown rather than being inferred after the fact.
+   */
+  attributionEvidenceByProject(startMs: number, endMs: number): AttributionEvidenceBucket[] {
+    return this.db
+      .prepare(
+        `SELECT COALESCE(a.canonical, r.project) AS project,
+                r.attribution_basis AS attributionBasis,
+                COUNT(*) AS requests, COALESCE(SUM(r.cost_usd),0) AS costUsd
+         FROM requests r LEFT JOIN project_aliases a ON a.alias = r.project
+         WHERE r.ts_epoch_ms >= ? AND r.ts_epoch_ms < ?
+         -- Group by the EXPRESSION, not the output alias: a bare \`project\` here
+         -- binds to the raw \`requests.project\` column instead, which silently
+         -- leaves aliased labels unmerged and disagreeing with byProject.
+         GROUP BY COALESCE(a.canonical, r.project), r.attribution_basis
+         ORDER BY costUsd DESC, requests DESC`,
+      )
+      .all(startMs, endMs) as unknown as AttributionEvidenceBucket[];
   }
 
   /**
@@ -1539,7 +1600,8 @@ export class Store {
                 rate_card_source_kind AS rateCardSourceKind, rate_match_kind AS rateMatchKind,
                 rate_match_provider AS rateMatchProvider, rate_match_model AS rateMatchModel,
                 scope_capture_status AS scopeCaptureStatus,
-                provider_scope_declaration_id AS providerScopeDeclarationId
+                provider_scope_declaration_id AS providerScopeDeclarationId,
+                attribution_basis AS attributionBasis
          FROM requests ORDER BY ts_epoch_ms DESC LIMIT ?`,
       )
       .all(limit) as Array<Record<string, unknown>>;
@@ -1563,7 +1625,8 @@ export class Store {
                 rate_card_source_kind AS rateCardSourceKind, rate_match_kind AS rateMatchKind,
                 rate_match_provider AS rateMatchProvider, rate_match_model AS rateMatchModel,
                 scope_capture_status AS scopeCaptureStatus,
-                provider_scope_declaration_id AS providerScopeDeclarationId
+                provider_scope_declaration_id AS providerScopeDeclarationId,
+                attribution_basis AS attributionBasis
          FROM requests r LEFT JOIN project_aliases a ON a.alias = r.project
          WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ? ORDER BY ts_epoch_ms ASC`,
       )

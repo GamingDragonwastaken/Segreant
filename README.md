@@ -198,7 +198,9 @@ fiscus project               Spend by project with aliases applied (--json). Too
                                 launch dirs fragment one real project across labels;
                                 merge them: project merge <label...> --into <name>
                                 (query-time only, raw rows untouched — undo with
-                                project unalias <label>)
+                                project unalias <label>). --coverage reports how
+                                each label was obtained — declared, path-inferred,
+                                or never attributed at all
 fiscus prune                 Prune old rows and compact the DB
 fiscus demo                  Seed isolated, labeled synthetic data so every surface
                                 populates with no API key (--serve starts the dashboard
@@ -245,6 +247,26 @@ X-Aegis-Task-Weight: 1.5
 Spend then rolls up by user in `fiscus today`, the dashboard's "By user"
 card, and the CSV export. Unset → reported as `unassigned`. These headers are
 stripped before the request is forwarded upstream — they never leave the device.
+
+**These labels are assertions, not verified identity.** Anything on this machine
+that can reach the proxy can set them, so Fiscus records *how* each project label
+was obtained alongside the label itself:
+
+| Basis | Meaning |
+| --- | --- |
+| `client_declared` | An `X-Aegis-Project` header on a proxied request. Self-asserted. |
+| `tool_log_inferred` | Derived from a working directory the tool recorded in its own local log. |
+| `tool_log_fallback` | The tool recorded no usable path, so its own name was used. Not a real project. |
+| `unattributed` | The request declared no project. Stored under `default`, but it is not one. |
+| `synthetic_demo` | Seeded demo data. |
+| `legacy_unknown` | Recorded before attribution lineage existed. Never backfilled or guessed. |
+
+Inspect the split with `fiscus project --coverage` (`--json` for the full result);
+it also appears under each bar of the dashboard's "By project" card and as an
+`attributionBasis` column in the CSV export. Recording the basis changes no
+totals — the same spend rolls up the same way. This is deliberately **not**
+chargeback-grade attribution: that would require a verified collector identity,
+which Fiscus does not have.
 
 ---
 
