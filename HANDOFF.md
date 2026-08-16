@@ -8,9 +8,11 @@ before any public claim.
 
 ## Canonical checkout
 
-- **Path:** `C:\Users\Null_\Documents\Projects & Learning\Fiscus`
 - **Origin:** `https://github.com/GamingDragonwastaken/Fiscus.git`
 - **Branch:** `main`
+- **Working copy:** the maintainer's local checkout. The absolute path is kept in
+  the untracked operations notes rather than here, so a published handoff does
+  not carry a local filesystem path or account name.
 
 Before handoff, release, or debugging a new report, record `git rev-parse HEAD`
 and `git status --short`. Do not infer GitHub publication or npm availability
