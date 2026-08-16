@@ -37,7 +37,19 @@ export interface RequestRow {
   tsEpochMs: number;
   provider: string;
   model: string;
+  /** The label exactly as recorded at metering time. Never rewritten by an alias. */
   project: string;
+  /**
+   * The project this row rolls up into once `project_aliases` is applied — the
+   * same label `byProject` aggregates under. Equal to `project` when unaliased.
+   *
+   * Both are carried because they answer different questions: `project` is what
+   * was actually recorded, `projectCanonical` is what it counts as. An export
+   * that carried only the raw label would total differently from the dashboard
+   * as soon as any alias existed; one that carried only the canonical would lose
+   * the recorded evidence and could not survive the alias being removed.
+   */
+  projectCanonical?: string;
   taskWeight: number;
   inputTokens: number;
   outputTokens: number;
@@ -1446,10 +1458,16 @@ export class Store {
     const realizedProjects = new Set(this.realizationProjects());
     const withOutcomes = new Set<string>();
     if (realizedProjects.size > 0) {
+      // `realizationProjects()` returns alias-CANONICAL labels, so the request
+      // side must be canonicalized too. Comparing a raw label against that set
+      // makes an aliased project silently fail to match, and the source loses
+      // its RoI depth badge even though its work did realize.
       const srcProj = this.db
         .prepare(
-          `SELECT DISTINCT COALESCE(source, 'direct') AS label, project
-           FROM requests WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ?`,
+          `SELECT DISTINCT COALESCE(r.source, 'direct') AS label,
+                  COALESCE(a.canonical, r.project) AS project
+           FROM requests r LEFT JOIN project_aliases a ON a.alias = r.project
+           WHERE r.ts_epoch_ms >= ? AND r.ts_epoch_ms < ?`,
         )
         .all(startMs, endMs) as Array<{ label: string; project: string }>;
       for (const r of srcProj) if (realizedProjects.has(r.project)) withOutcomes.add(r.label);
@@ -1530,10 +1548,13 @@ export class Store {
 
   /** Every metered request in [startMs, endMs), oldest first — for data export. */
   requestsInRange(startMs: number, endMs: number): RequestRow[] {
+    // Carry the alias-canonical label alongside the raw one so an export totals
+    // the same way `byProject` does without rewriting the recorded row.
     const rows = this.db
       .prepare(
         `SELECT request_id AS requestId, session_id AS sessionId, ts_epoch_ms AS tsEpochMs,
-                provider, model, project, task_weight AS taskWeight,
+                provider, model, r.project AS project,
+                COALESCE(a.canonical, r.project) AS projectCanonical, task_weight AS taskWeight,
                 input_tokens AS inputTokens, output_tokens AS outputTokens,
                 cache_write_tokens AS cacheWriteTokens, cache_read_tokens AS cacheReadTokens,
                 reasoning_tokens AS reasoningTokens, cost_usd AS costUsd,
@@ -1543,7 +1564,8 @@ export class Store {
                 rate_match_provider AS rateMatchProvider, rate_match_model AS rateMatchModel,
                 scope_capture_status AS scopeCaptureStatus,
                 provider_scope_declaration_id AS providerScopeDeclarationId
-         FROM requests WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ? ORDER BY ts_epoch_ms ASC`,
+         FROM requests r LEFT JOIN project_aliases a ON a.alias = r.project
+         WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ? ORDER BY ts_epoch_ms ASC`,
       )
       .all(startMs, endMs) as Array<Record<string, unknown>>;
     return rows.map(requestRowFromRecord);

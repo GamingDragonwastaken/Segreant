@@ -21,8 +21,13 @@ export function toCsv(headers: string[], rows: Array<Array<unknown>>): string {
   return lines.join('\r\n') + '\r\n';
 }
 
+// `project` is the label recorded at metering time; `projectCanonical` is what it
+// rolls up into once aliases are applied — the same grouping the dashboard totals
+// by. Both ship, because summing the raw column would disagree with the product's
+// own per-project figures as soon as an alias existed, and shipping only the
+// canonical would drop the recorded evidence.
 const REQUEST_COLUMNS = [
-  'tsIso', 'tsEpochMs', 'provider', 'model', 'project', 'user', 'source', 'sessionId',
+  'tsIso', 'tsEpochMs', 'provider', 'model', 'project', 'projectCanonical', 'user', 'source', 'sessionId',
   'inputTokens', 'outputTokens', 'cacheWriteTokens', 'cacheReadTokens', 'reasoningTokens',
   'costUsd', 'estimated', 'costBasis', 'rateCardSha256', 'rateCardSourceKind',
   'rateMatchKind', 'rateMatchProvider', 'rateMatchModel', 'streamed', 'statusCode', 'durationMs',
@@ -34,7 +39,8 @@ export function requestsToCsv(rows: RequestRow[]): string {
   return toCsv(
     REQUEST_COLUMNS,
     rows.map((r) => [
-      new Date(r.tsEpochMs).toISOString(), r.tsEpochMs, r.provider, r.model, r.project, r.user ?? '', r.source ?? '', r.sessionId ?? '',
+      new Date(r.tsEpochMs).toISOString(), r.tsEpochMs, r.provider, r.model, r.project,
+      r.projectCanonical ?? r.project, r.user ?? '', r.source ?? '', r.sessionId ?? '',
       r.inputTokens, r.outputTokens, r.cacheWriteTokens, r.cacheReadTokens, r.reasoningTokens ?? 0,
       r.costUsd, r.estimated ? 1 : 0, r.pricing?.costBasis ?? 'legacy_unknown', r.pricing?.rateCardSha256 ?? '',
       r.pricing?.rateCardSourceKind ?? 'legacy_unknown', r.pricing?.rateMatchKind ?? 'legacy_unknown',
