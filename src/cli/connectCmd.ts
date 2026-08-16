@@ -16,6 +16,8 @@ import {
   opencodeProviderBlock,
   mergeOpencodeConfig,
   resolveOpencodeConfigPath,
+  opencodeConfigScope,
+  PROJECT_HEADER,
   listOpencodeProviders,
   wrapOpencodeProvider,
 } from '../connect/connectors.ts';
@@ -37,6 +39,35 @@ function printOpencodeSnippet(block: Record<string, unknown>, tty: boolean): voi
   const snippet = JSON.stringify({ fiscus: block }, null, 2);
   console.log('');
   for (const line of snippet.split('\n')) console.log(color(tty, C.cyan, '    ' + line));
+  console.log('');
+}
+
+/**
+ * Say what project this connection will (or won't) attribute spend to.
+ *
+ * Connecting a tool used to tag only its source, so its spend metered as
+ * `unattributed` under the `default` label — a correctly-followed setup that
+ * still produced unattributable money. A project-scoped config can carry a real
+ * label; a global one cannot, and that limit is stated instead of being papered
+ * over with a guess that would be wrong in every other directory.
+ */
+function printAttributionNote(
+  attribution: { scope: 'project' | 'global'; project: string | null },
+  path: string | null,
+  tty: boolean,
+): void {
+  if (attribution.project) {
+    console.log(color(tty, C.gray, `  This config is project-scoped, so its traffic is also tagged`));
+    console.log(color(tty, C.cyan, `    ${PROJECT_HEADER}: ${attribution.project}`));
+    console.log(color(tty, C.gray, '  and its spend rolls up under that project instead of "unattributed".'));
+  } else {
+    console.log(color(tty, C.gray, `  ${path ? 'This config is global' : 'A new config here would be global'}, so Fiscus will NOT tag a project:`));
+    console.log(color(tty, C.gray, '  one label baked into a config that governs every directory would be wrong'));
+    console.log(color(tty, C.gray, '  everywhere else. This spend meters as "unattributed" until a project is sent.'));
+    console.log(color(tty, C.gray, `  To attribute it, keep an opencode.json in the repo and re-run connect there,`));
+    console.log(color(tty, C.gray, `  or have the tool send  ${PROJECT_HEADER}: <name>  per request.`));
+    console.log(color(tty, C.gray, '  Check either way with:  fiscus project --coverage'));
+  }
   console.log('');
 }
 
@@ -68,7 +99,9 @@ function wrapOpencodeFlow(cfg: AegisConfig, flags: Flags, tty: boolean, provider
   } catch {
     /* handled by the parse below */
   }
-  const res = wrapOpencodeProvider(raw, providerName, cfg.port);
+  // Only a config that lives in THIS directory is provably about one project.
+  const attribution = opencodeConfigScope({ configPath: path, cwd: process.cwd() });
+  const res = wrapOpencodeProvider(raw, providerName, cfg.port, attribution.project);
 
   console.log('');
   console.log(color(tty, C.bold, `  Connect opencode natively — wrap your "${providerName}" provider`));
@@ -90,6 +123,7 @@ function wrapOpencodeFlow(cfg: AegisConfig, flags: Flags, tty: boolean, provider
   console.log(color(tty, C.gray, `  which forwards them to ${res.originalBaseUrl} with your own key. Your key never`));
   console.log(color(tty, C.gray, "  touches Fiscus's author, and opencode Zen (if any) is unaffected."));
   console.log('');
+  printAttributionNote(attribution, path, tty);
 
   if (!flags.write) {
     console.log(color(tty, C.gray, '  Two local changes (preview — nothing written yet):'));
@@ -119,8 +153,14 @@ function wrapOpencodeFlow(cfg: AegisConfig, flags: Flags, tty: boolean, provider
 
 function connectOpencode(cfg: AegisConfig, flags: Flags, tty: boolean): void {
   const port = cfg.port;
-  const block = opencodeProviderBlock(port);
   const path = opencodeConfigPath();
+  // A project label is only true for a config scoped to this directory. When the
+  // config is global (or would be created global), the block carries no project
+  // header and the note below says so rather than leaving the gap silent.
+  const attribution = path
+    ? opencodeConfigScope({ configPath: path, cwd: process.cwd() })
+    : { scope: 'global' as const, project: null };
+  const block = opencodeProviderBlock(port, attribution.project);
 
   if (typeof flags.wrap === 'string' && flags.wrap) {
     wrapOpencodeFlow(cfg, flags, tty, flags.wrap, path);
@@ -146,7 +186,7 @@ function connectOpencode(cfg: AegisConfig, flags: Flags, tty: boolean): void {
     } catch {
       /* unreadable → treated as absent below */
     }
-    const probe = mergeOpencodeConfig(raw, port);
+    const probe = mergeOpencodeConfig(raw, port, attribution.project);
     if (probe.ok && probe.alreadyConnected && !flags.write) {
       console.log(color(tty, C.green, '  ✓ opencode is already connected as a source.'));
       console.log(color(tty, C.gray, `    Config: ${path}`));
@@ -179,6 +219,7 @@ function connectOpencode(cfg: AegisConfig, flags: Flags, tty: boolean): void {
     console.log(color(tty, C.gray, '  …or let Fiscus apply the block for you:'));
     console.log(color(tty, C.green, '    fiscus connect opencode --write'));
     console.log('');
+    printAttributionNote(attribution, path, tty);
     finishConnectOpencode(tty);
     return;
   }
@@ -203,7 +244,7 @@ function connectOpencode(cfg: AegisConfig, flags: Flags, tty: boolean): void {
   }
 
   // --write with an existing config: safe-merge, backing up first.
-  const res = mergeOpencodeConfig(raw, port);
+  const res = mergeOpencodeConfig(raw, port, attribution.project);
   if (!res.ok || !res.merged) {
     console.log(color(tty, C.yellow, `  Could not safely auto-edit the config (${res.error ?? 'unknown error'}).`));
     console.log(color(tty, C.gray, '  Add this provider block yourself instead:'));
@@ -298,8 +339,19 @@ function connectGenericApi(cfg: AegisConfig, flags: Flags, tty: boolean): void {
   console.log(color(tty, C.gray, '  curl:'));
   console.log(color(tty, C.cyan, `    curl ${base}/chat/completions -H "${SOURCE_HEADER}: ${source}" ...`));
   console.log('');
+  // The source tag alone leaves spend unattributed to any project. Unlike a
+  // config file, this recipe is a per-caller snippet, so the caller is the only
+  // one who knows which project the work belongs to — offer it, don't guess it.
+  console.log(color(tty, C.gray, '  Optional — attribute the spend to a project (otherwise it meters as'));
+  console.log(color(tty, C.gray, '  "unattributed" under the default label):'));
+  console.log(color(tty, C.cyan, `    header           ${PROJECT_HEADER}: <project>`));
+  console.log(color(tty, C.gray, '  Send it per request from the code that knows the project. Setting it once as'));
+  console.log(color(tty, C.gray, '  a shell env var follows the SHELL, not the directory, so it will mislabel'));
+  console.log(color(tty, C.gray, '  work after you cd elsewhere — a wrong project reads as a declared one.'));
+  console.log('');
   console.log(color(tty, C.gray, '  Run it, then check:'));
   console.log(color(tty, C.green, '    fiscus sources'));
+  console.log(color(tty, C.gray, '    fiscus project --coverage   # what the spend is attributed to, and how'));
   console.log('');
 }
 

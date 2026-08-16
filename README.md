@@ -261,6 +261,14 @@ was obtained alongside the label itself:
 | `synthetic_demo` | Seeded demo data. |
 | `legacy_unknown` | Recorded before attribution lineage existed. Never backfilled or guessed. |
 
+`fiscus connect opencode` sets the project header for you **only when the config
+it edits is project-scoped** — an `opencode.json(c)` in the repo itself, which by
+construction applies to that project alone. For a global config it deliberately
+sets nothing and says so: one label baked into a config that governs every
+directory would be wrong in all the others, and a confidently wrong project is
+worse than an honest blank. To attribute a globally-configured tool, keep an
+`opencode.json` in the repo and re-run connect there.
+
 Inspect the split with `fiscus project --coverage` (`--json` for the full result);
 it also appears under each bar of the dashboard's "By project" card and as an
 `attributionBasis` column in the CSV export. Recording the basis changes no

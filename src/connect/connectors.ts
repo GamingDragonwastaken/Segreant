@@ -18,6 +18,45 @@ import { join } from 'node:path';
 export const SOURCE_HEADER = 'x-aegis-source';
 
 /**
+ * The project-attribution header. Connecting a tool only tagged its SOURCE, so a
+ * correctly connected tool still metered with no project at all — its spend landed
+ * under the `default` label as `unattributed`.
+ *
+ * A connector writes a STATIC config, so this header can only be set where the
+ * config's scope really is one project. Baking a label into a config that governs
+ * every directory would be worse than leaving it unattributed: every future
+ * request, in any repo, would carry one project name and be recorded as
+ * `client_declared` — a confident wrong answer instead of an honest blank.
+ */
+export const PROJECT_HEADER = 'x-aegis-project';
+
+/**
+ * Whether an opencode config is scoped to one project, and if so which.
+ *
+ * Project-scoped means the config file sits in the working directory itself —
+ * the per-project `opencode.json(c)` case, which opencode gives highest
+ * precedence and which by construction applies to that project only. A global
+ * config (`~/.config/opencode/`) or one pointed at by `OPENCODE_CONFIG` governs
+ * work in every directory, so no single project label is true for it.
+ *
+ * Pure: takes the paths, does no I/O, so the decision is unit-testable.
+ */
+export function opencodeConfigScope(opts: { configPath: string; cwd: string }): {
+  scope: 'project' | 'global';
+  project: string | null;
+} {
+  const dir = opts.configPath.slice(0, Math.max(opts.configPath.lastIndexOf('/'), opts.configPath.lastIndexOf('\\')));
+  const norm = (p: string) => p.replace(/[\\/]+$/, '').toLowerCase();
+  if (norm(dir) !== norm(opts.cwd)) return { scope: 'global', project: null };
+  const base = opts.cwd
+    .split(/[\\/]/)
+    .filter(Boolean)
+    .pop();
+  // A rootless cwd yields no usable label; stay global rather than invent one.
+  return base && base.trim() ? { scope: 'project', project: base.trim() } : { scope: 'global', project: null };
+}
+
+/**
  * The proxy base URL for an openai-compatible client that appends the request
  * path itself (e.g. opencode's `@ai-sdk/openai-compatible` posts to
  * `${baseURL}/chat/completions`). NO trailing `/v1`: the proxy appends the path
@@ -84,14 +123,16 @@ export const GEMINI_OPENAI_COMPAT_BASE = 'https://generativelanguage.googleapis.
  * upstream `fiscus start` fronts by default); a user can change them — the
  * merge below preserves whatever they already set.
  */
-export function opencodeProviderBlock(port: number): Record<string, unknown> {
+export function opencodeProviderBlock(port: number, project?: string | null): Record<string, unknown> {
   return {
     npm: '@ai-sdk/openai-compatible',
     name: 'Fiscus (metered)',
     options: {
       baseURL: proxyBaseUrl(port),
       apiKey: '{env:GEMINI_API_KEY}',
-      headers: { [SOURCE_HEADER]: 'opencode' },
+      // The project header is added only for a project-scoped config; see
+      // PROJECT_HEADER for why a global config must not carry one.
+      headers: project ? { [SOURCE_HEADER]: 'opencode', [PROJECT_HEADER]: project } : { [SOURCE_HEADER]: 'opencode' },
     },
     models: { 'gemini-2.5-flash': { name: 'Gemini 2.5 Flash (via Fiscus)' } },
   };
@@ -168,7 +209,7 @@ export interface MergeResult {
  * nothing meaningful. On unparseable input it returns `{ ok: false }` so the
  * caller can fall back to printing the snippet instead of writing garbage.
  */
-export function mergeOpencodeConfig(raw: string, port: number): MergeResult {
+export function mergeOpencodeConfig(raw: string, port: number, project?: string | null): MergeResult {
   let obj: Record<string, unknown>;
   try {
     obj = raw.trim() ? (JSON.parse(stripJsonc(raw)) as Record<string, unknown>) : {};
@@ -180,15 +221,19 @@ export function mergeOpencodeConfig(raw: string, port: number): MergeResult {
   }
 
   const provider = (obj.provider ??= {}) as Record<string, unknown>;
-  const block = opencodeProviderBlock(port);
+  const block = opencodeProviderBlock(port, project);
   const existing = provider.fiscus as Record<string, unknown> | undefined;
   let alreadyConnected = false;
 
   if (existing && typeof existing === 'object' && !Array.isArray(existing)) {
     const options = (existing.options ??= {}) as Record<string, unknown>;
     const headers = (options.headers ??= {}) as Record<string, unknown>;
-    if (headers[SOURCE_HEADER] === 'opencode') alreadyConnected = true;
+    // `alreadyConnected` means nothing meaningful would change — so a config
+    // that is tagged but still missing a project label it should now carry is
+    // NOT already connected.
+    if (headers[SOURCE_HEADER] === 'opencode' && (!project || headers[PROJECT_HEADER] === project)) alreadyConnected = true;
     headers[SOURCE_HEADER] = 'opencode';
+    if (project) headers[PROJECT_HEADER] = project;
     options.baseURL ??= (block.options as Record<string, unknown>).baseURL;
     existing.npm ??= block.npm;
   } else {
@@ -248,7 +293,7 @@ export interface WrapResult {
  * provider that has no baseURL to wrap (a hosted/managed provider that can't be
  * metered cooperatively — reported honestly, not silently mangled).
  */
-export function wrapOpencodeProvider(raw: string, providerName: string, port: number): WrapResult {
+export function wrapOpencodeProvider(raw: string, providerName: string, port: number, project?: string | null): WrapResult {
   let obj: Record<string, unknown>;
   try {
     obj = raw.trim() ? (JSON.parse(stripJsonc(raw)) as Record<string, unknown>) : {};
@@ -267,6 +312,7 @@ export function wrapOpencodeProvider(raw: string, providerName: string, port: nu
   }
   const headers = (options.headers ??= {}) as Record<string, unknown>;
   headers[SOURCE_HEADER] = 'opencode';
+  if (project) headers[PROJECT_HEADER] = project;
 
   if (currentBase.startsWith(`http://localhost:${port}`) || currentBase.startsWith(`http://127.0.0.1:${port}`)) {
     return { ok: true, merged: JSON.stringify(obj, null, 2) + '\n', alreadyWrapped: true };

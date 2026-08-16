@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import {
   SOURCE_HEADER,
+  PROJECT_HEADER,
+  opencodeConfigScope,
   opencodeProviderBlock,
   stripJsonc,
   mergeOpencodeConfig,
@@ -170,4 +172,69 @@ test('connect antigravity --write points the OpenAI upstream at the Gemini endpo
   // And the config actually changed — the proxy now fronts Gemini's OpenAI-compatible API.
   const cfg = JSON.parse(readFileSync(join(home, 'config.json'), 'utf8')) as { upstreams: { openai: string } };
   assert.equal(cfg.upstreams.openai, 'https://generativelanguage.googleapis.com/v1beta/openai');
+});
+
+// ---- Project attribution on connect ----
+// Connecting a tool used to tag only its SOURCE, so a correctly-connected tool
+// still metered as `unattributed` under the `default` label. A project label can
+// only be baked into a config whose scope really is one project.
+
+test('opencodeConfigScope: a config in the working directory is project-scoped', () => {
+  assert.deepEqual(
+    opencodeConfigScope({ configPath: '/home/me/backend-api/opencode.json', cwd: '/home/me/backend-api' }),
+    { scope: 'project', project: 'backend-api' },
+  );
+  assert.deepEqual(
+    opencodeConfigScope({ configPath: 'C:\\work\\backend-api\\opencode.jsonc', cwd: 'C:\\work\\backend-api' }),
+    { scope: 'project', project: 'backend-api' },
+  );
+});
+
+test('opencodeConfigScope: a global config yields NO project — one label would be wrong everywhere else', () => {
+  assert.deepEqual(
+    opencodeConfigScope({ configPath: '/home/me/.config/opencode/opencode.json', cwd: '/home/me/backend-api' }),
+    { scope: 'global', project: null },
+  );
+  // An OPENCODE_CONFIG pointing outside the cwd is equally not about this project.
+  assert.deepEqual(
+    opencodeConfigScope({ configPath: '/etc/opencode/opencode.json', cwd: '/home/me/backend-api' }),
+    { scope: 'global', project: null },
+  );
+});
+
+test('connect: a project-scoped config tags the project; a global one deliberately does not', () => {
+  const scoped = opencodeProviderBlock(4000, 'backend-api').options as Record<string, Record<string, string>>;
+  assert.equal(scoped.headers![SOURCE_HEADER], 'opencode');
+  assert.equal(scoped.headers![PROJECT_HEADER], 'backend-api');
+
+  const global = opencodeProviderBlock(4000, null).options as Record<string, Record<string, string>>;
+  assert.equal(global.headers![SOURCE_HEADER], 'opencode');
+  assert.ok(!(PROJECT_HEADER in global.headers!), 'a global config must not carry a project label');
+});
+
+test('connect: merging into a project-scoped config writes the project header', () => {
+  const res = mergeOpencodeConfig(REAL_CONFIG, 4000, 'backend-api');
+  assert.ok(res.ok);
+  const headers = JSON.parse(res.merged!).provider.fiscus.options.headers;
+  assert.equal(headers[PROJECT_HEADER], 'backend-api');
+});
+
+test('connect: an already-tagged config still MISSING its project header is not "already connected"', () => {
+  // Otherwise re-running connect inside a repo would report success and change
+  // nothing, leaving the spend permanently unattributed.
+  const tagged = mergeOpencodeConfig(REAL_CONFIG, 4000).merged!;
+  const again = mergeOpencodeConfig(tagged, 4000, 'backend-api');
+  assert.equal(again.alreadyConnected, false, 'a missing project label is a real change');
+  assert.equal(JSON.parse(again.merged!).provider.fiscus.options.headers[PROJECT_HEADER], 'backend-api');
+  // And once it matches, it really is a no-op.
+  assert.equal(mergeOpencodeConfig(again.merged!, 4000, 'backend-api').alreadyConnected, true);
+});
+
+test('connect: wrapping an existing provider carries the project label too', () => {
+  const res = wrapOpencodeProvider(REAL_CONFIG, 'featherless', 4000, 'backend-api');
+  assert.ok(res.ok);
+  const headers = JSON.parse(res.merged!).provider.featherless.options.headers;
+  assert.equal(headers[SOURCE_HEADER], 'opencode');
+  assert.equal(headers[PROJECT_HEADER], 'backend-api');
+  assert.equal(res.originalBaseUrl, 'https://api.featherless.ai/v1', 'the real upstream is still returned');
 });
