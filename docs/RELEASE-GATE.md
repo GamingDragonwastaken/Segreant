@@ -30,10 +30,9 @@ external deployment, or the optional team service.
 ### Candidate record — commit `e3eb407`, 2026-08-17
 
 Run against `e3eb407858f20e6dae2e4dae3375b70bc7ed4771`, worktree clean before and
-after validation. **Nine rows pass; the CI row is unobserved at the time of
-writing** and is filled in below once the run exists. Supersedes the `669cb3d`
-record, retained for history: that candidate has been overtaken by a change to
-what the model trial is willing to claim.
+after validation. **All ten rows pass**, the CI row with its commit delta stated.
+Supersedes the `669cb3d` record, retained for history: that candidate has been
+overtaken by a change to what the model trial is willing to claim.
 
 | Requirement | Result |
 | --- | --- |
@@ -45,7 +44,7 @@ what the model trial is willing to claim.
 | Model-trial truthfulness | **Pass.** `/api/value` self-labels `demo: true`; exactly one switch, `confidence: trial`, no `evidence_supported`; `costStaleUnits: 0`. The demo cohort clears the new gates on its own merits rather than by exemption: **$0.20 vs $1.22 per 100 changed lines** (the saving survives normalizing by work volume), **3 vs 3 working sessions**, one recorded cost basis, no confounders, 4 assumptions, and the level split across **2** model-pair comparisons. |
 | Billing-boundary truthfulness | **Pass.** `billing scope set --account-ref … --json` → `applied: false`, `trust: operator_declared_unverified`, `reconciliationStatus: not_reconciled`. Packaged `/api/billing` → `demo: true`, `not_reconciled`, `recordCount: 0`, 5 `excludedFrom` entries. |
 | Direct-Costs connector boundary | **Pass.** With an applied `org_…`/`proj_…` scope, `billing openai-costs preview --from/--to --json` → `networkAttempted: false`, `credentialRead: false`. |
-| Intended CI | **Pending.** Not yet observed. This row is filled in only after the run for the pushed tip exists and has been inspected — writing a result before seeing it is the failure this document exists to prevent. |
+| Intended CI | **Pass, with the delta stated** (per the rule in the checklist above). Run **CI #20** (`.../actions/runs/31975450306`): status **Success**, 1m 11s, 7 jobs — `package-smoke` plus the 3-job `test` and 3-job `team-server-test` matrices. The run is for the pushed tip `a367781`; `git diff --stat e3eb407 a367781` is `docs/RELEASE-GATE.md` alone, 1 file changed — no source, no test, no packaged code. |
 | Visual check | **Pass.** Browser inspection of the packaged dashboard: DEMO banner present; By-project card shows the attribution basis per bar; rate-card health reads STALE; Value view renders exactly one TRIAL card, no EVIDENCE card, no confounder warning, no pre-reprice badge — and the card now carries both cost bases and the session counts. |
 
 **Team server at this tree:** typecheck clean, **55/55**. Source validation only;
