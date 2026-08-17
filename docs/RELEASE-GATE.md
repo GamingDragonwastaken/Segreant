@@ -27,7 +27,41 @@ This validates a local developer preview only. It does **not** validate a
 provider billing statement, production customer data, an npm publication, an
 external deployment, or the optional team service.
 
-### Candidate record — commit `1398fe3`, 2026-08-17
+### Candidate record — commit `7bfb6dd`, 2026-08-17
+
+Run against `7bfb6dda107a6f5f841915c54ff21ecbc07d64b7`, worktree clean before and
+after validation. **All ten rows pass.** Supersedes the `1398fe3` record,
+retained for history.
+
+| Requirement | Result |
+| --- | --- |
+| Candidate identity | **Pass.** `git rev-parse HEAD` = `7bfb6dda107a6f5f841915c54ff21ecbc07d64b7`; `git status --short` empty before and after. |
+| Source validation | **Pass.** `npm run typecheck` clean, `npm test` **493 tests / 492 pass / 1 expected platform skip / 0 fail**, `npm run build` clean, `git diff --check` clean. |
+| Packed artifact | **Pass.** `npm pack` → 98 files, SHA-256 `665ce684ca1d142cf431b46d404e1bd961d25f670422672b309636f1ced125f3`; all 6 key paths present. The file count rose by one against `1398fe3` because `docs/` ships with the package and this candidate adds `docs/VISION-AUDIT.md` — no new code path. |
+| Clean installed CLI | **Pass.** Installed with `--ignore-scripts` into a fresh directory; `fiscus --help` renders. |
+| Packaged dashboard/API | **Pass.** Isolated `AEGIS_HOME`, seeded demo (552 requests, $89.66), packaged dashboard on :8097. `/api/health` → `{"ok":true}`; `/api/overview` → `demo: true`. Terminated cleanly, port confirmed closed. |
+| Model-trial truthfulness | **Pass.** `/api/value` self-labels `demo: true`; one switch, `confidence: trial`, no `evidence_supported`, zero confounders, 4 assumptions, `costStaleUnits: 0`, `unitsExcludedStalePricing: 0`; $0.20 vs $1.22 per 100 changed lines, 3 vs 3 sessions. Unchanged by this candidate — the rebalanced roster was not touched. |
+| Billing-boundary truthfulness | **Pass.** `billing scope set --account-ref org_gatecheck --project-ref proj_gatecheck --json` → `applied: false`, `trust: operator_declared_unverified`, `reconciliationStatus: not_reconciled`. Packaged `/api/billing` → `demo: true`, `not_reconciled`, `recordCount: 0`, `excludedFrom` intact. |
+| Direct-Costs connector boundary | **Pass.** With an applied `org_…`/`proj_…` scope, `billing openai-costs preview --from 2026-08-01 --to 2026-08-10 --json` → `networkAttempted: false`, `credentialRead: false`. |
+| Intended CI | **Pending.** To be filled in only after the run for this candidate has been inspected. |
+| Visual check | **Pass.** Packaged dashboard in the browser: DEMO banner; **all five attribution bases render on the By-project card**, including `data-pipeline` showing two bases with their dollar split (`self-declared ($10.18) · resolved to a git repository ($3.30)`), a `default` bar reading `unattributed — no project declared`, and the demo tooltip stating the bases are depicted rather than observed. Overview shows rate-card `STALE · 63d old` under its list-price boundary. Value renders exactly one rendered `TRIAL` badge and no `EVIDENCE` badge. |
+
+**The demo now exercises the attribution paths, so they are no longer verified
+only outside the packaged artifact.** The previous record had to test them on a
+scratch home because every seeded row was `synthetic_demo`. The packaged
+coverage surface now returns all five bases with `demo: true` and a boundary
+string ending `DEMO DATA: these bases are DEPICTED by the seed, not observed.`
+The live-import and live-proxy proofs from the `1398fe3` record still stand for
+what the demo cannot do: a seeded row depicts a git resolution, it does not
+perform one.
+
+**Not covered by this candidate, deliberately:** the demo still fabricates no
+provider billing evidence, so billing and reconciliation remain verified only
+through their blocked/empty states above.
+
+**Team server at this tree:** typecheck clean, **55/55** — source validation only.
+
+### Superseded record — commit `1398fe3`, 2026-08-17
 
 Run against `1398fe35d63d26c9f09592f71e51cc457d7b84bb`, worktree clean before and
 after validation. **All ten rows pass**, the CI row with its commit delta stated.
