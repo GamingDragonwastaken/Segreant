@@ -306,20 +306,30 @@ export function cmdProject(flags: Flags): void {
       const rows = store.attributionEvidenceByProject(0, endMs);
       const total = rows.reduce((s, r) => s + r.costUsd, 0);
       const declared = rows.filter((r) => isDeclaredAttribution(r.attributionBasis)).reduce((s, r) => s + r.costUsd, 0);
+      // The demo depicts the acquisition routes rather than labelling every row
+      // synthetic, so this surface has something to show without a real repo and
+      // a real transcript corpus. That makes the coverage percentage the one
+      // number here a synthetic store could flatter, so it is disclaimed in the
+      // same breath as it is printed — in JSON too, since that is what gets piped.
+      const demoNote = 'DEMO DATA: these bases are DEPICTED by the seed, not observed. '
+        + 'The coverage share below describes a scenario, not this machine.';
       if (flags.json) {
         process.stdout.write(JSON.stringify({
           window: { startMs: 0, endMs, label: 'all recorded time' },
+          demo: isDemo(),
           total: { costUsd: total, declaredCostUsd: declared },
           evidence: rows,
           boundary:
             'How each project label was obtained. A declared label is a self-assertion by the calling tool, '
-            + 'never a verified identity, and this is not chargeback-grade attribution.',
+            + 'never a verified identity, and this is not chargeback-grade attribution.'
+            + (isDemo() ? ` ${demoNote}` : ''),
         }, null, 2) + '\n');
         return;
       }
       console.log('');
       console.log(color(tty, C.bold, '  Attribution evidence — all recorded time'));
       console.log(color(tty, C.dim, '  How each project label was obtained. A declared label is self-asserted, never verified.'));
+      if (isDemo()) console.log(color(tty, C.yellow, `  ● ${demoNote}`));
       if (rows.length === 0) {
         console.log(color(tty, C.gray, '  No metered requests yet.'));
       } else {

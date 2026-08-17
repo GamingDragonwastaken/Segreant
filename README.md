@@ -70,6 +70,14 @@ That lights up spend, governance alerts, the RoI index and its four value
 lenses, the model-by-task frontier, budget controls, and a review-only synthetic
 model trial in an isolated `demo.db`. Clear it with `fiscus demo --clear`.
 
+The demo also **depicts the attribution routes** — proxied traffic that declared
+a project, proxied traffic that declared nothing, and imported traffic whose
+recorded directory resolved to a repository, merely inferred a folder name, or
+recorded no path at all — so `fiscus project --coverage` and the By-project card
+show what each basis looks like, including roughly a tenth of the spend sitting
+unallocated under `default`. These bases are *depicted*, not observed; both
+surfaces say so while the demo store is active.
+
 **Then meter your real traffic:**
 
 ```bash
@@ -259,7 +267,7 @@ was obtained alongside the label itself:
 | `tool_log_inferred` | Derived from a working directory the tool recorded, which is not inside a git repository. |
 | `tool_log_fallback` | The tool recorded no usable path, so its own name was used. Not a real project. |
 | `unattributed` | The request declared no project. Stored under `default`, but it is not one. |
-| `synthetic_demo` | Seeded demo data. |
+| `synthetic_demo` | A demo row that declines to depict any route. Retained for stores seeded before the demo covered attribution; the current seed does not produce it. |
 | `legacy_unknown` | Recorded before attribution lineage existed. Never backfilled or guessed. |
 
 **Imports resolve the repository, not the folder name.** Claude Code and Codex
