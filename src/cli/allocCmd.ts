@@ -25,6 +25,7 @@ function usage(): void {
   console.error('             --centre <id>[:<ratio>][,<id>[:<ratio>]...] [--match-project P] [--match-model M]');
   console.error('             [--match-provider P] [--match-source S] [--match-user U]');
   console.error('             [--priority N] [--from <ISO>] [--until <ISO>] [--owner W] [--note "..."]');
+  console.error('             a proportional_to_direct rule derives its split, so its centre takes ratio 0');
   console.error('         fiscus alloc revoke <rule-id>');
   console.error('         fiscus alloc run --from <ISO> --to <ISO> [--apply] [--json]');
   console.error('  Allocation is derived: it never modifies a request row, and never feeds budgets or RoI.');
@@ -158,8 +159,19 @@ export function cmdAlloc(flags: Flags): void {
       if (rules.length === 0) console.log(color(tty, C.gray, '  No allocation rules. Spend allocates to nothing until one exists.'));
       for (const r of rules) {
         const match = MATCH_FIELDS.filter((f) => r.match[f] != null).map((f) => `${f}=${r.match[f]}`).join(' ') || 'everything';
-        const targets = r.targets.map((t) => (r.method === 'fixed_split' ? `${t.costCentreId}:${t.ratio}` : t.costCentreId)).join(' ');
-        const state = r.revokedAtMs ? color(tty, C.yellow, ' [revoked]') : r.effectiveToMs ? color(tty, C.gray, ' [superseded]') : '';
+        // A proportional pool splits across whichever centres were DIRECTLY
+        // allocated in the period, so its declared target is a placeholder the
+        // engine never reads. Printing that id here would show the author a
+        // destination the run does not use.
+        const targets = r.method === 'proportional_to_direct'
+          ? 'every directly-allocated centre'
+          : r.targets.map((t) => (r.method === 'fixed_split' ? `${t.costCentreId}:${t.ratio}` : t.costCentreId)).join(' ');
+        // Null-checked, not truthy-checked: a first rule defaults to an epoch-0
+        // effective date, so superseding it closes the old version AT 0, and a
+        // truthiness test would report that retired version as still in force.
+        const state = r.revokedAtMs != null ? color(tty, C.yellow, ' [revoked]')
+          : r.effectiveToMs != null ? color(tty, C.gray, ' [superseded]')
+          : '';
         console.log(`  ${`${r.ruleId} v${r.version}`.padEnd(22)} p${String(r.priority).padEnd(4)} ${r.method.padEnd(24)} ${match}  →  ${targets}${state}`);
       }
       return;

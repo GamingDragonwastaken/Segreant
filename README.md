@@ -632,7 +632,7 @@ question as which folder the spend arrived under:
 fiscus alloc centre eng --name "Engineering" --owner cto
 fiscus alloc rule backend --method direct --centre eng --match-project backend-api
 fiscus alloc rule web --method fixed_split --centre "eng:0.5,platform:0.5" --match-project web-frontend
-fiscus alloc rule infra --method proportional_to_direct --centre shared --match-project shared-infra
+fiscus alloc rule infra --method proportional_to_direct --centre "shared:0" --match-project shared-infra
 fiscus alloc run --from 2026-08-01 --to 2026-09-01 [--apply] [--json]
 ```
 
@@ -656,6 +656,12 @@ Every line carries the cost basis underneath it. Allocating a local rate-card
 estimate is legitimate; presenting it as settled cost is not — so the run
 self-labels `derived_allocation_of_local_estimates` and stays out of budget
 enforcement, RoI, and model recommendations.
+
+The dashboard's **Allocation** view reads *recorded* runs and never computes
+one, so it cannot disagree with what you chose to record — and when no provider
+reconciliation has been recorded, it says on the page that the residual beneath
+every figure is unexamined. It is a showback statement, not a live gauge, and it
+authors nothing: centres, rules, and runs are written from the CLI.
 
 Full model, including the three methods and what is deliberately not built:
 **[docs/ALLOCATION.md](docs/ALLOCATION.md)**.

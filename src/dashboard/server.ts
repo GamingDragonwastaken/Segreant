@@ -428,6 +428,55 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
       }
     }
 
+    // Cost-centre allocation — the showback surface, written for a BUDGET OWNER.
+    //
+    // Recorded runs only. Like reconciliation, this route reads what
+    // `fiscus alloc run --apply` recorded and never computes a run of its own: a
+    // freshly computed allocation would disagree with the recorded one the
+    // moment a rule changed or new spend landed in the period, and the recorded
+    // run is the statement someone has to stand behind.
+    //
+    // Cost centres and rules ARE served live, because they are configuration
+    // rather than derived money — the page needs them to name a centre and to
+    // show which rule version placed each line.
+    if (url.pathname === '/api/allocation') {
+      if (req.method !== 'GET') {
+        res.writeHead(405, { 'content-type': 'text/plain', allow: 'GET' });
+        res.end('method not allowed');
+        return;
+      }
+      try {
+        const reconciliationRuns = store.reconciliationRuns(1);
+        return json(res, 200, {
+          demo: isDemo(),
+          generatedAt: new Date().toISOString(),
+          kind: 'derived_cost_allocation',
+          trust: 'derived_allocation_of_local_estimates',
+          /** Showback, never chargeback: a chargeback implies a settlement this product does not have. */
+          basis: 'showback_only',
+          excludedFrom: [
+            'request_metered_spend',
+            'budget_enforcement',
+            'roi',
+            'model_recommendations',
+          ],
+          costCentres: store.costCentres(),
+          rules: store.allocationRules(),
+          runs: store.allocationRuns(10),
+          // A cross-reference, not a computation. Whether ANY reconciliation has
+          // been recorded decides whether the residual underneath every figure
+          // on that page has been looked at — which is the difference between a
+          // defensible showback number and a confident guess.
+          reconciliation: {
+            everRun: reconciliationRuns.length > 0,
+            latestComputedAtMs: reconciliationRuns[0]?.computedAtMs ?? null,
+          },
+        });
+      } catch (err) {
+        return json(res, 500, { error: String(err) });
+      }
+    }
+
     if (url.pathname === '/api/export.csv') {
       const range = (url.searchParams.get('range') as RangeKey) ?? '30d';
       const valid: RangeKey[] = ['today', '7d', '30d', 'all'];

@@ -59,7 +59,9 @@ fiscus alloc rule web --method fixed_split --centre "eng:0.5,platform:0.5" \
     --match-project web-frontend --priority 11
 
 # A shared pool follows whoever was directly allocated.
-fiscus alloc rule infra --method proportional_to_direct --centre shared \
+# The centre here is a required placeholder at ratio 0, not a destination: this
+# method derives its split from the period, so it refuses a declared ratio.
+fiscus alloc rule infra --method proportional_to_direct --centre "shared:0" \
     --match-project shared-infra --priority 50
 
 fiscus alloc rules
@@ -82,6 +84,13 @@ insertion order. **First match wins** — a request is claimed once.
 `proportional_to_direct` derives its shares, so declared ratios are refused
 rather than accepted and ignored — a number the author believes and the engine
 discards is worse than an error.
+
+The same reasoning does not yet hold for the *centre* on such a rule. One is
+still required at ratio 0, and the engine never reads it: the pool goes to every
+centre that received a direct allocation, whatever the rule names. Both the CLI
+and the dashboard therefore report the target of a proportional rule as *every
+directly-allocated centre* rather than echoing the placeholder back. Making the
+placeholder unnecessary is a change to the rule schema, and is not made here.
 
 **A pool with no driver stays unallocated.** If nothing was directly allocated in
 the period, there is nothing for the pool to follow, and splitting it evenly
@@ -199,11 +208,41 @@ separate, explicit decision with its own gate — not a silent promotion.
 
 ---
 
-## 7. Not built yet, deliberately
+## 7. The dashboard surface
 
-- **No dashboard surface.** Who the viewer is — a budget owner, a team lead, an
-  auditor — changes what the page should show, and shipping a half-considered
-  card is worse than shipping none. The CLI and JSON are the interface for now.
+`GET /api/allocation`, and the **Allocation** view beside Billing.
+
+This was withheld until the viewer question had an answer, because who is
+reading changes what the page should show. The answer this page implements: the
+viewer is the **budget owner** — someone who has to stand behind a number in a
+planning conversation — and the auditor is served on the *same* page rather than
+a second one, by attaching provenance to each figure instead of to a separate
+report. Three consequences carry that:
+
+**It serves recorded runs and never computes one.** Cost centres and rules are
+served live, because they are configuration; money is not. A page that
+recomputed on load would disagree with `fiscus alloc run --apply` the moment a
+rule changed or new spend landed in the period, and a budget owner would have no
+way to tell which of the two numbers was the statement. Re-running appends a
+second record, and the page shows both, so a restatement is visible rather than
+silent.
+
+**Unallocated is rendered at the weight of a cost centre**, with its reason, its
+request count, and its largest project labels. Shrinking it into a footnote
+would be quietly recommending that someone sweep it.
+
+**Every line names the rule version that placed it and the basis it rests on**,
+the conservation identity is printed as arithmetic the reader can check by eye,
+and the page states in its header whether a provider reconciliation has ever
+been recorded. When none has, it says so in as many words: the residual beneath
+every figure is unexamined, and nothing on the page can detect it.
+
+The page authors nothing. Centres, rules, and runs are written from the CLI —
+a dashboard that could edit an allocation policy would need the approval
+workflow that does not exist yet.
+
+## 8. Not built yet, deliberately
+
 - **No approval workflow.** Rules take effect when written. Versioning and
   reversal make that recoverable, but there is no second pair of eyes, and this
   is single-operator by design until the team tier is real.

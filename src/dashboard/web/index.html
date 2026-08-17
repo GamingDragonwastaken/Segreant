@@ -104,6 +104,12 @@
   .dlcsv:hover { color: var(--gold); border-color: rgba(232,179,60,0.3); }
   @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(87,210,163,0.5); } 70% { box-shadow: 0 0 0 7px rgba(87,210,163,0); } 100% { box-shadow: 0 0 0 0 rgba(87,210,163,0); } }
 
+  /* The view switcher sets `.hidden` on the range picker, the CSV link, and the
+     LIVE badge for views that carry their own period. That intent silently
+     failed for anything with its own `display` (flex/inline-flex beats the UA
+     [hidden] rule), so the range buttons stayed on screen looking like a filter
+     that did nothing. On a money page a dead control is worse than no control. */
+  [hidden] { display: none !important; }
   .ranges { display: flex; gap: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 4px; }
   .ranges button { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.05em; color: var(--muted); background: none; border: 0; padding: 6px 12px; border-radius: 7px; cursor: pointer; transition: all 0.18s ease; }
   .ranges button:hover { color: var(--text); }
@@ -294,7 +300,17 @@
   .billing-stat.coral { color: var(--coral); }
   #billing-grid .card { overflow: visible; }
   #billing-grid table { width: 100%; min-width: 760px; }
-  #billing-grid .table-wrap { overflow-x: auto; border: 1px solid var(--line-soft); border-radius: 10px; }
+  /* Wide evidence tables scroll inside their own card rather than pushing the
+     page sideways. Both evidence grids need this — scoping it to Billing alone
+     let the Allocation rule table overflow the whole document at narrow widths. */
+  #billing-grid .table-wrap, #alloc-grid .table-wrap { overflow-x: auto; border: 1px solid var(--line-soft); border-radius: 10px; }
+  /* Every allocation card is a full-row statement, so the grid is explicitly one
+     column — and that column is minmax(0, 1fr), not 1fr. A plain `1fr` track is
+     minmax(AUTO, 1fr) and still sizes itself to its widest content, which means
+     the wrapper's overflow-x never engages and a wide rule table pushes the
+     whole document sideways instead of scrolling inside its own card. */
+  #alloc-grid { grid-template-columns: minmax(0, 1fr); }
+  #alloc-grid .card { min-width: 0; }
   #billing-grid code { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
   #billing-grid .bsub { color: var(--faint); font-family: var(--mono); font-size: 10.5px; margin-top: var(--s2); line-height: 1.55; }
   /* RoI hero — mockup U4: giant index · uncertainty band · position scale */
@@ -377,6 +393,7 @@
     <nav class="viewnav" id="viewnav">
       <button data-view="overview" class="on">Overview</button>
       <button data-view="billing">Billing</button>
+      <button data-view="allocation">Allocation</button>
       <button data-view="value">Value</button>
       <button data-view="settings">Settings</button>
     </nav>
@@ -417,6 +434,16 @@
     </div>
     <div id="billing-grid" class="grid">
       <div class="card" style="grid-column:1/-1;color:var(--faint);font-family:var(--mono);font-size:12px">Load Billing to inspect locally imported evidence.</div>
+    </div>
+  </div>
+
+  <div id="view-allocation" class="view" style="display:none">
+    <div class="vhead">
+      <div><h2>Cost-centre allocation</h2><div class="tag">who owns the spend · showback from recorded runs</div></div>
+      <button class="vbtn" id="arefresh">↻ Refresh runs</button>
+    </div>
+    <div id="alloc-grid" class="grid">
+      <div class="card" style="grid-column:1/-1;color:var(--faint);font-family:var(--mono);font-size:12px">Load Allocation to read recorded runs.</div>
     </div>
   </div>
 
@@ -857,14 +884,19 @@ $('#viewnav').addEventListener('click', (e) => {
   document.querySelectorAll('#viewnav button').forEach((b) => b.classList.toggle('on', b === btn));
   $('#view-overview').style.display = view === 'overview' ? '' : 'none';
   $('#view-billing').style.display = view === 'billing' ? '' : 'none';
+  $('#view-allocation').style.display = view === 'allocation' ? '' : 'none';
   $('#view-value').style.display = view === 'value' ? '' : 'none';
   $('#view-settings').style.display = view === 'settings' ? '' : 'none';
-  const isBilling = view === 'billing';
-  $('#ranges').hidden = isBilling;
-  $('#dlcsv').hidden = isBilling;
-  $('#live-indicator').hidden = isBilling;
+  // The evidence views carry their own periods — Billing reads provider report
+  // periods, Allocation reads the period a recorded run was computed for — so
+  // the global range picker would be a control that silently does nothing.
+  const ownsItsPeriod = view === 'billing' || view === 'allocation';
+  $('#ranges').hidden = ownsItsPeriod;
+  $('#dlcsv').hidden = ownsItsPeriod;
+  $('#live-indicator').hidden = ownsItsPeriod;
   if (view === 'overview') load();
-  if (isBilling) loadBilling();
+  if (view === 'billing') loadBilling();
+  if (view === 'allocation') loadAllocation();
   if (view === 'settings' && !SETTINGS_LOADED) { SETTINGS_LOADED = true; loadSettings(); }
 });
 
@@ -996,6 +1028,203 @@ async function loadBilling() {
 }
 
 $('#brefresh').addEventListener('click', loadBilling);
+
+// ---- Cost-centre allocation ----
+//
+// ALLOCATION.md deliberately shipped this layer without a dashboard, on the
+// grounds that "who the viewer is changes what the page should show". This page
+// answers that: the viewer is the BUDGET OWNER — someone who has to stand
+// behind a number in a planning conversation — and the auditor is served on the
+// same page rather than a second one, by attaching provenance to every figure
+// instead of to a separate report. Three consequences, all load-bearing:
+//
+//   1. It reads RECORDED runs and never computes one. A page that recomputed on
+//      load would disagree with `fiscus alloc run --apply` the moment a rule
+//      changed or new spend landed in the period, and a budget owner would have
+//      no way to tell which of the two numbers was the statement.
+//   2. Unallocated is rendered at the same weight as allocated. It is an
+//      accounting position, not a gap; shrinking it into a footnote would be
+//      quietly recommending that someone sweep it into a fallback centre.
+//   3. Every line names the rule VERSION that placed it and the cost basis it
+//      rests on, and the conservation identity is printed as arithmetic the
+//      reader can check by eye.
+const words = (s) => String(s == null ? '' : s).replace(/_/g, ' ');
+const sharePct = (part, whole) => (!Number(whole) ? '—' : ((Number(part) / Number(whole)) * 100).toFixed(1) + '%');
+
+function renderAllocation(d) {
+  const grid = $('#alloc-grid');
+  const runs = Array.isArray(d && d.runs) ? d.runs : [];
+  const centres = Array.isArray(d && d.costCentres) ? d.costCentres : [];
+  const rules = Array.isArray(d && d.rules) ? d.rules : [];
+  const recon = d && typeof d.reconciliation === 'object' && d.reconciliation ? d.reconciliation : {};
+  const centreOf = (id) => centres.find((c) => c && c.costCentreId === id) || null;
+  const excluded = (Array.isArray(d && d.excludedFrom) ? d.excludedFrom : []).map((x) => esc(words(x))).join(', ');
+
+  // The most important sentence on the page whenever it is true. An allocated
+  // estimate is a legitimate thing to show a budget owner; an allocated
+  // estimate presented as settled cost is not, and only a reconciliation moves
+  // it from the first to the second.
+  const residualNote = recon.everRun
+    ? 'A provider reconciliation was recorded ' + esc(billingTime(recon.latestComputedAtMs)) + '. Read it under Billing before treating anything here as settled — reconciliation reports a residual, it does not remove one.'
+    : '<b>No provider reconciliation has been recorded.</b> The residual beneath every figure on this page is unexamined: if a provider reported materially more than Fiscus metered, each total below is understated by an unknown share, and nothing on this page can detect it.';
+
+  const trustCard = `<div class="card billing-note fade" style="grid-column:1/-1">
+    <div class="billing-state">SHOWBACK · DERIVED FROM LOCAL ESTIMATES${recon.everRun ? '' : ' · RESIDUAL UNEXAMINED'}</div>
+    <h3>Who owns the spend is a decision, not a measurement ${tip('A project label is an <b>instrumentation fact</b> — which folder or header the spend arrived under. A cost centre is an <b>accounting position</b> — who your organization decided owns it. They look alike on a dashboard and are different problems: a <code>default</code> project is fixed by instrumenting a tool, whereas <b>unallocated</b> is fixed by someone deciding something. Conflating them is how a folder name becomes a chargeback.')}</h3>
+    <p>Allocation never rewrites a project label, never modifies a request row, and never writes back to the ledger. Every figure below is derived, and re-derivable from immutable source rows.</p>
+    <div class="bsub">${residualNote}<br>Excluded from: ${excluded || 'request metered spend, budget enforcement, roi, model recommendations'}. Showback only — no chargeback export exists, because a chargeback implies a settlement process this product does not have.${d && d.demo ? '<br>Demo mode seeds requests but never cost centres or rules: anything below was authored on this machine.' : ''}</div>
+  </div>`;
+
+  // ---- Rule provenance. Shown even with no run, because it is the thing an
+  // operator edits, and because an empty rule set is the actual explanation for
+  // an empty page. Versions used by the displayed run are marked, so a line on
+  // the statement can be traced to the rule text that was in force. ----
+  const usedVersions = new Set(
+    (runs[0] && runs[0].result && Array.isArray(runs[0].result.lines) ? runs[0].result.lines : [])
+      .map((l) => String(l.ruleId) + ' v' + String(l.ruleVersion)),
+  );
+  const rulesCard = (() => {
+    if (!rules.length) {
+      return `<div class="card fade" style="grid-column:1/-1"><div class="label">Allocation rules</div><div class="billing-state">NONE AUTHORED</div><p class="bsub" style="margin-top:var(--s3)">No rule exists, so no spend can reach a cost centre. Rules are written on this machine with <code>fiscus alloc rule</code>; this page does not author or edit them.</p></div>`;
+    }
+    const rows = rules.map((r) => {
+      const match = ['project', 'provider', 'model', 'source', 'user']
+        .filter((f) => r.match && r.match[f] != null)
+        .map((f) => esc(f) + '=' + esc(String(r.match[f]))).join(' ') || '<span style="color:var(--faint)">everything</span>';
+      // A proportional pool splits across whichever centres were DIRECTLY
+      // allocated in the period, so its declared target is not where the money
+      // went. Printing that id in a Targets column would be the one thing this
+      // layer refuses elsewhere: showing an author a number the engine ignored.
+      const targets = r.method === 'proportional_to_direct'
+        ? '<span style="color:var(--faint)">every directly-allocated centre</span>'
+        : (Array.isArray(r.targets) ? r.targets : [])
+          .map((t) => esc(String(t.costCentreId)) + (r.method === 'fixed_split' ? ':' + esc(String(t.ratio)) : '')).join(' ');
+      // Null-checked, not truthy-checked. A first rule defaults to an epoch-0
+      // effective date, so superseding it closes the old version AT 0 — and a
+      // truthiness test reads that as still in force, which is the opposite of
+      // what happened.
+      const state = r.revokedAtMs != null ? '<span class="pill block">revoked</span>'
+        : r.effectiveToMs != null ? '<span style="color:var(--faint)">superseded</span>'
+        : '<span class="pill stream">in force</span>';
+      const used = usedVersions.has(String(r.ruleId) + ' v' + String(r.version));
+      return `<tr>
+        <td><b>${esc(String(r.ruleId))}</b> <span style="color:var(--faint)">v${Number(r.version)}</span>${used ? ' <span class="pill stream">used above</span>' : ''}</td>
+        <td>${Number(r.priority)}</td>
+        <td>${esc(words(r.method))}</td>
+        <td>${match}</td>
+        <td>${targets}</td>
+        <td>${state}</td>
+      </tr>`;
+    }).join('');
+    return `<div class="card fade" style="grid-column:1/-1">
+      <div class="label">Allocation rules ${tip('Lower priority wins and ties break on rule id, so a run never depends on insertion order. <b>First match wins</b> — a request is claimed once. Editing a rule creates a new VERSION rather than overwriting it, and a rule is matched against the instant the spend happened, so re-running a closed period restates nothing.')}</div>
+      <div class="table-wrap"><table><thead><tr><th>Rule</th><th>Priority</th><th>Method</th><th>Matches</th><th>Targets</th><th>State</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="bsub">Superseded and revoked versions are retained, never deleted — a past period must stay reconstructible under the rule text that actually applied to it.<br>A <code>proportional_to_direct</code> rule still requires a placeholder centre at ratio 0 when it is authored, but the engine derives its split from the period rather than from that name, so this column reports where the money actually goes.</div>
+    </div>`;
+  })();
+
+  const centresCard = centres.length
+    ? `<div class="card fade" style="grid-column:1/-1"><div class="label">Cost centres</div><div class="bsub" style="margin-top:var(--s3)">${centres.map((c) => `<code>${esc(String(c.costCentreId))}</code> ${esc(String(c.name))}${c.owner ? ' (' + esc(String(c.owner)) + ')' : ''}${c.archivedAtMs ? ' <span class="pill block">archived</span>' : ''}`).join(' · ')}</div><div class="bsub">Archiving retains a centre so past runs stay explicable; spend a rule still aims at an archived centre is reported as unallocated rather than silently delivered.</div></div>`
+    : '';
+
+  if (!runs.length) {
+    setNodes(grid, trustCard + `<div class="card empty">
+      <h3>No allocation run recorded</h3>
+      <p>This page reads recorded runs only, so it can never disagree with what you actually recorded. Compute a period first, then record the one you want to stand behind.</p>
+      <div style="font-family:var(--mono);font-size:12px;color:var(--muted);text-align:left;max-width:620px;margin:0 auto;line-height:2">
+        <code>fiscus alloc centre eng --name "Engineering"</code><br>
+        <code>fiscus alloc rule backend --method direct --centre eng --match-project backend-api</code><br>
+        <code>fiscus alloc run --from 2026-08-01 --to 2026-09-01</code><br>
+        <code>fiscus alloc run --from 2026-08-01 --to 2026-09-01 --apply</code>
+      </div>
+    </div>` + centresCard + rulesCard);
+    $('#gen').textContent = 'allocation read ' + new Date((d && d.generatedAt) || Date.now()).toLocaleTimeString();
+    return;
+  }
+
+  // ---- The statement: the most recently recorded run. ----
+  const latest = runs[0] && typeof runs[0].result === 'object' && runs[0].result ? runs[0].result : {};
+  const total = Number(latest.totalMicros || 0);
+  const allocated = Number(latest.allocatedMicros || 0);
+  const unallocated = Number(latest.unallocatedMicros || 0);
+  const byCentre = Array.isArray(latest.byCostCentre) ? latest.byCostCentre : [];
+  const lines = Array.isArray(latest.lines) ? latest.lines : [];
+  const day = (ms) => (Number.isFinite(Number(ms)) ? new Date(Number(ms)).toISOString().slice(0, 10) : '—');
+
+  const centreBars = byCentre.map((c) => {
+    const id = String(c.costCentreId || '');
+    const meta = centreOf(id);
+    const placedBy = lines.filter((l) => String(l.costCentreId) === id)
+      .map((l) => String(l.ruleId) + ' v' + String(l.ruleVersion))
+      .filter((v, i, arr) => arr.indexOf(v) === i).join(', ');
+    const width = total > 0 ? Math.min(100, (Number(c.allocatedMicros) / total) * 100) : 0;
+    return `<div class="bar">
+      <div class="top"><span class="name">${esc(meta ? meta.name : id)}${meta && meta.archivedAtMs ? ' <span class="pill block">archived</span>' : ''} <span class="prov">${esc(id)}</span></span><span class="cost">${billingUsd(c.allocatedMicros)}</span></div>
+      <div class="track"><div class="fill" style="width:${width}%"></div></div>
+      <div class="meta">${sharePct(c.allocatedMicros, total)} of the period · basis ${esc(words(c.sourceBasis))} · placed by ${esc(placedBy || 'no rule')}</div>
+    </div>`;
+  }).join('');
+
+  const statementCard = `<div class="card fade" style="grid-column:1/-1">
+    <div class="label">Recorded run · ${esc(day(latest.periodStartMs))} → ${esc(day(latest.periodEndMs))}</div>
+    <div class="bsub">Computed ${esc(billingTime(runs[0].computedAtMs))} · run <code>${esc(String(runs[0].allocationRunId || '').slice(0, 8))}</code> · end of period is exclusive</div>
+    <div class="bars" style="margin-top:var(--s4)">${centreBars || '<div style="color:var(--faint);font-family:var(--mono);font-size:12px">No spend reached a cost centre in this period.</div>'}</div>
+    <div class="bsub" style="margin-top:var(--s4)">
+      Conservation ${tip('Checked on every run, shipped on the result, and enforced in the store: it <b>refuses to record</b> a run where this identity does not hold to the microdollar. An allocation that lost or invented money is not a record worth keeping — the entire value of this layer is that a budget owner can add it up.')}
+      — ${billingUsd(allocated)} allocated + ${billingUsd(unallocated)} unallocated = ${billingUsd(total)} ledger total${latest.conserves === false ? ' · <b style="color:var(--coral)">FAILED</b>' : ' · exact'}
+      <br>Source basis: ${(Array.isArray(latest.sourceBases) ? latest.sourceBases : []).map((b) => esc(words(b))).join(', ') || '—'}. None of these is a provider-reported or reconciled amount.
+    </div>
+  </div>`;
+
+  // ---- Unallocated, at the same weight as the centres above. ----
+  const unallocatedList = Array.isArray(latest.unallocated) ? latest.unallocated : [];
+  const unallocatedCard = `<div class="card fade" style="grid-column:1/-1">
+    <div class="label">Unallocated ${tip('An <b>output</b>, not a failure. Each bucket names its largest project labels so an operator knows what to write a rule for. A rule set that swept the remainder into a fallback centre would report full coverage of an organization it had never described. Note that <code>default</code> appearing here is an <b>instrumentation</b> gap — nobody declared a project — which is a different problem from spend no rule claimed.')}</div>
+    <div class="billing-stat${unallocated > 0 ? ' coral' : ''}">${billingUsd(unallocated)}</div>
+    <div class="bsub">${sharePct(unallocated, total)} of the period</div>
+    ${unallocatedList.length ? `<div class="table-wrap" style="margin-top:var(--s3)"><table><thead><tr><th>Reason</th><th style="text-align:right">Amount</th><th style="text-align:right">Requests</th><th>Largest labels</th></tr></thead><tbody>${unallocatedList.map((u) => `<tr>
+      <td>${esc(words(u.reason))}</td>
+      <td style="text-align:right">${billingUsd(u.micros)}</td>
+      <td style="text-align:right">${Number(u.requestCount || 0).toLocaleString()}</td>
+      <td>${(Array.isArray(u.topProjects) ? u.topProjects : []).map((p) => esc(String(p.project)) + ' (' + billingUsd(p.micros) + ')').join(', ') || '—'}</td>
+    </tr>`).join('')}</tbody></table></div>` : '<div class="bsub" style="margin-top:var(--s3)">Every microdollar in this period reached a cost centre.</div>'}
+  </div>`;
+
+  // ---- Run history. Re-running writes a NEW record rather than editing one, so
+  // the history is the evidence that a restated period is visible. ----
+  const historyCard = runs.length > 1 ? `<div class="card fade" style="grid-column:1/-1">
+    <div class="label">Recorded runs</div>
+    <div class="table-wrap"><table><thead><tr><th>Computed</th><th>Period</th><th style="text-align:right">Ledger total</th><th style="text-align:right">Allocated</th><th style="text-align:right">Unallocated</th><th>Run</th></tr></thead><tbody>${runs.map((r) => {
+      const res = r && typeof r.result === 'object' && r.result ? r.result : {};
+      return `<tr>
+        <td>${esc(billingTime(r.computedAtMs))}</td>
+        <td>${esc(day(res.periodStartMs))} → ${esc(day(res.periodEndMs))}</td>
+        <td style="text-align:right">${billingUsd(res.totalMicros)}</td>
+        <td style="text-align:right">${billingUsd(res.allocatedMicros)} <span style="color:var(--faint)">${sharePct(res.allocatedMicros, res.totalMicros)}</span></td>
+        <td style="text-align:right">${billingUsd(res.unallocatedMicros)}</td>
+        <td><code>${esc(String(r.allocationRunId || '').slice(0, 8))}</code></td>
+      </tr>`;
+    }).join('')}</tbody></table></div>
+    <div class="bsub">Runs are immutable. Re-running a period appends a record rather than editing one, so a restatement is always visible as a second row.</div>
+  </div>` : '';
+
+  setNodes(grid, trustCard + statementCard + unallocatedCard + centresCard + rulesCard + historyCard);
+  $('#gen').textContent = 'allocation read ' + new Date((d && d.generatedAt) || Date.now()).toLocaleTimeString();
+}
+
+async function loadAllocation() {
+  const grid = $('#alloc-grid');
+  setNodes(grid, '<div class="card" style="grid-column:1/-1;color:var(--faint);font-family:var(--mono);font-size:12px">Reading recorded allocation runs…</div>');
+  try {
+    const res = await fetch('/api/allocation');
+    if (!res.ok) throw new Error('allocation unavailable');
+    renderAllocation(await res.json());
+  } catch (e) {
+    setNodes(grid, '<div class="card empty"><h3>Allocation unavailable</h3><p>The local dashboard could not read the recorded allocation runs. Your request ledger, budgets, and RoI are unaffected — allocation is derived from them and never feeds back into them.</p></div>');
+  }
+}
+
+$('#arefresh').addEventListener('click', loadAllocation);
 
 // ---- Return on Intelligence panels ----
 const cap1 = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
