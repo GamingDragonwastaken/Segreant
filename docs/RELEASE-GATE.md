@@ -27,7 +27,51 @@ This validates a local developer preview only. It does **not** validate a
 provider billing statement, production customer data, an npm publication, an
 external deployment, or the optional team service.
 
-### Candidate record — commit `3ddf625`, 2026-08-18
+### Candidate record — commit `a9fc6b2`, 2026-08-18
+
+Run against `a9fc6b2e01869b7bd8d9f4e24ffb782c891c3a51`, worktree clean before and
+after validation. **Nine rows pass; the CI row is PENDING** until the run for
+this candidate is observed. Supersedes the `3ddf625` record, retained for history.
+
+| Requirement | Result |
+| --- | --- |
+| Candidate identity | **Pass.** `git rev-parse HEAD` = `a9fc6b2e01869b7bd8d9f4e24ffb782c891c3a51`; `git status --short` empty before and after. |
+| Source validation | **Pass.** `npm run typecheck` clean, `npm test` **535 tests / 534 pass / 1 expected platform skip / 0 fail**, `npm run build` clean, `git diff --check` clean. |
+| Packed artifact | **Pass.** `npm pack` → 104 files, SHA-256 `e30737567d5b9f5cc90256a29efffd1aab235047f59fa696d5e46b41ebe55e54`; all 6 key paths present. Same file count as `3ddf625` — this candidate adds an API route and a view to files that already ship, not a new module. |
+| Clean installed CLI | **Pass.** Installed with `--ignore-scripts` into a fresh directory; `fiscus --help` renders. |
+| Packaged dashboard/API | **Pass.** Isolated `AEGIS_HOME`, seeded demo (552 requests, $89.66), packaged dashboard on :8105. `/api/health` → `{"ok":true}`; `/api/overview` → `demo: true`, 552 requests, `$89.66053895`. Terminated cleanly, port confirmed closed. |
+| Model-trial truthfulness | **Pass.** `/api/value` self-labels `demo: true`; one switch, `confidence: trial`, no `evidence_supported`. |
+| Billing-boundary truthfulness | **Pass.** `billing scope set --json` → `applied: false`, preview `trust: operator_declared_unverified`, `reconciliationStatus: not_reconciled`. Packaged `/api/billing` → `demo: true`, `not_reconciled`, `recordCount: 0`, `reconciliation.runs: 0`. |
+| Direct-Costs connector boundary | **Pass.** With an applied `org_…`/`proj_…` scope, `billing openai-costs preview --json` → `networkAttempted: false`, `credentialRead: false`. |
+| Intended CI | **PENDING.** Not yet pushed at the time this record was written. To be filled from the observed run for this candidate, with the multi-commit delta stated if it lands behind a tip. |
+| Visual check | **Pass.** Packaged dashboard in the browser, Allocation view: 5 cards; header state `SHOWBACK · DERIVED FROM LOCAL ESTIMATES · RESIDUAL UNEXAMINED`; conservation line renders as `$51.43 allocated + $38.23 unallocated = $89.66 ledger total · exact`; the unallocated bucket names `web-frontend ($15.79), data-pipeline ($13.48), default ($8.94), codex ($0.01)`; the proportional rule reports `every directly-allocated centre`; the range picker is `display: none`; no horizontal page overflow; no console errors. Screenshots were unavailable (the browser pane was not displayed), so this row rests on DOM and computed-style inspection, as the preceding records do. |
+
+**The new surface is a read path, and that was the point of checking it.**
+`GET /api/allocation` serves recorded runs and never computes one; the packaged
+probe returned `kind: derived_cost_allocation`, `trust:
+derived_allocation_of_local_estimates`, `basis: showback_only`, a 4-entry
+`excludedFrom`, `conserves: true`, and `sourceBases: [synthetic_demo, unpriced]`.
+`/api/overview` still reports 552 requests and `$89.66053895` with no
+`allocation` key, and `/api/value` still reports `allocation: null` and
+`projectAllocation: null` — a recorded allocation reaches no control.
+
+**Three display defects were found by rendering the page and are fixed here.**
+A `proportional_to_direct` rule was showing its placeholder centre in a Targets
+column the engine never reads; a rule version superseded at epoch 0 read as *in
+force* because the state was chosen on truthiness; and the view switcher's
+intent to hide the range picker had never worked, so Billing has been showing a
+filter that does nothing. The first two are exactly the failure this layer
+refuses elsewhere — presenting a number the engine discarded — and none of them
+were reachable by the API tests, the typecheck, or the build.
+
+**The caveat this page now states in its own header:** no reconciliation has run
+against real provider data, so the residual beneath every allocated figure is
+unexamined. That is unchanged by shipping a surface for it; the page says so
+rather than letting a well-rendered bar chart imply otherwise.
+
+**Team server at this tree:** typecheck clean, **55/55** — source validation only.
+
+### Superseded record — commit `3ddf625`, 2026-08-18
 
 Run against `3ddf6259c90cf7b6eeb42b8e2875aa2b967de367`, worktree clean before and
 after validation. **All ten rows pass.** Supersedes the `b990c3d` record,
