@@ -3,12 +3,14 @@
 **Date:** 2026-08-17. **Audited tree:** `main`, working tree clean at the time
 of writing.
 
-> **Update, 2026-08-18 — §6 was acted on.** The owner chose to unblock the
-> provider lane rather than re-rank the roadmap. Reconciliation is now built at
-> project-day grain ([PROVIDER-RECONCILIATION.md](PROVIDER-RECONCILIATION.md)),
-> which changes the Reconcile row in §4 and part of §2. The rest of this audit
-> stands as written; **§3 in particular is unchanged and now matters more**, since
-> allocation is the next layer up from a residual that is finally measurable.
+> **Update, 2026-08-18 — §6 was acted on, and §3 has since been built.**
+> The owner chose to unblock the provider lane rather than re-rank the roadmap.
+> Reconciliation landed at project-day grain
+> ([PROVIDER-RECONCILIATION.md](PROVIDER-RECONCILIATION.md)), and cost-centre
+> allocation landed after it ([ALLOCATION.md](ALLOCATION.md)) — on the owner's
+> direction, ahead of the sequencing this audit recommended. See §3 for what that
+> changed and what it did not. Sections 2, 4 and 6 are annotated; the rest stands
+> as written.
 
 This document applies the product's own rule to the product's own plans: an
 important claim should be inspectable through evidence. `PRODUCT_BRIEF.md` and
@@ -59,7 +61,7 @@ only claim in the vision that the code either honours or does not.
 | --- | --- | --- |
 | **Metered usage** | **Built, and the strongest part of the product.** Exact per-request capture through the proxy, read-only import for subscription tools, full pricing lineage per row (card SHA-256, source kind, match kind, matched provider/model), and a reprice audit trail that never rewrites history. | `src/proxy/server.ts`, `src/connect/*.ts`, `src/cost/pricing.ts`, `requests` + `request_price_events` in `src/store/db.ts` |
 | **Provider-billed cost** | **Partially built, and correctly refusing to overstate itself.** Operator-supplied billing evidence import produces immutable provider-declared charge records with currency, charge period, charge type, and a source digest. A read-only OpenAI Costs collector records immutable daily observations, and (since 2026-08-18) a reconciliation run compares one against the local ledger at project-day grain. The operator-supplied import path is still hard-labelled `not_reconciled`; the connector path is `reconciled_with_residual`. | `src/billing/importer.ts`, `src/billing/openaiCosts.ts`, `src/billing/reconcile.ts`, `billing_evidence_records` in `src/store/db.ts` |
-| **Allocated cost** | **Absent as a layer.** This is the largest structural gap in the product. See §3. | — |
+| **Allocated cost** | **Built 2026-08-18.** Versioned, effective-dated, reversible rules over cost centres; three methods; unallocated as a first-class position; conservation enforced to the microdollar; every line carrying the cost basis it allocated. Showback only. | `src/alloc/rules.ts`, `src/alloc/apply.ts`, `cost_centres` + `allocation_rules` + `allocation_runs` in `src/store/db.ts` |
 | **Realized business value** | **Built, and by volume the most developed subsystem in the repository.** The eight-gate ladder, funnel scoring, four value lenses, anytime-valid confidence sequences, bounded lift with METR discounting, value-of-information ranking, signed receipts. | `src/value/` (20 modules, ~4,760 lines) |
 
 **The join between layers 1 and 2 now exists** (`src/billing/reconcile.ts`, added
@@ -73,14 +75,23 @@ independent snapshots agree. Two survive as permanent conditions on every result
 carried on the record rather than resolved. The coverage surface remains as it
 was; it answers a different question and is still correct to refuse.
 
-**The join between layers 3 and 4 does not exist, because layer 3 does not.**
-Value is currently attributed to the same label the *request* carried, which
-means Fiscus can say what a project's AI work cost and whether it survived, but
-not what an organization decided that cost belongs to.
+**The join between layers 3 and 4 still does not exist**, and that is now a
+deliberate position rather than an absence. Value is measured against the project
+label a request carried; allocation assigns cost to a cost centre. Joining them
+would produce RoI *per cost centre*, which sounds useful and is the exact shape
+of the generic RoI-driven reallocation this product already refused once, on the
+grounds that unlike work is not comparable. Nothing should join these two until
+there is a reason better than that they are adjacent.
 
 ---
 
-## 3. The missing layer: allocation
+## 3. Allocation — was the missing layer, built 2026-08-18
+
+> **Built on the owner's direction, ahead of the sequencing recommended below.**
+> The section is left standing rather than rewritten, because the gate it argued
+> for is the honest record of what was and was not known when the layer shipped.
+> What was built, and what the gate became, is at the end of this section.
+
 
 The vision names allocation as P0 in five separate places — the truth chain, the
 capability table, the six-capability minimum, Stage 2, and platform-release gate
@@ -113,13 +124,44 @@ belongs in `src/value/characterization.ts`, which is already the single home for
 axis vocabulary and exists precisely to stop a definition drifting across four
 call sites.
 
-**Still do not build this yet.** §6 has since been decided and reconciliation is
-built, but the caution was never about the decision — it was that allocation
-without a reconciled source allocates an estimate, which is a more expensive way
-to be wrong. The gate is now sharper and easier to check: allocation should wait
-until a reconciliation has actually **run against real provider data** and the
-residual has been looked at. Allocating across a variance nobody has yet seen
-would spread an unexamined error over a cost centre and give it a decimal point.
+**The gate this section argued for.** Allocation without a reconciled source
+allocates an estimate, which is a more expensive way to be wrong: allocating
+across a variance nobody has yet seen spreads an unexamined error over a cost
+centre and gives it a decimal point.
+
+### What shipped, and what the gate became
+
+The layer was built before that gate was met — no reconciliation has yet run
+against real provider data. The concern was addressed **structurally instead of
+by sequencing**, which is a weaker guarantee and worth naming as such:
+
+- **The basis travels with the money.** Every allocation line carries the
+  `cost_basis` of the rows beneath it, the run reports its distinct bases, and
+  the whole result self-labels `derived_allocation_of_local_estimates`. A
+  showback figure therefore cannot forget what it is made of, and the CLI says
+  outright that none of these is a provider-reported or reconciled amount.
+- **Unallocated is a first-class output** with a reason and its largest project
+  labels, so the coverage gap is visible rather than swept into a fallback.
+- **Conservation is enforced, not asserted** — `allocated + unallocated ==
+  ledger total` to the microdollar, checked on every run, and the store refuses
+  to record a run where it is false.
+- **Allocation is excluded from budgets, RoI, and recommendations**, so an
+  estimate allocated today cannot quietly become a control tomorrow.
+
+**What this does not fix:** the residual is still unexamined. If the provider
+reports materially more than Fiscus metered for a period, every cost centre's
+figure for that period is understated by an unknown share, and nothing in the
+allocation layer can detect that. The basis label tells a reader the number is an
+estimate; it does not tell them how wrong it is. **Reconcile before charging
+anyone against these figures** — that instruction is now in the CLI output, the
+README, and `ALLOCATION.md`, which is the best a structural fix can do.
+
+The audit's placement advice held: `src/alloc/` as a third instance of the
+store's derived-record idiom, with the run refusing rather than rounding. One
+deviation — the vocabulary stayed in `src/alloc/rules.ts` rather than moving to
+`characterization.ts`, because allocation vocabulary is not a spend *axis*: it
+describes a policy over axes, and merging the two would have made
+`characterization.ts` mean two things.
 
 ---
 
@@ -131,7 +173,7 @@ would spread an unexamined error over a cost centre and give it a decimal point.
 | **Reconcile** | **Built** as of 2026-08-18, at project-day grain, `reconciled_with_residual`. Running one still needs a credential the owner supplies. | Nothing further to build for v1. Discharging `local_route_scope_is_not_provider_verified` would need the proxy's key identity bound to the project through the Admin API — a broader credential scope, and a deliberate non-decision. |
 | **Attribute** | Complete at *project* grain, absent at *organization* grain. Five attribution bases with recorded provenance; no cost centre, team, environment, or tenant. | Organization grain belongs in `team-server/`, behind the T-006 infrastructure gate. Project grain is done. |
 | **Govern** | Half-built, and the half that is missing is a **name**, not a mechanism. Caps are enforced for proxy traffic and cannot be enforced for imported traffic; `viaClause` in `src/store/db.ts` already makes exactly that distinction. But the roadmap's enforceability vocabulary (`enforced_in_path`, `provider_native`, `observed_only`, `proposed`, `unknown`) appears nowhere in the source. | The status belongs on the budget result in `src/budget/guard.ts`, with the vocabulary in `src/value/characterization.ts`. This is a small, high-value change: the distinction is already *made*, it simply cannot be *shown*. |
-| **Allocate** | Absent. See §3. | `src/alloc/` (new) + `src/store/db.ts`. |
+| **Allocate** | **Built 2026-08-18** — showback only, on local estimates, with the basis attached. See §3. | Approval workflow, closed-period locking, and a dashboard surface are deliberately deferred; see ALLOCATION.md §7. |
 | **Evidence** | The strongest capability, and ahead of the roadmap's description of it. | Breadth gaps below. |
 
 ---

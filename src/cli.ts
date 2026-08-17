@@ -17,6 +17,7 @@ import { packageVersion } from './version.ts';
 import { parseFlags } from './cli/flags.ts';
 import { cmdImport, cmdDiscover, cmdScan } from './cli/importCmd.ts';
 import { cmdBilling } from './cli/billingCmd.ts';
+import { cmdAlloc } from './cli/allocCmd.ts';
 import { cmdEvidence } from './cli/evidenceCmd.ts';
 import { cmdYield, cmdRealize, cmdReport, cmdExec, cmdUsage, cmdRoi, cmdSaved, cmdBudgetAdvisor, cmdFrontier } from './cli/valueCmd.ts';
 import { cmdTeam, cmdReceipt, cmdJudge, cmdTeamPush } from './cli/teamCmd.ts';
@@ -280,6 +281,10 @@ async function main(): Promise<void> {
       break;
     case 'billing':
       await cmdBilling(flags);
+      break;
+    case 'alloc':
+    case 'allocation':
+      cmdAlloc(flags);
       break;
     case 'discover':
       await cmdDiscover(flags);

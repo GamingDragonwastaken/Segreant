@@ -33,6 +33,14 @@ import { ATTRIBUTION_BASES, type AttributionBasis } from '../value/characterizat
 import type { OpenAiCostObservation, OpenAiCostsFailureCode } from '../billing/openaiCosts.ts';
 import { buildOpenAiCostsCaptureCoverage, type OpenAiCostsCaptureCoverage } from '../billing/openaiCostsCoverage.ts';
 import { reconcileOpenAiCosts, type ReconciliationResult, type ReconciliationRun } from '../billing/reconcile.ts';
+import {
+  validateCostCentre,
+  validateRule,
+  type AllocatableRow,
+  type AllocationRule,
+  type CostCentre,
+} from '../alloc/rules.ts';
+import { applyAllocation, type AllocationRunResult } from '../alloc/apply.ts';
 
 export interface RequestRow {
   requestId: string;
@@ -704,6 +712,60 @@ CREATE TABLE IF NOT EXISTS reconciliation_runs (
 
 CREATE INDEX IF NOT EXISTS idx_reconciliation_runs_latest
   ON reconciliation_runs(computed_at_ms DESC, reconciliation_run_id DESC);
+
+-- ── Allocation: the third layer of the truth chain ──────────────────────────
+-- A cost centre is an ACCOUNTING position (who an organization decided owns the
+-- money), not an instrumentation label like a project label. Allocation never rewrites
+-- a request row. Every figure it produces is derived and re-derivable.
+CREATE TABLE IF NOT EXISTS cost_centres (
+  cost_centre_id TEXT PRIMARY KEY NOT NULL,
+  name           TEXT NOT NULL,
+  owner          TEXT,
+  created_at_ms  INTEGER NOT NULL,
+  archived_at_ms INTEGER
+);
+
+-- One row per (rule, version). Substantive content — method, match, targets,
+-- ratios — is NEVER updated. Only two monotonic, write-once closures are
+-- permitted after insert: effective_to_ms when a later version supersedes this
+-- one, and revoked_at_ms when the rule is withdrawn. So the rule set that
+-- applied to any past instant stays reconstructible.
+CREATE TABLE IF NOT EXISTS allocation_rules (
+  rule_id           TEXT NOT NULL,
+  version           INTEGER NOT NULL,
+  method            TEXT NOT NULL,
+  match_json        TEXT NOT NULL,
+  targets_json      TEXT NOT NULL,
+  priority          INTEGER NOT NULL,
+  effective_from_ms INTEGER NOT NULL,
+  effective_to_ms   INTEGER,
+  revoked_at_ms     INTEGER,
+  owner             TEXT,
+  note              TEXT,
+  created_at_ms     INTEGER NOT NULL,
+  PRIMARY KEY (rule_id, version)
+);
+
+CREATE INDEX IF NOT EXISTS idx_allocation_rules_window
+  ON allocation_rules(effective_from_ms, effective_to_ms, priority);
+
+-- An allocation run is an immutable derived record of one closed period under
+-- the rule set that was in force during it. Re-running produces a NEW row.
+CREATE TABLE IF NOT EXISTS allocation_runs (
+  allocation_run_id TEXT PRIMARY KEY NOT NULL,
+  period_start_ms   INTEGER NOT NULL,
+  period_end_ms     INTEGER NOT NULL,
+  computed_at_ms    INTEGER NOT NULL,
+  total_micros      INTEGER NOT NULL,
+  allocated_micros  INTEGER NOT NULL,
+  unallocated_micros INTEGER NOT NULL,
+  conserves         INTEGER NOT NULL,
+  trust             TEXT NOT NULL,
+  result_json       TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_allocation_runs_latest
+  ON allocation_runs(computed_at_ms DESC, allocation_run_id DESC);
 `;
 
 function pricingEvidenceFromRecord(record: Record<string, unknown>, prefix = ''): RequestPricingEvidence {
@@ -971,11 +1033,22 @@ export class Store {
     this.runScript('CREATE INDEX IF NOT EXISTS idx_requests_scope_declaration ON requests(provider_scope_declaration_id)');
   }
 
-  /** Run one or more `;`-separated statements via prepared statements. */
+  /**
+   * Run one or more `;`-separated statements via prepared statements.
+   *
+   * A chunk that is only `--` comments is skipped rather than prepared. Naive
+   * splitting means one semicolon inside a comment severs the statement after
+   * it, and the leftover comment-only fragment fails with `statement has been
+   * finalized` — an error that names neither the schema nor the comma. Skipping
+   * comment-only chunks costs nothing and turns a baffling constructor failure
+   * into a no-op.
+   */
   private runScript(sql: string): void {
     for (const part of sql.split(';')) {
       const stmt = part.trim();
-      if (stmt) this.db.prepare(stmt).run();
+      if (!stmt) continue;
+      const withoutComments = stmt.replace(/^\s*--[^\n]*$/gm, '').trim();
+      if (withoutComments) this.db.prepare(stmt).run();
     }
   }
 
@@ -2708,6 +2781,209 @@ export class Store {
         JSON.stringify(result),
       );
     return id;
+  }
+
+  // ── Allocation ────────────────────────────────────────────────────────────
+
+  upsertCostCentre(input: { costCentreId: string; name: string; owner?: string | null; createdAtMs?: number }): CostCentre {
+    validateCostCentre(input);
+    const createdAtMs = input.createdAtMs ?? Date.now();
+    this.db
+      .prepare(
+        `INSERT INTO cost_centres (cost_centre_id, name, owner, created_at_ms, archived_at_ms)
+         VALUES (?,?,?,?,NULL)
+         ON CONFLICT(cost_centre_id) DO UPDATE SET name = excluded.name, owner = excluded.owner`,
+      )
+      .run(input.costCentreId, input.name, input.owner ?? null, createdAtMs);
+    return this.costCentres().find((c) => c.costCentreId === input.costCentreId)!;
+  }
+
+  /** Archive rather than delete: past runs must stay explicable. */
+  archiveCostCentre(costCentreId: string, archivedAtMs = Date.now()): boolean {
+    const info = this.db
+      .prepare('UPDATE cost_centres SET archived_at_ms = ? WHERE cost_centre_id = ? AND archived_at_ms IS NULL')
+      .run(archivedAtMs, costCentreId);
+    return Number(info.changes ?? 0) > 0;
+  }
+
+  costCentres(): CostCentre[] {
+    const rows = this.db
+      .prepare(
+        `SELECT cost_centre_id AS costCentreId, name, owner, created_at_ms AS createdAtMs, archived_at_ms AS archivedAtMs
+           FROM cost_centres ORDER BY cost_centre_id ASC`,
+      )
+      .all() as Array<Record<string, unknown>>;
+    return rows.map((r) => ({
+      costCentreId: String(r.costCentreId),
+      name: String(r.name),
+      owner: r.owner === null ? null : String(r.owner),
+      createdAtMs: Number(r.createdAtMs),
+      archivedAtMs: r.archivedAtMs === null ? null : Number(r.archivedAtMs),
+    }));
+  }
+
+  /**
+   * Add a rule, or a new VERSION of an existing one.
+   *
+   * A new version closes the previous one at its own `effectiveFromMs` — the
+   * only permitted post-insert write to a rule row, and only when that row is
+   * still open. The superseded version keeps its method, match, targets, and
+   * ratios exactly as authored, so any past period re-runs under the rule text
+   * that actually applied to it.
+   */
+  saveAllocationRule(input: Omit<AllocationRule, 'version' | 'createdAtMs'> & { createdAtMs?: number }): AllocationRule {
+    const createdAtMs = input.createdAtMs ?? Date.now();
+    const existing = this.db
+      .prepare('SELECT MAX(version) AS maxVersion FROM allocation_rules WHERE rule_id = ?')
+      .get(input.ruleId) as Record<string, unknown> | undefined;
+    const previous = existing && existing.maxVersion !== null ? Number(existing.maxVersion) : 0;
+    const rule: AllocationRule = { ...input, version: previous + 1, createdAtMs };
+    validateRule(rule);
+
+    this.runScript('BEGIN');
+    try {
+      if (previous > 0) {
+        this.db
+          .prepare(
+            `UPDATE allocation_rules SET effective_to_ms = ?
+              WHERE rule_id = ? AND version = ? AND effective_to_ms IS NULL`,
+          )
+          .run(rule.effectiveFromMs, rule.ruleId, previous);
+      }
+      this.db
+        .prepare(
+          `INSERT INTO allocation_rules (
+              rule_id, version, method, match_json, targets_json, priority,
+              effective_from_ms, effective_to_ms, revoked_at_ms, owner, note, created_at_ms
+           ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+        )
+        .run(
+          rule.ruleId,
+          rule.version,
+          rule.method,
+          JSON.stringify(rule.match),
+          JSON.stringify(rule.targets),
+          rule.priority,
+          rule.effectiveFromMs,
+          rule.effectiveToMs,
+          rule.revokedAtMs,
+          rule.owner,
+          rule.note,
+          rule.createdAtMs,
+        );
+      this.runScript('COMMIT');
+    } catch (err) {
+      this.runScript('ROLLBACK');
+      throw err;
+    }
+    return rule;
+  }
+
+  /** Withdraw a rule from a point in time forward. The row is retained. */
+  revokeAllocationRule(ruleId: string, revokedAtMs = Date.now()): number {
+    const info = this.db
+      .prepare('UPDATE allocation_rules SET revoked_at_ms = ? WHERE rule_id = ? AND revoked_at_ms IS NULL')
+      .run(revokedAtMs, ruleId);
+    return Number(info.changes ?? 0);
+  }
+
+  /** Every rule version ever written, so a past period stays reconstructible. */
+  allocationRules(): AllocationRule[] {
+    const rows = this.db
+      .prepare(
+        `SELECT rule_id AS ruleId, version, method, match_json AS matchJson, targets_json AS targetsJson,
+                priority, effective_from_ms AS effectiveFromMs, effective_to_ms AS effectiveToMs,
+                revoked_at_ms AS revokedAtMs, owner, note, created_at_ms AS createdAtMs
+           FROM allocation_rules ORDER BY priority ASC, rule_id ASC, version ASC`,
+      )
+      .all() as Array<Record<string, unknown>>;
+    return rows.map((r) => ({
+      ruleId: String(r.ruleId),
+      version: Number(r.version),
+      method: String(r.method) as AllocationRule['method'],
+      match: JSON.parse(String(r.matchJson)) as AllocationRule['match'],
+      targets: JSON.parse(String(r.targetsJson)) as AllocationRule['targets'],
+      priority: Number(r.priority),
+      effectiveFromMs: Number(r.effectiveFromMs),
+      effectiveToMs: r.effectiveToMs === null ? null : Number(r.effectiveToMs),
+      revokedAtMs: r.revokedAtMs === null ? null : Number(r.revokedAtMs),
+      owner: r.owner === null ? null : String(r.owner),
+      note: r.note === null ? null : String(r.note),
+      createdAtMs: Number(r.createdAtMs),
+    }));
+  }
+
+  /**
+   * Allocate one closed period. Read-only — computing does not record.
+   *
+   * Rows are read through the alias-canonical projection so allocation totals
+   * agree with `byProject`, and matched on the instant the spend happened.
+   */
+  allocatePeriod(periodStartMs: number, periodEndMs: number, runAtMs = Date.now()): AllocationRunResult {
+    const rows: AllocatableRow[] = this.requestsInRange(periodStartMs, periodEndMs).map((r) => ({
+      project: r.projectCanonical ?? r.project,
+      provider: r.provider,
+      model: r.model,
+      source: r.source ?? null,
+      user: r.user ?? null,
+      tsEpochMs: r.tsEpochMs,
+      costUsd: r.costUsd,
+      costBasis: r.pricing?.costBasis ?? 'legacy_unknown',
+    }));
+    return applyAllocation({
+      rows,
+      rules: this.allocationRules(),
+      costCentres: this.costCentres(),
+      periodStartMs,
+      periodEndMs,
+      runAtMs,
+    });
+  }
+
+  /**
+   * Persist a run. Refuses a result that does not conserve its input: an
+   * allocation that lost or invented money is not a record worth keeping, and
+   * storing it would put an unauditable number in front of a budget owner.
+   */
+  saveAllocationRun(result: AllocationRunResult, computedAtMs = Date.now()): string {
+    if (!result.conserves) {
+      throw new Error('refusing to record an allocation run that does not conserve its input');
+    }
+    const id = randomUUID();
+    this.db
+      .prepare(
+        `INSERT INTO allocation_runs (
+            allocation_run_id, period_start_ms, period_end_ms, computed_at_ms,
+            total_micros, allocated_micros, unallocated_micros, conserves, trust, result_json
+         ) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      )
+      .run(
+        id,
+        result.periodStartMs,
+        result.periodEndMs,
+        computedAtMs,
+        result.totalMicros,
+        result.allocatedMicros,
+        result.unallocatedMicros,
+        1,
+        result.trust,
+        JSON.stringify(result),
+      );
+    return id;
+  }
+
+  allocationRuns(limit = 20): Array<{ allocationRunId: string; computedAtMs: number; result: AllocationRunResult }> {
+    const rows = this.db
+      .prepare(
+        `SELECT allocation_run_id AS allocationRunId, computed_at_ms AS computedAtMs, result_json AS resultJson
+           FROM allocation_runs ORDER BY computed_at_ms DESC, allocation_run_id DESC LIMIT ?`,
+      )
+      .all(limit) as Array<Record<string, unknown>>;
+    return rows.map((row) => ({
+      allocationRunId: String(row.allocationRunId),
+      computedAtMs: Number(row.computedAtMs),
+      result: JSON.parse(String(row.resultJson)) as AllocationRunResult,
+    }));
   }
 
   /** Recorded reconciliation runs, newest first. */

@@ -623,6 +623,43 @@ totals, budget enforcement, RoI, and model recommendations.
 Full walkthrough, including exactly which credential is needed and what Fiscus
 will not do with it: **[docs/PROVIDER-RECONCILIATION.md](docs/PROVIDER-RECONCILIATION.md)**.
 
+### Cost-centre allocation
+
+Who an organization has **decided** owns the money — which is not the same
+question as which folder the spend arrived under:
+
+```powershell
+fiscus alloc centre eng --name "Engineering" --owner cto
+fiscus alloc rule backend --method direct --centre eng --match-project backend-api
+fiscus alloc rule web --method fixed_split --centre "eng:0.5,platform:0.5" --match-project web-frontend
+fiscus alloc rule infra --method proportional_to_direct --centre shared --match-project shared-infra
+fiscus alloc run --from 2026-08-01 --to 2026-09-01 [--apply] [--json]
+```
+
+```text
+     $71.718547   88.6%  allocated
+      $9.195772   11.4%  unallocated
+     $80.914319          ledger total for the period
+```
+
+`default` (nobody declared a project) is an *instrumentation* gap;
+`unallocated` (no rule claimed it) is an *accounting position*. Both are
+reported, neither is swept — and each unallocated bucket names the project
+labels inside it so you know what to write a rule for.
+
+`allocated + unallocated == ledger total` to the microdollar, checked on every
+run; the store refuses to record one where it is false. Rules are versioned,
+effective-dated, and reversible, and are matched against the instant the **spend
+happened**, so re-running a closed period after editing a rule restates nothing.
+
+Every line carries the cost basis underneath it. Allocating a local rate-card
+estimate is legitimate; presenting it as settled cost is not — so the run
+self-labels `derived_allocation_of_local_estimates` and stays out of budget
+enforcement, RoI, and model recommendations.
+
+Full model, including the three methods and what is deliberately not built:
+**[docs/ALLOCATION.md](docs/ALLOCATION.md)**.
+
 ### Beyond Anthropic & OpenAI
 
 The OpenAI route speaks the wire format most of the ecosystem now exposes, so
@@ -720,8 +757,10 @@ outcome-evidence views, and review-only within-task cheaper-model trials.
 Pricing refresh and all non-provider egress are operator-controlled.
 
 Reconciliation is scope-conditional and stops at project-day totals; it never
-becomes a budget, a recommendation, or a request-level cost. Generic cross-task
-or cross-project allocation and automatic model routing are deliberately not
+becomes a budget, a recommendation, or a request-level cost. Cost-centre
+allocation is showback only, self-labelled as allocating local estimates, and
+equally excluded from those controls. Generic cross-task or cross-project
+*RoI-driven* reallocation and automatic model routing remain deliberately not
 product actions at all. The optional
 [team server](team-server/README.md) is a separately gated, operator-run service;
 it is not approved for an internet-facing production deployment. See
