@@ -27,7 +27,58 @@ This validates a local developer preview only. It does **not** validate a
 provider billing statement, production customer data, an npm publication, an
 external deployment, or the optional team service.
 
-### Candidate record — commit `a9fc6b2`, 2026-08-18
+### Candidate record — commit `916e1c3`, 2026-08-18
+
+Run against `916e1c304a1aa9d036483e752dd68e7c5aa6c391`, worktree clean before and
+after validation. **Nine rows pass; the CI row is PENDING** until the run for
+this candidate is observed. Supersedes the `a9fc6b2` record, retained for history.
+
+| Requirement | Result |
+| --- | --- |
+| Candidate identity | **Pass.** `git rev-parse HEAD` = `916e1c304a1aa9d036483e752dd68e7c5aa6c391`; `git status --short` empty before and after. |
+| Source validation | **Pass.** `npm run typecheck` clean, `npm test` **542 tests / 541 pass / 1 expected platform skip / 0 fail**, `npm run build` clean, `git diff --check` clean. |
+| Packed artifact | **Pass.** `npm pack` → 104 files, SHA-256 `c430a91df44bf4c520805747ca660432de6c648792a9ddcf329d48d7eaa59c2e`; all 6 key paths present. Same file count as `a9fc6b2` — this candidate changes existing modules rather than adding one. |
+| Clean installed CLI | **Pass.** Installed with `--ignore-scripts` into a fresh directory; `fiscus --help` renders. |
+| Packaged dashboard/API | **Pass.** Isolated `AEGIS_HOME`, seeded demo (552 requests), packaged dashboard on :8107. `/api/health` → `{"ok":true}`; `/api/overview` → `demo: true`, 552 requests, `$89.66053895`. Terminated cleanly, both ports confirmed closed. |
+| Model-trial truthfulness | **Pass.** `/api/value` self-labels `demo: true`; one switch, `confidence: trial`, no `evidence_supported`; `allocation: null`. |
+| Billing-boundary truthfulness | **Pass.** Packaged `/api/billing` → `demo: true`, `not_reconciled`, `recordCount: 0`, `reconciliation.runs: 0`. `/api/allocation` → `showback_only`, 0 runs, `reconciliation.everRun: false`. |
+| Direct-Costs connector boundary | **Pass, and extended to the new route.** On the packaged artifact, `billing openai-costs adopt --import-id <id> --json` → `applied: false`, **`networkAttempted: false`, `credentialRead: false`**, `adoptable: true`, `matchedMicros: 21500000`, and the account-level credit reported as excluded at `-2000000` rather than dropped. After `--apply`, `billing reconcile --json` → `providerSourceKind: operator_supplied_export`, **5 conditions** including `provider_report_is_operator_supplied_and_unverified`, `trust: scope_conditional_reconciliation`. |
+| Intended CI | **PENDING.** Not yet pushed at the time this record was written. |
+| Visual check | **Pass, with a stated gap.** Packaged dashboard at 375px: `header` computes `flex-wrap: wrap`, the view switcher sits inside the viewport, and Overview, Billing, Allocation and Settings no longer scroll sideways (375px document on a 375px viewport, down from ~890px). **Value still overflows to 483px** — diagnosed, not fixed, and recorded in the stylesheet: its 15 tooltip popovers are laid out while invisible, and a viewport-relative `max-width` cannot fix it because the viewport is itself widened by the overflow. No console errors. Screenshots remain unavailable in this environment (the browser pane is not displayed, so the page composites no frames), so this row rests on DOM and computed-style inspection and says so rather than implying a picture was reviewed. |
+
+**The credential was the wrong blocker, and that is what this candidate
+changes.** A read-only Costs pull needs an Admin key; minting one requires a
+different permission than reading a bill. An owner who could export their costs
+still could not reconcile. `openai-costs adopt` turns an already-imported
+operator export into an observation at the same project-day grain, reading no
+credential and making no network request.
+
+**It is not sold as equivalent evidence.** Observations now carry a source kind;
+the adopt path stamps `operator_supplied_export`, the pull path stamps
+`provider_api_pull`, and rows written before the column existed stay
+`legacy_unknown` — deliberately not backfilled to the pull even though the pull
+was the only writer that could have produced them, because provenance asserted
+from context rather than captured from evidence is the failure the column exists
+to prevent. The stamp survives into the reconciliation and into the recorded
+run, and produces a fifth permanent condition that the CLI and dashboard both
+state in words.
+
+**Adoption refuses what it cannot honestly observe** — anything not a whole UTC
+day, anything outside the declared project, anything not single-currency USD —
+and reports what it excluded with its money. A silently dropped account-level
+credit would understate the provider side and reappear later as a residual that
+never existed.
+
+**Still true, and unchanged by any of this:** no reconciliation has been run
+against a real provider bill on this machine. The end-to-end exercise above used
+a **synthetic** export authored for the gate, and the local ledger it compared
+against holds zero requests — which is why the packaged run reports
+`no local capture` on every day. That is an honest first-run result, not a
+validated reconciliation of real spend.
+
+**Team server at this tree:** typecheck clean, **55/55** — source validation only.
+
+### Superseded record — commit `a9fc6b2`, 2026-08-18
 
 Run against `a9fc6b2e01869b7bd8d9f4e24ffb782c891c3a51`, worktree clean before and
 after validation. **All ten rows pass.** Supersedes the `3ddf625` record,
