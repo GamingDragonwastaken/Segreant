@@ -30,8 +30,8 @@ external deployment, or the optional team service.
 ### Candidate record — commit `916e1c3`, 2026-08-18
 
 Run against `916e1c304a1aa9d036483e752dd68e7c5aa6c391`, worktree clean before and
-after validation. **Nine rows pass; the CI row is PENDING** until the run for
-this candidate is observed. Supersedes the `a9fc6b2` record, retained for history.
+after validation. **All ten rows pass.** Supersedes the `a9fc6b2` record,
+retained for history.
 
 | Requirement | Result |
 | --- | --- |
@@ -43,7 +43,7 @@ this candidate is observed. Supersedes the `a9fc6b2` record, retained for histor
 | Model-trial truthfulness | **Pass.** `/api/value` self-labels `demo: true`; one switch, `confidence: trial`, no `evidence_supported`; `allocation: null`. |
 | Billing-boundary truthfulness | **Pass.** Packaged `/api/billing` → `demo: true`, `not_reconciled`, `recordCount: 0`, `reconciliation.runs: 0`. `/api/allocation` → `showback_only`, 0 runs, `reconciliation.everRun: false`. |
 | Direct-Costs connector boundary | **Pass, and extended to the new route.** On the packaged artifact, `billing openai-costs adopt --import-id <id> --json` → `applied: false`, **`networkAttempted: false`, `credentialRead: false`**, `adoptable: true`, `matchedMicros: 21500000`, and the account-level credit reported as excluded at `-2000000` rather than dropped. After `--apply`, `billing reconcile --json` → `providerSourceKind: operator_supplied_export`, **5 conditions** including `provider_report_is_operator_supplied_and_unverified`, `trust: scope_conditional_reconciliation`. |
-| Intended CI | **PENDING.** Not yet pushed at the time this record was written. |
+| Intended CI | **Pass, with the delta stated** (per the rule in the checklist above). Run **CI #32** (`.../actions/runs/32081199991`): status **Success**, 1m 15s, 7 jobs — `package-smoke` plus the 3-job `test` and 3-job `team-server-test` matrices. The run is for the pushed tip `49a5f33`; `git diff --stat 916e1c3 49a5f33` is `docs/RELEASE-GATE.md` alone, 1 file changed — no source, no test, no packaged code. |
 | Visual check | **Pass, with a stated gap.** Packaged dashboard at 375px: `header` computes `flex-wrap: wrap`, the view switcher sits inside the viewport, and Overview, Billing, Allocation and Settings no longer scroll sideways (375px document on a 375px viewport, down from ~890px). **Value still overflows to 483px** — diagnosed, not fixed, and recorded in the stylesheet: its 15 tooltip popovers are laid out while invisible, and a viewport-relative `max-width` cannot fix it because the viewport is itself widened by the overflow. No console errors. Screenshots remain unavailable in this environment (the browser pane is not displayed, so the page composites no frames), so this row rests on DOM and computed-style inspection and says so rather than implying a picture was reviewed. |
 
 **The credential was the wrong blocker, and that is what this candidate
