@@ -43,7 +43,7 @@ retained for history.
 | Model-trial truthfulness | **Pass.** `/api/value` self-labels `demo: true`; one switch, `confidence: trial`, no `evidence_supported`, zero confounders, 4 assumptions, `costStaleUnits: 0`, `unitsExcludedStalePricing: 0`. Attribution coverage still returns all five bases with `demo: true`. |
 | Billing-boundary truthfulness | **Pass.** `billing scope set --json` → `applied: false`, `trust: operator_declared_unverified`, `reconciliationStatus: not_reconciled`. Packaged `/api/billing` → `demo: true`, `not_reconciled`, `recordCount: 0`. |
 | Direct-Costs connector boundary | **Pass.** With an applied `org_…`/`proj_…` scope, `billing openai-costs preview --json` → `networkAttempted: false`, `credentialRead: false`. |
-| Intended CI | **Pending.** To be filled in only after the run for this candidate has been inspected. |
+| Intended CI | **Pass, with the delta stated** (per the rule in the checklist above). Run **CI #26** (`.../actions/runs/32071319078`): status **Success**, 1m 1s, 7 jobs — `package-smoke` plus the 3-job `test` and 3-job `team-server-test` matrices. The run is for the pushed tip `0f2b328`; `git diff --stat b990c3d 0f2b328` is `docs/RELEASE-GATE.md` alone, 1 file changed — no source, no test, no packaged code. |
 | Visual check | **Pass.** Packaged dashboard in the browser: DEMO banner; all five attribution bases on the By-project card including the two-basis `data-pipeline` split; exactly one rendered `TRIAL` badge and no `EVIDENCE` badge; Billing view renders the reconciliation card in its `NO RUN RECORDED` state with the owner-action wording. No console errors. |
 
 **Reconciliation boundary, this candidate's new surface.** On the packaged
