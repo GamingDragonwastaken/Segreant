@@ -27,7 +27,53 @@ This validates a local developer preview only. It does **not** validate a
 provider billing statement, production customer data, an npm publication, an
 external deployment, or the optional team service.
 
-### Candidate record — commit `7bfb6dd`, 2026-08-17
+### Candidate record — commit `b990c3d`, 2026-08-18
+
+Run against `b990c3dba6e4332881002eba28a25db767b092ab`, worktree clean before and
+after validation. **All ten rows pass.** Supersedes the `7bfb6dd` record,
+retained for history.
+
+| Requirement | Result |
+| --- | --- |
+| Candidate identity | **Pass.** `git rev-parse HEAD` = `b990c3dba6e4332881002eba28a25db767b092ab`; `git status --short` empty before and after. |
+| Source validation | **Pass.** `npm run typecheck` clean, `npm test` **510 tests / 509 pass / 1 expected platform skip / 0 fail**, `npm run build` clean, `git diff --check` clean. |
+| Packed artifact | **Pass.** `npm pack` → 100 files, SHA-256 `f580cf2b53088ddb043da9639006290cc859eba8fc8388f165547a2786448abb`; all 6 key paths present. Two more files than `7bfb6dd`: `src/billing/reconcile.ts` compiles into `dist`, and `docs/PROVIDER-RECONCILIATION.md` ships with the other docs. |
+| Clean installed CLI | **Pass.** Installed with `--ignore-scripts` into a fresh directory; `fiscus --help` renders. |
+| Packaged dashboard/API | **Pass.** Isolated `AEGIS_HOME`, seeded demo (552 requests), packaged dashboard on :8099. `/api/health` → `{"ok":true}`; `/api/overview` → `demo: true`. Terminated cleanly, port confirmed closed. |
+| Model-trial truthfulness | **Pass.** `/api/value` self-labels `demo: true`; one switch, `confidence: trial`, no `evidence_supported`, zero confounders, 4 assumptions, `costStaleUnits: 0`, `unitsExcludedStalePricing: 0`. Attribution coverage still returns all five bases with `demo: true`. |
+| Billing-boundary truthfulness | **Pass.** `billing scope set --json` → `applied: false`, `trust: operator_declared_unverified`, `reconciliationStatus: not_reconciled`. Packaged `/api/billing` → `demo: true`, `not_reconciled`, `recordCount: 0`. |
+| Direct-Costs connector boundary | **Pass.** With an applied `org_…`/`proj_…` scope, `billing openai-costs preview --json` → `networkAttempted: false`, `credentialRead: false`. |
+| Intended CI | **Pending.** To be filled in only after the run for this candidate has been inspected. |
+| Visual check | **Pass.** Packaged dashboard in the browser: DEMO banner; all five attribution bases on the By-project card including the two-basis `data-pipeline` split; exactly one rendered `TRIAL` badge and no `EVIDENCE` badge; Billing view renders the reconciliation card in its `NO RUN RECORDED` state with the owner-action wording. No console errors. |
+
+**Reconciliation boundary, this candidate's new surface.** On the packaged
+artifact with no provider snapshot, `billing reconcile --json` returns
+`status: not_ready` and a readiness list marking `[here] declare the route
+scope`, `[you] supply a least-privilege Admin credential`, `[you] observe a
+closed period` — the two owner steps are named as owner steps and nothing is
+attempted on their behalf. The dashboard's reconciliation card states the same
+in its empty state. **No credential was created, requested, supplied, or read at
+any point in this gate.**
+
+The engine itself was exercised on a scratch home against a locally fabricated
+snapshot (a harness artifact, stated as such — not provider data): $70.20
+provider vs $66.60 metered, `+$3.60` residual, one material day and one
+`no_local_capture` day, four conditions, `excludedFrom` intact, and the recorded
+run round-tripping through `/api/billing`. The refusal paths, exact
+microdollar summation, route filtering, and snapshot-stability comparison are
+pinned by 15 tests in `test/reconcile.test.ts`.
+
+**A dashboard-wide failure mode was found and closed during this candidate.** An
+over-escaped apostrophe in a new tooltip string killed the entire inline script,
+so no view rendered — while the typecheck, the build, and every HTTP/API test
+stayed green. It was caught by hand. `test/dashboard-script.test.ts` now compiles
+every inline script with `vm.Script` and asserts the page references no external
+resource, so the highest-blast-radius failure this file has is a test failure
+rather than a visual one.
+
+**Team server at this tree:** typecheck clean, **55/55** — source validation only.
+
+### Superseded record — commit `7bfb6dd`, 2026-08-17
 
 Run against `7bfb6dda107a6f5f841915c54ff21ecbc07d64b7`, worktree clean before and
 after validation. **All ten rows pass.** Supersedes the `1398fe3` record,
