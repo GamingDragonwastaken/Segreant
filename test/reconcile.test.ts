@@ -45,6 +45,7 @@ function run(over: Partial<OpenAiCostsObservationRun> = {}): OpenAiCostsObservat
     pageDigestChainSha256: 'a'.repeat(64),
     resultState: 'succeeded',
     failureCode: null,
+    sourceKind: 'provider_api_pull',
     providerFinality: 'undocumented',
     trust: 'provider_observation_unreconciled',
     rawRetention: 'digest_only',

@@ -27,6 +27,7 @@ function usage(): void {
   console.error('         fiscus billing export [--csv|--json] [--out <file>]');
   console.error('         fiscus billing scope <set|status|clear> [--account-ref <local-ref>] [--project-ref <local-ref>] [--apply] [--json]');
   console.error('         fiscus billing openai-costs <preview|pull> --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--apply] [--json]');
+  console.error('         fiscus billing openai-costs adopt --import-id <id> [--apply] [--json]   no credential needed');
   console.error('         fiscus billing openai-costs <status|coverage> [--json]');
   console.error('         fiscus billing reconcile [--apply] [--materiality <usd>] [--json]');
   console.error('  Local operator-supplied OpenAI billing evidence only. Reconciliation compares project-day totals');
@@ -36,6 +37,8 @@ function usage(): void {
 function costsUsage(): void {
   console.error('  Usage: fiscus billing openai-costs preview --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--json]');
   console.error('         fiscus billing openai-costs pull --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--apply] [--json]');
+  console.error('         fiscus billing openai-costs adopt --import-id <id> [--apply] [--json]');
+  console.error('             adopt an imported operator export as an observation; no Admin key, weaker evidence');
   console.error('         fiscus billing openai-costs status [--json]');
   console.error('         fiscus billing openai-costs coverage [--json]');
   console.error('  Pull is an explicit, read-only GET to OpenAI Organization Costs. It requires OPENAI_ADMIN_API_KEY only with pull --apply.');
@@ -92,14 +95,19 @@ function reconciliationReadiness(store: Store): ReconciliationReadiness {
   }
   const status = store.openAiCostsObservationStatus();
   if (!status.latestCompleteRun) {
+    // Two routes to the same grain, and the weaker one is offered because being
+    // blocked on a CREDENTIAL rather than on the DATA was the wrong place to be
+    // stuck: an owner who can export a bill should not be unable to reconcile
+    // because minting an Admin key needs a different permission than reading
+    // one. The pull is better evidence and stays first.
     missing.push({
-      step: 'supply a least-privilege Admin credential',
-      detail: 'an OpenAI Admin key with the Costs read scope, exported as OPENAI_ADMIN_API_KEY for one command. Fiscus never stores it, never logs it, and uses it for exactly one GET.',
+      step: 'observe a closed period — route A, a direct read-only pull (better evidence)',
+      detail: 'needs an OpenAI Admin key with the Costs read scope, exported as OPENAI_ADMIN_API_KEY for one command; Fiscus never stores or logs it. Then: fiscus billing openai-costs pull --from <YYYY-MM-DD> --to <YYYY-MM-DD> --apply',
       ownerAction: true,
     });
     missing.push({
-      step: 'observe a closed period',
-      detail: 'fiscus billing openai-costs pull --from <YYYY-MM-DD> --to <YYYY-MM-DD> --apply',
+      step: 'observe a closed period — route B, adopt an export you already have (no credential)',
+      detail: 'fiscus billing import --file <your-costs-export.fiscus.json> --apply, then fiscus billing openai-costs adopt --import-id <id> --apply. The result reconciles identically and is permanently stamped operator-supplied.',
       ownerAction: true,
     });
   }
@@ -147,6 +155,12 @@ function printReconciliation(result: ReconciliationRun, applied: boolean): void 
   console.log('  route declaration is true — nothing here verifies it with the provider — and');
   console.log('  usage that never passed through Fiscus is invisible, so the residual is an');
   console.log('  upper bound on off-path spend rather than a measurement of it.');
+  if (result.providerSourceKind === 'operator_supplied_export') {
+    console.log('  The provider side of this comparison was SUPPLIED BY AN OPERATOR, not read from');
+    console.log('  the provider by Fiscus. The arithmetic is identical; the evidence is weaker,');
+    console.log('  and nothing here can detect a report that was edited before it was handed over.');
+  }
+  console.log(`  Provider side ${result.providerSourceKind.replaceAll('_', ' ')}`);
   console.log(`  Conditions    ${result.conditions.join(', ')}`);
   console.log(`  Excluded from ${result.excludedFrom.join(', ')}`);
   console.log(applied ? '  Recorded as an immutable derived run.' : '  Not recorded. Persist it with: fiscus billing reconcile --apply');
@@ -185,6 +199,89 @@ function cmdReconcile(flags: Flags): void {
     const reconciliationRunId = applied ? store.saveReconciliationRun(result) : null;
     if (flags.json) process.stdout.write(JSON.stringify({ applied, reconciliationRunId, result }, null, 2) + '\n');
     else printReconciliation(result, applied);
+  } finally {
+    store.close();
+  }
+}
+
+/**
+ * Adopt an already-imported operator export as a Costs observation.
+ *
+ * Read-only by default like every other money-facing command here. It reads no
+ * credential and makes no network request — the whole point is that this route
+ * needs neither.
+ */
+function cmdAdoptCosts(flags: Flags): void {
+  const importId = typeof flags['import-id'] === 'string' ? flags['import-id'] : null;
+  const store = new Store(dbPath());
+  try {
+    const scope = store.activeOpenAiScope();
+    if (!scope || !scope.providerProjectRef) {
+      console.error('  Declare the route scope first, so the adopted lines are bound to a project:');
+      console.error('    fiscus billing scope set --provider openai --base-url https://api.openai.com --account-ref <org_…> --project-ref <proj_…> --apply');
+      process.exitCode = 1;
+      return;
+    }
+    const imports = store.billingImportRuns(50).filter((r) => r.provider === 'openai');
+    if (imports.length === 0) {
+      console.error('  No OpenAI billing export has been imported. Import one first:');
+      console.error('    fiscus billing import --file <your-costs-export.fiscus.json> --apply');
+      process.exitCode = 1;
+      return;
+    }
+    if (!importId) {
+      console.log('');
+      console.log('  Which import should be adopted? Re-run with --import-id <id>:');
+      for (const run of imports) {
+        console.log(`    ${run.importId}  ${new Date(run.periodStartMs).toISOString().slice(0, 10)} → ${new Date(run.periodEndMs).toISOString().slice(0, 10)}  ${run.recordsInserted} line(s)  coverage ${run.coverage}`);
+      }
+      process.exitCode = 1;
+      return;
+    }
+
+    const plan = store.planOpenAiCostsAdoption({
+      importId,
+      declaredScopeId: scope.declarationId,
+      providerProjectRef: scope.providerProjectRef,
+    });
+    if (!plan.adoptable) {
+      if (flags.json) process.stdout.write(JSON.stringify({ applied: false, plan }, null, 2) + '\n');
+      else {
+        console.log('');
+        console.log(`  Cannot adopt: ${plan.refusal.replaceAll('_', ' ')}`);
+        console.log(`  ${plan.detail}`);
+      }
+      process.exitCode = 1;
+      return;
+    }
+
+    const applied = Boolean(flags.apply);
+    const run = applied ? store.adoptOpenAiCostsFromImport(plan) : null;
+    if (flags.json) {
+      process.stdout.write(JSON.stringify({ applied, observationRunId: run?.observationRunId ?? null, plan, networkAttempted: false, credentialRead: false }, null, 2) + '\n');
+      return;
+    }
+    const day = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+    console.log('');
+    console.log('  Adopt an operator-supplied export as a provider observation');
+    console.log(`  Import        ${plan.importId}  (file sha256 ${plan.fileSha256.slice(0, 12)}…)`);
+    console.log(`  Project       ${plan.providerProjectRef}`);
+    console.log(`  Period        ${day(plan.periodStartMs)} → ${day(plan.periodEndMs)} (UTC, exclusive end)`);
+    console.log(`  Adopting      ${plan.matchedRecordCount} line(s), $${displayUsd(plan.matchedMicros)}, into ${plan.observations.length} daily grouping(s)`);
+    if (plan.excluded.otherOrNoProjectRecordCount > 0) {
+      console.log(`  NOT adopting  ${plan.excluded.otherOrNoProjectRecordCount} line(s), ${signedUsd(plan.excluded.otherOrNoProjectMicros)} — a different project, or account-level with no project reference`);
+      console.log('                These cannot be attributed to your project. They are excluded and');
+      console.log('                reported here rather than dropped, because a silently discarded');
+      console.log('                credit would surface later as a residual that never existed.');
+    }
+    console.log(`  Coverage      ${plan.declaredCoverage} — an operator declaration, never verified here`);
+    console.log('');
+    console.log('  This route reads no credential and makes no network request. The figures are');
+    console.log('  yours, not the provider’s: Fiscus validated their shape and digested the file,');
+    console.log('  but obtained nothing from OpenAI. The observation is permanently stamped');
+    console.log('  operator_supplied_export and every reconciliation built on it carries a fifth');
+    console.log('  condition saying so. A read-only Costs pull remains the stronger evidence.');
+    console.log(applied ? '  Recorded as an immutable observation.' : '  Not recorded. Persist it with: fiscus billing openai-costs adopt --import-id <id> --apply');
   } finally {
     store.close();
   }
@@ -244,6 +341,10 @@ async function cmdOpenAiCosts(flags: Flags): Promise<void> {
     } finally {
       store.close();
     }
+    return;
+  }
+  if (action === 'adopt') {
+    cmdAdoptCosts(flags);
     return;
   }
   if (action !== 'preview' && action !== 'pull') {

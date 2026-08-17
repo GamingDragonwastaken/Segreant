@@ -86,6 +86,46 @@ export type SnapshotStability =
   | 'stable_across_observations'
   | 'changed_across_observations';
 
+/**
+ * Where the provider side of the comparison came from. This is a real
+ * difference in evidence class, not a bookkeeping detail:
+ *
+ *   - `provider_api_pull` — Fiscus read the figures from the provider itself
+ *     over a read-only Costs call. Nobody stood between the provider and the
+ *     number.
+ *   - `operator_supplied_export` — a person exported a report and handed it to
+ *     Fiscus. Fiscus validated its shape and digested the file, but nothing in
+ *     it was obtained from the provider by Fiscus, so its authenticity rests
+ *     entirely on the operator. It reconciles, and it must never be displayed
+ *     as though the provider had confirmed it.
+ *   - `legacy_unknown` — recorded before this distinction existed. Unknown
+ *     stays unknown; it is never backfilled into either of the above.
+ */
+export type ProviderSourceKind =
+  | 'provider_api_pull'
+  | 'operator_supplied_export'
+  | 'legacy_unknown';
+
+/**
+ * The permanent limits of a reconciliation. Four always apply. The fifth applies
+ * only when the provider side was operator-supplied, which is why this is a list
+ * rather than a fixed tuple — a condition that appears and disappears with the
+ * evidence is exactly the kind a reader must be able to see.
+ */
+export type ReconciliationCondition =
+  | 'local_route_scope_is_not_provider_verified'
+  | 'off_path_provider_usage_is_not_observable'
+  | 'provider_line_items_do_not_join_to_requests_or_models'
+  | 'local_request_amounts_are_rate_card_estimates'
+  | 'provider_report_is_operator_supplied_and_unverified';
+
+export const PERMANENT_CONDITIONS: readonly ReconciliationCondition[] = [
+  'local_route_scope_is_not_provider_verified',
+  'off_path_provider_usage_is_not_observable',
+  'provider_line_items_do_not_join_to_requests_or_models',
+  'local_request_amounts_are_rate_card_estimates',
+];
+
 export interface ReconciliationRun {
   status: 'reconciled_with_residual';
   observationRunId: string;
@@ -116,13 +156,14 @@ export interface ReconciliationRun {
   snapshotStability: SnapshotStability;
   /** Days whose provider total changed between independent observations. */
   unstableDayStartMs: number[];
+  /**
+   * Where the provider figures came from. An operator-supplied export
+   * reconciles exactly as well arithmetically and is a weaker evidence class;
+   * both facts travel with the result rather than only the first.
+   */
+  providerSourceKind: ProviderSourceKind;
   /** Permanent limits of this result. They are conditions, not defects. */
-  conditions: readonly [
-    'local_route_scope_is_not_provider_verified',
-    'off_path_provider_usage_is_not_observable',
-    'provider_line_items_do_not_join_to_requests_or_models',
-    'local_request_amounts_are_rate_card_estimates',
-  ];
+  conditions: readonly ReconciliationCondition[];
   trust: 'scope_conditional_reconciliation';
   excludedFrom: readonly ['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations'];
 }
@@ -191,6 +232,9 @@ export function reconcileOpenAiCosts(input: {
   const now = input.now ?? Date.now();
   const materialityUsd = input.materialityUsd ?? DEFAULT_MATERIALITY_USD;
   const materialityMicros = Math.round(materialityUsd * 1_000_000);
+  // A run recorded before the distinction existed is `legacy_unknown`, never
+  // assumed to be an API pull just because that was the only path at the time.
+  const sourceKind: ProviderSourceKind = input.run.sourceKind ?? 'legacy_unknown';
 
   if (input.run.resultState !== 'succeeded' || !input.run.paginationComplete) {
     return refuse('no_provider_observation', 'a reconciliation needs one complete, successful provider observation');
@@ -306,12 +350,13 @@ export function reconcileOpenAiCosts(input: {
     days,
     snapshotStability,
     unstableDayStartMs,
-    conditions: [
-      'local_route_scope_is_not_provider_verified',
-      'off_path_provider_usage_is_not_observable',
-      'provider_line_items_do_not_join_to_requests_or_models',
-      'local_request_amounts_are_rate_card_estimates',
-    ],
+    providerSourceKind: sourceKind,
+    // The fifth condition appears only when it is true. A reader who sees four
+    // is looking at figures Fiscus read from the provider; a reader who sees
+    // five is looking at figures a person handed it.
+    conditions: sourceKind === 'operator_supplied_export'
+      ? [...PERMANENT_CONDITIONS, 'provider_report_is_operator_supplied_and_unverified']
+      : PERMANENT_CONDITIONS,
     trust: 'scope_conditional_reconciliation',
     excludedFrom: ['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations'],
   };

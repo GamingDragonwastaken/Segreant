@@ -620,6 +620,24 @@ an *upper bound* on it, not a measurement), line items do not join to requests,
 and local amounts are rate-card estimates. Reconciled cost stays out of request
 totals, budget enforcement, RoI, and model recommendations.
 
+**Two routes to the provider side, and Fiscus says which one you used.** A
+read-only Costs pull needs an Admin key and is the better evidence. If you can
+download a bill but cannot mint a key, import it and adopt it instead — no
+credential, no network request:
+
+```powershell
+fiscus billing import --file .\your-costs-export.fiscus.json --apply
+fiscus billing openai-costs adopt --import-id <id> --apply
+```
+
+The arithmetic is identical. The evidence is not: an adopted observation is
+permanently stamped `operator_supplied_export`, and every reconciliation built on
+it carries a **fifth** condition saying the provider figures were supplied by a
+person and that nothing here can detect a report edited before it was handed
+over. Adoption takes whole UTC days for your declared project only, and reports
+what it excluded — an account-level credit dropped in silence would surface later
+as a residual that never existed.
+
 Full walkthrough, including exactly which credential is needed and what Fiscus
 will not do with it: **[docs/PROVIDER-RECONCILIATION.md](docs/PROVIDER-RECONCILIATION.md)**.
 

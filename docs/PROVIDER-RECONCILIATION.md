@@ -38,12 +38,29 @@ day's metered total is a *compatible* join. It is coarse, and it is honest.
 
 ## 2. What it takes to run one
 
-Four steps. **Two of them are yours and Fiscus cannot do them for you** — they
-involve a provider credential, and this tool will not create, request, store, or
-transmit one on your behalf.
+Declare the route scope, get a provider observation for a closed period, then
+reconcile. `fiscus billing reconcile` prints exactly which step is outstanding,
+so you never have to guess where you are.
 
-`fiscus billing reconcile` prints exactly which of these is outstanding, so you
-never have to guess where you are.
+**There are two routes to the observation, and they are not equal.**
+
+| | Route A — direct pull | Route B — adopt an export |
+| --- | --- | --- |
+| Needs | an Admin key with the Costs read scope | nothing but a file you already have |
+| Provider side obtained by | Fiscus, from the provider | you, then handed to Fiscus |
+| Stamped | `provider_api_pull` | `operator_supplied_export` |
+| Conditions on the result | 4 | 5 |
+| Arithmetic | identical | identical |
+
+Route A is better evidence and is the recommended path. Route B exists because
+being blocked on a **credential** rather than on the **data** was the wrong place
+to be stuck: minting an Admin key needs a different permission than reading a
+bill, and an owner who can do the second should not be unable to reconcile.
+
+What route B does *not* do is pretend. Nothing in an adopted export was obtained
+from the provider by Fiscus, so nothing here can detect a report that was edited
+before it was handed over. That fact is stamped on the observation, survives into
+every reconciliation built on it, and appears as a fifth permanent condition.
 
 ### Step 1 — declare the route scope *(local)*
 
@@ -91,6 +108,33 @@ fiscus billing openai-costs preview --from 2026-07-01 --to 2026-08-01 --json
 What is retained from the pull: the daily project/line-item/currency groupings,
 a SHA-256 digest chain over the response pages, the page count, and the fetch
 time. Not the raw response, not the key, not prompt or request content.
+
+### Step 3b — or adopt an export instead, with no credential *(route B)*
+
+If you can download a costs report but cannot mint an Admin key, import it and
+adopt it as the observation. Both commands are read-only until `--apply`:
+
+```bash
+fiscus billing import --file ./your-costs-export.fiscus.json --apply
+fiscus billing openai-costs adopt                      # lists adoptable imports
+fiscus billing openai-costs adopt --import-id <id>     # preview: what it would observe
+fiscus billing openai-costs adopt --import-id <id> --apply
+```
+
+Adoption is strict about what it will observe, because the arithmetic downstream
+is exact and a sloppy input would produce a confident wrong residual:
+
+- **whole UTC days only** — the provider bucket grain is the only grain that
+  joins to the local ledger. Anything hourly or monthly is refused, not resampled.
+- **your declared project only** — lines for another project, and account-level
+  lines with no project reference at all (credits, most commonly), are excluded.
+- **exclusions are reported with their money**, never dropped. A silently
+  discarded credit would understate the provider side and surface later as a
+  residual that never existed.
+- **single-currency USD** — the evidence schema already enforces this at import.
+
+What is retained: the same daily groupings a pull would produce, plus the file's
+SHA-256 as the digest of the single "page" that produced them. Not the raw file.
 
 ### Step 4 — reconcile *(local)*
 
@@ -163,8 +207,10 @@ A run refuses rather than producing a soft number when:
 
 ## 4. The conditions that never go away
 
-Every result carries these four. They are properties of the method, not defects
-of your data, and an exactly-matching day does not earn a cleaner label:
+Every result carries these four — and a fifth when the provider side was
+adopted from an operator export rather than pulled. They are properties of the
+method, not defects of your data, and an exactly-matching day does not earn a
+cleaner label:
 
 - **`local_route_scope_is_not_provider_verified`** — you declared that an
   endpoint maps to a project. Nothing in Fiscus checks that with the provider.
@@ -180,6 +226,11 @@ of your data, and an exactly-matching day does not earn a cleaner label:
 - **`local_request_amounts_are_rate_card_estimates`** — Fiscus prices from a
   local rate card. The gap between that and the provider report is the subject
   of the comparison, not a flaw in it.
+- **`provider_report_is_operator_supplied_and_unverified`** — *route B only.*
+  The provider figures were supplied by a person, not read from the provider.
+  Fiscus validated their shape and digested the file; it obtained nothing from
+  the provider. This condition is absent on a pulled observation, so its
+  presence is the signal, not boilerplate.
 
 ---
 

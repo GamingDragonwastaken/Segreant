@@ -32,7 +32,57 @@ import {
 import { ATTRIBUTION_BASES, type AttributionBasis } from '../value/characterization.ts';
 import type { OpenAiCostObservation, OpenAiCostsFailureCode } from '../billing/openaiCosts.ts';
 import { buildOpenAiCostsCaptureCoverage, type OpenAiCostsCaptureCoverage } from '../billing/openaiCostsCoverage.ts';
-import { reconcileOpenAiCosts, type ReconciliationResult, type ReconciliationRun } from '../billing/reconcile.ts';
+import { reconcileOpenAiCosts, type ProviderSourceKind, type ReconciliationResult, type ReconciliationRun } from '../billing/reconcile.ts';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * A microdollar integer as the plain decimal string the observation grain
+ * stores. Never a float round-trip: the ledger is exact integers and the
+ * provider grain is an exact decimal, so the conversion between them must not
+ * introduce a representation error a reconciliation would then report as a
+ * residual.
+ */
+function microsToDecimal(micros: number): string {
+  const sign = micros < 0 ? '-' : '';
+  const abs = Math.abs(micros);
+  return `${sign}${Math.floor(abs / 1_000_000)}.${String(abs % 1_000_000).padStart(6, '0')}`;
+}
+
+/** What an adoption would observe, and what it deliberately would not. */
+export type OpenAiCostsAdoptionPlan =
+  | {
+      adoptable: true;
+      importId: string;
+      declaredScopeId: string;
+      providerProjectRef: string;
+      periodStartMs: number;
+      periodEndMs: number;
+      fileSha256: string;
+      /** The operator's own coverage claim on the import. Never verified here. */
+      declaredCoverage: string;
+      observations: OpenAiCostObservation[];
+      matchedRecordCount: number;
+      matchedMicros: number;
+      /**
+       * Lines this adoption will NOT observe, with their money. Account-level
+       * credits carry no project reference and cannot be attributed to one, so
+       * they are excluded — and reported, because a silently dropped credit
+       * would show up later as a residual that never existed.
+       */
+      excluded: { otherOrNoProjectRecordCount: number; otherOrNoProjectMicros: number };
+    }
+  | {
+      adoptable: false;
+      refusal:
+        | 'no_such_import'
+        | 'import_is_not_openai'
+        | 'import_owns_no_records'
+        | 'no_records_for_declared_project'
+        | 'records_are_not_single_currency_usd'
+        | 'records_are_not_whole_utc_days';
+      detail: string;
+    };
 import {
   validateCostCentre,
   validateRule,
@@ -241,6 +291,12 @@ export interface OpenAiCostsObservationRun {
   trust: 'provider_observation_unreconciled';
   rawRetention: 'digest_only';
   observationsStored: number;
+  /**
+   * How these figures reached Fiscus. `legacy_unknown` on rows recorded before
+   * the distinction existed — never backfilled to `provider_api_pull` merely
+   * because that happened to be the only writer at the time.
+   */
+  sourceKind: ProviderSourceKind;
 }
 
 /** A retained provider daily grouping from exactly one completed observation run. */
@@ -263,6 +319,8 @@ export interface OpenAiCostsObservationInput {
   resultState: 'succeeded' | 'failed';
   failureCode: OpenAiCostsFailureCode | null;
   observations: OpenAiCostObservation[];
+  /** Defaults to the direct API pull — the only writer that existed before this. */
+  sourceKind?: ProviderSourceKind;
 }
 
 export interface OpenAiCostsObservationStatus {
@@ -665,7 +723,10 @@ CREATE TABLE IF NOT EXISTS openai_cost_observation_runs (
   provider_finality        TEXT NOT NULL,
   trust                    TEXT NOT NULL,
   raw_retention            TEXT NOT NULL,
-  observations_stored      INTEGER NOT NULL
+  observations_stored      INTEGER NOT NULL,
+  -- How the figures reached Fiscus: read from the provider, or handed over by
+  -- an operator. Different evidence classes, so the reconciliation says which.
+  source_kind              TEXT NOT NULL DEFAULT 'legacy_unknown'
 );
 
 CREATE INDEX IF NOT EXISTS idx_openai_cost_observation_runs_latest
@@ -913,6 +974,11 @@ function openAiCostsRunFromRecord(row: Record<string, unknown>): OpenAiCostsObse
     trust: 'provider_observation_unreconciled',
     rawRetention: 'digest_only',
     observationsStored: Number(row.observationsStored),
+    // Anything not one of the two known writers stays unknown rather than being
+    // coerced into the one that happens to be more flattering.
+    sourceKind: row.sourceKind === 'provider_api_pull' || row.sourceKind === 'operator_supplied_export'
+      ? row.sourceKind
+      : 'legacy_unknown',
   };
 }
 
@@ -1023,6 +1089,15 @@ export class Store {
       // cannot prove would be as invented as asserting freshness. Only reprices
       // from here on mark units.
       this.db.prepare('ALTER TABLE realization_units ADD COLUMN cost_stale INTEGER NOT NULL DEFAULT 0').run();
+    }
+    const obsRunCols = this.db.prepare('PRAGMA table_info(openai_cost_observation_runs)').all() as Array<{ name: string }>;
+    if (obsRunCols.length > 0 && !obsRunCols.some((c) => c.name === 'source_kind')) {
+      // No backfill, even though the direct API pull was the only writer that
+      // could have produced these rows. Recording that as a fact would assert
+      // provenance the row itself never captured — and provenance asserted
+      // from context rather than from evidence is the exact failure this
+      // column exists to prevent. Unknown stays unknown.
+      this.db.prepare("ALTER TABLE openai_cost_observation_runs ADD COLUMN source_kind TEXT NOT NULL DEFAULT 'legacy_unknown'").run();
     }
     const signalCols = this.db.prepare('PRAGMA table_info(gate_signals)').all() as Array<{ name: string }>;
     if (!signalCols.some((c) => c.name === 'evidence_source')) {
@@ -2579,6 +2654,7 @@ export class Store {
       trust: 'provider_observation_unreconciled',
       rawRetention: 'digest_only',
       observationsStored: input.observations.length,
+      sourceKind: input.sourceKind ?? 'provider_api_pull',
     };
     const seen = new Set<string>();
     for (const observation of input.observations) {
@@ -2599,8 +2675,8 @@ export class Store {
       `INSERT INTO openai_cost_observation_runs (
          observation_run_id, declared_scope_id, provider_project_ref, period_start_ms, period_end_ms, fetched_at_ms,
          pagination_complete, page_count, page_digest_chain_sha256, result_state, failure_code, provider_finality,
-         trust, raw_retention, observations_stored
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         trust, raw_retention, observations_stored, source_kind
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     );
     const writeLine = this.db.prepare(
       `INSERT INTO openai_cost_observation_lines (
@@ -2614,6 +2690,7 @@ export class Store {
         run.observationRunId, run.declaredScopeId, run.providerProjectRef, run.periodStartMs, run.periodEndMs,
         run.fetchedAtMs, run.paginationComplete ? 1 : 0, run.pageCount, run.pageDigestChainSha256, run.resultState,
         run.failureCode, run.providerFinality, run.trust, run.rawRetention, run.observationsStored,
+        run.sourceKind,
       );
       for (const observation of input.observations) {
         writeLine.run(
@@ -2630,6 +2707,130 @@ export class Store {
     return run;
   }
 
+  /**
+   * Plan the adoption of an already-imported operator export as a Costs
+   * observation, so a reconciliation can run WITHOUT an Admin credential.
+   *
+   * This exists because the credential was the wrong thing to be blocked on.
+   * A read-only Costs pull is the better evidence and stays the recommended
+   * path, but an account owner who can export a report should not be unable to
+   * reconcile merely because minting an Admin key needs a different permission
+   * than reading a bill. What changes is the EVIDENCE CLASS, not the
+   * arithmetic: the resulting run is stamped `operator_supplied_export` and
+   * carries a fifth permanent condition saying nothing in it was obtained from
+   * the provider by Fiscus.
+   *
+   * Read-only: this computes a plan and writes nothing. Everything it cannot
+   * adopt is REPORTED with its amount rather than dropped — an adoption that
+   * quietly discarded an account-level credit would understate the provider
+   * side and turn a missing line into a fake residual.
+   */
+  planOpenAiCostsAdoption(input: { importId: string; declaredScopeId: string; providerProjectRef: string }): OpenAiCostsAdoptionPlan {
+    const run = this.billingImportRuns(500).find((r) => r.importId === input.importId);
+    if (!run) return { adoptable: false, refusal: 'no_such_import', detail: `no billing import ${input.importId}` };
+    if (run.provider !== 'openai') {
+      return { adoptable: false, refusal: 'import_is_not_openai', detail: `import ${input.importId} is for ${run.provider}` };
+    }
+
+    const all = this.billingEvidenceRecords().filter((r) => r.firstImportId === input.importId);
+    if (all.length === 0) {
+      // Every row was a replay of an earlier import, so this import id owns
+      // none of them. Adopting it would silently observe nothing.
+      return { adoptable: false, refusal: 'import_owns_no_records', detail: `import ${input.importId} inserted no new charge lines` };
+    }
+
+    const matched = all.filter((r) => r.providerProjectRef === input.providerProjectRef);
+    const excludedOtherProject = all.filter((r) => r.providerProjectRef !== input.providerProjectRef);
+    if (matched.length === 0) {
+      return {
+        adoptable: false,
+        refusal: 'no_records_for_declared_project',
+        detail: `no charge line in ${input.importId} carries providerProjectRef ${input.providerProjectRef}`,
+      };
+    }
+
+    const currencies = [...new Set(matched.map((r) => r.currency))].sort();
+    if (currencies.length > 1 || currencies[0] !== 'USD') {
+      return {
+        adoptable: false,
+        refusal: 'records_are_not_single_currency_usd',
+        detail: `the matched lines report ${currencies.join(', ')}; no rate is applied here`,
+      };
+    }
+    const nonDaily = matched.filter((r) => r.chargePeriodEndMs - r.chargePeriodStartMs !== DAY_MS
+      || r.chargePeriodStartMs % DAY_MS !== 0);
+    if (nonDaily.length > 0) {
+      return {
+        adoptable: false,
+        refusal: 'records_are_not_whole_utc_days',
+        detail: `${nonDaily.length} matched line(s) do not cover exactly one UTC day; the provider bucket grain is the only grain that joins`,
+      };
+    }
+
+    const byKey = new Map<string, { bucketStartMs: number; lineItem: string; micros: number }>();
+    for (const record of matched) {
+      const lineItem = record.sku || record.service || 'unspecified';
+      const key = `${record.chargePeriodStartMs} ${lineItem}`;
+      const entry = byKey.get(key) ?? { bucketStartMs: record.chargePeriodStartMs, lineItem, micros: 0 };
+      entry.micros += record.amountMicros;
+      byKey.set(key, entry);
+    }
+    const observations: OpenAiCostObservation[] = [...byKey.values()]
+      .sort((a, b) => (a.bucketStartMs - b.bucketStartMs) || a.lineItem.localeCompare(b.lineItem))
+      .map((entry) => ({
+        providerProjectRef: input.providerProjectRef,
+        bucketStartMs: entry.bucketStartMs,
+        bucketEndMs: entry.bucketStartMs + DAY_MS,
+        lineItem: entry.lineItem,
+        currency: 'USD',
+        amountDecimal: microsToDecimal(entry.micros),
+      }));
+
+    const days = observations.map((o) => o.bucketStartMs);
+    return {
+      adoptable: true,
+      importId: input.importId,
+      declaredScopeId: input.declaredScopeId,
+      providerProjectRef: input.providerProjectRef,
+      periodStartMs: Math.min(...days),
+      periodEndMs: Math.max(...days) + DAY_MS,
+      fileSha256: run.fileSha256,
+      // An operator declaration even when it says `complete`. Carried onto the
+      // plan so a partial export cannot become a silent under-report of the
+      // provider side, which would read as off-path spend that never happened.
+      declaredCoverage: run.coverage,
+      observations,
+      matchedRecordCount: matched.length,
+      matchedMicros: matched.reduce((sum, r) => sum + r.amountMicros, 0),
+      excluded: {
+        otherOrNoProjectRecordCount: excludedOtherProject.length,
+        otherOrNoProjectMicros: excludedOtherProject.reduce((sum, r) => sum + r.amountMicros, 0),
+      },
+    };
+  }
+
+  /** Record an adoption plan as an observation. Refuses anything not adoptable. */
+  adoptOpenAiCostsFromImport(plan: OpenAiCostsAdoptionPlan, adoptedAtMs = Date.now()): OpenAiCostsObservationRun {
+    if (!plan.adoptable) throw new Error(`refusing to adopt: ${plan.refusal} — ${plan.detail}`);
+    return this.recordOpenAiCostsObservation({
+      declaredScopeId: plan.declaredScopeId,
+      providerProjectRef: plan.providerProjectRef,
+      periodStartMs: plan.periodStartMs,
+      periodEndMs: plan.periodEndMs,
+      fetchedAtMs: adoptedAtMs,
+      paginationComplete: true,
+      // One "page": the operator's file. Its SHA-256 is genuinely the digest of
+      // the only artifact that produced these lines, so the field keeps its
+      // meaning rather than being repurposed.
+      pageCount: 1,
+      pageDigestChainSha256: plan.fileSha256,
+      resultState: 'succeeded',
+      failureCode: null,
+      observations: plan.observations,
+      sourceKind: 'operator_supplied_export',
+    });
+  }
+
   /** Newest first; includes failed pulls so a finance owner can see freshness failures. */
   openAiCostsObservationRuns(limit = 50): OpenAiCostsObservationRun[] {
     const safeLimit = Math.max(1, Math.min(500, Math.floor(limit)));
@@ -2639,7 +2840,7 @@ export class Store {
               fetched_at_ms AS fetchedAtMs, pagination_complete AS paginationComplete, page_count AS pageCount,
               page_digest_chain_sha256 AS pageDigestChainSha256, result_state AS resultState, failure_code AS failureCode,
               provider_finality AS providerFinality, trust, raw_retention AS rawRetention,
-              observations_stored AS observationsStored
+              observations_stored AS observationsStored, source_kind AS sourceKind
          FROM openai_cost_observation_runs
         ORDER BY fetched_at_ms DESC, observation_run_id DESC LIMIT ?`,
     ).all(safeLimit) as Array<Record<string, unknown>>;
@@ -2654,7 +2855,7 @@ export class Store {
               fetched_at_ms AS fetchedAtMs, pagination_complete AS paginationComplete, page_count AS pageCount,
               page_digest_chain_sha256 AS pageDigestChainSha256, result_state AS resultState, failure_code AS failureCode,
               provider_finality AS providerFinality, trust, raw_retention AS rawRetention,
-              observations_stored AS observationsStored
+              observations_stored AS observationsStored, source_kind AS sourceKind
          FROM openai_cost_observation_runs
         WHERE result_state = 'succeeded' AND pagination_complete = 1
         ORDER BY fetched_at_ms DESC, observation_run_id DESC LIMIT 1`,
