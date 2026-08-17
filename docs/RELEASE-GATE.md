@@ -30,8 +30,8 @@ external deployment, or the optional team service.
 ### Candidate record — commit `a9fc6b2`, 2026-08-18
 
 Run against `a9fc6b2e01869b7bd8d9f4e24ffb782c891c3a51`, worktree clean before and
-after validation. **Nine rows pass; the CI row is PENDING** until the run for
-this candidate is observed. Supersedes the `3ddf625` record, retained for history.
+after validation. **All ten rows pass.** Supersedes the `3ddf625` record,
+retained for history.
 
 | Requirement | Result |
 | --- | --- |
@@ -43,7 +43,7 @@ this candidate is observed. Supersedes the `3ddf625` record, retained for histor
 | Model-trial truthfulness | **Pass.** `/api/value` self-labels `demo: true`; one switch, `confidence: trial`, no `evidence_supported`. |
 | Billing-boundary truthfulness | **Pass.** `billing scope set --json` → `applied: false`, preview `trust: operator_declared_unverified`, `reconciliationStatus: not_reconciled`. Packaged `/api/billing` → `demo: true`, `not_reconciled`, `recordCount: 0`, `reconciliation.runs: 0`. |
 | Direct-Costs connector boundary | **Pass.** With an applied `org_…`/`proj_…` scope, `billing openai-costs preview --json` → `networkAttempted: false`, `credentialRead: false`. |
-| Intended CI | **PENDING.** Not yet pushed at the time this record was written. To be filled from the observed run for this candidate, with the multi-commit delta stated if it lands behind a tip. |
+| Intended CI | **Pass, with the delta stated** (per the rule in the checklist above). Run **CI #30** (`.../actions/runs/32077684444`): status **Success**, 1m 5s, 7 jobs — `package-smoke` plus the 3-job `test` and 3-job `team-server-test` matrices. The run is for the pushed tip `f8348c5`; `git diff --stat a9fc6b2 f8348c5` is `docs/RELEASE-GATE.md` alone, 1 file changed — no source, no test, no packaged code. |
 | Visual check | **Pass.** Packaged dashboard in the browser, Allocation view: 5 cards; header state `SHOWBACK · DERIVED FROM LOCAL ESTIMATES · RESIDUAL UNEXAMINED`; conservation line renders as `$51.43 allocated + $38.23 unallocated = $89.66 ledger total · exact`; the unallocated bucket names `web-frontend ($15.79), data-pipeline ($13.48), default ($8.94), codex ($0.01)`; the proportional rule reports `every directly-allocated centre`; the range picker is `display: none`; no horizontal page overflow; no console errors. Screenshots were unavailable (the browser pane was not displayed), so this row rests on DOM and computed-style inspection, as the preceding records do. |
 
 **The new surface is a read path, and that was the point of checking it.**
