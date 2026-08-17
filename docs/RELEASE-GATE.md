@@ -30,9 +30,8 @@ external deployment, or the optional team service.
 ### Candidate record — commit `1398fe3`, 2026-08-17
 
 Run against `1398fe35d63d26c9f09592f71e51cc457d7b84bb`, worktree clean before and
-after validation. **Nine rows pass; the CI row is unobserved at the time of
-writing** and is filled in below once the run exists. Supersedes the `e3eb407`
-record, retained for history.
+after validation. **All ten rows pass**, the CI row with its commit delta stated.
+Supersedes the `e3eb407` record, retained for history.
 
 | Requirement | Result |
 | --- | --- |
@@ -44,7 +43,7 @@ record, retained for history.
 | Model-trial truthfulness | **Pass.** `/api/value` self-labels `demo: true`; one switch, `confidence: trial`, no `evidence_supported`, zero confounders, `costStaleUnits: 0`; $0.20 vs $1.22 per 100 changed lines, 3 vs 3 sessions. |
 | Billing-boundary truthfulness | **Pass.** `billing scope set --account-ref … --json` → `applied: false`, `trust: operator_declared_unverified`, `reconciliationStatus: not_reconciled`. Packaged `/api/billing` → `demo: true`, `not_reconciled`, `recordCount: 0`. |
 | Direct-Costs connector boundary | **Pass.** With an applied `org_…`/`proj_…` scope, `billing openai-costs preview` → `networkAttempted: false`, `credentialRead: false`. |
-| Intended CI | **Pending.** Not yet observed; filled in only after the run for the pushed tip has been inspected. |
+| Intended CI | **Pass, with the delta stated** (per the rule in the checklist above). Run **CI #22** (`.../actions/runs/31991873049`): status **Success**, 59s, 7 jobs — `package-smoke` plus the 3-job `test` and 3-job `team-server-test` matrices. The run is for the pushed tip `89e2c2c`; `git diff --stat 1398fe3 89e2c2c` is `docs/RELEASE-GATE.md` alone, 1 file changed — no source, no test, no packaged code. |
 | Visual check | **Pass.** Packaged dashboard in the browser: DEMO banner, per-bar attribution basis, rate-card STALE, exactly one TRIAL card and no EVIDENCE card, no confounder warning, no pre-reprice badge. |
 
 **Attribution paths were additionally exercised outside the packaged demo**, whose
