@@ -27,12 +27,42 @@ This validates a local developer preview only. It does **not** validate a
 provider billing statement, production customer data, an npm publication, an
 external deployment, or the optional team service.
 
-### Candidate record — commit `e3eb407`, 2026-08-17
+### Candidate record — commit `1398fe3`, 2026-08-17
+
+Run against `1398fe35d63d26c9f09592f71e51cc457d7b84bb`, worktree clean before and
+after validation. **Nine rows pass; the CI row is unobserved at the time of
+writing** and is filled in below once the run exists. Supersedes the `e3eb407`
+record, retained for history.
+
+| Requirement | Result |
+| --- | --- |
+| Candidate identity | **Pass.** `git rev-parse HEAD` = `1398fe35d63d26c9f09592f71e51cc457d7b84bb`; `git status --short` empty before and after. |
+| Source validation | **Pass.** `npm ci` (3 packages, 0 vulnerabilities), `npm run typecheck` clean, `npm test` **489 tests / 488 pass / 1 expected platform skip / 0 fail**, `npm run build` clean. |
+| Packed artifact | **Pass.** `npm pack` → 97 files, SHA-256 `8ff548e7497e2eb9a08683e6d0be89dd777c11867f5427613d94e66e7c7fec85`; all 6 key paths present. |
+| Clean installed CLI | **Pass.** Installed with `--ignore-scripts` into a fresh directory; `fiscus --help` renders. |
+| Packaged dashboard/API | **Pass.** Isolated `AEGIS_HOME`, seeded demo, packaged dashboard on :8099. `/api/health` → `{"ok":true}`; `/api/overview` → `demo: true`, 77 requests, attribution evidence entirely `synthetic_demo`. Terminated cleanly, port confirmed closed. |
+| Model-trial truthfulness | **Pass.** `/api/value` self-labels `demo: true`; one switch, `confidence: trial`, no `evidence_supported`, zero confounders, `costStaleUnits: 0`; $0.20 vs $1.22 per 100 changed lines, 3 vs 3 sessions. |
+| Billing-boundary truthfulness | **Pass.** `billing scope set --account-ref … --json` → `applied: false`, `trust: operator_declared_unverified`, `reconciliationStatus: not_reconciled`. Packaged `/api/billing` → `demo: true`, `not_reconciled`, `recordCount: 0`. |
+| Direct-Costs connector boundary | **Pass.** With an applied `org_…`/`proj_…` scope, `billing openai-costs preview` → `networkAttempted: false`, `credentialRead: false`. |
+| Intended CI | **Pending.** Not yet observed; filled in only after the run for the pushed tip has been inspected. |
+| Visual check | **Pass.** Packaged dashboard in the browser: DEMO banner, per-bar attribution basis, rate-card STALE, exactly one TRIAL card and no EVIDENCE card, no confounder warning, no pre-reprice badge. |
+
+**Attribution paths were additionally exercised outside the packaged demo**, whose
+rows are all `synthetic_demo` and therefore cannot exercise them. On a scratch
+home: a Claude Code transcript recorded in `<repo>/packages/web` imported as
+project `myrepo` with basis `tool_log_repo_resolved`, and the run reported the
+`web → myrepo` relabel with the `fiscus project alias` remedy; a live proxy round
+trip to `POST /fiscus/backend-api/v1/messages` stored `backend-api` as
+`client_declared` while the mock upstream recorded being asked for
+`/v1/messages`, proving the prefix never leaves the machine.
+
+**Team server at this tree:** typecheck clean, **55/55** — source validation only.
+
+### Superseded record — commit `e3eb407`, 2026-08-17
 
 Run against `e3eb407858f20e6dae2e4dae3375b70bc7ed4771`, worktree clean before and
-after validation. **All ten rows pass**, the CI row with its commit delta stated.
-Supersedes the `669cb3d` record, retained for history: that candidate has been
-overtaken by a change to what the model trial is willing to claim.
+after validation. **All ten rows passed**, the CI row with its commit delta
+stated. Superseded by the `1398fe3` record above; retained for history.
 
 | Requirement | Result |
 | --- | --- |
