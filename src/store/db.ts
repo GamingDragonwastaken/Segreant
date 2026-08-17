@@ -18,6 +18,7 @@ import { randomUUID } from 'node:crypto';
 import { legacyPricingEvidence, type RequestPricingEvidence } from '../cost/pricing.ts';
 import {
   BILLING_IMPORTER_VERSION,
+  usdMicros,
   type BillingChargeType,
   type BillingCoverage,
   type NormalizedBillingImport,
@@ -31,6 +32,7 @@ import {
 import { ATTRIBUTION_BASES, type AttributionBasis } from '../value/characterization.ts';
 import type { OpenAiCostObservation, OpenAiCostsFailureCode } from '../billing/openaiCosts.ts';
 import { buildOpenAiCostsCaptureCoverage, type OpenAiCostsCaptureCoverage } from '../billing/openaiCostsCoverage.ts';
+import { reconcileOpenAiCosts, type ReconciliationResult, type ReconciliationRun } from '../billing/reconcile.ts';
 
 export interface RequestRow {
   requestId: string;
@@ -676,6 +678,32 @@ CREATE TABLE IF NOT EXISTS openai_cost_observation_lines (
 
 CREATE INDEX IF NOT EXISTS idx_openai_cost_observation_lines_run
   ON openai_cost_observation_lines(observation_run_id, bucket_start_ms, line_item);
+
+-- Reconciliation runs are derived, immutable records. They reference the exact
+-- observation snapshot they compared against and are never updated: a later
+-- provider snapshot produces a NEW run, so the history of what was claimed when
+-- stays inspectable. The original charge and the original request rows are
+-- untouched by anything here.
+CREATE TABLE IF NOT EXISTS reconciliation_runs (
+  reconciliation_run_id    TEXT PRIMARY KEY NOT NULL,
+  observation_run_id       TEXT NOT NULL,
+  declared_scope_id        TEXT NOT NULL,
+  provider_project_ref     TEXT NOT NULL,
+  period_start_ms          INTEGER NOT NULL,
+  period_end_ms            INTEGER NOT NULL,
+  computed_at_ms           INTEGER NOT NULL,
+  currency                 TEXT NOT NULL,
+  materiality_usd          REAL NOT NULL,
+  provider_reported_micros INTEGER NOT NULL,
+  local_captured_micros    INTEGER NOT NULL,
+  unexplained_variance_micros INTEGER NOT NULL,
+  snapshot_stability       TEXT NOT NULL,
+  trust                    TEXT NOT NULL,
+  result_json              TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_reconciliation_runs_latest
+  ON reconciliation_runs(computed_at_ms DESC, reconciliation_run_id DESC);
 `;
 
 function pricingEvidenceFromRecord(record: Record<string, unknown>, prefix = ''): RequestPricingEvidence {
@@ -2591,6 +2619,110 @@ export class Store {
       observations: latest.observations,
       requests: this.requestsInRange(latest.run.periodStartMs, latest.run.periodEndMs),
     });
+  }
+
+  /**
+   * Per-day provider totals from the newest COMPLETE observation of this period
+   * that is not the one being reconciled — the evidence behind
+   * `snapshotStability`. Returns null when no independent observation exists,
+   * which is honestly different from "two observations agreed".
+   *
+   * Matched on the exact period and scope: a snapshot of a different range is
+   * not an independent observation of this one, and comparing them would
+   * manufacture instability out of a boundary difference.
+   */
+  priorOpenAiCostsDayTotals(exceptRunId: string, scopeId: string, periodStartMs: number, periodEndMs: number): Map<number, number> | null {
+    const row = this.db.prepare(
+      `SELECT observation_run_id AS observationRunId
+         FROM openai_cost_observation_runs
+        WHERE result_state = 'succeeded' AND pagination_complete = 1
+          AND observation_run_id <> ? AND declared_scope_id = ?
+          AND period_start_ms = ? AND period_end_ms = ?
+        ORDER BY fetched_at_ms DESC, observation_run_id DESC LIMIT 1`,
+    ).get(exceptRunId, scopeId, periodStartMs, periodEndMs) as Record<string, unknown> | undefined;
+    if (!row) return null;
+    const lines = this.db.prepare(
+      `SELECT bucket_start_ms AS bucketStartMs, amount_decimal AS amountDecimal
+         FROM openai_cost_observation_lines WHERE observation_run_id = ?`,
+    ).all(String(row.observationRunId)) as Array<Record<string, unknown>>;
+    const totals = new Map<number, number>();
+    for (const line of lines) {
+      const day = Number(line.bucketStartMs);
+      totals.set(day, (totals.get(day) ?? 0) + usdMicros(String(line.amountDecimal), 'provider amount'));
+    }
+    return totals;
+  }
+
+  /**
+   * Compare the newest complete provider snapshot with the local ledger.
+   *
+   * Read-only: computing a reconciliation does not record one. `saveReconciliationRun`
+   * is a separate, explicit step, so an operator can look at a variance before
+   * it becomes part of the durable record.
+   */
+  reconcileOpenAiCosts(opts: { materialityUsd?: number; now?: number } = {}): ReconciliationResult | null {
+    const latest = this.latestCompleteOpenAiCostsObservation();
+    if (!latest) return null;
+    return reconcileOpenAiCosts({
+      run: latest.run,
+      observations: latest.observations,
+      requests: this.requestsInRange(latest.run.periodStartMs, latest.run.periodEndMs),
+      priorDayTotals: this.priorOpenAiCostsDayTotals(
+        latest.run.observationRunId,
+        latest.run.declaredScopeId,
+        latest.run.periodStartMs,
+        latest.run.periodEndMs,
+      ),
+      materialityUsd: opts.materialityUsd,
+      now: opts.now,
+    });
+  }
+
+  /** Persist a computed reconciliation as an immutable derived record. */
+  saveReconciliationRun(result: ReconciliationRun, computedAtMs = Date.now()): string {
+    const id = randomUUID();
+    this.db
+      .prepare(
+        `INSERT INTO reconciliation_runs (
+            reconciliation_run_id, observation_run_id, declared_scope_id, provider_project_ref,
+            period_start_ms, period_end_ms, computed_at_ms, currency, materiality_usd,
+            provider_reported_micros, local_captured_micros, unexplained_variance_micros,
+            snapshot_stability, trust, result_json
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      )
+      .run(
+        id,
+        result.observationRunId,
+        result.declaredScopeId,
+        result.providerProjectRef,
+        result.periodStartMs,
+        result.periodEndMs,
+        computedAtMs,
+        result.currency,
+        result.materialityUsd,
+        result.providerReportedMicros,
+        result.localCapturedMicros,
+        result.unexplainedVarianceMicros,
+        result.snapshotStability,
+        result.trust,
+        JSON.stringify(result),
+      );
+    return id;
+  }
+
+  /** Recorded reconciliation runs, newest first. */
+  reconciliationRuns(limit = 20): Array<{ reconciliationRunId: string; computedAtMs: number; result: ReconciliationRun }> {
+    const rows = this.db
+      .prepare(
+        `SELECT reconciliation_run_id AS reconciliationRunId, computed_at_ms AS computedAtMs, result_json AS resultJson
+           FROM reconciliation_runs ORDER BY computed_at_ms DESC, reconciliation_run_id DESC LIMIT ?`,
+      )
+      .all(limit) as Array<Record<string, unknown>>;
+    return rows.map((row) => ({
+      reconciliationRunId: String(row.reconciliationRunId),
+      computedAtMs: Number(row.computedAtMs),
+      result: JSON.parse(String(row.resultJson)) as ReconciliationRun,
+    }));
   }
 
   /**

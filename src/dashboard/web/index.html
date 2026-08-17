@@ -926,6 +926,46 @@ function renderBilling(d) {
     return `<div class="card billing-note fade" style="grid-column:1/-1"><div class="label">Direct OpenAI Costs observations</div><div class="billing-state">${esc(state)} · NOT RECONCILED</div><h3 style="margin-top:var(--s3)">Provider snapshot status, never a request-level match</h3><p>Latest run: ${esc(billingTime(directRun.fetchedAtMs))} · ${Number(directRun.pageCount || 0).toLocaleString()} page(s) · ${directRun.paginationComplete ? 'complete pagination' : 'incomplete pagination'}${failed && directRun.failureCode ? ' · ' + esc(directRun.failureCode) : ''}.</p><div class="bsub">Local capture: ${esc(captureLine)}${exclusions ? `<br>Excluded local traffic: ${esc(exclusions)}.` : ''}<br>No provider line-item total or provider/request variance is displayed. Route scope is operator-declared, provider finality is undocumented, and off-path usage is not observable.</div></div>`;
   })();
 
+  // Recorded reconciliation runs. Read-only: this page never computes a
+  // variance, so what it shows and what `fiscus billing reconcile --apply`
+  // recorded can never disagree.
+  const reconciliation = d && typeof d.reconciliation === 'object' && d.reconciliation ? d.reconciliation : {};
+  const reconRuns = Array.isArray(reconciliation.runs) ? reconciliation.runs : [];
+  const reconCard = (() => {
+    if (!reconRuns.length) {
+      return `<div class="card fade" style="grid-column:1/-1"><div class="label">Provider reconciliation</div><div class="billing-state">NO RUN RECORDED</div><p class="bsub" style="margin-top:var(--s3)">Comparing a provider snapshot with local metering needs an account owner to supply a least-privilege Admin key for one read-only pull. This page will never request, store, or transmit one. Run <code>fiscus billing reconcile</code> to see exactly which step is outstanding.</p></div>`;
+    }
+    const latest = reconRuns[0] && typeof reconRuns[0].result === 'object' ? reconRuns[0].result : {};
+    // Provider buckets are UTC days. Rendering them through toLocaleString would
+    // shift the label for any viewer west of UTC, so the day would stop matching
+    // the provider's own bucket — and the whole comparison is keyed on that day.
+    const utcDay = (ms) => (Number.isFinite(Number(ms)) ? new Date(Number(ms)).toISOString().slice(0, 10) : '—');
+    const variance = Number(latest.unexplainedVarianceMicros || 0);
+    const cov = latest.coverage && typeof latest.coverage === 'object' ? latest.coverage : {};
+    const stability = String(latest.snapshotStability || 'single_observation').replace(/_/g, ' ');
+    const days = Array.isArray(latest.days) ? latest.days : [];
+    const notable = days.filter((x) => x && (x.material || x.residualReason === 'no_local_capture' || x.residualReason === 'no_provider_report')).slice(0, 8);
+    const dayRows = notable.map((x) => `<tr>
+      <td>${esc(utcDay(x.dayStartMs))}</td>
+      <td style="text-align:right">${billingUsd(x.providerReportedMicros)}</td>
+      <td style="text-align:right">${billingUsd(x.localCapturedMicros)}</td>
+      <td style="text-align:right">${Number(x.differenceMicros) > 0 ? '+' : ''}${billingUsd(x.differenceMicros)}</td>
+      <td>${esc(String(x.residualReason || '').replace(/_/g, ' '))}</td>
+    </tr>`).join('');
+    return `<div class="card billing-note fade" style="grid-column:1/-1">
+      <div class="label">Provider reconciliation ${tip('A comparison of two totals for one provider project, per UTC day: what the provider Costs API reported, and what Fiscus metered on the route you declared belongs to that project. The <b>grain is a day total</b> — provider line items do not join to models or requests, and pretending otherwise would mean inventing an allocation. The residual is the OUTPUT, not an error: it is an upper bound on spend that never passed through Fiscus, and it holds only if your route declaration is true, which nothing here verifies with the provider.')}</div>
+      <div class="billing-state">RECONCILED WITH RESIDUAL · SCOPE-CONDITIONAL</div>
+      <div class="bars" style="margin-top:var(--s3)">
+        <div class="bar"><div class="top"><span class="name">Provider reported</span><span class="cost">${billingUsd(latest.providerReportedMicros)}</span></div><div class="meta">${esc(String(latest.providerProjectRef || '—'))}</div></div>
+        <div class="bar"><div class="top"><span class="name">Fiscus metered</span><span class="cost">${billingUsd(latest.localCapturedMicros)}</span></div><div class="meta">local rate-card estimate</div></div>
+        <div class="bar"><div class="top"><span class="name">Unexplained</span><span class="cost" style="color:${variance === 0 ? 'var(--faint)' : 'var(--coral)'}">${variance > 0 ? '+' : ''}${billingUsd(variance)}</span></div><div class="meta">${variance >= 0 ? 'upper bound on off-path spend' : 'metered above the provider report — check the route declaration first'}</div></div>
+      </div>
+      <div class="bsub" style="margin-top:var(--s3)">${Number(cov.daysWithBoth || 0)} day(s) with both sides · ${Number(cov.providerOnlyDays || 0)} provider-only · ${Number(cov.localOnlyDays || 0)} local-only · ${Number(cov.materialDays || 0)} material at $${Number(latest.materialityUsd || 0).toFixed(2)} · snapshot ${esc(stability)}.</div>
+      ${dayRows ? `<div class="table-wrap" style="margin-top:var(--s3)"><table><thead><tr><th>Day</th><th style="text-align:right">Provider</th><th style="text-align:right">Fiscus</th><th style="text-align:right">Difference</th><th>Reason</th></tr></thead><tbody>${dayRows}</tbody></table></div>` : ''}
+      <div class="bsub" style="margin-top:var(--s3)">Conditions that never go away: ${(Array.isArray(latest.conditions) ? latest.conditions : []).map((c) => esc(String(c).replace(/_/g, ' '))).join(' · ')}.<br>Excluded from: ${(Array.isArray(reconciliation.excludedFrom) ? reconciliation.excludedFrom : []).map((x) => esc(x)).join(', ')}.</div>
+    </div>`;
+  })();
+
   setNodes($('#billing-grid'), `
     <div class="card billing-note fade">
       <div class="billing-state">NOT RECONCILED</div>
@@ -938,6 +978,7 @@ function renderBilling(d) {
     <div class="card fade"><div class="label">Evidence imports</div><div class="billing-stat coral">${Number(summary.importCount || 0).toLocaleString()}</div><div class="bsub">latest ${esc(billingTime(summary.lastImportedAtMs))}</div></div>
     ${imports.length ? `<div class="card fade" style="grid-column:1/-1"><div class="label">Evidence import provenance</div><div class="table-wrap"><table><thead><tr><th>Provider</th><th>Account ref</th><th>Export ID</th><th>Source period</th><th>Coverage</th><th>Rows</th><th>File digest</th><th>Imported</th></tr></thead><tbody>${rows}</tbody></table></div><div class="bsub">Coverage is an operator declaration, even when marked complete. Replayed rows were recognized without changing immutable charge-line totals.</div></div>` : empty}
     ${directCard}
+    ${reconCard}
   `);
   $('#gen').textContent = 'billing evidence refreshed ' + new Date(d.generatedAt || Date.now()).toLocaleTimeString();
 }

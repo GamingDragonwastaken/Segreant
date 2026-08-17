@@ -164,6 +164,22 @@ reconciliation, provider finality, invoice close, request-level cost, variance,
 allocation, or a budget/recommendation action. A later changed provider day is
 a new snapshot, not a silent overwrite or additive total.
 
+**Current reconciliation increment (local v1, 2026-08-18):** item 4 below is now
+built. `fiscus billing reconcile` compares a completed provider snapshot with the
+local ledger at **project-day total** grain — the only compatible join, because
+line items do not map to models or requests — and produces an immutable derived
+run carrying provider total, metered total, and the residual, with a structural
+reason per day. It is `reconciled_with_residual`, never `reconciled`. It refuses
+a period that may still be accruing and any non-USD or mixed-currency snapshot
+rather than softening either into a variance. Independent snapshots of the same
+period yield an observed stability signal, which is what makes the previously
+open `provider_finality_is_undocumented` blocker addressable at all. Two blockers
+survive as permanent **conditions** on every result — the route scope is
+operator-declared and unverified, and off-path usage is unobservable, so the
+residual is an upper bound on it rather than a measurement. Reconciled cost is
+excluded from request spend, budgets, RoI, and recommendations. See
+[PROVIDER-RECONCILIATION.md](PROVIDER-RECONCILIATION.md).
+
 1. Introduce the cost-source taxonomy and immutable financial ledger entities.
 2. Ship one read-only authoritative connector first. Start with OpenAI organization cost/usage, or a customer-owned cloud billing export selected with a design partner; do not build five shallow connectors at once.
 3. Store account/project scope, source cursor or export ID, collection time, source update time, raw-evidence digest, pagination state, and connector version.

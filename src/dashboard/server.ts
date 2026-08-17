@@ -406,6 +406,22 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
             status: store.openAiCostsObservationStatus(),
             coverage: store.openAiCostsCaptureCoverage(),
           },
+          // Reconciliation is a DERIVED, immutable record — read here, never
+          // computed here. Serving a freshly computed variance from a GET would
+          // make the dashboard disagree with the recorded runs the moment a new
+          // snapshot landed, and the recorded runs are the evidence.
+          reconciliation: {
+            kind: 'scope_conditional_reconciliation',
+            grain: 'provider_project_day_total',
+            runs: store.reconciliationRuns(10),
+            excludedFrom: [
+              'request_metered_spend',
+              'budget_enforcement',
+              'outcome_attribution',
+              'roi',
+              'model_recommendations',
+            ],
+          },
         });
       } catch (err) {
         return json(res, 500, { error: String(err) });

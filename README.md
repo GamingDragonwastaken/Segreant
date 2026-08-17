@@ -582,6 +582,47 @@ route, and other providers. It does not sum provider line items or produce a
 provider/request variance: a local route declaration is not provider-account
 verification and cannot see off-path usage.
 
+### Reconciliation (project-day grain)
+
+Once a complete snapshot exists, Fiscus compares it with local metering at the
+**only grain where the two join** — the project-day total:
+
+```powershell
+fiscus billing reconcile                        # read-only
+fiscus billing reconcile --apply                # record it as an immutable derived run
+fiscus billing reconcile --json --materiality 1.00
+```
+
+```text
+Provider reported   $70.20
+Fiscus metered      $66.60   (local rate-card estimate)
+Unexplained         +$3.60
+```
+
+The residual is the **output**, not an error. A run that drove it to zero would
+be fitting the numbers to each other. Its status is `reconciled_with_residual`
+and never `reconciled`, and each day carries a structural reason
+(`provider_exceeds_local`, `no_local_capture`, and so on) that says what shape
+the difference has and nothing about its cause.
+
+Provider line items do not join to models or requests, which is exactly why this
+compares day totals rather than inventing an allocation of line items across
+local calls. A run **refuses** rather than softening: a period ending within 48
+hours may still be accruing, and a non-USD or mixed-currency snapshot gets no
+exchange rate applied to it.
+
+Pull the same period twice, a day apart, and the run reports whether the
+provider's numbers moved — observed stability, never provider-attested finality.
+
+Four conditions ship on every result and never go away: the route scope is
+operator-declared and unverified, off-path usage is invisible (so the residual is
+an *upper bound* on it, not a measurement), line items do not join to requests,
+and local amounts are rate-card estimates. Reconciled cost stays out of request
+totals, budget enforcement, RoI, and model recommendations.
+
+Full walkthrough, including exactly which credential is needed and what Fiscus
+will not do with it: **[docs/PROVIDER-RECONCILIATION.md](docs/PROVIDER-RECONCILIATION.md)**.
+
 ### Beyond Anthropic & OpenAI
 
 The OpenAI route speaks the wire format most of the ecosystem now exposes, so
@@ -678,8 +719,10 @@ operator-supplied OpenAI provider-cost-evidence import, proxy budget controls,
 outcome-evidence views, and review-only within-task cheaper-model trials.
 Pricing refresh and all non-provider egress are operator-controlled.
 
-Generic cross-task or cross-project allocation, provider billing reconciliation,
-and automatic model routing are deliberately not product actions. The optional
+Reconciliation is scope-conditional and stops at project-day totals; it never
+becomes a budget, a recommendation, or a request-level cost. Generic cross-task
+or cross-project allocation and automatic model routing are deliberately not
+product actions at all. The optional
 [team server](team-server/README.md) is a separately gated, operator-run service;
 it is not approved for an internet-facing production deployment. See
 [EVIDENCE-PROVENANCE.md](docs/EVIDENCE-PROVENANCE.md) for what outcome signals do

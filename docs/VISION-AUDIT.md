@@ -3,6 +3,13 @@
 **Date:** 2026-08-17. **Audited tree:** `main`, working tree clean at the time
 of writing.
 
+> **Update, 2026-08-18 — §6 was acted on.** The owner chose to unblock the
+> provider lane rather than re-rank the roadmap. Reconciliation is now built at
+> project-day grain ([PROVIDER-RECONCILIATION.md](PROVIDER-RECONCILIATION.md)),
+> which changes the Reconcile row in §4 and part of §2. The rest of this audit
+> stands as written; **§3 in particular is unchanged and now matters more**, since
+> allocation is the next layer up from a residual that is finally measurable.
+
 This document applies the product's own rule to the product's own plans: an
 important claim should be inspectable through evidence. `PRODUCT_BRIEF.md` and
 [AI-FINANCIAL-OPERATIONS-ROADMAP.md](AI-FINANCIAL-OPERATIONS-ROADMAP.md) say
@@ -51,18 +58,20 @@ only claim in the vision that the code either honours or does not.
 | Layer | State | Evidence |
 | --- | --- | --- |
 | **Metered usage** | **Built, and the strongest part of the product.** Exact per-request capture through the proxy, read-only import for subscription tools, full pricing lineage per row (card SHA-256, source kind, match kind, matched provider/model), and a reprice audit trail that never rewrites history. | `src/proxy/server.ts`, `src/connect/*.ts`, `src/cost/pricing.ts`, `requests` + `request_price_events` in `src/store/db.ts` |
-| **Provider-billed cost** | **Partially built, and correctly refusing to overstate itself.** Operator-supplied billing evidence import produces immutable provider-declared charge records with currency, charge period, charge type, and a source digest. A read-only OpenAI Costs collector records immutable daily observations. Both are hard-labelled `not_reconciled`. | `src/billing/importer.ts`, `src/billing/openaiCosts.ts`, `billing_evidence_records` in `src/store/db.ts` |
+| **Provider-billed cost** | **Partially built, and correctly refusing to overstate itself.** Operator-supplied billing evidence import produces immutable provider-declared charge records with currency, charge period, charge type, and a source digest. A read-only OpenAI Costs collector records immutable daily observations, and (since 2026-08-18) a reconciliation run compares one against the local ledger at project-day grain. The operator-supplied import path is still hard-labelled `not_reconciled`; the connector path is `reconciled_with_residual`. | `src/billing/importer.ts`, `src/billing/openaiCosts.ts`, `src/billing/reconcile.ts`, `billing_evidence_records` in `src/store/db.ts` |
 | **Allocated cost** | **Absent as a layer.** This is the largest structural gap in the product. See §3. | — |
 | **Realized business value** | **Built, and by volume the most developed subsystem in the repository.** The eight-gate ladder, funnel scoring, four value lenses, anytime-valid confidence sequences, bounded lift with METR discounting, value-of-information ranking, signed receipts. | `src/value/` (20 modules, ~4,760 lines) |
 
-**The join between layers 1 and 2 exists and is deliberately blocked, not
-missing.** `src/billing/openaiCostsCoverage.ts` partitions every local ledger
-row in a provider snapshot period into the declared route and four disjoint
-exclusion buckets, then returns `comparisonStatus: 'blocked_not_reconciled'`
-and `varianceStatus: 'not_calculated'` with three named blockers. That is the
-right behaviour: the mapping is operator-declared, off-path usage is not
-observable, and provider finality is undocumented. Nothing here should be
-"fixed" by calculating a number.
+**The join between layers 1 and 2 now exists** (`src/billing/reconcile.ts`, added
+2026-08-18). The original audit found it deliberately blocked, with five named
+blockers on `openaiCostsCoverage.ts`. Three of those turned out to be blockers to
+a *per-request* reconciliation rather than to reconciliation as such: line items
+never join to models, local amounts are rate-card estimates (which is the
+*subject* of the comparison), and single-snapshot finality is unknowable — all
+three are answered by comparing project-day totals and recording whether
+independent snapshots agree. Two survive as permanent conditions on every result,
+carried on the record rather than resolved. The coverage surface remains as it
+was; it answers a different question and is still correct to refuse.
 
 **The join between layers 3 and 4 does not exist, because layer 3 does not.**
 Value is currently attributed to the same label the *request* carried, which
@@ -104,9 +113,13 @@ belongs in `src/value/characterization.ts`, which is already the single home for
 axis vocabulary and exists precisely to stop a definition drifting across four
 call sites.
 
-**Do not build this yet without deciding §6 first.** Allocation without a
-reconciled source allocates an estimate, which is a more expensive way to be
-wrong.
+**Still do not build this yet.** §6 has since been decided and reconciliation is
+built, but the caution was never about the decision — it was that allocation
+without a reconciled source allocates an estimate, which is a more expensive way
+to be wrong. The gate is now sharper and easier to check: allocation should wait
+until a reconciliation has actually **run against real provider data** and the
+residual has been looked at. Allocating across a variance nobody has yet seen
+would spread an unexamined error over a cost centre and give it a decimal point.
 
 ---
 
@@ -115,7 +128,7 @@ wrong.
 | Capability | State | Where the remainder belongs |
 | --- | --- | --- |
 | **Capture** | Complete for the stated wedge. Proxy metering, three importers, repo-resolved attribution, path-prefix declaration for header-less clients. | — |
-| **Reconcile** | Structurally ready, blocked on owner authorization (T-015), not on code. | Nothing to build. An authorized export or least-privilege credential is an owner action. |
+| **Reconcile** | **Built** as of 2026-08-18, at project-day grain, `reconciled_with_residual`. Running one still needs a credential the owner supplies. | Nothing further to build for v1. Discharging `local_route_scope_is_not_provider_verified` would need the proxy's key identity bound to the project through the Admin API — a broader credential scope, and a deliberate non-decision. |
 | **Attribute** | Complete at *project* grain, absent at *organization* grain. Five attribution bases with recorded provenance; no cost centre, team, environment, or tenant. | Organization grain belongs in `team-server/`, behind the T-006 infrastructure gate. Project grain is done. |
 | **Govern** | Half-built, and the half that is missing is a **name**, not a mechanism. Caps are enforced for proxy traffic and cannot be enforced for imported traffic; `viaClause` in `src/store/db.ts` already makes exactly that distinction. But the roadmap's enforceability vocabulary (`enforced_in_path`, `provider_native`, `observed_only`, `proposed`, `unknown`) appears nowhere in the source. | The status belongs on the budget result in `src/budget/guard.ts`, with the vocabulary in `src/value/characterization.ts`. This is a small, high-value change: the distinction is already *made*, it simply cannot be *shown*. |
 | **Allocate** | Absent. See §3. | `src/alloc/` (new) + `src/store/db.ts`. |
@@ -182,6 +195,25 @@ What should *not* happen is the third thing, which is drifting further while the
 roadmap continues to assert an order the work is not following. That would make
 the roadmap exactly the kind of uninspectable claim the product exists to
 oppose.
+
+### Resolved, 2026-08-18: option 1
+
+The owner chose to unblock the lane. `src/billing/` is now 6 modules and ~1,285
+lines, and the reconciliation itself is built and tested — including against the
+case where no credential exists, which is most of them.
+
+Worth recording precisely, because the audit was partly wrong about the shape of
+the blocker: **most of what looked like an authorization problem was a grain
+problem.** Three of the five recorded blockers dissolved once the comparison was
+made at project-day totals instead of per-request, and none of those three needed
+a credential. What genuinely requires an owner is *running* a reconciliation — a
+provider snapshot needs a least-privilege Admin key — not *building* one. The
+engine, its refusals, and its conditions were all buildable and testable without
+one, and now are.
+
+The lesson generalizes: "blocked on the owner" deserves the same scrutiny as any
+other claim in this repository. Part of it was true and part of it was an
+untested assumption that had been carried forward for several sessions.
 
 ---
 

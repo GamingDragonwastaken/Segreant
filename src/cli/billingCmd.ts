@@ -13,6 +13,7 @@ import {
   type OpenAiCostsPreview,
 } from '../billing/openaiCosts.ts';
 import { newOpenAiScopeDeclaration } from '../billing/scope.ts';
+import { displayUsd, signedUsd, type ReconciliationReadiness, type ReconciliationRun } from '../billing/reconcile.ts';
 import { formatUsdMicros } from '../billing/types.ts';
 import { readBillingImportFile } from '../billing/importer.ts';
 import { billingEvidenceToCsv } from '../export/billingCsv.ts';
@@ -20,14 +21,16 @@ import { Store } from '../store/db.ts';
 import type { Flags } from './flags.ts';
 
 function usage(): void {
-  console.error('  Usage: fiscus billing <import|status|export|scope|openai-costs> [options]');
+  console.error('  Usage: fiscus billing <import|status|export|scope|openai-costs|reconcile> [options]');
   console.error('         fiscus billing import --file <evidence.json> [--apply] [--json]');
   console.error('         fiscus billing status [--json]');
   console.error('         fiscus billing export [--csv|--json] [--out <file>]');
   console.error('         fiscus billing scope <set|status|clear> [--account-ref <local-ref>] [--project-ref <local-ref>] [--apply] [--json]');
   console.error('         fiscus billing openai-costs <preview|pull> --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--apply] [--json]');
   console.error('         fiscus billing openai-costs <status|coverage> [--json]');
-  console.error('  Local operator-supplied OpenAI billing evidence only. It never overwrites request estimates or claims reconciliation.');
+  console.error('         fiscus billing reconcile [--apply] [--materiality <usd>] [--json]');
+  console.error('  Local operator-supplied OpenAI billing evidence only. Reconciliation compares project-day totals');
+  console.error('  under stated conditions; it never overwrites request estimates and never feeds budgets or RoI.');
 }
 
 function costsUsage(): void {
@@ -63,6 +66,128 @@ function printCostsCoverage(coverage: NonNullable<ReturnType<Store['openAiCostsC
   console.log(`  Excluded      ${excluded.importedOrNative.requestCount} imported/native; ${excluded.unscopedOrLegacyOpenAiProxy.requestCount} unscoped/legacy OpenAI proxy; ${excluded.differentDeclaredOpenAiScope.requestCount} different OpenAI scope; ${excluded.otherProvider.requestCount} other provider`);
   console.log('  Comparison    blocked_not_reconciled — no provider/request variance is calculated.');
   console.log(`  Blockers      ${coverage.blockers.join(', ')}`);
+}
+
+/**
+ * What still stands between this machine and a reconciliation run, in the order
+ * an operator has to do it. Two of these are OWNER actions — creating a
+ * least-privilege Admin key and supplying it — and Fiscus deliberately cannot
+ * perform them. The rest it can check.
+ */
+function reconciliationReadiness(store: Store): ReconciliationReadiness {
+  const missing: ReconciliationReadiness['missing'] = [];
+  const scope = store.activeOpenAiScope();
+  if (!scope) {
+    missing.push({
+      step: 'declare the route scope',
+      detail: 'fiscus billing scope set --provider openai --base-url https://api.openai.com --account-ref <org_…> --project-ref <proj_…> --apply',
+      ownerAction: false,
+    });
+  } else if (scope.upstreamDisplay !== 'https://api.openai.com' || !scope.providerProjectRef) {
+    missing.push({
+      step: 'the active scope cannot address the Costs API',
+      detail: 'it must be exactly https://api.openai.com and carry a proj_… project reference',
+      ownerAction: false,
+    });
+  }
+  const status = store.openAiCostsObservationStatus();
+  if (!status.latestCompleteRun) {
+    missing.push({
+      step: 'supply a least-privilege Admin credential',
+      detail: 'an OpenAI Admin key with the Costs read scope, exported as OPENAI_ADMIN_API_KEY for one command. Fiscus never stores it, never logs it, and uses it for exactly one GET.',
+      ownerAction: true,
+    });
+    missing.push({
+      step: 'observe a closed period',
+      detail: 'fiscus billing openai-costs pull --from <YYYY-MM-DD> --to <YYYY-MM-DD> --apply',
+      ownerAction: true,
+    });
+  }
+  return { ready: missing.length === 0, missing };
+}
+
+function printReadiness(readiness: ReconciliationReadiness): void {
+  console.log('');
+  console.log('  Reconciliation is not possible yet. What is missing, in order:');
+  for (const item of readiness.missing) {
+    console.log(`    ${item.ownerAction ? '[you]' : '[here]'} ${item.step}`);
+    console.log(`           ${item.detail}`);
+  }
+  console.log('');
+  console.log('  Steps marked [you] need an account owner. Fiscus will not create, store, or');
+  console.log('  request a provider credential on your behalf. See docs/PROVIDER-RECONCILIATION.md.');
+}
+
+function printReconciliation(result: ReconciliationRun, applied: boolean): void {
+  const day = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+  console.log('');
+  console.log('  Provider reconciliation — scope-conditional, at project-day grain');
+  console.log(`  Snapshot      ${result.observationRunId}`);
+  console.log(`  Project       ${result.providerProjectRef}`);
+  console.log(`  Period        ${day(result.periodStartMs)} → ${day(result.periodEndMs)} (UTC, exclusive end)`);
+  console.log('');
+  console.log(`  Provider reported   $${displayUsd(result.providerReportedMicros)}`);
+  console.log(`  Fiscus metered      $${displayUsd(result.localCapturedMicros)}  (local rate-card estimate)`);
+  console.log(`  Unexplained         ${signedUsd(result.unexplainedVarianceMicros)}`);
+  console.log('');
+  console.log(`  Coverage      ${result.coverage.daysWithBoth} day(s) with both sides · ${result.coverage.providerOnlyDays} provider-only · ${result.coverage.localOnlyDays} local-only`);
+  console.log(`  Material      ${result.coverage.materialDays} day(s) differ by more than $${result.materialityUsd.toFixed(2)}`);
+  console.log(`  Stability     ${result.snapshotStability.replaceAll('_', ' ')}${result.unstableDayStartMs.length ? ` (${result.unstableDayStartMs.map(day).join(', ')})` : ''}`);
+  const notable = result.days.filter((d) => d.material || d.residualReason === 'no_local_capture' || d.residualReason === 'no_provider_report');
+  if (notable.length > 0) {
+    console.log('');
+    console.log('  Days needing an explanation');
+    for (const d of notable.slice(0, 14)) {
+      console.log(`    ${day(d.dayStartMs)}  provider $${displayUsd(d.providerReportedMicros).padStart(10)}  local $${displayUsd(d.localCapturedMicros).padStart(10)}  ${signedUsd(d.differenceMicros).padStart(11)}  ${d.residualReason.replaceAll('_', ' ')}`);
+    }
+    if (notable.length > 14) console.log(`    … ${notable.length - 14} more (use --json)`);
+  }
+  console.log('');
+  console.log('  This is NOT a clean reconciliation and never will be. It holds only if your');
+  console.log('  route declaration is true — nothing here verifies it with the provider — and');
+  console.log('  usage that never passed through Fiscus is invisible, so the residual is an');
+  console.log('  upper bound on off-path spend rather than a measurement of it.');
+  console.log(`  Conditions    ${result.conditions.join(', ')}`);
+  console.log(`  Excluded from ${result.excludedFrom.join(', ')}`);
+  console.log(applied ? '  Recorded as an immutable derived run.' : '  Not recorded. Persist it with: fiscus billing reconcile --apply');
+}
+
+/** Compare the newest complete provider snapshot with the local ledger. */
+function cmdReconcile(flags: Flags): void {
+  const store = new Store(dbPath());
+  try {
+    const materialityUsd = typeof flags.materiality === 'string' ? Number(flags.materiality) : undefined;
+    if (materialityUsd !== undefined && (!Number.isFinite(materialityUsd) || materialityUsd < 0)) {
+      console.error('  --materiality must be a non-negative dollar amount');
+      process.exitCode = 1;
+      return;
+    }
+    const readiness = reconciliationReadiness(store);
+    const result = readiness.ready ? store.reconcileOpenAiCosts({ materialityUsd }) : null;
+
+    if (!result) {
+      if (flags.json) process.stdout.write(JSON.stringify({ status: 'not_ready', readiness }, null, 2) + '\n');
+      else printReadiness(readiness);
+      process.exitCode = 1;
+      return;
+    }
+    if (result.status === 'refused') {
+      if (flags.json) process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+      else {
+        console.log('');
+        console.log(`  Reconciliation refused: ${result.refusal.replaceAll('_', ' ')}`);
+        console.log(`  ${result.detail}`);
+      }
+      process.exitCode = 1;
+      return;
+    }
+    const applied = Boolean(flags.apply);
+    const reconciliationRunId = applied ? store.saveReconciliationRun(result) : null;
+    if (flags.json) process.stdout.write(JSON.stringify({ applied, reconciliationRunId, result }, null, 2) + '\n');
+    else printReconciliation(result, applied);
+  } finally {
+    store.close();
+  }
 }
 
 function printCostsPreview(preview: OpenAiCostsPreview): void {
@@ -354,6 +479,10 @@ export async function cmdBilling(flags: Flags): Promise<void> {
   }
   if (action === 'openai-costs') {
     await cmdOpenAiCosts(flags);
+    return;
+  }
+  if (action === 'reconcile') {
+    cmdReconcile(flags);
     return;
   }
   if (action === 'import') {
