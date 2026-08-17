@@ -2,6 +2,8 @@
 
 **Status:** Product-direction decision and staged build plan, 2026-08-11. It describes an intended expansion; it is not a claim that the capabilities below are shipped or that Fiscus is a financial system of record today.
 
+**Audited against the source on 2026-08-17 — see [VISION-AUDIT.md](VISION-AUDIT.md).** Section 3's "what exists today" is now stale in both directions, and the audit records three vocabularies specified here that were implemented differently or not at all (cost basis, evidence source, enforceability status). Where this document and the code disagree on a label that is already in migrated databases, the code is authoritative and this document is what needs correcting.
+
 ## 1. The product Fiscus should become
 
 Fiscus should become a **provenance-aware AI Financial Operations Control Plane**:
