@@ -27,7 +27,49 @@ This validates a local developer preview only. It does **not** validate a
 provider billing statement, production customer data, an npm publication, an
 external deployment, or the optional team service.
 
-### Candidate record — commit `b990c3d`, 2026-08-18
+### Candidate record — commit `3ddf625`, 2026-08-18
+
+Run against `3ddf6259c90cf7b6eeb42b8e2875aa2b967de367`, worktree clean before and
+after validation. **All ten rows pass.** Supersedes the `b990c3d` record,
+retained for history.
+
+| Requirement | Result |
+| --- | --- |
+| Candidate identity | **Pass.** `git rev-parse HEAD` = `3ddf6259c90cf7b6eeb42b8e2875aa2b967de367`; `git status --short` empty before and after. |
+| Source validation | **Pass.** `npm run typecheck` clean, `npm test` **527 tests / 526 pass / 1 expected platform skip / 0 fail**, `npm run build` clean, `git diff --check` clean. |
+| Packed artifact | **Pass.** `npm pack` → 104 files, SHA-256 `b048f11404729cf68555eeb6baeb72eebad437039d4e4c1df4f4302e37b6245c`; all 6 key paths present. Four more than `b990c3d`: `src/alloc/{rules,apply}.ts` and `src/cli/allocCmd.ts` compile into `dist`, plus `docs/ALLOCATION.md`. |
+| Clean installed CLI | **Pass.** Installed with `--ignore-scripts` into a fresh directory; `fiscus --help` renders. |
+| Packaged dashboard/API | **Pass.** Isolated `AEGIS_HOME`, seeded demo (552 requests), packaged dashboard on :8103. `/api/health` → `{"ok":true}`; `/api/overview` → `demo: true`. Terminated cleanly, port confirmed closed. |
+| Model-trial truthfulness | **Pass.** `/api/value` self-labels `demo: true`; one switch, `confidence: trial`, no `evidence_supported`, zero confounders, 4 assumptions. Attribution coverage still returns all five bases with `demo: true`. |
+| Billing-boundary truthfulness | **Pass.** `billing scope set --json` → `applied: false`, `trust: operator_declared_unverified`, `reconciliationStatus: not_reconciled`. Packaged `/api/billing` → `demo: true`, `not_reconciled`, `recordCount: 0`, `reconciliation.runs: 0`. `billing reconcile --json` → `status: not_ready` with both owner steps named. |
+| Direct-Costs connector boundary | **Pass.** With an applied `org_…`/`proj_…` scope, `billing openai-costs preview --json` → `networkAttempted: false`, `credentialRead: false`. |
+| Intended CI | **Pending.** To be filled in only after the run for this candidate has been inspected. |
+| Visual check | **Pass.** Packaged dashboard in the browser: DEMO banner; all five attribution bases including the two-basis `data-pipeline` split; exactly one rendered `TRIAL` badge and no `EVIDENCE` badge; Billing view renders the reconciliation card in its `NO RUN RECORDED` state. No console errors. |
+
+**Allocation boundary, this candidate's new surface.** Exercised on the packaged
+artifact against the seeded demo store: cost centres created, a `direct` and a
+`fixed_split` rule authored, and a period run returning `conserves: true`,
+`trust: derived_allocation_of_local_estimates`,
+`allocated + unallocated === total` verified independently of the flag,
+`unallocated` reasons present, and a 4-entry `excludedFrom`. A `fixed_split`
+whose ratios sum to 1.4 was **refused with exit 1**, naming the sum.
+
+**The honesty boundary this layer turns on was checked, not assumed.** Every run
+carries the cost basis beneath it and self-labels as allocating *local
+estimates*; on demo data that reads `synthetic_demo, unpriced`. Allocation
+appears in no budget, RoI, or recommendation surface.
+
+**Stated plainly, and recorded in `VISION-AUDIT.md` §3:** this layer was built
+ahead of the sequencing that audit recommended. **No reconciliation has run
+against real provider data**, so the residual remains unexamined and every
+cost-centre figure is an estimate of unknown accuracy. The structural guards
+(basis attached to the money, unallocated first-class, conservation enforced,
+excluded from controls) are weaker than reconciling first, and are labelled as
+such rather than presented as equivalent.
+
+**Team server at this tree:** typecheck clean, **55/55** — source validation only.
+
+### Superseded record — commit `b990c3d`, 2026-08-18
 
 Run against `b990c3dba6e4332881002eba28a25db767b092ab`, worktree clean before and
 after validation. **All ten rows pass.** Supersedes the `7bfb6dd` record,
