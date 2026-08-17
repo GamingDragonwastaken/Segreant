@@ -254,12 +254,34 @@ was obtained alongside the label itself:
 
 | Basis | Meaning |
 | --- | --- |
-| `client_declared` | An `X-Aegis-Project` header on a proxied request. Self-asserted. |
-| `tool_log_inferred` | Derived from a working directory the tool recorded in its own local log. |
+| `client_declared` | An `X-Aegis-Project` header — or a `/fiscus/<project>/` base-URL prefix — on a proxied request. Self-asserted either way. |
+| `tool_log_repo_resolved` | The tool recorded a working directory, and it resolved to a git repository on this machine. The label is that repository's root name. |
+| `tool_log_inferred` | Derived from a working directory the tool recorded, which is not inside a git repository. |
 | `tool_log_fallback` | The tool recorded no usable path, so its own name was used. Not a real project. |
 | `unattributed` | The request declared no project. Stored under `default`, but it is not one. |
 | `synthetic_demo` | Seeded demo data. |
 | `legacy_unknown` | Recorded before attribution lineage existed. Never backfilled or guessed. |
+
+**Imports resolve the repository, not the folder name.** Claude Code and Codex
+record the working directory a session ran in, which is routinely a
+subdirectory — so the old basename rule split one repository's spend across
+`web`, `api`, `packages`, and merged unrelated repositories that share a common
+leaf name. The importers now ask git for the working-tree root, which produces
+the same label `fiscus realize` computes for that repo and records
+`tool_log_repo_resolved`. Outside a repository it degrades to the previous
+behaviour and says so. Existing rows are never rewritten, so an import that
+relabels reports it and points at `fiscus project alias` — the ledger records
+what it recorded.
+
+**A client with no headers can still declare a project.** Antigravity's
+custom-provider form has a base URL and no custom-headers field, so
+`X-Aegis-Project` is simply unavailable to it. The proxy therefore also accepts
+the project as a path prefix — `http://localhost:8090/fiscus/backend-api/v1` —
+which it strips before forwarding, so the provider sees an unchanged request.
+The header wins if both are sent. Fiscus offers the URL and will not configure
+it: a provider entry is IDE-wide, so one baked-in project would mislabel every
+other repository. It is your declaration, recorded as `client_declared`, and
+never verified.
 
 `fiscus connect opencode` sets the project header for you **only when the config
 it edits is project-scoped** — an `opencode.json(c)` in the repo itself, which by

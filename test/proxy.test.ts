@@ -13,6 +13,33 @@ function sse(obj: unknown): string {
 }
 
 /** A stand-in for api.anthropic.com / api.openai.com so tests cost nothing. */
+/**
+ * A minimal Anthropic-shaped upstream that records the paths it was asked for —
+ * the only way to prove a local-only URL convention was actually stripped rather
+ * than merely ignored by the ledger.
+ */
+function startMockUpstreamRecording(paths: string[]): Promise<{ url: string; close: () => Promise<void> }> {
+  const server = http.createServer(async (req, res) => {
+    for await (const _ of req) { /* drain */ }
+    paths.push(req.url ?? '');
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({
+      id: 'msg_1',
+      model: 'claude-opus-4-8',
+      usage: { input_tokens: 2000, output_tokens: 100, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+    }));
+  });
+  return new Promise((resolve) => {
+    server.listen(0, '127.0.0.1', () => {
+      const addr = server.address() as { port: number };
+      resolve({
+        url: `http://127.0.0.1:${addr.port}`,
+        close: () => new Promise<void>((r) => server.close(() => r())),
+      });
+    });
+  });
+}
+
 function startMockUpstream(): Promise<{ url: string; close: () => Promise<void> }> {
   const server = http.createServer(async (req, res) => {
     const chunks: Buffer[] = [];
@@ -670,6 +697,43 @@ test('proxy records WHY a project label exists: declared vs never declared', asy
   // The label itself is untouched, so per-project totals are unchanged.
   const byProject = new Map(store.byProject(0, Date.now() + 1000).map((b) => [b.label, b.requests]));
   assert.equal(byProject.get('default'), 2, 'recording the basis moved no spend');
+
+  await proxy.close();
+  await upstream.close();
+  store.close();
+});
+
+test('proxy: a header-less client can declare its project in the URL, and the upstream never sees it', async () => {
+  // Antigravity's custom-provider form has a base URL and no headers field, so
+  // `x-aegis-project` is unavailable to it. The path prefix is the same
+  // declaration by the only route that tool has.
+  const seenPaths: string[] = [];
+  const upstream = await startMockUpstreamRecording(seenPaths);
+  const store = new Store(':memory:');
+  const proxy = await startProxy(store, {}, upstream.url);
+
+  const send = (path: string, headers: Record<string, string> = {}) =>
+    fetch(`${proxy.base}${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': 'sk-test', ...headers },
+      body: JSON.stringify({ model: 'claude-opus-4-8', messages: [{ role: 'user', content: 'hi' }] }),
+    });
+
+  await send('/fiscus/backend-api/v1/messages');
+  // A header on a prefixed URL wins: it is the documented primary, and it is set
+  // per request where the path is baked into one configured endpoint.
+  await send('/fiscus/backend-api/v1/messages', { 'x-aegis-project': 'web-frontend' });
+  await new Promise((r) => setTimeout(r, 30));
+
+  const ev = store.attributionEvidenceByProject(0, Date.now() + 1000);
+  const declared = ev.find((e) => e.project === 'backend-api');
+  assert.equal(declared?.attributionBasis, 'client_declared', 'a URL prefix is an operator declaration, recorded as one');
+  assert.equal(ev.find((e) => e.project === 'web-frontend')?.attributionBasis, 'client_declared');
+  assert.equal(ev.find((e) => e.project === 'default'), undefined, 'nothing fell through to the undeclared label');
+
+  // The declaration is a LOCAL addressing convention. Forwarding it would change
+  // what the provider was asked for.
+  assert.deepEqual(seenPaths, ['/v1/messages', '/v1/messages'], 'the prefix never leaves the machine');
 
   await proxy.close();
   await upstream.close();

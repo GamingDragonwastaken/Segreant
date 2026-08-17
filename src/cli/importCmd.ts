@@ -143,6 +143,18 @@ function renderImportSummary(tty: boolean, id: string, location: string, sum: Im
   console.log(`  Consumption  ${color(tty, C.green, usd(sum.costUsd))}${sum.estimatedCostUsd > 0 ? color(tty, C.yellow, `  (~est ${usd(sum.estimatedCostUsd)})`) : ''}`);
   const models = Object.entries(sum.byModel).sort((a, b) => b[1].costUsd - a[1].costUsd).slice(0, 5);
   for (const [m, v] of models) console.log(`    ${m.padEnd(26)} ${usd(v.costUsd).padStart(10)}  ${color(tty, C.gray, `${num(v.requests)} req`)}`);
+  // Rows already in the ledger keep the label they were written with, so a
+  // relabel means the same work now appears under two names. Say so and hand
+  // over the merge — silently splitting a project's money is the worse failure.
+  if (sum.relabelled.length > 0) {
+    console.log('');
+    console.log(color(tty, C.gray, '  Attributed to the git repository rather than the folder name:'));
+    for (const r of sum.relabelled) {
+      console.log(color(tty, C.cyan, `    ${r.from} → ${r.to}`));
+    }
+    console.log(color(tty, C.gray, '  Earlier rows keep their original label — the ledger is never rewritten.'));
+    console.log(color(tty, C.gray, `  Merge them at read time with:  fiscus project alias ${sum.relabelled[0]!.from} ${sum.relabelled[0]!.to}`));
+  }
 }
 
 /**

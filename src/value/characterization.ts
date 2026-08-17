@@ -104,6 +104,18 @@ export function projectKeyWithBasis(
 export type AttributionBasis =
   /** An explicit `x-aegis-project` header on a proxied request. Self-asserted, unverified. */
   | 'client_declared'
+  /**
+   * The tool recorded a working directory, and that directory resolved to a git
+   * repository on this machine — so the label is the repository's own root name,
+   * not a guess from a path component. This is the strongest attribution an
+   * importer can produce: it survives sessions started in a subdirectory, and it
+   * matches the label `fiscus realize` computes for the same repo.
+   *
+   * The one thing it cannot check is time: the path is resolved against the
+   * filesystem as it stands now, so a directory that has since been replaced by a
+   * different repository would resolve to the new one.
+   */
+  | 'tool_log_repo_resolved'
   /** Derived from a working-directory path the tool recorded in its own local log. */
   | 'tool_log_inferred'
   /** The tool recorded no usable path, so its own name was used as the label. Not a real project. */
@@ -116,7 +128,8 @@ export type AttributionBasis =
   | 'legacy_unknown';
 
 export const ATTRIBUTION_BASES: readonly AttributionBasis[] = [
-  'client_declared', 'tool_log_inferred', 'tool_log_fallback', 'unattributed', 'synthetic_demo', 'legacy_unknown',
+  'client_declared', 'tool_log_repo_resolved', 'tool_log_inferred', 'tool_log_fallback',
+  'unattributed', 'synthetic_demo', 'legacy_unknown',
 ] as const;
 
 /**
@@ -125,5 +138,5 @@ export const ATTRIBUTION_BASES: readonly AttributionBasis[] = [
  * called "trusted": a declared label is still unverified.
  */
 export function isDeclaredAttribution(basis: AttributionBasis): boolean {
-  return basis === 'client_declared' || basis === 'tool_log_inferred';
+  return basis === 'client_declared' || basis === 'tool_log_repo_resolved' || basis === 'tool_log_inferred';
 }

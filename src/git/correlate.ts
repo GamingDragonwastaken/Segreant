@@ -70,6 +70,23 @@ export async function resolveCommit(repoPath: string, ref: string): Promise<stri
  * runs from its repo root. That agreement is what lets project-scoped attribution
  * pull a project's native, no-proxy spend into its own RoI.
  */
+/**
+ * The git working tree a directory belongs to, or `null` if it is not inside
+ * one (or git is unavailable, or the path no longer exists).
+ *
+ * Unlike `projectName`, this DISTINGUISHES "resolved to a repository" from "fell
+ * back to the directory name" — which is the whole point when the caller has to
+ * record how it knows what it knows.
+ */
+export async function repoToplevel(dir: string): Promise<string | null> {
+  try {
+    const top = (await git(dir, ['rev-parse', '--show-toplevel'])).trim();
+    return top === '' ? null : top;
+  } catch {
+    return null;
+  }
+}
+
 export async function projectName(repoPath: string): Promise<string> {
   try {
     const top = (await git(repoPath, ['rev-parse', '--show-toplevel'])).trim();

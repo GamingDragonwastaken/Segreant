@@ -25,7 +25,14 @@ import { homedir } from 'node:os';
 import type { Store, RequestRow } from '../store/db.ts';
 import { computeCost } from '../cost/pricing.ts';
 import { projectKeyWithBasis, type AttributionBasis } from '../value/characterization.ts';
-import { type ImportSummary, type ImportOptions, emptyImportSummary, recordInsert } from './importShared.ts';
+import {
+  type ImportSummary,
+  type ImportOptions,
+  emptyImportSummary,
+  recordInsert,
+  createRepoResolver,
+  noteRelabel,
+} from './importShared.ts';
 
 export type { ImportSummary, ImportOptions } from './importShared.ts';
 
@@ -136,6 +143,10 @@ export async function importClaudeCode(store: Store, opts: ImportOptions = {}): 
   }
 
   const summary = emptyImportSummary(files.length);
+  // Resolve each transcript cwd to its repository root once. A Claude Code
+  // session is routinely started inside a package or a subdirectory, and the
+  // basename of that directory is not the project — see createRepoResolver.
+  const resolveProject = createRepoResolver();
 
   for (const file of files) {
     const seenInFile = new Set<string>(); // one API request = many transcript lines; first wins
@@ -145,6 +156,9 @@ export async function importClaudeCode(store: Store, opts: ImportOptions = {}): 
       if (!ev || ev.tsEpochMs < sinceMs) continue;
       if (seenInFile.has(ev.requestId)) continue;
       seenInFile.add(ev.requestId);
+
+      const attribution = await resolveProject(ev.cwd, 'claude-code');
+      noteRelabel(summary, attribution);
 
       const cost = computeCost('anthropic', ev.model, {
         inputTokens: ev.inputTokens,
@@ -160,8 +174,8 @@ export async function importClaudeCode(store: Store, opts: ImportOptions = {}): 
         tsEpochMs: ev.tsEpochMs,
         provider: 'anthropic',
         model: ev.model,
-        project: ev.project,
-        attributionBasis: ev.attributionBasis,
+        project: attribution.project,
+        attributionBasis: attribution.basis,
         taskWeight: 1,
         inputTokens: ev.inputTokens,
         outputTokens: ev.outputTokens,
@@ -178,7 +192,7 @@ export async function importClaudeCode(store: Store, opts: ImportOptions = {}): 
         source,
         cwd: ev.cwd,
       };
-      if (ev.sessionId) store.upsertSession(ev.sessionId, ev.project, source, ev.tsEpochMs);
+      if (ev.sessionId) store.upsertSession(ev.sessionId, attribution.project, source, ev.tsEpochMs);
       recordInsert(store, summary, row, cost.estimated);
     }
   }

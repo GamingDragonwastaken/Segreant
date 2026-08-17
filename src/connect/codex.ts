@@ -20,7 +20,14 @@ import { homedir } from 'node:os';
 import type { Store, RequestRow } from '../store/db.ts';
 import { computeCost, unpricedPricingEvidence, type Provider } from '../cost/pricing.ts';
 import { projectKeyWithBasis, type AttributionBasis } from '../value/characterization.ts';
-import { type ImportSummary, type ImportOptions, emptyImportSummary, recordInsert } from './importShared.ts';
+import {
+  type ImportSummary,
+  type ImportOptions,
+  emptyImportSummary,
+  recordInsert,
+  createRepoResolver,
+  noteRelabel,
+} from './importShared.ts';
 
 /** Codex home: ~/.codex (override with CODEX_HOME). null = not installed. */
 export function defaultCodexRoot(): string | null {
@@ -175,6 +182,9 @@ export async function importCodex(store: Store, opts: ImportOptions = {}): Promi
 
   const files = codexRolloutFiles(root);
   const summary = emptyImportSummary(files.length);
+  // Same subdirectory/collision problem as the Claude Code transcripts: a rollout
+  // records the cwd it ran in, which is often not the repository root.
+  const resolveProject = createRepoResolver();
 
   for (const file of files) {
     let rows: Awaited<ReturnType<typeof parseCodexRollout>>;
@@ -185,6 +195,8 @@ export async function importCodex(store: Store, opts: ImportOptions = {}): Promi
     }
     for (const ev of rows) {
       if (ev.tsEpochMs < sinceMs) continue;
+      const attribution = await resolveProject(ev.cwd, 'codex');
+      noteRelabel(summary, attribution);
       const prov = REPRICEABLE[ev.provider];
       const c = prov
         ? computeCost(prov, ev.model, {
@@ -201,8 +213,8 @@ export async function importCodex(store: Store, opts: ImportOptions = {}): Promi
         tsEpochMs: ev.tsEpochMs,
         provider: ev.provider,
         model: ev.model,
-        project: ev.project,
-        attributionBasis: ev.attributionBasis,
+        project: attribution.project,
+        attributionBasis: attribution.basis,
         taskWeight: 1,
         inputTokens: ev.inputTokens,
         outputTokens: ev.outputTokens,
@@ -219,7 +231,7 @@ export async function importCodex(store: Store, opts: ImportOptions = {}): Promi
         source,
         cwd: ev.cwd,
       };
-      if (ev.sessionId) store.upsertSession(ev.sessionId, ev.project, source, ev.tsEpochMs);
+      if (ev.sessionId) store.upsertSession(ev.sessionId, attribution.project, source, ev.tsEpochMs);
       recordInsert(store, summary, row, c.estimated);
     }
   }

@@ -54,8 +54,40 @@ interface RouteInfo {
   upstreamBase: string;
 }
 
+/**
+ * The URL prefix that lets a header-less client declare its project.
+ *
+ * Some tools expose a base-URL field and nothing else — Antigravity's
+ * custom-provider form is the clearest case: no custom-headers field at all, so
+ * `x-aegis-project` is simply unavailable and its traffic could only ever meter
+ * as `unattributed`. But a base URL is configurable, and one provider entry per
+ * project gives the operator a place to say which project this is:
+ *
+ *     http://localhost:8090/fiscus/backend-api/v1
+ *
+ * The prefix is stripped before routing and before forwarding, so the upstream
+ * sees exactly the path it would have seen without it. `/fiscus/` is not a path
+ * any supported provider API uses, so it cannot shadow a real endpoint.
+ *
+ * This is the SAME trust level as the header: an operator declaration, recorded
+ * as `client_declared`, never a verified identity.
+ */
+const PROJECT_PATH_PREFIX = /^\/fiscus\/([A-Za-z0-9._-]{1,64})(\/.*)$/;
+
+/** Split a declared-project path prefix off a request URL. */
+export function splitProjectPath(url: string): { project: string | null; path: string } {
+  const m = PROJECT_PATH_PREFIX.exec(url);
+  if (!m) return { project: null, path: url };
+  const project = m[1]!;
+  // `.` and `..` are valid under the character class but are not project names.
+  // Refuse rather than strip: an unrecognized prefix reaches the upstream and
+  // fails visibly, which beats silently metering under a nonsense label.
+  if (project === '.' || project === '..') return { project: null, path: url };
+  return { project, path: m[2]! };
+}
+
 export function detectRoute(req: http.IncomingMessage, cfg: AegisConfig): RouteInfo | null {
-  const url = req.url ?? '';
+  const url = splitProjectPath(req.url ?? '').path;
   const headers = req.headers;
 
   // Per-request OpenAI-compatible upstream override (OpenRouter — which itself
@@ -263,7 +295,13 @@ async function handle(
   // that nothing was declared — otherwise untagged traffic is indistinguishable
   // from a project someone genuinely named `default`. A present header is a
   // self-assertion by the calling process, never a verified identity.
-  const declaredProject = headerStr(req, 'x-aegis-project');
+  // A client that cannot set headers can still declare its project in the base
+  // URL (see splitProjectPath). The header wins when both are present: it is the
+  // documented primary and is set per request, where the path is baked into one
+  // configured endpoint. Both are operator declarations, so both record the same
+  // basis — the mechanism differs, the trust does not.
+  const pathProject = splitProjectPath(req.url ?? '').project;
+  const declaredProject = headerStr(req, 'x-aegis-project') ?? pathProject;
   const project = declaredProject ?? 'default';
   const attributionBasis: AttributionBasis = declaredProject ? 'client_declared' : 'unattributed';
   const sessionId = headerStr(req, 'x-aegis-session-id') ?? null;
@@ -336,8 +374,12 @@ async function handle(
   }
 
   // --- Forward upstream ---
-  const outboundBody = ensureOpenAIUsage(provider, parsed.stream, req.url ?? '', body);
-  const targetUrl = upstreamBase.replace(/\/$/, '') + (req.url ?? '');
+  // The declared-project prefix is a local addressing convention, so it is
+  // stripped here: the provider receives exactly the path it would have received
+  // had the operator pointed the client straight at the proxy root.
+  const upstreamPath = splitProjectPath(req.url ?? '').path;
+  const outboundBody = ensureOpenAIUsage(provider, parsed.stream, upstreamPath, body);
+  const targetUrl = upstreamBase.replace(/\/$/, '') + upstreamPath;
   let upstream: Response;
   // Connect/TTFB timeout ONLY: abort if the upstream never starts responding.
   // Cleared the instant headers arrive (right after the await), so a long

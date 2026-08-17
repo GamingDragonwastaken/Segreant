@@ -21,6 +21,7 @@ import {
   listOpencodeProviders,
   wrapOpencodeProvider,
 } from '../connect/connectors.ts';
+import { projectKey } from '../value/characterization.ts';
 import { C, color } from './ui.ts';
 import { type Flags } from './flags.ts';
 
@@ -304,6 +305,7 @@ function connectAntigravity(cfg: AegisConfig, flags: Flags, tty: boolean): void 
   console.log(color(tty, C.green, '       fiscus connect antigravity --write'));
   console.log(color(tty, C.gray, `       (sets upstreams.openai → ${GEMINI_OPENAI_COMPAT_BASE})`));
   console.log('');
+  const here = projectKey(process.cwd(), 'my-project');
   console.log(`  2) ${color(tty, C.bold, 'In Antigravity')}: Settings → Models → add a custom provider:`);
   console.log(color(tty, C.cyan, '       Provider type   OpenAI-compatible'));
   console.log(color(tty, C.cyan, `       Base URL        ${base}`));
@@ -313,12 +315,29 @@ function connectAntigravity(cfg: AegisConfig, flags: Flags, tty: boolean): void 
   console.log(`  3) ${color(tty, C.bold, 'Run it')}: fiscus start, use Antigravity with that model, then:`);
   console.log(color(tty, C.green, '       fiscus today') + color(tty, C.gray, '   — the requests and their cost appear live'));
   console.log('');
-  console.log(color(tty, C.gray, '  Note: Antigravity\'s custom-provider form has no custom-headers field, so'));
-  console.log(color(tty, C.gray, '  Fiscus cannot tag this traffic. It lands under the "direct" source and'));
-  console.log(color(tty, C.gray, '  meters as "unattributed" — the spend, caps, and cost are exact, but Fiscus'));
-  console.log(color(tty, C.gray, '  cannot say which project it belongs to, and will not guess one.'));
-  console.log(color(tty, C.gray, `  If a headers field is available, add  ${SOURCE_HEADER}: antigravity  and`));
-  console.log(color(tty, C.gray, `  ${PROJECT_HEADER}: <project>. Check with:  fiscus project --coverage`));
+  // Antigravity's form has no headers field, so `x-aegis-project` is simply
+  // unavailable — which is why the proxy also accepts the project in the PATH.
+  // It is offered, never applied: the provider entry is IDE-global, so baking in
+  // whatever directory this command happened to run in would tag every future
+  // request in every repo with one confidently wrong project.
+  console.log(color(tty, C.bold, '  Attributing this traffic to a project'));
+  console.log(color(tty, C.gray, '  Antigravity\'s custom-provider form has no custom-headers field, so the'));
+  console.log(color(tty, C.gray, `  usual ${PROJECT_HEADER} header is not available. Put the project in the`));
+  console.log(color(tty, C.gray, '  Base URL instead — Fiscus strips it before forwarding, so the provider'));
+  console.log(color(tty, C.gray, '  sees an unchanged request:'));
+  console.log('');
+  console.log(color(tty, C.cyan, `       Base URL        http://localhost:${cfg.port}/fiscus/${here}/v1`));
+  console.log('');
+  console.log(color(tty, C.gray, '  A provider entry is IDE-wide, not per-workspace, so this is only true if'));
+  console.log(color(tty, C.gray, '  you add ONE ENTRY PER PROJECT and pick the matching one. Fiscus will not'));
+  console.log(color(tty, C.gray, '  set it for you: a global entry carrying whichever directory you happened'));
+  console.log(color(tty, C.gray, '  to run this in would mislabel every other repo you work in.'));
+  console.log('');
+  console.log(color(tty, C.gray, `  Leave the plain ${base} and the traffic meters as`));
+  console.log(color(tty, C.gray, '  "unattributed" instead — spend, caps and cost stay exact, Fiscus just'));
+  console.log(color(tty, C.gray, '  will not claim a project it cannot know. Either way it lands under the'));
+  console.log(color(tty, C.gray, `  "direct" source; a headers field, if one ever appears, takes ${SOURCE_HEADER}.`));
+  console.log(color(tty, C.gray, '  Check what stuck with:  fiscus project --coverage'));
   console.log('');
 }
 
@@ -352,6 +371,16 @@ function connectGenericApi(cfg: AegisConfig, flags: Flags, tty: boolean): void {
   console.log(color(tty, C.gray, '  Send it per request from the code that knows the project. Setting it once as'));
   console.log(color(tty, C.gray, '  a shell env var follows the SHELL, not the directory, so it will mislabel'));
   console.log(color(tty, C.gray, '  work after you cd elsewhere — a wrong project reads as a declared one.'));
+  console.log('');
+  // Some clients expose a base URL and no header hook at all. The path prefix is
+  // the same declaration by another route, and it travels with the config rather
+  // than with the shell — so it is the better option when the base URL itself
+  // lives in a per-project file.
+  console.log(color(tty, C.gray, '  If your client has no way to set headers, put the project in the URL — Fiscus'));
+  console.log(color(tty, C.gray, '  strips it before forwarding, so the provider sees an unchanged request:'));
+  console.log(color(tty, C.cyan, `    OPENAI_BASE_URL = http://localhost:${port}/fiscus/<project>/v1`));
+  console.log(color(tty, C.gray, '  The header wins if you send both. Either way it is your declaration, recorded'));
+  console.log(color(tty, C.gray, '  as such — Fiscus does not verify that the label is true.'));
   console.log('');
   console.log(color(tty, C.gray, '  Run it, then check:'));
   console.log(color(tty, C.green, '    fiscus sources'));

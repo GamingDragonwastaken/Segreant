@@ -31,7 +31,7 @@ import { recommendBudget } from '../budget/recommend.ts';
 import { computeAlerts } from '../alerts/detect.ts';
 import { requestsToCsv } from '../export/csv.ts';
 import { DIMENSIONS } from '../value/characterization.ts';
-import { IMPORTERS, type ImportSummary } from '../connect/importShared.ts';
+import { IMPORTERS, emptyImportSummary, type ImportSummary } from '../connect/importShared.ts';
 import { importClaudeCode, defaultClaudeCodeRoot } from '../connect/claudeCode.ts';
 import { importOpencode, defaultOpencodeDbPath } from '../connect/opencode.ts';
 import { importCodex, defaultCodexRoot } from '../connect/codex.ts';
@@ -247,7 +247,7 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
           const results: Record<string, ImportSummary & { available: boolean }> = {};
           for (const imp of targets) {
             const available = imp.locate() !== null;
-            const sum = available ? await imp.run(store, {}) : { files: 0, eventsSeen: 0, inserted: 0, costUsd: 0, estimatedCostUsd: 0, byModel: {}, earliestMs: null, latestMs: null };
+            const sum = available ? await imp.run(store, {}) : emptyImportSummary(0);
             results[imp.id] = { ...sum, available };
           }
           const totalNew = Object.values(results).reduce((n, r) => n + r.inserted, 0);
