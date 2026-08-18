@@ -1,0 +1,233 @@
+/**
+ * The GUI/server payload contract.
+ *
+ * The browser app declares its own view of every payload in
+ * `src/dashboard/web/app/core/api.ts`. Nothing checks those declarations against
+ * what the server actually sends: the browser tsconfig cannot see the node
+ * source, so the two sides are structurally unrelated to the typechecker, and a
+ * field name invented in the GUI is not a compile error.
+ *
+ * It is not a runtime error either, which is what makes this class of defect
+ * expensive. Reading a field the payload does not have yields `undefined`, and
+ * `undefined` renders as whatever the screen shows for "absent" — which is
+ * usually a legitimate, honest-looking state:
+ *
+ *   GroupRow.label      written as something else, so every breakdown row
+ *                       rendered an em-dash while the numbers beside it were
+ *                       correct. Shipped. Found only by taking a screenshot.
+ *   BudgetConfig.dailyUsd  written as `dailyCapUsd`, so Control announced
+ *                       "no cap set" on a machine with a $30 cap enforcing, and
+ *                       the cap-setting action POSTed a key
+ *                       `applySettingsPatch` discards — 200, healthy response,
+ *                       nothing changed.
+ *
+ * Two instances of one mistake, each caught by chance rather than by a check.
+ * So this stops testing instances and tests the contract: every endpoint the GUI
+ * declares is fetched for real, and every REQUIRED field the GUI says it will
+ * find must actually be there.
+ *
+ * The pairings are derived from the source rather than listed here, so a new
+ * endpoint is covered the moment it is added to the `api` object — a hand-kept
+ * list would drift in exactly the way this test exists to prevent.
+ */
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import type { AddressInfo } from 'node:net';
+import type http from 'node:http';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { Store } from '../src/store/db.ts';
+import { DEFAULT_CONFIG } from '../src/config.ts';
+import { createDashboardServer } from '../src/dashboard/server.ts';
+import { seedDemo } from '../src/demo/seed.ts';
+
+const API_SRC = join(
+  import.meta.dirname,
+  '..',
+  'src',
+  'dashboard',
+  'web',
+  'app',
+  'core',
+  'api.ts',
+);
+
+interface Field {
+  name: string;
+  optional: boolean;
+  /** The declared type, trimmed — used to recurse into other declared interfaces. */
+  type: string;
+}
+
+/** Parse `export interface X { ... }` blocks into their field lists. */
+function parseInterfaces(source: string): Map<string, Field[]> {
+  const out = new Map<string, Field[]>();
+  const re = /export interface (\w+)\s*\{/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = re.exec(source)) !== null) {
+    const name = match[1];
+    if (!name) continue;
+
+    // Walk braces from the opening one so nested object literals in field types
+    // do not end the block early.
+    let depth = 0;
+    let i = re.lastIndex - 1;
+    const start = i;
+    for (; i < source.length; i += 1) {
+      if (source[i] === '{') depth += 1;
+      else if (source[i] === '}') {
+        depth -= 1;
+        if (depth === 0) break;
+      }
+    }
+    const body = source.slice(start + 1, i);
+
+    // Only fields at the block's own depth. Anything nested inside an inline
+    // object type belongs to that type, not to this interface.
+    const fields: Field[] = [];
+    let d = 0;
+    for (const rawLine of body.split(String.fromCharCode(10))) {
+      const line = rawLine.trim();
+      const fieldMatch = d === 0 ? /^(\w+)(\??):\s*(.+?);?$/.exec(line) : null;
+      if (fieldMatch && fieldMatch[1] && !line.startsWith('//') && !line.startsWith('*')) {
+        fields.push({
+          name: fieldMatch[1],
+          optional: fieldMatch[2] === '?',
+          type: (fieldMatch[3] ?? '').trim(),
+        });
+      }
+      for (const ch of rawLine) {
+        if (ch === '{') d += 1;
+        else if (ch === '}') d -= 1;
+      }
+    }
+    out.set(name, fields);
+  }
+  return out;
+}
+
+/**
+ * Pair each read endpoint with the interface the GUI claims it returns, straight
+ * out of the `api` object literal.
+ */
+function parseEndpoints(source: string): Array<{ method: string; type: string; path: string }> {
+  const body = source.slice(source.indexOf('export const api = {'));
+  const stop = body.indexOf('write: {');
+  const reads = stop > 0 ? body.slice(0, stop) : body;
+
+  const out: Array<{ method: string; type: string; path: string }> = [];
+  const re = /(\w+):\s*\([^)]*\)\s*=>\s*request<([\w<>, ]+)>\(\s*[`'"]([^`'"]+)[`'"]/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(reads)) !== null) {
+    const [, method, type, path] = m;
+    if (!method || !type || !path) continue;
+    // Inline generics like Record<string, unknown> describe no field contract.
+    if (type.includes('<') || type.includes('{')) continue;
+    out.push({ method, type: type.trim(), path });
+  }
+  return out;
+}
+
+function boot(store: Store): Promise<{ base: string; close: () => Promise<void> }> {
+  const server: http.Server = createDashboardServer({
+    store,
+    config: structuredClone(DEFAULT_CONFIG),
+    version: 'test',
+  });
+  return new Promise((resolve) => {
+    server.listen(0, '127.0.0.1', () => {
+      const port = (server.address() as AddressInfo).port;
+      resolve({
+        base: `http://127.0.0.1:${port}`,
+        close: () => new Promise<void>((r) => server.close(() => r())),
+      });
+    });
+  });
+}
+
+/** Substitute a usable value for any template hole in a declared path. */
+function concretePath(path: string): string {
+  return path.replace(/\$\{[^}]*\}/g, '30d');
+}
+
+/**
+ * Check every required field of `typeName` against `value`, recursing into other
+ * declared interfaces. Absent optional fields are fine; absent REQUIRED ones are
+ * the defect this file exists to catch.
+ */
+function checkShape(
+  typeName: string,
+  value: unknown,
+  interfaces: Map<string, Field[]>,
+  where: string,
+  problems: string[],
+  seen: Set<string>,
+): void {
+  const fields = interfaces.get(typeName);
+  if (!fields || seen.has(typeName)) return;
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return;
+
+  const obj = value as Record<string, unknown>;
+  for (const field of fields) {
+    const present = field.name in obj;
+    if (!present) {
+      if (!field.optional) {
+        problems.push(`${where}.${field.name} — declared as required, absent from the payload`);
+      }
+      continue;
+    }
+    // Recurse only into a single named interface, which is where the nesting
+    // that hid the budget defect actually lives.
+    const named = /^([A-Z]\w*)(\[\])?$/.exec(field.type.replace(/\s*\|\s*null$/, ''));
+    const inner = named?.[1];
+    if (inner && interfaces.has(inner)) {
+      const next = new Set(seen);
+      next.add(typeName);
+      const target = named?.[2] ? (obj[field.name] as unknown[])?.[0] : obj[field.name];
+      if (target !== undefined) {
+        checkShape(inner, target, interfaces, `${where}.${field.name}`, problems, next);
+      }
+    }
+  }
+}
+
+test('every required field the GUI declares exists in the payload the server sends', async () => {
+  const source = readFileSync(API_SRC, 'utf8');
+  const interfaces = parseInterfaces(source);
+  const endpoints = parseEndpoints(source);
+
+  assert.ok(interfaces.size >= 8, `expected to parse the GUI interfaces, got ${interfaces.size}`);
+  assert.ok(endpoints.length >= 5, `expected to parse the GUI endpoints, got ${endpoints.length}`);
+
+  // A seeded store, so payloads are populated rather than empty: an absent field
+  // and a field that is merely unreachable on an empty ledger look alike.
+  const store = new Store(':memory:');
+  seedDemo(store);
+  const srv = await boot(store);
+  const problems: string[] = [];
+
+  try {
+    for (const endpoint of endpoints) {
+      const res = await fetch(`${srv.base}${concretePath(endpoint.path)}`, {
+        headers: { 'x-aegis-local': '1' },
+      });
+      assert.equal(
+        res.status,
+        200,
+        `${endpoint.method}: GET ${endpoint.path} returned ${res.status} — the GUI issues this exact request`,
+      );
+      const payload: unknown = await res.json();
+      checkShape(endpoint.type, payload, interfaces, `${endpoint.type} (${endpoint.path})`, problems, new Set());
+    }
+  } finally {
+    await srv.close();
+    store.close();
+  }
+
+  assert.deepEqual(
+    problems,
+    [],
+    `the GUI declares fields the server does not send:${String.fromCharCode(10)}  ${problems.join(String.fromCharCode(10) + '  ')}`,
+  );
+});

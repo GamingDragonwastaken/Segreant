@@ -20,7 +20,7 @@
 
 import { h } from '../core/dom.ts';
 import { signal, effect } from '../core/signal.ts';
-import { api, type SettingsSnapshot, type Overview, type ValuePayload } from '../core/api.ts';
+import { api, type SettingsSnapshot, type Overview, type ValuePayload, type AlertRow } from '../core/api.ts';
 import { usd, count, pct, isPrecise } from '../core/fmt.ts';
 import { actionCard } from './spend.ts';
 
@@ -61,7 +61,14 @@ export function controlView(): Node {
       const rec = advice();
       const includesImported = budget?.capIncludesImported === true;
 
+      const alerts = today()?.alerts ?? [];
+
       return h('div', null,
+        // Live governance alerts, above the caps that produced them. The server
+        // already computed these; until now no screen rendered them, so an
+        // operator whose cap was exhausted had to infer it from a percentage.
+        alerts.length > 0 ? alertList(alerts) : null,
+
         h('div', { class: 'card card-basis' },
           h('div', { class: 'card-head' },
             h('span', { class: 'card-title', text: () => (isPrecise() ? 'Daily cap' : 'Your daily limit') }),
@@ -144,6 +151,24 @@ export function controlView(): Node {
             actionCard('alerts'),
             actionCard('exec'))));
     });
+}
+
+/**
+ * Alerts carry their own quantified evidence (`metric`), so each one is rendered
+ * with the figure that triggered it rather than as a bare warning. A warning an
+ * operator cannot check is a warning they learn to dismiss.
+ */
+function alertList(alerts: AlertRow[]): Node {
+  const order: Record<string, number> = { critical: 0, warn: 1, info: 2 };
+  const sorted = [...alerts].sort((a, b) => (order[a.severity] ?? 3) - (order[b.severity] ?? 3));
+
+  return h('div', { class: 'alerts', role: 'region', 'aria-label': 'Active alerts' },
+    ...sorted.map((a) => h('div', { class: `alert alert-${a.severity}` },
+      h('div', { class: 'alert-head' },
+        h('span', { class: `pill pill-${a.severity === 'critical' ? 'warn' : 'unverified'}`, text: a.severity }),
+        h('strong', { class: 'alert-title', text: a.title }),
+        a.metric ? h('span', { class: 'alert-metric', text: a.metric }) : null),
+      h('p', { class: 'alert-detail', text: a.detail }))));
 }
 
 /**

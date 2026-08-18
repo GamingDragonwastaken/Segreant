@@ -31,16 +31,28 @@ export interface GroupRow {
   outputTokens?: number;
 }
 
+/** Mirrors the server's series bucket. The key is `bucketMs`, not `ts`. */
 export interface SeriesPoint {
-  ts: number;
+  bucketMs: number;
   costUsd: number;
   requests: number;
 }
 
+/**
+ * Mirrors `Alert` in src/alerts/detect.ts. This was declared as
+ * `{ level, title?, message }` and the server sends `{ id, severity, title,
+ * detail, metric }` -- three of four names wrong. Nothing consumed it yet, so it
+ * never failed; the first screen to render an alert would have shown a blank
+ * severity and no text, with no error anywhere.
+ */
 export interface AlertRow {
-  level: string;
-  title?: string;
-  message: string;
+  /** Stable kind id, e.g. 'budget-exhausted'. */
+  id: string;
+  severity: 'critical' | 'warn' | 'info';
+  title: string;
+  detail: string;
+  /** Short quantified evidence, e.g. '$39.73 / $30.00'. Null when unquantified. */
+  metric: string | null;
 }
 
 export interface Overview {
