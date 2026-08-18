@@ -26,17 +26,17 @@ survive, and matter — measured from the wire and from your git history.
 
 ## The four questions we score (each 0–100%)
 
-Every dollar of AI spend has to survive four independent tests to become real value.
-We score each one separately, then combine them:
+Fiscus separates four questions that must not be collapsed into one number.
+They are different evidentiary claims, not assumed statistically independent:
 
 | # | The question | Plain meaning |
 |---|---|---|
 | **ρ Realization** | Did it become something real and lasting? | Not reverted, still in the codebase, shipped. |
 | **α Acceptance** | Did you keep it without rewriting? | How much of what the AI proposed actually got used. |
 | **λ Lift** | Would you have done it anyway? | The honest counterfactual — did AI actually save time. |
-| **ι Impact** | Did it matter? | Reached production, stuck, no incidents (not "how big"). |
+| **ι Impact** | Did it matter? | Orthogonal consequence/reach evidence. Coding Impact stays unknown until such evidence exists; it is not reconstructed from ship/survival gates. |
 
-## Why we *multiply* them (the part that can't be gamed)
+## Why we *multiply* them (the non-compensatory part)
 
 These four are a chain: spend → kept → caused → mattered. To become value, a dollar
 has to pass **all four** — so the odds are the four multiplied together, exactly like
@@ -45,10 +45,9 @@ its weakest link:
 
 > **RoI Index = ρ × α × λ × ι** (as a weighted geometric mean, scored 0–100)
 
-This is the key honesty property: **you cannot fake the score by maxing one number.**
-If any one of the four is near zero, the whole score collapses. A dashboard that just
-*averages* things can be gamed by pumping a single metric — ours can't, by
-construction. (This is a mathematical theorem, not a marketing claim; it's tested.)
+This is the key non-compensation property: one strong lens cannot buy back a collapsed one.
+That property is tested. It is **not** a proof against Goodhart effects in task selection,
+instrumentation, baselines, or which outcomes an organization chooses to report.
 
 ## The number your CFO cares about: does it pay for itself?
 
@@ -72,9 +71,10 @@ not invent the denominator.
 ## Two things that make it undeniable
 
 1. **It's honest about what it doesn't know.** Anything we can't observe is marked
-   "not yet measured" — never counted as a pass or a fail. A partly-measured score is
-   labeled an **upper bound**: wiring up more measurement can only move it *down*
-   toward the truth, never inflate it. That's the opposite of every vanity dashboard.
+   "not yet measured" — never counted as a pass or a fail. The observed-lens score
+   is explicitly **not** called a bound: a newly measured lens can move it up or down.
+   Fiscus instead reports a full-index identification interval that keeps missing
+   dimensions in the fixed weight vector at their admissible endpoints.
 
 2. **It's trustworthy on small samples.** A model that "won" on 2 tasks isn't treated
    like one that won on 200. We shrink thin, noisy results toward the average until
@@ -101,9 +101,10 @@ less than it costs — cut before you grow. No other tool answers this.
 The building blocks (geometric mean, diminishing-returns optimization, statistical
 shrinkage, partial-identification bounds) are established, well-understood mathematics
 — we cite them plainly. **The invention is putting them together** into one honest
-instrument that measures AI's real return across any kind of usage, from your own
-machine, and can't be gamed on a single axis. Stating exactly which parts are
-standard is what makes the rest credible.
+instrument whose mathematical shape can accept multiple AI modalities. Current
+outcome instrumentation is deepest for coding-agent workflows; non-coding value
+uses explicitly reported outcome adapters and is not claimed equally mature. The
+index is single-axis resistant, not immune to metric gaming.
 
 ## Your data never leaves your machine
 
@@ -113,7 +114,10 @@ configured AI provider. See **[DATA-BOUNDARIES.md](DATA-BOUNDARIES.md)** for the
 current, complete disclosure of provider traffic, local proposal retention, and
 each opt-in outbound feature.
 
-Everything is computed locally in a file-based database. No prompts, no code, no keys
-are ever transmitted. The only optional outbound traffic is a public pricing-table
-refresh (off by default) and alert webhooks you explicitly configure (which carry
-alert titles only — never content).
+The ledger and dashboard are local, but Fiscus is not an offline-only program.
+Outbound paths are explicit and purpose-scoped: configured provider traffic through
+the proxy; an applied OpenAI Costs pull using the operator's admin credential;
+pricing or baseline refreshes; configured alert webhooks; hosted judging when the
+operator enables it; and signed numeric team rollups when `team push` is invoked.
+The canonical, maintained disclosure is [DATA-BOUNDARIES.md](DATA-BOUNDARIES.md);
+this overview must not be used as a shorter substitute for that boundary document.

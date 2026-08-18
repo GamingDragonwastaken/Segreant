@@ -8,11 +8,11 @@
  * session; it "realizes" when it has a positive, no-incident outcome — the
  * direct analog of shipped+survived+clean for code.
  *
- * DEPTH (not just realized/not): a reported outcome is GRADED onto the same reach
- * ladder the Impact lens uses for code — `used`/`accepted` = kept, `resolved` =
- * merged-level, `published`/`shipped` = shipped-level. So a published deliverable
- * counts for more Impact than a one-off answer, without inventing anything: the
- * grade is exactly what the user reported, never inferred from prompt content.
+ * DEPTH (not just realized/not): a reported outcome is also a direct Impact
+ * observation for this non-coding adapter — `used`/`accepted` = kept, `resolved`
+ * = task-level reach, `published`/`shipped` = external reach. Impact is averaged
+ * CONDITIONALLY over realized sessions, so the realization rate is not counted
+ * twice. The grade is exactly what the user reported, never inferred from text.
  *
  * No prompt text is read or stored, so we never classify by content. Acceptance
  * (edit-distance) and survival-over-time don't apply to a one-shot answer, so they
@@ -179,6 +179,10 @@ export function computeUsageRoI(store: Store, opts: { startMs: number; endMs: nu
     }
   }
 
+  const realizedImpact = realized.length === 0
+    ? null
+    : realized.reduce((sum, u) => sum + (u.reach === 'shipped' ? 1 : u.reach === 'merged' ? 0.75 : 0.5), 0) / realized.length;
+
   const roi = computeReturnOnIntelligence(
     {
       firstPassAcceptance: null,
@@ -189,9 +193,14 @@ export function computeUsageRoI(store: Store, opts: { startMs: number; endMs: nu
         realizedValueUsd,
       },
     },
-    money.priced
-      ? { laborRatePerHour: rate, grossRealizedValueUsd: money.grossRealizedValueUsd, supervisionMinutes: money.supervisionMinutes }
-      : {},
+    {
+      ...(money.priced
+        ? { laborRatePerHour: rate, grossRealizedValueUsd: money.grossRealizedValueUsd, supervisionMinutes: money.supervisionMinutes }
+        : {}),
+      ...(realizedImpact === null
+        ? {}
+        : { impact: realizedImpact, impactHow: 'operator-reported outcome reach, conditional on realized sessions' }),
+    },
   );
 
   return { units, realizedUnits: realized.length, totalCostUsd, outcomeMix, money, roi };

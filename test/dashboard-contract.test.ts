@@ -2,10 +2,9 @@
  * The GUI/server payload contract.
  *
  * The browser app declares its own view of every payload in
- * `src/dashboard/web/app/core/api.ts`. Nothing checks those declarations against
- * what the server actually sends: the browser tsconfig cannot see the node
- * source, so the two sides are structurally unrelated to the typechecker, and a
- * field name invented in the GUI is not a compile error.
+ * `src/dashboard/web/app/core/contracts.ts`, which the browser client imports and
+ * the server can type against. This runtime check remains defense in depth: JSON
+ * is not runtime-validated by TypeScript, and endpoint wiring can still drift.
  *
  * It is not a runtime error either, which is what makes this class of defect
  * expensive. Reading a field the payload does not have yields `undefined`, and
@@ -50,6 +49,17 @@ const API_SRC = join(
   'app',
   'core',
   'api.ts',
+);
+
+const CONTRACTS_SRC = join(
+  import.meta.dirname,
+  '..',
+  'src',
+  'dashboard',
+  'web',
+  'app',
+  'core',
+  'contracts.ts',
 );
 
 interface Field {
@@ -193,9 +203,10 @@ function checkShape(
 }
 
 test('every required field the GUI declares exists in the payload the server sends', async () => {
-  const source = readFileSync(API_SRC, 'utf8');
-  const interfaces = parseInterfaces(source);
-  const endpoints = parseEndpoints(source);
+  const apiSource = readFileSync(API_SRC, 'utf8');
+  const contractSource = readFileSync(CONTRACTS_SRC, 'utf8');
+  const interfaces = parseInterfaces(contractSource);
+  const endpoints = parseEndpoints(apiSource);
 
   assert.ok(interfaces.size >= 8, `expected to parse the GUI interfaces, got ${interfaces.size}`);
   assert.ok(endpoints.length >= 5, `expected to parse the GUI endpoints, got ${endpoints.length}`);

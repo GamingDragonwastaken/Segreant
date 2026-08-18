@@ -84,7 +84,7 @@ produce. Only seeing them together tells the truth.
 
 ## 4. The composite — derived, not chosen
 
-The four lenses are not four metrics we liked. They are the **four independent
+The four lenses are not four metrics we liked. They are the **four separately evidenced
 ways raw output overstates value** — a spanning set of its failure modes. Each
 lens, normalized to [0,1], is a *conditional survival rate* along the chain
 **tokens → kept → caused → mattered**:
@@ -330,7 +330,7 @@ partial-identification bounds, funnel chain-rule, proper-scoring honesty. **The
 invention is the synthesis**, which has not been built:
 
 1. **The four lenses as a spanning set.** Realization/Acceptance/Lift/Impact are
-   *derived* as the four independent ways raw output overstates value (§4), not a
+   *derived* as the four separately evidenced ways raw output overstates value (§4), not a
    convenient list — and Lift is what makes it return on *intelligence*, not on
    spend.
 2. **Value-conversion as a necessary-condition chain ⟹ the aggregator is forced.**

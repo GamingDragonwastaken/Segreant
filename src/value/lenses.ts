@@ -11,7 +11,7 @@
  *      constant-returns-to-scale Cobb–Douglas production function whose weights
  *      are the lenses' output ELASTICITIES (disclosed calibration, Σ=1; set them
  *      equal for the pure symmetric axiomatic index). Any lens at 0 collapses it
- *      — no single axis can be gamed.
+ *      — no single axis can compensate for a collapsed one.
  *
  *   2. RoI RETURN (a dimensionless ratio, ≥1 ⟺ paid for itself) — realized,
  *      rework-discounted, manual-equivalent value over the HONEST cost of the
@@ -147,6 +147,8 @@ export interface RoIOptions {
   lift?: number | null; // injected lift score (0..1) when measured; null otherwise
   liftRange?: { low: number | null; high: number | null }; // partial-ID bound for Lift, in lens-score units
   liftHow?: string; // how Lift was sourced (baseline estimate / measured A-B / synthetic) — honest disclosure
+  impact?: number | null; // orthogonal outcome impact in [0,1]; absent => uninstrumented
+  impactHow?: string; // provenance for Impact; never inferred from Realization gates
   weights?: { realization: number; acceptance: number; lift: number; impact: number };
   theta?: number; // CES substitution parameter; 0 (default) = the forced geometric mean
   // --- the money number (RoI return) ---
@@ -156,20 +158,14 @@ export interface RoIOptions {
 }
 
 /**
- * Impact weight — how much a realized unit MATTERED, from observable outcome
- * signals only. Deliberately NOT line counts: LOC is a discredited value proxy
- * ("AI easily inflates the volume of code"), and weighting impact by it would
- * reintroduce exactly the lines-with-a-price-tag failure this metric rejects.
- * Instead: production reach (shipped > merged > committed-only) × durability
- * (the change survived its maturity window). Both are funnel verdicts, not size.
+ * Impact is intentionally NOT reconstructed from Realization gates.
+ *
+ * Earlier versions weighted `merged`, `shipped`, and `survived` a second time
+ * here even though those same verdicts already determine Realization. That made
+ * the nominally separate Impact lens partly a duplicate durability/reach score.
+ * Impact must come from an orthogonal outcome signal (business/customer reach,
+ * service criticality, explicitly reported external reach, etc.) or stay unknown.
  */
-function impactWeight(u: UnitLike): number {
-  const verdict = (g: Gate) => u.funnel.results.find((r) => r.gate === g)?.verdict;
-  const reach = verdict('shipped') === 'pass' ? 1.5 : verdict('merged') === 'pass' ? 1.2 : 1;
-  const durability = verdict('survived') === 'pass' ? 1.25 : 1;
-  return reach * durability;
-}
-
 /**
  * Default lens weights, calibrated from the productivity literature
  * (docs/RETURN-ON-INTELLIGENCE.md §research): value/quality signals dominate,
@@ -242,24 +238,15 @@ export function computeReturnOnIntelligence(report: RealizationLike, opts: RoIOp
   };
   if (!lift.instrumented) notes.push('Lift uninstrumented: needs a measured baseline (model A/B or no-AI control).');
 
-  // --- Lens 4: Impact (of what realized, how much mattered?) ---
-  let impact: LensValue;
-  if (mature.length === 0) {
-    impact = { value: null, instrumented: false, how: 'impact-weighted realization' };
-    notes.push('Impact uninstrumented: no matured units yet.');
-  } else {
-    let weighted = 0;
-    let realizedWeighted = 0;
-    for (const u of mature) {
-      const w = impactWeight(u);
-      weighted += w;
-      if (u.funnel.realized) realizedWeighted += w;
-    }
-    impact = {
-      value: weighted > 0 ? realizedWeighted / weighted : 0,
-      instrumented: true,
-      how: 'realized fraction weighted by production reach + durability (not lines)',
-    };
+  // --- Lens 4: Impact (conditional consequence, orthogonal to Realization) ---
+  const impactProvided = opts.impact !== undefined && opts.impact !== null;
+  const impact: LensValue = {
+    value: impactProvided ? Math.min(1, Math.max(0, opts.impact!)) : null,
+    instrumented: impactProvided,
+    how: opts.impactHow ?? 'orthogonal outcome impact — never inferred from merged/shipped/survived gates',
+  };
+  if (!impact.instrumented) {
+    notes.push('Impact uninstrumented: needs an outcome signal independent of the Realization funnel.');
   }
 
   // --- Composite: the weighted geometric aggregator (CRS Cobb–Douglas, CES θ=0) ---

@@ -98,15 +98,16 @@ test('certainty-equivalent: γ slides the Index from the point estimate toward t
   assert.ok(mid.certaintyEquivalent.index! > cons.certaintyEquivalent.index!);
 });
 
-test('Impact is driven by production reach (shipped), not line counts (the M2 fix)', () => {
-  // Same realization (one realized unit + one not), differing only in whether the
-  // realized unit reached production. No size input exists on the lens at all.
+test('Impact is not reconstructed from production gates already counted by Realization', () => {
   const matured = { realizationRate: 0.5, totalCostUsd: 5, realizedValueUsd: 3, netRealizedValueUsd: 3 };
   const reached = computeReturnOnIntelligence(rep({ units: [unit(true, true), unit(false)], matured }));
   const notReached = computeReturnOnIntelligence(rep({ units: [unit(true, false), unit(false)], matured }));
-  assert.ok(reached.lenses.impact.value !== null && notReached.lenses.impact.value !== null);
-  assert.ok(
-    reached.lenses.impact.value! > notReached.lenses.impact.value!,
-    `shipped ${reached.lenses.impact.value} should outweigh non-shipped ${notReached.lenses.impact.value}`,
-  );
+  assert.equal(reached.lenses.impact.value, null);
+  assert.equal(notReached.lenses.impact.value, null);
+  const measured = computeReturnOnIntelligence(rep({ units: [unit(true, true), unit(false)], matured }), {
+    impact: 0.8,
+    impactHow: 'customer exposure sample',
+  });
+  assert.equal(measured.lenses.impact.value, 0.8);
+  assert.equal(measured.lenses.impact.how, 'customer exposure sample');
 });

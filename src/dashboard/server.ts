@@ -38,6 +38,7 @@ import { importCodex, defaultCodexRoot } from '../connect/codex.ts';
 import { judgeSessionFromStore } from '../judge/orchestrate.ts';
 import { resolveJudgeTier, hasHostedJudgeApiKey } from '../judge/tier.ts';
 import { pricingStatus } from '../cost/pricing.ts';
+import type { Overview } from './web/app/core/contracts.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = join(__dirname, 'web');
@@ -127,7 +128,7 @@ function resolveRange(range: RangeKey, now: number): { startMs: number; endMs: n
   }
 }
 
-function buildOverview(store: Store, config: AegisConfig, range: RangeKey) {
+function buildOverview(store: Store, config: AegisConfig, range: RangeKey): Overview {
   const now = Date.now();
   const { startMs, endMs, bucketMs } = resolveRange(range, now);
 

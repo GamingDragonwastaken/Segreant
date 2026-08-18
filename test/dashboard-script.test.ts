@@ -228,11 +228,11 @@ test('the realized band carries the value claim, not the cost of realized work',
 
   // The hazard is documented where the type is declared, so the next person to
   // write this interface from memory meets the warning first.
-  const api = readFileSync(join(WEB_SRC, 'app', 'core', 'api.ts'), 'utf8');
+  const contracts = readFileSync(join(WEB_SRC, 'app', 'core', 'contracts.ts'), 'utf8');
   assert.match(
-    api,
+    contracts,
     /not the value they produced/,
-    'api.ts must warn that matured.realizedValueUsd is a cost, not a value',
+    'contracts.ts must warn that matured.realizedValueUsd is a cost, not a value',
   );
 });
 
@@ -257,7 +257,7 @@ test('the GUI budget type matches the server budget config field for field', () 
 
   assert.ok(fields.length >= 5, `expected to parse the server BudgetConfig, got ${fields.length} fields`);
 
-  const gui = readFileSync(join(WEB_SRC, 'app', 'core', 'api.ts'), 'utf8');
+  const gui = readFileSync(join(WEB_SRC, 'app', 'core', 'contracts.ts'), 'utf8');
   const guiBlock = gui.slice(gui.indexOf('export interface BudgetConfig'));
   const guiBody = guiBlock.slice(0, guiBlock.indexOf(String.fromCharCode(10) + '}'));
 

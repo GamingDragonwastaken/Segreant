@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "asOf": "2026-08-18",
+  "coreInvariant": "metered usage != provider-billed cost != allocated cost != realized value",
+  "productScope": {
+    "current": "local-first AI Financial Operations; strongest validated outcome evidence is coding-agent workflows",
+    "thesis": "broader organizational AI Financial Operations across modalities"
+  },
+  "truthClaims": [
+    {
+      "id": "metering",
+      "status": "implemented",
+      "basis": "proxy and native-import ledgers"
+    },
+    {
+      "id": "provider-billing-evidence",
+      "status": "implemented",
+      "basis": "immutable imported/adopted/direct provider evidence; never silently substituted for metered spend"
+    },
+    {
+      "id": "reconciliation-engine",
+      "status": "implemented",
+      "basis": "project-day residual reconciliation with permanent conditions disclosed"
+    },
+    {
+      "id": "real-provider-reconciliation",
+      "status": "external_validation_required",
+      "basis": "no controlled finalized provider bill has yet been reconciled end to end"
+    },
+    {
+      "id": "allocation-showback",
+      "status": "implemented",
+      "basis": "versioned rules; microdollar conservation; excluded from budgets and RoI"
+    },
+    {
+      "id": "coding-realization",
+      "status": "implemented",
+      "basis": "commit-bound realization funnel and outcome evidence"
+    },
+    {
+      "id": "noncoding-outcomes",
+      "status": "partial",
+      "basis": "explicit reported outcomes; not equal in depth to coding evidence"
+    },
+    {
+      "id": "impact",
+      "status": "partial",
+      "basis": "requires orthogonal outcome evidence; not inferred from Realization gates"
+    },
+    {
+      "id": "team-server-production",
+      "status": "external_validation_required",
+      "basis": "real deployment controls require Postgres/OIDC/TLS/backup/restore operational validation"
+    }
+  ]
+}
