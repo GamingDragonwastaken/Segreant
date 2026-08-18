@@ -3,16 +3,25 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def r(p): return (ROOT/p).read_text(encoding='utf-8')
 def w(p,s): (ROOT/p).write_text(s,encoding='utf-8')
-def one(p,old,new):
-    s=r(p); n=s.count(old)
-    if n!=1: raise SystemExit(f'{p}: expected one match, got {n}: {old[:100]!r}')
-    w(p,s.replace(old,new,1))
 
 # Dashboard contract test now has two sources: endpoint declarations remain in
-# api.ts, while the canonical interface declarations live in contracts.ts.
+# api.ts, while canonical interface declarations live in contracts.ts. The phase-2
+# extraction intentionally moved the old API_SRC path to contracts.ts, so split it
+# back into two named source constants here.
 p='test/dashboard-contract.test.ts'; s=r(p)
-s=s.replace(" * `src/dashboard/web/app/core/api.ts`. Nothing checks those declarations against\n * what the server actually sends: the browser tsconfig cannot see the node\n * source, so the two sides are structurally unrelated to the typechecker, and a\n * field name invented in the GUI is not a compile error.\n", " * `src/dashboard/web/app/core/contracts.ts`, which the browser client imports and\n * the server can type against. This runtime check remains defense in depth: JSON\n * is not runtime-validated by TypeScript, and endpoint wiring can still drift.\n")
-needle="""const API_SRC = join(
+s=s.replace(" * `src/dashboard/web/app/core/contracts.ts`. Nothing checks those declarations against\n * what the server actually sends: the browser tsconfig cannot see the node\n * source, so the two sides are structurally unrelated to the typechecker, and a\n * field name invented in the GUI is not a compile error.\n", " * `src/dashboard/web/app/core/contracts.ts`, which the browser client imports and\n * the server can type against. This runtime check remains defense in depth: JSON\n * is not runtime-validated by TypeScript, and endpoint wiring can still drift.\n")
+old="""const API_SRC = join(
+  import.meta.dirname,
+  '..',
+  'src',
+  'dashboard',
+  'web',
+  'app',
+  'core',
+  'contracts.ts',
+);
+"""
+new="""const API_SRC = join(
   import.meta.dirname,
   '..',
   'src',
@@ -22,8 +31,7 @@ needle="""const API_SRC = join(
   'core',
   'api.ts',
 );
-"""
-replacement=needle+"""
+
 const CONTRACTS_SRC = join(
   import.meta.dirname,
   '..',
@@ -35,22 +43,20 @@ const CONTRACTS_SRC = join(
   'contracts.ts',
 );
 """
-if needle not in s: raise SystemExit('dashboard contract API path block missing')
-s=s.replace(needle,replacement,1)
+if old not in s: raise SystemExit('dashboard contract post-extraction source block missing')
+s=s.replace(old,new,1)
 s=s.replace("  const source = readFileSync(API_SRC, 'utf8');\n  const interfaces = parseInterfaces(source);\n  const endpoints = parseEndpoints(source);", "  const apiSource = readFileSync(API_SRC, 'utf8');\n  const contractSource = readFileSync(CONTRACTS_SRC, 'utf8');\n  const interfaces = parseInterfaces(contractSource);\n  const endpoints = parseEndpoints(apiSource);")
 w(p,s)
 
-# Source-level semantic guards should follow the type to its canonical home.
+# Source-level semantic guards should follow types to their canonical home.
 p='test/dashboard-script.test.ts'; s=r(p)
 s=s.replace("  const api = readFileSync(join(WEB_SRC, 'app', 'core', 'api.ts'), 'utf8');\n  assert.match(\n    api,", "  const contracts = readFileSync(join(WEB_SRC, 'app', 'core', 'contracts.ts'), 'utf8');\n  assert.match(\n    contracts,")
 s=s.replace("'api.ts must warn that matured.realizedValueUsd is a cost, not a value'", "'contracts.ts must warn that matured.realizedValueUsd is a cost, not a value'")
 s=s.replace("  const gui = readFileSync(join(WEB_SRC, 'app', 'core', 'api.ts'), 'utf8');", "  const gui = readFileSync(join(WEB_SRC, 'app', 'core', 'contracts.ts'), 'utf8');")
-s=s.replace(" * The GUI declares its own copy of BudgetConfig, and a wrong field name there is\n * SILENT in both directions:", " * The shared dashboard contract declares BudgetConfig. A wrong field name there is\n * SILENT at runtime despite compile-time sharing:")
-s=s.replace(" * No typecheck can catch it — the browser tsconfig cannot see the node\n * source, so the two interfaces are structurally unrelated.\n *\n * So the contract is pinned across the boundary:", " * The shared declaration now lets typecheck catch direct drift, and this source-level\n * guard keeps the server config field names pinned as defense in depth.\n *\n * So the contract is pinned across the boundary:")
 w(p,s)
 
-# The old Impact tests asserted the bug we are removing. Replace them with the
-# intended orthogonal evidence contract.
+# Old Impact tests asserted the duplication bug. Replace them with the orthogonal
+# evidence contract instead of weakening assertions.
 p='test/roi-return.test.ts'; s=r(p)
 old="""test('Impact is driven by production reach (shipped), not line counts (the M2 fix)', () => {
   // Same realization (one realized unit + one not), differing only in whether the
@@ -118,10 +124,10 @@ new="""test('RoI: Impact is independently supplied and can diverge from raw real
 if old not in s: raise SystemExit('value old Impact test missing')
 s=s.replace(old,new,1); w(p,s)
 
-# VoI fixtures now instrument Impact explicitly when the test means it is known.
+# VoI fixtures explicitly supply Impact when the test means it is measured.
 p='test/voi.test.ts'; s=r(p)
 s=s.replace("/** A matured, realized unit (all gates pass) and a failed one — enough to instrument ρ and ι. */", "/** Matured units instrument Realization; Impact is supplied separately when known. */")
-s=s.replace("  // Realization + Impact instrumented; Acceptance + Lift honestly missing.\n  return computeReturnOnIntelligence({\n", "  // Realization + explicit orthogonal Impact instrumented; Acceptance + Lift missing.\n  return computeReturnOnIntelligence({\n")
+s=s.replace("  // Realization + Impact instrumented; Acceptance + Lift honestly missing.\n  return computeReturnOnIntelligence({", "  // Realization + explicit orthogonal Impact instrumented; Acceptance + Lift missing.\n  return computeReturnOnIntelligence({")
 s=s.replace("    matured: { realizationRate: 0.7, totalCostUsd: 10, realizedValueUsd: 7 },\n  });", "    matured: { realizationRate: 0.7, totalCostUsd: 10, realizedValueUsd: 7 },\n  }, { impact: 0.7, impactHow: 'fixture outcome signal' });",1)
 s=s.replace("    { lift: 0.6 },\n  );", "    { lift: 0.6, impact: 0.7, impactHow: 'fixture outcome signal' },\n  );")
 w(p,s)
