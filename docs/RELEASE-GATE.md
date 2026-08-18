@@ -30,8 +30,8 @@ external deployment, or the optional team service.
 ### Candidate record — commit `205fbcc`, 2026-08-18
 
 Run against `205fbcc6735c6b3518a551f1b7fd472f78f9e5a4`, worktree clean before and
-after validation. **Nine rows pass; the CI row is pending observation.**
-Supersedes the `916e1c3` record, retained for history.
+after validation. **All ten rows pass.** Supersedes the `916e1c3` record,
+retained for history.
 
 | Requirement | Result |
 | --- | --- |
@@ -43,7 +43,7 @@ Supersedes the `916e1c3` record, retained for history.
 | Model-trial truthfulness | **Pass.** Packaged `/api/value` self-labels `demo: true`; one switch, `confidence: trial`, no `evidence_supported`; `allocation: null`. |
 | Billing-boundary truthfulness | **Pass.** Packaged `/api/billing` → `demo: true`, `not_reconciled`, `recordCount: 0`. `/api/allocation` → `kind: derived_cost_allocation`, `basis: showback_only`, `reconciliation.everRun: false`. |
 | Direct-Costs connector boundary | **Pass, and extended by the readiness row.** On the packaged artifact, adopt → reconcile still reports `providerSourceKind: operator_supplied_export`, **5 conditions**, provider side `21500000` micros, `trust: scope_conditional_reconciliation`. The new pre-credential coverage block returns `null` on a store holding no OpenAI rows rather than reporting a fabricated zero-coverage warning. |
-| Intended CI | **Pending.** Not yet pushed at the time this record was written; the row is filled in after the run for this commit is observed, not predicted. |
+| Intended CI | **Pass, with the delta stated** (per the rule in the checklist above). Run **CI #34** (`.../actions/runs/32091103510`): status **Success**, 1m 3s, 7 jobs — `package-smoke` plus the 3-job `test` and 3-job `team-server-test` matrices. The run is for the pushed tip `c1912f5`; `git diff --stat 205fbcc c1912f5` is `docs/RELEASE-GATE.md` alone, 1 file changed — no source, no test, no packaged code. |
 | Visual check | **Pass, and the previously stated gap is closed.** Packaged dashboard at 375×812: Overview, Billing, Allocation, Value and Settings all report `scrollWidth 375` on a `clientWidth 375` document — **no view overflows**, including Value, which was 483px at `916e1c3`. Desktop 1280 re-checked on the same packaged artifact: `.ihelp` still computes `position: relative`, the popover is 270px with its `::after` arrow shown, `.grid` is still two-column (`1.5fr 1fr`), and the allocation view renders its 3 cards. No console errors. Screenshots remain unavailable in this environment — the browser pane is not displayed, so the page composites no frames and `computer{action:"screenshot"}` times out — so this row rests on DOM and computed-style inspection and says so rather than implying a picture was reviewed. |
 
 **The reconciliation was run against this machine's real ledger, and it
