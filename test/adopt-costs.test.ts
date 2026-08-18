@@ -328,3 +328,38 @@ test('a run recorded before the distinction existed stays legacy_unknown', () =>
     store.close();
   }
 });
+
+test('imported OpenAI spend is reported as uncountable BEFORE the credential step', () => {
+  const store = new Store(':memory:');
+  try {
+    const scopeId = scoped(store);
+    // The real-machine failure this exists to prevent: hundreds of dollars of
+    // genuine OpenAI spend, all of it natively imported, and a reconciliation
+    // that would therefore report the entire provider bill as residual.
+    store.insertRequest({
+      ...proxyRequest(scopeId, 400, D0 + 3_600_000, 'imported-1'),
+      via: 'import',
+      source: 'codex',
+      scopeCaptureStatus: undefined,
+      providerScopeDeclarationId: undefined,
+    } as RequestRow);
+    store.insertRequest(proxyRequest(scopeId, 12, D0 + 7_200_000, 'on-route-1'));
+
+    const coverage = store.openAiReconciliationCoverage(scopeId);
+    assert.ok(coverage, 'OpenAI spend exists, so there is something to report');
+    assert.equal(coverage!.importedUsd, 400);
+    assert.equal(coverage!.importedRequests, 1);
+    assert.equal(coverage!.onDeclaredRouteUsd, 12, 'only proxy traffic carrying the declaration counts');
+    assert.equal(coverage!.onDeclaredRouteRequests, 1);
+
+    // A ledger with no OpenAI rows at all has nothing to warn about.
+    const empty = new Store(':memory:');
+    try {
+      assert.equal(empty.openAiReconciliationCoverage(null), null);
+    } finally {
+      empty.close();
+    }
+  } finally {
+    store.close();
+  }
+});

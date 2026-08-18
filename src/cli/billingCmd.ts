@@ -111,7 +111,11 @@ function reconciliationReadiness(store: Store): ReconciliationReadiness {
       ownerAction: true,
     });
   }
-  return { ready: missing.length === 0, missing };
+  return {
+    ready: missing.length === 0,
+    missing,
+    coverage: store.openAiReconciliationCoverage(scope?.declarationId ?? null),
+  };
 }
 
 function printReadiness(readiness: ReconciliationReadiness): void {
@@ -120,6 +124,29 @@ function printReadiness(readiness: ReconciliationReadiness): void {
   for (const item of readiness.missing) {
     console.log(`    ${item.ownerAction ? '[you]' : '[here]'} ${item.step}`);
     console.log(`           ${item.detail}`);
+  }
+  const c = readiness.coverage;
+  if (c && c.onDeclaredRouteUsd === 0 && (c.importedUsd > 0 || c.proxyOffScopeUsd > 0)) {
+    // The expensive mistake this exists to prevent: minting an Admin key, pulling
+    // a real bill, and getting a local side of zero.
+    console.log('');
+    console.log('  READ THIS BEFORE GETTING A CREDENTIAL. You have OpenAI spend, and none of it');
+    console.log('  would count toward a reconciliation:');
+    if (c.importedUsd > 0) {
+      console.log(`    $${c.importedUsd.toFixed(2)} across ${c.importedRequests.toLocaleString()} request(s) arrived by NATIVE IMPORT.`);
+      console.log('           An imported row records the model and the cost but nothing that ties');
+      console.log('           it to your declared provider project, so counting it would invent the');
+      console.log('           attribution this layer exists to refuse. Reconciliation sees only');
+      console.log('           traffic you route through the proxy.');
+    }
+    if (c.proxyOffScopeUsd > 0) {
+      console.log(`    $${c.proxyOffScopeUsd.toFixed(2)} across ${c.proxyOffScopeRequests.toLocaleString()} proxy request(s) predate your scope declaration`);
+      console.log('           or carry a different one. Only rows metered AFTER the declaration count.');
+    }
+    console.log('  A pull would report your entire provider bill as unexplained residual. That is');
+    console.log('  arithmetically true and operationally useless. Route traffic through the proxy');
+    console.log('  first (fiscus start, then point your tools at it), let a period close, and the');
+    console.log('  local side will have something in it.');
   }
   console.log('');
   console.log('  Steps marked [you] need an account owner. Fiscus will not create, store, or');

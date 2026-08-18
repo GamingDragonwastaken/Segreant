@@ -147,7 +147,11 @@
   @media (max-width: 860px) { #settings-grid { grid-template-columns: 1fr; } }
 
   .grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: var(--s5); }
-  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } .wrap { padding: var(--s5) var(--s4) var(--s12); } }
+  /* minmax(0, …), not a bare 1fr. A `1fr` track is minmax(AUTO, 1fr) and still
+     sizes itself to its widest content, so one wide child pushed every card
+     past the container and scrolled the page sideways. Same root cause as the
+     allocation grid below; fixed here for every view at once. */
+  @media (max-width: 860px) { .grid { grid-template-columns: minmax(0, 1fr); } .wrap { padding: var(--s5) var(--s4) var(--s12); } }
 
   .card { background: linear-gradient(180deg, var(--panel) 0%, var(--ink-2) 100%); border: 1px solid var(--line); border-radius: var(--r); padding: var(--s6); position: relative; overflow: hidden; }
   .card .label { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); margin-bottom: var(--s4); }
@@ -393,14 +397,36 @@
   .ihelp .pop b { color:var(--text); font-weight:600; }
   .ihelp .pop code { font-family:var(--mono); color:var(--gold); font-size:10.5px; }
   .ihelp:hover .pop, .ihelp:focus .pop { opacity:1; transform:translateX(-50%) translateY(0); }
-  /* KNOWN, UNFIXED: a popover is invisible until hover/focus but still laid out,
-     so a 270px bubble centred on an icon near the right edge widens the document
-     even while nothing is on screen. On the Value view (15 popovers, several in
-     the right-hand column) that is ~107px of sideways scroll at 375px wide.
-     A `max-width: calc(100vw - …)` does NOT fix it — the viewport is already
-     widened by the overflow, so 100vw is circular. Fixing it properly means
-     anchoring the bubble to a wider ancestor or repositioning it in script,
-     which is a change to the tooltip component rather than a stylesheet tweak. */
+  /* A popover is invisible until hover/focus but still LAID OUT, so a 270px
+     bubble centred on a 14px icon near the right edge widened the whole
+     document even while nothing was on screen. That was the last sideways
+     scroll on the Value view (15 popovers, several in the right-hand column).
+
+     A viewport-relative max-width cannot fix it — the viewport is already
+     widened by the overflow, so 100vw is circular. The fix is to change what
+     the bubble is positioned AGAINST: drop `.ihelp` out of the positioned
+     ancestor chain at narrow widths so the popover resolves against the card
+     instead, then pin both edges. It can no longer be wider than the card, so
+     it can no longer widen the page. The arrow is hidden because it pointed at
+     an anchor the bubble is no longer aligned to.
+
+     STILL OPEN, and much smaller: above 700px the bubble stays anchored to its
+     icon, so one sitting near the right edge of the right-hand column can still
+     push the document out by up to ~30px at some viewport widths. Fixing that
+     without losing the pointed-at-the-icon look needs edge detection — script,
+     or CSS anchor positioning once it is broadly available. Recorded rather
+     than papered over. */
+  @media (max-width: 700px) {
+    .card { position: relative; }
+    .ihelp { position: static; }
+    .ihelp .pop {
+      left: 12px; right: 12px; width: auto; max-width: none;
+      top: 10px; bottom: auto;
+      transform: translateY(4px);
+    }
+    .ihelp .pop::after { display: none; }
+    .ihelp:hover .pop, .ihelp:focus .pop { transform: translateY(0); }
+  }
 </style>
 </head>
 <body>

@@ -32,7 +32,7 @@ import {
 import { ATTRIBUTION_BASES, type AttributionBasis } from '../value/characterization.ts';
 import type { OpenAiCostObservation, OpenAiCostsFailureCode } from '../billing/openaiCosts.ts';
 import { buildOpenAiCostsCaptureCoverage, type OpenAiCostsCaptureCoverage } from '../billing/openaiCostsCoverage.ts';
-import { reconcileOpenAiCosts, type ProviderSourceKind, type ReconciliationResult, type ReconciliationRun } from '../billing/reconcile.ts';
+import { reconcileOpenAiCosts, type ProviderSourceKind, type ReconciliationCoverage, type ReconciliationResult, type ReconciliationRun } from '../billing/reconcile.ts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -2829,6 +2829,48 @@ export class Store {
       observations: plan.observations,
       sourceKind: 'operator_supplied_export',
     });
+  }
+
+  /**
+   * What the local side of a reconciliation would actually contain, split by
+   * why each row does or does not qualify.
+   *
+   * Built after hitting the failure on a real machine: a ledger can hold
+   * hundreds of dollars of genuine OpenAI spend and still reconcile to a local
+   * side of ZERO, because every row arrived by native import rather than
+   * through the proxy. Reconciliation counts only proxy traffic carrying the
+   * declaration, and it has to — an imported row records the model and the cost
+   * but nothing that ties it to the declared provider project, so counting it
+   * would be inventing the very attribution the layer refuses to invent.
+   *
+   * Surfacing this BEFORE the credential step is the whole point. Discovering
+   * it afterwards means someone minted an Admin key for nothing.
+   */
+  openAiReconciliationCoverage(declaredScopeId: string | null): ReconciliationCoverage | null {
+    const row = this.db.prepare(
+      `SELECT
+         COALESCE(SUM(CASE WHEN via = 'proxy' AND scope_capture_status = 'declared_unverified'
+                            AND provider_scope_declaration_id = ? THEN cost_usd END), 0) AS onUsd,
+         COALESCE(SUM(CASE WHEN via = 'proxy' AND scope_capture_status = 'declared_unverified'
+                            AND provider_scope_declaration_id = ? THEN 1 END), 0) AS onReq,
+         COALESCE(SUM(CASE WHEN via = 'import' THEN cost_usd END), 0) AS importedUsd,
+         COALESCE(SUM(CASE WHEN via = 'import' THEN 1 END), 0) AS importedReq,
+         COALESCE(SUM(CASE WHEN via = 'proxy' AND NOT (scope_capture_status = 'declared_unverified'
+                            AND provider_scope_declaration_id = ?) THEN cost_usd END), 0) AS offUsd,
+         COALESCE(SUM(CASE WHEN via = 'proxy' AND NOT (scope_capture_status = 'declared_unverified'
+                            AND provider_scope_declaration_id = ?) THEN 1 END), 0) AS offReq,
+         COUNT(*) AS total
+       FROM requests WHERE provider = 'openai'`,
+    ).get(declaredScopeId, declaredScopeId, declaredScopeId, declaredScopeId) as Record<string, unknown>;
+    if (Number(row.total) === 0) return null;
+    return {
+      onDeclaredRouteUsd: Number(row.onUsd),
+      onDeclaredRouteRequests: Number(row.onReq),
+      importedUsd: Number(row.importedUsd),
+      importedRequests: Number(row.importedReq),
+      proxyOffScopeUsd: Number(row.offUsd),
+      proxyOffScopeRequests: Number(row.offReq),
+    };
   }
 
   /** Newest first; includes failed pulls so a finance owner can see freshness failures. */

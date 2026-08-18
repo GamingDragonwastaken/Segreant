@@ -386,7 +386,34 @@ export function signedUsd(micros: number): string {
  * when nothing is missing, so the CLI has one place to explain the path rather
  * than scattering instructions across error branches.
  */
+/**
+ * What the local side of a reconciliation would actually contain.
+ *
+ * This exists because of a failure mode that only shows up on a real machine:
+ * a user can have substantial OpenAI spend, obtain an Admin key, pull a real
+ * bill — and still get a local side of exactly zero, because every one of their
+ * rows arrived by NATIVE IMPORT rather than through the proxy. Reconciliation
+ * counts only proxy traffic carrying the declared scope, and it must, since an
+ * imported row cannot be shown to belong to the declared provider project.
+ *
+ * Telling someone that after they have gone and minted a credential is telling
+ * them too late. This is reported BEFORE the credential step.
+ */
+export interface ReconciliationCoverage {
+  /** Rows that would count: live proxy traffic carrying the declaration. */
+  onDeclaredRouteUsd: number;
+  onDeclaredRouteRequests: number;
+  /** Natively imported OpenAI rows. Real spend, structurally uncountable here. */
+  importedUsd: number;
+  importedRequests: number;
+  /** Proxy rows that predate the declaration or carry a different one. */
+  proxyOffScopeUsd: number;
+  proxyOffScopeRequests: number;
+}
+
 export interface ReconciliationReadiness {
   ready: boolean;
   missing: Array<{ step: string; detail: string; ownerAction: boolean }>;
+  /** Null when no OpenAI spend exists at all, so there is nothing to warn about. */
+  coverage: ReconciliationCoverage | null;
 }
