@@ -158,7 +158,7 @@ const BUILDERS: Record<string, Builder> = {
 
       preview: async (): Promise<PreviewResult> => {
         const [settings, value] = await Promise.all([api.settings(), api.value()]);
-        const current = settings.budget?.dailyCapUsd ?? null;
+        const current = settings.budget?.dailyUsd ?? null;
         const advice = value.budget ?? null;
         return {
           applicable: true,
@@ -200,8 +200,11 @@ const BUILDERS: Record<string, Builder> = {
         if (!Number.isFinite(parsed) || parsed < 0) {
           return { ok: false, message: 'That is not a usable amount. Enter a number of dollars, or 0 to block everything.' };
         }
-        const next = await api.write.settings({ budget: { dailyCapUsd: parsed } });
-        const saved = next.budget?.dailyCapUsd ?? null;
+        // `dailyUsd`, not `dailyCapUsd`. applySettingsPatch only copies keys it
+        // recognises, so a wrong name here is not an error -- the request
+        // succeeds, the response looks healthy, and nothing changes.
+        const next = await api.write.settings({ budget: { dailyUsd: parsed } });
+        const saved = next.budget?.dailyUsd ?? null;
         return {
           ok: true,
           message: `Saved. The daily cap is now ${saved === null ? 'unlimited' : usd(saved)}. Restart Fiscus for the proxy to begin enforcing it.`,

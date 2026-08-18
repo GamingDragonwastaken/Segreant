@@ -235,3 +235,46 @@ test('the realized band carries the value claim, not the cost of realized work',
     'api.ts must warn that matured.realizedValueUsd is a cost, not a value',
   );
 });
+
+/**
+ * The GUI declares its own copy of BudgetConfig, and a wrong field name there is
+ * SILENT in both directions: reading `budget.dailyCapUsd` off a payload that
+ * spells it `dailyUsd` yields undefined, which the Control screen rendered as
+ * "no cap set" while a cap was configured and enforcing; and posting the same
+ * wrong key to /api/settings/update succeeds with a healthy-looking response,
+ * because `applySettingsPatch` copies only the keys it recognises and ignores
+ * the rest. No typecheck can catch it — the browser tsconfig cannot see the node
+ * source, so the two interfaces are structurally unrelated.
+ *
+ * So the contract is pinned across the boundary: every field the server's
+ * BudgetConfig declares must exist in the GUI's, spelled identically.
+ */
+test('the GUI budget type matches the server budget config field for field', () => {
+  const server = readFileSync(join(import.meta.dirname, '..', 'src', 'config.ts'), 'utf8');
+  const block = server.slice(server.indexOf('export interface BudgetConfig'));
+  const body = block.slice(0, block.indexOf(String.fromCharCode(10) + '}'));
+  const fields = [...body.matchAll(/^\s{2}(\w+)[?]?:/gm)].map((m) => m[1]);
+
+  assert.ok(fields.length >= 5, `expected to parse the server BudgetConfig, got ${fields.length} fields`);
+
+  const gui = readFileSync(join(WEB_SRC, 'app', 'core', 'api.ts'), 'utf8');
+  const guiBlock = gui.slice(gui.indexOf('export interface BudgetConfig'));
+  const guiBody = guiBlock.slice(0, guiBlock.indexOf(String.fromCharCode(10) + '}'));
+
+  for (const field of fields) {
+    assert.match(
+      guiBody,
+      new RegExp(`\\b${field}[?]?:`),
+      `the GUI BudgetConfig is missing "${field}" — a name the server actually uses`,
+    );
+  }
+
+  // And the names that were invented must not come back. Matched as property
+  // access or declaration rather than as a bare word, so the comments that
+  // explain the hazard can go on naming it.
+  const guiSources = walk(join(WEB_SRC, 'app'), '.ts').map((f) => readFileSync(f, 'utf8')).join(String.fromCharCode(10));
+  for (const invented of ['dailyCapUsd', 'sessionCapUsd', 'softWarnRatio']) {
+    const used = new RegExp(`[.]${invented}\b|\b${invented}\s*[:?]`).test(guiSources);
+    assert.equal(used, false, `${invented} is not a field the server has`);
+  }
+});

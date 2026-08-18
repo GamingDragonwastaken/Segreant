@@ -56,7 +56,7 @@ export function controlView(): Node {
       if (!s) return h('div', { class: 'card' }, h('p', { class: 'drawer-muted', text: 'Loading…' }));
 
       const budget = s.budget;
-      const cap = budget?.dailyCapUsd ?? null;
+      const cap = budget?.dailyUsd ?? null;
       const spentToday = today()?.summary.costUsd ?? null;
       const rec = advice();
       const includesImported = budget?.capIncludesImported === true;
@@ -106,14 +106,33 @@ export function controlView(): Node {
               ? 'Editing a cap here writes the config file, but the running proxy holds its own configuration and continues enforcing the previous value until it is restarted.'
               : 'If you change this, the new limit is saved straight away — but the part of Fiscus that does the blocking keeps using the old one until you restart it.') }))),
 
-        budget?.sessionCapUsd !== null && budget?.sessionCapUsd !== undefined
-          ? h('div', { class: 'card', style: 'margin-top: var(--s4)' },
-              h('div', { class: 'card-head' }, h('span', { class: 'card-title', text: () => (isPrecise() ? 'Per-session cap' : 'Limit for a single session') })),
-              h('div', { class: 'stat', text: usd(budget.sessionCapUsd) }),
-              h('span', { class: 'basis', text: () => (isPrecise()
-                ? 'Applied per session in addition to the daily cap.'
-                : 'A single working session cannot go past this, on top of the daily limit.') }))
-          : null,
+        // The other three enforcement controls the CLI exposes. Shown together so
+        // the GUI states the whole enforcement picture rather than the daily cap
+        // alone -- a soft threshold that is set changes what "unlimited" means.
+        h('div', { class: 'card', style: 'margin-top: var(--s4)' },
+          h('div', { class: 'card-head' },
+            h('span', { class: 'card-title', text: () => (isPrecise() ? 'Other limits' : 'The other limits') })),
+          h('div', { class: 'facts' },
+            h('div', { class: `fact${budget?.dailySoftUsd == null ? ' fact-off' : ''}` },
+              h('span', { class: 'fact-key', text: () => (isPrecise() ? 'Soft daily threshold' : 'Warn me at') }),
+              h('span', { class: 'fact-val', text: budget?.dailySoftUsd == null
+                ? (isPrecise() ? 'off' : 'no warning')
+                : usd(budget.dailySoftUsd) })),
+            h('div', { class: `fact${budget?.sessionUsd == null ? ' fact-off' : ''}` },
+              h('span', { class: 'fact-key', text: () => (isPrecise() ? 'Per-session cap' : 'Limit for one session') }),
+              h('span', { class: 'fact-val', text: budget?.sessionUsd == null
+                ? (isPrecise() ? 'unlimited' : 'no limit')
+                : usd(budget.sessionUsd) })),
+            h('div', { class: `fact${budget?.runawayMaxUsd == null ? ' fact-off' : ''}` },
+              h('span', { class: 'fact-key', text: () => (isPrecise() ? 'Runaway detection' : 'Stop a runaway loop') }),
+              h('span', { class: 'fact-val', text: budget?.runawayMaxUsd == null
+                ? (isPrecise() ? 'off' : 'not watching')
+                : (isPrecise()
+                    ? `${usd(budget.runawayMaxUsd)} / ${count(budget.runawayWindowSec)}s`
+                    : `${usd(budget.runawayMaxUsd)} in ${count(budget.runawayWindowSec)} seconds`) }))),
+          h('span', { class: 'basis', text: () => (isPrecise()
+            ? 'All four limits are enforced at the proxy and share the same restart caveat as the daily cap.'
+            : 'These are set the same way as the daily limit, and need the same restart before they take effect.') })),
 
         rec ? recommendation(rec, cap) : null,
 

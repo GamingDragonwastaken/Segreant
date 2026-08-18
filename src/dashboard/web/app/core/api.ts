@@ -220,10 +220,26 @@ export interface BudgetAdvice {
   windowDays?: number;
 }
 
+/**
+ * Mirrors `BudgetConfig` in src/config.ts EXACTLY. Verified against that file and
+ * against a live /api/settings response, not written from memory: the first
+ * version of this interface invented `dailyCapUsd`/`sessionCapUsd`, so the
+ * Control screen read undefined and told operators "no cap set" while a $30 cap
+ * was configured and enforcing, and the cap-setting action posted a patch
+ * `applySettingsPatch` ignores. A test pins these names to the server's.
+ */
 export interface BudgetConfig {
-  dailyCapUsd: number | null;
-  sessionCapUsd: number | null;
-  softWarnRatio?: number | null;
+  /** Hard daily cap. null = unlimited. */
+  dailyUsd: number | null;
+  /** Soft daily threshold; past this a warning header is injected. null = off. */
+  dailySoftUsd: number | null;
+  /** Hard per-session cap. null = unlimited. */
+  sessionUsd: number | null;
+  /** Sliding window (seconds) for runaway-loop detection. */
+  runawayWindowSec: number;
+  /** Spend within that window that flags a runaway loop. null = off. */
+  runawayMaxUsd: number | null;
+  /** Whether imported (unblockable) spend counts toward enforcement. */
   capIncludesImported: boolean;
 }
 
