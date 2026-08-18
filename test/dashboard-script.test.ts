@@ -202,28 +202,28 @@ test('the two interfaces link to each other in both directions', () => {
  * mechanism: the code ran perfectly and reported the wrong claim.
  */
 test('the realized band carries the value claim, not the cost of realized work', () => {
-  const chain = readFileSync(join(WEB_SRC, 'app', 'core', 'chain.ts'), 'utf8');
+  const claimLayers = readFileSync(join(WEB_SRC, 'app', 'core', 'claimLayers.ts'), 'utf8');
 
   // The realized layer must price itself from the RoI return, which is the only
   // field in the payload that is actually value.
   assert.match(
-    chain,
+    claimLayers,
     /returnRatio/,
-    'chain.ts must read the realized figure from roi.returnRatio',
+    'claimLayers.ts must read the realized figure from roi.returnRatio',
   );
 
   // And it must not fall back to the cost field for that figure.
   assert.equal(
-    /valueUsd:\s*matured[?.]*\.realizedValueUsd/.test(chain),
+    /valueUsd:\s*matured[?.]*\.realizedValueUsd/.test(claimLayers),
     false,
-    'chain.ts must not use matured.realizedValueUsd as the realized VALUE figure — that field is attributed spend',
+    'claimLayers.ts must not use matured.realizedValueUsd as the realized VALUE figure — that field is attributed spend',
   );
 
   // A dollar figure is only shown when the payload says it priced one.
   assert.match(
-    chain,
+    claimLayers,
     /basis === 'usd'/,
-    'chain.ts must require the payload to declare a usd basis before showing dollars',
+    'claimLayers.ts must require the payload to declare a usd basis before showing dollars',
   );
 
   // The hazard is documented where the type is declared, so the next person to

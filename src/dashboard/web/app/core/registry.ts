@@ -40,6 +40,10 @@ export interface Capability {
   command: string;
   /** Stated only where a consequence needs naming out loud before it happens. */
   warning?: string;
+  /** Why GUI coverage is incomplete; required at runtime for non-full rows. */
+  gapReason?: string;
+  /** Safest currently-supported path while the GUI gap remains. */
+  safeAlternative?: string;
 }
 
 export const TERRITORIES: ReadonlyArray<{ id: Territory; label: string; plain: string; icon: string }> = [
@@ -52,18 +56,18 @@ export const TERRITORIES: ReadonlyArray<{ id: Territory; label: string; plain: s
   { id: 'system', label: 'System', plain: 'Pricing, settings, maintenance, and this table.', icon: 'gear' },
 ];
 
-export const CAPABILITIES: readonly Capability[] = [
+const RAW_CAPABILITIES: readonly Capability[] = [
   // ---- Spend --------------------------------------------------------------
   { id: 'today', label: 'Today', plain: 'What today has cost so far.', territory: 'spend', consequence: 'read', coverage: 'full', command: 'fiscus today' },
   { id: 'week', label: 'This week', plain: 'The last seven days of spend.', territory: 'spend', consequence: 'read', coverage: 'full', command: 'fiscus week' },
   { id: 'month', label: 'This month', plain: 'The current month of spend.', territory: 'spend', consequence: 'read', coverage: 'full', command: 'fiscus month' },
   { id: 'usage', label: 'Usage detail', plain: 'Requests and tokens broken down.', territory: 'spend', consequence: 'read', coverage: 'full', command: 'fiscus usage' },
-  { id: 'report', label: 'Period report', plain: 'A summary you can hand to someone.', territory: 'spend', consequence: 'read', coverage: 'partial', command: 'fiscus report' },
+  { id: 'report', label: 'Record an outcome', plain: 'Attach a tested, shipped, incident, or non-code outcome signal to one unit of work.', territory: 'value', consequence: 'local', coverage: 'partial', command: 'fiscus report --kind <kind>' },
   { id: 'export', label: 'Export CSV', plain: 'Download the ledger as a spreadsheet.', territory: 'spend', consequence: 'read', coverage: 'full', command: 'fiscus export' },
 
   // ---- Control ------------------------------------------------------------
   { id: 'budget', label: 'Budgets', plain: 'Set a spending cap and see how close you are.', territory: 'control', consequence: 'local', coverage: 'full', command: 'fiscus budget' },
-  { id: 'budget-recommend', label: 'Suggest a budget', plain: 'Propose a cap from your actual history.', territory: 'control', consequence: 'read', coverage: 'partial', command: 'fiscus budget --recommend' },
+  { id: 'budget-recommend', label: 'Suggest a budget', plain: 'Propose a cap from your actual history.', territory: 'control', consequence: 'read', coverage: 'full', command: 'fiscus budget --recommend' },
   { id: 'alerts', label: 'Alerts', plain: 'Get told before a cap is hit, not after.', territory: 'control', consequence: 'local', coverage: 'partial', command: 'fiscus alerts' },
   { id: 'exec', label: 'Run under a cap', plain: 'Run a command with a hard spending limit around it.', territory: 'control', consequence: 'local', coverage: 'planned', command: 'fiscus exec -- <command>' },
 
@@ -119,7 +123,7 @@ export const CAPABILITIES: readonly Capability[] = [
   {
     id: 'team-push', label: 'Push to team server', plain: 'Send a signed, aggregated rollup to your team server.',
     territory: 'system', consequence: 'egress', coverage: 'planned', command: 'fiscus team push',
-    warning: 'This is the only action in Fiscus that sends data off this machine. It transmits signed aggregate rollups to the team server you configured — never raw requests, prompts, or file contents. The team server is separately gated and is not approved for internet-facing deployment.',
+    warning: 'Sends signed aggregate rollups to the team server you configured — never raw requests, prompts, or file contents. Other explicit provider, refresh, judge, webhook, and billing actions may also use the network; the local dashboard itself does not.',
   },
   {
     id: 'prune', label: 'Delete old data', plain: 'Permanently remove records past the retention window.',
@@ -132,6 +136,38 @@ export const CAPABILITIES: readonly Capability[] = [
     warning: 'Permanently deletes captured proposals. Acceptance rates computed from them cannot be recomputed afterwards.',
   },
 ];
+
+const GAP_DETAILS: Readonly<Record<string, { reason: string; safeAlternative: string }>> = {
+  report: { reason: 'Outcome recording mutates the local evidence ledger and needs a unit/kind form plus preview semantics.', safeAlternative: 'Use fiscus report with an immutable commit or session id.' },
+  alerts: { reason: 'The GUI renders active alerts, but webhook configuration and delivery are still CLI-only.', safeAlternative: 'Review alerts here; configure or notify a webhook with fiscus alerts.' },
+  'project-alias': { reason: 'Project coverage is visible, but alias mutation has no reviewed GUI form yet.', safeAlternative: 'Preview project coverage here; use fiscus project alias/unalias for the mutation.' },
+  'billing-pull': { reason: 'Credential-backed provider access is intentionally not launched from the browser yet.', safeAlternative: 'Check readiness here, then use fiscus billing openai-costs pull explicitly.' },
+  receipt: { reason: 'Value evidence is visible, but receipt emission/verification and key pinning remain CLI workflows.', safeAlternative: 'Use fiscus receipt for signed receipt operations.' },
+  evidence: { reason: 'The GUI shows evidence state, but signed CI artifact import/emit workflows remain CLI-only.', safeAlternative: 'Use fiscus evidence for signed artifact operations.' },
+  audit: { reason: 'Audit results have no dedicated browser report yet.', safeAlternative: 'Use fiscus audit --repo <path>.' },
+  saved: { reason: 'The Realized screen exposes return/value evidence, but the detailed reclaimed-time breakdown remains CLI-only.', safeAlternative: 'Use fiscus saved --repo <path> for the detailed breakdown.' },
+  yield: { reason: 'Durability is represented in realized outcomes, but the dedicated durable-lines-per-dollar report has no browser view.', safeAlternative: 'Use fiscus yield --repo <path>.' },
+  judge: { reason: 'The server has a guarded judge endpoint, but the browser has no reviewed session/tier consent flow yet.', safeAlternative: 'Use fiscus judge; algorithmic judging is the default and hosted judging remains explicit opt-in.' },
+  connect: { reason: 'Connection recipes can change external tool configuration and need tool-specific previews.', safeAlternative: 'Use fiscus connect <tool>; write-capable variants require their explicit CLI flag.' },
+  baseline: { reason: 'Baseline evidence is consumed by value calculations, but refresh/source management has no browser surface.', safeAlternative: 'Use fiscus baseline to inspect or explicitly refresh a configured source.' },
+  demo: { reason: 'Demo state is supported by read surfaces, but generation/clearing is not exposed as a reviewed browser action.', safeAlternative: 'Use fiscus demo or fiscus demo --clear.' },
+  pricing: { reason: 'Pricing provenance is shown in spend/value surfaces, but the complete coverage report is not a dedicated GUI view.', safeAlternative: 'Use fiscus pricing --coverage; refresh is an explicit network action.' },
+  doctor: { reason: 'Setup state is visible across screens, but the consolidated diagnostic report has no browser renderer.', safeAlternative: 'Use fiscus doctor.' },
+  exec: { reason: 'Wrapping an arbitrary local command is too consequential for a generic browser button and requires command/exit-code semantics.', safeAlternative: 'Use fiscus exec -- <command> explicitly.' },
+  team: { reason: 'The local value screen exposes privacy-safe cohort summaries, but the complete team CLI workflow has no dedicated browser view.', safeAlternative: 'Use fiscus team; named self-view remains subject to its existing privacy gates.' },
+  reprice: { reason: 'Historical repricing rewrites recorded money and needs a dedicated diff/confirmation workflow.', safeAlternative: 'Use fiscus reprice dry-run first; add --apply only after reviewing the exact changes.' },
+  'team-push': { reason: 'Cross-machine egress needs a destination/identity/TLS review before a browser action is safe.', safeAlternative: 'Use fiscus team push --dry-run, then supply the team-server URL explicitly.' },
+  prune: { reason: 'Pruning is irreversible and needs retention/backup-aware confirmation beyond the generic drawer.', safeAlternative: 'Back up the ledger if needed, then use fiscus prune explicitly.' },
+};
+
+export const CAPABILITIES: readonly Capability[] = RAW_CAPABILITIES.map((cap) => {
+  if (cap.coverage === 'full') return cap;
+  const detail = GAP_DETAILS[cap.id] ?? {
+    reason: 'GUI coverage is incomplete for this capability and no narrower reviewed browser workflow exists yet.',
+    safeAlternative: `Use ${cap.command} explicitly.`,
+  };
+  return { ...cap, gapReason: detail.reason, safeAlternative: detail.safeAlternative };
+});
 
 export function byTerritory(territory: Territory): Capability[] {
   return CAPABILITIES.filter((c) => c.territory === territory);

@@ -131,9 +131,9 @@ const BUILDERS: Record<string, Builder> = {
 
   /**
    * Set the daily cap. The only field-bearing action in the GUI, and the one
-   * place a number typed by an operator becomes enforcement configuration -- so
-   * the preview states the enforcement gap (the running proxy keeps the old
-   * value until restart) as a row of the preview, not as a footnote under it.
+   * place a number typed by an operator becomes enforcement configuration.
+   * The running guard reads live configuration; the preview therefore names the
+   * real boundary (future in-path requests), not a stale restart requirement.
    */
   budget: (cap) => {
     const entered = signal<string>('');
@@ -183,8 +183,8 @@ const BUILDERS: Record<string, Builder> = {
             },
             {
               label: 'Takes effect',
-              value: 'on proxy restart',
-              note: 'the running proxy keeps enforcing the previous value until it is restarted',
+              value: 'immediately for future in-path requests',
+              note: 'the running proxy reads the saved budget configuration live',
             },
           ],
           notes: [
@@ -207,11 +207,41 @@ const BUILDERS: Record<string, Builder> = {
         const saved = next.budget?.dailyUsd ?? null;
         return {
           ok: true,
-          message: `Saved. The daily cap is now ${saved === null ? 'unlimited' : usd(saved)}. Restart Fiscus for the proxy to begin enforcing it.`,
+          message: `Saved. The daily cap is now ${saved === null ? 'unlimited' : usd(saved)} and applies to subsequent requests that pass through the running proxy.`,
         };
       },
     };
   },
+
+
+  'budget-recommend': (cap) => ({
+    capability: cap,
+    preview: async (): Promise<PreviewResult> => {
+      const value = await api.value();
+      const advice = value.budget ?? null;
+      if (!advice) {
+        return {
+          applicable: false,
+          blockedReason: 'No budget recommendation is available from the current evidence.',
+          summary: 'Fiscus has no recommendation to show yet. This is missing evidence, not a $0 recommendation.',
+        };
+      }
+      return {
+        applicable: false,
+        blockedReason: 'Read-only recommendation. Use the Budgets action if you decide to apply a cap.',
+        summary: advice.canApply
+          ? `Recommendation derived from ${count(advice.basisDays)} active day(s) of observed spend.`
+          : `Only ${count(advice.basisDays)} active day(s) support this review; Fiscus will not present it as apply-ready yet.`,
+        rows: [
+          { label: 'Recommended daily', value: advice.recommendedDailyUsd == null ? 'not established' : usd(advice.recommendedDailyUsd) },
+          { label: 'Recommended soft', value: advice.recommendedSoftUsd == null ? 'not established' : usd(advice.recommendedSoftUsd) },
+          { label: 'Evidence days', value: count(advice.basisDays), note: `minimum ${count(advice.minActiveDays)} active days` },
+          { label: 'Status', value: advice.status },
+        ],
+        notes: advice.rationale ?? [],
+      };
+    },
+  }),
 
   export: (cap) => ({
     capability: cap,
@@ -265,7 +295,7 @@ export function actionSpec(cap: Capability): ActionSpec {
       summary: cap.consequence === 'read'
         ? `${cap.plain} Reading this from the GUI is not built yet; the command below does it.`
         : `${cap.plain} Running this from the GUI is not built yet; the command below does it.`,
-      notes: ['The System section lists exactly which capabilities the GUI covers and which it does not.'],
+      notes: [cap.gapReason ?? 'The System section lists exactly which capabilities the GUI covers and which it does not.', cap.safeAlternative ? `Safe alternative: ${cap.safeAlternative}` : ''],
     }),
   };
 }

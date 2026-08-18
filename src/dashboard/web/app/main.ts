@@ -17,6 +17,7 @@ import { register, setRegister, type Register } from './core/fmt.ts';
 import { loadChain } from './core/chain.ts';
 import { spine, type LayerId } from './components/spine.ts';
 import { mountDrawer } from './components/drawer.ts';
+import { mountClaimInspector, openClaimInspector } from './components/claimInspector.ts';
 import type { Layer } from './components/spine.ts';
 import { spendView } from './views/spend.ts';
 import { evidenceView } from './views/evidence.ts';
@@ -151,14 +152,16 @@ function boot(): void {
             layers,
             active: ROUTE_LAYER[current()] ?? null,
             onSelect: (id) => go(LAYER_ROUTE[id]),
+            onInspect: openClaimInspector,
           });
         },
         h('main', { class: 'main', id: 'main', tabindex: '-1' }, () => viewFor(current()))),
       h('footer', { class: 'shellfoot' },
-        h('span', { text: 'Runs on this machine only. Nothing is sent anywhere.' }),
+        h('span', { text: 'Dashboard data stays local. Network access occurs only through explicit provider, refresh, judge, webhook, billing, or team actions.' }),
         h('a', { href: '/classic', text: 'Classic dashboard' })));
 
     mountDrawer(root);
+    mountClaimInspector(root);
   });
 }
 

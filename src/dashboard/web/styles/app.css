@@ -176,15 +176,16 @@ body {
 }
 
 .band {
-  display: flex; flex-direction: column; gap: var(--s2);
-  text-align: left; padding: var(--s4) var(--s4) var(--s5);
-  border: 0; border-top: 2px solid var(--line);
-  background: none; color: inherit; font: inherit; cursor: pointer;
+  display: flex; flex-direction: column; gap: 0;
+  text-align: left; border-top: 2px solid var(--line);
+  background: none; color: inherit;
   transition: border-color var(--t) var(--ease), background var(--t) var(--ease);
-  border-radius: 0 0 var(--r-sm) var(--r-sm);
-  min-width: 0;
+  border-radius: 0 0 var(--r-sm) var(--r-sm); min-width: 0;
 }
 .band:hover { background: var(--panel); }
+.band-hit { display:flex; flex-direction:column; gap:var(--s2); text-align:left; padding:var(--s4) var(--s4) var(--s3); border:0; background:none; color:inherit; font:inherit; cursor:pointer; min-width:0; }
+.band-inspect { align-self:flex-start; margin:0 var(--s4) var(--s4); padding:3px 7px; border:1px solid var(--line-soft); border-radius:999px; background:none; color:var(--faint); font-family:var(--mono); font-size:10px; cursor:pointer; }
+.band-inspect:hover { color:var(--gold-text); border-color:var(--gold-text); }
 .band-active { border-top-color: var(--gold); background: var(--panel); }
 
 /* An unestablished layer is drawn as an open socket, not a filled card. The
@@ -663,3 +664,23 @@ body.drawer-open { overflow: hidden; }
   .fact-val { text-align: left; }
   .waste-call { gap: var(--s1); }
 }
+
+
+/* Read-only Claim Inspector: evidence details, not an action confirmation. */
+.claim-inspector { position:fixed; inset:0; z-index:80; pointer-events:none; visibility:hidden; }
+.claim-inspector-open { pointer-events:auto; visibility:visible; }
+.claim-backdrop { position:absolute; inset:0; border:0; background:rgba(0,0,0,.62); cursor:default; }
+.claim-panel { position:absolute; top:0; right:0; width:min(560px, 94vw); height:100%; overflow:auto; background:var(--ink-2); border-left:1px solid var(--line); box-shadow:var(--shadow); padding:var(--s6); }
+.claim-head { display:flex; justify-content:space-between; gap:var(--s4); align-items:flex-start; padding-bottom:var(--s4); border-bottom:1px solid var(--line-soft); }
+.claim-head h2 { font-family:var(--serif); font-size:22px; font-weight:500; margin-top:var(--s1); }
+.claim-close { border:0; background:none; color:var(--muted); font-size:28px; cursor:pointer; line-height:1; }
+.claim-figure { font-family:var(--mono); font-size:30px; margin:var(--s5) 0; }
+.claim-unset { color:var(--faint); font-family:var(--sans); font-style:italic; font-size:18px; }
+.claim-row { display:grid; grid-template-columns:minmax(120px,.65fr) minmax(0,1.35fr); gap:var(--s3); padding:var(--s3) 0; border-top:1px solid var(--line-soft); }
+.claim-key { color:var(--faint); font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.08em; }
+.claim-val { color:var(--text); overflow-wrap:anywhere; }
+.claim-list { margin-top:var(--s5); padding:var(--s4); background:var(--panel); border:1px solid var(--line-soft); border-radius:var(--r-sm); }
+.claim-list ul { padding-left:var(--s5); margin-top:var(--s2); color:var(--muted); }
+.claim-missing { border-style:dashed; }
+.claim-complete { margin-top:var(--s5); color:var(--mint); }
+.claim-next { margin-top:var(--s5); color:var(--gold-text); }
