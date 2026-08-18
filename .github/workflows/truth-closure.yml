@@ -3,21 +3,25 @@ name: Truth Closure Bootstrap
 on:
   push:
     branches: [agent/truth-closure]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: write
 
 concurrency:
-  group: truth-closure-bootstrap
+  group: truth-closure-bootstrap-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   remediate-and-verify:
+    if: github.head_ref == 'agent/truth-closure' || github.ref == 'refs/heads/agent/truth-closure'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          ref: agent/truth-closure
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
@@ -38,7 +42,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm scripts/truth-closure.py .github/workflows/truth-closure.yml
+          rm -f scripts/truth-closure.py .github/workflows/truth-closure.yml .truth-closure-trigger
           git add -A
           if git diff --cached --quiet; then
             echo "No remediation diff to commit."
