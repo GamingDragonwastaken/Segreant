@@ -265,12 +265,16 @@ body {
 
 /* ---------- Basis line: every figure says where it came from ------------- */
 
+/* A caption line under a figure, and always its own line. This was inline-flex,
+   so two consecutive basis lines ran together into one string of text with a
+   stray bullet between them -- the qualifications became less readable exactly
+   where a figure had more than one of them to carry. */
 .basis {
-  display: inline-flex; align-items: center; gap: 6px;
+  display: flex; align-items: baseline; gap: 6px;
   font-size: 11px; color: var(--faint);
   margin-top: var(--s2);
 }
-.basis::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: 0.6; flex: none; }
+.basis::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: 0.6; flex: none; transform: translateY(-2px); }
 
 /* State never rests on color alone — each pill carries its own word. */
 .pill {
@@ -529,6 +533,96 @@ body.drawer-open { overflow: hidden; }
   font-family: var(--mono); font-size: 11.5px; color: var(--faint);
 }
 
+
+/* ---------------------------------------------------------------------------
+   Basis, facts, and limits
+   The patterns the four claim views are built from. All of them exist to carry
+   a qualification beside a figure rather than under it, so the caveat cannot be
+   read separately from the number it qualifies.
+   --------------------------------------------------------------------------- */
+
+/* A card whose subject IS the qualification. The gold rule marks it as the
+   product speaking about its own evidence, not reporting a measurement. */
+.card-basis { border-left: 2px solid var(--gold); }
+.card-basis p { color: var(--muted); max-width: 74ch; margin-bottom: var(--s2); }
+
+.excl-lede {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--faint);
+  margin-top: var(--s4); margin-bottom: var(--s2);
+}
+.excl { list-style: none; display: flex; flex-wrap: wrap; gap: var(--s2); margin-bottom: var(--s3); }
+.excl li {
+  font-family: var(--mono); font-size: 11.5px; color: var(--muted);
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  padding: 3px var(--s2); background: var(--ink-2);
+}
+/* The refusal is drawn, not just worded: each exclusion is struck through. */
+.excl li::before { content: '\2260\00a0'; color: var(--gold-text); }
+
+/* Key/value rows. A table would imply columns worth comparing across; these are
+   independent facts that happen to share a shape. */
+.facts { display: flex; flex-direction: column; margin-top: var(--s3); }
+.fact {
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--s4);
+  padding: var(--s2) 0; border-bottom: 1px solid var(--line-soft);
+}
+.fact:last-child { border-bottom: 0; }
+.fact-key {
+  display: flex; align-items: center; gap: var(--s2);
+  font-size: 13px; color: var(--text); min-width: 0;
+}
+.fact-val {
+  font-family: var(--mono); font-size: 12px; color: var(--faint);
+  text-align: right; white-space: nowrap;
+}
+/* Present but inactive: a revoked rule, a tool that was looked for and absent.
+   Dimmed rather than hidden, because "we checked and it is not there" is a
+   different statement from silence. */
+.fact-off .fact-key, .fact-off .fact-val { color: var(--faint); }
+
+.dot {
+  width: 6px; height: 6px; border-radius: 50%; flex: none;
+  border: 1px solid var(--line); background: transparent;
+}
+.dot-on { background: var(--gold); border-color: var(--gold); }
+
+/* Spend against a cap. Deliberately thin: it is a reading, not a gauge to watch. */
+.meter {
+  display: block; height: 3px; margin: var(--s3) 0 var(--s2);
+  background: var(--line-soft); border-radius: 2px; overflow: hidden;
+}
+.meter-fill { display: block; height: 100%; width: var(--fill, 0%); background: var(--gold); }
+.meter-over { background: var(--coral); }
+
+/* A limit on how far the figure above can be trusted. Inset so it reads as
+   attached to that figure rather than as the next paragraph of the page. */
+.scope-note {
+  margin-top: var(--s3); padding-left: var(--s3);
+  border-left: 1px solid var(--line);
+  font-size: 12.5px; color: var(--muted); max-width: 72ch;
+}
+
+.drift { margin-top: var(--s3); font-size: 12.5px; color: var(--muted); max-width: 72ch; }
+.drift-alarm { color: var(--gold-text); }
+
+/* The one number on the Control screen worth acting on. */
+.waste-call {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s2);
+  margin-top: var(--s4); padding-top: var(--s3); border-top: 1px solid var(--line-soft);
+}
+.waste-fig { font-family: var(--mono); font-size: 19px; color: var(--gold-text); }
+.waste-say { font-size: 12.5px; color: var(--muted); max-width: 60ch; }
+
+/* Secondary detail an operator can open, e.g. supported-but-absent tools. */
+.more { margin-top: var(--s4); }
+.more summary {
+  cursor: pointer; font-family: var(--mono); font-size: 11.5px;
+  color: var(--faint); padding: var(--s2) 0;
+}
+.more summary:hover { color: var(--text); }
+.more summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
 @media (max-width: 820px) {
   .topbar { padding: var(--s3) var(--s4); gap: var(--s3); flex-wrap: wrap; }
   .ops { margin-left: 0; order: 3; width: 100%; overflow-x: auto; }
@@ -550,4 +644,8 @@ body.drawer-open { overflow: hidden; }
   .cell-calls { grid-area: meta; justify-self: start; font-size: 12.5px; color: var(--faint); }
   .cell-share { grid-area: meta; justify-self: start; margin-left: 4.5rem; font-size: 12.5px; color: var(--faint); }
   .axisbar-note { margin-left: 0; width: 100%; }
+  /* Facts stack: a long key and a mono value fight for one line on a phone. */
+  .fact { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .fact-val { text-align: left; }
+  .waste-call { gap: var(--s1); }
 }

@@ -63,7 +63,6 @@ export function evidenceView(): Node {
           latest
             ? h('div', null,
                 h('span', { class: 'basis', text: () => `provider side: ${basisWords(latest.providerSourceKind)}` }),
-                h('br'),
                 h('span', { class: 'basis', text: `last run ${relative(latest.computedAtMs ?? null)}` }))
             : h('span', { class: 'basis', text: () => (isPrecise()
                 ? 'zero recorded observation runs'

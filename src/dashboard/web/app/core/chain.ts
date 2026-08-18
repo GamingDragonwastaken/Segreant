@@ -77,18 +77,42 @@ export async function loadChain(range: string): Promise<Layer[]> {
   // Realized value counts only MATURED units that actually shipped. A proposal
   // that was accepted but never survived is not value; conflating the two is the
   // headline number every other tool in this category reports.
-  const matured = (v as { realization?: { matured?: { realizedUnits?: number; realizedValueUsd?: number; units?: number } } } | null)?.realization?.matured;
+  //
+  // The FIGURE, though, must be the value claim rather than a cost. The payload
+  // carries two fields spelled `realizedValueUsd`: `matured.realizedValueUsd` is
+  // the attributed SPEND on units that realized, and `roi.returnRatio
+  // .realizedValueUsd` is the manual-equivalent VALUE those units produced. This
+  // band sat on the first one, so the fourth claim in
+  // `metered != billed != allocated != realized value` was rendering a cost --
+  // the precise collapse the spine exists to refuse, committed by the spine.
+  const v2 = v as {
+    realization?: { matured?: { realizedUnits?: number; units?: number } };
+    roi?: { returnRatio?: { realizedValueUsd?: number | null; basis?: string } | null };
+  } | null;
+  const matured = v2?.realization?.matured;
   const realizedUnits = matured?.realizedUnits ?? 0;
+  const ret = v2?.roi?.returnRatio ?? null;
+  // `basis: 'usd'` is the payload's own statement that the value figure is
+  // priced. Without it there is a ratio but no dollars, and a dollar figure must
+  // not be invented from one.
+  const valued = ret?.basis === 'usd' && typeof ret.realizedValueUsd === 'number';
+
   const realized: Layer = {
     id: 'realized',
     label: 'Realized',
     claim: 'what it produced',
-    valueUsd: matured?.realizedValueUsd ?? null,
-    established: realizedUnits > 0 && typeof matured?.realizedValueUsd === 'number',
-    basis: realizedUnits > 0
-      ? `${realizedUnits} of ${matured?.units ?? 0} matured units shipped and survived`
-      : 'no work units have matured into verified outcomes',
-    nextStep: realizedUnits > 0 ? undefined : 'Connect a repository so outcomes can be observed.',
+    valueUsd: valued ? (ret?.realizedValueUsd ?? null) : null,
+    established: realizedUnits > 0 && valued,
+    basis: realizedUnits === 0
+      ? 'no work units have matured into verified outcomes'
+      : valued
+        ? `${realizedUnits} of ${matured?.units ?? 0} matured units shipped and survived; manual-equivalent value, net of rework`
+        : `${realizedUnits} of ${matured?.units ?? 0} units matured, but no labour rate is set to price what they produced`,
+    nextStep: realizedUnits === 0
+      ? 'Connect a repository so outcomes can be observed.'
+      : valued
+        ? undefined
+        : 'Set a labour rate so realized work can be priced.',
   };
 
   return [metered, billed, allocated, realized];

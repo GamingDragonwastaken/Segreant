@@ -102,10 +102,172 @@ export interface AllocationPayload {
   reconciliation: { everRun: boolean; latestComputedAtMs: number | null };
 }
 
+/**
+ * The realized-value payload.
+ *
+ * Every field here was read off an actual /api/value response, not inferred from
+ * the computation's input types -- `RealizationLike` in src/value/lenses.ts is
+ * the minimal shape the calculator ACCEPTS, while the store snapshot the server
+ * returns carries considerably more. Typing this from the input interface would
+ * have silently dropped `realizedUnits`, which is the field the spine uses to
+ * decide whether the realized claim is established at all.
+ */
+export interface Matured {
+  units: number;
+  realizedUnits: number;
+  realizationRate: number;
+  totalCostUsd: number;
+  /**
+   * CAUTION: this is the attributed SPEND on units that realized
+   * (`sum of attributedCostUsd`), not the value they produced. The value claim
+   * lives on `roi.returnRatio.realizedValueUsd`, which is manual-equivalent
+   * dollars and a completely different quantity. Both fields are spelled
+   * `realizedValueUsd` in the payload; presenting this one as realized value
+   * collapses cost into value, which is the exact failure this product exists
+   * to refuse.
+   */
+  realizedValueUsd: number;
+  netRealizedValueUsd?: number;
+  realizedValueRate?: number;
+  /** Where units died, in stage order. The stage that costs most is the one to fix. */
+  wasteByStage?: Array<{ stage: string; units: number; costUsd: number }>;
+  instrumentation?: Record<string, number>;
+  /** Partial-identification bounds on the realization rate. */
+  realizationBounds?: { lower: number; upper: number; n: number };
+}
+
 export interface ValuePayload {
   demo: boolean;
   allocation: unknown;
   frontier?: { modelSwitches?: Array<{ confidence: string }> } | null;
+  /** 'git' | 'store' | null. Null means no matured outcomes could be observed. */
+  valueSource?: string | null;
+  gitRepo?: boolean;
+  /** Whether realized dollars came from spend scoped to this project, or a window sum. */
+  projectScoped?: boolean | null;
+  repo?: string;
+  realization?: {
+    matured?: Matured;
+    firstPassAcceptance?: number | null;
+    proposalCoverage?: number | null;
+    projectScoped?: boolean | null;
+    costStaleUnits?: number;
+  } | null;
+  roi?: {
+    roiIndex?: number | null;
+    roiInterval?: { low: number | null; high: number | null } | null;
+    /** True when the index can only be read as a ceiling, not a point estimate. */
+    indexIsUpperBound?: boolean;
+    coverage?: number | null;
+    /** The money claim. `realizedValueUsd` here IS value, not cost. */
+    returnRatio?: {
+      grossRatio?: number | null;
+      causalRatio?: number | null;
+      causalRange?: { low: number | null; high: number | null };
+      realizedValueUsd?: number | null;
+      costUsd?: number;
+      counterfactualCredit?: number | null;
+      supervisionPriced?: boolean;
+      paysForItself?: boolean | null;
+      basis?: string;
+    } | null;
+    tokenCostUsd?: number;
+    effortTaxUsd?: number;
+    notes?: string[];
+  } | null;
+  /** Goodhart drift alarm — an e-process over mature units. Needs ten to exist. */
+  drift?: { n: number; alarm: boolean; recentRate?: number; overallRate?: number } | null;
+  reclaimed?: {
+    savedMinutes?: number | null;
+    savedRange?: { low: number; high: number } | null;
+    workWeeksSaved?: number | null;
+    workWeeksRange?: { low: number; high: number } | null;
+    /** Matured units that earned no time credit: died, or had no baseline. */
+    uncreditedUnits?: number;
+    notes?: string[];
+  } | null;
+  /** Per-user distribution, gated by opt-in AND a k-anonymity floor. Never names people. */
+  team?: {
+    enabled: boolean;
+    suppressed: boolean;
+    reason?: string;
+    distribution?: {
+      cohortSize: number;
+      medianExtraction: number;
+      dispersion: number;
+      broadBased: boolean;
+      coachingHeadroomUsd: number;
+    } | null;
+  } | null;
+  budget?: BudgetAdvice | null;
+}
+
+/** The budget advisor's output. `status` gates whether it is safe to act on. */
+export interface BudgetAdvice {
+  status: string;
+  canApply: boolean;
+  minActiveDays?: number;
+  /** Days of real observation behind the recommendation. Fewer means less to trust. */
+  basisDays?: number;
+  observed?: { medianDaily: number; p90Daily: number; maxDaily: number; avgDaily: number };
+  recommendedDailyUsd?: number | null;
+  recommendedSoftUsd?: number | null;
+  realizedValueRate?: number | null;
+  /** Spend not turning into kept outcomes, projected monthly. The number to attack. */
+  projectedMonthlyWasteUsd?: number | null;
+  rationale?: string[];
+  spendBasis?: string;
+  windowDays?: number;
+}
+
+export interface BudgetConfig {
+  dailyCapUsd: number | null;
+  sessionCapUsd: number | null;
+  softWarnRatio?: number | null;
+  capIncludesImported: boolean;
+}
+
+export interface SettingsSnapshot {
+  version: string;
+  home: string;
+  configPath: string;
+  dbPath: string;
+  proxyPort: number;
+  dashboardPort: number;
+  retentionDays: number;
+  proposalRetentionDays: number;
+  metadataOnly: boolean;
+  budget: BudgetConfig;
+  connections: Array<Record<string, unknown>>;
+}
+
+export interface Importer {
+  id: string;
+  label: string;
+  blurb: string;
+  /** Whether this tool's data was actually found on this machine. */
+  available: boolean;
+  location: string | null;
+}
+
+export interface ScanPayload {
+  ok: boolean;
+  tools: Array<{ id: string; label?: string; present?: boolean }>;
+  otherApps: Array<{ id?: string; label?: string; name?: string }>;
+  roots: string[];
+  repoCount: number;
+  reposWithSpend: number;
+  /** True when the bounded filesystem walk stopped early — the count is a floor. */
+  hitBudget: boolean;
+  dirsVisited: number;
+  unreadableDirs: number;
+  diff?: Record<string, unknown>;
+}
+
+export interface ImportResult {
+  ok: boolean;
+  totalNew: number;
+  results: Record<string, { inserted: number; costUsd?: number; available: boolean }>;
 }
 
 export interface HealthPayload {
@@ -163,20 +325,27 @@ export const api = {
   billing: () => request<BillingPayload>('/api/billing'),
   allocation: () => request<AllocationPayload>('/api/allocation'),
   value: () => request<ValuePayload>('/api/value'),
-  settings: () => request<Record<string, unknown>>('/api/settings'),
+  settings: () => request<SettingsSnapshot>('/api/settings'),
   guide: () => request<Record<string, unknown>>('/api/guide'),
-  importers: () => request<Record<string, unknown>>('/api/importers'),
-  scan: () => request<Record<string, unknown>>('/api/scan'),
-  discover: () => request<Record<string, unknown>>('/api/discover'),
+  importers: () => request<{ importers: Importer[] }>('/api/importers'),
+  /** GET /api/scan is the dry run: it detects and reports, and imports nothing. */
+  scan: () => request<ScanPayload>('/api/scan'),
 
   /** Mutating calls are grouped so every write in the GUI is greppable in one place. */
   write: {
     settings: (patch: Record<string, unknown>) =>
-      request<Record<string, unknown>>('/api/settings/update', { method: 'POST', body: JSON.stringify(patch) }),
+      request<SettingsSnapshot>('/api/settings/update', { method: 'POST', body: JSON.stringify(patch) }),
     clearProposals: () =>
       request<{ ok: boolean; removed: number }>('/api/settings/clear-proposals', { method: 'POST' }),
-    runImport: (body: Record<string, unknown>) =>
-      request<Record<string, unknown>>('/api/import', { method: 'POST', body: JSON.stringify(body) }),
+    runImport: (tool = 'all') =>
+      request<ImportResult>(`/api/import?tool=${encodeURIComponent(tool)}`, { method: 'POST' }),
+    // POST, not GET. An earlier version of this client called /api/discover with
+    // the default GET and the server -- which guards it as a mutating route --
+    // answered 405 every time. Both correlation routes below write to the ledger.
+    discover: () =>
+      request<{ ok: boolean; foundFolders: number; correlated: number }>('/api/discover', { method: 'POST' }),
+    runScan: () =>
+      request<{ ok: boolean; totalNew: number; correlated: number }>('/api/scan', { method: 'POST' }),
   },
 };
 

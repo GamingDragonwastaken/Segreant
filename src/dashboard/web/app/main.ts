@@ -21,7 +21,10 @@ import type { Layer } from './components/spine.ts';
 import { spendView } from './views/spend.ts';
 import { evidenceView } from './views/evidence.ts';
 import { systemView } from './views/system.ts';
-import { territoryView } from './views/territory.ts';
+import { allocationView } from './views/allocation.ts';
+import { valueView } from './views/value.ts';
+import { controlView } from './views/control.ts';
+import { dataView } from './views/data.ts';
 import type { Territory } from './core/registry.ts';
 
 /** The four spine bands map onto the territories that answer their question. */
@@ -117,8 +120,11 @@ function viewFor(route: Territory): Node {
   switch (route) {
     case 'spend': return spendView();
     case 'evidence': return evidenceView();
+    case 'allocation': return allocationView();
+    case 'value': return valueView();
+    case 'control': return controlView();
+    case 'data': return dataView();
     case 'system': return systemView();
-    default: return territoryView(route);
   }
 }
 
@@ -143,7 +149,7 @@ function boot(): void {
           if (!layers) return h('div', { class: 'spine spine-loading' }, h('p', { class: 'spine-read', text: 'Reading the ledger…' }));
           return spine({
             layers,
-            active: ROUTE_LAYER[current()] ?? 'metered',
+            active: ROUTE_LAYER[current()] ?? null,
             onSelect: (id) => go(LAYER_ROUTE[id]),
           });
         },

@@ -9,7 +9,9 @@
  */
 
 import { api } from './api.ts';
-import { isPrecise } from './fmt.ts';
+import { h } from './dom.ts';
+import { signal } from './signal.ts';
+import { isPrecise, usd, count } from './fmt.ts';
 import type { Capability } from './registry.ts';
 import type { ActionSpec, PreviewResult } from '../components/drawer.ts';
 
@@ -46,6 +48,167 @@ const BUILDERS: Record<string, Builder> = {
       };
     },
   }),
+
+  /**
+   * Import every tool log this machine actually has. The preview names the tools
+   * that were LOCATED, not the tools that are supported -- an operator deciding
+   * whether to run this needs to know what it will find, and a list of
+   * integrations that exist somewhere else answers a different question.
+   */
+  import: (cap) => ({
+    capability: cap,
+    preview: async (): Promise<PreviewResult> => {
+      const { importers } = await api.importers();
+      const found = importers.filter((i) => i.available);
+      return {
+        applicable: found.length > 0,
+        blockedReason: found.length === 0 ? 'No supported tool logs were located on this machine.' : undefined,
+        summary: isPrecise()
+          ? `Reads ${found.length} located tool log(s) and inserts previously unseen usage records into the local ledger. Existing records are not duplicated.`
+          : `Reads usage that ${found.length} of your tools already recorded on this computer, and adds anything new to Fiscus.`,
+        rows: found.map((i) => ({ label: i.label, value: 'found', note: i.blurb })),
+        notes: [
+          'Nothing is sent anywhere. The files being read are already on this machine.',
+          'Imported subscription usage is observed after the fact, so by default it does not count toward budget enforcement.',
+        ],
+      };
+    },
+    commit: async () => {
+      const result = await api.write.runImport('all');
+      return {
+        ok: result.ok,
+        message: result.totalNew > 0
+          ? `Done. ${count(result.totalNew)} new record${result.totalNew === 1 ? '' : 's'} imported.`
+          : 'Done. Nothing new — everything these tools recorded was already in the ledger.',
+      };
+    },
+  }),
+
+  /**
+   * The full onboarding step: detect, import everything found, then correlate
+   * projects into per-project outcomes. The preview runs the real dry run, so
+   * what the operator reads is what the machine actually found.
+   */
+  scan: (cap) => ({
+    capability: cap,
+    preview: async (): Promise<PreviewResult> => {
+      const sc = await api.scan();
+      const tools = (sc.tools ?? []).filter((t) => t.present !== false);
+      const notes = [
+        'The walk stays on this machine and reads file locations, never file contents.',
+        'Applying this imports every detected tool log, then correlates discovered projects into per-project outcomes.',
+      ];
+      // A bounded walk that stopped early reports a floor. Saying so BEFORE the
+      // commit is the difference between "we found 3" and "there are 3".
+      if (sc.hitBudget) {
+        notes.unshift('The walk stopped at its visit budget, so these counts are a lower bound rather than a total.');
+      }
+      if (sc.unreadableDirs > 0) {
+        notes.push(`${count(sc.unreadableDirs)} directory or directories could not be read, so anything inside them was not counted.`);
+      }
+      return {
+        applicable: true,
+        summary: isPrecise()
+          ? 'Detection is read-only and has already run to produce this preview. Applying performs the import and correlation passes.'
+          : 'We have looked around and found the following. Applying will bring this usage into Fiscus.',
+        rows: [
+          { label: 'AI tools detected', value: count(tools.length) },
+          { label: 'Git repositories', value: count(sc.repoCount) },
+          { label: 'With attributed spend', value: count(sc.reposWithSpend) },
+          { label: 'Directories visited', value: count(sc.dirsVisited) },
+        ],
+        notes,
+      };
+    },
+    commit: async () => {
+      const result = await api.write.runScan();
+      return {
+        ok: result.ok,
+        message: `Done. ${count(result.totalNew)} new record${result.totalNew === 1 ? '' : 's'} imported, ${count(result.correlated)} project(s) correlated.`,
+      };
+    },
+  }),
+
+  /**
+   * Set the daily cap. The only field-bearing action in the GUI, and the one
+   * place a number typed by an operator becomes enforcement configuration -- so
+   * the preview states the enforcement gap (the running proxy keeps the old
+   * value until restart) as a row of the preview, not as a footnote under it.
+   */
+  budget: (cap) => {
+    const entered = signal<string>('');
+
+    return {
+      capability: cap,
+      fields: () => h('div', null,
+        h('label', { class: 'drawer-h3', for: 'budget-cap-input' },
+          isPrecise() ? 'New daily cap (USD)' : 'New daily limit, in dollars'),
+        h('input', {
+          id: 'budget-cap-input',
+          class: 'drawer-input',
+          type: 'number',
+          min: '0',
+          step: '0.01',
+          inputmode: 'decimal',
+          autocomplete: 'off',
+          placeholder: 'for example 5.00',
+          oninput: (event: Event) => entered.set((event.target as HTMLInputElement).value),
+        }),
+        h('p', { class: 'drawer-note', text: 'Leave this empty to change nothing. Enter 0 to block all spend.' })),
+
+      preview: async (): Promise<PreviewResult> => {
+        const [settings, value] = await Promise.all([api.settings(), api.value()]);
+        const current = settings.budget?.dailyCapUsd ?? null;
+        const advice = value.budget ?? null;
+        return {
+          applicable: true,
+          summary: isPrecise()
+            ? 'Writes the daily cap to the local config file. Enforcement happens at the proxy, so only spend routed through it can be blocked.'
+            : 'Saves a new daily limit on this machine. Fiscus can only actually block spend that goes through it.',
+          rows: [
+            { label: 'Current cap', value: current === null ? 'unlimited' : usd(current) },
+            {
+              label: 'Recommended',
+              value: advice?.recommendedDailyUsd != null ? usd(advice.recommendedDailyUsd) : 'not established',
+              note: advice?.canApply
+                ? `from ${count(advice.basisDays)} days of observed spend`
+                : 'not enough observed history to recommend acting on',
+            },
+            {
+              label: 'Counts toward the cap',
+              value: settings.budget?.capIncludesImported ? 'all observed spend' : 'live proxy spend only',
+              note: settings.budget?.capIncludesImported
+                ? 'includes imported usage, which cannot actually be blocked'
+                : 'imported subscription usage is excluded from enforcement',
+            },
+            {
+              label: 'Takes effect',
+              value: 'on proxy restart',
+              note: 'the running proxy keeps enforcing the previous value until it is restarted',
+            },
+          ],
+          notes: [
+            'A cap does not reduce spend already recorded. It stops future requests once the day total passes it.',
+          ],
+        };
+      },
+
+      commit: async () => {
+        const raw = entered().trim();
+        if (raw === '') return { ok: false, message: 'No value entered, so nothing was changed.' };
+        const parsed = Number(raw);
+        if (!Number.isFinite(parsed) || parsed < 0) {
+          return { ok: false, message: 'That is not a usable amount. Enter a number of dollars, or 0 to block everything.' };
+        }
+        const next = await api.write.settings({ budget: { dailyCapUsd: parsed } });
+        const saved = next.budget?.dailyCapUsd ?? null;
+        return {
+          ok: true,
+          message: `Saved. The daily cap is now ${saved === null ? 'unlimited' : usd(saved)}. Restart Fiscus for the proxy to begin enforcing it.`,
+        };
+      },
+    };
+  },
 
   export: (cap) => ({
     capability: cap,

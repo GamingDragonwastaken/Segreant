@@ -180,3 +180,58 @@ test('the two interfaces link to each other in both directions', () => {
   assert.match(gui, /href: '\/classic'/, 'the GUI must offer the classic dashboard');
   assert.match(classic, /class="backlink" href="\/"/, 'the classic dashboard must offer a way back');
 });
+
+/**
+ * The payload spells two entirely different quantities `realizedValueUsd`:
+ *
+ *   realization.matured.realizedValueUsd  the attributed SPEND on units that
+ *                                         realized (sum of attributedCostUsd)
+ *   roi.returnRatio.realizedValueUsd      the manual-equivalent VALUE those
+ *                                         units produced, net of rework
+ *
+ * The spine shipped reading the first one into the fourth claim, so the band
+ * labelled "Realized" — the value end of
+ * `metered != billed != allocated != realized value` — was rendering a cost.
+ * That is the exact collapse the whole product exists to refuse, committed by
+ * the component built to make the refusal visible, and neither the typecheck nor
+ * any test caught it because both fields are real, numeric, and identically
+ * named.
+ *
+ * So this pins the distinction at the source. It is a grep rather than a
+ * behavioural assertion because the failure was one of MEANING, not of
+ * mechanism: the code ran perfectly and reported the wrong claim.
+ */
+test('the realized band carries the value claim, not the cost of realized work', () => {
+  const chain = readFileSync(join(WEB_SRC, 'app', 'core', 'chain.ts'), 'utf8');
+
+  // The realized layer must price itself from the RoI return, which is the only
+  // field in the payload that is actually value.
+  assert.match(
+    chain,
+    /returnRatio/,
+    'chain.ts must read the realized figure from roi.returnRatio',
+  );
+
+  // And it must not fall back to the cost field for that figure.
+  assert.equal(
+    /valueUsd:\s*matured[?.]*\.realizedValueUsd/.test(chain),
+    false,
+    'chain.ts must not use matured.realizedValueUsd as the realized VALUE figure — that field is attributed spend',
+  );
+
+  // A dollar figure is only shown when the payload says it priced one.
+  assert.match(
+    chain,
+    /basis === 'usd'/,
+    'chain.ts must require the payload to declare a usd basis before showing dollars',
+  );
+
+  // The hazard is documented where the type is declared, so the next person to
+  // write this interface from memory meets the warning first.
+  const api = readFileSync(join(WEB_SRC, 'app', 'core', 'api.ts'), 'utf8');
+  assert.match(
+    api,
+    /not the value they produced/,
+    'api.ts must warn that matured.realizedValueUsd is a cost, not a value',
+  );
+});

@@ -41,7 +41,14 @@ export interface Layer {
 
 export interface SpineState {
   layers: Layer[];
-  active: LayerId;
+  /**
+   * The layer being viewed, or null on an operational route (Data, Control,
+   * System) that is not a money claim at all. Null matters: defaulting to
+   * 'metered' made the spine assert "you are reading the metered claim" while
+   * the operator was on the Data screen, which is the same category of untruth
+   * as a figure claiming evidence it does not have.
+   */
+  active: LayerId | null;
   onSelect: (id: LayerId) => void;
 }
 
