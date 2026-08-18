@@ -32,7 +32,9 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with: { node-version: '24', cache: npm }
       - name: Apply GUI truth batch
-        run: python scripts/phase4-gui-truth.py
+        run: |
+          python scripts/phase4-gui-truth.py
+          python scripts/phase4-claim-type-fixup.py
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
@@ -52,7 +54,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -f scripts/phase4-gui-truth.py .github/workflows/phase4-gui-truth.yml
+          rm -f scripts/phase4-gui-truth.py scripts/phase4-claim-type-fixup.py .github/workflows/phase4-gui-truth.yml
           git add -A
           git config user.name "Fiscus truth-closure bot"
           git config user.email "noreply@github.com"
