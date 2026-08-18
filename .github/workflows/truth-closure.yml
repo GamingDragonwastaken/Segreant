@@ -30,6 +30,7 @@ jobs:
         run: |
           python scripts/truth-closure.py
           python scripts/truth-closure-followup.py
+          python scripts/truth-closure-test-followup.py
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
@@ -44,7 +45,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -f scripts/truth-closure.py scripts/truth-closure-followup.py .github/workflows/truth-closure.yml .truth-closure-trigger
+          rm -f scripts/truth-closure.py scripts/truth-closure-followup.py scripts/truth-closure-test-followup.py .github/workflows/truth-closure.yml .truth-closure-trigger
           git add -A
           if git diff --cached --quiet; then
             echo "No remediation diff to commit."
