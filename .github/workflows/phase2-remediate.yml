@@ -1,8 +1,8 @@
 name: Phase 2 Truth Closure
 
 on:
-  push:
-    branches: [agent/truth-closure]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: write
@@ -13,6 +13,7 @@ concurrency:
 
 jobs:
   remediate:
+    if: github.head_ref == 'agent/truth-closure'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -38,7 +39,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -f scripts/phase2-remediate.py .github/workflows/phase2-remediate.yml
+          rm -f scripts/phase2-remediate.py .github/workflows/phase2-remediate.yml .phase2-trigger
           git add -A
           git config user.name "Fiscus truth-closure bot"
           git config user.email "noreply@github.com"
