@@ -32,6 +32,9 @@ test('buildSettingsSnapshot reports config, paths, and recent connections', () =
   assert.equal(snap.metadataOnly, false);
   assert.equal(snap.proposalRetentionDays, 30);
   assert.equal(snap.retentionDays, 180);
+  assert.equal(snap.enforcement.localProxy.state, 'enforced_in_path');
+  assert.equal(snap.enforcement.localProxy.liveConfig, true);
+  assert.equal(snap.enforcement.importedSpend.state, 'observed_only');
   assert.equal(snap.connections.length, 1);
   assert.equal(snap.connections[0]!.provider, 'anthropic');
   store.close();

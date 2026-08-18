@@ -8,11 +8,9 @@
  *      count toward enforcement. A screen that showed one "spend against cap"
  *      figure without saying which basis it used would be telling the operator
  *      their cap governs money it cannot touch.
- *   2. Saving a cap writes the config file, but the RUNNING proxy holds its own
- *      config object and does not pick the change up until it restarts. The
- *      server source says so in a comment; before this view, no surface said it
- *      to the person relying on it. A control that silently does not take effect
- *      is worse than no control.
+ *   2. A limit configured in Fiscus, off-path/imported spend, and provider-native
+ *      limits are different enforcement claims. The screen states which boundary
+ *      can actually block a future request instead of collapsing them into “cap”.
  *
  * The recommendation is presented as advice with its own basis (how many days of
  * observation stand behind it), never as a default that has already been applied.
@@ -60,6 +58,7 @@ export function controlView(): Node {
       const spentToday = today()?.summary.costUsd ?? null;
       const rec = advice();
       const includesImported = budget?.capIncludesImported === true;
+      const enforcement = s.enforcement;
 
       const alerts = today()?.alerts ?? [];
 
@@ -74,7 +73,7 @@ export function controlView(): Node {
             h('span', { class: 'card-title', text: () => (isPrecise() ? 'Daily cap' : 'Your daily limit') }),
             h('span', {
               class: `pill ${cap === null ? 'pill-unverified' : 'pill-ok'}`,
-              text: cap === null ? 'unlimited' : 'enforced',
+              text: cap === null ? 'unlimited' : 'enforced in path',
             })),
           cap === null
             ? h('div', null,
@@ -105,13 +104,27 @@ export function controlView(): Node {
                 ? 'Basis: live proxy spend only. Imported subscription usage is sunk cost observed after the fact and does not count toward enforcement.'
                 : 'This limit only counts spend that goes through Fiscus, where it can genuinely be stopped. Usage imported from other tools is already spent, so it is not counted here.')) }),
 
-          // The enforcement gap. A control that does not take effect until restart
-          // must say so at the point of use, not in a source comment.
-          h('div', { class: 'drawer-warning', role: 'note' },
-            h('strong', { text: () => (isPrecise() ? 'Applies at proxy restart' : 'Changes need a restart') }),
-            h('p', { text: () => (isPrecise()
-              ? 'Editing a cap here writes the config file, but the running proxy holds its own configuration and continues enforcing the previous value until it is restarted.'
-              : 'If you change this, the new limit is saved straight away — but the part of Fiscus that does the blocking keeps using the old one until you restart it.') }))),
+          // Enforcement is a location/scope claim, not just an on/off flag.
+          h('div', { class: 'facts enforcement-facts' },
+            h('div', { class: 'fact' },
+              h('span', { class: 'fact-key', text: () => (isPrecise() ? 'Local proxy' : 'What Fiscus can stop') }),
+              h('span', { class: 'fact-val', text: () => (isPrecise()
+                ? `${enforcement.localProxy.state.replaceAll('_', ' ')}${enforcement.localProxy.hardControlActive ? ' · hard control active' : ' · no hard blocker configured'}`
+                : (enforcement.localProxy.hardControlActive ? 'future requests are guarded' : 'ready, but no hard limit is set')) })),
+            h('div', { class: 'fact' },
+              h('span', { class: 'fact-key', text: () => (isPrecise() ? 'Config updates' : 'Changes you save') }),
+              h('span', { class: 'fact-val', text: enforcement.localProxy.liveConfig ? 'live · running proxy' : 'not live' })),
+            h('div', { class: 'fact' },
+              h('span', { class: 'fact-key', text: () => (isPrecise() ? 'Imported / off-path' : 'Usage Fiscus saw later') }),
+              h('span', { class: 'fact-val', text: () => (isPrecise()
+                ? `${enforcement.importedSpend.state.replaceAll('_', ' ')} · not blockable${enforcement.importedSpend.countsTowardInPathCap ? ' · counts toward later proxy decisions' : ''}`
+                : 'visible, but already spent') })),
+            h('div', { class: 'fact' },
+              h('span', { class: 'fact-key', text: () => (isPrecise() ? 'Provider-native limits' : 'Limits at the AI provider') }),
+              h('span', { class: 'fact-val', text: () => (isPrecise()
+                ? `${enforcement.providerNative.state} · not inspected`
+                : 'not checked by Fiscus') })))),
+
 
         // The other three enforcement controls the CLI exposes. Shown together so
         // the GUI states the whole enforcement picture rather than the daily cap
@@ -138,8 +151,8 @@ export function controlView(): Node {
                     ? `${usd(budget.runawayMaxUsd)} / ${count(budget.runawayWindowSec)}s`
                     : `${usd(budget.runawayMaxUsd)} in ${count(budget.runawayWindowSec)} seconds`) }))),
           h('span', { class: 'basis', text: () => (isPrecise()
-            ? 'All four limits are enforced at the proxy and share the same restart caveat as the daily cap.'
-            : 'These are set the same way as the daily limit, and need the same restart before they take effect.') })),
+            ? 'All four controls share the same local in-path boundary. Saved changes are visible to the running proxy; off-path spend remains observed-only.'
+            : 'All four work at the same Fiscus boundary: they can stop future requests that pass through Fiscus, not usage that already happened elsewhere.') })),
 
         rec ? recommendation(rec, cap) : null,
 

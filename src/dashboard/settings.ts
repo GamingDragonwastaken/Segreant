@@ -8,6 +8,7 @@
 import type { Store, ProviderConnection } from '../store/db.ts';
 import type { AegisConfig, BudgetConfig } from '../config.ts';
 import { aegisHome, configPath, dbPath } from '../config.ts';
+import { describeBudgetEnforcement, type BudgetEnforcementDescriptor } from '../budget/enforceability.ts';
 
 export interface SettingsSnapshot {
   version: string;
@@ -20,6 +21,7 @@ export interface SettingsSnapshot {
   proposalRetentionDays: number;
   metadataOnly: boolean;
   budget: BudgetConfig;
+  enforcement: BudgetEnforcementDescriptor;
   connections: ProviderConnection[];
 }
 
@@ -41,6 +43,7 @@ export function buildSettingsSnapshot(
     proposalRetentionDays: config.proposalRetentionDays,
     metadataOnly: config.metadataOnly,
     budget: config.budget,
+    enforcement: describeBudgetEnforcement(config.budget),
     connections: store.recentProviderConnections(sinceMs),
   };
 }

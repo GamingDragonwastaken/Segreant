@@ -263,6 +263,31 @@ export interface BudgetConfig {
   capIncludesImported: boolean;
 }
 
+export type EnforceabilityState =
+  | 'enforced_in_path'
+  | 'provider_native'
+  | 'observed_only'
+  | 'proposed'
+  | 'unknown';
+
+export interface BudgetEnforcementDescriptor {
+  localProxy: {
+    state: 'enforced_in_path';
+    mechanism: 'local_proxy';
+    hardControlActive: boolean;
+    warningActive: boolean;
+    liveConfig: boolean;
+    spendScope: 'live_proxy' | 'all_observed';
+  };
+  importedSpend: {
+    state: 'observed_only';
+    blockable: false;
+    countsTowardInPathCap: boolean;
+  };
+  providerNative: { state: 'unknown'; inspected: false };
+  recommendation: { state: 'proposed'; automaticallyApplied: false };
+}
+
 export interface SettingsSnapshot {
   version: string;
   home: string;
@@ -274,6 +299,7 @@ export interface SettingsSnapshot {
   proposalRetentionDays: number;
   metadataOnly: boolean;
   budget: BudgetConfig;
+  enforcement: BudgetEnforcementDescriptor;
   connections: Array<Record<string, unknown>>;
 }
 

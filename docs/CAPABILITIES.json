@@ -51,6 +51,11 @@
       "id": "team-server-production",
       "status": "external_validation_required",
       "basis": "real deployment controls require Postgres/OIDC/TLS/backup/restore operational validation"
+    },
+    {
+      "id": "control-enforceability",
+      "status": "implemented",
+      "basis": "local proxy controls are enforced in path; imported/off-path spend is observed-only; provider-native controls are not attested"
     }
   ]
 }

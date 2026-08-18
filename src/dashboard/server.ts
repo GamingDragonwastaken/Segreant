@@ -64,7 +64,12 @@ const STATIC_TYPES: Readonly<Record<string, string>> = {
 };
 
 function serveStatic(res: http.ServerResponse, pathname: string): boolean {
-  const relative = decodeURIComponent(pathname).replace(/^\/+/, '');
+  let relative: string;
+  try {
+    relative = decodeURIComponent(pathname).replace(/^\/+/, '');
+  } catch {
+    return false; // malformed percent-encoding is an invalid asset path, never a server exception
+  }
   // Reject before touching the filesystem: a traversal attempt is not a miss.
   if (relative.includes('..') || relative.includes('\u0000')) return false;
 
@@ -814,11 +819,10 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
           const current = configPersistence.load();
           const next = applySettingsPatch(current, patch);
           configPersistence.save(next);
-          // Keep this process's in-memory config in sync so a later plain GET
-          // /api/settings doesn't read back stale values until a restart. Note this
-          // does NOT reach the separately-constructed proxy server's own config
-          // object — live budget enforcement still needs a restart to pick up edits,
-          // same as any existing CLI config mutation today.
+          // Keep the shared in-memory config in sync. The running BudgetGuard
+          // reads its configuration through a live supplier, so dashboard budget
+          // edits affect subsequent in-path decisions without inventing a second
+          // control state or waiting for a process restart.
           Object.assign(config, next);
           return json(res, 200, buildSettingsSnapshot(store, config, version));
         } catch (err) {
