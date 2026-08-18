@@ -19,13 +19,16 @@ export interface Summary {
 }
 
 export interface GroupRow {
-  key?: string;
-  name?: string;
-  model?: string;
-  project?: string;
-  source?: string;
+  /** The payload's actual key for the thing being grouped. Every grouping
+   *  endpoint uses `label`; writing this interface from memory instead of from
+   *  the payload is how both breakdown tables shipped rendering an em-dash in
+   *  every row while the numbers beside them were correct. */
+  label: string;
+  provider?: string;
   requests: number;
   costUsd: number;
+  inputTokens?: number;
+  outputTokens?: number;
 }
 
 export interface SeriesPoint {

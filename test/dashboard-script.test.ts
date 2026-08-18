@@ -165,3 +165,18 @@ test('GUI sources: no HTML injection sink', () => {
     assert.equal(/\bdocument\.write\b/.test(source), false, `${file}: document.write`);
   }
 });
+
+/**
+ * Serving the classic dashboard without a return link made it a one-way door:
+ * an operator who clicked through had no route back except editing the URL. The
+ * link between the two surfaces has to exist in both directions, so both are
+ * pinned rather than only the one that was noticed.
+ */
+test('the two interfaces link to each other in both directions', () => {
+  // The GUI builds its footer in TypeScript, so the outbound link lives in the
+  // source rather than the shell markup.
+  const gui = walk(join(WEB_SRC, 'app'), '.ts').map((f) => readFileSync(f, 'utf8')).join(String.fromCharCode(10));
+  const classic = readFileSync(CLASSIC, 'utf8');
+  assert.match(gui, /href: '\/classic'/, 'the GUI must offer the classic dashboard');
+  assert.match(classic, /class="backlink" href="\/"/, 'the classic dashboard must offer a way back');
+});

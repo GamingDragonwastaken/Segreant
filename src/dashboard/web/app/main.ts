@@ -1,50 +1,66 @@
 /**
- * GUI shell: identity, navigation, register, and routing.
+ * GUI shell.
  *
- * The navigation is organized by what an operator is trying to do — seven
- * territories — not by the forty commands the CLI happens to expose. A GUI that
- * mirrors a command list is a worse CLI with buttons; the command list still
- * lives in core/registry.ts, and System renders it as an auditable parity table.
+ * The page leads with the evidence chain, not with a figure. Four money layers
+ * across the top as the spine — metered, billed, allocated, realized — and the
+ * operational sections beneath it. Selecting a band selects a view, so the
+ * navigation and the thesis are the same object rather than a sidebar of nouns
+ * beside a caption nobody reads.
+ *
+ * The operational sections (Data, Control, System) are secondary on purpose:
+ * they are how you feed and configure the instrument, not what it measures.
  */
 
 import { h, render } from './core/dom.ts';
 import { signal, effect } from './core/signal.ts';
 import { register, setRegister, type Register } from './core/fmt.ts';
-import { TERRITORIES, type Territory } from './core/registry.ts';
+import { loadChain } from './core/chain.ts';
+import { spine, type LayerId } from './components/spine.ts';
 import { mountDrawer } from './components/drawer.ts';
+import type { Layer } from './components/spine.ts';
 import { spendView } from './views/spend.ts';
 import { evidenceView } from './views/evidence.ts';
 import { systemView } from './views/system.ts';
 import { territoryView } from './views/territory.ts';
+import type { Territory } from './core/registry.ts';
+
+/** The four spine bands map onto the territories that answer their question. */
+const LAYER_ROUTE: Record<LayerId, Territory> = {
+  metered: 'spend',
+  billed: 'evidence',
+  allocated: 'allocation',
+  realized: 'value',
+};
+
+const ROUTE_LAYER: Partial<Record<Territory, LayerId>> = {
+  spend: 'metered',
+  evidence: 'billed',
+  allocation: 'allocated',
+  value: 'realized',
+};
+
+/** Everything that is not a money claim: how you feed and configure the tool. */
+const OPERATIONS: ReadonlyArray<{ id: Territory; label: string; plain: string }> = [
+  { id: 'data', label: 'Data', plain: 'Getting your usage in, from tools and providers.' },
+  { id: 'control', label: 'Control', plain: 'Budgets and alerts, so nothing surprises you.' },
+  { id: 'system', label: 'System', plain: 'Pricing, settings, maintenance, and what this GUI covers.' },
+];
+
+const ALL_ROUTES: Territory[] = ['spend', 'evidence', 'allocation', 'value', 'data', 'control', 'system'];
 
 const current = signal<Territory>(readRoute());
+const chain = signal<Layer[] | null>(null);
 
 function readRoute(): Territory {
   const hash = location.hash.replace(/^#\/?/, '');
-  const match = TERRITORIES.find((t) => t.id === hash);
-  return match ? match.id : 'spend';
+  return (ALL_ROUTES as string[]).includes(hash) ? (hash as Territory) : 'spend';
 }
 
 window.addEventListener('hashchange', () => current.set(readRoute()));
 
-function go(territory: Territory): void {
-  location.hash = `/${territory}`;
-  current.set(territory);
-}
-
-/** Small inline glyphs. Drawn in the system's own grammar, not an icon font. */
-function icon(name: string): Node {
-  const paths: Record<string, string> = {
-    meter: 'M2 12a6 6 0 0 1 12 0M8 12l3.2-3.6',
-    shield: 'M8 1.6 13 3.6v4.2c0 3-2 5.3-5 6.6-3-1.3-5-3.6-5-6.6V3.6z',
-    split: 'M8 2v5m0 0-4 3v3m4-6 4 3v3',
-    seal: 'M8 1.8 9.7 4l2.7.2-1.4 2.3 1 2.5-2.7.4L8 11.6 6.7 9.4 4 9l1-2.5L3.6 4.2 6.3 4z M5.4 10.6 4.4 14 8 12.6 11.6 14l-1-3.4',
-    yield: 'M2.5 13V8m3.7 5V4.5M9.8 13V7M13.5 13V2.6',
-    inflow: 'M8 2.4v7.2m0 0L5.2 6.9M8 9.6l2.8-2.7M2.6 12.4h10.8',
-    gear: 'M8 5.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8M8 1.6v1.6m0 9.6v1.6M14.4 8h-1.6M3.2 8H1.6m10.9-4.5-1.1 1.1m-5.5 5.5-1.2 1.1m0-7.7 1.2 1.1m5.5 5.5 1.1 1.1',
-  };
-  return h('svg', { class: 'ico', viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.4', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' },
-    h('path', { d: paths[name] ?? paths['gear']! }));
+function go(route: Territory): void {
+  location.hash = `/${route}`;
+  current.set(route);
 }
 
 function brandMark(): Node {
@@ -56,52 +72,53 @@ function brandMark(): Node {
 function firstRun(): Node {
   return h('div', { class: 'firstrun', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'fr-title' },
     h('div', { class: 'firstrun-card' },
-      h('h1', { id: 'fr-title', text: 'Welcome to Fiscus' }),
-      h('p', { class: 'lede', text: 'Everything here works either way — this only changes how precisely things are worded and how much detail is shown by default. You can switch at any time.' }),
+      h('div', { class: 'firstrun-mark' }, brandMark()),
+      h('h1', { id: 'fr-title', text: 'How should Fiscus talk to you?' }),
+      h('p', { class: 'lede', text: 'The numbers are identical either way. This only changes how precisely they are worded and how much detail shows by default — and you can switch whenever you like.' }),
       h('div', { class: 'choice-grid' },
         h('button', { class: 'choice', onclick: () => setRegister('plain') },
           h('strong', { text: 'Plain language' }),
-          h('span', { text: 'Rounded figures, concepts explained where they appear, no command line assumed.' })),
+          h('span', { text: 'Rounded figures, concepts explained where they appear, no command line assumed.' }),
+          h('code', { class: 'choice-eg', text: '$59.16 · measured from metered requests' })),
         h('button', { class: 'choice', onclick: () => setRegister('precise') },
           h('strong', { text: 'Precise' }),
-          h('span', { text: 'Exact microdollar figures, provenance labels shown, equivalent commands surfaced.' }))),
-      h('p', { class: 'fine', text: 'Fiscus runs entirely on this machine. This page makes no external requests — no fonts, no analytics, nothing loaded from the internet.' })));
+          h('span', { text: 'Exact microdollar figures, provenance labels shown, equivalent commands surfaced.' }),
+          h('code', { class: 'choice-eg', text: '$59.163468 · local_list_price' }))),
+      h('p', { class: 'fine', text: 'Runs entirely on this machine. This page loads nothing from the internet — no fonts, no analytics, no third parties.' })));
 }
 
-function rail(): Node {
-  return h('nav', { class: 'rail', 'aria-label': 'Sections' },
-    h('div', { class: 'brand' }, brandMark(),
-      h('div', { class: 'brand-text' },
-        h('div', { class: 'brand-name', text: 'Fiscus' }),
-        h('div', { class: 'brand-tag', text: 'AI Financial Ops' }))),
+function topbar(): Node {
+  return h('header', { class: 'topbar' },
+    h('a', { class: 'brand', href: '#/spend', onclick: () => go('spend') },
+      brandMark(),
+      h('span', { class: 'brand-text' },
+        h('span', { class: 'brand-name', text: 'Fiscus' }),
+        h('span', { class: 'brand-tag', text: 'AI Financial Ops' }))),
 
-    h('div', { class: 'nav' }, ...TERRITORIES.map((t) =>
-      h('button', {
-        class: 'nav-item',
-        'aria-current': () => (current() === t.id ? 'page' : false),
-        title: t.plain,
-        onclick: () => go(t.id),
-      }, icon(t.icon), h('span', { class: 'nav-label', text: t.label })))),
+    h('nav', { class: 'ops', 'aria-label': 'Operations' },
+      ...OPERATIONS.map((op) => h('button', {
+        class: 'op',
+        'aria-current': () => (current() === op.id ? 'page' : false),
+        title: op.plain,
+        onclick: () => go(op.id),
+        text: op.label,
+      }))),
 
-    h('div', { class: 'rail-foot' },
-      h('div', { class: 'register-switch', role: 'group', 'aria-label': 'Detail level' },
-        ...(['plain', 'precise'] as Register[]).map((r) =>
-          h('button', {
-            'aria-pressed': () => (register() === r ? 'true' : 'false'),
-            onclick: () => setRegister(r),
-            text: r,
-          }))),
-      h('p', { class: 'rail-note' },
-        'Runs on this machine only. ',
-        h('a', { href: '/classic', text: 'Classic view' }))));
+    h('div', { class: 'register-switch', role: 'group', 'aria-label': 'Detail level' },
+      ...(['plain', 'precise'] as Register[]).map((r) =>
+        h('button', {
+          'aria-pressed': () => (register() === r ? 'true' : 'false'),
+          onclick: () => setRegister(r),
+          text: r,
+        }))));
 }
 
-function viewFor(territory: Territory): Node {
-  switch (territory) {
+function viewFor(route: Territory): Node {
+  switch (route) {
     case 'spend': return spendView();
     case 'evidence': return evidenceView();
     case 'system': return systemView();
-    default: return territoryView(territory);
+    default: return territoryView(route);
   }
 }
 
@@ -114,11 +131,27 @@ function boot(): void {
       render(root, firstRun());
       return;
     }
+
+    void loadChain('30d').then((layers) => chain.set(layers)).catch(() => chain.set(null));
+
     render(root,
       h('a', { class: 'skip', href: '#main', text: 'Skip to content' }),
-      h('div', { class: 'shell' },
-        rail(),
-        h('main', { class: 'main', id: 'main', tabindex: '-1' }, () => viewFor(current()))));
+      topbar(),
+      h('div', { class: 'sheet' },
+        () => {
+          const layers = chain();
+          if (!layers) return h('div', { class: 'spine spine-loading' }, h('p', { class: 'spine-read', text: 'Reading the ledger…' }));
+          return spine({
+            layers,
+            active: ROUTE_LAYER[current()] ?? 'metered',
+            onSelect: (id) => go(LAYER_ROUTE[id]),
+          });
+        },
+        h('main', { class: 'main', id: 'main', tabindex: '-1' }, () => viewFor(current()))),
+      h('footer', { class: 'shellfoot' },
+        h('span', { text: 'Runs on this machine only. Nothing is sent anywhere.' }),
+        h('a', { href: '/classic', text: 'Classic dashboard' })));
+
     mountDrawer(root);
   });
 }

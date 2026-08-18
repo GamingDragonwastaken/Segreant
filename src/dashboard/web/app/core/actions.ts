@@ -47,6 +47,22 @@ const BUILDERS: Record<string, Builder> = {
     },
   }),
 
+  export: (cap) => ({
+    capability: cap,
+    preview: async () => ({
+      applicable: false,
+      blockedReason: 'Nothing to apply — the download starts from the link below.',
+      summary: isPrecise()
+        ? 'Streams the request ledger as CSV from this local server. One row per request, with the recorded attribution basis and pricing basis on each.'
+        : 'Downloads every request we recorded as a spreadsheet file, including where each cost figure came from.',
+      notes: [
+        'The file is generated on this machine and never leaves it unless you send it somewhere.',
+        'Each row carries its own attribution and pricing basis, so the export can be checked the same way the screens can.',
+      ],
+    }),
+    download: '/api/export.csv',
+  }),
+
   settings: (cap) => ({
     capability: cap,
     preview: async (): Promise<PreviewResult> => {
@@ -88,6 +104,7 @@ export function actionSpec(cap: Capability): ActionSpec {
   };
 }
 
+/** True when the GUI can actually do this, by commit or by download. */
 export function hasRunner(cap: Capability): boolean {
   return cap.id in BUILDERS;
 }

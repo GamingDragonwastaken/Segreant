@@ -46,6 +46,8 @@ export interface ActionSpec {
   commit?: () => Promise<{ ok: boolean; message: string }>;
   /** Extra fields rendered above the preview (a period picker, a file choice). */
   fields?: () => Node;
+  /** A same-origin path the operator can download instead of committing. */
+  download?: string;
 }
 
 const CONSEQUENCE_COPY: Record<Consequence, { badge: string; plain: string; tone: string }> = {
@@ -212,6 +214,9 @@ function panel(spec: ActionSpec): Node {
       },
       h('div', { class: 'drawer-actions' },
         h('button', { class: 'btn-ghost', text: 'Close', onclick: () => closeAction() }),
+        spec.download
+          ? h('a', { class: 'btn-commit', href: spec.download, download: '', text: 'Download' })
+          : null,
         () => {
           if (!spec.commit) return null;
           const p = preview();
