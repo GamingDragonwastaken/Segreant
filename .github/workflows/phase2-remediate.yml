@@ -28,6 +28,7 @@ jobs:
           python scripts/phase2-preflight.py
           python scripts/phase2-remediate.py
           python scripts/phase2-contract-fixup.py
+          python scripts/phase2-test-fixup.py
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
@@ -42,7 +43,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -f scripts/phase2-preflight.py scripts/phase2-remediate.py scripts/phase2-contract-fixup.py .github/workflows/phase2-remediate.yml .phase2-trigger
+          rm -f scripts/phase2-preflight.py scripts/phase2-remediate.py scripts/phase2-contract-fixup.py scripts/phase2-test-fixup.py .github/workflows/phase2-remediate.yml .phase2-trigger
           git add -A
           git config user.name "Fiscus truth-closure bot"
           git config user.email "noreply@github.com"
