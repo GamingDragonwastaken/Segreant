@@ -27,7 +27,54 @@ This validates a local developer preview only. It does **not** validate a
 provider billing statement, production customer data, an npm publication, an
 external deployment, or the optional team service.
 
-### Candidate record — commit `916e1c3`, 2026-08-18
+### Candidate record — commit `205fbcc`, 2026-08-18
+
+Run against `205fbcc6735c6b3518a551f1b7fd472f78f9e5a4`, worktree clean before and
+after validation. **Nine rows pass; the CI row is pending observation.**
+Supersedes the `916e1c3` record, retained for history.
+
+| Requirement | Result |
+| --- | --- |
+| Candidate identity | **Pass.** `git rev-parse HEAD` = `205fbcc6735c6b3518a551f1b7fd472f78f9e5a4`; `git status --short` empty before and after. |
+| Source validation | **Pass.** `npm run typecheck` clean, `npm test` **543 tests / 542 pass / 1 expected platform skip / 0 fail**, `npm run build` clean, `git diff --check` clean. |
+| Packed artifact | **Pass.** `npm pack` → 104 files, SHA-256 `535f2f0e0756722235e96d8361b7cd3e106e9574c49f0b095933734b30b57f37`; all 6 key paths present. Same file count as `916e1c3` — this candidate changes existing modules and adds no packaged file. |
+| Clean installed CLI | **Pass.** Installed with `--ignore-scripts` into a fresh directory; `fiscus --help` renders; `fiscus demo` seeds. |
+| Packaged dashboard/API | **Pass.** Isolated `AEGIS_HOME`, seeded demo (552 requests), packaged dashboard on :8109. `/api/health` → `{"ok":true,"service":"fiscus-dashboard"}`; `/api/overview?range=all` → `demo: true`, 552 requests, `$89.66053895`. Terminated cleanly (PID 4528, tree kill); :8090 and :8109 both confirmed closed afterwards. |
+| Model-trial truthfulness | **Pass.** Packaged `/api/value` self-labels `demo: true`; one switch, `confidence: trial`, no `evidence_supported`; `allocation: null`. |
+| Billing-boundary truthfulness | **Pass.** Packaged `/api/billing` → `demo: true`, `not_reconciled`, `recordCount: 0`. `/api/allocation` → `kind: derived_cost_allocation`, `basis: showback_only`, `reconciliation.everRun: false`. |
+| Direct-Costs connector boundary | **Pass, and extended by the readiness row.** On the packaged artifact, adopt → reconcile still reports `providerSourceKind: operator_supplied_export`, **5 conditions**, provider side `21500000` micros, `trust: scope_conditional_reconciliation`. The new pre-credential coverage block returns `null` on a store holding no OpenAI rows rather than reporting a fabricated zero-coverage warning. |
+| Intended CI | **Pending.** Not yet pushed at the time this record was written; the row is filled in after the run for this commit is observed, not predicted. |
+| Visual check | **Pass, and the previously stated gap is closed.** Packaged dashboard at 375×812: Overview, Billing, Allocation, Value and Settings all report `scrollWidth 375` on a `clientWidth 375` document — **no view overflows**, including Value, which was 483px at `916e1c3`. Desktop 1280 re-checked on the same packaged artifact: `.ihelp` still computes `position: relative`, the popover is 270px with its `::after` arrow shown, `.grid` is still two-column (`1.5fr 1fr`), and the allocation view renders its 3 cards. No console errors. Screenshots remain unavailable in this environment — the browser pane is not displayed, so the page composites no frames and `computer{action:"screenshot"}` times out — so this row rests on DOM and computed-style inspection and says so rather than implying a picture was reviewed. |
+
+**The reconciliation was run against this machine's real ledger, and it
+failed — which is the finding.** `fiscus import all` produced 18,422 real
+requests totalling `$1,574.42`, of which `$832.33` across 9,499 requests is
+OpenAI. None of it can reconcile. Every OpenAI row arrived by **native import**,
+and reconciliation counts only proxy traffic carrying the declared scope. It has
+to: an imported row records the model and the cost but nothing that ties it to
+the declared provider project, so counting it would invent exactly the
+attribution this layer refuses to invent. A real Costs pull against this ledger
+would have reported the entire provider bill as unexplained residual —
+arithmetically true and operationally useless.
+
+**So the tool now says that before the credential step, not after.** Minting an
+OpenAI Admin key is a real permission decision; discovering afterwards that
+nothing would have counted is discovering it too late. `fiscus billing
+reconcile` readiness now reports how much OpenAI spend would count, how much
+arrived by import, and how much is proxy traffic predating the declaration. The
+coverage query returns `null` — not a zero — when the ledger holds no OpenAI
+rows at all, because "no coverage" and "no data" are different answers.
+
+**Still true, and unchanged by any of this:** no reconciliation has completed
+against a real provider bill on this machine. The gate's end-to-end exercise
+still uses a **synthetic** export. What is new is that the real-data run was
+attempted, and its negative result is recorded here rather than deferred.
+
+**Team server at this tree:** typecheck clean, **55/55** — source validation
+only. It moves none of the five infrastructure requirements in the separate gate
+below.
+
+### Superseded record — commit `916e1c3`, 2026-08-18
 
 Run against `916e1c304a1aa9d036483e752dd68e7c5aa6c391`, worktree clean before and
 after validation. **All ten rows pass.** Supersedes the `a9fc6b2` record,
