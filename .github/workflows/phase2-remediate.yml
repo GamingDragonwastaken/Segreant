@@ -1,0 +1,46 @@
+name: Phase 2 Truth Closure
+
+on:
+  push:
+    branches: [agent/truth-closure]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phase2-truth-closure
+  cancel-in-progress: true
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: agent/truth-closure
+          fetch-depth: 0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: npm
+      - run: python scripts/phase2-remediate.py
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Team server unit checks
+        working-directory: team-server
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+      - name: Commit verified remediation
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f scripts/phase2-remediate.py .github/workflows/phase2-remediate.yml
+          git add -A
+          git config user.name "Fiscus truth-closure bot"
+          git config user.email "noreply@github.com"
+          git commit -m "Separate impact evidence and harden project truth"
+          git push origin HEAD:agent/truth-closure
