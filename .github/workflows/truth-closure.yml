@@ -1,0 +1,50 @@
+name: Truth Closure Bootstrap
+
+on:
+  push:
+    branches: [agent/truth-closure]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: truth-closure-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  remediate-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Apply deterministic remediation
+        run: python scripts/truth-closure.py
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Verify team server
+        working-directory: team-server
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+      - name: Commit only after all checks pass
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm scripts/truth-closure.py .github/workflows/truth-closure.yml
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No remediation diff to commit."
+            exit 0
+          fi
+          git config user.name "Fiscus truth-closure bot"
+          git config user.email "noreply@github.com"
+          git commit -m "Close correctness and repository-trust gaps"
+          git push origin HEAD:agent/truth-closure
