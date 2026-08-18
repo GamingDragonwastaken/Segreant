@@ -77,13 +77,15 @@ export interface BillingPayload {
   evidence: { reconciliationStatus: string };
   summary: { recordCount: number };
   reconciliation?: {
-    runs?: number;
-    latest?: {
-      providerSourceKind?: string;
-      conditions?: string[];
-      status?: string;
-      computedAtMs?: number;
-    } | null;
+    runs: Array<{
+      reconciliationRunId: string;
+      computedAtMs: number;
+      result: {
+        status: string;
+        providerSourceKind?: string;
+        conditions?: readonly string[];
+      };
+    }>;
   };
 }
 

@@ -1,0 +1,48 @@
+name: Bug report
+description: Report reproducible incorrect behavior
+title: "[bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "Do not include credentials, provider exports, private source, or personal filesystem paths. Security issues belong in private vulnerability reporting."
+  - type: input
+    id: version
+    attributes:
+      label: Fiscus version / commit
+      placeholder: "0.1.0 or git SHA"
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options: [Windows, macOS, Linux, Other]
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: What happened?
+      description: Include the exact incorrect claim or behavior, with sensitive data redacted.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should have happened?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Data safety
+      options:
+        - label: I removed secrets, private source, billing exports, and personal paths.
+          required: true

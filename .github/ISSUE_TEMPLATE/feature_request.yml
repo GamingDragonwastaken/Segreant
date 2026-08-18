@@ -1,0 +1,30 @@
+name: Feature request
+description: Propose a capability or evidence improvement
+title: "[feature] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Operator problem
+      description: What decision or workflow is currently impossible or misleading?
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence required
+      description: What data would make the new claim defensible, and what should remain unknown?
+    validations:
+      required: true
+  - type: textarea
+    id: boundaries
+    attributes:
+      label: Privacy / egress / mutation boundary
+      description: Does this require network access, credentials, new persistence, or a consequential write?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior

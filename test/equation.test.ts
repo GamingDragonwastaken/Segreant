@@ -33,7 +33,7 @@ test('aggregator is MULTIPLICATIVE: M(x·y) = M(x)·M(y) — the property that f
   assert.ok(Math.abs(weightedPowerMean(xy, 1) - weightedPowerMean(x, 1) * weightedPowerMean(y, 1)) > 1e-3);
 });
 
-test('aggregator COLLAPSES on any zero lens (Goodhart-proof) for θ ≤ 0', () => {
+test('aggregator is non-compensatory: any zero lens collapses the score for θ ≤ 0', () => {
   assert.equal(weightedPowerMean([{ value: 0, weight: 1 }, { value: 1, weight: 1 }], 0), 0);
   assert.equal(weightedPowerMean([{ value: 0, weight: 1 }, { value: 1, weight: 1 }], -4), 0);
   // The arithmetic mean would NOT collapse — it rewards gaming one axis.
@@ -64,11 +64,16 @@ test('Index is monotone increasing in Lift', () => {
   assert.ok(hi > lo, `${hi} > ${lo}`);
 });
 
-test('partial instrumentation makes the Index an explicit UPPER bound', () => {
-  // Lift un-instrumented (3 of 4 lenses) → upper bound.
-  assert.equal(computeReturnOnIntelligence(report(), {}).indexIsUpperBound, true);
-  // All four instrumented → not a bound.
-  assert.equal(computeReturnOnIntelligence(report(), { lift: 0.6 }).indexIsUpperBound, false);
+test('partial instrumentation is bounded honestly: the observed-only score is NOT an upper bound', () => {
+  const partial = computeReturnOnIntelligence(report(), {});
+  const measuredHigh = computeReturnOnIntelligence(report(), { lift: 0.9 });
+  const measuredLow = computeReturnOnIntelligence(report(), { lift: 0.2 });
+
+  assert.equal(partial.indexIsUpperBound, false, 'renormalized observed-lens mean must never be labelled a ceiling');
+  assert.ok(measuredHigh.roiIndex! > partial.roiIndex!, 'a newly measured strong lens can raise the score');
+  assert.ok(measuredLow.roiIndex! < partial.roiIndex!, 'a newly measured weak lens can lower the score');
+  assert.ok(partial.instrumentationInterval.low! <= measuredLow.roiIndex!);
+  assert.ok(partial.instrumentationInterval.high! >= measuredHigh.roiIndex!);
 });
 
 test('a collapsed realization lens zeroes the whole Index — no axis can carry it', () => {

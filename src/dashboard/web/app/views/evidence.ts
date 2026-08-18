@@ -52,7 +52,8 @@ export function evidenceView(): Node {
 
       const fallback = { plain: d.evidence.reconciliationStatus, precise: d.evidence.reconciliationStatus, pill: 'pill-unverified' };
       const status = STATUS_WORDS[d.evidence.reconciliationStatus] ?? fallback;
-      const latest = d.reconciliation?.latest ?? null;
+      const latestRun = d.reconciliation?.runs?.[0] ?? null;
+      const latest = latestRun?.result ?? null;
 
       return h('div', null,
         h('div', { class: 'card' },
@@ -63,7 +64,7 @@ export function evidenceView(): Node {
           latest
             ? h('div', null,
                 h('span', { class: 'basis', text: () => `provider side: ${basisWords(latest.providerSourceKind)}` }),
-                h('span', { class: 'basis', text: `last run ${relative(latest.computedAtMs ?? null)}` }))
+                h('span', { class: 'basis', text: `last run ${relative(latestRun?.computedAtMs ?? null)}` }))
             : h('span', { class: 'basis', text: () => (isPrecise()
                 ? 'zero recorded observation runs'
                 : 'no check has been run on this machine yet') }),

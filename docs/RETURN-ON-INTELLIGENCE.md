@@ -96,7 +96,7 @@ lens, normalized to [0,1], is a *conditional survival rate* along the chain
 | You'd have done it anyway | Lift (counterfactual) | λ |
 | It didn't matter | Impact | ι |
 
-### 4.1 Why they MULTIPLY (and why that is Goodhart-proof)
+### 4.1 Why they MULTIPLY (and why that is single-axis resistant)
 
 These are *necessary conditions in series*. The probability a unit of spend
 becomes real intelligence-value is the joint probability of clearing all of them,

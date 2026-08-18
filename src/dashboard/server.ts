@@ -370,13 +370,12 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
         return;
       }
       // GET preview. The filesystem walk is bounded (depth + visit budget), so this
-      // stays responsive; repo paths are capped in the payload for large trees. It
-      // also reports what changed since the last scan of these roots, then records
-      // this scan as the new baseline (a local marker — imports/correlates nothing).
+      // stays responsive; repo paths are capped in the payload for large trees.
+      // IMPORTANT: preview is genuinely read-only. scanWithDiff deliberately leaves
+      // persistence to its caller, and a GET must not advance the comparison baseline.
       try {
         const path = url.searchParams.get('path') || undefined;
         const { plan, diff } = scanWithDiff(store, { roots: path ? [path] : undefined });
-        saveScan(store, plan);
         return json(res, 200, {
           ok: true,
           tools: plan.tools,

@@ -315,7 +315,9 @@ get from the AI** — and neither "tokens consumed" nor "lines of code" ever
 answered it. Fiscus's core is **Return on Intelligence (RoI)**: a measure of
 realized AI value that works across *any* token usage (not just coding), is
 measured from the request path instead of surveys, and composes four value
-lenses into one index that can't be gamed on a single axis.
+lenses into a non-compensatory index where one strong axis cannot buy back a
+collapsed one. That is resistance to single-axis optimization, not a proof
+against Goodhart effects in task selection, instrumentation, or baselines.
 
 > **RoI Index** = geometric mean of **Realization · Acceptance · Lift · Impact** —
 > if any one lens collapses, the index collapses. The denominator is **tokens +
@@ -354,9 +356,11 @@ The four lenses, each answering a different real question (full definitions in
 | **Lift** | Was it worth it vs. not using it / a cheaper model? (behavioral, not self-report) |
 | **Impact** | Of what was realized, how much actually mattered? |
 
-A lens with no signal reads `uninstrumented` and is excluded — never faked — and
-the report shows your lens coverage. The path to a higher number is to wire more
-signal, not to game one. `fiscus roi --repo .`
+A lens with no signal reads `uninstrumented` and is excluded from the observed-lens
+score — never faked — and the report shows coverage plus a full-index interval
+that keeps the missing lens in the fixed weight vector at its admissible [0,1]
+endpoints. The observed-only score is explicitly not called an upper bound:
+measuring a missing lens can raise or lower it. `fiscus roi --repo .`
 
 ### The Realization substrate
 
