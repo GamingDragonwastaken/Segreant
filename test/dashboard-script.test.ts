@@ -278,3 +278,43 @@ test('the GUI budget type matches the server budget config field for field', () 
     assert.equal(used, false, `${invented} is not a field the server has`);
   }
 });
+
+/**
+ * Plain register rounds money to cents, which is right until the amount is
+ * smaller than a cent. Then `maximumFractionDigits: 2` turns a real figure into
+ * "$0.00" — not a rounding but a false claim, and one an operator reads as "no
+ * limit set" or "nothing spent".
+ *
+ * Caught on a live proxy run: a $0.0050 daily cap rendered as "$0.01" and its
+ * $0.0020 soft threshold as "$0.00", directly beneath an alert quoting
+ * "$0.0052 / $0.0050". Two figures for one quantity, disagreeing, on one screen.
+ *
+ * Small caps are not a contrived case — they are what anyone testing a budget
+ * sets first, which is exactly when trust in the number is being formed.
+ */
+test('plain-register money never renders a real amount as zero', async () => {
+  const { usd } = await import('../src/dashboard/web/app/core/fmt.ts');
+
+  // A true zero is still a true zero.
+  assert.equal(usd(0, { precise: false }), '$0.00');
+
+  // Sub-cent amounts keep enough precision to be distinguishable, and to agree
+  // with the server-formatted figures they sit beside.
+  assert.equal(usd(0.005, { precise: false }), '$0.0050');
+  assert.equal(usd(0.002, { precise: false }), '$0.0020');
+
+  // Below the ledger's microdollar resolution, say so rather than print zeros.
+  assert.equal(usd(0.0000004, { precise: false }), '<$0.000001');
+
+  // Ordinary amounts are untouched.
+  assert.equal(usd(0.01, { precise: false }), '$0.01');
+  assert.equal(usd(12.5, { precise: false }), '$12.50');
+  assert.equal(usd(1574.42, { precise: false }), '$1,574.42');
+
+  // The invariant, stated directly: no non-zero amount may format as all zeros.
+  for (const value of [0.009, 0.005, 0.0011, 0.0002, 0.00001, 0.000001, 5e-7]) {
+    const shown = usd(value, { precise: false });
+    assert.notEqual(shown, '$0.00', `${value} rendered as $0.00`);
+    assert.equal(/^\$0\.0+$/.test(shown), false, `${value} rendered as all zeros: ${shown}`);
+  }
+});

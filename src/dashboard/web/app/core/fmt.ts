@@ -54,6 +54,25 @@ export function usd(value: number | null | undefined, opts: { precise?: boolean 
     const micros = Math.round((abs - whole) * 1_000_000);
     return `${sign}$${whole.toLocaleString('en-US')}.${String(micros).padStart(6, '0')}`;
   }
+  // Plain register rounds to cents, EXCEPT where that would round a real amount
+  // to $0.00. Two cents is a rounding; a $0.002 threshold displayed as "$0.00"
+  // is an assertion that there is no money there, and the operator reads it as
+  // "no warning set". Found on a live proxy run, where a $0.0050 cap rendered as
+  // "$0.01" directly beneath an alert quoting "$0.0052 / $0.0050" -- two figures
+  // for one quantity, disagreeing, on the same screen.
+  //
+  // Sub-cent amounts therefore carry two significant figures, floored at the
+  // ledger's microdollar resolution. Ordinary dollar amounts are untouched.
+  const abs = Math.abs(value);
+  if (abs > 0 && abs < 0.01) {
+    const digits = Math.min(6, -Math.floor(Math.log10(abs)) + 1);
+    const shown = abs.toFixed(digits);
+    // Below the ledger's microdollar resolution there are no digits left to
+    // show, and printing "$0.000000" would make the same false claim in six
+    // decimal places instead of two.
+    if (Number(shown) === 0) return `${value < 0 ? '-' : ''}<$0.000001`;
+    return `${value < 0 ? '-' : ''}$${shown}`;
+  }
   return value.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
 }
 
