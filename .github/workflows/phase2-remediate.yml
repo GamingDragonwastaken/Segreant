@@ -15,6 +15,20 @@ jobs:
   remediate:
     if: github.head_ref == 'agent/truth-closure'
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: fiscus
+          POSTGRES_PASSWORD: fiscus
+          POSTGRES_DB: fiscus
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fiscus -d fiscus"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -29,6 +43,7 @@ jobs:
           python scripts/phase2-remediate.py
           python scripts/phase2-contract-fixup.py
           python scripts/phase2-test-fixup.py
+          python scripts/phase2-integration-fixup.py
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
@@ -39,11 +54,16 @@ jobs:
           npm ci
           npm run typecheck
           npm test
+      - name: Team server PostgreSQL integration
+        working-directory: team-server
+        env:
+          DATABASE_URL: postgresql://fiscus:fiscus@127.0.0.1:5432/fiscus
+        run: node --disable-warning=ExperimentalWarning --test integration/postgres.test.ts
       - name: Commit verified remediation
         shell: bash
         run: |
           set -euo pipefail
-          rm -f scripts/phase2-preflight.py scripts/phase2-remediate.py scripts/phase2-contract-fixup.py scripts/phase2-test-fixup.py .github/workflows/phase2-remediate.yml .phase2-trigger
+          rm -f scripts/phase2-preflight.py scripts/phase2-remediate.py scripts/phase2-contract-fixup.py scripts/phase2-test-fixup.py scripts/phase2-integration-fixup.py .github/workflows/phase2-remediate.yml .phase2-trigger
           git add -A
           git config user.name "Fiscus truth-closure bot"
           git config user.email "noreply@github.com"
