@@ -112,7 +112,7 @@ test('GET /api/overview exposes local rate-card freshness and estimated-rate cov
     assert.equal(body.pricing.provenance[0]!.rateCardSha256, 'a'.repeat(64));
     assert.equal(body.pricing.provenance[2]!.rateCardSha256, 'b'.repeat(64));
 
-    const html = readFileSync(join(import.meta.dirname, '..', 'src', 'dashboard', 'web', 'index.html'), 'utf8');
+    const html = readFileSync(join(import.meta.dirname, '..', 'src', 'dashboard', 'web', 'classic.html'), 'utf8');
     assert.match(html, /Rate-card health/);
     assert.match(html, /Estimated-rate share/);
     assert.match(html, /this page never fetches pricing/);

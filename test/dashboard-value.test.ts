@@ -73,7 +73,7 @@ test('GET /api/value: a synthetic demo labels itself and exposes only a review-o
 });
 
 test('value dashboard reveals the observed mature-unit and realization evidence behind model trials', () => {
-  const html = readFileSync(join(import.meta.dirname, '..', 'src', 'dashboard', 'web', 'index.html'), 'utf8');
+  const html = readFileSync(join(import.meta.dirname, '..', 'src', 'dashboard', 'web', 'classic.html'), 'utf8');
   assert.match(html, /mature units/);
   assert.match(html, /observed realization/);
   assert.match(html, /intervals overlap — keep this as a measured trial/);

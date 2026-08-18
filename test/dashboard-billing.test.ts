@@ -224,7 +224,7 @@ test('Billing dashboard client is a manual, separate view with no fabricated dem
     assert.equal(body.summary.recordCount, 0, 'demo mode does not fabricate billing charge lines');
     assert.equal(body.summary.importCount, 0, 'demo mode does not fabricate billing import provenance');
 
-    const html = readFileSync(join(import.meta.dirname, '..', 'src', 'dashboard', 'web', 'index.html'), 'utf8');
+    const html = readFileSync(join(import.meta.dirname, '..', 'src', 'dashboard', 'web', 'classic.html'), 'utf8');
     assert.match(html, /data-view="billing"/);
     assert.match(html, /fetch\('\/api\/billing'\)/);
     assert.match(html, /NOT RECONCILED/);

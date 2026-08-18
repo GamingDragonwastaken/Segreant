@@ -16,5 +16,9 @@
     "skipLibCheck": true,
     "resolveJsonModule": true
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "bin/**/*.mjs"]
+  "include": ["src/**/*.ts", "test/**/*.ts", "bin/**/*.mjs"],
+  // The browser app compiles under its own config (DOM lib, no node types) so
+  // server code cannot reach for a browser global and vice versa. One compiler,
+  // two passes -- see scripts/build.mjs.
+  "exclude": ["src/dashboard/web/app/**"]
 }

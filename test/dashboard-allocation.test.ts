@@ -25,7 +25,7 @@ import { createDashboardServer } from '../src/dashboard/server.ts';
 import type { AllocationRunResult } from '../src/alloc/apply.ts';
 import type { AllocationRule, CostCentre } from '../src/alloc/rules.ts';
 
-const HTML = join(import.meta.dirname, '..', 'src', 'dashboard', 'web', 'index.html');
+const HTML = join(import.meta.dirname, '..', 'src', 'dashboard', 'web', 'classic.html');
 const DAY = 24 * 60 * 60 * 1000;
 const T0 = Date.UTC(2026, 6, 1);
 const T1 = T0 + 5 * DAY;
