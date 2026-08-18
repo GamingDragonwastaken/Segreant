@@ -60,7 +60,62 @@ This document records what Fiscus is, how it's built, and — just as important 
    api.anthropic.com / api.openai.com
 ```
 
-The whole daemon is one Node process. The proxy (`:8090`) and the dashboard (`:8091`) share a single `Store` instance — the proxy writes, the dashboard reads.
+The whole daemon is one Node process. The proxy (`:8090`) and the dashboard (`:8091`) share a single `Store` instance — the proxy writes, the dashboard mostly reads. `fiscus start` creates both and shuts both down together, so the GUI's lifetime is the CLI's; there is no separate service to supervise.
+
+"Mostly reads" is deliberate wording. The dashboard began read-only and is not any more: the GUI reaches parity with the CLI on a small, explicit set of writes, each behind a preview and a same-origin header guard (§2.1).
+
+### 2.1 The web GUI
+
+The GUI is a browser application, not a page the server prints. It exists because
+a product whose whole argument is that a figure must carry its basis cannot ship
+a surface where the basis is a tooltip.
+
+**Build.** Two `tsc` passes, no bundler, no runtime dependency:
+`tsconfig.build.json` emits the Node runtime, and
+`src/dashboard/web/app/tsconfig.json` emits the browser app against DOM libs with
+no Node types. `rewriteRelativeImportExtensions` turns `.ts` specifiers into
+browser-valid `.js`, so the source imports what it means and the browser resolves
+what ships. The output is plain unminified ES modules served as static files.
+`erasableSyntaxOnly` forbids constructor parameter properties — type syntax may
+never emit code.
+
+**Structure.** `web/app/core/` holds the primitives (a hand-written
+`signal`/`effect`/`computed` reactive core, an `h()`/`render()` DOM builder, the
+API client, the capability registry); `web/app/components/` holds the spine and
+the action drawer; `web/app/views/` holds one module per route.
+
+**The spine is the layout, not a header.** Four bands — metered, billed,
+allocated, realized — separated by the product's own `≠`, each established or not
+on its OWN evidence, each also being the navigation. An unestablished band reads
+*not established*, never zero: a zero is a measurement and an absence is not.
+
+**Two entry points.** `/` serves the GUI; `/classic` serves the earlier
+single-page console. They link to each other in both directions, pinned by a test
+— serving `/classic` without a way back made it a one-way door.
+
+**Security properties**, all enforced by tests rather than convention:
+
+- No HTML-parsing sink anywhere in the app (`innerHTML`, `outerHTML`,
+  `insertAdjacentHTML`, `document.write` are all absent). Ledger data is
+  operator-supplied — project names from folder names, model ids from provider
+  responses — so it must never be able to become markup.
+- Zero external requests. No CDN, no fonts, no analytics. Pinned for both entry
+  points.
+- Mutating routes require `x-aegis-local: 1`, a header a cross-origin page cannot
+  set without a preflight this server never answers.
+- CSP served with the HTML.
+
+**The GUI/server payload contract.** The browser app declares its own view of
+every payload, and the browser tsconfig cannot see the Node source — so the two
+declarations are structurally unrelated to the typechecker. A field name invented
+in the GUI is not a compile error, and reading an absent field yields `undefined`,
+which renders as whatever a screen shows for "absent": usually a legitimate,
+honest-looking state. That failure mode shipped three times (a breakdown table of
+em-dashes; "no cap set" on a machine with a $30 cap enforcing; a silently
+discarded settings patch). `test/dashboard-contract.test.ts` now derives the
+endpoint→interface pairings from the API client itself, fetches every read
+endpoint against a real server, and asserts every required field actually
+arrives.
 
 ### Component responsibilities
 
@@ -82,7 +137,8 @@ The whole daemon is one Node process. The proxy (`:8090`) and the dashboard (`:8
 | Receipts | `src/value/receipt.ts` | ed25519-signed, verifiable Value Receipts |
 | System scan | `src/scan/scan.ts`, `src/scan/knownApps.ts` | Proactive, read-only discovery: the 3 importable tools, repos under a root, and a wider best-effort inventory of other AI coding tools detected (never a claim of import capability) |
 | Config | `src/config.ts` | Load/save `~/.aegisflow/config.json`, resolve paths |
-| Dashboard | `src/dashboard/` | Read-only JSON API + single-page console |
+| Dashboard API | `src/dashboard/server.ts` | JSON API over the store, plus six CSRF-guarded mutating routes (`/api/import`, `/api/discover`, `POST /api/scan`, `/api/judge`, `/api/settings/update`, `/api/settings/clear-proposals`) |
+| Web GUI | `src/dashboard/web/` | The browser application: four-claim spine, seven routes, preview-then-commit drawer. Built, not inlined — see §2.1 |
 | CLI | `src/cli.ts` + `src/cli/` | Thin dispatcher (`src/cli.ts`: help, version, main) over per-command modules — `showCmd`, `valueCmd`, `teamCmd`, `importCmd`, `connectCmd`, `opsCmd`, `runCmd`, with shared `ui`/`flags` helpers |
 
 ---

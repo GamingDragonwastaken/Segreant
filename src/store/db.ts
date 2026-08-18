@@ -2770,7 +2770,7 @@ export class Store {
     const byKey = new Map<string, { bucketStartMs: number; lineItem: string; micros: number }>();
     for (const record of matched) {
       const lineItem = record.sku || record.service || 'unspecified';
-      const key = `${record.chargePeriodStartMs} ${lineItem}`;
+      const key = `${record.chargePeriodStartMs}\u0000${lineItem}`;
       const entry = byKey.get(key) ?? { bucketStartMs: record.chargePeriodStartMs, lineItem, micros: 0 };
       entry.micros += record.amountMicros;
       byKey.set(key, entry);
