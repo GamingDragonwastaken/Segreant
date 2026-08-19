@@ -51,6 +51,10 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
+      - name: Exact clean-candidate release verifier
+        run: npm run release:verify
+      - name: Print machine-readable release evidence
+        run: cat .fiscus-release-evidence/release-evidence.json
       - run: mkdir -p ../fiscus-pack ../fiscus-install
       - run: npm pack --pack-destination ../fiscus-pack
       - working-directory: ../fiscus-install
