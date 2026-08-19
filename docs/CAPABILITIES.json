@@ -1,7 +1,8 @@
 {
   "schemaVersion": 1,
-  "asOf": "2026-08-18",
+  "asOf": "2026-08-19",
   "coreInvariant": "metered usage != provider-billed cost != allocated cost != realized value",
+  "researchInvariant": "observed association != causal effect != safe policy improvement != enforced policy",
   "productScope": {
     "current": "local-first AI Financial Operations; strongest validated outcome evidence is coding-agent workflows",
     "thesis": "broader organizational AI Financial Operations across modalities"
@@ -56,6 +57,16 @@
       "id": "control-enforceability",
       "status": "implemented",
       "basis": "local proxy controls are enforced in path; imported/off-path spend is observed-only; provider-native controls are not attested"
+    },
+    {
+      "id": "economic-control-primitives",
+      "status": "partial",
+      "basis": "pure local research modules for execution-plan identity, immutable decision records, conservative frontiers, tail-risk budgeting, policy-promotion gates, metric safety, AI capital accounts, spend decomposition, and off-policy evaluation; no live routing or enforcement integration"
+    },
+    {
+      "id": "complexity-lab",
+      "status": "partial",
+      "basis": "isolated experimental vector/IRT/interaction/compute-distribution mathematics with a held-out calibration gate against a simpler baseline; not connected to runtime routing or controls"
     }
   ]
 }
