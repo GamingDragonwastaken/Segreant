@@ -1,27 +1,155 @@
 name: CI
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: ci-finalize-release-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  CANDIDATE_SHA: 163b936fb0a9aeeb41519849137e4206c3e4f774
-
 jobs:
-  finalize-release-record:
-    if: github.head_ref == 'agent/truth-closure'
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  # A green source-tree test does not prove the published artifact can start.
+  # Build the tarball, install it into a clean directory, and invoke its real
+  # bin entrypoint without publishing anything.
+  package-smoke:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          ref: agent/truth-closure
-          fetch-depth: 0
-      - name: Finalize documentation-only release record
-        run: bash scripts/finalize-release-gate.sh
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: mkdir -p ../fiscus-pack ../fiscus-install
+      - run: npm pack --pack-destination ../fiscus-pack
+      - working-directory: ../fiscus-install
+        run: npm install --ignore-scripts --no-package-lock ../fiscus-pack/fiscus-*.tgz
+      - working-directory: ../fiscus-install
+        run: ./node_modules/.bin/fiscus --help
+      # Prove the packed executable, compiled dashboard module graph, and isolated
+      # synthetic ledger work together. The browser GUI is modular: data-backed
+      # labels are rendered after its ES modules execute, so this smoke verifies
+      # the shell/module transport plus the live APIs rather than grepping the
+      # unexecuted root HTML for dynamic view text.
+      - name: Packaged demo dashboard smoke
+        working-directory: ../fiscus-install
+        shell: bash
+        run: |
+          set -euo pipefail
+          export AEGIS_HOME="$PWD/.fiscus-home"
+          ./node_modules/.bin/fiscus billing scope set --account-ref ci-package-smoke --json >scope-preview.json
+          ./node_modules/.bin/fiscus billing scope set --account-ref ci-package-smoke --project-ref proj_ci_package --apply --json >scope-active.json
+          ./node_modules/.bin/fiscus billing openai-costs preview --from 2026-01-01 --to 2026-01-02 --json >costs-preview.json
+          ./node_modules/.bin/fiscus demo >/dev/null
+          ./node_modules/.bin/fiscus start --demo --port 18090 --dashboard-port 18091 >fiscus-dashboard.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 40); do
+            if curl --fail --silent --show-error http://127.0.0.1:18091/api/health >/dev/null; then break; fi
+            sleep 0.25
+          done
+          curl --fail --silent --show-error http://127.0.0.1:18091/api/health >/dev/null
+          node --input-type=module <<'NODE'
+          const base = 'http://127.0.0.1:18091';
+          const overview = await (await fetch(`${base}/api/overview`)).json();
+          const value = await (await fetch(`${base}/api/value`)).json();
+          const billing = await (await fetch(`${base}/api/billing`)).json();
+          const html = await (await fetch(`${base}/`)).text();
+          const mainRes = await fetch(`${base}/app/main.js`);
+          const valueRes = await fetch(`${base}/app/views/value.js`);
+          const evidenceRes = await fetch(`${base}/app/views/evidence.js`);
+          const mainModule = await mainRes.text();
+          const valueModule = await valueRes.text();
+          const evidenceModule = await evidenceRes.text();
+          const scope = JSON.parse(await (await import('node:fs/promises')).readFile('scope-preview.json', 'utf8'));
+          const activeScope = JSON.parse(await (await import('node:fs/promises')).readFile('scope-active.json', 'utf8'));
+          const costs = JSON.parse(await (await import('node:fs/promises')).readFile('costs-preview.json', 'utf8'));
+          if (overview.demo !== true || !(overview.summary?.requests > 0)) throw new Error('packaged demo overview missing labelled synthetic traffic');
+          if (value.demo !== true || !Array.isArray(value.frontier?.modelSwitches) || value.frontier.modelSwitches.length === 0) throw new Error('packaged dashboard value API missing model trial');
+          if (!value.frontier.modelSwitches.every((item) => item.confidence === 'trial')) throw new Error('synthetic model trial was overstated as evidence');
+          if (scope.applied !== false || scope.preview?.trust !== 'operator_declared_unverified') throw new Error('packaged billing-scope preview did not preserve dry-run/unverified boundary');
+          if (activeScope.applied !== true || activeScope.declaration?.providerProjectRef !== 'proj_ci_package') throw new Error('packaged scope activation did not preserve declared project provenance');
+          if (costs.applied !== false || costs.networkAttempted !== false || costs.credentialRead !== false || costs.preview?.projectRef !== 'proj_ci_package') throw new Error('packaged OpenAI Costs preview lost its secret-free/no-network boundary');
+          if (billing.demo !== true || billing.summary?.recordCount !== 0 || billing.evidence?.reconciliationStatus !== 'not_reconciled') throw new Error('packaged demo billing surface fabricated evidence or lost its unresolved boundary');
+          if (!html.includes('type="module"') || !html.includes('/app/main.js')) throw new Error('packaged dashboard shell does not boot the compiled browser app');
+          if (!mainRes.ok || !mainModule.includes("./core/chain.js") || !mainModule.includes("./views/value.js") || !mainModule.includes("./views/evidence.js")) throw new Error('packaged dashboard entrypoint/module graph is incomplete');
+          if (!valueRes.ok || !valueModule.includes('Sample data.') || !valueModule.includes('Realized value')) throw new Error('packaged value renderer is missing from the module graph');
+          if (!evidenceRes.ok || !evidenceModule.includes('Evidence')) throw new Error('packaged evidence renderer is missing from the module graph');
+          NODE
+
+  # team-server is a genuinely separate npm package (own package.json/lockfile,
+  # `pg` as its only dependency) so it gets its own job rather than being folded
+  # into `test` above — same OS matrix, run in parallel, never silently skipped.
+  team-server-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: team-server
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: team-server/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  team-server-postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: fiscus
+          POSTGRES_PASSWORD: fiscus_ci
+          POSTGRES_DB: fiscus
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fiscus -d fiscus"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: team-server
+    env:
+      DATABASE_URL: postgresql://fiscus:fiscus_ci@127.0.0.1:5432/fiscus
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: team-server/package-lock.json
+      - run: npm ci
+      - name: Real PostgreSQL adapter smoke
+        run: node --disable-warning=ExperimentalWarning --test integration/postgres.test.ts
