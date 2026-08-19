@@ -33,7 +33,9 @@ jobs:
         with: { node-version: '24', cache: npm }
       - run: npm ci
       - name: Apply exact pricing coverage parity
-        run: python scripts/phase6-pricing-parity.py
+        run: |
+          python scripts/phase6-pricing-parity.py
+          python scripts/phase6-test-fixup.py
       - run: git diff --check
       - run: npm run typecheck
       - run: npm test
@@ -53,7 +55,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -f scripts/phase6-pricing-parity.py .github/workflows/phase6-pricing-parity.yml
+          rm -f scripts/phase6-pricing-parity.py scripts/phase6-test-fixup.py .github/workflows/phase6-pricing-parity.yml
           git add -A
           git config user.name "Fiscus truth-closure bot"
           git config user.email "noreply@github.com"
