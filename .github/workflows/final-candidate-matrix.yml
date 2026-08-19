@@ -1,0 +1,181 @@
+name: Final Candidate Matrix
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: final-candidate-matrix
+  cancel-in-progress: true
+
+env:
+  CANDIDATE_SHA: 163b936fb0a9aeeb41519849137e4206c3e4f774
+
+jobs:
+  main-test:
+    name: main / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+      - name: Assert exact candidate
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  package-smoke:
+    name: packaged candidate / ubuntu
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+      - name: Assert exact candidate
+        run: test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: mkdir -p ../fiscus-pack ../fiscus-install
+      - run: npm pack --pack-destination ../fiscus-pack
+      - working-directory: ../fiscus-install
+        run: npm install --ignore-scripts --no-package-lock ../fiscus-pack/fiscus-*.tgz
+      - working-directory: ../fiscus-install
+        run: ./node_modules/.bin/fiscus --help
+      - name: Packaged dashboard and API truth smoke
+        working-directory: ../fiscus-install
+        shell: bash
+        run: |
+          set -euo pipefail
+          export AEGIS_HOME="$PWD/.fiscus-home"
+          ./node_modules/.bin/fiscus billing scope set --account-ref final-matrix --json >scope-preview.json
+          ./node_modules/.bin/fiscus billing scope set --account-ref final-matrix --project-ref proj_final_matrix --apply --json >scope-active.json
+          ./node_modules/.bin/fiscus billing openai-costs preview --from 2026-01-01 --to 2026-01-02 --json >costs-preview.json
+          ./node_modules/.bin/fiscus demo >/dev/null
+          ./node_modules/.bin/fiscus start --demo --port 18190 --dashboard-port 18191 >fiscus-dashboard.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 50); do
+            if curl --fail --silent --show-error http://127.0.0.1:18191/api/health >/dev/null; then break; fi
+            sleep 0.25
+          done
+          curl --fail --silent --show-error http://127.0.0.1:18191/api/health >/dev/null
+          node --input-type=module <<'NODE'
+          const fs = await import('node:fs/promises');
+          const base = 'http://127.0.0.1:18191';
+          const getJson = async (path) => {
+            const res = await fetch(`${base}${path}`);
+            if (!res.ok) throw new Error(`${path} returned ${res.status}`);
+            return res.json();
+          };
+          const overview = await getJson('/api/overview');
+          const value = await getJson('/api/value');
+          const billing = await getJson('/api/billing');
+          const pricing = await getJson('/api/pricing?all=1');
+          const htmlRes = await fetch(`${base}/`);
+          const mainRes = await fetch(`${base}/app/main.js`);
+          const valueRes = await fetch(`${base}/app/views/value.js`);
+          const evidenceRes = await fetch(`${base}/app/views/evidence.js`);
+          const html = await htmlRes.text();
+          const mainModule = await mainRes.text();
+          const valueModule = await valueRes.text();
+          const evidenceModule = await evidenceRes.text();
+          const scope = JSON.parse(await fs.readFile('scope-preview.json', 'utf8'));
+          const activeScope = JSON.parse(await fs.readFile('scope-active.json', 'utf8'));
+          const costs = JSON.parse(await fs.readFile('costs-preview.json', 'utf8'));
+
+          if (overview.demo !== true || !(overview.summary?.requests > 0)) throw new Error('packaged demo overview missing labelled synthetic traffic');
+          if (value.demo !== true || !Array.isArray(value.frontier?.modelSwitches) || value.frontier.modelSwitches.length === 0) throw new Error('packaged value API missing model trial');
+          if (!value.frontier.modelSwitches.every((item) => item.confidence === 'trial')) throw new Error('synthetic model trial overstated as evidence');
+          if (scope.applied !== false || scope.preview?.trust !== 'operator_declared_unverified') throw new Error('billing-scope preview lost dry-run/unverified boundary');
+          if (activeScope.applied !== true || activeScope.declaration?.providerProjectRef !== 'proj_final_matrix') throw new Error('scope activation lost declared project provenance');
+          if (costs.applied !== false || costs.networkAttempted !== false || costs.credentialRead !== false || costs.preview?.projectRef !== 'proj_final_matrix') throw new Error('OpenAI Costs preview lost secret-free/no-network boundary');
+          if (billing.demo !== true || billing.summary?.recordCount !== 0 || billing.evidence?.reconciliationStatus !== 'not_reconciled') throw new Error('demo billing surface fabricated evidence or lost unresolved boundary');
+          if (!pricing.window || pricing.window.label !== 'all recorded time' || !Array.isArray(pricing.provenance)) throw new Error('packaged pricing coverage surface missing');
+          if (!/does not fetch pricing, reprice history/i.test(pricing.boundary ?? '')) throw new Error('pricing boundary does not separate coverage from mutation');
+          if (!/provider-billed or reconciled cost/i.test(pricing.boundary ?? '')) throw new Error('pricing boundary conflates local pricing with billing evidence');
+          if (!htmlRes.ok || !html.includes('type="module"') || !html.includes('/app/main.js')) throw new Error('packaged dashboard shell does not boot compiled browser app');
+          if (!mainRes.ok || !mainModule.includes('./core/chain.js') || !mainModule.includes('./views/value.js') || !mainModule.includes('./views/evidence.js')) throw new Error('packaged dashboard module graph incomplete');
+          if (!valueRes.ok || !valueModule.includes('Realized value')) throw new Error('packaged value renderer missing');
+          if (!evidenceRes.ok || !evidenceModule.includes('Evidence')) throw new Error('packaged evidence renderer missing');
+          NODE
+
+  team-test:
+    name: team / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: team-server
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+      - name: Assert exact candidate
+        working-directory: .
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: team-server/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  team-postgres:
+    name: team / real PostgreSQL 17
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: fiscus
+          POSTGRES_PASSWORD: fiscus_final_matrix
+          POSTGRES_DB: fiscus
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fiscus -d fiscus"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://fiscus:fiscus_final_matrix@127.0.0.1:5432/fiscus
+    defaults:
+      run:
+        working-directory: team-server
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+      - name: Assert exact candidate
+        working-directory: .
+        run: test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: team-server/package-lock.json
+      - run: npm ci
+      - name: Real PostgreSQL adapter smoke
+        run: node --disable-warning=ExperimentalWarning --test integration/postgres.test.ts
