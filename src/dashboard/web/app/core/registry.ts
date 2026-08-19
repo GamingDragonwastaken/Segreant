@@ -112,7 +112,7 @@ const RAW_CAPABILITIES: readonly Capability[] = [
 
   // ---- System -------------------------------------------------------------
   { id: 'settings', label: 'Settings', plain: 'How Fiscus behaves on this machine.', territory: 'system', consequence: 'local', coverage: 'full', command: 'fiscus config' },
-  { id: 'pricing', label: 'Pricing', plain: 'The rate cards used to estimate cost.', territory: 'system', consequence: 'read', coverage: 'partial', command: 'fiscus pricing --coverage' },
+  { id: 'pricing', label: 'Pricing', plain: 'The rate cards used to estimate cost.', territory: 'system', consequence: 'read', coverage: 'full', command: 'fiscus pricing --coverage' },
   {
     id: 'reprice', label: 'Reprice history', plain: 'Recalculate past costs against a corrected rate card.',
     territory: 'system', consequence: 'destructive', coverage: 'planned', command: 'fiscus reprice --apply',
@@ -151,7 +151,6 @@ const GAP_DETAILS: Readonly<Record<string, { reason: string; safeAlternative: st
   connect: { reason: 'Connection recipes can change external tool configuration and need tool-specific previews.', safeAlternative: 'Use fiscus connect <tool>; write-capable variants require their explicit CLI flag.' },
   baseline: { reason: 'Baseline evidence is consumed by value calculations, but refresh/source management has no browser surface.', safeAlternative: 'Use fiscus baseline to inspect or explicitly refresh a configured source.' },
   demo: { reason: 'Demo state is supported by read surfaces, but generation/clearing is not exposed as a reviewed browser action.', safeAlternative: 'Use fiscus demo or fiscus demo --clear.' },
-  pricing: { reason: 'Pricing provenance is shown in spend/value surfaces, but the complete coverage report is not a dedicated GUI view.', safeAlternative: 'Use fiscus pricing --coverage; refresh is an explicit network action.' },
   doctor: { reason: 'Setup state is visible across screens, but the consolidated diagnostic report has no browser renderer.', safeAlternative: 'Use fiscus doctor.' },
   exec: { reason: 'Wrapping an arbitrary local command is too consequential for a generic browser button and requires command/exit-code semantics.', safeAlternative: 'Use fiscus exec -- <command> explicitly.' },
   team: { reason: 'The local value screen exposes privacy-safe cohort summaries, but the complete team CLI workflow has no dedicated browser view.', safeAlternative: 'Use fiscus team; named self-view remains subject to its existing privacy gates.' },

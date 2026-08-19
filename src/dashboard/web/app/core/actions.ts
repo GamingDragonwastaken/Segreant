@@ -11,7 +11,7 @@
 import { api } from './api.ts';
 import { h } from './dom.ts';
 import { signal } from './signal.ts';
-import { isPrecise, usd, count } from './fmt.ts';
+import { isPrecise, usd, count, pct } from './fmt.ts';
 import type { Capability } from './registry.ts';
 import type { ActionSpec, PreviewResult } from '../components/drawer.ts';
 
@@ -258,6 +258,68 @@ const BUILDERS: Record<string, Builder> = {
     }),
     download: '/api/export.csv',
   }),
+
+  pricing: (cap) => {
+    const days = signal<string>('30');
+    const all = signal<boolean>(false);
+    return {
+      capability: cap,
+      fields: () => h('div', null,
+        h('label', { class: 'drawer-h3', for: 'pricing-days-input' }, 'Coverage window'),
+        h('div', { class: 'facts' },
+          h('label', { class: 'fact' },
+            h('span', { class: 'fact-key', text: 'Last N days' }),
+            h('input', {
+              id: 'pricing-days-input', class: 'drawer-input', type: 'number', min: '0.000001', step: '1',
+              value: '30', disabled: () => all(),
+              oninput: (event: Event) => days.set((event.target as HTMLInputElement).value),
+            })),
+          h('label', { class: 'fact' },
+            h('span', { class: 'fact-key', text: 'All recorded time' }),
+            h('input', {
+              type: 'checkbox', checked: () => all(),
+              onchange: (event: Event) => all.set((event.target as HTMLInputElement).checked),
+            })))),
+      preview: async (): Promise<PreviewResult> => {
+        const parsedDays = Number(days());
+        if (!all() && (!Number.isFinite(parsedDays) || parsedDays <= 0)) {
+          return {
+            applicable: false,
+            blockedReason: 'Enter a positive number of days, or choose all recorded time.',
+            summary: 'Pricing coverage was not read because the requested window is invalid.',
+          };
+        }
+        const payload = await api.pricingCoverage(all() ? { all: true } : { days: parsedDays });
+        const status = payload.activeRateCard;
+        const source = status.source === 'cache'
+          ? `${status.sourceKind ?? 'cached'} local cache`
+          : status.source === 'bundled'
+            ? 'bundled package card'
+            : status.source ?? 'unknown source';
+        const freshness = status.stale === true
+          ? `stale${status.ageDays == null ? '' : ` · ${count(status.ageDays)}d old`}`
+          : `current${status.ageDays == null ? '' : ` · ${count(status.ageDays)}d old`}`;
+        const estimated = payload.provenance.reduce((sum, row) => sum + row.estimatedCostUsd, 0);
+        const cohortRows = payload.provenance.map((row) => ({
+          label: `${row.provider}/${row.model}`,
+          value: usd(row.costUsd),
+          note: `${count(row.requests)} req · ${row.costBasis.replaceAll('_', ' ')} · ${row.rateMatchKind.replaceAll('_', ' ')} · ${row.rateCardSourceKind} · ${row.rateCardSha256?.slice(0, 12) ?? 'no card'}`,
+        }));
+        return {
+          applicable: false,
+          blockedReason: 'Read-only pricing evidence. Refreshing a rate card and repricing history are separate explicit actions.',
+          summary: `Pricing provenance for ${payload.window.label}. Every cohort preserves the evidence captured when its requests were metered.`,
+          rows: [
+            { label: 'Active rate card', value: source, note: `${freshness}${status.modelCount == null ? '' : ` · ${count(status.modelCount)} models`}` },
+            { label: 'Recorded amount', value: usd(payload.total.costUsd), note: `${count(payload.total.requests)} request(s)` },
+            { label: 'Estimated-rate share', value: payload.total.costUsd > 0 ? pct(estimated / payload.total.costUsd, 1) : '0%', note: `${usd(estimated)} of this window used estimated pricing evidence` },
+            ...cohortRows,
+          ],
+          notes: [payload.boundary, 'Changing or refreshing the active rate card does not rewrite the provenance shown for historical requests.'],
+        };
+      },
+    };
+  },
 
   settings: (cap) => ({
     capability: cap,

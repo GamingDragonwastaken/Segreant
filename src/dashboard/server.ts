@@ -39,7 +39,7 @@ import { importCodex, defaultCodexRoot } from '../connect/codex.ts';
 import { judgeSessionFromStore } from '../judge/orchestrate.ts';
 import { resolveJudgeTier, hasHostedJudgeApiKey } from '../judge/tier.ts';
 import { pricingStatus } from '../cost/pricing.ts';
-import type { Overview } from './web/app/core/contracts.ts';
+import type { Overview, PricingCoveragePayload } from './web/app/core/contracts.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = join(__dirname, 'web');
@@ -196,6 +196,34 @@ function buildOverview(store: Store, config: AegisConfig, range: RangeKey): Over
     // Governance alerts refresh on the live poll. Realized-value alerts (git-gated)
     // are surfaced in /api/value; here we pass null so they're simply omitted.
     alerts: computeAlerts(store, config, { now }),
+  };
+}
+
+/**
+ * The same immutable pricing-provenance read model as `fiscus pricing
+ * --coverage`. Keeping it server-side means the CLI and GUI both group rows by
+ * the evidence captured at metering time; neither can accidentally merge two
+ * cards/match paths or reinterpret a historical request after a refresh.
+ */
+function buildPricingCoverage(
+  store: Store,
+  config: AegisConfig,
+  opts: { all: boolean; days: number },
+  now = Date.now(),
+): PricingCoveragePayload {
+  const day = 24 * 60 * 60 * 1000;
+  const startMs = opts.all ? 0 : now - opts.days * day;
+  const endMs = now + 1000;
+  const label = opts.all ? 'all recorded time' : `last ${opts.days} day${opts.days === 1 ? '' : 's'}`;
+  const total = store.summary(startMs, endMs);
+  return {
+    demo: isDemo(),
+    generatedAt: new Date(now).toISOString(),
+    window: { startMs, endMs, label },
+    activeRateCard: pricingStatus(config.pricing.maxAgeDays),
+    total: { costUsd: total.costUsd, requests: total.requests },
+    provenance: store.pricingEvidenceByModel(startMs, endMs),
+    boundary: 'Captured local pricing evidence only. It does not fetch pricing, reprice history, or represent any amount as provider-billed or reconciled cost.',
   };
 }
 
@@ -407,6 +435,28 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
       const safe = valid.includes(range) ? range : 'today';
       try {
         return json(res, 200, buildOverview(store, config, safe));
+      } catch (err) {
+        return json(res, 500, { error: String(err) });
+      }
+    }
+
+    // Exact read-only counterpart of `fiscus pricing --coverage`. `all=1`
+    // takes precedence over days, matching the CLI's --all behavior. This route
+    // never calls refreshPricing and never rewrites historical request costs.
+    if (url.pathname === '/api/pricing') {
+      if (req.method !== 'GET') {
+        res.writeHead(405, { 'content-type': 'text/plain', allow: 'GET' });
+        res.end('method not allowed');
+        return;
+      }
+      const all = url.searchParams.has('all');
+      const daysRaw = url.searchParams.get('days');
+      const days = daysRaw === null ? 30 : Number(daysRaw);
+      if (!all && (!Number.isFinite(days) || days <= 0)) {
+        return json(res, 400, { error: 'days must be a positive number (or use all=1)' });
+      }
+      try {
+        return json(res, 200, buildPricingCoverage(store, config, { all, days }));
       } catch (err) {
         return json(res, 500, { error: String(err) });
       }

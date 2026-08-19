@@ -11,8 +11,8 @@
  * consumes fails loudly the moment that screen's data moves.
  */
 
-import type { Summary, GroupRow, SeriesPoint, AlertRow, Overview, BillingPayload, CostCentre, AllocationRule, AllocationPayload, Matured, ValuePayload, BudgetAdvice, BudgetConfig, SettingsSnapshot, Importer, ScanPayload, ImportResult, HealthPayload } from './contracts.ts';
-export type { Summary, GroupRow, SeriesPoint, AlertRow, Overview, BillingPayload, CostCentre, AllocationRule, AllocationPayload, Matured, ValuePayload, BudgetAdvice, BudgetConfig, SettingsSnapshot, Importer, ScanPayload, ImportResult, HealthPayload } from './contracts.ts';
+import type { Summary, GroupRow, SeriesPoint, AlertRow, Overview, PricingCoveragePayload, BillingPayload, CostCentre, AllocationRule, AllocationPayload, Matured, ValuePayload, BudgetAdvice, BudgetConfig, SettingsSnapshot, Importer, ScanPayload, ImportResult, HealthPayload } from './contracts.ts';
+export type { Summary, GroupRow, SeriesPoint, AlertRow, Overview, PricingCoveragePayload, BillingPayload, CostCentre, AllocationRule, AllocationPayload, Matured, ValuePayload, BudgetAdvice, BudgetConfig, SettingsSnapshot, Importer, ScanPayload, ImportResult, HealthPayload } from './contracts.ts';
 
 export class ApiError extends Error {
   // Explicit fields rather than constructor parameter properties: the repo
@@ -61,6 +61,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   health: () => request<HealthPayload>('/api/health'),
   overview: (range: string) => request<Overview>(`/api/overview?range=${encodeURIComponent(range)}`),
+  pricingCoverage: (window: { days?: number; all?: boolean } = {}) => {
+    const query = window.all ? 'all=1' : `days=${encodeURIComponent(String(window.days ?? 30))}`;
+    return request<PricingCoveragePayload>(`/api/pricing?${query}`);
+  },
   billing: () => request<BillingPayload>('/api/billing'),
   allocation: () => request<AllocationPayload>('/api/allocation'),
   value: () => request<ValuePayload>('/api/value'),

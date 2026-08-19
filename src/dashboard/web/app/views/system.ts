@@ -67,6 +67,7 @@ export function systemView(): Node {
       h('h2', { class: 'card-title', style: 'margin-bottom: var(--s3)', text: 'Maintenance' }),
       h('div', { class: 'actions' },
         actionCard('settings'),
+        actionCard('pricing'),
         actionCard('doctor'),
         actionCard('clear-proposals'),
         actionCard('prune'))));

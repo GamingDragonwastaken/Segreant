@@ -52,6 +52,48 @@ export interface AlertRow {
   metric: string | null;
 }
 
+export interface PricingStatusSnapshot {
+  source?: string;
+  sourceKind?: string;
+  sourceUrl?: string | null;
+  stale?: boolean;
+  fresh?: boolean;
+  ageDays?: number | null;
+  modelCount?: number;
+  cacheIntegrity?: string;
+  fetchedAt?: string | null;
+  updated?: string;
+  freshnessBasis?: string;
+  cardSha256?: string | null;
+}
+
+/** One immutable pricing-evidence cohort captured on request rows. */
+export interface PricingEvidenceRow {
+  provider: string;
+  model: string;
+  costBasis: string;
+  rateCardSha256: string | null;
+  rateCardSourceKind: string;
+  rateMatchKind: string;
+  rateMatchProvider: string | null;
+  rateMatchModel: string | null;
+  requests: number;
+  costUsd: number;
+  estimatedCostUsd: number;
+  inputTokens: number;
+  outputTokens: number;
+}
+
+export interface PricingCoveragePayload {
+  demo: boolean;
+  generatedAt: string;
+  window: { startMs: number; endMs: number; label: string };
+  activeRateCard: PricingStatusSnapshot;
+  total: { costUsd: number; requests: number };
+  provenance: PricingEvidenceRow[];
+  boundary: string;
+}
+
 export interface Overview {
   demo: boolean;
   range: string;
@@ -59,11 +101,11 @@ export interface Overview {
   budget?: unknown;
   summary: Summary;
   pricing: {
-    status: { fresh?: boolean; ageDays?: number | null } | string;
+    status: PricingStatusSnapshot | string;
     autoRefresh?: boolean;
     estimatedCostUsd: number;
     estimatedSpendShare: number;
-    provenance?: unknown;
+    provenance?: PricingEvidenceRow[];
   };
   byModel: GroupRow[];
   byProject: GroupRow[];
