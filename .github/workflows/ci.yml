@@ -48,9 +48,11 @@ jobs:
         run: npm install --ignore-scripts --no-package-lock ../fiscus-pack/fiscus-*.tgz
       - working-directory: ../fiscus-install
         run: ./node_modules/.bin/fiscus --help
-      # Prove the packed executable, compiled dashboard, static HTML, and isolated
-      # synthetic ledger work together. The trial is intentionally synthetic and
-      # must remain review-only — this is a package/runtime proof, not model evidence.
+      # Prove the packed executable, compiled dashboard module graph, and isolated
+      # synthetic ledger work together. The browser GUI is modular: data-backed
+      # labels are rendered after its ES modules execute, so this smoke verifies
+      # the shell/module transport plus the live APIs rather than grepping the
+      # unexecuted root HTML for dynamic view text.
       - name: Packaged demo dashboard smoke
         working-directory: ../fiscus-install
         shell: bash
@@ -75,6 +77,12 @@ jobs:
           const value = await (await fetch(`${base}/api/value`)).json();
           const billing = await (await fetch(`${base}/api/billing`)).json();
           const html = await (await fetch(`${base}/`)).text();
+          const mainRes = await fetch(`${base}/app/main.js`);
+          const valueRes = await fetch(`${base}/app/views/value.js`);
+          const evidenceRes = await fetch(`${base}/app/views/evidence.js`);
+          const mainModule = await mainRes.text();
+          const valueModule = await valueRes.text();
+          const evidenceModule = await evidenceRes.text();
           const scope = JSON.parse(await (await import('node:fs/promises')).readFile('scope-preview.json', 'utf8'));
           const activeScope = JSON.parse(await (await import('node:fs/promises')).readFile('scope-active.json', 'utf8'));
           const costs = JSON.parse(await (await import('node:fs/promises')).readFile('costs-preview.json', 'utf8'));
@@ -85,7 +93,10 @@ jobs:
           if (activeScope.applied !== true || activeScope.declaration?.providerProjectRef !== 'proj_ci_package') throw new Error('packaged scope activation did not preserve declared project provenance');
           if (costs.applied !== false || costs.networkAttempted !== false || costs.credentialRead !== false || costs.preview?.projectRef !== 'proj_ci_package') throw new Error('packaged OpenAI Costs preview lost its secret-free/no-network boundary');
           if (billing.demo !== true || billing.summary?.recordCount !== 0 || billing.evidence?.reconciliationStatus !== 'not_reconciled') throw new Error('packaged demo billing surface fabricated evidence or lost its unresolved boundary');
-          if (!html.includes('DEMO DATA') || !html.includes('Cheaper model trials') || !html.includes('NOT RECONCILED')) throw new Error('packaged dashboard HTML missing labelled model-trial or billing renderer');
+          if (!html.includes('type="module"') || !html.includes('/app/main.js')) throw new Error('packaged dashboard shell does not boot the compiled browser app');
+          if (!mainRes.ok || !mainModule.includes("./core/chain.js") || !mainModule.includes("./views/value.js") || !mainModule.includes("./views/evidence.js")) throw new Error('packaged dashboard entrypoint/module graph is incomplete');
+          if (!valueRes.ok || !valueModule.includes('Sample data.') || !valueModule.includes('Realized value')) throw new Error('packaged value renderer is missing from the module graph');
+          if (!evidenceRes.ok || !evidenceModule.includes('Evidence')) throw new Error('packaged evidence renderer is missing from the module graph');
           NODE
 
   # team-server is a genuinely separate npm package (own package.json/lockfile,
