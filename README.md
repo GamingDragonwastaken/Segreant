@@ -6,11 +6,13 @@
 
 **Govern the spend. Not the developer.**
 
-Local-first financial control and outcome evidence for AI coding-agent spend: a
-proxy that meters configured traffic, assigns a local list-price estimate,
-measures evidence of what that spend actually *returns* (Return on
-Intelligence), and presents review-only within-task model trials with explicit
-provider and operator-controlled egress boundaries.
+Local-first financial control and outcome evidence for AI spend: Fiscus
+meters configured traffic and supported local tool logs, separates metered cost
+from provider billing evidence and allocation, and measures what that spend
+actually *returns* (Return on Intelligence). Coding-agent workflows currently
+have the deepest validated outcome instrumentation; non-coding outcomes use
+explicit adapters with their evidence limits exposed. Provider and
+operator-controlled egress boundaries remain explicit.
 
 `local-first` · `evidence-limited` · `explicit egress boundaries` · `MIT`
 
@@ -312,20 +314,22 @@ which Fiscus does not have.
 
 Capping waste is the floor. The question that matters is **how much you actually
 get from the AI** — and neither "tokens consumed" nor "lines of code" ever
-answered it. Fiscus's core is **Return on Intelligence (RoI)**: a measure of
-realized AI value that works across *any* token usage (not just coding), is
-measured from the request path instead of surveys, and composes four value
-lenses into a non-compensatory index where one strong axis cannot buy back a
-collapsed one. That is resistance to single-axis optimization, not a proof
-against Goodhart effects in task selection, instrumentation, or baselines.
+answered it. Fiscus's core is **Return on Intelligence (RoI)**: an
+evidence-limited framework for realized AI value. Coding workflows can bind
+request-path evidence to git/CI outcomes; supported non-coding workflows can use
+explicit reported-outcome adapters instead. RoI composes four value lenses into
+a non-compensatory index where one strong axis cannot buy back a collapsed one.
+That is resistance to single-axis compensation, not a proof against Goodhart
+effects in task selection, instrumentation, reporting, or baselines.
 
 > **RoI Index** = geometric mean of **Realization · Acceptance · Lift · Impact** —
 > if any one lens collapses, the index collapses. The denominator is **tokens +
 > the human effort it cost** (priced at a labor rate), not tokens alone.
 
 That index is unitless on purpose — it answers *"how well is the intelligence
-working, across every axis at once?"*, and a geometric mean resists gaming because
-one weak lens drags the whole number down. But a budget owner also asks a blunter
+working, across every instrumented axis at once?"* A geometric mean makes weak
+lenses non-compensatory; it does not make the surrounding measurement system
+immune to gaming. But a budget owner also asks a blunter
 question: **did it pay for itself, in dollars?** So RoI has a second, independent
 face:
 

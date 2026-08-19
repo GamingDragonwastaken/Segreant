@@ -2,7 +2,7 @@
 
 **Status:** Product-direction decision and staged build plan, 2026-08-11. It describes an intended expansion; it is not a claim that the capabilities below are shipped or that Fiscus is a financial system of record today.
 
-**Audited against the source on 2026-08-17 — see [VISION-AUDIT.md](VISION-AUDIT.md).** Section 3's "what exists today" is now stale in both directions, and the audit records three vocabularies specified here that were implemented differently or not at all (cost basis, evidence source, enforceability status). Where this document and the code disagree on a label that is already in migrated databases, the code is authoritative and this document is what needs correcting.
+**Source-status refresh: 2026-08-19.** [VISION-AUDIT.md](VISION-AUDIT.md) remains the historical 2026-08-17 audit; the canonical machine-readable current-status surface is [CAPABILITIES.json](CAPABILITIES.json). Where this roadmap and migrated code disagree on an implemented label, the code is authoritative. Section 3 below has been refreshed only for capabilities now demonstrably implemented; external provider/deployment proof gaps remain open.
 
 ## 1. The product Fiscus should become
 
@@ -57,11 +57,11 @@ That is not yet an AI Financial Operations platform. The gaps below are the mini
 
 | Capability | Current Fiscus position | Minimum missing capability | Priority |
 | --- | --- | --- | --- |
-| Financial source of truth | Local price-table metering and tool-log estimates. | Authoritative provider/billing ingestion, period close, source identity, currency, credits, discounts, adjustments, and retained source lineage. | P0 |
-| Reconciliation | Repricing can improve an estimate; there is no bill-to-ledger comparison. | A per-provider-account, per-period reconciliation record with coverage, variance, and reason codes. | P0 |
+| Financial source of truth | Metered/tool-log estimates plus immutable operator-supplied OpenAI billing evidence and direct OpenAI Costs observations, each retaining source/provenance separately. | Finalized authoritative bill/period-close validation, broader provider coverage, contractual credits/discounts/adjustments, and verified provider-account identity. | P0 |
+| Reconciliation | Immutable project-day reconciliation runs compare compatible OpenAI provider observations with declared-scope proxy traffic and retain residuals, conditions, source kind, and coverage. | End-to-end validation against a real finalized provider bill/account, documented finality, multi-provider support, and period-close operations. | P0 |
 | Organization and identity | Local labels; optional team service has only early aggregate access. | Single-organization model, roles, OIDC group-to-role mapping, account/project/cost-center ownership, and trustworthy ingestion identity. | P0 |
-| Allocation and showback | Project/user labels and value-aware budget recommendations. | Versioned direct/shared allocation rules, unallocated cost, effective dates, approval, reversal, and period showback exports. | P0 |
-| Central controls | Local proxy caps protect only routed traffic. | Policy objects with scope, owner, version, exception, simulation, decision log, and an honest observed-only state for off-path usage. | P0 |
+| Allocation and showback | Cost centres, versioned direct/fixed/shared rules, exact-microdollar conserving runs, unallocated residuals, effective-time rule application, and showback-only API/GUI surfaces are implemented. | Organization-grade ownership/identity, approval/reversal workflow, closed-period exports, and any chargeback claim. | P0 |
+| Central controls | Local proxy controls are explicitly `enforced_in_path`; imported/off-path spend is `observed_only`, provider-native control is uninspected, and saved cap changes reach the running proxy. Experimental decision-ledger/promotion mathematics exists only as pure research code. | Organization-scoped policy ownership/versions/exceptions/approvals and a proven central enforcement plane; research primitives must clear calibration/promotion gates before runtime use. | P0 |
 | Integration plane | Local importers, proxy, CSV/JSON, webhook, team rollups, and offline CI artifact import. | Versioned connector contract, authenticated read API, idempotent ingestion, connector health/freshness/coverage, and data-warehouse exports. | P1 |
 | Forecast and planning | Historical p90/headroom and a value-aware allocation recommendation. | Forecast horizon, prediction intervals, scenario assumptions, backtesting, actual-vs-forecast history, and budget/forecast/final variance. | P1 |
 | Outcome evidence breadth | Strong coding-agent foundation; signed CI v1 is intentionally `tested` only. | Protected merge, deployment, rollback/incident, and other source-specific evidence adapters, each bound to immutable work. | P1 |

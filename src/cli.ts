@@ -28,7 +28,7 @@ import { cmdStart, cmdDemo, cmdPricing, cmdBaseline, cmdReprice } from './cli/ru
 
 function cmdHelp(): void {
   console.log(`
-  Fiscus — meter and cap what your AI coding agents spend, locally.
+  Fiscus — local AI financial operations: meter, control, reconcile, allocate, and evidence value.
 
   Usage: fiscus <command> [options]
 

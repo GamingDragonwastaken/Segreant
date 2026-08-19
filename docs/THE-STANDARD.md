@@ -34,13 +34,20 @@ and treats cost as a lens laid over it.
 
 ## 2. The unit of work
 
-The atom is the **commit** — the smallest thing git makes objectively
-verifiable. Commits group into **tasks** (a session's worth) and **periods**
-(a sprint). Everything below is computed per commit and aggregated up.
+For the **coding adapter**, the atom is the **commit** — the smallest unit git
+makes objectively verifiable. Commits group into **tasks** (a session's worth)
+and **periods** (a sprint), and the eight-gate funnel below is computed at that
+grain.
+
+Fiscus also supports explicit non-coding outcome adapters. Those use the
+bounded session/outcome unit supplied by the adapter rather than pretending a
+commit exists. Their evidence depth is currently weaker and must remain labelled
+as such; coding-gate semantics do not become universal merely because the
+product's financial layer is broader.
 
 ---
 
-## 3. The funnel — eight gates
+## 3. The coding funnel — eight gates
 
 A unit of work travels down a ladder of gates. Each gate is an **objective,
 observable check**, and each is sourced from data Fiscus can actually see:
@@ -68,9 +75,11 @@ measure.
 
 ## 4. The signal nobody else has: Accepted (edit-distance)
 
-Gates 3–8 can be reconstructed by anyone with git + CI hooks. Gates **1–2 can
-only be measured from inside the request path**, which is exactly where
-Fiscus sits. This is the moat.
+Gates 3–8 can be reconstructed from git + CI evidence. In current Fiscus,
+gates **1–2 are captured from the request path**, which is where the product can
+observe proposed output before it becomes an artifact. That is a distinctive
+source of evidence, not an exclusivity claim: another system that retained both
+proposal and final-artifact evidence could construct a comparable signal.
 
 The proxy sees the agent's *proposed* edits (tool-call payloads in the response
 body). Git sees what was *actually committed*. The overlap between them —
@@ -175,8 +184,11 @@ signed it. `src/value/receipt.ts`.
 ## 8. What it deliberately is not
 
 - **Not a per-developer leaderboard tied to comp.** It's a coaching and
-  accounting instrument. (Gaming is a non-concern by design intent — the metric
-  is about realized production; optimizing realized production *is the goal*.)
+  accounting instrument. It is **not immune to gaming**: the funnel and
+  non-compensatory lenses reduce some single-axis incentives, while selection,
+  reporting, instrumentation, and baselines can still be manipulated. Resource
+  consumption metrics such as tokens and spend are inputs, not productivity
+  targets, and should not be rewarded as individual performance.
 - **Not a quality grade of the code's internals.** It measures whether work got
   realized, not whether it is elegant. Complexity-delta is a future gate.
 - **Not retrospective-only.** Acceptance and the early gates give same-session

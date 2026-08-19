@@ -1,9 +1,10 @@
 /**
  * Local web dashboard.
  *
- * A small read-only HTTP server over the same Store the proxy writes to. It
- * exposes a JSON API and serves a single self-contained HTML page. Bound to
- * localhost only — like everything else, nothing leaves the machine.
+ * A small local HTTP server over the same Store the proxy writes to. It exposes
+ * a JSON API and serves the bundled dashboard on loopback only. The dashboard
+ * itself makes no off-device request; separate explicit Fiscus actions may use
+ * the network according to docs/DATA-BOUNDARIES.md.
  */
 
 import http from 'node:http';
