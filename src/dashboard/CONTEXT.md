@@ -83,6 +83,13 @@ web/
   answered `DELETE`/`PATCH` with 200 and a full payload. They are `GET, HEAD`
   now. HEAD stays because Node drops the body itself, so it already worked;
   removing it would have traded a fall-open for a regression.
+- **A CLI/GUI parity claim is a shared function, never a comment.** Where a
+  route answers the same question as a CLI verb, both call one module:
+  `/api/value` and the value commands compose `src/value/report.ts`;
+  `/api/pricing` and `pricing --coverage` compose `src/cost/coverage.ts`. This
+  repo has already paid for the alternative — five comments in the dashboard
+  asserting its arithmetic matched the CLI's, which is asserting, not enforcing.
+  A new route that restates a CLI computation inline is the defect.
 - **A request the asset path cannot parse is a miss, never an exception.**
   `static.ts` reads the operator's disk, so it is reachable with input no other
   route sees. `decodeURIComponent` throws on a malformed escape (`%ZZ`, a

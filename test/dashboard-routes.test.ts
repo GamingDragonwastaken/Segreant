@@ -150,15 +150,21 @@ const HISTORICAL_ALLOW: Record<string, string> = {
 };
 
 /**
- * The read routes that used to answer ANY method, listed separately from the
- * historical map because their `Allow` is new rather than inherited.
+ * Read routes whose `Allow` is `GET, HEAD`, listed separately from the
+ * historical map because their header is new rather than inherited.
  *
- * They carried `methods: null` — faithfully preserved from the pre-refactor
- * if-chain, which never method-checked them — so `DELETE /api/value` returned
- * 200 and the full payload. Every one of these handlers is a read, so nothing
- * was corruptible through them; it is the route table that was lying, by
- * containing rows that meant "unrestricted" while claiming to be the auditable
- * statement of what this server answers.
+ * Ten of them are the former fall-open: they carried `methods: null` —
+ * faithfully preserved from the pre-refactor if-chain, which never
+ * method-checked them — so `DELETE /api/value` returned 200 and the full
+ * payload. Every one of those handlers is a read, so nothing was corruptible
+ * through them; it is the route table that was lying, by containing rows that
+ * meant "unrestricted" while claiming to be the auditable statement of what
+ * this server answers.
+ *
+ * `/api/pricing` is not one of those ten. It is a route added afterwards, and
+ * it is here because the union assertion below refused to let it ship without
+ * someone stating which methods it answers — which is the entire point of that
+ * assertion, and it fired on the first new route after it was written.
  *
  * HEAD is included, not dropped: Node suppresses the body itself, so HEAD
  * already worked on every one of these. Restricting them to GET alone would
@@ -173,6 +179,7 @@ const READ_ONLY_ALLOW: Record<string, string> = {
   '/api/health': 'GET, HEAD',
   '/api/importers': 'GET, HEAD',
   '/api/overview': 'GET, HEAD',
+  '/api/pricing': 'GET, HEAD',
   '/api/export.csv': 'GET, HEAD',
   '/api/realization': 'GET, HEAD',
   '/api/guide': 'GET, HEAD',

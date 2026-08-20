@@ -40,6 +40,7 @@ import { importCodex, defaultCodexRoot } from '../connect/codex.ts';
 import { judgeSessionFromStore } from '../judge/orchestrate.ts';
 import { resolveJudgeTier, hasHostedJudgeApiKey } from '../judge/tier.ts';
 import { pricingStatus } from '../cost/pricing.ts';
+import { pricingCoverage } from '../cost/coverage.ts';
 
 /**
  * Config persistence is injectable so the dashboard can be exercised without
@@ -483,6 +484,41 @@ export function handleAllocation({ res, store }: RouteContext): void {
   }
 }
 
+/**
+ * Pricing provenance — the read-only GUI counterpart of `fiscus pricing
+ * --coverage`, answering how each recorded amount was actually priced.
+ *
+ * Parity here is literal, not asserted: both surfaces call `pricingCoverage`
+ * in src/cost/coverage.ts, so neither can drift into a different answer about
+ * provenance. That is the same fix `src/value/report.ts` applied to the value
+ * arithmetic, for the same reason.
+ *
+ * What this route must never become. It reads. It cannot refresh a rate card,
+ * cannot reprice a historical row, and cannot present a local list-price
+ * estimate as provider-billed or reconciled cost — the payload carries
+ * `boundary` so that claim travels with the number instead of depending on
+ * whichever surface renders it.
+ *
+ * `all=1` takes precedence over `days`, matching the CLI's `--all`. An
+ * unparseable or non-positive `days` is a 400 rather than a silent default:
+ * quietly substituting 30 days would answer a different question than the one
+ * asked, over a window the caller never sees.
+ */
+export function handlePricing({ res, url, store, config }: RouteContext): void {
+  try {
+    const all = url.searchParams.get('all') === '1' || url.searchParams.get('all') === 'true';
+    const raw = url.searchParams.get('days');
+    const days = raw === null ? 30 : Number(raw);
+    if (!all && (!Number.isFinite(days) || days <= 0)) {
+      return json(res, 400, { error: 'days must be a positive number (or pass all=1)' });
+    }
+    const payload = pricingCoverage(store, { all, days, maxAgeDays: config.pricing.maxAgeDays });
+    return json(res, 200, { demo: isDemo(), generatedAt: new Date().toISOString(), ...payload });
+  } catch (err) {
+    return json(res, 500, { error: String(err) });
+  }
+}
+
 export function handleExportCsv({ res, url, store }: RouteContext): void {
   const range = (url.searchParams.get('range') as RangeKey) ?? '30d';
   const valid: RangeKey[] = ['today', '7d', '30d', 'all'];
@@ -747,6 +783,7 @@ export const ROUTES: readonly Route[] = [
   { path: '/api/overview', methods: ['GET', 'HEAD'], handler: handleOverview },
   { path: '/api/billing', methods: ['GET'], handler: handleBilling },
   { path: '/api/allocation', methods: ['GET'], handler: handleAllocation },
+  { path: '/api/pricing', methods: ['GET', 'HEAD'], handler: handlePricing },
   { path: '/api/export.csv', methods: ['GET', 'HEAD'], handler: handleExportCsv },
   { path: '/api/realization', methods: ['GET', 'HEAD'], handler: handleRealization },
   { path: '/api/guide', methods: ['GET', 'HEAD'], handler: handleGuide },

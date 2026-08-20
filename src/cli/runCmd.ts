@@ -13,6 +13,7 @@ import { loadConfig, saveConfig, dbPath, demoDbPath, isDemo, unlinkDemoDb, aegis
 import { packageVersion } from '../version.ts';
 import { seedDemo } from '../demo/seed.ts';
 import { startOfLocalDay } from '../budget/guard.ts';
+import { pricingCoverage } from '../cost/coverage.ts';
 import { refreshPricing, pricingStatus, computeCost, DEFAULT_MANIFEST_URL, type Provider } from '../cost/pricing.ts';
 import { refreshBaselineManifest, baselineManifestStatus } from '../value/liftBaseline.ts';
 import { C, color, usd, num } from './ui.ts';
@@ -168,21 +169,17 @@ export async function cmdPricing(flags: Flags): Promise<void> {
       process.exitCode = 1;
       return;
     }
-    const now = Date.now();
-    const startMs = flags.all ? 0 : now - days * 24 * 60 * 60 * 1000;
-    const endMs = now + 1000;
-    const label = flags.all ? 'all recorded time' : `last ${days} day${days === 1 ? '' : 's'}`;
     const store = new Store(dbPath());
     try {
-      const provenance = store.pricingEvidenceByModel(startMs, endMs);
-      const total = store.summary(startMs, endMs);
-      const payload = {
-        window: { startMs, endMs, label },
-        activeRateCard: pricingStatus(cfg.pricing.maxAgeDays),
-        total: { costUsd: total.costUsd, requests: total.requests },
-        provenance,
-        boundary: 'Captured local pricing evidence only. It does not fetch pricing, reprice history, or represent any amount as provider-billed or reconciled cost.',
-      };
+      // The read model is shared with GET /api/pricing. Composing it here rather
+      // than assembling the same three reads inline is what stops the CLI and
+      // the GUI drifting into two different answers about provenance.
+      const payload = pricingCoverage(store, {
+        all: Boolean(flags.all),
+        days,
+        maxAgeDays: cfg.pricing.maxAgeDays,
+      });
+      const { provenance, total, window: { label } } = payload;
       if (flags.json) {
         console.log(JSON.stringify(payload, null, 2));
         return;
