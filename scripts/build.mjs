@@ -15,10 +15,30 @@ function compile(project, label) {
   }
 }
 
-rmSync(dist, { recursive: true, force: true });
+/**
+ * `--web` emits only the browser app and its static assets — precisely the
+ * slice of dist/ that the GUI tests read.
+ *
+ * Those tests assert against built output, so on a clean checkout they fail
+ * until something has built it. That dependency was real but undeclared: it
+ * only stayed hidden because `npm ci` runs `prepare` -> a full build, so CI
+ * never saw it and a contributor running `npm test` straight after `git clone`
+ * did. `pretest` declares it instead of relying on that side effect.
+ *
+ * Declaring it must not cost 36 seconds per `npm test`, which a full rebuild
+ * would: the node-runtime pass below is the slow one and no test reads its
+ * output from dist/ (they import from src/). So this mode skips that pass, and
+ * skips the dist/ wipe with it — a partial build must never delete the half it
+ * was not asked to produce.
+ */
+const webOnly = process.argv.includes('--web');
 
-// Pass 1 — the Node runtime (CLI, proxy, store, dashboard server).
-compile(join(root, 'tsconfig.build.json'), 'node runtime');
+if (!webOnly) {
+  rmSync(dist, { recursive: true, force: true });
+
+  // Pass 1 — the Node runtime (CLI, proxy, store, dashboard server).
+  compile(join(root, 'tsconfig.build.json'), 'node runtime');
+}
 
 // Pass 2 — the browser app. Its own config carries the DOM lib and no node
 // types, so server code cannot reach a browser global and the GUI cannot reach

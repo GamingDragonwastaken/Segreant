@@ -12,6 +12,7 @@
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning bin/fiscus.mjs start",
     "aegis": "node --disable-warning=ExperimentalWarning bin/fiscus.mjs",
+    "pretest": "node scripts/build.mjs --web",
     "test": "node --disable-warning=ExperimentalWarning --test test/*.test.ts",
     "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit",
     "build": "node scripts/build.mjs",
