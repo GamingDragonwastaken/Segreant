@@ -290,10 +290,18 @@ export function handleDiscover({ req, res, url, store }: RouteContext): void {
  *   GET  /api/scan[?path=]  → dry-run preview: detected tools + git repos under
  *        the root (default: home). Read-only; imports and mutates nothing.
  *   POST /api/scan          → the deliberate setup step (CSRF-guarded like the
- *        other mutating routes): import every detected tool, then correlate every
- *        discovered project into per-project RoI. Same engines as import+discover.
+ *        other mutating routes): import every detected tool, correlate every
+ *        discovered project into per-project RoI, and record the scan baseline.
+ *        Same engines as import+discover.
+ *
+ * The baseline belongs to POST alone. `diff` answers "what changed since the
+ * last scan you COMMITTED to", so the preview that reports it must not also
+ * move the mark it is measured against — a GET that advanced the baseline made
+ * the drift it just reported unobservable to the next reader, and made itself
+ * the one write on this server reachable without `x-aegis-local: 1`.
  */
 export function handleScan({ req, res, url, store }: RouteContext): void {
+  const path = url.searchParams.get('path') || undefined;
   if (req.method === 'POST') {
     req.resume();
     void (async () => {
@@ -307,6 +315,11 @@ export function handleScan({ req, res, url, store }: RouteContext): void {
           totalNew += sum?.inserted ?? 0;
         }
         const discovered = await realizeDiscoveredProjects(store, {});
+        // Records what this deliberate step actually saw, so the next preview
+        // diffs against the setup the operator ran rather than against a walk
+        // some page they visited happened to trigger.
+        const { plan } = scanWithDiff(store, { roots: path ? [path] : undefined });
+        saveScan(store, plan);
         return json(res, 200, { ok: true, totalNew, imported, correlated: discovered.length, discovered });
       } catch (err) {
         return json(res, 500, { error: String(err) });
@@ -316,12 +329,9 @@ export function handleScan({ req, res, url, store }: RouteContext): void {
   }
   // GET preview. The filesystem walk is bounded (depth + visit budget), so this
   // stays responsive; repo paths are capped in the payload for large trees. It
-  // also reports what changed since the last scan of these roots, then records
-  // this scan as the new baseline (a local marker — imports/correlates nothing).
+  // reports what changed since the last scan of these roots and writes nothing.
   try {
-    const path = url.searchParams.get('path') || undefined;
     const { plan, diff } = scanWithDiff(store, { roots: path ? [path] : undefined });
-    saveScan(store, plan);
     return json(res, 200, {
       ok: true,
       tools: plan.tools,

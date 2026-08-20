@@ -22,6 +22,8 @@ import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import http from 'node:http';
 import { join } from 'node:path';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { Store } from '../src/store/db.ts';
 import { DEFAULT_CONFIG } from '../src/config.ts';
 import { createDashboardServer } from '../src/dashboard/server.ts';
@@ -301,4 +303,41 @@ test('serveStatic serves a real asset from inside WEB_ROOT with the asset CSP', 
   // Assets get the tighter script-src: no inline script, unlike the HTML shells.
   assert.match(out.headers['content-security-policy'] ?? '', /script-src 'self';/);
   assert.doesNotMatch(out.headers['content-security-policy'] ?? '', /script-src 'self' 'unsafe-inline'/);
+});
+
+/**
+ * `GET /api/scan` is the only route on this server that answers a method no
+ * `x-aegis-local: 1` gate covers AND reached a store write: it called
+ * `saveScan` two lines below a doc comment promising it "imports and mutates
+ * nothing", and below `scanWithDiff`'s own contract that the caller persists
+ * separately "so a pure preview can stay non-writing".
+ *
+ * Two harms, not one. Any page the operator visits can issue a plain cross-origin
+ * GET — no custom header, so no preflight to refuse — and silently advance the
+ * mark. And `diff` answers "what changed since the last scan you committed to",
+ * so a preview that moved the mark made the drift it had just reported
+ * unobservable to the next reader.
+ *
+ * `comparable` is false until a baseline exists for these roots. A second
+ * identical preview turning comparable IS the leaked write, which is why the
+ * assertion is on the second call rather than on a row count.
+ */
+test('GET /api/scan previews without moving the baseline it diffs against', async () => {
+  const store = new Store(':memory:');
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-scan-'));
+  const srv = await boot(store);
+  const path = `/api/scan?path=${encodeURIComponent(dir)}`;
+  try {
+    const first = JSON.parse((await rawRequest(srv.base, path, 'GET')).text);
+    assert.equal(first.ok, true);
+    assert.equal(first.diff.comparable, false, 'nothing persisted yet, so nothing to compare against');
+
+    const second = JSON.parse((await rawRequest(srv.base, path, 'GET')).text);
+    assert.equal(second.diff.comparable, false, 'the preview persisted a baseline it should not have');
+    assert.equal(second.diff.sinceMs, null, 'a sinceMs means a snapshot was written by a GET');
+  } finally {
+    await srv.close();
+    store.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

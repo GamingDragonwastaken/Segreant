@@ -65,6 +65,12 @@ web/
   be audited as a table instead of by reading every branch. A new mutating route
   adds itself to `MUTATING` in `test/dashboard-routes.test.ts`, which fails if
   the route ships without its gate.
+- **A GET writes nothing.** GET is the one method no `localOnly` gate covers —
+  a cross-origin page can issue one with no custom header, so no preflight to
+  refuse — which makes "read-only" a security boundary here and not a style
+  preference. A route that wants to persist what its preview saw does it on the
+  guarded method. `GET /api/scan` broke this by recording its own walk as the
+  new scan baseline; the baseline now moves only on `POST`.
 - **Route matching is separate from route handling.** `routes.ts` declares what
   each path answers; `server.ts` enforces those declarations and calls the
   handler. No handler re-implements a 405, a 403, or a Host check, and no
