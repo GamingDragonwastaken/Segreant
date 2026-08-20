@@ -11,7 +11,9 @@
 ## Layout
 
 ```
-server.ts            HTTP: JSON API + two HTML entry points + static assets
+server.ts            entry + guards: loopback Host, route matching, method/CSRF
+routes.ts            one named handler per endpoint, plus the ROUTES table
+static.ts            asset serving and the two HTML entry points
 settings.ts          settings snapshot / patch
 web/
   index.html         the GUI shell. Carries the DIRECTION CONTRACT comment.
@@ -58,7 +60,19 @@ web/
   able to become markup. Pinned by `test/dashboard-script.test.ts`.
 - **Mutating routes require `x-aegis-local: 1`.** A cross-origin page cannot set
   a custom header without a preflight this server never answers, so a malicious
-  site cannot drive the operator's local Fiscus. Never relax this.
+  site cannot drive the operator's local Fiscus. Never relax this. The gate is
+  DECLARED per route (`localOnly`) and enforced once, in `server.ts`, so it can
+  be audited as a table instead of by reading every branch. A new mutating route
+  adds itself to `MUTATING` in `test/dashboard-routes.test.ts`, which fails if
+  the route ships without its gate.
+- **Route matching is separate from route handling.** `routes.ts` declares what
+  each path answers; `server.ts` enforces those declarations and calls the
+  handler. No handler re-implements a 405, a 403, or a Host check, and no
+  handler is a closure over the server — each is a named export that takes a
+  `RouteContext`, so it can be called directly in a test with no socket.
+- **`Allow` headers are part of the response contract.** They are pinned to
+  their historical values by test, including `/api/settings` advertising
+  `GET, POST` while serving only GET. Correcting one is a behaviour change.
 - **The browser app never imports node code, and the server never imports the
   browser app.** Enforced structurally: `app/tsconfig.json` has the DOM lib and
   no node types, and the root configs exclude `app/**`.
