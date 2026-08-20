@@ -56,7 +56,7 @@ correctness.
 - **Schema migrations are additive and guarded.** `ALTER TABLE ... ADD COLUMN`
   inside `migrate()`, with a `NOT NULL DEFAULT '<sentinel>'`. No backfill.
 - **`runScript` splits SQL on `;`.** No semicolons and no backticks inside the
-  `SCHEMA` template literal in `src/store/db.ts`.
+  `SCHEMA` template literal in `src/store/schema.ts`.
 - **Demo data self-identifies.** Every payload derived from a demo seed carries
   `demo: true`. The seed may depict; it may never fabricate provider billing.
 

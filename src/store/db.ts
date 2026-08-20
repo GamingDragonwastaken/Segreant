@@ -15,83 +15,61 @@ import { DatabaseSync } from 'node:sqlite';
 import { initializeSchema, runScript } from './schema.ts';
 import { dirname } from 'node:path';
 import { existsSync, mkdirSync } from 'node:fs';
-import { randomUUID } from 'node:crypto';
 import { legacyPricingEvidence, type RequestPricingEvidence } from '../cost/pricing.ts';
-import {
-  BILLING_IMPORTER_VERSION,
-  usdMicros,
-  type BillingChargeType,
-  type BillingCoverage,
-  type NormalizedBillingImport,
-} from '../billing/types.ts';
-import {
-  newOpenAiScopeDeclaration,
-  normalizeOpenAiUpstream,
-  type ProviderScopeDeclaration,
-  type ScopeCaptureStatus,
-} from '../billing/scope.ts';
+import { pricingEvidenceFromRecord } from './rows.ts';
+import type { ProviderScopeDeclaration, ScopeCaptureStatus } from '../billing/scope.ts';
 import { ATTRIBUTION_BASES, type AttributionBasis } from '../value/characterization.ts';
-import type { OpenAiCostObservation, OpenAiCostsFailureCode } from '../billing/openaiCosts.ts';
-import { buildOpenAiCostsCaptureCoverage, type OpenAiCostsCaptureCoverage } from '../billing/openaiCostsCoverage.ts';
-import { reconcileOpenAiCosts, type ProviderSourceKind, type ReconciliationCoverage, type ReconciliationResult, type ReconciliationRun } from '../billing/reconcile.ts';
-
-const DAY_MS = 24 * 60 * 60 * 1000;
+import type { OpenAiCostsCaptureCoverage } from '../billing/openaiCostsCoverage.ts';
+import type { ReconciliationCoverage, ReconciliationResult, ReconciliationRun } from '../billing/reconcile.ts';
+import type { AllocationRule, CostCentre } from '../alloc/rules.ts';
+import type { AllocationRunResult } from '../alloc/apply.ts';
+import * as allocation from './allocation.ts';
+import * as billing from './billing.ts';
+import * as realization from './realization.ts';
+import type {
+  RealizationCostSync,
+  RealizationUnitRecord,
+  RepriceUpdate,
+  RequestPriceEvent,
+} from './realization.ts';
+/** Realized-value record shapes now live in ./realization.ts; re-exported for callers. */
+export type {
+  CostScope,
+  RealizationCostSync,
+  RealizationUnitRecord,
+  RepriceUpdate,
+  RequestPriceEvent,
+} from './realization.ts';
+import type {
+  BillingEvidenceRecord,
+  BillingImportInput,
+  BillingImportResult,
+  BillingImportRun,
+  BillingSummary,
+  OpenAiCostsAdoptionPlan,
+  OpenAiCostsObservationInput,
+  OpenAiCostsObservationLine,
+  OpenAiCostsObservationRun,
+  OpenAiCostsObservationStatus,
+} from './billing.ts';
 
 /**
- * A microdollar integer as the plain decimal string the observation grain
- * stores. Never a float round-trip: the ledger is exact integers and the
- * provider grain is an exact decimal, so the conversion between them must not
- * introduce a representation error a reconciliation would then report as a
- * residual.
+ * Provider-side evidence shapes now live in ./billing.ts. They are re-exported
+ * from here because the store facade is where every caller imports them from,
+ * and the split is meant to be invisible above this file.
  */
-function microsToDecimal(micros: number): string {
-  const sign = micros < 0 ? '-' : '';
-  const abs = Math.abs(micros);
-  return `${sign}${Math.floor(abs / 1_000_000)}.${String(abs % 1_000_000).padStart(6, '0')}`;
-}
-
-/** What an adoption would observe, and what it deliberately would not. */
-export type OpenAiCostsAdoptionPlan =
-  | {
-      adoptable: true;
-      importId: string;
-      declaredScopeId: string;
-      providerProjectRef: string;
-      periodStartMs: number;
-      periodEndMs: number;
-      fileSha256: string;
-      /** The operator's own coverage claim on the import. Never verified here. */
-      declaredCoverage: string;
-      observations: OpenAiCostObservation[];
-      matchedRecordCount: number;
-      matchedMicros: number;
-      /**
-       * Lines this adoption will NOT observe, with their money. Account-level
-       * credits carry no project reference and cannot be attributed to one, so
-       * they are excluded — and reported, because a silently dropped credit
-       * would show up later as a residual that never existed.
-       */
-      excluded: { otherOrNoProjectRecordCount: number; otherOrNoProjectMicros: number };
-    }
-  | {
-      adoptable: false;
-      refusal:
-        | 'no_such_import'
-        | 'import_is_not_openai'
-        | 'import_owns_no_records'
-        | 'no_records_for_declared_project'
-        | 'records_are_not_single_currency_usd'
-        | 'records_are_not_whole_utc_days';
-      detail: string;
-    };
-import {
-  validateCostCentre,
-  validateRule,
-  type AllocatableRow,
-  type AllocationRule,
-  type CostCentre,
-} from '../alloc/rules.ts';
-import { applyAllocation, type AllocationRunResult } from '../alloc/apply.ts';
+export type {
+  BillingEvidenceRecord,
+  BillingImportInput,
+  BillingImportResult,
+  BillingImportRun,
+  BillingSummary,
+  OpenAiCostsAdoptionPlan,
+  OpenAiCostsObservationInput,
+  OpenAiCostsObservationLine,
+  OpenAiCostsObservationRun,
+  OpenAiCostsObservationStatus,
+} from './billing.ts';
 
 export interface RequestRow {
   requestId: string;
@@ -178,158 +156,6 @@ export interface AttributionEvidenceBucket {
   costUsd: number;
 }
 
-export interface RequestPriceEvent {
-  eventId: number;
-  requestId: string;
-  action: 'reprice';
-  appliedAtMs: number;
-  previousCostUsd: number;
-  previousEstimated: boolean;
-  previousPricing: RequestPricingEvidence;
-  newCostUsd: number;
-  newEstimated: boolean;
-  newPricing: RequestPricingEvidence;
-}
-
-export interface RepriceUpdate {
-  requestId: string;
-  costUsd: number;
-  pricing: RequestPricingEvidence;
-}
-
-/** File-level provenance supplied with a validated, local billing-evidence import. */
-export interface BillingImportInput {
-  document: NormalizedBillingImport;
-  fileName: string;
-  fileSha256: string;
-  fileSizeBytes: number;
-  format: 'json';
-}
-
-export interface BillingImportRun {
-  importId: string;
-  importedAtMs: number;
-  format: 'json';
-  schemaVersion: number;
-  importerVersion: string;
-  fileName: string;
-  fileSha256: string;
-  fileSizeBytes: number;
-  sourceSystem: 'operator-export';
-  sourceExportId: string;
-  provider: 'openai';
-  billingAccountRef: string;
-  exportedAtMs: number;
-  periodStartMs: number;
-  periodEndMs: number;
-  coverage: BillingCoverage;
-  trust: 'operator_supplied_unverified';
-  rawRetention: 'digest_only';
-  recordsSeen: number;
-  recordsInserted: number;
-  recordsDuplicate: number;
-}
-
-/** One immutable provider-declared charge line. It is never a request-ledger row. */
-export interface BillingEvidenceRecord {
-  recordId: string;
-  sourceSystem: 'operator-export';
-  billingAccountRef: string;
-  sourceRecordId: string;
-  sourceRecordSha256: string;
-  firstImportId: string;
-  sourceExportId: string;
-  provider: 'openai';
-  providerProjectRef: string | null;
-  service: string;
-  sku: string;
-  model: string | null;
-  region: string | null;
-  observedAtMs: number;
-  chargePeriodStartMs: number;
-  chargePeriodEndMs: number;
-  chargeType: BillingChargeType;
-  currency: 'USD';
-  amountMicros: number;
-  usageUnit: string | null;
-  usageQuantity: string | null;
-  costBasis: 'provider_reported';
-  trust: 'operator_supplied_unverified';
-}
-
-export interface BillingImportResult {
-  run: BillingImportRun;
-  duplicateFile: boolean;
-}
-
-export interface BillingSummary {
-  importCount: number;
-  recordCount: number;
-  providerReportedUsdMicros: number;
-  lastImportedAtMs: number | null;
-  reconciliationStatus: 'not_reconciled';
-}
-
-/**
- * An immutable record of one direct, read-only OpenAI Costs API attempt. This
- * collection is intentionally separate from both operator file imports and the
- * request ledger. A successful later pull can restate or change a provider day;
- * it is retained as a new observation rather than an overwrite or a sum.
- */
-export interface OpenAiCostsObservationRun {
-  observationRunId: string;
-  declaredScopeId: string;
-  providerProjectRef: string;
-  periodStartMs: number;
-  periodEndMs: number;
-  fetchedAtMs: number;
-  paginationComplete: boolean;
-  pageCount: number;
-  pageDigestChainSha256: string | null;
-  resultState: 'succeeded' | 'failed';
-  failureCode: OpenAiCostsFailureCode | null;
-  providerFinality: 'undocumented';
-  trust: 'provider_observation_unreconciled';
-  rawRetention: 'digest_only';
-  observationsStored: number;
-  /**
-   * How these figures reached Fiscus. `legacy_unknown` on rows recorded before
-   * the distinction existed — never backfilled to `provider_api_pull` merely
-   * because that happened to be the only writer at the time.
-   */
-  sourceKind: ProviderSourceKind;
-}
-
-/** A retained provider daily grouping from exactly one completed observation run. */
-export interface OpenAiCostsObservationLine extends OpenAiCostObservation {
-  observationId: string;
-  observationRunId: string;
-  declaredScopeId: string;
-  fetchedAtMs: number;
-}
-
-export interface OpenAiCostsObservationInput {
-  declaredScopeId: string;
-  providerProjectRef: string;
-  periodStartMs: number;
-  periodEndMs: number;
-  fetchedAtMs: number;
-  paginationComplete: boolean;
-  pageCount: number;
-  pageDigestChainSha256: string | null;
-  resultState: 'succeeded' | 'failed';
-  failureCode: OpenAiCostsFailureCode | null;
-  observations: OpenAiCostObservation[];
-  /** Defaults to the direct API pull — the only writer that existed before this. */
-  sourceKind?: ProviderSourceKind;
-}
-
-export interface OpenAiCostsObservationStatus {
-  latestRun: OpenAiCostsObservationRun | null;
-  latestCompleteRun: OpenAiCostsObservationRun | null;
-  reconciliationStatus: 'not_reconciled';
-}
-
 export interface SpendBucket {
   label: string;
   costUsd: number;
@@ -400,74 +226,6 @@ export interface VerifiedGateEvidenceInput {
 
 export type VerifiedGateEvidenceWrite = 'inserted' | 'duplicate' | 'conflict';
 
-/**
- * A persisted snapshot of one computed work unit. The store keeps these so
- * realized value outlives the process (and the checkout) that produced it — the
- * full WorkUnit lives in `unitJson`; the broken-out columns are what we query on.
- */
-export interface RealizationUnitRecord {
-  commitHash: string;
-  project: string;
-  tsEpochMs: number;
-  computedAtMs: number;
-  attributedCostUsd: number;
-  maturing: boolean;
-  realized: boolean;
-  unitJson: string; // serialized WorkUnit (funnel + attribution + taskType + dominantModel)
-  /**
-   * Which spend basis produced this snapshot's dollars: `project` when the
-   * window was scoped to the unit's own project family, `window` when it was the
-   * project-blind sum (the classic proxy default). Recorded so a later reprice
-   * can re-attribute on the SAME basis — recomputing a project-scoped unit as a
-   * window sum (or the reverse) would move its cost for a reason that has
-   * nothing to do with the price change.
-   */
-  costScope: CostScope;
-}
-
-/**
- * How a persisted unit's dollars were attributed.
- *
- * `project` and `window` are the two real bases and are the only ones a reprice
- * can reproduce. `synthetic_demo` marks seeded units whose cost is asserted
- * rather than summed from any window — no re-attribution reproduces them, and a
- * reprice of the ledger does not make them wrong, because the ledger was never
- * their source. `legacy_unknown` predates the column: the basis is unrecoverable,
- * so such a unit is marked stale but never recomputed.
- */
-export type CostScope = 'project' | 'window' | 'synthetic_demo' | 'legacy_unknown';
-
-/** What a reprice did to the persisted realized-value snapshots. */
-export interface RealizationCostSync {
-  markedStale: number; // units whose window contained a repriced request
-  resynced: number; // of those, re-attributed on their recorded basis
-  unresolvable: number; // stale but pre-dating `cost_scope`, so left stale on purpose
-  costUsdBefore: number; // Σ attributed cost of the resynced units, before
-  costUsdAfter: number; // …and after
-}
-
-
-function pricingEvidenceFromRecord(record: Record<string, unknown>, prefix = ''): RequestPricingEvidence {
-  const fallback = legacyPricingEvidence();
-  const value = (name: string): unknown => record[prefix ? `${prefix}${name}` : `${name[0]!.toLowerCase()}${name.slice(1)}`];
-  const costBasis = value('CostBasis');
-  const rateCardSha256 = value('RateCardSha256');
-  const rateCardSourceKind = value('RateCardSourceKind');
-  const rateMatchKind = value('RateMatchKind');
-  const rateMatchProvider = value('RateMatchProvider');
-  const rateMatchModel = value('RateMatchModel');
-  return {
-    costBasis: typeof costBasis === 'string' ? costBasis as RequestPricingEvidence['costBasis'] : fallback.costBasis,
-    rateCardSha256: typeof rateCardSha256 === 'string' ? rateCardSha256 : null,
-    rateCardSourceKind: typeof rateCardSourceKind === 'string'
-      ? rateCardSourceKind as RequestPricingEvidence['rateCardSourceKind']
-      : fallback.rateCardSourceKind,
-    rateMatchKind: typeof rateMatchKind === 'string' ? rateMatchKind as RequestPricingEvidence['rateMatchKind'] : fallback.rateMatchKind,
-    rateMatchProvider: typeof rateMatchProvider === 'string' ? rateMatchProvider : null,
-    rateMatchModel: typeof rateMatchModel === 'string' ? rateMatchModel : null,
-  };
-}
-
 function requestRowFromRecord(record: Record<string, unknown>): RequestRow {
   const {
     costBasis,
@@ -499,19 +257,6 @@ function requestRowFromRecord(record: Record<string, unknown>): RequestRow {
   };
 }
 
-function scopeDeclarationFromRecord(row: Record<string, unknown>): ProviderScopeDeclaration {
-  return {
-    declarationId: String(row.declarationId),
-    provider: 'openai',
-    billingAccountRef: String(row.billingAccountRef),
-    providerProjectRef: typeof row.providerProjectRef === 'string' ? row.providerProjectRef : null,
-    upstreamFingerprint: String(row.upstreamFingerprint),
-    upstreamDisplay: String(row.upstreamDisplay),
-    declaredAtMs: Number(row.declaredAtMs),
-    trust: 'operator_declared_unverified',
-  };
-}
-
 function scopeCaptureForInsert(row: RequestRow): { status: ScopeCaptureStatus; declarationId: string | null } {
   if (row.scopeCaptureStatus) {
     return { status: row.scopeCaptureStatus, declarationId: row.providerScopeDeclarationId ?? null };
@@ -519,100 +264,6 @@ function scopeCaptureForInsert(row: RequestRow): { status: ScopeCaptureStatus; d
   // Native importer traffic cannot attest to the endpoint it originally used.
   // New proxy rows are deliberately not given an account identity by default.
   return { status: row.via === 'import' ? 'not_observed' : 'unscoped', declarationId: null };
-}
-
-function billingRunFromRecord(row: Record<string, unknown>): BillingImportRun {
-  return {
-    importId: String(row.importId),
-    importedAtMs: Number(row.importedAtMs),
-    format: 'json',
-    schemaVersion: Number(row.schemaVersion),
-    importerVersion: String(row.importerVersion),
-    fileName: String(row.fileName),
-    fileSha256: String(row.fileSha256),
-    fileSizeBytes: Number(row.fileSizeBytes),
-    sourceSystem: 'operator-export',
-    sourceExportId: String(row.sourceExportId),
-    provider: 'openai',
-    billingAccountRef: String(row.billingAccountRef),
-    exportedAtMs: Number(row.exportedAtMs),
-    periodStartMs: Number(row.periodStartMs),
-    periodEndMs: Number(row.periodEndMs),
-    coverage: String(row.coverage) as BillingCoverage,
-    trust: 'operator_supplied_unverified',
-    rawRetention: 'digest_only',
-    recordsSeen: Number(row.recordsSeen),
-    recordsInserted: Number(row.recordsInserted),
-    recordsDuplicate: Number(row.recordsDuplicate),
-  };
-}
-
-function billingRecordFromRecord(row: Record<string, unknown>): BillingEvidenceRecord {
-  return {
-    recordId: String(row.recordId),
-    sourceSystem: 'operator-export',
-    billingAccountRef: String(row.billingAccountRef),
-    sourceRecordId: String(row.sourceRecordId),
-    sourceRecordSha256: String(row.sourceRecordSha256),
-    firstImportId: String(row.firstImportId),
-    sourceExportId: String(row.sourceExportId),
-    provider: 'openai',
-    providerProjectRef: typeof row.providerProjectRef === 'string' ? row.providerProjectRef : null,
-    service: String(row.service),
-    sku: String(row.sku),
-    model: typeof row.model === 'string' ? row.model : null,
-    region: typeof row.region === 'string' ? row.region : null,
-    observedAtMs: Number(row.observedAtMs),
-    chargePeriodStartMs: Number(row.chargePeriodStartMs),
-    chargePeriodEndMs: Number(row.chargePeriodEndMs),
-    chargeType: String(row.chargeType) as BillingChargeType,
-    currency: 'USD',
-    amountMicros: Number(row.amountMicros),
-    usageUnit: typeof row.usageUnit === 'string' ? row.usageUnit : null,
-    usageQuantity: typeof row.usageQuantity === 'string' ? row.usageQuantity : null,
-    costBasis: 'provider_reported',
-    trust: 'operator_supplied_unverified',
-  };
-}
-
-function openAiCostsRunFromRecord(row: Record<string, unknown>): OpenAiCostsObservationRun {
-  return {
-    observationRunId: String(row.observationRunId),
-    declaredScopeId: String(row.declaredScopeId),
-    providerProjectRef: String(row.providerProjectRef),
-    periodStartMs: Number(row.periodStartMs),
-    periodEndMs: Number(row.periodEndMs),
-    fetchedAtMs: Number(row.fetchedAtMs),
-    paginationComplete: Boolean(row.paginationComplete),
-    pageCount: Number(row.pageCount),
-    pageDigestChainSha256: typeof row.pageDigestChainSha256 === 'string' ? row.pageDigestChainSha256 : null,
-    resultState: String(row.resultState) as OpenAiCostsObservationRun['resultState'],
-    failureCode: typeof row.failureCode === 'string' ? row.failureCode as OpenAiCostsFailureCode : null,
-    providerFinality: 'undocumented',
-    trust: 'provider_observation_unreconciled',
-    rawRetention: 'digest_only',
-    observationsStored: Number(row.observationsStored),
-    // Anything not one of the two known writers stays unknown rather than being
-    // coerced into the one that happens to be more flattering.
-    sourceKind: row.sourceKind === 'provider_api_pull' || row.sourceKind === 'operator_supplied_export'
-      ? row.sourceKind
-      : 'legacy_unknown',
-  };
-}
-
-function openAiCostsLineFromRecord(row: Record<string, unknown>): OpenAiCostsObservationLine {
-  return {
-    observationId: String(row.observationId),
-    observationRunId: String(row.observationRunId),
-    declaredScopeId: String(row.declaredScopeId),
-    fetchedAtMs: Number(row.fetchedAtMs),
-    providerProjectRef: String(row.providerProjectRef),
-    bucketStartMs: Number(row.bucketStartMs),
-    bucketEndMs: Number(row.bucketEndMs),
-    lineItem: String(row.lineItem),
-    currency: String(row.currency),
-    amountDecimal: String(row.amountDecimal),
-  };
 }
 
 export class Store {
@@ -633,6 +284,22 @@ export class Store {
   /** Transaction control and one-off DDL — see runScript in schema.ts. */
   private runScript(sql: string): void {
     runScript(this.db, sql);
+  }
+
+  /**
+   * The request/project reads the realization domain needs, bound to this store.
+   *
+   * Handed over rather than reimplemented: a re-attributed snapshot has to be
+   * summed by exactly the aggregate that produced it, and the alias family it
+   * scopes over has to be the same one `byProject` uses.
+   */
+  private realizationDeps(): realization.RealizationDeps {
+    return {
+      familyFilter: (column, project) => this.familyFilter(column, project),
+      canonicalProject: (name) => this.canonicalProject(name),
+      summary: (startMs, endMs, project) => this.summary(startMs, endMs, project),
+      byModel: (startMs, endMs, project) => this.byModel(startMs, endMs, project),
+    };
   }
 
   close(): void {
@@ -1620,86 +1287,33 @@ export class Store {
   }
 
   saveReceipt(r: { unit: string; project: string; tsEpochMs: number; realized: boolean; receiptJson: string }): void {
-    this.db
-      .prepare(
-        `INSERT INTO receipts (unit, project, ts_epoch_ms, realized, receipt_json)
-         VALUES (?,?,?,?,?)
-         ON CONFLICT(unit) DO UPDATE SET
-           ts_epoch_ms=excluded.ts_epoch_ms, realized=excluded.realized, receipt_json=excluded.receipt_json`,
-      )
-      .run(r.unit, r.project, r.tsEpochMs, r.realized ? 1 : 0, r.receiptJson);
+    realization.saveReceipt(this.db, r);
   }
 
   getReceipt(unit: string): string | null {
-    const row = this.db.prepare(`SELECT receipt_json AS j FROM receipts WHERE unit = ?`).get(unit) as
-      | { j: string }
-      | undefined;
-    return row ? row.j : null;
+    return realization.getReceipt(this.db, unit);
   }
 
   /**
    * Persist a snapshot of computed work units so realized value survives the
-   * process that computed it — the basis for serving RoI to a dashboard with no
-   * local checkout (a manager's machine). Keyed by commit hash, so re-running
-   * `realize` refreshes the snapshot rather than double-counting. `computed_at_ms`
-   * is retained so a future trend view can switch to append-mode without a
-   * destructive migration.
+   * process that computed it. Keyed by commit hash, so re-running `realize`
+   * refreshes the snapshot rather than double-counting.
    */
   saveRealizationUnits(records: RealizationUnitRecord[]): void {
-    const stmt = this.db.prepare(
-      `INSERT INTO realization_units
-         (commit_hash, project, ts_epoch_ms, computed_at_ms, attributed_cost_usd, maturing, realized, unit_json,
-          cost_scope, cost_stale)
-       VALUES (?,?,?,?,?,?,?,?,?,0)
-       ON CONFLICT(commit_hash) DO UPDATE SET
-         project=excluded.project, ts_epoch_ms=excluded.ts_epoch_ms, computed_at_ms=excluded.computed_at_ms,
-         attributed_cost_usd=excluded.attributed_cost_usd, maturing=excluded.maturing,
-         realized=excluded.realized, unit_json=excluded.unit_json,
-         cost_scope=excluded.cost_scope, cost_stale=0`,
-    );
-    for (const r of records) {
-      stmt.run(
-        r.commitHash,
-        r.project,
-        r.tsEpochMs,
-        r.computedAtMs,
-        r.attributedCostUsd,
-        r.maturing ? 1 : 0,
-        r.realized ? 1 : 0,
-        r.unitJson,
-        r.costScope,
-      );
-    }
+    realization.saveRealizationUnits(this.db, records);
   }
 
   /**
    * Rehydrate stored work-unit snapshots (newest commit first), optionally one
-   * project. `costStale` travels with the row rather than inside `unitJson`: a
-   * reprice changes whether a snapshot's dollars are current WITHOUT changing the
-   * unit it describes, so it is a property of the stored record, not of the work.
+   * project. `costStale` travels with the row rather than inside `unitJson`.
    */
   realizationUnitRows(project?: string): Array<{ unitJson: string; computedAtMs: number; costStale: boolean }> {
-    const fam = project ? this.familyFilter('project', project) : null;
-    const sql =
-      `SELECT unit_json AS unitJson, computed_at_ms AS computedAtMs, cost_stale AS costStale FROM realization_units` +
-      (fam ? ` WHERE ${fam.sql}` : ``) +
-      ` ORDER BY ts_epoch_ms DESC`;
-    const stmt = this.db.prepare(sql);
-    const rows = (fam ? stmt.all(...fam.args) : stmt.all()) as Array<{
-      unitJson: string;
-      computedAtMs: number;
-      costStale: number;
-    }>;
-    return rows.map((r) => ({ unitJson: r.unitJson, computedAtMs: r.computedAtMs, costStale: Boolean(r.costStale) }));
+    return realization.realizationUnitRows(this.db, this.realizationDeps(), project);
   }
 
   /** How many stored realization units exist (optionally scoped to one project). */
   countRealizationUnits(project?: string): number {
-    const fam = project ? this.familyFilter('project', project) : null;
-    const sql = `SELECT COUNT(*) AS n FROM realization_units` + (fam ? ` WHERE ${fam.sql}` : ``);
-    const stmt = this.db.prepare(sql);
-    const row = (fam ? stmt.get(...fam.args) : stmt.get()) as { n: number };
-    return row.n;
+    return realization.countRealizationUnits(this.db, this.realizationDeps(), project);
   }
 
   /** Total outcome signals ever recorded (`report`/`exec` wiring), across projects. */
@@ -1710,14 +1324,7 @@ export class Store {
 
   /** Distinct projects that have stored realization snapshots — the budget owner's rows. */
   realizationProjects(): string[] {
-    const rows = this.db
-      .prepare(
-        `SELECT DISTINCT COALESCE(a.canonical, u.project) AS project
-         FROM realization_units u LEFT JOIN project_aliases a ON a.alias = u.project
-         ORDER BY project`,
-      )
-      .all() as Array<{ project: string }>;
-    return rows.map((r) => r.project);
+    return realization.realizationProjects(this.db);
   }
 
   /** Every row priced with a fallback/family-match rate — the reprice candidates. */
@@ -1731,236 +1338,27 @@ export class Store {
     cacheReadTokens: number;
     costUsd: number;
   }> {
-    return this.db
-      .prepare(
-        `SELECT request_id AS requestId, provider, model,
-                input_tokens AS inputTokens, output_tokens AS outputTokens,
-                cache_write_tokens AS cacheWriteTokens, cache_read_tokens AS cacheReadTokens,
-                cost_usd AS costUsd
-         FROM requests WHERE estimated = 1`,
-      )
-      .all() as Array<{
-      requestId: string;
-      provider: string;
-      model: string;
-      inputTokens: number;
-      outputTokens: number;
-      cacheWriteTokens: number;
-      cacheReadTokens: number;
-      costUsd: number;
-    }>;
+    return realization.estimatedRequestRows(this.db);
   }
 
   /**
    * Re-cost estimated rows in one transaction and retain the previous
-   * amount/evidence as an audit event.
-   *
-   * A reprice moves money that persisted realized-value snapshots were already
-   * built from, so the request ledger and `realization_units` would otherwise
-   * disagree: `/api/overview` would show the corrected spend while `/api/value`
-   * served RoI, realized value, and per-model trial prices computed from the old
-   * one, with nothing on either surface saying which. The snapshots are therefore
-   * re-attributed HERE, inside the same transaction, on each unit's own recorded
-   * basis — the same rule applied to corrected prices, never a new rule. Units
-   * whose basis predates `cost_scope` cannot be reproduced faithfully, so they are
-   * left marked stale for disclosure instead of being recomputed on a guess.
+   * amount/evidence as an audit event. Persisted realized-value snapshots are
+   * re-attributed inside the same transaction, on each unit's own recorded
+   * basis — see realization.ts for why that basis is never re-derived.
    */
   applyRepricedCosts(updates: RepriceUpdate[], appliedAtMs = Date.now()): RealizationCostSync {
-    const prior = this.db.prepare(
-      `SELECT cost_usd AS costUsd, estimated, ts_epoch_ms AS tsEpochMs, project,
-              cost_basis AS CostBasis, rate_card_sha256 AS RateCardSha256,
-              rate_card_source_kind AS RateCardSourceKind, rate_match_kind AS RateMatchKind,
-              rate_match_provider AS RateMatchProvider, rate_match_model AS RateMatchModel
-       FROM requests WHERE request_id = ?`,
-    );
-    const update = this.db.prepare(
-      `UPDATE requests
-       SET cost_usd = ?, estimated = 0,
-           cost_basis = ?, rate_card_sha256 = ?, rate_card_source_kind = ?, rate_match_kind = ?,
-           rate_match_provider = ?, rate_match_model = ?
-       WHERE request_id = ? AND estimated = 1`,
-    );
-    const event = this.db.prepare(
-      `INSERT INTO request_price_events (
-         request_id, action, applied_at_ms, previous_cost_usd, previous_estimated,
-         previous_cost_basis, previous_rate_card_sha256, previous_rate_card_source_kind,
-         previous_rate_match_kind, previous_rate_match_provider, previous_rate_match_model,
-         new_cost_usd, new_estimated, new_cost_basis, new_rate_card_sha256,
-         new_rate_card_source_kind, new_rate_match_kind, new_rate_match_provider, new_rate_match_model
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    );
-    const touched: Array<{ tsEpochMs: number; project: string }> = [];
-    this.runScript('BEGIN');
-    try {
-      for (const u of updates) {
-        const old = prior.get(u.requestId) as Record<string, unknown> | undefined;
-        if (!old || !Boolean(old.estimated)) continue;
-        const oldPricing = pricingEvidenceFromRecord(old);
-        const written = update.run(
-          u.costUsd,
-          u.pricing.costBasis,
-          u.pricing.rateCardSha256,
-          u.pricing.rateCardSourceKind,
-          u.pricing.rateMatchKind,
-          u.pricing.rateMatchProvider,
-          u.pricing.rateMatchModel,
-          u.requestId,
-        );
-        if (Number(written.changes ?? 0) !== 1) continue;
-        event.run(
-          u.requestId, 'reprice', appliedAtMs, Number(old.costUsd), Boolean(old.estimated) ? 1 : 0,
-          oldPricing.costBasis, oldPricing.rateCardSha256, oldPricing.rateCardSourceKind,
-          oldPricing.rateMatchKind, oldPricing.rateMatchProvider, oldPricing.rateMatchModel,
-          u.costUsd, 0, u.pricing.costBasis, u.pricing.rateCardSha256,
-          u.pricing.rateCardSourceKind, u.pricing.rateMatchKind, u.pricing.rateMatchProvider, u.pricing.rateMatchModel,
-        );
-        touched.push({ tsEpochMs: Number(old.tsEpochMs), project: String(old.project) });
-      }
-      const sync = this.syncRealizationCosts(touched);
-      this.runScript('COMMIT');
-      return sync;
-    } catch (e) {
-      this.runScript('ROLLBACK');
-      throw e;
-    }
-  }
-
-  /**
-   * Bring persisted realized-value snapshots back in step with repriced requests.
-   *
-   * A unit is affected when one of the repriced requests falls inside its
-   * attribution window — the same half-open `[windowStartMs, windowEndMs)` test
-   * `summary()` applies, so a request on a boundary is counted by exactly one
-   * side here and there. A `project`-scoped unit absorbed only its own project
-   * family's spend, so a repriced request from elsewhere leaves it untouched; a
-   * `window`-scoped unit took the project-blind sum and is affected by any of
-   * them. A `legacy_unknown` unit is treated as affected either way (the
-   * conservative direction: it may be wrong, and saying so beats a silent guess)
-   * but is never recomputed.
-   *
-   * Recomputation re-runs only the MONEY half of attribution. Gate verdicts,
-   * survival, acceptance, maturity, and the realized flag are all independent of
-   * price and are left exactly as computed — this is a re-attribution, not a
-   * re-scoring, so a reprice can never change whether work realized.
-   *
-   * Caller must already be inside a transaction.
-   */
-  private syncRealizationCosts(repriced: Array<{ tsEpochMs: number; project: string }>): RealizationCostSync {
-    const empty: RealizationCostSync = { markedStale: 0, resynced: 0, unresolvable: 0, costUsdBefore: 0, costUsdAfter: 0 };
-    if (repriced.length === 0) return empty;
-
-    const rows = this.db
-      .prepare(
-        `SELECT commit_hash AS commitHash, project, cost_scope AS costScope,
-                attributed_cost_usd AS attributedCostUsd, unit_json AS unitJson
-         FROM realization_units`,
-      )
-      .all() as Array<{ commitHash: string; project: string; costScope: string; attributedCostUsd: number; unitJson: string }>;
-    if (rows.length === 0) return empty;
-
-    // Canonicalize once: a unit and a request can name the same project through
-    // different aliases, and project scoping is defined over the alias family.
-    const canonical = new Map<string, string>();
-    const canon = (name: string): string => {
-      const hit = canonical.get(name);
-      if (hit !== undefined) return hit;
-      const c = this.canonicalProject(name);
-      canonical.set(name, c);
-      return c;
-    };
-    const priced = repriced.map((r) => ({ tsEpochMs: r.tsEpochMs, project: canon(r.project) }));
-
-    const markStale = this.db.prepare(`UPDATE realization_units SET cost_stale = 1 WHERE commit_hash = ?`);
-    const writeBack = this.db.prepare(
-      `UPDATE realization_units SET attributed_cost_usd = ?, unit_json = ?, cost_stale = 0 WHERE commit_hash = ?`,
-    );
-
-    const out: RealizationCostSync = { ...empty };
-    for (const row of rows) {
-      let unit: Record<string, unknown>;
-      try {
-        unit = JSON.parse(row.unitJson) as Record<string, unknown>;
-      } catch {
-        continue; // an unparseable snapshot is not something to rewrite blind
-      }
-      const startMs = Number(unit.windowStartMs);
-      const endMs = Number(unit.windowEndMs);
-      if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) continue;
-      const scope: CostScope =
-        row.costScope === 'project' || row.costScope === 'window' || row.costScope === 'synthetic_demo'
-          ? row.costScope
-          : 'legacy_unknown';
-      // A synthetic unit's dollars were asserted, never summed from the ledger, so
-      // repricing the ledger cannot have staled them. Skipped rather than marked.
-      if (scope === 'synthetic_demo') continue;
-      const unitProject = canon(row.project);
-      const affected = priced.some(
-        (p) => p.tsEpochMs >= startMs && p.tsEpochMs < endMs && (scope !== 'project' || p.project === unitProject),
-      );
-      if (!affected) continue;
-
-      out.markedStale += 1;
-      if (scope === 'legacy_unknown') {
-        markStale.run(row.commitHash);
-        out.unresolvable += 1;
-        continue;
-      }
-
-      const scoped = scope === 'project' ? row.project : undefined;
-      const spend = this.summary(startMs, endMs, scoped);
-      const modelSpend = this.byModel(startMs, endMs, scoped);
-      const windowModelTotal = modelSpend.reduce((s, m) => s + m.costUsd, 0);
-      const totalLines = Number(unit.linesAdded ?? 0) + Number(unit.linesDeleted ?? 0);
-
-      unit.attributedCostUsd = spend.costUsd;
-      unit.attributedRequests = spend.requests;
-      unit.attributedOutputTokens = spend.outputTokens;
-      unit.costPerHundredLines = totalLines > 0 ? (spend.costUsd / totalLines) * 100 : null;
-      unit.dominantModel = modelSpend.length > 0 ? modelSpend[0]!.label : null;
-      unit.dominantModelCostUsd = modelSpend.length > 0 ? modelSpend[0]!.costUsd : null;
-      unit.dominantModelCostShare =
-        modelSpend.length > 0 && windowModelTotal > 0 ? modelSpend[0]!.costUsd / windowModelTotal : null;
-
-      writeBack.run(spend.costUsd, JSON.stringify(unit), row.commitHash);
-      out.resynced += 1;
-      out.costUsdBefore += row.attributedCostUsd;
-      out.costUsdAfter += spend.costUsd;
-    }
-    return out;
+    return realization.applyRepricedCosts(this.db, this.realizationDeps(), updates, appliedAtMs);
   }
 
   /** How many persisted snapshots are carrying pre-reprice dollars. */
   countStaleRealizationUnits(): number {
-    const row = this.db.prepare(`SELECT COUNT(*) AS n FROM realization_units WHERE cost_stale = 1`).get() as { n: number };
-    return row.n;
+    return realization.countStaleRealizationUnits(this.db);
   }
 
   /** Append-only price changes for one request, oldest first. */
   requestPriceEvents(requestId: string): RequestPriceEvent[] {
-    const rows = this.db.prepare(
-      `SELECT event_id AS eventId, request_id AS requestId, action, applied_at_ms AS appliedAtMs,
-              previous_cost_usd AS previousCostUsd, previous_estimated AS previousEstimated,
-              previous_cost_basis AS previousCostBasis, previous_rate_card_sha256 AS previousRateCardSha256,
-              previous_rate_card_source_kind AS previousRateCardSourceKind, previous_rate_match_kind AS previousRateMatchKind,
-              previous_rate_match_provider AS previousRateMatchProvider, previous_rate_match_model AS previousRateMatchModel,
-              new_cost_usd AS newCostUsd, new_estimated AS newEstimated,
-              new_cost_basis AS newCostBasis, new_rate_card_sha256 AS newRateCardSha256,
-              new_rate_card_source_kind AS newRateCardSourceKind, new_rate_match_kind AS newRateMatchKind,
-              new_rate_match_provider AS newRateMatchProvider, new_rate_match_model AS newRateMatchModel
-       FROM request_price_events WHERE request_id = ? ORDER BY event_id ASC`,
-    ).all(requestId) as Array<Record<string, unknown>>;
-    return rows.map((row) => ({
-      eventId: Number(row.eventId),
-      requestId: String(row.requestId),
-      action: 'reprice',
-      appliedAtMs: Number(row.appliedAtMs),
-      previousCostUsd: Number(row.previousCostUsd),
-      previousEstimated: Boolean(row.previousEstimated),
-      previousPricing: pricingEvidenceFromRecord(row, 'previous'),
-      newCostUsd: Number(row.newCostUsd),
-      newEstimated: Boolean(row.newEstimated),
-      newPricing: pricingEvidenceFromRecord(row, 'new'),
-    }));
+    return realization.requestPriceEvents(this.db, requestId);
   }
 
   /**
@@ -1969,608 +1367,115 @@ export class Store {
    * different scopes and cannot be silently added together.
    */
   applyBillingImport(input: BillingImportInput, importedAtMs = Date.now()): BillingImportResult {
-    if (!/^[a-f0-9]{64}$/.test(input.fileSha256)) throw new Error('billing fileSha256 must be a lowercase SHA-256 digest');
-    if (!Number.isSafeInteger(input.fileSizeBytes) || input.fileSizeBytes < 0) throw new Error('billing file size is invalid');
-    const d = input.document;
-    const priorFile = this.db.prepare(
-      `SELECT import_id AS importId, imported_at_ms AS importedAtMs, format, schema_version AS schemaVersion,
-              importer_version AS importerVersion, file_name AS fileName, file_sha256 AS fileSha256,
-              file_size_bytes AS fileSizeBytes, source_system AS sourceSystem, source_export_id AS sourceExportId,
-              provider, billing_account_ref AS billingAccountRef, exported_at_ms AS exportedAtMs,
-              period_start_ms AS periodStartMs, period_end_ms AS periodEndMs, coverage, trust, raw_retention AS rawRetention,
-              records_seen AS recordsSeen, records_inserted AS recordsInserted, records_duplicate AS recordsDuplicate
-       FROM billing_import_runs WHERE file_sha256 = ?`,
-    ).get(input.fileSha256) as Record<string, unknown> | undefined;
-    if (priorFile) return { run: billingRunFromRecord(priorFile), duplicateFile: true };
-
-    const existing = this.db.prepare(
-      `SELECT source_record_sha256 AS sourceRecordSha256
-       FROM billing_evidence_records
-       WHERE source_system = ? AND provider = ? AND billing_account_ref = ? AND source_record_id = ?`,
-    );
-    let recordsDuplicate = 0;
-    const recordsToInsert = [] as typeof d.records;
-    for (const record of d.records) {
-      const row = existing.get(d.source.system, d.source.provider, d.source.billingAccountRef, record.sourceRecordId) as
-        | { sourceRecordSha256: string }
-        | undefined;
-      if (!row) {
-        recordsToInsert.push(record);
-      } else if (row.sourceRecordSha256 === record.sourceRecordSha256) {
-        recordsDuplicate++;
-      } else {
-        throw new Error(
-          `billing source-record conflict for ${record.sourceRecordId}: the same provider/account record id has different content`,
-        );
-      }
-    }
-
-    const run: BillingImportRun = {
-      importId: randomUUID(),
-      importedAtMs,
-      format: input.format,
-      schemaVersion: d.schemaVersion,
-      importerVersion: BILLING_IMPORTER_VERSION,
-      fileName: input.fileName,
-      fileSha256: input.fileSha256,
-      fileSizeBytes: input.fileSizeBytes,
-      sourceSystem: d.source.system,
-      sourceExportId: d.source.exportId,
-      provider: d.source.provider,
-      billingAccountRef: d.source.billingAccountRef,
-      exportedAtMs: d.exportedAtMs,
-      periodStartMs: d.periodStartMs,
-      periodEndMs: d.periodEndMs,
-      coverage: d.source.coverage,
-      trust: 'operator_supplied_unverified',
-      rawRetention: 'digest_only',
-      recordsSeen: d.records.length,
-      recordsInserted: recordsToInsert.length,
-      recordsDuplicate,
-    };
-    const writeRun = this.db.prepare(
-      `INSERT INTO billing_import_runs (
-         import_id, imported_at_ms, format, schema_version, importer_version, file_name, file_sha256, file_size_bytes,
-         source_system, source_export_id, provider, billing_account_ref, exported_at_ms, period_start_ms, period_end_ms,
-         coverage, trust, raw_retention, records_seen, records_inserted, records_duplicate
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    );
-    const writeRecord = this.db.prepare(
-      `INSERT INTO billing_evidence_records (
-         record_id, source_system, billing_account_ref, source_record_id, source_record_sha256, first_import_id,
-         source_export_id, provider, provider_project_ref, service, sku, model, region, observed_at_ms,
-         charge_period_start_ms, charge_period_end_ms, charge_type, currency, amount_micros, usage_unit,
-         usage_quantity, cost_basis, trust
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    );
-    this.runScript('BEGIN');
-    try {
-      writeRun.run(
-        run.importId, run.importedAtMs, run.format, run.schemaVersion, run.importerVersion, run.fileName, run.fileSha256,
-        run.fileSizeBytes, run.sourceSystem, run.sourceExportId, run.provider, run.billingAccountRef, run.exportedAtMs,
-        run.periodStartMs, run.periodEndMs, run.coverage, run.trust, run.rawRetention, run.recordsSeen,
-        run.recordsInserted, run.recordsDuplicate,
-      );
-      for (const record of recordsToInsert) {
-        writeRecord.run(
-          randomUUID(), d.source.system, d.source.billingAccountRef, record.sourceRecordId, record.sourceRecordSha256,
-          run.importId, d.source.exportId, d.source.provider, record.providerProjectRef, record.service, record.sku,
-          record.model, record.region, record.observedAtMs, record.chargePeriodStartMs, record.chargePeriodEndMs,
-          record.chargeType, record.currency, record.amountMicros, record.usageUnit, record.usageQuantity,
-          'provider_reported', 'operator_supplied_unverified',
-        );
-      }
-      this.runScript('COMMIT');
-    } catch (error) {
-      this.runScript('ROLLBACK');
-      throw error;
-    }
-    return { run, duplicateFile: false };
+    return billing.applyBillingImport(this.db, input, importedAtMs);
   }
 
   /** Newest first, including empty/replay-only evidence runs for auditability. */
   billingImportRuns(limit = 50): BillingImportRun[] {
-    const safeLimit = Math.max(1, Math.min(500, Math.floor(limit)));
-    const rows = this.db.prepare(
-      `SELECT import_id AS importId, imported_at_ms AS importedAtMs, format, schema_version AS schemaVersion,
-              importer_version AS importerVersion, file_name AS fileName, file_sha256 AS fileSha256,
-              file_size_bytes AS fileSizeBytes, source_system AS sourceSystem, source_export_id AS sourceExportId,
-              provider, billing_account_ref AS billingAccountRef, exported_at_ms AS exportedAtMs,
-              period_start_ms AS periodStartMs, period_end_ms AS periodEndMs, coverage, trust, raw_retention AS rawRetention,
-              records_seen AS recordsSeen, records_inserted AS recordsInserted, records_duplicate AS recordsDuplicate
-       FROM billing_import_runs ORDER BY imported_at_ms DESC, import_id DESC LIMIT ?`,
-    ).all(safeLimit) as Array<Record<string, unknown>>;
-    return rows.map(billingRunFromRecord);
+    return billing.billingImportRuns(this.db, limit);
   }
 
   /** Immutable provider-declared lines, deliberately separate from requestsInRange(). */
   billingEvidenceRecords(): BillingEvidenceRecord[] {
-    const rows = this.db.prepare(
-      `SELECT record_id AS recordId, source_system AS sourceSystem, billing_account_ref AS billingAccountRef,
-              source_record_id AS sourceRecordId, source_record_sha256 AS sourceRecordSha256,
-              first_import_id AS firstImportId, source_export_id AS sourceExportId, provider,
-              provider_project_ref AS providerProjectRef, service, sku, model, region, observed_at_ms AS observedAtMs,
-              charge_period_start_ms AS chargePeriodStartMs, charge_period_end_ms AS chargePeriodEndMs,
-              charge_type AS chargeType, currency, amount_micros AS amountMicros, usage_unit AS usageUnit,
-              usage_quantity AS usageQuantity, cost_basis AS costBasis, trust
-       FROM billing_evidence_records
-       ORDER BY charge_period_start_ms ASC, source_record_id ASC`,
-    ).all() as Array<Record<string, unknown>>;
-    return rows.map(billingRecordFromRecord);
+    return billing.billingEvidenceRecords(this.db);
   }
 
   /** Provider-declared USD total only. It is not a reconciliation or a request-ledger total. */
   billingSummary(): BillingSummary {
-    const imports = this.db.prepare(
-      `SELECT COUNT(*) AS importCount, MAX(imported_at_ms) AS lastImportedAtMs FROM billing_import_runs`,
-    ).get() as { importCount: number; lastImportedAtMs: number | null };
-    const records = this.db.prepare(
-      `SELECT COUNT(*) AS recordCount, COALESCE(SUM(amount_micros), 0) AS providerReportedUsdMicros
-       FROM billing_evidence_records`,
-    ).get() as { recordCount: number; providerReportedUsdMicros: number };
-    return {
-      importCount: Number(imports.importCount),
-      recordCount: Number(records.recordCount),
-      providerReportedUsdMicros: Number(records.providerReportedUsdMicros),
-      lastImportedAtMs: imports.lastImportedAtMs === null ? null : Number(imports.lastImportedAtMs),
-      reconciliationStatus: 'not_reconciled',
-    };
+    return billing.billingSummary(this.db);
   }
 
   /**
    * Retain one direct OpenAI Costs API attempt. Failed and partial attempts are
-   * audit rows only: they store no usable provider observations. Successful
-   * attempts retain their own snapshot lines, even when a later pull changes a
-   * daily provider line. Nothing here mutates or contributes to request spend.
+   * audit rows only. Nothing here mutates or contributes to request spend.
    */
   recordOpenAiCostsObservation(input: OpenAiCostsObservationInput): OpenAiCostsObservationRun {
-    const text = (value: string, label: string, pattern: RegExp): void => {
-      if (!pattern.test(value)) throw new Error(`OpenAI Costs ${label} is invalid`);
-    };
-    text(input.declaredScopeId, 'declared scope id', /^[A-Za-z0-9_-]{8,200}$/);
-    text(input.providerProjectRef, 'project reference', /^proj_[A-Za-z0-9_-]+$/);
-    if (!Number.isSafeInteger(input.periodStartMs) || !Number.isSafeInteger(input.periodEndMs)
-      || input.periodEndMs <= input.periodStartMs || (input.periodEndMs - input.periodStartMs) % 86_400_000 !== 0) {
-      throw new Error('OpenAI Costs observation range must be whole UTC days');
-    }
-    if (!Number.isSafeInteger(input.fetchedAtMs) || input.fetchedAtMs < 0) throw new Error('OpenAI Costs fetched time is invalid');
-    if (!Number.isSafeInteger(input.pageCount) || input.pageCount < 0 || input.pageCount > 64) {
-      throw new Error('OpenAI Costs page count is invalid');
-    }
-    if (input.pageDigestChainSha256 !== null) text(input.pageDigestChainSha256, 'page digest chain', /^[a-f0-9]{64}$/);
-    const succeeded = input.resultState === 'succeeded';
-    if (succeeded !== input.paginationComplete) throw new Error('OpenAI Costs success state must match complete pagination');
-    if (succeeded && (input.failureCode !== null || input.pageCount < 1 || input.pageDigestChainSha256 === null)) {
-      throw new Error('OpenAI Costs successful observation is incomplete');
-    }
-    if (!succeeded && (input.failureCode === null || input.observations.length !== 0)) {
-      throw new Error('OpenAI Costs failed observation cannot expose provider lines');
-    }
-    const run: OpenAiCostsObservationRun = {
-      observationRunId: randomUUID(),
-      declaredScopeId: input.declaredScopeId,
-      providerProjectRef: input.providerProjectRef,
-      periodStartMs: input.periodStartMs,
-      periodEndMs: input.periodEndMs,
-      fetchedAtMs: input.fetchedAtMs,
-      paginationComplete: input.paginationComplete,
-      pageCount: input.pageCount,
-      pageDigestChainSha256: input.pageDigestChainSha256,
-      resultState: input.resultState,
-      failureCode: input.failureCode,
-      providerFinality: 'undocumented',
-      trust: 'provider_observation_unreconciled',
-      rawRetention: 'digest_only',
-      observationsStored: input.observations.length,
-      sourceKind: input.sourceKind ?? 'provider_api_pull',
-    };
-    const seen = new Set<string>();
-    for (const observation of input.observations) {
-      if (observation.providerProjectRef !== run.providerProjectRef) throw new Error('OpenAI Costs observation project does not match its declared scope');
-      if (!Number.isSafeInteger(observation.bucketStartMs) || !Number.isSafeInteger(observation.bucketEndMs)
-        || observation.bucketEndMs - observation.bucketStartMs !== 86_400_000
-        || observation.bucketStartMs < run.periodStartMs || observation.bucketEndMs > run.periodEndMs) {
-        throw new Error('OpenAI Costs observation bucket is invalid');
-      }
-      text(observation.lineItem, 'line item', /^[^\u0000-\u001F\u007F]{1,500}$/);
-      text(observation.currency, 'currency', /^[A-Z]{3}$/);
-      text(observation.amountDecimal, 'amount decimal', /^-?(?:0|[1-9]\d*)(?:\.\d+)?$/);
-      const key = `${observation.bucketStartMs}\u0000${observation.bucketEndMs}\u0000${observation.lineItem}\u0000${observation.currency}`;
-      if (seen.has(key)) throw new Error('OpenAI Costs observation has duplicate daily line grouping');
-      seen.add(key);
-    }
-    const writeRun = this.db.prepare(
-      `INSERT INTO openai_cost_observation_runs (
-         observation_run_id, declared_scope_id, provider_project_ref, period_start_ms, period_end_ms, fetched_at_ms,
-         pagination_complete, page_count, page_digest_chain_sha256, result_state, failure_code, provider_finality,
-         trust, raw_retention, observations_stored, source_kind
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    );
-    const writeLine = this.db.prepare(
-      `INSERT INTO openai_cost_observation_lines (
-         observation_id, observation_run_id, declared_scope_id, provider_project_ref, fetched_at_ms,
-         bucket_start_ms, bucket_end_ms, line_item, currency, amount_decimal
-       ) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-    );
-    this.runScript('BEGIN');
-    try {
-      writeRun.run(
-        run.observationRunId, run.declaredScopeId, run.providerProjectRef, run.periodStartMs, run.periodEndMs,
-        run.fetchedAtMs, run.paginationComplete ? 1 : 0, run.pageCount, run.pageDigestChainSha256, run.resultState,
-        run.failureCode, run.providerFinality, run.trust, run.rawRetention, run.observationsStored,
-        run.sourceKind,
-      );
-      for (const observation of input.observations) {
-        writeLine.run(
-          randomUUID(), run.observationRunId, run.declaredScopeId, run.providerProjectRef, run.fetchedAtMs,
-          observation.bucketStartMs, observation.bucketEndMs, observation.lineItem, observation.currency,
-          observation.amountDecimal,
-        );
-      }
-      this.runScript('COMMIT');
-    } catch (error) {
-      this.runScript('ROLLBACK');
-      throw error;
-    }
-    return run;
+    return billing.recordOpenAiCostsObservation(this.db, input);
   }
 
   /**
    * Plan the adoption of an already-imported operator export as a Costs
    * observation, so a reconciliation can run WITHOUT an Admin credential.
-   *
-   * This exists because the credential was the wrong thing to be blocked on.
-   * A read-only Costs pull is the better evidence and stays the recommended
-   * path, but an account owner who can export a report should not be unable to
-   * reconcile merely because minting an Admin key needs a different permission
-   * than reading a bill. What changes is the EVIDENCE CLASS, not the
-   * arithmetic: the resulting run is stamped `operator_supplied_export` and
-   * carries a fifth permanent condition saying nothing in it was obtained from
-   * the provider by Fiscus.
-   *
-   * Read-only: this computes a plan and writes nothing. Everything it cannot
-   * adopt is REPORTED with its amount rather than dropped — an adoption that
-   * quietly discarded an account-level credit would understate the provider
-   * side and turn a missing line into a fake residual.
+   * Read-only: this computes a plan and writes nothing.
    */
   planOpenAiCostsAdoption(input: { importId: string; declaredScopeId: string; providerProjectRef: string }): OpenAiCostsAdoptionPlan {
-    const run = this.billingImportRuns(500).find((r) => r.importId === input.importId);
-    if (!run) return { adoptable: false, refusal: 'no_such_import', detail: `no billing import ${input.importId}` };
-    if (run.provider !== 'openai') {
-      return { adoptable: false, refusal: 'import_is_not_openai', detail: `import ${input.importId} is for ${run.provider}` };
-    }
-
-    const all = this.billingEvidenceRecords().filter((r) => r.firstImportId === input.importId);
-    if (all.length === 0) {
-      // Every row was a replay of an earlier import, so this import id owns
-      // none of them. Adopting it would silently observe nothing.
-      return { adoptable: false, refusal: 'import_owns_no_records', detail: `import ${input.importId} inserted no new charge lines` };
-    }
-
-    const matched = all.filter((r) => r.providerProjectRef === input.providerProjectRef);
-    const excludedOtherProject = all.filter((r) => r.providerProjectRef !== input.providerProjectRef);
-    if (matched.length === 0) {
-      return {
-        adoptable: false,
-        refusal: 'no_records_for_declared_project',
-        detail: `no charge line in ${input.importId} carries providerProjectRef ${input.providerProjectRef}`,
-      };
-    }
-
-    const currencies = [...new Set(matched.map((r) => r.currency))].sort();
-    if (currencies.length > 1 || currencies[0] !== 'USD') {
-      return {
-        adoptable: false,
-        refusal: 'records_are_not_single_currency_usd',
-        detail: `the matched lines report ${currencies.join(', ')}; no rate is applied here`,
-      };
-    }
-    const nonDaily = matched.filter((r) => r.chargePeriodEndMs - r.chargePeriodStartMs !== DAY_MS
-      || r.chargePeriodStartMs % DAY_MS !== 0);
-    if (nonDaily.length > 0) {
-      return {
-        adoptable: false,
-        refusal: 'records_are_not_whole_utc_days',
-        detail: `${nonDaily.length} matched line(s) do not cover exactly one UTC day; the provider bucket grain is the only grain that joins`,
-      };
-    }
-
-    const byKey = new Map<string, { bucketStartMs: number; lineItem: string; micros: number }>();
-    for (const record of matched) {
-      const lineItem = record.sku || record.service || 'unspecified';
-      const key = `${record.chargePeriodStartMs}\u0000${lineItem}`;
-      const entry = byKey.get(key) ?? { bucketStartMs: record.chargePeriodStartMs, lineItem, micros: 0 };
-      entry.micros += record.amountMicros;
-      byKey.set(key, entry);
-    }
-    const observations: OpenAiCostObservation[] = [...byKey.values()]
-      .sort((a, b) => (a.bucketStartMs - b.bucketStartMs) || a.lineItem.localeCompare(b.lineItem))
-      .map((entry) => ({
-        providerProjectRef: input.providerProjectRef,
-        bucketStartMs: entry.bucketStartMs,
-        bucketEndMs: entry.bucketStartMs + DAY_MS,
-        lineItem: entry.lineItem,
-        currency: 'USD',
-        amountDecimal: microsToDecimal(entry.micros),
-      }));
-
-    const days = observations.map((o) => o.bucketStartMs);
-    return {
-      adoptable: true,
-      importId: input.importId,
-      declaredScopeId: input.declaredScopeId,
-      providerProjectRef: input.providerProjectRef,
-      periodStartMs: Math.min(...days),
-      periodEndMs: Math.max(...days) + DAY_MS,
-      fileSha256: run.fileSha256,
-      // An operator declaration even when it says `complete`. Carried onto the
-      // plan so a partial export cannot become a silent under-report of the
-      // provider side, which would read as off-path spend that never happened.
-      declaredCoverage: run.coverage,
-      observations,
-      matchedRecordCount: matched.length,
-      matchedMicros: matched.reduce((sum, r) => sum + r.amountMicros, 0),
-      excluded: {
-        otherOrNoProjectRecordCount: excludedOtherProject.length,
-        otherOrNoProjectMicros: excludedOtherProject.reduce((sum, r) => sum + r.amountMicros, 0),
-      },
-    };
+    return billing.planOpenAiCostsAdoption(this.db, input);
   }
 
   /** Record an adoption plan as an observation. Refuses anything not adoptable. */
   adoptOpenAiCostsFromImport(plan: OpenAiCostsAdoptionPlan, adoptedAtMs = Date.now()): OpenAiCostsObservationRun {
-    if (!plan.adoptable) throw new Error(`refusing to adopt: ${plan.refusal} — ${plan.detail}`);
-    return this.recordOpenAiCostsObservation({
-      declaredScopeId: plan.declaredScopeId,
-      providerProjectRef: plan.providerProjectRef,
-      periodStartMs: plan.periodStartMs,
-      periodEndMs: plan.periodEndMs,
-      fetchedAtMs: adoptedAtMs,
-      paginationComplete: true,
-      // One "page": the operator's file. Its SHA-256 is genuinely the digest of
-      // the only artifact that produced these lines, so the field keeps its
-      // meaning rather than being repurposed.
-      pageCount: 1,
-      pageDigestChainSha256: plan.fileSha256,
-      resultState: 'succeeded',
-      failureCode: null,
-      observations: plan.observations,
-      sourceKind: 'operator_supplied_export',
-    });
+    return billing.adoptOpenAiCostsFromImport(this.db, plan, adoptedAtMs);
   }
 
   /**
    * What the local side of a reconciliation would actually contain, split by
-   * why each row does or does not qualify.
-   *
-   * Built after hitting the failure on a real machine: a ledger can hold
-   * hundreds of dollars of genuine OpenAI spend and still reconcile to a local
-   * side of ZERO, because every row arrived by native import rather than
-   * through the proxy. Reconciliation counts only proxy traffic carrying the
-   * declaration, and it has to — an imported row records the model and the cost
-   * but nothing that ties it to the declared provider project, so counting it
-   * would be inventing the very attribution the layer refuses to invent.
-   *
-   * Surfacing this BEFORE the credential step is the whole point. Discovering
-   * it afterwards means someone minted an Admin key for nothing.
+   * why each row does or does not qualify. Surfacing this BEFORE the credential
+   * step is the whole point.
    */
   openAiReconciliationCoverage(declaredScopeId: string | null): ReconciliationCoverage | null {
-    const row = this.db.prepare(
-      `SELECT
-         COALESCE(SUM(CASE WHEN via = 'proxy' AND scope_capture_status = 'declared_unverified'
-                            AND provider_scope_declaration_id = ? THEN cost_usd END), 0) AS onUsd,
-         COALESCE(SUM(CASE WHEN via = 'proxy' AND scope_capture_status = 'declared_unverified'
-                            AND provider_scope_declaration_id = ? THEN 1 END), 0) AS onReq,
-         COALESCE(SUM(CASE WHEN via = 'import' THEN cost_usd END), 0) AS importedUsd,
-         COALESCE(SUM(CASE WHEN via = 'import' THEN 1 END), 0) AS importedReq,
-         COALESCE(SUM(CASE WHEN via = 'proxy' AND NOT (scope_capture_status = 'declared_unverified'
-                            AND provider_scope_declaration_id = ?) THEN cost_usd END), 0) AS offUsd,
-         COALESCE(SUM(CASE WHEN via = 'proxy' AND NOT (scope_capture_status = 'declared_unverified'
-                            AND provider_scope_declaration_id = ?) THEN 1 END), 0) AS offReq,
-         COUNT(*) AS total
-       FROM requests WHERE provider = 'openai'`,
-    ).get(declaredScopeId, declaredScopeId, declaredScopeId, declaredScopeId) as Record<string, unknown>;
-    if (Number(row.total) === 0) return null;
-    return {
-      onDeclaredRouteUsd: Number(row.onUsd),
-      onDeclaredRouteRequests: Number(row.onReq),
-      importedUsd: Number(row.importedUsd),
-      importedRequests: Number(row.importedReq),
-      proxyOffScopeUsd: Number(row.offUsd),
-      proxyOffScopeRequests: Number(row.offReq),
-    };
+    return billing.openAiReconciliationCoverage(this.db, declaredScopeId);
   }
 
   /** Newest first; includes failed pulls so a finance owner can see freshness failures. */
   openAiCostsObservationRuns(limit = 50): OpenAiCostsObservationRun[] {
-    const safeLimit = Math.max(1, Math.min(500, Math.floor(limit)));
-    const rows = this.db.prepare(
-      `SELECT observation_run_id AS observationRunId, declared_scope_id AS declaredScopeId,
-              provider_project_ref AS providerProjectRef, period_start_ms AS periodStartMs, period_end_ms AS periodEndMs,
-              fetched_at_ms AS fetchedAtMs, pagination_complete AS paginationComplete, page_count AS pageCount,
-              page_digest_chain_sha256 AS pageDigestChainSha256, result_state AS resultState, failure_code AS failureCode,
-              provider_finality AS providerFinality, trust, raw_retention AS rawRetention,
-              observations_stored AS observationsStored, source_kind AS sourceKind
-         FROM openai_cost_observation_runs
-        ORDER BY fetched_at_ms DESC, observation_run_id DESC LIMIT ?`,
-    ).all(safeLimit) as Array<Record<string, unknown>>;
-    return rows.map(openAiCostsRunFromRecord);
+    return billing.openAiCostsObservationRuns(this.db, limit);
   }
 
   /** Latest fully paginated successful snapshot only; failed runs never become a projection. */
   latestCompleteOpenAiCostsObservation(): { run: OpenAiCostsObservationRun; observations: OpenAiCostsObservationLine[] } | null {
-    const row = this.db.prepare(
-      `SELECT observation_run_id AS observationRunId, declared_scope_id AS declaredScopeId,
-              provider_project_ref AS providerProjectRef, period_start_ms AS periodStartMs, period_end_ms AS periodEndMs,
-              fetched_at_ms AS fetchedAtMs, pagination_complete AS paginationComplete, page_count AS pageCount,
-              page_digest_chain_sha256 AS pageDigestChainSha256, result_state AS resultState, failure_code AS failureCode,
-              provider_finality AS providerFinality, trust, raw_retention AS rawRetention,
-              observations_stored AS observationsStored, source_kind AS sourceKind
-         FROM openai_cost_observation_runs
-        WHERE result_state = 'succeeded' AND pagination_complete = 1
-        ORDER BY fetched_at_ms DESC, observation_run_id DESC LIMIT 1`,
-    ).get() as Record<string, unknown> | undefined;
-    if (!row) return null;
-    const run = openAiCostsRunFromRecord(row);
-    const observations = this.db.prepare(
-      `SELECT observation_id AS observationId, observation_run_id AS observationRunId, declared_scope_id AS declaredScopeId,
-              provider_project_ref AS providerProjectRef, fetched_at_ms AS fetchedAtMs, bucket_start_ms AS bucketStartMs,
-              bucket_end_ms AS bucketEndMs, line_item AS lineItem, currency, amount_decimal AS amountDecimal
-         FROM openai_cost_observation_lines
-        WHERE observation_run_id = ?
-        ORDER BY bucket_start_ms ASC, line_item ASC, currency ASC`,
-    ).all(run.observationRunId) as Array<Record<string, unknown>>;
-    return { run, observations: observations.map(openAiCostsLineFromRecord) };
+    return billing.latestCompleteOpenAiCostsObservation(this.db);
   }
 
   /** Status has no financial total by design, so independent snapshots cannot be double counted. */
   openAiCostsObservationStatus(): OpenAiCostsObservationStatus {
-    const latest = this.openAiCostsObservationRuns(1)[0] ?? null;
-    const latestComplete = this.latestCompleteOpenAiCostsObservation()?.run ?? null;
-    return { latestRun: latest, latestCompleteRun: latestComplete, reconciliationStatus: 'not_reconciled' };
+    return billing.openAiCostsObservationStatus(this.db);
   }
 
   /**
    * Read-only local capture coverage for the newest complete Costs snapshot.
-   * It deliberately returns no provider total and no variance: a local route
-   * declaration does not prove provider-account ownership or off-path coverage.
+   * It deliberately returns no provider total and no variance.
    */
   openAiCostsCaptureCoverage(): OpenAiCostsCaptureCoverage | null {
-    const latest = this.latestCompleteOpenAiCostsObservation();
-    if (!latest) return null;
-    return buildOpenAiCostsCaptureCoverage({
-      run: latest.run,
-      observations: latest.observations,
-      requests: this.requestsInRange(latest.run.periodStartMs, latest.run.periodEndMs),
-    });
+    return billing.openAiCostsCaptureCoverage(this.db, (startMs, endMs) => this.requestsInRange(startMs, endMs));
   }
 
   /**
    * Per-day provider totals from the newest COMPLETE observation of this period
    * that is not the one being reconciled — the evidence behind
-   * `snapshotStability`. Returns null when no independent observation exists,
-   * which is honestly different from "two observations agreed".
-   *
-   * Matched on the exact period and scope: a snapshot of a different range is
-   * not an independent observation of this one, and comparing them would
-   * manufacture instability out of a boundary difference.
+   * `snapshotStability`. Null when no independent observation exists.
    */
   priorOpenAiCostsDayTotals(exceptRunId: string, scopeId: string, periodStartMs: number, periodEndMs: number): Map<number, number> | null {
-    const row = this.db.prepare(
-      `SELECT observation_run_id AS observationRunId
-         FROM openai_cost_observation_runs
-        WHERE result_state = 'succeeded' AND pagination_complete = 1
-          AND observation_run_id <> ? AND declared_scope_id = ?
-          AND period_start_ms = ? AND period_end_ms = ?
-        ORDER BY fetched_at_ms DESC, observation_run_id DESC LIMIT 1`,
-    ).get(exceptRunId, scopeId, periodStartMs, periodEndMs) as Record<string, unknown> | undefined;
-    if (!row) return null;
-    const lines = this.db.prepare(
-      `SELECT bucket_start_ms AS bucketStartMs, amount_decimal AS amountDecimal
-         FROM openai_cost_observation_lines WHERE observation_run_id = ?`,
-    ).all(String(row.observationRunId)) as Array<Record<string, unknown>>;
-    const totals = new Map<number, number>();
-    for (const line of lines) {
-      const day = Number(line.bucketStartMs);
-      totals.set(day, (totals.get(day) ?? 0) + usdMicros(String(line.amountDecimal), 'provider amount'));
-    }
-    return totals;
+    return billing.priorOpenAiCostsDayTotals(this.db, exceptRunId, scopeId, periodStartMs, periodEndMs);
   }
 
   /**
    * Compare the newest complete provider snapshot with the local ledger.
    *
    * Read-only: computing a reconciliation does not record one. `saveReconciliationRun`
-   * is a separate, explicit step, so an operator can look at a variance before
-   * it becomes part of the durable record.
+   * is a separate, explicit step.
    */
   reconcileOpenAiCosts(opts: { materialityUsd?: number; now?: number } = {}): ReconciliationResult | null {
-    const latest = this.latestCompleteOpenAiCostsObservation();
-    if (!latest) return null;
-    return reconcileOpenAiCosts({
-      run: latest.run,
-      observations: latest.observations,
-      requests: this.requestsInRange(latest.run.periodStartMs, latest.run.periodEndMs),
-      priorDayTotals: this.priorOpenAiCostsDayTotals(
-        latest.run.observationRunId,
-        latest.run.declaredScopeId,
-        latest.run.periodStartMs,
-        latest.run.periodEndMs,
-      ),
-      materialityUsd: opts.materialityUsd,
-      now: opts.now,
-    });
+    return billing.reconcileOpenAiCosts(this.db, (startMs, endMs) => this.requestsInRange(startMs, endMs), opts);
   }
 
   /** Persist a computed reconciliation as an immutable derived record. */
   saveReconciliationRun(result: ReconciliationRun, computedAtMs = Date.now()): string {
-    const id = randomUUID();
-    this.db
-      .prepare(
-        `INSERT INTO reconciliation_runs (
-            reconciliation_run_id, observation_run_id, declared_scope_id, provider_project_ref,
-            period_start_ms, period_end_ms, computed_at_ms, currency, materiality_usd,
-            provider_reported_micros, local_captured_micros, unexplained_variance_micros,
-            snapshot_stability, trust, result_json
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      )
-      .run(
-        id,
-        result.observationRunId,
-        result.declaredScopeId,
-        result.providerProjectRef,
-        result.periodStartMs,
-        result.periodEndMs,
-        computedAtMs,
-        result.currency,
-        result.materialityUsd,
-        result.providerReportedMicros,
-        result.localCapturedMicros,
-        result.unexplainedVarianceMicros,
-        result.snapshotStability,
-        result.trust,
-        JSON.stringify(result),
-      );
-    return id;
+    return billing.saveReconciliationRun(this.db, result, computedAtMs);
   }
 
   // ── Allocation ────────────────────────────────────────────────────────────
 
   upsertCostCentre(input: { costCentreId: string; name: string; owner?: string | null; createdAtMs?: number }): CostCentre {
-    validateCostCentre(input);
-    const createdAtMs = input.createdAtMs ?? Date.now();
-    this.db
-      .prepare(
-        `INSERT INTO cost_centres (cost_centre_id, name, owner, created_at_ms, archived_at_ms)
-         VALUES (?,?,?,?,NULL)
-         ON CONFLICT(cost_centre_id) DO UPDATE SET name = excluded.name, owner = excluded.owner`,
-      )
-      .run(input.costCentreId, input.name, input.owner ?? null, createdAtMs);
-    return this.costCentres().find((c) => c.costCentreId === input.costCentreId)!;
+    return allocation.upsertCostCentre(this.db, input);
   }
 
   /** Archive rather than delete: past runs must stay explicable. */
   archiveCostCentre(costCentreId: string, archivedAtMs = Date.now()): boolean {
-    const info = this.db
-      .prepare('UPDATE cost_centres SET archived_at_ms = ? WHERE cost_centre_id = ? AND archived_at_ms IS NULL')
-      .run(archivedAtMs, costCentreId);
-    return Number(info.changes ?? 0) > 0;
+    return allocation.archiveCostCentre(this.db, costCentreId, archivedAtMs);
   }
 
   costCentres(): CostCentre[] {
-    const rows = this.db
-      .prepare(
-        `SELECT cost_centre_id AS costCentreId, name, owner, created_at_ms AS createdAtMs, archived_at_ms AS archivedAtMs
-           FROM cost_centres ORDER BY cost_centre_id ASC`,
-      )
-      .all() as Array<Record<string, unknown>>;
-    return rows.map((r) => ({
-      costCentreId: String(r.costCentreId),
-      name: String(r.name),
-      owner: r.owner === null ? null : String(r.owner),
-      createdAtMs: Number(r.createdAtMs),
-      archivedAtMs: r.archivedAtMs === null ? null : Number(r.archivedAtMs),
-    }));
+    return allocation.costCentres(this.db);
   }
 
   /**
@@ -2583,85 +1488,17 @@ export class Store {
    * that actually applied to it.
    */
   saveAllocationRule(input: Omit<AllocationRule, 'version' | 'createdAtMs'> & { createdAtMs?: number }): AllocationRule {
-    const createdAtMs = input.createdAtMs ?? Date.now();
-    const existing = this.db
-      .prepare('SELECT MAX(version) AS maxVersion FROM allocation_rules WHERE rule_id = ?')
-      .get(input.ruleId) as Record<string, unknown> | undefined;
-    const previous = existing && existing.maxVersion !== null ? Number(existing.maxVersion) : 0;
-    const rule: AllocationRule = { ...input, version: previous + 1, createdAtMs };
-    validateRule(rule);
-
-    this.runScript('BEGIN');
-    try {
-      if (previous > 0) {
-        this.db
-          .prepare(
-            `UPDATE allocation_rules SET effective_to_ms = ?
-              WHERE rule_id = ? AND version = ? AND effective_to_ms IS NULL`,
-          )
-          .run(rule.effectiveFromMs, rule.ruleId, previous);
-      }
-      this.db
-        .prepare(
-          `INSERT INTO allocation_rules (
-              rule_id, version, method, match_json, targets_json, priority,
-              effective_from_ms, effective_to_ms, revoked_at_ms, owner, note, created_at_ms
-           ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-        )
-        .run(
-          rule.ruleId,
-          rule.version,
-          rule.method,
-          JSON.stringify(rule.match),
-          JSON.stringify(rule.targets),
-          rule.priority,
-          rule.effectiveFromMs,
-          rule.effectiveToMs,
-          rule.revokedAtMs,
-          rule.owner,
-          rule.note,
-          rule.createdAtMs,
-        );
-      this.runScript('COMMIT');
-    } catch (err) {
-      this.runScript('ROLLBACK');
-      throw err;
-    }
-    return rule;
+    return allocation.saveAllocationRule(this.db, input);
   }
 
   /** Withdraw a rule from a point in time forward. The row is retained. */
   revokeAllocationRule(ruleId: string, revokedAtMs = Date.now()): number {
-    const info = this.db
-      .prepare('UPDATE allocation_rules SET revoked_at_ms = ? WHERE rule_id = ? AND revoked_at_ms IS NULL')
-      .run(revokedAtMs, ruleId);
-    return Number(info.changes ?? 0);
+    return allocation.revokeAllocationRule(this.db, ruleId, revokedAtMs);
   }
 
   /** Every rule version ever written, so a past period stays reconstructible. */
   allocationRules(): AllocationRule[] {
-    const rows = this.db
-      .prepare(
-        `SELECT rule_id AS ruleId, version, method, match_json AS matchJson, targets_json AS targetsJson,
-                priority, effective_from_ms AS effectiveFromMs, effective_to_ms AS effectiveToMs,
-                revoked_at_ms AS revokedAtMs, owner, note, created_at_ms AS createdAtMs
-           FROM allocation_rules ORDER BY priority ASC, rule_id ASC, version ASC`,
-      )
-      .all() as Array<Record<string, unknown>>;
-    return rows.map((r) => ({
-      ruleId: String(r.ruleId),
-      version: Number(r.version),
-      method: String(r.method) as AllocationRule['method'],
-      match: JSON.parse(String(r.matchJson)) as AllocationRule['match'],
-      targets: JSON.parse(String(r.targetsJson)) as AllocationRule['targets'],
-      priority: Number(r.priority),
-      effectiveFromMs: Number(r.effectiveFromMs),
-      effectiveToMs: r.effectiveToMs === null ? null : Number(r.effectiveToMs),
-      revokedAtMs: r.revokedAtMs === null ? null : Number(r.revokedAtMs),
-      owner: r.owner === null ? null : String(r.owner),
-      note: r.note === null ? null : String(r.note),
-      createdAtMs: Number(r.createdAtMs),
-    }));
+    return allocation.allocationRules(this.db);
   }
 
   /**
@@ -2671,24 +1508,13 @@ export class Store {
    * agree with `byProject`, and matched on the instant the spend happened.
    */
   allocatePeriod(periodStartMs: number, periodEndMs: number, runAtMs = Date.now()): AllocationRunResult {
-    const rows: AllocatableRow[] = this.requestsInRange(periodStartMs, periodEndMs).map((r) => ({
-      project: r.projectCanonical ?? r.project,
-      provider: r.provider,
-      model: r.model,
-      source: r.source ?? null,
-      user: r.user ?? null,
-      tsEpochMs: r.tsEpochMs,
-      costUsd: r.costUsd,
-      costBasis: r.pricing?.costBasis ?? 'legacy_unknown',
-    }));
-    return applyAllocation({
-      rows,
-      rules: this.allocationRules(),
-      costCentres: this.costCentres(),
+    return allocation.allocatePeriod(
+      this.db,
+      (startMs, endMs) => this.requestsInRange(startMs, endMs),
       periodStartMs,
       periodEndMs,
       runAtMs,
-    });
+    );
   }
 
   /**
@@ -2697,59 +1523,16 @@ export class Store {
    * storing it would put an unauditable number in front of a budget owner.
    */
   saveAllocationRun(result: AllocationRunResult, computedAtMs = Date.now()): string {
-    if (!result.conserves) {
-      throw new Error('refusing to record an allocation run that does not conserve its input');
-    }
-    const id = randomUUID();
-    this.db
-      .prepare(
-        `INSERT INTO allocation_runs (
-            allocation_run_id, period_start_ms, period_end_ms, computed_at_ms,
-            total_micros, allocated_micros, unallocated_micros, conserves, trust, result_json
-         ) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      )
-      .run(
-        id,
-        result.periodStartMs,
-        result.periodEndMs,
-        computedAtMs,
-        result.totalMicros,
-        result.allocatedMicros,
-        result.unallocatedMicros,
-        1,
-        result.trust,
-        JSON.stringify(result),
-      );
-    return id;
+    return allocation.saveAllocationRun(this.db, result, computedAtMs);
   }
 
   allocationRuns(limit = 20): Array<{ allocationRunId: string; computedAtMs: number; result: AllocationRunResult }> {
-    const rows = this.db
-      .prepare(
-        `SELECT allocation_run_id AS allocationRunId, computed_at_ms AS computedAtMs, result_json AS resultJson
-           FROM allocation_runs ORDER BY computed_at_ms DESC, allocation_run_id DESC LIMIT ?`,
-      )
-      .all(limit) as Array<Record<string, unknown>>;
-    return rows.map((row) => ({
-      allocationRunId: String(row.allocationRunId),
-      computedAtMs: Number(row.computedAtMs),
-      result: JSON.parse(String(row.resultJson)) as AllocationRunResult,
-    }));
+    return allocation.allocationRuns(this.db, limit);
   }
 
   /** Recorded reconciliation runs, newest first. */
   reconciliationRuns(limit = 20): Array<{ reconciliationRunId: string; computedAtMs: number; result: ReconciliationRun }> {
-    const rows = this.db
-      .prepare(
-        `SELECT reconciliation_run_id AS reconciliationRunId, computed_at_ms AS computedAtMs, result_json AS resultJson
-           FROM reconciliation_runs ORDER BY computed_at_ms DESC, reconciliation_run_id DESC LIMIT ?`,
-      )
-      .all(limit) as Array<Record<string, unknown>>;
-    return rows.map((row) => ({
-      reconciliationRunId: String(row.reconciliationRunId),
-      computedAtMs: Number(row.computedAtMs),
-      result: JSON.parse(String(row.resultJson)) as ReconciliationRun,
-    }));
+    return billing.reconciliationRuns(this.db, limit);
   }
 
   /**
@@ -2764,86 +1547,22 @@ export class Store {
     declaredAtMs?: number;
     activatedAtMs?: number;
   }): ProviderScopeDeclaration {
-    const declaration = newOpenAiScopeDeclaration(input);
-    const select = this.db.prepare(
-      `SELECT declaration_id AS declarationId, billing_account_ref AS billingAccountRef,
-              provider_project_ref AS providerProjectRef, upstream_fingerprint AS upstreamFingerprint,
-              upstream_display AS upstreamDisplay, declared_at_ms AS declaredAtMs
-         FROM provider_scope_declarations
-        WHERE provider = 'openai' AND billing_account_ref = ?
-          AND provider_project_ref IS ? AND upstream_fingerprint = ?`,
-    );
-    this.runScript('BEGIN');
-    try {
-      let record = select.get(
-        declaration.billingAccountRef,
-        declaration.providerProjectRef,
-        declaration.upstreamFingerprint,
-      ) as Record<string, unknown> | undefined;
-      // SQLite's UNIQUE treats NULL values as distinct. Look up first so the
-      // optional provider project cannot create duplicate declarations on each
-      // idempotent `scope set` invocation.
-      if (!record) {
-        this.db.prepare(
-          `INSERT INTO provider_scope_declarations (
-             declaration_id, provider, billing_account_ref, provider_project_ref, upstream_fingerprint,
-             upstream_display, declared_at_ms, trust
-           ) VALUES (?,?,?,?,?,?,?,?)`,
-        ).run(
-          declaration.declarationId, declaration.provider, declaration.billingAccountRef, declaration.providerProjectRef,
-          declaration.upstreamFingerprint, declaration.upstreamDisplay, declaration.declaredAtMs, declaration.trust,
-        );
-        record = select.get(
-          declaration.billingAccountRef,
-          declaration.providerProjectRef,
-          declaration.upstreamFingerprint,
-        ) as Record<string, unknown> | undefined;
-      }
-      if (!record) throw new Error('could not persist the local OpenAI scope declaration');
-      const persisted = scopeDeclarationFromRecord(record);
-      this.db.prepare(
-        `INSERT INTO active_provider_scope_routes (provider, declaration_id, upstream_fingerprint, activated_at_ms)
-         VALUES ('openai',?,?,?)
-         ON CONFLICT(provider) DO UPDATE SET declaration_id=excluded.declaration_id,
-           upstream_fingerprint=excluded.upstream_fingerprint, activated_at_ms=excluded.activated_at_ms`,
-      ).run(persisted.declarationId, persisted.upstreamFingerprint, input.activatedAtMs ?? Date.now());
-      this.runScript('COMMIT');
-      return persisted;
-    } catch (error) {
-      this.runScript('ROLLBACK');
-      throw error;
-    }
+    return billing.setOpenAiScope(this.db, input);
   }
 
   /** Stop attaching the local scope to future OpenAI-proxy rows. Historical rows are immutable. */
   clearOpenAiScope(): boolean {
-    const info = this.db.prepare(`DELETE FROM active_provider_scope_routes WHERE provider = 'openai'`).run();
-    return Number(info.changes ?? 0) > 0;
+    return billing.clearOpenAiScope(this.db);
   }
 
   /** Active local declaration, if one exists. It still has unverified trust. */
   activeOpenAiScope(): ProviderScopeDeclaration | null {
-    const row = this.db.prepare(
-      `SELECT d.declaration_id AS declarationId, d.billing_account_ref AS billingAccountRef,
-              d.provider_project_ref AS providerProjectRef, d.upstream_fingerprint AS upstreamFingerprint,
-              d.upstream_display AS upstreamDisplay, d.declared_at_ms AS declaredAtMs
-         FROM active_provider_scope_routes a
-         JOIN provider_scope_declarations d ON d.declaration_id = a.declaration_id
-        WHERE a.provider = 'openai'`,
-    ).get() as Record<string, unknown> | undefined;
-    return row ? scopeDeclarationFromRecord(row) : null;
+    return billing.activeOpenAiScope(this.db);
   }
 
   /** Snapshot only when a request's resolved OpenAI endpoint exactly matches the active declaration. */
   matchingOpenAiScope(upstreamBase: string): ProviderScopeDeclaration | null {
-    let fingerprint: string;
-    try {
-      fingerprint = normalizeOpenAiUpstream(upstreamBase).fingerprint;
-    } catch {
-      return null;
-    }
-    const active = this.activeOpenAiScope();
-    return active?.upstreamFingerprint === fingerprint ? active : null;
+    return billing.matchingOpenAiScope(this.db, upstreamBase);
   }
 
   /** Maintenance: prune old requests and compact. Returns rows removed. */

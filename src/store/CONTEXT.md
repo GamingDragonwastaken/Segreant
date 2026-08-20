@@ -1,6 +1,35 @@
 # store — the ledger and every derived record
 
-<!-- Layer 2 contract. One file, ~3,400 lines: the single writer for all persisted state. -->
+<!-- Layer 2 contract. The single writer for all persisted state. -->
+
+## Layout
+
+`db.ts` exports `Store` and is the **only** entry point any caller uses. It is a
+facade: it owns the connection, the public method names, and the record shapes,
+and delegates the body of each method to a domain module beside it. Callers
+import `Store` and its types from `db.ts` and nothing else — a domain module is
+an implementation detail, and moving a method between them must never be visible
+above this directory.
+
+| File | Owns |
+| --- | --- |
+| `db.ts` | the `Store` facade: connection, requests, sessions, projects/aliases, proposals, commits, gate signals, session units, maintenance |
+| `schema.ts` | every `CREATE TABLE`, every guarded `ALTER`, and `runScript` |
+| `billing.ts` | provider evidence imports, OpenAI Costs observations, provider scope declarations, reconciliation |
+| `allocation.ts` | cost centres, the versioned rule book, allocation runs |
+| `realization.ts` | realized-value snapshots, receipts, repricing and its re-attribution |
+| `rows.ts` | row decoders shared by more than one domain |
+
+Domain modules take the `DatabaseSync` handle as their first argument and are
+stateless. Where a domain needs a read that belongs to another one — allocation
+and billing need `requestsInRange`, realization needs the alias family and the
+window aggregates — the facade **passes it in** rather than the module
+re-implementing it. Two implementations of one aggregate is how a total starts
+disagreeing with itself.
+
+A domain module may `import type` from `db.ts` (erased at runtime) but must
+never import a value from it: that would make the graph circular. A helper with
+two domain callers goes in `rows.ts`.
 
 ## Consumes
 
@@ -12,8 +41,8 @@
 
 - **Money is exact.** All amounts are integer microdollars. No float ever reaches
   a column.
-- **One writer.** Every table is created and migrated here. No other module
-  issues DDL.
+- **One writer.** Every table is created and migrated in `schema.ts`. No other
+  module — inside this directory or outside it — issues DDL.
 - **Derived records are immutable.** `reconciliation runs`, `allocation_runs`,
   and `realization_units` are written once. Recompute by writing a new record.
 - **Recorded labels are never rewritten.** Alias resolution happens at query
@@ -22,9 +51,12 @@
 
 ## Invariants
 
-- **`runScript` splits SQL on `;`.** The `SCHEMA` template literal must contain
-  **no semicolons and no backticks**. Violating this silently truncates the
-  schema.
+- **`runScript` splits SQL on `;`.** The `SCHEMA` template literal in
+  `schema.ts` must contain **no semicolons and no backticks**. Violating this
+  silently truncates the schema.
+- **Control characters are written as escapes.** Composite keys built for
+  grouping join their parts with `\u0000`; that must stay the six-character
+  escape in source and never a literal NUL byte.
 - **Migrations are additive and guarded**: `ALTER TABLE ... ADD COLUMN` inside
   `migrate()`, `TEXT NOT NULL DEFAULT '<sentinel>'`, wrapped so a re-run is a
   no-op.
