@@ -67,11 +67,23 @@ export interface Route {
   /** Exact pathname. Matching is exact equality, never a prefix. */
   path: string;
   /**
-   * Methods this route answers. `null` means "any method" — the read-only
-   * routes that have never method-checked; keeping that explicit is what stops
-   * this refactor from quietly adding a 405 where there was none.
+   * Methods this route answers. Everything else gets a 405 and an `Allow`.
+   *
+   * There is deliberately no "any method" value. Ten read routes used to carry
+   * one, inherited from the pre-refactor if-chain where they simply never
+   * checked — so they answered DELETE and PATCH with 200 and a full payload.
+   * Every one of those handlers is a read, so nothing was corruptible through
+   * them, but a table whose whole purpose is to make the security posture
+   * readable should not have a row that means "unrestricted". Requiring the
+   * list makes the fall-open unrepresentable rather than merely absent.
+   *
+   * `OPTIONS` is not in any route's list, on purpose. The CSRF gate below rests
+   * on this server never answering a preflight; a route that started answering
+   * OPTIONS is the one change that could quietly undo it. OPTIONS gets a 405
+   * like any other unserved method, which no browser treats as preflight
+   * approval.
    */
-  methods: readonly string[] | null;
+  methods: readonly string[];
   /**
    * The `Allow` header sent with a 405. Defaults to `methods` joined, and is
    * only set explicitly where the historical header differs from the methods
@@ -719,21 +731,21 @@ export function handleHtmlEntry({ res, url }: RouteContext): void {
  * through to the static assets and then to 404.
  */
 export const ROUTES: readonly Route[] = [
-  { path: '/api/health', methods: null, handler: handleHealth },
-  { path: '/api/importers', methods: null, handler: handleImporters },
+  { path: '/api/health', methods: ['GET', 'HEAD'], handler: handleHealth },
+  { path: '/api/importers', methods: ['GET', 'HEAD'], handler: handleImporters },
   { path: '/api/import', methods: ['POST'], localOnly: ['POST'], handler: handleImport },
   { path: '/api/discover', methods: ['POST'], localOnly: ['POST'], handler: handleDiscover },
   // GET previews (read-only), POST performs the import+correlate — so only the
   // POST carries the CSRF gate.
   { path: '/api/scan', methods: ['GET', 'POST'], localOnly: ['POST'], handler: handleScan },
-  { path: '/api/overview', methods: null, handler: handleOverview },
+  { path: '/api/overview', methods: ['GET', 'HEAD'], handler: handleOverview },
   { path: '/api/billing', methods: ['GET'], handler: handleBilling },
   { path: '/api/allocation', methods: ['GET'], handler: handleAllocation },
-  { path: '/api/export.csv', methods: null, handler: handleExportCsv },
-  { path: '/api/realization', methods: null, handler: handleRealization },
-  { path: '/api/guide', methods: null, handler: handleGuide },
+  { path: '/api/export.csv', methods: ['GET', 'HEAD'], handler: handleExportCsv },
+  { path: '/api/realization', methods: ['GET', 'HEAD'], handler: handleRealization },
+  { path: '/api/guide', methods: ['GET', 'HEAD'], handler: handleGuide },
   { path: '/api/judge', methods: ['POST'], localOnly: ['POST'], handler: handleJudge },
-  { path: '/api/value', methods: null, handler: handleValue },
+  { path: '/api/value', methods: ['GET', 'HEAD'], handler: handleValue },
   // Reads GET only, but has always advertised 'GET, POST' on the 405 — the
   // POST that Settings actually performs goes to /api/settings/update. The
   // header is preserved verbatim rather than "corrected": it is part of the
@@ -741,7 +753,7 @@ export const ROUTES: readonly Route[] = [
   { path: '/api/settings', methods: ['GET'], allow: 'GET, POST', handler: handleSettings },
   { path: '/api/settings/update', methods: ['POST'], localOnly: ['POST'], handler: handleSettingsUpdate },
   { path: '/api/settings/clear-proposals', methods: ['POST'], localOnly: ['POST'], handler: handleClearProposals },
-  { path: '/', methods: null, handler: handleHtmlEntry },
-  { path: '/index.html', methods: null, handler: handleHtmlEntry },
-  { path: '/classic', methods: null, handler: handleHtmlEntry },
+  { path: '/', methods: ['GET', 'HEAD'], handler: handleHtmlEntry },
+  { path: '/index.html', methods: ['GET', 'HEAD'], handler: handleHtmlEntry },
+  { path: '/classic', methods: ['GET', 'HEAD'], handler: handleHtmlEntry },
 ];

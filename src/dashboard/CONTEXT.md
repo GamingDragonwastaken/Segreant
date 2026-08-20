@@ -76,9 +76,25 @@ web/
   handler. No handler re-implements a 405, a 403, or a Host check, and no
   handler is a closure over the server — each is a named export that takes a
   `RouteContext`, so it can be called directly in a test with no socket.
+- **Every route declares its methods; there is no "answers anything".** `Route.
+  methods` is a required list, so a route cannot fall open by omission — an
+  unlisted method is always a 405 with an `Allow`. Ten read routes carried a
+  `null` here (inherited from the if-chain, which never method-checked them) and
+  answered `DELETE`/`PATCH` with 200 and a full payload. They are `GET, HEAD`
+  now. HEAD stays because Node drops the body itself, so it already worked;
+  removing it would have traded a fall-open for a regression.
+- **No route answers `OPTIONS`.** The CSRF gate above is worth exactly as much
+  as this server's refusal to answer a preflight, so OPTIONS 405s like any other
+  unserved method — a 405 carries no `Access-Control-Allow-Origin`, and no
+  browser reads it as permission to send the real request. Adding an OPTIONS
+  responder is the one change that could undo `localOnly` without touching it.
 - **`Allow` headers are part of the response contract.** They are pinned to
   their historical values by test, including `/api/settings` advertising
   `GET, POST` while serving only GET. Correcting one is a behaviour change.
+  `test/dashboard-routes.test.ts` keeps two pinned maps — inherited values in
+  `HISTORICAL_ALLOW`, the newly-restricted reads in `READ_ONLY_ALLOW` — and
+  asserts they together account for every route, so a new path cannot ship
+  without a deliberate decision about which methods it answers.
 - **The browser app never imports node code, and the server never imports the
   browser app.** Enforced structurally: `app/tsconfig.json` has the DOM lib and
   no node types, and the root configs exclude `app/**`.

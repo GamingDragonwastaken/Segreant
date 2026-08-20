@@ -87,13 +87,13 @@ test('route table: every mutating route is gated by the x-aegis-local header', (
     // A gate that does not cover a method the route actually serves is not a gate.
     for (const method of route.localOnly!) {
       assert.ok(
-        route.methods === null || route.methods.includes(method),
+        route.methods.includes(method),
         `${path} guards ${method}, which it does not serve`,
       );
     }
     // Guarding a read is not the mistake this is looking for; leaving a write
     // ungated is. Every method a mutating route serves must be guarded.
-    for (const method of route.methods ?? []) {
+    for (const method of route.methods) {
       if (method === 'GET') continue; // GET /api/scan is a read-only preview
       assert.ok(route.localOnly!.includes(method), `${path} serves ${method} unguarded`);
     }
@@ -116,7 +116,6 @@ test('route table: declared methods are the methods the server answers', async (
   const srv = await boot(store);
   try {
     for (const route of ROUTES) {
-      if (route.methods === null) continue; // answers anything, by long-standing design
       const expectedAllow = route.allow ?? route.methods.join(', ');
       // DELETE is served by nothing, so it exercises the 405 on every route.
       const res = await rawRequest(srv.base, route.path, 'DELETE');
@@ -150,6 +149,39 @@ const HISTORICAL_ALLOW: Record<string, string> = {
   '/api/settings/clear-proposals': 'POST',
 };
 
+/**
+ * The read routes that used to answer ANY method, listed separately from the
+ * historical map because their `Allow` is new rather than inherited.
+ *
+ * They carried `methods: null` — faithfully preserved from the pre-refactor
+ * if-chain, which never method-checked them — so `DELETE /api/value` returned
+ * 200 and the full payload. Every one of these handlers is a read, so nothing
+ * was corruptible through them; it is the route table that was lying, by
+ * containing rows that meant "unrestricted" while claiming to be the auditable
+ * statement of what this server answers.
+ *
+ * HEAD is included, not dropped: Node suppresses the body itself, so HEAD
+ * already worked on every one of these. Restricting them to GET alone would
+ * have turned a fall-open into a regression.
+ *
+ * OPTIONS is deliberately absent, so it 405s. The CSRF gate rests on this
+ * server never answering a preflight — a 405 carries no
+ * `Access-Control-Allow-Origin`, so no browser reads it as approval to send the
+ * real request.
+ */
+const READ_ONLY_ALLOW: Record<string, string> = {
+  '/api/health': 'GET, HEAD',
+  '/api/importers': 'GET, HEAD',
+  '/api/overview': 'GET, HEAD',
+  '/api/export.csv': 'GET, HEAD',
+  '/api/realization': 'GET, HEAD',
+  '/api/guide': 'GET, HEAD',
+  '/api/value': 'GET, HEAD',
+  '/': 'GET, HEAD',
+  '/index.html': 'GET, HEAD',
+  '/classic': 'GET, HEAD',
+};
+
 test('405 responses send the same Allow header they always have', async () => {
   const store = new Store(':memory:');
   const srv = await boot(store);
@@ -159,10 +191,12 @@ test('405 responses send the same Allow header they always have', async () => {
       assert.equal(res.status, 405, `DELETE ${path}`);
       assert.equal(res.allow, allow, `Allow header for ${path}`);
     }
-    // And the inverse: no route outside that list method-checks at all, so a
-    // new 405 cannot appear on a path that used to answer anything.
-    const methodChecked = ROUTES.filter((r) => r.methods !== null).map((r) => r.path).sort();
-    assert.deepEqual(methodChecked, Object.keys(HISTORICAL_ALLOW).sort());
+    // Every route method-checks now, so the old inverse ("no 405 outside this
+    // list") is retired by design. What replaces it: the two pinned maps must
+    // together account for every route, so a new path cannot ship without a
+    // deliberate decision about which methods it answers.
+    const pinned = [...Object.keys(HISTORICAL_ALLOW), ...Object.keys(READ_ONLY_ALLOW)].sort();
+    assert.deepEqual(ROUTES.map((r) => r.path).sort(), pinned);
   } finally {
     await srv.close();
     store.close();
@@ -339,5 +373,61 @@ test('GET /api/scan previews without moving the baseline it diffs against', asyn
     await srv.close();
     store.close();
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/**
+ * The routes that used to answer anything now refuse everything they do not
+ * serve — and still serve what they did.
+ *
+ * Both halves matter. A 405 on DELETE proves the fall-open is closed; a 200 on
+ * GET and HEAD proves it was closed by declaring the real method list rather
+ * than by narrowing the route until something legitimate broke. HEAD in
+ * particular worked before this change, so it has to work after it.
+ */
+test('the formerly unrestricted read routes 405 every method they do not serve', async () => {
+  const store = new Store(':memory:');
+  const srv = await boot(store);
+  try {
+    for (const [path, allow] of Object.entries(READ_ONLY_ALLOW)) {
+      for (const method of ['DELETE', 'PUT', 'PATCH', 'POST', 'OPTIONS']) {
+        const res = await rawRequest(srv.base, path, method);
+        assert.equal(res.status, 405, `${method} ${path} must be refused`);
+        assert.equal(res.allow, allow, `Allow header for ${method} ${path}`);
+        assert.equal(res.text, 'method not allowed');
+      }
+    }
+  } finally {
+    await srv.close();
+    store.close();
+  }
+});
+
+test('restricting those routes did not break the methods they legitimately serve', async () => {
+  const store = new Store(':memory:');
+  const srv = await boot(store);
+  // `/api/value` and `/api/realization` correlate against a git repo, and
+  // unscoped they walk the checkout this suite runs in — 52s and 57s per
+  // request measured, which would cost more than the whole suite. Pointing
+  // them at an empty non-repo makes them return the same shape in ~60ms. The
+  // subject here is method dispatch, not correlation depth.
+  const empty = mkdtempSync(join(tmpdir(), 'fiscus-norepo-'));
+  const scoped = (path: string) => `${path}?repo=${encodeURIComponent(empty)}`;
+  try {
+    for (const path of Object.keys(READ_ONLY_ALLOW)) {
+      const get = await rawRequest(srv.base, scoped(path), 'GET');
+      assert.equal(get.status, 200, `GET ${path}`);
+      assert.ok(get.text.length > 0, `GET ${path} returned an empty body`);
+
+      // Node drops the body for HEAD on its own; the status and headers are
+      // what a HEAD is for, and they must still come from the real handler.
+      const head = await rawRequest(srv.base, scoped(path), 'HEAD');
+      assert.equal(head.status, 200, `HEAD ${path}`);
+      assert.equal(head.text, '', `HEAD ${path} must not send a body`);
+    }
+  } finally {
+    await srv.close();
+    store.close();
+    rmSync(empty, { recursive: true, force: true });
   }
 });

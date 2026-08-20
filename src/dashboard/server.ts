@@ -65,12 +65,11 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
 
     const route = ROUTE_TABLE.get(url.pathname);
     if (route) {
-      // A method the route does not serve never reaches the handler. `methods:
-      // null` means the route has always answered any method; an absent method
-      // matches nothing, which is what the per-route `req.method !== 'X'`
-      // checks did before.
+      // A method the route does not serve never reaches the handler. Every
+      // route declares its list — there is no longer an "answers anything"
+      // case to fall through, so an unlisted method is always a 405.
       const method = req.method ?? '';
-      if (route.methods && !route.methods.includes(method)) {
+      if (!route.methods.includes(method)) {
         res.writeHead(405, { 'content-type': 'text/plain', allow: route.allow ?? route.methods.join(', ') });
         res.end('method not allowed');
         return;
