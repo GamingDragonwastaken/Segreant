@@ -266,7 +266,36 @@ export interface SettingsSnapshot {
   proposalRetentionDays: number;
   metadataOnly: boolean;
   budget: BudgetConfig;
+  enforcement: BudgetEnforcement;
   connections: Array<Record<string, unknown>>;
+}
+
+/**
+ * Mirrors `BudgetEnforcementDescriptor` from `src/budget/enforceability.ts`.
+ *
+ * Declared structurally rather than imported: this module compiles under the
+ * browser config, which has no node types, so it cannot reach server source —
+ * the same reason `BudgetConfig` is restated above. `dashboard-contract.test.ts`
+ * is what keeps the two in step.
+ *
+ * The four members are four different enforcement CLAIMS, and the screen must
+ * not collapse them: what the local proxy can stop before it happens, spend that
+ * was only ever observed after the fact, provider-side limits Fiscus does not
+ * inspect at all, and advice that is a proposal until applied.
+ */
+export interface BudgetEnforcement {
+  localProxy: {
+    state: 'enforced_in_path';
+    mechanism: 'local_proxy';
+    hardControlActive: boolean;
+    warningActive: boolean;
+    /** True: the running guard re-reads config, so a saved cap is live. */
+    liveConfig: boolean;
+    spendScope: 'live_proxy' | 'all_observed';
+  };
+  importedSpend: { state: 'observed_only'; blockable: false; countsTowardInPathCap: boolean };
+  providerNative: { state: 'unknown'; inspected: false };
+  recommendation: { state: 'proposed'; automaticallyApplied: false };
 }
 
 export interface Importer {

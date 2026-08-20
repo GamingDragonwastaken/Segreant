@@ -594,6 +594,14 @@ body.drawer-open { overflow: hidden; }
    Dimmed rather than hidden, because "we checked and it is not there" is a
    different statement from silence. */
 .fact-off .fact-key, .fact-off .fact-val { color: var(--faint); }
+/* Enforcement facts carry sentences ("enforced in path · hard control active"),
+   not figures, so they are allowed to wrap. The default .fact-val is nowrap
+   because it holds money and counts, which must never break mid-number.
+   Measured at 375px: the current strings fit either way, so this prevents a
+   future longer state string from being forced onto one line — it is not
+   fixing an overflow that exists today. */
+.enforcement-facts .fact { align-items: flex-start; }
+.enforcement-facts .fact-val { white-space: normal; overflow-wrap: anywhere; }
 
 .dot {
   width: 6px; height: 6px; border-radius: 50%; flex: none;

@@ -689,11 +689,17 @@ export function handleSettingsUpdate({ req, res, store, config, version, configP
       const current = configPersistence.load();
       const next = applySettingsPatch(current, patch);
       configPersistence.save(next);
-      // Keep this process's in-memory config in sync so a later plain GET
-      // /api/settings doesn't read back stale values until a restart. Note this
-      // does NOT reach the separately-constructed proxy server's own config
-      // object — live budget enforcement still needs a restart to pick up edits,
-      // same as any existing CLI config mutation today.
+      // Mutate the shared config object IN PLACE rather than rebinding it.
+      // `fiscus start` hands this same object to the proxy, and the guard holds
+      // it as a getter (`new BudgetGuard(store, () => config.budget)`) that is
+      // re-read per request — so this assignment makes a saved cap live, with no
+      // restart. Verified end to end: with no cap a proxied request returned
+      // 200; a $0.01 cap posted here made the next one 429 in the same process.
+      //
+      // An earlier comment here claimed the opposite, and the Control view
+      // repeated it to operators as "Changes need a restart". Replacing the
+      // object instead of assigning into it would make that stale claim true
+      // again, silently — the proxy would keep the old reference.
       Object.assign(config, next);
       return json(res, 200, buildSettingsSnapshot(store, config, version));
     } catch (err) {
