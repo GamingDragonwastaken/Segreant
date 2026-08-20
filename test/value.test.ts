@@ -231,7 +231,7 @@ test('RoI: geometric mean collapses to 0 if any lens is 0 (no axis can carry the
   const r = computeReturnOnIntelligence(report);
   assert.equal(r.roiIndex, 0, 'one collapsed lens collapses the index');
   assert.equal(r.lenses.lift.instrumented, false, 'lift uninstrumented by default');
-  assert.ok(Math.abs(r.coverage - 3 / 4) < 1e-9, 'lift excluded from coverage');
+  assert.ok(Math.abs(r.coverage - 2 / 4) < 1e-9, 'Lift and orthogonal Impact are both uninstrumented');
   assert.ok(r.notes.some((n) => n.includes('collapsed')));
 });
 
@@ -241,8 +241,8 @@ test('RoI: injected lift widens coverage; index is the geometric mean of instrum
     units: [ru({ realized: true, acceptance: 0.9, shipped: true })],
     matured: { realizationRate: 0.8, totalCostUsd: 10, realizedValueUsd: 8 },
   };
-  const r = computeReturnOnIntelligence(report, { lift: 0.5 });
-  assert.equal(r.coverage, 1, 'all four lenses instrumented');
+  const r = computeReturnOnIntelligence(report, { lift: 0.5, impact: 0.8, impactHow: 'external outcome signal' });
+  assert.equal(r.coverage, 1, 'all four lenses instrumented only when Impact is supplied independently');
   assert.ok(r.roiIndex !== null && r.roiIndex > 0 && r.roiIndex < 100);
 });
 
@@ -318,21 +318,17 @@ test('RoI: effort tax raises the denominator, lowering realized efficiency', () 
   assert.ok(withLabor.realizedEfficiency !== null && withLabor.realizedEfficiency < 1);
 });
 
-test('RoI: Impact diverges from raw realization via production reach (shipped weighs more), not line counts', () => {
+test('RoI: Impact is independently supplied and can diverge from raw realization without double-counting gates', () => {
   const report: RealizationLike = {
     firstPassAcceptance: null,
-    units: [
-      ru({ realized: true, acceptance: null, shipped: true }), // realized AND reached production
-      ru({ realized: false, acceptance: null }), // not realized
-    ],
+    units: [ru({ realized: true, acceptance: null, shipped: true }), ru({ realized: false, acceptance: null })],
     matured: { realizationRate: 0.5, totalCostUsd: 5, realizedValueUsd: 3 },
   };
-  const r = computeReturnOnIntelligence(report);
-  assert.ok(r.lenses.impact.value !== null);
-  // The realized unit shipped (reach 1.5) while the other didn't realize → impact
-  // is pulled above the raw 0.5 realization purely by production reach. No LOC input
-  // exists on the lens anymore, so this divergence cannot come from size.
-  assert.ok(r.lenses.impact.value! > 0.5, `impact ${r.lenses.impact.value} should exceed raw 0.5 realization`);
+  const absent = computeReturnOnIntelligence(report);
+  assert.equal(absent.lenses.impact.value, null);
+  const measured = computeReturnOnIntelligence(report, { impact: 0.9, impactHow: 'business outcome adapter' });
+  assert.equal(measured.lenses.impact.value, 0.9);
+  assert.equal(measured.lenses.realization.value, 0.5);
 });
 
 // ---- Lift: METR windowing + bounded estimate ----

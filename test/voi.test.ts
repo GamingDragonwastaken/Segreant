@@ -8,7 +8,7 @@ function gate(g: Gate, verdict: Verdict): GateResult {
   return { gate: g, verdict, detail: '' };
 }
 
-/** A matured, realized unit (all gates pass) and a failed one — enough to instrument ρ and ι. */
+/** Matured units instrument Realization; Impact is supplied separately when known. */
 function units(realized: number, failed: number) {
   const pass: Record<Gate, GateResult> = {
     proposed: gate('proposed', 'pass'), accepted: gate('accepted', 'pass'), committed: gate('committed', 'pass'),
@@ -23,12 +23,12 @@ function units(realized: number, failed: number) {
 }
 
 function roiWithMissingLenses() {
-  // Realization + Impact instrumented; Acceptance + Lift honestly missing.
+  // Realization + explicit orthogonal Impact instrumented; Acceptance + Lift missing.
   return computeReturnOnIntelligence({
     firstPassAcceptance: null,
     units: units(7, 3),
     matured: { realizationRate: 0.7, totalCostUsd: 10, realizedValueUsd: 7 },
-  });
+  }, { impact: 0.7, impactHow: 'fixture outcome signal' });
 }
 
 test('voi: ranks the heavier missing lens first, with the exposure quantified transparently', () => {
@@ -57,7 +57,7 @@ test('voi: measuring at a mid reference moves the Index DOWN when current lenses
 test('voi: nothing to buy when fully instrumented; nothing to move from when nothing is', () => {
   const full = computeReturnOnIntelligence(
     { firstPassAcceptance: 0.8, units: units(7, 3), matured: { realizationRate: 0.7, totalCostUsd: 10, realizedValueUsd: 7 } },
-    { lift: 0.6 },
+    { lift: 0.6, impact: 0.7, impactHow: 'fixture outcome signal' },
   );
   assert.equal(instrumentationPriority(full).length, 0, 'all four instrumented → empty');
 

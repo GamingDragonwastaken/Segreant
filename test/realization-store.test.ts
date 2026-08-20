@@ -83,8 +83,10 @@ test('demo seed: git-correlated value surfaces light up via the real pipeline', 
   assert.ok(stages.has('realized') && stages.size >= 4, `varied outcomes: ${[...stages].join(',')}`);
 
   const roi = computeReturnOnIntelligence(rep, {});
-  assert.ok(roi.roiIndex !== null && roi.roiIndex > 0, 'a real composite');
-  assert.equal(roi.indexIsUpperBound, true, 'lift uninstrumented → honest upper bound');
+  assert.ok(roi.roiIndex !== null && roi.roiIndex > 0, 'a real observed-lens composite');
+  assert.equal(roi.indexIsUpperBound, false, 'observed-only mean is not a mathematical upper bound');
+  assert.ok(roi.instrumentationInterval.low !== null && roi.instrumentationInterval.high !== null);
+  assert.ok(roi.instrumentationInterval.low! <= roi.instrumentationInterval.high!);
 
   // The frontier tells the routing story: opus earns its premium on features;
   // gpt-4o keeps failing on refactors.

@@ -11,7 +11,7 @@
  *      constant-returns-to-scale Cobb–Douglas production function whose weights
  *      are the lenses' output ELASTICITIES (disclosed calibration, Σ=1; set them
  *      equal for the pure symmetric axiomatic index). Any lens at 0 collapses it
- *      — no single axis can be gamed.
+ *      — no single axis can compensate for a collapsed one.
  *
  *   2. RoI RETURN (a dimensionless ratio, ≥1 ⟺ paid for itself) — realized,
  *      rework-discounted, manual-equivalent value over the HONEST cost of the
@@ -108,10 +108,16 @@ export interface RoIResult {
   // only partially identified. The point above is the interval's interior estimate.
   // Width shrinks as you wire Lift with a behavioral A/B. (docs §5.)
   roiInterval: RoIInterval;
-  // True when the Index is an UPPER bound on the real conversion — i.e. some
-  // necessary lenses are un-instrumented, and unobserved conditions can only
-  // lower it. More measurement makes the number more honest, never inflated.
+  // Deprecated compatibility flag. An observed-only, weight-renormalized mean
+  // is NOT generally an upper bound: measuring a missing lens can raise or lower
+  // it. Kept false so older consumers do not mistake the observed score for a
+  // ceiling. Read `instrumentationInterval` for the mathematically valid bound.
   indexIsUpperBound: boolean;
+  // Partial-identification interval for the FULL four-lens Index when some lenses
+  // are unknown. Unknown necessary lenses are evaluated at their admissible
+  // endpoints 0 and 1 using the FULL fixed weight vector; the observed-only score
+  // is reported separately because it need not lie at either endpoint.
+  instrumentationInterval: { low: number | null; observed: number | null; high: number | null };
   // ANYTIME-VALID interval on the realization rate (docs §10): a confidence
   // sequence that holds simultaneously at every sample size, so it remains
   // honest under the way dashboards are actually used — watched continuously,
@@ -141,6 +147,8 @@ export interface RoIOptions {
   lift?: number | null; // injected lift score (0..1) when measured; null otherwise
   liftRange?: { low: number | null; high: number | null }; // partial-ID bound for Lift, in lens-score units
   liftHow?: string; // how Lift was sourced (baseline estimate / measured A-B / synthetic) — honest disclosure
+  impact?: number | null; // orthogonal outcome impact in [0,1]; absent => uninstrumented
+  impactHow?: string; // provenance for Impact; never inferred from Realization gates
   weights?: { realization: number; acceptance: number; lift: number; impact: number };
   theta?: number; // CES substitution parameter; 0 (default) = the forced geometric mean
   // --- the money number (RoI return) ---
@@ -150,20 +158,14 @@ export interface RoIOptions {
 }
 
 /**
- * Impact weight — how much a realized unit MATTERED, from observable outcome
- * signals only. Deliberately NOT line counts: LOC is a discredited value proxy
- * ("AI easily inflates the volume of code"), and weighting impact by it would
- * reintroduce exactly the lines-with-a-price-tag failure this metric rejects.
- * Instead: production reach (shipped > merged > committed-only) × durability
- * (the change survived its maturity window). Both are funnel verdicts, not size.
+ * Impact is intentionally NOT reconstructed from Realization gates.
+ *
+ * Earlier versions weighted `merged`, `shipped`, and `survived` a second time
+ * here even though those same verdicts already determine Realization. That made
+ * the nominally separate Impact lens partly a duplicate durability/reach score.
+ * Impact must come from an orthogonal outcome signal (business/customer reach,
+ * service criticality, explicitly reported external reach, etc.) or stay unknown.
  */
-function impactWeight(u: UnitLike): number {
-  const verdict = (g: Gate) => u.funnel.results.find((r) => r.gate === g)?.verdict;
-  const reach = verdict('shipped') === 'pass' ? 1.5 : verdict('merged') === 'pass' ? 1.2 : 1;
-  const durability = verdict('survived') === 'pass' ? 1.25 : 1;
-  return reach * durability;
-}
-
 /**
  * Default lens weights, calibrated from the productivity literature
  * (docs/RETURN-ON-INTELLIGENCE.md §research): value/quality signals dominate,
@@ -236,24 +238,15 @@ export function computeReturnOnIntelligence(report: RealizationLike, opts: RoIOp
   };
   if (!lift.instrumented) notes.push('Lift uninstrumented: needs a measured baseline (model A/B or no-AI control).');
 
-  // --- Lens 4: Impact (of what realized, how much mattered?) ---
-  let impact: LensValue;
-  if (mature.length === 0) {
-    impact = { value: null, instrumented: false, how: 'impact-weighted realization' };
-    notes.push('Impact uninstrumented: no matured units yet.');
-  } else {
-    let weighted = 0;
-    let realizedWeighted = 0;
-    for (const u of mature) {
-      const w = impactWeight(u);
-      weighted += w;
-      if (u.funnel.realized) realizedWeighted += w;
-    }
-    impact = {
-      value: weighted > 0 ? realizedWeighted / weighted : 0,
-      instrumented: true,
-      how: 'realized fraction weighted by production reach + durability (not lines)',
-    };
+  // --- Lens 4: Impact (conditional consequence, orthogonal to Realization) ---
+  const impactProvided = opts.impact !== undefined && opts.impact !== null;
+  const impact: LensValue = {
+    value: impactProvided ? Math.min(1, Math.max(0, opts.impact!)) : null,
+    instrumented: impactProvided,
+    how: opts.impactHow ?? 'orthogonal outcome impact — never inferred from merged/shipped/survived gates',
+  };
+  if (!impact.instrumented) {
+    notes.push('Impact uninstrumented: needs an outcome signal independent of the Realization funnel.');
   }
 
   // --- Composite: the weighted geometric aggregator (CRS Cobb–Douglas, CES θ=0) ---
@@ -282,6 +275,25 @@ export function computeReturnOnIntelligence(report: RealizationLike, opts: RoIOp
 
   const roiIndex = composeIndex(lift.instrumented ? lift.value : null);
 
+  // A TRUE partial-instrumentation bound must keep the full weight vector. The
+  // observed-only mean above renormalizes over observed lenses, so it is a useful
+  // diagnostic but not a ceiling or floor. Monotonicity of the CES/power mean
+  // lets us bound the full four-lens index by substituting each unknown lens with
+  // 0 (lower endpoint) and 1 (upper endpoint).
+  const composeFullIndex = (unknownValue: 0 | 1): number | null => {
+    const pairs: Array<{ value: number; weight: number }> = [
+      { value: realization.instrumented && realization.value !== null ? realization.value : unknownValue, weight: w.realization },
+      { value: acceptance.instrumented && acceptance.value !== null ? acceptance.value : unknownValue, weight: w.acceptance },
+      { value: lift.instrumented && lift.value !== null ? lift.value : unknownValue, weight: w.lift },
+      { value: impact.instrumented && impact.value !== null ? impact.value : unknownValue, weight: w.impact },
+    ];
+    return 100 * weightedPowerMean(pairs, theta);
+  };
+  const hasUnknownLenses = all.some((l) => !l.instrumented);
+  const instrumentationInterval = hasUnknownLenses
+    ? { low: composeFullIndex(0), observed: roiIndex, high: composeFullIndex(1) }
+    : { low: roiIndex, observed: roiIndex, high: roiIndex };
+
   // Interval-valued RoI. The counterfactual Lift is only partially identified
   // (Manski), so it arrives as a range; the aggregator is monotone in every lens,
   // so substituting Lift's [low, high] yields an Index interval that CONTAINS the
@@ -299,14 +311,16 @@ export function computeReturnOnIntelligence(report: RealizationLike, opts: RoIOp
     notes.push('RoI Index is 0 because a lens collapsed — by design, no single axis can carry the score.');
   }
 
-  // Honesty under partial instrumentation: every un-instrumented lens is a
-  // necessary condition we cannot see, and unobserved conditions can only LOWER
-  // the true conversion. So a partially-instrumented Index is an upper bound.
-  const indexIsUpperBound = all.some((l) => !l.instrumented);
-  if (indexIsUpperBound && roiIndex !== null) {
+  // Compatibility only: the observed-only score is never labelled an upper
+  // bound. Missing dimensions are represented by the explicit full-index interval.
+  const indexIsUpperBound = false;
+  if (hasUnknownLenses && roiIndex !== null) {
+    const low = instrumentationInterval.low;
+    const high = instrumentationInterval.high;
     notes.push(
-      `RoI Index is an UPPER bound: ${all.filter((l) => l.instrumented).length} of 4 lenses instrumented. ` +
-        'Measuring the rest can only lower it toward the truth — more measurement, more honest, never inflated.',
+      `RoI observed-lens Index uses ${all.filter((l) => l.instrumented).length} of 4 lenses and is not a bound. ` +
+        `Under the declared [0,1] lens scale, the full four-lens Index is only identified within ` +
+        `${low === null ? 'unknown' : low.toFixed(1)}–${high === null ? 'unknown' : high.toFixed(1)} until the missing lenses are measured.`,
     );
   }
 
@@ -443,6 +457,7 @@ export function computeReturnOnIntelligence(report: RealizationLike, opts: RoIOp
     roiIndex,
     roiInterval,
     indexIsUpperBound,
+    instrumentationInterval,
     realizationInterval: realizationCS,
     compositeInterval,
     tokenCostUsd,
