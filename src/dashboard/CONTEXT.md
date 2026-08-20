@@ -83,6 +83,14 @@ web/
   answered `DELETE`/`PATCH` with 200 and a full payload. They are `GET, HEAD`
   now. HEAD stays because Node drops the body itself, so it already worked;
   removing it would have traded a fall-open for a regression.
+- **A request the asset path cannot parse is a miss, never an exception.**
+  `static.ts` reads the operator's disk, so it is reachable with input no other
+  route sees. `decodeURIComponent` throws on a malformed escape (`%ZZ`, a
+  trailing `%`, a truncated multi-byte sequence), and unguarded that URIError
+  left the request handler as an **uncaught exception and ended the process** —
+  one `<img src>` on any page the operator visited stopped their dashboard.
+  Anything that fails to decode returns `false` and 404s. A new parsing step
+  here inherits the same rule.
 - **No route answers `OPTIONS`.** The CSRF gate above is worth exactly as much
   as this server's refusal to answer a preflight, so OPTIONS 405s like any other
   unserved method — a 405 carries no `Access-Control-Allow-Origin`, and no

@@ -317,6 +317,13 @@ test('serveStatic refuses traversal, NUL, and unlisted extensions without touchi
     '/index.html', // not in STATIC_TYPES: the shells are served by their own route
     '/app/main.txt',
     '/package.json',
+    // Malformed percent-escapes. `decodeURIComponent` THROWS on these rather
+    // than returning something odd, so before the guard each one killed the
+    // process rather than missing. Asserting `false` here also asserts no
+    // throw: an exception fails this test rather than returning a value.
+    '/app/%ZZ.js',
+    '/app/%.js',
+    '/styles/%E0%A4%A.css', // truncated multi-byte sequence
   ];
   for (const path of refused) {
     const out = fakeRes();
@@ -429,5 +436,33 @@ test('restricting those routes did not break the methods they legitimately serve
     await srv.close();
     store.close();
     rmSync(empty, { recursive: true, force: true });
+  }
+});
+
+/**
+ * The unit test above proves `serveStatic` returns false. This proves the
+ * SERVER is still alive afterwards, which is the property that actually
+ * mattered: `decodeURIComponent` threw a URIError out of the request handler,
+ * where nothing caught it, so the dashboard did not answer 500 — the process
+ * exited. A page the operator visited could stop their local Fiscus with a
+ * single `<img src="http://localhost:8091/app/%ZZ.js">`.
+ *
+ * The second half of each pair is the real assertion. A 404 that is followed by
+ * a dead socket is not a fix.
+ */
+test('a malformed percent-escape 404s and leaves the server serving', async () => {
+  const store = new Store(':memory:');
+  const srv = await boot(store);
+  try {
+    for (const path of ['/app/%ZZ.js', '/app/%.js', '/styles/%E0%A4%A.css']) {
+      const bad = await rawRequest(srv.base, path, 'GET');
+      assert.equal(bad.status, 404, `GET ${path} should miss, not crash`);
+
+      const alive = await rawRequest(srv.base, '/api/health', 'GET');
+      assert.equal(alive.status, 200, `server stopped serving after ${path}`);
+    }
+  } finally {
+    await srv.close();
+    store.close();
   }
 });

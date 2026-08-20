@@ -47,7 +47,18 @@ export const STATIC_TYPES: Readonly<Record<string, string>> = {
 };
 
 export function serveStatic(res: http.ServerResponse, pathname: string): boolean {
-  const relative = decodeURIComponent(pathname).replace(/^\/+/, '');
+  // `decodeURIComponent` throws on a malformed escape ('%ZZ', a trailing '%',
+  // a truncated multi-byte sequence). Unguarded, that URIError escaped the
+  // request handler as an UNCAUGHT EXCEPTION and took the process down, so any
+  // page the operator visited could stop their dashboard with one <img src>.
+  // A path that does not decode is an invalid asset path — a miss, never an
+  // exception, and never a reason to answer with anything but `false`.
+  let relative: string;
+  try {
+    relative = decodeURIComponent(pathname).replace(/^\/+/, '');
+  } catch {
+    return false;
+  }
   // Reject before touching the filesystem: a traversal attempt is not a miss.
   if (relative.includes('..') || relative.includes('\u0000')) return false;
 
