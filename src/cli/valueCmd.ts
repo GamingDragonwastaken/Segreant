@@ -8,19 +8,16 @@
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { Store } from '../store/db.ts';
-import { loadConfig, saveConfig, dbPath, isDemo, DEFAULT_CONFIG } from '../config.ts';
-import { demoLiftOptions } from '../demo/seed.ts';
+import { loadConfig, saveConfig, dbPath, isDemo } from '../config.ts';
 import { isGitRepo, projectName, resolveCommit } from '../git/correlate.ts';
 import { computeQuality } from '../git/quality.ts';
-import { loadRealization, liftOptionsFromStore, moneyInputsFromStore } from '../value/realization.ts';
-import { timeReclaimedFromStore, WORK_WEEK_MINUTES } from '../value/timeReclaimed.ts';
-import { computeReturnOnIntelligence } from '../value/lenses.ts';
-import { boundedLift } from '../value/lift.ts';
-import { resolveBaselineMinutesForRepo } from '../value/liftBaseline.ts';
+import { loadRealization } from '../value/realization.ts';
+import { WORK_WEEK_MINUTES } from '../value/timeReclaimed.ts';
 import { computeFrontier } from '../value/frontier.ts';
-import { computeUsageRoI } from '../value/usage.ts';
-import { recommendBudget } from '../budget/recommend.ts';
-import { goodhartStreams } from '../value/drift.ts';
+// The value report's one composition — shared with the dashboard's '/api/value'.
+// These commands used to sequence the same primitives themselves; the sequence
+// now has a single home, so the two surfaces cannot drift apart.
+import { valueSpine, usageValue, budgetAdvice } from '../value/report.ts';
 import { instrumentationPriority } from '../value/voi.ts';
 import { GATE_LADDER, GATE_META } from '../value/gates.ts';
 import { C, color, usd, num, pct, glyph, noteSource, printNotAGitRepo } from './ui.ts';
@@ -250,22 +247,12 @@ export async function cmdReport(flags: Flags): Promise<void> {
 export async function cmdUsage(flags: Flags): Promise<void> {
   const cfg = loadConfig();
   const store = new Store(dbPath());
-  const now = Date.now();
-  const dayMs = 24 * 60 * 60 * 1000;
   const days = flags.days ? Number(flags.days) : 30;
-  // Money inputs: org-disclosed outcome baselines + labor rate. The demo assumes
-  // illustrative values (clearly labeled) so the dollar face is visible there.
-  let laborRate = cfg.lift.laborRatePerHour;
-  let outcomeBaselines = cfg.lift.outcomeBaselineMinutes;
-  if (isDemo()) {
-    if (laborRate === null) laborRate = 120;
-    if (Object.keys(outcomeBaselines).length === 0) outcomeBaselines = { used: 10, resolved: 30, published: 90 };
-  }
-  const rep = computeUsageRoI(store, {
-    startMs: now - days * dayMs,
-    endMs: now + 1000,
-    money: { outcomeBaselineMinutes: outcomeBaselines, laborRatePerHour: laborRate },
-  });
+  // Money inputs (org-disclosed outcome baselines + labor rate, with the demo's
+  // labeled illustrative stand-ins) live with the rest of the value composition
+  // in src/value/report.ts, so this command and `/api/value` price the
+  // non-coding dollar identically.
+  const rep = usageValue(store, cfg, { windowDays: days });
 
   if (flags.json) {
     process.stdout.write(JSON.stringify(rep, null, 2) + '\n');
@@ -331,78 +318,33 @@ export async function cmdRoi(flags: Flags): Promise<void> {
   const repo = (flags.repo as string) ?? process.cwd();
   const windowDays = flags.window ? Number(flags.window) : 14;
   const cfg = loadConfig();
-  // Labor rate prices both the effort tax and the money number's denominator.
-  // Falls back to config; in the demo we assume an illustrative rate so the dollar
-  // return is visible (clearly labeled), since the demo has no real org rate.
-  let laborRate = flags['labor-rate'] !== undefined ? Number(flags['labor-rate']) : cfg.lift.laborRatePerHour;
-  if (laborRate === null && isDemo()) laborRate = 120;
-  const riskAversion = flags['risk'] !== undefined ? Number(flags['risk']) : 0;
   const store = new Store(dbPath());
-  const loaded = await loadRealization(store, repo, { windowDays, persist: true });
-  if (!loaded) {
+  // The whole composition — realization, this project's resolved baseline, the
+  // Lift source, the money inputs, RoI, the Goodhart streams, VoI — is one
+  // sequence in src/value/report.ts, shared with `/api/value`. The three inputs
+  // below are this command's own flags; everything else the module decides, so
+  // the CLI and the dashboard cannot disagree about what any of it means.
+  //   --labor-rate  prices both the effort tax and the money number's denominator
+  //                 (undefined falls back to config; the demo assumes a labeled
+  //                 illustrative rate, since it has no real org rate)
+  //   --tsf         an externally measured TSF — the gold-standard Lift source
+  //   --risk        γ for the Index certainty-equivalent
+  const spine = await valueSpine(store, cfg, {
+    repo,
+    windowDays,
+    persist: true,
+    laborRatePerHour: flags['labor-rate'] !== undefined ? Number(flags['labor-rate']) : undefined,
+    tsfUpperBound: flags.tsf !== undefined ? Number(flags.tsf) : undefined,
+    riskAversion: flags['risk'] !== undefined ? Number(flags['risk']) : 0,
+  });
+  if (!spine) {
     printNotAGitRepo(repo);
     process.exitCode = 1;
     store.close();
     return;
   }
-  const report = loaded.report;
-  // The manual-minutes-per-task-type input, resolved from three sources in
-  // priority order (never silent about which one won, per-task-type):
-  //   1. an explicit user override in config — always respected
-  //   2. THIS project's own pre-AI-tracking git history, shrunk toward #3
-  //   3. a cited, refreshable METR-anchored population prior
-  // Demo mode skips git entirely (the seeded snapshots aren't this checkout's
-  // real history) and uses the population prior + config as-is.
-  const project = isDemo() ? 'demo' : await projectName(repo);
-  const resolvedBaseline = isDemo()
-    ? { minutes: cfg.lift.baselineMinutes, minutesLow: cfg.lift.baselineMinutes, minutesHigh: cfg.lift.baselineMinutes, basis: {}, notes: [] as string[] }
-    : await resolveBaselineMinutesForRepo(store, repo, project, cfg.lift.baselineMinutes, DEFAULT_CONFIG.lift.baselineMinutes);
-  // Lift source, in priority order — self-report is NEVER accepted:
-  //   1. --tsf <x>   an externally measured TSF (transcript judge / RCT) — gold standard
-  //   2. demo mode   a labeled synthetic TSF, so the interval shows in the demo
-  //   3. real data   measured "time with AI" × resolved task baselines (the
-  //                  default real path; uninstrumented if there's no measured time
-  //                  or no baselined realized work)
-  let liftOpts: { lift: number | null; liftRange: { low: number | null; high: number | null }; liftHow: string };
-  let liftNotes: string[];
-  if (flags.tsf !== undefined) {
-    const e = boundedLift({ tsfUpperBound: Number(flags.tsf) });
-    liftOpts = { lift: e.lensScore, liftRange: { low: e.lensLow, high: e.lensHigh }, liftHow: 'externally measured TSF (transcript judge / A-B)' };
-    liftNotes = e.notes;
-  } else if (isDemo()) {
-    liftOpts = { ...demoLiftOptions(), liftHow: 'labeled synthetic TSF (demo stand-in for a real A-B)' };
-    liftNotes = ['Demo: Lift uses a synthetic TSF stand-in for a real transcript-judge / A-B measurement.'];
-  } else {
-    const dl = liftOptionsFromStore(store, report, resolvedBaseline.minutes, { low: resolvedBaseline.minutesLow, high: resolvedBaseline.minutesHigh });
-    liftOpts = { lift: dl.lift, liftRange: dl.liftRange, liftHow: 'measured time-with-AI × resolved task baselines (estimate, not a controlled A/B)' };
-    liftNotes = [...dl.notes, ...resolvedBaseline.notes];
-  }
-  // The money number's inputs, measured from the same data the lenses use (shared
-  // with the dashboard via moneyInputsFromStore, so both price the return identically).
-  const { grossRealizedValueUsd, supervisionMinutes } = moneyInputsFromStore(store, report, resolvedBaseline.minutes, laborRate);
-
-  const roi = computeReturnOnIntelligence(report, {
-    laborRatePerHour: laborRate,
-    grossRealizedValueUsd,
-    supervisionMinutes,
-    riskAversion,
-    ...liftOpts,
-  });
-  roi.notes.unshift(...liftNotes);
-
-  // Goodhart drift alarm (docs §11): is a rate being BENT? Three anytime-valid
-  // e-processes over mature units in time order — realization, acceptance, and
-  // hard-gate coverage (each stream needs ≥10 observed points; silent below
-  // that, honestly). The PATTERN across streams is the tell: acceptance rising
-  // while realization stagnates = proposal inflation; hard-gate unknowns rising
-  // while the headline holds = coverage suppression.
-  const matureOrdered = report.units.filter((u) => !u.maturing).sort((a, b) => a.tsEpochMs - b.tsEpochMs);
-  const driftStreams = goodhartStreams(matureOrdered.map((u) => u.funnel));
-  // Back-compat: `drift` stays the realization stream's report, as before.
-  const drift = driftStreams.find((s) => s.stream === 'realization')?.report ?? null;
-  // VoI (docs §12): which measurement to buy next — the un-instrumented lens
-  // whose measurement would move the Index most, at a disclosed mid reference.
-  const voi = instrumentationPriority(roi);
+  const loaded = spine.loaded;
+  const { roi, drift, driftStreams, voi } = spine;
 
   if (flags.json) {
     process.stdout.write(JSON.stringify({ ...roi, drift, driftStreams, instrumentNext: voi }, null, 2) + '\n');
@@ -515,19 +457,19 @@ export async function cmdSaved(flags: Flags): Promise<void> {
   const windowDays = flags.window ? Number(flags.window) : 14;
   const cfg = loadConfig();
   const store = new Store(dbPath());
-  const loaded = await loadRealization(store, repo, { windowDays, persist: true });
-  if (!loaded) {
+  // Same composition as `roi` and `/api/value` — so "this project's baseline"
+  // means one thing everywhere, and the reclaimed hours can never be priced off
+  // a baseline the RoI lens did not use.
+  const spine = await valueSpine(store, cfg, { repo, windowDays, persist: true });
+  if (!spine) {
     printNotAGitRepo(repo);
     process.exitCode = 1;
     store.close();
     return;
   }
-  const report = loaded.report;
-  const project = isDemo() ? 'demo' : await projectName(repo);
-  const resolvedBaseline = isDemo()
-    ? { minutes: cfg.lift.baselineMinutes, minutesLow: cfg.lift.baselineMinutes, minutesHigh: cfg.lift.baselineMinutes, basis: {}, notes: [] as string[] }
-    : await resolveBaselineMinutesForRepo(store, repo, project, cfg.lift.baselineMinutes, DEFAULT_CONFIG.lift.baselineMinutes);
-  const rec = timeReclaimedFromStore(store, report, resolvedBaseline.minutes, { low: resolvedBaseline.minutesLow, high: resolvedBaseline.minutesHigh });
+  const loaded = spine.loaded;
+  const project = spine.project;
+  const rec = spine.reclaimed;
 
   if (flags.json) {
     process.stdout.write(JSON.stringify(rec, null, 2) + '\n');
@@ -573,16 +515,7 @@ export async function cmdSaved(flags: Flags): Promise<void> {
 export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
   const cfg = loadConfig();
   const store = new Store(dbPath());
-  const now = Date.now();
-  const dayMs = 24 * 60 * 60 * 1000;
   const days = flags.days ? Number(flags.days) : 30;
-  // A cap recommendation must use the same spend basis that its --apply action
-  // will govern. Imported usage is observed-only by default, so it is excluded
-  // unless the user explicitly opted into total-observed-spend enforcement.
-  const liveOnly = !cfg.budget.capIncludesImported;
-  const spendBasis = liveOnly ? 'live_proxy' : 'all_observed';
-  const series = store.series(now - days * dayMs, now + 1000, dayMs, liveOnly);
-  const dailySpends = series.map((s) => s.costUsd);
 
   let realizedValueRate: number | null = null;
   let frontierCells: ReturnType<typeof computeFrontier>['byModelAndTask'] = [];
@@ -593,13 +526,17 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
     frontierCells = computeFrontier(loadedValue.report.units).byModelAndTask;
   }
 
-  const rec = recommendBudget({ dailySpends, realizedValueRate, frontier: frontierCells });
+  // The cap and its basis disclosure come from the shared composition, so this
+  // command and `/api/value` recommend from the same spend series — and the
+  // recommendation is always fitted to the spend its --apply action can govern.
+  const rec = budgetAdvice(store, cfg, { windowDays: days, realizedValueRate, frontier: frontierCells });
+  const spendBasis = rec.spendBasis;
   // Raw RoI cells can mix unlike tasks. The actionable guidance is the
   // separately gated same-task model-switch trial, never a generic allocator.
   const allocation = null;
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify({ ...rec, spendBasis, windowDays: days, allocation, shadowPrice: null }, null, 2) + '\n');
+    process.stdout.write(JSON.stringify({ ...rec, allocation, shadowPrice: null }, null, 2) + '\n');
     store.close();
     return;
   }

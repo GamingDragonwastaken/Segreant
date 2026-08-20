@@ -20,9 +20,18 @@
   the applied level and count on the payload.
 - Snapshots predating a pricing basis keep their amounts, are marked stale, and
   are reported as excluded rather than silently repriced.
+- Every surface that reports value composes it through `report.ts`
+  (`valueSpine` / `usageValue` / `budgetAdvice` / `valueReport`). The primitives
+  are shared; so is the SEQUENCE that assembles them, so the CLI and
+  `/api/value` cannot drift apart by hand-editing one of them.
 
 ## Invariants
 
+- **`realizedValueUsd` is two different claims and they never merge.**
+  `realization.matured.realizedValueUsd` is attributed SPEND on units that
+  realized (a cost); `roi.returnRatio.realizedValueUsd` is manual-equivalent
+  VALUE produced. Different evidence, different question — never renamed into
+  each other, never derived from each other.
 - **A gate on the label is not a fix to the estimator.** Never correct for
   clustering inside the interval math and then claim the guarantee still holds.
 - **Withhold or disclose; never strengthen.** If evidence does not carry the
