@@ -6,8 +6,8 @@
  */
 
 import type { Store, ProviderConnection } from '../store/db.ts';
-import type { AegisConfig, BudgetConfig } from '../config.ts';
-import { aegisHome, configPath, dbPath } from '../config.ts';
+import type { FiscusConfig, BudgetConfig } from '../config.ts';
+import { fiscusHome, configPath, dbPath } from '../config.ts';
 import { describeBudgetEnforcement, type BudgetEnforcementDescriptor } from '../budget/enforceability.ts';
 
 export interface SettingsSnapshot {
@@ -27,14 +27,14 @@ export interface SettingsSnapshot {
 
 export function buildSettingsSnapshot(
   store: Store,
-  config: AegisConfig,
+  config: FiscusConfig,
   version: string,
   windowDays = 14,
 ): SettingsSnapshot {
   const sinceMs = Date.now() - windowDays * 24 * 60 * 60 * 1000;
   return {
     version,
-    home: aegisHome(),
+    home: fiscusHome(),
     configPath: configPath(),
     dbPath: dbPath(),
     proxyPort: config.port,
@@ -56,8 +56,8 @@ export interface SettingsPatch {
 }
 
 /** Read-modify-write, mirroring cmdBudget's pattern in src/cli/showCmd.ts. Never mutates config. */
-export function applySettingsPatch(config: AegisConfig, patch: SettingsPatch): AegisConfig {
-  const next: AegisConfig = { ...config, budget: { ...config.budget } };
+export function applySettingsPatch(config: FiscusConfig, patch: SettingsPatch): FiscusConfig {
+  const next: FiscusConfig = { ...config, budget: { ...config.budget } };
   if (typeof patch.metadataOnly === 'boolean') next.metadataOnly = patch.metadataOnly;
   if (typeof patch.retentionDays === 'number' && patch.retentionDays > 0) {
     next.retentionDays = patch.retentionDays;

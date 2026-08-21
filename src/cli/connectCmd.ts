@@ -8,7 +8,7 @@
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync } from 'node:fs';
-import { loadConfig, saveConfig, type AegisConfig } from '../config.ts';
+import { loadConfig, saveConfig, type FiscusConfig } from '../config.ts';
 import {
   SOURCE_HEADER,
   CONNECTORS,
@@ -88,7 +88,7 @@ function finishConnectOpencode(tty: boolean): void {
  * but its traffic is metered and forwarded with the user's own key. Two local files
  * change on --write (opencode config + Fiscus config); read-only preview otherwise.
  */
-function wrapOpencodeFlow(cfg: AegisConfig, flags: Flags, tty: boolean, providerName: string, path: string | null): void {
+function wrapOpencodeFlow(cfg: FiscusConfig, flags: Flags, tty: boolean, providerName: string, path: string | null): void {
   if (!path) {
     console.log(color(tty, C.yellow, '  No opencode config found to wrap. Run `fiscus connect opencode` to see your options.'));
     console.log('');
@@ -152,7 +152,7 @@ function wrapOpencodeFlow(cfg: AegisConfig, flags: Flags, tty: boolean, provider
   console.log('');
 }
 
-function connectOpencode(cfg: AegisConfig, flags: Flags, tty: boolean): void {
+function connectOpencode(cfg: FiscusConfig, flags: Flags, tty: boolean): void {
   const port = cfg.port;
   const path = opencodeConfigPath();
   // A project label is only true for a config scoped to this directory. When the
@@ -283,11 +283,11 @@ function connectOpencode(cfg: AegisConfig, flags: Flags, tty: boolean): void {
  * `--write` points the proxy's OpenAI upstream at Gemini's OpenAI-compatible
  * endpoint, the free-tier test path; the user's key passes through untouched.
  */
-function connectAntigravity(cfg: AegisConfig, flags: Flags, tty: boolean): void {
+function connectAntigravity(cfg: FiscusConfig, flags: Flags, tty: boolean): void {
   const base = `http://localhost:${cfg.port}/v1`;
 
   if (flags.write) {
-    const next: AegisConfig = { ...cfg, upstreams: { ...cfg.upstreams, openai: GEMINI_OPENAI_COMPAT_BASE } };
+    const next: FiscusConfig = { ...cfg, upstreams: { ...cfg.upstreams, openai: GEMINI_OPENAI_COMPAT_BASE } };
     saveConfig(next);
     console.log('');
     console.log(`  ${color(tty, C.green, '✓')} OpenAI-path upstream set to Gemini's OpenAI-compatible endpoint:`);
@@ -341,7 +341,7 @@ function connectAntigravity(cfg: AegisConfig, flags: Flags, tty: boolean): void 
   console.log('');
 }
 
-function connectGenericApi(cfg: AegisConfig, flags: Flags, tty: boolean): void {
+function connectGenericApi(cfg: FiscusConfig, flags: Flags, tty: boolean): void {
   const port = cfg.port;
   // Optional custom source name: `fiscus connect api my-script`.
   const source = (typeof flags._[1] === 'string' ? flags._[1] : 'api').toLowerCase();

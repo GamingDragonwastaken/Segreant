@@ -5,7 +5,7 @@ import { once } from 'node:events';
 import { Store } from '../src/store/db.ts';
 import { createProxyServer, detectRoute } from '../src/proxy/server.ts';
 import { StreamProposalAccumulator } from '../src/proxy/stream-proposals.ts';
-import { DEFAULT_CONFIG, type AegisConfig } from '../src/config.ts';
+import { DEFAULT_CONFIG, type FiscusConfig } from '../src/config.ts';
 
 /** Format one object as an SSE `data:` frame, matching provider wire shape. */
 function sse(obj: unknown): string {
@@ -154,8 +154,8 @@ function startMockUpstream(): Promise<{ url: string; close: () => Promise<void> 
   });
 }
 
-async function startProxy(store: Store, overrides: Partial<AegisConfig>, upstreamUrl: string) {
-  const config: AegisConfig = {
+async function startProxy(store: Store, overrides: Partial<FiscusConfig>, upstreamUrl: string) {
+  const config: FiscusConfig = {
     ...DEFAULT_CONFIG,
     ...overrides,
     upstreams: { anthropic: upstreamUrl, openai: upstreamUrl },
@@ -556,7 +556,7 @@ test('budget: hard daily cap blocks with 429 once exceeded', async () => {
 
 test('detectRoute: x-aegis-openai-base is ignored even if legacy config enables it', () => {
   const off = DEFAULT_CONFIG; // allowOpenAIBaseOverride: false
-  const on: AegisConfig = { ...DEFAULT_CONFIG, allowOpenAIBaseOverride: true };
+  const on: FiscusConfig = { ...DEFAULT_CONFIG, allowOpenAIBaseOverride: true };
   const mk = (headers: Record<string, string>, url = '/v1/chat/completions') =>
     ({ url, headers }) as unknown as http.IncomingMessage;
 

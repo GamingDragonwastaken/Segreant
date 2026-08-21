@@ -18,7 +18,7 @@
 import type http from 'node:http';
 import { existsSync, statSync } from 'node:fs';
 import type { Store } from '../store/db.ts';
-import { isDemo, type AegisConfig } from '../config.ts';
+import { isDemo, type FiscusConfig } from '../config.ts';
 import { buildSettingsSnapshot, applySettingsPatch, type SettingsPatch } from './settings.ts';
 import { serveHtml } from './static.ts';
 import { startOfLocalDay } from '../budget/guard.ts';
@@ -47,8 +47,8 @@ import { pricingCoverage } from '../cost/coverage.ts';
  * touching a developer's real local configuration.
  */
 export interface ConfigPersistence {
-  load: () => AegisConfig;
-  save: (config: AegisConfig) => void;
+  load: () => FiscusConfig;
+  save: (config: FiscusConfig) => void;
 }
 
 /** Everything a handler is allowed to reach for. Nothing else is in scope. */
@@ -58,7 +58,7 @@ export interface RouteContext {
   /** The parsed request URL — handlers read `searchParams` off this. */
   url: URL;
   store: Store;
-  config: AegisConfig;
+  config: FiscusConfig;
   /** This package's version — surfaced read-only in the Settings view. */
   version: string;
   configPersistence: ConfigPersistence;
@@ -134,7 +134,7 @@ function resolveRange(range: RangeKey, now: number): { startMs: number; endMs: n
   }
 }
 
-export function buildOverview(store: Store, config: AegisConfig, range: RangeKey) {
+export function buildOverview(store: Store, config: FiscusConfig, range: RangeKey) {
   const now = Date.now();
   const { startMs, endMs, bucketMs } = resolveRange(range, now);
 

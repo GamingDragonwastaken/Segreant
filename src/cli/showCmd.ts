@@ -6,7 +6,7 @@
 
 import { writeFileSync } from 'node:fs';
 import { Store } from '../store/db.ts';
-import { loadConfig, saveConfig, dbPath, configPath, aegisHome, isDemo, type AegisConfig } from '../config.ts';
+import { loadConfig, saveConfig, dbPath, configPath, fiscusHome, isDemo, type FiscusConfig } from '../config.ts';
 import { startOfLocalDay } from '../budget/guard.ts';
 import { requestsToCsv } from '../export/csv.ts';
 import { computeAlerts } from '../alerts/detect.ts';
@@ -193,11 +193,11 @@ export function cmdExport(flags: Flags): void {
 export function cmdConfig(flags: Flags): void {
   const cfg = loadConfig();
   if (flags.json) {
-    process.stdout.write(JSON.stringify({ home: aegisHome(), configPath: configPath(), dbPath: dbPath(), config: cfg }, null, 2) + '\n');
+    process.stdout.write(JSON.stringify({ home: fiscusHome(), configPath: configPath(), dbPath: dbPath(), config: cfg }, null, 2) + '\n');
     return;
   }
   console.log('');
-  console.log(`  Home:   ${aegisHome()}`);
+  console.log(`  Home:   ${fiscusHome()}`);
   console.log(`  Config: ${configPath()}`);
   console.log(`  DB:     ${dbPath()}`);
   console.log('');
@@ -207,7 +207,7 @@ export function cmdConfig(flags: Flags): void {
 
 export function cmdBudget(flags: Flags): void {
   const cfg = loadConfig();
-  const next: AegisConfig = { ...cfg, budget: { ...cfg.budget } };
+  const next: FiscusConfig = { ...cfg, budget: { ...cfg.budget } };
   const setNum = (key: 'dailyUsd' | 'dailySoftUsd' | 'sessionUsd' | 'runawayMaxUsd', flag: string) => {
     if (flags[flag] !== undefined) {
       const v = String(flags[flag]);

@@ -23,7 +23,7 @@ import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import type { Store, RequestRow } from '../store/db.ts';
 import type { AttributionBasis } from '../value/characterization.ts';
-import type { AegisConfig } from '../config.ts';
+import type { FiscusConfig } from '../config.ts';
 import { BudgetGuard, type GuardDecision } from '../budget/guard.ts';
 import { computeCost, unpricedPricingEvidence, type NormalizedUsage, type Provider } from '../cost/pricing.ts';
 import {
@@ -86,7 +86,7 @@ export function splitProjectPath(url: string): { project: string | null; path: s
   return { project, path: m[2]! };
 }
 
-export function detectRoute(req: http.IncomingMessage, cfg: AegisConfig): RouteInfo | null {
+export function detectRoute(req: http.IncomingMessage, cfg: FiscusConfig): RouteInfo | null {
   const url = splitProjectPath(req.url ?? '').path;
   const headers = req.headers;
 
@@ -203,7 +203,7 @@ function providerErrorBody(provider: Provider, message: string): string {
 
 export interface ProxyDeps {
   store: Store;
-  config: AegisConfig;
+  config: FiscusConfig;
   onLog?: (row: RequestRow, decision: GuardDecision) => void;
 }
 

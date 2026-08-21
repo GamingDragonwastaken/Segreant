@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { Store, type RepriceUpdate } from '../store/db.ts';
 import { createProxyServer } from '../proxy/server.ts';
 import { createDashboardServer } from '../dashboard/server.ts';
-import { loadConfig, saveConfig, dbPath, demoDbPath, isDemo, unlinkDemoDb, aegisHome, type AegisConfig } from '../config.ts';
+import { loadConfig, saveConfig, dbPath, demoDbPath, isDemo, unlinkDemoDb, fiscusHome, type FiscusConfig } from '../config.ts';
 import { packageVersion } from '../version.ts';
 import { seedDemo } from '../demo/seed.ts';
 import { startOfLocalDay } from '../budget/guard.ts';
@@ -86,7 +86,7 @@ export async function cmdStart(flags: Flags): Promise<void> {
   process.on('SIGTERM', shutdown);
 }
 
-function printBanner(cfg: AegisConfig, tty: boolean): void {
+function printBanner(cfg: FiscusConfig, tty: boolean): void {
   const line = (s: string) => console.log('  ' + s);
   console.log('');
   line(color(tty, C.bold, '╔════════════════════════════════════════════════════════╗'));
@@ -234,7 +234,7 @@ export async function cmdPricing(flags: Flags): Promise<void> {
     if (result.ok) {
       const action = result.unchanged ? 'Pricing source rechecked — card unchanged' : 'Pricing cached';
       console.log(`  ${color(on, C.green, '✓')} ${action} — ${result.modelCount} models, declared card date ${result.updated}.`);
-      console.log(`  ${color(on, C.dim, `Saved to ${join(aegisHome(), 'pricing', 'models.json')} (overrides the bundled table).`)}`);
+      console.log(`  ${color(on, C.dim, `Saved to ${join(fiscusHome(), 'pricing', 'models.json')} (overrides the bundled table).`)}`);
       console.log(`  ${color(on, C.dim, `Provenance: ${result.sourceKind ?? 'unknown'} · ${result.sourceUrl ?? 'local input'} · card ${result.cardSha256?.slice(0, 12) ?? 'unknown'}`)}`);
       console.log(`  ${color(on, C.dim, 'List-price estimate only — not a provider invoice, contract, discount, tax, credit, or reconciliation result. Applies to new traffic and future imports; rows already metered keep their recorded price.')}`);
     } else {
@@ -251,7 +251,7 @@ export async function cmdPricing(flags: Flags): Promise<void> {
     return;
   }
   console.log(`\n  ${color(on, C.bold, 'Fiscus pricing')}`);
-  console.log(`  Source     ${st.source === 'cache' ? `${st.sourceKind} local cache (~/.aegisflow/pricing)` : 'bundled with the package'}`);
+  console.log(`  Source     ${st.source === 'cache' ? `${st.sourceKind} local cache (~/.fiscus/pricing)` : 'bundled with the package'}`);
   if (st.sourceUrl) console.log(`  Origin     ${st.sourceUrl}`);
   const age = st.ageDays === null ? '' : `  (${num(st.ageDays)}d ago)`;
   const stale = st.stale ? color(on, C.yellow, '  — STALE') : '';
@@ -289,7 +289,7 @@ export async function cmdBaseline(flags: Flags): Promise<void> {
         return;
       }
       console.error(`  ${color(on, C.yellow, '✗')} ${msg}`);
-      console.error(`  ${color(on, C.dim, 'Or edit the cache file by hand: ~/.aegisflow/baselines/lift-baselines.json')}`);
+      console.error(`  ${color(on, C.dim, 'Or edit the cache file by hand: ~/.fiscus/baselines/lift-baselines.json')}`);
       process.exitCode = 1;
       return;
     }
@@ -302,7 +302,7 @@ export async function cmdBaseline(flags: Flags): Promise<void> {
     }
     if (result.ok) {
       console.log(`  ${color(on, C.green, '✓')} Baselines updated — ${result.taskTypeCount} task-type(s), table dated ${result.curated}.`);
-      console.log(`  ${color(on, C.dim, `Saved to ${join(aegisHome(), 'baselines', 'lift-baselines.json')} (overrides the bundled table).`)}`);
+      console.log(`  ${color(on, C.dim, `Saved to ${join(fiscusHome(), 'baselines', 'lift-baselines.json')} (overrides the bundled table).`)}`);
     } else {
       console.error(`  ${color(on, C.yellow, '✗')} Refresh failed: ${result.error}`);
       console.error(`  ${color(on, C.dim, 'Keeping the current table — baselines still work; only the update was skipped.')}`);
@@ -317,7 +317,7 @@ export async function cmdBaseline(flags: Flags): Promise<void> {
     return;
   }
   console.log(`\n  ${color(on, C.bold, 'Fiscus Lift baselines')}`);
-  console.log(`  Source     ${st.source === 'cache' ? 'refreshed cache (~/.aegisflow/baselines)' : 'bundled with the package'}`);
+  console.log(`  Source     ${st.source === 'cache' ? 'refreshed cache (~/.fiscus/baselines)' : 'bundled with the package'}`);
   const age = st.ageDays === null ? '' : `  (${num(st.ageDays)}d ago)`;
   const stale = st.stale ? color(on, C.yellow, '  — STALE') : '';
   console.log(`  Curated    ${st.curated}${age}${stale}`);

@@ -58,7 +58,7 @@ test('resolveJudgeTier: an empty-string or whitespace-only localBaseUrl is treat
 test('resolveJudgeTier: hostedEnabled alone (no API key) never activates hosted judging', () => {
   const d = resolveJudgeTier(cfg({ hostedEnabled: true, hostedBaseUrl: 'https://api.example.com' }), false);
   assertOff(d);
-  assert.ok(d.notes.some((n) => n.includes('AEGIS_JUDGE_API_KEY is not set')));
+  assert.ok(d.notes.some((n) => n.includes('FISCUS_JUDGE_API_KEY is not set')));
 });
 
 test('resolveJudgeTier: an API key alone (hostedEnabled false) never activates hosted judging — the adversarial case', () => {
@@ -139,22 +139,22 @@ test('resolveJudgeTier: sendsContentOffDevice is true for exactly the two hosted
   assert.equal(hostedFull.sendsContentOffDevice, true);
 });
 
-test('hasHostedJudgeApiKey: reads AEGIS_JUDGE_API_KEY, and treats empty/whitespace as unset', () => {
-  const prev = process.env.AEGIS_JUDGE_API_KEY;
+test('hasHostedJudgeApiKey: reads FISCUS_JUDGE_API_KEY, and treats empty/whitespace as unset', () => {
+  const prev = process.env.FISCUS_JUDGE_API_KEY;
   try {
-    delete process.env.AEGIS_JUDGE_API_KEY;
+    delete process.env.FISCUS_JUDGE_API_KEY;
     assert.equal(hasHostedJudgeApiKey(), false);
 
-    process.env.AEGIS_JUDGE_API_KEY = '';
+    process.env.FISCUS_JUDGE_API_KEY = '';
     assert.equal(hasHostedJudgeApiKey(), false);
 
-    process.env.AEGIS_JUDGE_API_KEY = '   ';
+    process.env.FISCUS_JUDGE_API_KEY = '   ';
     assert.equal(hasHostedJudgeApiKey(), false);
 
-    process.env.AEGIS_JUDGE_API_KEY = 'sk-test-key-123';
+    process.env.FISCUS_JUDGE_API_KEY = 'sk-test-key-123';
     assert.equal(hasHostedJudgeApiKey(), true);
   } finally {
-    if (prev === undefined) delete process.env.AEGIS_JUDGE_API_KEY;
-    else process.env.AEGIS_JUDGE_API_KEY = prev;
+    if (prev === undefined) delete process.env.FISCUS_JUDGE_API_KEY;
+    else process.env.FISCUS_JUDGE_API_KEY = prev;
   }
 });

@@ -2,13 +2,12 @@
  * Configuration + on-disk paths.
  *
  * Everything Fiscus persists lives under a single directory:
- *   Windows : %USERPROFILE%\.aegisflow
- *   macOS   : ~/.aegisflow
- *   Linux   : ~/.aegisflow
+ *   Windows : %USERPROFILE%\.fiscus
+ *   macOS   : ~/.fiscus
+ *   Linux   : ~/.fiscus
  *
- * Override it with FISCUS_HOME (or the legacy AEGIS_HOME, still honoured).
- * FISCUS_DB and FISCUS_DEMO override the database path and the demo flag the
- * same way. See ENV_OVERRIDES below for the precedence rule.
+ * Override it with FISCUS_HOME. FISCUS_DB and FISCUS_DEMO override the database
+ * path and the demo flag the same way. See ENV_OVERRIDES below.
  *
  * Config is plain JSON so it stays dependency-free and hand-editable.
  */
@@ -73,7 +72,7 @@ export interface LiftConfig {
 export interface PricingConfig {
   /**
    * Remote pricing manifest. `fiscus pricing --refresh` pulls it into
-   * ~/.aegisflow/pricing/models.json, which then overrides the bundled table.
+   * ~/.fiscus/pricing/models.json, which then overrides the bundled table.
    * Accepts our native schema OR a LiteLLM price file (auto-detected and
    * transformed). Provider rates drift, and pricing is a core dependability,
    * so this keeps it current without a reinstall. The fetch is a plain GET of
@@ -136,7 +135,7 @@ export interface JudgeConfig {
   localSendFullContent: boolean;
   /**
    * Explicit opt-in for the HOSTED judge tier. The credential itself
-   * (AEGIS_JUDGE_API_KEY) must ALSO be set as an environment variable — never
+   * (FISCUS_JUDGE_API_KEY) must ALSO be set as an environment variable — never
    * stored here. config.json can end up committed, backed up, or shared, and a
    * bearer key for a separate judge account has no business living next to Lift
    * baselines. Both this flag AND the env var must independently be set before
@@ -158,7 +157,7 @@ export interface JudgeConfig {
   hostedSendFullContent: boolean;
 }
 
-export interface AegisConfig {
+export interface FiscusConfig {
   port: number;
   dashboardPort: number;
   upstreams: {
@@ -167,7 +166,7 @@ export interface AegisConfig {
   };
   /**
    * When true, a request may override the OpenAI-compatible upstream per call via
-   * the `x-aegis-openai-base` header (to meter OpenRouter / Ollama / DeepSeek / a
+   * the `x-fiscus-openai-base` header (to meter OpenRouter / Ollama / DeepSeek / a
    * local server from one proxy). OFF by default: that header forwards your
    * provider auth to the named URL, so honoring an attacker-influenced header
    * could exfiltrate the key. For the common case just set `upstreams.openai` to
@@ -208,7 +207,7 @@ export interface AegisConfig {
   proposalRetentionDays: number;
 }
 
-export const DEFAULT_CONFIG: AegisConfig = {
+export const DEFAULT_CONFIG: FiscusConfig = {
   port: 8090,
   dashboardPort: 8091,
   upstreams: {
@@ -269,13 +268,15 @@ export const DEFAULT_CONFIG: AegisConfig = {
 };
 
 /**
- * The environment overrides, and the one place their precedence is stated.
+ * The environment overrides. `FISCUS_*` is the only family the product reads.
  *
- * `FISCUS_*` is the product's name. `AEGIS_*` is what these were called before
- * it was renamed, and is still honoured — operators, CI, and every historical
- * release-gate record have `AEGIS_HOME` in a script somewhere, and silently
- * ignoring it would relocate a running install's ledger. `FISCUS_*` wins when
- * both are set, because it is the name the product answers to now.
+ * A second family briefly existed, carried over from the name this project used
+ * before it was Fiscus, and was honoured as a fallback. It is gone — not
+ * deprecated, not read, not warned about. Two spellings for one setting is a
+ * precedence rule, and a precedence rule is a thing to get wrong: this one was,
+ * for exactly one commit, during which an ambient `FISCUS_HOME` silently
+ * outranked the older name that every test used to isolate itself, and the
+ * suite began writing into whatever real home the developer had exported.
  *
  * An EMPTY value counts as unset. `FISCUS_HOME=` in a shell sets the variable
  * to the empty string, and `??` would happily accept it — resolving the home to
@@ -285,39 +286,34 @@ export const DEFAULT_CONFIG: AegisConfig = {
 export const ENV_OVERRIDES = ['HOME', 'DB', 'DEMO'] as const;
 
 function envOverride(name: (typeof ENV_OVERRIDES)[number]): string | undefined {
-  for (const key of [`FISCUS_${name}`, `AEGIS_${name}`]) {
-    const value = process.env[key];
-    if (typeof value === 'string' && value.trim() !== '') return value;
-  }
-  return undefined;
+  const value = process.env[`FISCUS_${name}`];
+  return typeof value === 'string' && value.trim() !== '' ? value : undefined;
 }
 
 /**
- * The preferred spelling, for code that must SET an override rather than read
- * one. Writing the legacy name is not enough: `FISCUS_*` outranks it, so a
- * `demo` run that set `AEGIS_DB` on a machine where the operator had exported
- * `FISCUS_DB` would have been overruled by their own variable and written
- * synthetic data straight into their real ledger.
+ * The override's name, for code that must SET one rather than read it — the
+ * `demo` switch in `cli.ts` above all. Keeping the spelling in one place means
+ * a caller cannot write a variable this module does not read.
  */
 export function envOverrideKey(name: (typeof ENV_OVERRIDES)[number]): string {
   return `FISCUS_${name}`;
 }
 
-export function aegisHome(): string {
-  return envOverride('HOME') ?? join(homedir(), '.aegisflow');
+export function fiscusHome(): string {
+  return envOverride('HOME') ?? join(homedir(), '.fiscus');
 }
 
 export function configPath(): string {
-  return join(aegisHome(), 'config.json');
+  return join(fiscusHome(), 'config.json');
 }
 
 export function dbPath(): string {
-  return envOverride('DB') ?? join(aegisHome(), 'aegis.db');
+  return envOverride('DB') ?? join(fiscusHome(), 'fiscus.db');
 }
 
 /** Isolated database for `fiscus demo` — never mixed with real metering. */
 export function demoDbPath(): string {
-  return join(aegisHome(), 'demo.db');
+  return join(fiscusHome(), 'demo.db');
 }
 
 /** True when the process is running against demo data (set by the `demo` command / `--demo`). */
@@ -338,7 +334,7 @@ export function unlinkDemoDb(): void {
  * session, runaway). Applied only in demo mode, only where the user hasn't set
  * their own value, and NEVER written to disk.
  */
-function withDemoDefaults(cfg: AegisConfig): AegisConfig {
+function withDemoDefaults(cfg: FiscusConfig): FiscusConfig {
   const budget = { ...cfg.budget };
   if (budget.dailyUsd === null) budget.dailyUsd = 30;
   if (budget.dailySoftUsd === null) budget.dailySoftUsd = 20;
@@ -360,7 +356,7 @@ function withDemoDefaults(cfg: AegisConfig): AegisConfig {
 }
 
 export function ensureHome(): string {
-  const home = aegisHome();
+  const home = fiscusHome();
   if (!existsSync(home)) mkdirSync(home, { recursive: true });
   return home;
 }
@@ -378,14 +374,14 @@ function deepMerge<T>(base: T, override: Partial<T>): T {
   return out as T;
 }
 
-export function loadConfig(): AegisConfig {
+export function loadConfig(): FiscusConfig {
   const path = configPath();
-  let cfg: AegisConfig;
+  let cfg: FiscusConfig;
   if (!existsSync(path)) {
     cfg = { ...DEFAULT_CONFIG };
   } else {
     try {
-      const raw = JSON.parse(readFileSync(path, 'utf8')) as Partial<AegisConfig>;
+      const raw = JSON.parse(readFileSync(path, 'utf8')) as Partial<FiscusConfig>;
       cfg = deepMerge(DEFAULT_CONFIG, raw);
     } catch {
       // A corrupt config should never take the daemon down. Fall back to defaults.
@@ -395,7 +391,7 @@ export function loadConfig(): AegisConfig {
   return isDemo() ? withDemoDefaults(cfg) : cfg;
 }
 
-export function saveConfig(config: AegisConfig): void {
+export function saveConfig(config: FiscusConfig): void {
   ensureHome();
   writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8');
 }

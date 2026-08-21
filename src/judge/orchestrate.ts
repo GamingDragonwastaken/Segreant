@@ -30,7 +30,7 @@ function neutralJudgment(sessionId: string, rationale: string): SessionJudgment 
 
 /**
  * Pure except for the outbound HTTP call itself (and reading
- * AEGIS_JUDGE_API_KEY, via hasHostedJudgeApiKey). Takes already-fetched rows so
+ * FISCUS_JUDGE_API_KEY, via hasHostedJudgeApiKey). Takes already-fetched rows so
  * it stays fully testable with synthetic data — see judgeSessionFromStore below
  * for the store-integrated convenience wrapper.
  */
@@ -51,7 +51,7 @@ export async function judgeSession(
   const isLocal = decision.tier === 'local-structural' || decision.tier === 'local-full';
   const baseUrl = isLocal ? cfg.localBaseUrl : cfg.hostedBaseUrl;
   const model = isLocal ? cfg.localModel : cfg.hostedModel;
-  const apiKey = isLocal ? null : (process.env.AEGIS_JUDGE_API_KEY ?? null);
+  const apiKey = isLocal ? null : (process.env.FISCUS_JUDGE_API_KEY ?? null);
 
   if (!isSet(baseUrl) || !isSet(model)) {
     const field = isLocal ? 'judge.localModel' : 'judge.hostedModel';

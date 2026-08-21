@@ -15,7 +15,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync, unlinkS
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { aegisHome } from '../config.ts';
+import { fiscusHome } from '../config.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -23,24 +23,24 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const BUNDLED_PRICING_PATH = join(__dirname, '..', '..', 'pricing', 'models.json');
 
 /**
- * A user-writable copy under ~/.aegisflow/pricing/models.json that, when present
+ * A user-writable copy under ~/.fiscus/pricing/models.json that, when present
  * and structurally valid, OVERRIDES the bundled table. This is where
  * `fiscus pricing --refresh` writes a freshly-pulled manifest, so prices can
  * be updated without reinstalling — pricing is a core dependability, and
  * provider rates drift.
  */
 function cachePath(): string {
-  return join(aegisHome(), 'pricing', 'models.json');
+  return join(fiscusHome(), 'pricing', 'models.json');
 }
 
 /** Sidecar for verifiable local cache provenance. It intentionally stores only
  * a redacted source identity, never a URL query string or credentials. */
 function provenancePath(): string {
-  return join(aegisHome(), 'pricing', 'provenance.json');
+  return join(fiscusHome(), 'pricing', 'provenance.json');
 }
 
 function archivePath(cardSha256: string): string {
-  return join(aegisHome(), 'pricing', 'cards', `${cardSha256}.json`);
+  return join(fiscusHome(), 'pricing', 'cards', `${cardSha256}.json`);
 }
 
 export type Provider = 'anthropic' | 'openai';
@@ -495,7 +495,7 @@ export function applyPricingManifest(rawText: string, options: ApplyPricingOptio
   };
 
   try {
-    const dir = join(aegisHome(), 'pricing');
+    const dir = join(fiscusHome(), 'pricing');
     const archiveDir = join(dir, 'cards');
     if (!existsSync(archiveDir)) mkdirSync(archiveDir, { recursive: true });
     const cardText = JSON.stringify(file, null, 2) + '\n';

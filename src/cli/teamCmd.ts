@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Store } from '../store/db.ts';
-import { loadConfig, dbPath, aegisHome } from '../config.ts';
+import { loadConfig, dbPath, fiscusHome } from '../config.ts';
 import { isGitRepo, projectName } from '../git/correlate.ts';
 import {
   computeRealization,
@@ -117,7 +117,7 @@ export async function cmdReceipt(flags: Flags): Promise<void> {
 
   // Publish this machine's signing identity so others can pin it when verifying.
   if (flags.pubkey) {
-    const keys = loadOrCreateKeyPair(join(aegisHome(), 'receipt-key.json'));
+    const keys = loadOrCreateKeyPair(join(fiscusHome(), 'receipt-key.json'));
     if (flags.json) {
       process.stdout.write(JSON.stringify({ keyId: keys.keyId, publicKey: keys.publicPem }, null, 2) + '\n');
       return;
@@ -185,7 +185,7 @@ export async function cmdReceipt(flags: Flags): Promise<void> {
   const store = new Store(dbPath());
   const report = await computeRealization(store, repo, { limit, windowDays, persist: false });
   const project = await projectName(repo);
-  const keys = loadOrCreateKeyPair(join(aegisHome(), 'receipt-key.json'));
+  const keys = loadOrCreateKeyPair(join(fiscusHome(), 'receipt-key.json'));
 
   const units = report.units.filter(
     (u) => !u.maturing && (!flags.unit || u.hash.startsWith(String(flags.unit))),
@@ -409,7 +409,7 @@ async function signAndPushRollup(
  */
 export async function cmdTeamPush(flags: Flags): Promise<void> {
   const tty = process.stdout.isTTY ?? false;
-  const keyPath = join(aegisHome(), 'team-key.json');
+  const keyPath = join(fiscusHome(), 'team-key.json');
   const sub = typeof flags._[0] === 'string' ? flags._[0] : '';
 
   if (sub !== 'push') {

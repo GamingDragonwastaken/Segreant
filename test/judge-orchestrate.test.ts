@@ -117,7 +117,7 @@ test('judgeSession: local-structural, fully configured, calls the endpoint and r
   }
 });
 
-test('judgeSession: hosted tier requires BOTH hostedEnabled and AEGIS_JUDGE_API_KEY — neither alone calls out', async () => {
+test('judgeSession: hosted tier requires BOTH hostedEnabled and FISCUS_JUDGE_API_KEY — neither alone calls out', async () => {
   const mock = await startMockJudge(() => chatCompletion(1.0, 'x'));
   try {
     // hostedEnabled true, no env var.
@@ -126,7 +126,7 @@ test('judgeSession: hosted tier requires BOTH hostedEnabled and AEGIS_JUDGE_API_
     assert.equal(mock.hitCount(), 0);
 
     // env var set, hostedEnabled false.
-    await withEnv('AEGIS_JUDGE_API_KEY', 'sk-test', async () => {
+    await withEnv('FISCUS_JUDGE_API_KEY', 'sk-test', async () => {
       const j2 = await judgeSession('s1', REQUESTS, PROPOSALS, cfg({ hostedBaseUrl: mock.url, hostedModel: 'gpt-4o-mini' }));
       assert.equal(j2.confidence, 'algorithmic');
       assert.equal(mock.hitCount(), 0);
@@ -139,7 +139,7 @@ test('judgeSession: hosted tier requires BOTH hostedEnabled and AEGIS_JUDGE_API_
 test('judgeSession: hosted-structural, all preconditions met, calls out with the key from the env var', async () => {
   const mock = await startMockJudge(() => chatCompletion(0.9, 'A bit meandering.'));
   try {
-    await withEnv('AEGIS_JUDGE_API_KEY', 'sk-test-abc', async () => {
+    await withEnv('FISCUS_JUDGE_API_KEY', 'sk-test-abc', async () => {
       const j = await judgeSession(
         's1',
         REQUESTS,
@@ -173,7 +173,7 @@ test('judgeSession: a full-content tier WITHOUT a transcript downgrades its REPO
 
   const mock2 = await startMockJudge(() => chatCompletion(1.0, 'ok'));
   try {
-    await withEnv('AEGIS_JUDGE_API_KEY', 'sk-test', async () => {
+    await withEnv('FISCUS_JUDGE_API_KEY', 'sk-test', async () => {
       const j = await judgeSession(
         's1',
         REQUESTS,
@@ -210,7 +210,7 @@ test('judgeSession: a full-content tier WITH a transcript sends it and earns the
     return chatCompletion(1.2, 'converged fast');
   });
   try {
-    await withEnv('AEGIS_JUDGE_API_KEY', 'sk-test', async () => {
+    await withEnv('FISCUS_JUDGE_API_KEY', 'sk-test', async () => {
       const j = await judgeSession(
         's1',
         REQUESTS,
@@ -242,7 +242,7 @@ test('judgeSession: a STRUCTURAL tier ignores a provided transcript — consent 
     return chatCompletion(1.0, 'ok');
   });
   try {
-    await withEnv('AEGIS_JUDGE_API_KEY', 'sk-test', async () => {
+    await withEnv('FISCUS_JUDGE_API_KEY', 'sk-test', async () => {
       const j = await judgeSession(
         's1',
         REQUESTS,
@@ -274,7 +274,7 @@ test('judgeSession: when both local and hosted are fully configured, local is ca
   const localMock = await startMockJudge(() => chatCompletion(1.1, 'local'));
   const hostedMock = await startMockJudge(() => chatCompletion(0.5, 'hosted'));
   try {
-    await withEnv('AEGIS_JUDGE_API_KEY', 'sk-test', async () => {
+    await withEnv('FISCUS_JUDGE_API_KEY', 'sk-test', async () => {
       const j = await judgeSession(
         's1',
         REQUESTS,

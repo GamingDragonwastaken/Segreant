@@ -20,7 +20,7 @@
  * team-rollup key is a longer-lived "this is developer X's machine" identity
  * registered once with a team server. Different trust domains, same
  * separation-of-concerns reasoning as the judge feature's dedicated
- * AEGIS_JUDGE_API_KEY (docs/LIFT-AI-SIDE-JUDGE-DESIGN.md §2).
+ * FISCUS_JUDGE_API_KEY (docs/LIFT-AI-SIDE-JUDGE-DESIGN.md §2).
  */
 
 import { sign as cryptoSign, verify as cryptoVerify, createHash, createPublicKey, type KeyObject } from 'node:crypto';

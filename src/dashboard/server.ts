@@ -17,7 +17,7 @@
 
 import http from 'node:http';
 import type { Store } from '../store/db.ts';
-import { loadConfig, saveConfig, type AegisConfig } from '../config.ts';
+import { loadConfig, saveConfig, type FiscusConfig } from '../config.ts';
 import { ROUTES, type ConfigPersistence, type Route } from './routes.ts';
 import { serveStatic } from './static.ts';
 
@@ -38,7 +38,7 @@ function isLocalHost(host: string | undefined): boolean {
 
 export interface DashboardDeps {
   store: Store;
-  config: AegisConfig;
+  config: FiscusConfig;
   /** This package's version — surfaced read-only in the Settings view. */
   version: string;
   /**

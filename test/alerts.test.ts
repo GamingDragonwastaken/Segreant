@@ -5,7 +5,7 @@ import { once } from 'node:events';
 import { detectAlerts, computeAlerts, type AlertInputs } from '../src/alerts/detect.ts';
 import { buildWebhookPayload, notifyWebhook } from '../src/alerts/notify.ts';
 import { Store } from '../src/store/db.ts';
-import { DEFAULT_CONFIG, type AegisConfig } from '../src/config.ts';
+import { DEFAULT_CONFIG, type FiscusConfig } from '../src/config.ts';
 
 function base(over: Partial<AlertInputs> = {}): AlertInputs {
   return {
@@ -143,7 +143,7 @@ test('computeAlerts: reads the store + config end-to-end (soft cap + throttling)
     project: 'default', taskWeight: 1, inputTokens: 0, outputTokens: 0, cacheWriteTokens: 0,
     cacheReadTokens: 0, reasoningTokens: 0, costUsd: 0, estimated: false, streamed: false, statusCode: 429, durationMs: 0,
   });
-  const config: AegisConfig = { ...DEFAULT_CONFIG, budget: { ...DEFAULT_CONFIG.budget, dailyUsd: 50, dailySoftUsd: 10 } };
+  const config: FiscusConfig = { ...DEFAULT_CONFIG, budget: { ...DEFAULT_CONFIG.budget, dailyUsd: 50, dailySoftUsd: 10 } };
   const alerts = computeAlerts(store, config, { now });
   const got = alerts.map((a) => a.id);
   assert.ok(got.includes('budget-soft'), 'soft cap crossed');

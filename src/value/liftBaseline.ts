@@ -43,7 +43,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { aegisHome } from '../config.ts';
+import { fiscusHome } from '../config.ts';
 import type { Store } from '../store/db.ts';
 import { readCommitsBefore } from '../git/correlate.ts';
 import { classifyTaskType, type TaskType } from './taskType.ts';
@@ -53,9 +53,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 /** The baseline table shipped inside the package — always present, works offline. */
 const BUNDLED_BASELINE_PATH = join(__dirname, '..', '..', 'baselines', 'lift-baselines.json');
 
-/** A user-writable override at ~/.aegisflow/baselines/lift-baselines.json, same pattern as pricing's cache. */
+/** A user-writable override at ~/.fiscus/baselines/lift-baselines.json, same pattern as pricing's cache. */
 function cachePath(): string {
-  return join(aegisHome(), 'baselines', 'lift-baselines.json');
+  return join(fiscusHome(), 'baselines', 'lift-baselines.json');
 }
 
 export interface BaselineManifest {
@@ -125,7 +125,7 @@ export function applyBaselineManifest(rawText: string): BaselineRefreshResult {
     return { ok: false, error: 'manifest failed shape check (schema_version / baselineMinutes: positive numbers)' };
   }
   try {
-    const dir = join(aegisHome(), 'baselines');
+    const dir = join(fiscusHome(), 'baselines');
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     writeFileSync(cachePath(), JSON.stringify(obj, null, 2) + '\n', 'utf8');
   } catch (e) {
@@ -141,7 +141,7 @@ export function applyBaselineManifest(rawText: string): BaselineRefreshResult {
  * is no established machine-readable feed for Lift baselines — METR publishes
  * research, not a versioned JSON endpoint. So this NEVER invents a default: pass
  * an explicit URL you trust (e.g. a manifest you or your org curates and hosts),
- * or edit ~/.aegisflow/baselines/lift-baselines.json by hand. Calling this with
+ * or edit ~/.fiscus/baselines/lift-baselines.json by hand. Calling this with
  * no URL is a clear, honest failure — not a silent no-op and not a fabricated
  * endpoint.
  */

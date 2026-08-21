@@ -9,7 +9,7 @@ import { realizationFromStore } from '../src/value/realization.ts';
 import { computeFrontier } from '../src/value/frontier.ts';
 import { startOfLocalDay } from '../src/budget/guard.ts';
 import { isDeclaredAttribution } from '../src/value/characterization.ts';
-import { DEFAULT_CONFIG, type AegisConfig } from '../src/config.ts';
+import { DEFAULT_CONFIG, type FiscusConfig } from '../src/config.ts';
 
 // Local noon today, so the "today" window is well-defined regardless of when the
 // suite runs (a seed near local midnight would have almost no room for today).
@@ -19,7 +19,7 @@ function noonToday(): number {
   return d.getTime();
 }
 
-const demoConfig = (): AegisConfig => ({
+const demoConfig = (): FiscusConfig => ({
   ...DEFAULT_CONFIG,
   budget: { ...DEFAULT_CONFIG.budget, dailyUsd: 30, dailySoftUsd: 20, runawayMaxUsd: 5 },
 });

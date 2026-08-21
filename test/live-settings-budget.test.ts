@@ -4,7 +4,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { once } from 'node:events';
 import { Store } from '../src/store/db.ts';
-import { DEFAULT_CONFIG, type AegisConfig } from '../src/config.ts';
+import { DEFAULT_CONFIG, type FiscusConfig } from '../src/config.ts';
 import { createProxyServer } from '../src/proxy/server.ts';
 import { createDashboardServer } from '../src/dashboard/server.ts';
 
@@ -29,7 +29,7 @@ test('live settings: saving a hard cap through the dashboard governs the already
   });
   const upstreamBase = await listen(upstream);
   const store = new Store(':memory:');
-  const config: AegisConfig = structuredClone(DEFAULT_CONFIG);
+  const config: FiscusConfig = structuredClone(DEFAULT_CONFIG);
   config.upstreams.openai = upstreamBase;
   let persisted = structuredClone(config);
   const proxy = createProxyServer({ store, config });

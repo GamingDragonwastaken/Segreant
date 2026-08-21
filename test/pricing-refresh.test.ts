@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { applyPricingManifest, loadPricing, MAX_PRICING_MANIFEST_BYTES, pricingStatus, rateFor, refreshPricing, transformLiteLLMManifest } from '../src/cost/pricing.ts';
 
 // These exercise the refresh/override path against an isolated FISCUS_HOME so the
-// real ~/.aegisflow is never touched. node's test runner isolates each FILE in
+// real ~/.fiscus is never touched. node's test runner isolates each FILE in
 // its own process, so the module-level pricing memo here can't leak elsewhere.
 const origHome = process.env.FISCUS_HOME;
 

@@ -3,7 +3,7 @@
  *
  * No native module, no build step, no external service. The whole point of the
  * product is that nothing leaves the machine, so the store is a single local
- * file under ~/.aegisflow.
+ * file under ~/.fiscus.
  *
  * Timestamps are stored twice: an ISO string for humans and an epoch-ms integer
  * for fast range/window queries. Day boundaries are computed in JS (local time)

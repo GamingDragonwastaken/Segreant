@@ -10,7 +10,7 @@
  * the other. `resolveJudgeTier` takes plain data in and returns plain data out —
  * no network calls, no file reads, no env access — so the gating logic itself is
  * exhaustively testable without mocking anything. The one impure fact it needs
- * (whether AEGIS_JUDGE_API_KEY is set) is read by the separate
+ * (whether FISCUS_JUDGE_API_KEY is set) is read by the separate
  * `hasHostedJudgeApiKey` below and passed in by the caller.
  */
 
@@ -41,7 +41,7 @@ function isSet(s: string | null | undefined): boolean {
 }
 
 /**
- * Reads AEGIS_JUDGE_API_KEY — deliberately a DIFFERENT env var than any credential
+ * Reads FISCUS_JUDGE_API_KEY — deliberately a DIFFERENT env var than any credential
  * the reverse proxy forwards. Reusing the metered key would be circular (using the
  * thing being measured to also measure itself) and would show judge calls up as
  * confusing extra spend on the same ledger they're supposed to be judging
@@ -49,7 +49,7 @@ function isSet(s: string | null | undefined): boolean {
  * config.json, never returned by this function — only whether it's set.
  */
 export function hasHostedJudgeApiKey(): boolean {
-  return isSet(process.env.AEGIS_JUDGE_API_KEY);
+  return isSet(process.env.FISCUS_JUDGE_API_KEY);
 }
 
 /**
@@ -70,8 +70,8 @@ export function resolveJudgeTier(cfg: JudgeConfig, hostedApiKeyPresent: boolean)
   if (cfg.hostedEnabled !== hostedApiKeyPresent) {
     notes.push(
       cfg.hostedEnabled
-        ? 'Hosted judge tier: judge.hostedEnabled is true but AEGIS_JUDGE_API_KEY is not set — hosted judging stays off until both are true.'
-        : 'Hosted judge tier: AEGIS_JUDGE_API_KEY is set but judge.hostedEnabled is false — hosted judging stays off until both are true.',
+        ? 'Hosted judge tier: judge.hostedEnabled is true but FISCUS_JUDGE_API_KEY is not set — hosted judging stays off until both are true.'
+        : 'Hosted judge tier: FISCUS_JUDGE_API_KEY is set but judge.hostedEnabled is false — hosted judging stays off until both are true.',
     );
   }
 
@@ -94,7 +94,7 @@ export function resolveJudgeTier(cfg: JudgeConfig, hostedApiKeyPresent: boolean)
 
   if (hostedConsent && !isSet(cfg.hostedBaseUrl)) {
     notes.push(
-      'Hosted judge tier: consented (hostedEnabled + AEGIS_JUDGE_API_KEY) but judge.hostedBaseUrl is not ' +
+      'Hosted judge tier: consented (hostedEnabled + FISCUS_JUDGE_API_KEY) but judge.hostedBaseUrl is not ' +
         'set — falling back to the algorithmic signal.',
     );
   }

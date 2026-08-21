@@ -13,7 +13,7 @@
  */
 
 import type { Store } from '../store/db.ts';
-import type { AegisConfig } from '../config.ts';
+import type { FiscusConfig } from '../config.ts';
 import { startOfLocalDay } from '../budget/guard.ts';
 
 export type AlertSeverity = 'critical' | 'warn' | 'info';
@@ -145,7 +145,7 @@ export function detectAlerts(inp: AlertInputs): Alert[] {
 /** Gather alert inputs from the store + config and detect. `realizedValueRate` is passed in (git-gated). */
 export function computeAlerts(
   store: Store,
-  config: AegisConfig,
+  config: FiscusConfig,
   opts: { now?: number; realizedValueRate?: number | null } = {},
 ): Alert[] {
   const now = opts.now ?? Date.now();

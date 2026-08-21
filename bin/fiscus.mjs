@@ -24,11 +24,11 @@ if (major < 24) {
 
 const self = fileURLToPath(import.meta.url);
 
-if (!process.env.__AEGIS_CHILD) {
+if (!process.env.__FISCUS_CHILD) {
   const result = spawnSync(
     process.execPath,
     ['--disable-warning=ExperimentalWarning', self, ...process.argv.slice(2)],
-    { stdio: 'inherit', env: { ...process.env, __AEGIS_CHILD: '1' } },
+    { stdio: 'inherit', env: { ...process.env, __FISCUS_CHILD: '1' } },
   );
   process.exit(result.status ?? 0);
 } else {
