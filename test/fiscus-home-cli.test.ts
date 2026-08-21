@@ -67,7 +67,10 @@ test('the CLI ignores the pre-rename home variable when it is the only one set',
   // `legacy`; one that does not falls through to the default home, which this
   // spawn has pointed at a temp directory.
   const code = await run(['demo'], fakeHome, { AEGIS_HOME: legacy });
-  assert.equal(code, 0, 'fiscus demo should succeed');
+  // `bin/fiscus.mjs` runs the compiled dist/, so this fails if dist is absent
+  // or mid-rebuild — which reads as a mysterious flake unless the message says
+  // so. `npm test` builds first via pretest; a bare `node --test` does not.
+  assert.equal(code, 0, 'fiscus demo should succeed — if this fails, check dist/ is built and no build is running concurrently');
 
   assert.deepEqual(
     listing(legacy),
