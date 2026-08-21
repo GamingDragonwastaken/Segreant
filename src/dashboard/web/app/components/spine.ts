@@ -20,24 +20,15 @@
 
 import { h } from '../core/dom.ts';
 import { usd, isPrecise } from '../core/fmt.ts';
+import type { Layer, LayerId } from '../core/claimTypes.ts';
 
-export type LayerId = 'metered' | 'billed' | 'allocated' | 'realized';
-
-export interface Layer {
-  id: LayerId;
-  /** What the claim is called. */
-  label: string;
-  /** The claim itself, in one line, in the operator's words. */
-  claim: string;
-  /** The figure, when the layer is established. */
-  valueUsd: number | null;
-  /** Whether the evidence substantiates this claim at all. */
-  established: boolean;
-  /** What the figure rests on, or what is missing when it does not exist. */
-  basis: string;
-  /** What the operator would have to do to establish it. Only when unestablished. */
-  nextStep?: string;
-}
+/**
+ * `Layer` and its evidence moved down to `core/claimTypes.ts` so that
+ * `core/claimLayers.ts` can build one without a core module importing a
+ * component. They are re-exported here because this is where every consumer
+ * already reaches for them, and a type's home is not worth a churn of imports.
+ */
+export type { Layer, LayerId, ClaimInspection } from '../core/claimTypes.ts';
 
 export interface SpineState {
   layers: Layer[];

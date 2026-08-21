@@ -58,6 +58,13 @@ export interface AlertRow {
 export interface Overview {
   demo: boolean;
   range: string;
+  /**
+   * ISO instant the server computed this payload. On the wire since the route
+   * was written, undeclared here until the Claim Inspector needed to report
+   * freshness — and an undeclared field is one a screen cannot read without a
+   * cast, which is how the reconciliation run collection got read as a number.
+   */
+  generatedAt: string;
   summary: Summary;
   pricing: {
     status: { fresh?: boolean; ageDays?: number | null } | string;

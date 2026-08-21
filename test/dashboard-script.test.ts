@@ -200,30 +200,37 @@ test('the two interfaces link to each other in both directions', () => {
  * So this pins the distinction at the source. It is a grep rather than a
  * behavioural assertion because the failure was one of MEANING, not of
  * mechanism: the code ran perfectly and reported the wrong claim.
+ *
+ * The derivation has since moved out of `chain.ts` — which is now only the
+ * fetching half — and into `core/claimLayers.ts`, where it is also covered
+ * behaviourally by `test/claim-layers.test.ts`. The grep follows the code. It
+ * is kept alongside the behavioural test rather than replaced by it, because a
+ * fixture proves the current code reads the right field while the grep is what
+ * survives someone rewriting the derivation from memory.
  */
 test('the realized band carries the value claim, not the cost of realized work', () => {
-  const chain = readFileSync(join(WEB_SRC, 'app', 'core', 'chain.ts'), 'utf8');
+  const claims = readFileSync(join(WEB_SRC, 'app', 'core', 'claimLayers.ts'), 'utf8');
 
   // The realized layer must price itself from the RoI return, which is the only
   // field in the payload that is actually value.
   assert.match(
-    chain,
+    claims,
     /returnRatio/,
-    'chain.ts must read the realized figure from roi.returnRatio',
+    'claimLayers.ts must read the realized figure from roi.returnRatio',
   );
 
   // And it must not fall back to the cost field for that figure.
   assert.equal(
-    /valueUsd:\s*matured[?.]*\.realizedValueUsd/.test(chain),
+    /valueUsd:\s*matured[?.]*\.realizedValueUsd/.test(claims),
     false,
-    'chain.ts must not use matured.realizedValueUsd as the realized VALUE figure — that field is attributed spend',
+    'claimLayers.ts must not use matured.realizedValueUsd as the realized VALUE figure — that field is attributed spend',
   );
 
   // A dollar figure is only shown when the payload says it priced one.
   assert.match(
-    chain,
+    claims,
     /basis === 'usd'/,
-    'chain.ts must require the payload to declare a usd basis before showing dollars',
+    'claimLayers.ts must require the payload to declare a usd basis before showing dollars',
   );
 
   // The hazard is documented where the type is declared, so the next person to
