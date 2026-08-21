@@ -138,8 +138,27 @@ export interface AllocationPayload {
   excludedFrom: string[];
   costCentres: CostCentre[];
   rules: AllocationRule[];
-  runs: Array<Record<string, unknown>>;
+  /** The immutable allocation runs, newest first. */
+  runs: AllocationRunRecord[];
+  /**
+   * A CROSS-REFERENCE to the billing reconciliation, not an allocation
+   * timestamp. `handleAllocation` fills this from `store.reconciliationRuns(1)`
+   * because whether any reconciliation exists decides whether the residual
+   * under every allocated figure has ever been looked at.
+   *
+   * It is therefore evidence ABOUT the inputs, and never this claim's own
+   * freshness. Reading it as one dates the allocation claim by a different
+   * claim's evidence — which is the collapse this product exists to refuse, and
+   * which the Claim Inspector shipped doing for exactly one release.
+   */
   reconciliation: { everRun: boolean; latestComputedAtMs: number | null };
+}
+
+/** One recorded allocation run. `result` is the immutable apportionment. */
+export interface AllocationRunRecord {
+  allocationRunId: string;
+  computedAtMs: number;
+  result?: Record<string, unknown>;
 }
 
 /**

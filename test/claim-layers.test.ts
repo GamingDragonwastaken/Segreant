@@ -149,15 +149,59 @@ test('allocation and realized state the boundary of what they can enforce', () =
   const allocation: AllocationPayload = {
     demo: false, kind: 'showback', trust: 'local_rule', basis: 'metered_request_cost',
     excludedFrom: ['provider_invoice'], costCentres: [{ id: 'a' }], rules: [],
-    runs: [{}], reconciliation: { everRun: false, latestComputedAtMs: null },
+    runs: [{ allocationRunId: 'run-1', computedAtMs: Date.UTC(2026, 7, 2) }],
+    reconciliation: { everRun: false, latestComputedAtMs: null },
   };
   const layers = buildClaimLayers({ ...NOTHING, allocation }, '30d');
 
   assert.equal(layers[2]!.established, true, 'one immutable run establishes the allocation claim');
   assert.match(layers[2]!.inspection.enforceability, /showback claim; an allocation moves no money/);
   assert.equal(layers[2]!.inspection.coverage, 'excluded from: provider_invoice');
-  assert.equal(layers[2]!.inspection.freshness, 'not established', 'no reconciliation timestamp recorded');
+  assert.equal(layers[2]!.inspection.freshness, '2026-08-02T00:00:00.000Z', 'dated by the allocation run itself');
   assert.match(layers[3]!.inspection.enforceability, /never evidence that a provider bill or a local budget was enforced/);
+});
+
+test('the allocation claim is never dated by the billing reconciliation', () => {
+  // `/api/allocation` carries `reconciliation.latestComputedAtMs` as a
+  // deliberate cross-reference to the BILLING run — it is filled from
+  // `store.reconciliationRuns(1)`. It sits next to the allocation runs and
+  // looks like the freshness answer. It is not: reading it here dated an
+  // allocation with zero recorded runs by the moment someone reconciled a
+  // provider bill, which is one claim's evidence presented as another's.
+  const billingRunMs = Date.UTC(2026, 7, 21);
+  const allocation: AllocationPayload = {
+    demo: false, kind: 'derived_cost_allocation', trust: 'derived_allocation_of_local_estimates',
+    basis: 'showback_only', excludedFrom: ['request_metered_spend'],
+    costCentres: [], rules: [], runs: [],
+    reconciliation: { everRun: true, latestComputedAtMs: billingRunMs },
+  };
+  const allocated = buildClaimLayers({ ...NOTHING, allocation }, '30d')[2]!;
+
+  assert.equal(allocated.established, false, 'zero allocation runs establishes nothing');
+  assert.equal(allocated.inspection.freshness, 'not established');
+  assert.equal(
+    allocated.inspection.freshness.includes('2026-08-21'),
+    false,
+    'the billing reconciliation timestamp must not surface as allocation freshness',
+  );
+  // It is still worth stating — as something the claim RESTS on.
+  assert.ok(
+    allocated.inspection.assumptions.some((s) => s.includes('metered estimates last reconciled')),
+    'the cross-reference belongs in assumptions, not in freshness',
+  );
+});
+
+test('an unreconciled allocation says its inputs were never checked against a bill', () => {
+  const allocation: AllocationPayload = {
+    demo: false, kind: 'derived_cost_allocation', trust: 'derived_allocation_of_local_estimates',
+    basis: 'showback_only', excludedFrom: [], costCentres: [], rules: [],
+    runs: [{ allocationRunId: 'run-1', computedAtMs: Date.UTC(2026, 7, 2) }],
+    reconciliation: { everRun: false, latestComputedAtMs: null },
+  };
+  const allocated = buildClaimLayers({ ...NOTHING, allocation }, '30d')[2]!;
+  assert.equal(allocated.established, true);
+  assert.equal(allocated.inspection.freshness, '2026-08-02T00:00:00.000Z');
+  assert.ok(allocated.inspection.assumptions.some((s) => /residual against a provider bill has never been checked/.test(s)));
 });
 
 test('a dead endpoint degrades its own layer, and reads as missing evidence rather than zero', () => {

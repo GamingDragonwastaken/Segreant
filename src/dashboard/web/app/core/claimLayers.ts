@@ -127,13 +127,29 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
       scope: a
         ? `${centres} cost centre(s); ${a.rules.length} rule version(s); ${allocRuns} immutable run(s)`
         : 'allocation endpoint unavailable',
-      freshness: iso(a?.reconciliation?.latestComputedAtMs),
+      // The allocation runs' OWN timestamp. `a.reconciliation.latestComputedAtMs`
+      // sits right there and looks like the answer, but it is a cross-reference
+      // to the BILLING reconciliation — reading it here dated an allocation with
+      // zero recorded runs by the moment someone reconciled a provider bill.
+      freshness: iso(a?.runs?.[0]?.computedAtMs),
       coverage: a
         ? (a.excludedFrom.length ? `excluded from: ${a.excludedFrom.join(', ')}` : 'no exclusions recorded')
         : 'allocation endpoint unavailable',
       enforceability: 'showback claim; an allocation moves no money and enforces no chargeback by itself',
       evidenceSource: 'recorded local cost centres, rule versions, and immutable allocation runs',
-      assumptions: a ? [`trust class: ${a.trust}`, `allocation kind: ${a.kind}`] : [],
+      // The billing cross-reference belongs here rather than in freshness: an
+      // allocation apportions metered ESTIMATES, so whether that residual has
+      // ever been checked against a provider bill is something this claim rests
+      // on, not something that says when it was computed.
+      assumptions: a
+        ? [
+            `trust class: ${a.trust}`,
+            `allocation kind: ${a.kind}`,
+            a.reconciliation?.everRun
+              ? `Apportions metered estimates last reconciled against a provider report at ${iso(a.reconciliation.latestComputedAtMs)}.`
+              : 'Apportions metered estimates whose residual against a provider bill has never been checked.',
+          ]
+        : [],
       missingEvidence: allocRuns > 0
         ? []
         : ['at least one reviewed allocation rule', 'an applied immutable allocation run'],
