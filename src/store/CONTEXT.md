@@ -34,8 +34,8 @@ two domain callers goes in `rows.ts`.
 ## Consumes
 
 - `node:sqlite` `DatabaseSync` only. No ORM, no query builder, no runtime dependency.
-- `src/config.ts` for the home directory (`AEGIS_HOME` overrides it — every test
-  and every gate run uses an isolated home).
+- `src/config.ts` for the home directory (`FISCUS_HOME` overrides it, or the
+  legacy `AEGIS_HOME` — every test and every gate run uses an isolated home).
 
 ## Guarantees
 

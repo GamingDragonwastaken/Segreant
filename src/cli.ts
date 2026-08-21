@@ -11,7 +11,7 @@
  */
 
 import './util/quiet.ts';
-import { demoDbPath } from './config.ts';
+import { demoDbPath, envOverrideKey } from './config.ts';
 import { packageVersion } from './version.ts';
 
 import { parseFlags } from './cli/flags.ts';
@@ -179,9 +179,14 @@ async function main(): Promise<void> {
   // Demo mode: point every store-open at an isolated demo.db and flag surfaces
   // to render the DEMO label. One switch covers the CLI and the in-process
   // dashboard, since both resolve the path through dbPath() and read isDemo().
+  //
+  // These set the PREFERRED spelling deliberately. Both `FISCUS_DB` and the
+  // legacy `AEGIS_DB` are read, with FISCUS winning; writing the legacy name
+  // here would leave an operator's own exported `FISCUS_DB` outranking this
+  // switch, and demo traffic would land in their real ledger.
   if (cmd === 'demo' || flags.demo) {
-    process.env.AEGIS_DB = demoDbPath();
-    process.env.AEGIS_DEMO = '1';
+    process.env[envOverrideKey('DB')] = demoDbPath();
+    process.env[envOverrideKey('DEMO')] = '1';
   }
 
   switch (cmd) {

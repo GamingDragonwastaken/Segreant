@@ -4,7 +4,11 @@
  * Everything Fiscus persists lives under a single directory:
  *   Windows : %USERPROFILE%\.aegisflow
  *   macOS   : ~/.aegisflow
- *   Linux   : ~/.aegisflow   (XDG override honored via AEGIS_HOME)
+ *   Linux   : ~/.aegisflow
+ *
+ * Override it with FISCUS_HOME (or the legacy AEGIS_HOME, still honoured).
+ * FISCUS_DB and FISCUS_DEMO override the database path and the demo flag the
+ * same way. See ENV_OVERRIDES below for the precedence rule.
  *
  * Config is plain JSON so it stays dependency-free and hand-editable.
  */
@@ -264,8 +268,43 @@ export const DEFAULT_CONFIG: AegisConfig = {
   proposalRetentionDays: 30,
 };
 
+/**
+ * The environment overrides, and the one place their precedence is stated.
+ *
+ * `FISCUS_*` is the product's name. `AEGIS_*` is what these were called before
+ * it was renamed, and is still honoured — operators, CI, and every historical
+ * release-gate record have `AEGIS_HOME` in a script somewhere, and silently
+ * ignoring it would relocate a running install's ledger. `FISCUS_*` wins when
+ * both are set, because it is the name the product answers to now.
+ *
+ * An EMPTY value counts as unset. `FISCUS_HOME=` in a shell sets the variable
+ * to the empty string, and `??` would happily accept it — resolving the home to
+ * a relative path and writing the operator's ledger into whatever directory
+ * they happened to be standing in.
+ */
+export const ENV_OVERRIDES = ['HOME', 'DB', 'DEMO'] as const;
+
+function envOverride(name: (typeof ENV_OVERRIDES)[number]): string | undefined {
+  for (const key of [`FISCUS_${name}`, `AEGIS_${name}`]) {
+    const value = process.env[key];
+    if (typeof value === 'string' && value.trim() !== '') return value;
+  }
+  return undefined;
+}
+
+/**
+ * The preferred spelling, for code that must SET an override rather than read
+ * one. Writing the legacy name is not enough: `FISCUS_*` outranks it, so a
+ * `demo` run that set `AEGIS_DB` on a machine where the operator had exported
+ * `FISCUS_DB` would have been overruled by their own variable and written
+ * synthetic data straight into their real ledger.
+ */
+export function envOverrideKey(name: (typeof ENV_OVERRIDES)[number]): string {
+  return `FISCUS_${name}`;
+}
+
 export function aegisHome(): string {
-  return process.env.AEGIS_HOME ?? join(homedir(), '.aegisflow');
+  return envOverride('HOME') ?? join(homedir(), '.aegisflow');
 }
 
 export function configPath(): string {
@@ -273,7 +312,7 @@ export function configPath(): string {
 }
 
 export function dbPath(): string {
-  return process.env.AEGIS_DB ?? join(aegisHome(), 'aegis.db');
+  return envOverride('DB') ?? join(aegisHome(), 'aegis.db');
 }
 
 /** Isolated database for `fiscus demo` — never mixed with real metering. */
@@ -283,7 +322,7 @@ export function demoDbPath(): string {
 
 /** True when the process is running against demo data (set by the `demo` command / `--demo`). */
 export function isDemo(): boolean {
-  return process.env.AEGIS_DEMO === '1';
+  return envOverride('DEMO') === '1';
 }
 
 /** Remove the demo database (and its WAL/SHM sidecars) for a clean re-seed. */
