@@ -31,8 +31,12 @@ import { fileURLToPath } from 'node:url';
 const REPO = dirname(dirname(fileURLToPath(import.meta.url)));
 const LEGACY = /aegis/i;
 
-/** This file and the identity test name the old spelling in order to ban it. */
-const SELF = ['test/fiscus-name-sweep.test.ts', 'test/fiscus-identity.test.ts'];
+/** These name the old spelling in order to ban it, or to prove it inert. */
+const SELF = [
+  'test/fiscus-name-sweep.test.ts',
+  'test/fiscus-identity.test.ts',
+  'test/fiscus-home-cli.test.ts',
+];
 
 /** Dated, already-executed plans quoting then-current code. */
 const ARCHIVED_PLANS = 'docs/superpowers/plans/';
