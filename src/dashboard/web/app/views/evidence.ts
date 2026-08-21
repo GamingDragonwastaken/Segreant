@@ -11,7 +11,7 @@
 import { h } from '../core/dom.ts';
 import { signal, effect } from '../core/signal.ts';
 import { api, type BillingPayload } from '../core/api.ts';
-import { isPrecise, relative, basisWords } from '../core/fmt.ts';
+import { isPrecise, relative, basisWords, usd, count } from '../core/fmt.ts';
 import { actionCard } from './spend.ts';
 
 const STATUS_WORDS: Record<string, { plain: string; precise: string; pill: string }> = {
@@ -26,6 +26,48 @@ const STATUS_WORDS: Record<string, { plain: string; precise: string; pill: strin
     pill: 'pill-ok',
   },
 };
+
+/**
+ * What a reconciliation would actually match, stated before the credential.
+ *
+ * Rendered only when readiness is REPORTED and says nothing would count.
+ * Absent readiness renders nothing at all — an older payload without the field
+ * must not be turned into a reassurance that everything is fine, and it must
+ * not be turned into a warning either. Silence is the honest rendering of "not
+ * reported".
+ */
+function readinessPanel(d: BillingPayload): Node | null {
+  const r = d.readiness;
+  if (!r) return null;
+  const c = r.coverage;
+  // No OpenAI spend at all: nothing to warn about, and saying "0 would count"
+  // would read as a defect rather than as an empty ledger.
+  if (!c) return null;
+  const uncountable = c.importedUsd + c.proxyOffScopeUsd;
+  if (c.onDeclaredRouteUsd > 0 || uncountable <= 0) return null;
+
+  const lines: Node[] = [];
+  if (c.importedUsd > 0) {
+    lines.push(h('li', { text: () => (isPrecise()
+      ? `${usd(c.importedUsd, { precise: true })} across ${count(c.importedRequests)} request(s) arrived by native import — model and cost recorded, no tie to a declared provider project`
+      : `${usd(c.importedUsd)} came from reading your tools' own logs, which do not record which provider project the spend belongs to`) }));
+  }
+  if (c.proxyOffScopeUsd > 0) {
+    lines.push(h('li', { text: () => (isPrecise()
+      ? `${usd(c.proxyOffScopeUsd, { precise: true })} across ${count(c.proxyOffScopeRequests)} proxy request(s) predate the declaration or carry a different one`
+      : `${usd(c.proxyOffScopeUsd)} went through the proxy before you declared the project, so it cannot be matched either`) }));
+  }
+
+  return h('div', { class: 'drawer-warning', style: 'margin-top: var(--s4)' },
+    h('strong', { text: 'Read this before getting a credential' }),
+    h('p', { text: () => (isPrecise()
+      ? `${usd(uncountable, { precise: true })} of local OpenAI spend cannot reconcile. A pull would report the entire provider bill as unexplained residual — arithmetically true and operationally useless.`
+      : `None of your ${usd(uncountable)} of OpenAI spend can be checked against a bill yet. Getting a key now would tell you nothing.`) }),
+    h('ul', { class: 'drawer-notes' }, ...lines),
+    h('p', { style: 'margin-top: var(--s3)', text: () => (isPrecise()
+      ? 'Only live proxy traffic carrying the declaration can count. Route traffic through the proxy, let a period close, and the local side will have something in it.'
+      : 'Route your tools through Fiscus (fiscus start), let a few days pass, and this becomes checkable.') }));
+}
 
 export function evidenceView(): Node {
   const data = signal<BillingPayload | null>(null);
@@ -81,6 +123,8 @@ export function evidenceView(): Node {
           h('span', { class: 'basis', text: () => (isPrecise()
             ? 'imported provider line items, unverified against the provider'
             : 'billing lines you have given us from your provider') })),
+
+        readinessPanel(d),
 
         h('div', { style: 'margin-top: var(--s6)' },
           h('h2', { class: 'card-title', style: 'margin-bottom: var(--s3)', text: 'Start here' }),

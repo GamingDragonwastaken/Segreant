@@ -79,10 +79,42 @@ export interface Overview {
   alerts?: AlertRow[] | null;
 }
 
+/**
+ * How much local spend a reconciliation would actually match, reported BEFORE
+ * an OpenAI Admin key is minted — the only moment the answer is useful.
+ *
+ * Every field is money or a count in the local ledger. `onDeclaredRouteUsd` is
+ * the only bucket that can reconcile; the other two are real spend that
+ * structurally cannot, and saying so is the point of the type.
+ */
+export interface ReconciliationCoverage {
+  onDeclaredRouteUsd: number;
+  onDeclaredRouteRequests: number;
+  /** Natively imported rows: model and cost, but nothing tying them to a provider project. */
+  importedUsd: number;
+  importedRequests: number;
+  /** Proxy rows predating the declaration, or carrying a different one. */
+  proxyOffScopeUsd: number;
+  proxyOffScopeRequests: number;
+}
+
+export interface ReconciliationReadiness {
+  ready: boolean;
+  missing: Array<{ step: string; detail: string; ownerAction: boolean }>;
+  /** Null when the ledger holds no OpenAI spend at all — "no data", not "no coverage". */
+  coverage: ReconciliationCoverage | null;
+}
+
 export interface BillingPayload {
   demo: boolean;
   evidence: { reconciliationStatus: string };
   summary: { recordCount: number };
+  /**
+   * Optional because a payload predating this field must not read as `ready`.
+   * Absent means "not reported", which the view has to render differently from
+   * `ready: false` — collapsing the two would invent a reassurance.
+   */
+  readiness?: ReconciliationReadiness;
   /**
    * The immutable reconciliation runs, newest first — the collection the server
    * actually sends (`store.reconciliationRuns(10)`), not a count.

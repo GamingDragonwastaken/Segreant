@@ -16,6 +16,7 @@
  */
 
 import type http from 'node:http';
+import { reconciliationReadiness } from '../billing/readiness.ts';
 import { existsSync, statSync } from 'node:fs';
 import type { Store } from '../store/db.ts';
 import { isDemo, type FiscusConfig } from '../config.ts';
@@ -404,6 +405,13 @@ export function handleBilling({ res, store }: RouteContext): void {
       },
       summary: store.billingSummary(),
       imports: store.billingImportRuns(25),
+      // Readiness is served BEFORE a credential is minted, which is the only
+      // moment it is useful. `directOpenAiCosts.coverage` below is the
+      // post-observation partition and is null until a snapshot exists, so on
+      // a ledger whose OpenAI spend all arrived by import — the case this
+      // warning was written for — it says nothing at all. Same computation the
+      // CLI prints, imported rather than reimplemented.
+      readiness: reconciliationReadiness(store),
       // Explicit, read-only provider API observations use a different
       // source contract from imported operator reports. They remain a
       // separate snapshot/status surface and never become overview spend.
