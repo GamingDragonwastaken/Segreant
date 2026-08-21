@@ -27,7 +27,51 @@ This validates a local developer preview only. It does **not** validate a
 provider billing statement, production customer data, an npm publication, an
 external deployment, or the optional team service.
 
-### Candidate record — commit `205fbcc`, 2026-08-18
+### Candidate record — commit `f2f3c9a`, 2026-08-21
+
+Run against `f2f3c9acd50f4e7fd4c0f11a706a9b4b4307758f` in a throwaway worktree
+with a real `npm ci`, worktree clean before and after validation (0 modified
+paths either side, excluding the `npm pack` artifact). **All ten rows pass.**
+Supersedes the `205fbcc` record, which predates the GUI rewrite landing in the
+package, the security fixes, the Fiscus rebrand, and the dependency majors.
+
+| Requirement | Result |
+| --- | --- |
+| Candidate identity | **Pass.** `git rev-parse HEAD` → `f2f3c9acd50f4e7fd4c0f11a706a9b4b4307758f` before and after; `git status --short` empty both times. |
+| Source validation | **Pass.** `npm ci` → 4 packages, 0 vulnerabilities. Typecheck run as BOTH passes, because the root config excludes the browser app and green on one says nothing about the other: node pass exit 0, `src/dashboard/web/app` pass exit 0. `npm test` → **613 tests, 612 pass, 0 fail, 1 skipped**. `npm run build` clean. Team-server, separately: typecheck 0, **55/55**. |
+| Packed artifact | **Pass.** `npm pack` → **139 files**, SHA-256 `03ebe86e5883729eaac0e1ea9c3aaa91516ad8ba078274451f2238d42656bdfa`; all 6 key paths present. **35 more than `205fbcc`, 0 removed**, and the delta was enumerated rather than asserted: 26 are the compiled browser app now shipping in the tarball (`dist/dashboard/web/app/**`, `classic.html`, `styles/app.css`, `routes.js`, `static.js`), 7 are module extractions (`store/{allocation,billing,realization,rows,schema}.js`, `budget/enforceability.js`, `cost/coverage.js`, `value/report.js`, `billing/readiness.js`), and 2 are new docs. |
+| Clean installed CLI | **Pass.** Installed with `--ignore-scripts --no-package-lock` into a fresh directory; `fiscus --help` renders; `fiscus demo` seeds into an isolated home. |
+| Packaged dashboard/API | **Pass.** Isolated `FISCUS_HOME`, seeded demo, packaged dashboard on :18191. `/api/health` → `{"ok":true,"service":"fiscus-dashboard"}`; `/api/overview?range=all` → `demo: true`, **552 requests, $89.66053895** — identical to every prior record, so the GUI rewrite and the rebrand moved no figure. Terminated cleanly (PID 27544, tree kill); :18190 and :18191 both confirmed closed afterwards. |
+| Model-trial truthfulness | **Pass.** Packaged `/api/value` self-labels `demo: true`; exactly one switch under `frontier.modelSwitches`, `confidence: "trial"`, no `evidence_supported`; `allocation: null`. `/classic` contains all three labelled strings (`DEMO DATA`, `Cheaper model trials`, `NOT RECONCILED`), 169,272 bytes. `/` proved separately as the shell: carries `id="app"` and its `/app/main.js` entry, and that entry resolves **HTTP 200, `text/javascript`** — the check a shell-only fetch cannot make. |
+| Billing-boundary truthfulness | **Pass.** `billing scope set --account-ref gate-test-ref --json` → `applied: false`, `trust: "operator_declared_unverified"`, no write. Packaged `/api/billing` → `demo: true`, `not_reconciled`, `recordCount: 0`, and `reconciliation.runs` an **array** of length 0 (the field whose declared type once disagreed with the wire). New this candidate: `readiness` is served here too — `ready: false`, coverage `$3.328845` imported across 44 requests and `$1.708766` proxy-off-scope across 45, so both uncountable buckets are exercised on the packaged artifact rather than only in unit tests. |
+| Direct-Costs connector boundary | **Pass.** Packaged local scope with `proj_gate_test` applied, then `billing openai-costs preview --from 2026-01-01 --to 2026-01-02 --json` → **`networkAttempted: false`, `credentialRead: false`**, `applied: false`. No provider account validated, no live pull authorized, no provider amount reconciled. |
+| Intended CI | **Pass, with no delta to state.** Run **CI #110** (`https://github.com/GamingDragonwastaken/Fiscus/actions/runs/32510582815`): status **Success**, 7 jobs — `package-smoke` plus the 3-job `test` and 3-job `team-server-test` matrices. Unlike the prior three records, CI ran on **the candidate commit itself**, not on a later tip, so there is no `git diff --stat` delta to record. |
+| Visual check | **Pass.** Packaged dashboard, precise register. At 375×812 all five views — Spend, Evidence, Control, Value, Settings — report `scrollWidth 375` on `clientWidth 375`: **no view overflows**, including Evidence, which gained a panel this candidate. At 1280×800 Evidence is 1265/1265 and the new readiness panel renders `$5.037610 of local OpenAI spend cannot reconcile` with its per-bucket breakdown. No console errors on either size. Screenshots remain unavailable in this environment — the browser pane is not displayed, so the page composites no frames and `computer{action:"screenshot"}` times out — so this row rests on DOM and computed-style inspection and says so rather than implying a picture was reviewed. |
+
+**What this candidate changes, and what it does not.** Reconciliation readiness
+is now served on `/api/billing` and rendered in the GUI, from the same
+`src/billing/readiness.ts` the CLI prints. That closes a gap where the terminal
+could warn an operator that a provider pull would match nothing and the primary
+surface could not. It does **not** make any reconciliation succeed.
+
+**Still true, and unchanged by any of this:** no reconciliation has completed
+against a real provider bill on this machine, and the negative real-data result
+recorded under `205fbcc` was re-confirmed at this candidate rather than
+softened. On the owner's real ledger all 9,499 OpenAI rows arrived by native
+import; **all 115 Codex rollout logs were scanned and carry no OpenAI account,
+project, or organization identifier at all** — the 18 files that matched such a
+pattern contain MCP tool-schema definitions quoted inside conversation text, not
+provider metadata. So this is a gap in the source data, not a matching bug, and
+no matching logic can close it.
+
+**One reserved decision was pre-empted and needs owner ratification.** Item 2 of
+*Required before public npm/GitHub release* reserves LICENSE
+ownership/attribution. During the rebrand the copyright line was changed on
+instruction, from the pre-rename product name to `Fiscus contributors`. It is
+recorded here rather than quietly kept: the owner should ratify or reverse it,
+and this gate does not treat it as settled.
+
+### Superseded record — commit `205fbcc`, 2026-08-18
 
 Run against `205fbcc6735c6b3518a551f1b7fd472f78f9e5a4`, worktree clean before and
 after validation. **All ten rows pass.** Supersedes the `916e1c3` record,
