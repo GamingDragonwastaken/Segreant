@@ -76,14 +76,35 @@ export interface BillingPayload {
   demo: boolean;
   evidence: { reconciliationStatus: string };
   summary: { recordCount: number };
+  /**
+   * The immutable reconciliation runs, newest first — the collection the server
+   * actually sends (`store.reconciliationRuns(10)`), not a count.
+   *
+   * This was declared as `{ runs?: number; latest?: {...} }`, and neither field
+   * existed on the wire. `chain.ts` then decided whether Billed was established
+   * with `runs > 0`, where `runs` is an array of objects: `Number([{…}])` is
+   * `NaN`, so the comparison was false for ONE run exactly as it was for none.
+   * The Billed band of the four-claim spine could never light up, however many
+   * reconciliations had been recorded. Count with `.length`.
+   */
   reconciliation?: {
-    runs?: number;
-    latest?: {
-      providerSourceKind?: string;
-      conditions?: string[];
-      status?: string;
-      computedAtMs?: number;
-    } | null;
+    kind?: string;
+    grain?: string;
+    runs?: ReconciliationRunRecord[];
+    excludedFrom?: string[];
+  };
+}
+
+/** One recorded run. `result` is the immutable reconciliation record itself. */
+export interface ReconciliationRunRecord {
+  reconciliationRunId: string;
+  computedAtMs: number;
+  result: {
+    status?: string;
+    providerSourceKind?: string;
+    conditions?: string[];
+    providerReportedMicros?: number;
+    localCapturedMicros?: number;
   };
 }
 

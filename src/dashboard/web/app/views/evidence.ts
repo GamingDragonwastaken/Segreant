@@ -52,7 +52,11 @@ export function evidenceView(): Node {
 
       const fallback = { plain: d.evidence.reconciliationStatus, precise: d.evidence.reconciliationStatus, pill: 'pill-unverified' };
       const status = STATUS_WORDS[d.evidence.reconciliationStatus] ?? fallback;
-      const latest = d.reconciliation?.latest ?? null;
+      // Newest recorded run, read from the immutable collection the server
+      // sends. This used to read `reconciliation.latest`, a field that has
+      // never been on the wire — so it was always null and this screen reported
+      // "no check has been run" no matter how many reconciliations existed.
+      const latest = d.reconciliation?.runs?.[0] ?? null;
 
       return h('div', null,
         h('div', { class: 'card' },
@@ -62,13 +66,13 @@ export function evidenceView(): Node {
           h('p', { text: () => (isPrecise() ? status.precise : status.plain) }),
           latest
             ? h('div', null,
-                h('span', { class: 'basis', text: () => `provider side: ${basisWords(latest.providerSourceKind)}` }),
-                h('span', { class: 'basis', text: `last run ${relative(latest.computedAtMs ?? null)}` }))
+                h('span', { class: 'basis', text: () => `provider side: ${basisWords(latest.result.providerSourceKind)}` }),
+                h('span', { class: 'basis', text: `last run ${relative(latest.computedAtMs)}` }))
             : h('span', { class: 'basis', text: () => (isPrecise()
                 ? 'zero recorded observation runs'
                 : 'no check has been run on this machine yet') }),
-          latest?.conditions?.length
-            ? h('ul', { class: 'drawer-notes' }, ...latest.conditions.map((c) => h('li', { text: c.replace(/_/g, ' ') })))
+          latest?.result.conditions?.length
+            ? h('ul', { class: 'drawer-notes' }, ...latest.result.conditions!.map((c: string) => h('li', { text: c.replace(/_/g, ' ') })))
             : null),
 
         h('div', { class: 'card', style: 'margin-top: var(--s4)' },

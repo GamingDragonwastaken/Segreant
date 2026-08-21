@@ -43,7 +43,10 @@ export async function loadChain(range: string): Promise<Layer[]> {
   // Billed is established only by a recorded reconciliation run. Holding
   // provider records is not the same claim — an imported bill nobody compared
   // against anything proves only that a file was read.
-  const runs = b?.reconciliation?.runs ?? 0;
+  // `.length`, not the array itself. `runs` is the immutable run COLLECTION the
+  // server sends; comparing the array to 0 coerced it through NaN, so Billed
+  // read "not established" even with reconciliations recorded.
+  const runs = b?.reconciliation?.runs?.length ?? 0;
   const billed: Layer = {
     id: 'billed',
     label: 'Billed',
