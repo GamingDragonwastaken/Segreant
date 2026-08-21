@@ -34,7 +34,7 @@ function projects(): ProjectValue[] {
 const period = { from: '2026-06-01T00:00:00.000Z', to: '2026-07-01T00:00:00.000Z' };
 
 test('team-rollup: buildRollupBody stamps the signer\'s own keyId and carries period/projects through unchanged', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'aegis-rollup-build-'));
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-rollup-build-'));
   try {
     const keys = loadOrCreateKeyPair(join(dir, 'key.json'));
     const body = buildRollupBody(keys, projects(), period);
@@ -48,7 +48,7 @@ test('team-rollup: buildRollupBody stamps the signer\'s own keyId and carries pe
 });
 
 test('team-rollup: sign then verify is valid; tampering a project\'s numbers invalidates (body hash mismatch)', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'aegis-rollup-tamper-'));
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-rollup-tamper-'));
   try {
     const keys = loadOrCreateKeyPair(join(dir, 'key.json'));
     const body = buildRollupBody(keys, projects(), period);
@@ -67,7 +67,7 @@ test('team-rollup: sign then verify is valid; tampering a project\'s numbers inv
 });
 
 test('team-rollup: key pinning rejects a forgery signed by an untrusted key (authenticity, not just integrity)', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'aegis-rollup-pin-'));
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-rollup-pin-'));
   try {
     const honest = loadOrCreateKeyPair(join(dir, 'honest.json'));
     const attacker = loadOrCreateKeyPair(join(dir, 'attacker.json'));
@@ -96,7 +96,7 @@ test('team-rollup: key pinning rejects a forgery signed by an untrusted key (aut
 });
 
 test('team-rollup: claiming a trusted keyId while signing with another key is detected', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'aegis-rollup-lie-'));
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-rollup-lie-'));
   try {
     const attacker = loadOrCreateKeyPair(join(dir, 'a.json'));
     const body = buildRollupBody(attacker, projects(), period);
@@ -112,7 +112,7 @@ test('team-rollup: claiming a trusted keyId while signing with another key is de
 });
 
 test('team-rollup: a garbled public key fails verification cleanly instead of throwing', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'aegis-rollup-garbled-'));
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-rollup-garbled-'));
   try {
     const keys = loadOrCreateKeyPair(join(dir, 'key.json'));
     const signed = signRollup(buildRollupBody(keys, projects(), period), keys);

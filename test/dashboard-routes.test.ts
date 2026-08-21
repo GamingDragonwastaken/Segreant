@@ -6,7 +6,7 @@
  * longer it grew:
  *
  *   - which methods each path answers, and with which `Allow` header, and
- *   - which paths are gated behind `x-aegis-local: 1` — the CSRF guard that is
+ *   - which paths are gated behind `x-fiscus-local: 1` — the CSRF guard that is
  *     the only thing stopping a page you visit from driving your local Fiscus.
  *
  * Both were spelled out per-branch, so "is every mutating route guarded?" could
@@ -79,7 +79,7 @@ function rawRequest(
 
 // --- the table's own invariants ---------------------------------------
 
-test('route table: every mutating route is gated by the x-aegis-local header', () => {
+test('route table: every mutating route is gated by the x-fiscus-local header', () => {
   for (const path of MUTATING) {
     const route = ROUTES.find((r) => r.path === path);
     assert.ok(route, `${path} is missing from the route table`);
@@ -221,7 +221,7 @@ test('route table: a guarded method without the local header is refused before i
         assert.equal(bare.text, 'forbidden');
 
         // A wrong value is not a present value.
-        const wrong = await rawRequest(srv.base, route.path, method, { 'x-aegis-local': '0' });
+        const wrong = await rawRequest(srv.base, route.path, method, { 'x-fiscus-local': '0' });
         assert.equal(wrong.status, 403, `${method} ${route.path} with a wrong header value`);
       }
     }
@@ -355,7 +355,7 @@ test('serveStatic serves a real asset from inside WEB_ROOT with the asset CSP', 
 
 /**
  * `GET /api/scan` is the only route on this server that answers a method no
- * `x-aegis-local: 1` gate covers AND reached a store write: it called
+ * `x-fiscus-local: 1` gate covers AND reached a store write: it called
  * `saveScan` two lines below a doc comment promising it "imports and mutates
  * nothing", and below `scanWithDiff`'s own contract that the caller persists
  * separately "so a pure preview can stay non-writing".

@@ -404,7 +404,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         // CSRF guard, and a good one: a cross-origin page cannot set a custom
         // header without a preflight this server never answers, so a malicious
         // site cannot drive the operator's local Fiscus by loading an image.
-        'x-aegis-local': '1',
+        'x-fiscus-local': '1',
         ...(init?.body ? { 'content-type': 'application/json' } : {}),
         ...init?.headers,
       },

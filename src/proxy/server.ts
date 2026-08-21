@@ -12,7 +12,7 @@
  *    to intercept and no root certificate to install. Safer and honest.
  *  - We force `Accept-Encoding: identity` upstream so the SSE stream is plain
  *    text we can both forward verbatim and parse for usage.
- *  - Cost headers (X-Aegis-Cost-USD) are added for non-streaming responses. For
+ *  - Cost headers (X-Fiscus-Cost-USD) are added for non-streaming responses. For
  *    streaming, headers are already flushed before usage is known, so we emit
  *    remaining-budget headers up front and record the final cost server-side.
  *  - Any internal failure falls through to a transparent passthrough: tracking
@@ -59,7 +59,7 @@ interface RouteInfo {
  *
  * Some tools expose a base-URL field and nothing else — Antigravity's
  * custom-provider form is the clearest case: no custom-headers field at all, so
- * `x-aegis-project` is simply unavailable and its traffic could only ever meter
+ * `x-fiscus-project` is simply unavailable and its traffic could only ever meter
  * as `unattributed`. But a base URL is configurable, and one provider entry per
  * project gives the operator a place to say which project this is:
  *
@@ -96,7 +96,7 @@ export function detectRoute(req: http.IncomingMessage, cfg: FiscusConfig): Route
   // auth header to the named URL, so it must be explicitly enabled
   // (config.allowOpenAIBaseOverride). For the common case, set config.upstreams.openai
   // instead — no flag, no per-request key-exfil risk. Must be absolute http(s).
-  // Deliberately ignore x-aegis-openai-base. This proxy forwards Authorization
+  // Deliberately ignore x-fiscus-openai-base. This proxy forwards Authorization
   // to its upstream, so a request-controlled destination would make it a
   // credential-forwarding primitive. Set the one trusted destination in config.
   const openaiBase = cfg.upstreams.openai;
@@ -138,7 +138,7 @@ function buildUpstreamHeaders(req: http.IncomingMessage): Record<string, string>
   for (const [k, v] of Object.entries(req.headers)) {
     const key = k.toLowerCase();
     if (HOP_BY_HOP.has(key)) continue;
-    if (key.startsWith('x-aegis-')) continue; // our metadata, not the provider's
+    if (key.startsWith('x-fiscus-')) continue; // our metadata, not the provider's
     if (v === undefined) continue;
     out[k] = Array.isArray(v) ? v.join(', ') : v;
   }
@@ -196,9 +196,9 @@ function ensureOpenAIUsage(provider: Provider, stream: boolean, url: string, bod
 
 function providerErrorBody(provider: Provider, message: string): string {
   if (provider === 'anthropic') {
-    return JSON.stringify({ type: 'error', error: { type: 'aegis_budget_block', message } });
+    return JSON.stringify({ type: 'error', error: { type: 'fiscus_budget_block', message } });
   }
-  return JSON.stringify({ error: { message, type: 'aegis_budget_block', code: 'budget_exceeded' } });
+  return JSON.stringify({ error: { message, type: 'fiscus_budget_block', code: 'budget_exceeded' } });
 }
 
 export interface ProxyDeps {
@@ -219,7 +219,7 @@ export function createProxyServer(deps: ProxyDeps): http.Server {
       // Last-resort guard: never leak a 500 that kills the agent session.
       if (!res.headersSent) {
         res.writeHead(502, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ error: { message: `aegis proxy error: ${String(err)}` } }));
+        res.end(JSON.stringify({ error: { message: `fiscus proxy error: ${String(err)}` } }));
       } else {
         res.end();
       }
@@ -239,7 +239,7 @@ async function handle(
   const startedAt = Date.now();
 
   // Lightweight health endpoint for the dashboard / readiness checks.
-  if (req.url === '/__aegis/health') {
+  if (req.url === '/__fiscus/health') {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ ok: true, service: 'fiscus-proxy', port: config.port }));
     return;
@@ -301,20 +301,20 @@ async function handle(
   // configured endpoint. Both are operator declarations, so both record the same
   // basis — the mechanism differs, the trust does not.
   const pathProject = splitProjectPath(req.url ?? '').project;
-  const declaredProject = headerStr(req, 'x-aegis-project') ?? pathProject;
+  const declaredProject = headerStr(req, 'x-fiscus-project') ?? pathProject;
   const project = declaredProject ?? 'default';
   const attributionBasis: AttributionBasis = declaredProject ? 'client_declared' : 'unattributed';
-  const sessionId = headerStr(req, 'x-aegis-session-id') ?? null;
-  const user = headerStr(req, 'x-aegis-user') ?? null;
+  const sessionId = headerStr(req, 'x-fiscus-session-id') ?? null;
+  const user = headerStr(req, 'x-fiscus-user') ?? null;
   // The connected source/feed (set by `fiscus connect <tool>`). Like every
-  // x-aegis-* header it is stripped in buildUpstreamHeaders, so it tags our local
+  // x-fiscus-* header it is stripped in buildUpstreamHeaders, so it tags our local
   // ledger without ever being forwarded to the provider.
-  const source = headerStr(req, 'x-aegis-source') ?? null;
-  // Optional full working-directory path (also an x-aegis-* header, so stripped
+  const source = headerStr(req, 'x-fiscus-source') ?? null;
+  // Optional full working-directory path (also an x-fiscus-* header, so stripped
   // before the request leaves the machine). Lets proxied traffic be repo-correlated
   // for per-project RoI the same way imported traffic is, when a tool sends it.
-  const cwd = headerStr(req, 'x-aegis-cwd') ?? null;
-  const rawTaskWeight = Number(headerStr(req, 'x-aegis-task-weight') ?? '1');
+  const cwd = headerStr(req, 'x-fiscus-cwd') ?? null;
+  const rawTaskWeight = Number(headerStr(req, 'x-fiscus-task-weight') ?? '1');
   const taskWeight = Number.isFinite(rawTaskWeight) && rawTaskWeight > 0 ? rawTaskWeight : 1;
   const requestId = randomUUID();
   if (sessionId) store.upsertSession(sessionId, project, headerStr(req, 'user-agent') ?? 'unknown', startedAt);
@@ -339,8 +339,8 @@ async function handle(
   if (decision.action === 'block') {
     const headers: Record<string, string> = {
       'content-type': 'application/json',
-      'x-aegis-blocked': '1',
-      'x-aegis-reason': sanitizeHeader(decision.reason ?? 'budget'),
+      'x-fiscus-blocked': '1',
+      'x-fiscus-reason': sanitizeHeader(decision.reason ?? 'budget'),
     };
     res.writeHead(429, headers);
     res.end(providerErrorBody(provider, decision.reason ?? 'Budget limit reached.'));
@@ -405,7 +405,7 @@ async function handle(
     const detail = timedOut
       ? `upstream timed out after ${config.upstreamTimeoutMs}ms (no response headers)`
       : `upstream unreachable: ${String(err)}`;
-    res.writeHead(status, { 'content-type': 'application/json', 'x-aegis-upstream-error': '1' });
+    res.writeHead(status, { 'content-type': 'application/json', 'x-fiscus-upstream-error': '1' });
     res.end(providerErrorBody(provider, detail));
     safeLog(deps, {
       requestId,
@@ -438,10 +438,10 @@ async function handle(
   const downHeaders = copyDownstreamHeaders(upstream);
   // Up-front budget context (final cost not yet known for streams).
   if (decision.remainingDailyUsd !== null) {
-    downHeaders['x-aegis-daily-remaining-usd'] = decision.remainingDailyUsd.toFixed(4);
+    downHeaders['x-fiscus-daily-remaining-usd'] = decision.remainingDailyUsd.toFixed(4);
   }
   if (decision.action === 'warn' && decision.reason) {
-    downHeaders['x-aegis-warning'] = sanitizeHeader(decision.reason);
+    downHeaders['x-fiscus-warning'] = sanitizeHeader(decision.reason);
   }
 
   const contentType = upstream.headers.get('content-type') ?? '';
@@ -495,10 +495,10 @@ async function handle(
       /* non-JSON (e.g. error HTML) — usage stays empty */
     }
     const cost = computeCost(provider, resolvedModel, usage);
-    downHeaders['x-aegis-cost-usd'] = cost.costUsd.toFixed(6);
+    downHeaders['x-fiscus-cost-usd'] = cost.costUsd.toFixed(6);
     if (decision.sessionSpendUsd !== null && config.budget.sessionUsd !== null) {
       const remaining = Math.max(0, config.budget.sessionUsd - decision.sessionSpendUsd - cost.costUsd);
-      downHeaders['x-aegis-session-remaining-usd'] = remaining.toFixed(4);
+      downHeaders['x-fiscus-session-remaining-usd'] = remaining.toFixed(4);
     }
     res.writeHead(upstream.status, downHeaders);
     res.end(text);

@@ -210,7 +210,7 @@ test('every required field the GUI declares exists in the payload the server sen
   try {
     for (const endpoint of endpoints) {
       const res = await fetch(`${srv.base}${concretePath(endpoint.path)}`, {
-        headers: { 'x-aegis-local': '1' },
+        headers: { 'x-fiscus-local': '1' },
       });
       assert.equal(
         res.status,

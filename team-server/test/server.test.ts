@@ -116,7 +116,7 @@ test('team-server: POST /developers rejects a missing or wrong admin bearer toke
 });
 
 test('team-server: POST /developers registers a developer given the correct admin token, and rejects a lying keyId', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'aegis-team-server-'));
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-server-'));
   try {
     const dev: KeyPair = loadOrCreateKeyPair(join(dir, 'dev.json'));
     const store = new FakeRollupStore();
@@ -148,7 +148,7 @@ test('team-server: POST /developers registers a developer given the correct admi
 });
 
 test('team-server: POST /rollups from an unregistered key is rejected (403) — the Sybil-resistance property', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'aegis-team-server-'));
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-server-'));
   try {
     const attacker: KeyPair = loadOrCreateKeyPair(join(dir, 'attacker.json'));
     const body = buildRollupBody(attacker, projects(), period);
@@ -173,7 +173,7 @@ test('team-server: POST /rollups from an unregistered key is rejected (403) — 
 });
 
 test('team-server: POST /rollups from a registered key with a valid signature is accepted (201) and stored', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'aegis-team-server-'));
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-server-'));
   try {
     const dev: KeyPair = loadOrCreateKeyPair(join(dir, 'dev.json'));
     const body = buildRollupBody(dev, projects(), period);
@@ -205,7 +205,7 @@ test('team-server: POST /rollups from a registered key with a valid signature is
 });
 
 test('team-server: POST /rollups treats an exact signed retry as an idempotent replay without changing the recorded receipt', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'aegis-team-server-'));
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-server-'));
   try {
     const dev: KeyPair = loadOrCreateKeyPair(join(dir, 'dev.json'));
     const signed = signRollup(buildRollupBody(dev, projects(), period), dev);
@@ -242,7 +242,7 @@ test('team-server: POST /rollups treats an exact signed retry as an idempotent r
 });
 
 test('team-server: POST /rollups rejects self-consistently signed payloads with unsafe semantic shapes before storage', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'aegis-team-server-'));
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-server-'));
   try {
     const dev: KeyPair = loadOrCreateKeyPair(join(dir, 'dev.json'));
     const store = new FakeRollupStore();
@@ -276,7 +276,7 @@ test('team-server: POST /rollups rejects self-consistently signed payloads with 
 });
 
 test('team-server: POST /rollups rejects a registered developer\'s rollup once its numbers are tampered', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'aegis-team-server-'));
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-server-'));
   try {
     const dev: KeyPair = loadOrCreateKeyPair(join(dir, 'dev.json'));
     const body = buildRollupBody(dev, projects(), period);
@@ -424,7 +424,7 @@ test('team-server: GET /dashboard/projects and /dashboard/developers are disable
 });
 
 test('team-server: GET /dashboard/projects weights realizationRate by units and avgRoiIndex by cost — not naive averages, and excludes a null roiIndex from both', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'aegis-team-server-'));
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-server-'));
   const idp = await startFakeIdp();
   try {
     const a: KeyPair = loadOrCreateKeyPair(join(dir, 'a.json'));
@@ -499,7 +499,7 @@ test('team-server: GET /dashboard/projects weights realizationRate by units and 
 });
 
 test('team-server: GET /dashboard/projects does not double-count when the same developer pushes overlapping-window rollups (cumulative-snapshot pushes, e.g. daily cron)', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'aegis-team-server-'));
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-server-'));
   const idp = await startFakeIdp();
   try {
     const dev: KeyPair = loadOrCreateKeyPair(join(dir, 'dev.json'));
@@ -549,7 +549,7 @@ test('team-server: GET /dashboard/projects does not double-count when the same d
 });
 
 test('team-server: GET /dashboard/projects suppresses a project below the k-anonymity floor and leaks no dollar figures', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'aegis-team-server-'));
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-server-'));
   const idp = await startFakeIdp();
   try {
     const dev: KeyPair = loadOrCreateKeyPair(join(dir, 'dev.json'));
@@ -590,7 +590,7 @@ test('team-server: GET /dashboard/projects suppresses a project below the k-anon
 });
 
 test('team-server: GET /dashboard/projects rejects periodFrom/periodTo rather than mislabeling cumulative snapshots as a partial historical window', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'aegis-team-server-'));
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-server-'));
   const idp = await startFakeIdp();
   try {
     const dev: KeyPair = loadOrCreateKeyPair(join(dir, 'dev.json'));
@@ -670,7 +670,7 @@ test('team-server: GET /dashboard/developers reports itself disabled (200, enabl
 });
 
 test('team-server: GET /dashboard/developers returns a k-anonymized distribution when enabled and the floor is met — never a named list', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'aegis-team-server-'));
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-server-'));
   const idp = await startFakeIdp();
   try {
     const a: KeyPair = loadOrCreateKeyPair(join(dir, 'a.json'));

@@ -15,7 +15,7 @@
  */
 
 export interface SourceDepthFlags {
-  tagged: boolean; // carries an x-aegis-source label (false = 'direct', routed but un-attributed)
+  tagged: boolean; // carries an x-fiscus-source label (false = 'direct', routed but un-attributed)
   hasProposals: boolean; // emitted captured proposed edits → the acceptance signal is available
   hasOutcomes: boolean; // contributed to projects with realized-value snapshots → RoI is in view
 }

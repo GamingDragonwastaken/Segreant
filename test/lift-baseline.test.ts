@@ -27,7 +27,7 @@ import {
 
 const origHome = process.env.FISCUS_HOME;
 function freshHome(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'aegis-liftbaseline-'));
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-liftbaseline-'));
   process.env.FISCUS_HOME = dir;
   return dir;
 }
@@ -246,7 +246,7 @@ function g(cwd: string, args: string[], env: Record<string, string> = {}): void 
   execFileSync('git', args, { cwd, env: { ...process.env, ...env }, stdio: 'ignore' });
 }
 function makeRepo(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'aegis-liftbaseline-repo-'));
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-liftbaseline-repo-'));
   g(dir, ['init', '-q']);
   g(dir, ['config', 'user.email', 't@t.co']);
   g(dir, ['config', 'user.name', 'tester']);
@@ -289,7 +289,7 @@ test('resolveBaselineMinutesForRepo: mines real git history, caches it, and reus
 test('resolveBaselineMinutesForRepo: a non-git directory degrades to the population prior, honestly, without throwing', async () => {
   freshHome();
   applyBaselineManifest(manifest(240)); // pin the population prior so this test isn't at the mercy of another test's cached manifest
-  const dir = mkdtempSync(join(tmpdir(), 'aegis-liftbaseline-notgit-'));
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-liftbaseline-notgit-'));
   try {
     const store = new Store(':memory:');
     const defaultBaseline = { feature: 240 };

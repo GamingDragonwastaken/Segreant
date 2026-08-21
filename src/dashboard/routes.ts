@@ -92,7 +92,7 @@ export interface Route {
    */
   allow?: string;
   /**
-   * Methods that additionally require `x-aegis-local: 1`. A cross-origin page
+   * Methods that additionally require `x-fiscus-local: 1`. A cross-origin page
    * cannot set a custom header without a preflight this server never answers,
    * so a malicious site cannot drive the operator's local Fiscus. This is the
    * CSRF gate on every mutating route — never relax it.
@@ -311,7 +311,7 @@ export function handleDiscover({ req, res, url, store }: RouteContext): void {
  * last scan you COMMITTED to", so the preview that reports it must not also
  * move the mark it is measured against — a GET that advanced the baseline made
  * the drift it just reported unobservable to the next reader, and made itself
- * the one write on this server reachable without `x-aegis-local: 1`.
+ * the one write on this server reachable without `x-fiscus-local: 1`.
  */
 export function handleScan({ req, res, url, store }: RouteContext): void {
   const path = url.searchParams.get('path') || undefined;
@@ -558,7 +558,7 @@ export function handleGuide({ res, store, config }: RouteContext): void {
       const day = 24 * 60 * 60 * 1000;
       let proxyUp = false;
       try {
-        const r = await fetch(`http://localhost:${config.port}/__aegis/health`, { signal: AbortSignal.timeout(500) });
+        const r = await fetch(`http://localhost:${config.port}/__fiscus/health`, { signal: AbortSignal.timeout(500) });
         proxyUp = r.ok;
       } catch {
         proxyUp = false;

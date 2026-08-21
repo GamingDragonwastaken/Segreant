@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS developers (
   registered_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- One row per accepted `aegisflow team push`. The full signed envelope is kept
+-- One row per accepted `fiscus team push`. The full signed envelope is kept
 -- in `body` (JSONB) as the tamper-evident source of truth; body_hash is the
 -- same sha256 the signature covers, kept alongside for cheap integrity spot
 -- checks without recomputing canonical() server-side.

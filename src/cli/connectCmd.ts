@@ -315,7 +315,7 @@ function connectAntigravity(cfg: FiscusConfig, flags: Flags, tty: boolean): void
   console.log(`  3) ${color(tty, C.bold, 'Run it')}: fiscus start, use Antigravity with that model, then:`);
   console.log(color(tty, C.green, '       fiscus today') + color(tty, C.gray, '   — the requests and their cost appear live'));
   console.log('');
-  // Antigravity's form has no headers field, so `x-aegis-project` is simply
+  // Antigravity's form has no headers field, so `x-fiscus-project` is simply
   // unavailable — which is why the proxy also accepts the project in the PATH.
   // It is offered, never applied: the provider entry is IDE-global, so baking in
   // whatever directory this command happened to run in would tag every future

@@ -110,7 +110,7 @@ export async function cmdDoctor(): Promise<void> {
 
   let proxyUp = false;
   try {
-    const r = await fetch(`http://localhost:${cfg.port}/__aegis/health`, { signal: AbortSignal.timeout(800) });
+    const r = await fetch(`http://localhost:${cfg.port}/__fiscus/health`, { signal: AbortSignal.timeout(800) });
     proxyUp = r.ok;
   } catch {
     proxyUp = false;
@@ -195,7 +195,7 @@ async function gatherGuideFacts(): Promise<GuideFacts> {
 
   let proxyUp = false;
   try {
-    const r = await fetch(`http://localhost:${cfg.port}/__aegis/health`, { signal: AbortSignal.timeout(800) });
+    const r = await fetch(`http://localhost:${cfg.port}/__fiscus/health`, { signal: AbortSignal.timeout(800) });
     proxyUp = r.ok;
   } catch {
     proxyUp = false;

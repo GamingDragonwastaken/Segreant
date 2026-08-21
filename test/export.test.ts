@@ -59,23 +59,23 @@ const aliasRow = (id: string, project: string, costUsd: number): RequestRow => (
 
 test('export: an aliased row carries both the recorded label and the canonical one', () => {
   const store = new Store(':memory:');
-  store.insertRequest(aliasRow('a', 'aegisflow-ts', 1));
-  store.setProjectAlias('aegisflow-ts', 'aegisflow');
+  store.insertRequest(aliasRow('a', 'fiscus-ts', 1));
+  store.setProjectAlias('fiscus-ts', 'fiscus');
   const [row] = store.requestsInRange(0, 5000);
-  assert.equal(row!.project, 'aegisflow-ts', 'the recorded label is never rewritten');
-  assert.equal(row!.projectCanonical, 'aegisflow', 'and the row still reports what it rolls up into');
+  assert.equal(row!.project, 'fiscus-ts', 'the recorded label is never rewritten');
+  assert.equal(row!.projectCanonical, 'fiscus', 'and the row still reports what it rolls up into');
   const csv = requestsToCsv(store.requestsInRange(0, 5000));
   assert.ok(csv.split('\r\n')[0]!.includes('project,projectCanonical'));
-  assert.ok(csv.includes(',aegisflow-ts,aegisflow,'));
+  assert.ok(csv.includes(',fiscus-ts,fiscus,'));
   store.close();
 });
 
 test('export: the CSV canonical column totals the same as byProject once an alias exists', () => {
   const store = new Store(':memory:');
-  store.insertRequest(aliasRow('a', 'aegisflow-ts', 1));
-  store.insertRequest(aliasRow('b', 'aegisflow', 2));
+  store.insertRequest(aliasRow('a', 'fiscus-ts', 1));
+  store.insertRequest(aliasRow('b', 'fiscus', 2));
   store.insertRequest(aliasRow('c', 'other', 4));
-  store.setProjectAlias('aegisflow-ts', 'aegisflow');
+  store.setProjectAlias('fiscus-ts', 'fiscus');
 
   // What the dashboard/CLI report.
   const rollup = new Map(store.byProject(0, 5000).map((b) => [b.label, b.costUsd]));
@@ -86,24 +86,24 @@ test('export: the CSV canonical column totals the same as byProject once an alia
     exported.set(key, (exported.get(key) ?? 0) + r.costUsd);
   }
   assert.deepEqual([...exported].sort(), [...rollup].sort(), 'export and rollup agree');
-  assert.equal(rollup.get('aegisflow'), 3, 'the merged project really did absorb both rows');
+  assert.equal(rollup.get('fiscus'), 3, 'the merged project really did absorb both rows');
 
   // Grouping on the RAW column is what used to disagree — pinned so the two
   // bases stay visibly different rather than quietly converging.
   const rawGrouped = new Map<string, number>();
   for (const r of store.requestsInRange(0, 5000)) rawGrouped.set(r.project, (rawGrouped.get(r.project) ?? 0) + r.costUsd);
-  assert.equal(rawGrouped.get('aegisflow'), 2, 'the raw label still shows only its own rows');
+  assert.equal(rawGrouped.get('fiscus'), 2, 'the raw label still shows only its own rows');
   store.close();
 });
 
 test('bySourceWithDepth: an aliased project still credits its source with outcomes', () => {
   const store = new Store(':memory:');
-  const row = { ...aliasRow('a', 'aegisflow-ts', 1), source: 'claude-code' };
+  const row = { ...aliasRow('a', 'fiscus-ts', 1), source: 'claude-code' };
   store.insertRequest(row);
-  store.setProjectAlias('aegisflow-ts', 'aegisflow');
+  store.setProjectAlias('fiscus-ts', 'fiscus');
   // A realization snapshot stored under the canonical label.
   store.saveRealizationUnits([
-    { commitHash: 'h1', project: 'aegisflow', tsEpochMs: 1000, computedAtMs: 1000, attributedCostUsd: 1, maturing: false, realized: true, unitJson: '{}', costScope: 'project' },
+    { commitHash: 'h1', project: 'fiscus', tsEpochMs: 1000, computedAtMs: 1000, attributedCostUsd: 1, maturing: false, realized: true, unitJson: '{}', costScope: 'project' },
   ]);
   const src = store.bySourceWithDepth(0, 5000).find((s) => s.label === 'claude-code');
   assert.ok(src, 'the source is present');

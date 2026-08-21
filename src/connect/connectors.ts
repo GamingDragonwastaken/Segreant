@@ -3,7 +3,7 @@
  *
  * The product meters by SOURCE: a tool deliberately routed through Fiscus so
  * its spend is attributed. "Connecting" a tool is two things — point it at the
- * local proxy, and tag its traffic with an `x-aegis-source` header. The tag is
+ * local proxy, and tag its traffic with an `x-fiscus-source` header. The tag is
  * stripped before the request leaves the machine (connect, don't intercept), so
  * the provider never sees it.
  *
@@ -15,7 +15,7 @@
 
 import { join } from 'node:path';
 
-export const SOURCE_HEADER = 'x-aegis-source';
+export const SOURCE_HEADER = 'x-fiscus-source';
 
 /**
  * The project-attribution header. Connecting a tool only tagged its SOURCE, so a
@@ -28,7 +28,7 @@ export const SOURCE_HEADER = 'x-aegis-source';
  * request, in any repo, would carry one project name and be recorded as
  * `client_declared` — a confident wrong answer instead of an honest blank.
  */
-export const PROJECT_HEADER = 'x-aegis-project';
+export const PROJECT_HEADER = 'x-fiscus-project';
 
 /**
  * Whether an opencode config is scoped to one project, and if so which.
@@ -285,7 +285,7 @@ export interface WrapResult {
 /**
  * Wrap an EXISTING opencode provider so its traffic routes through Fiscus — the
  * honest native connection. It rewrites that provider's `options.baseURL` to the
- * local proxy and tags it `x-aegis-source: opencode`, returning the provider's
+ * local proxy and tags it `x-fiscus-source: opencode`, returning the provider's
  * ORIGINAL baseURL so the caller can set Fiscus's upstream to it (the proxy then
  * forwards there, with the user's own key, unchanged). The provider's apiKey/models
  * are untouched. Idempotent: re-wrapping a provider already pointed at the proxy is

@@ -28,7 +28,7 @@ function runCli(args: string[], dbPath: string): Promise<{ code: number; stderr:
 }
 
 test('exec: a passing command records verdict=pass and exits 0', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'aegis-exec-'));
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-exec-'));
   const db = join(dir, 'exec.db');
   try {
     const r = await runCli(['exec', '--kind', 'resolved', '--session', 'amb-1', '--', 'node', '-e', 'process.exit(0)'], db);
@@ -51,7 +51,7 @@ test('exec: a passing command records verdict=pass and exits 0', async () => {
 });
 
 test('exec: a failing command records verdict=fail and passes the exit code through unchanged', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'aegis-exec-'));
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-exec-'));
   const db = join(dir, 'exec.db');
   try {
     const r = await runCli(['exec', '--kind', 'used', '--session', 'amb-2', '--', 'node', '-e', 'process.exit(3)'], db);
@@ -67,7 +67,7 @@ test('exec: a failing command records verdict=fail and passes the exit code thro
 });
 
 test('exec: refuses bad input without running anything', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'aegis-exec-'));
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-exec-'));
   const db = join(dir, 'exec.db');
   try {
     const noCmd = await runCli(['exec', '--kind', 'tested'], db);
@@ -84,7 +84,7 @@ test('exec: refuses bad input without running anything', async () => {
 });
 
 test('report: a coding lifecycle assertion without an immutable commit is rejected and not stored', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'aegis-report-'));
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-report-'));
   const db = join(dir, 'report.db');
   try {
     const r = await runCli(['report', '--kind', 'tested'], db);

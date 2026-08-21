@@ -77,7 +77,7 @@ export function createDashboardServer(deps: DashboardDeps): http.Server {
       // The CSRF gate on every mutating route, enforced in ONE place. A custom
       // header cannot be set cross-origin without a preflight this server never
       // answers, so a malicious page cannot drive the operator's local Fiscus.
-      if (route.localOnly?.includes(method) && req.headers['x-aegis-local'] !== '1') {
+      if (route.localOnly?.includes(method) && req.headers['x-fiscus-local'] !== '1') {
         res.writeHead(403, { 'content-type': 'text/plain' });
         res.end('forbidden');
         return;

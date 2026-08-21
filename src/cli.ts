@@ -181,7 +181,7 @@ async function main(): Promise<void> {
   // dashboard, since both resolve the path through dbPath() and read isDemo().
   //
   // These set the PREFERRED spelling deliberately. Both `FISCUS_DB` and the
-  // legacy `AEGIS_DB` are read, with FISCUS winning; writing the legacy name
+  // legacy `FISCUS_DB` are read, with FISCUS winning; writing the legacy name
   // here would leave an operator's own exported `FISCUS_DB` outranking this
   // switch, and demo traffic would land in their real ledger.
   if (cmd === 'demo' || flags.demo) {

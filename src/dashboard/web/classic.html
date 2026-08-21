@@ -857,7 +857,7 @@ function render(d) {
   const sourceBars = (d.bySource || []).map((x) => `
     <div class="bar"><div class="top"><span class="name">${esc(x.label)}${x.full ? ' <span class="pill stream">FULL RoI</span>' : ''}</span><span class="cost">$${usd(x.costUsd)}</span></div>
     <div class="meta">${x.requests} req · ${esc(x.depth || 'spend')}</div></div>`).join('');
-  const sourceCard = hasSources ? `<div class="card fade"><div class="label">By source ${tip('Spend grouped by connected source — each AI tool you route through Fiscus. Tag a tool with the <code>X-Aegis-Source</code> header (the connect command sets this for you) and its spend lands here. Untagged traffic reads as <b>direct</b>. The tag is stripped before the request ever leaves your machine. <b>Depth</b> is read from real signals, not asserted: <b>spend</b> always, <b>+ acceptance</b> once the source sends proposed edits, <b>+ RoI</b> once its work reaches projects with realized value.')}</div><div class="bars">${sourceBars}</div></div>` : '';
+  const sourceCard = hasSources ? `<div class="card fade"><div class="label">By source ${tip('Spend grouped by connected source — each AI tool you route through Fiscus. Tag a tool with the <code>X-Fiscus-Source</code> header (the connect command sets this for you) and its spend lands here. Untagged traffic reads as <b>direct</b>. The tag is stripped before the request ever leaves your machine. <b>Depth</b> is read from real signals, not asserted: <b>spend</b> always, <b>+ acceptance</b> once the source sends proposed edits, <b>+ RoI</b> once its work reaches projects with realized value.')}</div><div class="bars">${sourceBars}</div></div>` : '';
 
   setNodes(grid, `
     <div class="herorow fade">
@@ -895,7 +895,7 @@ function render(d) {
         <tbody>${modelTable || `<tr><td colspan="${anyCache ? 7 : 6}" style="color:var(--faint)">no data</td></tr>`}${modelTable ? totalRow : ''}</tbody>
       </table>
     </div>
-    <div class="card fade"><div class="label">By project ${tip('Spend grouped by project label, with the <b>basis</b> each label was obtained by underneath. A <b>self-declared</b> label is set by the calling tool via the <code>X-Aegis-Project</code> header — anything on this machine that can reach the proxy can set it, so it is an assertion, not a verified identity. <b>Unattributed</b> means the request declared no project at all; it is stored under the <code>default</code> label but is not a project. This is not chargeback-grade attribution. Merge fragmented labels with <code>fiscus project merge</code>; inspect the full split with <code>fiscus project --coverage</code>.' + (d.demo ? ' <b>In demo mode these bases are depicted by the seed, not observed</b> — they show what each route looks like, and the coverage share describes a scenario rather than this machine.' : ''))}</div><div class="bars">${projectBars || '<span style="color:var(--faint)">no data</span>'}</div></div>
+    <div class="card fade"><div class="label">By project ${tip('Spend grouped by project label, with the <b>basis</b> each label was obtained by underneath. A <b>self-declared</b> label is set by the calling tool via the <code>X-Fiscus-Project</code> header — anything on this machine that can reach the proxy can set it, so it is an assertion, not a verified identity. <b>Unattributed</b> means the request declared no project at all; it is stored under the <code>default</code> label but is not a project. This is not chargeback-grade attribution. Merge fragmented labels with <code>fiscus project merge</code>; inspect the full split with <code>fiscus project --coverage</code>.' + (d.demo ? ' <b>In demo mode these bases are depicted by the seed, not observed</b> — they show what each route looks like, and the coverage share describes a scenario rather than this machine.' : ''))}</div><div class="bars">${projectBars || '<span style="color:var(--faint)">no data</span>'}</div></div>
     ${userCard}
     ${sourceCard}
     <div class="card recent fade">
@@ -1632,7 +1632,7 @@ function renderValue(d) {
     try {
       const res = await fetch('/api/judge', {
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-aegis-local': '1' },
+        headers: { 'content-type': 'application/json', 'x-fiscus-local': '1' },
         body: JSON.stringify({}),
       });
       const body = await res.json();
@@ -1768,7 +1768,7 @@ async function doScanSetup() {
   const el = $('#scanres'); if (!el) return;
   el.textContent = 'setting up… importing your tools and correlating projects (may take a moment)';
   try {
-    const res = await fetch('/api/scan', { method: 'POST', headers: { 'x-aegis-local': '1' } });
+    const res = await fetch('/api/scan', { method: 'POST', headers: { 'x-fiscus-local': '1' } });
     const d = await res.json();
     if (!d.ok) { el.textContent = 'setup failed'; return; }
     el.textContent = `✓ imported ${Number(d.totalNew).toLocaleString()} new request(s) · correlated ${Number(d.correlated).toLocaleString()} project(s) → now live below`;
@@ -1816,7 +1816,7 @@ async function doDiscover() {
   if (el) el.textContent = 'correlating imported projects…';
   if (btn) btn.disabled = true;
   try {
-    const res = await fetch('/api/discover', { method: 'POST', headers: { 'x-aegis-local': '1' } });
+    const res = await fetch('/api/discover', { method: 'POST', headers: { 'x-fiscus-local': '1' } });
     const data = await res.json();
     if (!data.ok) { if (el) el.textContent = 'failed'; return; }
     if (el) {
@@ -1838,7 +1838,7 @@ async function doImport(tool) {
   const ids = tool === 'all' ? [...document.querySelectorAll('[data-import]')].map((b) => b.getAttribute('data-import')) : [tool];
   ids.forEach((id) => setResult(id, 'importing…'));
   try {
-    const res = await fetch('/api/import?tool=' + encodeURIComponent(tool), { method: 'POST', headers: { 'x-aegis-local': '1' } });
+    const res = await fetch('/api/import?tool=' + encodeURIComponent(tool), { method: 'POST', headers: { 'x-fiscus-local': '1' } });
     const data = await res.json();
     if (!data.ok) { ids.forEach((id) => setResult(id, 'failed')); return; }
     for (const [id, r] of Object.entries(data.results || {})) {
@@ -1935,7 +1935,7 @@ function wireSettingsHandlers() {
       },
     };
     const res = await fetch('/api/settings/update', {
-      method: 'POST', headers: { 'x-aegis-local': '1', 'content-type': 'application/json' },
+      method: 'POST', headers: { 'x-fiscus-local': '1', 'content-type': 'application/json' },
       body: JSON.stringify(patch),
     });
     renderSettings(await res.json());
@@ -1943,7 +1943,7 @@ function wireSettingsHandlers() {
 
   $('#metadataOnlyToggle').addEventListener('change', async (e) => {
     const res = await fetch('/api/settings/update', {
-      method: 'POST', headers: { 'x-aegis-local': '1', 'content-type': 'application/json' },
+      method: 'POST', headers: { 'x-fiscus-local': '1', 'content-type': 'application/json' },
       body: JSON.stringify({ metadataOnly: e.target.checked }),
     });
     renderSettings(await res.json());
@@ -1952,7 +1952,7 @@ function wireSettingsHandlers() {
   $('#clearProposalsBtn').addEventListener('click', async () => {
     const resultEl = $('#clearProposalsResult');
     resultEl.textContent = 'clearing…';
-    const res = await fetch('/api/settings/clear-proposals', { method: 'POST', headers: { 'x-aegis-local': '1' } });
+    const res = await fetch('/api/settings/clear-proposals', { method: 'POST', headers: { 'x-fiscus-local': '1' } });
     const out = await res.json();
     resultEl.textContent = `cleared ${out.removed} stored proposal row(s)`;
   });

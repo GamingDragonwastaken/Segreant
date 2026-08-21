@@ -11,7 +11,7 @@ import { applyPricingManifest, loadPricing, MAX_PRICING_MANIFEST_BYTES, pricingS
 const origHome = process.env.FISCUS_HOME;
 
 function freshHome(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'aegis-pricing-'));
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-pricing-'));
   process.env.FISCUS_HOME = dir;
   return dir;
 }

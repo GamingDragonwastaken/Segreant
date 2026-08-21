@@ -124,7 +124,7 @@ test('POST /api/settings/update applies a patch, persists it, and requires the l
 
     const res = await fetch(`${srv.base}/api/settings/update`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-aegis-local': '1' },
+      headers: { 'content-type': 'application/json', 'x-fiscus-local': '1' },
       body: JSON.stringify({ metadataOnly: true, budget: { dailyUsd: 42 } }),
     });
     assert.equal(res.status, 200);
@@ -156,7 +156,7 @@ test('POST /api/settings/clear-proposals removes stored proposals and requires t
     const noHeader = await fetch(`${srv.base}/api/settings/clear-proposals`, { method: 'POST' });
     assert.equal(noHeader.status, 403);
 
-    const res = await fetch(`${srv.base}/api/settings/clear-proposals`, { method: 'POST', headers: { 'x-aegis-local': '1' } });
+    const res = await fetch(`${srv.base}/api/settings/clear-proposals`, { method: 'POST', headers: { 'x-fiscus-local': '1' } });
     assert.equal(res.status, 200);
     const body = (await res.json()) as { ok: boolean; removed: number };
     assert.equal(body.ok, true);

@@ -268,7 +268,7 @@ export async function cmdUsage(flags: Flags): Promise<void> {
   console.log(color(tty, C.gray, '  when its tool never reports diffs — route it through the proxy to move it to git RoI.'));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
   if (rep.units.length === 0) {
-    console.log(color(tty, C.gray, '  No sessions without code signals in range. Tag sessions with X-Aegis-Session-Id to measure them.'));
+    console.log(color(tty, C.gray, '  No sessions without code signals in range. Tag sessions with X-Fiscus-Session-Id to measure them.'));
     console.log('');
     store.close();
     return;

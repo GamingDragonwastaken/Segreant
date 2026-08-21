@@ -217,7 +217,7 @@ export async function computeRealization(
   const project = await projectName(repoPath);
   // Attribute this project's OWN spend to its commits when the ledger is actually
   // characterized by project (native imports, or proxy traffic tagged with
-  // x-aegis-project); otherwise fall back to the project-blind window sum so a
+  // x-fiscus-project); otherwise fall back to the project-blind window sum so a
   // classic 'default'-tagged proxy store is unchanged. This is the bridge that
   // makes native, no-proxy imported spend produce correct per-project RoI.
   const projectScoped = store.hasProjectSpend(project);

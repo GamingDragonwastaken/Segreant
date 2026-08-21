@@ -35,7 +35,7 @@ function boot(store: Store): Promise<{ base: string; close: () => Promise<void> 
   });
 }
 
-async function postJudge(base: string, body: unknown, headers: Record<string, string> = { 'x-aegis-local': '1' }): Promise<{ status: number; body: Record<string, unknown> }> {
+async function postJudge(base: string, body: unknown, headers: Record<string, string> = { 'x-fiscus-local': '1' }): Promise<{ status: number; body: Record<string, unknown> }> {
   const res = await fetch(`${base}/api/judge`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...headers },

@@ -23,7 +23,7 @@ function g(cwd: string, args: string[], env: Record<string, string> = {}): void 
 }
 
 function makeRepo(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'aegis-bridge-'));
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-bridge-'));
   g(dir, ['init', '-q']);
   g(dir, ['config', 'user.email', 't@t.co']);
   g(dir, ['config', 'user.name', 'tester']);

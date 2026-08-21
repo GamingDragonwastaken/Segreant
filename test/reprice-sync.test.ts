@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 // Isolate from any real ~/.fiscus pricing override.
-process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'aegis-home-'));
+process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'fiscus-home-'));
 
 import { DatabaseSync } from 'node:sqlite';
 import { Store, type RequestRow, type RepriceUpdate, type CostScope } from '../src/store/db.ts';
@@ -204,9 +204,9 @@ test('reprice: a project-scoped unit ignores another project\'s repriced spend; 
 
 test('reprice: project scoping follows the alias family, not the raw label', () => {
   const store = new Store(':memory:');
-  store.insertRequest(req({ project: 'aegisflow-ts' }));
-  store.setProjectAlias('aegisflow-ts', 'aegisflow');
-  saveUnit(store, 'project', {}, 'aegisflow');
+  store.insertRequest(req({ project: 'fiscus-ts' }));
+  store.setProjectAlias('fiscus-ts', 'fiscus');
+  saveUnit(store, 'project', {}, 'fiscus');
   // The unit and the request name the same project through different labels. If
   // scoping compared raw strings this would look like unrelated spend and the
   // snapshot would keep a price its own ledger rows no longer have.

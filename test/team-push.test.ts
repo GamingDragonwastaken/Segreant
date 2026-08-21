@@ -26,7 +26,7 @@ function runCli(args: string[], dbPath: string, home: string): Promise<{ code: n
 }
 
 test('team push: no realized units in the window reports ok:true (projects:0) in JSON mode, agreeing with exit code 0', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'aegis-team-push-'));
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-push-'));
   try {
     const db = join(dir, 'push.db');
     const home = join(dir, 'home');
@@ -41,7 +41,7 @@ test('team push: no realized units in the window reports ok:true (projects:0) in
 });
 
 test('team push --watch: refuses to start without --url — nothing to poll into, exit 1, no hang', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'aegis-team-push-'));
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-push-'));
   try {
     const db = join(dir, 'push.db');
     const home = join(dir, 'home');
@@ -56,7 +56,7 @@ test('team push --watch: refuses to start without --url — nothing to poll into
 });
 
 test('team push: refuses a non-loopback plaintext HTTP endpoint before reading or sending a rollup', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'aegis-team-push-'));
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-push-'));
   try {
     const db = join(dir, 'push.db');
     const home = join(dir, 'home');
@@ -78,7 +78,7 @@ for (const endpoint of [
   'http://[::1]:8787',
 ]) {
   test(`team push: permits HTTPS or explicit loopback HTTP (${endpoint})`, async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'aegis-team-push-'));
+    const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-push-'));
     try {
       const db = join(dir, 'push.db');
       const home = join(dir, 'home');

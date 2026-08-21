@@ -81,7 +81,7 @@ test('cap basis: a runtime config supplier makes an already-running guard honor 
 });
 
 test('via migration: pre-existing rows are backfilled by importer source tag, once', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'aegis-via-'));
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-via-'));
   const path = join(dir, 'x.db');
   try {
     // Simulate a pre-`via` database: create via the Store, then drop the column.

@@ -95,7 +95,7 @@ function clamp(v: number, lo: number, hi: number): number {
  * Calls one OpenAI-compatible Chat Completions endpoint and returns a validated
  * SessionJudgment, or throws JudgeCallError. `apiKey` is null for local calls —
  * no Authorization header is sent in that case, matching how the reverse proxy's
- * own local-server support (x-aegis-openai-base) never assumes a key either.
+ * own local-server support (x-fiscus-openai-base) never assumes a key either.
  */
 export async function callJudgeApi(
   baseUrl: string,

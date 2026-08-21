@@ -57,7 +57,7 @@ test('live settings: saving a hard cap through the dashboard governs the already
 
     const update = await fetch(`${dashboardBase}/api/settings/update`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-aegis-local': '1' },
+      headers: { 'content-type': 'application/json', 'x-fiscus-local': '1' },
       body: JSON.stringify({ budget: { dailyUsd: 0.000001 } }),
     });
     assert.equal(update.status, 200);
@@ -66,7 +66,7 @@ test('live settings: saving a hard cap through the dashboard governs the already
     const blocked = await request();
     assert.equal(blocked.status, 429, 'the existing proxy reads the newly saved budget instead of a stale nested object');
     const body = (await blocked.json()) as { error?: { type?: string } };
-    assert.equal(body.error?.type, 'aegis_budget_block');
+    assert.equal(body.error?.type, 'fiscus_budget_block');
   } finally {
     await close(dashboard);
     await close(proxy);

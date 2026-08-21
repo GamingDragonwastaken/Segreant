@@ -97,7 +97,7 @@ const PROJECTS = ['backend-api', 'web-frontend', 'data-pipeline'];
  * imported row cannot claim it arrived through the proxy.
  */
 export type DemoRoute =
-  | 'proxy_declared'    // routed through Fiscus with x-aegis-project set
+  | 'proxy_declared'    // routed through Fiscus with x-fiscus-project set
   | 'proxy_undeclared'  // routed through Fiscus with no project header at all
   | 'import_repo'       // read out of a tool's local log; cwd resolved to a git repo
   | 'import_inferred'   // read out of a local log; cwd is a directory, not a repo
@@ -130,11 +130,11 @@ const ROUTES: Record<DemoRoute, RouteShape> = {
 // Six named devs — deliberately above the k-anonymity floor (5) so the demo can
 // show the per-user VALUE distribution. Real deployments still default this off.
 const NAMED_USERS: string[] = ['alice@team', 'bob@team', 'carol@team', 'dave@team', 'erin@team', 'frank@team'];
-// Background traffic includes some unattributed calls (no x-aegis-user header).
+// Background traffic includes some unattributed calls (no x-fiscus-user header).
 const USERS: Array<string | null> = [...NAMED_USERS, null];
 // Connected sources (feeds) — the AI tools routed through Fiscus. opencode is
 // the first first-class connector; the rest are a realistic multi-tool mix, plus
-// some untagged traffic (no x-aegis-source header) that reads as 'direct'.
+// some untagged traffic (no x-fiscus-source header) that reads as 'direct'.
 const SOURCES: Array<string | null> = ['opencode', 'cursor', 'claude-code', null];
 
 /**

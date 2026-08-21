@@ -102,7 +102,7 @@ export function projectKeyWithBasis(
  * Stage 2: client-supplied headers "are not trusted alone for chargeback".
  */
 export type AttributionBasis =
-  /** An explicit `x-aegis-project` header on a proxied request. Self-asserted, unverified. */
+  /** An explicit `x-fiscus-project` header on a proxied request. Self-asserted, unverified. */
   | 'client_declared'
   /**
    * The tool recorded a working directory, and that directory resolved to a git

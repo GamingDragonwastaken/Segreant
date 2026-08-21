@@ -101,8 +101,8 @@ export interface RequestRow {
   streamed: boolean;
   statusCode: number | null;
   durationMs: number | null;
-  user?: string | null; // developer/team attribution (x-aegis-user header); null = unassigned
-  source?: string | null; // connected tool/feed attribution (x-aegis-source header); null = direct
+  user?: string | null; // developer/team attribution (x-fiscus-user header); null = unassigned
+  source?: string | null; // connected tool/feed attribution (x-fiscus-source header); null = direct
   cwd?: string | null; // full working-directory path this request was made from; null = unknown. The
   // link that lets Fiscus find the git repo behind a project and auto-correlate
   // its spend into RoI with no --repo — the "no wiring" path. `project` is its basename.
@@ -670,7 +670,7 @@ export class Store {
   /**
    * Does the ledger hold ANY spend tagged with this exact project key? It separates
    * data that IS characterized by project (native imports, or proxy traffic tagged
-   * with x-aegis-project) from untagged 'default' proxy traffic. Attribution uses it
+   * with x-fiscus-project) from untagged 'default' proxy traffic. Attribution uses it
    * to decide whether scoping a commit's window to its project is meaningful — so a
    * project-blind store keeps its original window-wide behavior, no regression.
    */
@@ -683,8 +683,8 @@ export class Store {
   }
 
   // ---- Project aliasing ------------------------------------------------------
-  // Tool launch cwds fragment one real project across labels ("aegisflow" vs
-  // "aegisflow-ts", editor-named dirs, etc.). Aliases fix the LABELS at query
+  // Tool launch cwds fragment one real project across labels ("fiscus" vs
+  // "fiscus-ts", editor-named dirs, etc.). Aliases fix the LABELS at query
   // time; raw ledger rows are never rewritten, so the underlying record stays
   // honest and an alias can be removed without loss. The mapping is kept FLAT
   // (an alias always points at a real canonical, never at another alias).
@@ -892,7 +892,7 @@ export class Store {
       .all(startMs, endMs) as unknown as SpendBucket[];
   }
 
-  /** Spend grouped by developer/team (x-aegis-user); null is reported as 'unassigned'. */
+  /** Spend grouped by developer/team (x-fiscus-user); null is reported as 'unassigned'. */
   byUser(startMs: number, endMs: number): SpendBucket[] {
     return this.db
       .prepare(
@@ -906,7 +906,7 @@ export class Store {
   }
 
   /**
-   * Spend grouped by connected source/feed (x-aegis-source); null reads as
+   * Spend grouped by connected source/feed (x-fiscus-source); null reads as
    * 'direct'. A source is one AI tool deliberately routed through Fiscus — the
    * unit the product meters. The tag is set by `fiscus connect <tool>` and
    * stripped before the request leaves the machine, so the provider never sees it.
@@ -1265,7 +1265,7 @@ export class Store {
   }
 
   /**
-   * NON-CODING sessions with their attributed user (the x-aegis-user tag) and
+   * NON-CODING sessions with their attributed user (the x-fiscus-user tag) and
    * cost, for per-user value. Scoped to sessions WITHOUT code proposals, because
    * only those have outcomes we can honestly attribute to a user: their outcome
    * is reported against the session (which carries the user tag). Coding value is

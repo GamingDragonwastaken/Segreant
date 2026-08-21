@@ -68,12 +68,12 @@ test('attribution: the basis moves no money — evidence totals equal byProject 
 
 test('attribution: evidence rolls up under the alias canonical, like byProject', () => {
   const store = new Store(':memory:');
-  store.insertRequest(row('a', 'aegisflow-ts', 'client_declared', 1));
-  store.insertRequest(row('b', 'aegisflow', 'client_declared', 2));
-  store.setProjectAlias('aegisflow-ts', 'aegisflow');
+  store.insertRequest(row('a', 'fiscus-ts', 'client_declared', 1));
+  store.insertRequest(row('b', 'fiscus', 'client_declared', 2));
+  store.setProjectAlias('fiscus-ts', 'fiscus');
   const ev = store.attributionEvidenceByProject(0, 5000);
   assert.equal(ev.length, 1, 'both rows share a canonical label and one basis');
-  assert.equal(ev[0]!.project, 'aegisflow');
+  assert.equal(ev[0]!.project, 'fiscus');
   assert.equal(ev[0]!.costUsd, 3);
   store.close();
 });
