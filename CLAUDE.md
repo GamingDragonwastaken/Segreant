@@ -50,12 +50,72 @@ source files, user instruction, and verified runtime behaviour decide truth.
 
 ```bash
 npm test          # node:test over test/*.test.ts — the suite is the safety net
-npm run typecheck # tsc --noEmit
-npm run build     # tsc -> dist/, plus web assets
+npm run typecheck # the NODE pass only — see below
+npm run build     # two compiler passes -> dist/, plus web assets
 ```
 
-`npx tsc` fails on this checkout's space-containing path. Use
-`node ./node_modules/typescript/bin/tsc`.
+**`npm run typecheck` does not check the GUI.** `tsconfig.json` excludes
+`src/dashboard/web/app/**`, because the browser app compiles under its own
+config. A dashboard change needs both passes, and green on the first says
+nothing about the second:
+
+```bash
+node ./node_modules/typescript/bin/tsc --noEmit -p tsconfig.json
+node ./node_modules/typescript/bin/tsc --noEmit -p src/dashboard/web/app/tsconfig.json
+```
+
+`npx tsc` fails on this checkout's space-containing path. Use the explicit
+`node ./node_modules/typescript/bin/tsc` form everywhere.
+
+One file, or one test:
+
+```bash
+node --test --experimental-strip-types test/value.test.ts
+node --test --experimental-strip-types --test-name-pattern="realized" test/value.test.ts
+```
+
+`npm test` runs `pretest` first (`scripts/build.mjs --web`, ~3s) because three
+GUI tests read the emitted `dist/` tree rather than the source. Invoking
+`node --test` on a single file skips that — rebuild first if it is one of them.
+
+Exercising the CLI should not touch your own ledger:
+
+```bash
+FISCUS_HOME=/tmp/scratch node bin/fiscus.mjs demo
+FISCUS_HOME=/tmp/scratch node bin/fiscus.mjs start --demo --dashboard-port 8621
+```
+
+`FISCUS_HOME`, `FISCUS_DB` and `FISCUS_DEMO` are the overrides (`AEGIS_*` are
+legacy aliases, still honoured, outranked). Without one, `fiscus demo`
+regenerates the real `~/.aegisflow/demo.db`.
+
+`bin/fiscus.mjs` imports `dist/cli.js`, **not** `src/`. A source edit is
+invisible to it until `npm run build`. Probing a change you have not rebuilt is
+the most reliable way to verify the wrong thing.
+
+## Build and runtime topology
+
+One compiler, two passes, no bundler (`scripts/build.mjs`):
+
+- **node runtime** — `tsconfig.build.json` → `dist/`, which is what ships and
+  what `bin/fiscus.mjs` runs.
+- **browser app** — `src/dashboard/web/app/tsconfig.json`, DOM lib and no node
+  types, so server code cannot reach a browser global or the reverse. Emitted
+  import specifiers are rewritten to `.js`: `tsc` checks the source tree while
+  the browser resolves the emitted one.
+
+The consequence that has cost the most: **the browser app cannot import node
+source, so it compiles against hand-written interfaces in
+`src/dashboard/web/app/core/api.ts`.** A declaration that does not match what
+the server actually sends type-checks perfectly and fails silently at runtime —
+`reconciliation.runs` was declared a number while the server sends an array, so
+`runs > 0` coerced through `NaN` and the Billed band of the spine could never
+light up, however many reconciliations existed. Contract tests that assert
+required fields are PRESENT do not catch this. When you touch a payload, check
+the declaration against the wire, never against the other declaration.
+
+Persistence is `node:sqlite` (`DatabaseSync`) directly — no ORM, no query
+builder, which is what the zero-dependency rule costs and buys.
 
 ## Release discipline
 
@@ -64,8 +124,17 @@ real evidence (artifact digest, test totals, observed CI run). A gate record is
 worth exactly what its exact candidate commit proves. Write the CI row PENDING
 and fill it after observing the run — never predict it.
 
-Do not push, publish, deploy, or purchase without explicit authorization. Local
-work — commits, tests, docs, architecture, features — is expected.
+**Push verified work without asking.** When a round's work is genuinely done —
+suite green, build clean, nothing unresolved — pushing is part of finishing, not
+a separate approval gate. Confirm the push landed by reading the remote ref
+(`git ls-remote origin refs/heads/main`), not a zero exit code, and watch CI to
+completion instead of assuming it. `gh run watch | tail` reports `tail`'s exit
+status, so read the run's `conclusion` field.
+
+Publishing to a registry, deploying, tagging a release, and purchasing still
+need explicit authorization. So does anything genuinely uncertain: an unresolved
+conflict, a failing test, or a decision that changes architecture or product
+behaviour the owner has not weighed in on. Hold and flag those.
 
 ## Structure
 
