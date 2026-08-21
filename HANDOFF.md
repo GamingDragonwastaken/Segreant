@@ -80,6 +80,12 @@ controls, and a complete synthetic client-to-server flow. See
 
 ## Compatibility
 
-Historical local paths and controls retain the `aegisflow` / `AEGIS_*` names for
-compatibility. They are not the canonical Fiscus product identity or evidence of
-an earlier release state.
+The environment overrides are `FISCUS_HOME`, `FISCUS_DB`, and `FISCUS_DEMO`.
+The `AEGIS_*` spellings are still honoured and still appear throughout the
+historical release-gate records, so scripts that use them keep working;
+`FISCUS_*` wins when both are set.
+
+The on-disk home is still `~/.aegisflow` and the database is still `aegis.db`.
+Renaming an environment variable is a compatible addition; moving an existing
+install's data is a migration, and it has not been done. Neither name is the
+canonical Fiscus product identity or evidence of an earlier release state.
