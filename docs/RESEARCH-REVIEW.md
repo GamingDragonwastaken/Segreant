@@ -90,7 +90,7 @@ Genuinely good and kept verbatim as a design principle: security/privacy → lat
 
 - Local-first, metadata-only privacy stance. ✅
 - SQLite as the local store. ✅ (used Node's built-in instead of a separate dependency)
-- `X-Aegis-*` custom headers for project/session/task attribution. ✅
+- `X-Fiscus-*` custom headers for project/session/task attribution. ✅
 - Soft + hard budget thresholds, runaway-loop guard. ✅
 - Graceful passthrough on failure. ✅
 - The CLI shape (`start`, daily summary, `audit`). ✅ (renamed/expanded)

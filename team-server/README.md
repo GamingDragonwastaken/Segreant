@@ -42,7 +42,7 @@ chooses, with no claim/verification step tying it to whoever logs in.
 ```sh
 cd team-server
 npm install
-DATABASE_URL="postgres://user:pass@host:5432/aegisflow_team" \
+DATABASE_URL="postgres://user:pass@host:5432/fiscus_team" \
 TEAM_SERVER_ADMIN_TOKEN="<a long random secret>" \
 PORT=8092 \
 npm start

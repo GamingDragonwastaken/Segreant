@@ -101,7 +101,7 @@ single-page console. They link to each other in both directions, pinned by a tes
   responses — so it must never be able to become markup.
 - Zero external requests. No CDN, no fonts, no analytics. Pinned for both entry
   points.
-- Mutating routes require `x-aegis-local: 1`, a header a cross-origin page cannot
+- Mutating routes require `x-fiscus-local: 1`, a header a cross-origin page cannot
   set without a preflight this server never answers.
 - CSP served with the HTML.
 
@@ -136,7 +136,7 @@ arrives.
 | Lift baseline | `src/value/liftBaseline.ts` | Resolve manual-minutes-per-task-type: cited/refreshable population prior + personal pre-tracking git history, combined by continuous-data empirical-Bayes shrinkage |
 | Receipts | `src/value/receipt.ts` | ed25519-signed, verifiable Value Receipts |
 | System scan | `src/scan/scan.ts`, `src/scan/knownApps.ts` | Proactive, read-only discovery: the 3 importable tools, repos under a root, and a wider best-effort inventory of other AI coding tools detected (never a claim of import capability) |
-| Config | `src/config.ts` | Load/save `~/.aegisflow/config.json`, resolve paths |
+| Config | `src/config.ts` | Load/save `~/.fiscus/config.json`, resolve paths |
 | Dashboard API | `src/dashboard/server.ts` | JSON API over the store, plus six CSRF-guarded mutating routes (`/api/import`, `/api/discover`, `POST /api/scan`, `/api/judge`, `/api/settings/update`, `/api/settings/clear-proposals`) |
 | Web GUI | `src/dashboard/web/` | The browser application: four-claim spine, seven routes, preview-then-commit drawer. Built, not inlined — see §2.1 |
 | CLI | `src/cli.ts` + `src/cli/` | Thin dispatcher (`src/cli.ts`: help, version, main) over per-command modules — `showCmd`, `valueCmd`, `teamCmd`, `importCmd`, `connectCmd`, `opsCmd`, `runCmd`, with shared `ui`/`flags` helpers |
@@ -162,10 +162,10 @@ IDE/Agent          Proxy              Store           Upstream
    │                     │ computeCost(usage)             │
    │                     │ insertRequest()│               │
    │                     │───────────────▶│               │
-   │  (non-stream: X-Aegis-Cost-USD header on the response)
+   │  (non-stream: X-Fiscus-Cost-USD header on the response)
 ```
 
-**Streaming nuance.** Response headers flush before the body, so for streaming responses the final cost can't be a header. We send remaining-budget headers up front and record the final cost server-side (visible in the dashboard and `X-Aegis-Cost-USD` for non-streaming). This is an honest consequence of HTTP, not a limitation we hide.
+**Streaming nuance.** Response headers flush before the body, so for streaming responses the final cost can't be a header. We send remaining-budget headers up front and record the final cost server-side (visible in the dashboard and `X-Fiscus-Cost-USD` for non-streaming). This is an honest consequence of HTTP, not a limitation we hide.
 
 **OpenAI usage capture.** OpenAI only emits a usage chunk on a stream when `stream_options.include_usage` is set. The proxy injects that flag into outbound OpenAI requests so usage is always captured. Anthropic always reports usage in `message_start` + `message_delta`.
 
@@ -175,8 +175,8 @@ IDE/Agent          Proxy              Store           Upstream
 
 SQLite, seven tables (`src/store/db.ts`). Timestamps stored as both ISO string and epoch-ms; range/window queries use epoch-ms to avoid timezone ambiguity.
 
-- **requests** — one row per intercepted call: provider, model, project, `user` (developer/team, from `X-Aegis-User`), session, the four token dimensions, `cost_usd`, `estimated`, `streamed`, `status_code`, `duration_ms`. The `user` column is added by an idempotent migration (`ALTER TABLE`) for DBs created before it existed.
-- **sessions** — interaction windows keyed by `X-Aegis-Session-Id`.
+- **requests** — one row per intercepted call: provider, model, project, `user` (developer/team, from `X-Fiscus-User`), session, the four token dimensions, `cost_usd`, `estimated`, `streamed`, `status_code`, `duration_ms`. The `user` column is added by an idempotent migration (`ALTER TABLE`) for DBs created before it existed.
+- **sessions** — interaction windows keyed by `X-Fiscus-Session-Id`.
 - **git_commits** — commits discovered during `audit`.
 - **commit_attribution** — spend attributed to each commit's preceding window.
 - **proposals** — proposed edits captured in the proxy path (the Accepted-gate signal): provider, model, project, and the proposed files/lines as JSON.

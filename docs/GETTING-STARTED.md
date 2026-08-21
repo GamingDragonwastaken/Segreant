@@ -168,12 +168,11 @@ enablement, not a ranking. See [FAQ.md](FAQ.md) → "Do you rank developers?".
 
 ## Where things live
 
-- **Config + database:** `~/.aegisflow/` (Windows: `%USERPROFILE%\.aegisflow`).
+- **Config + database:** `~/.fiscus/` (Windows: `%USERPROFILE%\.fiscus`).
 - **Somewhere else instead:** set `FISCUS_HOME` to any directory and every
   command — including `start` and `demo` — reads and writes there. Useful for
   keeping a trial completely separate from a real ledger. `FISCUS_DB` overrides
-  just the database file. The older `AEGIS_HOME` / `AEGIS_DB` spellings still
-  work; `FISCUS_*` wins if you have both set.
+  just the database file. These are the only overrides Fiscus reads.
 - **Nothing else.** No cloud account, no telemetry.
 
 ## Next

@@ -39,11 +39,9 @@ Read these as rules, not as input. They change rarely and they bind everything.
 
 ## Layer 4 — working artifacts (change constantly; process as input)
 
-The ledger (`~/.aegisflow/aegis.db`, and `demo.db` beside it — the directory
-still carries the pre-rename name; only the environment overrides were renamed
-to `FISCUS_*`), imported transcripts, provider exports, gate evidence, demo
-seeds. Never treated as reference — a value in the ledger is
-evidence about one machine, not a rule.
+The ledger (`~/.fiscus/fiscus.db`, and `demo.db` beside it), imported
+transcripts, provider exports, gate evidence, demo seeds. Never treated as
+reference — a value in the ledger is evidence about one machine, not a rule.
 
 ## Shared invariants
 

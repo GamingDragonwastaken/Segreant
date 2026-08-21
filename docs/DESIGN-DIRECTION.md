@@ -121,7 +121,7 @@ whole-sprite transforms.
 5. README wordmark ✓ · npm publish as `fiscus` — awaiting the user's OTP-gated `npm publish`.
 
 Optional polish, not blocking: coin-spin loading state from seal-edge.png (P4), griffin
-alert/sleep states, ~/.aegisflow → ~/.fiscus home-dir migration.
+alert/sleep states.
 
 ---
 

@@ -18,7 +18,7 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
   single `<img src>`. A path that does not decode now 404s.
 - `GET /api/scan` no longer writes. It recorded its own filesystem walk as the
   new scan baseline, which made it the one store write reachable without the
-  `x-aegis-local: 1` header — and destroyed the drift it had just reported. The
+  `x-fiscus-local: 1` header — and destroyed the drift it had just reported. The
   baseline now advances only on the guarded `POST`.
 - Read-only dashboard routes answer only the methods they serve. Ten of them
   previously answered anything, so `DELETE /api/value` returned 200 and a full

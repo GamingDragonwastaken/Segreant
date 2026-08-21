@@ -81,11 +81,13 @@ controls, and a complete synthetic client-to-server flow. See
 ## Compatibility
 
 The environment overrides are `FISCUS_HOME`, `FISCUS_DB`, and `FISCUS_DEMO`.
-The `AEGIS_*` spellings are still honoured and still appear throughout the
-historical release-gate records, so scripts that use them keep working;
-`FISCUS_*` wins when both are set.
+There is no second family. The pre-rename spellings were removed rather than
+deprecated, so setting one now has no effect at all — deliberately, because a
+silently honoured alias is indistinguishable from a resolver that ignores your
+override, and nothing has been published that could depend on the old names.
 
-The on-disk home is still `~/.aegisflow` and the database is still `aegis.db`.
-Renaming an environment variable is a compatible addition; moving an existing
-install's data is a migration, and it has not been done. Neither name is the
-canonical Fiscus product identity or evidence of an earlier release state.
+The on-disk home is `~/.fiscus` and the database is `fiscus.db`. An install
+predating the rename keeps its old directory untouched on disk; copy it to the
+new path and the ledger is carried over. The release-gate records below cite the
+pre-rename variable because that is what those runs actually used, and rewriting
+them would claim evidence that does not exist.

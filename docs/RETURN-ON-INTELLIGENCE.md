@@ -455,7 +455,7 @@ which source produced it:
    defaults; the METR anchor is an order-of-magnitude sanity check against a
    real, cited human-timed scale, not a re-derivation of the numbers from METR
    data. Refreshable via `fiscus baseline --refresh --url <manifest>` (a
-   user-writable cache under `~/.aegisflow/baselines/` overrides the bundled
+   user-writable cache under `~/.fiscus/baselines/` overrides the bundled
    floor; `fiscus baseline` alone shows source/age/staleness) — but honestly,
    unlike `fiscus pricing`, there is no established machine-readable feed for
    this, so `--url` is required every time: there is no saved or invented

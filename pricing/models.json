@@ -10,7 +10,7 @@
     "Anthropic bills extended-thinking ('reasoning') tokens as ordinary OUTPUT tokens. OpenAI bills o-series reasoning tokens inside completion_tokens. There is NO separate reasoning multiplier in current provider pricing.",
     "Anthropic values verified against platform pricing (2026-06). OpenAI values are community-maintained best-effort and should be re-verified before billing-grade use.",
     "Google/Gemini values verified against ai.google.dev/gemini-api/docs/pricing (2026-06). Gemini 2.5 Pro lists the <=200k-token base rate; prompts over 200k bill at input 2.50 / output 15.0 / cache_read 0.25.",
-    "Gemini is metered through AegisFlow's OpenAI-compatible path (Google's .../v1beta/openai/ base URL). The cost engine resolves a rate by model family ACROSS providers, so the price follows the model id regardless of which wire protocol carried it."
+    "Gemini is metered through Fiscus's OpenAI-compatible path (Google's .../v1beta/openai/ base URL). The cost engine resolves a rate by model family ACROSS providers, so the price follows the model id regardless of which wire protocol carried it."
   ],
   "providers": {
     "anthropic": {

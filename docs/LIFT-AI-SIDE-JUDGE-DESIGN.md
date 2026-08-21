@@ -163,7 +163,7 @@ default, exactly as ARCHITECTURE.md §7 item 3 already says. Two sub-choices the
 raised, both worth supporting rather than picking one:
 
 **Local model.** The proxy already speaks to arbitrary OpenAI-compatible endpoints
-today — `x-aegis-openai-base` / `config.upstreams.openai` already routes metered
+today — `x-fiscus-openai-base` / `config.upstreams.openai` already routes metered
 traffic to Ollama and other local servers (README Status section). The same
 mechanism is directly reusable for a judge call: point a separate config key
 (`config.lift.judge.baseUrl`) at a local inference server, and nothing new has to be
@@ -246,7 +246,7 @@ what the ladder allows:
 | Algorithmic (§1) | **On** | Nothing beyond what's already logged locally | Same | None — same posture as the Acceptance lens it reuses |
 | Local LLM, structural input | Off | Nothing (stays on the user's machine) | Same | One opt-in: `judge.localBaseUrl` (+ `judge.localModel`) points at a local server |
 | Local LLM, full content | Off | Nothing (stays on the user's machine) | Same, but see ⚠ below — no richer payload actually exists to send | Same opt-in as above plus `judge.localSendFullContent` |
-| Hosted API, structural input | Off | A proposal-count/timing summary only | Same | Two independent opt-ins: `judge.hostedEnabled: true` AND the `AEGIS_JUDGE_API_KEY` env var set (plus `judge.hostedBaseUrl` + `judge.hostedModel` configured — operationally required, not consent gates) |
+| Hosted API, structural input | Off | A proposal-count/timing summary only | Same | Two independent opt-ins: `judge.hostedEnabled: true` AND the `FISCUS_JUDGE_API_KEY` env var set (plus `judge.hostedBaseUrl` + `judge.hostedModel` configured — operationally required, not consent gates) |
 | Hosted API, full content | Off | Actual session content | ⚠ Downgrades to the structural summary — see below | The above plus `judge.hostedSendFullContent` — the loudest tier, matching ARCHITECTURE §7 item 3's "real, loud opt-in decision" language exactly |
 
 ⚠ **The two "full content" rows now do what their name says — for Claude Code,

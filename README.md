@@ -233,7 +233,7 @@ almost nothing. Prefer one cap over total observed spend?
 |---|---|
 | `--daily N` | Hard daily cap — requests are blocked once today's spend hits `N`. |
 | `--soft N` | Soft daily threshold — a warning header is added past `N` (no block). |
-| `--session N` | Hard per-session cap (`X-Aegis-Session-Id`). |
+| `--session N` | Hard per-session cap (`X-Fiscus-Session-Id`). |
 | `--runaway N` | Block when spend in the sliding window exceeds `N` (loop guard). |
 | `--window S` | Runaway window length in seconds (default 60). |
 
@@ -246,10 +246,10 @@ Group spend by project, developer/team, session, or task by sending custom
 headers (your agent or a wrapper script sets these):
 
 ```
-X-Aegis-Project: backend-refactor
-X-Aegis-User: alice@team          # per-developer / per-team FinOps
-X-Aegis-Session-Id: <uuid>
-X-Aegis-Task-Weight: 1.5
+X-Fiscus-Project: backend-refactor
+X-Fiscus-User: alice@team          # per-developer / per-team FinOps
+X-Fiscus-Session-Id: <uuid>
+X-Fiscus-Task-Weight: 1.5
 ```
 
 Spend then rolls up by user in `fiscus today`, the dashboard's "By user"
@@ -262,7 +262,7 @@ was obtained alongside the label itself:
 
 | Basis | Meaning |
 | --- | --- |
-| `client_declared` | An `X-Aegis-Project` header — or a `/fiscus/<project>/` base-URL prefix — on a proxied request. Self-asserted either way. |
+| `client_declared` | An `X-Fiscus-Project` header — or a `/fiscus/<project>/` base-URL prefix — on a proxied request. Self-asserted either way. |
 | `tool_log_repo_resolved` | The tool recorded a working directory, and it resolved to a git repository on this machine. The label is that repository's root name. |
 | `tool_log_inferred` | Derived from a working directory the tool recorded, which is not inside a git repository. |
 | `tool_log_fallback` | The tool recorded no usable path, so its own name was used. Not a real project. |
@@ -283,7 +283,7 @@ what it recorded.
 
 **A client with no headers can still declare a project.** Antigravity's
 custom-provider form has a base URL and no custom-headers field, so
-`X-Aegis-Project` is simply unavailable to it. The proxy therefore also accepts
+`X-Fiscus-Project` is simply unavailable to it. The proxy therefore also accepts
 the project as a path prefix — `http://localhost:8090/fiscus/backend-api/v1` —
 which it strips before forwarding, so the provider sees an unchanged request.
 The header wins if both are sent. Fiscus offers the URL and will not configure
@@ -702,7 +702,7 @@ or reconciled amount.
 Do **not** switch providers per request through a routing header. Configure one
 trusted OpenAI-compatible upstream in Fiscus instead; use separate Fiscus
 processes when you need separate upstreams. The legacy
-`X-Aegis-OpenAI-Base` header is ignored on purpose: honoring a request-controlled
+`X-Fiscus-OpenAI-Base` header is ignored on purpose: honoring a request-controlled
 destination could forward provider authorization to an untrusted URL.
 
 ---
@@ -730,7 +730,7 @@ number.
 - **Locally stored, not transmitted:** to detect First-Pass Acceptance (whether
   the AI's proposed edit matches what you actually committed), Fiscus
   temporarily stores the AI's proposed code **on your own disk**
-  (`~/.aegisflow/aegis.db`) for up to `proposalRetentionDays` (default 30
+  (`~/.fiscus/fiscus.db`) for up to `proposalRetentionDays` (default 30
   days) — long enough to correlate against a later git commit, never
   transmitted anywhere. Set `metadataOnly: true` in your config to disable
   this and store only token/cost metadata (Acceptance tracking turns off).
@@ -739,7 +739,7 @@ number.
 - The dashboard itself makes no third-party browser requests: no web fonts, CDNs,
   or Fiscus analytics. This does not remove the explicit provider and
   operator-configured outbound paths described in the data-boundary disclosure.
-- The local store lives under `~/.aegisflow` (`%USERPROFILE%\.aegisflow` on
+- The local store lives under `~/.fiscus` (`%USERPROFILE%\.fiscus` on
   Windows) under your OS file permissions.
 - **The one thing that can leave the device is opt-in and metadata-only:** if you
   set an alert webhook (`fiscus alerts --set-webhook <url>`), Fiscus POSTs

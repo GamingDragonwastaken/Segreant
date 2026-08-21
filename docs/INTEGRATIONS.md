@@ -21,7 +21,7 @@ upstream at the provider.** That's the whole integration.
 | Knob | Where | What it does |
 |---|---|---|
 | Your tool's base URL | the tool's config / env | sends the tool's traffic to Fiscus instead of straight to the provider |
-| `upstreams.openai` / `upstreams.anthropic` | `~/.aegisflow/config.json` | where Fiscus forwards, after metering |
+| `upstreams.openai` / `upstreams.anthropic` | `~/.fiscus/config.json` | where Fiscus forwards, after metering |
 
 For native OpenAI or Anthropic, you only touch the first knob — the upstream
 defaults are already correct. You touch the second only to meter an
@@ -51,7 +51,7 @@ This is the recommended way to watch real agent traffic accrue without spending 
 cent — Gemini 2.5 Flash is free-tier, and it doubles as proof of Fiscus's
 multi-provider pricing.
 
-**1. Point Fiscus's OpenAI upstream at Google.** `~/.aegisflow/config.json`:
+**1. Point Fiscus's OpenAI upstream at Google.** `~/.fiscus/config.json`:
 
 ```json
 {
@@ -163,12 +163,12 @@ client = OpenAI(base_url="http://localhost:8090/v1", api_key="…")
 ## Beyond one provider, from one proxy
 
 To meter several OpenAI-compatible providers without restarting, enable
-Do not route providers per request with `x-aegis-openai-base`: current Fiscus
+Do not route providers per request with `x-fiscus-openai-base`: current Fiscus
 builds ignore that legacy header because the proxy forwards provider credentials.
 Set one trusted OpenAI-compatible destination in `upstreams.openai` instead.
 
 ```
-X-Aegis-OpenAI-Base: https://openrouter.ai/api
+X-Fiscus-OpenAI-Base: https://openrouter.ai/api
 ```
 
 It's **off by default on purpose** — that header forwards your provider key to the
@@ -192,7 +192,7 @@ fiscus pricing             # source, age, model count, staleness
 fiscus pricing --refresh   # pull the latest rates (a plain GET; sends nothing about you)
 ```
 
-A refreshed table is written to `~/.aegisflow/pricing/models.json` and overrides
+A refreshed table is written to `~/.fiscus/pricing/models.json` and overrides
 the bundled one. A malformed download is rejected and your current table is kept
 — a bad refresh never downgrades your data.
 

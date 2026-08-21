@@ -171,7 +171,7 @@ The local tool is free. It uses only free tiers and Node built-ins; there's no
 account and no telemetry.
 
 **Is my data mine?**
-Entirely. It's a local file (`~/.aegisflow/`). Export anytime with
+Entirely. It's a local file (`~/.fiscus/`). Export anytime with
 `fiscus export --csv`. Delete anytime by removing the directory.
 
 ## Troubleshooting

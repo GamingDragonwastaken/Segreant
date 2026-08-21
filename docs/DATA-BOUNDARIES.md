@@ -17,7 +17,7 @@ That request can contain prompts, source snippets, tool payloads, and the
 provider credential exactly as required by the provider API. Fiscus does not
 store credentials and does not forward them to any Fiscus service.
 
-The proxy deliberately ignores `x-aegis-openai-base`, including in old configs.
+The proxy deliberately ignores `x-fiscus-openai-base`, including in old configs.
 A request-controlled destination would otherwise be able to receive a caller's
 provider credential. To use a different provider, change the trusted configured
 upstream or run a separate Fiscus process with its own configuration.

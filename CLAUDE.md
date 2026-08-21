@@ -85,9 +85,9 @@ FISCUS_HOME=/tmp/scratch node bin/fiscus.mjs demo
 FISCUS_HOME=/tmp/scratch node bin/fiscus.mjs start --demo --dashboard-port 8621
 ```
 
-`FISCUS_HOME`, `FISCUS_DB` and `FISCUS_DEMO` are the overrides (`AEGIS_*` are
-legacy aliases, still honoured, outranked). Without one, `fiscus demo`
-regenerates the real `~/.aegisflow/demo.db`.
+`FISCUS_HOME`, `FISCUS_DB` and `FISCUS_DEMO` are the only overrides — there is
+no second family and no fallback. Without one, `fiscus demo` regenerates the
+real `~/.fiscus/demo.db`.
 
 `bin/fiscus.mjs` imports `dist/cli.js`, **not** `src/`. A source edit is
 invisible to it until `npm run build`. Probing a change you have not rebuilt is

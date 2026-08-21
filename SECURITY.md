@@ -28,5 +28,5 @@ should be evaluated against that document rather than a generic "no network"
 assumption.
 
 The local dashboard is expected to bind to loopback, reject non-local Host values,
-make no external browser requests, and require the `x-aegis-local: 1` custom
+make no external browser requests, and require the `x-fiscus-local: 1` custom
 header on mutating routes. A GET endpoint must not mutate persistent state.
