@@ -12,7 +12,7 @@
  */
 
 import { h, render } from './core/dom.ts';
-import { signal, effect } from './core/signal.ts';
+import { signal, effect, computed } from './core/signal.ts';
 import { register, setRegister, type Register } from './core/fmt.ts';
 import { loadChain } from './core/chain.ts';
 import { spine, type LayerId } from './components/spine.ts';
@@ -54,6 +54,15 @@ const ALL_ROUTES: Territory[] = ['spend', 'evidence', 'allocation', 'value', 'da
 
 const current = signal<Territory>(readRoute());
 const chain = signal<Layer[] | null>(null);
+
+/**
+ * Whether the operator has chosen a register at all — NOT which one they chose.
+ *
+ * This is the distinction the shell effect needs. It has to know when to stop
+ * showing the first-run chooser; it has no business re-running because someone
+ * switched between two wordings of the same numbers.
+ */
+const registerChosen = computed(() => register() !== null);
 
 function readRoute(): Territory {
   const hash = location.hash.replace(/^#\/?/, '');
@@ -152,7 +161,18 @@ function boot(): void {
   void loadChain('30d').then((layers) => chain.set(layers)).catch(() => chain.set(null));
 
   effect(() => {
-    if (register() === null) {
+    // `registerChosen()`, never `register()`. Reading the register itself made
+    // this effect — which renders the ENTIRE application — a subscriber to the
+    // plain/precise toggle. Every click tore down and rebuilt the whole view
+    // tree, and each view's own load effect re-ran with it, so changing the
+    // WORDING re-requested that screen's data from the server. `computed` only
+    // notifies when its value actually changes, so plain↔precise no longer
+    // reaches this effect at all, while first-run → chosen still does.
+    //
+    // The wording still updates, through the much smaller effects that `h()`
+    // creates for each register-sensitive binding. That is the whole point of
+    // those bindings; the full rebuild was masking them, not driving them.
+    if (!registerChosen()) {
       render(root, firstRun());
       return;
     }
