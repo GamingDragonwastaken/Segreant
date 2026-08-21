@@ -67,7 +67,9 @@ jobs:
           const overview = await (await fetch(`${base}/api/overview`)).json();
           const value = await (await fetch(`${base}/api/value`)).json();
           const billing = await (await fetch(`${base}/api/billing`)).json();
-          const html = await (await fetch(`${base}/`)).text();
+          const shell = await (await fetch(`${base}/`)).text();
+          const appEntry = await fetch(`${base}/app/main.js`);
+          const classic = await (await fetch(`${base}/classic`)).text();
           const scope = JSON.parse(await (await import('node:fs/promises')).readFile('scope-preview.json', 'utf8'));
           const activeScope = JSON.parse(await (await import('node:fs/promises')).readFile('scope-active.json', 'utf8'));
           const costs = JSON.parse(await (await import('node:fs/promises')).readFile('costs-preview.json', 'utf8'));
@@ -78,7 +80,18 @@ jobs:
           if (activeScope.applied !== true || activeScope.declaration?.providerProjectRef !== 'proj_ci_package') throw new Error('packaged scope activation did not preserve declared project provenance');
           if (costs.applied !== false || costs.networkAttempted !== false || costs.credentialRead !== false || costs.preview?.projectRef !== 'proj_ci_package') throw new Error('packaged OpenAI Costs preview lost its secret-free/no-network boundary');
           if (billing.demo !== true || billing.summary?.recordCount !== 0 || billing.evidence?.reconciliationStatus !== 'not_reconciled') throw new Error('packaged demo billing surface fabricated evidence or lost its unresolved boundary');
-          if (!html.includes('DEMO DATA') || !html.includes('Cheaper model trials') || !html.includes('NOT RECONCILED')) throw new Error('packaged dashboard HTML missing labelled model-trial or billing renderer');
+          // `/` is the GUI shell: an empty #app plus a module script, with every
+          // figure rendered in the browser. A static fetch of it can no longer
+          // observe a rendered claim, so asserting label text against `/` was
+          // asserting against markup that stopped existing when the GUI landed.
+          // The two things a PACKAGED artifact can actually get wrong are split
+          // out instead: the shell and its compiled entry must both be in the
+          // tarball and served (a shell whose module 404s is a blank dashboard),
+          // and `/classic`, which still renders server-side, must still carry the
+          // labelled demo / review-only trial / unreconciled claims.
+          if (!shell.includes('id="app"') || !shell.includes('/app/main.js')) throw new Error('packaged GUI shell missing its mount point or module entry');
+          if (!appEntry.ok || !(appEntry.headers.get('content-type') || '').includes('javascript')) throw new Error(`packaged GUI shell references /app/main.js but the tarball does not serve it (${appEntry.status})`);
+          if (!classic.includes('DEMO DATA') || !classic.includes('Cheaper model trials') || !classic.includes('NOT RECONCILED')) throw new Error('packaged classic dashboard missing labelled model-trial or billing renderer');
           NODE
 
   # team-server is a genuinely separate npm package (own package.json/lockfile,
