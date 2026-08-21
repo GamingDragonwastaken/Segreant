@@ -48,7 +48,7 @@
   "homepage": "https://github.com/GamingDragonwastaken/Fiscus#readme",
   "bugs": "https://github.com/GamingDragonwastaken/Fiscus/issues",
   "devDependencies": {
-    "@types/node": "^25.9.3",
-    "typescript": "^5.7.0"
+    "@types/node": "^26.2.0",
+    "typescript": "^7.0.2"
   }
 }

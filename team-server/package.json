@@ -13,11 +13,11 @@
     "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit"
   },
   "dependencies": {
-    "pg": "^8.13.0"
+    "pg": "^8.23.0"
   },
   "devDependencies": {
-    "@types/node": "^25.9.3",
-    "@types/pg": "^8.11.10",
-    "typescript": "^5.7.0"
+    "@types/node": "^26.2.0",
+    "@types/pg": "^8.23.1",
+    "typescript": "^7.0.2"
   }
 }
