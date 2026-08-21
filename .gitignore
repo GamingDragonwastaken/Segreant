@@ -4,7 +4,8 @@ node_modules/
 *.db-journal
 *.db-wal
 *.db-shm
-.aegisflow/
+.fiscus/
+.fiscus-home/
 dist/
 .DS_Store
 .env

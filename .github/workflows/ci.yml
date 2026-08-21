@@ -49,7 +49,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          export AEGIS_HOME="$PWD/.fiscus-home"
+          export FISCUS_HOME="$PWD/.fiscus-home"
           ./node_modules/.bin/fiscus billing scope set --account-ref ci-package-smoke --json >scope-preview.json
           ./node_modules/.bin/fiscus billing scope set --account-ref ci-package-smoke --project-ref proj_ci_package --apply --json >scope-active.json
           ./node_modules/.bin/fiscus billing openai-costs preview --from 2026-01-01 --to 2026-01-02 --json >costs-preview.json
