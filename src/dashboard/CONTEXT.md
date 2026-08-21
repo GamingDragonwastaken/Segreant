@@ -27,10 +27,15 @@ web/
       dom.ts         h() / render(); no HTML-parsing sink anywhere
       fmt.ts         money, dates, and the plain/precise REGISTER
       api.ts         typed client for this server
+      claimTypes.ts  Layer + ClaimInspection: the shape of a claim's evidence
+      claimLayers.ts the four claims, DERIVED from payloads. Pure; tested.
+      chain.ts       the I/O half: four independent reads, each degrading alone
       registry.ts    THE PARITY MAP — every capability, tier, coverage
       actions.ts     preview/commit builders per capability
     components/
+      spine.ts       the four bands and the ≠ between them
       drawer.ts      the action drawer: preview → consequence → command → commit
+      claimInspector.ts  the long form of a band's basis. Reads; never acts.
     views/           one per territory
 ```
 
@@ -113,6 +118,42 @@ web/
 - **The browser app never imports node code, and the server never imports the
   browser app.** Enforced structurally: `app/tsconfig.json` has the DOM lib and
   no node types, and the root configs exclude `app/**`.
+- **A claim's meaning is derived, not fetched.** `claimLayers.ts` turns four
+  payloads into four claims as a PURE function; `chain.ts` only reads the
+  endpoints. The claims are where this product commits itself, so they must be
+  reachable from a test with no socket and no ledger — the realized band spent a
+  release rendering a cost, and the only thing that could catch it was a grep.
+  A `null` payload means "that endpoint did not answer" and degrades exactly one
+  layer, which is why a dead endpoint reads as missing evidence, never as zero.
+- **Every claim answers all six evidence dimensions, and no claim is dated by
+  another claim's evidence.** `ClaimInspection` requires provenance, scope,
+  freshness, coverage, enforceability and evidence source; where one is not
+  established the string says so, because a blank renders identically to a
+  dimension nobody thought about. Freshness is a recorded instant or the words
+  "not established" — never `new Date()`, which would report the age of the
+  screen. `/api/allocation` carries the BILLING reconciliation as a deliberate
+  cross-reference; reading it as allocation freshness dated a claim with zero
+  runs by a provider reconciliation, and belongs in `assumptions` instead.
+- **The browser's declared payload types are the wire's, and are corrected
+  against it.** The app compiles against hand-written interfaces — it cannot
+  import the node source that builds the payload — so a wrong declaration
+  type-checks perfectly and fails silently at runtime. Two shipped that way:
+  `reconciliation.runs` declared a number while the server sent an array (so
+  `runs > 0` coerced through `NaN` and the Billed band could never light up),
+  and a phantom `reconciliation.latest` the Evidence view read forever. A field
+  that is on the wire and undeclared is the same defect facing the other way —
+  it forces a cast. Presence-checking contract tests do not cover this; the
+  shape does, against a record that actually exists.
+- **Overlays mount once, on `body`, outside the shell's render root.** The shell
+  effect re-runs on every register change and `render(root, …)` clears `#app`.
+  Mounting inside it appended a fresh host and a never-disposed effect per
+  toggle, so the panel was rebuilt N times into detached elements. Anything that
+  reads `isPrecise()` inside a host effect is rebuilt in place, so its listeners
+  and focus traps release through `onCleanup` — which runs before the next run —
+  and never through a nested effect watching for close.
+- **The Claim Inspector reads and never acts.** The drawer owns everything that
+  changes state. A panel that argues the evidence and offers the button in the
+  same box is the shape of every tool this one exists to disagree with.
 - **`demo: true` must reach the screen.** Any payload that can be seeded is
   rendered with its demo banner. A screen that cannot say it is showing sample
   data is the one lie this product cannot afford.
