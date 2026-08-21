@@ -17,6 +17,7 @@ import { register, setRegister, type Register } from './core/fmt.ts';
 import { loadChain } from './core/chain.ts';
 import { spine, type LayerId } from './components/spine.ts';
 import { mountDrawer } from './components/drawer.ts';
+import { mountClaimInspector, openClaimInspector } from './components/claimInspector.ts';
 import type { Layer } from './components/spine.ts';
 import { spendView } from './views/spend.ts';
 import { evidenceView } from './views/evidence.ts';
@@ -132,13 +133,29 @@ function boot(): void {
   const root = document.getElementById('app');
   if (!root) throw new Error('missing #app');
 
+  // The overlays mount ONCE, and onto the body rather than into `#app`.
+  //
+  // They used to be mounted at the END of the shell effect below, which re-runs
+  // whenever the register changes. Every plain/precise toggle therefore appended
+  // another host and started another effect that was never disposed:
+  // `render(root, ...)` detached the old hosts but not the effects still driving
+  // them, so opening the inspector after four toggles built the panel seven
+  // times, six of them into elements nobody could see. Mounting on `body` also
+  // means the shell's own `render` can never clear them.
+  mountDrawer(document.body);
+  mountClaimInspector(document.body);
+
+  // Loaded once, not per register toggle. The four claims do not depend on the
+  // wording register, and re-reading them on a plain/precise click re-issued
+  // every endpoint behind the spine — including `/api/value`, which correlates
+  // against the repository and is the slowest read this product has.
+  void loadChain('30d').then((layers) => chain.set(layers)).catch(() => chain.set(null));
+
   effect(() => {
     if (register() === null) {
       render(root, firstRun());
       return;
     }
-
-    void loadChain('30d').then((layers) => chain.set(layers)).catch(() => chain.set(null));
 
     render(root,
       h('a', { class: 'skip', href: '#main', text: 'Skip to content' }),
@@ -151,6 +168,7 @@ function boot(): void {
             layers,
             active: ROUTE_LAYER[current()] ?? null,
             onSelect: (id) => go(LAYER_ROUTE[id]),
+            onInspect: openClaimInspector,
           });
         },
         h('main', { class: 'main', id: 'main', tabindex: '-1' }, () => viewFor(current()))),
@@ -158,7 +176,6 @@ function boot(): void {
         h('span', { text: 'Runs on this machine only. Nothing is sent anywhere.' }),
         h('a', { href: '/classic', text: 'Classic dashboard' })));
 
-    mountDrawer(root);
   });
 }
 

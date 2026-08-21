@@ -41,6 +41,8 @@ export interface SpineState {
    */
   active: LayerId | null;
   onSelect: (id: LayerId) => void;
+  /** Open the long form of this claim's basis. Reads only; never acts. */
+  onInspect: (layer: Layer) => void;
 }
 
 /**
@@ -58,25 +60,46 @@ function separator(): Node {
   return h('div', { class: 'sep', 'aria-hidden': 'true' }, h('span', { class: 'sep-glyph', text: '≠' }));
 }
 
+/**
+ * A band carries two distinct actions, so it is a container rather than a
+ * control: going to the territory that answers the claim, and inspecting the
+ * evidence behind it. The band was a single `<button>` while it had only the
+ * first — nesting the second inside it is not an option, because a button
+ * inside a button is invalid HTML that browsers resolve by discarding the
+ * nesting, which would have silently produced two siblings anyway.
+ *
+ * The inspect control is a separate, quieter target on purpose. "Why this
+ * number?" is the question this product wants asked, but a band whose whole
+ * face opened a dialog would make the spine unusable as navigation, which is
+ * the job it already had.
+ */
 function band(layer: Layer, state: SpineState): Node {
   const active = state.active === layer.id;
 
-  return h('button', {
-    class: `band${active ? ' band-active' : ''}${layer.established ? '' : ' band-open'}`,
-    'aria-current': active ? 'page' : false,
-    onclick: () => state.onSelect(layer.id),
-  },
-    h('span', { class: 'band-label', text: layer.label }),
+  return h('div', { class: `band${active ? ' band-active' : ''}${layer.established ? '' : ' band-open'}` },
+    h('button', {
+      class: 'band-hit',
+      'aria-current': active ? 'page' : false,
+      onclick: () => state.onSelect(layer.id),
+    },
+      h('span', { class: 'band-label', text: layer.label }),
 
-    layer.established
-      ? h('span', { class: 'band-value', text: usd(layer.valueUsd) })
-      : h('span', { class: 'band-value band-unset', text: 'not established' }),
+      layer.established
+        ? h('span', { class: 'band-value', text: usd(layer.valueUsd) })
+        : h('span', { class: 'band-value band-unset', text: 'not established' }),
 
-    h('span', { class: 'band-basis', text: layer.basis }),
+      h('span', { class: 'band-basis', text: layer.basis }),
 
-    !layer.established && layer.nextStep
-      ? h('span', { class: 'band-next', text: layer.nextStep })
-      : null);
+      !layer.established && layer.nextStep
+        ? h('span', { class: 'band-next', text: layer.nextStep })
+        : null),
+
+    h('button', {
+      class: 'band-inspect',
+      'aria-label': `Inspect the evidence for the ${layer.label.toLowerCase()} claim`,
+      onclick: () => state.onInspect(layer),
+      text: () => (isPrecise() ? 'inspect claim' : 'why this number?'),
+    }));
 }
 
 export function spine(state: SpineState): Node {

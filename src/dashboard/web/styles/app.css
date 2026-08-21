@@ -175,16 +175,37 @@ body {
   gap: var(--s2);
 }
 
+/* The band is a container, not a control: it holds the navigation target and
+   the inspect target, so it owns only the edge and the ground they sit on. */
 .band {
-  display: flex; flex-direction: column; gap: var(--s2);
-  text-align: left; padding: var(--s4) var(--s4) var(--s5);
-  border: 0; border-top: 2px solid var(--line);
-  background: none; color: inherit; font: inherit; cursor: pointer;
+  display: flex; flex-direction: column;
+  border-top: 2px solid var(--line);
   transition: border-color var(--t) var(--ease), background var(--t) var(--ease);
   border-radius: 0 0 var(--r-sm) var(--r-sm);
   min-width: 0;
 }
 .band:hover { background: var(--panel); }
+
+/* The navigation half. It carries the padding and the type. */
+.band-hit {
+  display: flex; flex-direction: column; gap: var(--s2);
+  text-align: left; padding: var(--s4) var(--s4) var(--s3);
+  border: 0; background: none; color: inherit; font: inherit; cursor: pointer;
+  min-width: 0; flex: 1;
+}
+
+/* Deliberately quiet. "Why this number?" is the question this product most
+   wants asked, but the control that asks it should not compete with the figure
+   it is asking about. */
+.band-inspect {
+  align-self: flex-start;
+  margin: 0 var(--s4) var(--s4); padding: 0;
+  border: 0; border-bottom: 1px solid transparent; background: none;
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em;
+  color: var(--faint); cursor: pointer;
+  transition: color var(--t) var(--ease), border-color var(--t) var(--ease);
+}
+.band-inspect:hover { color: var(--gold-text); border-bottom-color: var(--gold-text); }
 .band-active { border-top-color: var(--gold); background: var(--panel); }
 
 /* An unestablished layer is drawn as an open socket, not a filled card. The
@@ -221,7 +242,9 @@ body {
 @media (max-width: 900px) {
   .spine-rail { grid-template-columns: minmax(0, 1fr); gap: 0; }
   .sep { display: none; }
-  .band { border-top-width: 1px; padding: var(--s3) var(--s2) var(--s4); }
+  .band { border-top-width: 1px; }
+  .band-hit { padding: var(--s3) var(--s2) var(--s2); }
+  .band-inspect { margin: 0 var(--s2) var(--s4); }
   .band-basis, .band-next { max-width: none; }
 }
 
@@ -424,6 +447,74 @@ tr:last-child td { border-bottom: 0; }
 .btn-commit.tone-warn { background: var(--gold); border-color: var(--gold); }
 
 body.drawer-open { overflow: hidden; }
+body.claim-open { overflow: hidden; }
+
+/* ---------- Claim Inspector --------------------------------------------- */
+
+/* The long form of a band's basis. It reuses the drawer's overlay mechanics
+   deliberately -- same scrim, same slide, same escape -- because it is the same
+   gesture from the operator's side, and a second visual language for "a panel
+   came out of the right" would only ask them to learn one twice. It reads and
+   never acts, so it carries no tone variants and no commit affordance. */
+.claim-wrap { position: fixed; inset: 0; z-index: 60; }
+.claim-scrim {
+  position: absolute; inset: 0;
+  background: rgba(3, 5, 10, 0.62); backdrop-filter: blur(2px);
+  animation: fade var(--t) var(--ease);
+}
+:root[data-theme='light'] .claim-scrim { background: rgba(40, 34, 20, 0.34); }
+
+.claim-panel {
+  position: absolute; top: 0; right: 0; bottom: 0;
+  width: min(520px, 100%);
+  background: var(--panel); border-left: 2px solid var(--gold);
+  box-shadow: var(--shadow);
+  padding: var(--s6); overflow-y: auto;
+  display: flex; flex-direction: column; gap: var(--s4);
+  animation: slide var(--t) var(--ease);
+}
+/* An unestablished claim keeps the open-socket edge the band uses, so the
+   panel does not look more settled than the thing it is explaining. */
+.claim-panel-open { border-left-style: dashed; border-left-color: var(--line); }
+
+.claim-head { position: relative; padding-right: var(--s8); }
+.claim-title { font-family: var(--serif); font-size: 22px; font-weight: 500; margin-top: var(--s1); }
+.claim-close {
+  position: absolute; top: -4px; right: -4px;
+  width: 32px; height: 32px; border: 0; background: none;
+  color: var(--faint); font-size: 22px; line-height: 1; cursor: pointer; border-radius: var(--r-sm);
+}
+.claim-close:hover { color: var(--text); background: var(--panel-2); }
+
+.claim-figure {
+  font-family: var(--mono); font-size: clamp(22px, 2.4vw, 30px);
+  letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.1;
+}
+.claim-unset { font-family: var(--sans); font-size: 15px; letter-spacing: 0; color: var(--faint); font-style: italic; }
+.claim-basis { color: var(--muted); font-size: 13px; max-width: 62ch; }
+
+.claim-rows { display: grid; grid-template-columns: auto 1fr; gap: var(--s2) var(--s4); font-size: 13px; }
+.claim-row { display: contents; }
+.claim-key { color: var(--faint); font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; padding-top: 2px; }
+.claim-val { color: var(--text); margin: 0; }
+
+.claim-list { border-left: 2px solid var(--line); padding-left: var(--s4); }
+.claim-list strong { display: block; font-family: var(--mono); font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--faint); margin-bottom: var(--s2); }
+.claim-list ul { margin: 0; padding-left: var(--s4); font-size: 13px; color: var(--muted); }
+.claim-list li { margin-bottom: var(--s1); }
+.claim-assumed { border-left-color: var(--gold); }
+/* Missing evidence is the most important thing on this panel, so it is the one
+   block drawn in the colour the product uses for a gap. */
+.claim-missing { border-left-color: var(--coral); }
+.claim-missing ul { color: var(--text); }
+.claim-complete { font-size: 13px; color: var(--mint); }
+.claim-next { font-size: 13px; color: var(--gold-text); }
+
+@media (max-width: 900px) {
+  .claim-panel { width: 100%; padding: var(--s5); }
+  .claim-rows { grid-template-columns: minmax(0, 1fr); gap: 2px var(--s2); }
+  .claim-key { padding-top: var(--s2); }
+}
 
 /* ---------- First run --------------------------------------------------- */
 
