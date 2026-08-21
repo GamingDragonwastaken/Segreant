@@ -44,8 +44,8 @@ test('GET /api/value: payload always carries a reclaimed key (null when no git r
 });
 
 test('GET /api/value: a synthetic demo labels itself and exposes only a review-only cheaper-model trial', async () => {
-  const previousDemo = process.env.AEGIS_DEMO;
-  process.env.AEGIS_DEMO = '1';
+  const previousDemo = process.env.FISCUS_DEMO;
+  process.env.FISCUS_DEMO = '1';
   const store = new Store(':memory:');
   const now = new Date();
   now.setHours(12, 0, 0, 0);
@@ -67,8 +67,8 @@ test('GET /api/value: a synthetic demo labels itself and exposes only a review-o
   } finally {
     await srv.close();
     store.close();
-    if (previousDemo === undefined) delete process.env.AEGIS_DEMO;
-    else process.env.AEGIS_DEMO = previousDemo;
+    if (previousDemo === undefined) delete process.env.FISCUS_DEMO;
+    else process.env.FISCUS_DEMO = previousDemo;
   }
 });
 

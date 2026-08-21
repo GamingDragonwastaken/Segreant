@@ -22,7 +22,7 @@ function runCli(args: string[], dbPath: string, home: string, cwd?: string): Pro
     execFile(
       process.execPath,
       [CLI, ...args],
-      { env: { ...process.env, AEGIS_DB: dbPath, AEGIS_HOME: home, NODE_OPTIONS: '' }, cwd },
+      { env: { ...process.env, FISCUS_DB: dbPath, FISCUS_HOME: home, NODE_OPTIONS: '' }, cwd },
       (err, stdout, stderr) => {
         const code = err && typeof (err as NodeJS.ErrnoException & { code?: unknown }).code === 'number' ? ((err as unknown as { code: number }).code) : err ? 1 : 0;
         resolve({ code, stdout: String(stdout), stderr: String(stderr) });

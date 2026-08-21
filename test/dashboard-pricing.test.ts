@@ -51,9 +51,9 @@ function boot(store: Store) {
 }
 
 test('GET /api/overview exposes local rate-card freshness and estimated-rate coverage without a pricing refresh', async () => {
-  const oldHome = process.env.AEGIS_HOME;
+  const oldHome = process.env.FISCUS_HOME;
   const home = mkdtempSync(join(tmpdir(), 'fiscus-dashboard-pricing-'));
-  process.env.AEGIS_HOME = home;
+  process.env.FISCUS_HOME = home;
   const store = new Store(':memory:');
   store.insertRequest(request({
     requestId: 'exact', costUsd: 3, estimated: false,
@@ -122,8 +122,8 @@ test('GET /api/overview exposes local rate-card freshness and estimated-rate cov
   } finally {
     await srv.close();
     store.close();
-    if (oldHome === undefined) delete process.env.AEGIS_HOME;
-    else process.env.AEGIS_HOME = oldHome;
+    if (oldHome === undefined) delete process.env.FISCUS_HOME;
+    else process.env.FISCUS_HOME = oldHome;
     rmSync(home, { recursive: true, force: true });
   }
 });

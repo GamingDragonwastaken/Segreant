@@ -148,7 +148,7 @@ test('resolveOpencodeConfigPath: OPENCODE_CONFIG → project-level → global (m
   assert.equal(resolveOpencodeConfigPath({ cwd, home, exists: () => false }), null);
 });
 
-// ---- antigravity connector (through the real CLI, isolated AEGIS_HOME) ----
+// ---- antigravity connector (through the real CLI, isolated FISCUS_HOME) ----
 
 test('connect antigravity --write points the OpenAI upstream at the Gemini endpoint', async () => {
   const { execFile } = await import('node:child_process');
@@ -161,7 +161,7 @@ test('connect antigravity --write points the OpenAI upstream at the Gemini endpo
     execFile(
       process.execPath,
       [CLI, 'connect', 'antigravity', '--write'],
-      { env: { ...process.env, AEGIS_HOME: home, NODE_OPTIONS: '' } },
+      { env: { ...process.env, FISCUS_HOME: home, NODE_OPTIONS: '' } },
       (err, stdout) => resolve({ code: err ? 1 : 0, stdout: String(stdout) }),
     );
   });

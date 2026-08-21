@@ -25,10 +25,10 @@ import {
   type CommitLike,
 } from '../src/value/liftBaseline.ts';
 
-const origHome = process.env.AEGIS_HOME;
+const origHome = process.env.FISCUS_HOME;
 function freshHome(): string {
   const dir = mkdtempSync(join(tmpdir(), 'aegis-liftbaseline-'));
-  process.env.AEGIS_HOME = dir;
+  process.env.FISCUS_HOME = dir;
   return dir;
 }
 function manifest(featureMin: number, curated = '2099-01-01'): string {
@@ -91,8 +91,8 @@ test('baselineManifestStatus flags a stale table by its curated date', () => {
 });
 
 test.after(() => {
-  if (origHome === undefined) delete process.env.AEGIS_HOME;
-  else process.env.AEGIS_HOME = origHome;
+  if (origHome === undefined) delete process.env.FISCUS_HOME;
+  else process.env.FISCUS_HOME = origHome;
 });
 
 // ---- personal-history mining (pure) ----

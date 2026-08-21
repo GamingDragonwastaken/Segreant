@@ -5,14 +5,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { applyPricingManifest, loadPricing, MAX_PRICING_MANIFEST_BYTES, pricingStatus, rateFor, refreshPricing, transformLiteLLMManifest } from '../src/cost/pricing.ts';
 
-// These exercise the refresh/override path against an isolated AEGIS_HOME so the
+// These exercise the refresh/override path against an isolated FISCUS_HOME so the
 // real ~/.aegisflow is never touched. node's test runner isolates each FILE in
 // its own process, so the module-level pricing memo here can't leak elsewhere.
-const origHome = process.env.AEGIS_HOME;
+const origHome = process.env.FISCUS_HOME;
 
 function freshHome(): string {
   const dir = mkdtempSync(join(tmpdir(), 'aegis-pricing-'));
-  process.env.AEGIS_HOME = dir;
+  process.env.FISCUS_HOME = dir;
   return dir;
 }
 
@@ -233,6 +233,6 @@ test('an oversized remote manifest is refused before it can replace a verified c
 });
 
 test.after(() => {
-  if (origHome === undefined) delete process.env.AEGIS_HOME;
-  else process.env.AEGIS_HOME = origHome;
+  if (origHome === undefined) delete process.env.FISCUS_HOME;
+  else process.env.FISCUS_HOME = origHome;
 });

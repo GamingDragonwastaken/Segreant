@@ -18,7 +18,7 @@ function runCli(args: string[], dbPath: string): Promise<{ code: number; stderr:
     execFile(
       process.execPath,
       [CLI, ...args],
-      { env: { ...process.env, AEGIS_DB: dbPath, NODE_OPTIONS: '' } },
+      { env: { ...process.env, FISCUS_DB: dbPath, NODE_OPTIONS: '' } },
       (err, _stdout, stderr) => {
         const code = err && typeof (err as NodeJS.ErrnoException & { code?: unknown }).code === 'number' ? ((err as unknown as { code: number }).code) : err ? 1 : 0;
         resolve({ code, stderr: String(stderr) });

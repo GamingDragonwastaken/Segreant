@@ -269,8 +269,8 @@ test('/api/allocation is read-only and keeps the dashboard loopback host protect
 });
 
 test('demo mode seeds no cost centre, rule, or allocation run', async () => {
-  const previousDemo = process.env.AEGIS_DEMO;
-  process.env.AEGIS_DEMO = '1';
+  const previousDemo = process.env.FISCUS_DEMO;
+  process.env.FISCUS_DEMO = '1';
   const store = new Store(':memory:');
   const srv = await boot(store);
   try {
@@ -282,8 +282,8 @@ test('demo mode seeds no cost centre, rule, or allocation run', async () => {
   } finally {
     await srv.close();
     store.close();
-    if (previousDemo === undefined) delete process.env.AEGIS_DEMO;
-    else process.env.AEGIS_DEMO = previousDemo;
+    if (previousDemo === undefined) delete process.env.FISCUS_DEMO;
+    else process.env.FISCUS_DEMO = previousDemo;
   }
 });
 

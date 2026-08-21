@@ -13,7 +13,7 @@ function runCli(args: string[], dbPath: string, home?: string): Promise<{ code: 
     execFile(
       process.execPath,
       [CLI, ...args],
-      { env: { ...process.env, AEGIS_DB: dbPath, ...(home ? { AEGIS_HOME: home } : {}), NODE_OPTIONS: '' } },
+      { env: { ...process.env, FISCUS_DB: dbPath, ...(home ? { FISCUS_HOME: home } : {}), NODE_OPTIONS: '' } },
       (err, stdout, stderr) => {
         const code = err && typeof (err as NodeJS.ErrnoException & { code?: unknown }).code === 'number'
           ? ((err as unknown as { code: number }).code)

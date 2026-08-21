@@ -13,7 +13,7 @@ const CLI = join(import.meta.dirname, '..', 'src', 'cli.ts');
 function runCli(args: string[], dbPath: string, home: string): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     execFile(process.execPath, [CLI, ...args], {
-      env: { ...process.env, AEGIS_DB: dbPath, AEGIS_HOME: home, NODE_OPTIONS: '' },
+      env: { ...process.env, FISCUS_DB: dbPath, FISCUS_HOME: home, NODE_OPTIONS: '' },
     }, (err, stdout, stderr) => {
       const code = err && typeof (err as NodeJS.ErrnoException & { code?: unknown }).code === 'number'
         ? (err as unknown as { code: number }).code : err ? 1 : 0;

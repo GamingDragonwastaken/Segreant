@@ -110,8 +110,8 @@ test('loadRealization: demo mode serves stored snapshots, never the cwd repo', a
   const store = new Store(':memory:');
   seedDemo(store, { now: noonToday() });
 
-  const prev = process.env.AEGIS_DEMO;
-  process.env.AEGIS_DEMO = '1';
+  const prev = process.env.FISCUS_DEMO;
+  process.env.FISCUS_DEMO = '1';
   try {
     // process.cwd() may itself be a git repo; demo mode must still read the store.
     const loaded = await loadRealization(store, process.cwd(), { windowDays: 14 });
@@ -119,8 +119,8 @@ test('loadRealization: demo mode serves stored snapshots, never the cwd repo', a
     assert.equal(loaded!.source, 'store');
     assert.equal(loaded!.report.matured.units, 15);
   } finally {
-    if (prev === undefined) delete process.env.AEGIS_DEMO;
-    else process.env.AEGIS_DEMO = prev;
+    if (prev === undefined) delete process.env.FISCUS_DEMO;
+    else process.env.FISCUS_DEMO = prev;
   }
   store.close();
 });

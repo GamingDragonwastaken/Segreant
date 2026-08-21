@@ -12,7 +12,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-process.env.AEGIS_HOME = mkdtempSync(join(tmpdir(), 'aegis-home-'));
+process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'aegis-home-'));
 
 import {
   reconcileOpenAiCosts,

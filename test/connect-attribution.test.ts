@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-process.env.AEGIS_HOME = mkdtempSync(join(tmpdir(), 'aegis-home-'));
+process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'aegis-home-'));
 
 import { Store } from '../src/store/db.ts';
 import { importClaudeCode } from '../src/connect/claudeCode.ts';

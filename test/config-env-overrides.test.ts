@@ -15,7 +15,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { readdirSync, readFileSync } from 'node:fs';
 import { aegisHome, dbPath, demoDbPath, isDemo, envOverrideKey } from '../src/config.ts';
 
 const KEYS = ['FISCUS_HOME', 'AEGIS_HOME', 'FISCUS_DB', 'AEGIS_DB', 'FISCUS_DEMO', 'AEGIS_DEMO'];
@@ -92,4 +94,48 @@ test('isDemo reads either spelling, and is false when neither is set', () => {
   assert.equal(withEnv({ AEGIS_DEMO: '1' }, isDemo), true);
   assert.equal(withEnv({ FISCUS_DEMO: '1' }, isDemo), true);
   assert.equal(withEnv({ FISCUS_DEMO: '0' }, isDemo), false);
+});
+
+/**
+ * The isolation guard.
+ *
+ * Every test that touches a Fiscus home isolates itself by setting an override
+ * to a temp directory. Those overrides were spelled `AEGIS_*`, and adding a
+ * `FISCUS_*` spelling that OUTRANKS them silently broke that isolation: a
+ * developer with `FISCUS_HOME` exported — which the docs now tell them to do —
+ * had the suite write into their real home instead. Measured before the fix, a
+ * full run leaked 14 files into an exported `FISCUS_HOME`, including
+ * `config.json` and `team-key.json`, the machine's signing identity.
+ *
+ * So a test may only isolate itself with the override that actually wins. This
+ * compares the literal the tests use against the key the resolver prefers, so
+ * introducing a third, higher-precedence name breaks this test rather than the
+ * isolation of every other one.
+ */
+test('tests isolate themselves with the override that actually wins', () => {
+  // `fileURLToPath`, not `url.pathname` — this repository lives under a path
+  // with a space in it, and `pathname` hands back `Projects%20&%20Learning`,
+  // which `readdirSync` cannot open. A guard that throws ENOENT is a guard that
+  // never checked anything.
+  const dir = dirname(fileURLToPath(import.meta.url));
+  const preferred = { HOME: envOverrideKey('HOME'), DB: envOverrideKey('DB'), DEMO: envOverrideKey('DEMO') };
+
+  const offenders: string[] = [];
+  let isolating = 0;
+  for (const file of readdirSync(dir).filter((f) => f.endsWith('.test.ts'))) {
+    if (file === 'config-env-overrides.test.ts') continue; // exercises both names on purpose
+    const src = readFileSync(join(dir, file), 'utf8');
+    for (const [name, key] of Object.entries(preferred)) {
+      // `\\b` — in a template literal `\b` is a backspace character, not a word
+      // boundary, and the regex would silently match nothing.
+      const legacy = new RegExp(`\\bAEGIS_${name}\\b`);
+      if (legacy.test(src)) offenders.push(`${file} uses AEGIS_${name}; it must use ${key}`);
+      if (src.includes(key)) isolating++;
+    }
+  }
+
+  assert.deepEqual(offenders, []);
+  // Guard the guard: if this stops finding any isolating test, the check has
+  // silently stopped checking anything.
+  assert.ok(isolating > 10, `expected many isolating tests, found ${isolating}`);
 });

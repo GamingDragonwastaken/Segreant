@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 // Isolate from any real ~/.aegisflow pricing override.
-process.env.AEGIS_HOME = mkdtempSync(join(tmpdir(), 'aegis-home-'));
+process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'aegis-home-'));
 
 import { DatabaseSync } from 'node:sqlite';
 import { Store, type RequestRow, type RepriceUpdate, type CostScope } from '../src/store/db.ts';

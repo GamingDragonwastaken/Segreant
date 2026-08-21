@@ -41,7 +41,7 @@ function meteredRequest(): RequestRow {
 function runCli(args: string[], dbPath: string, env: Record<string, string | undefined> = {}): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     execFile(process.execPath, [CLI, ...args], {
-      env: { ...process.env, AEGIS_DB: dbPath, OPENAI_ADMIN_API_KEY: undefined, NODE_OPTIONS: '', ...env },
+      env: { ...process.env, FISCUS_DB: dbPath, OPENAI_ADMIN_API_KEY: undefined, NODE_OPTIONS: '', ...env },
     }, (err, stdout, stderr) => {
       const code = err && typeof (err as NodeJS.ErrnoException & { code?: unknown }).code === 'number'
         ? (err as unknown as { code: number }).code : err ? 1 : 0;

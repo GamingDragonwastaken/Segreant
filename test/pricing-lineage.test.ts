@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 // Do not inherit a developer's live price-card cache while asserting local lineage.
-process.env.AEGIS_HOME = mkdtempSync(join(tmpdir(), 'fiscus-pricing-lineage-home-'));
+process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'fiscus-pricing-lineage-home-'));
 
 import { Store, type RequestRow } from '../src/store/db.ts';
 import { computeCost, legacyPricingEvidence, toolReportedPricingEvidence, unpricedPricingEvidence } from '../src/cost/pricing.ts';

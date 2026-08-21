@@ -20,7 +20,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-process.env.AEGIS_HOME = mkdtempSync(join(tmpdir(), 'aegis-adopt-'));
+process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'aegis-adopt-'));
 
 import { Store, type RequestRow } from '../src/store/db.ts';
 import { readBillingImportFile } from '../src/billing/importer.ts';

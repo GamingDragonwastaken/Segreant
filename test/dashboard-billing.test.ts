@@ -213,8 +213,8 @@ test('/api/billing is read-only and retains the dashboard loopback host protecti
 });
 
 test('Billing dashboard client is a manual, separate view with no fabricated demo evidence', async () => {
-  const previousDemo = process.env.AEGIS_DEMO;
-  process.env.AEGIS_DEMO = '1';
+  const previousDemo = process.env.FISCUS_DEMO;
+  process.env.FISCUS_DEMO = '1';
   const store = new Store(':memory:');
   const srv = await boot(store);
   try {
@@ -235,7 +235,7 @@ test('Billing dashboard client is a manual, separate view with no fabricated dem
   } finally {
     await srv.close();
     store.close();
-    if (previousDemo === undefined) delete process.env.AEGIS_DEMO;
-    else process.env.AEGIS_DEMO = previousDemo;
+    if (previousDemo === undefined) delete process.env.FISCUS_DEMO;
+    else process.env.FISCUS_DEMO = previousDemo;
   }
 });
