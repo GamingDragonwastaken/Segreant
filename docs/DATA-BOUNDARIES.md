@@ -79,8 +79,16 @@ Fiscus persists redacted local receipts for policy preflight and dial start; it
 adds a response or failure receipt afterwards. The receipt chain contains
 hashes, rule identifiers, event metadata, byte counts, and status only—not
 request bodies, query strings, API keys, headers, raw origins, or response
-bodies. `fiscus egress status` and `fiscus egress verify` expose the configured
-scope and the local chain.
+bodies. A missing receipt file is the only genesis case. If the path is present
+but empty, malformed, truncated, hash-invalid, unreadable, or cannot be safely
+locked/extended, Fiscus refuses before DNS/socket creation; it never treats that
+state as a fresh chain. `fiscus egress status` and `fiscus egress verify` expose
+the configured scope, exact failure reason, and local chain health so the
+operator can repair or restore the retained history before retrying. A bounded
+stale-lock refusal requires confirming that no Fiscus writer is active before
+the operator removes only that lock; abandoned locks are never auto-deleted.
+Receipt writes are synchronous, but Fiscus does not claim `fsync` or power-loss
+durability for this local ledger.
 
 With the default `metadataOnly: false`, Fiscus may also retain parsed proposed
 code lines locally to measure whether an AI proposal later appeared in a Git

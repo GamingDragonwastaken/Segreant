@@ -43,8 +43,13 @@ Fiscus keeps four different claims separate:
   literal loopback HTTP(S) targets only and refuses non-loopback targets before
   DNS. `controlled_cloud` mode permits a cloud request only when an enabled,
   exact rule matches its purpose, data class, method, HTTPS origin, and leading
-  path; it pins the selected public IP for the dial, follows no redirect, and
-  writes redacted hash-chained local receipts before preflight and dial.
+  path; it pins the selected public IP for the dial, follows no redirect, and,
+  after policy evaluation, writes a redacted hash-chained `preflight_allowed`
+  receipt before DNS resolution and a `dial_started` receipt before the socket.
+  Only a
+  genuinely absent receipt history may establish genesis; any present history
+  that is empty, malformed, truncated, hash-invalid, unreadable, or not safely
+  lockable refuses before DNS/socket creation and is never silently reset.
 - A local versioned rate card supplies a local list-price estimate. Rows retain
   pricing match and lineage; a list-price estimate is not a provider bill.
 - The ledger preserves the distinction between proxy usage, imported usage,
@@ -133,6 +138,11 @@ the provider or optional egress paths above.
   `controlled_cloud rule and receipt` for a permitted cloud request. Do not
   generalize either to the operating system, other applications, direct
   clients, or provider retention.
+- Say a present receipt-history integrity or persistence failure blocks before
+  dial and needs operator repair/restore; do not describe it as transparent
+  passthrough or as a fresh genesis.
+- Say a bounded stale-lock refusal requires confirming that no Fiscus writer is
+  active before removing only that lock; do not claim Fiscus auto-cleans locks.
 - Say review-only model trial, not forecast, recommendation, routing decision,
   or automatic action.
 - State current coding-agent strength separately from the broader AI Financial

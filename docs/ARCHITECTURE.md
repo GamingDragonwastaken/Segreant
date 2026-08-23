@@ -26,7 +26,10 @@ This document records what Fiscus is, how it's built, and — just as important 
   database service dependency. Provider forwarding and optional refresh,
   webhook, judge, cost-observation, and team paths use the declared Fiscus-process
   egress boundary; they are not hidden services.
-- **Reliability**: a failure in tracking must never break a developer's session. Tracking degrades to transparent passthrough.
+- **Reliability**: ordinary metering/DB failures degrade to transparent
+  passthrough, but the declared egress policy and pre-dial receipt-integrity
+  gate are intentionally load-bearing. A present receipt history that cannot be
+  validated or extended refuses the outbound request before DNS/socket creation.
 
 ### Constraints
 - One developer, zero-dollar infra budget, must run today on Windows/macOS/Linux.
@@ -227,8 +230,20 @@ Design properties that make it a standard rather than a dashboard:
 - **Value Receipts** (`src/value/receipt.ts`): each unit emits an ed25519-signed, canonical record of cost → gate verdicts → outcome. Verification separates two guarantees: **integrity** (body unaltered, signature valid, claimed keyId honestly fingerprints the embedded key) always holds from the receipt alone; **authenticity** (signed by the expected party) requires an out-of-band trust anchor — the verifier pins the publisher's keyId (`receipt --verify <file> --key-id <id>`, publish yours with `receipt --pubkey`). Without a pin, a self-consistent forgery would read as intact, so the CLI flags unpinned checks explicitly. This is what turns a private number into a portable, auditable unit of account.
 - **Honest scope**: proposal capture covers **both streaming (SSE tool-call reassembly, `src/proxy/stream-proposals.ts`) and non-streaming** responses through identical extraction; Tested/Merged/Shipped depend on ingested signals; Survived/Clean are "to date". None of these are faked — unobserved gates read `unknown`. (Full reasoning in RESEARCH-REVIEW §3.)
 
-### D6 — Fail open
-DB write failure, parse failure, or any internal error falls through to passthrough. A budget *block* is the only thing that intentionally stops a request. Tracking is never load-bearing for the developer's work.
+### D6 — Fail open for measurement, fail closed for declared egress integrity
+DB write failure, parse failure, or another ordinary measurement error falls
+through to passthrough. The egress boundary is different: a policy denial,
+present-invalid receipt history, unreadable history, or lock/persistence failure
+intentionally stops the outbound request before DNS resolution. When an allowed
+target is resolved, a DNS denial is raised after that resolution attempt and
+before socket creation; no DNS-denied target is dialled.
+Only a genuinely absent receipt path may establish a genesis predecessor, and a
+present invalid path is never silently reset. A bounded stale-lock refusal is
+operator-repairable only after confirming no Fiscus writer is active; the lock
+is never auto-deleted. A budget *block* is another
+intentional request stop. Receipt persistence is synchronous, but it is not an
+`fsync` or power-loss durability guarantee; the boundary is process-scoped and
+does not defeat a machine administrator who can replace local files.
 
 ---
 
@@ -238,7 +253,10 @@ This is single-user, single-process, local. "Scale" means a busy developer's age
 
 - **Throughput**: bounded by upstream latency; concurrency is Node's event loop. SQLite writes are tiny and happen after the response is sent to the client.
 - **Storage growth**: `prune` removes rows past `retentionDays` and `VACUUM`s. A heavy multi-agent month is megabytes, not gigabytes.
-- **Failure modes**: corrupt config → defaults; DB locked/unwritable → passthrough; upstream error → forwarded verbatim to the client.
+- **Failure modes**: corrupt config → defaults; ordinary DB locked/unwritable →
+  passthrough; invalid/unreadable/unlockable egress receipt history → refusal
+  before dial with an actionable local error; upstream error → forwarded
+  verbatim to the client.
 - **Observability**: the daemon prints a per-request line; the dashboard polls every 4s; `today --json` is scriptable.
 
 ---

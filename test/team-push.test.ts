@@ -4,10 +4,13 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import http from 'node:http';
 import { execFile } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Store } from '../src/store/db.ts';
+import { GATE_LADDER, scoreFunnel, type Gate, type GateResult } from '../src/value/gates.ts';
 
 const CLI = join(import.meta.dirname, '..', 'src', 'cli.ts');
 
@@ -67,6 +70,54 @@ test('team push: refuses a non-loopback plaintext HTTP endpoint before reading o
     assert.match(payload.error, /plaintext HTTP/i);
     assert.match(payload.error, /HTTPS/i);
   } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('team push: preserves a receipt refusal and repair action without opening the team socket', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-push-receipt-'));
+  let connections = 0;
+  const upstream = http.createServer((_req, res) => { res.writeHead(204); res.end(); });
+  upstream.on('connection', () => { connections += 1; });
+  await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+  const port = (upstream.address() as { port: number }).port;
+  try {
+    const db = join(dir, 'push.db');
+    const home = join(dir, 'home');
+    const store = new Store(db);
+    const now = Date.now();
+    const verdicts = Object.fromEntries(GATE_LADDER.map((gate) => [gate, { gate, verdict: 'pass', detail: 'fixture' }])) as Record<Gate, GateResult>;
+    const unit = {
+      hash: 'a'.repeat(40), subject: 'fixture feature', tsEpochMs: now - 3_600_000, linesAdded: 4, linesDeleted: 0, filesChanged: 1,
+      windowStartMs: now - 7_200_000, windowEndMs: now, attributedCostUsd: 1, attributedRequests: 1,
+      attributedOutputTokens: 10, costPerHundredLines: 25, ageDays: 30, maturing: false, survivalRatio: 1,
+      reverted: false, hadProposal: false, acceptance: null, taskType: 'feature', dominantModel: 'gpt-4o',
+      dominantModelCostUsd: 1, dominantModelCostShare: 1, dominantModelCostBasis: 'local_list_price',
+      dominantModelRateCard: null, costStale: false, funnel: scoreFunnel(verdicts),
+    };
+    store.saveRealizationUnits([{
+      commitHash: unit.hash,
+      project: 'fixture-project',
+      tsEpochMs: unit.tsEpochMs,
+      computedAtMs: now,
+      attributedCostUsd: 1,
+      maturing: false,
+      realized: true,
+      unitJson: JSON.stringify(unit),
+      costScope: 'project',
+    }]);
+    store.close();
+    mkdirSync(home, { recursive: true });
+    writeFileSync(join(home, 'egress-receipts.jsonl'), '{"version":1}\n', 'utf8');
+    const r = await runCli(['team', 'push', '--url', `http://127.0.0.1:${port}`, '--json'], db, home);
+    assert.equal(r.code, 1, r.stderr);
+    const payload = JSON.parse(r.stdout) as { ok: boolean; failureCode?: string; action?: string; error?: string };
+    assert.equal(payload.ok, false);
+    assert.equal(payload.failureCode, 'egress_receipt_integrity_failed');
+    assert.match(payload.action ?? payload.error ?? '', /repair.*restore/i);
+    assert.equal(connections, 0, 'receipt refusal occurred before the team socket dial');
+  } finally {
+    await new Promise<void>((resolve) => upstream.close(() => resolve()));
     rmSync(dir, { recursive: true, force: true });
   }
 });

@@ -10,8 +10,8 @@ import {
   pricingStatus,
   rateFor,
   refreshPricing,
+  refreshPricingFromResponses,
   transformLiteLLMManifest,
-  type PricingRefreshTransport,
 } from '../src/cost/pricing.ts';
 
 // These exercise the refresh/override path against an isolated FISCUS_HOME so the
@@ -182,16 +182,19 @@ test('a mismatched active cache recovers only the provenance-named archived card
 test('remote refresh is HTTPS-only, records a redacted source identity, and revalidates unchanged cards with ETag', async () => {
   freshHome();
   let conditionalEtag: string | null = null;
-  const firstTransport: PricingRefreshTransport = async (_input, init) => {
-    assert.equal(init.purpose, 'pricing_refresh');
-    assert.equal(init.dataClass, 'pricing_manifest');
-    assert.equal(init.method, undefined);
-    return new Response(litellmFeed(), {
+  const target = 'https://pricing.example.test/models.json?private=never-display';
+  const first = await refreshPricingFromResponses({
+    url: target,
+    responses: [new Response(litellmFeed(), {
       status: 200,
       headers: { etag: '"price-v1"', 'last-modified': 'Wed, 12 Aug 2026 00:00:00 GMT' },
-    });
-  };
-  const first = await refreshPricing('https://pricing.example.test/models.json?private=never-display', 20_000, firstTransport);
+    })],
+    onRequest: (_url, init) => {
+      assert.equal(init.purpose, 'pricing_refresh');
+      assert.equal(init.dataClass, 'pricing_manifest');
+      assert.equal(init.method, undefined);
+    },
+  });
   assert.equal(first.ok, true);
   assert.equal(first.sourceKind, 'litellm_transformed');
   assert.equal(first.sourceUrl, 'https://pricing.example.test/models.json');
@@ -200,35 +203,34 @@ test('remote refresh is HTTPS-only, records a redacted source identity, and reva
   assert.equal(before.sourceUrl, 'https://pricing.example.test/models.json');
   assert.equal(before.freshnessBasis, 'local_fetch');
 
-  const unchangedTransport: PricingRefreshTransport = async (_input, init) => {
-    conditionalEtag = new Headers(init.headers).get('if-none-match');
-    return new Response(null, { status: 304 });
-  };
-  const second = await refreshPricing('https://pricing.example.test/models.json?private=never-display', 20_000, unchangedTransport);
+  const second = await refreshPricingFromResponses({
+    url: target,
+    responses: [new Response(null, { status: 304 })],
+    onRequest: (_url, init) => { conditionalEtag = new Headers(init.headers).get('if-none-match'); },
+  });
   assert.equal(second.ok, true);
   assert.equal(second.unchanged, true);
   assert.equal(second.cardSha256, first.cardSha256, '304 never rewrites the active rate card');
   assert.equal(conditionalEtag, '"price-v1"');
 
-  let calls = 0;
-  const unexpectedTransport: PricingRefreshTransport = async () => {
-    calls += 1;
-    return new Response('{}');
-  };
-  const insecure = await refreshPricing('http://pricing.example.test/models.json', 20_000, unexpectedTransport);
+  const insecure = await refreshPricingFromResponses({
+    url: 'http://pricing.example.test/models.json',
+    responses: [],
+  });
   assert.equal(insecure.ok, false);
   assert.match(insecure.error ?? '', /https/i);
-  assert.equal(calls, 0, 'insecure URL is rejected before an outbound request');
 });
 
 test('an oversized remote manifest is refused before it can replace a verified card', async () => {
   freshHome();
   assert.equal(applyPricingManifest(manifest(73)).ok, true);
-  const oversizedTransport: PricingRefreshTransport = async () => new Response('{}', {
+  const result = await refreshPricingFromResponses({
+    url: 'https://pricing.example.test/too-large.json',
+    responses: [new Response('{}', {
       status: 200,
       headers: { 'content-length': String(MAX_PRICING_MANIFEST_BYTES + 1) },
+    })],
   });
-  const result = await refreshPricing('https://pricing.example.test/too-large.json', 20_000, oversizedTransport);
   assert.equal(result.ok, false);
   assert.match(result.error ?? '', /byte limit/i);
   assert.equal(rateFor('anthropic', 'claude-opus-4-8').rate.input, 73);
@@ -239,6 +241,15 @@ test('default local_locked mode refuses a remote pricing refresh before DNS or d
   const result = await refreshPricing('https://pricing.example.test/models.json');
   assert.equal(result.ok, false);
   assert.match(result.error ?? '', /local_locked permits only literal loopback/i);
+});
+
+test('default pricing transport refuses corrupt receipt history before DNS or socket creation', async () => {
+  const home = freshHome();
+  writeFileSync(join(home, 'egress-receipts.jsonl'), '{"version":1}\n', 'utf8');
+  const result = await refreshPricing('https://pricing.example.test/models.json');
+  assert.equal(result.ok, false);
+  assert.equal(result.failureCode, 'egress_receipt_integrity_failed');
+  assert.match(result.error ?? '', /repair\/restore.*receipt/i);
 });
 
 test.after(() => {

@@ -8,10 +8,23 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import type http from 'node:http';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { buildSettingsSnapshot, applySettingsPatch } from '../src/dashboard/settings.ts';
 import { DEFAULT_CONFIG } from '../src/config.ts';
 import { Store, type RequestRow } from '../src/store/db.ts';
 import { createDashboardServer } from '../src/dashboard/server.ts';
+
+const originalFiscusHome = process.env.FISCUS_HOME;
+const dashboardTestHome = mkdtempSync(join(tmpdir(), 'fiscus-dashboard-settings-home-'));
+process.env.FISCUS_HOME = dashboardTestHome;
+
+test.after(() => {
+  if (originalFiscusHome === undefined) delete process.env.FISCUS_HOME;
+  else process.env.FISCUS_HOME = originalFiscusHome;
+  rmSync(dashboardTestHome, { recursive: true, force: true });
+});
 
 function req(over: Partial<RequestRow>): RequestRow {
   return {
@@ -46,6 +59,24 @@ test('buildSettingsSnapshot reports no connections when no traffic is in the win
   const snap = buildSettingsSnapshot(store, structuredClone(DEFAULT_CONFIG), '0.1.0');
   assert.deepEqual(snap.connections, []);
   store.close();
+});
+
+test('dashboard settings action exposes corrupt receipt history and bounded repair guidance', () => {
+  const home = mkdtempSync(join(tmpdir(), 'fiscus-dashboard-receipt-refusal-'));
+  const previousHome = process.env.FISCUS_HOME;
+  process.env.FISCUS_HOME = home;
+  writeFileSync(join(home, 'egress-receipts.jsonl'), '{"version":1}\n', 'utf8');
+  const store = new Store(':memory:');
+  try {
+    const snapshot = buildSettingsSnapshot(store, structuredClone(DEFAULT_CONFIG), '0.1.0');
+    assert.equal(snapshot.egress.receipts.ok, false);
+    assert.match(snapshot.egress.receipts.errors.join(' '), /id|hash/i);
+  } finally {
+    store.close();
+    if (previousHome === undefined) delete process.env.FISCUS_HOME;
+    else process.env.FISCUS_HOME = previousHome;
+    rmSync(home, { recursive: true, force: true });
+  }
 });
 
 test('applySettingsPatch updates only the fields provided, never mutating the input', () => {

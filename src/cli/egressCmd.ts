@@ -55,6 +55,13 @@ function statusPayload(): Record<string, unknown> {
   };
 }
 
+const RECEIPT_REPAIR_ACTION = 'preserve and repair/restore the present receipt history before retrying; if the lock is stale, confirm no Fiscus writer is active, then remove only that lock and rerun verify; Fiscus will not restart history as genesis.';
+
+function printReceiptAction(ok: boolean): void {
+  if (ok) return;
+  console.error('  Action: ' + RECEIPT_REPAIR_ACTION);
+}
+
 export function cmdEgress(flags: Flags): void {
   const tty = process.stdout.isTTY ?? false;
   const sub = typeof flags._[0] === 'string' ? flags._[0] : 'status';
@@ -69,6 +76,10 @@ export function cmdEgress(flags: Flags): void {
       console.log('  Rules: ' + (rules.length ? rules.map((rule) => rule.id + ' (' + (rule.enabled ? 'enabled' : 'disabled') + ')').join(', ') : 'none'));
       const receipts = payload.receipts as ReturnType<typeof verifyEgressReceipts> & { path: string };
       console.log('  Receipts: ' + receipts.receiptCount + ' local receipt(s), chain ' + (receipts.ok ? 'valid' : 'INVALID'));
+      if (!receipts.ok) {
+        for (const failure of receipts.errors) console.error(color(tty, C.red, '  ' + failure));
+        printReceiptAction(false);
+      }
       console.log(color(tty, C.gray, '  Scope: ' + payload.scope));
       console.log('');
     }
@@ -76,7 +87,12 @@ export function cmdEgress(flags: Flags): void {
   }
 
   if (sub === 'receipts' || sub === 'verify') {
-    const payload = { path: egressReceiptPath(), ...verifyEgressReceipts() };
+    const verified = verifyEgressReceipts();
+    const payload = {
+      path: egressReceiptPath(),
+      ...verified,
+      ...(verified.ok ? {} : { action: RECEIPT_REPAIR_ACTION }),
+    };
     if (flags.json) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
     else {
       console.log('');
@@ -84,6 +100,7 @@ export function cmdEgress(flags: Flags): void {
       console.log('  Receipts: ' + payload.receiptCount);
       console.log('  Path: ' + payload.path);
       for (const failure of payload.errors) console.error(color(tty, C.red, '  ' + failure));
+      printReceiptAction(payload.ok);
       console.log('');
     }
     if (!payload.ok) process.exitCode = 1;

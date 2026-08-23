@@ -19,9 +19,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { judgeSession } from '../src/judge/orchestrate.ts';
 import { DEFAULT_CONFIG, type JudgeConfig } from '../src/config.ts';
 import type { RequestRow, ProposalRow } from '../src/store/db.ts';
+
+const originalFiscusHome = process.env.FISCUS_HOME;
+const judgeOrchestrateHome = mkdtempSync(join(tmpdir(), 'fiscus-judge-orchestrate-home-'));
+process.env.FISCUS_HOME = judgeOrchestrateHome;
+
+test.after(() => {
+  if (originalFiscusHome === undefined) delete process.env.FISCUS_HOME;
+  else process.env.FISCUS_HOME = originalFiscusHome;
+  rmSync(judgeOrchestrateHome, { recursive: true, force: true });
+});
 
 function cfg(overrides: Partial<JudgeConfig> = {}): JudgeConfig {
   return { ...DEFAULT_CONFIG.judge, ...overrides };

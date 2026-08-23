@@ -44,8 +44,13 @@ fiscus egress apply --apply --mode controlled_cloud \
 ```
 
 The receipt chain is local and redacted: `fiscus egress verify` checks its
-integrity, but neither a rule nor a receipt guarantees another process's
-network behaviour or the provider's retention policy.
+integrity. A genuinely absent file may establish genesis, but any present
+invalid/unreadable history or lock/persistence failure refuses the routed
+request before DNS or dial and is not reset automatically; repair or restore it
+before retrying. If the bounded lock wait reports a stale lock, confirm that no
+Fiscus writer is active, remove only that lock, and rerun receipt verification;
+the transport never auto-deletes it. Neither a rule nor a valid receipt guarantees another
+process's network behaviour or the provider's retention policy.
 
 ### The base-URL `/v1` rule (read this once)
 

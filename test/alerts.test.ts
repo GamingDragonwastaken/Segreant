@@ -6,6 +6,9 @@ import { detectAlerts, computeAlerts, type AlertInputs } from '../src/alerts/det
 import { buildWebhookPayload, notifyWebhook } from '../src/alerts/notify.ts';
 import { Store } from '../src/store/db.ts';
 import { DEFAULT_CONFIG, type FiscusConfig } from '../src/config.ts';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 function base(over: Partial<AlertInputs> = {}): AlertInputs {
   return {
@@ -22,6 +25,18 @@ function base(over: Partial<AlertInputs> = {}): AlertInputs {
 }
 
 const ids = (inp: AlertInputs) => detectAlerts(inp).map((a) => a.id);
+
+async function withIsolatedFiscusHome<T>(fn: (home: string) => Promise<T>): Promise<T> {
+  const previousHome = process.env.FISCUS_HOME;
+  const home = mkdtempSync(join(tmpdir(), 'fiscus-alert-test-'));
+  process.env.FISCUS_HOME = home;
+  try {
+    return await fn(home);
+  } finally {
+    if (previousHome === undefined) delete process.env.FISCUS_HOME;
+    else process.env.FISCUS_HOME = previousHome;
+  }
+}
 
 test('alerts: nothing wrong → no alerts', () => {
   assert.deepEqual(detectAlerts(base()), []);
@@ -96,36 +111,70 @@ test('buildWebhookPayload filters below minSeverity', () => {
 });
 
 test('notifyWebhook POSTs the metadata payload and reports delivery', async () => {
-  let received: { source?: string; alerts?: Array<{ id: string }> } | null = null;
-  const server = http.createServer(async (req, res) => {
-    const chunks: Buffer[] = [];
-    for await (const c of req) chunks.push(c as Buffer);
-    received = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-    res.writeHead(200);
-    res.end('ok');
+  await withIsolatedFiscusHome(async () => {
+    let received: { source?: string; alerts?: Array<{ id: string }> } | null = null;
+    const server = http.createServer(async (req, res) => {
+      const chunks: Buffer[] = [];
+      for await (const c of req) chunks.push(c as Buffer);
+      received = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      res.writeHead(200);
+      res.end('ok');
+    });
+    server.listen(0);
+    await once(server, 'listening');
+    const addr = server.address();
+    const port = typeof addr === 'object' && addr ? addr.port : 0;
+    try {
+      const alerts = detectAlerts(base({ todaySpendUsd: 25, dailyCapUsd: 25 }));
+      const r = await notifyWebhook(`http://127.0.0.1:${port}/hook`, alerts, { minSeverity: 'warn' });
+      assert.equal(r.delivered, true);
+      assert.equal(r.status, 200);
+      assert.ok(r.posted >= 1);
+      assert.equal(received!.source, 'fiscus');
+      assert.equal(received!.alerts![0]!.id, 'budget-exhausted');
+    } finally {
+      await new Promise<void>((res) => server.close(() => res()));
+    }
   });
-  server.listen(0);
-  await once(server, 'listening');
-  const addr = server.address();
-  const port = typeof addr === 'object' && addr ? addr.port : 0;
-  try {
-    const alerts = detectAlerts(base({ todaySpendUsd: 25, dailyCapUsd: 25 }));
-    const r = await notifyWebhook(`http://127.0.0.1:${port}/hook`, alerts, { minSeverity: 'warn' });
-    assert.equal(r.delivered, true);
-    assert.equal(r.status, 200);
-    assert.ok(r.posted >= 1);
-    assert.equal(received!.source, 'fiscus');
-    assert.equal(received!.alerts![0]!.id, 'budget-exhausted');
-  } finally {
-    await new Promise<void>((res) => server.close(() => res()));
-  }
 });
 
 test('notifyWebhook never throws on an unreachable URL — returns delivered:false', async () => {
-  const alerts = detectAlerts(base({ todaySpendUsd: 25, dailyCapUsd: 25 }));
-  const r = await notifyWebhook('http://127.0.0.1:1/nope', alerts, { minSeverity: 'warn', timeoutMs: 300 });
-  assert.equal(r.delivered, false);
-  assert.ok(r.error);
+  await withIsolatedFiscusHome(async () => {
+    const alerts = detectAlerts(base({ todaySpendUsd: 25, dailyCapUsd: 25 }));
+    const r = await notifyWebhook('http://127.0.0.1:1/nope', alerts, { minSeverity: 'warn', timeoutMs: 300 });
+    assert.equal(r.delivered, false);
+    assert.ok(r.error);
+    assert.equal(r.failureCode, 'transport_failed');
+  });
+});
+
+test('notifyWebhook preserves receipt refusal and repair guidance before any socket', async () => {
+  await withIsolatedFiscusHome(async (home) => {
+    const receipts = home;
+    mkdirSync(receipts, { recursive: true });
+    writeFileSync(join(receipts, 'egress-receipts.jsonl'), '{"bad":true}\n', 'utf8');
+    let connections = 0;
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200);
+      res.end('unexpected');
+    });
+    server.on('connection', () => { connections += 1; });
+    server.listen(0);
+    await once(server, 'listening');
+    const addr = server.address();
+    const port = typeof addr === 'object' && addr ? addr.port : 0;
+    try {
+      const alerts = detectAlerts(base({ todaySpendUsd: 25, dailyCapUsd: 25 }));
+      const r = await notifyWebhook(`http://127.0.0.1:${port}/hook`, alerts, { minSeverity: 'warn' });
+      assert.equal(r.delivered, false);
+      assert.equal(r.failureCode, 'receipt_integrity_failed');
+      assert.match(r.error ?? '', /invalid|receipt|schema/i);
+      assert.match(r.action ?? '', /restore|repair/i);
+      assert.equal(connections, 0);
+    } finally {
+      await new Promise<void>((res) => server.close(() => res()));
+    }
+  });
 });
 
 test('computeAlerts: reads the store + config end-to-end (soft cap + throttling)', () => {

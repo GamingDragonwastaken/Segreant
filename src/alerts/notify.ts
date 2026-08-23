@@ -12,7 +12,7 @@
  */
 
 import type { Alert, AlertSeverity } from './detect.ts';
-import { egressFetch } from '../egress/transport.ts';
+import { egressFetch, EgressError, type EgressErrorCode } from '../egress/transport.ts';
 
 const SEV_RANK: Record<AlertSeverity, number> = { info: 0, warn: 1, critical: 2 };
 
@@ -52,6 +52,17 @@ export interface NotifyResult {
   posted: number; // how many alerts met the severity threshold
   status?: number;
   error?: string;
+  /** Stable boundary category; never collapse receipt refusal into network failure. */
+  failureCode?: EgressErrorCode | 'network_error';
+  /** Safe operator action for a local receipt refusal. */
+  action?: string;
+}
+
+function egressRepairAction(code: EgressErrorCode): string | undefined {
+  if (code === 'receipt_integrity_failed' || code === 'receipt_persistence_failed') {
+    return 'restore or repair the local egress receipt history, then retry; if a lock is stale, confirm no Fiscus writer owns it and remove only that lock';
+  }
+  return undefined;
 }
 
 /**
@@ -76,6 +87,15 @@ export async function notifyWebhook(
     });
     return { delivered: res.ok, posted: payload.alerts.length, status: res.status };
   } catch (e) {
-    return { delivered: false, posted: payload.alerts.length, error: String(e) };
+    if (e instanceof EgressError) {
+      return {
+        delivered: false,
+        posted: payload.alerts.length,
+        error: e.message,
+        failureCode: e.code,
+        action: egressRepairAction(e.code),
+      };
+    }
+    return { delivered: false, posted: payload.alerts.length, error: String(e), failureCode: 'network_error' };
   }
 }

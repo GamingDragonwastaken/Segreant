@@ -1,8 +1,13 @@
 /**
- * Hash-chained local receipts. They detect accidental edits/truncation, but are
- * not a defence against a machine administrator who can replace local files.
+ * Hash-chained local receipts. A genuinely absent history may establish genesis;
+ * a present history must validate completely before it can be extended. This
+ * detects accidental edits/truncation and fails closed before dial. The lock
+ * coordinates cooperative Fiscus writers; path identity checks catch ordinary
+ * replacement races, but a machine administrator can still replace local files
+ * outside that cooperation boundary. Persistence is synchronous, not an fsync
+ * or power-loss durability guarantee.
  */
-import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync } from 'node:fs';
+import { closeSync, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, Stats, unlinkSync, writeSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { fiscusHome, type EgressDataClass, type EgressPurpose } from '../config.ts';
@@ -48,6 +53,32 @@ export interface ReceiptVerification {
   errors: string[];
 }
 
+export type EgressReceiptFailureCode = 'integrity' | 'persistence' | 'lock';
+
+/** A typed refusal for receipt-history integrity or local persistence faults. */
+export class EgressReceiptError extends Error {
+  readonly code: EgressReceiptFailureCode;
+  readonly errors: string[];
+
+  constructor(code: EgressReceiptFailureCode, message: string, errors: string[] = [message]) {
+    super(message);
+    this.name = 'EgressReceiptError';
+    this.code = code;
+    this.errors = errors;
+  }
+}
+
+let receiptLockReleaseHookForTests: (() => void) | undefined;
+
+/** @internal deterministic filesystem-failure seam used only by boundary tests. */
+export function setReceiptLockReleaseHookForTests(hook: (() => void) | undefined): () => void {
+  const previous = receiptLockReleaseHookForTests;
+  receiptLockReleaseHookForTests = hook;
+  return () => {
+    receiptLockReleaseHookForTests = previous;
+  };
+}
+
 export function egressReceiptPath(): string {
   return join(fiscusHome(), 'egress-receipts.jsonl');
 }
@@ -63,7 +94,56 @@ function receiptLockPath(): string {
  * short-lived exclusive local lock. A stale lock fails closed rather than being
  * guessed away after a crash.
  */
+function errorCode(error: unknown): string | undefined {
+  return error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
+    ? error.code
+    : undefined;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function asReceiptError(error: unknown, code: EgressReceiptFailureCode, prefix: string): EgressReceiptError {
+  if (error instanceof EgressReceiptError) return error;
+  return new EgressReceiptError(code, prefix + ': ' + errorMessage(error));
+}
+
+function lockPathIsRegularFile(path: string): boolean {
+  try {
+    return lstatSync(path).isFile();
+  } catch (error) {
+    // A contender can remove its lock between openSync and lstatSync. Let the
+    // caller retry that race; any other inspection failure is itself a refusal.
+    if (errorCode(error) === 'ENOENT') return false;
+    throw asReceiptError(error, 'persistence', 'egress receipt lock/persistence failed while inspecting the lock');
+  }
+}
+
+function releaseReceiptLock(fd: number, lockPath: string): void {
+  let failure: EgressReceiptError | null = null;
+  try {
+    closeSync(fd);
+  } catch (error) {
+    failure = asReceiptError(error, 'lock', 'egress receipt lock/persistence failed while closing the lock');
+  }
+  try {
+    unlinkSync(lockPath);
+  } catch (error) {
+    if (failure === null) {
+      failure = asReceiptError(error, 'lock', 'egress receipt lock/persistence failed while releasing the lock');
+    }
+  }
+  if (failure !== null) throw failure;
+}
+
 function withReceiptLock<T>(fn: () => T): T {
+  const home = fiscusHome();
+  try {
+    mkdirSync(home, { recursive: true });
+  } catch (error) {
+    throw asReceiptError(error, 'persistence', 'egress receipt lock/persistence failed while preparing the Fiscus home');
+  }
   const lockPath = receiptLockPath();
   let fd: number | null = null;
   // Test runners and a real CLI + proxy can briefly contend on the same local
@@ -74,20 +154,36 @@ function withReceiptLock<T>(fn: () => T): T {
       fd = openSync(lockPath, 'wx');
       break;
     } catch (error) {
-      if (!(error instanceof Error) || !('code' in error) || error.code !== 'EEXIST') throw error;
+      const code = errorCode(error);
+      // On Windows, an exclusive open of a lock held by another process can
+      // transiently report EPERM/EACCES rather than EEXIST while the handle is
+      // being created or released. Treat those codes as contention; a real
+      // permission/open failure still reaches the bounded lock timeout and is
+      // refused rather than falling through to a dial.
+      if (code === 'EPERM' || code === 'EACCES') {
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
+        continue;
+      }
+      if (code !== 'EEXIST') {
+        throw asReceiptError(error, 'persistence', 'egress receipt lock/persistence failed while opening the lock');
+      }
+      if (!lockPathIsRegularFile(lockPath)) {
+        if (!existsSync(lockPath)) continue;
+        throw new EgressReceiptError('lock', 'egress receipt lock/persistence failed: lock path is not a regular file');
+      }
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
     }
   }
-  if (fd === null) throw new Error('egress receipt lock remained busy');
+  if (fd === null) throw new EgressReceiptError('lock', 'egress receipt lock/persistence failed: lock remained busy');
   try {
     return fn();
   } finally {
-    closeSync(fd);
-    try {
-      unlinkSync(lockPath);
-    } catch {
-      /* the next append fails closed if another fault leaves a lock behind */
-    }
+    // Lock cleanup is part of the critical section's success condition. If
+    // release cannot be completed, report a typed refusal instead of allowing
+    // the caller to proceed to DNS/socket creation with an uncertain lock
+    // owner or an abandoned lock path.
+    receiptLockReleaseHookForTests?.();
+    releaseReceiptLock(fd, lockPath);
   }
 }
 
@@ -99,25 +195,276 @@ function payload(receipt: Omit<EgressReceipt, 'hash'>): string {
   return JSON.stringify(receipt);
 }
 
-function priorHash(path: string): string | null {
-  if (!existsSync(path)) return null;
-  const text = readFileSync(path, 'utf8').trim();
-  if (!text) return null;
+function receiptHash(previous: string | null, receipt: Omit<EgressReceipt, 'hash'>): string {
+  return sha256((previous ?? '') + '\n' + payload(receipt));
+}
+
+const RECEIPT_EVENTS: readonly EgressReceiptEvent[] = [
+  'preflight_allowed', 'preflight_denied', 'dial_started', 'response_received', 'transport_failed',
+];
+
+const RECEIPT_PURPOSES: readonly EgressPurpose[] = [
+  'provider_inference', 'pricing_refresh', 'baseline_refresh', 'alert_delivery',
+  'provider_cost_observation', 'team_rollup', 'hosted_judge', 'local_judge', 'local_healthcheck',
+];
+
+const RECEIPT_DATA_CLASSES: readonly EgressDataClass[] = [
+  'provider_request', 'pricing_manifest', 'baseline_manifest', 'alert_metadata',
+  'provider_cost_aggregate', 'team_rollup', 'judge_structural_summary',
+  'judge_transcript_excerpt', 'healthcheck',
+];
+
+const RECEIPT_TARGET_CLASSES: readonly (EgressTargetClass | 'denied')[] = [
+  'loopback', 'controlled_cloud', 'denied',
+];
+
+const RECEIPT_FIELDS = new Set([
+  'version', 'id', 'at', 'event', 'purpose', 'dataClass', 'method', 'targetClass',
+  'ruleId', 'originSha256', 'pathSha256', 'bodyBytes', 'status', 'previousHash', 'hash',
+]);
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isHash(value: unknown): value is string {
+  return typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+}
+
+function isIsoTimestamp(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return false;
+  const parsed = Date.parse(value);
+  return !Number.isNaN(parsed) && new Date(parsed).toISOString() === value;
+}
+
+function schemaErrors(value: unknown, line: number): string[] {
+  if (!isObject(value)) return ['line ' + line + ': receipt must be a JSON object'];
+  const failures: string[] = [];
+  const unexpected = Object.keys(value).filter((key) => !RECEIPT_FIELDS.has(key));
+  if (unexpected.length) failures.push('line ' + line + ': unexpected receipt field(s): ' + unexpected.join(', '));
+  if (value.version !== 1) failures.push('line ' + line + ': version must be 1');
+  if (typeof value.id !== 'string' || value.id.length === 0) failures.push('line ' + line + ': id must be a non-empty string');
+  if (!isIsoTimestamp(value.at)) failures.push('line ' + line + ': at must be a canonical ISO date string');
+  if (!RECEIPT_EVENTS.includes(value.event as EgressReceiptEvent)) failures.push('line ' + line + ': event is not a supported receipt event');
+  if (!RECEIPT_PURPOSES.includes(value.purpose as EgressPurpose)) failures.push('line ' + line + ': purpose is not a supported Fiscus purpose');
+  if (!RECEIPT_DATA_CLASSES.includes(value.dataClass as EgressDataClass)) failures.push('line ' + line + ': dataClass is not a supported Fiscus data class');
+  if (typeof value.method !== 'string' || !/^[A-Z]+$/.test(value.method)) failures.push('line ' + line + ': method must be a non-empty uppercase token');
+  if (!RECEIPT_TARGET_CLASSES.includes(value.targetClass as EgressTargetClass | 'denied')) failures.push('line ' + line + ': targetClass is not supported');
+  if (value.ruleId !== null && typeof value.ruleId !== 'string') failures.push('line ' + line + ': ruleId must be a string or null');
+  if (value.originSha256 !== null && !isHash(value.originSha256)) failures.push('line ' + line + ': originSha256 must be a hash or null');
+  if (value.pathSha256 !== null && !isHash(value.pathSha256)) failures.push('line ' + line + ': pathSha256 must be a hash or null');
+  if (typeof value.bodyBytes !== 'number' || !Number.isSafeInteger(value.bodyBytes) || value.bodyBytes < 0) failures.push('line ' + line + ': bodyBytes must be a non-negative safe integer');
+  if (value.status !== null && (typeof value.status !== 'number' || !Number.isSafeInteger(value.status) || value.status < 0)) failures.push('line ' + line + ': status must be a non-negative safe integer or null');
+  if (value.previousHash !== null && !isHash(value.previousHash)) failures.push('line ' + line + ': previousHash must be a hash or null');
+  if (!isHash(value.hash)) failures.push('line ' + line + ': hash must be a lowercase SHA-256 value');
+  return failures;
+}
+
+interface ReceiptHistoryInspection extends ReceiptVerification {
+  present: boolean;
+  records: Array<EgressReceipt | null>;
+  identity?: ReceiptFileIdentity;
+}
+
+interface ReceiptFileIdentity {
+  dev: number;
+  ino: number;
+  size: number;
+  mtimeMs: number;
+  ctimeMs: number;
+  birthtimeMs: number;
+}
+
+function receiptFileIdentity(stat: Stats): ReceiptFileIdentity {
+  return {
+    dev: stat.dev,
+    ino: stat.ino,
+    size: stat.size,
+    mtimeMs: stat.mtimeMs,
+    ctimeMs: stat.ctimeMs,
+    birthtimeMs: stat.birthtimeMs,
+  };
+}
+
+function sameReceiptFile(a: ReceiptFileIdentity, b: ReceiptFileIdentity): boolean {
+  return a.dev === b.dev
+    && a.ino === b.ino
+    && a.size === b.size
+    && a.mtimeMs === b.mtimeMs
+    && a.ctimeMs === b.ctimeMs
+    && a.birthtimeMs === b.birthtimeMs;
+}
+
+function receiptHistoryStat(path: string): Stats | null {
   try {
-    const parsed = JSON.parse(text.slice(text.lastIndexOf('\n') + 1)) as Partial<EgressReceipt>;
-    return typeof parsed.hash === 'string' && /^[a-f0-9]{64}$/.test(parsed.hash) ? parsed.hash : null;
-  } catch {
-    return null;
+    const stat = lstatSync(path);
+    if (stat.isSymbolicLink()) {
+      throw new EgressReceiptError('persistence', 'egress receipt history path is a symbolic link/reparse point; restore a regular local file before retrying');
+    }
+    if (!stat.isFile()) {
+      throw new EgressReceiptError('persistence', 'egress receipt history path is not a regular file; restore a regular local file before retrying');
+    }
+    return stat;
+  } catch (error) {
+    if (error instanceof EgressReceiptError) throw error;
+    if (errorCode(error) === 'ENOENT') return null;
+    throw asReceiptError(error, 'persistence', 'egress receipt history path could not be inspected');
+  }
+}
+
+function readReceiptHistory(path: string): { text: string; identity: ReceiptFileIdentity } | null {
+  const before = receiptHistoryStat(path);
+  if (before === null) return null;
+  const identity = receiptFileIdentity(before);
+  let text: string;
+  try {
+    text = readFileSync(path, 'utf8');
+  } catch (error) {
+    if (errorCode(error) === 'ENOENT') {
+      throw new EgressReceiptError('persistence', 'egress receipt history disappeared after its presence was confirmed; restore it before retrying');
+    }
+    throw asReceiptError(error, 'persistence', 'egress receipt history could not be read');
+  }
+  const after = receiptHistoryStat(path);
+  if (after === null || !sameReceiptFile(identity, receiptFileIdentity(after))) {
+    throw new EgressReceiptError('persistence', 'egress receipt history changed while it was being read; retry only after the history is stable');
+  }
+  return { text, identity };
+}
+
+function inspectReceiptHistory(path: string): ReceiptHistoryInspection {
+  const read = readReceiptHistory(path);
+  if (read === null) return { ok: true, receiptCount: 0, validThroughHash: null, errors: [], present: false, records: [] };
+  const { text, identity } = read;
+
+  if (text.length === 0) {
+    return {
+      ok: false,
+      receiptCount: 0,
+      validThroughHash: null,
+      errors: ['empty receipt history is present; remove or repair it before retrying'],
+      present: true,
+      records: [],
+      identity,
+    };
+  }
+
+  const lines = text.split(/\r?\n/);
+  const errors: string[] = [];
+  if (!text.endsWith('\n')) errors.push('receipt history is not terminated by a newline; repair the truncated final record before retrying');
+  if (lines.at(-1) === '') lines.pop();
+  const records: Array<EgressReceipt | null> = [];
+  for (const [index, line] of lines.entries()) {
+    const lineNumber = index + 1;
+    if (!line.trim()) {
+      errors.push('line ' + lineNumber + ': empty receipt line');
+      records.push(null);
+      continue;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      errors.push('line ' + lineNumber + ': not valid receipt JSON');
+      records.push(null);
+      continue;
+    }
+    const failures = schemaErrors(parsed, lineNumber);
+    if (failures.length) {
+      errors.push(...failures);
+      records.push(null);
+      continue;
+    }
+    records.push(parsed as EgressReceipt);
+  }
+
+  let expectedPrevious: string | null = null;
+  let validThroughHash: string | null = null;
+  let receiptCount = 0;
+  for (const [index, receipt] of records.entries()) {
+    if (receipt === null) continue;
+    receiptCount++;
+    const { hash, ...base } = receipt;
+    const lineNumber = index + 1;
+    const previousMatches = receipt.previousHash === expectedPrevious;
+    const hashMatches = hash === receiptHash(expectedPrevious, base);
+    if (!previousMatches) errors.push('line ' + lineNumber + ': previous-hash link does not match');
+    if (!hashMatches) errors.push('line ' + lineNumber + ': receipt hash does not match');
+    if (previousMatches && hashMatches) {
+      expectedPrevious = hash;
+      validThroughHash = hash;
+    }
+  }
+  return {
+    ok: errors.length === 0 && records.length > 0,
+    receiptCount,
+    validThroughHash,
+    errors,
+    present: true,
+    records,
+    identity,
+  };
+}
+
+function persistReceiptLine(path: string, history: ReceiptHistoryInspection, line: string): void {
+  let fd: number | null = null;
+  try {
+    if (history.present) {
+      if (history.identity === undefined) {
+        throw new EgressReceiptError('persistence', 'egress receipt history identity was not retained; refuse to extend it');
+      }
+      fd = openSync(path, 'a');
+      const current = receiptFileIdentity(fstatSync(fd));
+      if (!sameReceiptFile(history.identity, current)) {
+        throw new EgressReceiptError('persistence', 'egress receipt history changed before append; retry only after the history is stable');
+      }
+    } else {
+      try {
+        // Exclusive creation prevents an absent-path genesis decision from
+        // racing a concurrent creator or a path replacement into a null
+        // predecessor record.
+        fd = openSync(path, 'ax');
+      } catch (error) {
+        if (errorCode(error) === 'EEXIST') {
+          throw new EgressReceiptError('persistence', 'egress receipt history appeared after absence was confirmed; refuse to restart it as genesis');
+        }
+        throw error;
+      }
+    }
+    const bytes = Buffer.from(line, 'utf8');
+    let offset = 0;
+    while (offset < bytes.length) {
+      const written = writeSync(fd, bytes, offset, bytes.length - offset, null);
+      if (written <= 0) throw new EgressReceiptError('persistence', 'egress receipt persistence wrote no bytes');
+      offset += written;
+    }
+  } catch (error) {
+    if (error instanceof EgressReceiptError) throw error;
+    throw asReceiptError(error, 'persistence', 'egress receipt persistence failed');
+  } finally {
+    if (fd !== null) {
+      try {
+        closeSync(fd);
+      } catch (error) {
+        throw asReceiptError(error, 'persistence', 'egress receipt persistence failed while closing the receipt file');
+      }
+    }
   }
 }
 
 /** Persistence faults are fail-closed before a request is allowed to dial. */
 export function appendEgressReceipt(input: ReceiptInput): EgressReceipt {
-  const home = fiscusHome();
-  if (!existsSync(home)) mkdirSync(home, { recursive: true });
   return withReceiptLock(() => {
     const path = egressReceiptPath();
-    const prior = priorHash(path);
+    const history = inspectReceiptHistory(path);
+    if (!history.ok) {
+      throw new EgressReceiptError(
+        'integrity',
+        'egress receipt history is invalid; ' + history.errors.join('; '),
+        history.errors,
+      );
+    }
+    const prior = history.validThroughHash;
     const base: Omit<EgressReceipt, 'hash'> = {
       version: 1,
       id: randomUUID(),
@@ -134,30 +481,25 @@ export function appendEgressReceipt(input: ReceiptInput): EgressReceipt {
       status: input.status ?? null,
       previousHash: prior,
     };
-    const receipt: EgressReceipt = { ...base, hash: sha256((prior ?? '') + '\n' + payload(base)) };
-    appendFileSync(path, JSON.stringify(receipt) + '\n', 'utf8');
+    const receipt: EgressReceipt = { ...base, hash: receiptHash(prior, base) };
+    persistReceiptLine(path, history, JSON.stringify(receipt) + '\n');
     return receipt;
   });
 }
 
 export function verifyEgressReceipts(path = egressReceiptPath()): ReceiptVerification {
-  if (!existsSync(path)) return { ok: true, receiptCount: 0, validThroughHash: null, errors: [] };
-  return withReceiptLock(() => {
-    const errors: string[] = [];
-    let expectedPrevious: string | null = null;
-    let count = 0;
-    for (const [index, line] of readFileSync(path, 'utf8').split(/\r?\n/).filter(Boolean).entries()) {
-      try {
-        const receipt = JSON.parse(line) as EgressReceipt;
-        const { hash, ...base } = receipt;
-        if (receipt.previousHash !== expectedPrevious) errors.push('line ' + (index + 1) + ': previous-hash link does not match');
-        if (hash !== sha256((expectedPrevious ?? '') + '\n' + payload(base))) errors.push('line ' + (index + 1) + ': receipt hash does not match');
-        expectedPrevious = typeof hash === 'string' ? hash : expectedPrevious;
-        count++;
-      } catch {
-        errors.push('line ' + (index + 1) + ': not valid receipt JSON');
-      }
-    }
-    return { ok: errors.length === 0, receiptCount: count, validThroughHash: expectedPrevious, errors };
-  });
+  try {
+    return withReceiptLock(() => {
+      const inspection = inspectReceiptHistory(path);
+      return {
+        ok: inspection.ok,
+        receiptCount: inspection.receiptCount,
+        validThroughHash: inspection.validThroughHash,
+        errors: inspection.errors,
+      };
+    });
+  } catch (error) {
+    const failure = asReceiptError(error, 'persistence', 'egress receipt verification failed');
+    return { ok: false, receiptCount: 0, validThroughHash: null, errors: failure.errors };
+  }
 }

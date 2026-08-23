@@ -19,7 +19,13 @@ non-loopback HTTP(S) targets before DNS. A local model at `localhost` or
 plan` to inspect one exact rule and `fiscus egress apply --apply` to persist it;
 `fiscus egress verify` validates the redacted local receipt chain. This is a
 Fiscus-process boundary, not a claim about other applications, direct clients,
-the operating system, or provider retention.
+the operating system, or provider retention. Only a genuinely absent history
+may establish genesis. If a receipt path is present but empty, malformed,
+truncated, hash-invalid, unreadable, or locked/unwritable, Fiscus refuses the
+request before DNS or socket creation and reports the repair/restore action;
+it does not silently reset the chain. For a stale lock, confirm that no Fiscus
+writer is active, then remove only that lock and rerun `fiscus egress verify`;
+Fiscus never auto-deletes an abandoned lock.
 
 **Is my proposed code stored anywhere, even locally?**
 Yes, temporarily. To measure whether an AI's proposed edit was actually
@@ -99,8 +105,10 @@ native importer ships for it.
 
 **Does the proxy slow my requests down?**
 Negligibly. The proxy overhead is microseconds against a provider round-trip of
-hundreds of milliseconds to seconds. If Fiscus is off, traffic you pointed at it
-simply fails over/through — tracking never breaks your session.
+hundreds of milliseconds to seconds. Ordinary local metering failures degrade
+to a transparent passthrough, but the egress policy and receipt-integrity gate
+are intentional controls: a corrupt or unextendable receipt history refuses an
+outbound request before dial rather than silently weakening the boundary.
 
 ## The measurement
 

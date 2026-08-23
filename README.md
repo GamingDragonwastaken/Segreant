@@ -126,7 +126,13 @@ Use `fiscus egress status` to inspect the active mode/rules and
 `fiscus egress verify` to verify the local receipt chain. Return to
 `local_locked` with `fiscus egress apply --apply --mode local_locked`. These
 controls govern Fiscus's own HTTP(S) transport; they are not a machine-wide
-firewall or a provider-data-retention guarantee.
+firewall or a provider-data-retention guarantee. A genuinely absent receipt
+file may establish the first genesis record; a present empty, malformed,
+truncated, hash-invalid, unreadable, or lock-failed history blocks the request
+before DNS or dial and is never silently reset with a null predecessor. Repair
+or restore the history, then rerun `fiscus egress verify`. If a lock is stale,
+first confirm that no Fiscus writer is active, then remove only that lock; Fiscus
+never auto-deletes an abandoned lock or restarts the history as genesis.
 
 Run your agents as usual. Watch spend accrue in the terminal and at
 **http://localhost:8091**.

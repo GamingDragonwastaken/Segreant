@@ -15,8 +15,10 @@
  *  - Cost headers (X-Fiscus-Cost-USD) are added for non-streaming responses. For
  *    streaming, headers are already flushed before usage is known, so we emit
  *    remaining-budget headers up front and record the final cost server-side.
- *  - Any internal failure falls through to a transparent passthrough: tracking
- *    must never break a developer's session.
+ *  - Ordinary upstream transport failures are returned in a provider-shaped
+ *    upstream-error body, while budget blocks and Fiscus egress-boundary
+ *    refusals use distinct stable types. Corrupt or unextendable receipt
+ *    history refuses the outbound request before DNS/dial.
  */
 
 import http from 'node:http';
@@ -200,6 +202,24 @@ function providerErrorBody(provider: Provider, message: string): string {
     return JSON.stringify({ type: 'error', error: { type: 'fiscus_budget_block', message } });
   }
   return JSON.stringify({ error: { message, type: 'fiscus_budget_block', code: 'budget_exceeded' } });
+}
+
+function providerEgressRefusalBody(provider: Provider, error: EgressError): string {
+  const repair = error.code === 'receipt_integrity_failed' || error.code === 'receipt_persistence_failed'
+    ? ' Repair or restore the local receipt history before retrying.'
+    : '';
+  const message = `Fiscus refused this outbound request at its egress boundary: ${error.message}.${repair}`;
+  if (provider === 'anthropic') {
+    return JSON.stringify({ type: 'error', error: { type: 'fiscus_egress_refusal', code: 'egress_refused', subcode: error.code, message } });
+  }
+  return JSON.stringify({ error: { message, type: 'fiscus_egress_refusal', code: 'egress_refused', subcode: error.code } });
+}
+
+function providerUpstreamErrorBody(provider: Provider, message: string, code: 'upstream_timeout' | 'upstream_unreachable'): string {
+  if (provider === 'anthropic') {
+    return JSON.stringify({ type: 'error', error: { type: 'fiscus_upstream_error', code, message } });
+  }
+  return JSON.stringify({ error: { message, type: 'fiscus_upstream_error', code } });
 }
 
 export interface ProxyDeps {
@@ -399,20 +419,24 @@ async function handle(
     clearTimeout(timeoutTimer);
   } catch (err) {
     clearTimeout(timeoutTimer);
-    // Either the upstream is unreachable (DNS/refused/network drop) or it never
-    // started responding within upstreamTimeoutMs (we aborted). Fail transparently
-    // with a provider-shaped error the client already handles, and record the
-    // attempt — Fiscus must never be a worse failure mode than calling direct.
+    // Either the upstream is unreachable (DNS/refused/network drop), it never
+    // started responding within upstreamTimeoutMs, or Fiscus refused its own
+    // policy/receipt boundary. Keep these categories distinct: a local
+    // boundary refusal is not a provider budget decision or a remote failure.
     const timedOut = controller.signal.aborted;
-    const egressRefusal = err instanceof EgressError && err.code !== 'transport_failed';
+    const egressRefusal = err instanceof EgressError && err.code !== 'transport_failed' ? err : null;
     const status = timedOut ? 504 : egressRefusal ? 403 : 502;
     const detail = timedOut
       ? `upstream timed out after ${config.upstreamTimeoutMs}ms (no response headers)`
       : egressRefusal
-        ? 'Fiscus egress boundary refused this upstream request: ' + err.message
+        ? 'Fiscus egress boundary refused this upstream request: ' + egressRefusal.message
       : `upstream unreachable: ${String(err)}`;
-    res.writeHead(status, { 'content-type': 'application/json', 'x-fiscus-upstream-error': '1' });
-    res.end(providerErrorBody(provider, detail));
+    const headers: Record<string, string> = { 'content-type': 'application/json', 'x-fiscus-upstream-error': '1' };
+    if (egressRefusal) headers['x-fiscus-egress-refusal'] = egressRefusal.code;
+    res.writeHead(status, headers);
+    res.end(egressRefusal
+      ? providerEgressRefusalBody(provider, egressRefusal)
+      : providerUpstreamErrorBody(provider, detail, timedOut ? 'upstream_timeout' : 'upstream_unreachable'));
     safeLog(deps, {
       requestId,
       sessionId,

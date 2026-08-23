@@ -14,18 +14,11 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync, unlinkSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { egressFetch } from '../egress/transport.ts';
+import { egressFetch, EgressError } from '../egress/transport.ts';
 import { dirname, join } from 'node:path';
 import { fiscusHome } from '../config.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-
-/**
- * Deliberate test seam for response-level pricing validation. Production callers
- * omit it and always use the hardened egress transport below; this does not
- * add a configuration path that could bypass the egress policy.
- */
-export type PricingRefreshTransport = (url: URL, init: Parameters<typeof egressFetch>[1]) => Promise<Response>;
 
 /** The rate card shipped inside the package — always present, works offline. */
 const BUNDLED_PRICING_PATH = join(__dirname, '..', '..', 'pricing', 'models.json');
@@ -344,7 +337,17 @@ export interface RefreshResult {
   cardSha256?: string;
   unchanged?: boolean;
   error?: string;
+  /** Stable distinction between a Fiscus boundary refusal and an ordinary fetch failure. */
+  failureCode?: PricingRefreshFailureCode;
 }
+
+export type PricingRefreshFailureCode =
+  | 'egress_policy_denied'
+  | 'egress_dns_denied'
+  | 'egress_receipt_integrity_failed'
+  | 'egress_receipt_persistence_failed'
+  | 'egress_transport_failed'
+  | 'network_error';
 
 /**
  * The default live pricing source: LiteLLM's community-maintained price file.
@@ -574,19 +577,31 @@ async function readPricingResponse(res: Response): Promise<string> {
   return new TextDecoder().decode(bytes);
 }
 
-/**
- * Pull a fresh pricing manifest only from a secure explicit/default endpoint.
- * Conditional requests identify an unchanged *local card*; they never claim a
- * provider invoice or silently mutate historical measured rows.
- */
-export async function refreshPricing(
+type PricingRefreshTransport = (url: URL, init: Parameters<typeof egressFetch>[1]) => Promise<Response>;
+
+function pricingFailureCode(error: unknown): PricingRefreshFailureCode {
+  if (error instanceof EgressError) return `egress_${error.code}` as PricingRefreshFailureCode;
+  return 'network_error';
+}
+
+function pricingFailureMessage(error: unknown, failureCode: PricingRefreshFailureCode): string {
+  const boundary = failureCode.startsWith('egress_');
+  const repair = failureCode === 'egress_receipt_integrity_failed' || failureCode === 'egress_receipt_persistence_failed'
+    ? '; repair/restore the local receipt history before retrying'
+    : '';
+  return boundary
+    ? `Fiscus egress boundary refused the pricing refresh (${failureCode.slice('egress_'.length)}): ${String(error)}${repair}`
+    : `fetch failed: ${String(error)}`;
+}
+
+async function refreshPricingWithTransport(
   url: string | null,
-  timeoutMs = 20_000,
-  transport: PricingRefreshTransport = egressFetch,
+  timeoutMs: number,
+  transport: PricingRefreshTransport,
 ): Promise<RefreshResult> {
   const target = url ?? DEFAULT_MANIFEST_URL;
   const parsed = safeRemoteTarget(target);
-  if (!parsed.url) return { ok: false, error: parsed.error };
+  if (!parsed.url) return { ok: false, error: parsed.error, failureCode: 'network_error' };
 
   const prior = readProvenance();
   const sameSource = prior?.sourceUrlSha256 === sha256(target);
@@ -603,7 +618,7 @@ export async function refreshPricing(
     if (res.status === 304) {
       const active = loadVerifiedCache();
       if (!prior || !sameSource || !active || (active.integrity !== 'verified' && active.integrity !== 'archive_recovered') || active.provenance?.cardSha256 !== prior.cardSha256) {
-        return { ok: false, error: 'source returned 304 but no matching verified local card exists' };
+        return { ok: false, error: 'source returned 304 but no matching verified local card exists', failureCode: 'network_error' };
       }
       const checkedAt = new Date().toISOString();
       const checked: PricingProvenance = { ...prior, lastCheckedAt: checkedAt };
@@ -611,7 +626,7 @@ export async function refreshPricing(
         writeAtomically(provenancePath(), JSON.stringify(checked, null, 2) + '\n');
         cached = null;
       } catch (e) {
-        return { ok: false, error: `could not record successful pricing check: ${String(e)}` };
+        return { ok: false, error: `could not record successful pricing check: ${String(e)}`, failureCode: 'network_error' };
       }
       return {
         ok: true,
@@ -624,7 +639,7 @@ export async function refreshPricing(
         cardSha256: prior.cardSha256,
       };
     }
-    if (!res.ok) return { ok: false, error: `HTTP ${res.status} from ${redactedUrl(target) ?? 'pricing source'}` };
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status} from ${redactedUrl(target) ?? 'pricing source'}`, failureCode: 'network_error' };
     const body = await readPricingResponse(res);
     return applyPricingManifest(body, {
       sourceUrl: target,
@@ -634,8 +649,39 @@ export async function refreshPricing(
       lastModified: res.headers.get('last-modified'),
     });
   } catch (e) {
-    return { ok: false, error: `fetch failed: ${String(e)}` };
+    const failureCode = pricingFailureCode(e);
+    return { ok: false, error: pricingFailureMessage(e, failureCode), failureCode };
   }
+}
+
+/**
+ * Pull a fresh pricing manifest only from a secure explicit/default endpoint.
+ * Conditional requests identify an unchanged *local card*; they never claim a
+ * provider invoice or silently mutate historical measured rows.
+ */
+export async function refreshPricing(url: string | null, timeoutMs = 20_000): Promise<RefreshResult> {
+  return refreshPricingWithTransport(url, timeoutMs, egressFetch);
+}
+
+/**
+ * Network-free response fixture seam. Production refreshes have no public
+ * transport override and always use egressFetch, so parser tests cannot bypass
+ * policy, DNS validation, pinning, redirect refusal, or receipt validation.
+ */
+export async function refreshPricingFromResponses(input: {
+  url: string | null;
+  responses: readonly Response[];
+  timeoutMs?: number;
+  /** Optional read-only assertion hook for request-shape tests; it cannot provide a transport. */
+  onRequest?: (url: URL, init: Parameters<typeof egressFetch>[1]) => void;
+}): Promise<RefreshResult> {
+  let index = 0;
+  return refreshPricingWithTransport(input.url, input.timeoutMs ?? 20_000, async (url, init) => {
+    input.onRequest?.(url, init);
+    const response = input.responses[index++];
+    if (!response) throw new Error('fixture_response_sequence_exhausted');
+    return response;
+  });
 }
 
 export interface PricingStatus {

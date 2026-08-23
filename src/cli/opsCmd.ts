@@ -62,6 +62,7 @@ export async function cmdAlerts(flags: Flags): Promise<void> {
       console.log(color(tty, C.green, `  Delivered ${r.posted} alert(s) to the webhook (HTTP ${r.status}).`) + color(tty, C.gray, ' Metadata only.'));
     } else {
       console.error(color(tty, C.red, `  Delivery failed (${r.error ?? 'HTTP ' + r.status}); ${r.posted} alert(s) not sent.`));
+      if (r.action) console.error(color(tty, C.gray, `  Action: ${r.action}`));
       process.exitCode = 1;
     }
     store.close();

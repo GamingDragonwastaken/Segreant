@@ -76,6 +76,15 @@ test('refreshBaselineManifest with no URL is an honest, explained failure — ne
   assert.match(res.error ?? '', /no default manifest source/);
 });
 
+test('default egress transport preserves receipt refusal when refreshing Lift baselines', async () => {
+  const home = freshHome();
+  writeFileSync(join(home, 'egress-receipts.jsonl'), '{"version":1}\n', 'utf8');
+  const res = await refreshBaselineManifest('https://baseline.example.test/manifest.json');
+  assert.equal(res.ok, false);
+  assert.equal(res.failureCode, 'egress_receipt_integrity_failed');
+  assert.match(res.error ?? '', /repair\/restore.*receipt/i);
+});
+
 test('refreshBaselineManifest degrades gracefully on a real fetch failure', async () => {
   freshHome();
   const res = await refreshBaselineManifest('https://this-host-does-not-exist.invalid/manifest.json', 2000);

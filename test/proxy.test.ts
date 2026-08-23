@@ -2,10 +2,23 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { once } from 'node:events';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { Store } from '../src/store/db.ts';
 import { createProxyServer, detectRoute } from '../src/proxy/server.ts';
 import { StreamProposalAccumulator } from '../src/proxy/stream-proposals.ts';
 import { DEFAULT_CONFIG, type FiscusConfig } from '../src/config.ts';
+
+const originalFiscusHome = process.env.FISCUS_HOME;
+const proxyTestHome = mkdtempSync(join(tmpdir(), 'fiscus-proxy-home-'));
+process.env.FISCUS_HOME = proxyTestHome;
+
+test.after(() => {
+  if (originalFiscusHome === undefined) delete process.env.FISCUS_HOME;
+  else process.env.FISCUS_HOME = originalFiscusHome;
+  rmSync(proxyTestHome, { recursive: true, force: true });
+});
 
 /** Format one object as an SSE `data:` frame, matching provider wire shape. */
 function sse(obj: unknown): string {
@@ -40,7 +53,8 @@ function startMockUpstreamRecording(paths: string[]): Promise<{ url: string; clo
   });
 }
 
-function startMockUpstream(): Promise<{ url: string; close: () => Promise<void> }> {
+function startMockUpstream(): Promise<{ url: string; close: () => Promise<void>; connections: () => number }> {
+  let connectionCount = 0;
   const server = http.createServer(async (req, res) => {
     const chunks: Buffer[] = [];
     for await (const c of req) chunks.push(c as Buffer);
@@ -143,12 +157,14 @@ function startMockUpstream(): Promise<{ url: string; close: () => Promise<void> 
     res.writeHead(404);
     res.end('not found');
   });
+  server.on('connection', () => { connectionCount += 1; });
   server.listen(0);
   return once(server, 'listening').then(() => {
     const addr = server.address();
     const port = typeof addr === 'object' && addr ? addr.port : 0;
     return {
       url: `http://127.0.0.1:${port}`,
+      connections: () => connectionCount,
       close: () => new Promise<void>((r) => server.close(() => r())),
     };
   });
@@ -610,6 +626,40 @@ test('upstream unreachable: transparent provider-shaped 502, and the failed atte
 
   await proxy.close();
   store.close();
+});
+
+test('corrupt receipt history returns a truthful egress refusal and never opens an upstream socket', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'fiscus-proxy-receipt-refusal-'));
+  const previousHome = process.env.FISCUS_HOME;
+  process.env.FISCUS_HOME = home;
+  writeFileSync(join(home, 'egress-receipts.jsonl'), '{"version":1}\n', 'utf8');
+  const upstream = await startMockUpstream();
+  const store = new Store(':memory:');
+  const proxy = await startProxy(store, {}, upstream.url);
+  try {
+    const res = await fetch(`${proxy.base}/v1/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': 'sk-test' },
+      body: JSON.stringify({ model: 'claude-opus-4-8', messages: [{ role: 'user', content: 'hi' }] }),
+    });
+    assert.equal(res.status, 403);
+    assert.equal(res.headers.get('x-fiscus-egress-refusal'), 'receipt_integrity_failed');
+    const json = (await res.json()) as { type?: string; error?: { type?: string; code?: string; subcode?: string; message?: string } };
+    assert.equal(json.type, 'error');
+    assert.equal(json.error?.type, 'fiscus_egress_refusal');
+    assert.equal(json.error?.code, 'egress_refused');
+    assert.equal(json.error?.subcode, 'receipt_integrity_failed');
+    assert.match(json.error?.message ?? '', /repair or restore/i);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(upstream.connections(), 0, 'receipt refusal happened before any upstream socket connection');
+  } finally {
+    await proxy.close();
+    store.close();
+    await upstream.close();
+    rmSync(home, { recursive: true, force: true });
+    if (previousHome === undefined) delete process.env.FISCUS_HOME;
+    else process.env.FISCUS_HOME = previousHome;
+  }
 });
 
 /** A provider that accepts the connection and the request body, then NEVER responds. */

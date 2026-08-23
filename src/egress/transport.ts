@@ -1,6 +1,8 @@
 /**
  * The only Fiscus-process HTTP(S) dialler. It pins the selected DNS address,
- * never follows redirects, and writes redacted receipts before each dial.
+ * never follows redirects, and writes redacted receipts before each dial. A
+ * present receipt history that cannot be validated/extended refuses before DNS
+ * resolution or socket creation; only an absent history may establish genesis.
  */
 import { lookup as dnsLookup } from 'node:dns/promises';
 import * as http from 'node:http';
@@ -8,10 +10,10 @@ import * as https from 'node:https';
 import { isIP } from 'node:net';
 import { Readable } from 'node:stream';
 import { loadConfig, type EgressConfig, type EgressDataClass, type EgressPurpose } from '../config.ts';
-import { appendEgressReceipt } from './receipts.ts';
+import { appendEgressReceipt, EgressReceiptError } from './receipts.ts';
 import { evaluateEgressPolicy, type EgressTargetClass } from './policy.ts';
 
-export type EgressErrorCode = 'policy_denied' | 'dns_denied' | 'receipt_persistence_failed' | 'transport_failed';
+export type EgressErrorCode = 'policy_denied' | 'dns_denied' | 'receipt_integrity_failed' | 'receipt_persistence_failed' | 'transport_failed';
 
 export class EgressError extends Error {
   readonly code: EgressErrorCode;
@@ -97,7 +99,10 @@ async function resolveTarget(target: URL, targetClass: EgressTargetClass): Promi
 function receipt(input: Parameters<typeof appendEgressReceipt>[0]): void {
   try {
     appendEgressReceipt(input);
-  } catch {
+  } catch (error) {
+    if (error instanceof EgressReceiptError && error.code === 'integrity') {
+      throw new EgressError('receipt_integrity_failed', error.message);
+    }
     throw new EgressError('receipt_persistence_failed', 'egress receipt persistence failed; Fiscus refused the outbound request');
   }
 }

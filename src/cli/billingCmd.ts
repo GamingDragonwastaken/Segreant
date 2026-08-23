@@ -21,6 +21,12 @@ import { billingEvidenceToCsv } from '../export/billingCsv.ts';
 import { Store } from '../store/db.ts';
 import type { Flags } from './flags.ts';
 
+function billingEgressRepairAction(failureCode: string): string | undefined {
+  return failureCode === 'egress_receipt_integrity_failed' || failureCode === 'egress_receipt_persistence_failed'
+    ? 'Repair or restore the local receipt history before retrying; if the lock is stale, confirm no Fiscus writer is active, then remove only that lock and rerun verify.'
+    : undefined;
+}
+
 function usage(): void {
   console.error('  Usage: fiscus billing <import|status|export|scope|openai-costs|reconcile> [options]');
   console.error('         fiscus billing import --file <evidence.json> [--apply] [--json]');
@@ -425,9 +431,13 @@ async function cmdOpenAiCosts(flags: Flags): Promise<void> {
         failureCode: failed.failureCode,
         observations: [],
       });
-      const payload = { applied: true, resultState: 'failed', run, error: `OpenAI Costs pull failed (${failed.failureCode})` };
+      const action = billingEgressRepairAction(failed.failureCode);
+      const payload = { applied: true, resultState: 'failed', run, error: `OpenAI Costs pull failed (${failed.failureCode})`, action };
       if (flags.json) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
-      else console.error(`  OpenAI Costs pull failed (${failed.failureCode}); the failed audit run was retained without a response body or credential.`);
+      else {
+        console.error(`  OpenAI Costs pull failed (${failed.failureCode}); the failed audit run was retained without a response body or credential.`);
+        if (action) console.error(`  ${action}`);
+      }
       process.exitCode = 1;
     }
   } catch (error) {
