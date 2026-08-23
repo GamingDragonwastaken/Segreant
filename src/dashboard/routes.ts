@@ -20,7 +20,7 @@ import { reconciliationReadiness } from '../billing/readiness.ts';
 import { existsSync, statSync } from 'node:fs';
 import type { Store } from '../store/db.ts';
 import { isDemo, type FiscusConfig } from '../config.ts';
-import { egressFetch } from '../egress/transport.ts';
+import { probeProxyState } from '../egress/proxyHealth.ts';
 import { buildSettingsSnapshot, applySettingsPatch, type SettingsPatch } from './settings.ts';
 import { serveHtml } from './static.ts';
 import { startOfLocalDay } from '../budget/guard.ts';
@@ -567,22 +567,13 @@ export function handleGuide({ res, store, config }: RouteContext): void {
     try {
       const now = Date.now();
       const day = 24 * 60 * 60 * 1000;
-      let proxyUp = false;
-      try {
-        const r = await egressFetch('http://localhost:' + config.port + '/__fiscus/health', {
-          purpose: 'local_healthcheck',
-          dataClass: 'healthcheck',
-          signal: AbortSignal.timeout(500),
-        });
-        proxyUp = r.ok;
-      } catch {
-        proxyUp = false;
-      }
+      const proxyStatus = await probeProxyState(config);
       return json(res, 200, buildGuide({
         demo: isDemo(),
         port: config.port,
         dashboardPort: config.dashboardPort,
-        proxyUp,
+        proxyUp: proxyStatus.kind === 'up',
+        proxyStatus,
         requestsAllTime: store.summary(0, now + 1000).requests,
         spend30dUsd: store.summary(now - 30 * day, now + 1000).costUsd,
         dailyCapUsd: config.budget.dailyUsd,

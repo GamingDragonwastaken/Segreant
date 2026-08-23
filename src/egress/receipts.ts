@@ -69,6 +69,7 @@ export class EgressReceiptError extends Error {
 }
 
 let receiptLockReleaseHookForTests: (() => void) | undefined;
+let receiptWriteHookForTests: (() => void) | undefined;
 
 /** @internal deterministic filesystem-failure seam used only by boundary tests. */
 export function setReceiptLockReleaseHookForTests(hook: (() => void) | undefined): () => void {
@@ -76,6 +77,15 @@ export function setReceiptLockReleaseHookForTests(hook: (() => void) | undefined
   receiptLockReleaseHookForTests = hook;
   return () => {
     receiptLockReleaseHookForTests = previous;
+  };
+}
+
+/** @internal deterministic path-replacement seam used only by boundary tests. */
+export function setReceiptWriteHookForTests(hook: (() => void) | undefined): () => void {
+  const previous = receiptWriteHookForTests;
+  receiptWriteHookForTests = hook;
+  return () => {
+    receiptWriteHookForTests = previous;
   };
 }
 
@@ -120,17 +130,28 @@ function lockPathIsRegularFile(path: string): boolean {
   }
 }
 
-function releaseReceiptLock(fd: number, lockPath: string): void {
+function releaseReceiptLock(fd: number, lockPath: string, acquiredIdentity: ReceiptFileIdentity): void {
   let failure: EgressReceiptError | null = null;
+  try {
+    const current = lstatSync(lockPath);
+    if (!current.isFile() || !sameReceiptObject(acquiredIdentity, receiptFileIdentity(current))) {
+      failure = new EgressReceiptError(
+        'lock',
+        'egress receipt lock/persistence failed while releasing the lock: lock path changed or was replaced; replacement was not unlinked',
+      );
+    }
+  } catch (error) {
+    failure = asReceiptError(error, 'lock', 'egress receipt lock/persistence failed while releasing the lock');
+  }
   try {
     closeSync(fd);
   } catch (error) {
-    failure = asReceiptError(error, 'lock', 'egress receipt lock/persistence failed while closing the lock');
+    if (failure === null) failure = asReceiptError(error, 'lock', 'egress receipt lock/persistence failed while closing the lock');
   }
-  try {
-    unlinkSync(lockPath);
-  } catch (error) {
-    if (failure === null) {
+  if (failure === null) {
+    try {
+      unlinkSync(lockPath);
+    } catch (error) {
       failure = asReceiptError(error, 'lock', 'egress receipt lock/persistence failed while releasing the lock');
     }
   }
@@ -146,12 +167,25 @@ function withReceiptLock<T>(fn: () => T): T {
   }
   const lockPath = receiptLockPath();
   let fd: number | null = null;
+  let acquiredIdentity: ReceiptFileIdentity | null = null;
   // Test runners and a real CLI + proxy can briefly contend on the same local
   // receipt log. Ten seconds is bounded, but comfortably exceeds a synchronous
   // hash/append/verification critical section on a large local ledger.
   for (let attempt = 0; attempt < 2_000; attempt++) {
     try {
-      fd = openSync(lockPath, 'wx');
+      const candidate = openSync(lockPath, 'wx');
+      try {
+        const candidateIdentity = receiptFileIdentity(fstatSync(candidate));
+        const pathStat = lstatSync(lockPath);
+        if (!pathStat.isFile() || !sameReceiptObject(candidateIdentity, receiptFileIdentity(pathStat))) {
+          throw new EgressReceiptError('lock', 'egress receipt lock/persistence failed while opening the lock: lock path identity changed; refusing an ambiguous owner');
+        }
+        fd = candidate;
+        acquiredIdentity = candidateIdentity;
+      } catch (error) {
+        try { closeSync(candidate); } catch { /* preserve the identity failure */ }
+        throw error;
+      }
       break;
     } catch (error) {
       const code = errorCode(error);
@@ -175,6 +209,7 @@ function withReceiptLock<T>(fn: () => T): T {
     }
   }
   if (fd === null) throw new EgressReceiptError('lock', 'egress receipt lock/persistence failed: lock remained busy');
+  if (acquiredIdentity === null) throw new EgressReceiptError('lock', 'egress receipt lock/persistence failed: lock identity was not retained');
   try {
     return fn();
   } finally {
@@ -183,7 +218,7 @@ function withReceiptLock<T>(fn: () => T): T {
     // the caller to proceed to DNS/socket creation with an uncertain lock
     // owner or an abandoned lock path.
     receiptLockReleaseHookForTests?.();
-    releaseReceiptLock(fd, lockPath);
+    releaseReceiptLock(fd, lockPath, acquiredIdentity);
   }
 }
 
@@ -293,6 +328,10 @@ function sameReceiptFile(a: ReceiptFileIdentity, b: ReceiptFileIdentity): boolea
     && a.mtimeMs === b.mtimeMs
     && a.ctimeMs === b.ctimeMs
     && a.birthtimeMs === b.birthtimeMs;
+}
+
+function sameReceiptObject(a: ReceiptFileIdentity, b: ReceiptFileIdentity): boolean {
+  return a.dev === b.dev && a.ino === b.ino && a.birthtimeMs === b.birthtimeMs;
 }
 
 function receiptHistoryStat(path: string): Stats | null {
@@ -431,12 +470,18 @@ function persistReceiptLine(path: string, history: ReceiptHistoryInspection, lin
         throw error;
       }
     }
+    receiptWriteHookForTests?.();
     const bytes = Buffer.from(line, 'utf8');
     let offset = 0;
     while (offset < bytes.length) {
       const written = writeSync(fd, bytes, offset, bytes.length - offset, null);
       if (written <= 0) throw new EgressReceiptError('persistence', 'egress receipt persistence wrote no bytes');
       offset += written;
+    }
+    const afterFd = receiptFileIdentity(fstatSync(fd));
+    const afterPath = receiptHistoryStat(path);
+    if (afterPath === null || !sameReceiptObject(afterFd, receiptFileIdentity(afterPath))) {
+      throw new EgressReceiptError('persistence', 'egress receipt history path identity changed after append; the write was not accepted');
     }
   } catch (error) {
     if (error instanceof EgressReceiptError) throw error;

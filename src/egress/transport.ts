@@ -36,10 +36,43 @@ export interface EgressFetchInit {
   signal?: AbortSignal;
 }
 
-interface ResolvedTarget {
+export interface ResolvedTarget {
   address: string;
   family: 4 | 6;
   targetClass: EgressTargetClass;
+}
+
+type EgressDnsLookup = (
+  hostname: string,
+  options: { all: true; verbatim: true },
+) => Promise<ReadonlyArray<{ address: string; family: 4 | 6 }>>;
+
+export type EgressDialHook = (input: {
+  target: URL;
+  resolved: ResolvedTarget;
+  method: string;
+  bodyBytes: number;
+}) => Promise<Response>;
+
+let egressDnsLookupForTests: EgressDnsLookup | undefined;
+let egressDialHookForTests: EgressDialHook | undefined;
+
+/** @internal deterministic DNS seam used only by boundary tests. */
+export function setEgressDnsLookupForTests(hook: EgressDnsLookup | undefined): () => void {
+  const previous = egressDnsLookupForTests;
+  egressDnsLookupForTests = hook;
+  return () => {
+    egressDnsLookupForTests = previous;
+  };
+}
+
+/** @internal deterministic dial seam used only by boundary tests. */
+export function setEgressDialHookForTests(hook: EgressDialHook | undefined): () => void {
+  const previous = egressDialHookForTests;
+  egressDialHookForTests = hook;
+  return () => {
+    egressDialHookForTests = previous;
+  };
 }
 
 function bodyByteLength(body: EgressFetchInit['body']): number {
@@ -49,13 +82,80 @@ function bodyByteLength(body: EgressFetchInit['body']): number {
 }
 
 function normalAddress(address: string): string {
-  const value = address.replace(/(^\[|\]$)/g, '').toLowerCase();
-  return value.startsWith('::ffff:') ? value.slice('::ffff:'.length) : value;
+  return address.replace(/(^\[|\]$)/g, '').toLowerCase();
+}
+
+function parseIpv6(address: string): bigint | null {
+  let value = normalAddress(address);
+  if (value.includes('%')) return null;
+  if (value.includes('.')) {
+    const separator = value.lastIndexOf(':');
+    if (separator < 0) return null;
+    const ipv4 = value.slice(separator + 1);
+    if (isIP(ipv4) !== 4) return null;
+    const octets = ipv4.split('.').map(Number);
+    if (octets.length !== 4 || octets.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return null;
+    const high = ((octets[0]! << 8) | octets[1]!).toString(16);
+    const low = ((octets[2]! << 8) | octets[3]!).toString(16);
+    value = value.slice(0, separator + 1) + high + ':' + low;
+  }
+  const compression = value.indexOf('::');
+  if (compression >= 0 && value.indexOf('::', compression + 2) >= 0) return null;
+  const leftText = compression >= 0 ? value.slice(0, compression) : value;
+  const rightText = compression >= 0 ? value.slice(compression + 2) : '';
+  const left = leftText ? leftText.split(':') : [];
+  const right = rightText ? rightText.split(':') : [];
+  if (compression < 0 && left.length !== 8) return null;
+  if (compression >= 0 && left.length + right.length >= 8) return null;
+  const groups = compression >= 0
+    ? [...left, ...Array.from({ length: 8 - left.length - right.length }, () => '0'), ...right]
+    : left;
+  if (groups.length !== 8 || groups.some((group) => !/^[0-9a-f]{1,4}$/.test(group))) return null;
+  let numeric = 0n;
+  for (const group of groups) numeric = (numeric << 16n) | BigInt(parseInt(group, 16));
+  return numeric;
+}
+
+function inIpv6Cidr(value: bigint, network: bigint, prefixLength: number): boolean {
+  const shift = 128n - BigInt(prefixLength);
+  return (value >> shift) === (network >> shift);
+}
+
+function isGlobalUnicastIpv6(value: bigint): boolean {
+  // Global-unicast space is 2000::/3. Starting with that numeric allowlist is
+  // deliberate: unknown/reserved IPv6 ranges fail closed instead of inheriting
+  // an accidental string-prefix exception.
+  if (!inIpv6Cidr(value, 0x20000000000000000000000000000000n, 3)) return false;
+  if (inIpv6Cidr(value, 0x00000000000000000000000000000000n, 128)) return false;
+  if (inIpv6Cidr(value, 0x00000000000000000000000000000001n, 128)) return false;
+  if (inIpv6Cidr(value, 0xfc00000000000000000000000000000000n, 7)) return false;
+  if (inIpv6Cidr(value, 0xfe80000000000000000000000000000000n, 10)) return false;
+  if (inIpv6Cidr(value, 0xfec0000000000000000000000000000000n, 10)) return false;
+  if (inIpv6Cidr(value, 0x20010db8000000000000000000000000n, 32)) return false;
+  if (inIpv6Cidr(value, 0x20010000000000000000000000000000n, 32)) return false;
+  if (inIpv6Cidr(value, 0x20010002000000000000000000000000n, 48)) return false;
+  if (inIpv6Cidr(value, 0x20010010000000000000000000000000n, 28)) return false;
+  if (inIpv6Cidr(value, 0x20010020000000000000000000000000n, 28)) return false;
+  if (inIpv6Cidr(value, 0x20020000000000000000000000000000n, 16)) return false;
+  if (inIpv6Cidr(value, 0x3ffe0000000000000000000000000000n, 16)) return false;
+  if (inIpv6Cidr(value, 0x3fff0000000000000000000000000000n, 20)) return false;
+  if (inIpv6Cidr(value, 0x005f0000000000000000000000000000n, 16)) return false;
+  if (inIpv6Cidr(value, 0x0064ff9b000000000000000000000000n, 96)) return false;
+  return true;
+}
+
+function mappedIpv4(value: bigint): string | null {
+  if ((value >> 32n) !== 0xffffn) return null;
+  const octets = [24n, 16n, 8n, 0n].map((shift) => Number((value >> shift) & 0xffn));
+  return octets.join('.');
 }
 
 function isLoopback(address: string): boolean {
   const value = normalAddress(address);
-  return value === '127.0.0.1' || value === '::1';
+  if (isIP(value) === 4) return value === '127.0.0.1';
+  const numeric = parseIpv6(value);
+  if (numeric === null) return false;
+  return numeric === 1n || mappedIpv4(numeric) === '127.0.0.1';
 }
 
 function isPublic(address: string): boolean {
@@ -73,9 +173,8 @@ function isPublic(address: string): boolean {
     return true;
   }
   if (isIP(value) === 6) {
-    if (value === '::' || value === '::1') return false;
-    if (/^(fc|fd|fe[89ab])/.test(value) || value.startsWith('2001:db8:')) return false;
-    return true;
+    const numeric = parseIpv6(value);
+    return numeric !== null && mappedIpv4(numeric) === null && isGlobalUnicastIpv6(numeric);
   }
   return false;
 }
@@ -84,7 +183,7 @@ async function resolveTarget(target: URL, targetClass: EgressTargetClass): Promi
   const literal = normalAddress(target.hostname);
   const addresses = isIP(literal)
     ? [{ address: literal, family: isIP(literal) as 4 | 6 }]
-    : await dnsLookup(target.hostname, { all: true, verbatim: true });
+    : await (egressDnsLookupForTests ?? ((hostname, options) => dnsLookup(hostname, options)))(target.hostname, { all: true, verbatim: true });
   if (addresses.length === 0) throw new EgressError('dns_denied', 'egress DNS resolution produced no address');
   if (targetClass === 'loopback' && !addresses.every((entry) => isLoopback(entry.address))) {
     throw new EgressError('dns_denied', 'loopback target resolved outside loopback; Fiscus refused the request');
@@ -144,6 +243,24 @@ export async function egressFetchWithConfig(config: EgressConfig, url: string | 
     throw new EgressError('dns_denied', 'Fiscus could not resolve an allowed egress target');
   }
   receipt({ ...common, event: 'dial_started' });
+
+  if (egressDialHookForTests) {
+    try {
+      const response = await egressDialHookForTests({ target: decision.target, resolved, method, bodyBytes: bytes });
+      receipt({ ...common, event: 'response_received', status: response.status });
+      return response;
+    } catch (error) {
+      try {
+        receipt({ ...common, event: 'transport_failed' });
+      } catch (receiptError) {
+        throw receiptError instanceof EgressError
+          ? receiptError
+          : new EgressError('receipt_persistence_failed', 'egress receipt persistence failed');
+      }
+      if (error instanceof EgressError) throw error;
+      throw new EgressError('transport_failed', 'Fiscus could not complete the permitted outbound request');
+    }
+  }
 
   return new Promise<Response>((resolve, reject) => {
     const client = decision.target!.protocol === 'https:' ? https : http;

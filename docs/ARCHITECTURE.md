@@ -237,8 +237,17 @@ present-invalid receipt history, unreadable history, or lock/persistence failure
 intentionally stops the outbound request before DNS resolution. When an allowed
 target is resolved, a DNS denial is raised after that resolution attempt and
 before socket creation; no DNS-denied target is dialled.
+For controlled-cloud DNS results, IPv4 validation retains the existing private/
+reserved checks and IPv6 validation is numeric and fail-closed: only the global
+unicast space is eligible, with multicast, unspecified, loopback, ULA,
+link-local, site-local, documentation, IPv4-mapped, and other reserved ranges
+refused. The selected eligible address is pinned into the one socket request;
+the OS resolver is not asked to choose a different address afterward.
 Only a genuinely absent receipt path may establish a genesis predecessor, and a
-present invalid path is never silently reset. A bounded stale-lock refusal is
+present invalid path is never silently reset. Loaded JSON egress configuration
+also accepts only the two declared modes and exact rule field types; ambiguous
+mode/enabled values return to local-locked behavior rather than authorizing a
+cloud rule. A bounded stale-lock refusal is
 operator-repairable only after confirming no Fiscus writer is active; the lock
 is never auto-deleted. A budget *block* is another
 intentional request stop. Receipt persistence is synchronous, but it is not an

@@ -53,6 +53,7 @@ function safePathPrefix(value: string): boolean {
 export function validateEgressRule(rule: EgressRule): string[] {
   const failures: string[] = [];
   if (!/^[a-z][a-z0-9_-]{2,63}$/.test(rule.id)) failures.push('id must be 3-64 lowercase letters, digits, _ or -');
+  if (typeof rule.enabled !== 'boolean') failures.push('enabled must be a boolean');
   if (!EGRESS_PURPOSES.includes(rule.purpose)) failures.push('purpose is not a supported Fiscus purpose');
   if (!EGRESS_DATA_CLASSES.includes(rule.dataClass)) failures.push('dataClass is not a supported Fiscus data class');
   if (!/^(GET|POST|PUT|PATCH|DELETE|HEAD)$/.test(rule.method)) failures.push('method must be exact uppercase HTTP');
@@ -71,7 +72,7 @@ function normalMethod(value: string): string {
 }
 
 function matches(rule: EgressRule, target: URL, intent: EgressRequestIntent): boolean {
-  return rule.enabled
+  return rule.enabled === true
     && rule.purpose === intent.purpose
     && rule.dataClass === intent.dataClass
     && rule.method === normalMethod(intent.method)
@@ -97,6 +98,9 @@ export function evaluateEgressPolicy(config: EgressConfig, intent: EgressRequest
   if (literalLoopback(target.hostname)) return { allowed: true, target, targetClass: 'loopback', reason: 'literal loopback target is permitted' };
   if (config.mode === 'local_locked') {
     return { allowed: false, target, reason: 'local_locked permits only literal loopback; no non-loopback DNS lookup or dial occurs' };
+  }
+  if (config.mode !== 'controlled_cloud' || !Array.isArray(config.rules)) {
+    return { allowed: false, target, reason: 'unknown or malformed egress mode/config is fail-closed; only local_locked or controlled_cloud is supported' };
   }
   if (target.protocol !== 'https:') return { allowed: false, target, reason: 'controlled_cloud refuses plaintext HTTP outside literal loopback' };
   const matching = config.rules.filter((rule) => matches(rule, target, { ...intent, method }));

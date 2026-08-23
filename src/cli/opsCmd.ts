@@ -1,7 +1,7 @@
 /**
  * Setup & health command cluster — alerts, doctor, init, guide, and audit.
  * Extracted verbatim from cli.ts in the per-command-module split;
- * gatherGuideFacts stays module-internal to cmdGuide.
+ * gatherGuideFacts is exported for the CLI/dashboard guidance contract tests.
  */
 
 import { Store } from '../store/db.ts';
@@ -13,9 +13,11 @@ import { computeAlerts } from '../alerts/detect.ts';
 import { notifyWebhook } from '../alerts/notify.ts';
 import { pricingStatus } from '../cost/pricing.ts';
 import { baselineManifestStatus } from '../value/liftBaseline.ts';
-import { egressFetch } from '../egress/transport.ts';
+import { probeProxyState } from '../egress/proxyHealth.ts';
 import { C, color, usd, num, printNotAGitRepo } from './ui.ts';
 import { type Flags } from './flags.ts';
+
+export { probeProxyState };
 
 export async function cmdAlerts(flags: Flags): Promise<void> {
   const tty = process.stdout.isTTY ?? false;
@@ -110,17 +112,8 @@ export async function cmdDoctor(): Promise<void> {
   const alerts = computeAlerts(store, cfg, { now });
   const criticals = alerts.filter((a) => a.severity === 'critical').length;
 
-  let proxyUp = false;
-  try {
-    const r = await egressFetch('http://localhost:' + cfg.port + '/__fiscus/health', {
-      purpose: 'local_healthcheck',
-      dataClass: 'healthcheck',
-      signal: AbortSignal.timeout(800),
-    });
-    proxyUp = r.ok;
-  } catch {
-    proxyUp = false;
-  }
+  const proxyStatus = await probeProxyState(cfg);
+  const proxyUp = proxyStatus.kind === 'up';
 
   const mark = (good: boolean) => (good ? color(tty, C.green, '✓') : color(tty, C.yellow, '!'));
   console.log('');
@@ -128,7 +121,12 @@ export async function cmdDoctor(): Promise<void> {
   console.log(color(tty, C.gray, '  ' + '─'.repeat(58)));
   console.log(`  ${mark(true)} Config      ${color(tty, C.gray, configPath())}`);
   console.log(`  ${mark(true)} Database    ${color(tty, C.gray, `${dbPath()}  (${num(sum30.requests)} req · ${usd(sum30.costUsd)} in 30d)`)}`);
-  console.log(`  ${mark(proxyUp)} Proxy       ${proxyUp ? color(tty, C.green, `running on :${cfg.port}`) : color(tty, C.yellow, `not reachable on :${cfg.port} — start with "fiscus start"`)}`);
+  const proxyMessage = proxyStatus.kind === 'up'
+    ? color(tty, C.green, `running on :${cfg.port}`)
+    : proxyStatus.kind === 'blocked_by_egress'
+      ? color(tty, C.yellow, `blocked by local egress (${proxyStatus.code}) — ${proxyStatus.action}`)
+      : color(tty, C.yellow, `not reachable on :${cfg.port} — start with "fiscus start"`);
+  console.log(`  ${mark(proxyUp)} Proxy       ${proxyMessage}`);
   console.log(`  ${mark(cfg.budget.dailyUsd !== null)} Daily cap   ${cfg.budget.dailyUsd !== null ? usd(cfg.budget.dailyUsd) : color(tty, C.yellow, 'none — metering only (set with "fiscus budget --daily N")')}`);
   console.log(`  ${mark(estShare <= 0.2)} Pricing     ${estShare > 0 ? `${Math.round(estShare * 100)}% of 30d spend used estimated rates` : 'all spend priced from the rate card'}`);
   const price = pricingStatus(cfg.pricing.maxAgeDays);
@@ -188,7 +186,7 @@ export function cmdInit(): void {
  * from what the user ran before. Re-running `guide` after any action shows the
  * journey advance, which is the whole point: the tool teaches by reflecting state.
  */
-async function gatherGuideFacts(): Promise<GuideFacts> {
+export async function gatherGuideFacts(): Promise<GuideFacts> {
   const cfg = loadConfig();
   const store = new Store(dbPath());
   const now = Date.now();
@@ -199,23 +197,14 @@ async function gatherGuideFacts(): Promise<GuideFacts> {
   const realizationUnits = store.countRealizationUnits();
   store.close();
 
-  let proxyUp = false;
-  try {
-    const r = await egressFetch('http://localhost:' + cfg.port + '/__fiscus/health', {
-      purpose: 'local_healthcheck',
-      dataClass: 'healthcheck',
-      signal: AbortSignal.timeout(800),
-    });
-    proxyUp = r.ok;
-  } catch {
-    proxyUp = false;
-  }
+  const proxyStatus = await probeProxyState(cfg);
 
   return {
     demo: isDemo(),
     port: cfg.port,
     dashboardPort: cfg.dashboardPort,
-    proxyUp,
+    proxyUp: proxyStatus.kind === 'up',
+    proxyStatus,
     requestsAllTime: all.requests,
     spend30dUsd: sum30.costUsd,
     dailyCapUsd: cfg.budget.dailyUsd,

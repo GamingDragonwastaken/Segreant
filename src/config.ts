@@ -428,6 +428,55 @@ function deepMerge<T>(base: T, override: Partial<T>): T {
   return out as T;
 }
 
+const VALID_EGRESS_PURPOSES: readonly EgressPurpose[] = [
+  'provider_inference', 'pricing_refresh', 'baseline_refresh', 'alert_delivery',
+  'provider_cost_observation', 'team_rollup', 'hosted_judge', 'local_judge', 'local_healthcheck',
+];
+
+const VALID_EGRESS_DATA_CLASSES: readonly EgressDataClass[] = [
+  'provider_request', 'pricing_manifest', 'baseline_manifest', 'alert_metadata',
+  'provider_cost_aggregate', 'team_rollup', 'judge_structural_summary',
+  'judge_transcript_excerpt', 'healthcheck',
+];
+
+const VALID_EGRESS_METHODS: readonly EgressRule['method'][] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD'];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function validEgressRule(value: unknown): value is EgressRule {
+  if (!isRecord(value)) return false;
+  return typeof value.id === 'string'
+    && typeof value.enabled === 'boolean'
+    && VALID_EGRESS_PURPOSES.includes(value.purpose as EgressPurpose)
+    && VALID_EGRESS_DATA_CLASSES.includes(value.dataClass as EgressDataClass)
+    && VALID_EGRESS_METHODS.includes(value.method as EgressRule['method'])
+    && typeof value.origin === 'string'
+    && typeof value.pathPrefix === 'string';
+}
+
+/**
+ * JSON configuration is an untrusted boundary. Deep merge is useful for the
+ * broad config surface, but it cannot decide whether an egress object is
+ * authorization data. An absent or ambiguous egress object therefore returns
+ * the local-locked default; a controlled-cloud object must have an exact mode,
+ * an array of exact rule shapes, and boolean enabled flags.
+ */
+function sanitizeEgressConfig(value: unknown): EgressConfig {
+  if (!isRecord(value)) return { mode: 'local_locked', rules: [] };
+  if (value.mode !== 'local_locked' && value.mode !== 'controlled_cloud') {
+    return { mode: 'local_locked', rules: [] };
+  }
+  if (!Array.isArray(value.rules) || !value.rules.every(validEgressRule)) {
+    return { mode: 'local_locked', rules: [] };
+  }
+  return {
+    mode: value.mode,
+    rules: value.rules.map((rule) => ({ ...rule })),
+  };
+}
+
 export function loadConfig(): FiscusConfig {
   const path = configPath();
   let cfg: FiscusConfig;
@@ -435,8 +484,9 @@ export function loadConfig(): FiscusConfig {
     cfg = { ...DEFAULT_CONFIG };
   } else {
     try {
-      const raw = JSON.parse(readFileSync(path, 'utf8')) as Partial<FiscusConfig>;
-      cfg = deepMerge(DEFAULT_CONFIG, raw);
+      const raw = JSON.parse(readFileSync(path, 'utf8')) as unknown;
+      cfg = deepMerge(DEFAULT_CONFIG, isRecord(raw) ? raw as Partial<FiscusConfig> : {});
+      cfg = { ...cfg, egress: sanitizeEgressConfig(isRecord(raw) ? raw.egress : undefined) };
     } catch {
       // A corrupt config should never take the daemon down. Fall back to defaults.
       cfg = { ...DEFAULT_CONFIG };

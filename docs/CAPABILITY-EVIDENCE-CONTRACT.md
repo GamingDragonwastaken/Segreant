@@ -50,6 +50,10 @@ Fiscus keeps four different claims separate:
   genuinely absent receipt history may establish genesis; any present history
   that is empty, malformed, truncated, hash-invalid, unreadable, or not safely
   lockable refuses before DNS/socket creation and is never silently reset.
+  The loader also fails closed on an unknown egress mode, a non-array rule set,
+  or a non-boolean `enabled` value; controlled-cloud DNS accepts only numeric
+  global-unicast destinations, and the selected address is pinned into the
+  request.
 - A local versioned rate card supplies a local list-price estimate. Rows retain
   pricing match and lineage; a list-price estimate is not a provider bill.
 - The ledger preserves the distinction between proxy usage, imported usage,

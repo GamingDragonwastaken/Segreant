@@ -11,6 +11,13 @@
  * Pure: facts in, report out. No I/O here — that keeps it testable to the line.
  */
 
+import type { EgressErrorCode } from './egress/transport.ts';
+
+export type ProxyStatus =
+  | { kind: 'up' }
+  | { kind: 'down'; message?: string }
+  | { kind: 'blocked_by_egress'; code: EgressErrorCode; message: string; action: string };
+
 export interface GuideFacts {
   /** Rendering surfaces label demo data; the guide also swaps its hint. */
   demo: boolean;
@@ -18,6 +25,8 @@ export interface GuideFacts {
   dashboardPort: number;
   /** Probed (health endpoint), not assumed. */
   proxyUp: boolean;
+  /** Structured health result; proxyUp remains for compatibility with older callers. */
+  proxyStatus?: ProxyStatus;
   requestsAllTime: number;
   spend30dUsd: number;
   dailyCapUsd: number | null;
@@ -60,6 +69,9 @@ function fmtInt(n: number): string {
 
 export function buildGuide(f: GuideFacts): GuideReport {
   const envHint = `$env:ANTHROPIC_BASE_URL="http://localhost:${f.port}"  ·  $env:OPENAI_BASE_URL="http://localhost:${f.port}/v1"`;
+  const proxyStatus: ProxyStatus = f.proxyStatus ?? (f.proxyUp ? { kind: 'up' } : { kind: 'down' });
+  const proxyUp = proxyStatus.kind === 'up';
+  const proxyBlocked = proxyStatus.kind === 'blocked_by_egress';
 
   const meter: GuideStep = {
     id: 'meter',
@@ -68,11 +80,19 @@ export function buildGuide(f: GuideFacts): GuideReport {
     state:
       f.requestsAllTime > 0
         ? `${fmtInt(f.requestsAllTime)} requests metered`
-        : f.proxyUp
+        : proxyUp
           ? `proxy running on :${f.port} — no traffic through it yet`
+          : proxyBlocked
+            ? `proxy health check blocked by local egress (${proxyStatus.code})`
           : 'no traffic yet',
     why: 'Nothing can be governed or valued until the spend is captured — imported from what your tools already log, or routed through the proxy.',
-    commands: f.proxyUp
+    commands: proxyBlocked
+      ? [
+          'fiscus egress verify',
+          proxyStatus.action,
+          proxyStatus.message,
+        ]
+      : proxyUp
       ? [envHint, 'then run your AI tool as usual — watch requests appear']
       : [
           'fiscus scan --setup    (find your AI tools + repos, import everything — no wiring)',

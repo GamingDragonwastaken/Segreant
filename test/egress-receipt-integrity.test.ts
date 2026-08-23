@@ -23,6 +23,7 @@ import {
   EgressReceiptError,
   egressReceiptPath,
   setReceiptLockReleaseHookForTests,
+  setReceiptWriteHookForTests,
   verifyEgressReceipts,
   type EgressReceipt,
   type ReceiptInput,
@@ -397,6 +398,53 @@ test('transport refuses before socket creation when pre-dial lock release fails'
   });
   try {
     await assertRefusesBeforeDial(state.home, /receipt persistence/i, 'receipt_persistence_failed');
+  } finally {
+    restoreHook();
+    state.restore();
+  }
+});
+
+test('a present receipt path replaced after the write is refused before any dial', async () => {
+  const state = withHome('post-write-identity-race');
+  let replaced = false;
+  let restoreHook: () => void = () => undefined;
+  const installHook = () => setReceiptWriteHookForTests(() => {
+    if (replaced) return;
+    replaced = true;
+    rmSync(egressReceiptPath(), { force: true });
+    writeFileSync(egressReceiptPath(), '', 'utf8');
+  });
+  try {
+    appendEgressReceipt(INPUT);
+    restoreHook = installHook();
+    assert.throws(
+      () => appendEgressReceipt({ ...INPUT, event: 'dial_started' }),
+      (error: unknown) => error instanceof EgressReceiptError
+        && error.code === 'persistence'
+        && /changed after append|path identity/i.test(error.message),
+    );
+    await assertRefusesBeforeDial(state.home, /empty receipt history/i);
+  } finally {
+    restoreHook();
+    state.restore();
+  }
+});
+
+test('a replacement lock pathname is never unlinked during release', () => {
+  const state = withHome('lock-path-replacement');
+  const lockPath = join(state.home, 'egress-receipts.lock');
+  const restoreHook = setReceiptLockReleaseHookForTests(() => {
+    rmSync(lockPath, { force: true });
+    writeFileSync(lockPath, 'replacement lock owned by another process', 'utf8');
+  });
+  try {
+    assert.throws(
+      () => appendEgressReceipt(INPUT),
+      (error: unknown) => error instanceof EgressReceiptError
+        && error.code === 'lock'
+        && /changed|replacement|releasing/i.test(error.message),
+    );
+    assert.equal(readFileSync(lockPath, 'utf8'), 'replacement lock owned by another process');
   } finally {
     restoreHook();
     state.restore();

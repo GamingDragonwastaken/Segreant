@@ -134,6 +134,11 @@ or restore the history, then rerun `fiscus egress verify`. If a lock is stale,
 first confirm that no Fiscus writer is active, then remove only that lock; Fiscus
 never auto-deletes an abandoned lock or restarts the history as genesis.
 
+When working from a checkout, `npm start` and `npm run fiscus` rebuild the full
+Node/browser output before launching `bin/fiscus.mjs`; this keeps an ignored,
+stale `dist/` tree from silently running older source. Published package
+`prepare`/`prepack` builds remain unchanged.
+
 Run your agents as usual. Watch spend accrue in the terminal and at
 **http://localhost:8091**.
 
