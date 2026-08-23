@@ -390,6 +390,78 @@ CREATE TABLE IF NOT EXISTS allocation_runs (
 
 CREATE INDEX IF NOT EXISTS idx_allocation_runs_latest
   ON allocation_runs(computed_at_ms DESC, allocation_run_id DESC);
+
+-- The causal-study lane stores only protocol/event metadata and declared
+-- outcome facts. Raw prompts, source code, and credentials are neither schema
+-- fields nor required inputs. These rows are append-only and immutability triggers
+-- are installed below because runScript deliberately does not split triggers.
+CREATE TABLE IF NOT EXISTS causal_protocols (
+  study_id        TEXT PRIMARY KEY NOT NULL,
+  protocol_hash   TEXT NOT NULL UNIQUE,
+  committed_at_ms INTEGER NOT NULL,
+  protocol_json   TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS causal_assignment_plans (
+  study_id        TEXT NOT NULL,
+  block_id        TEXT NOT NULL,
+  protocol_hash   TEXT NOT NULL,
+  created_at_ms   INTEGER NOT NULL,
+  allocation_hash TEXT NOT NULL,
+  material_sha256 TEXT NOT NULL,
+  plan_json       TEXT NOT NULL,
+  PRIMARY KEY (study_id, block_id)
+);
+
+CREATE TABLE IF NOT EXISTS causal_decisions (
+  decision_id     TEXT PRIMARY KEY NOT NULL,
+  study_id        TEXT NOT NULL,
+  protocol_hash   TEXT NOT NULL,
+  assigned_at_ms  INTEGER NOT NULL,
+  event_hash      TEXT NOT NULL UNIQUE,
+  decision_json   TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_causal_decisions_study
+  ON causal_decisions(study_id, assigned_at_ms, decision_id);
+
+CREATE TABLE IF NOT EXISTS causal_executions (
+  execution_id    TEXT PRIMARY KEY NOT NULL,
+  decision_id     TEXT NOT NULL UNIQUE,
+  study_id        TEXT NOT NULL,
+  protocol_hash   TEXT NOT NULL,
+  completed_at_ms INTEGER NOT NULL,
+  event_hash      TEXT NOT NULL UNIQUE,
+  execution_json  TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_causal_executions_study
+  ON causal_executions(study_id, completed_at_ms, execution_id);
+
+CREATE TABLE IF NOT EXISTS causal_outcomes (
+  outcome_id      TEXT PRIMARY KEY NOT NULL,
+  decision_id     TEXT NOT NULL UNIQUE,
+  study_id        TEXT NOT NULL,
+  protocol_hash   TEXT NOT NULL,
+  observed_at_ms  INTEGER NOT NULL,
+  event_hash      TEXT NOT NULL UNIQUE,
+  outcome_json    TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_causal_outcomes_study
+  ON causal_outcomes(study_id, observed_at_ms, outcome_id);
+
+CREATE TABLE IF NOT EXISTS causal_analysis_snapshots (
+  analysis_id     TEXT PRIMARY KEY NOT NULL,
+  study_id        TEXT NOT NULL,
+  protocol_hash   TEXT NOT NULL,
+  computed_at_ms  INTEGER NOT NULL,
+  state           TEXT NOT NULL,
+  analysis_json   TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_causal_analysis_latest
+  ON causal_analysis_snapshots(study_id, computed_at_ms DESC, analysis_id DESC);
 `;
 
 /** Idempotent schema migrations for DBs created before a column existed. */
@@ -485,6 +557,32 @@ function migrate(db: DatabaseSync): void {
   runScript(db, 'CREATE INDEX IF NOT EXISTS idx_requests_scope_declaration ON requests(provider_scope_declaration_id)');
 }
 
+/** Immutable causal evidence is a local record-control, not an audit claim. */
+function installCausalImmutability(db: DatabaseSync): void {
+  const tables = [
+    'causal_protocols',
+    'causal_assignment_plans',
+    'causal_decisions',
+    'causal_executions',
+    'causal_outcomes',
+    'causal_analysis_snapshots',
+  ];
+  for (const table of tables) {
+    const updateTrigger = 'causal_no_update_' + table;
+    const deleteTrigger = 'causal_no_delete_' + table;
+    db.prepare(
+      'CREATE TRIGGER IF NOT EXISTS ' + updateTrigger +
+      ' BEFORE UPDATE ON ' + table +
+      ' BEGIN SELECT RAISE(ABORT, \'causal evidence is append-only\'); END',
+    ).run();
+    db.prepare(
+      'CREATE TRIGGER IF NOT EXISTS ' + deleteTrigger +
+      ' BEFORE DELETE ON ' + table +
+      ' BEGIN SELECT RAISE(ABORT, \'causal evidence is append-only\'); END',
+    ).run();
+  }
+}
+
 /**
  * Run one or more `;`-separated statements via prepared statements.
  *
@@ -516,4 +614,5 @@ export function initializeSchema(db: DatabaseSync): void {
   runScript(db, 'PRAGMA synchronous = NORMAL');
   runScript(db, SCHEMA);
   migrate(db);
+  installCausalImmutability(db);
 }

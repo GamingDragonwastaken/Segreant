@@ -47,6 +47,7 @@ import { fiscusHome } from '../config.ts';
 import type { Store } from '../store/db.ts';
 import { readCommitsBefore } from '../git/correlate.ts';
 import { classifyTaskType, type TaskType } from './taskType.ts';
+import { egressFetch } from '../egress/transport.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -154,7 +155,12 @@ export async function refreshBaselineManifest(url: string | null, timeoutMs = 20
     };
   }
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs), headers: { accept: 'application/json' } });
+    const res = await egressFetch(url, {
+      purpose: 'baseline_refresh',
+      dataClass: 'baseline_manifest',
+      signal: AbortSignal.timeout(timeoutMs),
+      headers: { accept: 'application/json' },
+    });
     if (!res.ok) return { ok: false, error: `HTTP ${res.status} from ${url}` };
     return applyBaselineManifest(await res.text());
   } catch (e) {

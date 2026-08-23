@@ -2,7 +2,13 @@
 
 **Status:** Product-direction decision and staged build plan, 2026-08-11. It describes an intended expansion; it is not a claim that the capabilities below are shipped or that Fiscus is a financial system of record today.
 
-**Audited against the source on 2026-08-17 — see [VISION-AUDIT.md](VISION-AUDIT.md).** Section 3's "what exists today" is now stale in both directions, and the audit records three vocabularies specified here that were implemented differently or not at all (cost basis, evidence source, enforceability status). Where this document and the code disagree on a label that is already in migrated databases, the code is authoritative and this document is what needs correcting.
+**This is a direction document, not a current capability claim.** The public
+status contract is [CAPABILITY-EVIDENCE-CONTRACT.md](CAPABILITY-EVIDENCE-CONTRACT.md).
+This roadmap was audited against the source on 2026-08-17 — see
+[VISION-AUDIT.md](VISION-AUDIT.md) — and Section 3 is a historical baseline in
+both directions. Where this document and the code disagree on a label that is
+already in migrated databases, the code is authoritative and this document is
+what needs correcting.
 
 ## 1. The product Fiscus should become
 
@@ -49,7 +55,12 @@ Use these stable labels throughout the database, API, dashboard, export, and rec
 
 Outcome evidence needs its own independent labels: `user_asserted`, `local_command`, `git_observed`, `signed_ci`, `deployment_attested`, and `unknown`.
 
-## 3. What exists today, and what is missing
+## 3. Historical pre-2026-08-18 baseline: what existed and what was missing
+
+This section is retained for the reasoning behind the roadmap and must not be
+read as a live gap list. Reconciliation and local showback allocation have since
+landed; use [CAPABILITY-EVIDENCE-CONTRACT.md](CAPABILITY-EVIDENCE-CONTRACT.md)
+for current support, evidence tier, and remaining boundaries.
 
 Fiscus is already a credible **local AI spend-control and outcome-evidence product**. It has a local proxy and supported native imports, a SQLite request ledger, pricing freshness/estimated-cost handling, live local caps, alerts, exports, coding-work realization signals, signed CI `tested` evidence, and an early optional aggregate team-service experiment.
 

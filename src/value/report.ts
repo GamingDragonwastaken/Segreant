@@ -33,7 +33,8 @@
  *                     pre-AI git history shrunk toward a cited population prior
  *                     > the prior alone). Demo mode skips git entirely: the
  *                     seeded snapshots are not this checkout's real history.
- *   3. lift         — the counterfactual; its provenance travels with it.
+ *   3. lift         — an observational time/comparative lens; its provenance
+ *                     travels with it but it is not monetary causal credit.
  *   4. money        — priced from the SAME baseline the lens used, so the
  *                     dollar and the index can never disagree.
  *   5. RoI, drift, time reclaimed, frontier — all read (1)–(4), never the store
@@ -223,7 +224,7 @@ export async function valueSpine(
 
   // Labor rate prices both the effort tax and the money number's denominator.
   // Falls back to config; in the demo we assume an illustrative rate so the
-  // dollar return is visible (clearly labeled), since the demo has no real org
+  // dollar scenario is visible (clearly labeled), since the demo has no real org
   // rate. Threaded ONLY into the headline RoI — never into `liftOptions` — so
   // the per-project breakdown is not handed a global numerator.
   let laborRate = opts.laborRatePerHour !== undefined ? opts.laborRatePerHour : config.lift.laborRatePerHour;

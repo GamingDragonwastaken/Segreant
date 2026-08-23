@@ -14,10 +14,18 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync, unlinkSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { egressFetch } from '../egress/transport.ts';
 import { dirname, join } from 'node:path';
 import { fiscusHome } from '../config.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Deliberate test seam for response-level pricing validation. Production callers
+ * omit it and always use the hardened egress transport below; this does not
+ * add a configuration path that could bypass the egress policy.
+ */
+export type PricingRefreshTransport = (url: URL, init: Parameters<typeof egressFetch>[1]) => Promise<Response>;
 
 /** The rate card shipped inside the package — always present, works offline. */
 const BUNDLED_PRICING_PATH = join(__dirname, '..', '..', 'pricing', 'models.json');
@@ -571,7 +579,11 @@ async function readPricingResponse(res: Response): Promise<string> {
  * Conditional requests identify an unchanged *local card*; they never claim a
  * provider invoice or silently mutate historical measured rows.
  */
-export async function refreshPricing(url: string | null, timeoutMs = 20_000): Promise<RefreshResult> {
+export async function refreshPricing(
+  url: string | null,
+  timeoutMs = 20_000,
+  transport: PricingRefreshTransport = egressFetch,
+): Promise<RefreshResult> {
   const target = url ?? DEFAULT_MANIFEST_URL;
   const parsed = safeRemoteTarget(target);
   if (!parsed.url) return { ok: false, error: parsed.error };
@@ -582,10 +594,11 @@ export async function refreshPricing(url: string | null, timeoutMs = 20_000): Pr
   if (sameSource && prior?.etag) headers['if-none-match'] = prior.etag;
   if (sameSource && prior?.lastModified) headers['if-modified-since'] = prior.lastModified;
   try {
-    const res = await fetch(parsed.url, {
+    const res = await transport(parsed.url, {
+      purpose: 'pricing_refresh',
+      dataClass: 'pricing_manifest',
       signal: AbortSignal.timeout(timeoutMs),
       headers,
-      redirect: 'error',
     });
     if (res.status === 304) {
       const active = loadVerifiedCache();

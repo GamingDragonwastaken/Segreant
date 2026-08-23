@@ -260,6 +260,7 @@ export interface ValuePayload {
       counterfactualCredit?: number | null;
       supervisionPriced?: boolean;
       paysForItself?: boolean | null;
+      evidenceState?: 'unpriced' | 'observational_scenario';
       basis?: string;
     } | null;
     tokenCostUsd?: number;
@@ -311,6 +312,43 @@ export interface BudgetAdvice {
   windowDays?: number;
 }
 
+/** Read-only summary of Fiscus's separate causal-study evidence lane. */
+export interface CausalPayload {
+  demo: boolean;
+  generatedAt: string;
+  studies: Array<{
+    studyId: string;
+    protocolHash: string;
+    committedAtMs: number;
+    decisions: number;
+    executions: number;
+    outcomes: number;
+    latestAnalysis: { analysisId: string; computedAtMs: number; state: string } | null;
+  }>;
+  study: {
+    studyId: string;
+    protocolHash: string;
+    committedAtMs: number;
+    question: 'model_cost_quality' | 'ai_vs_incumbent_net_benefit';
+    counts: { decisions: number; executions: number; outcomes: number };
+    qualification: {
+      state: 'collecting' | 'invalid' | 'inconclusive' | 'qualified';
+      evidenceGrade: string;
+      reasons: string[];
+      countsByArm: Record<string, {
+        assigned: number;
+        completed: number;
+        missing: number;
+        adherenceConfirmed: number;
+      }>;
+    };
+    allowedClaim: 'not_established' | 'comparative_cost_quality_supported' | 'causal_net_benefit_supported';
+    assignmentReplay: Array<{ blockId: string; allocationHash: string; errors: string[] }>;
+  } | null;
+  causalEvidence: string;
+  boundary: string;
+}
+
 /**
  * Mirrors `BudgetConfig` in src/config.ts EXACTLY. Verified against that file and
  * against a live /api/settings response, not written from memory: the first
@@ -346,6 +384,26 @@ export interface SettingsSnapshot {
   metadataOnly: boolean;
   budget: BudgetConfig;
   enforcement: BudgetEnforcement;
+  egress: {
+    mode: 'local_locked' | 'controlled_cloud';
+    rules: Array<{
+      id: string;
+      enabled: boolean;
+      purpose: string;
+      dataClass: string;
+      method: string;
+      origin: string;
+      pathPrefix: string;
+    }>;
+    receipts: {
+      path: string;
+      ok: boolean;
+      receiptCount: number;
+      validThroughHash: string | null;
+      errors: string[];
+    };
+    scope: string;
+  };
   connections: Array<Record<string, unknown>>;
 }
 
@@ -460,6 +518,9 @@ export const api = {
   overview: (range: string) => request<Overview>(`/api/overview?range=${encodeURIComponent(range)}`),
   billing: () => request<BillingPayload>('/api/billing'),
   allocation: () => request<AllocationPayload>('/api/allocation'),
+  causal: (studyId?: string) => request<CausalPayload>(
+    studyId ? '/api/causal?study=' + encodeURIComponent(studyId) : '/api/causal',
+  ),
   value: () => request<ValuePayload>('/api/value'),
   settings: () => request<SettingsSnapshot>('/api/settings'),
   guide: () => request<Record<string, unknown>>('/api/guide'),

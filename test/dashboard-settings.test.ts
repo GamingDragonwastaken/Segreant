@@ -32,6 +32,10 @@ test('buildSettingsSnapshot reports config, paths, and recent connections', () =
   assert.equal(snap.metadataOnly, false);
   assert.equal(snap.proposalRetentionDays, 30);
   assert.equal(snap.retentionDays, 180);
+  assert.equal(snap.egress.mode, 'local_locked');
+  assert.deepEqual(snap.egress.rules, []);
+  assert.equal(snap.egress.receipts.ok, true);
+  assert.match(snap.egress.scope, /Fiscus-process/i);
   assert.equal(snap.connections.length, 1);
   assert.equal(snap.connections[0]!.provider, 'anthropic');
   store.close();
@@ -102,6 +106,7 @@ test('GET /api/settings returns a snapshot; POST is not allowed', async () => {
     assert.equal(body.version, 'test');
     assert.equal(body.metadataOnly, false);
     assert.ok(Array.isArray(body.connections));
+    assert.deepEqual((body.egress as { mode?: string }).mode, 'local_locked');
 
     const post = await fetch(`${srv.base}/api/settings`, { method: 'POST' });
     assert.equal(post.status, 405);

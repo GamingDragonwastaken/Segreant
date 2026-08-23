@@ -34,6 +34,7 @@ import {
 } from './usage.ts';
 import { extractProposals, type ProposedFile } from '../value/proposals.ts';
 import { StreamProposalAccumulator } from './stream-proposals.ts';
+import { EgressError, egressFetchWithConfig } from '../egress/transport.ts';
 
 const HOP_BY_HOP = new Set([
   'connection',
@@ -387,8 +388,10 @@ async function handle(
   const controller = new AbortController();
   const timeoutTimer = setTimeout(() => controller.abort(), config.upstreamTimeoutMs);
   try {
-    upstream = await fetch(targetUrl, {
-      method: req.method,
+    upstream = await egressFetchWithConfig(config.egress, targetUrl, {
+      purpose: 'provider_inference',
+      dataClass: 'provider_request',
+      method: req.method ?? 'POST',
       headers: buildUpstreamHeaders(req),
       body: req.method === 'GET' || req.method === 'HEAD' ? undefined : outboundBody,
       signal: controller.signal,
@@ -401,9 +404,12 @@ async function handle(
     // with a provider-shaped error the client already handles, and record the
     // attempt — Fiscus must never be a worse failure mode than calling direct.
     const timedOut = controller.signal.aborted;
-    const status = timedOut ? 504 : 502;
+    const egressRefusal = err instanceof EgressError && err.code !== 'transport_failed';
+    const status = timedOut ? 504 : egressRefusal ? 403 : 502;
     const detail = timedOut
       ? `upstream timed out after ${config.upstreamTimeoutMs}ms (no response headers)`
+      : egressRefusal
+        ? 'Fiscus egress boundary refused this upstream request: ' + err.message
       : `upstream unreachable: ${String(err)}`;
     res.writeHead(status, { 'content-type': 'application/json', 'x-fiscus-upstream-error': '1' });
     res.end(providerErrorBody(provider, detail));

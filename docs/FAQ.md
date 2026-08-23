@@ -3,12 +3,23 @@
 ## Privacy & security
 
 **Does my code or prompts ever leave my machine?**
-No. Metering, storage, and all RoI math run locally in a file-based database. The
-only outbound traffic is (1) forwarding your AI requests to the provider you already
-use — with your own key, exactly as your tool would have — and (2) two *optional,
-off-by-default* things: a public pricing-table refresh (a plain GET, sends nothing
-about you) and alert webhooks you configure (which carry alert titles/severity only,
-never content).
+Fiscus does not send your prompts or code to a Fiscus-operated telemetry service
+by default. Metering, storage, and RoI calculations run locally, but a request
+you deliberately route through the proxy is forwarded to the AI provider you
+configure and can include its prompt, source snippets, tool payloads, and
+provider credential. Other explicit paths include pricing/baseline refresh,
+alert webhooks, a configured hosted judge, an OpenAI Costs pull, and an opt-in
+team rollup. [DATA-BOUNDARIES.md](DATA-BOUNDARIES.md) is the complete,
+current outbound and retention contract.
+
+**Can I make Fiscus itself refuse all cloud traffic?**
+Yes. New configuration begins in `local_locked` mode, where Fiscus refuses
+non-loopback HTTP(S) targets before DNS. A local model at `localhost` or
+`127.0.0.1` remains available. To permit a cloud route, use `fiscus egress
+plan` to inspect one exact rule and `fiscus egress apply --apply` to persist it;
+`fiscus egress verify` validates the redacted local receipt chain. This is a
+Fiscus-process boundary, not a claim about other applications, direct clients,
+the operating system, or provider retention.
 
 **Is my proposed code stored anywhere, even locally?**
 Yes, temporarily. To measure whether an AI's proposed edit was actually
@@ -100,11 +111,13 @@ A controlled study found experienced developers were 19% *slower* with AI while
 believing they were 24% faster. Self-report is off by ~40 points, so we use behavior,
 never surveys.
 
-**Why is my RoI Index sometimes labeled an "upper bound"?**
-Because some of the four value lenses aren't wired yet. Every unmeasured necessary
-condition can only *lower* the true value, so a partly-measured score is an honest
-ceiling. Wire more (report tests/ships, attach a repo) and it moves toward the truth —
-usually down. That's the point: more measurement, more honest, never inflated.
+**Why does my RoI Index show missing coverage and a range?**
+Because some of the four value lenses may not be wired yet. The observed-only
+geometric mean is not generally an upper bound: measuring a missing lens can
+raise or lower it. Fiscus therefore keeps that observed score separate from the
+full-instrumentation range obtained by evaluating unknown necessary lenses at
+their admissible endpoints. Wire more evidence to reduce what must be assumed,
+not to force the score in one direction.
 
 **Why did a small experiment's great score get "pulled down"?**
 Reliability shrinkage. Two-of-two successes isn't the same evidence as 140-of-200, so
@@ -121,11 +134,11 @@ never inferred from the content of your prompts. Acceptance and survival-over-ti
 don't apply to a one-shot answer, so they stay honestly n/a rather than faked.
 
 **What's the "shadow price of intelligence"?**
-The value of one more AI dollar, spent optimally, right now (μ). μ ≥ $1 means invest
-more; μ < $1 means the next dollar returns less than it costs — cut before you grow.
-The diminishing-returns curve behind it (β) is estimated from your own history when
-there's enough of it, and falls back to a disclosed default — with the reason
-printed — when there isn't.
+The name for a research scenario: a hypothetical power-law response curve can
+produce a marginal-value number, μ. Fiscus does not currently present it as a
+forecast, a general allocation recommendation, a routing instruction, or an
+automatic budget action. A decision-grade version requires a controlled,
+within-task allocation design and independent validation.
 
 **Can I trust the interval while watching it live?**
 Yes — and that's rarer than it sounds. A classical interval is only valid if you
@@ -185,7 +198,8 @@ Usually the `/v1` double-version gotcha: if your client already appends
 `fiscus pricing --refresh` pulls current rates from the community price feed
 (LiteLLM's model-price file — machine-readable, updated by hundreds of
 contributors within days of every model release; the GET sends nothing about
-you). For self-maintenance, `fiscus pricing --auto` refreshes on start
+you). It needs a reviewed `pricing_refresh` egress rule in controlled-cloud
+mode. For self-maintenance, `fiscus pricing --auto` refreshes on start
 whenever the table goes stale. A malformed or shrunken feed is refused and the
 current table kept — a bad refresh can never corrupt your pricing.
 

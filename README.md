@@ -53,7 +53,8 @@ architecture puts privacy and latency ahead of analytics, always.
 New here? Start with **[docs/GETTING-STARTED.md](docs/GETTING-STARTED.md)**. For the
 measurement in plain language (the CFO version) see
 **[docs/METHODOLOGY.md](docs/METHODOLOGY.md)**; common questions are in
-**[docs/FAQ.md](docs/FAQ.md)**.
+**[docs/FAQ.md](docs/FAQ.md)**. The current support/evidence boundary is in
+**[docs/CAPABILITY-EVIDENCE-CONTRACT.md](docs/CAPABILITY-EVIDENCE-CONTRACT.md)**.
 
 Requires **Node.js >= 24**. A cloned checkout builds the distributable runtime
 during `npm install`; the packaged runtime needs no build at use time and uses
@@ -101,6 +102,32 @@ export ANTHROPIC_BASE_URL="http://localhost:8090"
 export OPENAI_BASE_URL="http://localhost:8090/v1"
 ```
 
+Fiscus starts in **local-locked** mode. Before a cloud provider can receive
+routed traffic, grant only the exact route you intend to use. For the default
+OpenAI Responses/Chat API path:
+
+```bash
+fiscus egress apply --apply --mode controlled_cloud \
+  --id openai-inference --purpose provider_inference \
+  --data-class provider_request --method POST \
+  --origin https://api.openai.com --path-prefix /v1/
+```
+
+For Anthropic, add a second exact rule (this preserves the OpenAI rule):
+
+```bash
+fiscus egress apply --apply --mode controlled_cloud \
+  --id anthropic-inference --purpose provider_inference \
+  --data-class provider_request --method POST \
+  --origin https://api.anthropic.com --path-prefix /v1/
+```
+
+Use `fiscus egress status` to inspect the active mode/rules and
+`fiscus egress verify` to verify the local receipt chain. Return to
+`local_locked` with `fiscus egress apply --apply --mode local_locked`. These
+controls govern Fiscus's own HTTP(S) transport; they are not a machine-wide
+firewall or a provider-data-retention guarantee.
+
 Run your agents as usual. Watch spend accrue in the terminal and at
 **http://localhost:8091**.
 
@@ -141,6 +168,9 @@ Metering, governance, and value:
 
 ```
 fiscus start                 Start the proxy (:8090) + dashboard (:8091)
+fiscus egress status         Inspect Fiscus-process egress mode, exact cloud rules,
+                                and local receipt-chain health. `egress plan`
+                                previews a change; `egress apply --apply` persists it.
 fiscus today | week | month  Show spend for a window        (--json)
 fiscus roi --repo <path>     Return on Intelligence — four value lenses composed
                                 into one index (--labor-rate $/hr, --tsf X, --json)
@@ -312,10 +342,12 @@ which Fiscus does not have.
 
 Capping waste is the floor. The question that matters is **how much you actually
 get from the AI** — and neither "tokens consumed" nor "lines of code" ever
-answered it. Fiscus's core is **Return on Intelligence (RoI)**: a measure of
-realized AI value that works across *any* token usage (not just coding), is
-measured from the request path instead of surveys, and composes four value
-lenses into one index that can't be gamed on a single axis.
+answered it. Fiscus's core is **Return on Intelligence (RoI)**: an
+evidence-limited measurement of realized AI value. The current implementation
+and evidence are strongest for instrumented coding-agent workflows; the
+underlying accounting model is intended to extend to broader AI usage, but that
+intention is not a claim of present coverage. It composes four value lenses so a
+strong observed lens cannot compensate for a weak necessary lens.
 
 > **RoI Index** = geometric mean of **Realization · Acceptance · Lift · Impact** —
 > if any one lens collapses, the index collapses. The denominator is **tokens +
@@ -327,22 +359,24 @@ one weak lens drags the whole number down. But a budget owner also asks a blunte
 question: **did it pay for itself, in dollars?** So RoI has a second, independent
 face:
 
-> **RoI Return** ℛ = **realized value ÷ honest cost**. Value is the manual time
-> the realized work would otherwise have taken, priced at your labor rate and
-> discounted by first-pass acceptance; cost is **tokens + the measured supervision
-> time** it took to get there. **ℛ ≥ 1 ⟺ the spend paid for itself.** It's
-> reported as an *interval*, because the counterfactual — "how much faster than
-> doing it without AI?" — is honestly a range, not a point.
+> **Observed value scenario** ℛ = **realized manual-equivalent value ÷ honest
+> cost**. Value is the manual time the realized work would otherwise have taken,
+> priced at your labour rate and discounted by first-pass acceptance; cost is
+> **tokens + measured supervision time**. This scenario describes the recorded
+> workflow under stated baseline, labour-rate, realization, and supervision-time
+> assumptions. It cannot establish what the same eligible work would have
+> produced without AI, so it is not a causal break-even result.
 
-The two faces are deliberately **never multiplied**. The dollar return already
-*is* a speedup, and so is the Lift lens inside the index — combining them would
-square the same effect. The index tells you *how well* the intelligence works; the
-return tells you *whether it was worth it*. And because the measured supervision
-time sits in the denominator, the return lands in the **empirically-documented
-~1–2× range** for real coding work — not the fantasy 100× you get from counting
-tokens alone. Fiscus refuses to print a dollar return at all until it has
-measured supervision time to divide by; an honest "not yet" beats a flattering
-lie.
+The two faces are deliberately **never multiplied**. The dollar scenario and
+the Lift lens answer distinct but observational questions; multiplying them
+would turn an index-scale lens into a financial causal claim. A
+supervision-time denominator prevents a token-only calculation from presenting
+an implausible scenario as evidence. Fiscus refuses to print a dollar scenario
+until it has measured supervision time to divide by. A causal net-benefit result
+requires a registered randomized study with a frozen protocol, pre-exposure
+assignment, execution/outcome lineage, a predeclared quality guardrail, and a
+conservative confidence bound. The initial local study protocol is documented
+in [CAUSAL-EVIDENCE-PROTOCOL.md](docs/CAUSAL-EVIDENCE-PROTOCOL.md).
 
 The four lenses, each answering a different real question (full definitions in
 **[docs/RETURN-ON-INTELLIGENCE.md](docs/RETURN-ON-INTELLIGENCE.md)**):

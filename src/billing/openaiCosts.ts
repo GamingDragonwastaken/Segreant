@@ -8,6 +8,7 @@
  */
 
 import { createHash } from 'node:crypto';
+import { egressFetch } from '../egress/transport.ts';
 import type { ProviderScopeDeclaration } from './scope.ts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -307,7 +308,6 @@ export async function pullOpenAiCosts(input: {
   const observations: OpenAiCostObservation[] = [];
   let page: string | null = null;
   const cursors = new Set<string>();
-  const fetchImpl = input.fetchImpl ?? fetch;
   try {
     while (true) {
       if (page !== null) {
@@ -316,12 +316,20 @@ export async function pullOpenAiCosts(input: {
       }
       if (pageCount >= MAX_OPENAI_COST_PAGES) throw new Error('partial_response');
       const url = requestUrl(input.preview, page);
-      const response = await fetchImpl(url, {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${input.apiKey}`, Accept: 'application/json' },
-        redirect: 'error',
-        signal: AbortSignal.timeout(30_000),
-      });
+      const response = input.fetchImpl
+        ? await input.fetchImpl(url, {
+            method: 'GET',
+            headers: { Authorization: `Bearer ${input.apiKey}`, Accept: 'application/json' },
+            redirect: 'error',
+            signal: AbortSignal.timeout(30_000),
+          })
+        : await egressFetch(url, {
+            purpose: 'provider_cost_observation',
+            dataClass: 'provider_cost_aggregate',
+            method: 'GET',
+            headers: { Authorization: 'Bearer ' + input.apiKey, Accept: 'application/json' },
+            signal: AbortSignal.timeout(30_000),
+          });
       if (!response.ok) throw new Error(`http_${response.status}`);
       const bytes = await responseBytes(response);
       pageCount++;

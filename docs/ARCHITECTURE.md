@@ -17,7 +17,10 @@ This document records what Fiscus is, how it's built, and — just as important 
 
 ### Non-functional
 - **Latency**: negligible relative to the upstream call it wraps. The proxy adds one in-process hop; the dominant cost is the provider round-trip (hundreds of ms to tens of seconds). Sub-millisecond bookkeeping is a non-goal dressed up as a requirement — see §5.
-- **Privacy**: no prompt text, source code, or credentials ever leave the device. Provider API keys pass through to the provider untouched and are never stored.
+- **Privacy**: Fiscus stores no provider API keys and has no Fiscus-hosted
+  telemetry by default. A request intentionally routed through the proxy is
+  forwarded to the configured provider, which may receive prompt text, source
+  snippets, tool payloads, and the provider credential it requires.
 - **Footprint**: a single command to run. No build step, no native modules, no external services.
 - **Reliability**: a failure in tracking must never break a developer's session. Tracking degrades to transparent passthrough.
 

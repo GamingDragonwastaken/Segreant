@@ -143,6 +143,8 @@ function wrapOpencodeFlow(cfg: FiscusConfig, flags: Flags, tty: boolean, provide
     console.log(color(tty, C.green, `  ✓ Wrapped "${providerName}". opencode now routes through Fiscus.`));
     console.log(color(tty, C.gray, `    opencode config: ${path}  (backup at ${path}.bak)`));
     console.log(color(tty, C.gray, `    Fiscus upstreams.openai → ${res.originalBaseUrl}`));
+    console.log(color(tty, C.gray, `    Egress remains ${cfg.egress.mode}; this connection never grants cloud permission.`));
+    console.log(color(tty, C.gray, `    Review the provider's exact rule with: fiscus egress plan ...`));
     console.log(color(tty, C.gray, '    JSON comments were reformatted away; your settings + keys are preserved.'));
     console.log('');
     console.log(color(tty, C.gray, '  Restart Fiscus (fiscus start), run opencode, then:  fiscus sources'));
@@ -449,4 +451,3 @@ export function cmdConnect(flags: Flags): void {
   for (const c of CONNECTORS) console.log(`    ${color(tty, C.green, c.id)}  ${color(tty, C.gray, c.summary)}`);
   console.log('');
 }
-

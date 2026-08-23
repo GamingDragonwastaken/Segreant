@@ -52,7 +52,7 @@ export interface ActionSpec {
 
 const CONSEQUENCE_COPY: Record<Consequence, { badge: string; plain: string; tone: string }> = {
   read: { badge: 'reads only', plain: 'This looks at your data. It changes nothing.', tone: 'calm' },
-  local: { badge: 'writes locally', plain: 'This writes to the ledger on this machine. Nothing leaves your device.', tone: 'local' },
+  local: { badge: 'writes locally', plain: 'This action writes to the ledger on this machine. It does not itself send data to another service.', tone: 'local' },
   credential: { badge: 'uses a credential', plain: 'This reads a provider credential and contacts the provider.', tone: 'warn' },
   egress: { badge: 'sends data off this machine', plain: 'This transmits data to a server you configured.', tone: 'warn' },
   destructive: { badge: 'cannot be undone', plain: 'This permanently changes or deletes recorded data.', tone: 'danger' },

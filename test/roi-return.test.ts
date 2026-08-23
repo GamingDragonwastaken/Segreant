@@ -31,7 +31,7 @@ function rep(over: Partial<RealizationLike> = {}): RealizationLike {
   };
 }
 
-test('RoI return: gross = value ÷ (tokens + measured time); causal = gross × Lift credit; interval from the Lift bound', () => {
+test('RoI return: gross = value ÷ (tokens + measured time); Lift does not turn an observational scenario into causal economics', () => {
   const r = computeReturnOnIntelligence(rep(), {
     laborRatePerHour: 60, // $1 / minute
     grossRealizedValueUsd: 250,
@@ -42,15 +42,16 @@ test('RoI return: gross = value ÷ (tokens + measured time); causal = gross × L
   const rr = r.returnRatio;
   assert.equal(rr.basis, 'usd');
   approx(rr.costUsd, 100); // $10 token + 90 min × $1/min
-  approx(rr.grossRatio!, 2.5); // 250 / 100 — the upper bound on causal return
-  approx(rr.causalRatio!, 1.25); // 2.5 × 0.5 — counterfactual credit applied ONCE
-  approx(rr.causalRange.low!, 0.75); // 2.5 × 0.3
-  approx(rr.causalRange.high!, 1.75); // 2.5 × 0.7
+  approx(rr.grossRatio!, 2.5); // 250 / 100 — an observed/manual-equivalent scenario
+  assert.equal(rr.causalRatio, null);
+  assert.equal(rr.causalRange.low, null);
+  assert.equal(rr.causalRange.high, null);
   assert.equal(rr.supervisionPriced, true);
-  assert.equal(rr.paysForItself, true); // causal 1.25 ≥ 1
+  assert.equal(rr.paysForItself, null);
+  assert.equal(rr.evidenceState, 'observational_scenario');
 });
 
-test('RoI return: a below-break-even return is flagged (the METR "19% slower" case)', () => {
+test('RoI return: a below-break-even Lift scenario remains non-causal without a qualified study', () => {
   const r = computeReturnOnIntelligence(rep(), {
     laborRatePerHour: 60,
     grossRealizedValueUsd: 120, // little realized value
@@ -59,8 +60,8 @@ test('RoI return: a below-break-even return is flagged (the METR "19% slower" ca
   });
   const rr = r.returnRatio;
   approx(rr.grossRatio!, 1); // 120 / (10 + 110)
-  approx(rr.causalRatio!, 0.5); // × 0.5 → below 1
-  assert.equal(rr.paysForItself, false);
+  assert.equal(rr.causalRatio, null);
+  assert.equal(rr.paysForItself, null);
 });
 
 test('RoI return: refuses to invent a dollar return without measured supervision time', () => {
@@ -70,12 +71,13 @@ test('RoI return: refuses to invent a dollar return without measured supervision
     supervisionMinutes: null, // no proxy traffic measured
   });
   assert.equal(r.returnRatio.basis, 'none');
+  assert.equal(r.returnRatio.evidenceState, 'unpriced');
   assert.equal(r.returnRatio.grossRatio, null);
   assert.equal(r.returnRatio.causalRatio, null);
   assert.ok(r.notes.some((n) => /will not invent a dollar return/i.test(n)), 'explains why it will not fake the number');
 });
 
-test('RoI return: gross-only (Lift not wired) is an explicit upper bound on the causal return', () => {
+test('RoI return: a gross scenario is explicit about the missing randomized-study evidence', () => {
   const r = computeReturnOnIntelligence(rep(), {
     laborRatePerHour: 60,
     grossRealizedValueUsd: 250,
@@ -84,7 +86,11 @@ test('RoI return: gross-only (Lift not wired) is an explicit upper bound on the 
   const rr = r.returnRatio;
   assert.equal(rr.causalRatio, null, 'no counterfactual credit without Lift');
   approx(rr.grossRatio!, 2.5);
-  assert.equal(rr.paysForItself, true); // headline falls back to gross 2.5 ≥ 1
+  assert.equal(rr.paysForItself, null, 'gross return cannot establish causal break-even');
+  assert.ok(
+    r.notes.some((n) => /Observed\/manual-equivalent return scenario.*Causal break-even is not established/i.test(n)),
+    'the operator sees both the useful scenario and the missing causal evidence',
+  );
 });
 
 test('certainty-equivalent: γ slides the Index from the point estimate toward the partial-ID lower bound', () => {

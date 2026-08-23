@@ -12,6 +12,7 @@
  */
 
 import type { Alert, AlertSeverity } from './detect.ts';
+import { egressFetch } from '../egress/transport.ts';
 
 const SEV_RANK: Record<AlertSeverity, number> = { info: 0, warn: 1, critical: 2 };
 
@@ -65,7 +66,9 @@ export async function notifyWebhook(
   const payload = buildWebhookPayload(alerts, opts.minSeverity ?? 'warn', opts.now);
   if (payload.alerts.length === 0) return { delivered: false, posted: 0 };
   try {
-    const res = await fetch(url, {
+    const res = await egressFetch(url, {
+      purpose: 'alert_delivery',
+      dataClass: 'alert_metadata',
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(payload),

@@ -491,14 +491,14 @@ signed    ed25519:9c3a…</pre>
   <div class="container">
     <div class="sec-eyebrow reveal">The mathematics · derived, not designed</div>
     <h2 class="head reveal">Four lenses. One index. <em>Valid while you watch it.</em></h2>
-    <p class="sec-lede reveal">Anyone can copy a dashboard. What makes a <b style="color:var(--text)">standard</b> is the derivation underneath it: every formula in Fiscus is forced by stated axioms, every guarantee is verified by simulation in the test suite, and the whole derivation is published. The numbers below are measured, not asserted.</p>
+    <p class="sec-lede reveal">Anyone can copy a dashboard. What makes a <b style="color:var(--text)">standard</b> useful is a derivation you can inspect: formulas, assumptions, coverage, and uncertainty are published with the implementation. A local calculation is never promoted to a provider bill or a universal productivity claim.</p>
 
     <div class="mathgrid reveal">
       <div class="mcard">
         <div class="n">01 · The RoI Index</div>
-        <h3>The composite that cannot be gamed on one axis</h3>
+        <h3>One strong lens cannot hide a weak necessary lens</h3>
         <div class="eq">Index&nbsp;=&nbsp;100&nbsp;·&nbsp;exp(&nbsp;Σ&nbsp;w<sub>i</sub>&nbsp;ln&nbsp;x<sub>i</sub>&nbsp;/&nbsp;Σ&nbsp;w<sub>i</sub>&nbsp;)</div>
-        <p>Four necessary conditions — did it stick <b>(Realization)</b>, did you keep it <b>(Acceptance)</b>, did it save time <b>(Lift)</b>, did it matter <b>(Impact)</b> — combined as a weighted geometric mean. Not a taste choice: it is the unique form where a zero on any lens zeroes the whole, and an <em>unknown</em> lens is dropped from the mean instead of faked as a pass.</p>
+        <p>Four necessary conditions — did it stick <b>(Realization)</b>, did you keep it <b>(Acceptance)</b>, did it save time <b>(Lift)</b>, did it matter <b>(Impact)</b> — are combined as a weighted geometric mean. A low observed lens lowers the whole result rather than being averaged away. An <em>unknown</em> lens is not faked as a pass: it is disclosed as missing coverage.</p>
       </div>
       <div class="mcard">
         <div class="n">02 · Anytime-valid confidence</div>
@@ -534,11 +534,11 @@ signed    ed25519:9c3a…</pre>
 <section id="how">
   <div class="container">
     <div class="sec-eyebrow reveal">How it works</div>
-    <h2 class="head reveal">One command. It sits in the path and does the rest.</h2>
+    <h2 class="head reveal">One local process. You choose what it measures.</h2>
     <p class="sec-lede reveal">Fiscus is a reverse proxy you point your tools at — no certificate to install, no traffic intercepted that you didn't explicitly route to it.</p>
     <div class="steps">
-      <div class="step reveal"><div class="k">1</div><h3>Point your tools at it</h3><p>Set <code>ANTHROPIC_BASE_URL</code> and <code>OPENAI_BASE_URL</code> to <code>localhost:8090</code>. Your agents work exactly as before.</p></div>
-      <div class="step reveal"><div class="k">2</div><h3>Every call is metered</h3><p>It reads the exact usage each provider returns — streaming or not — prices it locally against a versioned rate card, and logs it to an on-device SQLite store. Prompt bodies are never stored.</p></div>
+      <div class="step reveal"><div class="k">1</div><h3>Point supported tools at it</h3><p>Set <code>ANTHROPIC_BASE_URL</code> and <code>OPENAI_BASE_URL</code> to <code>localhost:8090</code>, then test with a low-risk request. Fiscus forwards that request to the provider you configure.</p></div>
+      <div class="step reveal"><div class="k">2</div><h3>Supported routed calls are metered</h3><p>For supported streaming and non-streaming provider responses, Fiscus reads usage, prices it locally against a versioned rate card, and records the basis in an on-device SQLite ledger. Normal request metering does not retain prompt bodies as a ledger field; optional proposal capture has its own local control.</p></div>
       <div class="step reveal"><div class="k">3</div><h3>Runaway spend gets capped</h3><p>Soft thresholds warn; hard caps block with a clean error; a velocity guard halts an agent burning money in a loop — before the bill, not after.</p></div>
     </div>
 
@@ -586,7 +586,7 @@ signed    ed25519:9c3a…</pre>
           <tr><td class="name">Self-hosted gateways</td><td>Your server</td><td class="part">per-key caps</td><td class="no">—</td><td class="part">your infra</td></tr>
           <tr><td class="name">High-perf gateways</td><td>Your server</td><td class="yes">✓ blocking</td><td class="no">—</td><td class="part">your infra</td></tr>
           <tr><td class="name">SaaS observability</td><td>Vendor cloud</td><td class="no">alerts only</td><td class="no">—</td><td class="no">round-trips out</td></tr>
-          <tr class="me"><td class="name">Fiscus</td><td>Your machine</td><td class="yes">✓ caps + runaway guard</td><td class="yes">✓ cost / commit</td><td class="yes">✓ zero egress</td></tr>
+          <tr class="me"><td class="name">Fiscus</td><td>Your machine</td><td class="yes">✓ local caps + runaway guard</td><td class="yes">✓ local cost / commit evidence</td><td class="yes">✓ no Fiscus-hosted telemetry by default</td></tr>
         </tbody>
       </table>
     </div>
@@ -600,10 +600,10 @@ signed    ed25519:9c3a…</pre>
     <div class="sec-eyebrow reveal">What good governance looks like</div>
     <h2 class="head reveal">Visibility you can act on, caps you can trust.</h2>
     <div class="nums">
-      <div class="nstat reveal"><div class="big">&lt;1ms</div><div class="lbl">added latency vs. the provider round-trip it wraps</div></div>
+      <div class="nstat reveal"><div class="big">Local</div><div class="lbl">metering, ledger, and dashboard on the operator's machine</div></div>
       <div class="nstat reveal"><div class="big">0 bytes</div><div class="lbl">of default Fiscus telemetry or product analytics</div></div>
-      <div class="nstat reveal"><div class="big">100%</div><div class="lbl">of calls metered — streaming and non-streaming</div></div>
-      <div class="nstat reveal"><div class="big">1 cmd</div><div class="lbl">to install and run — no daemon to manage, no build step</div></div>
+      <div class="nstat reveal"><div class="big">Supported</div><div class="lbl">streaming and non-streaming responses when traffic is explicitly routed through Fiscus</div></div>
+      <div class="nstat reveal"><div class="big">No account</div><div class="lbl">required to run the local product; provider credentials remain operator-controlled</div></div>
     </div>
     <p class="disclaimer reveal">Cost-reduction figures depend entirely on how wasteful your baseline is. Fiscus's job is to make that baseline visible and give you the controls to act — it does not promise a fixed percentage. Honest tools quote ranges, not guarantees.</p>
   </div>

@@ -1,0 +1,188 @@
+# Causal Evidence Protocol
+
+This is the contract Fiscus must satisfy before it uses causal financial
+language. It is intentionally stricter than the ordinary local ledger,
+price model, realized-value pipeline, or RoI Index. Those tools remain
+valuable; none can reconstruct the counterfactual by itself.
+
+## Purpose and non-goal
+
+Fiscus is building a local-first causal-evidence lane for two questions:
+
+1. **Model or policy comparison** — did assignment to a candidate model/policy
+   reduce direct operating cost while meeting a predeclared quality guardrail?
+2. **AI versus incumbent workflow** — did assignment to an AI-enabled workflow
+   create positive causal net benefit under a real economic outcome basis?
+
+It is not a general productivity oracle. It does not prove future performance,
+provider invoices, organisation-wide savings, external certification, or
+independent audit status. A local hash chain makes a retained evidence package
+reproducible against that package; it cannot prove that every possible copy of
+local data was never altered.
+
+## Evidence hierarchy
+
+| Grade | Fiscus may say | Fiscus must not say |
+| --- | --- | --- |
+| accounted | Recorded cost and usage with the stated source | Saved, caused, same value, or ROI |
+| modeled | Counterfactual price/model calculation under named assumptions | Realized savings or a guarantee |
+| observed | Historic association or observed/manual-equivalent value scenario | The intervention caused the outcome |
+| quasi-experimental | Assumption-dependent result with diagnostics and sensitivity | Randomized evidence or unconditional certainty |
+| randomized causal | Scoped ITT causal estimate with protocol hash and interval | Universal or future ROI, certification, or a provider guarantee |
+
+## Study lifecycle
+
+    draft -> committed -> collecting -> data_locked -> analyzed
+          -> qualified | inconclusive | invalid -> exported
+
+Only a committed protocol may assign an eligible unit. Any change to
+eligibility, an arm, randomisation, outcome, cost source, quality margin, or
+analysis plan produces a new protocol hash and a new study version. The
+previous protocol remains inspectable but cannot silently absorb the change.
+
+## Required pre-registration
+
+Before the first eligible exposure, a randomized protocol must pin:
+
+- study owner, scope, eligible population, unit of assignment, exclusion rules,
+  start/end or stopping rule, and protocol version;
+- each arm's exact provider/model/configuration/prompt-policy/tool/fallback
+  plan, represented by a content hash rather than raw prompt content;
+- allocation method and non-zero probability for every eligible arm;
+- primary cost outcome, currency, source classification, price lineage rule,
+  and whether it is actual reconciled, actual observed, modeled price-card, or
+  incomplete/unknown;
+- primary quality/value outcome, its collection method, and the
+  non-inferiority margin required before same-value language;
+- the intention-to-treat estimand, confidence level, sample floor,
+  missingness/attrition treatment, and predeclared exclusion policy;
+- the data-minimized source list, retention choice, and any explicit egress
+  receipt references; and
+- claim templates for qualified, inconclusive, and invalid results.
+
+Fiscus rejects raw prompt text, source text, credentials, URLs with secrets,
+and open-ended free-text payloads in the protocol's structural context. The
+protocol stores declared identifiers and hashes, not a hidden copy of sensitive
+input material.
+
+## Event lineage
+
+Every eligible unit must have local, hash-linked events in this order:
+
+    committed protocol
+      -> decision: candidate set, feasible set, randomized assigned arm, propensity
+      -> execution: assigned versus actual plan, metered request references, cost lineage
+      -> outcome: maturity, quality/value evidence, missing reason if absent
+      -> locked analysis snapshot
+
+The analysis must show assignment, completion, execution adherence, missingness,
+and outcome availability by arm. An outcome before assignment, a plan mismatch,
+a missing source class, or an unresolved/missing outcome cannot silently count
+as favourable evidence.
+
+## Qualification gates
+
+A randomized result is qualified only when all applicable gates pass:
+
+1. The immutable protocol is committed before first exposure and its hash
+   matches every included event.
+2. At least two arms have non-zero recorded assignment probability, and the
+   decision ledger can reconstruct the assignment.
+3. Each included unit is within the predeclared eligible population, uses the
+   exact assigned plan, and has confirmed execution adherence.
+4. Cost, price-version, outcome, and quality evidence have the required
+   classification and lineage.
+5. All enrolled units have a resolved maturity state; missingness/attrition is
+   reported and does not violate the protocol's thresholds.
+6. The study reaches its predeclared completed-sample floor and produces its
+   stated interval.
+7. A model/policy claim meets its predeclared quality non-inferiority gate.
+8. No material protocol violation or unresolved conflict invalidates the run.
+
+A model/policy result may then say: candidate cost was lower for the recorded
+eligible population under this registered protocol, while the stated quality
+guardrail passed. It may not say that the candidate is universally better.
+
+An AI-paid-for-itself or causal net-benefit claim has three additional gates:
+
+1. a no-AI or incumbent-workflow control arm;
+2. full-cost accounting for both arms; and
+3. a currency or measured-labour-cost outcome basis whose conservative lower
+   confidence bound for causal net benefit is above zero.
+
+The preferred output is causal net benefit: lower bound plus a currency amount
+per eligible unit, not an unconstrained ROI multiplier.
+
+## Analysis and decisions
+
+The first supported design is a pre-specified, blocked randomized comparison
+with an intention-to-treat headline. Every result must include the point
+estimate, confidence interval, arm counts, completion/missingness/adherence
+table, quality result, cost source classification, protocol hash, and exact
+result state. Fiscus does not turn a p-value alone into a winner badge.
+
+Quasi-experimental designs may later be supported, but are not a default
+shortcut. A difference-in-differences result must surface its parallel-trends,
+no-anticipation, comparison-cohort, pre-period, sensitivity, staggered-adoption,
+and cluster-inference assumptions. If those gates are absent, Fiscus reports an
+observational comparison instead.
+
+## Recommendation rule
+
+Recommendations are evidence-aware and review-only:
+
+- **Qualified recommendation** — matching qualified causal study, cost result,
+  and quality guardrail; requires human review before routing changes.
+- **Conditional candidate** — modeled or observed cost signal, but no qualified
+  causal/value-parity evidence; Fiscus offers a study plan.
+- **No recommendation** — insufficient coverage, no overlap, invalid design,
+  or unresolved evidence conflict.
+
+No study result changes a provider route, budget, or model automatically.
+
+## Data minimisation, privacy, and export
+
+The causal lane is local-first and stores the smallest reproducible facts:
+pseudonymous study/unit IDs, assignment and actual arm, timestamps,
+plan/provider/model hashes, metered cost/price lineage, quality/value result,
+outcome evidence references, and missingness reason. Raw prompts, source,
+credentials, and output content are not required inputs and must not be stored
+by default.
+
+An export defaults to an aggregate, redacted evidence pack. Any sensitive field
+requires explicit operator selection. Fiscus must never silently upload a study,
+its raw evidence, or a local evaluation to an LLM, analytics service, or hosted
+evaluator. If an explicit controlled-cloud source is used, the egress receipt
+chain is part of the evidence pack but does not prove recipient retention or
+provider-side confidentiality.
+
+## Revocation rule
+
+Fiscus reverts a study to inconclusive or invalid when protocol validation,
+assignment reconstruction, plan adherence, cost lineage, outcome maturation,
+quality criteria, interval computation, or the local evidence manifest no
+longer passes. The previous result must remain visible as superseded with the
+reason; it must not survive in a recommendation card as a stale green claim.
+
+## Implementation status
+
+The repository now implements a local randomized-study substrate:
+
+- strict protocol commitment with content hash and rejection of undeclared/raw
+  protocol fields;
+- pre-exposure balanced assignment blocks with replayable retained local
+  material and per-unit propensity;
+- append-only SQLite records for protocols, assignment blocks, decisions,
+  executions, outcomes, and analysis snapshots;
+- deterministic qualification and conservative interval analysis;
+- a review-first CLI: causal status, register, assign, inspect, verify, and
+  analyze; registration and assignment require explicit local apply; and
+- a read-only dashboard/API inspector that shows evidence state and replay
+  verdicts without exposing randomisation material.
+
+No command in this lane changes a provider route, provider configuration, or
+budget automatically. The present Store API is the safe integration point for
+adapters that record actual execution and outcome evidence; automated bindings
+from every proxy/provider/outcome source remain future work. Until a real
+executed study passes the qualification gates, Fiscus has **no qualified causal
+customer result**.

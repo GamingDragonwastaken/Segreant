@@ -22,7 +22,7 @@
 
 import { h } from '../core/dom.ts';
 import { signal, effect } from '../core/signal.ts';
-import { api, type ValuePayload } from '../core/api.ts';
+import { api, type CausalPayload, type ValuePayload } from '../core/api.ts';
 import { usd, count, pct, isPrecise } from '../core/fmt.ts';
 import { actionCard } from './spend.ts';
 
@@ -53,14 +53,74 @@ const STOPPED_AFTER: Record<string, string> = {
 
 const plural = (n: number, one: string, many: string): string => (n === 1 ? one : many);
 
+function causalStudyCard(payload: CausalPayload | null, failure: string | null): Node {
+  if (failure) {
+    return h('div', { class: 'card', style: 'margin-top: var(--s4)' },
+      h('div', { class: 'card-head' },
+        h('span', { class: 'card-title', text: 'Causal study evidence' }),
+        h('span', { class: 'pill pill-warn', text: 'unavailable' })),
+      h('p', { class: 'basis', text: 'The value scenario remains non-causal because the local study inspector could not be read.' }),
+      h('p', { class: 'drawer-muted', text: failure }));
+  }
+  if (!payload) {
+    return h('div', { class: 'card', style: 'margin-top: var(--s4)' },
+      h('p', { class: 'drawer-muted', text: 'Loading causal-study evidence…' }));
+  }
+  if (!payload.study) {
+    return h('div', { class: 'card', style: 'margin-top: var(--s4)' },
+      h('div', { class: 'card-head' },
+        h('span', { class: 'card-title', text: 'Causal study evidence' }),
+        h('span', { class: 'pill pill-warn', text: 'not established' })),
+      h('p', { text: payload.causalEvidence }),
+      h('p', { class: 'basis', text: 'Create and inspect a local protocol with fiscus causal register, then use pre-exposure randomized assignment. This never changes routing automatically.' }));
+  }
+
+  const study = payload.study;
+  const claim = study.allowedClaim === 'causal_net_benefit_supported'
+    ? 'Scoped causal net-benefit evidence is supported under this registered protocol.'
+    : study.allowedClaim === 'comparative_cost_quality_supported'
+      ? 'Scoped randomized comparative cost-and-quality evidence is supported under this registered protocol.'
+      : study.qualification.state === 'qualified'
+        ? 'The protocol and records validate, but the conservative decision threshold is not met.'
+        : study.qualification.state === 'collecting'
+          ? 'The protocol is registered, but execution or outcome evidence is still incomplete.'
+          : 'The study does not currently qualify for a causal claim.';
+  const replayFailures = study.assignmentReplay.flatMap((plan) => plan.errors);
+  return h('div', { class: 'card', style: 'margin-top: var(--s4)' },
+    h('div', { class: 'card-head' },
+      h('span', { class: 'card-title', text: 'Causal study evidence' }),
+      h('span', {
+        class: study.allowedClaim === 'not_established' ? 'pill pill-warn' : 'pill pill-ok',
+        text: study.allowedClaim === 'not_established' ? study.qualification.state : 'scoped result',
+      })),
+    h('p', { text: claim }),
+    h('p', { class: 'basis', text: 'Protocol ' + study.protocolHash.slice(0, 12) + '… · ' + study.question.replaceAll('_', ' ') }),
+    h('div', { class: 'facts' },
+      ...Object.entries(study.qualification.countsByArm).map(([armId, counts]) => h('div', { class: 'fact' },
+        h('span', { class: 'fact-key', text: armId }),
+        h('span', { class: 'fact-val', text: String(counts.completed) + '/' + String(counts.assigned) + ' completed' })))),
+    replayFailures.length > 0
+      ? h('p', { class: 'drawer-error', text: 'Assignment replay failed: ' + replayFailures.join('; ') })
+      : h('p', { class: 'basis', text: 'Recorded assignment blocks replay from their retained local material.' }),
+    study.qualification.reasons.length > 0
+      ? h('p', { class: 'basis', text: study.qualification.reasons.join(' ') })
+      : null,
+    h('p', { class: 'drawer-muted', text: payload.boundary }));
+}
+
 export function valueView(): Node {
   const data = signal<ValuePayload | null>(null);
   const error = signal<string | null>(null);
+  const causal = signal<CausalPayload | null>(null);
+  const causalError = signal<string | null>(null);
 
   effect(() => {
     void api.value()
       .then((payload) => data.set(payload))
       .catch((e: unknown) => error.set(e instanceof Error ? e.message : String(e)));
+    void api.causal()
+      .then((payload) => causal.set(payload))
+      .catch((e: unknown) => causalError.set(e instanceof Error ? e.message : String(e)));
   });
 
   return h('div', null,
@@ -89,6 +149,7 @@ export function valueView(): Node {
             h('p', { class: 'basis', text: () => (isPrecise()
               ? 'Maturation requires observable outcomes: a repository whose history can be read, or imported units with recorded gate results.'
               : 'Fiscus needs somewhere to watch outcomes happen — usually a code repository — before it can say what the spend produced.') })),
+          causalStudyCard(causal(), causalError()),
           actions());
       }
 
@@ -104,6 +165,8 @@ export function valueView(): Node {
         d.demo ? h('div', { class: 'banner banner-demo' },
           h('span', { class: 'pill pill-demo', text: 'demo' }),
           h('p', null, h('strong', { text: 'Sample data. ' }), 'These outcomes were seeded, not observed on your machine.')) : null,
+
+        causalStudyCard(causal(), causalError()),
 
         // Basis before figure. Which of the two sources produced this, and whether
         // the dollars are scoped to the project or merely summed over a window,
@@ -169,26 +232,20 @@ export function valueView(): Node {
                 ? 'Work matured, but no labour rate is configured, so the value it produced cannot be expressed in dollars. The rate below is still computable; the money figure is not.'
                 : 'Work did get finished, but Fiscus has no hourly rate to value it against — so it can tell you how much stuck, but not what it was worth.') })),
 
-        // The return, stated as an interval and honest about break-even.
-        ret && typeof ret.causalRatio === 'number'
+        // The money face is an observed/manual-equivalent scenario. A separate
+        // qualified randomized study is required for causal economics.
+        ret && typeof ret.grossRatio === 'number'
           ? h('div', { class: 'card', style: 'margin-top: var(--s4)' },
               h('div', { class: 'card-head' },
-                h('span', { class: 'card-title', text: () => (isPrecise() ? 'Return on intelligence' : 'Whether it paid for itself') }),
+                h('span', { class: 'card-title', text: () => (isPrecise() ? 'Observed value scenario' : 'The value it looks like it delivered') }),
                 h('span', {
-                  class: `pill ${ret.paysForItself ? 'pill-ok' : 'pill-warn'}`,
-                  text: ret.paysForItself ? 'above break-even' : 'below break-even',
+                  class: 'pill pill-warn',
+                  text: 'not causal evidence',
                 })),
-              h('div', { class: 'stat', text: `${ret.causalRatio.toFixed(2)}\u00d7` }),
-              ret.causalRange && typeof ret.causalRange.low === 'number' && typeof ret.causalRange.high === 'number'
-                ? h('span', { class: 'basis', text: () => (isPrecise()
-                    ? `partial-identification interval ${ret.causalRange?.low?.toFixed(2)}\u2013${ret.causalRange?.high?.toFixed(2)}\u00d7; the counterfactual is bounded, not point-identified`
-                    : `somewhere between ${ret.causalRange?.low?.toFixed(2)}\u00d7 and ${ret.causalRange?.high?.toFixed(2)}\u00d7 \u2014 the range is real uncertainty about what you would have done anyway`) })
-                : null,
-              typeof ret.grossRatio === 'number'
-                ? h('span', { class: 'basis', text: () => (isPrecise()
-                    ? `gross ratio ${ret.grossRatio?.toFixed(2)}\u00d7 before counterfactual credit \u2014 an upper bound, not the honest return`
-                    : `Before allowing for work you would have done anyway, it looks like ${ret.grossRatio?.toFixed(2)}\u00d7. That is the flattering number, not the honest one.`) })
-                : null)
+              h('div', { class: 'stat', text: `${ret.grossRatio.toFixed(2)}\u00d7` }),
+              h('span', { class: 'basis', text: () => (isPrecise()
+                ? 'realized manual-equivalent value divided by tokens plus measured time; a qualified randomized study is required for causal net benefit'
+                : 'This uses the value of work that stuck and what it cost in AI and time. It cannot tell us what would have happened without AI.') }))
           : null,
 
         // Realization rate with its partial-identification bounds. A point estimate

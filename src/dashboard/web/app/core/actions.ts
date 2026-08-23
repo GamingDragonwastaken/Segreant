@@ -237,12 +237,18 @@ const BUILDERS: Record<string, Builder> = {
         { label: 'Ledger', value: String(settings['dbPath'] ?? '—'), note: 'on this machine only' },
         { label: 'Proxy port', value: String(settings['proxyPort'] ?? '—') },
         { label: 'Dashboard port', value: String(settings['dashboardPort'] ?? '—') },
-        { label: 'Retention', value: `${String(settings['retentionDays'] ?? '—')} days` },
+        { label: 'Retention', value: String(settings['retentionDays'] ?? '—') + ' days' },
         { label: 'Metadata only', value: settings['metadataOnly'] ? 'yes' : 'no', note: 'prompt and response bodies are never stored when on' },
+        {
+          label: 'Egress mode',
+          value: settings.egress.mode === 'local_locked' ? 'local locked' : 'controlled cloud',
+          note: settings.egress.rules.length + ' exact rule(s); ' + settings.egress.receipts.receiptCount + ' receipt(s); chain ' + (settings.egress.receipts.ok ? 'valid' : 'INVALID'),
+        },
+        { label: 'Egress scope', value: 'Fiscus process only', note: settings.egress.scope },
       ];
       return {
         applicable: false,
-        blockedReason: 'Editing settings from the GUI is not built yet.',
+        blockedReason: 'Use fiscus egress plan to review a cloud permission and fiscus egress apply --apply to persist it. The GUI exposes status and receipt-chain health only.',
         summary: isPrecise() ? 'Current local configuration.' : 'How Fiscus is set up on this machine right now.',
         rows,
       };

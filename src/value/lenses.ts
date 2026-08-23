@@ -13,12 +13,10 @@
  *      equal for the pure symmetric axiomatic index). Any lens at 0 collapses it
  *      — no single axis can compensate for a collapsed one.
  *
- *   2. RoI RETURN (a dimensionless ratio, ≥1 ⟺ paid for itself) — realized,
- *      rework-discounted, manual-equivalent value over the HONEST cost of the
- *      intelligence (tokens + your measured time-with-AI), then discounted by the
- *      counterfactual credit (Lift). This is value÷cost computed DIRECTLY and is
- *      kept mathematically independent of the Index: the speedup must not be
- *      counted once in a "leverage" and again inside Lift.
+ *   2. RoI VALUE SCENARIO (a dimensionless observed/manual-equivalent ratio) —
+ *      realized, rework-discounted manual-equivalent value over the HONEST cost
+ *      of the intelligence (tokens + measured time-with-AI). It is useful
+ *      accounting under stated assumptions, not causal economic evidence.
  *
  * A lens with no signal is `uninstrumented` (value null), excluded from the mean,
  * and reflected in coverage — the same honesty rule as the gates: unknown ≠ fault.
@@ -61,26 +59,33 @@ export interface RoIInterval {
 }
 
 /**
- * The money number — Return on Intelligence as a real, dimensionless ratio.
+ * The money number — an observed/manual-equivalent return scenario.
  *
  *   grossRatio  = realized manual-equivalent value (net of rework) ÷ honest cost
- *   causalRatio = grossRatio × counterfactual credit (the Lift lens, applied ONCE)
  *
- * `grossRatio` is an UPPER bound on the causal return (it does not subtract what
- * you'd have done anyway); `causalRatio` is the honest headline. ≥1 ⟺ the AI
- * returned more than it cost. The cost is tokens + your measured time-with-AI
- * priced at the labor rate — so the ratio can't be inflated by ignoring the human
- * supervision the literature says dominates. Interval-valued via Lift's Manski bound.
+ * `grossRatio` is not an identified treatment effect. A separate,
+ * pre-registered randomized study must estimate incremental net benefit directly
+ * before Fiscus may make an economic causal claim. The cost still includes tokens
+ * + measured time-with-AI at the disclosed labor rate, so it cannot be inflated
+ * by ignoring human supervision.
  */
 export interface RoIReturn {
-  grossRatio: number | null; // realized net value ÷ honest cost (upper bound on causal)
-  causalRatio: number | null; // grossRatio × counterfactual credit — the true return
-  causalRange: { low: number | null; high: number | null }; // from Lift's partial-ID interval
+  grossRatio: number | null; // realized manual-equivalent value ÷ honest cost (observational scenario)
+  causalRatio: number | null; // reserved legacy field; ordinary value reports always return null
+  causalRange: { low: number | null; high: number | null }; // reserved legacy field; ordinary value reports are null
   realizedValueUsd: number | null; // numerator: realized, rework-discounted, manual-equivalent $
   costUsd: number; // denominator: token cost + measured time-with-AI × labor rate
-  counterfactualCredit: number | null; // the Lift lens value applied (null → grossRatio only)
+  counterfactualCredit: number | null; // reserved legacy field; Lift is no longer used as economic credit
   supervisionPriced: boolean; // true when the denominator includes measured human time (not the rework proxy)
-  paysForItself: boolean | null; // (causalRatio ?? grossRatio) ≥ 1
+  // Break-even is a causal claim and is never established by this observational
+  // value scenario.
+  paysForItself: boolean | null; // always null on the ordinary value spine
+  /**
+   * The ordinary value spine has observed/manual-equivalent inputs only. A
+   * randomized study will eventually supply a distinct, direct incremental
+   * economic estimand; a Lift lens score is never promoted into one here.
+   */
+  evidenceState: 'unpriced' | 'observational_scenario';
   basis: 'usd' | 'none';
 }
 
@@ -360,33 +365,33 @@ export function computeReturnOnIntelligence(report: RealizationLike, opts: RoIOp
   let returnRatio: RoIReturn;
   if (grossValue !== null && grossValue >= 0 && honestCostUsd > 0 && supervisionPriced) {
     const grossRatio = grossValue / honestCostUsd;
-    // The counterfactual credit (Lift) is applied exactly ONCE, here — never also
-    // as a separate "leverage", so the speedup is not double-counted. grossRatio
-    // is therefore an UPPER bound on the causal return.
-    const credit = lift.instrumented ? lift.value : null;
-    const causalRatio = credit !== null ? grossRatio * credit : null;
-    const loCredit = opts.liftRange?.low ?? credit;
-    const hiCredit = opts.liftRange?.high ?? credit;
+    // Lift remains a useful behavioral, partially-identified lens for the
+    // composite Index. It is NOT an identified economic counterfactual: a
+    // baseline-derived TSF or an injected `--tsf` has no pre-registered
+    // assignment, execution adherence, value outcome, or causal estimand. Do
+    // not multiply an index-scale lens score into a financial claim. Causal net
+    // benefit will be a separate result supplied only by a qualified study.
+    const credit = null;
+    const causalRatio = null;
     returnRatio = {
       grossRatio,
       causalRatio,
       causalRange: {
-        low: loCredit !== null && loCredit !== undefined ? grossRatio * loCredit : null,
-        high: hiCredit !== null && hiCredit !== undefined ? grossRatio * hiCredit : null,
+        low: null,
+        high: null,
       },
       realizedValueUsd: grossValue,
       costUsd: honestCostUsd,
       counterfactualCredit: credit,
       supervisionPriced,
-      paysForItself: (causalRatio ?? grossRatio) >= 1,
+      paysForItself: null,
+      evidenceState: 'observational_scenario',
       basis: 'usd',
     };
-    const headline = causalRatio ?? grossRatio;
     notes.push(
-      `RoI return ${headline.toFixed(2)}× — $${grossValue.toFixed(0)} of realized work (manual-equivalent, net of rework) ` +
-        `÷ $${honestCostUsd.toFixed(2)} cost (tokens + ${Math.round(supervisionMin!)} min of your time)` +
-        `${causalRatio !== null ? `, credited ×${credit!.toFixed(2)} for the counterfactual` : ' (gross — wire Lift to credit the counterfactual)'}. ` +
-        `${headline >= 1 ? 'It paid for itself.' : 'Below break-even.'}`,
+      `Observed/manual-equivalent return scenario ${grossRatio.toFixed(2)}× — $${grossValue.toFixed(0)} of realized work (manual-equivalent, net of rework) ` +
+        `÷ $${honestCostUsd.toFixed(2)} cost (tokens + ${Math.round(supervisionMin!)} min of your time). ` +
+        'Causal break-even is not established: a qualified randomized study needs pre-registered assignment, execution, and outcome evidence.',
     );
   } else {
     returnRatio = {
@@ -398,6 +403,7 @@ export function computeReturnOnIntelligence(report: RealizationLike, opts: RoIOp
       counterfactualCredit: lift.instrumented ? lift.value : null,
       supervisionPriced,
       paysForItself: null,
+      evidenceState: 'unpriced',
       basis: 'none',
     };
     if (grossValue !== null && !supervisionPriced) {
