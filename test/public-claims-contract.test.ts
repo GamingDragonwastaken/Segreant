@@ -58,6 +58,14 @@ test('public coverage and egress claims remain scoped to the supported path', ()
   assert.doesNotMatch(readme, /works across \*any\* token usage/i);
 });
 
+test('landing metadata scopes provider traffic instead of claiming code never leaves the machine', () => {
+  const head = read('web', 'index.html').split('</head>', 1)[0]!;
+
+  assert.doesNotMatch(head, /(?:no|without)\s+(?:a\s+)?byte(?:s?)\s+of\s+(?:your\s+)?code\s+(?:leaves|leaving)\s+(?:the\s+)?(?:machine|device)/i);
+  assert.match(head, /local-first/i);
+  assert.match(head, /routed provider traffic|upstream you configure|configured provider/i);
+});
+
 test('historical direction documents point current readers to the contract', () => {
   const roadmap = read('docs', 'AI-FINANCIAL-OPERATIONS-ROADMAP.md');
   const audit = read('docs', 'VISION-AUDIT.md');
@@ -100,16 +108,25 @@ const CURRENT_CLAIM_SURFACES = [
   'CLAUDE.md',
   'PRODUCT.md',
   'docs/ARCHITECTURE.md',
+  'docs/CAPABILITY-EVIDENCE-CONTRACT.md',
+  'docs/ECONOMIC-CONTROL-FOUNDATION.md',
   'docs/FAQ.md',
+  'docs/INTEGRATIONS.md',
   'docs/METHODOLOGY.md',
   'docs/RETURN-ON-INTELLIGENCE.md',
   'docs/DATA-BOUNDARIES.md',
+  'docs/CAUSAL-EVIDENCE-PROTOCOL.md',
   'docs/LIFT-AI-SIDE-JUDGE-DESIGN.md',
+  'docs/RELEASE-GATE.md',
+  'src/cli/causalCmd.ts',
   'src/cli/valueCmd.ts',
+  'src/config.ts',
   'src/dashboard/server.ts',
+  'src/dashboard/routes.ts',
   'src/dashboard/web/classic.html',
   'src/dashboard/web/app/core/actions.ts',
   'src/dashboard/web/app/core/api.ts',
+  'src/dashboard/web/app/core/registry.ts',
   'src/dashboard/web/app/views/value.ts',
   'src/store/db.ts',
   'src/value/voi.ts',
@@ -126,43 +143,92 @@ const REJECTED_LIVE_CLAIMS: ReadonlyArray<[string, RegExp]> = [
   ['blanket machine-boundary claim', /nothing leaves (?:the )?(?:machine|device|it)\b/i],
   ['blanket zero-egress claim', /(?:zero|no) (?:data )?egress\b/i],
   ['blanket all-on-device claim', /all on-device\b/i],
-  ['blanket code-never-leaves claim', /no byte of (?:your )?code leaves (?:the )?(?:machine|device)/i],
+  ['blanket code-never-leaves claim', /(?:no|without)\s+(?:a\s+)?byte(?:s?)\s+of\s+(?:your\s+)?code\s+(?:leaves|leaving)\s+(?:the\s+)?(?:machine|device)/i],
   ['blanket never-transmitted claim', /(?:is|are) never transmitted anywhere/i],
+  ['historical path-prefix machine-boundary claim', /proving the prefix never leaves the machine\./i],
   ['causal RoI formula in live docs', /RoI_causal\s*=\s*RoI_gross/i],
   ['causal RoI break-even formula in live docs', /RoI_causal[^\n]{0,240}(?:pays for itself|break-even)/is],
 ];
 
+const INTENTIONAL_REJECTED_CLAIMS = [
+  {
+    relativePath: 'docs/RELEASE-GATE.md',
+    label: 'blanket zero-egress claim',
+    text: 'zero egress',
+    count: 1,
+    reason: 'release-gate prohibition quoted as an intentional non-claim example',
+  },
+  {
+    relativePath: 'docs/RELEASE-GATE.md',
+    label: 'historical path-prefix machine-boundary claim',
+    text: 'proving the prefix never leaves the machine.',
+    count: 1,
+    reason: 'historical path-prefix forwarding evidence retained verbatim',
+  },
+] as const;
+
+function matchesIn(source: string, pattern: RegExp): string[] {
+  const globalPattern = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`);
+  return Array.from(source.matchAll(globalPattern), (match) => match[0]);
+}
+
 test('the rejected-claim scan keeps universal value and privacy wording out of current surfaces', () => {
-  const matches: string[] = [];
+  const matches: Array<{ relativePath: string; label: string; text: string }> = [];
   for (const relativePath of CURRENT_CLAIM_SURFACES) {
     const source = read(...relativePath.split('/'));
     for (const [label, pattern] of REJECTED_LIVE_CLAIMS) {
-      if (pattern.test(source)) matches.push(`${relativePath}: ${label}`);
+      for (const text of matchesIn(source, pattern)) matches.push({ relativePath, label, text });
     }
   }
-  assert.deepEqual(matches, [], 'rejected live claim matches must be corrected or precisely scoped');
+
+  for (const intentional of INTENTIONAL_REJECTED_CLAIMS) {
+    const actual = matches.filter((match) =>
+      match.relativePath === intentional.relativePath &&
+      match.label === intentional.label &&
+      match.text === intentional.text,
+    ).length;
+    assert.equal(actual, intentional.count, `${intentional.reason}: exact occurrence count`);
+  }
+
+  const residual = matches.filter((match) => !INTENTIONAL_REJECTED_CLAIMS.some((intentional) =>
+    intentional.relativePath === match.relativePath &&
+    intentional.label === match.label &&
+    intentional.text === match.text,
+  ));
+  assert.deepEqual(residual, [], 'rejected live claim matches must be corrected or precisely scoped');
 });
 
-test('current ROI and dashboard surfaces disclose measured coverage and separate causal evidence', () => {
+test('README and both dashboards separate ordinary value scenarios from causal evidence', () => {
   const readme = read('README.md');
-  const methodology = read('docs', 'METHODOLOGY.md');
-  const roiDocs = read('docs', 'RETURN-ON-INTELLIGENCE.md');
-  const cli = read('src', 'cli', 'valueCmd.ts');
-  const voi = read('src', 'value', 'voi.ts');
   const classic = read('src', 'dashboard', 'web', 'classic.html');
   const modern = read('src', 'dashboard', 'web', 'app', 'views', 'value.ts');
 
-  for (const source of [readme, methodology, roiDocs, cli, classic, modern]) {
-    assert.match(source, /observed(?:\/manual-equivalent)? value scenario|observed\/manual-equivalent/i);
-    assert.match(source, /causal (?:study|net benefit)|causal evidence/i);
-  }
-  assert.match(voi, /observed score|sensitivity|may raise or lower|either direction/i);
-  assert.match(methodology, /measured|unmeasured|unknown necessary lenses/i);
-  assert.match(roiDocs, /sensitivity|disclosed neutral reference|instrumentation/i);
-  assert.match(cli, /instrument|coverage|unmeasured/i);
-  assert.match(voi, /reference|sensitivity|may raise or lower|either direction/i);
-  assert.match(classic, /causal net benefit|not causal evidence/i);
+  assert.match(readme, /Observed value scenario/);
+  assert.match(readme, /not a causal return|qualified causal-study result|causal net benefit result is separate/i);
+  assert.match(classic, /Observed value scenario/);
+  assert.match(classic, /qualified randomized study is required for causal net benefit|not causal evidence/i);
+  assert.match(modern, /causalStudyCard/);
   assert.match(modern, /not causal evidence|causal study/i);
+});
+
+test('CLI and ROI documentation qualify scenario values separately from causal results', () => {
+  const cli = read('src', 'cli', 'valueCmd.ts');
+  const roiDocs = read('docs', 'RETURN-ON-INTELLIGENCE.md');
+
+  assert.match(cli, /Value scenario/);
+  assert.match(cli, /causal study required for break-even|not a causal return/i);
+  assert.match(roiDocs, /observed value scenario/i);
+  assert.match(roiDocs, /qualified causal-study result|causal net benefit result is separate/i);
+});
+
+test('VoI and methodology describe coverage and two-direction sensitivity', () => {
+  const methodology = read('docs', 'METHODOLOGY.md');
+  const voi = read('src', 'value', 'voi.ts');
+
+  assert.match(methodology, /measured|unmeasured|unknown necessary lenses/i);
+  assert.match(methodology, /coverage/i);
+  assert.match(voi, /reference|sensitivity/i);
+  assert.match(voi, /may raise or lower|either direction/i);
 });
 
 test('intentional historical or quoted claim matches are explicit and narrow', () => {

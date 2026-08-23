@@ -244,8 +244,8 @@ what the ladder allows:
 | Tier | Default | What leaves the machine (as designed) | What leaves the machine (as built) | Gate (as built) |
 |---|---|---|---|---|
 | Algorithmic (§1) | **On** | No outbound judge request; reads the local structural record | Same | None — same posture as the Acceptance lens it reuses |
-| Local LLM, structural input | Off | Bounded summary to the configured local endpoint; no hosted judge destination | Same | One opt-in: `judge.localBaseUrl` (+ `judge.localModel`) points at a local server |
-| Local LLM, full content | Off | Bounded content to the configured local endpoint; no hosted judge destination | Same, but see ⚠ below — no richer payload actually exists to send | Same opt-in as above plus `judge.localSendFullContent` |
+| Local LLM, structural input | Off | Bounded summary to the configured endpoint; a validated loopback URL is the only destination reported as on-device | Same; a non-loopback URL is reported as remote/off-device | One opt-in: `judge.localBaseUrl` (+ `judge.localModel`) points at a local server |
+| Local LLM, full content | Off | Bounded content to the configured endpoint; a validated loopback URL is the only destination reported as on-device | Same, but see ⚠ below — no richer payload actually exists to send; a non-loopback URL is reported as remote/off-device | Same opt-in as above plus `judge.localSendFullContent` |
 | Hosted API, structural input | Off | A proposal-count/timing summary only | Same | Two independent opt-ins: `judge.hostedEnabled: true` AND the `FISCUS_JUDGE_API_KEY` env var set (plus `judge.hostedBaseUrl` + `judge.hostedModel` configured — operationally required, not consent gates) |
 | Hosted API, full content | Off | Actual session content | ⚠ Downgrades to the structural summary — see below | The above plus `judge.hostedSendFullContent` — the loudest tier, matching ARCHITECTURE §7 item 3's "real, loud opt-in decision" language exactly |
 

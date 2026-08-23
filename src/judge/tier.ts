@@ -20,10 +20,9 @@ export type JudgeTier = 'algorithmic' | 'local-structural' | 'local-full' | 'hos
 
 /**
  * Matches SessionJudgment.confidence (LIFT-AI-SIDE-JUDGE-DESIGN.md §3). Local
- * structural and local full share one tag on purpose: the trust boundary ("your
- * machine") is identical either way, so downstream consumers of `confidence`
- * only need the structural/full distinction where it changes WHERE data goes
- * (hosted), not where it merely changes what a same-machine process reads.
+ * structural and local full share one tag on purpose: the payload distinction is
+ * independent of the egress bit, which separately reports whether the configured
+ * endpoint is a validated loopback destination.
  */
 export type JudgeConfidence = 'algorithmic' | 'local-llm' | 'hosted-llm-structural' | 'hosted-llm-full';
 
@@ -38,6 +37,23 @@ export interface JudgeTierDecision {
 
 function isSet(s: string | null | undefined): boolean {
   return typeof s === 'string' && s.trim().length > 0;
+}
+
+/**
+ * A configured URL is treated as on-device only when its parsed host is literal
+ * loopback. A non-loopback or malformed URL remains an explicit local-tier
+ * selection, but its egress bit must warn that the endpoint is off-device.
+ */
+function isValidatedLoopbackEndpoint(value: string | null | undefined): boolean {
+  if (!isSet(value)) return false;
+  try {
+    const parsed = new URL(value!.trim());
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+    const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -65,6 +81,7 @@ export function hasHostedJudgeApiKey(): boolean {
 export function resolveJudgeTier(cfg: JudgeConfig, hostedApiKeyPresent: boolean): JudgeTierDecision {
   const notes: string[] = [];
   const localOn = isSet(cfg.localBaseUrl);
+  const localLoopback = isValidatedLoopbackEndpoint(cfg.localBaseUrl);
   const hostedConsent = cfg.hostedEnabled && hostedApiKeyPresent;
   const hostedOperational = hostedConsent && isSet(cfg.hostedBaseUrl);
 
@@ -85,12 +102,22 @@ export function resolveJudgeTier(cfg: JudgeConfig, hostedApiKeyPresent: boolean)
 
   if (localOn) {
     const full = cfg.localSendFullContent;
+    if (!localLoopback) {
+      notes.push(
+        'Judge tier: configured local endpoint is not a validated loopback URL; report this destination as remote/off-device.',
+      );
+    }
     notes.push(
       full
         ? 'Judge tier: local LLM endpoint, full session content; hosted tier is not selected.'
         : 'Judge tier: local LLM endpoint, structural summary only; hosted tier is not selected.',
     );
-    return { tier: full ? 'local-full' : 'local-structural', confidence: 'local-llm', sendsContentOffDevice: false, notes };
+    return {
+      tier: full ? 'local-full' : 'local-structural',
+      confidence: 'local-llm',
+      sendsContentOffDevice: !localLoopback,
+      notes,
+    };
   }
 
   if (hostedConsent && !isSet(cfg.hostedBaseUrl)) {

@@ -113,7 +113,9 @@ export interface JudgeConfig {
    * Local OpenAI-compatible inference server for the AI-side Lift judge (e.g. a
    * local Ollama). null = the local-LLM judge tier is off. A separate field from
    * upstreams.openai on purpose — judge calls are never metered proxy traffic and
-   * must never share a base URL with what's actually being measured.
+   * must never share a base URL with what's actually being measured. The tier's
+   * egress evidence treats only a validated loopback URL as on-device; another
+   * configured URL is reported as remote/off-device.
    */
   localBaseUrl: string | null;
   /**

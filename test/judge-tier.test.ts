@@ -55,6 +55,14 @@ test('resolveJudgeTier: an empty-string or whitespace-only localBaseUrl is treat
   assertOff(resolveJudgeTier(cfg({ localBaseUrl: '   ' }), false));
 });
 
+test('resolveJudgeTier: a non-loopback localBaseUrl is reported as off-device', () => {
+  const d = resolveJudgeTier(cfg({ localBaseUrl: 'http://x' }), false);
+  assert.equal(d.tier, 'local-structural');
+  assert.equal(d.confidence, 'local-llm');
+  assert.equal(d.sendsContentOffDevice, true, 'only a validated loopback endpoint may be reported as on-device');
+  assert.ok(d.notes.some((n) => /non-loopback|remote|off-device/i.test(n)));
+});
+
 test('resolveJudgeTier: hostedEnabled alone (no API key) never activates hosted judging', () => {
   const d = resolveJudgeTier(cfg({ hostedEnabled: true, hostedBaseUrl: 'https://api.example.com' }), false);
   assertOff(d);
@@ -127,8 +135,8 @@ test('resolveJudgeTier: when both local and hosted are fully configured, local w
 
 test('resolveJudgeTier: sendsContentOffDevice is true for exactly the two hosted tiers and no others', () => {
   const algorithmic = resolveJudgeTier(cfg(), false);
-  const localStructural = resolveJudgeTier(cfg({ localBaseUrl: 'http://x' }), false);
-  const localFull = resolveJudgeTier(cfg({ localBaseUrl: 'http://x', localSendFullContent: true }), false);
+  const localStructural = resolveJudgeTier(cfg({ localBaseUrl: 'http://localhost:11434' }), false);
+  const localFull = resolveJudgeTier(cfg({ localBaseUrl: 'http://localhost:11434', localSendFullContent: true }), false);
   const hostedStructural = resolveJudgeTier(cfg({ hostedEnabled: true, hostedBaseUrl: 'http://x' }), true);
   const hostedFull = resolveJudgeTier(cfg({ hostedEnabled: true, hostedBaseUrl: 'http://x', hostedSendFullContent: true }), true);
 
