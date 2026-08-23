@@ -363,8 +363,14 @@ export async function cmdRoi(flags: Flags): Promise<void> {
   const hasBand = iv.low !== null && iv.high !== null && idx !== null && (iv.high - iv.low) > 0.5;
   const band = hasBand ? color(tty, C.gray, `  [${iv.low!.toFixed(0)}–${iv.high!.toFixed(0)}]`) : '';
   console.log(`  ${color(tty, C.bold, 'RoI Index')}           ${idx === null ? color(tty, C.gray, 'n/a (no lenses instrumented)') : color(tty, idx > 60 ? C.green : idx > 30 ? C.yellow : C.red, `${idx.toFixed(0)} / 100`)}${band}   ${color(tty, C.gray, hasBand ? 'point in a partially-identified interval' : 'geometric mean — no axis can carry it alone')}`);
-  if (roi.indexIsUpperBound && idx !== null) {
-    console.log(color(tty, C.gray, `  ${''.padEnd(20)}↑ upper bound — wiring more lenses can only lower it toward the truth`));
+  if (idx !== null && roi.coverage < 1) {
+    const observed = roi.instrumentationInterval.observed;
+    const low = roi.instrumentationInterval.low;
+    const high = roi.instrumentationInterval.high;
+    const sensitivity = observed !== null && low !== null && high !== null
+      ? `full-lens sensitivity ${low.toFixed(0)}–${high.toFixed(0)}`
+      : 'full-lens sensitivity not established';
+    console.log(color(tty, C.gray, `  ${''.padEnd(20)}${Math.round(roi.coverage * 4)}/4 lenses measured · ${sensitivity} — a measured lens may move the observed score up or down`));
   }
   const eff = roi.realizedEfficiency;
   console.log(`  Realized efficiency  ${eff === null ? '—' : color(tty, C.green, pct(eff))}   ${color(tty, C.gray, `of $${(roi.tokenCostUsd + roi.effortTaxUsd).toFixed(2)} spent (tokens${roi.effortTaxUsd > 0 ? ' + effort' : ''})`)}`);
@@ -426,7 +432,7 @@ export async function cmdRoi(flags: Flags): Promise<void> {
         color(
           tty,
           C.gray,
-          `largest unmeasured exposure: measured at a mid ${top.reference}, the Index moves ${roi.roiIndex.toFixed(0)} → ${top.indexAtReference.toFixed(0)} — measuring only makes the number more honest`,
+          `largest unmeasured exposure: at a mid ${top.reference}, the observed Index moves ${roi.roiIndex.toFixed(0)} → ${top.indexAtReference.toFixed(0)} — direction is disclosed sensitivity, not a monotone promise`,
         ),
     );
   }

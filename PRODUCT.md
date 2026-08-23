@@ -72,10 +72,13 @@ inspectable through evidence.
 
 ## Operating Context
 
-Runs entirely on the operator's own machine. A local proxy (`:8090`) meters
-traffic; a SQLite ledger stores it; the GUI and API serve on `:8091`. An optional
-team server exists and is separately gated — it is **not** approved for
-internet-facing deployment.
+The ledger, proxy, GUI, and API run on the operator's machine by default. A
+local proxy (`:8090`) meters traffic; a SQLite ledger stores it; and the GUI/API
+serve on `:8091`. Provider forwarding and other outbound paths remain explicit
+Fiscus-process egress decisions under `docs/DATA-BOUNDARIES.md`; direct clients,
+other processes, operating-system policy, and provider retention are outside
+that boundary. An optional team server exists and is separately gated — it is
+**not** approved for internet-facing deployment.
 
 Data arrives by three routes, and the route determines what may be claimed:
 proxy traffic (can carry a declared project label), native tool-log import
@@ -85,8 +88,9 @@ carrying the declared scope — a real ledger on the owner's machine holds $832 
 imported OpenAI spend that therefore cannot reconcile, and the product says so
 before the operator goes and mints a credential.
 
-Fiscus itself has no hosted telemetry. Proxy requests still travel to whichever
-AI provider the operator configured.
+Fiscus itself has no hosted telemetry by default. Proxy requests still travel to
+whichever AI provider the operator configured when that provider route is
+enabled, and the declared egress mode/rule records the Fiscus-process decision.
 
 ## Capabilities and Constraints
 
@@ -141,8 +145,10 @@ Seal" set) are in the repository.
    from, it does not ship.
 3. **Withhold rather than inflate.** Say what is missing, in the same place the
    result appears — before the user spends effort or permission on it.
-4. **The operator's machine is the boundary.** Nothing leaves it without an
-   explicit, informed action.
+4. **The Fiscus process has a declared egress boundary.** Local-first storage
+   and UI are the default; provider forwarding and other outbound paths require
+   an explicit configured route and remain distinct from machine-wide firewall,
+   direct-client, and provider-retention guarantees.
 5. **Parity with responsibility.** Anything the CLI can do, the GUI can do — and
    anything consequential announces its consequence before it happens.
 

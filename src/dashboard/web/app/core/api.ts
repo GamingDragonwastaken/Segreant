@@ -247,7 +247,7 @@ export interface ValuePayload {
   roi?: {
     roiIndex?: number | null;
     roiInterval?: { low: number | null; high: number | null } | null;
-    /** True when the index can only be read as a ceiling, not a point estimate. */
+    /** Deprecated compatibility flag; the observed score is not a ceiling when lenses are missing. */
     indexIsUpperBound?: boolean;
     coverage?: number | null;
     /** The money claim. `realizedValueUsd` here IS value, not cost. */

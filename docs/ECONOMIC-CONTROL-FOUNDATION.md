@@ -738,9 +738,10 @@ that restraint should become the design pattern for the entire allocator.
 
 ### `src/value/voi.ts` — repair immediately after current correctness work
 
-Phase-1 already showed that an observed-lens score under weight renormalization is not an
-upper bound that can only decrease when a lens is measured. Any remaining stale text or
-logic based on that claim should be removed. Then rename this module's output away from
+Phase-1 already showed that an observed-lens score under weight renormalization is not a
+universal ceiling: measuring a missing lens can move the observed score either way. Any
+remaining stale text or logic based on the old monotone claim should be removed. Then rename
+this module's output away from
 formal Value of Information until EVSI/minimax decision value is implemented.
 
 ## 19. Calibration is a first-class gate

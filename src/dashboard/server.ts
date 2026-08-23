@@ -3,7 +3,9 @@
  *
  * A small read-only HTTP server over the same Store the proxy writes to. It
  * exposes a JSON API and serves a single self-contained HTML page. Bound to
- * localhost only — like everything else, nothing leaves the machine.
+ * localhost only for the dashboard API. Local storage and UI reads stay in the
+ * Fiscus process; provider forwarding and optional refresh, webhook, judge, cost,
+ * or team paths use the declared Fiscus-process egress boundary elsewhere.
  *
  * This file is the ENTRY and the GUARD, and nothing else. It answers three
  * questions in order — is the caller local, which route is this, may this

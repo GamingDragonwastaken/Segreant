@@ -26,10 +26,13 @@ Yes, temporarily. To measure whether an AI's proposed edit was actually
 accepted (the "First-Pass Acceptance" signal), Fiscus stores the proposed
 code text in your local database for up to 30 days by default
 (`proposalRetentionDays` in config) — long enough to match it against a
-later git commit. It is never transmitted anywhere. Set `metadataOnly: true`
+later git commit. Proposal rows remain local to the Fiscus store unless an
+operator explicitly exports or forwards the surrounding data. Set
+`metadataOnly: true`
 to turn this off entirely (you lose Acceptance tracking, keep everything
 else), or run `fiscus prune` / use the dashboard Settings page to purge it
-early.
+early. Provider requests and other declared egress paths follow
+[DATA-BOUNDARIES.md](DATA-BOUNDARIES.md).
 
 **Do you see my API keys?**
 No. Keys stay in your environment / your tool's config. The proxy forwards the auth
@@ -113,11 +116,12 @@ never surveys.
 
 **Why does my RoI Index show missing coverage and a range?**
 Because some of the four value lenses may not be wired yet. The observed-only
-geometric mean is not generally an upper bound: measuring a missing lens can
-raise or lower it. Fiscus therefore keeps that observed score separate from the
-full-instrumentation range obtained by evaluating unknown necessary lenses at
-their admissible endpoints. Wire more evidence to reduce what must be assumed,
-not to force the score in one direction.
+geometric mean is an observational score, not a universal ceiling: measuring a
+missing lens can raise or lower it. Fiscus therefore keeps that observed score
+separate from the full-instrumentation sensitivity range obtained by evaluating
+unknown necessary lenses at their admissible endpoints. Add evidence to reduce
+what must be assumed and inspect the disclosed direction/size of the change; the
+calculation does not promise a monotone movement.
 
 **Why did a small experiment's great score get "pulled down"?**
 Reliability shrinkage. Two-of-two successes isn't the same evidence as 140-of-200, so
@@ -173,9 +177,9 @@ simulation in the test suite.
 
 **What should I measure next?**
 Ask the tool: the "Instrument next" line names the unmeasured lens whose
-measurement would move your Index most (evaluated at a disclosed midpoint, not a
-prediction). Measuring can only make the number more honest — it names the cheapest
-place to buy honesty.
+measurement would move your Index most at a disclosed midpoint (a sensitivity
+calculation, not a prediction). It names the cheapest place to reduce an
+unmeasured assumption; the measured value may move the Index up or down.
 
 ## Cost & licensing
 

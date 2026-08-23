@@ -68,7 +68,7 @@ const BUILDERS: Record<string, Builder> = {
           : `Reads usage that ${found.length} of your tools already recorded on this computer, and adds anything new to Fiscus.`,
         rows: found.map((i) => ({ label: i.label, value: 'found', note: i.blurb })),
         notes: [
-          'Nothing is sent anywhere. The files being read are already on this machine.',
+          'This import reads files already on this machine and does not invoke a Fiscus outbound path; provider/tool traffic is outside this read.',
           'Imported subscription usage is observed after the fact, so by default it does not count toward budget enforcement.',
         ],
       };
@@ -222,7 +222,7 @@ const BUILDERS: Record<string, Builder> = {
         ? 'Streams the request ledger as CSV from this local server. One row per request, with the recorded attribution basis and pricing basis on each.'
         : 'Downloads every request we recorded as a spreadsheet file, including where each cost figure came from.',
       notes: [
-        'The file is generated on this machine and never leaves it unless you send it somewhere.',
+        'The file is generated locally; sharing it is an explicit operator export action. Fiscus egress rules do not make this machine-wide.',
         'Each row carries its own attribution and pricing basis, so the export can be checked the same way the screens can.',
       ],
     }),

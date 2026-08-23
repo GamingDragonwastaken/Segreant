@@ -4,6 +4,8 @@ This is the operational boundary between a verified local release candidate and
 an external release. Passing source tests is necessary but not a substitute for
 registry ownership, production infrastructure, or customer evidence.
 
+Every successful record below is historical evidence bound to its recorded candidate SHA and to the checklist/gate version in force at that time. A result cannot be inherited by a later SHA; a changed gate requires a fresh run. Superseded records remain unchanged as historical evidence rather than being rewritten into current authority.
+
 ## Local CLI and dashboard candidate
 
 Historical check counts and screenshots are not release authority. Before making

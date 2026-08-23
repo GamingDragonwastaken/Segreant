@@ -4,8 +4,10 @@
 
 Local-first **AI Financial Operations** layer: meter AI spend, control it,
 allocate it, reconcile it against provider billing where the evidence allows, and
-measure what it produced. Runs entirely on the operator's machine. Product truth
-is in [PRODUCT.md](PRODUCT.md); read it before designing anything user-facing.
+measure what it produced. The ledger and GUI are local by default; configured
+provider traffic and other declared egress paths are governed by the
+Fiscus-process boundary described in `docs/DATA-BOUNDARIES.md`. Product truth is
+in [PRODUCT.md](PRODUCT.md); read it before designing anything user-facing.
 
 ## The one distinction the whole product is built on
 
@@ -27,9 +29,12 @@ another.** Most defects in this repo have been a version of that collapse.
    result, before the user spends effort or a credential on it.
 4. **Read-only by default.** Compute and preview; `--apply` persists. Preserve
    preview-then-commit as a visible step in any new surface.
-5. **Nothing leaves the machine** without an explicit, informed action. No hidden
-   telemetry, no egress, no credential forwarding. The GUI makes **zero external
-   network requests** — no CDN, no fonts, no analytics.
+5. **Fiscus's own outbound paths are declared and policy-gated.** There is no
+   hosted telemetry by default; configured provider forwarding, refreshes,
+   webhooks, hosted judging, and team rollups are separate egress paths with
+   explicit scope. The GUI talks to the local dashboard only — no CDN, fonts, or
+   analytics — but this is not a machine-wide firewall or provider-retention
+   guarantee.
 6. **Zero runtime dependencies.** `typescript` and `@types/node` are the only
    devDependencies. Adding a runtime dependency is a decision, not a convenience.
 7. **The repo is public.** Scan for credentials, personal data, and local

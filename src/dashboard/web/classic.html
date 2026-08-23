@@ -393,7 +393,7 @@
   .rtag.trim { background: rgba(226,93,74,0.14); color: var(--coral); }
   td.roi { color: var(--mint); text-align: right; }
   .lenshow { color: var(--faint); font-size: 10.5px; font-family: var(--mono); margin-top: 8px; line-height: 1.5; }
-  /* Explanatory popovers: every uncertain state (n/a, upper bound, below break-
+  /* Explanatory popovers: every uncertain state (n/a, sensitivity band, below break-
      even, cold start) justifies itself on hover/focus, so nothing is unexplained.
      Pure CSS + keyboard-focusable; no script, no innerHTML sink. Value cards get
      overflow:visible so the popover isn't clipped by the card's rounded mask. */
@@ -858,7 +858,7 @@ function render(d) {
   const sourceBars = (d.bySource || []).map((x) => `
     <div class="bar"><div class="top"><span class="name">${esc(x.label)}${x.full ? ' <span class="pill stream">FULL RoI</span>' : ''}</span><span class="cost">$${usd(x.costUsd)}</span></div>
     <div class="meta">${x.requests} req · ${esc(x.depth || 'spend')}</div></div>`).join('');
-  const sourceCard = hasSources ? `<div class="card fade"><div class="label">By source ${tip('Spend grouped by connected source — each AI tool you route through Fiscus. Tag a tool with the <code>X-Fiscus-Source</code> header (the connect command sets this for you) and its spend lands here. Untagged traffic reads as <b>direct</b>. The tag is stripped before the request ever leaves your machine. <b>Depth</b> is read from real signals, not asserted: <b>spend</b> always, <b>+ acceptance</b> once the source sends proposed edits, <b>+ RoI</b> once its work reaches projects with realized value.')}</div><div class="bars">${sourceBars}</div></div>` : '';
+  const sourceCard = hasSources ? `<div class="card fade"><div class="label">By source ${tip('Spend grouped by connected source — each AI tool you route through Fiscus. Tag a tool with the <code>X-Fiscus-Source</code> header (the connect command sets this for you) and its spend lands here. Untagged traffic reads as <b>direct</b>. The tag is stripped before forwarding; the configured provider receives no local attribution label. <b>Depth</b> is read from real signals, not asserted: <b>spend</b> always, <b>+ acceptance</b> once the source sends proposed edits, <b>+ RoI</b> once its work reaches projects with realized value.')}</div><div class="bars">${sourceBars}</div></div>` : '';
 
   setNodes(grid, `
     <div class="herorow fade">
@@ -1345,7 +1345,6 @@ function renderValue(d) {
   const idxColor = idx == null ? 'var(--faint)' : idx > 60 ? 'var(--mint)' : idx > 30 ? 'var(--gold)' : 'var(--coral)';
   const iv = roi && roi.roiInterval;
   const band = iv && iv.low != null && iv.high != null && (iv.high - iv.low) > 0.5 ? Math.round(iv.low) + '–' + Math.round(iv.high) : null;
-  const upperBound = !!(roi && roi.indexIsUpperBound && idx != null);
   const eff = roi && roi.realizedEfficiency != null ? Math.round(roi.realizedEfficiency * 100) + '%' : '—';
   const cov = roi ? Math.round(roi.coverage * 4) : 0;
 
@@ -1588,7 +1587,7 @@ function renderValue(d) {
       <div class="idxpane">
         <div class="label">Return on Intelligence</div>
         <div class="roibig" style="color:${idxColor}">${idx == null ? '—' : idx}</div>
-        <div class="idxcap">RoI Index · 0–100${upperBound ? ' · <span style="color:var(--gold)">upper bound</span>' + tip('Some lenses aren\'t connected yet, so this is the <b>highest</b> the Index could be. Measuring the rest can only pull it down, never up — more measurement means a more honest number.') : ''}</div>
+        <div class="idxcap">RoI Index · 0–100 · ${cov}/4 lenses measured${tip('The observed score excludes unmeasured lenses. The instrumentation interval is the disclosed full-lens sensitivity band; measuring a missing lens may move the observed score up or down.')}</div>
       </div>
       <div class="bandpane">
         <div class="label">Honest range</div>
@@ -1609,7 +1608,7 @@ function renderValue(d) {
     ${lensRow}
     <div class="card fade" style="grid-column:1/-1"><div class="label">The realization funnel · where the spend went ${tip('Dollars surviving each gate of the Realization Standard — a unit that died at a gate passed everything before it. "Realized" made it all the way through; spend that stalled at an early gate never became durable value.')}</div>${pnl}</div>
     <div class="card fade" style="grid-column:1/-1">
-      <div class="label">Session judge ${tip('Judges one real session — yours, from this proxy\'s own store — for whether the AI\'s work actually helped. <b>Algorithmic</b> by default: a structural signal computed on-device from your own metered data, nothing leaves this machine. A hosted judge (if you\'ve configured one) reads a bounded excerpt of the session transcript and sends it off-device — you\'ll see a warning here before that happens.')}</div>
+      <div class="label">Session judge ${tip('Judges one real session — yours, from this proxy\'s own store — for whether the AI\'s work actually helped. <b>Algorithmic</b> by default: a structural signal reads local metered data and makes no hosted judge call. A local judge uses its configured local endpoint; a hosted judge (if you\'ve configured one) reads a bounded excerpt of the session transcript and sends it off-device — you\'ll see a warning here before that happens.')}</div>
       <button class="vbtn" id="judgebtn">Judge latest session</button>
       <span id="judgeout" style="display:block;margin-top:10px;font-family:var(--mono);font-size:12.5px;color:var(--muted);line-height:1.6"></span>
     </div>

@@ -284,7 +284,8 @@ X-Fiscus-Task-Weight: 1.5
 
 Spend then rolls up by user in `fiscus today`, the dashboard's "By user"
 card, and the CSV export. Unset → reported as `unassigned`. These headers are
-stripped before the request is forwarded upstream — they never leave the device.
+stripped before the request is forwarded upstream; the provider receives the
+request without Fiscus's local attribution labels.
 
 **These labels are assertions, not verified identity.** Anything on this machine
 that can reach the proxy can set them, so Fiscus records *how* each project label
@@ -372,11 +373,18 @@ the Lift lens answer distinct but observational questions; multiplying them
 would turn an index-scale lens into a financial causal claim. A
 supervision-time denominator prevents a token-only calculation from presenting
 an implausible scenario as evidence. Fiscus refuses to print a dollar scenario
-until it has measured supervision time to divide by. A causal net-benefit result
+until it has measured supervision time to divide by. A causal net benefit result
 requires a registered randomized study with a frozen protocol, pre-exposure
 assignment, execution/outcome lineage, a predeclared quality guardrail, and a
 conservative confidence bound. The initial local study protocol is documented
 in [CAUSAL-EVIDENCE-PROTOCOL.md](docs/CAUSAL-EVIDENCE-PROTOCOL.md).
+
+The README and both dashboard registers keep these claims separate: the ordinary
+**Observed value scenario** is manual-equivalent value under recorded assumptions;
+it is not a causal return or a claim that AI paid for itself. A qualified causal
+net benefit result appears only when the separate registered-study lane clears its
+protocol, cost, outcome, quality, and conservative-bound gates. Until then the
+causal card says **not established** and points to the next evidence step.
 
 The four lenses, each answering a different real question (full definitions in
 **[docs/RETURN-ON-INTELLIGENCE.md](docs/RETURN-ON-INTELLIGENCE.md)**):

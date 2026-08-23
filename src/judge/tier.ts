@@ -54,8 +54,9 @@ export function hasHostedJudgeApiKey(): boolean {
 
 /**
  * The trust-ladder gate. Precedence when BOTH local and hosted are fully
- * configured: local wins. It never leaves the machine, so it's the strictly
- * more conservative choice, and the loser is easy to switch (unset
+ * configured: local wins. It selects the configured local endpoint and does not
+ * select a hosted judge, so it is the strictly more conservative choice within
+ * the declared Fiscus-process egress boundary; the loser is easy to switch (unset
  * judge.localBaseUrl) — the alternative (silently preferring hosted) would mean
  * a config that types out to "local is available" can still send content off
  * the user's machine, which is exactly the silent-escalation shape
@@ -77,7 +78,7 @@ export function resolveJudgeTier(cfg: JudgeConfig, hostedApiKeyPresent: boolean)
 
   if (localOn && hostedOperational) {
     notes.push(
-      'Both local and hosted judge tiers are configured; using local — it never leaves the machine. ' +
+      'Both local and hosted judge tiers are configured; using local endpoint (configured) and no hosted judge call. ' +
         'Unset judge.localBaseUrl to use the hosted tier instead.',
     );
   }
@@ -86,8 +87,8 @@ export function resolveJudgeTier(cfg: JudgeConfig, hostedApiKeyPresent: boolean)
     const full = cfg.localSendFullContent;
     notes.push(
       full
-        ? 'Judge tier: local LLM, full session content (stays on this machine).'
-        : 'Judge tier: local LLM, structural summary only (stays on this machine).',
+        ? 'Judge tier: local LLM endpoint, full session content; hosted tier is not selected.'
+        : 'Judge tier: local LLM endpoint, structural summary only; hosted tier is not selected.',
     );
     return { tier: full ? 'local-full' : 'local-structural', confidence: 'local-llm', sendsContentOffDevice: false, notes };
   }

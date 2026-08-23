@@ -50,7 +50,7 @@ test('voi: ranks the heavier missing lens first, with the exposure quantified tr
 test('voi: measuring at a mid reference moves the Index DOWN when current lenses are strong — more honest, never inflated', () => {
   const roi = roiWithMissingLenses();
   for (const p of instrumentationPriority(roi)) {
-    assert.ok(p.deltaAtReference < 0, `${p.lens}: a mid-range measurement can only lower a strong Index`);
+    assert.ok(p.deltaAtReference < 0, `${p.lens}: this fixture's disclosed midpoint sensitivity lowers a strong observed Index`);
   }
 });
 

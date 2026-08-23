@@ -158,8 +158,8 @@ Where the algorithmic signal is structurally blind (it can see *that* a session 
 many proposal-revision cycles, not *why*, or whether a single long uninterrupted
 turn was productive deep work or one long confused ramble), an LLM reading actual
 session content could judge more than structure allows. This is real additional
-insight — and a real, loud opt-in decision against the "nothing leaves your machine"
-default, exactly as ARCHITECTURE.md §7 item 3 already says. Two sub-choices the user
+insight — and a real, loud opt-in decision against the default hosted-judge egress
+path, exactly as ARCHITECTURE.md §7 item 3 already says. Two sub-choices the user
 raised, both worth supporting rather than picking one:
 
 **Local model.** The proxy already speaks to arbitrary OpenAI-compatible endpoints
@@ -167,10 +167,9 @@ today — `x-fiscus-openai-base` / `config.upstreams.openai` already routes mete
 traffic to Ollama and other local servers (README Status section). The same
 mechanism is directly reusable for a judge call: point a separate config key
 (`config.lift.judge.baseUrl`) at a local inference server, and nothing new has to be
-invented to *reach* it. Because the model runs on the user's own machine, this tier
-can reasonably default to reading full session content when enabled — the trust
-boundary ("your machine") isn't crossed any more than it already is by the AI coding
-tool itself running there.
+invented to *reach* it. When that endpoint is literal loopback and the local_locked
+egress mode is active, this tier can reasonably default to reading full session
+content when enabled; the configured Fiscus-process destination remains explicit.
 
 **User's own API key.** A separate, explicit credential
 (`config.lift.judge.apiKey` / a dedicated env var) — never the same credential or
@@ -236,16 +235,17 @@ what the ladder allows:
   impossible rather than merely undocumented.
 - **Explicit precedence when both tiers are configured at once.** Not
   addressed in the original sketch. The built gate resolves this case (local
-  AND hosted both fully opted into) by preferring local — it never leaves the
-  machine, so it's the strictly more conservative reading of an ambiguous
+  AND hosted both fully opted into) by preferring the configured local endpoint
+  and not selecting a hosted judge, so it is the strictly more conservative
+  reading of an ambiguous config within the declared Fiscus-process egress
   config, and it's a one-line config change to reverse (unset
   `judge.localBaseUrl`).
 
 | Tier | Default | What leaves the machine (as designed) | What leaves the machine (as built) | Gate (as built) |
 |---|---|---|---|---|
-| Algorithmic (§1) | **On** | Nothing beyond what's already logged locally | Same | None — same posture as the Acceptance lens it reuses |
-| Local LLM, structural input | Off | Nothing (stays on the user's machine) | Same | One opt-in: `judge.localBaseUrl` (+ `judge.localModel`) points at a local server |
-| Local LLM, full content | Off | Nothing (stays on the user's machine) | Same, but see ⚠ below — no richer payload actually exists to send | Same opt-in as above plus `judge.localSendFullContent` |
+| Algorithmic (§1) | **On** | No outbound judge request; reads the local structural record | Same | None — same posture as the Acceptance lens it reuses |
+| Local LLM, structural input | Off | Bounded summary to the configured local endpoint; no hosted judge destination | Same | One opt-in: `judge.localBaseUrl` (+ `judge.localModel`) points at a local server |
+| Local LLM, full content | Off | Bounded content to the configured local endpoint; no hosted judge destination | Same, but see ⚠ below — no richer payload actually exists to send | Same opt-in as above plus `judge.localSendFullContent` |
 | Hosted API, structural input | Off | A proposal-count/timing summary only | Same | Two independent opt-ins: `judge.hostedEnabled: true` AND the `FISCUS_JUDGE_API_KEY` env var set (plus `judge.hostedBaseUrl` + `judge.hostedModel` configured — operationally required, not consent gates) |
 | Hosted API, full content | Off | Actual session content | ⚠ Downgrades to the structural summary — see below | The above plus `judge.hostedSendFullContent` — the loudest tier, matching ARCHITECTURE §7 item 3's "real, loud opt-in decision" language exactly |
 

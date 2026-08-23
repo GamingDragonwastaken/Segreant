@@ -2,9 +2,9 @@
  * Value of Information — which measurement to buy next.
  * (docs/RETURN-ON-INTELLIGENCE.md §12.)
  *
- * The Index is an upper bound while lenses are un-instrumented (§5): every
- * unmeasured necessary condition can only pull it DOWN. But "wire more lenses"
- * is not a decision — "wire THIS lens next" is. This module ranks the
+ * The observed Index is not generally a ceiling while lenses are un-instrumented:
+ * weight renormalization means a missing lens can move the score either direction.
+ * "Wire THIS lens next" is an instrumentation decision. This module ranks the
  * un-instrumented lenses by how much the Index would move if each were measured,
  * completing the decision calculus:
  *
@@ -21,7 +21,8 @@
  * reference (v = 0.5 by default — the midpoint, not a prediction) and rank by
  * the size of the move. The exposure is real regardless of the reference's
  * exact position: a heavier, further-from-current lens moves the Index more,
- * and measuring can only make the number more honest.
+ * and measuring can raise or lower the observed score. The direction is a
+ * disclosed sensitivity result, not a monotone promise.
  */
 
 import { DEFAULT_LENS_WEIGHTS, type RoIResult } from './lenses.ts';
@@ -34,7 +35,7 @@ export interface InstrumentationPriority {
   weight: number;
   /** The Index if this lens were measured at the reference value. */
   indexAtReference: number;
-  /** indexAtReference − current Index (usually negative: more measurement, more honest). */
+  /** indexAtReference − current Index; the direction can be positive or negative. */
   deltaAtReference: number;
   /** The disclosed reference the exposure was evaluated at. */
   reference: number;

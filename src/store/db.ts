@@ -1,9 +1,10 @@
 /**
  * Local persistence — built on Node's bundled SQLite (node:sqlite).
  *
- * No native module, no build step, no external service. The whole point of the
- * product is that nothing leaves the machine, so the store is a single local
- * file under ~/.fiscus.
+ * The store has no native module or external database service dependency. A
+ * packaged distribution still has a build step; this module persists the local
+ * ledger under ~/.fiscus. Provider forwarding and optional outbound paths are
+ * governed by the declared Fiscus-process egress boundary elsewhere.
  *
  * Timestamps are stored twice: an ISO string for humans and an epoch-ms integer
  * for fast range/window queries. Day boundaries are computed in JS (local time)

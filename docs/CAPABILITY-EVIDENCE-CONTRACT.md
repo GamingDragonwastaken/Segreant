@@ -126,8 +126,8 @@ the provider or optional egress paths above.
   that AI definitively paid for itself. A causal net-benefit claim is allowed
   only from a qualified causal-study result with its protocol identifier and
   lower-bound evidence.
-- Say no Fiscus-hosted telemetry by default, not zero egress or that proxy
-  traffic never leaves the device.
+- Say no Fiscus-hosted telemetry by default; do not generalize that default into
+  an egress guarantee or claim that proxy traffic remains on the device.
 - Say `local_locked Fiscus-process transport refused non-loopback HTTP(S)
   egress` only when that mode is active and receipts verify; say
   `controlled_cloud rule and receipt` for a permitted cloud request. Do not

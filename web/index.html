@@ -12,9 +12,10 @@
 <meta property="og:type" content="website" />
 <meta property="og:image" content="assets/og-banner-1600.jpg" />
 <meta name="twitter:card" content="summary_large_image" />
-<!-- No web fonts. Fiscus is local-first: even the landing page makes ZERO
-     external requests. System font stack (prefers nicer faces when locally
-     installed, falls back to elegant platform fonts) — see --serif/--sans/--mono. -->
+<!-- No web fonts or third-party assets. The landing page is a bundled local
+     surface; product provider traffic follows the declared Fiscus-process egress
+     boundary. System font stack (prefers nicer faces when locally installed,
+     falls back to elegant platform fonts) — see --serif/--sans/--mono. -->
 <style>
   :root {
     --ink: #0b0d14;
@@ -287,7 +288,7 @@
   <div class="container">
     <div class="eyebrow reveal">Return on Intelligence · measured locally</div>
     <h1 class="display reveal">Govern the spend.<br><em>Not</em> the developer.</h1>
-    <p class="lede reveal">Your AI coding agents bill by the token now — and an agent stuck in a loop overnight doesn't send a warning, it sends an invoice. Fiscus is a <b>local-first proxy</b> that meters every call, caps runaway spend, and — the part that actually matters — <b>measures whether that spend produced work worth keeping.</b> All on-device. No byte of your code leaves the machine.</p>
+    <p class="lede reveal">Your AI coding agents bill by the token now — and an agent stuck in a loop overnight doesn't send a warning, it sends an invoice. Fiscus is a <b>local-first proxy</b> that meters every call, caps runaway spend, and — the part that actually matters — <b>measures whether that spend produced work worth keeping.</b> The ledger and controls run locally; routed requests go to the configured provider when declared egress permits.</p>
     <p class="disclaimer reveal">Fiscus has no hosted telemetry by default. Requests routed through its proxy still go to the configured AI provider; see the repository's DATA-BOUNDARIES.md before using sensitive material.</p>
     <div class="cta-row reveal">
       <div class="install" id="install" title="Click to copy">
@@ -297,7 +298,7 @@
       <a class="ghost" href="#how">See how it works <span>↓</span></a>
     </div>
     <div class="trustline reveal">
-      <span><span class="tick">✓</span> Local-first — zero data egress</span>
+      <span><span class="tick">✓</span> Local-first — declared egress</span>
       <span><span class="tick">✓</span> Works with Claude Code, Cursor, OpenAI SDK</span>
       <span><span class="tick">✓</span> MIT licensed</span>
     </div>

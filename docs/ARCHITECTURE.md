@@ -17,11 +17,15 @@ This document records what Fiscus is, how it's built, and — just as important 
 
 ### Non-functional
 - **Latency**: negligible relative to the upstream call it wraps. The proxy adds one in-process hop; the dominant cost is the provider round-trip (hundreds of ms to tens of seconds). Sub-millisecond bookkeeping is a non-goal dressed up as a requirement — see §5.
-- **Privacy**: Fiscus stores no provider API keys and has no Fiscus-hosted
+- **Privacy**: Fiscus is local-first for its ledger and UI, stores no provider API keys, and has no Fiscus-hosted
   telemetry by default. A request intentionally routed through the proxy is
   forwarded to the configured provider, which may receive prompt text, source
   snippets, tool payloads, and the provider credential it requires.
-- **Footprint**: a single command to run. No build step, no native modules, no external services.
+- **Footprint**: a single local command to run after the distributable is built.
+  The runtime uses Node's bundled SQLite and has no native module or external
+  database service dependency. Provider forwarding and optional refresh,
+  webhook, judge, cost-observation, and team paths use the declared Fiscus-process
+  egress boundary; they are not hidden services.
 - **Reliability**: a failure in tracking must never break a developer's session. Tracking degrades to transparent passthrough.
 
 ### Constraints

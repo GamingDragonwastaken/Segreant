@@ -43,7 +43,7 @@ test('resolveJudgeTier: localBaseUrl alone is sufficient for local-structural', 
   assert.equal(d.sendsContentOffDevice, false);
 });
 
-test('resolveJudgeTier: localBaseUrl + localSendFullContent → local-full, still never leaves the machine', () => {
+test('resolveJudgeTier: localBaseUrl + localSendFullContent → local-full, no hosted tier selected', () => {
   const d = resolveJudgeTier(cfg({ localBaseUrl: 'http://localhost:11434', localSendFullContent: true }), false);
   assert.equal(d.tier, 'local-full');
   assert.equal(d.confidence, 'local-llm', 'local structural and full share one confidence tag — same trust boundary');
@@ -121,7 +121,7 @@ test('resolveJudgeTier: when both local and hosted are fully configured, local w
     true,
   );
   assert.equal(d.tier, 'local-structural');
-  assert.equal(d.sendsContentOffDevice, false, 'local precedence means nothing leaves the machine even though hosted is also configured');
+  assert.equal(d.sendsContentOffDevice, false, 'local precedence selects no hosted destination even though hosted is also configured');
   assert.ok(d.notes.some((n) => n.includes('using local')));
 });
 
