@@ -29,8 +29,8 @@ export type JudgeConfidence = 'algorithmic' | 'local-llm' | 'hosted-llm-structur
 export interface JudgeTierDecision {
   tier: JudgeTier;
   confidence: JudgeConfidence;
-  /** True only for the two hosted tiers — the one bit a UI needs to decide
-   * whether to show an egress warning. */
+  /** True when the selected judge endpoint is not a validated loopback — the
+   * one bit a UI needs to decide whether to show an egress warning. */
   sendsContentOffDevice: boolean;
   notes: string[];
 }
@@ -64,8 +64,10 @@ function isValidatedLoopbackEndpoint(value: string | null | undefined): boolean 
  * (docs/LIFT-AI-SIDE-JUDGE-DESIGN.md §2). Never logged, never persisted to
  * config.json, never returned by this function — only whether it's set.
  */
-export function hasHostedJudgeApiKey(): boolean {
-  return isSet(process.env.FISCUS_JUDGE_API_KEY);
+export function hasHostedJudgeApiKey(
+  environment: { FISCUS_JUDGE_API_KEY?: string | null } = process.env,
+): boolean {
+  return isSet(environment.FISCUS_JUDGE_API_KEY);
 }
 
 /**

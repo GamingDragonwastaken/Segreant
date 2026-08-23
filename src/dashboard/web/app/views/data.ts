@@ -116,7 +116,7 @@ export function dataView(): Node {
           h('h2', { class: 'section-title', text: () => (isPrecise() ? 'Detect what is on this machine' : 'Look around this computer') }),
           h('p', { class: 'view-plain', text: () => (isPrecise()
             ? 'A bounded walk of your home directory for AI tools and git repositories. Imports nothing; records the result as the baseline for change reporting.'
-            : 'Fiscus can look through your files for AI tools and projects. It only looks — nothing is imported and nothing is sent anywhere.') }),
+            : 'Fiscus can look through your files for AI tools and projects. This detection reads local paths; local imports remain local, while provider requests follow the configured egress boundary.') }),
 
           h('div', { class: 'cmd-row' },
             h('button', {

@@ -133,36 +133,25 @@ test('resolveJudgeTier: when both local and hosted are fully configured, local w
   assert.ok(d.notes.some((n) => n.includes('using local')));
 });
 
-test('resolveJudgeTier: sendsContentOffDevice is true for exactly the two hosted tiers and no others', () => {
+test('resolveJudgeTier: sendsContentOffDevice reflects the selected endpoint boundary', () => {
   const algorithmic = resolveJudgeTier(cfg(), false);
   const localStructural = resolveJudgeTier(cfg({ localBaseUrl: 'http://localhost:11434' }), false);
   const localFull = resolveJudgeTier(cfg({ localBaseUrl: 'http://localhost:11434', localSendFullContent: true }), false);
+  const remoteLocal = resolveJudgeTier(cfg({ localBaseUrl: 'https://judge.example.test', localSendFullContent: true }), false);
   const hostedStructural = resolveJudgeTier(cfg({ hostedEnabled: true, hostedBaseUrl: 'http://x' }), true);
   const hostedFull = resolveJudgeTier(cfg({ hostedEnabled: true, hostedBaseUrl: 'http://x', hostedSendFullContent: true }), true);
 
   assert.equal(algorithmic.sendsContentOffDevice, false);
   assert.equal(localStructural.sendsContentOffDevice, false);
   assert.equal(localFull.sendsContentOffDevice, false);
+  assert.equal(remoteLocal.sendsContentOffDevice, true);
   assert.equal(hostedStructural.sendsContentOffDevice, true);
   assert.equal(hostedFull.sendsContentOffDevice, true);
 });
 
 test('hasHostedJudgeApiKey: reads FISCUS_JUDGE_API_KEY, and treats empty/whitespace as unset', () => {
-  const prev = process.env.FISCUS_JUDGE_API_KEY;
-  try {
-    delete process.env.FISCUS_JUDGE_API_KEY;
-    assert.equal(hasHostedJudgeApiKey(), false);
-
-    process.env.FISCUS_JUDGE_API_KEY = '';
-    assert.equal(hasHostedJudgeApiKey(), false);
-
-    process.env.FISCUS_JUDGE_API_KEY = '   ';
-    assert.equal(hasHostedJudgeApiKey(), false);
-
-    process.env.FISCUS_JUDGE_API_KEY = 'sk-test-key-123';
-    assert.equal(hasHostedJudgeApiKey(), true);
-  } finally {
-    if (prev === undefined) delete process.env.FISCUS_JUDGE_API_KEY;
-    else process.env.FISCUS_JUDGE_API_KEY = prev;
-  }
+  assert.equal(hasHostedJudgeApiKey({}), false);
+  assert.equal(hasHostedJudgeApiKey({ FISCUS_JUDGE_API_KEY: '' }), false);
+  assert.equal(hasHostedJudgeApiKey({ FISCUS_JUDGE_API_KEY: '   ' }), false);
+  assert.equal(hasHostedJudgeApiKey({ FISCUS_JUDGE_API_KEY: 'sk-test-key-123' }), true);
 });

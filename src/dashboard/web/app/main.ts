@@ -193,7 +193,7 @@ function boot(): void {
         },
         h('main', { class: 'main', id: 'main', tabindex: '-1' }, () => viewFor(current()))),
       h('footer', { class: 'shellfoot' },
-        h('span', { text: 'Runs on this machine only. Nothing is sent anywhere.' }),
+        h('span', { text: 'Dashboard runs locally; provider traffic follows your configured egress boundary.' }),
         h('a', { href: '/classic', text: 'Classic dashboard' })));
 
   });

@@ -192,6 +192,19 @@ test('judgeSession: a full-content tier WITHOUT a transcript downgrades its REPO
   }
 });
 
+test('judgeSession: a non-loopback local full tier never says a downgraded summary stayed on this machine', async () => {
+  const j = await judgeSession(
+    's1',
+    REQUESTS,
+    PROPOSALS,
+    cfg({ localBaseUrl: 'https://judge.example.test', localModel: 'llama3.1', localSendFullContent: true }),
+  );
+
+  assert.equal(j.confidence, 'algorithmic', 'the default locked egress policy may refuse the test endpoint, but the rationale must still disclose the boundary');
+  assert.match(j.rationale, /configured endpoint|remote\/off-device/i);
+  assert.doesNotMatch(j.rationale, /stays on this machine either way/i);
+});
+
 test('judgeSession: a full-content tier WITH a transcript sends it and earns the full tag — and the wire payload provably contains the turns', async () => {
   const transcript = {
     sessionId: 's1',

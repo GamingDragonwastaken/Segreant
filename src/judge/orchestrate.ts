@@ -49,6 +49,7 @@ export async function judgeSession(
   }
 
   const isLocal = decision.tier === 'local-structural' || decision.tier === 'local-full';
+  const localEndpointIsOnDevice = isLocal && !decision.sendsContentOffDevice;
   const baseUrl = isLocal ? cfg.localBaseUrl : cfg.hostedBaseUrl;
   const model = isLocal ? cfg.localModel : cfg.hostedModel;
   const apiKey = isLocal ? null : (process.env.FISCUS_JUDGE_API_KEY ?? null);
@@ -96,7 +97,9 @@ export async function judgeSession(
     }
     notes.push(
       isLocal
-        ? 'Judge tier: local LLM (full-content configured but no on-disk transcript found for this session — sent the structural summary; stays on this machine either way).'
+        ? localEndpointIsOnDevice
+          ? 'Judge tier: local LLM (full-content configured but no on-disk transcript found for this session — the structural-summary request targets the validated loopback endpoint; it stays within the configured loopback boundary).'
+          : 'Judge tier: local LLM (full-content configured but no on-disk transcript found for this session — the structural-summary request targets the configured endpoint; this destination is reported as remote/off-device).'
         : 'Judge tier: hosted API (full-content configured but no on-disk transcript found for this session — only a structural summary left this machine, never raw content).',
     );
   }

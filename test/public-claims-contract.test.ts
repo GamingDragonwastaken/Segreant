@@ -124,13 +124,16 @@ const CURRENT_CLAIM_SURFACES = [
   'src/dashboard/server.ts',
   'src/dashboard/routes.ts',
   'src/dashboard/web/classic.html',
+  'src/dashboard/web/app/main.ts',
   'src/dashboard/web/app/core/actions.ts',
   'src/dashboard/web/app/core/api.ts',
   'src/dashboard/web/app/core/registry.ts',
+  'src/dashboard/web/app/views/data.ts',
   'src/dashboard/web/app/views/value.ts',
   'src/store/db.ts',
   'src/value/voi.ts',
   'src/judge/tier.ts',
+  'src/judge/orchestrate.ts',
   'web/index.html',
 ] as const;
 
@@ -144,6 +147,8 @@ const REJECTED_LIVE_CLAIMS: ReadonlyArray<[string, RegExp]> = [
   ['blanket zero-egress claim', /(?:zero|no) (?:data )?egress\b/i],
   ['blanket all-on-device claim', /all on-device\b/i],
   ['blanket code-never-leaves claim', /(?:no|without)\s+(?:a\s+)?byte(?:s?)\s+of\s+(?:your\s+)?code\s+(?:leaves|leaving)\s+(?:the\s+)?(?:machine|device)/i],
+  ['blanket nothing-ever-sent-off-device claim', /nothing\s+is\s+ever\s+sent\s+off[- ]device/i],
+  ['blanket nothing-sent-anywhere claim', /nothing\s+is\s+(?:ever\s+)?sent\s+anywhere/i],
   ['blanket never-transmitted claim', /(?:is|are) never transmitted anywhere/i],
   ['historical path-prefix machine-boundary claim', /proving the prefix never leaves the machine\./i],
   ['causal RoI formula in live docs', /RoI_causal\s*=\s*RoI_gross/i],
@@ -209,6 +214,16 @@ test('README and both dashboards separate ordinary value scenarios from causal e
   assert.match(classic, /qualified randomized study is required for causal net benefit|not causal evidence/i);
   assert.match(modern, /causalStudyCard/);
   assert.match(modern, /not causal evidence|causal study/i);
+});
+
+test('modern dashboard egress copy qualifies local UI and file detection separately from outbound traffic', () => {
+  const shell = read('src', 'dashboard', 'web', 'app', 'main.ts');
+  const data = read('src', 'dashboard', 'web', 'app', 'views', 'data.ts');
+
+  assert.match(shell, /configured egress boundary|configured provider|outbound/i);
+  assert.match(data, /configured egress boundary|configured provider|outbound/i);
+  assert.doesNotMatch(shell, /nothing\s+is\s+(?:ever\s+)?sent\s+anywhere/i);
+  assert.doesNotMatch(data, /nothing\s+is\s+(?:ever\s+)?sent\s+anywhere/i);
 });
 
 test('CLI and ROI documentation qualify scenario values separately from causal results', () => {

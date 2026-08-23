@@ -240,8 +240,8 @@ export interface FiscusConfig {
    * When true, the proxy stores ONLY token/cost metadata and skips capturing
    * proposed-edit content. That turns OFF First-Pass Acceptance (the proposal⇄commit
    * diff needs the AI's proposed lines stored locally). Default false so the signal
-   * works out of the box. Either way nothing is ever sent off-device — this only
-   * controls what is persisted in the local DB.
+   * works out of the box. This only controls what is persisted in the local DB;
+   * provider traffic still follows the configured egress boundary.
    */
   metadataOnly: boolean;
   /**
