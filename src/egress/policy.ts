@@ -3,6 +3,16 @@
  * only in transport.ts, so a feature cannot silently make its own network path.
  */
 import type { EgressConfig, EgressDataClass, EgressPurpose, EgressRule } from '../config.ts';
+import {
+  EGRESS_DATA_CLASSES,
+  EGRESS_PURPOSES,
+  canonicalAuthorizationPath,
+  canonicalOrigin,
+  normalizePathPrefix,
+  validateEgressRule,
+} from './ruleValidation.ts';
+
+export { EGRESS_DATA_CLASSES, EGRESS_PURPOSES, validateEgressRule };
 
 export type EgressTargetClass = 'loopback' | 'controlled_cloud';
 
@@ -21,47 +31,6 @@ export interface EgressPolicyDecision {
   reason: string;
 }
 
-export const EGRESS_PURPOSES = [
-  'provider_inference', 'pricing_refresh', 'baseline_refresh', 'alert_delivery',
-  'provider_cost_observation', 'team_rollup', 'hosted_judge', 'local_judge', 'local_healthcheck',
-] as const satisfies readonly EgressPurpose[];
-
-export const EGRESS_DATA_CLASSES = [
-  'provider_request', 'pricing_manifest', 'baseline_manifest', 'alert_metadata',
-  'provider_cost_aggregate', 'team_rollup', 'judge_structural_summary',
-  'judge_transcript_excerpt', 'healthcheck',
-] as const satisfies readonly EgressDataClass[];
-
-function canonicalOrigin(value: string): string | null {
-  try {
-    const parsed = new URL(value);
-    if (parsed.username || parsed.password || parsed.protocol !== 'https:') return null;
-    if (parsed.pathname !== '/' || parsed.search || parsed.hash) return null;
-    return parsed.origin;
-  } catch {
-    return null;
-  }
-}
-
-function safePathPrefix(value: string): boolean {
-  return value.startsWith('/')
-    && !value.includes('?')
-    && !value.includes('#')
-    && !/(^|\/)\.\.?(?:\/|$)/.test(value);
-}
-
-export function validateEgressRule(rule: EgressRule): string[] {
-  const failures: string[] = [];
-  if (!/^[a-z][a-z0-9_-]{2,63}$/.test(rule.id)) failures.push('id must be 3-64 lowercase letters, digits, _ or -');
-  if (typeof rule.enabled !== 'boolean') failures.push('enabled must be a boolean');
-  if (!EGRESS_PURPOSES.includes(rule.purpose)) failures.push('purpose is not a supported Fiscus purpose');
-  if (!EGRESS_DATA_CLASSES.includes(rule.dataClass)) failures.push('dataClass is not a supported Fiscus data class');
-  if (!/^(GET|POST|PUT|PATCH|DELETE|HEAD)$/.test(rule.method)) failures.push('method must be exact uppercase HTTP');
-  if (canonicalOrigin(rule.origin) === null) failures.push('origin must be exact HTTPS origin without path, query, fragment, or credentials');
-  if (!safePathPrefix(rule.pathPrefix)) failures.push('pathPrefix must be absolute, query-free, and contain no dot segment');
-  return failures;
-}
-
 function literalLoopback(hostname: string): boolean {
   const host = hostname.replace(/(^\[|\]$)/g, '').toLowerCase();
   return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '::ffff:127.0.0.1';
@@ -71,13 +40,22 @@ function normalMethod(value: string): string {
   return value.trim().toUpperCase();
 }
 
+function pathMatchesPrefix(pathname: string, pathPrefix: string): boolean {
+  const canonicalPath = canonicalAuthorizationPath(pathname);
+  const normalized = normalizePathPrefix(pathPrefix);
+  if (canonicalPath === null || normalized === null) return false;
+  if (normalized === '/') return canonicalPath.startsWith('/');
+  return canonicalPath === normalized || canonicalPath.startsWith(normalized + '/');
+}
+
 function matches(rule: EgressRule, target: URL, intent: EgressRequestIntent): boolean {
-  return rule.enabled === true
+  return validateEgressRule(rule).length === 0
+    && rule.enabled === true
     && rule.purpose === intent.purpose
     && rule.dataClass === intent.dataClass
     && rule.method === normalMethod(intent.method)
     && canonicalOrigin(rule.origin) === target.origin
-    && target.pathname.startsWith(rule.pathPrefix);
+    && pathMatchesPrefix(target.pathname, rule.pathPrefix);
 }
 
 /**

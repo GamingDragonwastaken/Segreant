@@ -3,8 +3,12 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { once } from 'node:events';
+import { mkdtempSync, rmSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { Store } from '../src/store/db.ts';
 import { DEFAULT_CONFIG, type FiscusConfig } from '../src/config.ts';
+import { egressReceiptPath, verifyEgressReceipts } from '../src/egress/receipts.ts';
 import { createProxyServer } from '../src/proxy/server.ts';
 import { createDashboardServer } from '../src/dashboard/server.ts';
 
@@ -19,6 +23,12 @@ function close(server: http.Server): Promise<void> {
 }
 
 test('live settings: saving a hard cap through the dashboard governs the already-running proxy', async () => {
+  const originalFiscusHome = process.env.FISCUS_HOME;
+  const testHome = mkdtempSync(join(tmpdir(), 'fiscus-live-settings-home-'));
+  process.env.FISCUS_HOME = testHome;
+  const receiptPath = egressReceiptPath();
+  assert.equal(receiptPath, join(testHome, 'egress-receipts.jsonl'), 'the test owns an isolated receipt ledger');
+
   const upstream = http.createServer((_req, res) => {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({
@@ -54,6 +64,10 @@ test('live settings: saving a hard cap through the dashboard governs the already
   try {
     const first = await request();
     assert.equal(first.status, 200, 'traffic is initially allowed with no configured cap');
+    assert.ok(statSync(receiptPath).size > 0, 'the first allowed request persists a nonempty receipt ledger');
+    const receiptVerification = verifyEgressReceipts(receiptPath);
+    assert.equal(receiptVerification.ok, true, receiptVerification.errors.join('; '));
+    assert.ok(receiptVerification.receiptCount > 0, 'the first allowed request persists at least one valid receipt');
 
     const update = await fetch(`${dashboardBase}/api/settings/update`, {
       method: 'POST',
@@ -72,5 +86,8 @@ test('live settings: saving a hard cap through the dashboard governs the already
     await close(proxy);
     await close(upstream);
     store.close();
+    if (originalFiscusHome === undefined) delete process.env.FISCUS_HOME;
+    else process.env.FISCUS_HOME = originalFiscusHome;
+    rmSync(testHome, { recursive: true, force: true });
   }
 });

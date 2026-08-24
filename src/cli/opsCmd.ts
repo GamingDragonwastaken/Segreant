@@ -235,6 +235,7 @@ export async function cmdGuide(flags: Flags): Promise<void> {
     const title = step.done ? padded : isNext ? color(tty, C.cyan, padded) : color(tty, C.gray, padded);
     console.log(`  ${mark} ${title} ${color(tty, C.gray, step.state)}`);
     if (isNext) {
+      if (step.notice) console.log(color(tty, C.yellow, '      ' + step.notice));
       console.log(`      ${step.why}`);
       for (const c of step.commands) console.log(color(tty, C.cyan, `        ${c}`));
     }

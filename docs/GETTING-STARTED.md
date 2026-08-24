@@ -10,7 +10,7 @@ goes to the AI provider you configure, and proposal capture is a local storage
 choice.
 
 > **Release status:** this checkout is not yet published to npm. Run commands
-> from a clone with `node bin/fiscus.mjs ...`. The `npx fiscus ...` examples below
+> from a clone with `npm run fiscus -- ...`. The `npx fiscus ...` examples below
 > describe the intended post-publication command and must not be treated as an
 > available package until the registry release is verified.
 

@@ -292,7 +292,7 @@
     <p class="disclaimer reveal">Fiscus has no hosted telemetry by default. Requests routed through its proxy still go to the configured AI provider; see the repository's DATA-BOUNDARIES.md before using sensitive material.</p>
     <div class="cta-row reveal">
       <div class="install" id="install" title="Click to copy">
-        <span><span class="pr">$</span> node bin/fiscus.mjs start</span>
+        <span><span class="pr">$</span> npm run start</span>
         <span class="copy" id="copyLabel">COPY</span>
       </div>
       <a class="ghost" href="#how">See how it works <span>↓</span></a>
@@ -616,7 +616,7 @@ signed    ed25519:9c3a…</pre>
     <p class="reveal">Run it once, point your agents at it, and watch every token turn into a number you can see — and a bill you can cap. From there the tool guides itself: <code style="color:var(--gold)">fiscus guide</code> reads your actual state and names the single next step, every time.</p>
     <div class="cta-row reveal">
       <div class="install" id="install2" title="Click to copy">
-        <span><span class="pr">$</span> node bin/fiscus.mjs start</span>
+        <span><span class="pr">$</span> npm run start</span>
         <span class="copy" id="copyLabel2">COPY</span>
       </div>
       <a class="ghost" href="#math">Read the math →</a>
@@ -651,7 +651,7 @@ signed    ed25519:9c3a…</pre>
     if (!box) return;
     box.addEventListener('click', async () => {
       try {
-        await navigator.clipboard.writeText('node bin/fiscus.mjs start');
+        await navigator.clipboard.writeText('npm run start');
         const prev = label.textContent;
         label.textContent = 'COPIED ✓';
         label.style.color = '#63c593';

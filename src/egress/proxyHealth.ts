@@ -1,4 +1,4 @@
-import { egressFetch, EgressError } from './transport.ts';
+import { egressFetchWithConfig, EgressError } from './transport.ts';
 import type { FiscusConfig } from '../config.ts';
 import type { ProxyStatus } from '../guide.ts';
 
@@ -12,7 +12,9 @@ function isBoundaryRefusal(error: EgressError): boolean {
 /** Probe the local proxy while preserving whether failure was local policy or transport. */
 export async function probeProxyState(config: FiscusConfig): Promise<ProxyStatus> {
   try {
-    const response = await egressFetch('http://localhost:' + config.port + '/__fiscus/health', {
+    // The proxy binds to IPv4 loopback. Use the literal address so health
+    // itself never depends on ambient localhost DNS ordering or aliases.
+    const response = await egressFetchWithConfig(config.egress, 'http://127.0.0.1:' + config.port + '/__fiscus/health', {
       purpose: 'local_healthcheck',
       dataClass: 'healthcheck',
       signal: AbortSignal.timeout(800),

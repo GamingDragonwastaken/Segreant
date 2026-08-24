@@ -16,6 +16,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import type { EgressConfig } from '../src/config.ts';
 import {
@@ -456,10 +457,13 @@ test('a stale regular receipt lock refuses within the bounded timeout and is nev
   try {
     const lockPath = join(state.home, 'egress-receipts.lock');
     writeFileSync(lockPath, 'stale lock owner', 'utf8');
+    const startedAt = performance.now();
     assert.throws(
       () => appendEgressReceipt(INPUT),
       (error: unknown) => error instanceof EgressReceiptError && error.code === 'lock' && /lock remained busy/i.test(error.message),
     );
+    const elapsedMs = performance.now() - startedAt;
+    assert.ok(elapsedMs < 15_000, `the intended ten-second lock bound took ${elapsedMs.toFixed(3)} ms`);
     assert.equal(readFileSync(lockPath, 'utf8'), 'stale lock owner');
   } finally {
     state.restore();

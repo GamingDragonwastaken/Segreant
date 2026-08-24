@@ -86,8 +86,9 @@ GUI tests read the emitted `dist/` tree rather than the source. Invoking
 Exercising the CLI should not touch your own ledger:
 
 ```bash
-FISCUS_HOME=/tmp/scratch node bin/fiscus.mjs demo
-FISCUS_HOME=/tmp/scratch node bin/fiscus.mjs start --demo --dashboard-port 8621
+# npm lifecycle hooks rebuild the checked-out dist/ before launch
+FISCUS_HOME=/tmp/scratch npm run demo
+FISCUS_HOME=/tmp/scratch npm run start -- --demo --dashboard-port 8621
 ```
 
 `FISCUS_HOME`, `FISCUS_DB` and `FISCUS_DEMO` are the only overrides — there is

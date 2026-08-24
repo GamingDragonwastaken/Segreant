@@ -122,20 +122,27 @@ function inIpv6Cidr(value: bigint, network: bigint, prefixLength: number): boole
 }
 
 function isGlobalUnicastIpv6(value: bigint): boolean {
-  // Global-unicast space is 2000::/3. Starting with that numeric allowlist is
-  // deliberate: unknown/reserved IPv6 ranges fail closed instead of inheriting
-  // an accidental string-prefix exception.
+  // Global-unicast space is 2000::/3. The IANA special-purpose registry
+  // marks the 2001::/23 parent as not globally reachable, with these explicit
+  // more-specific globally-reachable entries. Encoding the exceptions keeps
+  // this numeric boundary from blanket-denying entries that IANA marks public.
   if (!inIpv6Cidr(value, 0x20000000000000000000000000000000n, 3)) return false;
   if (inIpv6Cidr(value, 0x00000000000000000000000000000000n, 128)) return false;
   if (inIpv6Cidr(value, 0x00000000000000000000000000000001n, 128)) return false;
+  if (inIpv6Cidr(value, 0x20010001000000000000000000000001n, 128)) return true;
+  if (inIpv6Cidr(value, 0x20010001000000000000000000000002n, 128)) return true;
+  if (inIpv6Cidr(value, 0x20010001000000000000000000000003n, 128)) return true;
+  if (inIpv6Cidr(value, 0x20010003000000000000000000000000n, 32)) return true;
+  if (inIpv6Cidr(value, 0x20010004011200000000000000000000n, 48)) return true;
+  if (inIpv6Cidr(value, 0x20010020000000000000000000000000n, 28)) return true;
+  if (inIpv6Cidr(value, 0x20010030000000000000000000000000n, 28)) return true;
+  if (inIpv6Cidr(value, 0x20010000000000000000000000000000n, 23)) return false;
   if (inIpv6Cidr(value, 0xfc00000000000000000000000000000000n, 7)) return false;
   if (inIpv6Cidr(value, 0xfe80000000000000000000000000000000n, 10)) return false;
   if (inIpv6Cidr(value, 0xfec0000000000000000000000000000000n, 10)) return false;
   if (inIpv6Cidr(value, 0x20010db8000000000000000000000000n, 32)) return false;
-  if (inIpv6Cidr(value, 0x20010000000000000000000000000000n, 32)) return false;
   if (inIpv6Cidr(value, 0x20010002000000000000000000000000n, 48)) return false;
   if (inIpv6Cidr(value, 0x20010010000000000000000000000000n, 28)) return false;
-  if (inIpv6Cidr(value, 0x20010020000000000000000000000000n, 28)) return false;
   if (inIpv6Cidr(value, 0x20020000000000000000000000000000n, 16)) return false;
   if (inIpv6Cidr(value, 0x3ffe0000000000000000000000000000n, 16)) return false;
   if (inIpv6Cidr(value, 0x3fff0000000000000000000000000000n, 20)) return false;
@@ -164,12 +171,25 @@ function isPublic(address: string): boolean {
     const parts = value.split('.').map(Number);
     const a = parts[0] ?? -1;
     const b = parts[1] ?? -1;
+    const c = parts[2] ?? -1;
+    const d = parts[3] ?? -1;
     if (a === 0 || a === 10 || a === 127 || a >= 224) return false;
     if (a === 169 && b === 254) return false;
     if (a === 172 && b >= 16 && b <= 31) return false;
-    if (a === 192 && (b === 0 || b === 168)) return false;
     if (a === 100 && b >= 64 && b <= 127) return false;
     if (a === 198 && (b === 18 || b === 19)) return false;
+    // IANA marks the AS112/AMT ranges 192.31.196.0/24, 192.52.193.0/24,
+    // and 192.175.48.0/24 Globally Reachable. Do not classify them as private
+    // or special-use solely because they are commonly used by infrastructure.
+    // IANA IPv4 special-purpose snapshot: 192.0.0.0/24 is not globally
+    // reachable except the explicitly globally reachable .9 and .10 anycast
+    // entries; 192.0.1.0/24 remains ordinary globally reachable space.
+    if (a === 192 && b === 0 && c === 0 && d !== 9 && d !== 10) return false;
+    if (a === 192 && b === 0 && c === 2) return false;
+    if (a === 192 && b === 168) return false;
+    if (a === 192 && b === 88 && c === 99) return false;
+    if (a === 198 && b === 51 && c === 100) return false;
+    if (a === 203 && b === 0 && c === 113) return false;
     return true;
   }
   if (isIP(value) === 6) {

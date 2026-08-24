@@ -75,6 +75,194 @@ test('controlled-cloud policy needs one exact enabled method/origin/path/data ru
   }
 });
 
+test('path prefixes authorize whole path segments, with root retaining root semantics', () => {
+  const rule = cloudRule().rules[0]!;
+  for (const [path, allowed] of [
+    ['/v1', true],
+    ['/v1/', true],
+    ['/v1/responses', true],
+    ['/v1/responses/stream', true],
+    ['/v10/responses', false],
+    ['/v1beta/responses', false],
+  ] as const) {
+    const result = evaluateEgressPolicy({
+      mode: 'controlled_cloud',
+      rules: [{ ...rule, pathPrefix: '/v1' }],
+    }, {
+      url: 'https://api.openai.com' + path,
+      purpose: 'provider_inference',
+      dataClass: 'provider_request',
+      method: 'POST',
+    });
+    assert.equal(result.allowed, allowed, path);
+  }
+
+  for (const path of ['/anything', '/', '/v1beta']) {
+    const result = evaluateEgressPolicy({
+      mode: 'controlled_cloud',
+      rules: [{ ...rule, pathPrefix: '/' }],
+    }, {
+      url: 'https://api.openai.com' + path,
+      purpose: 'provider_inference',
+      dataClass: 'provider_request',
+      method: 'POST',
+    });
+    assert.equal(result.allowed, true, path);
+  }
+  assert.match(validateEgressRule({ ...rule, pathPrefix: '//' })[0]!, /pathPrefix/i);
+  assert.match(validateEgressRule({ ...rule, pathPrefix: '/v1//' })[0]!, /pathPrefix/i);
+});
+
+test('controlled-cloud path authorization rejects encoded boundary ambiguity after one canonical decode', () => {
+  const cfg = cloudRule();
+  cfg.rules[0] = { ...cfg.rules[0]!, pathPrefix: '/v1' };
+  const deniedPaths = [
+    '/v1/%2fadmin',
+    '/v1/%2Fadmin',
+    '/v1/%5c..%5cadmin',
+    '/v1/%5C..%5Cadmin',
+    '/v1/%2E%2E%2Fadmin',
+    '/v1/%2e%2e%2fadmin',
+    '/v1/%2e%2e/admin',
+    '/v1/%3fadmin',
+    '/v1/%3Fadmin',
+    '/v1/%23admin',
+    '/v1/%00admin',
+    '/v1/%1fadmin',
+    '/v1/%7Fadmin',
+    '/v1/%',
+    '/v1/%2',
+    '/v1/%GG',
+    '/v1/%252fadmin',
+    '/v1/%252Fadmin',
+    '/v1/%255c..%255cadmin',
+    '/v1/%252e%252e%252fadmin',
+    '/v1/%252E%252E%252Fadmin',
+    '/v1/%253fadmin',
+    '/v1/%2523admin',
+    '/v1/%257Euser',
+  ] as const;
+
+  for (const path of deniedPaths) {
+    const result = evaluateEgressPolicy(cfg, {
+      url: 'https://api.openai.com' + path,
+      purpose: 'provider_inference',
+      dataClass: 'provider_request',
+      method: 'POST',
+    });
+    assert.equal(result.allowed, false, path);
+  }
+
+  for (const url of [
+    'https://api.openai.com/v1/%7Euser',
+    'https://api.openai.com/v1/%7euser/jobs',
+    'https://api.openai.com/v1/responses?redirect=%2fadmin#client-fragment',
+  ] as const) {
+    const result = evaluateEgressPolicy(cfg, {
+      url,
+      purpose: 'provider_inference',
+      dataClass: 'provider_request',
+      method: 'POST',
+    });
+    assert.equal(result.allowed, true, url);
+  }
+});
+
+test('configured and programmatic rule prefixes use the same canonical authorization path', () => {
+  const rule = cloudRule().rules[0]!;
+  const canonicalRule = { ...rule, pathPrefix: '/v1/%7Eteam/' };
+  assert.deepEqual(validateEgressRule(canonicalRule), []);
+  assert.equal(evaluateEgressPolicy({ mode: 'controlled_cloud', rules: [canonicalRule] }, {
+    url: 'https://api.openai.com/v1/~team/jobs',
+    purpose: 'provider_inference',
+    dataClass: 'provider_request',
+    method: 'POST',
+  }).allowed, true);
+
+  for (const pathPrefix of [
+    '/v1/%2fadmin',
+    '/v1/%5cadmin',
+    '/v1/%2e%2e/admin',
+    '/v1/%3fadmin',
+    '/v1/%23admin',
+    '/v1/%00admin',
+    '/v1/%',
+    '/v1/%252fadmin',
+    '/v1/%252e%252e%252fadmin',
+  ] as const) {
+    const unsafeRule = { ...rule, pathPrefix };
+    assert.match(validateEgressRule(unsafeRule)[0]!, /pathPrefix/i, pathPrefix);
+    assert.equal(evaluateEgressPolicy({ mode: 'controlled_cloud', rules: [unsafeRule] }, {
+      url: 'https://api.openai.com/v1/admin',
+      purpose: 'provider_inference',
+      dataClass: 'provider_request',
+      method: 'POST',
+    }).allowed, false, pathPrefix);
+  }
+});
+
+test('controlled-cloud target paths allow only slash and unreserved characters after canonical decode', () => {
+  const cfg = cloudRule();
+  cfg.rules[0] = { ...cfg.rules[0]!, pathPrefix: '/v1' };
+  for (const path of [
+    '/v1/..;/admin',
+    '/v1/%2e%2e;/admin',
+    '/v1/%2E%2e;/admin',
+  ] as const) {
+    assert.equal(evaluateEgressPolicy(cfg, {
+      url: 'https://api.openai.com' + path,
+      purpose: 'provider_inference',
+      dataClass: 'provider_request',
+      method: 'POST',
+    }).allowed, false, path);
+  }
+
+  const nonStructuralReserved = [':', '[', ']', '@', '!', '$', '&', "'", '(', ')', '*', '+', ',', ';', '='] as const;
+  for (const character of nonStructuralReserved) {
+    const path = '/v1/a' + character + 'b';
+    assert.equal(evaluateEgressPolicy(cfg, {
+      url: 'https://api.openai.com' + path,
+      purpose: 'provider_inference',
+      dataClass: 'provider_request',
+      method: 'POST',
+    }).allowed, false, JSON.stringify(character));
+  }
+
+  for (const url of [
+    'https://api.openai.com/v1/AZaz09-._~/child',
+    'https://api.openai.com/v1/%41%7a%30%2D%2Ename%5F%7E/child',
+    'https://api.openai.com/v1/query-safe?raw=:[]@!$&\'()*+,;=/#fragment',
+  ] as const) {
+    assert.equal(evaluateEgressPolicy(cfg, {
+      url,
+      purpose: 'provider_inference',
+      dataClass: 'provider_request',
+      method: 'POST',
+    }).allowed, true, url);
+  }
+});
+
+test('configured rule prefixes reject parameterized traversal and non-structural reserved characters', () => {
+  const rule = cloudRule().rules[0]!;
+  const unsafePrefixes = [
+    '/v1/..;',
+    '/v1/%2e%2e;',
+    '/v1/%2E%2e;',
+    ...([':', '[', ']', '@', '!', '$', '&', "'", '(', ')', '*', '+', ',', ';', '='] as const)
+      .map((character) => '/v1/a' + character + 'b'),
+  ];
+  for (const pathPrefix of unsafePrefixes) {
+    const unsafeRule = { ...rule, pathPrefix };
+    assert.match(validateEgressRule(unsafeRule)[0]!, /pathPrefix/i, pathPrefix);
+    assert.equal(evaluateEgressPolicy({ mode: 'controlled_cloud', rules: [unsafeRule] }, {
+      url: 'https://api.openai.com' + pathPrefix + '/admin',
+      purpose: 'provider_inference',
+      dataClass: 'provider_request',
+      method: 'POST',
+    }).allowed, false, pathPrefix);
+  }
+});
+
 test('rules reject wildcard-adjacent and credential-bearing forms', () => {
   const rule = cloudRule().rules[0]!;
   assert.deepEqual(validateEgressRule(rule), []);

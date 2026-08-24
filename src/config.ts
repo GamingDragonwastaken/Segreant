@@ -15,6 +15,7 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { validateEgressRule } from './egress/ruleValidation.ts';
 
 export interface BudgetConfig {
   /** Hard daily cap in USD. Requests are blocked once exceeded. null = unlimited. */
@@ -428,32 +429,19 @@ function deepMerge<T>(base: T, override: Partial<T>): T {
   return out as T;
 }
 
-const VALID_EGRESS_PURPOSES: readonly EgressPurpose[] = [
-  'provider_inference', 'pricing_refresh', 'baseline_refresh', 'alert_delivery',
-  'provider_cost_observation', 'team_rollup', 'hosted_judge', 'local_judge', 'local_healthcheck',
-];
-
-const VALID_EGRESS_DATA_CLASSES: readonly EgressDataClass[] = [
-  'provider_request', 'pricing_manifest', 'baseline_manifest', 'alert_metadata',
-  'provider_cost_aggregate', 'team_rollup', 'judge_structural_summary',
-  'judge_transcript_excerpt', 'healthcheck',
-];
-
-const VALID_EGRESS_METHODS: readonly EgressRule['method'][] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD'];
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function validEgressRule(value: unknown): value is EgressRule {
-  if (!isRecord(value)) return false;
-  return typeof value.id === 'string'
-    && typeof value.enabled === 'boolean'
-    && VALID_EGRESS_PURPOSES.includes(value.purpose as EgressPurpose)
-    && VALID_EGRESS_DATA_CLASSES.includes(value.dataClass as EgressDataClass)
-    && VALID_EGRESS_METHODS.includes(value.method as EgressRule['method'])
-    && typeof value.origin === 'string'
-    && typeof value.pathPrefix === 'string';
+/** TCP ports are finite, integral values in the IANA-assigned 1..65535 range. */
+function sanitizePort(value: unknown, fallback: number): number {
+  return typeof value === 'number'
+    && Number.isFinite(value)
+    && Number.isInteger(value)
+    && value >= 1
+    && value <= 65535
+    ? value
+    : fallback;
 }
 
 /**
@@ -468,12 +456,16 @@ function sanitizeEgressConfig(value: unknown): EgressConfig {
   if (value.mode !== 'local_locked' && value.mode !== 'controlled_cloud') {
     return { mode: 'local_locked', rules: [] };
   }
-  if (!Array.isArray(value.rules) || !value.rules.every(validEgressRule)) {
+  const keys = Object.keys(value).sort();
+  if (keys.length !== 2 || keys[0] !== 'mode' || keys[1] !== 'rules') {
+    return { mode: 'local_locked', rules: [] };
+  }
+  if (!Array.isArray(value.rules) || !value.rules.every((rule) => validateEgressRule(rule).length === 0)) {
     return { mode: 'local_locked', rules: [] };
   }
   return {
-    mode: value.mode,
-    rules: value.rules.map((rule) => ({ ...rule })),
+    mode: value.mode as EgressConfig['mode'],
+    rules: value.rules.map((rule) => ({ ...rule } as EgressRule)),
   };
 }
 
@@ -492,6 +484,14 @@ export function loadConfig(): FiscusConfig {
       cfg = { ...DEFAULT_CONFIG };
     }
   }
+  // Ports cross into URL, server, and copy-paste command construction. Never
+  // interpolate an untrusted JSON value into those surfaces: malformed values
+  // (including shell-like strings) fail closed to the known-good defaults.
+  cfg = {
+    ...cfg,
+    port: sanitizePort(cfg.port, DEFAULT_CONFIG.port),
+    dashboardPort: sanitizePort(cfg.dashboardPort, DEFAULT_CONFIG.dashboardPort),
+  };
   return isDemo() ? withDemoDefaults(cfg) : cfg;
 }
 

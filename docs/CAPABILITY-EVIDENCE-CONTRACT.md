@@ -53,7 +53,11 @@ Fiscus keeps four different claims separate:
   The loader also fails closed on an unknown egress mode, a non-array rule set,
   or a non-boolean `enabled` value; controlled-cloud DNS accepts only numeric
   global-unicast destinations, and the selected address is pinned into the
-  request.
+  request. Loaded rules are held to the same exact semantic contract as CLI
+  rules: canonical HTTPS origin, non-empty safe path prefix, valid identifier,
+  and no unexpected fields. The encoded IANA boundary allows only the listed
+  globally-reachable IPv6 exceptions under the otherwise non-global 2001::/23
+  parent and the explicit globally-reachable IPv4 exceptions in 192.0.0.0/24.
 - A local versioned rate card supplies a local list-price estimate. Rows retain
   pricing match and lineage; a list-price estimate is not a provider bill.
 - The ledger preserves the distinction between proxy usage, imported usage,

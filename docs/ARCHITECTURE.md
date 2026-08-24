@@ -237,17 +237,27 @@ present-invalid receipt history, unreadable history, or lock/persistence failure
 intentionally stops the outbound request before DNS resolution. When an allowed
 target is resolved, a DNS denial is raised after that resolution attempt and
 before socket creation; no DNS-denied target is dialled.
-For controlled-cloud DNS results, IPv4 validation retains the existing private/
-reserved checks and IPv6 validation is numeric and fail-closed: only the global
-unicast space is eligible, with multicast, unspecified, loopback, ULA,
-link-local, site-local, documentation, IPv4-mapped, and other reserved ranges
-refused. The selected eligible address is pinned into the one socket request;
-the OS resolver is not asked to choose a different address afterward.
+For controlled-cloud DNS results, IPv4 and IPv6 validation use numeric,
+registry-shaped globally-reachable boundaries and fail closed on multicast,
+unspecified, loopback, private, link-local, documentation, benchmark, and
+reserved ranges. The IPv6 snapshot retains the IANA 2001::/23 parent denial
+while allowing only its encoded globally-reachable exceptions:
+2001:1::1/128, ::2/128, ::3/128, 2001:3::/32, 2001:4:112::/48,
+2001:20::/28, and 2001:30::/28. Teredo, 2001:2::/48, unallocated
+remainder, documentation, 2002::/16, and 3fff::/20 remain denied. The IPv4
+snapshot denies documentation 198.51.100.0/24 and 203.0.113.0/24,
+192.88.99.0/24, and 192.0.0.0/24 except globally-reachable 192.0.0.9/.10;
+ordinary 192.0.1.0/24 and IANA-globally-reachable AS112/AMT ranges
+192.31.196.0/24, 192.52.193.0/24, and 192.175.48.0/24 remain eligible. The
+selected eligible address is pinned into the one socket request; the OS resolver
+is not asked to choose a different address afterward.
 Only a genuinely absent receipt path may establish a genesis predecessor, and a
 present invalid path is never silently reset. Loaded JSON egress configuration
 also accepts only the two declared modes and exact rule field types; ambiguous
 mode/enabled values return to local-locked behavior rather than authorizing a
-cloud rule. A bounded stale-lock refusal is
+cloud rule. Loaded rules use the same exact semantic validator as CLI-authored
+rules: canonical HTTPS origin, non-empty safe path prefix, valid identifiers,
+and no unexpected fields. A bounded stale-lock refusal is
 operator-repairable only after confirming no Fiscus writer is active; the lock
 is never auto-deleted. A budget *block* is another
 intentional request stop. Receipt persistence is synchronous, but it is not an

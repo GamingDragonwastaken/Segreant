@@ -64,7 +64,7 @@ only Node's built-in SQLite.
 
 ```bash
 npm install        # compiles the local CLI; Fiscus has zero runtime dependencies
-npm run demo       # seeds labelled synthetic data and starts the local dashboard
+npm run demo       # rebuilds, seeds labelled synthetic data, and starts the local dashboard
 ```
 
 That lights up spend, governance alerts, the RoI index and its four value
@@ -82,8 +82,8 @@ surfaces say so while the demo store is active.
 **Then meter your real traffic:**
 
 ```bash
-# from a clone
-node bin/fiscus.mjs start
+# from a clone; the lifecycle hook rebuilds before launch
+npm run start
 # or, once published
 npx fiscus start
 ```
@@ -823,7 +823,7 @@ CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs `typecheck` +
 
 > **Active local development candidate:** Fiscus is not verified as published
 > to npm, externally deployed, or reconciled against provider invoices. Use a
-> cloned checkout (`node bin/fiscus.mjs ...`) or a locally packed tarball until
+> cloned checkout (`npm run fiscus -- ...`) or a locally packed tarball until
 > an authorized registry release and registry clean-install check have completed.
 > See [RELEASE-GATE.md](docs/RELEASE-GATE.md) for the current evidence boundary.
 

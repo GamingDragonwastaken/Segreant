@@ -10,6 +10,7 @@
 import { closeSync, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, Stats, unlinkSync, writeSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
+import { performance } from 'node:perf_hooks';
 import { fiscusHome, type EgressDataClass, type EgressPurpose } from '../config.ts';
 import type { EgressTargetClass } from './policy.ts';
 
@@ -169,8 +170,11 @@ function withReceiptLock<T>(fn: () => T): T {
   let fd: number | null = null;
   let acquiredIdentity: ReceiptFileIdentity | null = null;
   // Test runners and a real CLI + proxy can briefly contend on the same local
-  // receipt log. Ten seconds is bounded, but comfortably exceeds a synchronous
-  // hash/append/verification critical section on a large local ledger.
+  // receipt log. Use a monotonic ten-second deadline: on Windows, a requested
+  // 5 ms wait can consume a much coarser timer slice, so attempt count is not a
+  // truthful elapsed-time bound. The attempt cap also fails closed if a runtime
+  // returns from the wait spuriously without advancing the clock as expected.
+  const lockDeadline = performance.now() + 10_000;
   for (let attempt = 0; attempt < 2_000; attempt++) {
     try {
       const candidate = openSync(lockPath, 'wx');
@@ -195,7 +199,9 @@ function withReceiptLock<T>(fn: () => T): T {
       // permission/open failure still reaches the bounded lock timeout and is
       // refused rather than falling through to a dial.
       if (code === 'EPERM' || code === 'EACCES') {
-        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
+        const remainingMs = lockDeadline - performance.now();
+        if (remainingMs <= 0) break;
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.min(5, remainingMs));
         continue;
       }
       if (code !== 'EEXIST') {
@@ -205,7 +211,9 @@ function withReceiptLock<T>(fn: () => T): T {
         if (!existsSync(lockPath)) continue;
         throw new EgressReceiptError('lock', 'egress receipt lock/persistence failed: lock path is not a regular file');
       }
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
+      const remainingMs = lockDeadline - performance.now();
+      if (remainingMs <= 0) break;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.min(5, remainingMs));
     }
   }
   if (fd === null) throw new EgressReceiptError('lock', 'egress receipt lock/persistence failed: lock remained busy');

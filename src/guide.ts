@@ -48,8 +48,10 @@ export interface GuideStep {
   state: string;
   /** The one-line reason this step exists — the product thesis, in order. */
   why: string;
-  /** Copy-pasteable commands, most direct first. */
+  /** Copy-pasteable commands, most direct first; prose belongs in notice. */
   commands: string[];
+  /** Human-readable context or recovery guidance, never an executable command. */
+  notice?: string;
 }
 
 export interface GuideReport {
@@ -68,7 +70,10 @@ function fmtInt(n: number): string {
 }
 
 export function buildGuide(f: GuideFacts): GuideReport {
-  const envHint = `$env:ANTHROPIC_BASE_URL="http://localhost:${f.port}"  ·  $env:OPENAI_BASE_URL="http://localhost:${f.port}/v1"`;
+  const envHints = [
+    '$env:ANTHROPIC_BASE_URL="http://localhost:' + f.port + '"',
+    '$env:OPENAI_BASE_URL="http://localhost:' + f.port + '/v1"',
+  ];
   const proxyStatus: ProxyStatus = f.proxyStatus ?? (f.proxyUp ? { kind: 'up' } : { kind: 'down' });
   const proxyUp = proxyStatus.kind === 'up';
   const proxyBlocked = proxyStatus.kind === 'blocked_by_egress';
@@ -86,19 +91,16 @@ export function buildGuide(f: GuideFacts): GuideReport {
             ? `proxy health check blocked by local egress (${proxyStatus.code})`
           : 'no traffic yet',
     why: 'Nothing can be governed or valued until the spend is captured — imported from what your tools already log, or routed through the proxy.',
-    commands: proxyBlocked
-      ? [
-          'fiscus egress verify',
-          proxyStatus.action,
-          proxyStatus.message,
-        ]
+    notice: proxyBlocked
+      ? proxyStatus.code + ': ' + proxyStatus.message + ' ' + proxyStatus.action
       : proxyUp
-      ? [envHint, 'then run your AI tool as usual — watch requests appear']
-      : [
-          'fiscus scan --setup    (find your AI tools + repos, import everything — no wiring)',
-          'or fiscus start, then set the base URL to also CAP spend:',
-          envHint,
-        ],
+        ? 'Then run your AI tool as usual and watch requests appear.'
+        : 'If you have not configured a tool, scan first; otherwise start the proxy before setting the base URL.',
+    commands: proxyBlocked
+      ? ['fiscus egress verify']
+      : proxyUp
+        ? envHints
+        : ['fiscus scan --setup', 'fiscus start', ...envHints],
   };
 
   const cap: GuideStep = {
@@ -107,9 +109,13 @@ export function buildGuide(f: GuideFacts): GuideReport {
     done: f.dailyCapUsd !== null,
     state: f.dailyCapUsd !== null ? `daily hard cap $${f.dailyCapUsd}` : 'metering only — no enforcement',
     why: 'Metering without enforcement is a report, not governance. The proxy can actually say no.',
+    notice:
+      f.spend30dUsd > 0
+        ? 'The recommendation uses your observed spend history.'
+        : 'Set a hard cap and optional soft threshold for governed spend.',
     commands:
       f.spend30dUsd > 0
-        ? ['fiscus budget --recommend        (suggests a cap from your own usage)', 'fiscus budget --daily 25 --soft 18']
+        ? ['fiscus budget --recommend', 'fiscus budget --daily 25 --soft 18']
         : ['fiscus budget --daily 25 --soft 18'],
   };
 
@@ -122,7 +128,8 @@ export function buildGuide(f: GuideFacts): GuideReport {
         ? `${fmtInt(f.outcomeSignals)} outcome signals recorded`
         : 'no outcomes yet — spend is a cost with no counterweight',
     why: 'Exit codes are outcomes. Wrap your test command once and every run reports itself.',
-    commands: ['fiscus exec -- npm test        (any command; its exit code is the outcome)', 'fiscus report --kind merged --commit <hash>'],
+    notice: 'Wrap any command whose exit code should become an outcome signal.',
+    commands: ['fiscus exec -- npm test', 'fiscus report --kind merged --commit HEAD'],
   };
 
   const value: GuideStep = {
@@ -134,7 +141,8 @@ export function buildGuide(f: GuideFacts): GuideReport {
         ? `${fmtInt(f.realizationUnits)} units of work scored`
         : 'outcomes recorded but never scored against the spend',
     why: 'Four lenses — did it stick, did you keep it, did it save time, did it matter — one honest index.',
-    commands: ['fiscus roi --repo .', 'fiscus usage        (sessions without code signals: chat, research, drafting)'],
+    notice: 'Use usage for sessions without code signals, such as chat, research, or drafting.',
+    commands: ['fiscus roi --repo .', 'fiscus usage'],
   };
 
   const price: GuideStep = {
@@ -143,7 +151,8 @@ export function buildGuide(f: GuideFacts): GuideReport {
     done: f.laborRateSet,
     state: f.laborRateSet ? 'labor rate set — returns priced in dollars' : 'index only — the dollar return stays honestly un-priced',
     why: 'One auditable org input turns the 0–100 index into a break-even answer: was the AI worth it.',
-    commands: ['fiscus roi --repo . --labor-rate 120', 'or set lift.laborRatePerHour in config for every surface'],
+    notice: 'The labor-rate option is a local disclosed input used by every value surface.',
+    commands: ['fiscus roi --repo . --labor-rate 120'],
   };
 
   const journeyDone = [meter, cap, outcome, value, price].every((s) => s.done);
@@ -155,10 +164,11 @@ export function buildGuide(f: GuideFacts): GuideReport {
       ? 'fully instrumented — the four questions are now answerable'
       : 'unlocks when the journey above is complete',
     why: 'Where does the next dollar go, what should you measure next, when do you actually know, and is the number being bent.',
+    notice: 'Review the value-aware cap, frontier, and return surfaces as the evidence grows.',
     commands: [
-      'fiscus budget --recommend --repo .   (value-aware cap)',
-      'fiscus frontier --repo .             (best model × task for YOU)',
-      'fiscus roi --repo .                  (watch Stability + Instrument next)',
+      'fiscus budget --recommend --repo .',
+      'fiscus frontier --repo .',
+      'fiscus roi --repo .',
     ],
   };
 

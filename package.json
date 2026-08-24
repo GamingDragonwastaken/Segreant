@@ -19,6 +19,7 @@
     "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit",
     "build": "node scripts/build.mjs",
     "prepare": "npm run build",
+    "predemo": "npm run build",
     "demo": "node --disable-warning=ExperimentalWarning bin/fiscus.mjs demo --serve",
     "prepack": "npm run build",
     "prepublishOnly": "npm run typecheck && npm test && npm run build"
