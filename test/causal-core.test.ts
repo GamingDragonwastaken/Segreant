@@ -7,9 +7,16 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createBlockedAssignmentPlan, verifyBlockedAssignmentPlan } from '../src/causal/assignment.ts';
+import { createHash } from 'node:crypto';
+import {
+  createBlockedAssignmentPlan,
+  deriveBlockedAssignmentPlanV2,
+  verifyBlockedAssignmentPlan,
+  verifyBlockedAssignmentPlanV2,
+} from '../src/causal/assignment.ts';
 import { estimateCausalStudy } from '../src/causal/estimate.ts';
 import {
+  canonicalJson,
   causalEventHash,
   commitCausalProtocol,
   isCausalProtocolMutationEligible,
@@ -22,6 +29,8 @@ import {
   CAUSAL_PROTOCOL_TYPE,
   CAUSAL_PROTOCOL_VERSION,
   CAUSAL_PROTOCOL_VERSION_V2,
+  type CausalAssignmentBlockV2,
+  type CausalDecisionRecordV2,
   type CommittedCausalStudyProtocolV2,
   type CausalExecutionRecord,
   type CausalOutcomeRecord,
@@ -155,6 +164,39 @@ function aiV2Draft(overrides: Partial<CausalStudyProtocolDraftV2> = {}): CausalS
 
 function event<T extends Record<string, unknown>>(input: T): T & { eventHash: string } {
   return { ...input, eventHash: causalEventHash(input) };
+}
+
+const V2_ASSIGNMENT_ENTROPY = Buffer.from(
+  '000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f',
+  'hex',
+);
+
+function v2AssignmentFixture(
+  blockId = 'block:alpha',
+  sequence = 1,
+  unitIdDigests = [D('1'), D('2'), D('3'), D('4')],
+): {
+  protocol: CommittedCausalStudyProtocolV2;
+  randomizationMaterial: Buffer;
+  block: CausalAssignmentBlockV2;
+} {
+  const protocol = commitCausalProtocol(v2Draft(), 1_700_000_000_500);
+  const randomizationMaterial = Buffer.from(V2_ASSIGNMENT_ENTROPY);
+  const block = deriveBlockedAssignmentPlanV2(protocol, {
+    blockId,
+    sequence,
+    createdAtMs: 1_700_000_001_000,
+    unitIdDigests,
+    randomizationMaterial,
+  });
+  return { protocol, randomizationMaterial, block };
+}
+
+function v2DecisionEventHashForTamper(decision: CausalDecisionRecordV2): string {
+  const { eventHash: _eventHash, ...material } = decision;
+  return 'sha256:' + createHash('sha256')
+    .update('fiscus.causal.decision\n2\n' + canonicalJson(material))
+    .digest('hex');
 }
 
 function completedData(): CausalStudyData {
@@ -460,6 +502,172 @@ test('strict causal strings, digests, sets, timestamps, and closed v2 grammar fa
   delete sparse.eligibility.inclusionRuleIds[0];
   assert.ok(validateCausalProtocol(sparse).some((error) => /inclusionRuleIds.*sparse/i.test(error)));
 });
+
+test('v2 assignment block root is independent, protocol-derived, and acyclic', () => {
+  const first = v2AssignmentFixture();
+  const second = v2AssignmentFixture('block:beta', 2, [D('5'), D('6'), D('7'), D('8')]);
+
+  assert.equal(first.block.plan.blockRoot, 'sha256:3910ebf11cb3a210cf0e8cc54796d4f80e48645fba61641c2c35613829d14cd3');
+  assert.equal(first.block.plan.randomizationMaterialDigest, 'sha256:26e709bf388301641591771e7faf8b781a27e8617a52fc5bf68165bb016b74a9');
+  assert.equal(first.block.plan.allocationHash, 'sha256:2c49dcd28a9ece58810933201eee73a4796c293f624539440278403c2562fa03');
+  assert.equal(first.block.plan.planHash, 'sha256:77b9957c2d971f1c1038de34ade78a820e7af5acd66be22ad1a2f80abd4156a2');
+  assert.equal(first.block.plan.firstDecisionHash, 'sha256:645f36837e8ac3f52b80faab82e82dd67711beebf57c35e6df997d2eb9ca8793');
+  assert.equal(first.block.plan.lastDecisionHash, 'sha256:4e8fa3e5cbfdaa8819bf5a44a8416acd81c7381b42c926377bc444441e93c6f6');
+  assert.deepEqual(
+    first.block.decisions.map((decision) => decision.assignedArmId),
+    ['arm:candidate', 'arm:candidate', 'arm:control', 'arm:control'],
+  );
+
+  assert.notEqual(second.block.plan.blockRoot, first.block.plan.blockRoot);
+  assert.equal(first.block.decisions[0]!.previousEventHash, first.block.plan.blockRoot);
+  assert.equal(second.block.decisions[0]!.previousEventHash, second.block.plan.blockRoot);
+  assert.notEqual(second.block.decisions[0]!.previousEventHash, first.block.plan.lastDecisionHash);
+  assert.ok(first.block.decisions.every((decision) => decision.assignedAtMs === first.block.plan.createdAtMs));
+  assert.deepEqual(verifyBlockedAssignmentPlanV2(first.protocol, first.block, first.randomizationMaterial), []);
+  assert.deepEqual(verifyBlockedAssignmentPlanV2(second.protocol, second.block, second.randomizationMaterial), []);
+
+  const forbiddenCallerFields = [
+    { blockRoot: D('f') },
+    { orderedArmIds: ['arm:control', 'arm:candidate'] },
+    { probabilityPerArm: 0.5 },
+  ];
+  for (const extra of forbiddenCallerFields) {
+    assert.throws(() => deriveBlockedAssignmentPlanV2(first.protocol, {
+      blockId: 'block:forbidden',
+      sequence: 3,
+      createdAtMs: 1_700_000_001_000,
+      unitIdDigests: [D('5'), D('6'), D('7'), D('8')],
+      randomizationMaterial: first.randomizationMaterial,
+      ...extra,
+    } as never), /unsupported|caller|input/i);
+  }
+});
+
+test('assignment bijection rejects missing extra duplicate and reordered records', () => {
+  const { protocol, randomizationMaterial, block } = v2AssignmentFixture();
+  const cases: Array<{
+    name: string;
+    mutate: (candidate: CausalAssignmentBlockV2) => void;
+    expected: RegExp;
+  }> = [
+    { name: 'missing decision', mutate: (candidate) => { candidate.decisions.pop(); }, expected: /bijection|one decision|count/i },
+    { name: 'extra decision', mutate: (candidate) => { candidate.decisions.push({ ...candidate.decisions[0]! }); }, expected: /bijection|one decision|count|duplicate/i },
+    { name: 'duplicate decision id', mutate: (candidate) => { candidate.plan.decisionIds[1] = candidate.plan.decisionIds[0]!; }, expected: /decisionIds.*duplicate|bijection/i },
+    { name: 'reordered decisions', mutate: (candidate) => { candidate.decisions.reverse(); }, expected: /order|bijection|index|replay/i },
+    { name: 'reordered units', mutate: (candidate) => { candidate.plan.unitIdDigests.reverse(); }, expected: /unit|plan hash|replay/i },
+    { name: 'extra plan key', mutate: (candidate) => { (candidate.plan as unknown as Record<string, unknown>).callerRoot = D('f'); }, expected: /plan.*unsupported field/i },
+    { name: 'extra decision key', mutate: (candidate) => { (candidate.decisions[0] as unknown as Record<string, unknown>).rawUnitId = 'secret'; }, expected: /decision.*unsupported field/i },
+    { name: 'missing plan key', mutate: (candidate) => { delete (candidate.plan as unknown as Record<string, unknown>).planHash; }, expected: /plan.*missing required field.*planHash/i },
+    { name: 'missing decision key', mutate: (candidate) => { delete (candidate.decisions[0] as unknown as Record<string, unknown>).eventHash; }, expected: /decision.*missing required field.*eventHash/i },
+  ];
+
+  for (const { name, mutate, expected } of cases) {
+    const candidate = structuredClone(block);
+    mutate(candidate);
+    const errors = verifyBlockedAssignmentPlanV2(protocol, candidate, randomizationMaterial);
+    assert.ok(errors.some((error) => expected.test(error)), name + ': ' + errors.join('; '));
+  }
+});
+
+test('assignment replay rejects root entropy material allocation plan event predecessor sequence identity and timestamp tampering', () => {
+  const { protocol, randomizationMaterial, block } = v2AssignmentFixture();
+  const alteredEntropy = Buffer.from(randomizationMaterial);
+  alteredEntropy[0] = alteredEntropy[0]! ^ 0xff;
+
+  const cases: Array<{
+    name: string;
+    mutate?: (candidate: CausalAssignmentBlockV2) => void;
+    entropy?: Uint8Array;
+    expected: RegExp;
+  }> = [
+    { name: 'root', mutate: (candidate) => { candidate.plan.blockRoot = D('9'); }, expected: /block root/i },
+    { name: 'entropy', entropy: alteredEntropy, expected: /entropy|material/i },
+    { name: 'material digest', mutate: (candidate) => { candidate.plan.randomizationMaterialDigest = D('8'); }, expected: /material/i },
+    { name: 'allocation', mutate: (candidate) => { candidate.plan.allocationHash = D('7'); }, expected: /allocation/i },
+    { name: 'plan', mutate: (candidate) => { candidate.plan.planHash = D('6'); }, expected: /plan hash/i },
+    { name: 'event', mutate: (candidate) => { candidate.decisions[0]!.eventHash = D('5'); }, expected: /event|replay|anchor/i },
+    { name: 'predecessor', mutate: (candidate) => { candidate.decisions[1]!.previousEventHash = D('4'); }, expected: /predecessor|event|replay/i },
+    { name: 'sequence', mutate: (candidate) => { candidate.plan.sequence = 2; }, expected: /sequence|plan hash|allocation/i },
+    { name: 'block identity', mutate: (candidate) => { candidate.plan.blockId = 'block:other'; }, expected: /block|root|identity/i },
+    { name: 'protocol identity', mutate: (candidate) => { candidate.plan.protocolHash = D('3'); }, expected: /protocol|identity/i },
+  ];
+
+  for (const { name, mutate, entropy, expected } of cases) {
+    const candidate = structuredClone(block);
+    mutate?.(candidate);
+    const errors = verifyBlockedAssignmentPlanV2(protocol, candidate, entropy ?? randomizationMaterial);
+    assert.ok(errors.some((error) => expected.test(error)), name + ': ' + errors.join('; '));
+  }
+
+  const selfConsistentTimestampRewrite = structuredClone(block);
+  let previousEventHash = selfConsistentTimestampRewrite.plan.blockRoot;
+  for (const decision of selfConsistentTimestampRewrite.decisions) {
+    decision.assignedAtMs += 1;
+    decision.previousEventHash = previousEventHash;
+    decision.eventHash = v2DecisionEventHashForTamper(decision);
+    previousEventHash = decision.eventHash;
+  }
+  selfConsistentTimestampRewrite.plan.firstDecisionHash = selfConsistentTimestampRewrite.decisions[0]!.eventHash;
+  selfConsistentTimestampRewrite.plan.lastDecisionHash = selfConsistentTimestampRewrite.decisions.at(-1)!.eventHash;
+  assert.equal(selfConsistentTimestampRewrite.plan.planHash, block.plan.planHash);
+  const timestampErrors = verifyBlockedAssignmentPlanV2(protocol, selfConsistentTimestampRewrite, randomizationMaterial);
+  assert.ok(timestampErrors.some((error) => /assignedAtMs.*createdAtMs|timestamp.*plan/i.test(error)), timestampErrors.join('; '));
+});
+
+const malformedV2AssignmentProtocolCases: Array<{
+  name: string;
+  mutate: (protocol: Record<string, unknown>) => void;
+}> = [
+  { name: 'missing studyWindow', mutate: (protocol) => { delete protocol.studyWindow; } },
+  { name: 'null studyWindow', mutate: (protocol) => { protocol.studyWindow = null; } },
+  { name: 'scalar studyWindow', mutate: (protocol) => { protocol.studyWindow = 'not-a-window'; } },
+  { name: 'array studyWindow', mutate: (protocol) => { protocol.studyWindow = []; } },
+  { name: 'partial studyWindow', mutate: (protocol) => { protocol.studyWindow = { startsAtMs: 1_700_000_001_000 }; } },
+  { name: 'missing allocation', mutate: (protocol) => { delete protocol.allocation; } },
+  { name: 'null allocation', mutate: (protocol) => { protocol.allocation = null; } },
+  { name: 'scalar allocation', mutate: (protocol) => { protocol.allocation = 'not-an-allocation'; } },
+  { name: 'array allocation', mutate: (protocol) => { protocol.allocation = []; } },
+  { name: 'partial allocation', mutate: (protocol) => { protocol.allocation = { blockSize: 4 }; } },
+  { name: 'missing arms', mutate: (protocol) => { delete protocol.arms; } },
+  { name: 'null arms', mutate: (protocol) => { protocol.arms = null; } },
+  { name: 'scalar arms', mutate: (protocol) => { protocol.arms = 'not-arms'; } },
+  { name: 'empty arms array', mutate: (protocol) => { protocol.arms = []; } },
+  {
+    name: 'partial arms array',
+    mutate: (protocol) => {
+      protocol.arms = [(protocol.arms as unknown[])[0]];
+    },
+  },
+];
+
+for (const { name, mutate } of malformedV2AssignmentProtocolCases) {
+  test(`assignment replay and derivation reject ${name} without raw TypeError`, () => {
+    const { protocol, block, randomizationMaterial } = v2AssignmentFixture();
+    const malformed = structuredClone(protocol) as unknown as Record<string, unknown>;
+    mutate(malformed);
+    const input = {
+      blockId: 'block:malformed-protocol',
+      sequence: 2,
+      createdAtMs: 1_700_000_001_000,
+      unitIdDigests: [D('5'), D('6'), D('7'), D('8')],
+      randomizationMaterial,
+    };
+
+    assert.throws(() => deriveBlockedAssignmentPlanV2(malformed as never, input), (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.equal(error instanceof TypeError, false);
+      assert.match(error.message, /^cannot derive v2 blocked causal assignment:/);
+      return true;
+    });
+
+    let replayErrors: string[] = [];
+    assert.doesNotThrow(() => {
+      replayErrors = verifyBlockedAssignmentPlanV2(malformed, block, randomizationMaterial);
+    });
+    assert.ok(replayErrors.length > 0);
+    assert.ok(replayErrors.some((error) => /protocol|studyWindow|allocation|arms/i.test(error)), replayErrors.join('; '));
+  });
+}
 
 test('blocked assignment is replayable, balanced, and invalidates tampering', () => {
   const protocol = commitCausalProtocol(modelDraft(), 1_700_000_000_100);

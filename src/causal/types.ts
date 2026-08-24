@@ -282,6 +282,53 @@ export interface CausalAssignmentPlan {
   decisions: CausalDecisionRecord[];
 }
 
+/** Exact persisted v2 assignment-plan record. Raw entropy is never serialized. */
+export interface CausalAssignmentPlanV2 {
+  type: 'fiscus.causal-assignment-plan';
+  version: 2;
+  studyId: string;
+  blockId: string;
+  protocolHash: string;
+  sequence: number;
+  createdAtMs: number;
+  blockRoot: string;
+  unitIdDigests: string[];
+  randomizationMaterialDigest: string;
+  allocationHash: string;
+  decisionIds: string[];
+  firstDecisionHash: string;
+  lastDecisionHash: string;
+  planHash: string;
+}
+
+/** Exact persisted v2 assignment decision. */
+export interface CausalDecisionRecordV2 {
+  type: 'fiscus.causal-decision';
+  version: 2;
+  decisionId: string;
+  studyId: string;
+  blockId: string;
+  protocolHash: string;
+  blockSequence: number;
+  decisionIndex: number;
+  unitIdDigest: string;
+  assignedAtMs: number;
+  assignedArmId: string;
+  propensity: 0.5;
+  blockRoot: string;
+  planHash: string;
+  allocationHash: string;
+  randomizationMaterialDigest: string;
+  previousEventHash: string;
+  eventHash: string;
+}
+
+/** In-memory Slice 2 envelope; only its plan and decisions are persisted records. */
+export interface CausalAssignmentBlockV2 {
+  plan: CausalAssignmentPlanV2;
+  decisions: CausalDecisionRecordV2[];
+}
+
 export interface CausalExecutionRecord {
   executionId: string;
   decisionId: string;
