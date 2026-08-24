@@ -7,7 +7,7 @@
  * outside that cooperation boundary. Persistence is synchronous, not an fsync
  * or power-loss durability guarantee.
  */
-import { closeSync, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, Stats, unlinkSync, writeSync } from 'node:fs';
+import { closeSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, Stats, unlinkSync, writeSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
@@ -71,6 +71,7 @@ export class EgressReceiptError extends Error {
 
 let receiptLockReleaseHookForTests: (() => void) | undefined;
 let receiptWriteHookForTests: (() => void) | undefined;
+let receiptContentionLockLstatForTests: ((path: string) => Stats) | undefined;
 
 /** @internal deterministic filesystem-failure seam used only by boundary tests. */
 export function setReceiptLockReleaseHookForTests(hook: (() => void) | undefined): () => void {
@@ -87,6 +88,15 @@ export function setReceiptWriteHookForTests(hook: (() => void) | undefined): () 
   receiptWriteHookForTests = hook;
   return () => {
     receiptWriteHookForTests = previous;
+  };
+}
+
+/** @internal one-shot seam limited to contention lock-path inspection. */
+export function setReceiptContentionLockLstatForTests(hook: ((path: string) => Stats) | undefined): () => void {
+  const previous = receiptContentionLockLstatForTests;
+  receiptContentionLockLstatForTests = hook;
+  return () => {
+    receiptContentionLockLstatForTests = previous;
   };
 }
 
@@ -120,13 +130,18 @@ function asReceiptError(error: unknown, code: EgressReceiptFailureCode, prefix: 
   return new EgressReceiptError(code, prefix + ': ' + errorMessage(error));
 }
 
-function lockPathIsRegularFile(path: string): boolean {
+type ContentionLockPathState = 'absent' | 'regular' | 'unsafe';
+
+function contentionLockPathState(path: string): ContentionLockPathState {
   try {
-    return lstatSync(path).isFile();
+    const injectedLstat = receiptContentionLockLstatForTests;
+    receiptContentionLockLstatForTests = undefined;
+    return (injectedLstat ?? lstatSync)(path).isFile() ? 'regular' : 'unsafe';
   } catch (error) {
-    // A contender can remove its lock between openSync and lstatSync. Let the
-    // caller retry that race; any other inspection failure is itself a refusal.
-    if (errorCode(error) === 'ENOENT') return false;
+    // This state is derived from one lstat generation. A contender can remove
+    // its lock after openSync reports EEXIST; retry absence immediately rather
+    // than combining it with a second path observation from a later generation.
+    if (errorCode(error) === 'ENOENT') return 'absent';
     throw asReceiptError(error, 'persistence', 'egress receipt lock/persistence failed while inspecting the lock');
   }
 }
@@ -207,8 +222,9 @@ function withReceiptLock<T>(fn: () => T): T {
       if (code !== 'EEXIST') {
         throw asReceiptError(error, 'persistence', 'egress receipt lock/persistence failed while opening the lock');
       }
-      if (!lockPathIsRegularFile(lockPath)) {
-        if (!existsSync(lockPath)) continue;
+      const lockPathState = contentionLockPathState(lockPath);
+      if (lockPathState === 'absent') continue;
+      if (lockPathState === 'unsafe') {
         throw new EgressReceiptError('lock', 'egress receipt lock/persistence failed: lock path is not a regular file');
       }
       const remainingMs = lockDeadline - performance.now();

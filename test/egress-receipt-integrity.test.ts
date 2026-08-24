@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import {
   appendFileSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -17,12 +18,14 @@ import {
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { performance } from 'node:perf_hooks';
+import { Worker } from 'node:worker_threads';
 import { fileURLToPath } from 'node:url';
 import type { EgressConfig } from '../src/config.ts';
 import {
   appendEgressReceipt,
   EgressReceiptError,
   egressReceiptPath,
+  setReceiptContentionLockLstatForTests,
   setReceiptLockReleaseHookForTests,
   setReceiptWriteHookForTests,
   verifyEgressReceipts,
@@ -448,6 +451,57 @@ test('a replacement lock pathname is never unlinked during release', () => {
     assert.equal(readFileSync(lockPath, 'utf8'), 'replacement lock owned by another process');
   } finally {
     restoreHook();
+    state.restore();
+  }
+});
+
+test('a lock generation absent during contention inspection is retried even when a regular generation appears afterward', async () => {
+  const state = withHome('lock-generation-race');
+  const lockPath = join(state.home, 'egress-receipts.lock');
+  const first = appendEgressReceipt(INPUT);
+  writeFileSync(lockPath, 'initial valid lock generation', 'utf8');
+  let inspectionCalls = 0;
+  let releaser: Worker | undefined;
+  const restoreHook = setReceiptContentionLockLstatForTests((path) => {
+    inspectionCalls++;
+    assert.equal(path, lockPath);
+    assert.equal(readFileSync(path, 'utf8'), 'initial valid lock generation');
+    rmSync(path, { force: true });
+    let absentError: unknown;
+    try {
+      lstatSync(path);
+    } catch (error) {
+      absentError = error;
+    }
+    assert.equal(
+      absentError && typeof absentError === 'object' && 'code' in absentError ? absentError.code : undefined,
+      'ENOENT',
+    );
+    writeFileSync(path, 'recreated valid lock generation', 'utf8');
+    releaser = new Worker(`
+      const { workerData } = require('node:worker_threads');
+      const { rmSync } = require('node:fs');
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 200);
+      rmSync(workerData.path, { force: true });
+    `, { eval: true, workerData: { path } });
+    throw absentError;
+  });
+  try {
+    const second = appendEgressReceipt({ ...INPUT, event: 'dial_started' });
+    assert.equal(inspectionCalls, 1);
+    assert.equal(existsSync(lockPath), false);
+    const verification = verifyEgressReceipts();
+    assert.equal(verification.ok, true);
+    assert.equal(verification.receiptCount, 2);
+    const lines = receiptLines(state.home);
+    assert.equal(lines.length, 2);
+    assert.equal(lines.filter((line) => line.previousHash === null).length, 1);
+    assert.equal(lines[0]!.hash, first.hash);
+    assert.equal(lines[1]!.hash, second.hash);
+    assert.equal(lines[1]!.previousHash, first.hash);
+  } finally {
+    restoreHook();
+    if (releaser !== undefined) await releaser.terminate();
     state.restore();
   }
 });
