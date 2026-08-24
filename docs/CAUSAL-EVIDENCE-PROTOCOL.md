@@ -65,6 +65,33 @@ and open-ended free-text payloads in the protocol's structural context. The
 protocol stores declared identifiers and hashes, not a hidden copy of sensitive
 input material.
 
+### Additive protocol version 2
+
+Protocol v2 is a new canonical document; it does not reinterpret or silently
+upgrade version 1. V1 hashes remain the original raw lowercase 64-hex SHA-256
+values and retained v1 commitments remain inspectable, but they are ineligible
+for new causal mutations. A v2 commitment uses the namespaced digest
+`sha256:<64 lowercase hex>` over the exact draft material with the byte prefix
+`fiscus.causal.protocol\n2\n`. Commitment-only fields are not hash material.
+
+V2 requires namespaced IDs for study/series/version ownership and scope,
+eligibility and explicit inclusion/exclusion rules, a study window and stopping
+rule, exactly two ordered arms, actual observed/reconciled cost sources and
+price-lineage policy, quality/economic collection methods, ITT/confidence/
+sample/missingness/exclusion policy, minimized sources/retention/egress digest
+references, and governed claim-template IDs. Exact-key decoders reject missing
+or extra fields, malformed or uppercase digests, non-finite/unsafe timestamps,
+sparse/duplicate/unsorted sets, URL/path/control/credential-shaped strings, and
+unsupported enums before hashing or commitment. `local_ai_judge` is not a v2
+quality or economic preregistration evidence class.
+
+Public validation, hashing, commitment, and retained verification guard the
+untrusted root and exact runtime version before dispatch. Public v2 hashing
+validates the complete document before projecting canonical material, and v2
+positive integer fields require `Number.isSafeInteger`; malformed roots and
+unsupported versions fail closed as protocol errors rather than JavaScript type
+errors.
+
 ## Event lineage
 
 Every eligible unit must have local, hash-linked events in this order:
@@ -166,23 +193,23 @@ reason; it must not survive in a recommendation card as a stale green claim.
 
 ## Implementation status
 
-The repository now implements a local randomized-study substrate:
+Task 3 Slice 1 implements only the additive in-process protocol boundary:
 
-- strict protocol commitment with content hash and rejection of undeclared/raw
-  protocol fields;
-- pre-exposure balanced assignment blocks with replayable retained local
-  material and per-unit propensity;
-- append-only SQLite records for protocols, assignment blocks, decisions,
-  executions, outcomes, and analysis snapshots;
-- deterministic qualification and conservative interval analysis;
-- a review-first CLI: causal status, register, assign, inspect, verify, and
-  analyze; registration and assignment require explicit local apply; and
-- a read-only dashboard/API inspector that shows evidence state and replay
-  verdicts without exposing randomisation material.
+- exact v2 TypeScript protocol/commitment declarations;
+- strict v2 draft and retained-commitment validation;
+- domain-separated v2 canonical hashing and immutable local commitment;
+- explicit v1 hash isolation and v1 inspect-only mutation eligibility; and
+- draft/commit rejection of `local_ai_judge` for both quality and economic
+  preregistration.
 
-No command in this lane changes a provider route, provider configuration, or
-budget automatically. The present Store API is the safe integration point for
-adapters that record actual execution and outcome evidence; automated bindings
-from every proxy/provider/outcome source remain future work. Until a real
-executed study passes the qualification gates, Fiscus has **no qualified causal
-customer result**.
+This slice does **not** implement v2 Store tables or migration, assignment
+blocks, execution/outcome persistence, lifecycle/data locking, analysis
+snapshots, CLI commands, API/dashboard projection, export, packaging, or release.
+Legacy v1 code remains present for compatibility and inspection; its existence
+is not evidence that any v2 operation beyond this protocol boundary is ready.
+That legacy compatibility substrate includes pre-exposure balanced assignment blocks
+used by existing v1 callers/tests; Task 3 does not treat them as a v2
+mutation or persistence capability.
+No command in the causal lane changes a provider route, provider configuration,
+or budget automatically. Fiscus still has **no qualified causal customer
+result** unless and until a real executed study passes every applicable gate.

@@ -8,6 +8,7 @@
 
 export const CAUSAL_PROTOCOL_TYPE = 'fiscus.causal-study' as const;
 export const CAUSAL_PROTOCOL_VERSION = 1 as const;
+export const CAUSAL_PROTOCOL_VERSION_V2 = 2 as const;
 
 export type CausalStudyQuestion =
   | 'model_cost_quality'
@@ -143,6 +144,116 @@ export interface CommittedCausalStudyProtocol extends CausalStudyProtocolDraft {
   committedAtMs: number;
   protocolHash: string;
 }
+
+/** Additive protocol-v2 declarations. Version 1 remains byte-compatible. */
+export type CausalEvidenceClassV2 =
+  | 'deterministic'
+  | 'independent_operational'
+  | 'structured_human'
+  | 'operator_attested';
+
+export interface CausalEligibilityV2 {
+  cohortId: string;
+  contextSchemaId: string;
+  unitOfAssignment: 'agent_run' | 'task' | 'request' | 'repository_change' | 'workflow_block';
+  inclusionRuleIds: string[];
+  exclusionRuleIds: string[];
+}
+
+export interface CausalStudyWindowV2 {
+  startsAtMs: number;
+  endsAtMs: number | null;
+}
+
+export interface CausalStoppingRuleV2 {
+  kind: 'fixed_enrollment' | 'fixed_time' | 'fixed_enrollment_or_time';
+  maxAssignments: number | null;
+}
+
+export interface CausalStudyArmV2 {
+  armId: string;
+  role: CausalArmRole;
+  executionPlanDigest: string;
+  providerId: string | null;
+  modelId: string | null;
+}
+
+export interface CausalCostOutcomeV2 {
+  metricId: string;
+  currency: 'USD';
+  boundsUsd: NumericBounds;
+  acceptedSourceClasses: Array<'actual_reconciled' | 'actual_observed'>;
+  priceLineageRule: 'every_included_cost_has_retained_sha256_lineage';
+}
+
+export interface CausalQualityOutcomeV2 {
+  metricId: string;
+  collectionMethodId: string;
+  bounds: NumericBounds;
+  evidenceClass: CausalEvidenceClassV2;
+  nonInferiorityMargin: number;
+}
+
+export interface CausalEconomicOutcomeV2 {
+  metricId: string;
+  collectionMethodId: string;
+  currency: 'USD';
+  boundsUsd: NumericBounds;
+  evidenceClass: CausalEvidenceClassV2;
+  fullCostAccountingRequired: true;
+}
+
+export interface CausalAnalysisPlanV2 {
+  estimand: 'intention_to_treat';
+  confidenceLevel: number;
+  minCompletedPerArm: number;
+  maxMissingFractionPerArm: number;
+  exclusionPolicyId: string;
+}
+
+export interface CausalDataGovernanceV2 {
+  minimizedSourceIds: string[];
+  retentionClassId: string;
+  egressReceiptDigests: string[];
+}
+
+export interface CausalClaimTemplateIdsV2 {
+  qualified: string;
+  inconclusive: string;
+  invalid: string;
+}
+
+export interface CausalStudyProtocolDraftV2 {
+  type: typeof CAUSAL_PROTOCOL_TYPE;
+  version: typeof CAUSAL_PROTOCOL_VERSION_V2;
+  studyId: string;
+  seriesId: string;
+  studyVersion: number;
+  ownerId: string;
+  scopeId: string;
+  createdAtMs: number;
+  question: CausalStudyQuestion;
+  eligibility: CausalEligibilityV2;
+  studyWindow: CausalStudyWindowV2;
+  stoppingRule: CausalStoppingRuleV2;
+  arms: CausalStudyArmV2[];
+  allocation: CausalAllocation;
+  costOutcome: CausalCostOutcomeV2;
+  qualityOutcome: CausalQualityOutcomeV2;
+  economicOutcome: CausalEconomicOutcomeV2 | null;
+  analysis: CausalAnalysisPlanV2;
+  dataGovernance: CausalDataGovernanceV2;
+  claimTemplateIds: CausalClaimTemplateIdsV2;
+}
+
+export interface CommittedCausalStudyProtocolV2 extends CausalStudyProtocolDraftV2 {
+  lifecycle: 'committed';
+  committedAtMs: number;
+  protocolHash: string;
+}
+
+export type AnyCausalStudyProtocolDraft = CausalStudyProtocolDraft | CausalStudyProtocolDraftV2;
+export type AnyCommittedCausalStudyProtocol = CommittedCausalStudyProtocol | CommittedCausalStudyProtocolV2;
 
 export interface CausalDecisionRecord {
   decisionId: string;
