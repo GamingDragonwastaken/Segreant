@@ -9,11 +9,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import {
-  createBlockedAssignmentPlan,
-  deriveBlockedAssignmentPlanV2,
   verifyBlockedAssignmentPlan,
-  verifyBlockedAssignmentPlanV2,
 } from '../src/causal/assignment.ts';
+import {
+  deriveDeterministicCausalAssignmentV2 as deriveBlockedAssignmentPlanV2,
+  verifyDeterministicCausalAssignmentV2 as verifyBlockedAssignmentPlanV2,
+} from './support/causalDeterministicRng.ts';
+import { createRetainedCausalV1AssignmentFixture } from './support/causalV1Fixture.ts';
 import { estimateCausalStudy } from '../src/causal/estimate.ts';
 import {
   canonicalJson,
@@ -201,7 +203,7 @@ function v2DecisionEventHashForTamper(decision: CausalDecisionRecordV2): string 
 
 function completedData(): CausalStudyData {
   const protocol = commitCausalProtocol(modelDraft(), 1_700_000_000_100);
-  const plan = createBlockedAssignmentPlan(protocol, {
+  const plan = createRetainedCausalV1AssignmentFixture(protocol, {
     blockId: 'block-1',
     createdAtMs: 1_700_000_000_200,
     unitIdHashes: [H('1'), H('2'), H('3'), H('4')],
@@ -671,7 +673,7 @@ for (const { name, mutate } of malformedV2AssignmentProtocolCases) {
 
 test('blocked assignment is replayable, balanced, and invalidates tampering', () => {
   const protocol = commitCausalProtocol(modelDraft(), 1_700_000_000_100);
-  const plan = createBlockedAssignmentPlan(protocol, {
+  const plan = createRetainedCausalV1AssignmentFixture(protocol, {
     blockId: 'block-1',
     createdAtMs: 1_700_000_000_200,
     unitIdHashes: [H('1'), H('2'), H('3'), H('4')],
@@ -685,6 +687,26 @@ test('blocked assignment is replayable, balanced, and invalidates tampering', ()
   const altered = { ...plan, decisions: plan.decisions.map((decision) => ({ ...decision })) };
   altered.decisions[0]!.assignedArmId = altered.decisions[0]!.assignedArmId === 'candidate' ? 'control' : 'candidate';
   assert.ok(verifyBlockedAssignmentPlan(protocol, altered).some((error) => /replay/i.test(error)));
+});
+
+test('retained v1 replay independently guards malformed unit arrays without throwing', () => {
+  const protocol = commitCausalProtocol(modelDraft(), 1_700_000_000_100);
+  const plan = createRetainedCausalV1AssignmentFixture(protocol, {
+    blockId: 'block-v1-malformed-units',
+    createdAtMs: 1_700_000_000_200,
+    unitIdHashes: [H('1'), H('2'), H('3'), H('4')],
+    randomizationMaterial: Buffer.from('0123456789abcdef0123456789abcdef', 'hex'),
+  });
+
+  for (const unitIdHashes of [null, undefined, 42, 'not-an-array']) {
+    let errors: string[] = [];
+    assert.doesNotThrow(() => {
+      errors = verifyBlockedAssignmentPlan(protocol, { ...plan, unitIdHashes });
+    });
+    assert.ok(errors.length > 0);
+    assert.ok(errors.some((error) => /unit|array|block contract/i.test(error)), errors.join('; '));
+  }
+  assert.deepEqual(verifyBlockedAssignmentPlan(protocol, plan), []);
 });
 
 test('complete randomized evidence qualifies as a study but interval gates still control claims', () => {

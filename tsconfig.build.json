@@ -6,5 +6,10 @@
     "rootDir": "./src"
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["test/**", "dist/**", "src/dashboard/web/app/**"]
+  "exclude": [
+    "test/**",
+    "dist/**",
+    "src/dashboard/web/app/**",
+    "src/store/causalInternal.ts"
+  ]
 }

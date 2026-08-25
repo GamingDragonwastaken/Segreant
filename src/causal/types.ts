@@ -329,6 +329,56 @@ export interface CausalAssignmentBlockV2 {
   decisions: CausalDecisionRecordV2[];
 }
 
+/** Public Store input. Sequence, entropy, allocation, roots, and plans are Store-owned. */
+export interface CausalAssignmentRequestV2 {
+  studyId: string;
+  blockId: string;
+  createdAtMs: number;
+  unitIdDigests: string[];
+}
+
+export interface CausalAssignmentManifestPlanV2 {
+  blockId: string;
+  sequence: number;
+  blockRoot: string;
+  planHash: string;
+  allocationHash: string;
+  firstDecisionHash: string;
+  lastDecisionHash: string;
+  decisionCount: number;
+}
+
+export interface CausalAssignmentManifestDecisionV2 {
+  decisionId: string;
+  blockId: string;
+  blockSequence: number;
+  decisionIndex: number;
+  unitIdDigest: string;
+  assignedArmId: string;
+  eventHash: string;
+  planHash: string;
+}
+
+/** Exact authoritative manifest derived from all retained v2 assignment rows. */
+export interface CausalAssignmentManifestV2 {
+  type: 'fiscus.causal-assignment-manifest';
+  version: 2;
+  studyId: string;
+  protocolHash: string;
+  planCount: number;
+  decisionCount: number;
+  unitCount: number;
+  plans: CausalAssignmentManifestPlanV2[];
+  decisions: CausalAssignmentManifestDecisionV2[];
+  assignmentManifestHash: string;
+}
+
+export interface CausalAssignmentResultV2 {
+  status: 'created' | 'existing';
+  block: CausalAssignmentBlockV2;
+  manifest: CausalAssignmentManifestV2;
+}
+
 export interface CausalExecutionRecord {
   executionId: string;
   decisionId: string;

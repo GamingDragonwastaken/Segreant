@@ -83,6 +83,7 @@ test('ordinary value surfaces cannot revive causal break-even copy while the stu
   const contract = read('docs', 'CAPABILITY-EVIDENCE-CONTRACT.md');
   const protocol = read('docs', 'CAUSAL-EVIDENCE-PROTOCOL.md');
   const causalCli = read('src', 'cli', 'causalCmd.ts');
+  const rootCli = read('src', 'cli.ts');
 
   assert.match(readme, /Observed value scenario/);
   assert.doesNotMatch(readme, /estimated causal return exceeds/i);
@@ -91,9 +92,17 @@ test('ordinary value surfaces cannot revive causal break-even copy while the stu
   assert.match(modern, /not causal evidence/);
   assert.match(modern, /causalStudyCard/);
   assert.match(contract, /qualified causal-study result/i);
-  assert.match(protocol, /pre-exposure balanced assignment blocks/i);
-  assert.match(causalCli, /Registration and assignment require --apply/i);
+  assert.match(protocol, /production code cannot create\s+a new v1\s+assignment/i);
+  assert.match(protocol, /CLI\s+does not yet expose v2 protocol registration or assignment/i);
+  assert.match(causalCli, /exposes retained version-1 status, inspection, and replay verification only/i);
+  assert.match(causalCli, /Public causal mutations and version-2 projection are deferred/i);
+  assert.doesNotMatch(causalCli, /register without --apply|fiscus causal register --file/i);
+  assert.match(rootCli, /V1 is inspect-only/i);
+  assert.match(rootCli, /all causal\s+mutations and v2 public projection remain deferred/i);
+  assert.doesNotMatch(rootCli, /Registration\/assignment are local-only and require/i);
   assert.doesNotMatch(causalCli, /provider route.*=/i);
+  assert.match(modern, /Version-2 studies and every causal mutation remain Store-only or deferred/i);
+  assert.doesNotMatch(modern, /fiscus causal register|use pre-exposure randomized assignment/i);
 });
 
 /**

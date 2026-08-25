@@ -72,7 +72,7 @@ function causalStudyCard(payload: CausalPayload | null, failure: string | null):
         h('span', { class: 'card-title', text: 'Causal study evidence' }),
         h('span', { class: 'pill pill-warn', text: 'not established' })),
       h('p', { text: payload.causalEvidence }),
-      h('p', { class: 'basis', text: 'Create and inspect a local protocol with fiscus causal register, then use pre-exposure randomized assignment. This never changes routing automatically.' }));
+      h('p', { class: 'basis', text: 'This dashboard currently inspects retained version-1 evidence only. Version-2 studies and every causal mutation remain Store-only or deferred until later reviewed public-operation slices.' }));
   }
 
   const study = payload.study;
@@ -101,7 +101,7 @@ function causalStudyCard(payload: CausalPayload | null, failure: string | null):
         h('span', { class: 'fact-val', text: String(counts.completed) + '/' + String(counts.assigned) + ' completed' })))),
     replayFailures.length > 0
       ? h('p', { class: 'drawer-error', text: 'Assignment replay failed: ' + replayFailures.join('; ') })
-      : h('p', { class: 'basis', text: 'Recorded assignment blocks replay from their retained local material.' }),
+      : h('p', { class: 'basis', text: 'Retained assignment evidence replays from local material; this read-only dashboard cannot create assignments.' }),
     study.qualification.reasons.length > 0
       ? h('p', { class: 'basis', text: study.qualification.reasons.join(' ') })
       : null,

@@ -13,9 +13,19 @@
 
 import '../util/quiet.ts';
 import { DatabaseSync } from 'node:sqlite';
-import { initializeSchema, runScript } from './schema.ts';
-import { dirname } from 'node:path';
-import { existsSync, mkdirSync } from 'node:fs';
+import { causalV2SchemaAttestation, initializeSchema, runScript } from './schema.ts';
+import { dirname, resolve } from 'node:path';
+import {
+  closeSync,
+  existsSync,
+  fstatSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  realpathSync,
+} from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
 import { legacyPricingEvidence, type RequestPricingEvidence } from '../cost/pricing.ts';
 import { pricingEvidenceFromRecord } from './rows.ts';
 import type { ProviderScopeDeclaration, ScopeCaptureStatus } from '../billing/scope.ts';
@@ -55,7 +65,11 @@ import type {
   OpenAiCostsObservationStatus,
 } from './billing.ts';
 import type {
+  AnyCommittedCausalStudyProtocol,
+  CausalAssignmentManifestV2,
   CausalAssignmentPlan,
+  CausalAssignmentRequestV2,
+  CausalAssignmentResultV2,
   CausalExecutionRecord,
   CausalOutcomeRecord,
   CommittedCausalStudyProtocol,
@@ -79,7 +93,11 @@ export type {
   OpenAiCostsObservationStatus,
 } from './billing.ts';
 export type {
+  AnyCommittedCausalStudyProtocol,
+  CausalAssignmentManifestV2,
   CausalAssignmentPlan,
+  CausalAssignmentRequestV2,
+  CausalAssignmentResultV2,
   CausalExecutionRecord,
   CausalOutcomeRecord,
   CausalStudyData,
@@ -285,17 +303,113 @@ function scopeCaptureForInsert(row: RequestRow): { status: ScopeCaptureStatus; d
 
 export class Store {
   private db: DatabaseSync;
+  private migrationBackupEvidence: { path: string; sha256: string } | null = null;
 
   constructor(path: string) {
-    if (path !== ':memory:') {
-      const dir = dirname(path);
+    const databasePath = path === ':memory:' ? path : resolve(path);
+    const existingFile = databasePath !== ':memory:' && existsSync(databasePath);
+    if (databasePath !== ':memory:') {
+      const dir = dirname(databasePath);
       if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     }
-    this.db = new DatabaseSync(path);
-    // node:sqlite's DatabaseSync exposes only prepare() + a multi-statement
-    // runner; we run DDL/PRAGMA as individual prepared statements so the schema
-    // setup stays uniform and side-effect-free.
-    initializeSchema(this.db);
+    this.db = new DatabaseSync(databasePath);
+    let backupPath: string | null = null;
+    let backupVerified = false;
+    try {
+      this.db.prepare('PRAGMA busy_timeout = 5000').run();
+      // node:sqlite's DatabaseSync exposes only prepare() + a multi-statement
+      // runner; we run DDL/PRAGMA as individual prepared statements so the schema
+      // setup stays uniform and side-effect-free. Preflight belongs inside this
+      // guarded boundary because retained SQLite metadata is untrusted input.
+      const causalV2Preflight = causalV2SchemaAttestation(this.db);
+      if (existingFile) {
+        if (causalV2Preflight.state !== 'exact') {
+          backupPath = databasePath + '.pre-causal-v2-' + randomUUID() + '.sqlite';
+          if (existsSync(backupPath)) throw new Error('exclusive causal migration backup path already exists');
+          this.db.prepare('VACUUM INTO ?').run(backupPath);
+          backupPath = realpathSync.native(backupPath);
+          const pathBefore = lstatSync(backupPath);
+          if (!pathBefore.isFile() || pathBefore.isSymbolicLink()) {
+            throw new Error('causal migration backup is not a safe regular sibling file');
+          }
+          const descriptor = openSync(backupPath, 'r');
+          try {
+            const descriptorBefore = fstatSync(descriptor);
+            const verification = new DatabaseSync(backupPath, { readOnly: true });
+            try {
+              const quickCheck = verification.prepare('PRAGMA quick_check').get() as { quick_check: string } | undefined;
+              if (quickCheck?.quick_check !== 'ok') throw new Error('backup quick_check did not return ok');
+            } finally {
+              verification.close();
+            }
+            const bytes = readFileSync(descriptor);
+            try {
+              const descriptorAfter = fstatSync(descriptor);
+              const pathAfter = lstatSync(backupPath);
+              const stable = descriptorBefore.dev === descriptorAfter.dev
+                && descriptorBefore.ino === descriptorAfter.ino
+                && descriptorBefore.size === descriptorAfter.size
+                && descriptorBefore.mtimeMs === descriptorAfter.mtimeMs
+                && descriptorBefore.dev === pathAfter.dev
+                && descriptorBefore.ino === pathAfter.ino
+                && descriptorBefore.size === pathAfter.size
+                && descriptorBefore.mtimeMs === pathAfter.mtimeMs
+                && pathAfter.isFile()
+                && !pathAfter.isSymbolicLink();
+              if (!stable) throw new Error('causal migration backup identity changed during verification');
+              this.migrationBackupEvidence = {
+                path: backupPath,
+                sha256: createHash('sha256').update(bytes).digest('hex'),
+              };
+            } finally {
+              // A database backup can contain retained private assignment entropy.
+              // Clear the owned JS copy even when identity verification fails.
+              bytes.fill(0);
+            }
+          } finally {
+            closeSync(descriptor);
+          }
+          backupVerified = true;
+        }
+      }
+      initializeSchema(this.db, {
+        expectedCausalV2State: causalV2Preflight.state,
+        migrationBackupVerified: backupVerified,
+        allowUnbackedCausalV2Create: !existingFile,
+      });
+    } catch {
+      let closeConfirmed = true;
+      try {
+        this.db.close();
+      } catch {
+        closeConfirmed = false;
+      }
+      const closeGuidance = closeConfirmed
+        ? 'The failed Store handle was closed. '
+        : 'The failed Store handle could not be confirmed closed; stop using this database until operator recovery. ';
+      if (backupVerified && backupPath) {
+        throw new Error(
+          'CAUSAL_IO_FAILURE: causal v2 migration failed before an operational Store opened; ' +
+          'the retained database was not accepted. The verified backup remains readable at ' + backupPath + '. ' +
+          closeGuidance + 'Inspect the retained database and verified backup before recovery.',
+        );
+      }
+      if (existingFile) {
+        const candidateGuidance = backupPath
+          ? 'No verified backup was produced; an unverified backup candidate may exist at ' + backupPath + '. '
+          : 'No verified backup was produced. ';
+        throw new Error(
+          'CAUSAL_IO_FAILURE: causal v2 schema initialization failed before an operational Store opened; ' +
+          'the retained database was not accepted. ' + candidateGuidance + closeGuidance +
+          'Inspect the retained database before recovery.',
+        );
+      }
+      throw new Error(
+        'CAUSAL_IO_FAILURE: causal v2 schema initialization failed before an operational Store opened; ' +
+        'no retained database migration was performed. ' + closeGuidance +
+        'Inspect the database path before retrying.',
+      );
+    }
   }
 
   /** Transaction control and one-off DDL — see runScript in schema.ts. */
@@ -325,6 +439,11 @@ export class Store {
 
   raw(): DatabaseSync {
     return this.db;
+  }
+
+  /** Evidence for the backup created immediately before this open migrated v2 tables. */
+  causalMigrationBackupEvidence(): { path: string; sha256: string } | null {
+    return this.migrationBackupEvidence ? { ...this.migrationBackupEvidence } : null;
   }
 
   /**
@@ -1586,13 +1705,25 @@ export class Store {
    * Commit a validated causal-study protocol. Existing committed records are
    * idempotent only when byte-for-byte equivalent; no update path exists.
    */
-  registerCausalProtocol(protocol: CommittedCausalStudyProtocol): 'created' | 'existing' {
+  registerCausalProtocol(protocol: unknown): 'created' | 'existing' {
     return causal.registerCausalProtocol(this.db, protocol);
   }
 
   /** Persist a complete pre-exposure randomisation block and its decision ledger. */
   saveCausalAssignmentPlan(plan: CausalAssignmentPlan): 'created' | 'existing' {
     return causal.saveCausalAssignmentPlan(this.db, plan);
+  }
+
+  /**
+   * Atomically allocate and persist one v2 block. Sequence and cryptographic
+   * entropy are Store-owned and allocations are returned only after commit.
+   */
+  assignCausalBlockV2(request: CausalAssignmentRequestV2): CausalAssignmentResultV2 {
+    return causal.assignCausalBlockV2(this.db, request);
+  }
+
+  causalAssignmentManifestV2(studyId: string): CausalAssignmentManifestV2 | null {
+    return causal.causalAssignmentManifestV2(this.db, studyId);
   }
 
   /** Append actual execution lineage after a stored randomized decision. */

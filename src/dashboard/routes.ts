@@ -728,7 +728,7 @@ export function handleCausal({ res, url, store }: RouteContext): void {
         generatedAt: new Date().toISOString(),
         studies: [],
         study: null,
-        causalEvidence: 'No registered causal study. Value output remains an observed/manual-equivalent scenario.',
+        causalEvidence: 'No publicly inspectable retained version-1 causal study. Version-2 public projection is deferred. Value output remains an observed/manual-equivalent scenario.',
         boundary: 'Read-only local status. This endpoint cannot change routing, budgets, or provider configuration.',
       });
     }
@@ -762,6 +762,12 @@ export function handleCausal({ res, url, store }: RouteContext): void {
       boundary: 'Read-only local status. This endpoint cannot change routing, budgets, or provider configuration.',
     });
   } catch (err) {
+    if (typeof err === 'object' && err !== null && Reflect.get(err, 'code') === 'CAUSAL_INTEGRITY_FAILURE') {
+      return json(res, 409, {
+        error: 'CAUSAL_INTEGRITY_FAILURE',
+        causalEvidence: 'Stored causal evidence failed integrity verification. Public causal projection is unavailable until the local Store is repaired.',
+      });
+    }
     return json(res, 500, { error: String(err) });
   }
 }

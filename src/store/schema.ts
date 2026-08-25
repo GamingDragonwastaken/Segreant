@@ -462,6 +462,63 @@ CREATE TABLE IF NOT EXISTS causal_analysis_snapshots (
 
 CREATE INDEX IF NOT EXISTS idx_causal_analysis_latest
   ON causal_analysis_snapshots(study_id, computed_at_ms DESC, analysis_id DESC);
+
+-- Version-2 assignment rows are physically isolated from retained version-1
+-- evidence. Store-owned sequence and entropy never enter the public plan JSON.
+CREATE TABLE IF NOT EXISTS causal_assignment_plans_v2 (
+  study_id        TEXT NOT NULL,
+  block_id        TEXT NOT NULL,
+  protocol_hash   TEXT NOT NULL,
+  sequence        INTEGER NOT NULL,
+  created_at_ms   INTEGER NOT NULL,
+  block_root      TEXT NOT NULL,
+  allocation_hash TEXT NOT NULL,
+  material_digest TEXT NOT NULL,
+  plan_hash       TEXT NOT NULL UNIQUE,
+  entropy_blob    BLOB NOT NULL,
+  plan_json       TEXT NOT NULL,
+  PRIMARY KEY (study_id, block_id),
+  UNIQUE (study_id, sequence)
+);
+
+CREATE TABLE IF NOT EXISTS causal_decisions_v2 (
+  decision_id     TEXT PRIMARY KEY NOT NULL,
+  study_id        TEXT NOT NULL,
+  block_id        TEXT NOT NULL,
+  block_sequence  INTEGER NOT NULL,
+  decision_index  INTEGER NOT NULL,
+  unit_id_digest  TEXT NOT NULL,
+  assigned_arm_id TEXT NOT NULL,
+  event_hash      TEXT NOT NULL UNIQUE,
+  decision_json   TEXT NOT NULL,
+  UNIQUE (study_id, block_sequence, decision_index)
+);
+
+CREATE INDEX IF NOT EXISTS idx_causal_decisions_v2_study
+  ON causal_decisions_v2(study_id, block_sequence, decision_index);
+
+-- This table is the SQLite authority for study-scoped unit enrollment.
+CREATE TABLE IF NOT EXISTS causal_assignment_units_v2 (
+  study_id        TEXT NOT NULL,
+  unit_id_digest  TEXT NOT NULL,
+  decision_id     TEXT NOT NULL UNIQUE,
+  block_id        TEXT NOT NULL,
+  block_sequence  INTEGER NOT NULL,
+  claimed_at_ms   INTEGER NOT NULL,
+  PRIMARY KEY (study_id, unit_id_digest)
+);
+
+CREATE TABLE IF NOT EXISTS causal_assignment_manifests_v2 (
+  study_id        TEXT NOT NULL,
+  generation      INTEGER NOT NULL,
+  protocol_hash   TEXT NOT NULL,
+  manifest_hash   TEXT NOT NULL UNIQUE,
+  manifest_json   TEXT NOT NULL,
+  PRIMARY KEY (study_id, generation)
+);
+
+CREATE INDEX IF NOT EXISTS idx_causal_assignment_manifests_v2_current
+  ON causal_assignment_manifests_v2(study_id, generation DESC);
 `;
 
 /** Idempotent schema migrations for DBs created before a column existed. */
@@ -566,6 +623,10 @@ function installCausalImmutability(db: DatabaseSync): void {
     'causal_executions',
     'causal_outcomes',
     'causal_analysis_snapshots',
+    'causal_assignment_plans_v2',
+    'causal_decisions_v2',
+    'causal_assignment_units_v2',
+    'causal_assignment_manifests_v2',
   ];
   for (const table of tables) {
     const updateTrigger = 'causal_no_update_' + table;
@@ -602,6 +663,395 @@ export function runScript(db: DatabaseSync, sql: string): void {
   }
 }
 
+interface CausalV2ColumnContract {
+  name: string;
+  type: 'TEXT' | 'INTEGER' | 'BLOB';
+  pk: number;
+}
+
+interface CausalV2IndexContract {
+  origin: 'pk' | 'u' | 'c';
+  unique: 0 | 1;
+  columns: Array<{ cid: number; name: string; desc: 0 | 1 }>;
+  /** Bound only for checked-in explicit indexes; SQLite owns autoindex names. */
+  name?: string;
+  sql?: string;
+}
+
+interface CausalV2TableContract {
+  sql: string;
+  columns: CausalV2ColumnContract[];
+  indexes: CausalV2IndexContract[];
+}
+
+const C = (name: string, type: 'TEXT' | 'INTEGER' | 'BLOB', pk = 0): CausalV2ColumnContract => ({ name, type, pk });
+const I = (
+  origin: 'pk' | 'u' | 'c',
+  unique: 0 | 1,
+  columns: Array<{ cid: number; name: string; desc?: 0 | 1 }>,
+  explicit?: { name: string; sql: string },
+): CausalV2IndexContract => ({
+  origin,
+  unique,
+  columns: columns.map((column) => ({ ...column, desc: column.desc ?? 0 })),
+  ...explicit,
+});
+
+const CAUSAL_V2_TABLE_CONTRACTS: Record<string, CausalV2TableContract> = {
+  causal_assignment_plans_v2: {
+    sql: `CREATE TABLE causal_assignment_plans_v2 (
+  study_id        TEXT NOT NULL,
+  block_id        TEXT NOT NULL,
+  protocol_hash   TEXT NOT NULL,
+  sequence        INTEGER NOT NULL,
+  created_at_ms   INTEGER NOT NULL,
+  block_root      TEXT NOT NULL,
+  allocation_hash TEXT NOT NULL,
+  material_digest TEXT NOT NULL,
+  plan_hash       TEXT NOT NULL UNIQUE,
+  entropy_blob    BLOB NOT NULL,
+  plan_json       TEXT NOT NULL,
+  PRIMARY KEY (study_id, block_id),
+  UNIQUE (study_id, sequence)
+)`,
+    columns: [
+      C('study_id', 'TEXT', 1), C('block_id', 'TEXT', 2), C('protocol_hash', 'TEXT'),
+      C('sequence', 'INTEGER'), C('created_at_ms', 'INTEGER'), C('block_root', 'TEXT'),
+      C('allocation_hash', 'TEXT'), C('material_digest', 'TEXT'), C('plan_hash', 'TEXT'),
+      C('entropy_blob', 'BLOB'), C('plan_json', 'TEXT'),
+    ],
+    indexes: [
+      I('u', 1, [{ cid: 8, name: 'plan_hash' }]),
+      I('pk', 1, [{ cid: 0, name: 'study_id' }, { cid: 1, name: 'block_id' }]),
+      I('u', 1, [{ cid: 0, name: 'study_id' }, { cid: 3, name: 'sequence' }]),
+    ],
+  },
+  causal_decisions_v2: {
+    sql: `CREATE TABLE causal_decisions_v2 (
+  decision_id     TEXT PRIMARY KEY NOT NULL,
+  study_id        TEXT NOT NULL,
+  block_id        TEXT NOT NULL,
+  block_sequence  INTEGER NOT NULL,
+  decision_index  INTEGER NOT NULL,
+  unit_id_digest  TEXT NOT NULL,
+  assigned_arm_id TEXT NOT NULL,
+  event_hash      TEXT NOT NULL UNIQUE,
+  decision_json   TEXT NOT NULL,
+  UNIQUE (study_id, block_sequence, decision_index)
+)`,
+    columns: [
+      C('decision_id', 'TEXT', 1), C('study_id', 'TEXT'), C('block_id', 'TEXT'),
+      C('block_sequence', 'INTEGER'), C('decision_index', 'INTEGER'),
+      C('unit_id_digest', 'TEXT'), C('assigned_arm_id', 'TEXT'),
+      C('event_hash', 'TEXT'), C('decision_json', 'TEXT'),
+    ],
+    indexes: [
+      I('c', 0, [
+        { cid: 1, name: 'study_id' }, { cid: 3, name: 'block_sequence' },
+        { cid: 4, name: 'decision_index' },
+      ], {
+        name: 'idx_causal_decisions_v2_study',
+        sql: `CREATE INDEX idx_causal_decisions_v2_study
+  ON causal_decisions_v2(study_id, block_sequence, decision_index)`,
+      }),
+      I('u', 1, [
+        { cid: 1, name: 'study_id' }, { cid: 3, name: 'block_sequence' },
+        { cid: 4, name: 'decision_index' },
+      ]),
+      I('u', 1, [{ cid: 7, name: 'event_hash' }]),
+      I('pk', 1, [{ cid: 0, name: 'decision_id' }]),
+    ],
+  },
+  causal_assignment_units_v2: {
+    sql: `CREATE TABLE causal_assignment_units_v2 (
+  study_id        TEXT NOT NULL,
+  unit_id_digest  TEXT NOT NULL,
+  decision_id     TEXT NOT NULL UNIQUE,
+  block_id        TEXT NOT NULL,
+  block_sequence  INTEGER NOT NULL,
+  claimed_at_ms   INTEGER NOT NULL,
+  PRIMARY KEY (study_id, unit_id_digest)
+)`,
+    columns: [
+      C('study_id', 'TEXT', 1), C('unit_id_digest', 'TEXT', 2),
+      C('decision_id', 'TEXT'), C('block_id', 'TEXT'),
+      C('block_sequence', 'INTEGER'), C('claimed_at_ms', 'INTEGER'),
+    ],
+    indexes: [
+      I('pk', 1, [{ cid: 0, name: 'study_id' }, { cid: 1, name: 'unit_id_digest' }]),
+      I('u', 1, [{ cid: 2, name: 'decision_id' }]),
+    ],
+  },
+  causal_assignment_manifests_v2: {
+    sql: `CREATE TABLE causal_assignment_manifests_v2 (
+  study_id        TEXT NOT NULL,
+  generation      INTEGER NOT NULL,
+  protocol_hash   TEXT NOT NULL,
+  manifest_hash   TEXT NOT NULL UNIQUE,
+  manifest_json   TEXT NOT NULL,
+  PRIMARY KEY (study_id, generation)
+)`,
+    columns: [
+      C('study_id', 'TEXT', 1), C('generation', 'INTEGER', 2),
+      C('protocol_hash', 'TEXT'), C('manifest_hash', 'TEXT'), C('manifest_json', 'TEXT'),
+    ],
+    indexes: [
+      I('c', 0, [
+        { cid: 0, name: 'study_id' }, { cid: 1, name: 'generation', desc: 1 },
+      ], {
+        name: 'idx_causal_assignment_manifests_v2_current',
+        sql: `CREATE INDEX idx_causal_assignment_manifests_v2_current
+  ON causal_assignment_manifests_v2(study_id, generation DESC)`,
+      }),
+      I('pk', 1, [{ cid: 0, name: 'study_id' }, { cid: 1, name: 'generation' }]),
+      I('u', 1, [{ cid: 3, name: 'manifest_hash' }]),
+    ],
+  },
+};
+
+const CAUSAL_V2_TABLES = Object.keys(CAUSAL_V2_TABLE_CONTRACTS);
+
+export type CausalV2SchemaState = 'absent' | 'exact' | 'incomplete';
+
+export interface CausalV2SchemaAttestation {
+  state: CausalV2SchemaState;
+  defectIds: string[];
+}
+
+/**
+ * Tokenize checked-in SQLite authority without changing quoted material.
+ *
+ * SQLite preserves the creating statement in `sqlite_schema.sql`, but its
+ * formatting and keyword case are not semantic.  Comparing the token stream
+ * binds every constraint, conflict policy, clause, identifier and literal
+ * while safely tolerating only whitespace/comments and bare-keyword case.
+ * Quoted tokens remain byte-exact; malformed quoting/comments fail closed.
+ */
+function normalizeAuthoritySql(sql: unknown): string | null {
+  if (typeof sql !== 'string') return null;
+  const tokens: string[] = [];
+  let index = 0;
+  while (index < sql.length) {
+    const char = sql[index]!;
+    if (/\s/.test(char)) {
+      index += 1;
+      continue;
+    }
+    if (char === '-' && sql[index + 1] === '-') {
+      index += 2;
+      while (index < sql.length && sql[index] !== '\n' && sql[index] !== '\r') index += 1;
+      continue;
+    }
+    if (char === '/' && sql[index + 1] === '*') {
+      const close = sql.indexOf('*/', index + 2);
+      if (close === -1) return null;
+      index = close + 2;
+      continue;
+    }
+    if (char === "'" || char === '"' || char === '`') {
+      const delimiter = char;
+      let literal = delimiter;
+      index += 1;
+      let closed = false;
+      while (index < sql.length) {
+        const next = sql[index]!;
+        literal += next;
+        index += 1;
+        if (next !== delimiter) continue;
+        if (sql[index] === delimiter) {
+          literal += delimiter;
+          index += 1;
+          continue;
+        }
+        closed = true;
+        break;
+      }
+      if (!closed) return null;
+      tokens.push(literal);
+      continue;
+    }
+    if (char === '[') {
+      const close = sql.indexOf(']', index + 1);
+      if (close === -1) return null;
+      tokens.push(sql.slice(index, close + 1));
+      index = close + 1;
+      continue;
+    }
+    if (/[A-Za-z_]/.test(char)) {
+      let end = index + 1;
+      while (end < sql.length && /[A-Za-z0-9_$]/.test(sql[end]!)) end += 1;
+      tokens.push(sql.slice(index, end).toLowerCase());
+      index = end;
+      continue;
+    }
+    if (/[0-9]/.test(char)) {
+      let end = index + 1;
+      while (end < sql.length && /[0-9A-Fa-fxXeE.+-]/.test(sql[end]!)) end += 1;
+      tokens.push(sql.slice(index, end));
+      index = end;
+      continue;
+    }
+    if ('(),;=+-*/.<>!|&%~'.includes(char)) {
+      tokens.push(char);
+      index += 1;
+      continue;
+    }
+    // Parameters and syntax outside the checked-in authority fail closed.
+    return null;
+  }
+  return tokens.join(' ');
+}
+
+function expectedImmutabilityTriggers(): Map<string, { table: string; sql: string }> {
+  const expected = new Map<string, { table: string; sql: string }>();
+  for (const table of CAUSAL_V2_TABLES) {
+    for (const operation of ['update', 'delete'] as const) {
+      const name = 'causal_no_' + operation + '_' + table;
+      const sql = 'CREATE TRIGGER ' + name + ' BEFORE ' + operation.toUpperCase() +
+        ' ON ' + table + " BEGIN SELECT RAISE(ABORT, 'causal evidence is append-only'); END";
+      expected.set(name, { table, sql: normalizeAuthoritySql(sql)! });
+    }
+  }
+  return expected;
+}
+
+function tableContractMatches(db: DatabaseSync, table: string, contract: CausalV2TableContract): boolean {
+  const schemaRow = db.prepare(
+    "SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = ? AND tbl_name = ?",
+  ).get(table, table) as { sql: string | null } | undefined;
+  if (!schemaRow || normalizeAuthoritySql(schemaRow.sql) !== normalizeAuthoritySql(contract.sql)) return false;
+
+  const tableList = db.prepare('PRAGMA table_list(' + table + ')').all() as Array<{
+    schema: string; name: string; type: string; ncol: number; wr: number; strict: number;
+  }>;
+  if (tableList.length !== 1) return false;
+  const listed = tableList[0]!;
+  if (listed.schema !== 'main' || listed.name !== table || listed.type !== 'table'
+      || listed.ncol !== contract.columns.length || listed.wr !== 0 || listed.strict !== 0) return false;
+
+  const expectedColumns = contract.columns.map((column, cid) => ({
+    cid,
+    name: column.name,
+    type: column.type,
+    notnull: 1,
+    dflt_value: null,
+    pk: column.pk,
+  }));
+  const tableInfo = db.prepare('PRAGMA table_info(' + table + ')').all() as Array<{
+    cid: number; name: string; type: string; notnull: number; dflt_value: unknown; pk: number;
+  }>;
+  if (JSON.stringify(tableInfo) !== JSON.stringify(expectedColumns)) return false;
+  const tableXinfo = db.prepare('PRAGMA table_xinfo(' + table + ')').all() as Array<{
+    cid: number; name: string; type: string; notnull: number; dflt_value: unknown; pk: number; hidden: number;
+  }>;
+  const expectedXinfo = expectedColumns.map((column) => ({ ...column, hidden: 0 }));
+  if (JSON.stringify(tableXinfo) !== JSON.stringify(expectedXinfo)) return false;
+
+  const actualIndexes: CausalV2IndexContract[] = [];
+  const indexList = db.prepare('PRAGMA index_list(' + table + ')').all() as Array<{
+    name: string; unique: number; origin: string; partial: number;
+  }>;
+  for (const index of indexList) {
+    if ((index.unique !== 0 && index.unique !== 1)
+        || !['pk', 'u', 'c'].includes(index.origin)
+        || index.partial !== 0) return false;
+    // `index.name` is SQLite metadata, not a checked-in identifier. The bound
+    // table-valued pragma keeps arbitrary valid names data rather than syntax.
+    const xinfo = db.prepare(
+      'SELECT seqno, cid, name, desc, coll, key FROM pragma_index_xinfo(?) ORDER BY seqno',
+    ).all(index.name) as Array<{
+      seqno: number; cid: number; name: string | null; desc: number; coll: string | null; key: number;
+    }>;
+    if (xinfo.some((entry) => entry.key !== 1 && entry.cid !== -1)) return false;
+    const keyRows = xinfo.filter((entry) => entry.key === 1).sort((left, right) => left.seqno - right.seqno);
+    if (keyRows.some((entry) => entry.cid < 0 || entry.name === null
+        || entry.coll !== 'BINARY' || (entry.desc !== 0 && entry.desc !== 1))) return false;
+    let explicit: { name: string; sql: string } | undefined;
+    if (index.origin === 'c') {
+      const schemaIndex = db.prepare(
+        "SELECT sql FROM sqlite_schema WHERE type = 'index' AND name = ? AND tbl_name = ?",
+      ).get(index.name, table) as { sql: string | null } | undefined;
+      if (!schemaIndex || typeof schemaIndex.sql !== 'string') return false;
+      explicit = { name: index.name, sql: schemaIndex.sql };
+    }
+    actualIndexes.push({
+      origin: index.origin as 'pk' | 'u' | 'c',
+      unique: index.unique as 0 | 1,
+      columns: keyRows.map((entry) => ({
+        cid: entry.cid,
+        name: entry.name!,
+        desc: entry.desc as 0 | 1,
+      })),
+      ...explicit,
+    });
+  }
+  const semanticKey = (value: CausalV2IndexContract): string | null => {
+    const shared = { origin: value.origin, unique: value.unique, columns: value.columns };
+    if (value.origin !== 'c') return JSON.stringify(shared);
+    const sql = normalizeAuthoritySql(value.sql);
+    if (typeof value.name !== 'string' || sql === null) return null;
+    return JSON.stringify({ ...shared, name: value.name, sql });
+  };
+  const actualKeys = actualIndexes.map(semanticKey);
+  const expectedKeys = contract.indexes.map(semanticKey);
+  if (actualKeys.some((value) => value === null) || expectedKeys.some((value) => value === null)) return false;
+  return JSON.stringify((actualKeys as string[]).sort())
+    === JSON.stringify((expectedKeys as string[]).sort());
+}
+
+/** Authenticate the complete v2 table/index/trigger authority. */
+export function causalV2SchemaAttestation(db: DatabaseSync): CausalV2SchemaAttestation {
+  const defectIds = new Set<string>();
+  let presentTables = 0;
+  for (const [table, contract] of Object.entries(CAUSAL_V2_TABLE_CONTRACTS)) {
+    const present = db.prepare(
+      "SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = ?",
+    ).get(table) as { present: number } | undefined;
+    if (!present) {
+      defectIds.add('CAUSAL_V2_TABLE_MISSING');
+      continue;
+    }
+    presentTables += 1;
+    if (!tableContractMatches(db, table, contract)) {
+      defectIds.add('CAUSAL_V2_TABLE_OR_INDEX_AUTHORITY_MISMATCH');
+    }
+  }
+
+  const expectedTriggers = expectedImmutabilityTriggers();
+  const triggerRows = db.prepare(
+    "SELECT name, tbl_name, sql FROM sqlite_master WHERE type = 'trigger' ORDER BY name",
+  ).all() as Array<{ name: string; tbl_name: string; sql: string | null }>;
+  const relevantTriggers = triggerRows.filter((row) =>
+    expectedTriggers.has(row.name) || CAUSAL_V2_TABLES.includes(row.tbl_name),
+  );
+  if (relevantTriggers.length !== expectedTriggers.size) {
+    defectIds.add('CAUSAL_V2_TRIGGER_AUTHORITY_MISMATCH');
+  } else {
+    for (const row of relevantTriggers) {
+      const expected = expectedTriggers.get(row.name);
+      if (!expected || row.tbl_name !== expected.table
+          || normalizeAuthoritySql(row.sql) !== expected.sql) {
+        defectIds.add('CAUSAL_V2_TRIGGER_AUTHORITY_MISMATCH');
+      }
+    }
+  }
+
+  if (presentTables === 0 && relevantTriggers.length === 0) {
+    return { state: 'absent', defectIds: ['CAUSAL_V2_SCHEMA_ABSENT'] };
+  }
+  if (presentTables === CAUSAL_V2_TABLES.length && defectIds.size === 0) {
+    return { state: 'exact', defectIds: [] };
+  }
+  if (presentTables > 0 && presentTables < CAUSAL_V2_TABLES.length) {
+    defectIds.add('CAUSAL_V2_PARTIAL_SCHEMA');
+  }
+  return { state: 'incomplete', defectIds: [...defectIds].sort() };
+}
+
+export function causalV2SchemaComplete(db: DatabaseSync): boolean {
+  return causalV2SchemaAttestation(db).state === 'exact';
+}
+
 
 /**
  * Open-time setup, in the order the store has always run it: journal + sync
@@ -609,10 +1059,45 @@ export function runScript(db: DatabaseSync, sql: string): void {
  * load-bearing — migrate() reads `PRAGMA table_info` for tables SCHEMA has just
  * guaranteed exist.
  */
-export function initializeSchema(db: DatabaseSync): void {
+export function initializeSchema(
+  db: DatabaseSync,
+  options: {
+    expectedCausalV2State?: CausalV2SchemaState;
+    migrationBackupVerified?: boolean;
+    allowUnbackedCausalV2Create?: boolean;
+  } = {},
+): void {
   runScript(db, 'PRAGMA journal_mode = WAL');
   runScript(db, 'PRAGMA synchronous = NORMAL');
-  runScript(db, SCHEMA);
-  migrate(db);
-  installCausalImmutability(db);
+  const preflightState = options.expectedCausalV2State ?? causalV2SchemaAttestation(db).state;
+  db.prepare('BEGIN IMMEDIATE').run();
+  try {
+    const lockedState = causalV2SchemaAttestation(db).state;
+    if (lockedState !== preflightState) {
+      throw new Error('causal v2 schema validation failed: CAUSAL_V2_PREFLIGHT_STATE_DRIFT');
+    }
+    if (lockedState !== 'exact'
+        && !options.migrationBackupVerified
+        && !options.allowUnbackedCausalV2Create) {
+      throw new Error('causal v2 schema validation failed: CAUSAL_V2_VERIFIED_BACKUP_REQUIRED');
+    }
+    runScript(db, SCHEMA);
+    migrate(db);
+    installCausalImmutability(db);
+    const finalAttestation = causalV2SchemaAttestation(db);
+    if (finalAttestation.state !== 'exact') {
+      throw new Error(
+        'causal v2 schema validation failed: ' +
+        (finalAttestation.defectIds.join(',') || 'CAUSAL_V2_SCHEMA_INCOMPLETE'),
+      );
+    }
+    db.prepare('COMMIT').run();
+  } catch (error) {
+    try {
+      db.prepare('ROLLBACK').run();
+    } catch {
+      // Preserve the migration failure if SQLite already closed the transaction.
+    }
+    throw error;
+  }
 }

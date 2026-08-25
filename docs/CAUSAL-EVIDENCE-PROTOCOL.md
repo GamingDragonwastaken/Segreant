@@ -193,7 +193,7 @@ reason; it must not survive in a recommendation card as a stale green claim.
 
 ## Implementation status
 
-Task 3 Slice 1 implements only the additive in-process protocol boundary:
+Task 3 Slice 1 implements the additive in-process protocol boundary:
 
 - exact v2 TypeScript protocol/commitment declarations;
 - strict v2 draft and retained-commitment validation;
@@ -202,14 +202,29 @@ Task 3 Slice 1 implements only the additive in-process protocol boundary:
 - draft/commit rejection of `local_ai_judge` for both quality and economic
   preregistration.
 
-This slice does **not** implement v2 Store tables or migration, assignment
-blocks, execution/outcome persistence, lifecycle/data locking, analysis
-snapshots, CLI commands, API/dashboard projection, export, packaging, or release.
-Legacy v1 code remains present for compatibility and inspection; its existence
-is not evidence that any v2 operation beyond this protocol boundary is ready.
-That legacy compatibility substrate includes pre-exposure balanced assignment blocks
-used by existing v1 callers/tests; Task 3 does not treat them as a v2
-mutation or persistence capability.
-No command in the causal lane changes a provider route, provider configuration,
-or budget automatically. Fiscus still has **no qualified causal customer
+Slice 2 adds the domain-separated, replayable v2 assignment formulas as an
+internal algorithm checkpoint. Slice 3 adds the local Store boundary: additive
+v2 tables and authenticated migration, Store-owned sequence allocation and
+cryptographic entropy inside one transaction, global per-study unit uniqueness,
+canonical retained rows, authoritative manifests, rollback without allocation
+disclosure, and a package boundary that excludes test-only deterministic seams.
+These Slice 3 changes remain a review candidate until their exact patch is
+approved and committed; they are a Store-only substrate, not a public v2
+projection or release statement.
+
+Legacy v1 protocol and assignment records remain decodable and replayable for
+inspection. They are immutable evidence: production code cannot create a new v1
+assignment, and both causal-assignment preview and apply refuse v1 with
+`CAUSAL_LEGACY_INSPECT_ONLY` before reading a units file or allocating an arm.
+V1 protocol registration is likewise refused for preview and apply. The CLI
+does not yet expose v2 protocol registration or assignment: both forms of v2
+registration refuse with `CAUSAL_V2_CLI_DEFERRED` before opening or mutating the
+Store, and current status/inspect/verify plus the API/dashboard expose retained
+v1 evidence only. Execution/outcome v2 persistence,
+append-only lifecycle and data locking, analysis snapshots and qualification,
+full read-only API/dashboard projection, redacted export, packaging approval,
+and release remain deferred to later reviewed slices.
+No supported current causal command mutates study evidence, changes a provider
+route, changes provider configuration, or changes a budget automatically.
+Fiscus still has **no qualified causal customer
 result** unless and until a real executed study passes every applicable gate.

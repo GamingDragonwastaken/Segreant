@@ -9,6 +9,9 @@
   "bin": {
     "fiscus": "bin/fiscus.mjs"
   },
+  "exports": {
+    "./package.json": "./package.json"
+  },
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning bin/fiscus.mjs start",
     "fiscus": "node --disable-warning=ExperimentalWarning bin/fiscus.mjs",

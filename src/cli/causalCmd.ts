@@ -1,17 +1,16 @@
 /**
  * Local, review-first causal-study operator surface.
  *
- * Registration and assignment require --apply because they append local
- * evidence records. They never change provider routing, budgets, prompts, or
- * external systems. Analysis without --apply is a deterministic preview.
+ * The current public surface reads retained version-1 evidence only. Version-2
+ * registration, assignment, and projection remain deferred to their owning
+ * public-operation slices; Slice 3's version-2 substrate is Store-only.
  */
 
 import { readFileSync } from 'node:fs';
 import { dbPath } from '../config.ts';
-import { createBlockedAssignmentPlan, verifyBlockedAssignmentPlan } from '../causal/assignment.ts';
+import { verifyBlockedAssignmentPlan } from '../causal/assignment.ts';
 import { estimateCausalStudy } from '../causal/estimate.ts';
 import { commitCausalProtocol } from '../causal/protocol.ts';
-import type { CausalStudyProtocolDraft } from '../causal/types.ts';
 import { Store } from '../store/db.ts';
 import type { Flags } from './flags.ts';
 
@@ -29,16 +28,21 @@ function readJsonFile(file: string): unknown {
   }
 }
 
-function readUnitHashes(file: string): string[] {
-  try {
-    const values = readFileSync(file, 'utf8')
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-    if (values.length === 0) throw new Error('no unit hashes found');
-    return values;
-  } catch (err) {
-    throw new Error('cannot read causal unit hashes from ' + file + ': ' + (err instanceof Error ? err.message : String(err)));
+class CausalCliLegacyInspectOnlyError extends Error {
+  readonly code = 'CAUSAL_LEGACY_INSPECT_ONLY';
+
+  constructor(operation: string) {
+    super('CAUSAL_LEGACY_INSPECT_ONLY: retained version-1 causal evidence is inspect-only; cannot ' + operation);
+    this.name = 'CausalCliLegacyInspectOnlyError';
+  }
+}
+
+class CausalCliV2DeferredError extends Error {
+  readonly code = 'CAUSAL_V2_CLI_DEFERRED';
+
+  constructor(operation: string) {
+    super('CAUSAL_V2_CLI_DEFERRED: version-2 causal ' + operation + ' is Store-only in this slice; the reviewed public CLI projection is deferred');
+    this.name = 'CausalCliV2DeferredError';
   }
 }
 
@@ -58,11 +62,10 @@ function usage(): void {
   console.log('  fiscus causal status [--json]');
   console.log('  fiscus causal inspect <study-id> [--json]');
   console.log('  fiscus causal verify <study-id> [--json]');
-  console.log('  fiscus causal register --file <protocol.json> [--at <epoch-ms>] [--apply] [--json]');
-  console.log('  fiscus causal assign --study <study-id> --block <block-id> --units-file <sha256-lines.txt> [--apply] [--json]');
-  console.log('  fiscus causal analyze --study <study-id> [--id <analysis-id>] [--apply] [--json]');
   console.log('');
-  console.log('  register and assign without --apply are validated previews. No action here routes');
+  console.log('  Public causal mutations and version-2 projection are deferred. This CLI');
+  console.log('  exposes retained version-1 status, inspection, and replay verification only.');
+  console.log('  No action here routes');
   console.log('  providers, alters budgets, or sends a request outside this machine.');
   console.log('');
 }
@@ -99,6 +102,16 @@ export function cmdCausal(flags: Flags): void {
     usage();
     return;
   }
+  if (action === 'register') {
+    const file = requireStringFlag(flags, 'file');
+    const source = readJsonFile(file);
+    const at = flags.at === undefined ? Date.now() : Number(flags.at);
+    const protocol = commitCausalProtocol(source, at);
+    if (protocol.version === 1) {
+      throw new CausalCliLegacyInspectOnlyError('register a version-1 protocol');
+    }
+    throw new CausalCliV2DeferredError('protocol registration');
+  }
   const store = new Store(dbPath());
   try {
     if (action === 'status') {
@@ -106,71 +119,18 @@ export function cmdCausal(flags: Flags): void {
       emit({
         studies,
         causalEvidence: studies.length === 0
-          ? 'No registered causal study. Current Fiscus value output remains an observed/manual-equivalent scenario.'
-          : 'Registered local studies are listed. Inspect or verify one before using any causal language.',
-      }, flags);
-      return;
-    }
-
-    if (action === 'register') {
-      const file = requireStringFlag(flags, 'file');
-      const source = readJsonFile(file) as CausalStudyProtocolDraft;
-      const at = flags.at === undefined ? Date.now() : Number(flags.at);
-      const protocol = commitCausalProtocol(source, at);
-      if (!flags.apply) {
-        emit({
-          operation: 'register_preview',
-          protocol,
-          warning: 'Validated only. Re-run with --apply to append this immutable local protocol.',
-        }, flags);
-        return;
-      }
-      emit({
-        operation: 'registered',
-        result: store.registerCausalProtocol(protocol),
-        protocolHash: protocol.protocolHash,
-        studyId: protocol.studyId,
-        boundary: 'Protocol registration does not collect traffic or alter routing.',
+          ? 'No publicly inspectable retained version-1 causal study. Version-2 public projection is deferred; current Fiscus value output remains an observed/manual-equivalent scenario.'
+          : 'Retained version-1 local studies are listed for inspection or replay verification; no public causal mutation is available.',
       }, flags);
       return;
     }
 
     if (action === 'assign') {
       const studyId = requireStringFlag(flags, 'study');
-      const blockId = requireStringFlag(flags, 'block');
-      const unitsFile = requireStringFlag(flags, 'units-file');
+      requireStringFlag(flags, 'block');
       const data = store.causalStudyData(studyId);
       if (!data) throw new Error('causal study not found: ' + studyId);
-      const plan = createBlockedAssignmentPlan(data.protocol, {
-        blockId,
-        unitIdHashes: readUnitHashes(unitsFile),
-      });
-      if (!flags.apply) {
-        emit({
-          operation: 'assign_preview',
-          studyId,
-          blockId,
-          allocationHash: plan.allocationHash,
-          decisions: plan.decisions.map((decision) => ({
-            decisionId: decision.decisionId,
-            unitIdHash: decision.unitIdHash,
-            assignedArmId: decision.assignedArmId,
-            propensity: decision.propensity,
-          })),
-          warning: 'Validated only. Re-run with --apply to append this immutable local assignment block.',
-        }, flags);
-        return;
-      }
-      emit({
-        operation: 'assigned',
-        result: store.saveCausalAssignmentPlan(plan),
-        studyId,
-        blockId,
-        allocationHash: plan.allocationHash,
-        decisions: plan.decisions.length,
-        boundary: 'Assignment is evidence collection only. It does not switch a provider route.',
-      }, flags);
-      return;
+      throw new CausalCliLegacyInspectOnlyError('preview or apply a new assignment');
     }
 
     if (action === 'inspect') {
