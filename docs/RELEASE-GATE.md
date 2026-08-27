@@ -45,8 +45,24 @@ These records are not public CLI/API/dashboard evidence. Cost-bearing internal
 qualification remains fail-closed unless the sidecar is present and valid,
 ordinary ledger verification is resolved, and every other causal gate passes.
 The same branch also carries the token-safe build publication/launcher read
-hardening at `d862d6a`. The historical candidate rows below do not cover these
-later sources and must not be reused as exact-head release evidence.
+hardening at `d862d6a`. The follow-up `3516e5a` adds a source-generation
+fingerprint (captured before compilation and checked again inside the
+publication gate), one bounded retry on source drift, and an exclusive reader
+gate in the supported `bin/fiscus.mjs` launcher. Thus a build that started from
+an older source generation cannot publish after a newer generation merely
+because it finished compiling later, and the supported launcher cannot resolve
+the file-by-file publication while it is in progress.
+
+This guarantee is deliberately scoped. The package-compatible top-level
+`dist/*` paths remain ordinary files, because replacing the non-empty `dist`
+directory is not an atomic overwrite on Windows (and a POSIX remove/rename
+sequence would introduce a reader gap). Direct module imports of `dist/*` and
+tools such as `npm pack` do not acquire the Fiscus gate and therefore remain
+outside the whole-tree reader guarantee; changing that would require a
+generation-pointer or symlink/junction package-layout change that would break
+the existing `dist/cli.js`/deep-import and package-surface contract. The
+historical candidate rows below do not cover these later sources and must not
+be reused as exact-head release evidence.
 
 ### Candidate record — commit `f2f3c9a`, 2026-08-21
 
