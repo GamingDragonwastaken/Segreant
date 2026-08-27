@@ -33,4 +33,3 @@ export function independentCausalUnitIdDigestV2(
     'fiscus.causal.independent-unit\n2\n' + canonicalJson(input),
   );
 }
-
