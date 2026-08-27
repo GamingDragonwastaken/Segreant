@@ -12,6 +12,10 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ### Security
 
+- SQLite causal evidence tables now enable recursive triggers on every Store
+  connection. `INSERT OR REPLACE` therefore cannot silently delete and replace
+  an append-only evidence row; the regression suite exercises all protected
+  causal tables through the raw connection as well as the typed write path.
 - The local dashboard no longer exits on a malformed percent-escape in an asset
   path. `decodeURIComponent` threw a `URIError` out of the request handler with
   nothing to catch it, so any page the operator visited could stop Fiscus with a
@@ -52,6 +56,11 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ### Changed
 
+- Concurrent builds now fingerprint their source generation before and after
+  compilation and again inside the publication gate, retrying once on source
+  drift. The supported CLI launcher acquires the same exclusive gate while it
+  resolves the compiled module graph, so an older build cannot publish after a
+  newer source generation merely because it finished compiling later.
 - `npm test` performs the full reproducible build prerequisite. Package-boundary
   tests inspect Node runtime artifacts as well as browser output, so they no
   longer depend on `npm ci` having run `prepare` earlier in the checkout.

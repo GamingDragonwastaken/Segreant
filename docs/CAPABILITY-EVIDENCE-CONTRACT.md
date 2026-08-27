@@ -1,12 +1,13 @@
 # Capability and evidence contract
 
-**Candidate-source review:** 2026-08-27, source revisions `45a79a6` (causal
-integrity) and `d862d6a` (build publication). This document
-describes the locally implemented product and the evidence available at that
-candidate. It is not a statement that a hosted service, customer deployment, or
-provider invoice validation exists. Any later candidate must re-review this
-contract against its exact source revision; this marker is not inherited by a
-newer branch tip.
+**Candidate-source review:** 2026-08-27, source revisions `e3cef41` (asserted
+T-069 identity remains unqualified), `aa24764` (recursive-trigger append-only
+hardening), `3516e5a` (source-generation/publication gate), and `4e8d387`
+(release-reader boundary). This document describes the locally implemented
+product and the evidence available at that candidate. It is not a statement
+that a hosted service, customer deployment, or provider invoice validation
+exists. Any later candidate must re-review this contract against its exact
+source revision; this marker is not inherited by a newer branch tip.
 
 Fiscus is a local-first AI Financial Operations tool. Its present evidence and
 implementation are strongest for AI coding-agent work. Its broader direction is

@@ -35,7 +35,7 @@ external deployment, or the optional team service.
 **Current internal causal substrate.** The exact branch includes the
 Store-internal V2 execution, terminal-outcome, follow-up-policy,
 clock-authority, qualification, and T-069 scalar lineage-validation code at
-source revision `45a79a6`, including the append-only
+source revision `e3cef41`, including the append-only
 `causal_lineage_bindings_v2` sidecar. The validator requires canonical retained
 execution/outcome records, recomputes stored binding digests, and requires a
 separately retained causal unit identity plus a post-execution realization
@@ -44,8 +44,12 @@ identity, so its rows remain unqualified until a causal-aware producer exists.
 These records are not public CLI/API/dashboard evidence. Cost-bearing internal
 qualification remains fail-closed unless the sidecar is present and valid,
 ordinary ledger verification is resolved, and every other causal gate passes.
-The same branch also carries the token-safe build publication/launcher read
-hardening at `d862d6a`. The follow-up `3516e5a` adds a source-generation
+Commit `aa24764` enables recursive SQLite triggers for every operational and
+migration-verification connection, so the physical append-only triggers also
+cover `INSERT OR REPLACE` conflict resolution. The same branch also carries
+the token-safe build publication/launcher read hardening at `3516e5a`.
+The follow-up `4e8d387` records its exact supported-reader guarantee and the
+remaining unmanaged-reader boundary. That build protocol adds a source-generation
 fingerprint (captured before compilation and checked again inside the
 publication gate), one bounded retry on source drift, and an exclusive reader
 gate in the supported `bin/fiscus.mjs` launcher. Thus a build that started from

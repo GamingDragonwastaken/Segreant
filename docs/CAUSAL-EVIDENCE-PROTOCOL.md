@@ -1,5 +1,10 @@
 # Causal Evidence Protocol
 
+**Candidate-source review:** 2026-08-27, T-069 qualification behavior is bound
+to `e3cef41` and the SQLite append-only trigger hardening to `aa24764`. The
+current branch still has no independent causal-aware realization producer, so
+the asserted identity path remains inconclusive rather than qualified.
+
 This is the contract Fiscus must satisfy before it uses causal financial
 language. It is intentionally stricter than the ordinary local ledger,
 price model, realized-value pipeline, or RoI Index. Those tools remain
