@@ -419,6 +419,30 @@ export interface CausalExecutionRecordV2 {
   eventHash: string;
 }
 
+/** Exact v2 terminal outcome record. Pending is represented by row absence. */
+export interface CausalTerminalOutcomeRecordV2 {
+  type: 'fiscus.causal-terminal-outcome';
+  version: 2;
+  outcomeId: string;
+  decisionId: string;
+  studyId: string;
+  protocolHash: string;
+  observedAtMs: number;
+  maturity: Exclude<OutcomeMaturity, 'pending'>;
+  qualityValue: number | null;
+  qualityEvidenceClass: CausalEvidenceClassV2 | null;
+  economicValueUsd: number | null;
+  economicEvidenceClass: CausalEvidenceClassV2 | null;
+  outcomeEvidenceDigests: string[];
+  censoredReason: 'follow_up_expired' | 'source_unavailable' | 'not_observable' | 'unit_withdrawn' | null;
+  invalidReason: 'protocol_violation' | 'measurement_conflict' | 'integrity_failure' | 'ineligible_unit' | null;
+  previousEventHash: string;
+  eventHash: string;
+}
+
+/** Name used by the durable causal protocol for the same exact v2 record. */
+export type TerminalOutcomeV2 = CausalTerminalOutcomeRecordV2;
+
 export interface CausalExecutionRecord {
   executionId: string;
   decisionId: string;

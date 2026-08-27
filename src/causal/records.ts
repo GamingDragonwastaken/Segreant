@@ -11,6 +11,8 @@ import { createHash } from 'node:crypto';
 import { canonicalJson } from './protocol.ts';
 import type {
   CausalExecutionRecordV2,
+  CausalTerminalOutcomeRecordV2,
+  CausalEvidenceClassV2,
   CostSourceClass,
   ExecutionAdherence,
   OrdinaryLedgerVerifierResultV2,
@@ -34,6 +36,21 @@ const COST_CLASSES: readonly CostSourceClass[] = [
   'actual_reconciled', 'actual_observed', 'modeled_price_card', 'incomplete_or_unknown',
 ];
 const ADHERENCE: readonly ExecutionAdherence[] = ['confirmed', 'deviated', 'incomplete', 'unverifiable'];
+const TERMINAL_OUTCOME_KEYS = [
+  'type', 'version', 'outcomeId', 'decisionId', 'studyId', 'protocolHash',
+  'observedAtMs', 'maturity', 'qualityValue', 'qualityEvidenceClass',
+  'economicValueUsd', 'economicEvidenceClass', 'outcomeEvidenceDigests',
+  'censoredReason', 'invalidReason', 'previousEventHash', 'eventHash',
+] as const;
+const EVIDENCE_CLASSES: readonly CausalEvidenceClassV2[] = [
+  'deterministic', 'independent_operational', 'structured_human', 'operator_attested',
+];
+const CENSORED_REASON_CODES = [
+  'follow_up_expired', 'source_unavailable', 'not_observable', 'unit_withdrawn',
+] as const;
+const INVALID_REASON_CODES = [
+  'protocol_violation', 'measurement_conflict', 'integrity_failure', 'ineligible_unit',
+] as const;
 
 export class CausalRecordValidationError extends Error {
   readonly code = 'CAUSAL_RECORD_INVALID';
@@ -44,17 +61,47 @@ export class CausalRecordValidationError extends Error {
   }
 }
 
+export class CausalTerminalOutcomeValidationError extends Error {
+  readonly code = 'CAUSAL_RECORD_INVALID';
+
+  constructor() {
+    super('CAUSAL_RECORD_INVALID: causal terminal outcome record is invalid');
+    this.name = 'CausalTerminalOutcomeValidationError';
+  }
+}
+
 function plainRecord(value: unknown): value is Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
   const prototype = Object.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
 }
 
-function exactKeys(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
-  if (!plainRecord(value)) return false;
-  const actual = Object.keys(value).sort();
-  const expected = [...keys].sort();
-  return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
+/**
+ * Capture an exact plain input object before projecting any fields.  This is
+ * deliberately descriptor-based: accessors and symbol/hidden properties are
+ * not production records, and rejecting them prevents a getter/proxy from
+ * changing the shape after the unknown-input boundary has been checked.
+ */
+function captureExactRecord(value: unknown, keys: readonly string[]): Record<string, unknown> | null {
+  if (!plainRecord(value)) return null;
+  try {
+    const actual = Reflect.ownKeys(value);
+    if (actual.some((key) => typeof key !== 'string')) return null;
+    const expected = [...keys].sort();
+    const actualStrings = (actual as string[]).sort();
+    if (actualStrings.length !== expected.length
+        || !actualStrings.every((key, index) => key === expected[index])) return null;
+
+    const captured: Record<string, unknown> = {};
+    for (const key of keys) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor || !('value' in descriptor) || descriptor.enumerable !== true) return null;
+      captured[key] = descriptor.value;
+    }
+    return captured;
+  } catch {
+    return null;
+  }
 }
 
 function safeScalar(value: unknown): value is string {
@@ -107,6 +154,68 @@ function sortedUnique(values: unknown, validator: (value: unknown) => value is s
     && typed.every((value, index) => index === 0 || typed[index - 1]! < value);
 }
 
+/**
+ * Snapshot an input array without retaining a caller-owned mutable reference.
+ * Invalid array shape becomes a scalar sentinel so the normal decoder rejects
+ * it; a hostile getter/proxy cannot change the returned validated record after
+ * this boundary has completed.
+ */
+function snapshotArray(value: unknown): unknown {
+  if (!Array.isArray(value)) return value;
+  try {
+    const lengthDescriptor = Object.getOwnPropertyDescriptor(value, 'length');
+    if (!lengthDescriptor || !('value' in lengthDescriptor)) return null;
+    const length = lengthDescriptor.value;
+    const keys = Reflect.ownKeys(value);
+    if (!Number.isSafeInteger(length) || length < 0
+        || keys.some((key) => typeof key !== 'string')
+        || keys.length !== length + 1
+        || !keys.includes('length')
+        || (keys as string[]).some((key) => key !== 'length'
+          && (!/^(0|[1-9][0-9]*)$/.test(key) || Number(key) >= length))) {
+      return null;
+    }
+    const copy = new Array<unknown>(length);
+    for (let index = 0; index < length; index += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (!descriptor || !('value' in descriptor) || descriptor.enumerable !== true) return null;
+      copy[index] = descriptor.value;
+    }
+    return copy;
+  } catch {
+    return null;
+  }
+}
+
+function snapshotVerifier(value: unknown): unknown {
+  const captured = captureExactRecord(value, VERIFIER_KEYS);
+  if (!captured) return null;
+  return {
+    ...captured,
+    reasonCodes: snapshotArray(captured.reasonCodes),
+  };
+}
+
+function snapshotExecution(value: unknown): unknown {
+  const captured = captureExactRecord(value, EXECUTION_KEYS);
+  if (!captured) return null;
+  return {
+    ...captured,
+    requestIds: snapshotArray(captured.requestIds),
+    priceLineageDigests: snapshotArray(captured.priceLineageDigests),
+    ordinaryLedgerVerifier: snapshotVerifier(captured.ordinaryLedgerVerifier),
+  };
+}
+
+function snapshotTerminalOutcome(value: unknown): unknown {
+  const captured = captureExactRecord(value, TERMINAL_OUTCOME_KEYS);
+  if (!captured) return null;
+  return {
+    ...captured,
+    outcomeEvidenceDigests: snapshotArray(captured.outcomeEvidenceDigests),
+  };
+}
+
 function domainHash(domain: string, material: unknown): string {
   return 'sha256:' + createHash('sha256')
     .update(domain + '\n2\n' + canonicalJson(material))
@@ -122,76 +231,86 @@ function executionHash(value: Omit<CausalExecutionRecordV2, 'eventHash'>): strin
 }
 
 function decodeVerifier(value: unknown): OrdinaryLedgerVerifierResultV2 {
-  if (!exactKeys(value, VERIFIER_KEYS)
-      || value.type !== 'fiscus.causal-ordinary-ledger-verifier'
-      || value.version !== 2
-      || value.state !== 'unresolved'
-      || value.checkedAtMs !== null
-      || value.requestCount !== 0
-      || value.evidenceManifestHash !== null
-      || !denseArray(value.reasonCodes)
-      || value.reasonCodes.length !== 1
-      || value.reasonCodes[0] !== 'task4_not_implemented'
-      || !digest(value.resultHash)) {
+  const snapshot = snapshotVerifier(value);
+  if (!plainRecord(snapshot)
+      || snapshot.type !== 'fiscus.causal-ordinary-ledger-verifier'
+      || snapshot.version !== 2
+      || snapshot.state !== 'unresolved'
+      || snapshot.checkedAtMs !== null
+      || snapshot.requestCount !== 0
+      || snapshot.evidenceManifestHash !== null
+      || !denseArray(snapshot.reasonCodes)
+      || snapshot.reasonCodes.length !== 1
+      || snapshot.reasonCodes[0] !== 'task4_not_implemented'
+      || !digest(snapshot.resultHash)) {
     throw new CausalRecordValidationError();
   }
-  const { resultHash, ...material } = value as Omit<OrdinaryLedgerVerifierResultV2, 'resultHash'> & { resultHash: string };
+  const { resultHash, ...material } = snapshot as Omit<OrdinaryLedgerVerifierResultV2, 'resultHash'> & { resultHash: string };
   if (verifierHash(material) !== resultHash) throw new CausalRecordValidationError();
-  return value as unknown as OrdinaryLedgerVerifierResultV2;
+  return {
+    ...snapshot,
+    reasonCodes: [...snapshot.reasonCodes],
+  } as OrdinaryLedgerVerifierResultV2;
 }
 
 /** Decode one exact production execution record from unknown input. */
 function decodeCausalExecutionV2Unchecked(value: unknown): CausalExecutionRecordV2 {
-  if (!exactKeys(value, EXECUTION_KEYS)
-      || value.type !== 'fiscus.causal-execution'
-      || value.version !== 2) {
+  const snapshot = snapshotExecution(value);
+  if (!plainRecord(snapshot)
+      || snapshot.type !== 'fiscus.causal-execution'
+      || snapshot.version !== 2) {
     throw new CausalRecordValidationError();
   }
-  if (!id(value.executionId) || !id(value.decisionId) || !id(value.studyId)
-      || !digest(value.protocolHash) || !epoch(value.startedAtMs)
-      || !epoch(value.completedAtMs) || value.completedAtMs < value.startedAtMs
-      || !digest(value.assignedExecutionPlanDigest)
-      || (value.actualExecutionPlanDigest !== null && !digest(value.actualExecutionPlanDigest))
-      || !ADHERENCE.includes(value.adherence as ExecutionAdherence)
-      || !sortedUnique(value.requestIds, id)
-      || !finiteOrNull(value.directAiCostUsd)
-      || !COST_CLASSES.includes(value.directCostSourceClass as CostSourceClass)
-      || !sortedUnique(value.priceLineageDigests, digest)
-      || !finiteOrNull(value.fullArmCostUsd)
-      || !COST_CLASSES.includes(value.fullCostSourceClass as CostSourceClass)
-      || !digest(value.previousEventHash)
-      || !digest(value.eventHash)) {
+  if (!id(snapshot.executionId) || !id(snapshot.decisionId) || !id(snapshot.studyId)
+      || !digest(snapshot.protocolHash) || !epoch(snapshot.startedAtMs)
+      || !epoch(snapshot.completedAtMs) || snapshot.completedAtMs < snapshot.startedAtMs
+      || !digest(snapshot.assignedExecutionPlanDigest)
+      || (snapshot.actualExecutionPlanDigest !== null && !digest(snapshot.actualExecutionPlanDigest))
+      || !ADHERENCE.includes(snapshot.adherence as ExecutionAdherence)
+      || !sortedUnique(snapshot.requestIds, id)
+      || !finiteOrNull(snapshot.directAiCostUsd)
+      || !COST_CLASSES.includes(snapshot.directCostSourceClass as CostSourceClass)
+      || !sortedUnique(snapshot.priceLineageDigests, digest)
+      || !finiteOrNull(snapshot.fullArmCostUsd)
+      || !COST_CLASSES.includes(snapshot.fullCostSourceClass as CostSourceClass)
+      || !digest(snapshot.previousEventHash)
+      || !digest(snapshot.eventHash)) {
     throw new CausalRecordValidationError();
   }
-  if (value.directAiCostUsd === null) {
-    if (value.directCostSourceClass !== 'incomplete_or_unknown'
-        || (value.fullArmCostUsd === null && value.priceLineageDigests.length !== 0)) {
+  if (snapshot.directAiCostUsd === null) {
+    if (snapshot.directCostSourceClass !== 'incomplete_or_unknown'
+        || (snapshot.fullArmCostUsd === null && snapshot.priceLineageDigests.length !== 0)) {
       throw new CausalRecordValidationError();
     }
-  } else if ((value.directCostSourceClass !== 'actual_observed' && value.directCostSourceClass !== 'actual_reconciled')
-      || value.priceLineageDigests.length === 0) {
+  } else if ((snapshot.directCostSourceClass !== 'actual_observed' && snapshot.directCostSourceClass !== 'actual_reconciled')
+      || snapshot.priceLineageDigests.length === 0) {
     throw new CausalRecordValidationError();
   }
-  if (value.fullArmCostUsd === null) {
-    if (value.fullCostSourceClass !== 'incomplete_or_unknown') throw new CausalRecordValidationError();
+  if (snapshot.fullArmCostUsd === null) {
+    if (snapshot.fullCostSourceClass !== 'incomplete_or_unknown') throw new CausalRecordValidationError();
   } else {
-    if (value.fullCostSourceClass !== 'actual_observed' && value.fullCostSourceClass !== 'actual_reconciled') {
+    if (snapshot.fullCostSourceClass !== 'actual_observed' && snapshot.fullCostSourceClass !== 'actual_reconciled') {
       throw new CausalRecordValidationError();
     }
-    if (value.priceLineageDigests.length === 0) throw new CausalRecordValidationError();
+    if (snapshot.priceLineageDigests.length === 0) throw new CausalRecordValidationError();
   }
-  if (value.adherence === 'confirmed'
-      && (value.actualExecutionPlanDigest === null || value.actualExecutionPlanDigest !== value.assignedExecutionPlanDigest)) {
+  if (snapshot.adherence === 'confirmed'
+      && (snapshot.actualExecutionPlanDigest === null || snapshot.actualExecutionPlanDigest !== snapshot.assignedExecutionPlanDigest)) {
     throw new CausalRecordValidationError();
   }
-  if ((value.adherence === 'incomplete' || value.adherence === 'unverifiable')
-      && (value.directAiCostUsd !== null || value.fullArmCostUsd !== null)) {
+  if ((snapshot.adherence === 'incomplete' || snapshot.adherence === 'unverifiable')
+      && (snapshot.directAiCostUsd !== null || snapshot.fullArmCostUsd !== null)) {
     throw new CausalRecordValidationError();
   }
-  decodeVerifier(value.ordinaryLedgerVerifier);
-  const { eventHash, ...material } = value as Omit<CausalExecutionRecordV2, 'eventHash'> & { eventHash: string };
+  const ordinaryLedgerVerifier = decodeVerifier(snapshot.ordinaryLedgerVerifier);
+  const { eventHash, ...material } = snapshot as Omit<CausalExecutionRecordV2, 'eventHash'> & { eventHash: string };
   if (executionHash(material) !== eventHash) throw new CausalRecordValidationError();
-  return value as unknown as CausalExecutionRecordV2;
+  return {
+    ...snapshot,
+    requestIds: [...snapshot.requestIds],
+    priceLineageDigests: [...snapshot.priceLineageDigests],
+    ordinaryLedgerVerifier,
+  } as CausalExecutionRecordV2;
 }
 
 /**
@@ -221,4 +340,82 @@ export function causalExecutionV2EventHash(
     eventHash?: string;
   };
   return executionHash(material);
+}
+
+function terminalOutcomeHash(value: Omit<CausalTerminalOutcomeRecordV2, 'eventHash'>): string {
+  return domainHash('fiscus.causal.terminal-outcome', value);
+}
+
+function terminalOutcomeEvidenceClass(value: unknown): value is CausalEvidenceClassV2 {
+  return EVIDENCE_CLASSES.includes(value as CausalEvidenceClassV2);
+}
+
+/** Decode one exact production terminal outcome from unknown input. */
+function decodeCausalTerminalOutcomeV2Unchecked(value: unknown): CausalTerminalOutcomeRecordV2 {
+  const snapshot = snapshotTerminalOutcome(value);
+  if (!plainRecord(snapshot)
+      || snapshot.type !== 'fiscus.causal-terminal-outcome'
+      || snapshot.version !== 2
+      || !id(snapshot.outcomeId) || !id(snapshot.decisionId) || !id(snapshot.studyId)
+      || !digest(snapshot.protocolHash) || !epoch(snapshot.observedAtMs)
+      || typeof snapshot.maturity !== 'string'
+      || !['matured', 'censored', 'invalid'].includes(snapshot.maturity)
+      || !finiteOrNull(snapshot.qualityValue)
+      || (snapshot.qualityEvidenceClass !== null && !terminalOutcomeEvidenceClass(snapshot.qualityEvidenceClass))
+      || !finiteOrNull(snapshot.economicValueUsd)
+      || (snapshot.economicEvidenceClass !== null && !terminalOutcomeEvidenceClass(snapshot.economicEvidenceClass))
+      || !sortedUnique(snapshot.outcomeEvidenceDigests, digest)
+      || (snapshot.censoredReason !== null && !CENSORED_REASON_CODES.includes(snapshot.censoredReason as typeof CENSORED_REASON_CODES[number]))
+      || (snapshot.invalidReason !== null && !INVALID_REASON_CODES.includes(snapshot.invalidReason as typeof INVALID_REASON_CODES[number]))
+      || !digest(snapshot.previousEventHash) || !digest(snapshot.eventHash)) {
+    throw new CausalTerminalOutcomeValidationError();
+  }
+
+  const maturity = snapshot.maturity as CausalTerminalOutcomeRecordV2['maturity'];
+  if (maturity === 'matured') {
+    if (snapshot.qualityValue === null || snapshot.qualityEvidenceClass === null
+        || snapshot.outcomeEvidenceDigests.length === 0
+        || snapshot.censoredReason !== null || snapshot.invalidReason !== null) {
+      throw new CausalTerminalOutcomeValidationError();
+    }
+    if ((snapshot.economicValueUsd === null) !== (snapshot.economicEvidenceClass === null)) {
+      throw new CausalTerminalOutcomeValidationError();
+    }
+  } else if (snapshot.qualityValue !== null || snapshot.qualityEvidenceClass !== null
+      || snapshot.economicValueUsd !== null || snapshot.economicEvidenceClass !== null
+      || snapshot.outcomeEvidenceDigests.length !== 0) {
+    throw new CausalTerminalOutcomeValidationError();
+  } else if (maturity === 'censored') {
+    if (snapshot.censoredReason === null || snapshot.invalidReason !== null) {
+      throw new CausalTerminalOutcomeValidationError();
+    }
+  } else if (snapshot.censoredReason !== null || snapshot.invalidReason === null) {
+    throw new CausalTerminalOutcomeValidationError();
+  }
+
+  const { eventHash, ...material } = snapshot as Omit<CausalTerminalOutcomeRecordV2, 'eventHash'> & { eventHash: string };
+  if (terminalOutcomeHash(material) !== eventHash) throw new CausalTerminalOutcomeValidationError();
+  return {
+    ...snapshot,
+    outcomeEvidenceDigests: [...snapshot.outcomeEvidenceDigests],
+  } as CausalTerminalOutcomeRecordV2;
+}
+
+/** Convert hostile runtime/getter failures into the bounded outcome error. */
+export function decodeCausalTerminalOutcomeV2(value: unknown): CausalTerminalOutcomeRecordV2 {
+  try {
+    return decodeCausalTerminalOutcomeV2Unchecked(value);
+  } catch (error) {
+    if (error instanceof CausalTerminalOutcomeValidationError) throw error;
+    throw new CausalTerminalOutcomeValidationError();
+  }
+}
+
+export function causalTerminalOutcomeV2EventHash(
+  value: Omit<CausalTerminalOutcomeRecordV2, 'eventHash'>,
+): string {
+  const { eventHash: _ignored, ...material } = value as Omit<CausalTerminalOutcomeRecordV2, 'eventHash'> & {
+    eventHash?: string;
+  };
+  return terminalOutcomeHash(material);
 }

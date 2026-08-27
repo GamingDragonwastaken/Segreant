@@ -1736,6 +1736,11 @@ export class Store {
     return causal.appendCausalExecutionV2(this.db, record);
   }
 
+  /** Store-internal v2 terminal outcome append; pending is represented by absence. */
+  appendCausalTerminalOutcomeV2(record: unknown): 'created' | 'existing' {
+    return causal.appendCausalTerminalOutcomeV2(this.db, record);
+  }
+
   /** Append outcome lineage after a stored execution. */
   appendCausalOutcome(record: CausalOutcomeRecord): 'created' | 'existing' {
     return causal.appendCausalOutcome(this.db, record);

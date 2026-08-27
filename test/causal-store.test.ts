@@ -15,13 +15,19 @@ import { pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
 import { estimateCausalStudy } from '../src/causal/estimate.ts';
 import { canonicalJson, causalEventHash, commitCausalProtocol } from '../src/causal/protocol.ts';
-import { causalExecutionV2EventHash, ordinaryLedgerVerifierHash } from '../src/causal/records.ts';
+import {
+  causalExecutionV2EventHash,
+  causalTerminalOutcomeV2EventHash,
+  decodeCausalTerminalOutcomeV2,
+  ordinaryLedgerVerifierHash,
+} from '../src/causal/records.ts';
 import {
   CAUSAL_PROTOCOL_TYPE,
   CAUSAL_PROTOCOL_VERSION,
   CAUSAL_PROTOCOL_VERSION_V2,
   type CausalExecutionRecord,
   type CausalExecutionRecordV2,
+  type CausalTerminalOutcomeRecordV2,
   type CausalOutcomeRecord,
   type CausalStudyProtocolDraft,
   type CausalStudyProtocolDraftV2,
@@ -778,6 +784,63 @@ function validExecutionV2(
   return { ...material, eventHash: causalExecutionV2EventHash(material) };
 }
 
+type TerminalMaturity = CausalTerminalOutcomeRecordV2['maturity'];
+
+function validTerminalOutcomeV2(
+  protocol: CommittedCausalStudyProtocolV2,
+  execution: CausalExecutionRecordV2,
+  maturity: TerminalMaturity = 'matured',
+  outcomeId = 'outcome:terminal-v2',
+): CausalTerminalOutcomeRecordV2 {
+  const material: Omit<CausalTerminalOutcomeRecordV2, 'eventHash'> = maturity === 'matured'
+    ? {
+      type: 'fiscus.causal-terminal-outcome',
+      version: 2,
+      outcomeId,
+      decisionId: execution.decisionId,
+      studyId: protocol.studyId,
+      protocolHash: protocol.protocolHash,
+      observedAtMs: execution.completedAtMs + 1,
+      maturity,
+      qualityValue: 0.9,
+      qualityEvidenceClass: protocol.qualityOutcome.evidenceClass,
+      economicValueUsd: protocol.question === 'ai_vs_incumbent_net_benefit' ? 1 : null,
+      economicEvidenceClass: protocol.economicOutcome?.evidenceClass ?? null,
+      outcomeEvidenceDigests: [D('e')],
+      censoredReason: null,
+      invalidReason: null,
+      previousEventHash: execution.eventHash,
+    }
+    : {
+      type: 'fiscus.causal-terminal-outcome',
+      version: 2,
+      outcomeId,
+      decisionId: execution.decisionId,
+      studyId: protocol.studyId,
+      protocolHash: protocol.protocolHash,
+      observedAtMs: execution.completedAtMs + 1,
+      maturity,
+      qualityValue: null,
+      qualityEvidenceClass: null,
+      economicValueUsd: null,
+      economicEvidenceClass: null,
+      outcomeEvidenceDigests: [],
+      censoredReason: maturity === 'censored' ? 'not_observable' : null,
+      invalidReason: maturity === 'invalid' ? 'integrity_failure' : null,
+      previousEventHash: execution.eventHash,
+    };
+  return { ...material, eventHash: causalTerminalOutcomeV2EventHash(material) };
+}
+
+type TerminalOutcomeMethod = (record: unknown) => 'created' | 'existing';
+
+function terminalOutcomeMethod(store: Store): TerminalOutcomeMethod {
+  const method = (store as unknown as { appendCausalTerminalOutcomeV2?: TerminalOutcomeMethod }).appendCausalTerminalOutcomeV2;
+  assert.equal(typeof method, 'function', 'Store must expose the internal v2 terminal outcome operation');
+  if (typeof method !== 'function') throw new Error('internal v2 terminal outcome operation is unavailable');
+  return method.bind(store);
+}
+
 test('atomic assignment persistence commits a complete replayable block before disclosure', () => {
   const store = new Store(':memory:');
   try {
@@ -1342,6 +1405,46 @@ test('strict causal execution v2 Store facade exists independently of legacy app
   }
 });
 
+test('terminal causal outcome rejects unknown roots and pending maturity before persistence', () => {
+  const store = new Store(':memory:');
+  try {
+    const protocol = v2StoreProtocol();
+    assert.equal(store.registerCausalProtocol(protocol), 'created');
+    const assignment = assignmentMethod(store)(assignmentRequest());
+    const decision = assignment.block.decisions[0]! as typeof assignment.block.decisions[number] & {
+      decisionId: string; assignedAtMs: number; assignedArmId: string; eventHash: string;
+    };
+    const execution = validExecutionV2(protocol, decision, 'execution:terminal-red');
+    assert.equal(executionMethod(store)(execution), 'created');
+
+    const method = (store as unknown as { appendCausalTerminalOutcomeV2?: (record: unknown) => 'created' | 'existing' }).appendCausalTerminalOutcomeV2;
+    assert.equal(typeof method, 'function', 'Slice 4 requires an explicit v2-only terminal outcome append boundary');
+    if (typeof method !== 'function') throw new Error('internal v2 terminal outcome operation is unavailable');
+
+    const pending = {
+      type: 'fiscus.causal-terminal-outcome',
+      version: 2,
+      outcomeId: 'outcome:terminal-red',
+      decisionId: decision.decisionId,
+      studyId: protocol.studyId,
+      protocolHash: protocol.protocolHash,
+      observedAtMs: execution.completedAtMs + 1,
+      maturity: 'pending',
+    };
+    for (const malformed of [null, undefined, [], pending]) {
+      assert.throws(() => method.call(store, malformed), (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.equal((error as Error & { code?: string }).code, 'CAUSAL_RECORD_INVALID');
+        assert.equal(error.message, 'CAUSAL_RECORD_INVALID: causal terminal outcome record is invalid');
+        return true;
+      });
+    }
+    assert.equal(tableCount(store, 'causal_terminal_outcomes_v2'), 0);
+  } finally {
+    store.close();
+  }
+});
+
 test('strict causal execution v2 appends only against an authenticated v2 decision and replays exactly', () => {
   const store = new Store(':memory:');
   try {
@@ -1399,6 +1502,7 @@ test('strict causal execution v2 rejects unknown roots and local judge verifier 
     const record = validExecutionV2(protocol, decision);
     const append = executionMethod(store);
     for (const malformed of [null, undefined, [], { ...record, unexpected: 'secret' },
+      { ...record, ordinaryLedgerVerifier: { ...record.ordinaryLedgerVerifier, unexpected: 'secret' } },
       { ...record, ordinaryLedgerVerifier: { ...record.ordinaryLedgerVerifier, state: 'verified' } },
       { ...record, ordinaryLedgerVerifier: { ...record.ordinaryLedgerVerifier, reasonCodes: ['local_ai_judge'] } }]) {
       assert.throws(() => append(malformed), (error: unknown) => {
@@ -1411,6 +1515,382 @@ test('strict causal execution v2 rejects unknown roots and local judge verifier 
     assert.equal(tableCount(store, 'causal_executions_v2'), 0);
   } finally {
     store.close();
+  }
+});
+
+test('strict causal terminal outcome decoder rejects extra roots, hostile maturity coercion, and nested array fields', () => {
+  const store = new Store(':memory:');
+  try {
+    const protocol = v2StoreProtocol();
+    assert.equal(store.registerCausalProtocol(protocol), 'created');
+    const assignment = assignmentMethod(store)(assignmentRequest());
+    const decision = assignment.block.decisions[0]! as typeof assignment.block.decisions[number] & {
+      decisionId: string; assignedAtMs: number; assignedArmId: string; eventHash: string;
+    };
+    const execution = validExecutionV2(protocol, decision, 'execution:terminal-decoder');
+    assert.equal(executionMethod(store)(execution), 'created');
+    const append = terminalOutcomeMethod(store);
+    const valid = validTerminalOutcomeV2(protocol, execution);
+    const nestedExtra = [...valid.outcomeEvidenceDigests] as string[] & { unexpected?: string };
+    nestedExtra.unexpected = 'secret';
+    const coercibleMaturity = {
+      toString(): never {
+        throw new Error('credential-secret');
+      },
+    };
+    for (const malformed of [
+      { ...valid, unexpected: 'secret' },
+      { ...valid, outcomeEvidenceDigests: nestedExtra },
+      { ...valid, maturity: coercibleMaturity },
+    ]) {
+      assert.throws(() => append(malformed), (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.equal((error as Error & { code?: string }).code, 'CAUSAL_RECORD_INVALID');
+        assert.equal(error.message, 'CAUSAL_RECORD_INVALID: causal terminal outcome record is invalid');
+        assert.doesNotMatch(error.message, /credential-secret|toString|sqlite|SQL/i);
+        return true;
+      });
+    }
+    assert.equal(tableCount(store, 'causal_terminal_outcomes_v2'), 0);
+  } finally {
+    store.close();
+  }
+});
+
+test('strict causal terminal outcome v2 appends each terminal maturity and enforces immutable lineage replay', () => {
+  const store = new Store(':memory:');
+  try {
+    const protocol = v2StoreProtocol('study:terminal-maturity-matrix');
+    assert.equal(store.registerCausalProtocol(protocol), 'created');
+    const assignment = assignmentMethod(store)({ ...assignmentRequest(), studyId: protocol.studyId });
+    const appendExecution = executionMethod(store);
+    const appendOutcome = terminalOutcomeMethod(store);
+    const decisions = assignment.block.decisions.slice(0, 3) as Array<typeof assignment.block.decisions[number] & {
+      decisionId: string; assignedAtMs: number; assignedArmId: string; eventHash: string;
+    }>;
+    const executions = decisions.map((decision, index) => {
+      const execution = validExecutionV2(protocol, decision, 'execution:terminal-maturity-' + index);
+      assert.equal(appendExecution(execution), 'created');
+      return execution;
+    });
+    const maturities: TerminalMaturity[] = ['matured', 'censored', 'invalid'];
+    const outcomes = executions.map((execution, index) => {
+      const outcome = validTerminalOutcomeV2(
+        protocol,
+        execution,
+        maturities[index],
+        'outcome:terminal-maturity-' + index,
+      );
+      assert.equal(appendOutcome(outcome), 'created');
+      return outcome;
+    });
+
+    assert.equal(tableCount(store, 'causal_terminal_outcomes_v2'), 3);
+    assert.deepEqual(
+      (store.raw().prepare(
+        'SELECT outcome_id, decision_id, maturity, previous_event_hash, event_hash FROM causal_terminal_outcomes_v2 ORDER BY outcome_id',
+      ).all() as Array<Record<string, unknown>>).map((row) => ({ ...row })),
+      outcomes.map((outcome) => ({
+        outcome_id: outcome.outcomeId,
+        decision_id: outcome.decisionId,
+        maturity: outcome.maturity,
+        previous_event_hash: outcome.previousEventHash,
+        event_hash: outcome.eventHash,
+      })),
+    );
+    assert.equal(appendOutcome(outcomes[0]), 'existing');
+
+    const divergent = { ...outcomes[0]!, qualityValue: 0.8 };
+    assert.throws(
+      () => appendOutcome({ ...divergent, eventHash: causalTerminalOutcomeV2EventHash(divergent) }),
+      /CAUSAL_IMMUTABLE_CONFLICT/,
+    );
+    const duplicateDecision = validTerminalOutcomeV2(
+      protocol,
+      executions[0]!,
+      'matured',
+      'outcome:terminal-maturity-other',
+    );
+    assert.throws(() => appendOutcome(duplicateDecision), /CAUSAL_IMMUTABLE_CONFLICT/);
+    assert.equal(tableCount(store, 'causal_terminal_outcomes_v2'), 3);
+
+    assert.throws(
+      () => store.raw().prepare('UPDATE causal_terminal_outcomes_v2 SET maturity = ?').run('censored'),
+      /append-only/i,
+    );
+    assert.throws(
+      () => store.raw().prepare('DELETE FROM causal_terminal_outcomes_v2').run(),
+      /append-only/i,
+    );
+  } finally {
+    store.close();
+  }
+});
+
+test('strict causal terminal outcome v2 requires the authenticated execution predecessor and rejects V1 or local judge evidence', () => {
+  const store = new Store(':memory:');
+  try {
+    const protocol = v2StoreProtocol('study:terminal-lineage-boundary');
+    assert.equal(store.registerCausalProtocol(protocol), 'created');
+    const assignment = assignmentMethod(store)({ ...assignmentRequest(), studyId: protocol.studyId });
+    const decision = assignment.block.decisions[0]! as typeof assignment.block.decisions[number] & {
+      decisionId: string; assignedAtMs: number; assignedArmId: string; eventHash: string;
+    };
+    const execution = validExecutionV2(protocol, decision, 'execution:terminal-lineage');
+    assert.equal(executionMethod(store)(execution), 'created');
+    const appendOutcome = terminalOutcomeMethod(store);
+    const valid = validTerminalOutcomeV2(protocol, execution);
+
+    const wrongPredecessor = { ...valid, previousEventHash: D('z') };
+    assert.throws(
+      () => appendOutcome({ ...wrongPredecessor, eventHash: causalTerminalOutcomeV2EventHash(wrongPredecessor) }),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.equal((error as Error & { code?: string }).code, 'CAUSAL_RECORD_INVALID');
+        assert.equal(error.message, 'CAUSAL_RECORD_INVALID: causal terminal outcome record is invalid');
+        return true;
+      },
+    );
+
+    const localJudge = {
+      ...valid,
+      qualityEvidenceClass: 'local_ai_judge',
+    } as unknown as CausalTerminalOutcomeRecordV2;
+    assert.throws(
+      () => appendOutcome(localJudge),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.equal((error as Error & { code?: string }).code, 'CAUSAL_RECORD_INVALID');
+        assert.equal(error.message, 'CAUSAL_RECORD_INVALID: causal terminal outcome record is invalid');
+        return true;
+      },
+    );
+
+    const legacyShape = {
+      outcomeId: 'outcome:legacy-terminal',
+      decisionId: decision.decisionId,
+      studyId: protocol.studyId,
+      protocolHash: protocol.protocolHash,
+      observedAtMs: execution.completedAtMs + 1,
+      maturity: 'matured',
+      qualityValue: 0.9,
+      qualityEvidenceClass: 'deterministic',
+      economicValueUsd: null,
+      economicEvidenceClass: null,
+      outcomeEvidenceRefs: [D('e')],
+      missingReason: null,
+      previousEventHash: execution.eventHash,
+      eventHash: D('l'),
+    };
+    assert.throws(
+      () => appendOutcome(legacyShape),
+      /CAUSAL_RECORD_INVALID: causal terminal outcome record is invalid/,
+    );
+    assert.equal(tableCount(store, 'causal_terminal_outcomes_v2'), 0);
+  } finally {
+    store.close();
+  }
+});
+
+test('strict causal terminal outcome v2 maps missing protocol and wrong study to the canonical input boundary', () => {
+  const missingProtocolStore = new Store(':memory:');
+  try {
+    const protocol = v2StoreProtocol('study:terminal-missing-protocol');
+    const decision = {
+      decisionId: 'decision:terminal-missing-protocol',
+      assignedAtMs: protocol.studyWindow.startsAtMs,
+      assignedArmId: protocol.arms[0]!.armId,
+      eventHash: D('d'),
+    };
+    const execution = validExecutionV2(protocol, decision, 'execution:terminal-missing-protocol');
+    const outcome = validTerminalOutcomeV2(
+      protocol,
+      execution,
+      'matured',
+      'outcome:terminal-missing-protocol',
+    );
+    assert.throws(
+      () => terminalOutcomeMethod(missingProtocolStore)(outcome),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.equal((error as Error & { code?: string }).code, 'CAUSAL_RECORD_INVALID');
+        assert.equal(error.message, 'CAUSAL_RECORD_INVALID: causal terminal outcome record is invalid');
+        return true;
+      },
+    );
+    assert.equal(tableCount(missingProtocolStore, 'causal_terminal_outcomes_v2'), 0);
+  } finally {
+    missingProtocolStore.close();
+  }
+
+  const wrongStudyStore = new Store(':memory:');
+  try {
+    const retainedProtocol = v2StoreProtocol('study:terminal-retained-study');
+    assert.equal(wrongStudyStore.registerCausalProtocol(retainedProtocol), 'created');
+    const wrongStudyProtocol = v2StoreProtocol('study:terminal-wrong-study');
+    const decision = {
+      decisionId: 'decision:terminal-wrong-study',
+      assignedAtMs: wrongStudyProtocol.studyWindow.startsAtMs,
+      assignedArmId: wrongStudyProtocol.arms[0]!.armId,
+      eventHash: D('d'),
+    };
+    const execution = validExecutionV2(wrongStudyProtocol, decision, 'execution:terminal-wrong-study');
+    const outcome = validTerminalOutcomeV2(
+      wrongStudyProtocol,
+      execution,
+      'matured',
+      'outcome:terminal-wrong-study',
+    );
+    assert.throws(
+      () => terminalOutcomeMethod(wrongStudyStore)(outcome),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.equal((error as Error & { code?: string }).code, 'CAUSAL_RECORD_INVALID');
+        assert.equal(error.message, 'CAUSAL_RECORD_INVALID: causal terminal outcome record is invalid');
+        return true;
+      },
+    );
+    assert.equal(tableCount(wrongStudyStore, 'causal_terminal_outcomes_v2'), 0);
+  } finally {
+    wrongStudyStore.close();
+  }
+});
+
+test('strict causal terminal outcome v2 re-authenticates retained protocol and execution before writing', () => {
+  for (const corruption of ['protocol', 'execution'] as const) {
+    const store = new Store(':memory:');
+    try {
+      const protocol = v2StoreProtocol('study:terminal-retained-' + corruption);
+      assert.equal(store.registerCausalProtocol(protocol), 'created');
+      const assignment = assignmentMethod(store)({ ...assignmentRequest(), studyId: protocol.studyId });
+      const decision = assignment.block.decisions[0]! as typeof assignment.block.decisions[number] & {
+        decisionId: string; assignedAtMs: number; assignedArmId: string; eventHash: string;
+      };
+      const execution = validExecutionV2(protocol, decision, 'execution:terminal-retained-' + corruption);
+      assert.equal(executionMethod(store)(execution), 'created');
+      if (corruption === 'protocol') {
+        dropProtocolUpdateTrigger(store.raw());
+        store.raw().prepare("UPDATE causal_protocols SET protocol_json = '{'").run();
+      } else {
+        store.raw().prepare('DROP TRIGGER causal_no_update_causal_executions_v2').run();
+        store.raw().prepare("UPDATE causal_executions_v2 SET execution_json = '{'").run();
+      }
+      const outcome = validTerminalOutcomeV2(protocol, execution, 'matured', 'outcome:terminal-retained-' + corruption);
+      assert.throws(
+        () => terminalOutcomeMethod(store)(outcome),
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.equal((error as Error & { code?: string }).code, 'CAUSAL_INTEGRITY_FAILURE');
+          assert.equal(error.message, 'CAUSAL_INTEGRITY_FAILURE: stored v2 terminal outcome failed integrity verification');
+          assert.doesNotMatch(error.message, /sqlite|protocol_json|execution_json|terminal-retained/i);
+          return true;
+        },
+        corruption,
+      );
+      assert.equal(tableCount(store, 'causal_terminal_outcomes_v2'), 0);
+    } finally {
+      store.close();
+    }
+  }
+});
+
+test('strict causal terminal outcome v2 rejects a self-consistent but protocol-invalid retained execution', () => {
+  const store = new Store(':memory:');
+  try {
+    const protocol = v2StoreProtocol('study:terminal-self-consistent-tamper');
+    assert.equal(store.registerCausalProtocol(protocol), 'created');
+    const assignment = assignmentMethod(store)({ ...assignmentRequest(), studyId: protocol.studyId });
+    const decision = assignment.block.decisions[0]! as typeof assignment.block.decisions[number] & {
+      decisionId: string; assignedAtMs: number; assignedArmId: string; eventHash: string;
+    };
+    const execution = validExecutionV2(protocol, decision, 'execution:terminal-self-consistent-tamper');
+    assert.equal(executionMethod(store)(execution), 'created');
+    const tamperedMaterial = {
+      ...execution,
+      directAiCostUsd: 101,
+      directCostSourceClass: 'actual_observed' as const,
+      priceLineageDigests: [D('c')],
+    };
+    const tampered = { ...tamperedMaterial, eventHash: causalExecutionV2EventHash(tamperedMaterial) };
+    store.raw().prepare('DROP TRIGGER causal_no_update_causal_executions_v2').run();
+    store.raw().prepare(
+      'UPDATE causal_executions_v2 SET event_hash = ?, execution_json = ? WHERE execution_id = ?',
+    ).run(tampered.eventHash, canonicalJson(tampered), tampered.executionId);
+
+    const outcome = validTerminalOutcomeV2(protocol, tampered, 'matured', 'outcome:terminal-self-consistent-tamper');
+    assert.throws(
+      () => terminalOutcomeMethod(store)(outcome),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.equal((error as Error & { code?: string }).code, 'CAUSAL_INTEGRITY_FAILURE');
+        assert.equal(error.message, 'CAUSAL_INTEGRITY_FAILURE: stored v2 terminal outcome failed integrity verification');
+        return true;
+      },
+    );
+    assert.equal(tableCount(store, 'causal_terminal_outcomes_v2'), 0);
+  } finally {
+    store.close();
+  }
+});
+
+test('strict causal terminal outcome v2 detects retained-row corruption and rolls back injected failures', () => {
+  const corrupted = new Store(':memory:');
+  try {
+    const protocol = v2StoreProtocol('study:terminal-row-corruption');
+    assert.equal(corrupted.registerCausalProtocol(protocol), 'created');
+    const assignment = assignmentMethod(corrupted)({ ...assignmentRequest(), studyId: protocol.studyId });
+    const decision = assignment.block.decisions[0]! as typeof assignment.block.decisions[number] & {
+      decisionId: string; assignedAtMs: number; assignedArmId: string; eventHash: string;
+    };
+    const execution = validExecutionV2(protocol, decision, 'execution:terminal-row-corruption');
+    assert.equal(executionMethod(corrupted)(execution), 'created');
+    const outcome = validTerminalOutcomeV2(protocol, execution, 'matured', 'outcome:terminal-row-corruption');
+    const append = terminalOutcomeMethod(corrupted);
+    assert.equal(append(outcome), 'created');
+    corrupted.raw().prepare('DROP TRIGGER causal_no_update_causal_terminal_outcomes_v2').run();
+    corrupted.raw().prepare("UPDATE causal_terminal_outcomes_v2 SET terminal_outcome_json = '{'").run();
+    assert.throws(
+      () => append(outcome),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.equal((error as Error & { code?: string }).code, 'CAUSAL_INTEGRITY_FAILURE');
+        assert.equal(error.message, 'CAUSAL_INTEGRITY_FAILURE: stored v2 terminal outcome failed integrity verification');
+        assert.doesNotMatch(error.message, /terminal_outcome_json|sqlite|row-corruption/i);
+        return true;
+      },
+    );
+    assert.equal(tableCount(corrupted, 'causal_terminal_outcomes_v2'), 1);
+  } finally {
+    corrupted.close();
+  }
+
+  const rollback = new Store(':memory:');
+  try {
+    const protocol = v2StoreProtocol('study:terminal-rollback');
+    assert.equal(rollback.registerCausalProtocol(protocol), 'created');
+    const assignment = assignmentMethod(rollback)({ ...assignmentRequest(), studyId: protocol.studyId });
+    const decision = assignment.block.decisions[0]! as typeof assignment.block.decisions[number] & {
+      decisionId: string; assignedAtMs: number; assignedArmId: string; eventHash: string;
+    };
+    const execution = validExecutionV2(protocol, decision, 'execution:terminal-rollback');
+    assert.equal(executionMethod(rollback)(execution), 'created');
+    const outcome = validTerminalOutcomeV2(protocol, execution, 'matured', 'outcome:terminal-rollback');
+    rollback.raw().prepare(
+      "CREATE TRIGGER injected_terminal_failure AFTER INSERT ON causal_terminal_outcomes_v2 BEGIN SELECT RAISE(ABORT, 'credential-secret'); END",
+    ).run();
+    assert.throws(
+      () => terminalOutcomeMethod(rollback)(outcome),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.equal((error as Error & { code?: string }).code, 'CAUSAL_APPEND_ROLLED_BACK');
+        assert.equal(error.message, 'CAUSAL_APPEND_ROLLED_BACK: terminal outcome transaction rolled back without disclosing a causal record');
+        assert.doesNotMatch(error.message, /credential-secret|terminal-rollback|sqlite|SQL/i);
+        return true;
+      },
+    );
+    assert.equal(tableCount(rollback, 'causal_terminal_outcomes_v2'), 0);
+  } finally {
+    rollback.close();
   }
 });
 

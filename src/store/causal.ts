@@ -10,7 +10,10 @@ import { createHash, randomFillSync } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { estimateCausalStudy } from '../causal/estimate.ts';
 import { CAUSAL_PROTOCOL_VERSION } from '../causal/types.ts';
-import { decodeCausalExecutionV2 } from '../causal/records.ts';
+import {
+  decodeCausalExecutionV2,
+  decodeCausalTerminalOutcomeV2,
+} from '../causal/records.ts';
 import {
   canonicalJson,
   sha256,
@@ -27,6 +30,7 @@ import type {
   CausalAssignmentResultV2,
   CausalDecisionRecordV2,
   CausalExecutionRecordV2,
+  CausalTerminalOutcomeRecordV2,
   CausalExecutionRecord,
   CausalOutcomeRecord,
   CausalStudyData,
@@ -403,6 +407,68 @@ function authenticateStoredExecutionV2(row: StoredExecutionV2Row): CausalExecuti
   }
 }
 
+/**
+ * Re-check the full execution contract whenever a later terminal record relies
+ * on a retained execution. A valid event hash authenticates bytes, but it does
+ * not by itself prove that those bytes satisfy the committed protocol.
+ */
+function executionSatisfiesStoredV2Protocol(
+  protocol: CommittedCausalStudyProtocolV2,
+  decision: CausalDecisionRecordV2,
+  execution: CausalExecutionRecordV2,
+): boolean {
+  const arm = protocol.arms.find((candidate) => candidate.armId === decision.assignedArmId);
+  if (!arm
+      || execution.studyId !== protocol.studyId
+      || execution.protocolHash !== protocol.protocolHash
+      || execution.decisionId !== decision.decisionId
+      || execution.assignedExecutionPlanDigest !== arm.executionPlanDigest
+      || execution.previousEventHash !== decision.eventHash
+      || execution.startedAtMs < decision.assignedAtMs
+      || execution.completedAtMs < execution.startedAtMs
+      || execution.startedAtMs < protocol.studyWindow.startsAtMs
+      || (protocol.studyWindow.endsAtMs !== null && execution.completedAtMs > protocol.studyWindow.endsAtMs)) {
+    return false;
+  }
+  if (execution.adherence === 'confirmed'
+      && (execution.actualExecutionPlanDigest === null
+        || execution.actualExecutionPlanDigest !== execution.assignedExecutionPlanDigest)) {
+    return false;
+  }
+  if ((execution.adherence === 'incomplete' || execution.adherence === 'unverifiable')
+      && (execution.directAiCostUsd !== null || execution.fullArmCostUsd !== null)) {
+    return false;
+  }
+  const direct = execution.directAiCostUsd;
+  if (direct === null) {
+    if (execution.directCostSourceClass !== 'incomplete_or_unknown') return false;
+  } else if (direct < protocol.costOutcome.boundsUsd.low
+      || direct > protocol.costOutcome.boundsUsd.high
+      || (execution.directCostSourceClass !== 'actual_observed'
+        && execution.directCostSourceClass !== 'actual_reconciled')
+      || !protocol.costOutcome.acceptedSourceClasses.includes(
+        execution.directCostSourceClass as 'actual_observed' | 'actual_reconciled',
+      )
+      || execution.priceLineageDigests.length === 0) {
+    return false;
+  }
+  const full = execution.fullArmCostUsd;
+  if (protocol.question === 'model_cost_quality') {
+    if (full !== null || execution.fullCostSourceClass !== 'incomplete_or_unknown') return false;
+  } else if (full === null
+      || full < protocol.costOutcome.boundsUsd.low
+      || full > protocol.costOutcome.boundsUsd.high
+      || (execution.fullCostSourceClass !== 'actual_observed'
+        && execution.fullCostSourceClass !== 'actual_reconciled')
+      || !protocol.costOutcome.acceptedSourceClasses.includes(
+        execution.fullCostSourceClass as 'actual_observed' | 'actual_reconciled',
+      )
+      || execution.priceLineageDigests.length === 0) {
+    return false;
+  }
+  return true;
+}
+
 function normalizedExecutionError(error: unknown): Error {
   if (error instanceof CausalExecutionStoreError) return error;
   if (error && typeof error === 'object' && 'code' in error
@@ -494,9 +560,13 @@ export function appendCausalExecutionV2(db: DatabaseSync, recordValue: unknown):
       }
     }
 
-    const byId = db.prepare(
+    const byIdRows = db.prepare(
       STORED_EXECUTION_V2_SELECT + 'FROM causal_executions_v2 WHERE execution_id = ?',
-    ).get(record.executionId) as StoredExecutionV2Row | undefined;
+    ).all(record.executionId) as unknown as StoredExecutionV2Row[];
+    if (byIdRows.length > 1) {
+      executionFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 execution identity is duplicated');
+    }
+    const byId = byIdRows[0];
     if (byId) {
       const existing = authenticateStoredExecutionV2(byId);
       if (canonicalJson(existing) === encoded) {
@@ -533,9 +603,13 @@ export function appendCausalExecutionV2(db: DatabaseSync, recordValue: unknown):
       encoded,
     );
 
-    const retained = db.prepare(
+    const retainedRows = db.prepare(
       STORED_EXECUTION_V2_SELECT + 'FROM causal_executions_v2 WHERE execution_id = ?',
-    ).get(record.executionId) as StoredExecutionV2Row | undefined;
+    ).all(record.executionId) as unknown as StoredExecutionV2Row[];
+    if (retainedRows.length !== 1) {
+      executionFail('CAUSAL_INTEGRITY_FAILURE', 'created v2 execution identity did not reload exactly once');
+    }
+    const retained = retainedRows[0];
     if (!retained) executionFail('CAUSAL_INTEGRITY_FAILURE', 'created v2 execution could not be reloaded');
     const authenticated = authenticateStoredExecutionV2(retained);
     if (canonicalJson(authenticated) !== encoded) {
@@ -549,6 +623,239 @@ export function appendCausalExecutionV2(db: DatabaseSync, recordValue: unknown):
       try { db.prepare('ROLLBACK').run(); } catch { /* no active transaction */ }
     }
     throw normalizedExecutionError(error);
+  }
+}
+
+interface StoredTerminalOutcomeV2Row {
+  outcome_id: unknown;
+  decision_id: unknown;
+  study_id: unknown;
+  protocol_hash: unknown;
+  observed_at_ms_type: unknown;
+  observed_at_ms_text: unknown;
+  maturity: unknown;
+  previous_event_hash: unknown;
+  event_hash: unknown;
+  terminal_outcome_json: unknown;
+}
+
+const STORED_TERMINAL_OUTCOME_V2_SELECT =
+  'SELECT outcome_id, decision_id, study_id, protocol_hash, ' +
+  'typeof(observed_at_ms) AS observed_at_ms_type, CAST(observed_at_ms AS TEXT) AS observed_at_ms_text, ' +
+  'maturity, previous_event_hash, event_hash, terminal_outcome_json ';
+
+class CausalTerminalOutcomeStoreError extends Error {
+  readonly code: string;
+
+  constructor(code: string, message: string) {
+    super(code + ': ' + message);
+    this.name = 'CausalTerminalOutcomeStoreError';
+    this.code = code;
+  }
+}
+
+function terminalOutcomeFail(code: string, message: string): never {
+  throw new CausalTerminalOutcomeStoreError(code, message);
+}
+
+function authenticateStoredTerminalOutcomeV2(row: StoredTerminalOutcomeV2Row): CausalTerminalOutcomeRecordV2 {
+  try {
+    if (typeof row.terminal_outcome_json !== 'string') throw new Error('terminal outcome JSON storage class');
+    const record = decodeCausalTerminalOutcomeV2(JSON.parse(row.terminal_outcome_json));
+    if (row.terminal_outcome_json !== canonicalJson(record)) throw new Error('terminal outcome JSON is not canonical');
+    const observedAtMs = decodeStoredIntegerMs(row.observed_at_ms_type, row.observed_at_ms_text);
+    if (row.outcome_id !== record.outcomeId || row.decision_id !== record.decisionId
+        || row.study_id !== record.studyId || row.protocol_hash !== record.protocolHash
+        || observedAtMs !== record.observedAtMs || row.maturity !== record.maturity
+        || row.previous_event_hash !== record.previousEventHash || row.event_hash !== record.eventHash) {
+      throw new Error('terminal outcome physical identity');
+    }
+    return record;
+  } catch {
+    terminalOutcomeFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 terminal outcome failed integrity verification');
+  }
+}
+
+function normalizedTerminalOutcomeError(error: unknown): Error {
+  if (error instanceof CausalTerminalOutcomeStoreError) {
+    if (error.code === 'CAUSAL_RECORD_INVALID' || error.code === 'CAUSAL_NOT_FOUND') {
+      return new CausalTerminalOutcomeStoreError(
+        'CAUSAL_RECORD_INVALID',
+        'causal terminal outcome record is invalid',
+      );
+    }
+    if (error.code === 'CAUSAL_INTEGRITY_FAILURE') {
+      return new CausalTerminalOutcomeStoreError(
+        'CAUSAL_INTEGRITY_FAILURE',
+        'stored v2 terminal outcome failed integrity verification',
+      );
+    }
+    return error;
+  }
+  if (error && typeof error === 'object' && 'code' in error
+      && typeof (error as { code?: unknown }).code === 'string') {
+    const code = (error as { code: string }).code;
+    if (code === 'CAUSAL_RECORD_INVALID' || code === 'CAUSAL_NOT_FOUND') {
+      return new CausalTerminalOutcomeStoreError(
+        'CAUSAL_RECORD_INVALID',
+        'causal terminal outcome record is invalid',
+      );
+    }
+    if (code === 'CAUSAL_INTEGRITY_FAILURE') {
+      return new CausalTerminalOutcomeStoreError(
+        'CAUSAL_INTEGRITY_FAILURE',
+        'stored v2 terminal outcome failed integrity verification',
+      );
+    }
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  if (/database is locked|SQLITE_BUSY/i.test(message)) {
+    return new CausalTerminalOutcomeStoreError(
+      'CAUSAL_BUSY',
+      'terminal outcome writer is busy; retry this immutable request',
+    );
+  }
+  if (/UNIQUE constraint failed.*causal_terminal_outcomes_v2/i.test(message)) {
+    return new CausalTerminalOutcomeStoreError(
+      'CAUSAL_IMMUTABLE_CONFLICT',
+      'terminal outcome conflicts with an existing immutable record',
+    );
+  }
+  return new CausalTerminalOutcomeStoreError(
+    'CAUSAL_APPEND_ROLLED_BACK',
+    'terminal outcome transaction rolled back without disclosing a causal record',
+  );
+}
+
+/** Append one exact v2 terminal outcome after an authenticated v2 execution. */
+export function appendCausalTerminalOutcomeV2(
+  db: DatabaseSync,
+  recordValue: unknown,
+): 'created' | 'existing' {
+  let committed = false;
+  try {
+    const record = decodeCausalTerminalOutcomeV2(recordValue);
+    const encoded = canonicalJson(record);
+    db.prepare('BEGIN IMMEDIATE').run();
+
+    const protocol = requireProtocolV2(db, record.studyId);
+    if (record.protocolHash !== protocol.protocolHash) {
+      terminalOutcomeFail('CAUSAL_RECORD_INVALID', 'causal terminal outcome record is invalid');
+    }
+
+    // Re-authenticate the V2 assignment lane so no legacy decision/outcome row
+    // can become the predecessor for a terminal record.
+    let blocks: CausalAssignmentBlockV2[];
+    try {
+      blocks = scanAssignmentArtifacts(db, protocol);
+    } catch (error) {
+      if (error instanceof CausalTerminalOutcomeStoreError) throw error;
+      terminalOutcomeFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 assignment evidence failed integrity verification');
+    }
+    const decision = blocks.flatMap((block) => block.decisions)
+      .find((candidate) => candidate.decisionId === record.decisionId);
+    if (!decision) terminalOutcomeFail('CAUSAL_RECORD_INVALID', 'causal terminal outcome record is invalid');
+
+    const executionRows = db.prepare(
+      STORED_EXECUTION_V2_SELECT + 'FROM causal_executions_v2 WHERE decision_id = ?',
+    ).all(record.decisionId) as unknown as StoredExecutionV2Row[];
+    if (executionRows.length > 1) {
+      terminalOutcomeFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 execution predecessor identity is duplicated');
+    }
+    const executionRow = executionRows[0];
+    if (!executionRow) terminalOutcomeFail('CAUSAL_RECORD_INVALID', 'causal terminal outcome record is invalid');
+    const execution = authenticateStoredExecutionV2(executionRow);
+    if (!executionSatisfiesStoredV2Protocol(protocol, decision, execution)) {
+      terminalOutcomeFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 execution failed protocol verification');
+    }
+    if (record.previousEventHash !== execution.eventHash
+        || record.observedAtMs < execution.completedAtMs) {
+      terminalOutcomeFail('CAUSAL_RECORD_INVALID', 'causal terminal outcome record is invalid');
+    }
+
+    if (record.maturity === 'matured') {
+      const quality = record.qualityValue;
+      if (quality === null || quality < protocol.qualityOutcome.bounds.low
+          || quality > protocol.qualityOutcome.bounds.high
+          || record.qualityEvidenceClass !== protocol.qualityOutcome.evidenceClass
+          || record.outcomeEvidenceDigests.length === 0) {
+        terminalOutcomeFail('CAUSAL_RECORD_INVALID', 'causal terminal outcome record is invalid');
+      }
+      const economic = protocol.economicOutcome;
+      if (protocol.question === 'model_cost_quality') {
+        if (economic !== null || record.economicValueUsd !== null || record.economicEvidenceClass !== null) {
+          terminalOutcomeFail('CAUSAL_RECORD_INVALID', 'causal terminal outcome record is invalid');
+        }
+      } else if (economic === null
+          || record.economicValueUsd === null
+          || record.economicValueUsd < economic.boundsUsd.low
+          || record.economicValueUsd > economic.boundsUsd.high
+          || record.economicEvidenceClass !== economic.evidenceClass) {
+        terminalOutcomeFail('CAUSAL_RECORD_INVALID', 'causal terminal outcome record is invalid');
+      }
+    }
+
+    const byIdRows = db.prepare(
+      STORED_TERMINAL_OUTCOME_V2_SELECT + 'FROM causal_terminal_outcomes_v2 WHERE outcome_id = ?',
+    ).all(record.outcomeId) as unknown as StoredTerminalOutcomeV2Row[];
+    if (byIdRows.length > 1) {
+      terminalOutcomeFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 terminal outcome identity is duplicated');
+    }
+    const byId = byIdRows[0];
+    if (byId) {
+      const existing = authenticateStoredTerminalOutcomeV2(byId);
+      if (canonicalJson(existing) === encoded) {
+        db.prepare('COMMIT').run();
+        committed = true;
+        return 'existing';
+      }
+      terminalOutcomeFail('CAUSAL_IMMUTABLE_CONFLICT', 'terminal outcome conflicts with existing immutable content');
+    }
+
+    const competing = db.prepare(
+      STORED_TERMINAL_OUTCOME_V2_SELECT + 'FROM causal_terminal_outcomes_v2 WHERE decision_id = ? OR event_hash = ?',
+    ).all(record.decisionId, record.eventHash) as unknown as StoredTerminalOutcomeV2Row[];
+    for (const row of competing) authenticateStoredTerminalOutcomeV2(row);
+    if (competing.length > 0) {
+      terminalOutcomeFail('CAUSAL_IMMUTABLE_CONFLICT', 'terminal outcome conflicts with an existing immutable decision or event');
+    }
+
+    db.prepare(
+      'INSERT INTO causal_terminal_outcomes_v2 ' +
+      '(outcome_id, decision_id, study_id, protocol_hash, observed_at_ms, maturity, previous_event_hash, event_hash, terminal_outcome_json) ' +
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).run(
+      record.outcomeId,
+      record.decisionId,
+      record.studyId,
+      record.protocolHash,
+      record.observedAtMs,
+      record.maturity,
+      record.previousEventHash,
+      record.eventHash,
+      encoded,
+    );
+
+    const retainedRows = db.prepare(
+      STORED_TERMINAL_OUTCOME_V2_SELECT + 'FROM causal_terminal_outcomes_v2 WHERE outcome_id = ?',
+    ).all(record.outcomeId) as unknown as StoredTerminalOutcomeV2Row[];
+    if (retainedRows.length !== 1) {
+      terminalOutcomeFail('CAUSAL_INTEGRITY_FAILURE', 'created v2 terminal outcome identity did not reload exactly once');
+    }
+    const retained = retainedRows[0];
+    if (!retained) terminalOutcomeFail('CAUSAL_INTEGRITY_FAILURE', 'created v2 terminal outcome could not be reloaded');
+    const authenticated = authenticateStoredTerminalOutcomeV2(retained);
+    if (canonicalJson(authenticated) !== encoded) {
+      terminalOutcomeFail('CAUSAL_INTEGRITY_FAILURE', 'created v2 terminal outcome did not replay canonically');
+    }
+    db.prepare('COMMIT').run();
+    committed = true;
+    return 'created';
+  } catch (error) {
+    if (!committed) {
+      try { db.prepare('ROLLBACK').run(); } catch { /* no active transaction */ }
+    }
+    throw normalizedTerminalOutcomeError(error);
   }
 }
 
