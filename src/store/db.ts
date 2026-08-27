@@ -13,7 +13,7 @@
 
 import '../util/quiet.ts';
 import { DatabaseSync } from 'node:sqlite';
-import { causalV2SchemaAttestation, initializeSchema, runScript } from './schema.ts';
+import { causalV2SchemaAttestation, configureDatabaseConnection, initializeSchema, runScript } from './schema.ts';
 import { dirname, resolve } from 'node:path';
 import {
   closeSync,
@@ -322,6 +322,7 @@ export class Store {
     let backupPath: string | null = null;
     let backupVerified = false;
     try {
+      configureDatabaseConnection(this.db);
       this.db.prepare('PRAGMA busy_timeout = 5000').run();
       // node:sqlite's DatabaseSync exposes only prepare() + a multi-statement
       // runner; we run DDL/PRAGMA as individual prepared statements so the schema
@@ -343,6 +344,7 @@ export class Store {
             const descriptorBefore = fstatSync(descriptor);
             const verification = new DatabaseSync(backupPath, { readOnly: true });
             try {
+              configureDatabaseConnection(verification);
               const quickCheck = verification.prepare('PRAGMA quick_check').get() as { quick_check: string } | undefined;
               if (quickCheck?.quick_check !== 'ok') throw new Error('backup quick_check did not return ok');
             } finally {

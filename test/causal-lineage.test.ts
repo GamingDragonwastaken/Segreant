@@ -486,6 +486,88 @@ test('T-069 sidecar update and delete are refused by physical append-only trigge
   }
 });
 
+test('T-069 every causal evidence table rejects INSERT OR REPLACE and retains its original row', () => {
+  const store = new Store(':memory:');
+  try {
+    const db = store.raw();
+    const tables = [
+      'causal_protocols',
+      'causal_assignment_plans',
+      'causal_decisions',
+      'causal_executions',
+      'causal_outcomes',
+      'causal_analysis_snapshots',
+      'causal_assignment_plans_v2',
+      'causal_decisions_v2',
+      'causal_assignment_units_v2',
+      'causal_assignment_manifests_v2',
+      'causal_executions_v2',
+      'causal_terminal_outcomes_v2',
+      'causal_lineage_bindings_v2',
+    ];
+    const quoteIdentifier = (value: string): string => '"' + value.replaceAll('"', '""') + '"';
+
+    for (const [tableIndex, table] of tables.entries()) {
+      const columns = db.prepare('PRAGMA table_info(' + quoteIdentifier(table) + ')').all() as Array<{
+        name: string;
+        type: string;
+        pk: number;
+      }>;
+      assert.ok(columns.length > 0, table + ' must exist before the replacement probe');
+      const columnSql = columns.map((column) => quoteIdentifier(column.name)).join(', ');
+      const placeholders = columns.map(() => '?').join(', ');
+      const originalValues = columns.map((column, columnIndex) => {
+        if (/BLOB/i.test(column.type)) return Buffer.from(`causal-replace:${table}:${column.name}:original`);
+        if (/INT/i.test(column.type)) return tableIndex * 100 + columnIndex + 1;
+        return `causal-replace:${table}:${column.name}:original`;
+      });
+      db.prepare(
+        'INSERT INTO ' + quoteIdentifier(table) + ' (' + columnSql + ') VALUES (' + placeholders + ')',
+      ).run(...originalValues);
+
+      const primaryKeyColumns = columns
+        .filter((column) => column.pk > 0)
+        .sort((left, right) => left.pk - right.pk);
+      assert.ok(primaryKeyColumns.length > 0, table + ' must have a primary key for the replacement probe');
+      const primaryKeyValues = primaryKeyColumns.map((column) => originalValues[columns.indexOf(column)]!);
+      const selectByPrimaryKey = 'SELECT * FROM ' + quoteIdentifier(table) + ' WHERE ' + primaryKeyColumns
+        .map((column) => quoteIdentifier(column.name) + ' = ?').join(' AND ');
+      const originalRows = db.prepare(selectByPrimaryKey).all(...primaryKeyValues);
+      assert.equal(originalRows.length, 1, table + ' replacement probe must seed exactly one row');
+
+      const mutableColumnIndex = columns.findIndex((column) => column.pk === 0);
+      assert.notEqual(mutableColumnIndex, -1, table + ' replacement probe needs a non-key column');
+      const replacementValues = [...originalValues];
+      const mutableColumn = columns[mutableColumnIndex]!;
+      if (/BLOB/i.test(mutableColumn.type)) {
+        replacementValues[mutableColumnIndex] = Buffer.from(`causal-replace:${table}:${mutableColumn.name}:replacement`);
+      } else if (/INT/i.test(mutableColumn.type)) {
+        replacementValues[mutableColumnIndex] = (replacementValues[mutableColumnIndex] as number) + 1;
+      } else {
+        replacementValues[mutableColumnIndex] = String(replacementValues[mutableColumnIndex]) + ':replacement';
+      }
+
+      assert.throws(
+        () => db.prepare(
+          'INSERT OR REPLACE INTO ' + quoteIdentifier(table) + ' (' + columnSql + ') VALUES (' + placeholders + ')',
+        ).run(...replacementValues),
+        /causal evidence is append-only/i,
+        table + ' must reject replacement through Store.raw()',
+      );
+      assert.deepEqual(
+        db.prepare(selectByPrimaryKey).all(...primaryKeyValues),
+        originalRows,
+        table + ' must retain the original row after a rejected replacement',
+      );
+    }
+
+    const recursiveTriggers = db.prepare('PRAGMA recursive_triggers').get() as { recursive_triggers: number };
+    assert.equal(recursiveTriggers.recursive_triggers, 1, 'Store connections must enable recursive SQLite triggers');
+  } finally {
+    store.close();
+  }
+});
+
 test('T-069 sidecar reload fails closed when canonical JSON is tampered behind a restored trigger', () => {
   const store = new Store(':memory:');
   try {

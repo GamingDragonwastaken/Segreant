@@ -588,6 +588,16 @@ CREATE TABLE IF NOT EXISTS causal_clock_state (
 );
 `;
 
+/**
+ * Configure connection-local SQLite behavior before any schema inspection or
+ * causal write.  INSERT OR REPLACE implements conflict resolution by deleting
+ * the conflicting row first; SQLite only runs that delete through the normal
+ * trigger path when recursive triggers are enabled on this connection.
+ */
+export function configureDatabaseConnection(db: DatabaseSync): void {
+  db.prepare('PRAGMA recursive_triggers = ON').run();
+}
+
 /** Idempotent schema migrations for DBs created before a column existed. */
 function migrate(db: DatabaseSync): void {
   const cols = db.prepare('PRAGMA table_info(requests)').all() as Array<{ name: string }>;
@@ -1544,6 +1554,7 @@ export function initializeSchema(
     allowUnbackedCausalV2Create?: boolean;
   } = {},
 ): void {
+  configureDatabaseConnection(db);
   runScript(db, 'PRAGMA journal_mode = WAL');
   runScript(db, 'PRAGMA synchronous = NORMAL');
   const preflightState = options.expectedCausalV2State ?? causalV2SchemaAttestation(db).state;
