@@ -17,7 +17,7 @@
     "fiscus": "node --disable-warning=ExperimentalWarning bin/fiscus.mjs",
     "prestart": "npm run build",
     "prefiscus": "npm run build",
-    "pretest": "node scripts/build.mjs --web",
+    "pretest": "node scripts/build.mjs",
     "test": "node --disable-warning=ExperimentalWarning --test test/*.test.ts",
     "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit",
     "build": "node scripts/build.mjs",

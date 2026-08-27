@@ -24,6 +24,8 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
   previously answered anything, so `DELETE /api/value` returned 200 and a full
   payload; they now return 405 with an `Allow` header. No route answers
   `OPTIONS`, which is what keeps the same-origin header gate meaningful.
+- Dialog focus traps now treat the initially focused drawer/inspector container
+  as a keyboard boundary, so the first `Shift+Tab` cannot escape to the opener.
 
 ### Fixed
 
@@ -50,9 +52,13 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ### Changed
 
-- `npm test` builds what it needs. Two GUI tests read built output and failed on
-  a clean checkout unless `npm ci` had already run; a `pretest` step declares
-  that dependency instead of inheriting it from an install side effect.
+- `npm test` performs the full reproducible build prerequisite. Package-boundary
+  tests inspect Node runtime artifacts as well as browser output, so they no
+  longer depend on `npm ci` having run `prepare` earlier in the checkout.
+- V2 causal cost-bearing qualification now names the missing durable
+  request-to-realization lineage binding and remains fail-closed until that
+  append-only sidecar is implemented. The Store-internal validator retains only
+  scalar metadata and rejects raw prompts, source text, and unit snapshots.
 - The CLI and the dashboard compose value through one shared sequence rather
   than assembling the same primitives independently in two places.
 

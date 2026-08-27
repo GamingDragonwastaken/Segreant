@@ -208,9 +208,14 @@ v2 tables and authenticated migration, Store-owned sequence allocation and
 cryptographic entropy inside one transaction, global per-study unit uniqueness,
 canonical retained rows, authoritative manifests, rollback without allocation
 disclosure, and a package boundary that excludes test-only deterministic seams.
-These Slice 3 changes remain a review candidate until their exact patch is
-approved and committed; they are a Store-only substrate, not a public v2
-projection or release statement.
+These Slice 3 changes were followed by reviewed Store-only execution,
+terminal-outcome, follow-up-policy, clock-authority, and qualification
+substrate increments. The internal records are authenticated and deliberately
+not exposed as a public v2 projection or release statement. The T-069 lineage
+resolver currently validates the proposed scalar request/realization binding
+without persisting a sidecar row; qualification therefore remains fail-closed
+for every cost-bearing V2 execution until the append-only binding migration is
+implemented and verified.
 
 Legacy v1 protocol and assignment records remain decodable and replayable for
 inspection. They are immutable evidence: production code cannot create a new v1
@@ -220,10 +225,11 @@ V1 protocol registration is likewise refused for preview and apply. The CLI
 does not yet expose v2 protocol registration or assignment: both forms of v2
 registration refuse with `CAUSAL_V2_CLI_DEFERRED` before opening or mutating the
 Store, and current status/inspect/verify plus the API/dashboard expose retained
-v1 evidence only. Execution/outcome v2 persistence,
-append-only lifecycle and data locking, analysis snapshots and qualification,
-full read-only API/dashboard projection, redacted export, packaging approval,
-and release remain deferred to later reviewed slices.
+v1 evidence only. Public v2 registration/assignment/execution projection,
+lifecycle ownership and data locking, append-only lineage sidecar persistence,
+analysis snapshots as a public result, full read-only API/dashboard projection,
+redacted export, packaging approval, and release remain deferred to later
+reviewed slices.
 No supported current causal command mutates study evidence, changes a provider
 route, changes provider configuration, or changes a budget automatically.
 Fiscus still has **no qualified causal customer

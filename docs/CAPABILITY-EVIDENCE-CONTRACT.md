@@ -1,9 +1,11 @@
 # Capability and evidence contract
 
-**Current-source review:** 2026-08-22, starting revision cf4179f. This document
-describes the locally implemented product and the evidence available in this
-repository. It is not a statement that a hosted service, customer deployment,
-or provider invoice validation exists.
+**Baseline-source review:** 2026-08-22, starting revision cf4179f. This document
+describes the locally implemented product and the evidence available at that
+baseline. It is not a statement that a hosted service, customer deployment, or
+provider invoice validation exists. Any later candidate must re-review this
+contract against its exact source revision; the baseline marker is not inherited
+by a newer branch tip.
 
 Fiscus is a local-first AI Financial Operations tool. Its present evidence and
 implementation are strongest for AI coding-agent work. Its broader direction is
@@ -70,9 +72,14 @@ Fiscus keeps four different claims separate:
 - Return on Intelligence has coverage labels, assumptions, uncertainty, and
   review-only within-task model trials. The product includes a local,
   append-only randomized-study protocol/assignment/analysis lane with
-  read-only CLI/dashboard inspection; until a real protocol is registered,
-  executed, and qualified, it has no causal result to present. Neither path
-  routes providers or changes budgets automatically.
+  Store-internal execution, terminal-outcome, follow-up-policy, clock-authority,
+  qualification, and T-069 scalar lineage-validation substrate. Those later
+  records are not public CLI/API/dashboard evidence: the append-only
+  request-to-realization lineage sidecar is not persisted, so cost-bearing V2
+  qualification remains fail-closed until that migration is implemented and
+  verified. Until a real protocol is registered, executed, and qualified, the
+  product has no causal result to present. Neither path routes providers or
+  changes budgets automatically.
 - The browser dashboard has no third-party assets or analytics and is intended
   to expose a preview before consequential local changes. The CLI remains the
   reference surface while GUI parity is completed.

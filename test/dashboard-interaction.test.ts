@@ -16,10 +16,12 @@ test('the budget action explains that a saved cap is enforced immediately', () =
 
 test('the first-run choice is a keyboard-managed modal with a non-dismissal Escape policy', () => {
   const source = readFileSync(join(WEB, 'app', 'main.ts'), 'utf8');
+  const dom = readFileSync(join(WEB, 'app', 'core', 'dom.ts'), 'utf8');
 
   assert.match(source, /function firstRun\(\)/);
   assert.match(source, /tabindex: '-1'/);
   assert.match(source, /trapFocus\(body/);
+  assert.match(dom, /document\.activeElement === first \|\| document\.activeElement === container/);
   assert.match(source, /event\.key === 'Escape'/);
   assert.match(source, /event\.preventDefault\(\)/);
   assert.match(source, /restoreFocus\(/);

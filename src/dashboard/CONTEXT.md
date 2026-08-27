@@ -44,6 +44,10 @@ web/
 - **The GUI reaches for CLI parity, and says where it has not.** `registry.ts` is
   the single source for navigation, action cards, and the parity table rendered
   in System. A capability with no screen is visible in the product as unbuilt.
+- **The test prerequisite is explicit.** `npm test` performs a full build before
+  running tests because package-boundary checks inspect both browser and Node
+  artifacts in `dist/`. The build script's `--web` mode remains a targeted GUI
+  iteration tool, not the ordinary test contract.
 - **Nothing happens without a preview.** Every action opens the drawer, which
   states the consequence in words, shows the computed preview, prints the
   equivalent command, and only then offers the commit.

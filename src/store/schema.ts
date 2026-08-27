@@ -1300,9 +1300,10 @@ export function causalV2SchemaAttestation(db: DatabaseSync): CausalV2SchemaAttes
     }
   }
 
-  if (presentTables === 0 && relevantTriggers.length === 0) {
+  if (presentTables === 0 && relevantTriggers.length === 0 && !extraTables) {
     return { state: 'absent', defectIds: ['CAUSAL_V2_SCHEMA_ABSENT'] };
   }
+  if (extraTables) defectIds.add('CAUSAL_V2_EXTRA_TABLE');
   if (exactPreClockCausalV2Schema(db)) {
     return { state: 'exact-pre-clock', defectIds: [] };
   }

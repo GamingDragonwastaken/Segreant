@@ -41,6 +41,7 @@ import type {
   CommittedCausalStudyProtocolV2,
   AnyCommittedCausalStudyProtocol,
 } from '../causal/types.ts';
+import { CAUSAL_LINEAGE_BINDING_NOT_PERSISTED } from './causalLineage.ts';
 import { causalV2SchemaComplete } from './schema.ts';
 
 export interface CausalAnalysisSnapshot {
@@ -1168,6 +1169,7 @@ function evaluateQualificationV2(data: AuthenticatedCausalStudySnapshotV2): Caus
   const executionByDecision = new Map<string, CausalExecutionRecordV2>();
   const invalidExecutionDecisions = new Set<string>();
   let unresolvedCostVerification = false;
+  let missingLineageBinding = false;
   if (duplicateQualificationIds(executions.map((execution) => execution.executionId))
       || duplicateQualificationIds(executions.map((execution) => execution.decisionId))) {
     reasons.push('duplicate V2 execution identity');
@@ -1216,6 +1218,12 @@ function evaluateQualificationV2(data: AuthenticatedCausalStudySnapshotV2): Caus
         && execution.ordinaryLedgerVerifier.reasonCodes.includes('task4_not_implemented')
         && (execution.directAiCostUsd !== null || execution.fullArmCostUsd !== null)) {
       unresolvedCostVerification = true;
+    }
+    if (execution.directAiCostUsd !== null || execution.fullArmCostUsd !== null) {
+      // T-069's durable sidecar is intentionally not inferred from an
+      // execution/request coincidence. Until it is persisted and authenticated,
+      // every cost-bearing structural result remains non-qualified.
+      missingLineageBinding = true;
     }
     executionByDecision.set(execution.decisionId, execution);
   }
@@ -1315,6 +1323,7 @@ function evaluateQualificationV2(data: AuthenticatedCausalStudySnapshotV2): Caus
   if (unresolvedCostVerification) {
     reasons.push('V2 ordinary ledger cost verification is unresolved');
   }
+  if (missingLineageBinding) reasons.push(CAUSAL_LINEAGE_BINDING_NOT_PERSISTED);
   if (Object.values(countsByArm).some((count) => count.completed < protocol.analysis.minCompletedPerArm)) {
     reasons.push('V2 matured completion support is below the committed minimum');
   }

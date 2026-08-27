@@ -16,20 +16,18 @@ function compile(project, label) {
 }
 
 /**
- * `--web` emits only the browser app and its static assets — precisely the
- * slice of dist/ that the GUI tests read.
+ * `--web` emits only the browser app and its static assets — the targeted
+ * slice used when iterating on GUI output. The ordinary `npm test` pretest
+ * uses the full build because package-boundary tests also inspect the Node
+ * runtime artifacts in dist/.
  *
- * Those tests assert against built output, so on a clean checkout they fail
- * until something has built it. That dependency was real but undeclared: it
- * only stayed hidden because `npm ci` runs `prepare` -> a full build, so CI
- * never saw it and a contributor running `npm test` straight after `git clone`
- * did. `pretest` declares it instead of relying on that side effect.
+ * The artifact dependency is real but must not be inherited from `npm ci`'s
+ * prepare side effect: a contributor running `npm test` straight after a
+ * clean install must receive the same prerequisites as CI.
  *
- * Declaring it must not cost 36 seconds per `npm test`, which a full rebuild
- * would: the node-runtime pass below is the slow one and no test reads its
- * output from dist/ (they import from src/). So this mode skips that pass, and
- * skips the dist/ wipe with it — a partial build must never delete the half it
- * was not asked to produce.
+ * `--web` still skips the node-runtime pass and the dist/ wipe so a partial
+ * iteration cannot delete the half it was not asked to produce. The full
+ * pretest build is intentionally slower, but it is the reproducible contract.
  */
 const webOnly = process.argv.includes('--web');
 

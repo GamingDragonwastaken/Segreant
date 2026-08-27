@@ -3484,6 +3484,19 @@ test('causal v2 schema attestation rejects exact-name nullable no-constraint tab
   }
 });
 
+test('causal v2 schema attestation reports an extra-only generation as incomplete', () => {
+  const db = new DatabaseSync(':memory:');
+  try {
+    db.prepare('CREATE TABLE causal_shadow_v2 (value TEXT)').run();
+    const attestation = causalV2SchemaAttestation(db);
+    assert.equal(attestation.state, 'incomplete');
+    assert.ok(attestation.defectIds.includes('CAUSAL_V2_EXTRA_TABLE'));
+    assert.equal(causalV2SchemaComplete(db), false);
+  } finally {
+    db.close();
+  }
+});
+
 test('file-backed exact-name schema lookalike is backed up before atomic refusal and never opens operationally', () => {
   const dir = mkdtempSync(join(tmpdir(), 'fiscus-causal-schema-lookalike-'));
   const dbPath = join(dir, 'lookalike.sqlite');

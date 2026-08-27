@@ -410,6 +410,22 @@ test('v2 protocol public wrappers fail closed for invalid roots and unsupported 
   assert.ok(verifyCommittedCausalProtocol(unsupportedCommitted as never).some((error) => /unsupported.*version/i.test(error)));
 });
 
+test('v2 protocol public wrappers contain a throwing runtime-version getter', () => {
+  const hostile = new Proxy({ version: 2 }, {
+    get() {
+      throw new Error('runtime version getter must not escape');
+    },
+  });
+  assert.doesNotThrow(() => validateCausalProtocol(hostile));
+  assert.match(validateCausalProtocol(hostile)[0] ?? '', /unsupported|object/i);
+  assert.doesNotThrow(() => verifyCommittedCausalProtocol(hostile));
+  assert.equal(isCausalProtocolMutationEligible(hostile), false);
+  assert.throws(() => protocolHash(hostile), (error: unknown) =>
+    error instanceof Error && !(error instanceof TypeError) && /cannot hash causal protocol/i.test(error.message));
+  assert.throws(() => commitCausalProtocol(hostile, 1_700_000_000_500), (error: unknown) =>
+    error instanceof Error && !(error instanceof TypeError) && /cannot commit causal protocol/i.test(error.message));
+});
+
 test('v2 protocol hash exact-decodes the public document before projecting material', () => {
   const cases: Array<{
     name: string;

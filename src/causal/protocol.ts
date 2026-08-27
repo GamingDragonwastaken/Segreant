@@ -860,10 +860,18 @@ function verifyCommittedCausalProtocolV2(protocol: unknown): string[] {
 }
 
 function runtimeProtocolVersion(value: unknown): 1 | 2 | null {
-  if (!isRecord(value)) return null;
-  if (value.version === CAUSAL_PROTOCOL_VERSION) return CAUSAL_PROTOCOL_VERSION;
-  if (value.version === CAUSAL_PROTOCOL_VERSION_V2) return CAUSAL_PROTOCOL_VERSION_V2;
-  return null;
+  try {
+    if (!isRecord(value)) return null;
+    // Dispatch is an untrusted-input boundary. A caller can pass an
+    // in-process Proxy whose getter throws; that must be treated exactly like
+    // an unknown protocol root rather than escaping as an arbitrary error.
+    const version = value.version;
+    if (version === CAUSAL_PROTOCOL_VERSION) return CAUSAL_PROTOCOL_VERSION;
+    if (version === CAUSAL_PROTOCOL_VERSION_V2) return CAUSAL_PROTOCOL_VERSION_V2;
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 function invalidProtocolRoot(value: unknown, label: string): string[] {
