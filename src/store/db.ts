@@ -1731,6 +1731,11 @@ export class Store {
     return causal.appendCausalExecution(this.db, record);
   }
 
+  /** Store-internal v2 execution append; terminal outcomes are a later slice. */
+  appendCausalExecutionV2(record: unknown): 'created' | 'existing' {
+    return causal.appendCausalExecutionV2(this.db, record);
+  }
+
   /** Append outcome lineage after a stored execution. */
   appendCausalOutcome(record: CausalOutcomeRecord): 'created' | 'existing' {
     return causal.appendCausalOutcome(this.db, record);

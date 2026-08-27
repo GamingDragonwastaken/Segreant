@@ -10,6 +10,7 @@ import { createHash, randomFillSync } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { estimateCausalStudy } from '../causal/estimate.ts';
 import { CAUSAL_PROTOCOL_VERSION } from '../causal/types.ts';
+import { decodeCausalExecutionV2 } from '../causal/records.ts';
 import {
   canonicalJson,
   sha256,
@@ -25,6 +26,7 @@ import type {
   CausalAssignmentRequestV2,
   CausalAssignmentResultV2,
   CausalDecisionRecordV2,
+  CausalExecutionRecordV2,
   CausalExecutionRecord,
   CausalOutcomeRecord,
   CausalStudyData,
@@ -345,6 +347,209 @@ export function appendCausalExecution(db: DatabaseSync, record: CausalExecutionR
     'INSERT INTO causal_executions (execution_id, decision_id, study_id, protocol_hash, completed_at_ms, event_hash, execution_json) VALUES (?, ?, ?, ?, ?, ?, ?)',
   ).run(record.executionId, record.decisionId, record.studyId, record.protocolHash, record.completedAtMs, record.eventHash, encoded);
   return 'created';
+}
+
+class CausalExecutionStoreError extends Error {
+  readonly code: string;
+
+  constructor(code: string, message: string) {
+    super(code + ': ' + message);
+    this.name = 'CausalExecutionStoreError';
+    this.code = code;
+  }
+}
+
+function executionFail(code: string, message: string): never {
+  throw new CausalExecutionStoreError(code, message);
+}
+
+interface StoredExecutionV2Row {
+  execution_id: unknown;
+  decision_id: unknown;
+  study_id: unknown;
+  protocol_hash: unknown;
+  started_at_ms_type: unknown;
+  started_at_ms_text: unknown;
+  completed_at_ms_type: unknown;
+  completed_at_ms_text: unknown;
+  previous_event_hash: unknown;
+  event_hash: unknown;
+  execution_json: unknown;
+}
+
+const STORED_EXECUTION_V2_SELECT =
+  'SELECT execution_id, decision_id, study_id, protocol_hash, ' +
+  'typeof(started_at_ms) AS started_at_ms_type, CAST(started_at_ms AS TEXT) AS started_at_ms_text, ' +
+  'typeof(completed_at_ms) AS completed_at_ms_type, CAST(completed_at_ms AS TEXT) AS completed_at_ms_text, ' +
+  'previous_event_hash, event_hash, execution_json ';
+
+function authenticateStoredExecutionV2(row: StoredExecutionV2Row): CausalExecutionRecordV2 {
+  try {
+    if (typeof row.execution_json !== 'string') throw new Error('execution json storage class');
+    const record = decodeCausalExecutionV2(JSON.parse(row.execution_json));
+    if (row.execution_json !== canonicalJson(record)) throw new Error('execution json is not canonical');
+    const startedAtMs = decodeStoredIntegerMs(row.started_at_ms_type, row.started_at_ms_text);
+    const completedAtMs = decodeStoredIntegerMs(row.completed_at_ms_type, row.completed_at_ms_text);
+    if (row.execution_id !== record.executionId || row.decision_id !== record.decisionId
+        || row.study_id !== record.studyId || row.protocol_hash !== record.protocolHash
+        || startedAtMs !== record.startedAtMs || completedAtMs !== record.completedAtMs
+        || row.previous_event_hash !== record.previousEventHash || row.event_hash !== record.eventHash) {
+      throw new Error('execution physical identity');
+    }
+    return record;
+  } catch (error) {
+    if (error instanceof CausalExecutionStoreError) throw error;
+    executionFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 execution failed integrity verification');
+  }
+}
+
+function normalizedExecutionError(error: unknown): Error {
+  if (error instanceof CausalExecutionStoreError) return error;
+  if (error && typeof error === 'object' && 'code' in error
+      && typeof (error as { code?: unknown }).code === 'string') {
+    const code = (error as { code: string }).code;
+    if (code === 'CAUSAL_RECORD_INVALID') {
+      return new CausalExecutionStoreError('CAUSAL_RECORD_INVALID', 'causal execution record is invalid');
+    }
+    if (code === 'CAUSAL_INTEGRITY_FAILURE') {
+      return new CausalExecutionStoreError('CAUSAL_INTEGRITY_FAILURE', 'stored v2 causal evidence failed integrity verification');
+    }
+    if (code === 'CAUSAL_NOT_FOUND') {
+      return new CausalExecutionStoreError('CAUSAL_RECORD_INVALID', 'causal execution record is invalid');
+    }
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  if (/database is locked|SQLITE_BUSY/i.test(message)) {
+    return new CausalExecutionStoreError('CAUSAL_BUSY', 'execution writer is busy; retry this immutable request');
+  }
+  if (/UNIQUE constraint failed.*causal_executions_v2/i.test(message)) {
+    return new CausalExecutionStoreError('CAUSAL_IMMUTABLE_CONFLICT', 'causal execution conflicts with an existing immutable record');
+  }
+  return new CausalExecutionStoreError(
+    'CAUSAL_APPEND_ROLLED_BACK',
+    'execution transaction rolled back without disclosing a causal record',
+  );
+}
+
+/**
+ * Append one exact v2 execution record.  This is intentionally Store-internal:
+ * terminal outcomes, public mutation, lifecycle, and analysis are separate
+ * later increments.
+ */
+export function appendCausalExecutionV2(db: DatabaseSync, recordValue: unknown): 'created' | 'existing' {
+  let committed = false;
+  try {
+    // Decode before property access, hashing, or database use.  All stateful
+    // lineage and replay checks below remain inside the write transaction.
+    const record = decodeCausalExecutionV2(recordValue);
+    const encoded = canonicalJson(record);
+    db.prepare('BEGIN IMMEDIATE').run();
+    const protocol = requireProtocolV2(db, record.studyId);
+    if (record.protocolHash !== protocol.protocolHash) {
+      executionFail('CAUSAL_RECORD_INVALID', 'execution does not bind the stored v2 protocol');
+    }
+
+    // This scan authenticates the retained v2 assignment artifacts.  In
+    // particular, no legacy causal_decisions row can become a predecessor.
+    let blocks: CausalAssignmentBlockV2[];
+    try {
+      blocks = scanAssignmentArtifacts(db, protocol);
+    } catch (error) {
+      if (error instanceof CausalExecutionStoreError) throw error;
+      executionFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 assignment evidence failed integrity verification');
+    }
+    const decision = blocks.flatMap((block) => block.decisions)
+      .find((candidate) => candidate.decisionId === record.decisionId);
+    if (!decision) executionFail('CAUSAL_RECORD_INVALID', 'execution does not bind a stored v2 decision');
+    const arm = protocol.arms.find((candidate) => candidate.armId === decision.assignedArmId);
+    if (!arm
+        || record.assignedExecutionPlanDigest !== arm.executionPlanDigest
+        || record.previousEventHash !== decision.eventHash
+        || record.startedAtMs < decision.assignedAtMs) {
+      executionFail('CAUSAL_RECORD_INVALID', 'execution lineage does not match the stored v2 decision');
+    }
+    if (record.startedAtMs < protocol.studyWindow.startsAtMs
+        || (protocol.studyWindow.endsAtMs !== null && record.completedAtMs > protocol.studyWindow.endsAtMs)) {
+      executionFail('CAUSAL_RECORD_INVALID', 'execution timestamps fall outside the stored study window');
+    }
+    const directCost = record.directAiCostUsd;
+    if (directCost !== null && (!Number.isFinite(directCost)
+        || directCost < protocol.costOutcome.boundsUsd.low
+        || directCost > protocol.costOutcome.boundsUsd.high
+        || !protocol.costOutcome.acceptedSourceClasses.includes(record.directCostSourceClass as 'actual_reconciled' | 'actual_observed'))) {
+      executionFail('CAUSAL_RECORD_INVALID', 'execution does not satisfy the stored protocol');
+    }
+    const fullCost = record.fullArmCostUsd;
+    if (protocol.question === 'model_cost_quality') {
+      if (fullCost !== null || record.fullCostSourceClass !== 'incomplete_or_unknown') {
+        executionFail('CAUSAL_RECORD_INVALID', 'execution does not satisfy the stored protocol');
+      }
+    } else {
+      if (fullCost === null
+          || !Number.isFinite(fullCost)
+          || fullCost < protocol.costOutcome.boundsUsd.low
+          || fullCost > protocol.costOutcome.boundsUsd.high
+          || !protocol.costOutcome.acceptedSourceClasses.includes(record.fullCostSourceClass as 'actual_reconciled' | 'actual_observed')) {
+        executionFail('CAUSAL_RECORD_INVALID', 'execution does not satisfy the stored protocol');
+      }
+    }
+
+    const byId = db.prepare(
+      STORED_EXECUTION_V2_SELECT + 'FROM causal_executions_v2 WHERE execution_id = ?',
+    ).get(record.executionId) as StoredExecutionV2Row | undefined;
+    if (byId) {
+      const existing = authenticateStoredExecutionV2(byId);
+      if (canonicalJson(existing) === encoded) {
+        db.prepare('COMMIT').run();
+        committed = true;
+        return 'existing';
+      }
+      executionFail('CAUSAL_IMMUTABLE_CONFLICT', 'execution conflicts with existing immutable content');
+    }
+
+    // Authenticate any competing row before classifying a unique decision or
+    // event collision.  A corrupt row is never an ordinary duplicate.
+    const competing = db.prepare(
+      STORED_EXECUTION_V2_SELECT + 'FROM causal_executions_v2 WHERE decision_id = ? OR event_hash = ?',
+    ).all(record.decisionId, record.eventHash) as unknown as StoredExecutionV2Row[];
+    for (const row of competing) authenticateStoredExecutionV2(row);
+    if (competing.length > 0) {
+      executionFail('CAUSAL_IMMUTABLE_CONFLICT', 'execution conflicts with an existing immutable decision or event');
+    }
+
+    db.prepare(
+      'INSERT INTO causal_executions_v2 ' +
+      '(execution_id, decision_id, study_id, protocol_hash, started_at_ms, completed_at_ms, previous_event_hash, event_hash, execution_json) ' +
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).run(
+      record.executionId,
+      record.decisionId,
+      record.studyId,
+      record.protocolHash,
+      record.startedAtMs,
+      record.completedAtMs,
+      record.previousEventHash,
+      record.eventHash,
+      encoded,
+    );
+
+    const retained = db.prepare(
+      STORED_EXECUTION_V2_SELECT + 'FROM causal_executions_v2 WHERE execution_id = ?',
+    ).get(record.executionId) as StoredExecutionV2Row | undefined;
+    if (!retained) executionFail('CAUSAL_INTEGRITY_FAILURE', 'created v2 execution could not be reloaded');
+    const authenticated = authenticateStoredExecutionV2(retained);
+    if (canonicalJson(authenticated) !== encoded) {
+      executionFail('CAUSAL_INTEGRITY_FAILURE', 'created v2 execution did not replay canonically');
+    }
+    db.prepare('COMMIT').run();
+    committed = true;
+    return 'created';
+  } catch (error) {
+    if (!committed) {
+      try { db.prepare('ROLLBACK').run(); } catch { /* no active transaction */ }
+    }
+    throw normalizedExecutionError(error);
+  }
 }
 
 /** Append a resolved/pending outcome only when it follows a stored execution. */

@@ -379,6 +379,46 @@ export interface CausalAssignmentResultV2 {
   manifest: CausalAssignmentManifestV2;
 }
 
+/**
+ * The production Slice 4 verifier is intentionally unresolved.  A caller may
+ * retain only the closed result shape; the Store derives and authenticates the
+ * result hash and does not accept a caller-selected verified result.
+ */
+export interface OrdinaryLedgerVerifierResultV2 {
+  type: 'fiscus.causal-ordinary-ledger-verifier';
+  version: 2;
+  state: 'unresolved';
+  checkedAtMs: null;
+  requestCount: 0;
+  evidenceManifestHash: null;
+  reasonCodes: Array<'task4_not_implemented'>;
+  resultHash: string;
+}
+
+/** Exact v2 execution record. It is deliberately distinct from the retained v1 shape. */
+export interface CausalExecutionRecordV2 {
+  type: 'fiscus.causal-execution';
+  version: 2;
+  executionId: string;
+  decisionId: string;
+  studyId: string;
+  protocolHash: string;
+  startedAtMs: number;
+  completedAtMs: number;
+  assignedExecutionPlanDigest: string;
+  actualExecutionPlanDigest: string | null;
+  adherence: ExecutionAdherence;
+  requestIds: string[];
+  directAiCostUsd: number | null;
+  directCostSourceClass: CostSourceClass;
+  priceLineageDigests: string[];
+  fullArmCostUsd: number | null;
+  fullCostSourceClass: CostSourceClass;
+  ordinaryLedgerVerifier: OrdinaryLedgerVerifierResultV2;
+  previousEventHash: string;
+  eventHash: string;
+}
+
 export interface CausalExecutionRecord {
   executionId: string;
   decisionId: string;

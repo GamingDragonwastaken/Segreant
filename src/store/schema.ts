@@ -519,6 +519,39 @@ CREATE TABLE IF NOT EXISTS causal_assignment_manifests_v2 (
 
 CREATE INDEX IF NOT EXISTS idx_causal_assignment_manifests_v2_current
   ON causal_assignment_manifests_v2(study_id, generation DESC);
+
+-- Version-2 terminal evidence is physically isolated from retained v1 causal
+-- execution/outcome rows.  The JSON is canonical and duplicated scalar columns
+-- are the physical identity anchors checked on every Store reload.
+CREATE TABLE IF NOT EXISTS causal_executions_v2 (
+  execution_id                    TEXT PRIMARY KEY NOT NULL,
+  decision_id                     TEXT NOT NULL UNIQUE,
+  study_id                        TEXT NOT NULL,
+  protocol_hash                   TEXT NOT NULL,
+  started_at_ms                   INTEGER NOT NULL,
+  completed_at_ms                 INTEGER NOT NULL,
+  previous_event_hash             TEXT NOT NULL,
+  event_hash                      TEXT NOT NULL UNIQUE,
+  execution_json                  TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_causal_executions_v2_study_completed
+  ON causal_executions_v2(study_id, completed_at_ms, execution_id);
+
+CREATE TABLE IF NOT EXISTS causal_terminal_outcomes_v2 (
+  outcome_id                      TEXT PRIMARY KEY NOT NULL,
+  decision_id                     TEXT NOT NULL UNIQUE,
+  study_id                        TEXT NOT NULL,
+  protocol_hash                   TEXT NOT NULL,
+  observed_at_ms                  INTEGER NOT NULL,
+  maturity                        TEXT NOT NULL,
+  previous_event_hash             TEXT NOT NULL,
+  event_hash                      TEXT NOT NULL UNIQUE,
+  terminal_outcome_json            TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_causal_terminal_outcomes_v2_study_observed
+  ON causal_terminal_outcomes_v2(study_id, observed_at_ms, outcome_id);
 `;
 
 /** Idempotent schema migrations for DBs created before a column existed. */
@@ -627,6 +660,8 @@ function installCausalImmutability(db: DatabaseSync): void {
     'causal_decisions_v2',
     'causal_assignment_units_v2',
     'causal_assignment_manifests_v2',
+    'causal_executions_v2',
+    'causal_terminal_outcomes_v2',
   ];
   for (const table of tables) {
     const updateTrigger = 'causal_no_update_' + table;
@@ -807,11 +842,74 @@ const CAUSAL_V2_TABLE_CONTRACTS: Record<string, CausalV2TableContract> = {
       I('u', 1, [{ cid: 3, name: 'manifest_hash' }]),
     ],
   },
+  causal_executions_v2: {
+    sql: `CREATE TABLE causal_executions_v2 (
+  execution_id                    TEXT PRIMARY KEY NOT NULL,
+  decision_id                     TEXT NOT NULL UNIQUE,
+  study_id                        TEXT NOT NULL,
+  protocol_hash                   TEXT NOT NULL,
+  started_at_ms                   INTEGER NOT NULL,
+  completed_at_ms                 INTEGER NOT NULL,
+  previous_event_hash             TEXT NOT NULL,
+  event_hash                      TEXT NOT NULL UNIQUE,
+  execution_json                  TEXT NOT NULL
+)`,
+    columns: [
+      C('execution_id', 'TEXT', 1), C('decision_id', 'TEXT'), C('study_id', 'TEXT'),
+      C('protocol_hash', 'TEXT'), C('started_at_ms', 'INTEGER'),
+      C('completed_at_ms', 'INTEGER'), C('previous_event_hash', 'TEXT'),
+      C('event_hash', 'TEXT'), C('execution_json', 'TEXT'),
+    ],
+    indexes: [
+      I('c', 0, [
+        { cid: 2, name: 'study_id' }, { cid: 5, name: 'completed_at_ms' },
+        { cid: 0, name: 'execution_id' },
+      ], {
+        name: 'idx_causal_executions_v2_study_completed',
+        sql: `CREATE INDEX idx_causal_executions_v2_study_completed
+  ON causal_executions_v2(study_id, completed_at_ms, execution_id)`,
+      }),
+      I('u', 1, [{ cid: 7, name: 'event_hash' }]),
+      I('u', 1, [{ cid: 1, name: 'decision_id' }]),
+      I('pk', 1, [{ cid: 0, name: 'execution_id' }]),
+    ],
+  },
+  causal_terminal_outcomes_v2: {
+    sql: `CREATE TABLE causal_terminal_outcomes_v2 (
+  outcome_id                      TEXT PRIMARY KEY NOT NULL,
+  decision_id                     TEXT NOT NULL UNIQUE,
+  study_id                        TEXT NOT NULL,
+  protocol_hash                   TEXT NOT NULL,
+  observed_at_ms                  INTEGER NOT NULL,
+  maturity                        TEXT NOT NULL,
+  previous_event_hash             TEXT NOT NULL,
+  event_hash                      TEXT NOT NULL UNIQUE,
+  terminal_outcome_json            TEXT NOT NULL
+)`,
+    columns: [
+      C('outcome_id', 'TEXT', 1), C('decision_id', 'TEXT'), C('study_id', 'TEXT'),
+      C('protocol_hash', 'TEXT'), C('observed_at_ms', 'INTEGER'), C('maturity', 'TEXT'),
+      C('previous_event_hash', 'TEXT'), C('event_hash', 'TEXT'), C('terminal_outcome_json', 'TEXT'),
+    ],
+    indexes: [
+      I('c', 0, [
+        { cid: 2, name: 'study_id' }, { cid: 4, name: 'observed_at_ms' },
+        { cid: 0, name: 'outcome_id' },
+      ], {
+        name: 'idx_causal_terminal_outcomes_v2_study_observed',
+        sql: `CREATE INDEX idx_causal_terminal_outcomes_v2_study_observed
+  ON causal_terminal_outcomes_v2(study_id, observed_at_ms, outcome_id)`,
+      }),
+      I('u', 1, [{ cid: 7, name: 'event_hash' }]),
+      I('u', 1, [{ cid: 1, name: 'decision_id' }]),
+      I('pk', 1, [{ cid: 0, name: 'outcome_id' }]),
+    ],
+  },
 };
 
 const CAUSAL_V2_TABLES = Object.keys(CAUSAL_V2_TABLE_CONTRACTS);
 
-export type CausalV2SchemaState = 'absent' | 'exact' | 'incomplete';
+export type CausalV2SchemaState = 'absent' | 'exact-s3' | 'exact' | 'incomplete';
 
 export interface CausalV2SchemaAttestation {
   state: CausalV2SchemaState;
@@ -902,9 +1000,9 @@ function normalizeAuthoritySql(sql: unknown): string | null {
   return tokens.join(' ');
 }
 
-function expectedImmutabilityTriggers(): Map<string, { table: string; sql: string }> {
+function expectedImmutabilityTriggers(tables: readonly string[] = CAUSAL_V2_TABLES): Map<string, { table: string; sql: string }> {
   const expected = new Map<string, { table: string; sql: string }>();
-  for (const table of CAUSAL_V2_TABLES) {
+  for (const table of tables) {
     for (const operation of ['update', 'delete'] as const) {
       const name = 'causal_no_' + operation + '_' + table;
       const sql = 'CREATE TRIGGER ' + name + ' BEFORE ' + operation.toUpperCase() +
@@ -913,6 +1011,49 @@ function expectedImmutabilityTriggers(): Map<string, { table: string; sql: strin
     }
   }
   return expected;
+}
+
+const SLICE3_CAUSAL_V2_TABLES = [
+  'causal_assignment_plans_v2',
+  'causal_decisions_v2',
+  'causal_assignment_units_v2',
+  'causal_assignment_manifests_v2',
+] as const;
+
+/**
+ * The four-table assignment generation is the only trusted predecessor for
+ * the additive Slice 4 migration.  A partial or lookalike generation must not
+ * be upgraded merely because CREATE TABLE IF NOT EXISTS can fill its gaps.
+ */
+function exactSlice3AssignmentSchema(db: DatabaseSync): boolean {
+  for (const table of CAUSAL_V2_TABLES) {
+    const exists = db.prepare(
+      "SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = ?",
+    ).get(table) as { present: number } | undefined;
+    if (SLICE3_CAUSAL_V2_TABLES.includes(table as typeof SLICE3_CAUSAL_V2_TABLES[number])) {
+      const contract = CAUSAL_V2_TABLE_CONTRACTS[table];
+      if (!exists || !contract || !tableContractMatches(db, table, contract)) return false;
+    } else if (exists) {
+      return false;
+    }
+  }
+  const v2Tables = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'causal_%_v2' ORDER BY name",
+  ).all() as Array<{ name: string }>;
+  if (JSON.stringify(v2Tables.map((row) => row.name)) !== JSON.stringify([...SLICE3_CAUSAL_V2_TABLES].sort())) {
+    return false;
+  }
+  const expected = expectedImmutabilityTriggers(SLICE3_CAUSAL_V2_TABLES);
+  const triggers = db.prepare(
+    "SELECT name, tbl_name, sql FROM sqlite_master WHERE type = 'trigger' ORDER BY name",
+  ).all() as Array<{ name: string; tbl_name: string; sql: string | null }>;
+  const relevant = triggers.filter((row) => expected.has(row.name) || SLICE3_CAUSAL_V2_TABLES.includes(row.tbl_name as typeof SLICE3_CAUSAL_V2_TABLES[number]));
+  if (relevant.length !== expected.size) return false;
+  return relevant.every((row) => {
+    const authority = expected.get(row.name);
+    return authority !== undefined && authority.table === row.tbl_name
+      && normalizeAuthoritySql(row.sql) === authority.sql;
+  });
 }
 
 function tableContractMatches(db: DatabaseSync, table: string, contract: CausalV2TableContract): boolean {
@@ -1017,6 +1158,14 @@ export function causalV2SchemaAttestation(db: DatabaseSync): CausalV2SchemaAttes
     }
   }
 
+  // The contract is closed.  An unrelated table with a v2-looking name is a
+  // hostile/extra generation, not a harmless extension to ignore.
+  const expectedTableNames = new Set(CAUSAL_V2_TABLES);
+  const extraTables = (db.prepare(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'causal_%_v2'",
+  ).all() as Array<{ name: string }>).some((row) => !expectedTableNames.has(row.name));
+  if (extraTables) defectIds.add('CAUSAL_V2_EXTRA_TABLE');
+
   const expectedTriggers = expectedImmutabilityTriggers();
   const triggerRows = db.prepare(
     "SELECT name, tbl_name, sql FROM sqlite_master WHERE type = 'trigger' ORDER BY name",
@@ -1038,6 +1187,9 @@ export function causalV2SchemaAttestation(db: DatabaseSync): CausalV2SchemaAttes
 
   if (presentTables === 0 && relevantTriggers.length === 0) {
     return { state: 'absent', defectIds: ['CAUSAL_V2_SCHEMA_ABSENT'] };
+  }
+  if (exactSlice3AssignmentSchema(db)) {
+    return { state: 'exact-s3', defectIds: [] };
   }
   if (presentTables === CAUSAL_V2_TABLES.length && defectIds.size === 0) {
     return { state: 'exact', defectIds: [] };
@@ -1080,6 +1232,9 @@ export function initializeSchema(
         && !options.migrationBackupVerified
         && !options.allowUnbackedCausalV2Create) {
       throw new Error('causal v2 schema validation failed: CAUSAL_V2_VERIFIED_BACKUP_REQUIRED');
+    }
+    if (lockedState === 'incomplete' && !exactSlice3AssignmentSchema(db)) {
+      throw new Error('causal v2 schema validation failed: CAUSAL_V2_UNRECOGNIZED_PREDECESSOR');
     }
     runScript(db, SCHEMA);
     migrate(db);

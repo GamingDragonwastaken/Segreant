@@ -15,11 +15,13 @@ import { pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
 import { estimateCausalStudy } from '../src/causal/estimate.ts';
 import { canonicalJson, causalEventHash, commitCausalProtocol } from '../src/causal/protocol.ts';
+import { causalExecutionV2EventHash, ordinaryLedgerVerifierHash } from '../src/causal/records.ts';
 import {
   CAUSAL_PROTOCOL_TYPE,
   CAUSAL_PROTOCOL_VERSION,
   CAUSAL_PROTOCOL_VERSION_V2,
   type CausalExecutionRecord,
+  type CausalExecutionRecordV2,
   type CausalOutcomeRecord,
   type CausalStudyProtocolDraft,
   type CausalStudyProtocolDraftV2,
@@ -277,6 +279,36 @@ function v2StoreProtocol(
     },
   };
   return commitCausalProtocol(draft, 1_700_000_000_500) as CommittedCausalStudyProtocolV2;
+}
+
+function v2AiStoreProtocol(
+  studyId = 'study:ai-store-v2',
+  maxAssignments = 12,
+): CommittedCausalStudyProtocolV2 {
+  const base = v2StoreProtocol(studyId, maxAssignments);
+  const {
+    lifecycle: _lifecycle,
+    committedAtMs: _committedAtMs,
+    protocolHash: _protocolHash,
+    ...draftBase
+  } = base;
+  const draft: CausalStudyProtocolDraftV2 = {
+    ...draftBase,
+    question: 'ai_vs_incumbent_net_benefit',
+    arms: [
+      { ...base.arms[0]!, role: 'ai' },
+      { ...base.arms[1]!, role: 'incumbent' },
+    ],
+    economicOutcome: {
+      metricId: 'metric:net-benefit',
+      collectionMethodId: 'method:deterministic-economic',
+      currency: 'USD',
+      boundsUsd: { low: -100, high: 100 },
+      evidenceClass: 'deterministic',
+      fullCostAccountingRequired: true,
+    },
+  };
+  return commitCausalProtocol(draft, base.committedAtMs) as CommittedCausalStudyProtocolV2;
 }
 
 interface RetainedProtocolRowFixture {
@@ -696,6 +728,54 @@ function assignmentMethod(store: Store): AssignmentMethod {
 function tableCount(store: Store, table: string): number {
   const row = store.raw().prepare('SELECT COUNT(*) AS count FROM ' + table).get() as { count: number };
   return Number(row.count);
+}
+
+type ExecutionMethod = (record: unknown) => 'created' | 'existing';
+
+function executionMethod(store: Store): ExecutionMethod {
+  const method = (store as unknown as { appendCausalExecutionV2?: ExecutionMethod }).appendCausalExecutionV2;
+  assert.equal(typeof method, 'function', 'Store must expose the internal v2 execution operation');
+  if (typeof method !== 'function') throw new Error('internal v2 execution operation is unavailable');
+  return method.bind(store);
+}
+
+function validExecutionV2(
+  protocol: CommittedCausalStudyProtocolV2,
+  decision: { decisionId: string; assignedAtMs: number; assignedArmId: string; eventHash: string },
+  executionId = 'execution:store-v2',
+): CausalExecutionRecordV2 {
+  const verifierMaterial = {
+    type: 'fiscus.causal-ordinary-ledger-verifier' as const,
+    version: 2 as const,
+    state: 'unresolved' as const,
+    checkedAtMs: null,
+    requestCount: 0 as const,
+    evidenceManifestHash: null,
+    reasonCodes: ['task4_not_implemented' as const],
+  };
+  const arm = protocol.arms.find((candidate) => candidate.armId === decision.assignedArmId)!;
+  const material = {
+    type: 'fiscus.causal-execution' as const,
+    version: 2 as const,
+    executionId,
+    decisionId: decision.decisionId,
+    studyId: protocol.studyId,
+    protocolHash: protocol.protocolHash,
+    startedAtMs: decision.assignedAtMs + 1,
+    completedAtMs: decision.assignedAtMs + 2,
+    assignedExecutionPlanDigest: arm.executionPlanDigest,
+    actualExecutionPlanDigest: arm.executionPlanDigest,
+    adherence: 'confirmed' as const,
+    requestIds: [] as string[],
+    directAiCostUsd: null,
+    directCostSourceClass: 'incomplete_or_unknown' as const,
+    priceLineageDigests: [] as string[],
+    fullArmCostUsd: null,
+    fullCostSourceClass: 'incomplete_or_unknown' as const,
+    ordinaryLedgerVerifier: { ...verifierMaterial, resultHash: ordinaryLedgerVerifierHash(verifierMaterial) },
+    previousEventHash: decision.eventHash,
+  };
+  return { ...material, eventHash: causalExecutionV2EventHash(material) };
 }
 
 test('atomic assignment persistence commits a complete replayable block before disclosure', () => {
@@ -1237,6 +1317,319 @@ test('public assignment manifest reader observes one explicit SQLite snapshot du
   }
 });
 
+test('legacy causal decision storage is not a source for v2 terminal records', () => {
+  const store = new Store(':memory:');
+  try {
+    const protocol = v2StoreProtocol();
+    assert.equal(store.registerCausalProtocol(protocol), 'created');
+    assert.equal(assignmentMethod(store)(assignmentRequest()).status, 'created');
+    const decisionRow = store.raw().prepare(
+      'SELECT decision_json FROM causal_decisions ORDER BY decision_id LIMIT 1',
+    ).get() as { decision_json: string } | undefined;
+    assert.equal(decisionRow, undefined, 'v2 assignment must never be reinterpreted through legacy v1 decision JSON');
+  } finally {
+    store.close();
+  }
+});
+
+test('strict causal execution v2 Store facade exists independently of legacy append helpers', () => {
+  const store = new Store(':memory:');
+  try {
+    const method = (store as unknown as { appendCausalExecutionV2?: unknown }).appendCausalExecutionV2;
+    assert.equal(typeof method, 'function', 'Slice 4 requires an explicit v2-only Store append boundary');
+  } finally {
+    store.close();
+  }
+});
+
+test('strict causal execution v2 appends only against an authenticated v2 decision and replays exactly', () => {
+  const store = new Store(':memory:');
+  try {
+    const protocol = v2StoreProtocol();
+    assert.equal(store.registerCausalProtocol(protocol), 'created');
+    const assignment = assignmentMethod(store)(assignmentRequest());
+    const decision = assignment.block.decisions[0]! as typeof assignment.block.decisions[number] & {
+      decisionId: string; assignedAtMs: number; assignedArmId: string; eventHash: string;
+    };
+    const record = validExecutionV2(protocol, decision);
+    const append = executionMethod(store);
+    assert.equal(append(record), 'created');
+    assert.equal(tableCount(store, 'causal_executions_v2'), 1);
+    assert.equal(tableCount(store, 'causal_terminal_outcomes_v2'), 0);
+    const retained = store.raw().prepare(
+      'SELECT execution_id, decision_id, study_id, protocol_hash, started_at_ms, completed_at_ms, previous_event_hash, event_hash, execution_json FROM causal_executions_v2',
+    ).get() as Record<string, unknown>;
+    assert.equal(retained.execution_id, record.executionId);
+    assert.equal(retained.decision_id, record.decisionId);
+    assert.equal(retained.previous_event_hash, record.previousEventHash);
+    assert.equal(retained.event_hash, record.eventHash);
+    assert.equal(retained.execution_json, canonicalJson(record));
+    assert.equal(append(record), 'existing');
+
+    const changed = { ...record, completedAtMs: record.completedAtMs + 1 };
+    assert.throws(
+      () => append({ ...changed, eventHash: causalExecutionV2EventHash(changed) }),
+      /CAUSAL_IMMUTABLE_CONFLICT/,
+    );
+    const duplicateDecision = validExecutionV2(protocol, decision, 'execution:store-v2-other');
+    assert.throws(() => append(duplicateDecision), /CAUSAL_IMMUTABLE_CONFLICT/);
+    assert.equal(tableCount(store, 'causal_executions_v2'), 1);
+    assert.throws(
+      () => store.raw().prepare('UPDATE causal_executions_v2 SET study_id = ?').run('study:tampered'),
+      /append-only/i,
+    );
+    assert.throws(
+      () => store.raw().prepare('DELETE FROM causal_executions_v2').run(),
+      /append-only/i,
+    );
+  } finally {
+    store.close();
+  }
+});
+
+test('strict causal execution v2 rejects unknown roots and local judge verifier before mutation', () => {
+  const store = new Store(':memory:');
+  try {
+    const protocol = v2StoreProtocol();
+    assert.equal(store.registerCausalProtocol(protocol), 'created');
+    const assignment = assignmentMethod(store)(assignmentRequest());
+    const decision = assignment.block.decisions[0]! as typeof assignment.block.decisions[number] & {
+      decisionId: string; assignedAtMs: number; assignedArmId: string; eventHash: string;
+    };
+    const record = validExecutionV2(protocol, decision);
+    const append = executionMethod(store);
+    for (const malformed of [null, undefined, [], { ...record, unexpected: 'secret' },
+      { ...record, ordinaryLedgerVerifier: { ...record.ordinaryLedgerVerifier, state: 'verified' } },
+      { ...record, ordinaryLedgerVerifier: { ...record.ordinaryLedgerVerifier, reasonCodes: ['local_ai_judge'] } }]) {
+      assert.throws(() => append(malformed), (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.equal((error as Error & { code?: string }).code, 'CAUSAL_RECORD_INVALID');
+        assert.equal(error.message, 'CAUSAL_RECORD_INVALID: causal execution record is invalid');
+        return true;
+      });
+    }
+    assert.equal(tableCount(store, 'causal_executions_v2'), 0);
+  } finally {
+    store.close();
+  }
+});
+
+test('strict causal execution v2 rejects non-null direct and full-arm costs without price lineage', () => {
+  const store = new Store(':memory:');
+  try {
+    const protocol = v2StoreProtocol();
+    assert.equal(store.registerCausalProtocol(protocol), 'created');
+    const assignment = assignmentMethod(store)(assignmentRequest());
+    const decision = assignment.block.decisions[0]! as typeof assignment.block.decisions[number] & {
+      decisionId: string; assignedAtMs: number; assignedArmId: string; eventHash: string;
+    };
+    const record = validExecutionV2(protocol, decision, 'execution:cost-lineage');
+    const append = executionMethod(store);
+    const directCost = { ...record, directAiCostUsd: 1, directCostSourceClass: 'actual_observed' as const };
+    assert.throws(
+      () => append({ ...directCost, eventHash: causalExecutionV2EventHash(directCost) }),
+      /CAUSAL_RECORD_INVALID/,
+    );
+    const fullCost = {
+      ...record,
+      fullArmCostUsd: 1,
+      fullCostSourceClass: 'actual_observed' as const,
+    };
+    assert.throws(
+      () => append({ ...fullCost, eventHash: causalExecutionV2EventHash(fullCost) }),
+      /CAUSAL_RECORD_INVALID/,
+    );
+    assert.equal(tableCount(store, 'causal_executions_v2'), 0);
+  } finally {
+    store.close();
+  }
+});
+
+test('strict causal execution v2 applies protocol question and declared cost bounds before insertion', () => {
+  const store = new Store(':memory:');
+  try {
+    const protocol = v2StoreProtocol();
+    assert.equal(store.registerCausalProtocol(protocol), 'created');
+    const assignment = assignmentMethod(store)(assignmentRequest());
+    const decision = assignment.block.decisions[0]! as typeof assignment.block.decisions[number] & {
+      decisionId: string; assignedAtMs: number; assignedArmId: string; eventHash: string;
+    };
+    const record = validExecutionV2(protocol, decision, 'execution:model-full-cost');
+    const modelFullCost = {
+      ...record,
+      fullArmCostUsd: 1,
+      fullCostSourceClass: 'actual_observed' as const,
+      priceLineageDigests: [D('c')],
+    };
+    assert.throws(
+      () => executionMethod(store)({ ...modelFullCost, eventHash: causalExecutionV2EventHash(modelFullCost) }),
+      /CAUSAL_RECORD_INVALID/,
+    );
+    assert.equal(tableCount(store, 'causal_executions_v2'), 0);
+  } finally {
+    store.close();
+  }
+});
+
+test('strict causal execution v2 requires full-arm cost for AI-versus-incumbent protocols', () => {
+  const store = new Store(':memory:');
+  try {
+    const protocol = v2AiStoreProtocol();
+    assert.equal(store.registerCausalProtocol(protocol), 'created');
+    const assignment = assignmentMethod(store)({ ...assignmentRequest(), studyId: protocol.studyId });
+    const decision = assignment.block.decisions[0]! as typeof assignment.block.decisions[number] & {
+      decisionId: string; assignedAtMs: number; assignedArmId: string; eventHash: string;
+    };
+    const record = validExecutionV2(protocol, decision, 'execution:ai-full-cost');
+    const append = executionMethod(store);
+    assert.throws(() => append(record), /CAUSAL_RECORD_INVALID/);
+    const fullCost = {
+      ...record,
+      fullArmCostUsd: 1,
+      fullCostSourceClass: 'actual_observed' as const,
+      priceLineageDigests: [D('c')],
+    };
+    assert.equal(append({ ...fullCost, eventHash: causalExecutionV2EventHash(fullCost) }), 'created');
+    assert.equal(tableCount(store, 'causal_executions_v2'), 1);
+  } finally {
+    store.close();
+  }
+});
+
+test('strict causal execution v2 rejects direct and full-arm financial values outside the committed bounds or source classes', () => {
+  const cases: Array<{
+    name: string;
+    protocol: CommittedCausalStudyProtocolV2;
+    mutate: (record: CausalExecutionRecordV2) => CausalExecutionRecordV2;
+  }> = [
+    {
+      name: 'direct cost above bound',
+      protocol: v2StoreProtocol('study:financial-direct-bound'),
+      mutate: (record) => ({
+        ...record,
+        directAiCostUsd: 101,
+        directCostSourceClass: 'actual_observed',
+        priceLineageDigests: [D('c')],
+      }),
+    },
+    {
+      name: 'direct source disallowed by protocol',
+      protocol: v2StoreProtocol('study:financial-direct-source'),
+      mutate: (record) => ({
+        ...record,
+        directAiCostUsd: 1,
+        directCostSourceClass: 'actual_reconciled',
+        priceLineageDigests: [D('c')],
+      }),
+    },
+    {
+      name: 'full-arm cost above bound',
+      protocol: v2AiStoreProtocol('study:financial-full-bound'),
+      mutate: (record) => ({
+        ...record,
+        fullArmCostUsd: 101,
+        fullCostSourceClass: 'actual_observed',
+        priceLineageDigests: [D('c')],
+      }),
+    },
+    {
+      name: 'full-arm source disallowed by protocol',
+      protocol: v2AiStoreProtocol('study:financial-full-source'),
+      mutate: (record) => ({
+        ...record,
+        fullArmCostUsd: 1,
+        fullCostSourceClass: 'actual_reconciled',
+        priceLineageDigests: [D('c')],
+      }),
+    },
+  ];
+  for (const financialCase of cases) {
+    const store = new Store(':memory:');
+    try {
+      const { protocol } = financialCase;
+      assert.equal(store.registerCausalProtocol(protocol), 'created');
+      const assignment = assignmentMethod(store)({ ...assignmentRequest(), studyId: protocol.studyId });
+      const decision = assignment.block.decisions[0]! as typeof assignment.block.decisions[number] & {
+        decisionId: string; assignedAtMs: number; assignedArmId: string; eventHash: string;
+      };
+      const base = validExecutionV2(protocol, decision, 'execution:financial-' + financialCase.name.replaceAll(' ', '-'));
+      const mutated = financialCase.mutate(base);
+      assert.throws(
+        () => executionMethod(store)({ ...mutated, eventHash: causalExecutionV2EventHash(mutated) }),
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.equal((error as Error & { code?: string }).code, 'CAUSAL_RECORD_INVALID');
+          assert.equal(error.message, 'CAUSAL_RECORD_INVALID: execution does not satisfy the stored protocol');
+          return true;
+        },
+        financialCase.name,
+      );
+      assert.equal(tableCount(store, 'causal_executions_v2'), 0, financialCase.name);
+    } finally {
+      store.close();
+    }
+  }
+});
+
+test('strict causal execution v2 rolls back an injected failure without disclosing retained content', () => {
+  const store = new Store(':memory:');
+  try {
+    const protocol = v2StoreProtocol();
+    assert.equal(store.registerCausalProtocol(protocol), 'created');
+    const assignment = assignmentMethod(store)(assignmentRequest());
+    const decision = assignment.block.decisions[0]! as typeof assignment.block.decisions[number] & {
+      decisionId: string; assignedAtMs: number; assignedArmId: string; eventHash: string;
+    };
+    const record = validExecutionV2(protocol, decision, 'execution:rollback');
+    store.raw().prepare(
+      "CREATE TRIGGER injected_execution_failure AFTER INSERT ON causal_executions_v2 BEGIN SELECT RAISE(ABORT, 'credential-secret'); END",
+    ).run();
+    assert.throws(() => executionMethod(store)(record), (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.equal((error as Error & { code?: string }).code, 'CAUSAL_APPEND_ROLLED_BACK');
+      assert.equal(error.message, 'CAUSAL_APPEND_ROLLED_BACK: execution transaction rolled back without disclosing a causal record');
+      assert.doesNotMatch(error.message, /credential-secret|execution:rollback|sqlite|SQL/i);
+      return true;
+    });
+    assert.equal(tableCount(store, 'causal_executions_v2'), 0);
+  } finally {
+    store.close();
+  }
+});
+
+test('strict causal execution v2 rejects malformed, noncanonical, unsafe, and physically divergent retained rows', () => {
+  const variants: Array<{ name: string; mutate: (store: Store, record: CausalExecutionRecordV2) => void }> = [
+    { name: 'malformed JSON', mutate: (store) => store.raw().prepare("UPDATE causal_executions_v2 SET execution_json = '{'").run() },
+    { name: 'noncanonical JSON', mutate: (store, record) => store.raw().prepare('UPDATE causal_executions_v2 SET execution_json = ?').run(JSON.stringify(record)) },
+    { name: 'unsafe timestamp storage', mutate: (store) => store.raw().prepare("UPDATE causal_executions_v2 SET started_at_ms = CAST('9007199254740992' AS INTEGER)").run() },
+    { name: 'physical identity mismatch', mutate: (store) => store.raw().prepare('UPDATE causal_executions_v2 SET study_id = ?').run('study:corrupt') },
+  ];
+  for (const variant of variants) {
+    const store = new Store(':memory:');
+    try {
+      const protocol = v2StoreProtocol();
+      assert.equal(store.registerCausalProtocol(protocol), 'created');
+      const assignment = assignmentMethod(store)(assignmentRequest());
+      const decision = assignment.block.decisions[0]! as typeof assignment.block.decisions[number] & {
+        decisionId: string; assignedAtMs: number; assignedArmId: string; eventHash: string;
+      };
+      const record = validExecutionV2(protocol, decision, 'execution:corrupt-' + variant.name.replaceAll(' ', '-'));
+      assert.equal(executionMethod(store)(record), 'created');
+      store.raw().prepare('DROP TRIGGER causal_no_update_causal_executions_v2').run();
+      variant.mutate(store, record);
+      assert.throws(() => executionMethod(store)(record), (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.equal((error as Error & { code?: string }).code, 'CAUSAL_INTEGRITY_FAILURE');
+        assert.equal(error.message, 'CAUSAL_INTEGRITY_FAILURE: stored v2 execution failed integrity verification');
+        assert.doesNotMatch(error.message, /'|sqlite|execution_json|9007199254740992|study:corrupt/i);
+        return true;
+      }, variant.name);
+    } finally {
+      store.close();
+    }
+  }
+});
+
 test('version-1 causal records are inspect-only at every public Store mutation boundary', () => {
   const store = new Store(':memory:');
   try {
@@ -1369,6 +1762,73 @@ test('causal v2 migration fails atomically with a verified safe backup when an i
     } finally {
       original.close();
     }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('exact Slice 3 assignment schema is a named migration predecessor and upgrades both terminal tables atomically', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-causal-s3-predecessor-'));
+  const dbPath = join(dir, 'slice3.sqlite');
+  try {
+    const seeded = new Store(dbPath);
+    seeded.close();
+    const stripSlice4 = new DatabaseSync(dbPath);
+    try {
+      stripSlice4.prepare('DROP TABLE causal_executions_v2').run();
+      stripSlice4.prepare('DROP TABLE causal_terminal_outcomes_v2').run();
+      assert.equal(causalV2SchemaAttestation(stripSlice4).state, 'exact-s3');
+    } finally {
+      stripSlice4.close();
+    }
+    const migrated = new Store(dbPath);
+    try {
+      assert.equal(migrated.causalMigrationBackupEvidence()?.path.startsWith(dbPath + '.pre-causal-v2-'), true);
+      assert.equal(causalV2SchemaComplete(migrated.raw()), true);
+      assert.equal(tableCount(migrated, 'causal_executions_v2'), 0);
+      assert.equal(tableCount(migrated, 'causal_terminal_outcomes_v2'), 0);
+      const triggers = migrated.raw().prepare(
+        "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'trigger' AND (tbl_name = 'causal_executions_v2' OR tbl_name = 'causal_terminal_outcomes_v2')",
+      ).get() as { count: number };
+      assert.equal(triggers.count, 4);
+    } finally {
+      migrated.close();
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('partial Slice 4 terminal schema is not adopted or repaired in place', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-causal-s4-partial-'));
+  const dbPath = join(dir, 'partial.sqlite');
+  try {
+    const seeded = new Store(dbPath);
+    seeded.raw().prepare('DROP TABLE causal_terminal_outcomes_v2').run();
+    seeded.close();
+    const retained = new DatabaseSync(dbPath, { readOnly: true });
+    try {
+      assert.equal(causalV2SchemaAttestation(retained).state, 'incomplete');
+    } finally {
+      retained.close();
+    }
+    assert.throws(() => new Store(dbPath), (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /^CAUSAL_IO_FAILURE:/);
+      assert.doesNotMatch(error.message, /CREATE TABLE|sqlite_master|trigger body/i);
+      return true;
+    });
+    const original = new DatabaseSync(dbPath, { readOnly: true });
+    try {
+      assert.equal(causalV2SchemaAttestation(original).state, 'incomplete');
+      const missing = original.prepare(
+        "SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = 'causal_terminal_outcomes_v2'",
+      ).get() as { present: number } | undefined;
+      assert.equal(missing, undefined);
+    } finally {
+      original.close();
+    }
+    assert.equal(readdirSync(dir).filter((name) => name.startsWith('partial.sqlite.pre-causal-v2-')).length, 1);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
