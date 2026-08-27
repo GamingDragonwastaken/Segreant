@@ -61,6 +61,7 @@ test('GET /api/billing: empty evidence remains explicitly separate and unresolve
       evidence: Record<string, unknown>;
       summary: Record<string, unknown>;
       imports: unknown[];
+      mapping: { coverageStatus: string; reconciliationStatus: string; totalRecordCount: number; excludedFrom: string[] };
       directOpenAiCosts: {
         kind: string;
         trust: string;
@@ -80,6 +81,10 @@ test('GET /api/billing: empty evidence remains explicitly separate and unresolve
     assert.equal(body.summary.recordCount, 0);
     assert.equal(body.summary.reconciliationStatus, 'not_reconciled');
     assert.deepEqual(body.imports, []);
+    assert.equal(body.mapping.coverageStatus, 'no_records');
+    assert.equal(body.mapping.reconciliationStatus, 'blocked_no_records');
+    assert.equal(body.mapping.totalRecordCount, 0);
+    assert.deepEqual(body.mapping.excludedFrom, ['budget_enforcement', 'roi', 'model_recommendations']);
     assert.equal(body.directOpenAiCosts.kind, 'openai_organization_costs_observation');
     assert.equal(body.directOpenAiCosts.trust, 'provider_observation_unreconciled');
     assert.equal(body.directOpenAiCosts.reconciliationStatus, 'not_reconciled');
@@ -169,6 +174,14 @@ test('GET /api/billing: imported evidence has provenance but never changes overv
     const body = await billing.json() as {
       summary: { importCount: number; recordCount: number; providerReportedUsdMicros: number };
       imports: Array<{ sourceExportId: string; billingAccountRef: string; trust: string; rawRetention: string }>;
+      mapping: {
+        coverageStatus: string;
+        reconciliationStatus: string;
+        totalRecordCount: number;
+        mappedRecordCount: number;
+        residualMicros: number;
+        excludedFrom: string[];
+      };
     };
     assert.deepEqual(body.summary, {
       importCount: 1,
@@ -182,6 +195,12 @@ test('GET /api/billing: imported evidence has provenance but never changes overv
     assert.equal(body.imports[0]!.billingAccountRef, imported.document.source.billingAccountRef);
     assert.equal(body.imports[0]!.trust, 'operator_supplied_unverified');
     assert.equal(body.imports[0]!.rawRetention, 'digest_only');
+    assert.equal(body.mapping.coverageStatus, 'unmapped');
+    assert.equal(body.mapping.reconciliationStatus, 'blocked_incomplete_mapping');
+    assert.equal(body.mapping.totalRecordCount, 2);
+    assert.equal(body.mapping.mappedRecordCount, 0);
+    assert.equal(body.mapping.residualMicros, 11_345_678);
+    assert.deepEqual(body.mapping.excludedFrom, ['budget_enforcement', 'roi', 'model_recommendations']);
 
     const overview = await fetch(`${srv.base}/api/overview?range=all`);
     assert.equal(overview.status, 200);
@@ -232,6 +251,9 @@ test('Billing dashboard client is a manual, separate view with no fabricated dem
     assert.match(html, /No provider line-item total or provider\/request variance is displayed/);
     assert.match(html, /CURRENT_VIEW === 'overview'/);
     assert.doesNotMatch(html, /setInterval\(load, 4000\)/, 'Billing does not inherit the overview polling loop');
+    const evidenceSource = readFileSync(join(import.meta.dirname, '..', 'src', 'dashboard', 'web', 'app', 'views', 'evidence.ts'), 'utf8');
+    assert.match(evidenceSource, /Imported-record mapping/);
+    assert.match(evidenceSource, /excluded from/);
   } finally {
     await srv.close();
     store.close();

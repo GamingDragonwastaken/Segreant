@@ -11,7 +11,7 @@
 import { h } from '../core/dom.ts';
 import { signal, effect } from '../core/signal.ts';
 import { api, type BillingPayload } from '../core/api.ts';
-import { isPrecise, relative, basisWords, usd, count } from '../core/fmt.ts';
+import { isPrecise, relative, basisWords, usd, usdFromMicros, count } from '../core/fmt.ts';
 import { actionCard } from './spend.ts';
 
 const STATUS_WORDS: Record<string, { plain: string; precise: string; pill: string }> = {
@@ -67,6 +67,58 @@ function readinessPanel(d: BillingPayload): Node | null {
     h('p', { style: 'margin-top: var(--s3)', text: () => (isPrecise()
       ? 'Only live proxy traffic carrying the declaration can count. Route traffic through the proxy, let a period close, and the local side will have something in it.'
       : 'Route your tools through Fiscus (fiscus start), let a few days pass, and this becomes checkable.') }));
+}
+
+/**
+ * Explain the exact-record mapping layer on the same Evidence surface as the
+ * provider report. Mapping is useful accounting preparation, not provider
+ * verification: even a fully mapped import remains excluded from money-
+ * consuming controls until a verified provider scope exists.
+ */
+function mappingPanel(d: BillingPayload): Node | null {
+  const m = d.mapping;
+  if (!m) return null;
+  const eligible = m.reconciliationStatus === 'eligible_for_authoritative_reconciliation';
+  const status = m.coverageStatus === 'no_records'
+    ? 'no imported records'
+    : m.coverageStatus.replace(/_/g, ' ');
+  const mapped = usdFromMicros(m.mappedMicros);
+  const total = usdFromMicros(m.totalMicros);
+  const residual = usdFromMicros(m.residualMicros);
+  const statusRows = Object.entries(m.byStatus)
+    .filter(([, value]) => value.recordCount > 0)
+    .map(([key, value]) => h('li', { text: () => (isPrecise()
+      ? `${key}: ${count(value.recordCount)} record(s), ${usdFromMicros(value.amountMicros, { precise: true })}`
+      : `${key.replace(/_/g, ' ')}: ${count(value.recordCount)} record(s), ${usdFromMicros(value.amountMicros)}`) }));
+  const targetRows = m.targets.slice(0, 8).map((target) => h('li', { text: () => (isPrecise()
+    ? `${target.targetAccountRef} / ${target.targetProject}: ${count(target.recordCount)} record(s), ${usdFromMicros(target.amountMicros, { precise: true })}`
+    : `${target.targetProject}: ${usdFromMicros(target.amountMicros)} across ${count(target.recordCount)} record(s)`) }));
+  if (m.targets.length > 8) {
+    targetRows.push(h('li', { class: 'drawer-muted', text: `${count(m.targets.length - 8)} more target(s) hidden` }));
+  }
+  return h('div', { class: 'card', style: 'margin-top: var(--s4)' },
+    h('div', { class: 'card-head' },
+      h('span', { class: 'card-title', text: 'Imported-record mapping' }),
+      h('span', { class: `pill ${eligible ? 'pill-ok' : 'pill-unverified'}`, text: status })),
+    h('p', { text: () => (isPrecise()
+      ? `${count(m.mappedRecordCount)} of ${count(m.totalRecordCount)} imported record(s) have an exact operator mapping; ${m.providerScopeAuthority} provider scope keeps reconciliation ${m.reconciliationStatus}.`
+      : `${count(m.mappedRecordCount)} of ${count(m.totalRecordCount)} imported records have an exact local target. ${m.reconciliationDetail}.`) }),
+    h('div', { class: 'stat' },
+      h('span', { text: () => `${mapped} mapped · ${residual} residual` })),
+    h('span', { class: 'basis', text: () => (isPrecise()
+      ? `total ${total}; mapping trust ${m.mappingTrust}`
+      : `of ${total} imported provider evidence; Fiscus does not guess a target`) }),
+    statusRows.length > 0
+      ? h('ul', { class: 'drawer-notes', style: 'margin-top: var(--s3)' }, ...statusRows)
+      : null,
+    targetRows.length > 0
+      ? h('div', { style: 'margin-top: var(--s3)' },
+          h('span', { class: 'basis', text: 'Exact local targets' }),
+          h('ul', { class: 'drawer-notes' }, ...targetRows))
+      : null,
+    h('p', { class: 'basis', style: 'margin-top: var(--s3)', text: () => (m.excludedFrom.length > 0
+      ? `Still excluded from: ${m.excludedFrom.join(', ')}.`
+      : 'Provider scope authority is present for this payload; review the recorded reconciliation before consuming the result.') }));
 }
 
 export function evidenceView(): Node {
@@ -125,6 +177,7 @@ export function evidenceView(): Node {
             : 'billing lines you have given us from your provider') })),
 
         readinessPanel(d),
+        mappingPanel(d),
 
         h('div', { style: 'margin-top: var(--s6)' },
           h('h2', { class: 'card-title', style: 'margin-bottom: var(--s3)', text: 'Start here' }),

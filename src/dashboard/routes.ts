@@ -415,6 +415,10 @@ export function handleBilling({ res, store }: RouteContext): void {
       // warning was written for — it says nothing at all. Same computation the
       // CLI prints, imported rather than reimplemented.
       readiness: reconciliationReadiness(store),
+      // Exact imported-record mapping coverage is a read-only accounting
+      // projection. Operator declarations stay visibly separate from provider
+      // authority and cannot enter request spend, budgets, RoI, or advice.
+      mapping: store.billingMappingCoverage(),
       // Explicit, read-only provider API observations use a different
       // source contract from imported operator reports. They remain a
       // separate snapshot/status surface and never become overview spend.

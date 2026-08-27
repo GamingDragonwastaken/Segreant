@@ -105,6 +105,31 @@ export interface ReconciliationReadiness {
   coverage: ReconciliationCoverage | null;
 }
 
+/**
+ * Exact imported-record mapping coverage. This is intentionally a narrow GUI
+ * projection of the server payload: the dashboard can explain residuals and
+ * trust, but it cannot author a mapping or treat an operator declaration as a
+ * provider-verified account binding.
+ */
+export interface BillingMappingCoveragePayload {
+  coverageStatus: string;
+  reconciliationStatus: string;
+  reconciliationDetail: string;
+  providerScopeAuthority: string;
+  mappingTrust: string;
+  totalRecordCount: number;
+  mappedRecordCount: number;
+  unmappedRecordCount: number;
+  staleMappingRecordCount: number;
+  ambiguousMappingRecordCount: number;
+  totalMicros: number;
+  mappedMicros: number;
+  residualMicros: number;
+  byStatus: Record<string, { recordCount: number; amountMicros: number }>;
+  targets: Array<{ targetProject: string; targetAccountRef: string; recordCount: number; amountMicros: number }>;
+  excludedFrom: string[];
+}
+
 export interface BillingPayload {
   demo: boolean;
   evidence: { reconciliationStatus: string };
@@ -115,6 +140,8 @@ export interface BillingPayload {
    * `ready: false` — collapsing the two would invent a reassurance.
    */
   readiness?: ReconciliationReadiness;
+  /** Exact imported-record mapping coverage; absent only for pre-mapping payloads. */
+  mapping?: BillingMappingCoveragePayload;
   /**
    * The immutable reconciliation runs, newest first — the collection the server
    * actually sends (`store.reconciliationRuns(10)`), not a count.
