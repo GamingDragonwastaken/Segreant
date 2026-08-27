@@ -8,6 +8,8 @@
 - Operator-declared route scope (`scope.ts`) — a self-assertion, never verified.
 - Either an authorized OpenAI Costs pull (`openaiCosts.ts`) or an
   operator-supplied export adopted from an import (`Store.adoptOpenAiCostsFromImport`).
+- Exact imported-record mapping (`mapping.ts`) can attach a provider line to a
+  local project/account, but only as an operator declaration.
 
 ## Guarantees
 
@@ -22,6 +24,9 @@
 - Refuses rather than softens: a period ending within 48h, non-USD or mixed
   currency, non-whole-UTC-day input, and out-of-project records are refused with
   the excluded money reported.
+- Mapping coverage is explicit: each imported line is `mapped_operator_declared`,
+  `unmapped`, `stale_mapping`, or `ambiguous_mapping`; residual dollars remain
+  visible and are never force-fitted.
 
 ## Invariants
 
@@ -29,6 +34,10 @@
   make no network request and read no credential; both facts are asserted in the
   release gate.
 - **A reconciled amount never reaches budgets, RoI, or model recommendations.**
+- **A mapped imported amount never reaches budgets, RoI, or model recommendations
+  while provider scope is operator-declared.** Mapping is versioned evidence, not
+  provider verification; only a future explicit provider-verified authority can
+  discharge this gate.
 - `isOnDeclaredRoute` counts only `provider === 'openai' && via === 'proxy'`
   carrying the declared scope id. **Imported rows are excluded and must stay
   excluded** — an imported row has the model and the cost but nothing tying it to

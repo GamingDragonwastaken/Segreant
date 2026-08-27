@@ -29,6 +29,15 @@ import {
 import type { OpenAiCostObservation, OpenAiCostsFailureCode } from '../billing/openaiCosts.ts';
 import { buildOpenAiCostsCaptureCoverage, type OpenAiCostsCaptureCoverage } from '../billing/openaiCostsCoverage.ts';
 import {
+  billingMappingKey,
+  evaluateBillingMapping,
+  newBillingRecordMapping,
+  type BillingMappingCoverage,
+  type BillingRecordMapping,
+  type ImportedBillingRecordIdentity,
+  type ProviderScopeAuthority,
+} from '../billing/mapping.ts';
+import {
   reconcileOpenAiCosts as computeOpenAiReconciliation,
   type ProviderSourceKind,
   type ReconciliationCoverage,
@@ -100,6 +109,19 @@ export interface BillingEvidenceRecord {
   usageQuantity: string | null;
   costBasis: 'provider_reported';
   trust: 'operator_supplied_unverified';
+}
+
+export interface BillingRecordMappingDeclarationInput {
+  /** The immutable billing_evidence_records.record_id, not a fuzzy selector. */
+  recordId: string;
+  targetProject: string;
+  targetAccountRef: string;
+  declaredAtMs?: number;
+}
+
+export interface BillingRecordMappingDeclarationResult {
+  mapping: BillingRecordMapping;
+  created: boolean;
 }
 
 export interface BillingImportResult {
@@ -468,6 +490,180 @@ export function billingEvidenceRecords(db: DatabaseSync): BillingEvidenceRecord[
        ORDER BY charge_period_start_ms ASC, source_record_id ASC`,
   ).all() as Array<Record<string, unknown>>;
   return rows.map(billingRecordFromRecord);
+}
+
+function mappingFromRecord(row: Record<string, unknown>): BillingRecordMapping {
+  return {
+    mappingId: String(row.mappingId),
+    mappingKey: String(row.mappingKey),
+    mappingVersion: Number(row.mappingVersion),
+    schemaVersion: Number(row.schemaVersion) as 1,
+    sourceSystem: 'operator-export',
+    provider: 'openai',
+    billingAccountRef: String(row.billingAccountRef),
+    sourceRecordId: String(row.sourceRecordId),
+    sourceRecordSha256: String(row.sourceRecordSha256),
+    firstImportId: String(row.firstImportId),
+    targetProject: String(row.targetProject),
+    targetAccountRef: String(row.targetAccountRef),
+    declaredAtMs: Number(row.declaredAtMs),
+    trust: 'operator_declared_unverified',
+  };
+}
+
+const MAPPING_SELECT = `
+  SELECT mapping_id AS mappingId, mapping_key AS mappingKey, mapping_version AS mappingVersion,
+         schema_version AS schemaVersion, source_system AS sourceSystem, provider,
+         billing_account_ref AS billingAccountRef, source_record_id AS sourceRecordId,
+         source_record_sha256 AS sourceRecordSha256, first_import_id AS firstImportId,
+         target_project AS targetProject, target_account_ref AS targetAccountRef,
+         declared_at_ms AS declaredAtMs, trust
+    FROM billing_record_mapping_versions`;
+
+/** Every mapping version, oldest first per source record for audit/replay. */
+export function billingRecordMappings(db: DatabaseSync, recordId?: string): BillingRecordMapping[] {
+  let rows: Array<Record<string, unknown>>;
+  if (recordId !== undefined) {
+    const source = db.prepare(
+      `SELECT source_system AS sourceSystem, provider, billing_account_ref AS billingAccountRef,
+              source_record_id AS sourceRecordId
+         FROM billing_evidence_records WHERE record_id = ?`,
+    ).get(recordId) as Record<string, unknown> | undefined;
+    if (!source) return [];
+    const mappingKey = billingMappingKey({
+      sourceSystem: 'operator-export',
+      provider: 'openai',
+      billingAccountRef: String(source.billingAccountRef),
+      sourceRecordId: String(source.sourceRecordId),
+    });
+    rows = db.prepare(`${MAPPING_SELECT} WHERE mapping_key = ? ORDER BY mapping_key ASC, mapping_version ASC`).all(mappingKey) as Array<Record<string, unknown>>;
+  } else {
+    rows = db.prepare(`${MAPPING_SELECT} ORDER BY mapping_key ASC, mapping_version ASC`).all() as Array<Record<string, unknown>>;
+  }
+  return rows.map(mappingFromRecord);
+}
+
+/**
+ * Declare one exact imported record's local accounting/project destination.
+ *
+ * The source row is looked up first and its stored hash/import anchor is copied
+ * into the mapping. This makes a caller unable to map a guessed or subsequently
+ * changed record. Remapping is an append-only new version; the old decision is
+ * never updated or deleted.
+ */
+export function declareBillingRecordMapping(
+  db: DatabaseSync,
+  input: BillingRecordMappingDeclarationInput,
+): BillingRecordMappingDeclarationResult {
+  if (typeof input.recordId !== 'string' || !input.recordId.trim()) throw new Error('recordId is required');
+  const source = db.prepare(
+    `SELECT record_id AS recordId, source_system AS sourceSystem, provider,
+            billing_account_ref AS billingAccountRef, source_record_id AS sourceRecordId,
+            source_record_sha256 AS sourceRecordSha256, first_import_id AS firstImportId
+       FROM billing_evidence_records WHERE record_id = ?`,
+  ).get(input.recordId) as Record<string, unknown> | undefined;
+  if (!source) throw new Error(`no imported billing evidence record exists for recordId ${input.recordId}`);
+  if (source.sourceSystem !== 'operator-export' || source.provider !== 'openai') {
+    throw new Error('only OpenAI operator-export records can receive a billing mapping');
+  }
+  const identity = {
+    sourceSystem: 'operator-export' as const,
+    provider: 'openai' as const,
+    billingAccountRef: String(source.billingAccountRef),
+    sourceRecordId: String(source.sourceRecordId),
+  };
+  const mappingKey = billingMappingKey(identity);
+  const previous = db.prepare(
+    `${MAPPING_SELECT} WHERE mapping_key = ? ORDER BY mapping_version DESC LIMIT 1`,
+  ).get(mappingKey) as Record<string, unknown> | undefined;
+  const previousMapping = previous ? mappingFromRecord(previous) : null;
+  if (previousMapping
+      && previousMapping.sourceRecordSha256 === String(source.sourceRecordSha256)
+      && previousMapping.firstImportId === String(source.firstImportId)
+      && previousMapping.targetProject === input.targetProject
+      && previousMapping.targetAccountRef === input.targetAccountRef) {
+    return { mapping: previousMapping, created: false };
+  }
+  const declaredAtMs = input.declaredAtMs ?? Date.now();
+  if (previousMapping && declaredAtMs <= previousMapping.declaredAtMs) {
+    throw new Error('declaredAtMs must be later than the prior mapping version for this source record');
+  }
+  const mapping = newBillingRecordMapping({
+    sourceSystem: identity.sourceSystem,
+    provider: identity.provider,
+    billingAccountRef: identity.billingAccountRef,
+    sourceRecordId: identity.sourceRecordId,
+    sourceRecordSha256: String(source.sourceRecordSha256),
+    firstImportId: String(source.firstImportId),
+    targetProject: input.targetProject,
+    targetAccountRef: input.targetAccountRef,
+    mappingVersion: previousMapping ? previousMapping.mappingVersion + 1 : 1,
+    declaredAtMs,
+  });
+  runScript(db, 'BEGIN IMMEDIATE');
+  try {
+    // Re-check the version under the writer lock. Another handle may have
+    // authored a version between the read above and this transaction.
+    const locked = db.prepare(
+      `${MAPPING_SELECT} WHERE mapping_key = ? ORDER BY mapping_version DESC LIMIT 1`,
+    ).get(mappingKey) as Record<string, unknown> | undefined;
+    const lockedMapping = locked ? mappingFromRecord(locked) : null;
+    if (lockedMapping && lockedMapping.mappingVersion >= mapping.mappingVersion) {
+      runScript(db, 'ROLLBACK');
+      if (lockedMapping.sourceRecordSha256 === mapping.sourceRecordSha256
+          && lockedMapping.firstImportId === mapping.firstImportId
+          && lockedMapping.targetProject === mapping.targetProject
+          && lockedMapping.targetAccountRef === mapping.targetAccountRef) {
+        return { mapping: lockedMapping, created: false };
+      }
+      throw new Error('mapping version advanced concurrently; retry with a fresh declaration');
+    }
+    db.prepare(
+      `INSERT INTO billing_record_mapping_versions (
+         mapping_id, mapping_key, mapping_version, schema_version, source_system, provider,
+         billing_account_ref, source_record_id, source_record_sha256, first_import_id,
+         target_project, target_account_ref, declared_at_ms, trust
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      mapping.mappingId, mapping.mappingKey, mapping.mappingVersion, mapping.schemaVersion,
+      mapping.sourceSystem, mapping.provider, mapping.billingAccountRef, mapping.sourceRecordId,
+      mapping.sourceRecordSha256, mapping.firstImportId, mapping.targetProject, mapping.targetAccountRef,
+      mapping.declaredAtMs, mapping.trust,
+    );
+    runScript(db, 'COMMIT');
+  } catch (error) {
+    try { runScript(db, 'ROLLBACK'); } catch { /* preserve the insertion error */ }
+    throw error;
+  }
+  return { mapping, created: true };
+}
+
+/**
+ * Evaluate imported provider evidence against all retained mapping versions.
+ * No request rows are touched and no result is eligible for budgets, ROI, or
+ * model routing while provider scope remains unverified.
+ */
+export function billingMappingCoverage(
+  db: DatabaseSync,
+  options: { importId?: string; asOfMs?: number; providerScopeAuthority?: ProviderScopeAuthority } = {},
+): BillingMappingCoverage {
+  const records = billingEvidenceRecords(db).filter((record) => options.importId === undefined || record.firstImportId === options.importId);
+  const identities: ImportedBillingRecordIdentity[] = records.map((record) => ({
+    recordId: record.recordId,
+    sourceSystem: record.sourceSystem,
+    provider: record.provider,
+    billingAccountRef: record.billingAccountRef,
+    sourceRecordId: record.sourceRecordId,
+    sourceRecordSha256: record.sourceRecordSha256,
+    firstImportId: record.firstImportId,
+    amountMicros: record.amountMicros,
+  }));
+  return evaluateBillingMapping({
+    records: identities,
+    mappings: billingRecordMappings(db),
+    asOfMs: options.asOfMs,
+    providerScopeAuthority: options.providerScopeAuthority,
+  });
 }
 
 /** Provider-declared USD total only. It is not a reconciliation or a request-ledger total. */

@@ -273,6 +273,35 @@ CREATE INDEX IF NOT EXISTS idx_billing_evidence_scope
 CREATE INDEX IF NOT EXISTS idx_billing_evidence_import
   ON billing_evidence_records(first_import_id);
 
+-- Operator-declared mappings are a separate, append-only evidence layer. A
+-- mapping points at one immutable provider record by its source identity and
+-- digest and it never rewrites that record or a request-ledger row. A later
+-- declaration is a new version, so the prior accounting decision remains
+-- inspectable.
+CREATE TABLE IF NOT EXISTS billing_record_mapping_versions (
+  mapping_id            TEXT PRIMARY KEY NOT NULL,
+  mapping_key           TEXT NOT NULL,
+  mapping_version       INTEGER NOT NULL,
+  schema_version        INTEGER NOT NULL,
+  source_system         TEXT NOT NULL CHECK (source_system = 'operator-export'),
+  provider              TEXT NOT NULL CHECK (provider = 'openai'),
+  billing_account_ref   TEXT NOT NULL,
+  source_record_id      TEXT NOT NULL,
+  source_record_sha256  TEXT NOT NULL,
+  first_import_id       TEXT NOT NULL,
+  target_project        TEXT NOT NULL,
+  target_account_ref    TEXT NOT NULL,
+  declared_at_ms        INTEGER NOT NULL,
+  trust                 TEXT NOT NULL CHECK (trust = 'operator_declared_unverified'),
+  UNIQUE(mapping_key, mapping_version)
+);
+
+CREATE INDEX IF NOT EXISTS idx_billing_record_mapping_key
+  ON billing_record_mapping_versions(mapping_key, mapping_version DESC);
+
+CREATE INDEX IF NOT EXISTS idx_billing_record_mapping_import
+  ON billing_record_mapping_versions(first_import_id, declared_at_ms DESC);
+
 -- Direct OpenAI Organization Costs observations have their own immutable grain.
 -- They are not billing_evidence_records and never join/sum with requests.
 CREATE TABLE IF NOT EXISTS openai_cost_observation_runs (
@@ -728,6 +757,18 @@ function installCausalImmutability(db: DatabaseSync): void {
       ' BEGIN SELECT RAISE(ABORT, \'causal evidence is append-only\'); END',
     ).run();
   }
+}
+
+/** Operator mappings are evidence, not mutable configuration. */
+function installBillingMappingImmutability(db: DatabaseSync): void {
+  db.prepare(
+    "CREATE TRIGGER IF NOT EXISTS billing_mapping_no_update BEFORE UPDATE ON billing_record_mapping_versions " +
+    "BEGIN SELECT RAISE(ABORT, 'billing mapping evidence is append-only'); END",
+  ).run();
+  db.prepare(
+    "CREATE TRIGGER IF NOT EXISTS billing_mapping_no_delete BEFORE DELETE ON billing_record_mapping_versions " +
+    "BEGIN SELECT RAISE(ABORT, 'billing mapping evidence is append-only'); END",
+  ).run();
 }
 
 /**
@@ -1575,6 +1616,7 @@ export function initializeSchema(
     runScript(db, SCHEMA);
     migrate(db);
     installCausalImmutability(db);
+    installBillingMappingImmutability(db);
     initializeCausalClockState(db, lockedState);
     const finalAttestation = causalV2SchemaAttestation(db);
     if (finalAttestation.state !== 'exact') {

@@ -28,11 +28,12 @@ function billingEgressRepairAction(failureCode: string): string | undefined {
 }
 
 function usage(): void {
-  console.error('  Usage: fiscus billing <import|status|export|scope|openai-costs|reconcile> [options]');
+  console.error('  Usage: fiscus billing <import|status|export|scope|mapping|openai-costs|reconcile> [options]');
   console.error('         fiscus billing import --file <evidence.json> [--apply] [--json]');
   console.error('         fiscus billing status [--json]');
   console.error('         fiscus billing export [--csv|--json] [--out <file>]');
   console.error('         fiscus billing scope <set|status|clear> [--account-ref <local-ref>] [--project-ref <local-ref>] [--apply] [--json]');
+  console.error('         fiscus billing mapping <set|status> [--record-id <id>] [--project <local-project>] [--account-ref <local-account>] [--apply] [--json]');
   console.error('         fiscus billing openai-costs <preview|pull> --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--apply] [--json]');
   console.error('         fiscus billing openai-costs adopt --import-id <id> [--apply] [--json]   no credential needed');
   console.error('         fiscus billing openai-costs <status|coverage> [--json]');
@@ -538,6 +539,113 @@ function cmdScope(flags: Flags): void {
   process.exitCode = 1;
 }
 
+function mappingUsage(): void {
+  console.error('  Usage: fiscus billing mapping set --record-id <imported-record-id> --project <local-project> --account-ref <local-account> [--apply] [--json]');
+  console.error('         fiscus billing mapping status [--json]');
+  console.error('  Mapping is exact-record, append-only operator evidence. It never rewrites provider lines or request rows.');
+  console.error('  Mapped imported dollars stay excluded from budgets, RoI, and model recommendations until provider scope is authoritative.');
+}
+
+function printMappingStatus(coverage: ReturnType<Store['billingMappingCoverage']>): void {
+  console.log('');
+  console.log('  Imported provider-record mapping coverage');
+  console.log(`  Coverage      ${coverage.coverageStatus}`);
+  console.log(`  Records       ${coverage.mappedRecordCount}/${coverage.totalRecordCount} mapped · ${coverage.unmappedRecordCount} unmapped · ${coverage.staleMappingRecordCount} stale · ${coverage.ambiguousMappingRecordCount} ambiguous`);
+  console.log(`  Amounts       mapped ${formatUsdMicros(coverage.mappedMicros)} USD · residual ${formatUsdMicros(coverage.residualMicros)} USD`);
+  console.log(`  Readiness     ${coverage.reconciliationStatus} — ${coverage.reconciliationDetail}`);
+  console.log(`  Authority     ${coverage.providerScopeAuthority}; mapping trust ${coverage.mappingTrust}`);
+  console.log(`  Excluded      ${coverage.excludedFrom.join(', ') || 'none (only with explicit provider-verified scope)'}`);
+  if (coverage.targets.length > 0) {
+    console.log('  Targets');
+    for (const target of coverage.targets) {
+      console.log(`    ${target.targetAccountRef} / ${target.targetProject}  ${target.recordCount} record(s)  ${formatUsdMicros(target.amountMicros)} USD`);
+    }
+  }
+}
+
+/** Declare an exact imported provider record's local project/account target. */
+function cmdMapping(flags: Flags): void {
+  const action = typeof flags._[1] === 'string' ? flags._[1] : 'status';
+  const store = new Store(dbPath());
+  try {
+    if (action === 'status') {
+      const coverage = store.billingMappingCoverage();
+      const payload = { coverage, mappings: store.billingRecordMappings() };
+      if (flags.json) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+      else printMappingStatus(coverage);
+      return;
+    }
+    if (action !== 'set') {
+      mappingUsage();
+      process.exitCode = 1;
+      return;
+    }
+    const recordId = typeof flags['record-id'] === 'string' ? flags['record-id'] : null;
+    const targetProject = typeof flags.project === 'string' ? flags.project : null;
+    const targetAccountRef = typeof flags['account-ref'] === 'string' ? flags['account-ref'] : null;
+    if (!recordId || !targetProject || !targetAccountRef) {
+      mappingUsage();
+      process.exitCode = 1;
+      return;
+    }
+    const source = store.billingEvidenceRecords().find((record) => record.recordId === recordId);
+    if (!source) {
+      console.error(`  No imported billing evidence record exists for recordId ${recordId}.`);
+      console.error('  Use fiscus billing export --json to inspect exact record ids; Fiscus will not guess a selector.');
+      process.exitCode = 1;
+      return;
+    }
+    const prior = store.billingRecordMappings().filter((mapping) =>
+      mapping.sourceRecordId === source.sourceRecordId
+      && mapping.billingAccountRef === source.billingAccountRef,
+    ).sort((left, right) => right.mappingVersion - left.mappingVersion)[0] ?? null;
+    const plan = {
+      recordId: source.recordId,
+      sourceRecordId: source.sourceRecordId,
+      sourceRecordSha256: source.sourceRecordSha256,
+      firstImportId: source.firstImportId,
+      provider: source.provider,
+      billingAccountRef: source.billingAccountRef,
+      targetProject,
+      targetAccountRef,
+      nextMappingVersion: prior ? prior.mappingVersion + 1 : 1,
+      trust: 'operator_declared_unverified' as const,
+      excludedFrom: ['budget_enforcement', 'roi', 'model_recommendations'] as const,
+      message: 'Exact source-record mapping only; no provider verification and no request/budget/ROI/recommendation mutation.',
+    };
+    if (!flags.apply) {
+      if (flags.json) process.stdout.write(JSON.stringify({ applied: false, plan }, null, 2) + '\n');
+      else {
+        console.log('');
+        console.log('  Imported provider-record mapping — dry run');
+        console.log(`  Record        ${plan.recordId} / ${plan.sourceRecordId}`);
+        console.log(`  Source hash   ${plan.sourceRecordSha256}`);
+        console.log(`  Target        ${plan.targetAccountRef} / ${plan.targetProject}`);
+        console.log(`  Version       ${plan.nextMappingVersion}`);
+        console.log('  Trust         operator_declared_unverified');
+        console.log('  No data written. Apply with: fiscus billing mapping set ... --apply');
+      }
+      return;
+    }
+    const result = store.declareBillingRecordMapping({ recordId, targetProject, targetAccountRef });
+    const payload = { applied: true, created: result.created, mapping: result.mapping, excludedFrom: ['budget_enforcement', 'roi', 'model_recommendations'] as const };
+    if (flags.json) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+    else {
+      console.log(result.created
+        ? `  Recorded mapping version ${result.mapping.mappingVersion} for ${result.mapping.sourceRecordId}.`
+        : `  Identical mapping already recorded as version ${result.mapping.mappingVersion}.`);
+      console.log(`  Target        ${result.mapping.targetAccountRef} / ${result.mapping.targetProject}`);
+      console.log('  Trust         operator_declared_unverified');
+      console.log('  Excluded      budget_enforcement, roi, model_recommendations until provider scope is authoritative.');
+    }
+  } catch (error) {
+    console.error(`  Billing mapping failed: ${error instanceof Error ? error.message : String(error)}`);
+    process.exitCode = 1;
+  } finally {
+    store.close();
+  }
+}
+
 function writeOrPrint(value: string, out: unknown): void {
   if (typeof out === 'string') {
     writeFileSync(out, value, 'utf8');
@@ -567,6 +675,10 @@ export async function cmdBilling(flags: Flags): Promise<void> {
   const action = typeof flags._[0] === 'string' ? flags._[0] : 'status';
   if (action === 'scope') {
     cmdScope(flags);
+    return;
+  }
+  if (action === 'mapping') {
+    cmdMapping(flags);
     return;
   }
   if (action === 'openai-costs') {

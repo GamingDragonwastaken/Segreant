@@ -32,6 +32,7 @@ import type { ProviderScopeDeclaration, ScopeCaptureStatus } from '../billing/sc
 import { ATTRIBUTION_BASES, type AttributionBasis } from '../value/characterization.ts';
 import type { OpenAiCostsCaptureCoverage } from '../billing/openaiCostsCoverage.ts';
 import type { ReconciliationCoverage, ReconciliationResult, ReconciliationRun } from '../billing/reconcile.ts';
+import type { BillingMappingCoverage, BillingRecordMapping } from '../billing/mapping.ts';
 import type { AllocationRule, CostCentre } from '../alloc/rules.ts';
 import type { AllocationRunResult } from '../alloc/apply.ts';
 import * as allocation from './allocation.ts';
@@ -55,6 +56,8 @@ export type {
 } from './realization.ts';
 import type {
   BillingEvidenceRecord,
+  BillingRecordMappingDeclarationInput,
+  BillingRecordMappingDeclarationResult,
   BillingImportInput,
   BillingImportResult,
   BillingImportRun,
@@ -83,6 +86,8 @@ import type {
  */
 export type {
   BillingEvidenceRecord,
+  BillingRecordMappingDeclarationInput,
+  BillingRecordMappingDeclarationResult,
   BillingImportInput,
   BillingImportResult,
   BillingImportRun,
@@ -93,6 +98,7 @@ export type {
   OpenAiCostsObservationRun,
   OpenAiCostsObservationStatus,
 } from './billing.ts';
+export type { BillingMappingCoverage, BillingRecordMapping, ProviderScopeAuthority } from '../billing/mapping.ts';
 export type {
   AnyCommittedCausalStudyProtocol,
   CausalAssignmentManifestV2,
@@ -1522,6 +1528,30 @@ export class Store {
   /** Immutable provider-declared lines, deliberately separate from requestsInRange(). */
   billingEvidenceRecords(): BillingEvidenceRecord[] {
     return billing.billingEvidenceRecords(this.db);
+  }
+
+  /** Every immutable operator-declared mapping version, oldest first per record. */
+  billingRecordMappings(recordId?: string): BillingRecordMapping[] {
+    return billing.billingRecordMappings(this.db, recordId);
+  }
+
+  /**
+   * Append an exact imported-record mapping to a local project/account. A
+   * repeated identical declaration is idempotent; a changed destination creates
+   * a new version and leaves the prior decision intact.
+   */
+  declareBillingRecordMapping(input: BillingRecordMappingDeclarationInput): BillingRecordMappingDeclarationResult {
+    return billing.declareBillingRecordMapping(this.db, input);
+  }
+
+  /**
+   * Report mapped coverage and residual reasons without changing provider or
+   * request evidence. The Store facade intentionally cannot assert
+   * provider_verified; that authority must arrive from a future verified
+   * connector boundary rather than an operator flag.
+   */
+  billingMappingCoverage(options: { importId?: string; asOfMs?: number } = {}): BillingMappingCoverage {
+    return billing.billingMappingCoverage(this.db, options);
   }
 
   /** Provider-declared USD total only. It is not a reconciliation or a request-ledger total. */
