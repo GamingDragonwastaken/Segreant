@@ -55,3 +55,16 @@ test('clean production artifact physically omits every causal deterministic and 
   const cliArtifact = readFileSync(resolve('dist/cli/causalCmd.js'), 'utf8');
   assert.doesNotMatch(cliArtifact, /createBlockedAssignmentPlan|randomizationMaterialHex/);
 });
+
+test('clean production artifact omits the research-only causal experiment module', async () => {
+  const researchArtifact = resolve('dist/value/causalExperiment.js');
+  assert.equal(
+    existsSync(researchArtifact),
+    false,
+    'research-only causalExperiment must not ship in the production build',
+  );
+  await assert.rejects(
+    import(pathToFileURL(researchArtifact).href),
+    (error: unknown) => error instanceof Error && (error as NodeJS.ErrnoException).code === 'ERR_MODULE_NOT_FOUND',
+  );
+});

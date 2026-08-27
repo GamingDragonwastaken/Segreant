@@ -32,7 +32,8 @@
     "dist",
     "pricing",
     "baselines",
-    "docs"
+    "docs/*.md",
+    "web/assets/seal-256.png"
   ],
   "keywords": [
     "finops",

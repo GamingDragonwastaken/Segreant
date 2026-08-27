@@ -10,6 +10,7 @@
     "test/**",
     "dist/**",
     "src/dashboard/web/app/**",
-    "src/store/causalInternal.ts"
+    "src/store/causalInternal.ts",
+    "src/value/causalExperiment.ts"
   ]
 }
