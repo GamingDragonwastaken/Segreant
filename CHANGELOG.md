@@ -55,10 +55,13 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 - `npm test` performs the full reproducible build prerequisite. Package-boundary
   tests inspect Node runtime artifacts as well as browser output, so they no
   longer depend on `npm ci` having run `prepare` earlier in the checkout.
-- V2 causal cost-bearing qualification now names the missing durable
-  request-to-realization lineage binding and remains fail-closed until that
-  append-only sidecar is implemented. The Store-internal validator retains only
-  scalar metadata and rejects raw prompts, source text, and unit snapshots.
+- V2 causal cost-bearing qualification now names the durable, append-only
+  request-to-realization lineage sidecar. The Store-internal validator retains
+  scalar metadata only, rejects raw prompts, source text, and unit snapshots,
+  and remains fail-closed when ordinary ledger verification, a causally-bound
+  realization identity, or any other evidence gate is unresolved. The sidecar
+  is persisted internally; it is not yet a public evidence projection or
+  release claim.
 - The CLI and the dashboard compose value through one shared sequence rather
   than assembling the same primitives independently in two places.
 
