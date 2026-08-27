@@ -552,6 +552,14 @@ CREATE TABLE IF NOT EXISTS causal_terminal_outcomes_v2 (
 
 CREATE INDEX IF NOT EXISTS idx_causal_terminal_outcomes_v2_study_observed
   ON causal_terminal_outcomes_v2(study_id, observed_at_ms, outcome_id);
+
+-- The Store-owned wall-time floor preserves local rollback continuity across
+-- handles and restarts. It is metadata, not causal evidence, so it remains
+-- mutable only through the protected terminal-append clock boundary.
+CREATE TABLE IF NOT EXISTS causal_clock_state (
+  clock_id      TEXT PRIMARY KEY CHECK (clock_id = 'causal-v2'),
+  last_wall_ms  INTEGER NOT NULL CHECK (last_wall_ms >= 0)
+);
 `;
 
 /** Idempotent schema migrations for DBs created before a column existed. */
@@ -702,6 +710,7 @@ interface CausalV2ColumnContract {
   name: string;
   type: 'TEXT' | 'INTEGER' | 'BLOB';
   pk: number;
+  notnull?: 0 | 1;
 }
 
 interface CausalV2IndexContract {
@@ -719,7 +728,12 @@ interface CausalV2TableContract {
   indexes: CausalV2IndexContract[];
 }
 
-const C = (name: string, type: 'TEXT' | 'INTEGER' | 'BLOB', pk = 0): CausalV2ColumnContract => ({ name, type, pk });
+const C = (
+  name: string,
+  type: 'TEXT' | 'INTEGER' | 'BLOB',
+  pk = 0,
+  notnull: 0 | 1 = 1,
+): CausalV2ColumnContract => ({ name, type, pk, notnull });
 const I = (
   origin: 'pk' | 'u' | 'c',
   unique: 0 | 1,
@@ -905,11 +919,24 @@ const CAUSAL_V2_TABLE_CONTRACTS: Record<string, CausalV2TableContract> = {
       I('pk', 1, [{ cid: 0, name: 'outcome_id' }]),
     ],
   },
+  causal_clock_state: {
+    sql: `CREATE TABLE causal_clock_state (
+  clock_id      TEXT PRIMARY KEY CHECK (clock_id = 'causal-v2'),
+  last_wall_ms  INTEGER NOT NULL CHECK (last_wall_ms >= 0)
+)`,
+    columns: [
+      C('clock_id', 'TEXT', 1, 0), C('last_wall_ms', 'INTEGER'),
+    ],
+    indexes: [
+      I('pk', 1, [{ cid: 0, name: 'clock_id' }]),
+    ],
+  },
 };
 
 const CAUSAL_V2_TABLES = Object.keys(CAUSAL_V2_TABLE_CONTRACTS);
+const CAUSAL_V2_EVIDENCE_TABLES = CAUSAL_V2_TABLES.filter((table) => table !== 'causal_clock_state');
 
-export type CausalV2SchemaState = 'absent' | 'exact-s3' | 'exact' | 'incomplete';
+export type CausalV2SchemaState = 'absent' | 'exact-s3' | 'exact-pre-clock' | 'exact' | 'incomplete';
 
 export interface CausalV2SchemaAttestation {
   state: CausalV2SchemaState;
@@ -1000,7 +1027,7 @@ function normalizeAuthoritySql(sql: unknown): string | null {
   return tokens.join(' ');
 }
 
-function expectedImmutabilityTriggers(tables: readonly string[] = CAUSAL_V2_TABLES): Map<string, { table: string; sql: string }> {
+function expectedImmutabilityTriggers(tables: readonly string[] = CAUSAL_V2_EVIDENCE_TABLES): Map<string, { table: string; sql: string }> {
   const expected = new Map<string, { table: string; sql: string }>();
   for (const table of tables) {
     for (const operation of ['update', 'delete'] as const) {
@@ -1026,7 +1053,7 @@ const SLICE3_CAUSAL_V2_TABLES = [
  * be upgraded merely because CREATE TABLE IF NOT EXISTS can fill its gaps.
  */
 function exactSlice3AssignmentSchema(db: DatabaseSync): boolean {
-  for (const table of CAUSAL_V2_TABLES) {
+  for (const table of CAUSAL_V2_EVIDENCE_TABLES) {
     const exists = db.prepare(
       "SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = ?",
     ).get(table) as { present: number } | undefined;
@@ -1037,6 +1064,13 @@ function exactSlice3AssignmentSchema(db: DatabaseSync): boolean {
       return false;
     }
   }
+  const clockPresent = db.prepare(
+    "SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = 'causal_clock_state'",
+  ).get() as { present: number } | undefined;
+  if (clockPresent && !tableContractMatches(db, 'causal_clock_state', CAUSAL_V2_TABLE_CONTRACTS.causal_clock_state!)) {
+    return false;
+  }
+  if (clockPresent && !causalClockStateRowExact(db)) return false;
   const v2Tables = db.prepare(
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'causal_%_v2' ORDER BY name",
   ).all() as Array<{ name: string }>;
@@ -1054,6 +1088,84 @@ function exactSlice3AssignmentSchema(db: DatabaseSync): boolean {
     return authority !== undefined && authority.table === row.tbl_name
       && normalizeAuthoritySql(row.sql) === authority.sql;
   });
+}
+
+/**
+ * A complete Slice 4 evidence generation created before the Store-owned clock
+ * metadata was introduced is an authenticated additive predecessor.  Unlike a
+ * partial Slice 4 database, every evidence table and its append-only authority
+ * must already be exact; only the clock table may be absent.
+ */
+function exactPreClockCausalV2Schema(db: DatabaseSync): boolean {
+  const clockPresent = db.prepare(
+    "SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = 'causal_clock_state'",
+  ).get() as { present: number } | undefined;
+  if (clockPresent) return false;
+
+  for (const table of CAUSAL_V2_EVIDENCE_TABLES) {
+    const exists = db.prepare(
+      "SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = ?",
+    ).get(table) as { present: number } | undefined;
+    const contract = CAUSAL_V2_TABLE_CONTRACTS[table];
+    if (!exists || !contract || !tableContractMatches(db, table, contract)) return false;
+  }
+
+  const v2Tables = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'causal_%_v2' ORDER BY name",
+  ).all() as Array<{ name: string }>;
+  if (JSON.stringify(v2Tables.map((row) => row.name))
+      !== JSON.stringify([...CAUSAL_V2_EVIDENCE_TABLES].sort())) return false;
+
+  const expected = expectedImmutabilityTriggers();
+  const triggers = db.prepare(
+    "SELECT name, tbl_name, sql FROM sqlite_master WHERE type = 'trigger' ORDER BY name",
+  ).all() as Array<{ name: string; tbl_name: string; sql: string | null }>;
+  const relevant = triggers.filter((row) =>
+    expected.has(row.name) || CAUSAL_V2_EVIDENCE_TABLES.includes(row.tbl_name),
+  );
+  if (relevant.length !== expected.size) return false;
+  return relevant.every((row) => {
+    const authority = expected.get(row.name);
+    return authority !== undefined && authority.table === row.tbl_name
+      && normalizeAuthoritySql(row.sql) === authority.sql;
+  });
+}
+
+function causalClockStateRowExact(db: DatabaseSync): boolean {
+  try {
+    const rows = db.prepare(
+      'SELECT clock_id, typeof(last_wall_ms) AS wall_type, CAST(last_wall_ms AS TEXT) AS wall_text ' +
+      'FROM causal_clock_state ORDER BY rowid',
+    ).all() as Array<{ clock_id: unknown; wall_type: unknown; wall_text: unknown }>;
+    if (rows.length !== 1) return false;
+    const row = rows[0]!;
+    if (row.clock_id !== 'causal-v2' || row.wall_type !== 'integer' || typeof row.wall_text !== 'string'
+        || !/^(?:0|[1-9][0-9]*)$/.test(row.wall_text)) return false;
+    const value = BigInt(row.wall_text);
+    return value <= BigInt(Number.MAX_SAFE_INTEGER);
+  } catch {
+    return false;
+  }
+}
+
+/** Create the one Store-owned clock row only while a database is initialized. */
+function initializeCausalClockState(db: DatabaseSync, predecessorState: CausalV2SchemaState): void {
+  if (predecessorState !== 'absent'
+      && predecessorState !== 'exact-s3'
+      && predecessorState !== 'exact-pre-clock') return;
+  const rows = db.prepare(
+    'SELECT clock_id FROM causal_clock_state ORDER BY rowid',
+  ).all() as Array<{ clock_id: unknown }>;
+  if (rows.length === 0) {
+    const nowMs = Date.now();
+    db.prepare(
+      "INSERT INTO causal_clock_state (clock_id, last_wall_ms) VALUES ('causal-v2', ?)",
+    ).run(nowMs);
+    return;
+  }
+  if (!causalClockStateRowExact(db)) {
+    throw new Error('causal v2 schema validation failed: CAUSAL_V2_CLOCK_STATE_INVALID');
+  }
 }
 
 function tableContractMatches(db: DatabaseSync, table: string, contract: CausalV2TableContract): boolean {
@@ -1074,7 +1186,7 @@ function tableContractMatches(db: DatabaseSync, table: string, contract: CausalV
     cid,
     name: column.name,
     type: column.type,
-    notnull: 1,
+    notnull: column.notnull ?? 1,
     dflt_value: null,
     pk: column.pk,
   }));
@@ -1156,6 +1268,9 @@ export function causalV2SchemaAttestation(db: DatabaseSync): CausalV2SchemaAttes
     if (!tableContractMatches(db, table, contract)) {
       defectIds.add('CAUSAL_V2_TABLE_OR_INDEX_AUTHORITY_MISMATCH');
     }
+    if (table === 'causal_clock_state' && !causalClockStateRowExact(db)) {
+      defectIds.add('CAUSAL_V2_CLOCK_STATE_INVALID');
+    }
   }
 
   // The contract is closed.  An unrelated table with a v2-looking name is a
@@ -1171,7 +1286,7 @@ export function causalV2SchemaAttestation(db: DatabaseSync): CausalV2SchemaAttes
     "SELECT name, tbl_name, sql FROM sqlite_master WHERE type = 'trigger' ORDER BY name",
   ).all() as Array<{ name: string; tbl_name: string; sql: string | null }>;
   const relevantTriggers = triggerRows.filter((row) =>
-    expectedTriggers.has(row.name) || CAUSAL_V2_TABLES.includes(row.tbl_name),
+    expectedTriggers.has(row.name) || CAUSAL_V2_EVIDENCE_TABLES.includes(row.tbl_name),
   );
   if (relevantTriggers.length !== expectedTriggers.size) {
     defectIds.add('CAUSAL_V2_TRIGGER_AUTHORITY_MISMATCH');
@@ -1187,6 +1302,9 @@ export function causalV2SchemaAttestation(db: DatabaseSync): CausalV2SchemaAttes
 
   if (presentTables === 0 && relevantTriggers.length === 0) {
     return { state: 'absent', defectIds: ['CAUSAL_V2_SCHEMA_ABSENT'] };
+  }
+  if (exactPreClockCausalV2Schema(db)) {
+    return { state: 'exact-pre-clock', defectIds: [] };
   }
   if (exactSlice3AssignmentSchema(db)) {
     return { state: 'exact-s3', defectIds: [] };
@@ -1239,6 +1357,7 @@ export function initializeSchema(
     runScript(db, SCHEMA);
     migrate(db);
     installCausalImmutability(db);
+    initializeCausalClockState(db, lockedState);
     const finalAttestation = causalV2SchemaAttestation(db);
     if (finalAttestation.state !== 'exact') {
       throw new Error(

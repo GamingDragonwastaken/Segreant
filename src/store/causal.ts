@@ -772,6 +772,76 @@ function normalizedQualificationError(error: unknown): Error {
   );
 }
 
+const MAX_SAFE_INTEGER_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
+
+/** The only production clock read used by V2 terminal operations. */
+function readCausalWallClockMs(): number {
+  return Date.now();
+}
+
+function readCausalClockFloor(db: DatabaseSync): number {
+  try {
+    const rows = db.prepare(
+      'SELECT clock_id, typeof(last_wall_ms) AS wall_type, CAST(last_wall_ms AS TEXT) AS wall_text ' +
+      'FROM causal_clock_state ORDER BY rowid',
+    ).all() as Array<{ clock_id: unknown; wall_type: unknown; wall_text: unknown }>;
+    if (rows.length !== 1) throw new Error('clock row cardinality');
+    const row = rows[0]!;
+    if (row.clock_id !== 'causal-v2' || row.wall_type !== 'integer'
+        || typeof row.wall_text !== 'string' || !/^(?:0|[1-9][0-9]*)$/.test(row.wall_text)) {
+      throw new Error('clock row shape');
+    }
+    const value = BigInt(row.wall_text);
+    if (value < 0n || value > MAX_SAFE_INTEGER_BIGINT) throw new Error('clock floor range');
+    return Number(value);
+  } catch {
+    terminalOutcomeFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 causal clock state failed integrity verification');
+  }
+}
+
+function captureCausalAsOfMs(db: DatabaseSync): number {
+  const nowMs = readCausalWallClockMs();
+  if (!Number.isSafeInteger(nowMs) || nowMs < 0) {
+    terminalOutcomeFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 causal clock state failed integrity verification');
+  }
+  const floor = readCausalClockFloor(db);
+  if (nowMs < floor) {
+    terminalOutcomeFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 causal clock state failed integrity verification');
+  }
+  return nowMs;
+}
+
+function advanceCausalClockFloor(db: DatabaseSync, nowMs: number): void {
+  const result = db.prepare(
+    "UPDATE causal_clock_state SET last_wall_ms = CASE WHEN last_wall_ms < ? THEN ? ELSE last_wall_ms END WHERE clock_id = 'causal-v2'",
+  ).run(nowMs, nowMs);
+  if (Number(result.changes) !== 1 || readCausalClockFloor(db) < nowMs) {
+    terminalOutcomeFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 causal clock state failed integrity verification');
+  }
+}
+
+type FollowUpDeadline =
+  | { kind: 'legacy' }
+  | { kind: 'valid'; deadlineMs: number }
+  | { kind: 'impossible' };
+
+function checkedFollowUpDeadlineMs(
+  protocol: CommittedCausalStudyProtocolV2,
+  completedAtMs: number,
+): FollowUpDeadline {
+  if (!Object.hasOwn(protocol, 'followUpWindowMs')) return { kind: 'legacy' };
+  const followUpWindowMs = protocol.followUpWindowMs;
+  if (typeof followUpWindowMs !== 'number'
+      || !Number.isSafeInteger(followUpWindowMs) || followUpWindowMs <= 0
+      || followUpWindowMs > 31_536_000_000
+      || !Number.isSafeInteger(completedAtMs)
+      || completedAtMs < 0
+      || completedAtMs > Number.MAX_SAFE_INTEGER - followUpWindowMs) {
+    return { kind: 'impossible' };
+  }
+  return { kind: 'valid', deadlineMs: completedAtMs + followUpWindowMs };
+}
+
 /** Append one exact v2 terminal outcome after an authenticated v2 execution. */
 export function appendCausalTerminalOutcomeV2(
   db: DatabaseSync,
@@ -782,6 +852,15 @@ export function appendCausalTerminalOutcomeV2(
     const record = decodeCausalTerminalOutcomeV2(recordValue);
     const encoded = canonicalJson(record);
     db.prepare('BEGIN IMMEDIATE').run();
+    try {
+      if (!causalV2SchemaComplete(db)) {
+        terminalOutcomeFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 schema authority failed integrity verification');
+      }
+    } catch (error) {
+      if (error instanceof CausalTerminalOutcomeStoreError) throw error;
+      terminalOutcomeFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 schema authority failed integrity verification');
+    }
+    const asOfMs = captureCausalAsOfMs(db);
 
     const protocol = requireProtocolV2(db, record.studyId);
     if (record.protocolHash !== protocol.protocolHash) {
@@ -813,8 +892,13 @@ export function appendCausalTerminalOutcomeV2(
     if (!executionSatisfiesStoredV2Protocol(protocol, decision, execution)) {
       terminalOutcomeFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 execution failed protocol verification');
     }
+    const followUpDeadline = checkedFollowUpDeadlineMs(protocol, execution.completedAtMs);
+    if (followUpDeadline.kind === 'impossible') {
+      terminalOutcomeFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 follow-up policy failed integrity verification');
+    }
     if (record.previousEventHash !== execution.eventHash
-        || record.observedAtMs < execution.completedAtMs) {
+        || record.observedAtMs < execution.completedAtMs
+        || record.observedAtMs > asOfMs) {
       terminalOutcomeFail('CAUSAL_RECORD_INVALID', 'causal terminal outcome record is invalid');
     }
 
@@ -838,6 +922,13 @@ export function appendCausalTerminalOutcomeV2(
           || record.economicEvidenceClass !== economic.evidenceClass) {
         terminalOutcomeFail('CAUSAL_RECORD_INVALID', 'causal terminal outcome record is invalid');
       }
+    } else if (record.maturity === 'censored') {
+      if (followUpDeadline.kind !== 'valid'
+          || asOfMs < followUpDeadline.deadlineMs
+          || record.observedAtMs < followUpDeadline.deadlineMs
+          || record.observedAtMs > asOfMs) {
+        terminalOutcomeFail('CAUSAL_RECORD_INVALID', 'causal terminal outcome record is invalid');
+      }
     }
 
     const byIdRows = db.prepare(
@@ -850,6 +941,7 @@ export function appendCausalTerminalOutcomeV2(
     if (byId) {
       const existing = authenticateStoredTerminalOutcomeV2(byId);
       if (canonicalJson(existing) === encoded) {
+        advanceCausalClockFloor(db, asOfMs);
         db.prepare('COMMIT').run();
         committed = true;
         return 'existing';
@@ -893,6 +985,7 @@ export function appendCausalTerminalOutcomeV2(
     if (canonicalJson(authenticated) !== encoded) {
       terminalOutcomeFail('CAUSAL_INTEGRITY_FAILURE', 'created v2 terminal outcome did not replay canonically');
     }
+    advanceCausalClockFloor(db, asOfMs);
     db.prepare('COMMIT').run();
     committed = true;
     return 'created';
@@ -1161,9 +1254,11 @@ function evaluateQualificationV2(data: AuthenticatedCausalStudySnapshotV2): Caus
         continue;
       }
     } else if (outcome.maturity === 'censored') {
-      reasons.push('V2 censored outcome is unsupported without a committed follow-up policy');
-      invalidTerminalDecisions.add(outcome.decisionId);
-      continue;
+      if (!Object.hasOwn(protocol, 'followUpWindowMs')) {
+        reasons.push('V2 censored outcome is unsupported without a committed follow-up policy');
+        invalidTerminalDecisions.add(outcome.decisionId);
+        continue;
+      }
     } else if (outcome.maturity === 'invalid') {
       if (outcome.qualityValue !== null || outcome.qualityEvidenceClass !== null
           || outcome.economicValueUsd !== null || outcome.economicEvidenceClass !== null
@@ -1221,14 +1316,21 @@ function terminalOutcomeSatisfiesStoredV2Protocol(
   protocol: CommittedCausalStudyProtocolV2,
   execution: CausalExecutionRecordV2,
   outcome: CausalTerminalOutcomeRecordV2,
+  asOfMs: number,
 ): boolean {
   if (outcome.studyId !== protocol.studyId
       || outcome.protocolHash !== protocol.protocolHash
       || outcome.decisionId !== execution.decisionId
       || outcome.previousEventHash !== execution.eventHash
       || !Number.isSafeInteger(outcome.observedAtMs)
-      || outcome.observedAtMs < execution.completedAtMs) {
+      || outcome.observedAtMs < execution.completedAtMs
+      || outcome.observedAtMs > asOfMs) {
     return false;
+  }
+  if (outcome.maturity === 'censored') {
+    const deadline = checkedFollowUpDeadlineMs(protocol, execution.completedAtMs);
+    return deadline.kind === 'legacy'
+      || (deadline.kind === 'valid' && outcome.observedAtMs >= deadline.deadlineMs);
   }
   if (outcome.maturity !== 'matured') return true;
   if (!finiteStoredValue(outcome.qualityValue, protocol.qualityOutcome.bounds)
@@ -1265,8 +1367,9 @@ export function causalQualificationV2(
   let committed = false;
   let transactionStarted = false;
   try {
-    db.prepare('BEGIN').run();
+    db.prepare('BEGIN IMMEDIATE').run();
     transactionStarted = true;
+    const asOfMs = captureCausalAsOfMs(db);
     if (!causalV2SchemaComplete(db)) {
       qualificationFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 qualification schema is not exact');
     }
@@ -1338,6 +1441,9 @@ export function causalQualificationV2(
           || !executionSatisfiesStoredV2Protocol(protocol, decision, execution)) {
         qualificationFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 execution lineage is not authoritative');
       }
+      if (checkedFollowUpDeadlineMs(protocol, execution.completedAtMs).kind === 'impossible') {
+        qualificationFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 qualification evidence failed integrity verification');
+      }
       executionIds.add(execution.executionId);
       executionByDecision.set(execution.decisionId, execution);
       executions.push(execution);
@@ -1360,7 +1466,7 @@ export function causalQualificationV2(
           || outcome.protocolHash !== protocol.protocolHash
           || outcomeIds.has(outcome.outcomeId)
           || terminalByDecision.has(outcome.decisionId)
-          || !terminalOutcomeSatisfiesStoredV2Protocol(protocol, execution, outcome)) {
+          || !terminalOutcomeSatisfiesStoredV2Protocol(protocol, execution, outcome, asOfMs)) {
         qualificationFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 terminal outcome lineage is not authoritative');
       }
       outcomeIds.add(outcome.outcomeId);

@@ -10,6 +10,9 @@ import {
   CAUSAL_PROTOCOL_VERSION,
   CAUSAL_PROTOCOL_VERSION_V2,
   type AnyCommittedCausalStudyProtocol,
+  type CausalStudyProtocolDraftV2Base,
+  type CausalStudyProtocolDraftV2Legacy,
+  type CausalStudyProtocolDraftV2Policy,
   type CausalStudyProtocolDraftV2,
   type CommittedCausalStudyProtocolV2,
   type CausalStudyProtocolDraft,
@@ -20,7 +23,11 @@ const ID_RE = /^[A-Za-z0-9._:-]{1,160}$/;
 const SHA256_RE = /^[a-f0-9]{64}$/i;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  try {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+  } catch {
+    return false;
+  }
 }
 
 function finite(value: unknown): value is number {
@@ -258,12 +265,14 @@ function validateCausalProtocolV1(draft: CausalStudyProtocolDraft): string[] {
 
 const V2_NAMESPACED_ID_RE = /^[a-z][a-z0-9._-]{0,31}:[A-Za-z0-9][A-Za-z0-9._-]{0,126}$/;
 const V2_DIGEST_RE = /^sha256:[a-f0-9]{64}$/;
-const V2_PROTOCOL_KEYS = [
+const V2_LEGACY_PROTOCOL_KEYS = [
   'type', 'version', 'studyId', 'seriesId', 'studyVersion', 'ownerId', 'scopeId',
   'createdAtMs', 'question', 'eligibility', 'studyWindow', 'stoppingRule', 'arms',
   'allocation', 'costOutcome', 'qualityOutcome', 'economicOutcome', 'analysis',
   'dataGovernance', 'claimTemplateIds',
 ] as const;
+const V2_POLICY_PROTOCOL_KEYS = [...V2_LEGACY_PROTOCOL_KEYS, 'followUpWindowMs'] as const;
+const V2_MAX_FOLLOW_UP_WINDOW_MS = 31_536_000_000;
 
 function validateExactRecord(
   value: unknown,
@@ -275,13 +284,47 @@ function validateExactRecord(
     errors.push(label + ' must be an object');
     return false;
   }
-  for (const key of keys) {
-    if (!Object.hasOwn(value, key)) errors.push(label + ' is missing required field: ' + key);
-  }
-  for (const key of Object.keys(value)) {
-    if (!keys.includes(key)) errors.push(label + ' has unsupported field: ' + key);
+  try {
+    let valid = true;
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      errors.push(label + ' must be a plain object');
+      return false;
+    }
+    const ownKeys = Reflect.ownKeys(value);
+    if (ownKeys.some((key) => typeof key !== 'string')) {
+      errors.push(label + ' has unsupported symbol fields');
+      return false;
+    }
+    const actual = ownKeys as string[];
+    for (const key of keys) {
+      if (!actual.includes(key)) errors.push(label + ' is missing required field: ' + key);
+    }
+    for (const key of actual) {
+      if (!keys.includes(key)) errors.push(label + ' has unsupported field: ' + key);
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor || !('value' in descriptor) || descriptor.enumerable !== true) {
+        errors.push(label + ' contains an unsupported accessor or hidden field: ' + key);
+        valid = false;
+      }
+    }
+    if (!valid) return false;
+  } catch {
+    errors.push(label + ' must be a plain object');
+    return false;
   }
   return true;
+}
+
+function ownPropertyPresence(value: unknown, key: string): boolean | null {
+  try {
+    if (!isRecord(value)) return false;
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return null;
+    return Reflect.ownKeys(value).includes(key);
+  } catch {
+    return null;
+  }
 }
 
 function safeV2Scalar(value: unknown, label: string, errors: string[]): value is string {
@@ -411,7 +454,7 @@ function validateClosedSortedSourceClasses(value: unknown, label: string, errors
 }
 
 function protocolMaterialV2(draft: CausalStudyProtocolDraftV2): CausalStudyProtocolDraftV2 {
-  return {
+  const material = {
     type: draft.type,
     version: draft.version,
     studyId: draft.studyId,
@@ -481,7 +524,11 @@ function protocolMaterialV2(draft: CausalStudyProtocolDraftV2): CausalStudyProto
       inconclusive: draft.claimTemplateIds.inconclusive,
       invalid: draft.claimTemplateIds.invalid,
     },
-  };
+  } as CausalStudyProtocolDraftV2Base;
+  if (Object.hasOwn(draft, 'followUpWindowMs')) {
+    return { ...material, followUpWindowMs: draft.followUpWindowMs } as CausalStudyProtocolDraftV2Policy;
+  }
+  return material as CausalStudyProtocolDraftV2Legacy;
 }
 
 function protocolHashV2Validated(draft: CausalStudyProtocolDraftV2): string {
@@ -491,7 +538,18 @@ function protocolHashV2Validated(draft: CausalStudyProtocolDraftV2): string {
 
 function validateCausalProtocolV2(draft: unknown): string[] {
   const errors: string[] = [];
-  if (!validateExactRecord(draft, V2_PROTOCOL_KEYS, 'protocol', errors)) return errors;
+  const policyPresence = ownPropertyPresence(draft, 'followUpWindowMs');
+  if (policyPresence === null) return ['protocol must be a plain object'];
+  const policyShape = policyPresence;
+  const protocolKeys = policyShape ? V2_POLICY_PROTOCOL_KEYS : V2_LEGACY_PROTOCOL_KEYS;
+  if (!validateExactRecord(draft, protocolKeys, 'protocol', errors)) return errors;
+
+  if (policyShape && (typeof draft.followUpWindowMs !== 'number'
+      || !Number.isSafeInteger(draft.followUpWindowMs)
+      || draft.followUpWindowMs <= 0
+      || draft.followUpWindowMs > V2_MAX_FOLLOW_UP_WINDOW_MS)) {
+    errors.push('followUpWindowMs must be a positive safe integer no greater than 31536000000 milliseconds');
+  }
 
   if (draft.type !== CAUSAL_PROTOCOL_TYPE || draft.version !== CAUSAL_PROTOCOL_VERSION_V2) {
     errors.push('protocol has an unsupported type or version');
@@ -768,7 +826,11 @@ function commitCausalProtocolV2(
 
 function verifyCommittedCausalProtocolV2(protocol: unknown): string[] {
   const errors: string[] = [];
-  const committedKeys = [...V2_PROTOCOL_KEYS, 'lifecycle', 'committedAtMs', 'protocolHash'];
+  const policyPresence = ownPropertyPresence(protocol, 'followUpWindowMs');
+  if (policyPresence === null) return ['committed protocol must be a plain object'];
+  const policyShape = policyPresence;
+  const protocolKeys = policyShape ? V2_POLICY_PROTOCOL_KEYS : V2_LEGACY_PROTOCOL_KEYS;
+  const committedKeys = [...protocolKeys, 'lifecycle', 'committedAtMs', 'protocolHash'];
   if (!validateExactRecord(protocol, committedKeys, 'committed protocol', errors)) return errors;
 
   const draftCandidate = { ...protocol };

@@ -41,6 +41,16 @@ import { createRetainedCausalV1AssignmentFixture } from './support/causalV1Fixtu
 
 const H = (char: string): string => char.repeat(64);
 
+function withWallClock<T>(nowMs: number, action: () => T): T {
+  const original = Date.now;
+  Date.now = () => nowMs;
+  try {
+    return action();
+  } finally {
+    Date.now = original;
+  }
+}
+
 function protocolDraft(): CausalStudyProtocolDraft {
   return {
     type: CAUSAL_PROTOCOL_TYPE,
@@ -287,6 +297,26 @@ function v2StoreProtocol(
     },
   };
   return commitCausalProtocol(draft, 1_700_000_000_500) as CommittedCausalStudyProtocolV2;
+}
+
+function policyV2StoreProtocol(
+  studyId = 'study:policy-store-v2',
+  maxAssignments = 12,
+  followUpWindowMs = 1_000,
+  maxMissingFractionPerArm = 0.25,
+): CommittedCausalStudyProtocolV2 {
+  const base = v2StoreProtocol(studyId, maxAssignments);
+  const {
+    lifecycle: _lifecycle,
+    committedAtMs: _committedAtMs,
+    protocolHash: _protocolHash,
+    ...draftBase
+  } = base;
+  return commitCausalProtocol({
+    ...draftBase,
+    followUpWindowMs,
+    analysis: { ...draftBase.analysis, maxMissingFractionPerArm },
+  } as CausalStudyProtocolDraftV2, base.committedAtMs) as CommittedCausalStudyProtocolV2;
 }
 
 function v2AiStoreProtocol(
@@ -859,9 +889,14 @@ interface QualificationFixture {
 function populateQualificationStudy(
   store: Store,
   studyId: string,
-  options: { appendExecutions?: boolean; maturities?: TerminalMaturity[] | null } = {},
+  options: {
+    appendExecutions?: boolean;
+    maturities?: Array<TerminalMaturity | undefined> | null
+      | ((decision: { decisionId: string; assignedAtMs: number; assignedArmId: string; eventHash: string }, index: number) => TerminalMaturity | undefined);
+    protocol?: CommittedCausalStudyProtocolV2;
+  } = {},
 ): QualificationFixture {
-  const protocol = v2StoreProtocol(studyId);
+  const protocol = options.protocol ?? v2StoreProtocol(studyId);
   assert.equal(store.registerCausalProtocol(protocol), 'created');
   const assignment = assignmentMethod(store)({ ...assignmentRequest(), studyId });
   const decisions = assignment.block.decisions as Array<{
@@ -893,14 +928,22 @@ function populateQualificationStudy(
     if (appendExecutions) {
       assert.equal(appendExecution(execution), 'created');
       executions.push(execution);
-      const maturity = maturities?.[index];
+       const maturity = typeof maturities === 'function'
+         ? maturities(decision, index)
+         : maturities?.[index];
       if (maturity) {
-        const outcome = validTerminalOutcomeV2(
+        let outcome = validTerminalOutcomeV2(
           protocol,
           execution,
           maturity,
           'outcome:qualification-matrix-' + index,
         );
+        if (outcome.maturity === 'censored' && Object.hasOwn(protocol, 'followUpWindowMs')) {
+          const observedAtMs = execution.completedAtMs + protocol.followUpWindowMs!;
+          const material = { ...outcome, observedAtMs };
+          const { eventHash: _eventHash, ...eventMaterial } = material;
+          outcome = { ...material, eventHash: causalTerminalOutcomeV2EventHash(eventMaterial) };
+        }
         assert.equal(appendOutcome(outcome), 'created');
         outcomes.push(outcome);
       }
@@ -983,8 +1026,30 @@ test('legacy V2 censoring is structurally invalid and never counted as missingne
   const store = new Store(':memory:');
   try {
     const fixture = populateQualificationStudy(store, 'study:qualification-legacy-censor', {
-      maturities: ['censored', 'matured', 'matured', 'matured'],
+      maturities: null,
     });
+    const censoredExecution = fixture.executions[0]!;
+    const censoredOutcome = validTerminalOutcomeV2(
+      fixture.protocol,
+      censoredExecution,
+      'censored',
+      'outcome:qualification-legacy-censor',
+    );
+    store.raw().prepare(
+      'INSERT INTO causal_terminal_outcomes_v2 ' +
+      '(outcome_id, decision_id, study_id, protocol_hash, observed_at_ms, maturity, previous_event_hash, event_hash, terminal_outcome_json) ' +
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).run(
+      censoredOutcome.outcomeId,
+      censoredOutcome.decisionId,
+      censoredOutcome.studyId,
+      censoredOutcome.protocolHash,
+      censoredOutcome.observedAtMs,
+      censoredOutcome.maturity,
+      censoredOutcome.previousEventHash,
+      censoredOutcome.eventHash,
+      canonicalJson(censoredOutcome),
+    );
     const result = causalQualificationV2(store.raw(), fixture.protocol.studyId);
     const censoredArm = fixture.decisions[0]!.assignedArmId;
     assert.equal(result.state, 'invalid');
@@ -994,6 +1059,486 @@ test('legacy V2 censoring is structurally invalid and never counted as missingne
   } finally {
     store.close();
   }
+});
+
+test('legacy V2 censoring is refused at the Store append boundary', () => {
+  const store = new Store(':memory:');
+  try {
+    const fixture = populateQualificationStudy(store, 'study:append-legacy-censor', { maturities: null });
+    const execution = fixture.executions[0]!;
+    const outcome = validTerminalOutcomeV2(
+      fixture.protocol,
+      execution,
+      'censored',
+      'outcome:append-legacy-censor',
+    );
+    assert.throws(
+      () => terminalOutcomeMethod(store)(outcome),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.equal((error as Error & { code?: string }).code, 'CAUSAL_RECORD_INVALID');
+        assert.equal(error.message, 'CAUSAL_RECORD_INVALID: causal terminal outcome record is invalid');
+        assert.doesNotMatch(error.message, /sqlite|SQLITE|outcome:append-legacy-censor/i);
+        return true;
+      },
+    );
+    assert.equal(tableCount(store, 'causal_terminal_outcomes_v2'), 0);
+  } finally {
+    store.close();
+  }
+});
+
+test('policy-bearing V2 censors enforce deadline, observation, replay, and zero-row rollback', () => {
+  const initialWallClock = 1_700_000_001_000;
+  withWallClock(initialWallClock, () => {
+    const store = new Store(':memory:');
+    try {
+      const protocol = policyV2StoreProtocol('study:policy-append-boundary');
+      assert.equal(store.registerCausalProtocol(protocol), 'created');
+      const assignment = assignmentMethod(store)({ ...assignmentRequest(), studyId: protocol.studyId });
+      const decision = assignment.block.decisions[0]! as typeof assignment.block.decisions[number] & {
+        decisionId: string; assignedAtMs: number; assignedArmId: string; eventHash: string;
+      };
+      const execution = validExecutionV2(protocol, decision, 'execution:policy-append-boundary');
+      assert.equal(executionMethod(store)(execution), 'created');
+      const deadlineMs = execution.completedAtMs + protocol.followUpWindowMs!;
+      const reobserve = (outcome: CausalTerminalOutcomeRecordV2, observedAtMs: number): CausalTerminalOutcomeRecordV2 => {
+        const material = { ...outcome, observedAtMs };
+        const { eventHash: _eventHash, ...eventMaterial } = material;
+        return { ...material, eventHash: causalTerminalOutcomeV2EventHash(eventMaterial) };
+      };
+      const append = terminalOutcomeMethod(store);
+
+      const preDeadline = reobserve(
+        validTerminalOutcomeV2(protocol, execution, 'censored', 'outcome:policy-pre-deadline'),
+        deadlineMs - 1,
+      );
+      withWallClock(deadlineMs - 1, () => {
+        assert.throws(() => append(preDeadline), /CAUSAL_RECORD_INVALID/);
+      });
+      assert.equal(tableCount(store, 'causal_terminal_outcomes_v2'), 0);
+      assert.equal(
+        (store.raw().prepare('SELECT last_wall_ms FROM causal_clock_state').get() as { last_wall_ms: number }).last_wall_ms,
+        initialWallClock,
+        'a rejected append must roll back the captured wall-time floor',
+      );
+
+      const futureObserved = reobserve(
+        validTerminalOutcomeV2(protocol, execution, 'censored', 'outcome:policy-future-observed'),
+        deadlineMs + 1,
+      );
+      withWallClock(deadlineMs, () => {
+        assert.throws(() => append(futureObserved), /CAUSAL_RECORD_INVALID/);
+      });
+      assert.equal(tableCount(store, 'causal_terminal_outcomes_v2'), 0);
+      assert.equal(
+        (store.raw().prepare('SELECT last_wall_ms FROM causal_clock_state').get() as { last_wall_ms: number }).last_wall_ms,
+        initialWallClock,
+        'a second rejected append must leave the floor unchanged',
+      );
+
+      const atDeadline = reobserve(
+        validTerminalOutcomeV2(protocol, execution, 'censored', 'outcome:policy-at-deadline'),
+        deadlineMs,
+      );
+      withWallClock(deadlineMs, () => assert.equal(append(atDeadline), 'created'));
+      assert.equal(tableCount(store, 'causal_terminal_outcomes_v2'), 1);
+      withWallClock(deadlineMs + 1, () => assert.equal(append(atDeadline), 'existing'));
+      assert.equal(tableCount(store, 'causal_terminal_outcomes_v2'), 1);
+
+      const afterDeadline = reobserve(
+        validTerminalOutcomeV2(protocol, execution, 'censored', 'outcome:policy-after-deadline'),
+        deadlineMs + 1,
+      );
+      withWallClock(deadlineMs + 1, () => assert.throws(() => append(afterDeadline), /CAUSAL_IMMUTABLE_CONFLICT/));
+      assert.equal(tableCount(store, 'causal_terminal_outcomes_v2'), 1);
+    } finally {
+      store.close();
+    }
+  });
+});
+
+test('policy-bearing qualification counts post-deadline censors and allows exact missingness equality', () => {
+  const store = new Store(':memory:');
+  try {
+    const protocol = policyV2StoreProtocol('study:qualification-policy-equality', 12, 1_000, 0.5);
+    const censoredArms = new Set<string>();
+    const fixture = populateQualificationStudy(store, protocol.studyId, {
+      protocol,
+      maturities: (decision) => {
+        if (censoredArms.has(decision.assignedArmId)) return 'matured';
+        censoredArms.add(decision.assignedArmId);
+        return 'censored';
+      },
+    });
+    const result = causalQualificationV2(store.raw(), protocol.studyId);
+    assert.equal(result.state, 'inconclusive', result.reasons.join('; '));
+    for (const count of Object.values(result.countsByArm)) {
+      assert.equal(count.assigned, 2);
+      assert.equal(count.completed, 1);
+      assert.equal(count.censored, 1);
+      assert.equal(count.invalid, 0);
+      assert.equal(count.pending, 0);
+    }
+    assert.equal(tableCount(store, 'causal_terminal_outcomes_v2'), fixture.outcomes.length);
+  } finally {
+    store.close();
+  }
+});
+
+test('policy-bearing qualification rejects missingness greater than the committed ceiling', () => {
+  const store = new Store(':memory:');
+  try {
+    const protocol = policyV2StoreProtocol('study:qualification-policy-over-ceiling', 12, 1_000, 0.25);
+    const censoredArms = new Set<string>();
+    const fixture = populateQualificationStudy(store, protocol.studyId, {
+      protocol,
+      maturities: (decision) => {
+        if (censoredArms.has(decision.assignedArmId)) return 'matured';
+        censoredArms.add(decision.assignedArmId);
+        return 'censored';
+      },
+    });
+    const result = causalQualificationV2(store.raw(), protocol.studyId);
+    assert.equal(result.state, 'invalid', result.reasons.join('; '));
+    assert.match(result.reasons.join('; '), /missingness exceeds/i);
+    for (const count of Object.values(result.countsByArm)) {
+      assert.equal(count.assigned, 2);
+      assert.equal(count.completed, 1);
+      assert.equal(count.censored, 1);
+      assert.equal(count.invalid, 0);
+      assert.equal(count.pending, 0);
+    }
+    assert.equal(tableCount(store, 'causal_terminal_outcomes_v2'), fixture.outcomes.length);
+  } finally {
+    store.close();
+  }
+});
+
+test('policy-bearing qualification rejects retained pre-deadline and future-dated censors as integrity failures', () => {
+  const deadlineMs = 1_700_000_002_002;
+  for (const scenario of [
+    { label: 'pre-deadline', setupNow: deadlineMs + 10, readNow: deadlineMs + 10, observedAtMs: deadlineMs - 1 },
+    { label: 'future-dated', setupNow: deadlineMs, readNow: deadlineMs, observedAtMs: deadlineMs + 1 },
+  ]) {
+    const store = withWallClock(scenario.setupNow, () => {
+      const value = new Store(':memory:');
+      const protocol = policyV2StoreProtocol('study:qualification-policy-' + scenario.label);
+      assert.equal(value.registerCausalProtocol(protocol), 'created');
+      const assignment = assignmentMethod(value)({
+        ...assignmentRequest('block:qualification-policy-' + scenario.label),
+        studyId: protocol.studyId,
+      });
+      const decision = assignment.block.decisions[0]! as typeof assignment.block.decisions[number] & {
+        decisionId: string; assignedAtMs: number; assignedArmId: string; eventHash: string;
+      };
+      const execution = validExecutionV2(protocol, decision, 'execution:qualification-policy-' + scenario.label);
+      assert.equal(execution.completedAtMs + protocol.followUpWindowMs!, deadlineMs);
+      assert.equal(executionMethod(value)(execution), 'created');
+      const baseOutcome = validTerminalOutcomeV2(
+        protocol,
+        execution,
+        'censored',
+        'outcome:qualification-policy-' + scenario.label,
+      );
+      const material = { ...baseOutcome, observedAtMs: scenario.observedAtMs };
+      const { eventHash: _eventHash, ...eventMaterial } = material;
+      const outcome = { ...material, eventHash: causalTerminalOutcomeV2EventHash(eventMaterial) };
+      value.raw().prepare(
+        'INSERT INTO causal_terminal_outcomes_v2 ' +
+        '(outcome_id, decision_id, study_id, protocol_hash, observed_at_ms, maturity, previous_event_hash, event_hash, terminal_outcome_json) ' +
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ',
+      ).run(
+        outcome.outcomeId,
+        outcome.decisionId,
+        outcome.studyId,
+        outcome.protocolHash,
+        outcome.observedAtMs,
+        outcome.maturity,
+        outcome.previousEventHash,
+        outcome.eventHash,
+        canonicalJson(outcome),
+      );
+      return value;
+    });
+    try {
+      withWallClock(scenario.readNow, () => assert.throws(
+        () => causalQualificationV2(store.raw(), 'study:qualification-policy-' + scenario.label),
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.equal((error as Error & { code?: string }).code, 'CAUSAL_INTEGRITY_FAILURE');
+          assert.match(error.message, /^CAUSAL_INTEGRITY_FAILURE: /);
+          assert.doesNotMatch(error.message, /pre-deadline|future-dated|sqlite|outcome:qualification-policy/i);
+          return true;
+        },
+      ));
+    } finally {
+      store.close();
+    }
+  }
+});
+
+test('policy-bearing qualification keeps absence pending after deadline and gives structural invalid precedence over pending', () => {
+  const pending = new Store(':memory:');
+  try {
+    const protocol = policyV2StoreProtocol('study:qualification-policy-pending', 12, 1, 0.5);
+    const fixture = populateQualificationStudy(pending, protocol.studyId, {
+      protocol,
+      maturities: null,
+    });
+    const result = causalQualificationV2(pending.raw(), protocol.studyId);
+    assert.equal(result.state, 'collecting');
+    assert.equal(result.reasons.some((reason) => /collecting|pending/i.test(reason)), true);
+    assert.equal(tableCount(pending, 'causal_terminal_outcomes_v2'), 0);
+    assert.equal(fixture.executions.length, 4);
+  } finally {
+    pending.close();
+  }
+
+  const precedence = new Store(':memory:');
+  try {
+    const protocol = policyV2StoreProtocol('study:qualification-policy-precedence', 12, 1_000, 0.5);
+    const fixture = populateQualificationStudy(precedence, protocol.studyId, {
+      protocol,
+      maturities: ['invalid', undefined, 'matured', 'matured'],
+    });
+    const result = causalQualificationV2(precedence.raw(), protocol.studyId);
+    const invalidArm = fixture.decisions[0]!.assignedArmId;
+    const pendingArm = fixture.decisions[1]!.assignedArmId;
+    assert.equal(result.state, 'invalid');
+    assert.equal(result.countsByArm[invalidArm]?.invalid, 1);
+    assert.equal(result.countsByArm[pendingArm]?.pending, 1);
+  } finally {
+    precedence.close();
+  }
+});
+
+test('causal clock floor initializes exactly once, rejects rollback, accepts forward jumps, and survives restart', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-causal-clock-floor-'));
+  const dbPath = join(dir, 'clock.sqlite');
+  const initialWallClock = 1_700_000_001_000;
+  let protocol: CommittedCausalStudyProtocolV2;
+  let firstOutcome: CausalTerminalOutcomeRecordV2;
+  let secondExecution: CausalExecutionRecordV2;
+  let deadlineMs: number;
+  try {
+    withWallClock(initialWallClock, () => {
+      const store = new Store(dbPath);
+      try {
+        const clockRows = store.raw().prepare(
+          'SELECT clock_id, last_wall_ms FROM causal_clock_state',
+        ).all() as Array<{ clock_id: string; last_wall_ms: number }>;
+        assert.equal(clockRows.length, 1);
+        assert.equal(clockRows[0]?.clock_id, 'causal-v2');
+        assert.equal(clockRows[0]?.last_wall_ms, initialWallClock);
+        protocol = policyV2StoreProtocol('study:clock-floor-restart');
+        assert.equal(store.registerCausalProtocol(protocol), 'created');
+        const assignment = assignmentMethod(store)({ ...assignmentRequest(), studyId: protocol.studyId });
+        const decision = assignment.block.decisions[0]! as typeof assignment.block.decisions[number] & {
+          decisionId: string; assignedAtMs: number; assignedArmId: string; eventHash: string;
+        };
+        const execution = validExecutionV2(protocol, decision, 'execution:clock-floor-first');
+        assert.equal(executionMethod(store)(execution), 'created');
+        deadlineMs = execution.completedAtMs + protocol.followUpWindowMs!;
+        const material = { ...validTerminalOutcomeV2(protocol, execution, 'censored', 'outcome:clock-floor-first'), observedAtMs: deadlineMs };
+        const { eventHash: _eventHash, ...eventMaterial } = material;
+        firstOutcome = { ...material, eventHash: causalTerminalOutcomeV2EventHash(eventMaterial) };
+        withWallClock(deadlineMs, () => assert.equal(terminalOutcomeMethod(store)(firstOutcome), 'created'));
+        const floor = store.raw().prepare('SELECT last_wall_ms FROM causal_clock_state').get() as { last_wall_ms: number };
+        assert.equal(floor.last_wall_ms, deadlineMs);
+      } finally {
+        store.close();
+      }
+    });
+
+    withWallClock(deadlineMs! - 1, () => {
+      const restarted = new Store(dbPath);
+      try {
+        assert.throws(
+          () => terminalOutcomeMethod(restarted)(firstOutcome!),
+          (error: unknown) => {
+            assert.ok(error instanceof Error);
+            assert.equal((error as Error & { code?: string }).code, 'CAUSAL_INTEGRITY_FAILURE');
+            assert.equal(error.message, 'CAUSAL_INTEGRITY_FAILURE: stored v2 terminal outcome failed integrity verification');
+            assert.doesNotMatch(error.message, /clock|sqlite|outcome:clock-floor-first/i);
+            return true;
+          },
+        );
+        assert.equal(tableCount(restarted, 'causal_terminal_outcomes_v2'), 1);
+        assert.equal((restarted.raw().prepare('SELECT last_wall_ms FROM causal_clock_state').get() as { last_wall_ms: number }).last_wall_ms, deadlineMs);
+      } finally {
+        restarted.close();
+      }
+    });
+
+    withWallClock(deadlineMs! + 10, () => {
+      const forward = new Store(dbPath);
+      try {
+        assert.equal(terminalOutcomeMethod(forward)(firstOutcome!), 'existing');
+        const secondAssignment = assignmentMethod(forward)({
+          ...assignmentRequest('block:clock-floor-second', ['5', '6', '7', '8']),
+          studyId: protocol!.studyId,
+        });
+        const decision = secondAssignment.block.decisions[0]! as typeof secondAssignment.block.decisions[number] & {
+          decisionId: string; assignedAtMs: number; assignedArmId: string; eventHash: string;
+        };
+        secondExecution = validExecutionV2(protocol!, decision, 'execution:clock-floor-second');
+        assert.equal(executionMethod(forward)(secondExecution), 'created');
+        const material = { ...validTerminalOutcomeV2(protocol!, secondExecution, 'censored', 'outcome:clock-floor-second'), observedAtMs: deadlineMs! + 10 };
+        const { eventHash: _eventHash, ...eventMaterial } = material;
+        const secondOutcome = { ...material, eventHash: causalTerminalOutcomeV2EventHash(eventMaterial) };
+        assert.equal(terminalOutcomeMethod(forward)(secondOutcome), 'created');
+        assert.equal((forward.raw().prepare('SELECT last_wall_ms FROM causal_clock_state').get() as { last_wall_ms: number }).last_wall_ms, deadlineMs! + 10);
+      } finally {
+        forward.close();
+      }
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('causal qualification fails closed when the persisted clock floor is missing or duplicated', () => {
+  const store = new Store(':memory:');
+  try {
+    const fixture = populateQualificationStudy(store, 'study:clock-corruption-append', { maturities: null });
+    const validOutcome = validTerminalOutcomeV2(
+      fixture.protocol,
+      fixture.executions[0]!,
+      'matured',
+      'outcome:clock-corruption-append',
+    );
+    store.raw().prepare('DELETE FROM causal_clock_state').run();
+    assert.throws(
+      () => terminalOutcomeMethod(store)(validOutcome),
+      /CAUSAL_INTEGRITY_FAILURE/,
+      'append must fail closed when the persisted clock row is missing',
+    );
+    assert.throws(
+      () => causalQualificationV2(store.raw(), fixture.protocol.studyId),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.equal((error as Error & { code?: string }).code, 'CAUSAL_INTEGRITY_FAILURE');
+        assert.equal(error.message, 'CAUSAL_INTEGRITY_FAILURE: stored v2 qualification evidence failed integrity verification');
+        assert.doesNotMatch(error.message, /clock|sqlite|causal_clock_state/i);
+        return true;
+      },
+    );
+    store.raw().prepare("INSERT INTO causal_clock_state (clock_id, last_wall_ms) VALUES (NULL, 0)").run();
+    assert.throws(
+      () => terminalOutcomeMethod(store)(validOutcome),
+      /CAUSAL_INTEGRITY_FAILURE/,
+      'append must fail closed when the persisted clock identity is corrupt',
+    );
+    assert.throws(() => causalQualificationV2(store.raw(), fixture.protocol.studyId), /CAUSAL_INTEGRITY_FAILURE/);
+  } finally {
+    store.close();
+  }
+});
+
+test('multiple Store handles serialize terminal replay and preserve one monotonic floor', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-causal-clock-handles-'));
+  const dbPath = join(dir, 'clock-handles.sqlite');
+  const initialWallClock = 1_700_000_001_000;
+  withWallClock(initialWallClock, () => {
+    const first = new Store(dbPath);
+    const second = new Store(dbPath);
+    try {
+      const protocol = policyV2StoreProtocol('study:clock-handles');
+      assert.equal(first.registerCausalProtocol(protocol), 'created');
+      const assignment = assignmentMethod(first)({
+        ...assignmentRequest('block:clock-handles'),
+        studyId: protocol.studyId,
+      });
+      const decision = assignment.block.decisions[0]! as typeof assignment.block.decisions[number] & {
+        decisionId: string; assignedAtMs: number; assignedArmId: string; eventHash: string;
+      };
+      const execution = validExecutionV2(protocol, decision, 'execution:clock-handles');
+      assert.equal(executionMethod(first)(execution), 'created');
+      const deadlineMs = execution.completedAtMs + protocol.followUpWindowMs!;
+      const material = {
+        ...validTerminalOutcomeV2(protocol, execution, 'censored', 'outcome:clock-handles'),
+        observedAtMs: deadlineMs,
+      };
+      const { eventHash: _eventHash, ...eventMaterial } = material;
+      const outcome = { ...material, eventHash: causalTerminalOutcomeV2EventHash(eventMaterial) };
+      withWallClock(deadlineMs, () => {
+        assert.equal(terminalOutcomeMethod(second)(outcome), 'created');
+        assert.equal(terminalOutcomeMethod(first)(outcome), 'existing');
+      });
+      assert.equal(tableCount(first, 'causal_terminal_outcomes_v2'), 1);
+      assert.equal(tableCount(second, 'causal_terminal_outcomes_v2'), 1);
+      assert.equal(
+        (first.raw().prepare('SELECT last_wall_ms FROM causal_clock_state').get() as { last_wall_ms: number }).last_wall_ms,
+        deadlineMs,
+      );
+      assert.equal(
+        (second.raw().prepare('SELECT last_wall_ms FROM causal_clock_state').get() as { last_wall_ms: number }).last_wall_ms,
+        deadlineMs,
+      );
+    } finally {
+      second.close();
+      first.close();
+    }
+  });
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('policy deadline overflow at MAX_SAFE_INTEGER fails closed for append and qualification', () => {
+  const overflowCompletedAtMs = Number.MAX_SAFE_INTEGER - 500;
+  const wallClock = overflowCompletedAtMs + 100;
+  const base = policyV2StoreProtocol('study:policy-deadline-overflow', 4, 1_000);
+  const {
+    lifecycle: _lifecycle,
+    committedAtMs: _committedAtMs,
+    protocolHash: _protocolHash,
+    ...draftBase
+  } = base;
+  const protocol = commitCausalProtocol({
+    ...draftBase,
+    studyWindow: { startsAtMs: overflowCompletedAtMs - 2, endsAtMs: null },
+  } as CausalStudyProtocolDraftV2, base.committedAtMs) as CommittedCausalStudyProtocolV2;
+  withWallClock(wallClock, () => {
+    const store = new Store(':memory:');
+    try {
+      assert.equal(store.registerCausalProtocol(protocol), 'created');
+      const assignment = assignmentMethod(store)({
+        ...assignmentRequest('block:policy-deadline-overflow'),
+        studyId: protocol.studyId,
+        createdAtMs: overflowCompletedAtMs - 2,
+      });
+      const decision = assignment.block.decisions[0]! as typeof assignment.block.decisions[number] & {
+        decisionId: string; assignedAtMs: number; assignedArmId: string; eventHash: string;
+      };
+      const execution = validExecutionV2(protocol, decision, 'execution:policy-deadline-overflow');
+      assert.equal(execution.completedAtMs, overflowCompletedAtMs);
+      assert.equal(executionMethod(store)(execution), 'created');
+      const outcome = validTerminalOutcomeV2(protocol, execution, 'matured', 'outcome:policy-deadline-overflow');
+      assert.throws(
+        () => terminalOutcomeMethod(store)(outcome),
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.equal((error as Error & { code?: string }).code, 'CAUSAL_INTEGRITY_FAILURE');
+          assert.equal(error.message, 'CAUSAL_INTEGRITY_FAILURE: stored v2 terminal outcome failed integrity verification');
+          assert.doesNotMatch(error.message, /MAX_SAFE|overflow|follow-up|sqlite|execution:policy-deadline-overflow/i);
+          return true;
+        },
+      );
+      assert.equal(tableCount(store, 'causal_terminal_outcomes_v2'), 0);
+      assert.throws(
+        () => causalQualificationV2(store.raw(), protocol.studyId),
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.equal((error as Error & { code?: string }).code, 'CAUSAL_INTEGRITY_FAILURE');
+          assert.equal(error.message, 'CAUSAL_INTEGRITY_FAILURE: stored v2 qualification evidence failed integrity verification');
+          assert.doesNotMatch(error.message, /MAX_SAFE|overflow|follow-up|sqlite|execution:policy-deadline-overflow/i);
+          return true;
+        },
+      );
+    } finally {
+      store.close();
+    }
+  });
 });
 
 test('V1 protocol is non-applicable to the V2 qualification reader and has no fallback', () => {
@@ -2044,7 +2589,7 @@ test('strict causal terminal outcome decoder rejects extra roots, hostile maturi
 test('strict causal terminal outcome v2 appends each terminal maturity and enforces immutable lineage replay', () => {
   const store = new Store(':memory:');
   try {
-    const protocol = v2StoreProtocol('study:terminal-maturity-matrix');
+    const protocol = policyV2StoreProtocol('study:terminal-maturity-matrix');
     assert.equal(store.registerCausalProtocol(protocol), 'created');
     const assignment = assignmentMethod(store)({ ...assignmentRequest(), studyId: protocol.studyId });
     const appendExecution = executionMethod(store);
@@ -2059,12 +2604,18 @@ test('strict causal terminal outcome v2 appends each terminal maturity and enfor
     });
     const maturities: TerminalMaturity[] = ['matured', 'censored', 'invalid'];
     const outcomes = executions.map((execution, index) => {
-      const outcome = validTerminalOutcomeV2(
+      let outcome = validTerminalOutcomeV2(
         protocol,
         execution,
         maturities[index],
         'outcome:terminal-maturity-' + index,
       );
+      if (outcome.maturity === 'censored') {
+        const deadlineMs = execution.completedAtMs + protocol.followUpWindowMs!;
+        const material = { ...outcome, observedAtMs: deadlineMs };
+        const { eventHash: _eventHash, ...eventMaterial } = material;
+        outcome = { ...material, eventHash: causalTerminalOutcomeV2EventHash(eventMaterial) };
+      }
       assert.equal(appendOutcome(outcome), 'created');
       return outcome;
     });
@@ -2333,6 +2884,9 @@ test('strict causal terminal outcome v2 detects retained-row corruption and roll
     assert.equal(append(outcome), 'created');
     corrupted.raw().prepare('DROP TRIGGER causal_no_update_causal_terminal_outcomes_v2').run();
     corrupted.raw().prepare("UPDATE causal_terminal_outcomes_v2 SET terminal_outcome_json = '{'").run();
+    corrupted.raw().prepare(
+      "CREATE TRIGGER causal_no_update_causal_terminal_outcomes_v2 BEFORE UPDATE ON causal_terminal_outcomes_v2 BEGIN SELECT RAISE(ABORT, 'causal evidence is append-only'); END",
+    ).run();
     assert.throws(
       () => append(outcome),
       (error: unknown) => {
@@ -2362,16 +2916,27 @@ test('strict causal terminal outcome v2 detects retained-row corruption and roll
     rollback.raw().prepare(
       "CREATE TRIGGER injected_terminal_failure AFTER INSERT ON causal_terminal_outcomes_v2 BEGIN SELECT RAISE(ABORT, 'credential-secret'); END",
     ).run();
-    assert.throws(
-      () => terminalOutcomeMethod(rollback)(outcome),
-      (error: unknown) => {
-        assert.ok(error instanceof Error);
-        assert.equal((error as Error & { code?: string }).code, 'CAUSAL_APPEND_ROLLED_BACK');
-        assert.equal(error.message, 'CAUSAL_APPEND_ROLLED_BACK: terminal outcome transaction rolled back without disclosing a causal record');
-        assert.doesNotMatch(error.message, /credential-secret|terminal-rollback|sqlite|SQL/i);
-        return true;
-      },
-    );
+    const originalNow = Date.now;
+    let wallClockReads = 0;
+    Date.now = () => {
+      wallClockReads += 1;
+      return originalNow();
+    };
+    try {
+      assert.throws(
+        () => terminalOutcomeMethod(rollback)(outcome),
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.equal((error as Error & { code?: string }).code, 'CAUSAL_INTEGRITY_FAILURE');
+          assert.equal(error.message, 'CAUSAL_INTEGRITY_FAILURE: stored v2 terminal outcome failed integrity verification');
+          assert.doesNotMatch(error.message, /credential-secret|terminal-rollback|sqlite|SQL/i);
+          return true;
+        },
+      );
+    } finally {
+      Date.now = originalNow;
+    }
+    assert.equal(wallClockReads, 0, 'schema attestation must run before the Store-owned clock capture');
     assert.equal(tableCount(rollback, 'causal_terminal_outcomes_v2'), 0);
   } finally {
     rollback.close();
@@ -2755,6 +3320,69 @@ test('exact Slice 3 assignment schema is a named migration predecessor and upgra
         "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'trigger' AND (tbl_name = 'causal_executions_v2' OR tbl_name = 'causal_terminal_outcomes_v2')",
       ).get() as { count: number };
       assert.equal(triggers.count, 4);
+    } finally {
+      migrated.close();
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('complete pre-clock Slice 4 evidence schema migrates by adding only exact clock metadata', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-causal-pre-clock-'));
+  const dbPath = join(dir, 'pre-clock.sqlite');
+  try {
+    const seeded = new Store(dbPath);
+    const protocol = v2StoreProtocol('study:pre-clock-migration');
+    assert.equal(seeded.registerCausalProtocol(protocol), 'created');
+    const assignment = assignmentMethod(seeded)({
+      ...assignmentRequest('block:pre-clock-migration'),
+      studyId: protocol.studyId,
+    });
+    const decision = assignment.block.decisions[0]! as typeof assignment.block.decisions[number] & {
+      decisionId: string; assignedAtMs: number; assignedArmId: string; eventHash: string;
+    };
+    const execution = validExecutionV2(protocol, decision, 'execution:pre-clock-migration');
+    assert.equal(executionMethod(seeded)(execution), 'created');
+    const outcome = validTerminalOutcomeV2(protocol, execution, 'matured', 'outcome:pre-clock-migration');
+    assert.equal(terminalOutcomeMethod(seeded)(outcome), 'created');
+    const before = {
+      protocol: (seeded.raw().prepare('SELECT protocol_hash, protocol_json FROM causal_protocols WHERE study_id = ?')
+        .get(protocol.studyId) as { protocol_hash: string; protocol_json: string }),
+      execution: (seeded.raw().prepare('SELECT event_hash, execution_json FROM causal_executions_v2 WHERE execution_id = ?')
+        .get(execution.executionId) as { event_hash: string; execution_json: string }),
+      outcome: (seeded.raw().prepare('SELECT event_hash, terminal_outcome_json FROM causal_terminal_outcomes_v2 WHERE outcome_id = ?')
+        .get(outcome.outcomeId) as { event_hash: string; terminal_outcome_json: string }),
+    };
+    seeded.close();
+
+    const preClock = new DatabaseSync(dbPath);
+    try {
+      preClock.prepare('DROP TABLE causal_clock_state').run();
+      assert.equal(causalV2SchemaAttestation(preClock).state, 'exact-pre-clock');
+    } finally {
+      preClock.close();
+    }
+
+    const migrated = new Store(dbPath);
+    try {
+      assert.equal(causalV2SchemaComplete(migrated.raw()), true);
+      assert.equal(migrated.causalMigrationBackupEvidence()?.path.startsWith(dbPath + '.pre-causal-v2-'), true);
+      const clockRows = migrated.raw().prepare(
+        'SELECT clock_id, last_wall_ms FROM causal_clock_state',
+      ).all() as Array<{ clock_id: string; last_wall_ms: number }>;
+      assert.equal(clockRows.length, 1);
+      assert.equal(clockRows[0]?.clock_id, 'causal-v2');
+      assert.equal(Number.isSafeInteger(clockRows[0]?.last_wall_ms), true);
+      const after = {
+        protocol: (migrated.raw().prepare('SELECT protocol_hash, protocol_json FROM causal_protocols WHERE study_id = ?')
+          .get(protocol.studyId) as { protocol_hash: string; protocol_json: string }),
+        execution: (migrated.raw().prepare('SELECT event_hash, execution_json FROM causal_executions_v2 WHERE execution_id = ?')
+          .get(execution.executionId) as { event_hash: string; execution_json: string }),
+        outcome: (migrated.raw().prepare('SELECT event_hash, terminal_outcome_json FROM causal_terminal_outcomes_v2 WHERE outcome_id = ?')
+          .get(outcome.outcomeId) as { event_hash: string; terminal_outcome_json: string }),
+      };
+      assert.deepEqual(after, before);
     } finally {
       migrated.close();
     }

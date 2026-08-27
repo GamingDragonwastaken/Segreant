@@ -284,7 +284,7 @@ test('v2 protocol validates, commits its frozen domain-separated hash, and rejec
   assert.ok(Object.isFrozen(committed));
   assert.ok(Object.isFrozen(committed.eligibility));
 
-  const extra = { ...v2Draft(), rawPrompt: 'do not retain this' } as CausalStudyProtocolDraftV2;
+  const extra = { ...v2Draft(), rawPrompt: 'do not retain this' } as unknown as CausalStudyProtocolDraftV2;
   assert.ok(validateCausalProtocol(extra).some((error) => /protocol has unsupported field: rawPrompt/i.test(error)));
 
   const missing = structuredClone(v2Draft()) as CausalStudyProtocolDraftV2;
@@ -294,6 +294,87 @@ test('v2 protocol validates, commits its frozen domain-separated hash, and rejec
   const nestedExtra = structuredClone(v2Draft()) as CausalStudyProtocolDraftV2;
   (nestedExtra.analysis as unknown as Record<string, unknown>).postHocWinner = true;
   assert.ok(validateCausalProtocol(nestedExtra).some((error) => /analysis has unsupported field: postHocWinner/i.test(error)));
+});
+
+test('policy-bearing V2 protocol accepts the exact bounded follow-up root field and hashes it', () => {
+  const policyDraft = {
+    ...v2Draft(),
+    followUpWindowMs: 86_400_000,
+  } as CausalStudyProtocolDraftV2;
+  assert.deepEqual(validateCausalProtocol(policyDraft), []);
+  const committed = commitCausalProtocol(policyDraft, 1_700_000_000_500) as CommittedCausalStudyProtocolV2;
+  assert.equal(committed.followUpWindowMs, 86_400_000);
+  assert.notEqual(committed.protocolHash, protocolHash(v2Draft()));
+  assert.deepEqual(verifyCommittedCausalProtocol(committed), []);
+});
+
+test('policy-bearing V2 protocol rejects malformed values and non-root placement', () => {
+  const malformed: unknown[] = [undefined, null, '86', false, 0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, 31_536_000_001];
+  for (const value of malformed) {
+    const draft = { ...v2Draft(), followUpWindowMs: value } as unknown as CausalStudyProtocolDraftV2;
+    assert.ok(validateCausalProtocol(draft).some((error) => /followUpWindowMs/i.test(error)), String(value));
+    assert.throws(() => commitCausalProtocol(draft, 1_700_000_000_500), /followUpWindowMs/i, String(value));
+  }
+
+  const nested = { ...v2Draft(), studyWindow: { ...v2Draft().studyWindow, followUpWindowMs: 1000 } } as unknown as CausalStudyProtocolDraftV2;
+  assert.ok(validateCausalProtocol(nested).some((error) => /unsupported field: followUpWindowMs/i.test(error)));
+  assert.throws(() => protocolHash(nested), /unsupported field: followUpWindowMs/i);
+
+  const changed = { ...v2Draft(), followUpWindowMs: 1001 } as unknown as CausalStudyProtocolDraftV2;
+  assert.notEqual(protocolHash({ ...v2Draft(), followUpWindowMs: 1000 } as unknown as CausalStudyProtocolDraftV2), protocolHash(changed));
+});
+
+test('policy-bearing V2 protocol rejects inherited, accessor, proxy, and symbol root shapes without coercion', () => {
+  const inherited = Object.create({ followUpWindowMs: 1000 }) as Record<string, unknown>;
+  Object.assign(inherited, v2Draft());
+  assert.ok(validateCausalProtocol(inherited).length > 0);
+
+  let getterCalls = 0;
+  const accessor = { ...v2Draft(), followUpWindowMs: 1000 } as Record<string, unknown>;
+  Object.defineProperty(accessor, 'followUpWindowMs', {
+    enumerable: true,
+    configurable: true,
+    get() {
+      getterCalls += 1;
+      return 1000;
+    },
+  });
+  assert.ok(validateCausalProtocol(accessor).some((error) => /accessor|followUpWindowMs/i.test(error)));
+  assert.equal(getterCalls, 0);
+
+  let coercionCalls = 0;
+  const coercible = {
+    [Symbol.toPrimitive]() {
+      coercionCalls += 1;
+      throw new Error('coercion must not run');
+    },
+  };
+  const coercibleDraft = { ...v2Draft(), followUpWindowMs: coercible } as unknown as CausalStudyProtocolDraftV2;
+  assert.ok(validateCausalProtocol(coercibleDraft).some((error) => /followUpWindowMs/i.test(error)));
+  assert.equal(coercionCalls, 0);
+
+  const proxied = new Proxy({ ...v2Draft(), followUpWindowMs: 1000 }, {
+    getOwnPropertyDescriptor() {
+      throw new Error('proxy descriptor must not escape the validation boundary');
+    },
+  });
+  assert.doesNotThrow(() => validateCausalProtocol(proxied));
+  assert.ok(validateCausalProtocol(proxied).length > 0);
+
+  const symbolRoot = { ...v2Draft(), followUpWindowMs: 1000, [Symbol('unexpected')]: true } as unknown as CausalStudyProtocolDraftV2;
+  assert.ok(validateCausalProtocol(symbolRoot).some((error) => /symbol|unsupported/i.test(error)));
+});
+
+test('legacy and policy-bearing V2 commitments retain exact hash separation when the policy field is altered', () => {
+  const legacy = commitCausalProtocol(v2Draft(), 1_700_000_000_500) as CommittedCausalStudyProtocolV2;
+  const policy = commitCausalProtocol({ ...v2Draft(), followUpWindowMs: 86_400_000 } as CausalStudyProtocolDraftV2, 1_700_000_000_500) as CommittedCausalStudyProtocolV2;
+  assert.deepEqual(verifyCommittedCausalProtocol(legacy), []);
+  assert.deepEqual(verifyCommittedCausalProtocol(policy), []);
+  assert.notEqual(legacy.protocolHash, policy.protocolHash);
+  assert.ok(verifyCommittedCausalProtocol({ ...legacy, followUpWindowMs: 86_400_000 } as unknown as CommittedCausalStudyProtocolV2).length > 0);
+  const removed = { ...policy } as Record<string, unknown>;
+  delete removed.followUpWindowMs;
+  assert.ok(verifyCommittedCausalProtocol(removed).length > 0);
 });
 
 test('v2 protocol public wrappers fail closed for invalid roots and unsupported runtime versions', () => {

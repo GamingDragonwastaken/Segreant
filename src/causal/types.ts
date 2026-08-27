@@ -223,7 +223,7 @@ export interface CausalClaimTemplateIdsV2 {
   invalid: string;
 }
 
-export interface CausalStudyProtocolDraftV2 {
+export interface CausalStudyProtocolDraftV2Base {
   type: typeof CAUSAL_PROTOCOL_TYPE;
   version: typeof CAUSAL_PROTOCOL_VERSION_V2;
   studyId: string;
@@ -246,11 +246,38 @@ export interface CausalStudyProtocolDraftV2 {
   claimTemplateIds: CausalClaimTemplateIdsV2;
 }
 
-export interface CommittedCausalStudyProtocolV2 extends CausalStudyProtocolDraftV2 {
+/** Existing V2 commitment shape; absence of the policy field means no censoring. */
+export interface CausalStudyProtocolDraftV2Legacy extends CausalStudyProtocolDraftV2Base {
+  followUpWindowMs?: never;
+}
+
+/** Exact policy-bearing V2 commitment shape. */
+export interface CausalStudyProtocolDraftV2Policy extends CausalStudyProtocolDraftV2Base {
+  followUpWindowMs: number;
+}
+
+/** V2 accepts exactly the legacy or policy-bearing root shape at runtime. */
+export type CausalStudyProtocolDraftV2 =
+  | CausalStudyProtocolDraftV2Legacy
+  | CausalStudyProtocolDraftV2Policy;
+
+export interface CommittedCausalStudyProtocolV2Base extends CausalStudyProtocolDraftV2Base {
   lifecycle: 'committed';
   committedAtMs: number;
   protocolHash: string;
 }
+
+export interface CommittedCausalStudyProtocolV2Legacy extends CommittedCausalStudyProtocolV2Base {
+  followUpWindowMs?: never;
+}
+
+export interface CommittedCausalStudyProtocolV2Policy extends CommittedCausalStudyProtocolV2Base {
+  followUpWindowMs: number;
+}
+
+export type CommittedCausalStudyProtocolV2 =
+  | CommittedCausalStudyProtocolV2Legacy
+  | CommittedCausalStudyProtocolV2Policy;
 
 export type AnyCausalStudyProtocolDraft = CausalStudyProtocolDraft | CausalStudyProtocolDraftV2;
 export type AnyCommittedCausalStudyProtocol = CommittedCausalStudyProtocol | CommittedCausalStudyProtocolV2;
