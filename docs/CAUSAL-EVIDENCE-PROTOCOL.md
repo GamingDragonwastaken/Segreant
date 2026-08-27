@@ -224,10 +224,13 @@ not an independently audited causal proof; equality is a necessary join
 invariant, not a sufficient claim of causation.
 Retained execution and terminal-outcome text must also round-trip to the
 canonical decoded record, and realization timestamps may not precede execution
-completion. Ordinary snapshots without the scalar remain unqualified. A
-cost-bearing V2 result still remains fail-closed when the sidecar is absent or
-invalid, the ordinary ledger verifier is unresolved, or any request,
-realization, or outcome gate fails.
+completion. A matching scalar is retained as asserted evidence only: the
+validator marks the realization-to-unit identity unverified, and qualification
+remains inconclusive until an independent causal-aware producer boundary exists.
+Ordinary snapshots without the scalar remain unqualified. A cost-bearing V2
+result still remains fail-closed when the sidecar is absent or invalid, the
+ordinary ledger verifier is unresolved, or any request, realization, or outcome
+gate fails.
 
 Legacy v1 protocol and assignment records remain decodable and replayable for
 inspection. They are immutable evidence: production code cannot create a new v1

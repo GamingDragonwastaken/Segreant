@@ -79,6 +79,7 @@ export type CausalLineageReasonCode =
   | 'realization_missing'
   | 'realization_unit_identity_missing'
   | 'realization_unit_identity_mismatch'
+  | 'realization_unit_identity_unverified'
   | 'realization_not_mature'
   | 'realization_scope_invalid'
   | 'realization_project_mismatch'
@@ -90,6 +91,8 @@ export const CAUSAL_LINEAGE_BINDING_NOT_PERSISTED =
   'V2 request-to-realization lineage binding is not persisted';
 export const CAUSAL_LINEAGE_BINDING_INVALID =
   'V2 request-to-realization lineage binding failed validation';
+export const CAUSAL_LINEAGE_REALIZATION_IDENTITY_UNVERIFIED =
+  'V2 realization-to-unit identity is asserted but not independently verified';
 
 export interface CausalLineageBindingValidationV2 {
   state: 'valid' | 'invalid';
@@ -732,6 +735,12 @@ export function validateCausalLineageBindingV2(
         reasons.push('realization_unit_identity_missing');
       } else if (causalUnitIdDigest !== binding.unitIdDigest) {
         reasons.push('realization_unit_identity_mismatch');
+      } else {
+        // The scalar is retained outside unit_json, but this Store has no
+        // causal-aware producer that can independently derive the
+        // commit-to-study-unit mapping. Equality is therefore a consistency
+        // check on a producer assertion, never independently verified proof.
+        reasons.push('realization_unit_identity_unverified');
       }
       if (maturing || !realized || costStale) reasons.push('realization_not_mature');
       if (requestRows.some((row) => row.project !== project)) reasons.push('realization_project_mismatch');
@@ -882,10 +891,16 @@ function authenticateStoredCausalLineageBindingV2(
   }
 }
 
-function onlyUnresolvedLedgerBlock(validation: CausalLineageBindingValidationV2): boolean {
-  return validation.state === 'invalid'
-    && validation.reasonCodes.length === 1
-    && validation.reasonCodes[0] === 'ledger_verification_unresolved';
+function onlyPermittedAssertionBlock(validation: CausalLineageBindingValidationV2): boolean {
+  if (validation.state !== 'invalid'
+      || !validation.reasonCodes.includes('realization_unit_identity_unverified')) {
+    return false;
+  }
+  const permitted = new Set<CausalLineageReasonCode>([
+    'ledger_verification_unresolved',
+    'realization_unit_identity_unverified',
+  ]);
+  return validation.reasonCodes.every((reason) => permitted.has(reason));
 }
 
 function normalizedLineageError(error: unknown): Error {
@@ -920,10 +935,11 @@ function normalizedLineageError(error: unknown): Error {
 }
 
 /**
- * Append one authenticated scalar binding.  The only currently admissible
- * non-valid result is the explicit ordinary-ledger-verifier blocker: that
- * permits the sidecar to record the causal join without allowing it to turn an
- * unresolved cost ledger into a qualified result.
+ * Append one authenticated scalar binding. The current Store has no
+ * causal-aware producer that independently derives the realization-to-unit
+ * mapping, so a matching scalar is retained only as asserted, unqualified
+ * evidence. An unresolved ordinary-ledger verifier may accompany that
+ * assertion; neither condition can qualify a study.
  */
 export function appendCausalLineageBindingV2(
   db: DatabaseSync,
@@ -961,7 +977,7 @@ export function appendCausalLineageBindingV2(
       if (validation.reasonCodes.includes('causal_schema_unavailable')) {
         lineageFail('CAUSAL_INTEGRITY_FAILURE', 'causal lineage records could not be authenticated');
       }
-      if (!onlyUnresolvedLedgerBlock(validation)) {
+      if (!onlyPermittedAssertionBlock(validation)) {
         lineageFail('CAUSAL_RECORD_INVALID', 'causal lineage binding failed validation');
       }
     }

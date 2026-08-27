@@ -233,7 +233,7 @@ function appendFixture(store: Store, studyId: string): {
     `INSERT INTO realization_units
        (commit_hash, project, ts_epoch_ms, computed_at_ms, attributed_cost_usd, maturing, realized, unit_json,
         causal_unit_id_digest, cost_scope, cost_stale)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(COMMIT, 'project:lineage', execution.completedAtMs + 2, execution.completedAtMs + 3, 1, 0, 1, '{}', decision.unitIdDigest, 'project', 0);
   const realizationSnapshotDigest = causalRealizationSnapshotDigestV2({
     commitHash: COMMIT,
@@ -311,7 +311,22 @@ function completeRemainingFixture(store: Store, committed: CommittedCausalStudyP
       requestIds: [`request:lineage-${index}`],
       directAiCostUsd: 1,
       directCostSourceClass: 'actual_observed',
-      priceLineageDigests: [D('9')],
+      priceLineageDigests: [causalRequestPricingDigestV2({
+        requestId: `request:lineage-${index}`,
+        tsEpochMs: decision.assignedAtMs + 2,
+        provider: arm.providerId!,
+        model: arm.modelId!,
+        project: 'project:lineage',
+        costMicros: 1_000_000,
+        costBasis: 'tool_reported_unverified',
+        rateCardSha256: null,
+        rateCardSourceKind: 'none',
+        rateMatchKind: 'reported',
+        rateMatchProvider: null,
+        rateMatchModel: null,
+        scopeCaptureStatus: 'declared_unverified',
+        providerScopeDeclarationId: declaration.declarationId,
+      })],
       fullArmCostUsd: null,
       fullCostSourceClass: 'incomplete_or_unknown',
       ordinaryLedgerVerifier: {
@@ -352,6 +367,56 @@ function completeRemainingFixture(store: Store, committed: CommittedCausalStudyP
       arm.providerId!,
       arm.modelId!,
     ));
+    const realizationCommitHash = ['b', 'c', 'd'][index - 1]!.repeat(40);
+    const realizationTsEpochMs = execution.completedAtMs + 2;
+    const realizationComputedAtMs = execution.completedAtMs + 3;
+    store.raw().prepare(
+      `INSERT INTO realization_units
+         (commit_hash, project, ts_epoch_ms, computed_at_ms, attributed_cost_usd, maturing, realized,
+          unit_json, causal_unit_id_digest, cost_scope, cost_stale)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      realizationCommitHash,
+      'project:lineage',
+      realizationTsEpochMs,
+      realizationComputedAtMs,
+      1,
+      0,
+      1,
+      '{}',
+      decision.unitIdDigest,
+      'project',
+      0,
+    );
+    const realizationSnapshotDigest = causalRealizationSnapshotDigestV2({
+      commitHash: realizationCommitHash,
+      project: 'project:lineage',
+      tsEpochMs: realizationTsEpochMs,
+      computedAtMs: realizationComputedAtMs,
+      attributedCostUsd: 1,
+      maturing: false,
+      realized: true,
+      costScope: 'project',
+      costStale: false,
+    });
+    const bindingMaterial = {
+      type: 'fiscus.causal-lineage-binding' as const,
+      version: 2 as const,
+      bindingId: `lineage:lineage-${index}`,
+      studyId: committed.studyId,
+      protocolHash: committed.protocolHash,
+      decisionId: decision.decisionId,
+      executionId: execution.executionId,
+      outcomeId: `outcome:lineage-${index}`,
+      unitIdDigest: decision.unitIdDigest,
+      requestIds: [...execution.requestIds],
+      realizationCommitHash,
+      realizationSnapshotDigest,
+    };
+    assert.equal(store.appendCausalLineageBindingV2({
+      ...bindingMaterial,
+      bindingDigest: causalLineageBindingDigestV2(bindingMaterial),
+    }), 'created');
   }
 }
 
@@ -386,7 +451,10 @@ test('T-069 appends one scalar sidecar, authenticates idempotent reload, and pre
     assert.doesNotMatch(row.bindingJson, /prompt|source|unit_json/i);
     const validation = validateCausalLineageBindingV2(store.raw(), fixture.binding);
     assert.equal(validation.state, 'invalid');
-    assert.deepEqual(validation.reasonCodes, ['ledger_verification_unresolved']);
+    assert.deepEqual(validation.reasonCodes, [
+      'ledger_verification_unresolved',
+      'realization_unit_identity_unverified',
+    ]);
   } finally {
     store.close();
   }
@@ -718,6 +786,23 @@ test('T-069 qualification remains inconclusive until the append-only lineage bin
     const result = causalQualificationV2(store.raw(), fixture.protocol.studyId);
     assert.equal(result.state, 'inconclusive');
     assert.ok(result.reasons.includes('V2 request-to-realization lineage binding is not persisted'));
+  } finally {
+    store.close();
+  }
+});
+
+test('T-069 asserted realization identity remains inconclusive and never qualifies', () => {
+  const store = new Store(':memory:');
+  try {
+    const fixture = appendFixture(store, 'study:lineage-asserted-unqualified');
+    assert.equal(store.appendCausalLineageBindingV2(fixture.binding), 'created');
+    completeRemainingFixture(store, fixture.protocol);
+    const result = causalQualificationV2(store.raw(), fixture.protocol.studyId);
+    assert.equal(result.state, 'inconclusive');
+    assert.ok(
+      result.reasons.includes('V2 realization-to-unit identity is asserted but not independently verified'),
+      result.reasons.join(','),
+    );
   } finally {
     store.close();
   }

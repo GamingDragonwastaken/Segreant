@@ -44,6 +44,7 @@ import type {
 import {
   CAUSAL_LINEAGE_BINDING_NOT_PERSISTED,
   CAUSAL_LINEAGE_BINDING_INVALID,
+  CAUSAL_LINEAGE_REALIZATION_IDENTITY_UNVERIFIED,
   causalLineageBindingsV2,
   validateCausalLineageBindingV2,
   type CausalLineageBindingValidationV2,
@@ -1182,6 +1183,7 @@ function evaluateQualificationV2(data: AuthenticatedCausalStudySnapshotV2): Caus
   const invalidExecutionDecisions = new Set<string>();
   let unresolvedCostVerification = false;
   let missingLineageBinding = false;
+  let unverifiedLineageBinding = false;
   let invalidLineageBinding = false;
   const lineageByExecution = new Map<string, Array<{
     binding: CausalLineageBindingV2;
@@ -1194,11 +1196,18 @@ function evaluateQualificationV2(data: AuthenticatedCausalStudySnapshotV2): Caus
     const related = lineageByExecution.get(lineage.binding.executionId) ?? [];
     related.push(lineage);
     lineageByExecution.set(lineage.binding.executionId, related);
+    const assertedIdentity = lineage.validation.reasonCodes.includes(
+      'realization_unit_identity_unverified',
+    );
     const validationAccepted = lineage.validation.state === 'valid'
       || (lineage.validation.state === 'invalid'
-        && lineage.validation.reasonCodes.length === 1
-        && lineage.validation.reasonCodes[0] === 'ledger_verification_unresolved');
+        && lineage.validation.reasonCodes.length > 0
+        && lineage.validation.reasonCodes.every((reason) =>
+          reason === 'ledger_verification_unresolved'
+          || reason === 'realization_unit_identity_unverified')
+        && assertedIdentity);
     if (!validationAccepted) invalidLineageBinding = true;
+    if (validationAccepted && assertedIdentity) unverifiedLineageBinding = true;
   }
   if (duplicateQualificationIds(executions.map((execution) => execution.executionId))
       || duplicateQualificationIds(executions.map((execution) => execution.decisionId))) {
@@ -1374,6 +1383,7 @@ function evaluateQualificationV2(data: AuthenticatedCausalStudySnapshotV2): Caus
     reasons.push('V2 ordinary ledger cost verification is unresolved');
   }
   if (missingLineageBinding) reasons.push(CAUSAL_LINEAGE_BINDING_NOT_PERSISTED);
+  if (unverifiedLineageBinding) reasons.push(CAUSAL_LINEAGE_REALIZATION_IDENTITY_UNVERIFIED);
   if (Object.values(countsByArm).some((count) => count.completed < protocol.analysis.minCompletedPerArm)) {
     reasons.push('V2 matured completion support is below the committed minimum');
   }
