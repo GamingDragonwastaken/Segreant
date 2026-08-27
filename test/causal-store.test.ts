@@ -14,6 +14,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
 import { estimateCausalStudy } from '../src/causal/estimate.ts';
+import * as qualificationModule from '../src/causal/qualification.ts';
 import { canonicalJson, causalEventHash, commitCausalProtocol } from '../src/causal/protocol.ts';
 import {
   causalExecutionV2EventHash,
@@ -34,6 +35,7 @@ import {
   type CommittedCausalStudyProtocolV2,
 } from '../src/causal/types.ts';
 import { Store } from '../src/store/db.ts';
+import { causalQualificationV2 } from '../src/store/causal.ts';
 import { causalV2SchemaAttestation, causalV2SchemaComplete } from '../src/store/schema.ts';
 import { createRetainedCausalV1AssignmentFixture } from './support/causalV1Fixture.ts';
 
@@ -841,6 +843,397 @@ function terminalOutcomeMethod(store: Store): TerminalOutcomeMethod {
   return method.bind(store);
 }
 
+interface QualificationFixture {
+  protocol: CommittedCausalStudyProtocolV2;
+  decisions: Array<{
+    decisionId: string;
+    assignedAtMs: number;
+    assignedArmId: string;
+    eventHash: string;
+  }>;
+  executions: CausalExecutionRecordV2[];
+  outcomes: CausalTerminalOutcomeRecordV2[];
+}
+
+/** Build evidence through the Store mutation boundaries for qualification tests. */
+function populateQualificationStudy(
+  store: Store,
+  studyId: string,
+  options: { appendExecutions?: boolean; maturities?: TerminalMaturity[] | null } = {},
+): QualificationFixture {
+  const protocol = v2StoreProtocol(studyId);
+  assert.equal(store.registerCausalProtocol(protocol), 'created');
+  const assignment = assignmentMethod(store)({ ...assignmentRequest(), studyId });
+  const decisions = assignment.block.decisions as Array<{
+    decisionId: string;
+    assignedAtMs: number;
+    assignedArmId: string;
+    eventHash: string;
+  }>;
+  const executions: CausalExecutionRecordV2[] = [];
+  const outcomes: CausalTerminalOutcomeRecordV2[] = [];
+  const appendExecution = executionMethod(store);
+  const appendOutcome = terminalOutcomeMethod(store);
+  const appendExecutions = options.appendExecutions ?? true;
+  const maturities = options.maturities === undefined
+    ? decisions.map(() => 'matured' as const)
+    : options.maturities;
+  for (const [index, decision] of decisions.entries()) {
+    const incompleteExecution = validExecutionV2(protocol, decision, 'execution:qualification-matrix-' + index);
+    const executionMaterial = {
+      ...incompleteExecution,
+      directAiCostUsd: 1,
+      directCostSourceClass: 'actual_observed' as const,
+      priceLineageDigests: [D('c')],
+    };
+    const execution = {
+      ...executionMaterial,
+      eventHash: causalExecutionV2EventHash(executionMaterial),
+    };
+    if (appendExecutions) {
+      assert.equal(appendExecution(execution), 'created');
+      executions.push(execution);
+      const maturity = maturities?.[index];
+      if (maturity) {
+        const outcome = validTerminalOutcomeV2(
+          protocol,
+          execution,
+          maturity,
+          'outcome:qualification-matrix-' + index,
+        );
+        assert.equal(appendOutcome(outcome), 'created');
+        outcomes.push(outcome);
+      }
+    }
+  }
+  return { protocol, decisions, executions, outcomes };
+}
+
+test('v2 qualification remains source-internal and has no raw snapshot issuer surface', async () => {
+  assert.equal(Object.hasOwn(qualificationModule, 'issueAuthenticatedCausalStudyV2'), false);
+  assert.equal(Object.hasOwn(qualificationModule, 'qualifyCausalStudyV2'), false);
+  assert.equal(typeof (Store.prototype as unknown as { causalQualificationV2?: unknown }).causalQualificationV2, 'undefined');
+  const packageJson = JSON.parse(readFileSync(join(import.meta.dirname, '..', 'package.json'), 'utf8')) as {
+    exports?: Record<string, string>;
+    name?: string;
+  };
+  assert.deepEqual(packageJson.exports, { './package.json': './package.json' });
+  if (packageJson.name) {
+    for (const specifier of [
+      packageJson.name,
+      packageJson.name + '/store/db.js',
+      packageJson.name + '/dist/store/causal.js',
+    ]) {
+      await assert.rejects(import(specifier), (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.equal((error as Error & { code?: string }).code, 'ERR_PACKAGE_PATH_NOT_EXPORTED');
+        return true;
+      });
+    }
+  }
+});
+
+test('Store-authoritative v2 qualification reports zero assignments as collecting with zero counts', () => {
+  const store = new Store(':memory:');
+  try {
+    const protocol = v2StoreProtocol('study:qualification-zero');
+    assert.equal(store.registerCausalProtocol(protocol), 'created');
+    const result = causalQualificationV2(store.raw(), protocol.studyId);
+    assert.equal(result.state, 'collecting');
+    assert.deepEqual(result.countsByArm, {
+      'arm:candidate': { assigned: 0, pending: 0, completed: 0, censored: 0, invalid: 0 },
+      'arm:control': { assigned: 0, pending: 0, completed: 0, censored: 0, invalid: 0 },
+    });
+  } finally {
+    store.close();
+  }
+});
+
+test('Store-authoritative v2 qualification preserves absent execution and outcome as collecting pending evidence', () => {
+  const noExecution = new Store(':memory:');
+  try {
+    const fixture = populateQualificationStudy(noExecution, 'study:qualification-no-execution', { appendExecutions: false });
+    const result = causalQualificationV2(noExecution.raw(), fixture.protocol.studyId);
+    assert.equal(result.state, 'collecting');
+    assert.deepEqual(Object.values(result.countsByArm).map((count) => [count.assigned, count.pending, count.completed, count.censored, count.invalid]), [
+      [2, 2, 0, 0, 0],
+      [2, 2, 0, 0, 0],
+    ]);
+    assert.equal(tableCount(noExecution, 'causal_terminal_outcomes_v2'), 0);
+  } finally {
+    noExecution.close();
+  }
+
+  const noOutcome = new Store(':memory:');
+  try {
+    const fixture = populateQualificationStudy(noOutcome, 'study:qualification-no-outcome', { maturities: null });
+    const result = causalQualificationV2(noOutcome.raw(), fixture.protocol.studyId);
+    assert.equal(result.state, 'collecting');
+    assert.deepEqual(Object.values(result.countsByArm).map((count) => [count.assigned, count.pending, count.completed, count.censored, count.invalid]), [
+      [2, 2, 0, 0, 0],
+      [2, 2, 0, 0, 0],
+    ]);
+    assert.equal(tableCount(noOutcome, 'causal_terminal_outcomes_v2'), 0);
+  } finally {
+    noOutcome.close();
+  }
+});
+
+test('legacy V2 censoring is structurally invalid and never counted as missingness', () => {
+  const store = new Store(':memory:');
+  try {
+    const fixture = populateQualificationStudy(store, 'study:qualification-legacy-censor', {
+      maturities: ['censored', 'matured', 'matured', 'matured'],
+    });
+    const result = causalQualificationV2(store.raw(), fixture.protocol.studyId);
+    const censoredArm = fixture.decisions[0]!.assignedArmId;
+    assert.equal(result.state, 'invalid');
+    assert.equal(result.countsByArm[censoredArm]?.censored, 0);
+    assert.equal(result.countsByArm[censoredArm]?.invalid, 1);
+    assert.match(result.reasons.join('; '), /censored.*unsupported|invalid terminal/i);
+  } finally {
+    store.close();
+  }
+});
+
+test('V1 protocol is non-applicable to the V2 qualification reader and has no fallback', () => {
+  const store = new Store(':memory:');
+  try {
+    const protocol = commitCausalProtocol({ ...protocolDraft(), studyId: 'study:qualification-v1' }, 1_700_000_000_100);
+    store.raw().prepare(
+      'INSERT INTO causal_protocols (study_id, protocol_hash, committed_at_ms, protocol_json) VALUES (?, ?, ?, ?)',
+    ).run(protocol.studyId, protocol.protocolHash, protocol.committedAtMs, canonicalJson(protocol));
+    assert.throws(
+      () => causalQualificationV2(store.raw(), protocol.studyId),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.equal((error as Error & { code?: string }).code, 'CAUSAL_INTEGRITY_FAILURE');
+        assert.equal(error.message, 'CAUSAL_INTEGRITY_FAILURE: stored v2 qualification evidence failed integrity verification');
+        return true;
+      },
+    );
+    assert.equal(tableCount(store, 'causal_terminal_outcomes_v2'), 0);
+  } finally {
+    store.close();
+  }
+});
+
+test('Store-internal v2 qualification reads the complete manifested study and rejects a truncated decision lane', () => {
+  const populateCompleteStudy = (store: Store, studyId: string): CommittedCausalStudyProtocolV2 => {
+    const protocol = v2StoreProtocol(studyId);
+    assert.equal(store.registerCausalProtocol(protocol), 'created');
+    const assignment = assignmentMethod(store)({ ...assignmentRequest(), studyId });
+    const appendExecution = executionMethod(store);
+    const appendOutcome = terminalOutcomeMethod(store);
+    for (const [index, decisionValue] of assignment.block.decisions.entries()) {
+      const decision = decisionValue as typeof assignment.block.decisions[number] & {
+        decisionId: string;
+        assignedAtMs: number;
+        eventHash: string;
+      };
+      const incompleteExecution = validExecutionV2(protocol, decision, 'execution:qualification-reader-' + index);
+      const executionMaterial = {
+        ...incompleteExecution,
+        directAiCostUsd: 1,
+        directCostSourceClass: 'actual_observed' as const,
+        priceLineageDigests: [D('c')],
+      };
+      const execution = {
+        ...executionMaterial,
+        eventHash: causalExecutionV2EventHash(executionMaterial),
+      };
+      assert.equal(appendExecution(execution), 'created');
+      assert.equal(
+        appendOutcome(validTerminalOutcomeV2(protocol, execution, 'matured', 'outcome:qualification-reader-' + index)),
+        'created',
+      );
+    }
+    return protocol;
+  };
+
+  const complete = new Store(':memory:');
+  try {
+    const protocol = populateCompleteStudy(complete, 'study:qualification-reader');
+    const result = causalQualificationV2(complete.raw(), protocol.studyId) as {
+      studyId: string;
+      protocolHash: string;
+      state: string;
+      reasons: string[];
+      countsByArm: Record<string, {
+        assigned: number;
+        pending: number;
+        completed: number;
+        censored: number;
+        invalid: number;
+      }>;
+      estimate?: unknown;
+      claim?: unknown;
+    };
+    assert.equal(result.studyId, protocol.studyId);
+    assert.equal(result.protocolHash, protocol.protocolHash);
+    assert.equal(result.state, 'qualified', result.reasons.join('; '));
+    assert.deepEqual(result.countsByArm, {
+      'arm:candidate': { assigned: 2, pending: 0, completed: 2, censored: 0, invalid: 0 },
+      'arm:control': { assigned: 2, pending: 0, completed: 2, censored: 0, invalid: 0 },
+    });
+    assert.equal(result.estimate, undefined, 'qualification reader must not create an estimate');
+    assert.equal(result.claim, undefined, 'qualification reader must not create a claim');
+
+    const truncated = new Store(':memory:');
+    try {
+      const truncatedProtocol = populateCompleteStudy(truncated, 'study:qualification-reader-truncated');
+      const decisionToDelete = truncated.raw().prepare(
+        'SELECT decision_id FROM causal_decisions_v2 WHERE study_id = ? ORDER BY block_sequence, decision_index LIMIT 1',
+      ).get(truncatedProtocol.studyId) as { decision_id: string };
+      dropV2ImmutabilityTriggers(truncated.raw());
+      truncated.raw().prepare('DELETE FROM causal_decisions_v2 WHERE decision_id = ?').run(decisionToDelete.decision_id);
+      restoreV2ImmutabilityTriggers(truncated.raw());
+      assert.equal(causalV2SchemaComplete(truncated.raw()), true, 'schema authority must be restored before the manifest test');
+      assert.throws(
+        () => causalQualificationV2(truncated.raw(), truncatedProtocol.studyId),
+        /CAUSAL_INTEGRITY_FAILURE/,
+        'a manifest/cardinality mismatch must fail closed as integrity failure',
+      );
+    } finally {
+      truncated.close();
+    }
+  } finally {
+    complete.close();
+  }
+});
+
+test('Store-authoritative v2 qualification rejects duplicate, orphan, cross-study, wrong-protocol, and corrupted evidence', () => {
+  const duplicateCases: Array<{
+    label: string;
+    table: 'causal_executions_v2' | 'causal_terminal_outcomes_v2';
+  }> = [
+    { label: 'duplicate execution topology', table: 'causal_executions_v2' },
+    { label: 'duplicate terminal topology', table: 'causal_terminal_outcomes_v2' },
+  ];
+  for (const duplicateCase of duplicateCases) {
+    const store = new Store(':memory:');
+    try {
+      const fixture = populateQualificationStudy(store, 'study:qualification-' + duplicateCase.table);
+      const duplicateDb = duplicateQualificationRows(store, duplicateCase.table);
+      expectCausalIntegrityFailure(
+        () => causalQualificationV2(duplicateDb, fixture.protocol.studyId),
+        duplicateCase.label,
+      );
+    } finally {
+      store.close();
+    }
+  }
+
+  const orphanExecution = new Store(':memory:');
+  try {
+    const fixture = populateQualificationStudy(orphanExecution, 'study:qualification-orphan-execution', { appendExecutions: false });
+    const decision = fixture.decisions[0]!;
+    const orphan = validExecutionV2(
+      fixture.protocol,
+      { ...decision, decisionId: 'decision:orphan', eventHash: D('p') },
+      'execution:orphan',
+    );
+    insertRawExecutionV2(orphanExecution, orphan);
+    expectCausalIntegrityFailure(
+      () => causalQualificationV2(orphanExecution.raw(), fixture.protocol.studyId),
+      'orphan execution row',
+    );
+  } finally {
+    orphanExecution.close();
+  }
+
+  const orphanTerminal = new Store(':memory:');
+  try {
+    const fixture = populateQualificationStudy(orphanTerminal, 'study:qualification-orphan-terminal', { appendExecutions: false });
+    const decision = fixture.decisions[0]!;
+    const predecessor = validExecutionV2(
+      fixture.protocol,
+      { ...decision, decisionId: 'decision:orphan-terminal', eventHash: D('q') },
+      'execution:orphan-terminal',
+    );
+    insertRawTerminalOutcomeV2(
+      orphanTerminal,
+      validTerminalOutcomeV2(fixture.protocol, predecessor, 'matured', 'outcome:orphan-terminal'),
+    );
+    expectCausalIntegrityFailure(
+      () => causalQualificationV2(orphanTerminal.raw(), fixture.protocol.studyId),
+      'orphan terminal row',
+    );
+  } finally {
+    orphanTerminal.close();
+  }
+
+  for (const [label, corrupt] of [
+    ['cross-study execution link', 'execution'] as const,
+    ['wrong-protocol execution link', 'execution'] as const,
+    ['cross-study terminal link', 'terminal'] as const,
+    ['wrong-protocol terminal link', 'terminal'] as const,
+  ]) {
+    const store = new Store(':memory:');
+    try {
+      const fixture = populateQualificationStudy(store, 'study:qualification-' + label.replace(/[^a-z]+/g, '-'), {
+        ...(corrupt === 'terminal' ? { maturities: null } : { appendExecutions: false }),
+      });
+      const decision = fixture.decisions[0]!;
+      if (corrupt === 'execution') {
+        const base = validExecutionV2(fixture.protocol, decision, 'execution:' + label.replace(/[^a-z]+/g, '-'));
+        const changed = {
+          ...base,
+          ...(label.startsWith('cross') ? { studyId: 'study:foreign' } : { protocolHash: D('f') }),
+        };
+        insertRawExecutionV2(store, { ...changed, eventHash: causalExecutionV2EventHash(changed) });
+      } else {
+        const execution = fixture.executions[0]!;
+        const base = validTerminalOutcomeV2(
+          fixture.protocol,
+          execution,
+          'matured',
+          'outcome:' + label.replace(/[^a-z]+/g, '-'),
+        );
+        const changed = {
+          ...base,
+          ...(label.startsWith('cross') ? { studyId: 'study:foreign' } : { protocolHash: D('f') }),
+        };
+        insertRawTerminalOutcomeV2(store, { ...changed, eventHash: causalTerminalOutcomeV2EventHash(changed) });
+      }
+      expectCausalIntegrityFailure(
+        () => causalQualificationV2(store.raw(), fixture.protocol.studyId),
+        label,
+      );
+    } finally {
+      store.close();
+    }
+  }
+
+  for (const [label, mutation] of [
+    ['canonical terminal JSON corruption', (store: Store, fixture: QualificationFixture) => {
+      dropV2UpdateTrigger(store.raw(), 'causal_terminal_outcomes_v2');
+      store.raw().prepare('UPDATE causal_terminal_outcomes_v2 SET terminal_outcome_json = ? WHERE outcome_id = ?')
+        .run('{"maturity":"matured"}', fixture.outcomes[0]!.outcomeId);
+      restoreV2UpdateTrigger(store.raw(), 'causal_terminal_outcomes_v2');
+    }],
+    ['physical terminal identity corruption', (store: Store, fixture: QualificationFixture) => {
+      dropV2UpdateTrigger(store.raw(), 'causal_terminal_outcomes_v2');
+      store.raw().prepare('UPDATE causal_terminal_outcomes_v2 SET event_hash = ? WHERE outcome_id = ?')
+        .run(D('f'), fixture.outcomes[0]!.outcomeId);
+      restoreV2UpdateTrigger(store.raw(), 'causal_terminal_outcomes_v2');
+    }],
+  ] as const) {
+    const store = new Store(':memory:');
+    try {
+      const fixture = populateQualificationStudy(store, 'study:qualification-' + label.replace(/[^a-z]+/g, '-'));
+      mutation(store, fixture);
+      assert.equal(causalV2SchemaComplete(store.raw()), true, label + ' must preserve exact schema authority');
+      expectCausalIntegrityFailure(
+        () => causalQualificationV2(store.raw(), fixture.protocol.studyId),
+        label,
+      );
+    } finally {
+      store.close();
+    }
+  }
+});
+
 test('atomic assignment persistence commits a complete replayable block before disclosure', () => {
   const store = new Store(':memory:');
   try {
@@ -1122,6 +1515,97 @@ function dropV2ImmutabilityTriggers(db: DatabaseSync): void {
     db.prepare('DROP TRIGGER causal_no_update_' + table).run();
     db.prepare('DROP TRIGGER causal_no_delete_' + table).run();
   }
+}
+
+function restoreV2ImmutabilityTriggers(db: DatabaseSync): void {
+  for (const table of [
+    'causal_assignment_plans_v2',
+    'causal_decisions_v2',
+    'causal_assignment_units_v2',
+    'causal_assignment_manifests_v2',
+  ]) {
+    for (const operation of ['UPDATE', 'DELETE']) {
+      const trigger = 'causal_no_' + operation.toLowerCase() + '_' + table;
+      db.prepare(
+        'CREATE TRIGGER ' + trigger + ' BEFORE ' + operation + ' ON ' + table +
+        " BEGIN SELECT RAISE(ABORT, 'causal evidence is append-only'); END",
+      ).run();
+    }
+  }
+}
+
+function dropV2UpdateTrigger(db: DatabaseSync, table: 'causal_executions_v2' | 'causal_terminal_outcomes_v2'): void {
+  db.prepare('DROP TRIGGER causal_no_update_' + table).run();
+}
+
+function restoreV2UpdateTrigger(db: DatabaseSync, table: 'causal_executions_v2' | 'causal_terminal_outcomes_v2'): void {
+  const trigger = 'causal_no_update_' + table;
+  db.prepare(
+    'CREATE TRIGGER ' + trigger + ' BEFORE UPDATE ON ' + table +
+    " BEGIN SELECT RAISE(ABORT, 'causal evidence is append-only'); END",
+  ).run();
+}
+
+function insertRawExecutionV2(store: Store, execution: CausalExecutionRecordV2): void {
+  store.raw().prepare(
+    'INSERT INTO causal_executions_v2 ' +
+    '(execution_id, decision_id, study_id, protocol_hash, started_at_ms, completed_at_ms, previous_event_hash, event_hash, execution_json) ' +
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  ).run(
+    execution.executionId,
+    execution.decisionId,
+    execution.studyId,
+    execution.protocolHash,
+    execution.startedAtMs,
+    execution.completedAtMs,
+    execution.previousEventHash,
+    execution.eventHash,
+    canonicalJson(execution),
+  );
+}
+
+function insertRawTerminalOutcomeV2(store: Store, outcome: CausalTerminalOutcomeRecordV2): void {
+  store.raw().prepare(
+    'INSERT INTO causal_terminal_outcomes_v2 ' +
+    '(outcome_id, decision_id, study_id, protocol_hash, observed_at_ms, maturity, previous_event_hash, event_hash, terminal_outcome_json) ' +
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  ).run(
+    outcome.outcomeId,
+    outcome.decisionId,
+    outcome.studyId,
+    outcome.protocolHash,
+    outcome.observedAtMs,
+    outcome.maturity,
+    outcome.previousEventHash,
+    outcome.eventHash,
+    canonicalJson(outcome),
+  );
+}
+
+/** Test-only read seam that simulates a duplicate physical row without changing schema authority. */
+function duplicateQualificationRows(
+  store: Store,
+  table: 'causal_executions_v2' | 'causal_terminal_outcomes_v2',
+): DatabaseSync {
+  const raw = store.raw();
+  return {
+    prepare(sql: string) {
+      const statement = raw.prepare(sql);
+      if (!sql.includes('FROM ' + table + ' WHERE study_id')) return statement;
+      return new Proxy(statement, {
+        get(target, property, receiver) {
+          if (property === 'all') {
+            return (...parameters: unknown[]) => {
+              const all = Reflect.get(target, property, target) as (...args: unknown[]) => unknown[];
+              const rows = all.apply(target, parameters);
+              return [...rows, ...rows];
+            };
+          }
+          return Reflect.get(target, property, target);
+        },
+      });
+    },
+  } as unknown as DatabaseSync;
 }
 
 function dropProtocolUpdateTrigger(db: DatabaseSync): void {

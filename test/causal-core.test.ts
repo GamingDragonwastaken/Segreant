@@ -26,13 +26,17 @@ import {
   validateCausalProtocol,
   verifyCommittedCausalProtocol,
 } from '../src/causal/protocol.ts';
-import { qualifyCausalStudy } from '../src/causal/qualification.ts';
+import {
+  qualifyCausalStudy,
+} from '../src/causal/qualification.ts';
 import {
   CAUSAL_PROTOCOL_TYPE,
   CAUSAL_PROTOCOL_VERSION,
   CAUSAL_PROTOCOL_VERSION_V2,
   type CausalAssignmentBlockV2,
   type CausalDecisionRecordV2,
+  type CausalExecutionRecordV2,
+  type CausalTerminalOutcomeRecordV2,
   type CommittedCausalStudyProtocolV2,
   type CausalExecutionRecord,
   type CausalOutcomeRecord,

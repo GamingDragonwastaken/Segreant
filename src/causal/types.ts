@@ -489,6 +489,31 @@ export interface CausalStudyData {
   outcomes: CausalOutcomeRecord[];
 }
 
+/** Fully authenticated v2 evidence presented to the internal qualification gate. */
+export interface CausalStudyDataV2 {
+  protocol: CommittedCausalStudyProtocolV2;
+  decisions: CausalDecisionRecordV2[];
+  executions: CausalExecutionRecordV2[];
+  terminalOutcomes: CausalTerminalOutcomeRecordV2[];
+}
+
+export interface CausalQualificationCountsV2 {
+  assigned: number;
+  pending: number;
+  completed: number;
+  censored: number;
+  invalid: number;
+}
+
+/** Structural v2 qualification only; it deliberately contains no estimate or claim. */
+export interface CausalQualificationV2 {
+  studyId: string;
+  protocolHash: string;
+  state: 'collecting' | 'invalid' | 'inconclusive' | 'qualified';
+  reasons: string[];
+  countsByArm: Record<string, CausalQualificationCountsV2>;
+}
+
 export interface ArmCounts {
   assigned: number;
   completed: number;

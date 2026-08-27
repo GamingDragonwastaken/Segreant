@@ -33,12 +33,15 @@ import type {
   CausalTerminalOutcomeRecordV2,
   CausalExecutionRecord,
   CausalOutcomeRecord,
+  CausalQualificationV2,
+  CausalStudyDataV2,
   CausalStudyData,
   CausalStudyEstimate,
   CommittedCausalStudyProtocol,
   CommittedCausalStudyProtocolV2,
   AnyCommittedCausalStudyProtocol,
 } from '../causal/types.ts';
+import { causalV2SchemaComplete } from './schema.ts';
 
 export interface CausalAnalysisSnapshot {
   analysisId: string;
@@ -727,6 +730,48 @@ function normalizedTerminalOutcomeError(error: unknown): Error {
   );
 }
 
+class CausalQualificationStoreError extends Error {
+  readonly code: string;
+
+  constructor(code: string, message: string) {
+    super(code + ': ' + message);
+    this.name = 'CausalQualificationStoreError';
+    this.code = code;
+  }
+}
+
+function qualificationFail(code: string, message: string): never {
+  throw new CausalQualificationStoreError(code, message);
+}
+
+function normalizedQualificationError(error: unknown): Error {
+  if (error instanceof CausalQualificationStoreError) return error;
+  if (error && typeof error === 'object' && 'code' in error
+      && typeof (error as { code?: unknown }).code === 'string') {
+    const code = (error as { code: string }).code;
+    if (code === 'CAUSAL_NOT_FOUND') {
+      return new CausalQualificationStoreError('CAUSAL_NOT_FOUND', 'committed causal study was not found');
+    }
+    if (code === 'CAUSAL_BUSY') {
+      return new CausalQualificationStoreError('CAUSAL_BUSY', 'qualification reader is busy; retry this immutable read');
+    }
+    if (code === 'CAUSAL_INTEGRITY_FAILURE') {
+      return new CausalQualificationStoreError(
+        'CAUSAL_INTEGRITY_FAILURE',
+        'stored v2 qualification evidence failed integrity verification',
+      );
+    }
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  if (/database is locked|SQLITE_BUSY/i.test(message)) {
+    return new CausalQualificationStoreError('CAUSAL_BUSY', 'qualification reader is busy; retry this immutable read');
+  }
+  return new CausalQualificationStoreError(
+    'CAUSAL_INTEGRITY_FAILURE',
+    'stored v2 qualification evidence failed integrity verification',
+  );
+}
+
 /** Append one exact v2 terminal outcome after an authenticated v2 execution. */
 export function appendCausalTerminalOutcomeV2(
   db: DatabaseSync,
@@ -921,6 +966,424 @@ export function causalAssignmentManifestV2(
   studyId: string,
 ): CausalAssignmentManifestV2 | null {
   return readCausalAssignmentManifestV2Store(db, studyId);
+}
+
+function finiteStoredValue(value: number | null, bounds: { low: number; high: number }): boolean {
+  return value !== null && Number.isFinite(value) && value >= bounds.low && value <= bounds.high;
+}
+
+interface AuthenticatedCausalStudySnapshotV2 extends CausalStudyDataV2 {}
+
+const issuedV2QualificationSnapshots = new WeakSet<object>();
+
+function freezeQualificationSnapshot<T>(value: T, seen = new WeakSet<object>()): T {
+  if (typeof value !== 'object' || value === null || seen.has(value)) return value;
+  seen.add(value);
+  for (const child of Object.values(value)) freezeQualificationSnapshot(child, seen);
+  return Object.freeze(value);
+}
+
+function issueQualificationSnapshot(data: CausalStudyDataV2): AuthenticatedCausalStudySnapshotV2 {
+  const snapshot = JSON.parse(canonicalJson(data)) as AuthenticatedCausalStudySnapshotV2;
+  freezeQualificationSnapshot(snapshot);
+  issuedV2QualificationSnapshots.add(snapshot);
+  return snapshot;
+}
+
+function blankQualificationCountsV2(armIds: string[]): Record<string, CausalQualificationV2['countsByArm'][string]> {
+  return Object.fromEntries(armIds.map((armId) => [armId, {
+    assigned: 0,
+    pending: 0,
+    completed: 0,
+    censored: 0,
+    invalid: 0,
+  }]));
+}
+
+function structuralQualificationV2(
+  data: CausalStudyDataV2,
+  state: CausalQualificationV2['state'],
+  reasons: string[],
+  countsByArm: CausalQualificationV2['countsByArm'],
+): CausalQualificationV2 {
+  return {
+    studyId: data.protocol.studyId,
+    protocolHash: data.protocol.protocolHash,
+    state,
+    reasons,
+    countsByArm,
+  };
+}
+
+function duplicateQualificationIds(values: string[]): boolean {
+  return new Set(values).size !== values.length;
+}
+
+function isQualificationDigest(value: unknown): value is string {
+  return typeof value === 'string' && /^sha256:[a-f0-9]{64}$/.test(value);
+}
+
+/**
+ * Evaluate only structural V2 state after the Store has issued its immutable
+ * authenticated snapshot. This function is intentionally module-private.
+ */
+function evaluateQualificationV2(data: AuthenticatedCausalStudySnapshotV2): CausalQualificationV2 {
+  if (!issuedV2QualificationSnapshots.has(data)) {
+    qualificationFail('CAUSAL_INTEGRITY_FAILURE', 'authenticated v2 qualification snapshot is required');
+  }
+  const { protocol, decisions, executions, terminalOutcomes } = data;
+  const countsByArm = blankQualificationCountsV2(protocol.arms.map((arm) => arm.armId));
+  const reasons: string[] = [];
+  const protocolErrors = verifyCommittedCausalProtocol(protocol);
+  if (protocolErrors.length > 0) {
+    return structuralQualificationV2(data, 'invalid', ['invalid committed V2 protocol'], countsByArm);
+  }
+
+  const armIds = new Set(protocol.arms.map((arm) => arm.armId));
+  const decisionById = new Map<string, CausalDecisionRecordV2>();
+  if (duplicateQualificationIds(decisions.map((decision) => decision.decisionId))) {
+    reasons.push('duplicate V2 assignment decision');
+  }
+  for (const decision of decisions) {
+    if (decision.type !== 'fiscus.causal-decision'
+        || decision.version !== 2
+        || decision.studyId !== protocol.studyId
+        || decision.protocolHash !== protocol.protocolHash
+        || !isCausalIdentifier(decision.decisionId)
+        || !isCausalIdentifier(decision.blockId)
+        || !armIds.has(decision.assignedArmId)
+        || !isQualificationDigest(decision.unitIdDigest)
+        || !isQualificationDigest(decision.blockRoot)
+        || !isQualificationDigest(decision.planHash)
+        || !isQualificationDigest(decision.allocationHash)
+        || !isQualificationDigest(decision.randomizationMaterialDigest)
+        || !isQualificationDigest(decision.previousEventHash)
+        || !isQualificationDigest(decision.eventHash)
+        || decision.propensity !== protocol.allocation.probabilityPerArm
+        || !Number.isSafeInteger(decision.assignedAtMs)
+        || decision.assignedAtMs < protocol.committedAtMs) {
+      reasons.push('invalid V2 assignment evidence');
+      continue;
+    }
+    decisionById.set(decision.decisionId, decision);
+    countsByArm[decision.assignedArmId]!.assigned += 1;
+  }
+  if (decisions.length === 0) {
+    return structuralQualificationV2(data, 'collecting', ['V2 study has no assignment support'], countsByArm);
+  }
+
+  const executionByDecision = new Map<string, CausalExecutionRecordV2>();
+  const invalidExecutionDecisions = new Set<string>();
+  if (duplicateQualificationIds(executions.map((execution) => execution.executionId))
+      || duplicateQualificationIds(executions.map((execution) => execution.decisionId))) {
+    reasons.push('duplicate V2 execution identity');
+  }
+  for (const execution of executions) {
+    const decision = decisionById.get(execution.decisionId);
+    const arm = decision && protocol.arms.find((candidate) => candidate.armId === decision.assignedArmId);
+    const valid = decision !== undefined && arm !== undefined
+      && execution.type === 'fiscus.causal-execution'
+      && execution.version === 2
+      && execution.studyId === protocol.studyId
+      && execution.protocolHash === protocol.protocolHash
+      && isCausalIdentifier(execution.executionId)
+      && execution.assignedExecutionPlanDigest === arm.executionPlanDigest
+      && execution.actualExecutionPlanDigest === arm.executionPlanDigest
+      && execution.adherence === 'confirmed'
+      && execution.previousEventHash === decision.eventHash
+      && Number.isSafeInteger(execution.startedAtMs)
+      && Number.isSafeInteger(execution.completedAtMs)
+      && execution.startedAtMs >= decision.assignedAtMs
+      && execution.completedAtMs >= execution.startedAtMs
+      && execution.startedAtMs >= protocol.studyWindow.startsAtMs
+      && (protocol.studyWindow.endsAtMs === null || execution.completedAtMs <= protocol.studyWindow.endsAtMs)
+      && execution.directAiCostUsd !== null
+      && finiteStoredValue(execution.directAiCostUsd, protocol.costOutcome.boundsUsd)
+      && (execution.directCostSourceClass === 'actual_observed' || execution.directCostSourceClass === 'actual_reconciled')
+      && protocol.costOutcome.acceptedSourceClasses.includes(execution.directCostSourceClass)
+      && execution.priceLineageDigests.length > 0
+      && execution.priceLineageDigests.every(isQualificationDigest)
+      && (protocol.question === 'model_cost_quality'
+        ? execution.fullArmCostUsd === null
+          && execution.fullCostSourceClass === 'incomplete_or_unknown'
+        : execution.fullArmCostUsd !== null
+          && finiteStoredValue(execution.fullArmCostUsd, protocol.costOutcome.boundsUsd)
+          && (execution.fullCostSourceClass === 'actual_observed'
+            || execution.fullCostSourceClass === 'actual_reconciled')
+          && protocol.costOutcome.acceptedSourceClasses.includes(execution.fullCostSourceClass)
+          && execution.priceLineageDigests.length > 0
+          && execution.priceLineageDigests.every(isQualificationDigest));
+    if (!valid) {
+      reasons.push('invalid V2 execution evidence');
+      invalidExecutionDecisions.add(execution.decisionId);
+      continue;
+    }
+    executionByDecision.set(execution.decisionId, execution);
+  }
+
+  const terminalByDecision = new Map<string, CausalTerminalOutcomeRecordV2>();
+  if (duplicateQualificationIds(terminalOutcomes.map((outcome) => outcome.outcomeId))
+      || duplicateQualificationIds(terminalOutcomes.map((outcome) => outcome.decisionId))) {
+    reasons.push('duplicate V2 terminal identity');
+  }
+  const invalidTerminalDecisions = new Set<string>();
+  for (const outcome of terminalOutcomes) {
+    const decision = decisionById.get(outcome.decisionId);
+    const execution = executionByDecision.get(outcome.decisionId);
+    const lineageValid = decision !== undefined && execution !== undefined
+      && outcome.type === 'fiscus.causal-terminal-outcome'
+      && outcome.version === 2
+      && outcome.studyId === protocol.studyId
+      && outcome.protocolHash === protocol.protocolHash
+      && isCausalIdentifier(outcome.outcomeId)
+      && outcome.previousEventHash === execution.eventHash
+      && Number.isSafeInteger(outcome.observedAtMs)
+      && outcome.observedAtMs >= execution.completedAtMs;
+    if (!lineageValid) {
+      reasons.push('invalid V2 terminal outcome evidence');
+      invalidTerminalDecisions.add(outcome.decisionId);
+      continue;
+    }
+    if (outcome.maturity === 'matured') {
+      const qualityValid = finiteStoredValue(outcome.qualityValue, protocol.qualityOutcome.bounds)
+        && outcome.qualityEvidenceClass === protocol.qualityOutcome.evidenceClass
+        && outcome.outcomeEvidenceDigests.length > 0
+        && outcome.outcomeEvidenceDigests.every(isQualificationDigest);
+      const economic = protocol.economicOutcome;
+      const economicValid = protocol.question === 'model_cost_quality'
+        ? economic === null && outcome.economicValueUsd === null && outcome.economicEvidenceClass === null
+        : economic !== null
+          && finiteStoredValue(outcome.economicValueUsd, economic.boundsUsd)
+          && outcome.economicEvidenceClass === economic.evidenceClass;
+      if (!qualityValid || !economicValid) {
+        reasons.push('invalid V2 matured outcome evidence');
+        invalidTerminalDecisions.add(outcome.decisionId);
+        continue;
+      }
+    } else if (outcome.maturity === 'censored') {
+      reasons.push('V2 censored outcome is unsupported without a committed follow-up policy');
+      invalidTerminalDecisions.add(outcome.decisionId);
+      continue;
+    } else if (outcome.maturity === 'invalid') {
+      if (outcome.qualityValue !== null || outcome.qualityEvidenceClass !== null
+          || outcome.economicValueUsd !== null || outcome.economicEvidenceClass !== null
+          || outcome.outcomeEvidenceDigests.length !== 0 || outcome.invalidReason === null
+          || outcome.censoredReason !== null) {
+        reasons.push('invalid V2 invalid-outcome evidence');
+        invalidTerminalDecisions.add(outcome.decisionId);
+        continue;
+      }
+    } else {
+      reasons.push('invalid V2 terminal maturity');
+      invalidTerminalDecisions.add(outcome.decisionId);
+      continue;
+    }
+    terminalByDecision.set(outcome.decisionId, outcome);
+  }
+
+  for (const decision of decisionById.values()) {
+    const count = countsByArm[decision.assignedArmId]!;
+    if (invalidExecutionDecisions.has(decision.decisionId)
+        || invalidTerminalDecisions.has(decision.decisionId)) {
+      count.invalid += 1;
+      continue;
+    }
+    const terminal = terminalByDecision.get(decision.decisionId);
+    if (!executionByDecision.has(decision.decisionId) || !terminal) {
+      count.pending += 1;
+      continue;
+    }
+    if (terminal.maturity === 'matured') count.completed += 1;
+    else if (terminal.maturity === 'censored') count.censored += 1;
+    else count.invalid += 1;
+  }
+
+  if (Object.values(countsByArm).some((count) => count.invalid > 0)) {
+    reasons.push('V2 invalid terminal outcome present');
+  }
+  if (reasons.length > 0) return structuralQualificationV2(data, 'invalid', reasons, countsByArm);
+  if (Object.values(countsByArm).some((count) => count.pending > 0)) {
+    return structuralQualificationV2(data, 'collecting', ['V2 terminal outcomes are still collecting'], countsByArm);
+  }
+  for (const count of Object.values(countsByArm)) {
+    if (count.assigned > 0 && count.censored / count.assigned > protocol.analysis.maxMissingFractionPerArm) {
+      reasons.push('V2 terminal missingness exceeds the committed limit');
+    }
+  }
+  if (reasons.length > 0) return structuralQualificationV2(data, 'invalid', reasons, countsByArm);
+  if (Object.values(countsByArm).some((count) => count.completed < protocol.analysis.minCompletedPerArm)) {
+    return structuralQualificationV2(data, 'inconclusive', ['V2 matured completion support is below the committed minimum'], countsByArm);
+  }
+  return structuralQualificationV2(data, 'qualified', [], countsByArm);
+}
+
+function terminalOutcomeSatisfiesStoredV2Protocol(
+  protocol: CommittedCausalStudyProtocolV2,
+  execution: CausalExecutionRecordV2,
+  outcome: CausalTerminalOutcomeRecordV2,
+): boolean {
+  if (outcome.studyId !== protocol.studyId
+      || outcome.protocolHash !== protocol.protocolHash
+      || outcome.decisionId !== execution.decisionId
+      || outcome.previousEventHash !== execution.eventHash
+      || !Number.isSafeInteger(outcome.observedAtMs)
+      || outcome.observedAtMs < execution.completedAtMs) {
+    return false;
+  }
+  if (outcome.maturity !== 'matured') return true;
+  if (!finiteStoredValue(outcome.qualityValue, protocol.qualityOutcome.bounds)
+      || outcome.qualityEvidenceClass !== protocol.qualityOutcome.evidenceClass
+      || outcome.outcomeEvidenceDigests.length === 0
+      || !outcome.outcomeEvidenceDigests.every(digest)) {
+    return false;
+  }
+  if (protocol.question === 'model_cost_quality') {
+    return protocol.economicOutcome === null
+      && outcome.economicValueUsd === null
+      && outcome.economicEvidenceClass === null;
+  }
+  const economic = protocol.economicOutcome;
+  return economic !== null
+    && finiteStoredValue(outcome.economicValueUsd, economic.boundsUsd)
+    && outcome.economicEvidenceClass === economic.evidenceClass;
+}
+
+/**
+ * Read one coherent, authenticated V2 snapshot for the internal qualification
+ * evaluator.  The manifest is the assignment authority; every retained
+ * execution/outcome row is checked against that exact decision set, and
+ * absence is preserved as pending rather than synthesized.
+ */
+export function causalQualificationV2(
+  db: DatabaseSync,
+  studyId: string,
+): CausalQualificationV2 {
+  if (!safeId(studyId)) {
+    qualificationFail('CAUSAL_RECORD_INVALID', 'causal study id is invalid');
+  }
+
+  let committed = false;
+  let transactionStarted = false;
+  try {
+    db.prepare('BEGIN').run();
+    transactionStarted = true;
+    if (!causalV2SchemaComplete(db)) {
+      qualificationFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 qualification schema is not exact');
+    }
+    const protocol = requireProtocolV2(db, studyId);
+    let blocks: CausalAssignmentBlockV2[];
+    let manifest: CausalAssignmentManifestV2 | null;
+    try {
+      blocks = scanAssignmentArtifacts(db, protocol);
+      manifest = retainedManifest(db, protocol);
+    } catch (error) {
+      if (error && typeof error === 'object' && 'code' in error
+          && (error as { code?: unknown }).code === 'CAUSAL_INTEGRITY_FAILURE') {
+        throw error;
+      }
+      qualificationFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 assignment evidence failed integrity verification');
+    }
+
+    const decisions = blocks.flatMap((block) => block.decisions);
+    const decisionIds = decisions.map((decision) => decision.decisionId);
+    if (new Set(decisionIds).size !== decisionIds.length) {
+      qualificationFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 assignment decisions contain duplicate identities');
+    }
+    if (manifest === null) {
+      if (decisions.length !== 0) {
+        qualificationFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 assignments have no authoritative manifest');
+      }
+    } else {
+      if (manifest.studyId !== protocol.studyId
+          || manifest.protocolHash !== protocol.protocolHash
+          || manifest.decisionCount !== decisions.length
+          || manifest.unitCount !== decisions.length
+          || manifest.planCount !== blocks.length
+          || manifest.decisions.length !== decisions.length) {
+        qualificationFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 assignment manifest cardinality is not authoritative');
+      }
+      for (const [index, decision] of decisions.entries()) {
+        const manifestDecision = manifest.decisions[index];
+        if (!manifestDecision
+            || manifestDecision.decisionId !== decision.decisionId
+            || manifestDecision.blockId !== decision.blockId
+            || manifestDecision.blockSequence !== decision.blockSequence
+            || manifestDecision.decisionIndex !== decision.decisionIndex
+            || manifestDecision.unitIdDigest !== decision.unitIdDigest
+            || manifestDecision.assignedArmId !== decision.assignedArmId
+            || manifestDecision.eventHash !== decision.eventHash
+            || manifestDecision.planHash !== decision.planHash) {
+          qualificationFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 assignment manifest does not bind every decision');
+        }
+      }
+    }
+
+    const decisionById = new Map(decisions.map((decision) => [decision.decisionId, decision]));
+    const decisionPlaceholders = decisionIds.map(() => '?').join(', ');
+    const executionRows = db.prepare(
+      STORED_EXECUTION_V2_SELECT + 'FROM causal_executions_v2 WHERE study_id = ?'
+        + (decisionIds.length > 0 ? ' OR decision_id IN (' + decisionPlaceholders + ')' : ''),
+    ).all(studyId, ...decisionIds) as unknown as StoredExecutionV2Row[];
+    const executions: CausalExecutionRecordV2[] = [];
+    const executionByDecision = new Map<string, CausalExecutionRecordV2>();
+    const executionIds = new Set<string>();
+    for (const row of executionRows) {
+      const execution = authenticateStoredExecutionV2(row);
+      const decision = decisionById.get(execution.decisionId);
+      if (!decision
+          || execution.studyId !== protocol.studyId
+          || execution.protocolHash !== protocol.protocolHash
+          || executionIds.has(execution.executionId)
+          || executionByDecision.has(execution.decisionId)
+          || !executionSatisfiesStoredV2Protocol(protocol, decision, execution)) {
+        qualificationFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 execution lineage is not authoritative');
+      }
+      executionIds.add(execution.executionId);
+      executionByDecision.set(execution.decisionId, execution);
+      executions.push(execution);
+    }
+
+    const terminalRows = db.prepare(
+      STORED_TERMINAL_OUTCOME_V2_SELECT + 'FROM causal_terminal_outcomes_v2 WHERE study_id = ?'
+        + (decisionIds.length > 0 ? ' OR decision_id IN (' + decisionPlaceholders + ')' : ''),
+    ).all(studyId, ...decisionIds) as unknown as StoredTerminalOutcomeV2Row[];
+    const terminalOutcomes: CausalTerminalOutcomeRecordV2[] = [];
+    const terminalByDecision = new Map<string, CausalTerminalOutcomeRecordV2>();
+    const outcomeIds = new Set<string>();
+    for (const row of terminalRows) {
+      const outcome = authenticateStoredTerminalOutcomeV2(row);
+      const decision = decisionById.get(outcome.decisionId);
+      const execution = executionByDecision.get(outcome.decisionId);
+      if (!decision
+          || !execution
+          || outcome.studyId !== protocol.studyId
+          || outcome.protocolHash !== protocol.protocolHash
+          || outcomeIds.has(outcome.outcomeId)
+          || terminalByDecision.has(outcome.decisionId)
+          || !terminalOutcomeSatisfiesStoredV2Protocol(protocol, execution, outcome)) {
+        qualificationFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 terminal outcome lineage is not authoritative');
+      }
+      outcomeIds.add(outcome.outcomeId);
+      terminalByDecision.set(outcome.decisionId, outcome);
+      terminalOutcomes.push(outcome);
+    }
+
+    const snapshot = issueQualificationSnapshot({
+      protocol,
+      decisions,
+      executions,
+      terminalOutcomes,
+    });
+    const result = evaluateQualificationV2(snapshot);
+    db.prepare('COMMIT').run();
+    committed = true;
+    return result;
+  } catch (error) {
+    if (transactionStarted && !committed) {
+      try { db.prepare('ROLLBACK').run(); } catch { /* no active transaction */ }
+    }
+    throw normalizedQualificationError(error);
+  }
 }
 
 /** Stored randomisation blocks are retained for allocation replay and review. */
