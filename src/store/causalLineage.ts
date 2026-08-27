@@ -22,6 +22,7 @@ import {
   sha256,
   verifyCommittedCausalProtocol,
 } from '../causal/protocol.ts';
+import { independentCausalUnitIdDigestV2 } from '../causal/identity.ts';
 import type { CausalExecutionRecordV2, CausalTerminalOutcomeRecordV2, CommittedCausalStudyProtocolV2 } from '../causal/types.ts';
 import { causalV2SchemaComplete } from './schema.ts';
 
@@ -354,6 +355,16 @@ interface StoredRealizationRow {
   costStale: unknown;
 }
 
+interface StoredGitCommitRow {
+  commitHash: unknown;
+  project: unknown;
+  tsEpochMs: unknown;
+  linesAdded: unknown;
+  linesDeleted: unknown;
+  filesChanged: unknown;
+  subject: unknown;
+}
+
 function parseCanonicalJson(raw: unknown): Record<string, unknown> | null {
   if (typeof raw !== 'string') return null;
   try {
@@ -402,6 +413,12 @@ function declaredProviderKey(provider: string): string | null {
   if (provider === 'openai') return provider;
   if (provider === 'provider:openai') return 'openai';
   return null;
+}
+
+function commitSubjectDigest(subject: unknown): string | null {
+  if (subject === null || subject === undefined) return null;
+  if (typeof subject !== 'string' || subject.length > 4096 || subject.includes('\0')) return null;
+  return 'sha256:' + sha256('fiscus.causal.commit-subject\n1\n' + subject);
 }
 
 function emptyBindingDigest(value: unknown): string | null {
@@ -736,11 +753,36 @@ export function validateCausalLineageBindingV2(
       } else if (causalUnitIdDigest !== binding.unitIdDigest) {
         reasons.push('realization_unit_identity_mismatch');
       } else {
-        // The scalar is retained outside unit_json, but this Store has no
-        // causal-aware producer that can independently derive the
-        // commit-to-study-unit mapping. Equality is therefore a consistency
-        // check on a producer assertion, never independently verified proof.
-        reasons.push('realization_unit_identity_unverified');
+        // A producer-derived identity is independently recomputable from the
+        // retained commit metadata plus this scalar snapshot. Older rows (or
+        // rows populated by a caller assertion) remain explicitly unverified.
+        const git = db.prepare(
+          `SELECT commit_hash AS commitHash, project, ts_epoch_ms AS tsEpochMs,
+                  lines_added AS linesAdded, lines_deleted AS linesDeleted,
+                  files_changed AS filesChanged, subject
+             FROM git_commits WHERE commit_hash = ?`,
+        ).get(binding.realizationCommitHash) as StoredGitCommitRow | undefined;
+        const gitValid = git !== undefined
+          && git.commitHash === binding.realizationCommitHash
+          && typeof git.project === 'string'
+          && git.project === project
+          && asPositiveSafeInteger(git.tsEpochMs) === ts
+          && asSafeInteger(git.linesAdded) !== null && Number(git.linesAdded) >= 0
+          && asSafeInteger(git.linesDeleted) !== null && Number(git.linesDeleted) >= 0
+          && asSafeInteger(git.filesChanged) !== null && Number(git.filesChanged) >= 0;
+        const derived = gitValid
+          ? independentCausalUnitIdDigestV2({
+              studyId: binding.studyId,
+              commitHash: binding.realizationCommitHash,
+              project: project!,
+              tsEpochMs: ts!,
+              linesAdded: Number(git!.linesAdded),
+              linesDeleted: Number(git!.linesDeleted),
+              filesChanged: Number(git!.filesChanged),
+              subjectDigest: commitSubjectDigest(git!.subject),
+            })
+          : null;
+        if (derived !== binding.unitIdDigest) reasons.push('realization_unit_identity_unverified');
       }
       if (maturing || !realized || costStale) reasons.push('realization_not_mature');
       if (requestRows.some((row) => row.project !== project)) reasons.push('realization_project_mismatch');
@@ -934,20 +976,8 @@ function normalizedLineageError(error: unknown): Error {
   );
 }
 
-/**
- * Append one authenticated scalar binding. The current Store has no
- * causal-aware producer that independently derives the realization-to-unit
- * mapping, so a matching scalar is retained only as asserted, unqualified
- * evidence. An unresolved ordinary-ledger verifier may accompany that
- * assertion; neither condition can qualify a study.
- */
-export function appendCausalLineageBindingV2(
-  db: DatabaseSync,
-  value: unknown,
-): 'created' | 'existing' {
-  const binding = immutableBinding(value);
-  if (!binding) lineageFail('CAUSAL_RECORD_INVALID', 'causal lineage binding shape is invalid');
-  const material: BindingMaterial = {
+function bindingMaterial(binding: CausalLineageBindingV2): BindingMaterial {
+  return {
     type: binding.type,
     version: binding.version,
     bindingId: binding.bindingId,
@@ -961,111 +991,156 @@ export function appendCausalLineageBindingV2(
     realizationCommitHash: binding.realizationCommitHash,
     realizationSnapshotDigest: binding.realizationSnapshotDigest,
   };
-  if (causalLineageBindingDigestV2(material) !== binding.bindingDigest) {
+}
+
+function assertBindingDigest(binding: CausalLineageBindingV2): void {
+  if (causalLineageBindingDigestV2(bindingMaterial(binding)) !== binding.bindingDigest) {
     lineageFail('CAUSAL_RECORD_INVALID', 'causal lineage binding digest is invalid');
   }
+}
+
+/**
+ * Perform the immutable append while the caller owns the current SQLite
+ * transaction.  This is intentionally separate from the public writer so a
+ * producer can atomically update its retained realization identity and append
+ * the corresponding binding without nesting BEGIN/COMMIT statements.
+ */
+function appendCausalLineageBindingV2Internal(
+  db: DatabaseSync,
+  binding: CausalLineageBindingV2,
+): 'created' | 'existing' {
   const encoded = canonicalJson(binding);
   const requestIdsJson = canonicalJson(binding.requestIds);
+  if (!causalV2SchemaComplete(db)) {
+    lineageFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 lineage schema is not exact');
+  }
+  const validation = validateCausalLineageBindingV2(db, binding);
+  if (validation.state === 'invalid') {
+    if (validation.reasonCodes.includes('causal_schema_unavailable')) {
+      lineageFail('CAUSAL_INTEGRITY_FAILURE', 'causal lineage records could not be authenticated');
+    }
+    if (!onlyPermittedAssertionBlock(validation)) {
+      lineageFail('CAUSAL_RECORD_INVALID', 'causal lineage binding failed validation');
+    }
+  }
+
+  const byIdRows = db.prepare(
+    STORED_CAUSAL_LINEAGE_BINDING_V2_SELECT +
+    'FROM causal_lineage_bindings_v2 WHERE binding_id = ?',
+  ).all(binding.bindingId) as unknown as StoredCausalLineageBindingV2Row[];
+  if (byIdRows.length > 1) {
+    lineageFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 lineage binding identity is duplicated');
+  }
+  const byId = byIdRows[0];
+  if (byId) {
+    const existing = authenticateStoredCausalLineageBindingV2(byId);
+    if (canonicalJson(existing) === encoded) {
+      return 'existing';
+    }
+    lineageFail('CAUSAL_IMMUTABLE_CONFLICT', 'lineage binding conflicts with existing immutable content');
+  }
+
+  // All identity collisions are classified only after authenticating the
+  // colliding rows. A corrupt row is never silently treated as a duplicate.
+  const competing = db.prepare(
+    STORED_CAUSAL_LINEAGE_BINDING_V2_SELECT +
+    'FROM causal_lineage_bindings_v2 WHERE decision_id = ? OR execution_id = ? ' +
+    'OR outcome_id = ? OR binding_digest = ?',
+  ).all(binding.decisionId, binding.executionId, binding.outcomeId, binding.bindingDigest) as unknown as StoredCausalLineageBindingV2Row[];
+  for (const row of competing) authenticateStoredCausalLineageBindingV2(row);
+  if (competing.length > 0) {
+    lineageFail('CAUSAL_IMMUTABLE_CONFLICT', 'lineage binding conflicts with an existing immutable identity');
+  }
+
+  const retained = db.prepare(
+    STORED_CAUSAL_LINEAGE_BINDING_V2_SELECT +
+    'FROM causal_lineage_bindings_v2 ORDER BY binding_id',
+  ).all() as unknown as StoredCausalLineageBindingV2Row[];
+  const requestSet = new Set(binding.requestIds);
+  for (const row of retained) {
+    const existing = authenticateStoredCausalLineageBindingV2(row);
+    if (existing.requestIds.some((requestId) => requestSet.has(requestId))) {
+      lineageFail('CAUSAL_IMMUTABLE_CONFLICT', 'lineage binding reuses an existing request identity');
+    }
+  }
+
+  db.prepare(
+    'INSERT INTO causal_lineage_bindings_v2 ' +
+    '(binding_id, study_id, protocol_hash, decision_id, execution_id, outcome_id, ' +
+    'unit_id_digest, request_ids_json, realization_commit_hash, realization_snapshot_digest, ' +
+    'binding_digest, binding_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  ).run(
+    binding.bindingId,
+    binding.studyId,
+    binding.protocolHash,
+    binding.decisionId,
+    binding.executionId,
+    binding.outcomeId,
+    binding.unitIdDigest,
+    requestIdsJson,
+    binding.realizationCommitHash,
+    binding.realizationSnapshotDigest,
+    binding.bindingDigest,
+    encoded,
+  );
+
+  const reloadedRows = db.prepare(
+    STORED_CAUSAL_LINEAGE_BINDING_V2_SELECT +
+    'FROM causal_lineage_bindings_v2 WHERE binding_id = ?',
+  ).all(binding.bindingId) as unknown as StoredCausalLineageBindingV2Row[];
+  if (reloadedRows.length !== 1) {
+    lineageFail('CAUSAL_INTEGRITY_FAILURE', 'created v2 lineage binding did not reload exactly once');
+  }
+  const reloaded = reloadedRows[0];
+  if (!reloaded) lineageFail('CAUSAL_INTEGRITY_FAILURE', 'created v2 lineage binding could not be reloaded');
+  const authenticated = authenticateStoredCausalLineageBindingV2(reloaded);
+  if (canonicalJson(authenticated) !== encoded) {
+    lineageFail('CAUSAL_INTEGRITY_FAILURE', 'created v2 lineage binding did not replay canonically');
+  }
+  return 'created';
+}
+
+/**
+ * Append one authenticated scalar binding. The current Store has no
+ * causal-aware producer that independently derives the realization-to-unit
+ * mapping, so a matching scalar is retained only as asserted, unqualified
+ * evidence. An unresolved ordinary-ledger verifier may accompany that
+ * assertion; neither condition can qualify a study.
+ */
+export function appendCausalLineageBindingV2(
+  db: DatabaseSync,
+  value: unknown,
+): 'created' | 'existing' {
+  const binding = immutableBinding(value);
+  if (!binding) lineageFail('CAUSAL_RECORD_INVALID', 'causal lineage binding shape is invalid');
+  assertBindingDigest(binding);
   let committed = false;
   try {
     db.prepare('BEGIN IMMEDIATE').run();
-    if (!causalV2SchemaComplete(db)) {
-      lineageFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 lineage schema is not exact');
-    }
-    const validation = validateCausalLineageBindingV2(db, binding);
-    if (validation.state === 'invalid') {
-      if (validation.reasonCodes.includes('causal_schema_unavailable')) {
-        lineageFail('CAUSAL_INTEGRITY_FAILURE', 'causal lineage records could not be authenticated');
-      }
-      if (!onlyPermittedAssertionBlock(validation)) {
-        lineageFail('CAUSAL_RECORD_INVALID', 'causal lineage binding failed validation');
-      }
-    }
-
-    const byIdRows = db.prepare(
-      STORED_CAUSAL_LINEAGE_BINDING_V2_SELECT +
-      'FROM causal_lineage_bindings_v2 WHERE binding_id = ?',
-    ).all(binding.bindingId) as unknown as StoredCausalLineageBindingV2Row[];
-    if (byIdRows.length > 1) {
-      lineageFail('CAUSAL_INTEGRITY_FAILURE', 'stored v2 lineage binding identity is duplicated');
-    }
-    const byId = byIdRows[0];
-    if (byId) {
-      const existing = authenticateStoredCausalLineageBindingV2(byId);
-      if (canonicalJson(existing) === encoded) {
-        db.prepare('COMMIT').run();
-        committed = true;
-        return 'existing';
-      }
-      lineageFail('CAUSAL_IMMUTABLE_CONFLICT', 'lineage binding conflicts with existing immutable content');
-    }
-
-    // All identity collisions are classified only after authenticating the
-    // colliding rows. A corrupt row is never silently treated as a duplicate.
-    const competing = db.prepare(
-      STORED_CAUSAL_LINEAGE_BINDING_V2_SELECT +
-      'FROM causal_lineage_bindings_v2 WHERE decision_id = ? OR execution_id = ? ' +
-      'OR outcome_id = ? OR binding_digest = ?',
-    ).all(binding.decisionId, binding.executionId, binding.outcomeId, binding.bindingDigest) as unknown as StoredCausalLineageBindingV2Row[];
-    for (const row of competing) authenticateStoredCausalLineageBindingV2(row);
-    if (competing.length > 0) {
-      lineageFail('CAUSAL_IMMUTABLE_CONFLICT', 'lineage binding conflicts with an existing immutable identity');
-    }
-
-    const retained = db.prepare(
-      STORED_CAUSAL_LINEAGE_BINDING_V2_SELECT +
-      'FROM causal_lineage_bindings_v2 ORDER BY binding_id',
-    ).all() as unknown as StoredCausalLineageBindingV2Row[];
-    const requestSet = new Set(binding.requestIds);
-    for (const row of retained) {
-      const existing = authenticateStoredCausalLineageBindingV2(row);
-      if (existing.requestIds.some((requestId) => requestSet.has(requestId))) {
-        lineageFail('CAUSAL_IMMUTABLE_CONFLICT', 'lineage binding reuses an existing request identity');
-      }
-    }
-
-    db.prepare(
-      'INSERT INTO causal_lineage_bindings_v2 ' +
-      '(binding_id, study_id, protocol_hash, decision_id, execution_id, outcome_id, ' +
-      'unit_id_digest, request_ids_json, realization_commit_hash, realization_snapshot_digest, ' +
-      'binding_digest, binding_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ).run(
-      binding.bindingId,
-      binding.studyId,
-      binding.protocolHash,
-      binding.decisionId,
-      binding.executionId,
-      binding.outcomeId,
-      binding.unitIdDigest,
-      requestIdsJson,
-      binding.realizationCommitHash,
-      binding.realizationSnapshotDigest,
-      binding.bindingDigest,
-      encoded,
-    );
-
-    const reloadedRows = db.prepare(
-      STORED_CAUSAL_LINEAGE_BINDING_V2_SELECT +
-      'FROM causal_lineage_bindings_v2 WHERE binding_id = ?',
-    ).all(binding.bindingId) as unknown as StoredCausalLineageBindingV2Row[];
-    if (reloadedRows.length !== 1) {
-      lineageFail('CAUSAL_INTEGRITY_FAILURE', 'created v2 lineage binding did not reload exactly once');
-    }
-    const reloaded = reloadedRows[0];
-    if (!reloaded) lineageFail('CAUSAL_INTEGRITY_FAILURE', 'created v2 lineage binding could not be reloaded');
-    const authenticated = authenticateStoredCausalLineageBindingV2(reloaded);
-    if (canonicalJson(authenticated) !== encoded) {
-      lineageFail('CAUSAL_INTEGRITY_FAILURE', 'created v2 lineage binding did not replay canonically');
-    }
+    const result = appendCausalLineageBindingV2Internal(db, binding);
     db.prepare('COMMIT').run();
     committed = true;
-    return 'created';
+    return result;
   } catch (error) {
     if (!committed) {
       try { db.prepare('ROLLBACK').run(); } catch { /* no active transaction */ }
     }
     throw normalizedLineageError(error);
   }
+}
+
+/**
+ * Transaction-scoped form for Store-owned producers. The caller must already
+ * have begun the transaction and is responsible for COMMIT/ROLLBACK.
+ */
+export function appendCausalLineageBindingV2WithinTransaction(
+  db: DatabaseSync,
+  value: unknown,
+): 'created' | 'existing' {
+  const binding = immutableBinding(value);
+  if (!binding) lineageFail('CAUSAL_RECORD_INVALID', 'causal lineage binding shape is invalid');
+  assertBindingDigest(binding);
+  return appendCausalLineageBindingV2Internal(db, binding);
 }
 
 export interface CausalLineageBindingLookupV2 {

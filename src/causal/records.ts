@@ -235,18 +235,31 @@ function decodeVerifier(value: unknown): OrdinaryLedgerVerifierResultV2 {
   if (!plainRecord(snapshot)
       || snapshot.type !== 'fiscus.causal-ordinary-ledger-verifier'
       || snapshot.version !== 2
-      || snapshot.state !== 'unresolved'
-      || snapshot.checkedAtMs !== null
-      || snapshot.requestCount !== 0
-      || snapshot.evidenceManifestHash !== null
       || !denseArray(snapshot.reasonCodes)
-      || snapshot.reasonCodes.length !== 1
-      || snapshot.reasonCodes[0] !== 'task4_not_implemented'
       || !digest(snapshot.resultHash)) {
     throw new CausalRecordValidationError();
   }
   const { resultHash, ...material } = snapshot as Omit<OrdinaryLedgerVerifierResultV2, 'resultHash'> & { resultHash: string };
   if (verifierHash(material) !== resultHash) throw new CausalRecordValidationError();
+  if (snapshot.state === 'unresolved') {
+    if (snapshot.checkedAtMs !== null
+        || snapshot.requestCount !== 0
+        || snapshot.evidenceManifestHash !== null
+        || snapshot.reasonCodes.length !== 1
+        || snapshot.reasonCodes[0] !== 'task4_not_implemented') {
+      throw new CausalRecordValidationError();
+    }
+  } else if (snapshot.state === 'verified') {
+    if (!epoch(snapshot.checkedAtMs)
+        || typeof snapshot.requestCount !== 'number'
+        || !Number.isSafeInteger(snapshot.requestCount) || snapshot.requestCount <= 0
+        || !digest(snapshot.evidenceManifestHash)
+        || snapshot.reasonCodes.length !== 0) {
+      throw new CausalRecordValidationError();
+    }
+  } else {
+    throw new CausalRecordValidationError();
+  }
   return {
     ...snapshot,
     reasonCodes: [...snapshot.reasonCodes],

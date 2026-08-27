@@ -39,6 +39,7 @@ import * as allocation from './allocation.ts';
 import * as billing from './billing.ts';
 import * as causal from './causal.ts';
 import * as causalLineage from './causalLineage.ts';
+import * as causalProducer from './causalProducer.ts';
 import * as realization from './realization.ts';
 import type {
   RealizationCostSync,
@@ -117,6 +118,12 @@ export type {
   CausalLineageBindingValidationV2,
   CausalLineageBindingV2,
 } from './causalLineage.ts';
+export type {
+  IndependentCausalProducerAssessmentV2,
+  IndependentCausalProducerEvidenceV2,
+  IndependentCausalProducerInputV2,
+  IndependentCausalProducerReasonCodeV2,
+} from './causalProducer.ts';
 
 export interface RequestRow {
   requestId: string;
@@ -1782,6 +1789,20 @@ export class Store {
   /** Store-internal T-069 scalar request-to-realization sidecar append. */
   appendCausalLineageBindingV2(record: unknown): 'created' | 'existing' {
     return causalLineage.appendCausalLineageBindingV2(this.db, record);
+  }
+
+  /** Prepare a Store-authenticated, independently-derived scalar unit binding. */
+  prepareIndependentCausalLineageBindingV2(
+    input: causalProducer.IndependentCausalProducerInputV2,
+  ): causalProducer.IndependentCausalProducerAssessmentV2 {
+    return causalProducer.prepareIndependentCausalLineageBindingV2(this.db, input);
+  }
+
+  /** Atomically retain the derived realization identity and append its binding. */
+  appendIndependentCausalLineageBindingV2(
+    input: causalProducer.IndependentCausalProducerInputV2,
+  ): causalProducer.IndependentCausalProducerAssessmentV2 {
+    return causalProducer.appendIndependentCausalLineageBindingV2(this.db, input);
   }
 
   /** Read only authenticated T-069 sidecar rows; prompts/source are absent. */

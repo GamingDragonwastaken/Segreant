@@ -411,7 +411,7 @@ export interface CausalAssignmentResultV2 {
  * retain only the closed result shape; the Store derives and authenticates the
  * result hash and does not accept a caller-selected verified result.
  */
-export interface OrdinaryLedgerVerifierResultV2 {
+export interface OrdinaryLedgerVerifierUnresolvedV2 {
   type: 'fiscus.causal-ordinary-ledger-verifier';
   version: 2;
   state: 'unresolved';
@@ -421,6 +421,30 @@ export interface OrdinaryLedgerVerifierResultV2 {
   reasonCodes: Array<'task4_not_implemented'>;
   resultHash: string;
 }
+
+/**
+ * A read-only verifier result produced from exact retained request ids.
+ *
+ * `verified` means that Fiscus checked the scalar request evidence against the
+ * execution window, provider/model, scope declaration, status, cost basis,
+ * fixed-point cost total, and retained price-lineage digests. It remains local
+ * evidence: provider invoice finality and account ownership are separate
+ * reconciliation claims and are never implied by this state.
+ */
+export interface OrdinaryLedgerVerifierVerifiedV2 {
+  type: 'fiscus.causal-ordinary-ledger-verifier';
+  version: 2;
+  state: 'verified';
+  checkedAtMs: number;
+  requestCount: number;
+  evidenceManifestHash: string;
+  reasonCodes: [];
+  resultHash: string;
+}
+
+export type OrdinaryLedgerVerifierResultV2 =
+  | OrdinaryLedgerVerifierUnresolvedV2
+  | OrdinaryLedgerVerifierVerifiedV2;
 
 /** Exact v2 execution record. It is deliberately distinct from the retained v1 shape. */
 export interface CausalExecutionRecordV2 {
