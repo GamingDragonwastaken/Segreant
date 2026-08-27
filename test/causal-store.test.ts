@@ -6,7 +6,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync } from 'node:fs';
+import { existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { constants as sqliteConstants, DatabaseSync } from 'node:sqlite';
@@ -1849,7 +1849,7 @@ test('atomic assignment persistence backs up the first file migration and a seco
     }).causalMigrationBackupEvidence?.();
     try {
       assert.ok(evidence, 'first file-backed v2 migration must report its verified SQLite backup');
-      assert.equal(evidence.path.startsWith(dbPath + '.pre-causal-v2-'), true);
+      assert.equal(evidence.path.startsWith(realpathSync.native(dbPath) + '.pre-causal-v2-'), true);
       assert.equal(existsSync(evidence.path), true);
       assert.equal(
         evidence.sha256,
@@ -3325,7 +3325,7 @@ test('exact Slice 3 assignment schema is a named migration predecessor and upgra
     }
     const migrated = new Store(dbPath);
     try {
-      assert.equal(migrated.causalMigrationBackupEvidence()?.path.startsWith(dbPath + '.pre-causal-v2-'), true);
+      assert.equal(migrated.causalMigrationBackupEvidence()?.path.startsWith(realpathSync.native(dbPath) + '.pre-causal-v2-'), true);
       assert.equal(causalV2SchemaComplete(migrated.raw()), true);
       assert.equal(tableCount(migrated, 'causal_executions_v2'), 0);
       assert.equal(tableCount(migrated, 'causal_terminal_outcomes_v2'), 0);
@@ -3380,7 +3380,7 @@ test('complete pre-clock Slice 4 evidence schema migrates by adding only exact c
     const migrated = new Store(dbPath);
     try {
       assert.equal(causalV2SchemaComplete(migrated.raw()), true);
-      assert.equal(migrated.causalMigrationBackupEvidence()?.path.startsWith(dbPath + '.pre-causal-v2-'), true);
+      assert.equal(migrated.causalMigrationBackupEvidence()?.path.startsWith(realpathSync.native(dbPath) + '.pre-causal-v2-'), true);
       const clockRows = migrated.raw().prepare(
         'SELECT clock_id, last_wall_ms FROM causal_clock_state',
       ).all() as Array<{ clock_id: string; last_wall_ms: number }>;
@@ -3422,7 +3422,7 @@ test('pre-T-069 complete evidence is a named lineage predecessor and adds an emp
 
     const migrated = new Store(dbPath);
     try {
-      assert.equal(migrated.causalMigrationBackupEvidence()?.path.startsWith(dbPath + '.pre-causal-v2-'), true);
+      assert.equal(migrated.causalMigrationBackupEvidence()?.path.startsWith(realpathSync.native(dbPath) + '.pre-causal-v2-'), true);
       assert.equal(causalV2SchemaComplete(migrated.raw()), true);
       assert.equal(
         (migrated.raw().prepare('SELECT COUNT(*) AS count FROM causal_lineage_bindings_v2').get() as { count: number }).count,
