@@ -553,6 +553,28 @@ CREATE TABLE IF NOT EXISTS causal_terminal_outcomes_v2 (
 CREATE INDEX IF NOT EXISTS idx_causal_terminal_outcomes_v2_study_observed
   ON causal_terminal_outcomes_v2(study_id, observed_at_ms, outcome_id);
 
+-- One scalar-only binding joins an authenticated execution to its retained
+-- request ids, terminal outcome, and immutable realization snapshot.  The
+-- canonical JSON is duplicated only so every physical identity anchor can be
+-- checked on reload, and contains no prompts, source text, or unit_json.
+CREATE TABLE IF NOT EXISTS causal_lineage_bindings_v2 (
+  binding_id                 TEXT PRIMARY KEY NOT NULL,
+  study_id                   TEXT NOT NULL,
+  protocol_hash              TEXT NOT NULL,
+  decision_id                TEXT NOT NULL UNIQUE,
+  execution_id               TEXT NOT NULL UNIQUE,
+  outcome_id                 TEXT NOT NULL UNIQUE,
+  unit_id_digest             TEXT NOT NULL,
+  request_ids_json           TEXT NOT NULL,
+  realization_commit_hash    TEXT NOT NULL,
+  realization_snapshot_digest TEXT NOT NULL,
+  binding_digest             TEXT NOT NULL UNIQUE,
+  binding_json               TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_causal_lineage_bindings_v2_study
+  ON causal_lineage_bindings_v2(study_id, decision_id);
+
 -- The Store-owned wall-time floor preserves local rollback continuity across
 -- handles and restarts. It is metadata, not causal evidence, so it remains
 -- mutable only through the protected terminal-append clock boundary.
@@ -670,6 +692,7 @@ function installCausalImmutability(db: DatabaseSync): void {
     'causal_assignment_manifests_v2',
     'causal_executions_v2',
     'causal_terminal_outcomes_v2',
+    'causal_lineage_bindings_v2',
   ];
   for (const table of tables) {
     const updateTrigger = 'causal_no_update_' + table;
@@ -919,6 +942,43 @@ const CAUSAL_V2_TABLE_CONTRACTS: Record<string, CausalV2TableContract> = {
       I('pk', 1, [{ cid: 0, name: 'outcome_id' }]),
     ],
   },
+  causal_lineage_bindings_v2: {
+    sql: `CREATE TABLE causal_lineage_bindings_v2 (
+  binding_id                  TEXT PRIMARY KEY NOT NULL,
+  study_id                    TEXT NOT NULL,
+  protocol_hash               TEXT NOT NULL,
+  decision_id                 TEXT NOT NULL UNIQUE,
+  execution_id               TEXT NOT NULL UNIQUE,
+  outcome_id                 TEXT NOT NULL UNIQUE,
+  unit_id_digest              TEXT NOT NULL,
+  request_ids_json            TEXT NOT NULL,
+  realization_commit_hash     TEXT NOT NULL,
+  realization_snapshot_digest TEXT NOT NULL,
+  binding_digest              TEXT NOT NULL UNIQUE,
+  binding_json                TEXT NOT NULL
+)`,
+    columns: [
+      C('binding_id', 'TEXT', 1), C('study_id', 'TEXT'), C('protocol_hash', 'TEXT'),
+      C('decision_id', 'TEXT'), C('execution_id', 'TEXT'), C('outcome_id', 'TEXT'),
+      C('unit_id_digest', 'TEXT'), C('request_ids_json', 'TEXT'),
+      C('realization_commit_hash', 'TEXT'), C('realization_snapshot_digest', 'TEXT'),
+      C('binding_digest', 'TEXT'), C('binding_json', 'TEXT'),
+    ],
+    indexes: [
+      I('c', 0, [
+        { cid: 1, name: 'study_id' }, { cid: 3, name: 'decision_id' },
+      ], {
+        name: 'idx_causal_lineage_bindings_v2_study',
+        sql: `CREATE INDEX idx_causal_lineage_bindings_v2_study
+  ON causal_lineage_bindings_v2(study_id, decision_id)`,
+      }),
+      I('u', 1, [{ cid: 10, name: 'binding_digest' }]),
+      I('u', 1, [{ cid: 5, name: 'outcome_id' }]),
+      I('u', 1, [{ cid: 4, name: 'execution_id' }]),
+      I('u', 1, [{ cid: 3, name: 'decision_id' }]),
+      I('pk', 1, [{ cid: 0, name: 'binding_id' }]),
+    ],
+  },
   causal_clock_state: {
     sql: `CREATE TABLE causal_clock_state (
   clock_id      TEXT PRIMARY KEY CHECK (clock_id = 'causal-v2'),
@@ -936,7 +996,14 @@ const CAUSAL_V2_TABLE_CONTRACTS: Record<string, CausalV2TableContract> = {
 const CAUSAL_V2_TABLES = Object.keys(CAUSAL_V2_TABLE_CONTRACTS);
 const CAUSAL_V2_EVIDENCE_TABLES = CAUSAL_V2_TABLES.filter((table) => table !== 'causal_clock_state');
 
-export type CausalV2SchemaState = 'absent' | 'exact-s3' | 'exact-pre-clock' | 'exact' | 'incomplete';
+export type CausalV2SchemaState =
+  | 'absent'
+  | 'exact-s3'
+  | 'exact-pre-clock'
+  | 'exact-pre-lineage'
+  | 'exact-pre-clock-pre-lineage'
+  | 'exact'
+  | 'incomplete';
 
 export interface CausalV2SchemaAttestation {
   state: CausalV2SchemaState;
@@ -1048,11 +1115,40 @@ const SLICE3_CAUSAL_V2_TABLES = [
 ] as const;
 
 /**
+ * The complete pre-T-069 generation is an additive migration predecessor.  It
+ * has the exact Slice 4 evidence and clock authority, but no lineage sidecar.
+ * Keep this list explicit: accepting a lookalike or partial sidecar generation
+ * would turn CREATE TABLE IF NOT EXISTS into an authority upgrade.
+ */
+const PRE_LINEAGE_CAUSAL_V2_EVIDENCE_TABLES = [
+  'causal_assignment_plans_v2',
+  'causal_decisions_v2',
+  'causal_assignment_units_v2',
+  'causal_assignment_manifests_v2',
+  'causal_executions_v2',
+  'causal_terminal_outcomes_v2',
+] as const;
+
+
+/**
  * The four-table assignment generation is the only trusted predecessor for
  * the additive Slice 4 migration.  A partial or lookalike generation must not
  * be upgraded merely because CREATE TABLE IF NOT EXISTS can fill its gaps.
  */
 function exactSlice3AssignmentSchema(db: DatabaseSync): boolean {
+  const lineagePresent = db.prepare(
+    "SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = 'causal_lineage_bindings_v2'",
+  ).get() as { present: number } | undefined;
+  // A current-generation database with its terminal tables intentionally
+  // removed (the historical Slice 3 migration test shape) may retain the
+  // newly-created but necessarily empty sidecar.  It is accepted only when
+  // that sidecar is itself exact and empty, never when lineage rows survive
+  // without their terminal predecessors.
+  if (lineagePresent
+      && (!tableContractMatches(db, 'causal_lineage_bindings_v2', CAUSAL_V2_TABLE_CONTRACTS.causal_lineage_bindings_v2!)
+        || Number((db.prepare('SELECT COUNT(*) AS count FROM causal_lineage_bindings_v2').get() as { count: number }).count) !== 0)) {
+    return false;
+  }
   for (const table of CAUSAL_V2_EVIDENCE_TABLES) {
     const exists = db.prepare(
       "SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = ?",
@@ -1060,6 +1156,8 @@ function exactSlice3AssignmentSchema(db: DatabaseSync): boolean {
     if (SLICE3_CAUSAL_V2_TABLES.includes(table as typeof SLICE3_CAUSAL_V2_TABLES[number])) {
       const contract = CAUSAL_V2_TABLE_CONTRACTS[table];
       if (!exists || !contract || !tableContractMatches(db, table, contract)) return false;
+    } else if (table === 'causal_lineage_bindings_v2' && lineagePresent) {
+      // Checked above, and kept explicit to make the accepted table set clear.
     } else if (exists) {
       return false;
     }
@@ -1074,14 +1172,17 @@ function exactSlice3AssignmentSchema(db: DatabaseSync): boolean {
   const v2Tables = db.prepare(
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'causal_%_v2' ORDER BY name",
   ).all() as Array<{ name: string }>;
-  if (JSON.stringify(v2Tables.map((row) => row.name)) !== JSON.stringify([...SLICE3_CAUSAL_V2_TABLES].sort())) {
+  const acceptedTables = lineagePresent
+    ? [...SLICE3_CAUSAL_V2_TABLES, 'causal_lineage_bindings_v2']
+    : [...SLICE3_CAUSAL_V2_TABLES];
+  if (JSON.stringify(v2Tables.map((row) => row.name)) !== JSON.stringify(acceptedTables.sort())) {
     return false;
   }
-  const expected = expectedImmutabilityTriggers(SLICE3_CAUSAL_V2_TABLES);
+  const expected = expectedImmutabilityTriggers(acceptedTables);
   const triggers = db.prepare(
     "SELECT name, tbl_name, sql FROM sqlite_master WHERE type = 'trigger' ORDER BY name",
   ).all() as Array<{ name: string; tbl_name: string; sql: string | null }>;
-  const relevant = triggers.filter((row) => expected.has(row.name) || SLICE3_CAUSAL_V2_TABLES.includes(row.tbl_name as typeof SLICE3_CAUSAL_V2_TABLES[number]));
+  const relevant = triggers.filter((row) => expected.has(row.name) || acceptedTables.includes(row.tbl_name));
   if (relevant.length !== expected.size) return false;
   return relevant.every((row) => {
     const authority = expected.get(row.name);
@@ -1131,6 +1232,94 @@ function exactPreClockCausalV2Schema(db: DatabaseSync): boolean {
   });
 }
 
+/**
+ * A complete pre-T-069 Slice 4 database may have the Store-owned clock but no
+ * lineage sidecar.  It is accepted only as the named predecessor for the
+ * additive sidecar migration; its rows and authority are never repaired in
+ * place by inference.
+ */
+function exactPreLineageCausalV2Schema(db: DatabaseSync): boolean {
+  const clockPresent = db.prepare(
+    "SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = 'causal_clock_state'",
+  ).get() as { present: number } | undefined;
+  if (!clockPresent || !tableContractMatches(db, 'causal_clock_state', CAUSAL_V2_TABLE_CONTRACTS.causal_clock_state!)) {
+    return false;
+  }
+  if (!causalClockStateRowExact(db)) return false;
+
+  for (const table of PRE_LINEAGE_CAUSAL_V2_EVIDENCE_TABLES) {
+    const exists = db.prepare(
+      "SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = ?",
+    ).get(table) as { present: number } | undefined;
+    const contract = CAUSAL_V2_TABLE_CONTRACTS[table];
+    if (!exists || !contract || !tableContractMatches(db, table, contract)) return false;
+  }
+  const lineagePresent = db.prepare(
+    "SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = 'causal_lineage_bindings_v2'",
+  ).get() as { present: number } | undefined;
+  if (lineagePresent) return false;
+
+  const v2Tables = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'causal_%_v2' ORDER BY name",
+  ).all() as Array<{ name: string }>;
+  if (JSON.stringify(v2Tables.map((row) => row.name))
+      !== JSON.stringify([...PRE_LINEAGE_CAUSAL_V2_EVIDENCE_TABLES].sort())) return false;
+
+  const expected = expectedImmutabilityTriggers(PRE_LINEAGE_CAUSAL_V2_EVIDENCE_TABLES);
+  const triggers = db.prepare(
+    "SELECT name, tbl_name, sql FROM sqlite_master WHERE type = 'trigger' ORDER BY name",
+  ).all() as Array<{ name: string; tbl_name: string; sql: string | null }>;
+  const relevant = triggers.filter((row) =>
+    expected.has(row.name) || PRE_LINEAGE_CAUSAL_V2_EVIDENCE_TABLES.includes(row.tbl_name as typeof PRE_LINEAGE_CAUSAL_V2_EVIDENCE_TABLES[number]),
+  );
+  if (relevant.length !== expected.size) return false;
+  return relevant.every((row) => {
+    const authority = expected.get(row.name);
+    return authority !== undefined && authority.table === row.tbl_name
+      && normalizeAuthoritySql(row.sql) === authority.sql;
+  });
+}
+
+/** The pre-T-069 generation without the clock is also a valid predecessor. */
+function exactPreClockPreLineageCausalV2Schema(db: DatabaseSync): boolean {
+  const clockPresent = db.prepare(
+    "SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = 'causal_clock_state'",
+  ).get() as { present: number } | undefined;
+  if (clockPresent) return false;
+
+  for (const table of PRE_LINEAGE_CAUSAL_V2_EVIDENCE_TABLES) {
+    const exists = db.prepare(
+      "SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = ?",
+    ).get(table) as { present: number } | undefined;
+    const contract = CAUSAL_V2_TABLE_CONTRACTS[table];
+    if (!exists || !contract || !tableContractMatches(db, table, contract)) return false;
+  }
+  const lineagePresent = db.prepare(
+    "SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = 'causal_lineage_bindings_v2'",
+  ).get() as { present: number } | undefined;
+  if (lineagePresent) return false;
+
+  const v2Tables = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'causal_%_v2' ORDER BY name",
+  ).all() as Array<{ name: string }>;
+  if (JSON.stringify(v2Tables.map((row) => row.name))
+      !== JSON.stringify([...PRE_LINEAGE_CAUSAL_V2_EVIDENCE_TABLES].sort())) return false;
+
+  const expected = expectedImmutabilityTriggers(PRE_LINEAGE_CAUSAL_V2_EVIDENCE_TABLES);
+  const triggers = db.prepare(
+    "SELECT name, tbl_name, sql FROM sqlite_master WHERE type = 'trigger' ORDER BY name",
+  ).all() as Array<{ name: string; tbl_name: string; sql: string | null }>;
+  const relevant = triggers.filter((row) =>
+    expected.has(row.name) || PRE_LINEAGE_CAUSAL_V2_EVIDENCE_TABLES.includes(row.tbl_name as typeof PRE_LINEAGE_CAUSAL_V2_EVIDENCE_TABLES[number]),
+  );
+  if (relevant.length !== expected.size) return false;
+  return relevant.every((row) => {
+    const authority = expected.get(row.name);
+    return authority !== undefined && authority.table === row.tbl_name
+      && normalizeAuthoritySql(row.sql) === authority.sql;
+  });
+}
+
 function causalClockStateRowExact(db: DatabaseSync): boolean {
   try {
     const rows = db.prepare(
@@ -1152,7 +1341,8 @@ function causalClockStateRowExact(db: DatabaseSync): boolean {
 function initializeCausalClockState(db: DatabaseSync, predecessorState: CausalV2SchemaState): void {
   if (predecessorState !== 'absent'
       && predecessorState !== 'exact-s3'
-      && predecessorState !== 'exact-pre-clock') return;
+      && predecessorState !== 'exact-pre-clock'
+      && predecessorState !== 'exact-pre-clock-pre-lineage') return;
   const rows = db.prepare(
     'SELECT clock_id FROM causal_clock_state ORDER BY rowid',
   ).all() as Array<{ clock_id: unknown }>;
@@ -1306,6 +1496,12 @@ export function causalV2SchemaAttestation(db: DatabaseSync): CausalV2SchemaAttes
   if (extraTables) defectIds.add('CAUSAL_V2_EXTRA_TABLE');
   if (exactPreClockCausalV2Schema(db)) {
     return { state: 'exact-pre-clock', defectIds: [] };
+  }
+  if (exactPreLineageCausalV2Schema(db)) {
+    return { state: 'exact-pre-lineage', defectIds: [] };
+  }
+  if (exactPreClockPreLineageCausalV2Schema(db)) {
+    return { state: 'exact-pre-clock-pre-lineage', defectIds: [] };
   }
   if (exactSlice3AssignmentSchema(db)) {
     return { state: 'exact-s3', defectIds: [] };

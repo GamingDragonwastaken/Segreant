@@ -6,6 +6,8 @@ node_modules/
 *.db-shm
 .fiscus/
 .fiscus-home/
+.fiscus-build.lock/
+.fiscus-build-*/
 dist/
 .DS_Store
 .env

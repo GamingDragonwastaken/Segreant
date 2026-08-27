@@ -37,6 +37,7 @@ import type { AllocationRunResult } from '../alloc/apply.ts';
 import * as allocation from './allocation.ts';
 import * as billing from './billing.ts';
 import * as causal from './causal.ts';
+import * as causalLineage from './causalLineage.ts';
 import * as realization from './realization.ts';
 import type {
   RealizationCostSync,
@@ -105,6 +106,11 @@ export type {
   CommittedCausalStudyProtocol,
 } from '../causal/types.ts';
 export type { CausalAnalysisSnapshot, CausalStudySummary } from './causal.ts';
+export type {
+  CausalLineageBindingLookupV2,
+  CausalLineageBindingValidationV2,
+  CausalLineageBindingV2,
+} from './causalLineage.ts';
 
 export interface RequestRow {
   requestId: string;
@@ -1739,6 +1745,19 @@ export class Store {
   /** Store-internal v2 terminal outcome append; pending is represented by absence. */
   appendCausalTerminalOutcomeV2(record: unknown): 'created' | 'existing' {
     return causal.appendCausalTerminalOutcomeV2(this.db, record);
+  }
+
+  /** Store-internal T-069 scalar request-to-realization sidecar append. */
+  appendCausalLineageBindingV2(record: unknown): 'created' | 'existing' {
+    return causalLineage.appendCausalLineageBindingV2(this.db, record);
+  }
+
+  /** Read only authenticated T-069 sidecar rows; prompts/source are absent. */
+  causalLineageBindingsV2(
+    studyId: string,
+    lookup: causalLineage.CausalLineageBindingLookupV2 = {},
+  ): causalLineage.CausalLineageBindingV2[] {
+    return causalLineage.causalLineageBindingsV2(this.db, studyId, lookup);
   }
 
   /** Append outcome lineage after a stored execution. */

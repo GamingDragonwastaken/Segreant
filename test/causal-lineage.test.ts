@@ -10,6 +10,8 @@ import assert from 'node:assert/strict';
 import { causalExecutionV2EventHash, causalTerminalOutcomeV2EventHash, decodeCausalExecutionV2, ordinaryLedgerVerifierHash } from '../src/causal/records.ts';
 import { commitCausalProtocol } from '../src/causal/protocol.ts';
 import {
+  appendCausalLineageBindingV2,
+  causalRequestPricingDigestV2,
   validateCausalLineageBindingV2,
   causalLineageBindingDigestV2,
   causalRealizationSnapshotDigestV2,
@@ -171,7 +173,22 @@ function appendFixture(store: Store, studyId: string): {
     requestIds: ['request:lineage'],
     directAiCostUsd: 1,
     directCostSourceClass: 'actual_observed',
-    priceLineageDigests: [D('9')],
+    priceLineageDigests: [causalRequestPricingDigestV2({
+      requestId: 'request:lineage',
+      tsEpochMs: decision.assignedAtMs + 2,
+      provider: assignedArm.providerId!,
+      model: assignedArm.modelId!,
+      project: 'project:lineage',
+      costMicros: 1_000_000,
+      costBasis: 'tool_reported_unverified',
+      rateCardSha256: null,
+      rateCardSourceKind: 'none',
+      rateMatchKind: 'reported',
+      rateMatchProvider: null,
+      rateMatchModel: null,
+      scopeCaptureStatus: 'declared_unverified',
+      providerScopeDeclarationId: declaration.declarationId,
+    })],
     fullArmCostUsd: null,
     fullCostSourceClass: 'incomplete_or_unknown',
     ordinaryLedgerVerifier: {
@@ -347,6 +364,103 @@ test('T-069 RED/GREEN contract: unresolved ordinary ledger evidence cannot valid
     assert.equal(result.bindingDigest, fixture.binding.bindingDigest);
     assert.equal(result.requestCount, 1);
     assert.equal(result.actualCostUsd, null);
+  } finally {
+    store.close();
+  }
+});
+
+test('T-069 appends one scalar sidecar, authenticates idempotent reload, and preserves the unresolved ledger gate', () => {
+  const store = new Store(':memory:');
+  try {
+    const fixture = appendFixture(store, 'study:lineage-sidecar');
+    assert.equal(store.appendCausalLineageBindingV2(fixture.binding), 'created');
+    assert.equal(store.appendCausalLineageBindingV2(fixture.binding), 'existing');
+    assert.deepEqual(store.causalLineageBindingsV2(fixture.protocol.studyId), [fixture.binding]);
+
+    const row = store.raw().prepare(
+      `SELECT request_ids_json AS requestIdsJson, binding_json AS bindingJson
+         FROM causal_lineage_bindings_v2 WHERE binding_id = ?`,
+    ).get(fixture.binding.bindingId) as { requestIdsJson: string; bindingJson: string };
+    assert.equal(row.requestIdsJson, '["request:lineage"]');
+    assert.doesNotMatch(row.bindingJson, /prompt|source|unit_json/i);
+    const validation = validateCausalLineageBindingV2(store.raw(), fixture.binding);
+    assert.equal(validation.state, 'invalid');
+    assert.deepEqual(validation.reasonCodes, ['ledger_verification_unresolved']);
+  } finally {
+    store.close();
+  }
+});
+
+test('T-069 sidecar update and delete are refused by physical append-only triggers', () => {
+  const store = new Store(':memory:');
+  try {
+    const fixture = appendFixture(store, 'study:lineage-immutable');
+    assert.equal(appendCausalLineageBindingV2(store.raw(), fixture.binding), 'created');
+    assert.throws(
+      () => store.raw().prepare(
+        'UPDATE causal_lineage_bindings_v2 SET binding_json = binding_json WHERE binding_id = ?',
+      ).run(fixture.binding.bindingId),
+      /causal evidence is append-only/i,
+    );
+    assert.throws(
+      () => store.raw().prepare(
+        'DELETE FROM causal_lineage_bindings_v2 WHERE binding_id = ?',
+      ).run(fixture.binding.bindingId),
+      /causal evidence is append-only/i,
+    );
+    assert.equal(
+      (store.raw().prepare('SELECT COUNT(*) AS count FROM causal_lineage_bindings_v2').get() as { count: number }).count,
+      1,
+    );
+  } finally {
+    store.close();
+  }
+});
+
+test('T-069 sidecar reload fails closed when canonical JSON is tampered behind a restored trigger', () => {
+  const store = new Store(':memory:');
+  try {
+    const fixture = appendFixture(store, 'study:lineage-tamper');
+    assert.equal(appendCausalLineageBindingV2(store.raw(), fixture.binding), 'created');
+    const row = store.raw().prepare(
+      'SELECT binding_json AS bindingJson FROM causal_lineage_bindings_v2 WHERE binding_id = ?',
+    ).get(fixture.binding.bindingId) as { bindingJson: string };
+    const altered = row.bindingJson.replace('lineage:lineage', 'lineage:tampered');
+    assert.notEqual(altered, row.bindingJson);
+    store.raw().prepare('DROP TRIGGER causal_no_update_causal_lineage_bindings_v2').run();
+    store.raw().prepare(
+      'UPDATE causal_lineage_bindings_v2 SET binding_json = ? WHERE binding_id = ?',
+    ).run(altered, fixture.binding.bindingId);
+    store.raw().prepare(
+      `CREATE TRIGGER causal_no_update_causal_lineage_bindings_v2
+         BEFORE UPDATE ON causal_lineage_bindings_v2
+         BEGIN SELECT RAISE(ABORT, 'causal evidence is append-only'); END`,
+    ).run();
+    assert.throws(
+      () => store.causalLineageBindingsV2(fixture.protocol.studyId),
+      (error: unknown) => error instanceof Error
+        && 'code' in error
+        && (error as { code?: unknown }).code === 'CAUSAL_INTEGRITY_FAILURE',
+    );
+  } finally {
+    store.close();
+  }
+});
+
+test('T-069 qualification rejects a semantically invalid persisted sidecar before pending evidence can hide it', () => {
+  const store = new Store(':memory:');
+  try {
+    const fixture = appendFixture(store, 'study:lineage-qualification-tamper');
+    assert.equal(store.appendCausalLineageBindingV2(fixture.binding), 'created');
+    store.raw().prepare(
+      `UPDATE requests SET via = 'import', estimated = 1, cost_basis = 'local_list_price',
+         rate_card_source_kind = 'bundled', rate_match_kind = 'exact_provider',
+         scope_capture_status = 'unscoped', provider_scope_declaration_id = NULL
+       WHERE request_id = ?`,
+    ).run('request:lineage');
+    const result = causalQualificationV2(store.raw(), fixture.protocol.studyId);
+    assert.equal(result.state, 'invalid');
+    assert.ok(result.reasons.includes('V2 request-to-realization lineage binding failed validation'));
   } finally {
     store.close();
   }

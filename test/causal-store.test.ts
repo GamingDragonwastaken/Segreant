@@ -3404,6 +3404,44 @@ test('complete pre-clock Slice 4 evidence schema migrates by adding only exact c
   }
 });
 
+test('pre-T-069 complete evidence is a named lineage predecessor and adds an empty scalar sidecar atomically', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-causal-pre-lineage-'));
+  const dbPath = join(dir, 'pre-lineage.sqlite');
+  try {
+    const seeded = new Store(dbPath);
+    seeded.close();
+
+    const predecessor = new DatabaseSync(dbPath);
+    try {
+      predecessor.prepare('DROP TABLE causal_lineage_bindings_v2').run();
+      assert.equal(causalV2SchemaAttestation(predecessor).state, 'exact-pre-lineage');
+      assert.equal(causalV2SchemaComplete(predecessor), false);
+    } finally {
+      predecessor.close();
+    }
+
+    const migrated = new Store(dbPath);
+    try {
+      assert.equal(migrated.causalMigrationBackupEvidence()?.path.startsWith(dbPath + '.pre-causal-v2-'), true);
+      assert.equal(causalV2SchemaComplete(migrated.raw()), true);
+      assert.equal(
+        (migrated.raw().prepare('SELECT COUNT(*) AS count FROM causal_lineage_bindings_v2').get() as { count: number }).count,
+        0,
+      );
+      const columns = migrated.raw().prepare('PRAGMA table_info(causal_lineage_bindings_v2)').all() as Array<{ name: string }>;
+      assert.deepEqual(columns.map((column) => column.name), [
+        'binding_id', 'study_id', 'protocol_hash', 'decision_id', 'execution_id', 'outcome_id',
+        'unit_id_digest', 'request_ids_json', 'realization_commit_hash',
+        'realization_snapshot_digest', 'binding_digest', 'binding_json',
+      ]);
+    } finally {
+      migrated.close();
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('partial Slice 4 terminal schema is not adopted or repaired in place', () => {
   const dir = mkdtempSync(join(tmpdir(), 'fiscus-causal-s4-partial-'));
   const dbPath = join(dir, 'partial.sqlite');

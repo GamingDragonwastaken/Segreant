@@ -41,7 +41,14 @@ import type {
   CommittedCausalStudyProtocolV2,
   AnyCommittedCausalStudyProtocol,
 } from '../causal/types.ts';
-import { CAUSAL_LINEAGE_BINDING_NOT_PERSISTED } from './causalLineage.ts';
+import {
+  CAUSAL_LINEAGE_BINDING_NOT_PERSISTED,
+  CAUSAL_LINEAGE_BINDING_INVALID,
+  causalLineageBindingsV2,
+  validateCausalLineageBindingV2,
+  type CausalLineageBindingValidationV2,
+  type CausalLineageBindingV2,
+} from './causalLineage.ts';
 import { causalV2SchemaComplete } from './schema.ts';
 
 export interface CausalAnalysisSnapshot {
@@ -1066,7 +1073,12 @@ function finiteStoredValue(value: number | null, bounds: { low: number; high: nu
   return value !== null && Number.isFinite(value) && value >= bounds.low && value <= bounds.high;
 }
 
-interface AuthenticatedCausalStudySnapshotV2 extends CausalStudyDataV2 {}
+interface AuthenticatedCausalStudySnapshotV2 extends CausalStudyDataV2 {
+  lineageBindings: Array<{
+    binding: CausalLineageBindingV2;
+    validation: CausalLineageBindingValidationV2;
+  }>;
+}
 
 const issuedV2QualificationSnapshots = new WeakSet<object>();
 
@@ -1077,7 +1089,7 @@ function freezeQualificationSnapshot<T>(value: T, seen = new WeakSet<object>()):
   return Object.freeze(value);
 }
 
-function issueQualificationSnapshot(data: CausalStudyDataV2): AuthenticatedCausalStudySnapshotV2 {
+function issueQualificationSnapshot(data: AuthenticatedCausalStudySnapshotV2): AuthenticatedCausalStudySnapshotV2 {
   const snapshot = JSON.parse(canonicalJson(data)) as AuthenticatedCausalStudySnapshotV2;
   freezeQualificationSnapshot(snapshot);
   issuedV2QualificationSnapshots.add(snapshot);
@@ -1125,7 +1137,7 @@ function evaluateQualificationV2(data: AuthenticatedCausalStudySnapshotV2): Caus
   if (!issuedV2QualificationSnapshots.has(data)) {
     qualificationFail('CAUSAL_INTEGRITY_FAILURE', 'authenticated v2 qualification snapshot is required');
   }
-  const { protocol, decisions, executions, terminalOutcomes } = data;
+  const { protocol, decisions, executions, terminalOutcomes, lineageBindings } = data;
   const countsByArm = blankQualificationCountsV2(protocol.arms.map((arm) => arm.armId));
   const reasons: string[] = [];
   const protocolErrors = verifyCommittedCausalProtocol(protocol);
@@ -1170,6 +1182,24 @@ function evaluateQualificationV2(data: AuthenticatedCausalStudySnapshotV2): Caus
   const invalidExecutionDecisions = new Set<string>();
   let unresolvedCostVerification = false;
   let missingLineageBinding = false;
+  let invalidLineageBinding = false;
+  const lineageByExecution = new Map<string, Array<{
+    binding: CausalLineageBindingV2;
+    validation: CausalLineageBindingValidationV2;
+  }>>();
+  const lineageBindingIds = new Set<string>();
+  for (const lineage of lineageBindings) {
+    if (lineageBindingIds.has(lineage.binding.bindingId)) invalidLineageBinding = true;
+    lineageBindingIds.add(lineage.binding.bindingId);
+    const related = lineageByExecution.get(lineage.binding.executionId) ?? [];
+    related.push(lineage);
+    lineageByExecution.set(lineage.binding.executionId, related);
+    const validationAccepted = lineage.validation.state === 'valid'
+      || (lineage.validation.state === 'invalid'
+        && lineage.validation.reasonCodes.length === 1
+        && lineage.validation.reasonCodes[0] === 'ledger_verification_unresolved');
+    if (!validationAccepted) invalidLineageBinding = true;
+  }
   if (duplicateQualificationIds(executions.map((execution) => execution.executionId))
       || duplicateQualificationIds(executions.map((execution) => execution.decisionId))) {
     reasons.push('duplicate V2 execution identity');
@@ -1215,15 +1245,12 @@ function evaluateQualificationV2(data: AuthenticatedCausalStudySnapshotV2): Caus
       continue;
     }
     if (execution.ordinaryLedgerVerifier.state === 'unresolved'
-        && execution.ordinaryLedgerVerifier.reasonCodes.includes('task4_not_implemented')
         && (execution.directAiCostUsd !== null || execution.fullArmCostUsd !== null)) {
       unresolvedCostVerification = true;
     }
     if (execution.directAiCostUsd !== null || execution.fullArmCostUsd !== null) {
-      // T-069's durable sidecar is intentionally not inferred from an
-      // execution/request coincidence. Until it is persisted and authenticated,
-      // every cost-bearing structural result remains non-qualified.
-      missingLineageBinding = true;
+      const related = lineageByExecution.get(execution.executionId) ?? [];
+      if (related.length !== 1) missingLineageBinding = true;
     }
     executionByDecision.set(execution.decisionId, execution);
   }
@@ -1306,6 +1333,29 @@ function evaluateQualificationV2(data: AuthenticatedCausalStudySnapshotV2): Caus
     else if (terminal.maturity === 'censored') count.censored += 1;
     else count.invalid += 1;
   }
+
+  // A sidecar row is useful only when its three immutable anchors point to the
+  // same retained decision/execution/outcome set.  Rows with a valid envelope
+  // but a cross-study or orphaned anchor are invalid evidence, not harmless
+  // extras.  The per-row semantic validation above also proves request and
+  // scalar-realization digests against the current local ledger.
+  for (const lineage of lineageBindings) {
+    const binding = lineage.binding;
+    const decision = decisionById.get(binding.decisionId);
+    const execution = decision ? executionByDecision.get(decision.decisionId) : undefined;
+    const outcome = decision ? terminalByDecision.get(decision.decisionId) : undefined;
+    if (!decision || !execution || !outcome
+        || binding.studyId !== protocol.studyId
+        || binding.protocolHash !== protocol.protocolHash
+        || binding.unitIdDigest !== decision.unitIdDigest
+        || binding.executionId !== execution.executionId
+        || binding.outcomeId !== outcome.outcomeId
+        || binding.decisionId !== execution.decisionId) {
+      invalidLineageBinding = true;
+    }
+  }
+
+  if (invalidLineageBinding) reasons.push(CAUSAL_LINEAGE_BINDING_INVALID);
 
   if (Object.values(countsByArm).some((count) => count.invalid > 0)) {
     reasons.push('V2 invalid terminal outcome present');
@@ -1495,11 +1545,25 @@ export function causalQualificationV2(
       terminalOutcomes.push(outcome);
     }
 
+    // The sidecar is an authenticated Store-internal join, not a public
+    // qualification input. Include rows whose identity points at this study's
+    // decisions/executions/outcomes even when their stored study_id disagrees;
+    // otherwise a cross-study transplant could masquerade as a missing row.
+    const lineageBindings = causalLineageBindingsV2(db, studyId, {
+      decisionIds,
+      executionIds: [...executionIds],
+      outcomeIds: [...outcomeIds],
+    }).map((binding) => ({
+      binding,
+      validation: validateCausalLineageBindingV2(db, binding),
+    }));
+
     const snapshot = issueQualificationSnapshot({
       protocol,
       decisions,
       executions,
       terminalOutcomes,
+      lineageBindings,
     });
     const result = evaluateQualificationV2(snapshot);
     db.prepare('COMMIT').run();
