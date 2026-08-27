@@ -22,19 +22,24 @@
  * failure than for most.
  */
 
-import { h, render, trapFocus } from '../core/dom.ts';
+import { h, render, captureFocus, restoreFocus, trapFocus, type FocusTarget } from '../core/dom.ts';
 import { signal, effect, onCleanup } from '../core/signal.ts';
 import { usd, isPrecise } from '../core/fmt.ts';
 import type { Layer } from '../core/claimTypes.ts';
 
 const active = signal<Layer | null>(null);
+let opener: FocusTarget | null = null;
 
 export function openClaimInspector(layer: Layer): void {
+  if (active.peek() === null) opener = captureFocus(document.activeElement as FocusTarget | null);
   active.set(layer);
 }
 
 export function closeClaimInspector(): void {
   active.set(null);
+  const previous = opener;
+  opener = null;
+  restoreFocus(previous);
 }
 
 function row(label: string, value: string): Node {

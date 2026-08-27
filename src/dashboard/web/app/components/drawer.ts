@@ -20,8 +20,8 @@
  * three rows uses the same gate as `prune` deleting three hundred thousand.
  */
 
-import { h, render, trapFocus } from '../core/dom.ts';
-import { signal, effect } from '../core/signal.ts';
+import { h, render, captureFocus, restoreFocus, trapFocus, type FocusTarget } from '../core/dom.ts';
+import { signal, effect, onCleanup } from '../core/signal.ts';
 import { isPrecise } from '../core/fmt.ts';
 import type { Capability, Consequence } from '../core/registry.ts';
 
@@ -59,13 +59,18 @@ const CONSEQUENCE_COPY: Record<Consequence, { badge: string; plain: string; tone
 };
 
 const open = signal<ActionSpec | null>(null);
+let opener: FocusTarget | null = null;
 
 export function openAction(spec: ActionSpec): void {
+  if (open.peek() === null) opener = captureFocus(document.activeElement as FocusTarget | null);
   open.set(spec);
 }
 
 export function closeAction(): void {
   open.set(null);
+  const previous = opener;
+  opener = null;
+  restoreFocus(previous);
 }
 
 export function mountDrawer(root: HTMLElement): void {
@@ -251,11 +256,9 @@ function panel(spec: ActionSpec): Node {
   queueMicrotask(() => (body as HTMLElement).focus());
   (body as HTMLElement).tabIndex = -1;
 
-  effect(() => {
-    if (open() === null) {
-      release();
-      document.removeEventListener('keydown', onKey);
-    }
+  onCleanup(() => {
+    release();
+    document.removeEventListener('keydown', onKey);
   });
 
   return h('div', { class: 'drawer-wrap' }, scrim, body);

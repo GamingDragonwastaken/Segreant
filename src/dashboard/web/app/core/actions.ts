@@ -131,9 +131,9 @@ const BUILDERS: Record<string, Builder> = {
 
   /**
    * Set the daily cap. The only field-bearing action in the GUI, and the one
-   * place a number typed by an operator becomes enforcement configuration -- so
-   * the preview states the enforcement gap (the running proxy keeps the old
-   * value until restart) as a row of the preview, not as a footnote under it.
+   * place a number typed by an operator becomes enforcement configuration. The
+   * running proxy reads this config from the live settings object, so the
+   * preview states that the saved value is enforced immediately.
    */
   budget: (cap) => {
     const entered = signal<string>('');
@@ -183,8 +183,8 @@ const BUILDERS: Record<string, Builder> = {
             },
             {
               label: 'Takes effect',
-              value: 'on proxy restart',
-              note: 'the running proxy keeps enforcing the previous value until it is restarted',
+              value: 'immediately',
+              note: 'the running proxy uses the saved cap for future requests',
             },
           ],
           notes: [
@@ -207,7 +207,7 @@ const BUILDERS: Record<string, Builder> = {
         const saved = next.budget?.dailyUsd ?? null;
         return {
           ok: true,
-          message: `Saved. The daily cap is now ${saved === null ? 'unlimited' : usd(saved)}. Restart Fiscus for the proxy to begin enforcing it.`,
+          message: `Saved. The daily cap is now ${saved === null ? 'unlimited' : usd(saved)}. The running proxy will enforce it for future requests immediately.`,
         };
       },
     };

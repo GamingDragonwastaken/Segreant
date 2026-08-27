@@ -11,8 +11,8 @@
  * they are how you feed and configure the instrument, not what it measures.
  */
 
-import { h, render } from './core/dom.ts';
-import { signal, effect, computed } from './core/signal.ts';
+import { h, render, captureFocus, restoreFocus, trapFocus, type FocusTarget } from './core/dom.ts';
+import { signal, effect, computed, onCleanup } from './core/signal.ts';
 import { register, setRegister, type Register } from './core/fmt.ts';
 import { loadChain } from './core/chain.ts';
 import { spine, type LayerId } from './components/spine.ts';
@@ -83,7 +83,8 @@ function brandMark(): Node {
 }
 
 function firstRun(): Node {
-  return h('div', { class: 'firstrun', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'fr-title' },
+  const previousFocus = captureFocus(document.activeElement as FocusTarget | null);
+  const body = h('div', { class: 'firstrun', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'fr-title', tabindex: '-1' },
     h('div', { class: 'firstrun-card' },
       h('div', { class: 'firstrun-mark' }, brandMark()),
       h('h1', { id: 'fr-title', text: 'How should Fiscus talk to you?' }),
@@ -98,6 +99,24 @@ function firstRun(): Node {
           h('span', { text: 'Exact microdollar figures, provenance labels shown, equivalent commands surfaced.' }),
           h('code', { class: 'choice-eg', text: '$59.163468 · local_list_price' }))),
       h('p', { class: 'fine', text: 'Runs entirely on this machine. This page loads nothing from the internet — no fonts, no analytics, no third parties.' })));
+
+  const release = trapFocus(body);
+  const onKey = (event: KeyboardEvent): void => {
+    if (event.key === 'Escape') {
+      // The choice is required, so Escape cannot dismiss the first-run gate.
+      // Keep the interaction inside the modal and return to its first choice.
+      event.preventDefault();
+      body.querySelector<HTMLElement>('.choice')?.focus();
+    }
+  };
+  body.addEventListener('keydown', onKey);
+  onCleanup(() => {
+    release();
+    body.removeEventListener('keydown', onKey);
+    restoreFocus(previousFocus);
+  });
+  queueMicrotask(() => body.querySelector<HTMLElement>('.choice')?.focus());
+  return body;
 }
 
 function topbar(): Node {

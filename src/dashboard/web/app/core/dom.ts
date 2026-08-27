@@ -12,6 +12,10 @@
  */
 
 import { effect, onCleanup } from './signal.ts';
+import { captureFocus, restoreFocus, type FocusTarget } from './focus.ts';
+
+export { captureFocus, restoreFocus } from './focus.ts';
+export type { FocusTarget } from './focus.ts';
 
 export type Child = Node | string | number | null | undefined | false | (() => Child) | Child[];
 

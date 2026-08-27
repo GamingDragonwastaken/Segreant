@@ -47,6 +47,10 @@ web/
 - **Nothing happens without a preview.** Every action opens the drawer, which
   states the consequence in words, shows the computed preview, prints the
   equivalent command, and only then offers the commit.
+- **Classic is an explicitly legacy compatibility view.** `/classic` preserves
+  the earlier single-file dashboard and its direct settings controls; it does
+  not provide the modern preview-first action flow and must not be presented as
+  GUI parity. The modern `/` surface is the preview/consequence/apply contract.
 - **Consequence tiers gate the commit**: `read` has none, `local` needs a loaded
   preview, `credential` and `egress` name what is read or sent, `destructive`
   requires typing the capability id.

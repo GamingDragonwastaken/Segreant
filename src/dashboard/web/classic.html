@@ -135,6 +135,9 @@
     transition: all .18s ease; white-space: nowrap;
   }
   .backlink:hover { color: var(--gold); border-color: rgba(232,179,60,0.3); }
+  .legacy-note { grid-column: 1 / -1; margin: calc(var(--s5) * -1) 0 var(--s6); padding: var(--s3) var(--s4); border: 1px solid rgba(232,179,60,0.24); border-radius: 10px; color: var(--muted); background: var(--gold-soft); font-family: var(--mono); font-size: 11.5px; line-height: 1.55; }
+  .legacy-note strong { color: var(--gold); }
+  .legacy-note a { color: var(--text); }
   .viewnav { display: flex; gap: var(--s2); }
   .viewnav button { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.05em; background: transparent; border: 1px solid var(--line); color: var(--muted); border-radius: 9px; padding: 7px 14px; cursor: pointer; transition: all .18s ease; }
   .viewnav button:hover { color: var(--text); }
@@ -152,6 +155,8 @@
   #settings-grid .body .empty { color: var(--faint); font-style: italic; }
   #settings-grid .conn-row { border-bottom: 1px solid var(--line-soft); padding-bottom: var(--s2); }
   #settings-grid .conn-row .chip { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--sky); background: rgba(126,166,224,0.12); border-radius: 6px; padding: 2px 6px; margin-right: var(--s2); }
+  .settings-error { margin: 0 0 var(--s5); padding: var(--s3) var(--s4); border: 1px solid rgba(226,93,74,0.45); border-radius: 10px; color: #ffb0a4; background: rgba(226,93,74,0.1); font-family: var(--mono); font-size: 12px; line-height: 1.5; }
+  .settings-error button { margin-top: var(--s2); font: inherit; color: var(--gold); background: transparent; border: 1px solid rgba(232,179,60,0.35); border-radius: 7px; padding: 5px 10px; cursor: pointer; }
   @media (max-width: 860px) { #settings-grid { grid-template-columns: 1fr; } }
 
   .grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: var(--s5); }
@@ -468,6 +473,8 @@
     </div>
   </header>
 
+  <div class="legacy-note" role="note"><strong>Legacy compatibility view.</strong> This page keeps the earlier dashboard and does not provide the modern preview-first action flow. Use the <a href="/">modern dashboard</a> for preview, consequence, and apply controls.</div>
+
   <div id="view-overview" class="view">
     <div id="demobanner"></div>
     <div id="alerts"></div>
@@ -510,6 +517,7 @@
     <div class="vhead">
       <div><h2>Settings</h2><div class="tag">how your Fiscus setup is configured — no CLI required</div></div>
     </div>
+    <div id="settings-error" class="settings-error" role="alert" hidden></div>
     <div class="grid" id="settings-grid">
       <div class="card" id="s-status"><h3>Setup status</h3><div class="body">Loading…</div></div>
       <div class="card" id="s-appearance">
@@ -1872,6 +1880,7 @@ async function loadImporters() {
 // privacy. Loaded lazily (see the #viewnav handler above) so the CLI-free
 // configuration surface never costs anything on the default Overview view. ----
 function renderSettings(s) {
+  clearSettingsError();
   setNodes($('#s-status').querySelector('.body'), `
     <div>Version: <b>${esc(s.version)}</b></div>
     <div>Home: <code>${esc(s.home)}</code></div>
@@ -1921,11 +1930,37 @@ function renderSettings(s) {
   wireSettingsHandlers();
 }
 
+function clearSettingsError() {
+  const error = $('#settings-error');
+  if (!error) return;
+  error.hidden = true;
+  setNodes(error, '');
+}
+
+function showSettingsError(error) {
+  const host = $('#settings-error');
+  if (!host) return;
+  const message = error instanceof Error ? error.message : String(error || 'Unknown settings error');
+  host.hidden = false;
+  setNodes(host, `<div>Settings could not be loaded or saved: ${esc(message)}</div><button type="button" id="settingsRetry">Try again</button>`);
+  $('#settingsRetry').addEventListener('click', () => {
+    clearSettingsError();
+    loadSettings();
+  });
+}
+
+async function settingsJson(res) {
+  let data = null;
+  try { data = await res.json(); } catch (_) { /* use the status below */ }
+  if (!res.ok) throw new Error(data && data.error ? data.error : `Settings request failed (${res.status})`);
+  return data;
+}
+
 async function loadSettings() {
   try {
     const res = await fetch('/api/settings');
-    renderSettings(await res.json());
-  } catch (e) { console.warn('settings unavailable', e); }
+    renderSettings(await settingsJson(res));
+  } catch (e) { showSettingsError(e); }
 }
 
 function wireSettingsHandlers() {
@@ -1943,27 +1978,36 @@ function wireSettingsHandlers() {
         capIncludesImported: fd.get('capIncludesImported') === 'on',
       },
     };
-    const res = await fetch('/api/settings/update', {
-      method: 'POST', headers: { 'x-fiscus-local': '1', 'content-type': 'application/json' },
-      body: JSON.stringify(patch),
-    });
-    renderSettings(await res.json());
+    try {
+      const res = await fetch('/api/settings/update', {
+        method: 'POST', headers: { 'x-fiscus-local': '1', 'content-type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
+      renderSettings(await settingsJson(res));
+    } catch (error) { showSettingsError(error); }
   });
 
   $('#metadataOnlyToggle').addEventListener('change', async (e) => {
-    const res = await fetch('/api/settings/update', {
-      method: 'POST', headers: { 'x-fiscus-local': '1', 'content-type': 'application/json' },
-      body: JSON.stringify({ metadataOnly: e.target.checked }),
-    });
-    renderSettings(await res.json());
+    try {
+      const res = await fetch('/api/settings/update', {
+        method: 'POST', headers: { 'x-fiscus-local': '1', 'content-type': 'application/json' },
+        body: JSON.stringify({ metadataOnly: e.target.checked }),
+      });
+      renderSettings(await settingsJson(res));
+    } catch (error) { showSettingsError(error); }
   });
 
   $('#clearProposalsBtn').addEventListener('click', async () => {
     const resultEl = $('#clearProposalsResult');
     resultEl.textContent = 'clearing…';
-    const res = await fetch('/api/settings/clear-proposals', { method: 'POST', headers: { 'x-fiscus-local': '1' } });
-    const out = await res.json();
-    resultEl.textContent = `cleared ${out.removed} stored proposal row(s)`;
+    try {
+      const res = await fetch('/api/settings/clear-proposals', { method: 'POST', headers: { 'x-fiscus-local': '1' } });
+      const out = await settingsJson(res);
+      resultEl.textContent = `cleared ${out.removed} stored proposal row(s)`;
+    } catch (error) {
+      resultEl.textContent = 'could not clear stored proposals';
+      showSettingsError(error);
+    }
   });
 }
 
