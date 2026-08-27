@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const BUILD = join(ROOT, 'scripts', 'build.mjs');
 const CLI = join(ROOT, 'bin', 'fiscus.mjs');
+const PUBLICATION_LOCK = join(ROOT, 'bin', 'publication-lock.mjs');
 
 interface ProcessResult {
   code: number;
@@ -70,6 +71,7 @@ test('the supported CLI launcher waits for publication and leaves no lock residu
   mkdirSync(fixtureBin);
   mkdirSync(fixtureDist);
   copyFileSync(CLI, join(fixtureBin, 'fiscus.mjs'));
+  copyFileSync(PUBLICATION_LOCK, join(fixtureBin, 'publication-lock.mjs'));
   writeFileSync(join(fixtureDist, 'cli.js'), "process.stdout.write('fixture-cli-ready\\n');", 'utf8');
   mkdirSync(fixtureLock);
   writeFileSync(join(fixtureLock, 'owner.json'), JSON.stringify({ pid: process.pid, token: 'held-for-test' }), 'utf8');
@@ -88,4 +90,22 @@ test('the supported CLI launcher waits for publication and leaves no lock residu
   }
 
   assert.equal(existsSync(fixtureLock), false, 'the held test lock must not leave residue');
+});
+
+test('source generation fingerprints distinguish changed build inputs', async () => {
+  const fixture = mkdtempSync(join(ROOT, '.fiscus-build-generation-'));
+  try {
+    const source = join(fixture, 'src');
+    mkdirSync(source);
+    writeFileSync(join(source, 'generation.ts'), 'export const generation = "A";\n', 'utf8');
+    const { sourceFingerprint } = await import('../scripts/build-integrity.mjs') as {
+      sourceFingerprint: (root: string, inputPaths: string[]) => string;
+    };
+    const first = sourceFingerprint(fixture, ['src']);
+    writeFileSync(join(source, 'generation.ts'), 'export const generation = "B";\n', 'utf8');
+    const second = sourceFingerprint(fixture, ['src']);
+    assert.notEqual(second, first, 'a changed source generation must not reuse the previous fingerprint');
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
 });

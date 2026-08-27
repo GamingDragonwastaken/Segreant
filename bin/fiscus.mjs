@@ -7,27 +7,9 @@
 // re-exec ourselves once with --disable-warning to keep output clean. This is
 // the only knob that reliably suppresses it for `npx fiscus`.
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { acquirePublicationLock } from './publication-lock.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
-
-const PUBLICATION_WAIT_MS = 120_000;
-const PUBLICATION_POLL_MS = 25;
-const waitCell = new Int32Array(new SharedArrayBuffer(4));
-
-function waitForPublication() {
-  const lock = join(dirname(fileURLToPath(import.meta.url)), '..', '.fiscus-build.lock');
-  const started = Date.now();
-  while (existsSync(lock)) {
-    if (Date.now() - started >= PUBLICATION_WAIT_MS) {
-      throw new Error(`timed out waiting for Fiscus build publication (${PUBLICATION_WAIT_MS}ms)`);
-    }
-    // This is intentionally synchronous: the launcher must not begin module
-    // resolution until the publisher has released its short-lived lock. A
-    // bounded wait also turns an abandoned lock into an actionable failure.
-    Atomics.wait(waitCell, 0, 0, PUBLICATION_POLL_MS);
-  }
-}
 
 // Fail fast with a human message on too-old Node before Node's SQLite runtime
 // dependency reports a less actionable error.
@@ -52,6 +34,30 @@ if (!process.env.__FISCUS_CHILD) {
   process.exit(result.status ?? 0);
 } else {
   const here = dirname(self);
-  waitForPublication();
-  await import(pathToFileURL(join(here, '..', 'dist', 'cli.js')).href);
+  let release;
+  try {
+    // The launcher participates in the same exclusive gate as publication.
+    // Acquiring (rather than merely checking) the lock closes the race where
+    // a build starts immediately after a reader's old existsSync check. The
+    // lock spans module-graph resolution, after which every imported module is
+    // resident and the reader can release it before a long-running command
+    // (such as `start`) continues.
+    release = acquirePublicationLock(join(here, '..'));
+  } catch (error) {
+    // An npm installation may be read-only (for example under Program Files),
+    // in which case the package cannot create the local build gate. Preserve
+    // the supported packaged CLI behavior; a read-only install has no local
+    // publisher that could mutate its dist tree. Other lock failures remain
+    // actionable and must not be hidden.
+    if (!['EACCES', 'EPERM', 'EROFS'].includes(error?.code)) throw error;
+  }
+
+  try {
+    // Direct imports of dist/* and tools such as npm pack do not participate
+    // in this gate; the atomic reader guarantee is intentionally limited to
+    // the supported bin launcher and the build protocol.
+    await import(pathToFileURL(join(here, '..', 'dist', 'cli.js')).href);
+  } finally {
+    release?.();
+  }
 }
