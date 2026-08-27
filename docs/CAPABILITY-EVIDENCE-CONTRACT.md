@@ -1,11 +1,11 @@
 # Capability and evidence contract
 
-**Baseline-source review:** 2026-08-22, starting revision cf4179f. This document
+**Candidate-source review:** 2026-08-27, source revision 3982848. This document
 describes the locally implemented product and the evidence available at that
-baseline. It is not a statement that a hosted service, customer deployment, or
+candidate. It is not a statement that a hosted service, customer deployment, or
 provider invoice validation exists. Any later candidate must re-review this
-contract against its exact source revision; the baseline marker is not inherited
-by a newer branch tip.
+contract against its exact source revision; this marker is not inherited by a
+newer branch tip.
 
 Fiscus is a local-first AI Financial Operations tool. Its present evidence and
 implementation are strongest for AI coding-agent work. Its broader direction is
@@ -73,13 +73,15 @@ Fiscus keeps four different claims separate:
   review-only within-task model trials. The product includes a local,
   append-only randomized-study protocol/assignment/analysis lane with
   Store-internal execution, terminal-outcome, follow-up-policy, clock-authority,
-  qualification, and T-069 scalar lineage-validation substrate. Those later
-  records are not public CLI/API/dashboard evidence: the append-only
-  request-to-realization lineage sidecar is not persisted, so cost-bearing V2
-  qualification remains fail-closed until that migration is implemented and
-  verified. Until a real protocol is registered, executed, and qualified, the
-  product has no causal result to present. Neither path routes providers or
-  changes budgets automatically.
+  qualification, and T-069 scalar lineage-validation substrate. T-069 now
+  persists a scalar-only request-to-realization sidecar behind an exact,
+  append-only schema; its reload path authenticates the canonical envelope and
+  duplicated identity columns. These later records are not public
+  CLI/API/dashboard evidence. Cost-bearing V2 qualification remains fail-closed
+  unless the sidecar is present and valid, ordinary ledger verification is
+  resolved, and every other causal gate passes. Until a real protocol is
+  registered, executed, and qualified, the product has no causal result to
+  present. Neither path routes providers or changes budgets automatically.
 - The browser dashboard has no third-party assets or analytics and is intended
   to expose a preview before consequential local changes. The CLI remains the
   reference surface while GUI parity is completed.

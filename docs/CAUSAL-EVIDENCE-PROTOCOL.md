@@ -209,13 +209,15 @@ cryptographic entropy inside one transaction, global per-study unit uniqueness,
 canonical retained rows, authoritative manifests, rollback without allocation
 disclosure, and a package boundary that excludes test-only deterministic seams.
 These Slice 3 changes were followed by reviewed Store-only execution,
-terminal-outcome, follow-up-policy, clock-authority, and qualification
-substrate increments. The internal records are authenticated and deliberately
-not exposed as a public v2 projection or release statement. The T-069 lineage
-resolver currently validates the proposed scalar request/realization binding
-without persisting a sidecar row; qualification therefore remains fail-closed
-for every cost-bearing V2 execution until the append-only binding migration is
-implemented and verified.
+terminal-outcome, follow-up-policy, clock-authority, qualification, and T-069
+scalar-lineage increments. The internal records are authenticated and
+deliberately not exposed as a public v2 projection or release statement. The
+T-069 slice now validates and persists a scalar-only
+`causal_lineage_bindings_v2` envelope behind an exact, append-only schema;
+reloads authenticate the canonical JSON and duplicated identity columns. A
+cost-bearing V2 result still remains fail-closed when the sidecar is absent or
+invalid, the ordinary ledger verifier is unresolved, or any request,
+realization, or outcome gate fails.
 
 Legacy v1 protocol and assignment records remain decodable and replayable for
 inspection. They are immutable evidence: production code cannot create a new v1
@@ -226,10 +228,11 @@ does not yet expose v2 protocol registration or assignment: both forms of v2
 registration refuse with `CAUSAL_V2_CLI_DEFERRED` before opening or mutating the
 Store, and current status/inspect/verify plus the API/dashboard expose retained
 v1 evidence only. Public v2 registration/assignment/execution projection,
-lifecycle ownership and data locking, append-only lineage sidecar persistence,
-analysis snapshots as a public result, full read-only API/dashboard projection,
+lifecycle ownership and data locking, qualification snapshots as a public
+result, full read-only API/dashboard projection,
 redacted export, packaging approval, and release remain deferred to later
-reviewed slices.
+reviewed slices. The internal sidecar implementation is not itself release
+evidence and makes no provider-invoice or causal customer claim.
 No supported current causal command mutates study evidence, changes a provider
 route, changes provider configuration, or changes a budget automatically.
 Fiscus still has **no qualified causal customer

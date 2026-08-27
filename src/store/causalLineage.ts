@@ -83,7 +83,7 @@ export type CausalLineageReasonCode =
   | 'realization_snapshot_digest_mismatch';
 
 /** Qualification must not report a cost-bearing V2 result as qualified until
- * the durable sidecar is available.  The schema-backed append slice is next. */
+ * the durable sidecar is available and authenticated. */
 export const CAUSAL_LINEAGE_BINDING_NOT_PERSISTED =
   'V2 request-to-realization lineage binding is not persisted';
 export const CAUSAL_LINEAGE_BINDING_INVALID =
@@ -140,7 +140,7 @@ function canonicalBindingMaterial(binding: BindingMaterial): string {
   return canonicalJson(binding);
 }
 
-/** Digest used by the future append-only sidecar and by resolver tests. */
+/** Digest used by the append-only sidecar and by resolver tests. */
 export function causalLineageBindingDigestV2(binding: BindingMaterial): string {
   return 'sha256:' + sha256('fiscus.causal.lineage-binding\n2\n' + canonicalBindingMaterial(binding));
 }
