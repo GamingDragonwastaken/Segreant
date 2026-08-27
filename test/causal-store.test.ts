@@ -976,6 +976,18 @@ test('v2 qualification remains source-internal and has no raw snapshot issuer su
   }
 });
 
+test('v2 qualification remains inconclusive when positive cost claims have unresolved ledger verification', () => {
+  const store = new Store(':memory:');
+  try {
+    const fixture = populateQualificationStudy(store, 'study:qualification-unresolved-ledger');
+    const result = causalQualificationV2(store.raw(), fixture.protocol.studyId);
+    assert.equal(result.state, 'inconclusive', result.reasons.join('; '));
+    assert.match(result.reasons.join('; '), /ordinary ledger.*unresolved|task4_not_implemented/i);
+  } finally {
+    store.close();
+  }
+});
+
 test('Store-authoritative v2 qualification reports zero assignments as collecting with zero counts', () => {
   const store = new Store(':memory:');
   try {
@@ -1616,7 +1628,8 @@ test('Store-internal v2 qualification reads the complete manifested study and re
     };
     assert.equal(result.studyId, protocol.studyId);
     assert.equal(result.protocolHash, protocol.protocolHash);
-    assert.equal(result.state, 'qualified', result.reasons.join('; '));
+    assert.equal(result.state, 'inconclusive', result.reasons.join('; '));
+    assert.match(result.reasons.join('; '), /ordinary ledger.*unresolved/i);
     assert.deepEqual(result.countsByArm, {
       'arm:candidate': { assigned: 2, pending: 0, completed: 2, censored: 0, invalid: 0 },
       'arm:control': { assigned: 2, pending: 0, completed: 2, censored: 0, invalid: 0 },

@@ -1167,6 +1167,7 @@ function evaluateQualificationV2(data: AuthenticatedCausalStudySnapshotV2): Caus
 
   const executionByDecision = new Map<string, CausalExecutionRecordV2>();
   const invalidExecutionDecisions = new Set<string>();
+  let unresolvedCostVerification = false;
   if (duplicateQualificationIds(executions.map((execution) => execution.executionId))
       || duplicateQualificationIds(executions.map((execution) => execution.decisionId))) {
     reasons.push('duplicate V2 execution identity');
@@ -1210,6 +1211,11 @@ function evaluateQualificationV2(data: AuthenticatedCausalStudySnapshotV2): Caus
       reasons.push('invalid V2 execution evidence');
       invalidExecutionDecisions.add(execution.decisionId);
       continue;
+    }
+    if (execution.ordinaryLedgerVerifier.state === 'unresolved'
+        && execution.ordinaryLedgerVerifier.reasonCodes.includes('task4_not_implemented')
+        && (execution.directAiCostUsd !== null || execution.fullArmCostUsd !== null)) {
+      unresolvedCostVerification = true;
     }
     executionByDecision.set(execution.decisionId, execution);
   }
@@ -1306,8 +1312,14 @@ function evaluateQualificationV2(data: AuthenticatedCausalStudySnapshotV2): Caus
     }
   }
   if (reasons.length > 0) return structuralQualificationV2(data, 'invalid', reasons, countsByArm);
+  if (unresolvedCostVerification) {
+    reasons.push('V2 ordinary ledger cost verification is unresolved');
+  }
   if (Object.values(countsByArm).some((count) => count.completed < protocol.analysis.minCompletedPerArm)) {
-    return structuralQualificationV2(data, 'inconclusive', ['V2 matured completion support is below the committed minimum'], countsByArm);
+    reasons.push('V2 matured completion support is below the committed minimum');
+  }
+  if (reasons.length > 0) {
+    return structuralQualificationV2(data, 'inconclusive', reasons, countsByArm);
   }
   return structuralQualificationV2(data, 'qualified', [], countsByArm);
 }
