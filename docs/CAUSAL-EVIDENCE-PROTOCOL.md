@@ -1,9 +1,12 @@
 # Causal Evidence Protocol
 
-**Candidate-source review:** 2026-08-27, T-069 qualification behavior is bound
-to `e3cef41` and the SQLite append-only trigger hardening to `aa24764`. The
-current branch still has no independent causal-aware realization producer, so
-the asserted identity path remains inconclusive rather than qualified.
+**Candidate-source review:** 2026-08-27, the Store-owned independent producer
+is bound to `0fc647c`, identity regressions to `c31e1ea`/`25cb707`/`556b5d0`,
+T-069 qualification behavior to `e3cef41`, and SQLite append-only trigger
+hardening to `aa24764`. The branch now has an independently derived local
+identity and ordinary-ledger adapter, but the asserted identity path remains
+inconclusive rather than qualified until a governed real study passes every
+causal gate.
 
 This is the contract Fiscus must satisfy before it uses causal financial
 language. It is intentionally stricter than the ordinary local ledger,
@@ -218,24 +221,28 @@ terminal-outcome, follow-up-policy, clock-authority, qualification, and T-069
 scalar-lineage increments. The internal records are authenticated and
 deliberately not exposed as a public v2 projection or release statement. The
 T-069 slice now validates and persists a scalar-only
-`causal_lineage_bindings_v2` envelope behind an exact, append-only schema;
-reloads authenticate the canonical JSON and duplicated identity columns. The
-realization join requires a separately retained nullable
-`causal_unit_id_digest` scalar to be present and equal to the assigned unit
-digest; it never derives identity from or selects realization `unit_json`.
-Because the current realization pipeline has no source from which to derive a
-commit-to-study-unit mapping, that scalar is a causal-aware producer assertion,
-not an independently audited causal proof; equality is a necessary join
-invariant, not a sufficient claim of causation.
+  `causal_lineage_bindings_v2` envelope behind an exact, append-only schema;
+  reloads authenticate the canonical JSON and duplicated identity columns. The
+  realization join requires a separately retained nullable
+  `causal_unit_id_digest` scalar to be present and equal to the assigned unit
+  digest; it never derives identity from or selects realization `unit_json`.
+  The Store-owned producer now derives that scalar from retained Git metadata
+  and exact request evidence, while the ordinary realization pipeline remains
+  a separate path that does not call it automatically. The derived identity is
+  therefore independently reproducible local evidence, not an independently
+  audited causal effect; equality is a necessary join invariant, not a
+  sufficient claim of causation.
 Retained execution and terminal-outcome text must also round-trip to the
 canonical decoded record, and realization timestamps may not precede execution
 completion. A matching scalar is retained as asserted evidence only: the
 validator marks the realization-to-unit identity unverified, and qualification
-remains inconclusive until an independent causal-aware producer boundary exists.
+  remains inconclusive until a governed study, provider/account scope, and every
+  other causal gate passes, even when the Store producer has produced a ready
+  local assessment.
 Ordinary snapshots without the scalar remain unqualified. A cost-bearing V2
 result still remains fail-closed when the sidecar is absent or invalid, the
-ordinary ledger verifier is unresolved, or any request, realization, or outcome
-gate fails.
+  ordinary ledger verifier fails, or any request, realization, or outcome gate
+  fails.
 
 Legacy v1 protocol and assignment records remain decodable and replayable for
 inspection. They are immutable evidence: production code cannot create a new v1

@@ -1,7 +1,9 @@
 # Capability and evidence contract
 
-**Candidate-source review:** 2026-08-27, source revisions `e3cef41` (asserted
-T-069 identity remains unqualified), `aa24764` (recursive-trigger append-only
+**Candidate-source review:** 2026-08-27, source revisions `0fc647c` (Store-owned
+independent causal producer), `5eafa2e` (billing mapping coverage dashboard),
+`c31e1ea`/`25cb707`/`556b5d0` (mapping and identity regressions), `e3cef41`
+(asserted T-069 identity boundary), `aa24764` (recursive-trigger append-only
 hardening), `3516e5a` (source-generation/publication gate), and `4e8d387`
 (release-reader boundary). This document describes the locally implemented
 product and the evidence available at that candidate. It is not a statement
@@ -70,6 +72,13 @@ Fiscus keeps four different claims separate:
 - OpenAI project-day reconciliation is deliberately narrow, immutable, and
   residual-bearing. It withholds a result when the required route/account scope
   is absent.
+- Imported provider lines can be assigned to an exact local project and
+  accounting account through append-only operator mapping versions. Coverage,
+  mapped dollars, residual dollars, stale/ambiguous mappings, target summaries,
+  and the exclusions are visible in the CLI/API/dashboard. This is an
+  accounting-preparation aid: the declaration is not provider identity, and
+  mapped imports remain excluded from budget enforcement, RoI, and model advice
+  until an authoritative provider scope is established.
 - Cost-centre allocation is local showback with exact microdollar conservation.
 - Return on Intelligence has coverage labels, assumptions, uncertainty, and
   review-only within-task model trials. The product includes a local,
@@ -78,22 +87,19 @@ Fiscus keeps four different claims separate:
   qualification, and T-069 scalar lineage-validation substrate. T-069 now
   persists a scalar-only request-to-realization sidecar behind an exact,
   append-only schema; its reload path authenticates the canonical envelope and
-  duplicated identity columns. Realization identity is retained outside
-  `unit_json` as a nullable scalar assertion from a causal-aware producer and
-  must be present and equal to the assigned unit digest; ordinary snapshots
-  without it remain unqualified, and causal validation never needs to select
-  `unit_json`. The current realization pipeline cannot independently derive
-  that mapping, so the scalar is not by itself audited causal proof: even a
-  matching scalar is retained only as asserted, unverified evidence and keeps
-  qualification inconclusive until an independent causal-aware producer boundary
-  exists. Retained execution and outcome JSON must be canonical round-trips,
-  and realization timestamps must follow execution completion. These later
-  records are not public CLI/API/dashboard evidence. Cost-bearing V2
-  qualification remains fail-closed
-  unless the sidecar is present and valid, ordinary ledger verification is
-  resolved, and every other causal gate passes. Until a real protocol is
-  registered, executed, and qualified, the product has no causal result to
-  present. Neither path routes providers or changes budgets automatically.
+  duplicated identity columns. The Store-owned producer adapter independently
+  derives the unit identity from retained Git scalar metadata and verifies the
+  exact request ledger before it can append that identity. The normal
+  realization pipeline does not invoke this adapter automatically, and an
+  asserted or matching scalar is not by itself audited causal proof. Retained
+  execution and outcome JSON must be canonical round-trips, and realization
+  timestamps must follow execution completion. These later records are not
+  public CLI/API/dashboard evidence. Cost-bearing V2 qualification remains
+  fail-closed unless the sidecar is present and valid, ordinary ledger evidence
+  passes, provider/account scope is independently addressed where required,
+  and every other causal gate passes. Until a real protocol is registered,
+  executed, and qualified, the product has no causal result to present.
+  Neither path routes providers or changes budgets automatically.
 - The browser dashboard has no third-party assets or analytics and is intended
   to expose a preview before consequential local changes. The CLI remains the
   reference surface while GUI parity is completed.

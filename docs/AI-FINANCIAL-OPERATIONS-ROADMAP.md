@@ -191,6 +191,15 @@ residual is an upper bound on it rather than a measurement. Reconciled cost is
 excluded from request spend, budgets, RoI, and recommendations. See
 [PROVIDER-RECONCILIATION.md](PROVIDER-RECONCILIATION.md).
 
+**Current mapping increment (local v1, 2026-08-27):** imported provider line
+items can now be mapped one record at a time to an exact local project and
+account reference. Mapping versions are append-only, idempotent on replay, and
+retain the source record digest and first-import anchor. The CLI/API/dashboard
+show mapped coverage and residual dollars, but the mapping remains
+`operator_declared_unverified`; it does not establish provider account identity
+or make imported dollars eligible for budgets, RoI, recommendations, or
+chargeback.
+
 1. Introduce the cost-source taxonomy and immutable financial ledger entities.
 2. Ship one read-only authoritative connector first. Start with OpenAI organization cost/usage, or a customer-owned cloud billing export selected with a design partner; do not build five shallow connectors at once.
 3. Store account/project scope, source cursor or export ID, collection time, source update time, raw-evidence digest, pagination state, and connector version.

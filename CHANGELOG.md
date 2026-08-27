@@ -71,6 +71,17 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
   realization identity, or any other evidence gate is unresolved. The sidecar
   is persisted internally; it is not yet a public evidence projection or
   release claim.
+- The Store now has an internal independent causal-unit producer adapter. It
+  authenticates the exact protocol, assignment, execution, matured outcome,
+  request set, route scope, realization, and retained Git scalar rows; derives
+  the unit identity without reading raw prompts or `unit_json`; verifies exact
+  local ledger conservation and pricing lineage; and appends the scalar binding
+  atomically. It remains local evidence, not a qualified causal result or
+  provider invoice.
+- Imported provider billing lines now expose exact append-only project/account
+  mapping coverage in the Evidence dashboard and `/api/billing`, including
+  mapped and residual amounts, status counts, targets, and the fact that these
+  operator declarations remain excluded from budgets, RoI, and model advice.
 - The CLI and the dashboard compose value through one shared sequence rather
   than assembling the same primitives independently in two places.
 

@@ -43,6 +43,13 @@ retain rate-card lineage; tool-reported, unpriced audit, synthetic-demo, and
 pre-lineage values remain explicitly labelled. An explicit reprice is retained
 as a before/after local-ledger event.
 
+The current local candidate also includes two bounded internal foundations: a
+Store-owned independent causal-unit producer that derives identity from retained
+Git/request scalars, and exact imported-billing project/account mapping coverage
+shown on the Evidence surface. Both are reviewable local evidence only. The
+producer does not qualify a causal result; operator mappings do not verify a
+provider account or make imported dollars authoritative.
+
 ## Before a fresh local candidate claim
 
 1. Record the exact final SHA and clean/known worktree state.
