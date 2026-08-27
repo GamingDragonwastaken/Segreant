@@ -7,8 +7,27 @@
 // re-exec ourselves once with --disable-warning to keep output clean. This is
 // the only knob that reliably suppresses it for `npx fiscus`.
 import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
+
+const PUBLICATION_WAIT_MS = 120_000;
+const PUBLICATION_POLL_MS = 25;
+const waitCell = new Int32Array(new SharedArrayBuffer(4));
+
+function waitForPublication() {
+  const lock = join(dirname(fileURLToPath(import.meta.url)), '..', '.fiscus-build.lock');
+  const started = Date.now();
+  while (existsSync(lock)) {
+    if (Date.now() - started >= PUBLICATION_WAIT_MS) {
+      throw new Error(`timed out waiting for Fiscus build publication (${PUBLICATION_WAIT_MS}ms)`);
+    }
+    // This is intentionally synchronous: the launcher must not begin module
+    // resolution until the publisher has released its short-lived lock. A
+    // bounded wait also turns an abandoned lock into an actionable failure.
+    Atomics.wait(waitCell, 0, 0, PUBLICATION_POLL_MS);
+  }
+}
 
 // Fail fast with a human message on too-old Node before Node's SQLite runtime
 // dependency reports a less actionable error.
@@ -33,5 +52,6 @@ if (!process.env.__FISCUS_CHILD) {
   process.exit(result.status ?? 0);
 } else {
   const here = dirname(self);
+  waitForPublication();
   await import(pathToFileURL(join(here, '..', 'dist', 'cli.js')).href);
 }
