@@ -21,8 +21,8 @@ for this checklist against that source tree:
 | Clean installed CLI | Install the tarball with `--ignore-scripts` in a fresh directory and run `fiscus --help` |
 | Packaged dashboard/API | Use an isolated `FISCUS_HOME` (records below that predate the rename cite the pre-rename variable, which is what those runs actually used); seed labelled demo data; start the installed dashboard; probe health, overview, value, and HTML; terminate it cleanly |
 | Model-trial truthfulness | The packaged value payload must self-label `demo: true`; any seeded model switch must be `trial`, never evidence-supported; the **`/classic`** HTML must contain the labelled renderer. Check `/classic`, not `/`: `/` is the GUI shell and renders every figure in the browser, so fetching it proves only that a shell was served. Prove `/` separately by confirming it carries `id="app"` and its module entry, and that the entry resolves as JavaScript — a shell whose compiled app is missing from the tarball serves a 200 and a blank dashboard |
-| Causal-evidence integrity | Run `test/causal-core.test.ts`, `test/causal-store.test.ts`, `test/causal-cli.test.ts`, and `test/causal-dashboard.test.ts`. In a clean installed artifact, prove `fiscus causal status --json` reports no publicly inspectable retained-v1 study/no causal result by default. Prove v1 registration and assignment preview/apply refuse with `CAUSAL_LEGACY_INSPECT_ONLY`; prove valid-v2 registration preview/apply refuse before Store open or mutation with `CAUSAL_V2_CLI_DEFERRED`; and prove Store-owned v2 assignment is atomic without implying that a v2 registration or assignment CLI exists. Retained v1 assignment replay still verifies. Current CLI/API/dashboard summaries expose retained v1 only; v2-only Store state remains bounded and non-500 rather than becoming the legacy projection. A no-outcome retained-v1 study remains `collecting`, not a causal claim. Verify `/api/causal` is GET/HEAD-only, redacts randomisation material, and exposes no mutation or automatic routing/budget action. This is release-gate evidence, not release approval. The current branch has Store-internal V2 execution/outcome/qualification substrate plus an append-only T-069 scalar lineage sidecar, but these are not public evidence. Public v2 execution/outcome projection, qualification snapshots as a released result, export, and full v2 public projection remain deferred; cost-bearing internal qualification remains fail-closed unless the sidecar, ordinary ledger verification, and every other causal gate are valid. |
-| Billing-boundary truthfulness | `fiscus billing scope set --account-ref <test-ref> --json` must remain a no-write, `operator_declared_unverified` preview; packaged demo `/api/billing` must self-label `demo: true`, retain `not_reconciled`, and show zero fabricated billing records |
+| Causal-evidence integrity | Run `test/causal-core.test.ts`, `test/causal-store.test.ts`, `test/causal-cli.test.ts`, `test/causal-dashboard.test.ts`, and the Store-owned producer/ordinary-ledger cohort. In a clean installed artifact, prove `fiscus causal status --json` reports no publicly inspectable retained-v1 study/no causal result by default. Prove v1 registration and assignment preview/apply refuse with `CAUSAL_LEGACY_INSPECT_ONLY`; prove valid-v2 registration preview/apply refuse before Store open or mutation with `CAUSAL_V2_CLI_DEFERRED`; and prove Store-owned v2 assignment is atomic without implying that a v2 registration or assignment CLI exists. Retained v1 assignment replay still verifies. Current CLI/API/dashboard summaries expose retained v1 only; v2-only Store state remains bounded and non-500 rather than becoming the legacy projection. A no-outcome retained-v1 study remains `collecting`, not a causal claim. Verify `/api/causal` is GET/HEAD-only, redacts randomisation material, and exposes no mutation or automatic routing/budget action. This is release-gate evidence, not release approval. The branch now has a Store-owned independent scalar identity and ordinary-ledger adapter, but these are still internal local evidence, not a public result. Public v2 execution/outcome projection, qualification snapshots as a released result, export, and full v2 public projection remain deferred; cost-bearing internal qualification remains fail-closed unless the sidecar, independently derived identity, ordinary ledger evidence, provider/account scope where required, and every other causal gate are valid. |
+| Billing-boundary truthfulness | `fiscus billing scope set --account-ref <test-ref> --json` must remain a no-write, `operator_declared_unverified` preview; packaged demo `/api/billing` must self-label `demo: true`, retain `not_reconciled`, show zero fabricated billing records, and expose exact mapping coverage without promoting operator declarations to provider authority |
 | Direct-Costs connector boundary | A packaged local scope with `proj_…` must yield an OpenAI Costs **preview** with `networkAttempted: false` and `credentialRead: false`. It does not validate a provider account, authorize a live pull, or reconcile a provider amount. |
 | Egress disclosure | Reconcile every newly introduced outbound path with DATA-BOUNDARIES.md; distinguish Fiscus-process enforcement, proxy-routed traffic coverage, browser behaviour, and any separately validated OS/network control. Do not project a process-level test into a workstation-wide or provider-privacy guarantee. |
 | Intended CI | Inspect the CI jobs for the intended commit, not merely a workflow definition or an old run. If the candidate reached the remote inside a multi-commit push, CI ran on the tip; cite that run and record `git diff --stat <candidate> <tip>` so the delta is stated rather than assumed. A tip that differs only by this document does not need its own run — otherwise recording a result would forever require another commit |
@@ -34,16 +34,18 @@ external deployment, or the optional team service.
 
 **Current internal causal substrate.** The exact branch includes the
 Store-internal V2 execution, terminal-outcome, follow-up-policy,
-clock-authority, qualification, and T-069 scalar lineage-validation code at
-source revision `e3cef41`, including the append-only
-`causal_lineage_bindings_v2` sidecar. The validator requires canonical retained
-execution/outcome records, recomputes stored binding digests, and requires a
-separately retained causal unit identity plus a post-execution realization
-timestamp; the current ordinary realization pipeline does not derive that
-identity, so its rows remain unqualified until a causal-aware producer exists.
-These records are not public CLI/API/dashboard evidence. Cost-bearing internal
-qualification remains fail-closed unless the sidecar is present and valid,
-ordinary ledger verification is resolved, and every other causal gate passes.
+clock-authority, qualification, T-069 scalar lineage-validation, and
+Store-owned independent producer code at source revisions `e3cef41` and
+`0fc647c`, including the append-only `causal_lineage_bindings_v2` sidecar. The
+producer authenticates the retained protocol, assignment, execution, matured
+outcome, request set, declared scope, realization, and Git scalar rows; it
+derives the unit identity independently from retained Git metadata and verifies
+the exact local request ledger before an atomic append. The ordinary realization
+pipeline still does not invoke that adapter automatically. These records are not
+public CLI/API/dashboard evidence. Cost-bearing internal qualification remains
+fail-closed unless the sidecar is present and valid, ordinary ledger evidence is
+verified, provider/account scope is addressed where required, and every other
+causal gate passes.
 Commit `aa24764` enables recursive SQLite triggers for every operational and
 migration-verification connection, so the physical append-only triggers also
 cover `INSERT OR REPLACE` conflict resolution. The same branch also carries
@@ -67,6 +69,44 @@ generation-pointer or symlink/junction package-layout change that would break
 the existing `dist/cli.js`/deep-import and package-surface contract. The
 historical candidate rows below do not cover these later sources and must not
 be reused as exact-head release evidence.
+
+### Current local candidate record — source commit `a5d1121`, 2026-08-27
+
+The record below is bound to source commit
+`a5d112109b42872a206849cd4f8898743806b7c4` in the isolated
+`codex/high-assurance-foundation` worktree. The source tree was clean before and
+after validation. The release-gate document itself is the documentation-only
+follow-up commit that records this evidence; under the rule above, that change
+does not require rerunning source tests or inventing a new CI result. The local
+candidate is strong enough for a reviewable developer preview, but it is **not
+an external release**: no push was authorized, no exact-head CI run exists for
+this branch, and no browser connector is available for visual/keyboard/WCAG
+evidence.
+
+| Requirement | Result |
+| --- | --- |
+| Candidate identity | **Pass.** `git rev-parse HEAD` → `a5d112109b42872a206849cd4f8898743806b7c4`; `git status --short` was empty before and after the source/package validation. |
+| Capability/evidence contract | **Pass.** `docs/CAPABILITY-EVIDENCE-CONTRACT.md`, `docs/CAUSAL-EVIDENCE-PROTOCOL.md`, `docs/CAUSAL-PRODUCER-CONTRACT.md`, the AI FinOps roadmap, and the handoff were reviewed against this source. The full suite includes the public-claims and egress-boundary checks. New producer and mapping claims are explicitly local, operator-declared, residual-bearing, and excluded from provider billing, causal, budget, and routing claims. |
+| Source validation | **Pass.** `npm ci` → 4 packages, 0 vulnerabilities; root typecheck exit 0; browser-app typecheck exit 0; full `npm test` → **877 tests, 875 pass, 0 fail, 2 intentional platform skips**; `npm run build` exit 0; `npm run build -- --web` exit 0 with the CLI artifact hash unchanged. |
+| Packed artifact | **Pass for source commit `a5d1121`.** `npm pack --ignore-scripts` → **164 entries, 803,487 bytes**, SHA-256 `2CC9DF3D722E3E5BD9085176C2523DC605EDB50D8A53B720604A5C3ED7DCEA48`; the artifact contains `bin/fiscus.mjs`, `bin/publication-lock.mjs`, compiled causal producer/ledger/store/dashboard code, pricing, baselines, and the reviewed public docs. The subsequent gate-record commit changes only this document. |
+| Clean installed CLI | **Pass.** The tarball was installed offline with `--ignore-scripts` into a fresh prefix; packaged `fiscus --help`, `demo --json`, and `causal status --json` ran successfully. |
+| Packaged dashboard/API | **Pass.** From the installed tarball and isolated `FISCUS_HOME`, `start --demo` served HTTP 200 for `/api/health`, `/api/overview?range=all`, `/api/value?range=all`, `/api/causal`, `/api/billing`, `/`, `/classic`, and `/app/main.js`. Overview, value, causal, and billing payloads self-labelled demo mode; causal status contained no public study; `/classic` carried the labelled demo renderer; `/` carried `id="app"`; `/app/main.js` resolved as JavaScript; the dashboard process terminated and the port was closed. |
+| Model-trial truthfulness | **Pass.** The packaged value payload is demo-labelled and the synthetic same-task comparison remains review-only (`trial`), with no evidence-supported switch or automatic routing. The mapping panel is informational and has no write action. |
+| Causal-evidence integrity | **Pass for the local boundary, not a causal result.** The causal ledger/producer/store cohort and the full suite pass. The packaged status command reports no publicly inspectable retained study/result. The Store-owned producer derives and atomically persists a scalar identity only when exact local request evidence passes; public v2 registration, lifecycle, qualification projection, export, and any causal customer claim remain deferred. |
+| Billing-boundary truthfulness | **Pass.** Exact imported-record mapping is append-only and visible as mapped/residual coverage; demo `/api/billing` contains the mapping contract without fabricated provider records. An isolated packaged OpenAI scope was used only for the connector preview; the declaration remains `operator_declared_unverified` and imported/mapped evidence remains excluded from spend controls, RoI, and model advice. |
+| Direct-Costs connector boundary | **Pass.** Packaged `billing openai-costs preview --from 2026-01-01 --to 2026-01-02 --json` returned `applied: false`, `networkAttempted: false`, and `credentialRead: false` for an isolated `proj_gate_test` scope. No provider account was validated and no live pull occurred. |
+| Egress disclosure | **Pass.** The full egress and public-claims checks pass; the new mapping and producer paths perform no network calls. The documented process-scoped, rule-gated transport boundary and its non-claims remain unchanged. |
+| Intended CI | **Not satisfied.** No push was authorized and there is no CI run on this exact local head. A workflow definition or historical run is not substituted for current evidence. |
+| Visual check | **Not satisfied in this environment.** Source/DOM contract tests and packaged HTTP probes pass, but no browser connector is installed, so screenshot, keyboard interaction, and WCAG runtime evidence were not obtained. |
+
+**What this candidate establishes.** This is a locally verified, reviewable
+implementation checkpoint. The independent causal identity/ledger substrate and
+exact billing mapping coverage are now implemented and tested. They do not
+establish provider invoice finality, a qualified causal financial result,
+machine-wide privacy, hosted multi-tenant readiness, or automatic model/budget/
+routing actions. CI, browser interaction evidence, real PostgreSQL/OIDC/TLS/
+backup validation, owner-authorized push, and registry publication remain
+separate gates.
 
 ### Candidate record — commit `f2f3c9a`, 2026-08-21
 
