@@ -185,11 +185,10 @@ test('Store declarations are exact, append-only, versioned, and do not mutate pr
 
 test('mapping key is stable and does not include target accounting choices', () => {
   const record = importedRecord();
-  assert.equal(billingMappingKey(record), mappingFor(record).mappingKey);
-  assert.notEqual(
-    mappingFor(record, { targetProject: 'different-project' }).mappingKey,
-    undefined,
-  );
+  const originalKey = billingMappingKey(record);
+  assert.equal(originalKey, mappingFor(record).mappingKey);
+  assert.equal(mappingFor(record, { targetProject: 'different-project' }).mappingKey, originalKey);
+  assert.equal(mappingFor(record, { targetAccountRef: 'different-account' }).mappingKey, originalKey);
 });
 
 test('empty imports are explicit and cannot be treated as a zero-dollar ready reconciliation', () => {
