@@ -32,16 +32,21 @@ This validates a local developer preview only. It does **not** validate a
 provider billing statement, production customer data, an npm publication, an
 external deployment, or the optional team service.
 
-**Current internal causal substrate.** The exact branch at source revision
-`3982848` contains Store-internal V2 execution, terminal-outcome,
-follow-up-policy, clock-authority, qualification, and T-069 scalar
-lineage-validation code, including the append-only
-`causal_lineage_bindings_v2` sidecar. These records are not public
-CLI/API/dashboard evidence. Cost-bearing internal qualification remains
-fail-closed unless the sidecar is present and valid, ordinary ledger
-verification is resolved, and every other causal gate passes. The historical
-candidate rows below do not cover this later source and must not be reused as
-exact-head release evidence.
+**Current internal causal substrate.** The exact branch includes the
+Store-internal V2 execution, terminal-outcome, follow-up-policy,
+clock-authority, qualification, and T-069 scalar lineage-validation code at
+source revision `45a79a6`, including the append-only
+`causal_lineage_bindings_v2` sidecar. The validator requires canonical retained
+execution/outcome records, recomputes stored binding digests, and requires a
+separately retained causal unit identity plus a post-execution realization
+timestamp; the current ordinary realization pipeline does not derive that
+identity, so its rows remain unqualified until a causal-aware producer exists.
+These records are not public CLI/API/dashboard evidence. Cost-bearing internal
+qualification remains fail-closed unless the sidecar is present and valid,
+ordinary ledger verification is resolved, and every other causal gate passes.
+The same branch also carries the token-safe build publication/launcher read
+hardening at `d862d6a`. The historical candidate rows below do not cover these
+later sources and must not be reused as exact-head release evidence.
 
 ### Candidate record — commit `f2f3c9a`, 2026-08-21
 

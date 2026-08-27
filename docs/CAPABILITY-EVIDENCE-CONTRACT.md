@@ -1,6 +1,7 @@
 # Capability and evidence contract
 
-**Candidate-source review:** 2026-08-27, source revision 3982848. This document
+**Candidate-source review:** 2026-08-27, source revisions `45a79a6` (causal
+integrity) and `d862d6a` (build publication). This document
 describes the locally implemented product and the evidence available at that
 candidate. It is not a statement that a hosted service, customer deployment, or
 provider invoice validation exists. Any later candidate must re-review this
