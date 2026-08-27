@@ -289,6 +289,8 @@ test('reprice: a pre-migration snapshot table gains the columns without inventin
   legacy.close();
 
   const store = new Store(file);
+  const migratedColumns = store.raw().prepare('PRAGMA table_info(realization_units)').all() as Array<{ name: string }>;
+  assert.ok(migratedColumns.some((column) => column.name === 'causal_unit_id_digest'));
   const rep = realizationFromStore(store);
   assert.equal(rep.matured.totalCostUsd, 3, 'the legacy dollars are preserved exactly');
   assert.equal(rep.costStaleUnits, 0, 'a reprice we have no record of is not asserted to have happened');

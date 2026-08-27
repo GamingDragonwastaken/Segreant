@@ -76,7 +76,14 @@ Fiscus keeps four different claims separate:
   qualification, and T-069 scalar lineage-validation substrate. T-069 now
   persists a scalar-only request-to-realization sidecar behind an exact,
   append-only schema; its reload path authenticates the canonical envelope and
-  duplicated identity columns. These later records are not public
+  duplicated identity columns. Realization identity is retained outside
+  `unit_json` as a nullable scalar assertion from a causal-aware producer and
+  must be present and equal to the assigned unit digest; ordinary snapshots
+  without it remain unqualified, and causal validation never needs to select
+  `unit_json`. The current realization pipeline cannot independently derive
+  that mapping, so the scalar is not by itself audited causal proof. Retained
+  execution and outcome JSON must be canonical round-trips, and realization
+  timestamps must follow execution completion. These later records are not public
   CLI/API/dashboard evidence. Cost-bearing V2 qualification remains fail-closed
   unless the sidecar is present and valid, ordinary ledger verification is
   resolved, and every other causal gate passes. Until a real protocol is

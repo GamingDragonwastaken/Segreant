@@ -8,7 +8,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { causalExecutionV2EventHash, causalTerminalOutcomeV2EventHash, decodeCausalExecutionV2, ordinaryLedgerVerifierHash } from '../src/causal/records.ts';
-import { commitCausalProtocol } from '../src/causal/protocol.ts';
+import { canonicalJson, commitCausalProtocol } from '../src/causal/protocol.ts';
 import {
   appendCausalLineageBindingV2,
   causalRequestPricingDigestV2,
@@ -231,9 +231,10 @@ function appendFixture(store: Store, studyId: string): {
   ));
   store.raw().prepare(
     `INSERT INTO realization_units
-       (commit_hash, project, ts_epoch_ms, computed_at_ms, attributed_cost_usd, maturing, realized, unit_json, cost_scope, cost_stale)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(COMMIT, 'project:lineage', execution.completedAtMs + 2, execution.completedAtMs + 3, 1, 0, 1, '{}', 'project', 0);
+       (commit_hash, project, ts_epoch_ms, computed_at_ms, attributed_cost_usd, maturing, realized, unit_json,
+        causal_unit_id_digest, cost_scope, cost_stale)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(COMMIT, 'project:lineage', execution.completedAtMs + 2, execution.completedAtMs + 3, 1, 0, 1, '{}', decision.unitIdDigest, 'project', 0);
   const realizationSnapshotDigest = causalRealizationSnapshotDigestV2({
     commitHash: COMMIT,
     project: 'project:lineage',
@@ -431,6 +432,183 @@ test('T-069 sidecar reload fails closed when canonical JSON is tampered behind a
     store.raw().prepare(
       'UPDATE causal_lineage_bindings_v2 SET binding_json = ? WHERE binding_id = ?',
     ).run(altered, fixture.binding.bindingId);
+    store.raw().prepare(
+      `CREATE TRIGGER causal_no_update_causal_lineage_bindings_v2
+         BEFORE UPDATE ON causal_lineage_bindings_v2
+         BEGIN SELECT RAISE(ABORT, 'causal evidence is append-only'); END`,
+    ).run();
+    assert.throws(
+      () => store.causalLineageBindingsV2(fixture.protocol.studyId),
+      (error: unknown) => error instanceof Error
+        && 'code' in error
+        && (error as { code?: unknown }).code === 'CAUSAL_INTEGRITY_FAILURE',
+    );
+  } finally {
+    store.close();
+  }
+});
+
+test('T-069 realization lineage requires an independently retained scalar unit identity', () => {
+  const cases: Array<{
+    name: string;
+    causalUnitIdDigest: string | null;
+    unitJson: string;
+    reason: 'realization_unit_identity_missing' | 'realization_unit_identity_mismatch';
+  }> = [
+    {
+      name: 'arbitrary unit_json cannot stand in for the scalar identity',
+      causalUnitIdDigest: null,
+      unitJson: JSON.stringify({ unitIdDigest: D('3') }),
+      reason: 'realization_unit_identity_missing',
+    },
+    {
+      name: 'missing scalar identity remains unqualified',
+      causalUnitIdDigest: null,
+      unitJson: '{}',
+      reason: 'realization_unit_identity_missing',
+    },
+    {
+      name: 'mismatched scalar identity is rejected',
+      causalUnitIdDigest: D('f'),
+      unitJson: '{}',
+      reason: 'realization_unit_identity_mismatch',
+    },
+  ];
+  for (const [index, candidate] of cases.entries()) {
+    const store = new Store(':memory:');
+    try {
+      const fixture = appendFixture(store, `study:lineage-unit-identity-${index}`);
+      store.raw().prepare(
+        'UPDATE realization_units SET causal_unit_id_digest = ?, unit_json = ? WHERE commit_hash = ?',
+      ).run(candidate.causalUnitIdDigest, candidate.unitJson, COMMIT);
+      const result = validateCausalLineageBindingV2(store.raw(), fixture.binding);
+      assert.equal(result.state, 'invalid', candidate.name);
+      assert.ok(result.reasonCodes.includes(candidate.reason), result.reasonCodes.join(','));
+    } finally {
+      store.close();
+    }
+  }
+});
+
+test('T-069 realization store persists the optional scalar identity and leaves ordinary rows null', () => {
+  const store = new Store(':memory:');
+  try {
+    store.saveRealizationUnits([
+      {
+        commitHash: 'b'.repeat(40),
+        project: 'project:lineage-store',
+        tsEpochMs: 1_700_000_002_000,
+        computedAtMs: 1_700_000_003_000,
+        attributedCostUsd: 1,
+        maturing: false,
+        realized: true,
+        unitJson: '{}',
+        causalUnitIdDigest: D('1'),
+        costScope: 'project',
+      },
+      {
+        commitHash: 'c'.repeat(40),
+        project: 'project:ordinary',
+        tsEpochMs: 1_700_000_002_000,
+        computedAtMs: 1_700_000_003_000,
+        attributedCostUsd: 1,
+        maturing: false,
+        realized: true,
+        unitJson: '{}',
+        costScope: 'window',
+      },
+    ]);
+    const columns = store.raw().prepare('PRAGMA table_info(realization_units)').all() as Array<{ name: string }>;
+    assert.ok(columns.some((column) => column.name === 'causal_unit_id_digest'));
+    const rows = store.raw().prepare(
+      `SELECT commit_hash AS commitHash, causal_unit_id_digest AS causalUnitIdDigest
+         FROM realization_units ORDER BY commit_hash`,
+    ).all().map((row) => ({ ...row })) as Array<{ commitHash: string; causalUnitIdDigest: string | null }>;
+    assert.deepEqual(rows, [
+      { commitHash: 'b'.repeat(40), causalUnitIdDigest: D('1') },
+      { commitHash: 'c'.repeat(40), causalUnitIdDigest: null },
+    ]);
+  } finally {
+    store.close();
+  }
+});
+
+test('T-069 realization timestamps cannot precede execution completion', () => {
+  const store = new Store(':memory:');
+  try {
+    const fixture = appendFixture(store, 'study:lineage-realization-clock');
+    store.raw().prepare(
+      'UPDATE realization_units SET ts_epoch_ms = ?, computed_at_ms = ? WHERE commit_hash = ?',
+    ).run(fixture.execution.completedAtMs - 1, fixture.execution.completedAtMs - 1, COMMIT);
+    const result = validateCausalLineageBindingV2(store.raw(), fixture.binding);
+    assert.equal(result.state, 'invalid');
+    assert.ok(result.reasonCodes.includes('realization_scope_invalid'), result.reasonCodes.join(','));
+  } finally {
+    store.close();
+  }
+});
+
+test('T-069 validation rejects noncanonical retained execution and terminal-outcome JSON', () => {
+  const executionStore = new Store(':memory:');
+  try {
+    const fixture = appendFixture(executionStore, 'study:lineage-noncanonical-execution');
+    const row = executionStore.raw().prepare(
+      'SELECT execution_json AS executionJson FROM causal_executions_v2 WHERE execution_id = ?',
+    ).get(fixture.execution.executionId) as { executionJson: string };
+    executionStore.raw().prepare('DROP TRIGGER causal_no_update_causal_executions_v2').run();
+    executionStore.raw().prepare(
+      'UPDATE causal_executions_v2 SET execution_json = ? WHERE execution_id = ?',
+    ).run(' ' + row.executionJson, fixture.execution.executionId);
+    executionStore.raw().prepare(
+      `CREATE TRIGGER causal_no_update_causal_executions_v2
+         BEFORE UPDATE ON causal_executions_v2
+         BEGIN SELECT RAISE(ABORT, 'causal evidence is append-only'); END`,
+    ).run();
+    const result = validateCausalLineageBindingV2(executionStore.raw(), fixture.binding);
+    assert.equal(result.state, 'invalid');
+    assert.ok(result.reasonCodes.includes('execution_identity_mismatch'), result.reasonCodes.join(','));
+  } finally {
+    executionStore.close();
+  }
+
+  const outcomeStore = new Store(':memory:');
+  try {
+    const fixture = appendFixture(outcomeStore, 'study:lineage-noncanonical-outcome');
+    const row = outcomeStore.raw().prepare(
+      'SELECT terminal_outcome_json AS terminalOutcomeJson FROM causal_terminal_outcomes_v2 WHERE outcome_id = ?',
+    ).get('outcome:lineage') as { terminalOutcomeJson: string };
+    outcomeStore.raw().prepare('DROP TRIGGER causal_no_update_causal_terminal_outcomes_v2').run();
+    outcomeStore.raw().prepare(
+      'UPDATE causal_terminal_outcomes_v2 SET terminal_outcome_json = ? WHERE outcome_id = ?',
+    ).run(' ' + row.terminalOutcomeJson, 'outcome:lineage');
+    outcomeStore.raw().prepare(
+      `CREATE TRIGGER causal_no_update_causal_terminal_outcomes_v2
+         BEFORE UPDATE ON causal_terminal_outcomes_v2
+         BEGIN SELECT RAISE(ABORT, 'causal evidence is append-only'); END`,
+    ).run();
+    const result = validateCausalLineageBindingV2(outcomeStore.raw(), fixture.binding);
+    assert.equal(result.state, 'invalid');
+    assert.ok(result.reasonCodes.includes('outcome_identity_mismatch'), result.reasonCodes.join(','));
+  } finally {
+    outcomeStore.close();
+  }
+});
+
+test('T-069 sidecar reload recomputes the envelope binding digest', () => {
+  const store = new Store(':memory:');
+  try {
+    const fixture = appendFixture(store, 'study:lineage-sidecar-digest');
+    assert.equal(store.appendCausalLineageBindingV2(fixture.binding), 'created');
+    const row = store.raw().prepare(
+      'SELECT binding_json AS bindingJson FROM causal_lineage_bindings_v2 WHERE binding_id = ?',
+    ).get(fixture.binding.bindingId) as { bindingJson: string };
+    const alteredBinding = JSON.parse(row.bindingJson) as Record<string, unknown>;
+    alteredBinding.bindingDigest = D('f');
+    const alteredJson = canonicalJson(alteredBinding);
+    store.raw().prepare('DROP TRIGGER causal_no_update_causal_lineage_bindings_v2').run();
+    store.raw().prepare(
+      'UPDATE causal_lineage_bindings_v2 SET binding_digest = ?, binding_json = ? WHERE binding_id = ?',
+    ).run(D('f'), alteredJson, fixture.binding.bindingId);
     store.raw().prepare(
       `CREATE TRIGGER causal_no_update_causal_lineage_bindings_v2
          BEFORE UPDATE ON causal_lineage_bindings_v2

@@ -174,6 +174,10 @@ CREATE TABLE IF NOT EXISTS realization_units (
   maturing       INTEGER NOT NULL DEFAULT 0,
   realized       INTEGER NOT NULL DEFAULT 0,
   unit_json      TEXT NOT NULL,
+  -- Optional causal-study identity asserted by a causal-aware producer outside
+  -- unit_json. Ordinary realization rows leave this NULL and therefore cannot
+  -- establish causal lineage by accident.
+  causal_unit_id_digest TEXT,
   cost_scope     TEXT NOT NULL DEFAULT 'legacy_unknown',
   cost_stale     INTEGER NOT NULL DEFAULT 0
 );
@@ -658,6 +662,12 @@ function migrate(db: DatabaseSync): void {
     // cannot prove would be as invented as asserting freshness. Only reprices
     // from here on mark units.
     db.prepare('ALTER TABLE realization_units ADD COLUMN cost_stale INTEGER NOT NULL DEFAULT 0').run();
+  }
+  if (!unitCols.some((c) => c.name === 'causal_unit_id_digest')) {
+    // No backfill. Existing snapshots have no independently retained causal
+    // unit identity, and deriving one from unit_json would make ordinary
+    // realization data appear to be randomized-study evidence.
+    db.prepare('ALTER TABLE realization_units ADD COLUMN causal_unit_id_digest TEXT').run();
   }
   const obsRunCols = db.prepare('PRAGMA table_info(openai_cost_observation_runs)').all() as Array<{ name: string }>;
   if (obsRunCols.length > 0 && !obsRunCols.some((c) => c.name === 'source_kind')) {

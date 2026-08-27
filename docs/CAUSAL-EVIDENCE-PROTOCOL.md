@@ -214,7 +214,17 @@ scalar-lineage increments. The internal records are authenticated and
 deliberately not exposed as a public v2 projection or release statement. The
 T-069 slice now validates and persists a scalar-only
 `causal_lineage_bindings_v2` envelope behind an exact, append-only schema;
-reloads authenticate the canonical JSON and duplicated identity columns. A
+reloads authenticate the canonical JSON and duplicated identity columns. The
+realization join requires a separately retained nullable
+`causal_unit_id_digest` scalar to be present and equal to the assigned unit
+digest; it never derives identity from or selects realization `unit_json`.
+Because the current realization pipeline has no source from which to derive a
+commit-to-study-unit mapping, that scalar is a causal-aware producer assertion,
+not an independently audited causal proof; equality is a necessary join
+invariant, not a sufficient claim of causation.
+Retained execution and terminal-outcome text must also round-trip to the
+canonical decoded record, and realization timestamps may not precede execution
+completion. Ordinary snapshots without the scalar remain unqualified. A
 cost-bearing V2 result still remains fail-closed when the sidecar is absent or
 invalid, the ordinary ledger verifier is unresolved, or any request,
 realization, or outcome gate fails.

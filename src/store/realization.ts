@@ -37,6 +37,14 @@ export interface RealizationUnitRecord {
   realized: boolean;
   unitJson: string; // serialized WorkUnit (funnel + attribution + taskType + dominantModel)
   /**
+   * Optional causal-study unit identity captured outside `unitJson` by a
+   * causal-aware producer. The current realization pipeline has no source from
+   * which to derive this mapping, so a populated value is a producer assertion,
+   * not independent causal proof. Normal snapshots do not have this identity
+   * and remain ineligible for causal lineage qualification.
+   */
+  causalUnitIdDigest?: string | null;
+  /**
    * Which spend basis produced this snapshot's dollars: `project` when the
    * window was scoped to the unit's own project family, `window` when it was the
    * project-blind sum (the classic proxy default). Recorded so a later reprice
@@ -138,12 +146,13 @@ export function saveRealizationUnits(db: DatabaseSync, records: RealizationUnitR
   const stmt = db.prepare(
     `INSERT INTO realization_units
          (commit_hash, project, ts_epoch_ms, computed_at_ms, attributed_cost_usd, maturing, realized, unit_json,
-          cost_scope, cost_stale)
-       VALUES (?,?,?,?,?,?,?,?,?,0)
+          causal_unit_id_digest, cost_scope, cost_stale)
+       VALUES (?,?,?,?,?,?,?,?,?,?,0)
        ON CONFLICT(commit_hash) DO UPDATE SET
          project=excluded.project, ts_epoch_ms=excluded.ts_epoch_ms, computed_at_ms=excluded.computed_at_ms,
          attributed_cost_usd=excluded.attributed_cost_usd, maturing=excluded.maturing,
          realized=excluded.realized, unit_json=excluded.unit_json,
+         causal_unit_id_digest=COALESCE(excluded.causal_unit_id_digest, realization_units.causal_unit_id_digest),
          cost_scope=excluded.cost_scope, cost_stale=0`,
   );
   for (const r of records) {
@@ -156,6 +165,7 @@ export function saveRealizationUnits(db: DatabaseSync, records: RealizationUnitR
       r.maturing ? 1 : 0,
       r.realized ? 1 : 0,
       r.unitJson,
+      r.causalUnitIdDigest ?? null,
       r.costScope,
     );
   }

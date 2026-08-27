@@ -77,6 +77,8 @@ export type CausalLineageReasonCode =
   | 'outcome_identity_mismatch'
   | 'outcome_not_mature'
   | 'realization_missing'
+  | 'realization_unit_identity_missing'
+  | 'realization_unit_identity_mismatch'
   | 'realization_not_mature'
   | 'realization_scope_invalid'
   | 'realization_project_mismatch'
@@ -341,6 +343,7 @@ interface StoredRealizationRow {
   project: unknown;
   tsEpochMs: unknown;
   computedAtMs: unknown;
+  causalUnitIdDigest: unknown;
   attributedCostUsd: unknown;
   maturing: unknown;
   realized: unknown;
@@ -491,7 +494,12 @@ export function validateCausalLineageBindingV2(
       reasons.push('execution_missing');
     } else {
       try {
-        execution = decodeCausalExecutionV2(JSON.parse(String(executionRow.executionJson)));
+        const encodedExecution = typeof executionRow.executionJson === 'string'
+          ? executionRow.executionJson
+          : null;
+        if (encodedExecution === null) throw new Error('execution JSON storage class');
+        execution = decodeCausalExecutionV2(JSON.parse(encodedExecution));
+        if (canonicalJson(execution) !== encodedExecution) throw new Error('execution JSON is not canonical');
       } catch {
         reasons.push('execution_identity_mismatch');
       }
@@ -547,7 +555,12 @@ export function validateCausalLineageBindingV2(
       reasons.push('outcome_missing');
     } else {
       try {
-        outcome = decodeCausalTerminalOutcomeV2(JSON.parse(String(outcomeRow.terminalOutcomeJson)));
+        const encodedOutcome = typeof outcomeRow.terminalOutcomeJson === 'string'
+          ? outcomeRow.terminalOutcomeJson
+          : null;
+        if (encodedOutcome === null) throw new Error('terminal outcome JSON storage class');
+        outcome = decodeCausalTerminalOutcomeV2(JSON.parse(encodedOutcome));
+        if (canonicalJson(outcome) !== encodedOutcome) throw new Error('terminal outcome JSON is not canonical');
       } catch {
         reasons.push('outcome_identity_mismatch');
       }
@@ -686,7 +699,8 @@ export function validateCausalLineageBindingV2(
 
     const realizationRow = db.prepare(
       `SELECT commit_hash AS commitHash, project, ts_epoch_ms AS tsEpochMs,
-              computed_at_ms AS computedAtMs, attributed_cost_usd AS attributedCostUsd,
+              computed_at_ms AS computedAtMs, causal_unit_id_digest AS causalUnitIdDigest,
+              attributed_cost_usd AS attributedCostUsd,
               maturing, realized, cost_scope AS costScope, cost_stale AS costStale
          FROM realization_units WHERE commit_hash = ?`,
     ).get(binding.realizationCommitHash) as StoredRealizationRow | undefined;
@@ -696,6 +710,7 @@ export function validateCausalLineageBindingV2(
       const project = typeof realizationRow.project === 'string' ? realizationRow.project : null;
       const ts = asPositiveSafeInteger(realizationRow.tsEpochMs);
       const computedAtMs = asPositiveSafeInteger(realizationRow.computedAtMs);
+      const causalUnitIdDigest = realizationRow.causalUnitIdDigest;
       const attributedCostUsd = asNumber(realizationRow.attributedCostUsd);
       const maturityFlagValid = realizationRow.maturing === 0 || realizationRow.maturing === 1;
       const realizedFlagValid = realizationRow.realized === 0 || realizationRow.realized === 1;
@@ -708,8 +723,15 @@ export function validateCausalLineageBindingV2(
           || attributedCostUsd < 0
           || !maturityFlagValid || !realizedFlagValid || !staleFlagValid
           || !['project', 'window'].includes(String(costScope))
-          || computedAtMs < ts) {
+          || computedAtMs < ts
+          || ts < execution.completedAtMs
+          || computedAtMs < execution.completedAtMs) {
         reasons.push('realization_scope_invalid');
+      }
+      if (causalUnitIdDigest === null || causalUnitIdDigest === undefined) {
+        reasons.push('realization_unit_identity_missing');
+      } else if (causalUnitIdDigest !== binding.unitIdDigest) {
+        reasons.push('realization_unit_identity_mismatch');
       }
       if (maturing || !realized || costStale) reasons.push('realization_not_mature');
       if (requestRows.some((row) => row.project !== project)) reasons.push('realization_project_mismatch');
@@ -837,6 +859,22 @@ function authenticateStoredCausalLineageBindingV2(
         || storedText(row.realization_snapshot_digest) !== binding.realizationSnapshotDigest
         || storedText(row.binding_digest) !== binding.bindingDigest) {
       throw new Error('lineage physical identity');
+    }
+    if (causalLineageBindingDigestV2({
+      type: binding.type,
+      version: binding.version,
+      bindingId: binding.bindingId,
+      studyId: binding.studyId,
+      protocolHash: binding.protocolHash,
+      decisionId: binding.decisionId,
+      executionId: binding.executionId,
+      outcomeId: binding.outcomeId,
+      unitIdDigest: binding.unitIdDigest,
+      requestIds: [...binding.requestIds],
+      realizationCommitHash: binding.realizationCommitHash,
+      realizationSnapshotDigest: binding.realizationSnapshotDigest,
+    }) !== binding.bindingDigest) {
+      throw new Error('lineage binding digest');
     }
     return binding;
   } catch {
