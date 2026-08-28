@@ -498,6 +498,34 @@ test('team-server: GET /dashboard/projects weights realizationRate by units and 
   }
 });
 
+test('team-server: aggregate storage rejection becomes a bounded 503 instead of an unhandled route rejection', async () => {
+  class FailingAggregateStore extends FakeRollupStore {
+    override async aggregateProjects(): Promise<never> {
+      throw new Error('database unavailable');
+    }
+  }
+  const idp = await startFakeIdp();
+  try {
+    const srv = await startTeamServer({
+      store: new FailingAggregateStore(),
+      adminToken: null,
+      oidc: { issuerUrl: idp.issuer, clientId: 'team-dashboard', jwksUrl: idp.jwksUrl },
+      aggregate: DEFAULT_TEST_AGGREGATE_CONFIG,
+    });
+    try {
+      const now = Math.floor(Date.now() / 1000);
+      const token = idp.sign({ iss: idp.issuer, aud: 'team-dashboard', sub: 'lead@example.com', iat: now, exp: now + 3600 });
+      const res = await fetch(`${srv.url}/dashboard/projects`, { headers: { authorization: `Bearer ${token}` } });
+      assert.equal(res.status, 503);
+      assert.deepEqual(await res.json(), { ok: false, error: 'team-server route unavailable' });
+    } finally {
+      await srv.close();
+    }
+  } finally {
+    await idp.close();
+  }
+});
+
 test('team-server: GET /dashboard/projects does not double-count when the same developer pushes overlapping-window rollups (cumulative-snapshot pushes, e.g. daily cron)', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-server-'));
   const idp = await startFakeIdp();

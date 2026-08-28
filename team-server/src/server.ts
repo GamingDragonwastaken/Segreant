@@ -40,7 +40,10 @@ import { verifyIdToken, type OidcConfig } from './oidc.ts';
 import { buildProjectReport, buildDeveloperReport, type TeamAggregateConfig } from './aggregate.ts';
 
 function json(res: http.ServerResponse, status: number, payload: unknown): void {
-  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
+  res.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    'cache-control': 'no-store',
+  });
   res.end(JSON.stringify(payload));
 }
 
@@ -59,6 +62,20 @@ function readBody(req: http.IncomingMessage, maxBytes: number): Promise<Buffer> 
     });
     req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', reject);
+  });
+}
+
+/** Ensure every asynchronous route turns storage/auth failures into a response. */
+function runAsyncRoute(res: http.ServerResponse, route: () => Promise<void>): void {
+  void route().catch(() => {
+    // Never leak database/identity details through an unhandled rejection. If
+    // headers are already committed, close the stream; otherwise return a
+    // generic temporary-unavailable response that callers can retry.
+    if (res.headersSent || res.writableEnded) {
+      res.destroy();
+      return;
+    }
+    json(res, 503, { ok: false, error: 'team-server route unavailable' });
   });
 }
 
@@ -289,7 +306,7 @@ export function createTeamServer(deps: TeamServerDeps): http.Server {
       if (!presented || !constantTimeEqual(presented, adminToken)) {
         return json(res, 401, { ok: false, error: 'missing or invalid admin bearer token' });
       }
-      void (async () => {
+      runAsyncRoute(res, async () => {
         try {
           const raw = await readBody(req, 64 * 1024);
           const parsed: unknown = JSON.parse(raw.toString('utf8'));
@@ -312,7 +329,7 @@ export function createTeamServer(deps: TeamServerDeps): http.Server {
         } catch (err) {
           return json(res, 400, { ok: false, error: `bad request: ${String(err)}` });
         }
-      })();
+      });
       return;
     }
 
@@ -322,7 +339,7 @@ export function createTeamServer(deps: TeamServerDeps): http.Server {
         res.end('method not allowed');
         return;
       }
-      void (async () => {
+      runAsyncRoute(res, async () => {
         let parsed: unknown;
         try {
           const raw = await readBody(req, maxBodyBytes);
@@ -359,7 +376,7 @@ export function createTeamServer(deps: TeamServerDeps): http.Server {
           console.error('team-server: insertRollup failed:', err);
           return json(res, 500, { ok: false, error: 'storage failure' });
         }
-      })();
+      });
       return;
     }
 
@@ -369,11 +386,11 @@ export function createTeamServer(deps: TeamServerDeps): http.Server {
         res.end('method not allowed');
         return;
       }
-      void (async () => {
+      runAsyncRoute(res, async () => {
         const subject = await requireOidcSubject(req, res, oidc);
         if (subject === null) return; // response already sent
         return json(res, 200, { ok: true, subject });
-      })();
+      });
       return;
     }
 
@@ -383,7 +400,7 @@ export function createTeamServer(deps: TeamServerDeps): http.Server {
         res.end('method not allowed');
         return;
       }
-      void (async () => {
+      runAsyncRoute(res, async () => {
         const subject = await requireDashboardSubject(req, res, oidc, dashboardAllowedSubjects);
         if (subject === null) return;
         const filter = parsePeriodFilter(url.searchParams);
@@ -392,7 +409,7 @@ export function createTeamServer(deps: TeamServerDeps): http.Server {
         }
         const totals = await store.aggregateProjects(filter);
         return json(res, 200, { ok: true, projects: buildProjectReport(totals, aggregate.minCohort) });
-      })();
+      });
       return;
     }
 
@@ -402,7 +419,7 @@ export function createTeamServer(deps: TeamServerDeps): http.Server {
         res.end('method not allowed');
         return;
       }
-      void (async () => {
+      runAsyncRoute(res, async () => {
         const subject = await requireDashboardSubject(req, res, oidc, dashboardAllowedSubjects);
         if (subject === null) return;
         const filter = parsePeriodFilter(url.searchParams);
@@ -415,7 +432,7 @@ export function createTeamServer(deps: TeamServerDeps): http.Server {
         }
         const totals = await store.aggregateDevelopers(filter);
         return json(res, 200, { ok: true, report: buildDeveloperReport(totals, aggregate) });
-      })();
+      });
       return;
     }
 

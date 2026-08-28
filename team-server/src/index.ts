@@ -27,13 +27,13 @@ function requireEnv(name: string): string {
 }
 
 function resolveOidcConfig(): OidcConfig | null {
-  const issuerUrl = process.env['OIDC_ISSUER_URL'];
-  const clientId = process.env['OIDC_CLIENT_ID'];
+  const issuerUrl = process.env['OIDC_ISSUER_URL']?.trim();
+  const clientId = process.env['OIDC_CLIENT_ID']?.trim();
   if (!issuerUrl || !clientId) {
     console.warn('team-server: OIDC_ISSUER_URL/OIDC_CLIENT_ID not set — GET /me (and any future authenticated route) is disabled.');
     return null;
   }
-  const jwksUrl = process.env['OIDC_JWKS_URL'];
+  const jwksUrl = process.env['OIDC_JWKS_URL']?.trim();
   return { issuerUrl, clientId, ...(jwksUrl ? { jwksUrl } : {}) };
 }
 
@@ -68,15 +68,19 @@ function resolveAggregateConfig(): TeamAggregateConfig {
 
 async function main(): Promise<void> {
   const databaseUrl = requireEnv('DATABASE_URL');
-  const adminToken = process.env['TEAM_SERVER_ADMIN_TOKEN'] ?? null;
+  const adminToken = process.env['TEAM_SERVER_ADMIN_TOKEN']?.trim() || null;
   if (!adminToken) {
     console.warn('team-server: TEAM_SERVER_ADMIN_TOKEN is not set — POST /developers is disabled; no new developers can be registered.');
   }
   const oidc = resolveOidcConfig();
   const dashboardAllowedSubjects = resolveDashboardAllowedSubjects();
   const aggregate = resolveAggregateConfig();
-  const port = process.env['PORT'] ? Number(process.env['PORT']) : 8092;
-  const host = process.env['HOST'] ?? '0.0.0.0';
+  const parsedPort = process.env['PORT'] ? Number(process.env['PORT']) : 8092;
+  const port = Number.isInteger(parsedPort) && parsedPort >= 1 && parsedPort <= 65535 ? parsedPort : 8092;
+  // Loopback is the safe default. An operator who deliberately deploys this
+  // optional service across a network must state HOST explicitly and complete
+  // the separate TLS/OIDC/Postgres deployment gate.
+  const host = process.env['HOST']?.trim() || '127.0.0.1';
 
   const store = new PgRollupStore(databaseUrl);
   const schemaSql = readFileSync(join(__dirname, '..', 'schema.sql'), 'utf8');
@@ -88,6 +92,10 @@ async function main(): Promise<void> {
   }
 
   const server = createTeamServer({ store, adminToken, oidc, dashboardAllowedSubjects, aggregate });
+  server.once('error', () => {
+    console.error('team-server: listener failed; shutting down');
+    void store.close().finally(() => process.exit(1));
+  });
   server.listen(port, host, () => {
     console.log(
       `fiscus team-server listening on ${host}:${port} ` +

@@ -580,5 +580,11 @@ Before it is exposed, complete all of the following in a disposable environment:
    no real developer or financial data. Confirm the actual retention/deletion
    policy and incident response path.
 
+The source tier also now has bounded HTTPS/loopback-only OIDC discovery/JWKS
+retrieval with no redirects, same-origin discovery checks, bounded response
+bodies, generic async-route failure responses, a loopback listen default, and
+normalized empty admin-token handling. These source-level hardening checks do
+not replace the real infrastructure gate above.
+
 The local Fiscus product can advance independently. The team service remains a
 separately gated deployment, not hidden technical debt inside a “ready” claim.

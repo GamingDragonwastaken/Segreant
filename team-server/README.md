@@ -60,7 +60,7 @@ Environment variables:
 | `TEAM_SERVER_EXPOSE_DEVELOPER_BREAKDOWN` | no (default off) | Set to exactly `true` to turn on `GET /dashboard/developers`. Off by default — opt-in, same fail-closed posture as `TEAM_SERVER_ADMIN_TOKEN`. |
 | `TEAM_SERVER_MIN_COHORT` | no (default `5`) | The k-anonymity floor: `/dashboard/projects` withholds any single project's numbers if fewer than this many distinct developers contributed to it, and `/dashboard/developers` withholds its whole distribution below this many total developers. Same default `cohort.ts` already uses for the single-machine per-user value feature. |
 | `PORT` | no (default `8092`) | Listen port. |
-| `HOST` | no (default `0.0.0.0`) | Listen address. Unlike Fiscus's own local dashboard, this server is *meant* to be reached across your network. |
+| `HOST` | no (default `127.0.0.1`) | Listen address. Loopback is the safe default; set this explicitly only behind the separately verified TLS/OIDC/Postgres deployment gate. |
 
 ### Dashboard aggregate authorization
 
@@ -82,7 +82,11 @@ infer group membership or generic roles from provider-specific claims. `GET
 This process speaks plain HTTP. Put a reverse proxy (nginx, Caddy, your cloud
 load balancer) in front of it for TLS — that's your infrastructure's job, not
 this process's; see `docs/TEAM-TIER-DESIGN.md` §1's "Fiscus provides the
-software, never the operation" framing.
+software, never the operation" framing. OIDC discovery/JWKS retrieval is
+HTTPS-only except for literal loopback test endpoints, follows no redirects,
+limits response bodies, and requires discovered JWKS to remain on the issuer
+origin. An explicitly configured HTTPS `OIDC_JWKS_URL` is the pin for providers
+that intentionally publish keys on another origin.
 
 ## Registering a developer
 
