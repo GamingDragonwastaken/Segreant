@@ -274,7 +274,9 @@ This is single-user, single-process, local. "Scale" means a busy developer's age
 - **Storage growth**: `prune` removes rows past `retentionDays` and `VACUUM`s. A heavy multi-agent month is megabytes, not gigabytes.
 - **Failure modes**: corrupt/invalid config → startup refusal; a budget read or
   request-record failure → provider forwarding refusal until repair/restart;
-  invalid/unreadable/unlockable egress receipt history → refusal
+  invalid/unreadable/unlockable egress receipt history → refusal; publication
+  lock or child-runtime failures → nonzero launcher failure, never a silent
+  success or lock bypass
   before dial with an actionable local error; upstream error → forwarded
   verbatim to the client.
 - **Observability**: the daemon prints a per-request line; the dashboard polls every 4s; `today --json` is scriptable.

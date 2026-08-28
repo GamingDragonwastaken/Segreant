@@ -31,26 +31,21 @@ if (!process.env.__FISCUS_CHILD) {
     ['--disable-warning=ExperimentalWarning', self, ...process.argv.slice(2)],
     { stdio: 'inherit', env: { ...process.env, __FISCUS_CHILD: '1' } },
   );
-  process.exit(result.status ?? 0);
+  if (result.error) {
+    console.error(`Fiscus could not start its runtime: ${result.error.message}`);
+    process.exit(1);
+  }
+  if (typeof result.status === 'number') process.exit(result.status);
+  console.error(`Fiscus runtime terminated by signal ${result.signal ?? 'unknown'}`);
+  process.exit(1);
 } else {
   const here = dirname(self);
-  let release;
-  try {
-    // The launcher participates in the same exclusive gate as publication.
-    // Acquiring (rather than merely checking) the lock closes the race where
-    // a build starts immediately after a reader's old existsSync check. The
-    // lock spans module-graph resolution, after which every imported module is
-    // resident and the reader can release it before a long-running command
-    // (such as `start`) continues.
-    release = acquirePublicationLock(join(here, '..'));
-  } catch (error) {
-    // An npm installation may be read-only (for example under Program Files),
-    // in which case the package cannot create the local build gate. Preserve
-    // the supported packaged CLI behavior; a read-only install has no local
-    // publisher that could mutate its dist tree. Other lock failures remain
-    // actionable and must not be hidden.
-    if (!['EACCES', 'EPERM', 'EROFS'].includes(error?.code)) throw error;
-  }
+  // The launcher participates in the same exclusive gate as publication.
+  // Acquiring (rather than merely checking) the lock closes the race where a
+  // build starts immediately after a reader's old existsSync check. Lock
+  // failure is intentionally fatal: bypassing it would make a reader's
+  // artifact guarantee depend on an unverified filesystem assumption.
+  const release = acquirePublicationLock(join(here, '..'));
 
   try {
     // Direct imports of dist/* and tools such as npm pack do not participate

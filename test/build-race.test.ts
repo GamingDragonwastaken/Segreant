@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -90,6 +90,12 @@ test('the supported CLI launcher waits for publication and leaves no lock residu
   }
 
   assert.equal(existsSync(fixtureLock), false, 'the held test lock must not leave residue');
+});
+
+test('the launcher cannot turn a spawn or publication-lock failure into exit 0', () => {
+  const source = readFileSync(CLI, 'utf8');
+  assert.doesNotMatch(source, /result\.status \?\? 0/, 'a signaled or failed child must never become success');
+  assert.doesNotMatch(source, /\['EACCES', 'EPERM', 'EROFS'\]\.includes\(error\?\.code\)/, 'an inaccessible publication lock must fail closed');
 });
 
 test('source generation fingerprints distinguish changed build inputs', async () => {
