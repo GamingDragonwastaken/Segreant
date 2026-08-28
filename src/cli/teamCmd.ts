@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Store } from '../store/db.ts';
 import { loadConfig, dbPath, fiscusHome } from '../config.ts';
-import { egressFetch, EgressError, type EgressErrorCode } from '../egress/transport.ts';
+import { discardResponseBody, egressFetch, EgressError, type EgressErrorCode } from '../egress/transport.ts';
 import { isGitRepo, projectName } from '../git/correlate.ts';
 import {
   computeRealization,
@@ -404,6 +404,7 @@ async function signAndPushRollup(
       const message = `push failed: HTTP ${res.status} from ${opts.url}${detail ? ` — ${detail.slice(0, 200)}` : ''}`;
       return { status: 'error', message, failureCode: 'network_error' };
     }
+    await discardResponseBody(res);
     return { status: 'ok', keyId: opts.keys.keyId, projectCount: projects.length };
   } catch (e) {
     if (e instanceof EgressError) {

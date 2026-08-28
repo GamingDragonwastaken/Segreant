@@ -12,7 +12,7 @@
  */
 
 import type { Alert, AlertSeverity } from './detect.ts';
-import { egressFetch, EgressError, type EgressErrorCode } from '../egress/transport.ts';
+import { discardResponseBody, egressFetch, EgressError, type EgressErrorCode } from '../egress/transport.ts';
 
 const SEV_RANK: Record<AlertSeverity, number> = { info: 0, warn: 1, critical: 2 };
 
@@ -85,7 +85,10 @@ export async function notifyWebhook(
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(opts.timeoutMs ?? 4000),
     });
-    return { delivered: res.ok, posted: payload.alerts.length, status: res.status };
+    const delivered = res.ok;
+    const status = res.status;
+    await discardResponseBody(res);
+    return { delivered, posted: payload.alerts.length, status };
   } catch (e) {
     if (e instanceof EgressError) {
       return {

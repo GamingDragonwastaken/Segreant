@@ -1,4 +1,4 @@
-import { egressFetchWithConfig, EgressError } from './transport.ts';
+import { discardResponseBody, egressFetchWithConfig, EgressError } from './transport.ts';
 import type { FiscusConfig } from '../config.ts';
 import type { ProxyStatus } from '../guide.ts';
 
@@ -19,9 +19,12 @@ export async function probeProxyState(config: FiscusConfig): Promise<ProxyStatus
       dataClass: 'healthcheck',
       signal: AbortSignal.timeout(800),
     });
-    return response.ok
+    const status = response.status;
+    const ok = response.ok;
+    await discardResponseBody(response);
+    return ok
       ? { kind: 'up' }
-      : { kind: 'down', message: `proxy health endpoint returned HTTP ${response.status}` };
+      : { kind: 'down', message: `proxy health endpoint returned HTTP ${status}` };
   } catch (error) {
     if (error instanceof EgressError && isBoundaryRefusal(error)) {
       const receiptRefusal = error.code === 'receipt_integrity_failed' || error.code === 'receipt_persistence_failed';

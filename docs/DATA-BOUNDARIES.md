@@ -95,7 +95,9 @@ The append path keeps a redacted, hash-checked checkpoint in
 identity, count, and chain hash. It is an optimization, not a second source of
 truth: a missing/invalid checkpoint or changed receipt identity triggers a
 complete JSONL validation, and `fiscus egress verify` always scans the complete
-history. Checkpoint persistence failure fails closed.
+history. Checkpoint persistence failure fails closed. Status-only egress
+callers cancel the returned response body so repeated health, webhook, and team
+operations do not retain unused response streams.
 
 When the proxy receives an upstream redirect, it preserves the status/body for
 diagnosis but strips `Location` before returning the response. A downstream

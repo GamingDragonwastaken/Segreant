@@ -341,3 +341,17 @@ export async function egressFetchWithConfig(config: EgressConfig, url: string | 
 export function egressFetch(url: string | URL, init: EgressFetchInit): Promise<Response> {
   return egressFetchWithConfig(loadConfig().egress, url, init);
 }
+
+/**
+ * Release a response body for callers that only need status/headers. A
+ * Fiscus-owned transport returns a live stream; leaving it unread can retain a
+ * socket and make repeated health/watch operations accumulate resources.
+ */
+export async function discardResponseBody(response: Response): Promise<void> {
+  if (!response.body) return;
+  try {
+    await response.body.cancel();
+  } catch {
+    // The caller already has its status/result; cancellation is best effort.
+  }
+}
