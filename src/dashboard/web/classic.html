@@ -454,19 +454,19 @@
          one-way door: an operator who clicked through to it had no route back to
          the current interface except editing the URL. -->
     <a class="backlink" href="/">&larr; Back to Fiscus</a>
-    <nav class="viewnav" id="viewnav">
-      <button data-view="overview" class="on">Overview</button>
-      <button data-view="billing">Billing</button>
-      <button data-view="allocation">Allocation</button>
-      <button data-view="value">Value</button>
-      <button data-view="settings">Settings</button>
+    <nav class="viewnav" id="viewnav" aria-label="Classic dashboard views">
+      <button data-view="overview" class="on" aria-current="page" aria-pressed="true">Overview</button>
+      <button data-view="billing" aria-current="false" aria-pressed="false">Billing</button>
+      <button data-view="allocation" aria-current="false" aria-pressed="false">Allocation</button>
+      <button data-view="value" aria-current="false" aria-pressed="false">Value</button>
+      <button data-view="settings" aria-current="false" aria-pressed="false">Settings</button>
     </nav>
     <div style="display:flex; align-items:center; gap:18px;">
-      <div class="ranges" id="ranges">
-        <button data-r="today" class="on">Today</button>
-        <button data-r="7d">7d</button>
-        <button data-r="30d">30d</button>
-        <button data-r="all">All</button>
+      <div class="ranges" id="ranges" role="group" aria-label="Time range">
+        <button data-r="today" class="on" aria-pressed="true">Today</button>
+        <button data-r="7d" aria-pressed="false">7d</button>
+        <button data-r="30d" aria-pressed="false">30d</button>
+        <button data-r="all" aria-pressed="false">All</button>
       </div>
       <a class="dlcsv" id="dlcsv" href="/api/export.csv?range=today" download title="Download the request ledger as CSV">↓ CSV</a>
       <span class="live" id="live-indicator"><span class="dot"></span> LIVE</span>
@@ -477,10 +477,10 @@
 
   <div id="view-overview" class="view">
     <div id="demobanner"></div>
-    <div id="alerts"></div>
-    <div id="guide"></div>
-    <div id="scanpanel"></div>
-    <div id="importpanel"></div>
+    <div id="alerts" role="status" aria-live="polite"></div>
+    <div id="guide" role="status" aria-live="polite"></div>
+    <div id="scanpanel" role="status" aria-live="polite"></div>
+    <div id="importpanel" role="status" aria-live="polite"></div>
 
     <div class="grid" id="grid"></div>
   </div>
@@ -613,7 +613,10 @@ function sparkline(series) {
       : dt.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
     times += `<text class="axis" x="${x(i)}" y="${h - 6}" text-anchor="${t === 0 ? 'start' : t === nLbl - 1 ? 'end' : 'middle'}">${esc(lbl)}</text>`;
   }
-  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+  const total = series.reduce((sum, point) => sum + (Number(point.costUsd) || 0), 0);
+  return `<svg class="spark" role="img" aria-labelledby="spend-chart-title spend-chart-desc" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+    <title id="spend-chart-title">Spend over time</title>
+    <desc id="spend-chart-desc">${esc(series.length)} time buckets with a total recorded spend of $${money(total)}.</desc>
     <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="rgba(232,179,60,0.35)"/><stop offset="1" stop-color="rgba(232,179,60,0)"/>
     </linearGradient></defs>
@@ -934,8 +937,11 @@ async function load() {
 $('#ranges').addEventListener('click', (e) => {
   const btn = e.target.closest('button');
   if (!btn) return;
-  document.querySelectorAll('#ranges button').forEach((x) => x.classList.remove('on'));
-  btn.classList.add('on');
+  document.querySelectorAll('#ranges button').forEach((x) => {
+    const selected = x === btn;
+    x.classList.toggle('on', selected);
+    x.setAttribute('aria-pressed', String(selected));
+  });
   RANGE = btn.dataset.r;
   load();
 });
@@ -948,7 +954,12 @@ $('#viewnav').addEventListener('click', (e) => {
   if (!btn) return;
   const view = btn.dataset.view;
   CURRENT_VIEW = view;
-  document.querySelectorAll('#viewnav button').forEach((b) => b.classList.toggle('on', b === btn));
+  document.querySelectorAll('#viewnav button').forEach((b) => {
+    const selected = b === btn;
+    b.classList.toggle('on', selected);
+    b.setAttribute('aria-current', selected ? 'page' : 'false');
+    b.setAttribute('aria-pressed', String(selected));
+  });
   $('#view-overview').style.display = view === 'overview' ? '' : 'none';
   $('#view-billing').style.display = view === 'billing' ? '' : 'none';
   $('#view-allocation').style.display = view === 'allocation' ? '' : 'none';

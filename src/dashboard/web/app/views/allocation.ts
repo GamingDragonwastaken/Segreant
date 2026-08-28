@@ -48,9 +48,9 @@ export function allocationView(): Node {
 
     () => {
       const err = error();
-      if (err) return h('div', { class: 'card' }, h('p', { class: 'drawer-error', text: err }));
+      if (err) return h('div', { class: 'card' }, h('p', { class: 'drawer-error', role: 'alert', 'aria-live': 'assertive', text: err }));
       const d = data();
-      if (!d) return h('div', { class: 'card' }, h('p', { class: 'drawer-muted', text: 'Loading…' }));
+      if (!d) return h('div', { class: 'card' }, h('p', { class: 'drawer-muted', role: 'status', 'aria-live': 'polite', 'aria-busy': 'true', text: 'Loading…' }));
 
       const centres = d.costCentres ?? [];
       const rules = d.rules ?? [];

@@ -59,9 +59,9 @@ export function dataView(): Node {
 
     () => {
       const err = error();
-      if (err) return h('div', { class: 'card' }, h('p', { class: 'drawer-error', text: err }));
+      if (err) return h('div', { class: 'card' }, h('p', { class: 'drawer-error', role: 'alert', 'aria-live': 'assertive', text: err }));
       const list = importers();
-      if (!list) return h('div', { class: 'card' }, h('p', { class: 'drawer-muted', text: 'Loading…' }));
+      if (!list) return h('div', { class: 'card' }, h('p', { class: 'drawer-muted', role: 'status', 'aria-live': 'polite', 'aria-busy': 'true', text: 'Loading…' }));
 
       const found = list.filter((i) => i.available);
       const missing = list.filter((i) => !i.available);
@@ -129,7 +129,7 @@ export function dataView(): Node {
 
           () => {
             const e = scanError();
-            if (e) return h('p', { class: 'drawer-error', text: e });
+            if (e) return h('p', { class: 'drawer-error', role: 'alert', 'aria-live': 'assertive', text: e });
             const sc = scan();
             if (!sc) return null;
 

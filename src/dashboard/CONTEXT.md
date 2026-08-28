@@ -126,6 +126,11 @@ web/
 - **The browser app never imports node code, and the server never imports the
   browser app.** Enforced structurally: `app/tsconfig.json` has the DOM lib and
   no node types, and the root configs exclude `app/**`.
+- **Asynchronous evidence is announced.** Modern loading/error states expose
+  status/alert semantics, and the classic view exposes current navigation/range
+  state plus a text alternative for the spend chart. Source contracts improve
+  the baseline, but they do not replace exact-candidate browser and screen-reader
+  verification in the release gate.
 - **A claim's meaning is derived, not fetched.** `claimLayers.ts` turns four
   payloads into four claims as a PURE function; `chain.ts` only reads the
   endpoints. The claims are where this product commits itself, so they must be

@@ -60,11 +60,11 @@ function causalStudyCard(payload: CausalPayload | null, failure: string | null):
         h('span', { class: 'card-title', text: 'Causal study evidence' }),
         h('span', { class: 'pill pill-warn', text: 'unavailable' })),
       h('p', { class: 'basis', text: 'The value scenario remains non-causal because the local study inspector could not be read.' }),
-      h('p', { class: 'drawer-muted', text: failure }));
+      h('p', { class: 'drawer-muted', role: 'status', text: failure }));
   }
   if (!payload) {
     return h('div', { class: 'card', style: 'margin-top: var(--s4)' },
-      h('p', { class: 'drawer-muted', text: 'Loading causal-study evidence…' }));
+      h('p', { class: 'drawer-muted', role: 'status', 'aria-live': 'polite', 'aria-busy': 'true', text: 'Loading causal-study evidence…' }));
   }
   if (!payload.study) {
     return h('div', { class: 'card', style: 'margin-top: var(--s4)' },
@@ -100,12 +100,12 @@ function causalStudyCard(payload: CausalPayload | null, failure: string | null):
         h('span', { class: 'fact-key', text: armId }),
         h('span', { class: 'fact-val', text: String(counts.completed) + '/' + String(counts.assigned) + ' completed' })))),
     replayFailures.length > 0
-      ? h('p', { class: 'drawer-error', text: 'Assignment replay failed: ' + replayFailures.join('; ') })
+      ? h('p', { class: 'drawer-error', role: 'alert', 'aria-live': 'assertive', text: 'Assignment replay failed: ' + replayFailures.join('; ') })
       : h('p', { class: 'basis', text: 'Retained assignment evidence replays from local material; this read-only dashboard cannot create assignments.' }),
     study.qualification.reasons.length > 0
       ? h('p', { class: 'basis', text: study.qualification.reasons.join(' ') })
       : null,
-    h('p', { class: 'drawer-muted', text: payload.boundary }));
+    h('p', { class: 'drawer-muted', role: 'note', text: payload.boundary }));
 }
 
 export function valueView(): Node {
@@ -132,9 +132,9 @@ export function valueView(): Node {
 
     () => {
       const err = error();
-      if (err) return h('div', { class: 'card' }, h('p', { class: 'drawer-error', text: err }));
+      if (err) return h('div', { class: 'card' }, h('p', { class: 'drawer-error', role: 'alert', 'aria-live': 'assertive', text: err }));
       const d = data();
-      if (!d) return h('div', { class: 'card' }, h('p', { class: 'drawer-muted', text: 'Loading…' }));
+      if (!d) return h('div', { class: 'card' }, h('p', { class: 'drawer-muted', role: 'status', 'aria-live': 'polite', 'aria-busy': 'true', text: 'Loading…' }));
 
       const matured = d.realization?.matured ?? null;
       const established = (matured?.realizedUnits ?? 0) > 0;

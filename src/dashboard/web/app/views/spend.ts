@@ -73,10 +73,10 @@ export function spendView(): Node {
 
     () => {
       const err = error();
-      if (err) return h('div', { class: 'card' }, h('p', { class: 'drawer-error', text: err }));
+      if (err) return h('div', { class: 'card' }, h('p', { class: 'drawer-error', role: 'alert', 'aria-live': 'assertive', text: err }));
 
       const d = data();
-      if (!d) return h('div', { class: 'card' }, h('p', { class: 'drawer-muted', text: 'Reading the ledger…' }));
+      if (!d) return h('div', { class: 'card' }, h('p', { class: 'drawer-muted', role: 'status', 'aria-live': 'polite', 'aria-busy': 'true', text: 'Reading the ledger…' }));
 
       const rows = (axis() === 'project' ? d.byProject : axis() === 'model' ? d.byModel : d.bySource) ?? [];
       const meta = AXES.find((a) => a.id === axis());
@@ -121,25 +121,25 @@ function demoBanner(): Node {
  */
 function ledger(rows: GroupRow[], totalUsd: number): Node {
   if (rows.length === 0) {
-    return h('div', { class: 'card' }, h('p', { class: 'drawer-muted', text: 'Nothing recorded in this window.' }));
+    return h('div', { class: 'card' }, h('p', { class: 'drawer-muted', role: 'status', text: 'Nothing recorded in this window.' }));
   }
 
   const sorted = [...rows].sort((a, b) => b.costUsd - a.costUsd);
   const max = sorted[0]?.costUsd ?? 0;
   const total = totalUsd > 0 ? totalUsd : sorted.reduce((s, r) => s + r.costUsd, 0);
 
-  return h('div', { class: 'ledger' },
-    h('div', { class: 'ledger-head' },
-      h('span', { text: 'Where it went' }),
-      h('span', { class: 'num cell-calls', text: () => (isPrecise() ? 'Requests' : 'Calls') }),
-      h('span', { class: 'num cell-cost', text: 'Cost' }),
-      h('span', { class: 'num cell-share', text: 'Share' })),
+  return h('div', { class: 'ledger', role: 'table', 'aria-label': 'Metered spend breakdown' },
+    h('div', { class: 'ledger-head', role: 'row' },
+      h('span', { role: 'columnheader', text: 'Where it went' }),
+      h('span', { class: 'num cell-calls', role: 'columnheader', text: () => (isPrecise() ? 'Requests' : 'Calls') }),
+      h('span', { class: 'num cell-cost', role: 'columnheader', text: 'Cost' }),
+      h('span', { class: 'num cell-share', role: 'columnheader', text: 'Share' })),
 
-    ...sorted.map((row) => h('div', { class: 'ledger-row' },
-      h('span', { class: 'ledger-key', text: row.label }),
-      h('span', { class: 'num cell-calls', text: count(row.requests) }),
-      h('span', { class: 'num cell-cost ledger-cost', text: usd(row.costUsd) }),
-      h('span', { class: 'num cell-share', text: total > 0 ? pct(row.costUsd / total, 0) : '—' }),
+    ...sorted.map((row) => h('div', { class: 'ledger-row', role: 'row' },
+      h('span', { class: 'ledger-key', role: 'cell', text: row.label }),
+      h('span', { class: 'num cell-calls', role: 'cell', text: count(row.requests) }),
+      h('span', { class: 'num cell-cost ledger-cost', role: 'cell', text: usd(row.costUsd) }),
+      h('span', { class: 'num cell-share', role: 'cell', text: total > 0 ? pct(row.costUsd / total, 0) : '—' }),
       h('span', {
         class: 'ledger-bar',
         'aria-hidden': 'true',
