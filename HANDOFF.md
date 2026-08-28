@@ -9,8 +9,8 @@ not inherited by later code changes.
 
 **Current local checkpoint:** see the newest “Current local candidate record” in
 [docs/RELEASE-GATE.md](docs/RELEASE-GATE.md). The source/package evidence head
-is `dd09d07`, with the last code-bearing tree at `07855b8`; later branch tips
-are documentation-only evidence and handoff follow-ups. The canonical `main`
+is `0cfd8f9`, with the code-bearing audit-fix tree at `a4b91a8`; later branch
+tips are documentation-only evidence and handoff follow-ups. The canonical `main`
 checkout remains a separate dirty recovery source; do not reset, clean, or
 merge it implicitly.
 
