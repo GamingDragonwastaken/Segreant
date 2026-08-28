@@ -71,6 +71,10 @@ card into provider billing, or alter signed/canonical evidence bytes.
   parent and the explicit globally-reachable IPv4 exceptions in 192.0.0.0/24.
 - A local versioned rate card supplies a local list-price estimate. Rows retain
   pricing match and lineage; a list-price estimate is not a provider bill.
+- Budget/configuration state is validated before persistence and provider
+  forwarding fails closed when the ledger cannot be read or a request cannot be
+  recorded; settings updates are bounded and strict rather than silently
+  accepting unenforceable values.
 - The ledger preserves the distinction between proxy usage, imported usage,
   operator-supplied billing evidence, direct provider observations, and
   synthetic demo data.

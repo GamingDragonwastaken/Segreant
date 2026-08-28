@@ -21,7 +21,7 @@ import { existsSync, statSync } from 'node:fs';
 import type { Store } from '../store/db.ts';
 import { isDemo, type FiscusConfig } from '../config.ts';
 import { probeProxyState } from '../egress/proxyHealth.ts';
-import { buildSettingsSnapshot, applySettingsPatch, type SettingsPatch } from './settings.ts';
+import { buildSettingsSnapshot, applySettingsPatch, SettingsValidationError, type SettingsPatch } from './settings.ts';
 import { serveHtml } from './static.ts';
 import { startOfLocalDay } from '../budget/guard.ts';
 import { loadRealization, realizeDiscoveredProjects } from '../value/realization.ts';
@@ -797,7 +797,16 @@ export function handleSettingsUpdate({ req, res, store, config, version, configP
   void (async () => {
     try {
       const chunks: Buffer[] = [];
-      for await (const c of req) chunks.push(c as Buffer);
+      let bytes = 0;
+      for await (const c of req) {
+        const chunk = c as Buffer;
+        bytes += chunk.byteLength;
+        if (bytes > 16 * 1024) {
+          req.resume();
+          throw new SettingsValidationError('request body exceeds the 16 KiB settings limit');
+        }
+        chunks.push(chunk);
+      }
       const patch = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') as SettingsPatch;
       const current = configPersistence.load();
       const next = applySettingsPatch(current, patch);
@@ -816,7 +825,13 @@ export function handleSettingsUpdate({ req, res, store, config, version, configP
       Object.assign(config, next);
       return json(res, 200, buildSettingsSnapshot(store, config, version));
     } catch (err) {
-      return json(res, 500, { error: String(err) });
+      if (err instanceof SettingsValidationError) {
+        return json(res, 400, { error: { code: err.code, message: err.message } });
+      }
+      if (err instanceof SyntaxError) {
+        return json(res, 400, { error: { code: 'SETTINGS_INVALID_JSON', message: 'settings request body must be valid JSON' } });
+      }
+      return json(res, 500, { error: { code: 'SETTINGS_UPDATE_FAILED', message: 'settings could not be persisted' } });
     }
   })();
 }

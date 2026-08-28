@@ -204,6 +204,13 @@ function providerErrorBody(provider: Provider, message: string): string {
   return JSON.stringify({ error: { message, type: 'fiscus_budget_block', code: 'budget_exceeded' } });
 }
 
+function providerBudgetUnavailableBody(provider: Provider, message: string): string {
+  if (provider === 'anthropic') {
+    return JSON.stringify({ type: 'error', error: { type: 'fiscus_budget_unavailable', code: 'budget_enforcement_unavailable', message } });
+  }
+  return JSON.stringify({ error: { message, type: 'fiscus_budget_unavailable', code: 'budget_enforcement_unavailable' } });
+}
+
 function providerEgressRefusalBody(provider: Provider, error: EgressError): string {
   const repair = error.code === 'receipt_integrity_failed' || error.code === 'receipt_persistence_failed'
     ? ' Repair or restore the local receipt history before retrying.'
@@ -228,15 +235,21 @@ export interface ProxyDeps {
   onLog?: (row: RequestRow, decision: GuardDecision) => void;
 }
 
+interface ProxyRuntimeState {
+  /** Set after any local accounting failure; future requests fail closed. */
+  accountingFailure: boolean;
+}
+
 export function createProxyServer(deps: ProxyDeps): http.Server {
   const { store, config } = deps;
   // Dashboard Settings mutates the shared config object after persisting it.
   // Resolve budget at each pre-flight check so a newly chosen cap actually
   // governs the already-running proxy, rather than merely looking saved in UI.
   const guard = new BudgetGuard(store, () => config.budget);
+  const state: ProxyRuntimeState = { accountingFailure: false };
 
   const server = http.createServer((req, res) => {
-    handle(req, res, deps, guard).catch((err) => {
+    handle(req, res, deps, guard, state).catch((err) => {
       // Last-resort guard: never leak a 500 that kills the agent session.
       if (!res.headersSent) {
         res.writeHead(502, { 'content-type': 'application/json' });
@@ -255,6 +268,7 @@ async function handle(
   res: http.ServerResponse,
   deps: ProxyDeps,
   guard: BudgetGuard,
+  state: ProxyRuntimeState,
 ): Promise<void> {
   const { store, config } = deps;
   const startedAt = Date.now();
@@ -267,6 +281,18 @@ async function handle(
   }
 
   const route = detectRoute(req, config);
+  if (state.accountingFailure) {
+    const message = 'Fiscus cannot verify local budget/accounting state; the request was not sent. Repair the local ledger or configuration, then restart Fiscus.';
+    res.writeHead(503, {
+      'content-type': 'application/json',
+      'x-fiscus-blocked': '1',
+      'x-fiscus-reason': 'budget_enforcement_unavailable',
+    });
+    res.end(route
+      ? providerBudgetUnavailableBody(route.provider, message)
+      : JSON.stringify({ error: { type: 'fiscus_budget_unavailable', code: 'budget_enforcement_unavailable', message } }));
+    return;
+  }
   const body = await readBody(req);
 
   if (!route) {
@@ -342,12 +368,15 @@ async function handle(
 
   // --- Budget pre-flight ---
   let decision: GuardDecision;
+  let budgetFailure = false;
   try {
     decision = guard.evaluate({ sessionId });
   } catch {
+    budgetFailure = true;
+    state.accountingFailure = true;
     decision = {
-      action: 'allow',
-      reason: null,
+      action: 'block',
+      reason: 'budget_enforcement_unavailable',
       daySpendUsd: 0,
       dailyLimitUsd: null,
       remainingDailyUsd: null,
@@ -358,13 +387,17 @@ async function handle(
   }
 
   if (decision.action === 'block') {
+    const unavailable = budgetFailure;
     const headers: Record<string, string> = {
       'content-type': 'application/json',
       'x-fiscus-blocked': '1',
-      'x-fiscus-reason': sanitizeHeader(decision.reason ?? 'budget'),
+      'x-fiscus-reason': sanitizeHeader(unavailable ? 'budget_enforcement_unavailable' : decision.reason ?? 'budget'),
     };
-    res.writeHead(429, headers);
-    res.end(providerErrorBody(provider, decision.reason ?? 'Budget limit reached.'));
+    res.writeHead(unavailable ? 503 : 429, headers);
+    const message = unavailable
+      ? 'Fiscus cannot verify local budget/accounting state; the request was not sent. Repair the local ledger or configuration, then restart Fiscus.'
+      : decision.reason ?? 'Budget limit reached.';
+    res.end(unavailable ? providerBudgetUnavailableBody(provider, message) : providerErrorBody(provider, message));
     // Log the blocked attempt at zero cost for the audit trail.
     safeLog(deps, {
       requestId: randomUUID(),
@@ -387,10 +420,10 @@ async function handle(
       estimated: false,
       pricing: unpricedPricingEvidence(),
       streamed: parsed.stream,
-      statusCode: 429,
+      statusCode: unavailable ? 503 : 429,
       durationMs: 0,
       ...scopeCapture,
-    }, decision);
+    }, decision, () => { state.accountingFailure = true; });
     return;
   }
 
@@ -461,7 +494,7 @@ async function handle(
       statusCode: status,
       durationMs: Date.now() - startedAt,
       ...scopeCapture,
-    }, decision);
+    }, decision, () => { state.accountingFailure = true; });
     return;
   }
 
@@ -560,7 +593,7 @@ async function handle(
     statusCode: upstream.status,
     durationMs: Date.now() - startedAt,
     ...scopeCapture,
-  }, decision);
+  }, decision, () => { state.accountingFailure = true; });
 }
 
 function headerStr(req: http.IncomingMessage, name: string): string | undefined {
@@ -598,11 +631,15 @@ function persistProposals(
   }
 }
 
-function safeLog(deps: ProxyDeps, row: RequestRow, decision: GuardDecision): void {
+function safeLog(deps: ProxyDeps, row: RequestRow, decision: GuardDecision, onFailure?: () => void): boolean {
   try {
     deps.store.insertRequest(row);
     deps.onLog?.(row, decision);
+    return true;
   } catch {
-    // Storage failure must not affect the response that already went out.
+    // The current response may already be out, but future requests must stop
+    // rather than silently continue without a trustworthy accounting record.
+    onFailure?.();
+    return false;
   }
 }

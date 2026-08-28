@@ -43,6 +43,13 @@ retain rate-card lineage; tool-reported, unpriced audit, synthetic-demo, and
 pre-lineage values remain explicitly labelled. An explicit reprice is retained
 as a before/after local-ledger event.
 
+Budget enforcement is fail-closed: malformed persisted budget/configuration is
+refused at load, settings patches are bounded and strict, and a ledger read or
+request-record failure stops subsequent provider forwarding until the local
+state is repaired and Fiscus is restarted. This protects the control boundary;
+it does not prevent a request already sent before a persistence failure from
+having reached its configured provider.
+
 The current local candidate also includes two bounded internal foundations: a
 Store-owned independent causal-unit producer that derives identity from retained
 Git/request scalars, and exact imported-billing project/account mapping coverage

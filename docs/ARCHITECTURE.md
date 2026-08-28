@@ -272,8 +272,9 @@ This is single-user, single-process, local. "Scale" means a busy developer's age
 
 - **Throughput**: bounded by upstream latency; concurrency is Node's event loop. SQLite writes are tiny and happen after the response is sent to the client.
 - **Storage growth**: `prune` removes rows past `retentionDays` and `VACUUM`s. A heavy multi-agent month is megabytes, not gigabytes.
-- **Failure modes**: corrupt config → defaults; ordinary DB locked/unwritable →
-  passthrough; invalid/unreadable/unlockable egress receipt history → refusal
+- **Failure modes**: corrupt/invalid config → startup refusal; a budget read or
+  request-record failure → provider forwarding refusal until repair/restart;
+  invalid/unreadable/unlockable egress receipt history → refusal
   before dial with an actionable local error; upstream error → forwarded
   verbatim to the client.
 - **Observability**: the daemon prints a per-request line; the dashboard polls every 4s; `today --json` is scriptable.

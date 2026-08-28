@@ -29,15 +29,19 @@ another.** Most defects in this repo have been a version of that collapse.
    result, before the user spends effort or a credential on it.
 4. **Read-only by default.** Compute and preview; `--apply` persists. Preserve
    preview-then-commit as a visible step in any new surface.
-5. **Fiscus's own outbound paths are declared and policy-gated.** There is no
+5. **Budget enforcement fails closed.** Invalid persisted budget/configuration
+   or an unreadable ledger must stop provider forwarding rather than silently
+   becoming an unlimited or unmetered path. Dashboard settings are strict,
+   bounded, and validated before persistence.
+6. **Fiscus's own outbound paths are declared and policy-gated.** There is no
    hosted telemetry by default; configured provider forwarding, refreshes,
    webhooks, hosted judging, and team rollups are separate egress paths with
    explicit scope. The GUI talks to the local dashboard only — no CDN, fonts, or
    analytics — but this is not a machine-wide firewall or provider-retention
    guarantee.
-6. **Zero runtime dependencies.** `typescript` and `@types/node` are the only
+7. **Zero runtime dependencies.** `typescript` and `@types/node` are the only
    devDependencies. Adding a runtime dependency is a decision, not a convenience.
-7. **The repo is public.** Scan for credentials, personal data, and local
+8. **The repo is public.** Scan for credentials, personal data, and local
    filesystem paths before every push.
 
 ## Where the durable state lives

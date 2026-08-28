@@ -181,6 +181,44 @@ test('POST /api/settings/update applies a patch, persists it, and requires the l
   }
 });
 
+test('POST /api/settings/update rejects malformed budget values before persistence', async () => {
+  const store = new Store(':memory:');
+  const srv = await boot(store);
+  try {
+    const res = await fetch(`${srv.base}/api/settings/update`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-fiscus-local': '1' },
+      body: JSON.stringify({ budget: { dailyUsd: 'unlimited' } }),
+    });
+    assert.equal(res.status, 400);
+    const body = await res.json() as { error?: { code?: string } };
+    assert.equal(body.error?.code, 'SETTINGS_INVALID');
+    assert.equal(srv.readPersisted().budget.dailyUsd, null, 'invalid caps must never be persisted');
+  } finally {
+    await srv.close();
+    store.close();
+  }
+});
+
+test('POST /api/settings/update rejects an oversized body before parsing or persistence', async () => {
+  const store = new Store(':memory:');
+  const srv = await boot(store);
+  try {
+    const res = await fetch(`${srv.base}/api/settings/update`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-fiscus-local': '1' },
+      body: 'x'.repeat(16 * 1024 + 1),
+    });
+    assert.equal(res.status, 400);
+    const body = await res.json() as { error?: { code?: string } };
+    assert.equal(body.error?.code, 'SETTINGS_INVALID');
+    assert.equal(srv.readPersisted().metadataOnly, false, 'oversized input must not reach the writer');
+  } finally {
+    await srv.close();
+    store.close();
+  }
+});
+
 test('POST /api/settings/clear-proposals removes stored proposals and requires the local header', async () => {
   const store = new Store(':memory:');
   store.insertProposal({

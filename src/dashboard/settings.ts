@@ -7,7 +7,7 @@
 
 import type { Store, ProviderConnection } from '../store/db.ts';
 import type { FiscusConfig, BudgetConfig } from '../config.ts';
-import { fiscusHome, configPath, dbPath } from '../config.ts';
+import { fiscusHome, configPath, dbPath, validateBudgetConfig } from '../config.ts';
 import { describeBudgetEnforcement, type BudgetEnforcementDescriptor } from '../budget/enforceability.ts';
 import { egressReceiptPath, verifyEgressReceipts } from '../egress/receipts.ts';
 
@@ -68,9 +68,34 @@ export interface SettingsPatch {
   budget?: Partial<BudgetConfig>;
 }
 
+export class SettingsValidationError extends Error {
+  readonly code = 'SETTINGS_INVALID';
+
+  constructor(message: string) {
+    super(`SETTINGS_INVALID: ${message}`);
+    this.name = 'SettingsValidationError';
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+const PATCH_KEYS = new Set(['metadataOnly', 'retentionDays', 'proposalRetentionDays', 'budget']);
+const BUDGET_KEYS = new Set([
+  'dailyUsd', 'dailySoftUsd', 'sessionUsd', 'runawayWindowSec', 'runawayMaxUsd', 'capIncludesImported',
+]);
+
 /** Read-modify-write, mirroring cmdBudget's pattern in src/cli/showCmd.ts. Never mutates config. */
 export function applySettingsPatch(config: FiscusConfig, patch: SettingsPatch): FiscusConfig {
+  if (!isRecord(patch)) throw new SettingsValidationError('patch must be an object');
+  for (const key of Object.keys(patch)) {
+    if (!PATCH_KEYS.has(key)) throw new SettingsValidationError(`unsupported patch key: ${key}`);
+  }
   const next: FiscusConfig = { ...config, budget: { ...config.budget } };
+  if ('metadataOnly' in patch && typeof patch.metadataOnly !== 'boolean') {
+    throw new SettingsValidationError('metadataOnly must be boolean');
+  }
   if (typeof patch.metadataOnly === 'boolean') next.metadataOnly = patch.metadataOnly;
   if (typeof patch.retentionDays === 'number' && patch.retentionDays > 0) {
     next.retentionDays = patch.retentionDays;
@@ -78,16 +103,24 @@ export function applySettingsPatch(config: FiscusConfig, patch: SettingsPatch): 
   if (typeof patch.proposalRetentionDays === 'number' && patch.proposalRetentionDays > 0) {
     next.proposalRetentionDays = patch.proposalRetentionDays;
   }
-  if (patch.budget) {
+  if ('budget' in patch) {
+    if (!isRecord(patch.budget)) throw new SettingsValidationError('budget must be an object');
     const b = patch.budget;
-    if ('dailyUsd' in b) next.budget.dailyUsd = b.dailyUsd ?? null;
-    if ('dailySoftUsd' in b) next.budget.dailySoftUsd = b.dailySoftUsd ?? null;
-    if ('sessionUsd' in b) next.budget.sessionUsd = b.sessionUsd ?? null;
-    if ('runawayMaxUsd' in b) next.budget.runawayMaxUsd = b.runawayMaxUsd ?? null;
-    if (typeof b.runawayWindowSec === 'number' && b.runawayWindowSec > 0) {
-      next.budget.runawayWindowSec = b.runawayWindowSec;
+    for (const key of Object.keys(b)) {
+      if (!BUDGET_KEYS.has(key)) throw new SettingsValidationError(`unsupported budget key: ${key}`);
     }
-    if (typeof b.capIncludesImported === 'boolean') next.budget.capIncludesImported = b.capIncludesImported;
+    if ('dailyUsd' in b) next.budget.dailyUsd = b.dailyUsd as BudgetConfig['dailyUsd'];
+    if ('dailySoftUsd' in b) next.budget.dailySoftUsd = b.dailySoftUsd as BudgetConfig['dailySoftUsd'];
+    if ('sessionUsd' in b) next.budget.sessionUsd = b.sessionUsd as BudgetConfig['sessionUsd'];
+    if ('runawayMaxUsd' in b) next.budget.runawayMaxUsd = b.runawayMaxUsd as BudgetConfig['runawayMaxUsd'];
+    if ('runawayWindowSec' in b) next.budget.runawayWindowSec = b.runawayWindowSec as number;
+    if ('capIncludesImported' in b) next.budget.capIncludesImported = b.capIncludesImported as boolean;
+    try {
+      validateBudgetConfig(next.budget);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new SettingsValidationError(message.replace(/^CONFIG_INVALID:\s*/, ''));
+    }
   }
   return next;
 }

@@ -14,7 +14,20 @@
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import {
+  closeSync,
+  copyFileSync,
+  existsSync,
+  fsyncSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  unlinkSync,
+  writeSync,
+} from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { validateEgressRule } from './egress/ruleValidation.ts';
 
 export interface BudgetConfig {
@@ -36,6 +49,47 @@ export interface BudgetConfig {
    * the cap govern total observed AI spend instead of blockable spend.
    */
   capIncludesImported: boolean;
+}
+
+/** Highest USD value that can still round to an exact safe microdollar integer. */
+export const MAX_SAFE_USD = Number.MAX_SAFE_INTEGER / 1_000_000;
+const MAX_RUNAWAY_WINDOW_SEC = 366 * 24 * 60 * 60;
+
+export class ConfigValidationError extends Error {
+  readonly code = 'CONFIG_INVALID';
+
+  constructor(message: string) {
+    super(`CONFIG_INVALID: ${message}`);
+    this.name = 'ConfigValidationError';
+  }
+}
+
+function validNullableUsd(value: unknown): value is number | null {
+  return value === null || (
+    typeof value === 'number'
+    && Number.isFinite(value)
+    && value >= 0
+    && value <= MAX_SAFE_USD
+  );
+}
+
+/** Validate the budget object before it can reach enforcement or persistence. */
+export function validateBudgetConfig(value: unknown): asserts value is BudgetConfig {
+  if (!isRecord(value)) throw new ConfigValidationError('budget must be an object');
+  for (const key of ['dailyUsd', 'dailySoftUsd', 'sessionUsd', 'runawayMaxUsd'] as const) {
+    if (!validNullableUsd(value[key])) {
+      throw new ConfigValidationError(`budget.${key} must be null or a finite non-negative USD value`);
+    }
+  }
+  if (typeof value.runawayWindowSec !== 'number'
+      || !Number.isFinite(value.runawayWindowSec)
+      || value.runawayWindowSec <= 0
+      || value.runawayWindowSec > MAX_RUNAWAY_WINDOW_SEC) {
+    throw new ConfigValidationError(`budget.runawayWindowSec must be a finite positive value no greater than ${MAX_RUNAWAY_WINDOW_SEC}`);
+  }
+  if (typeof value.capIncludesImported !== 'boolean') {
+    throw new ConfigValidationError('budget.capIncludesImported must be boolean');
+  }
 }
 
 export interface AlertsConfig {
@@ -475,14 +529,17 @@ export function loadConfig(): FiscusConfig {
   if (!existsSync(path)) {
     cfg = { ...DEFAULT_CONFIG };
   } else {
+    let raw: unknown;
     try {
-      const raw = JSON.parse(readFileSync(path, 'utf8')) as unknown;
-      cfg = deepMerge(DEFAULT_CONFIG, isRecord(raw) ? raw as Partial<FiscusConfig> : {});
-      cfg = { ...cfg, egress: sanitizeEgressConfig(isRecord(raw) ? raw.egress : undefined) };
-    } catch {
-      // A corrupt config should never take the daemon down. Fall back to defaults.
-      cfg = { ...DEFAULT_CONFIG };
+      raw = JSON.parse(readFileSync(path, 'utf8')) as unknown;
+    } catch (error) {
+      throw new ConfigValidationError(
+        `cannot parse ${path}; repair or restore ${path}.bak before starting Fiscus (${error instanceof Error ? error.message : String(error)})`,
+      );
     }
+    if (!isRecord(raw)) throw new ConfigValidationError(`configuration root in ${path} must be an object`);
+    cfg = deepMerge(DEFAULT_CONFIG, raw as Partial<FiscusConfig>);
+    cfg = { ...cfg, egress: sanitizeEgressConfig(raw.egress) };
   }
   // Ports cross into URL, server, and copy-paste command construction. Never
   // interpolate an untrusted JSON value into those surfaces: malformed values
@@ -492,10 +549,32 @@ export function loadConfig(): FiscusConfig {
     port: sanitizePort(cfg.port, DEFAULT_CONFIG.port),
     dashboardPort: sanitizePort(cfg.dashboardPort, DEFAULT_CONFIG.dashboardPort),
   };
+  validateBudgetConfig(cfg.budget);
   return isDemo() ? withDemoDefaults(cfg) : cfg;
 }
 
 export function saveConfig(config: FiscusConfig): void {
   ensureHome();
-  writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8');
+  validateBudgetConfig(config.budget);
+  const path = configPath();
+  const tempPath = `${path}.tmp-${randomUUID()}`;
+  const backupPath = `${path}.bak`;
+  const text = JSON.stringify(config, null, 2) + '\n';
+  let descriptor: number | null = null;
+  try {
+    // Preserve the previous known-good config before replacing it. The target
+    // itself is replaced by a flushed sibling rename, so readers never observe
+    // a partially written JSON document on filesystems where rename replaces.
+    if (existsSync(path)) copyFileSync(path, backupPath);
+    descriptor = openSync(tempPath, 'wx', 0o600);
+    writeSync(descriptor, text, undefined, 'utf8');
+    fsyncSync(descriptor);
+    closeSync(descriptor);
+    descriptor = null;
+    renameSync(tempPath, path);
+  } catch (error) {
+    if (descriptor !== null) closeSync(descriptor);
+    if (existsSync(tempPath)) unlinkSync(tempPath);
+    throw new ConfigValidationError(`cannot persist ${path}; previous configuration was retained when possible (${error instanceof Error ? error.message : String(error)})`);
+  }
 }

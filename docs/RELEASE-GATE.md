@@ -17,6 +17,7 @@ for this checklist against that source tree:
 | Candidate identity | `git rev-parse HEAD` and `git status --short` recorded before and after validation |
 | Capability/evidence contract | Review `docs/CAPABILITY-EVIDENCE-CONTRACT.md` against the exact candidate; record its revision/date, run `test/public-claims-contract.test.ts`, and confirm any new egress, pricing, performance, return, or recommendation claim names its scope, evidence tier, uncertainty, and revocation condition |
 | Source validation | `npm ci`, `npm run typecheck`, `npm test`, and `npm run build` with exact totals/results |
+| Budget fail-closed integrity | Exercise malformed budget configuration, invalid/oversized dashboard settings, ledger-read failure, and request-persistence failure. Invalid state must be refused before provider dial; after an unpersisted response, the supported proxy circuit must refuse subsequent requests until restart/recovery. |
 | Packed artifact | `npm pack`; record the tarball digest and inspect that `bin`, compiled `dist`, pricing, baselines, and dashboard HTML are present |
 | Clean installed CLI | Install the tarball with `--ignore-scripts` in a fresh directory and run `fiscus --help` |
 | Packaged dashboard/API | Use an isolated `FISCUS_HOME` (records below that predate the rename cite the pre-rename variable, which is what those runs actually used); seed labelled demo data; start the installed dashboard; probe health, overview, value, and HTML; terminate it cleanly |
