@@ -22,6 +22,7 @@ whole tree loaded.
 | Team rollups | `src/team/`, `team-server/` | `docs/TEAM-TIER-DESIGN.md` |
 | Releasing | `docs/RELEASE-GATE.md` | `CLAUDE.md` |
 | Backup/restore and recovery | `src/store/backup.ts` | `src/store/CONTEXT.md`, `docs/RELEASE-GATE.md` |
+| Reliability/performance evidence | `scripts/benchmark.mjs` | `docs/RELIABILITY-PERFORMANCE.md` |
 
 ## Layer 3 — reference (stable; internalize as constraints)
 

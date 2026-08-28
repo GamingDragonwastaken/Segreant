@@ -21,6 +21,7 @@
     "test": "node --disable-warning=ExperimentalWarning --test test/*.test.ts",
     "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit",
     "build": "node scripts/build.mjs",
+    "benchmark": "node --disable-warning=ExperimentalWarning scripts/benchmark.mjs",
     "prepare": "npm run build",
     "predemo": "npm run build",
     "demo": "node --disable-warning=ExperimentalWarning bin/fiscus.mjs demo --serve",

@@ -840,6 +840,7 @@ npm install          # dev-only: typescript + @types/node
 npm run build        # compile the distributable runtime into dist/
 npm test             # node --test (cost, usage, proxy, budget, git)
 npm run typecheck    # tsc --noEmit (strict)
+npm run benchmark    # synthetic performance observations (never user data)
 ```
 
 Runtime dependencies: **none.** The `node_modules` directory holds only the dev
