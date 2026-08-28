@@ -90,6 +90,18 @@ the operator removes only that lock; abandoned locks are never auto-deleted.
 Receipt writes are synchronous, but Fiscus does not claim `fsync` or power-loss
 durability for this local ledger.
 
+The append path keeps a redacted, hash-checked checkpoint in
+`egress-receipts.checkpoint.json` containing only the last verified file
+identity, count, and chain hash. It is an optimization, not a second source of
+truth: a missing/invalid checkpoint or changed receipt identity triggers a
+complete JSONL validation, and `fiscus egress verify` always scans the complete
+history. Checkpoint persistence failure fails closed.
+
+When the proxy receives an upstream redirect, it preserves the status/body for
+diagnosis but strips `Location` before returning the response. A downstream
+client therefore cannot silently follow a provider redirect to a destination
+outside the configured Fiscus-process egress policy.
+
 With the default `metadataOnly: false`, Fiscus may also retain parsed proposed
 code lines locally to measure whether an AI proposal later appeared in a Git
 commit. This is a local-only convenience signal, not a claim that source never

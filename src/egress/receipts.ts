@@ -7,7 +7,19 @@
  * outside that cooperation boundary. Persistence is synchronous, not an fsync
  * or power-loss durability guarantee.
  */
-import { closeSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, Stats, unlinkSync, writeSync } from 'node:fs';
+import {
+  closeSync,
+  fstatSync,
+  fsyncSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  Stats,
+  unlinkSync,
+  writeSync,
+} from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
@@ -106,6 +118,10 @@ export function egressReceiptPath(): string {
 
 function receiptLockPath(): string {
   return join(fiscusHome(), 'egress-receipts.lock');
+}
+
+function receiptCheckpointPath(): string {
+  return join(fiscusHome(), 'egress-receipts.checkpoint.json');
 }
 
 /**
@@ -354,6 +370,103 @@ function sameReceiptFile(a: ReceiptFileIdentity, b: ReceiptFileIdentity): boolea
     && a.birthtimeMs === b.birthtimeMs;
 }
 
+interface ReceiptCheckpoint {
+  version: 1;
+  receiptCount: number;
+  validThroughHash: string | null;
+  fileIdentity: ReceiptFileIdentity;
+  checkpointHash: string;
+}
+
+const CHECKPOINT_FIELDS = new Set(['version', 'receiptCount', 'validThroughHash', 'fileIdentity', 'checkpointHash']);
+const FILE_IDENTITY_FIELDS = new Set(['dev', 'ino', 'size', 'mtimeMs', 'ctimeMs', 'birthtimeMs']);
+
+function checkpointPayload(value: Omit<ReceiptCheckpoint, 'checkpointHash'>): string {
+  return JSON.stringify(value);
+}
+
+function isFileIdentity(value: unknown): value is ReceiptFileIdentity {
+  if (!isObject(value)) return false;
+  const keys = Object.keys(value).sort();
+  return keys.length === FILE_IDENTITY_FIELDS.size
+    && keys.every((key) => FILE_IDENTITY_FIELDS.has(key))
+    && [...FILE_IDENTITY_FIELDS].every((key) => typeof value[key] === 'number' && Number.isFinite(value[key]) && value[key] >= 0);
+}
+
+function readReceiptCheckpoint(): ReceiptCheckpoint | null {
+  const path = receiptCheckpointPath();
+  let stat: Stats;
+  try {
+    stat = lstatSync(path);
+  } catch (error) {
+    return errorCode(error) === 'ENOENT' ? null : null;
+  }
+  if (!stat.isFile() || stat.isSymbolicLink()) return null;
+  try {
+    const parsed = JSON.parse(readFileSync(path, 'utf8')) as unknown;
+    if (!isObject(parsed)) return null;
+    const keys = Object.keys(parsed).sort();
+    if (keys.length !== CHECKPOINT_FIELDS.size || !keys.every((key) => CHECKPOINT_FIELDS.has(key))) return null;
+    if (parsed.version !== 1 || typeof parsed.receiptCount !== 'number' || !Number.isSafeInteger(parsed.receiptCount) || parsed.receiptCount <= 0) return null;
+    if (parsed.validThroughHash !== null && !isHash(parsed.validThroughHash)) return null;
+    if (!isFileIdentity(parsed.fileIdentity) || !isHash(parsed.checkpointHash)) return null;
+    const { checkpointHash, ...base } = parsed as Omit<ReceiptCheckpoint, 'checkpointHash'> & { checkpointHash: string };
+    if (checkpointHash !== sha256(checkpointPayload(base))) return null;
+    return parsed as unknown as ReceiptCheckpoint;
+  } catch {
+    return null;
+  }
+}
+
+function writeReceiptCheckpoint(historyPath: string, receiptCount: number, validThroughHash: string): void {
+  const historyStat = receiptHistoryStat(historyPath);
+  if (historyStat === null) throw new EgressReceiptError('persistence', 'egress receipt history disappeared before checkpoint publication');
+  const checkpointPath = receiptCheckpointPath();
+  try {
+    const existing = lstatSync(checkpointPath);
+    if (!existing.isFile() || existing.isSymbolicLink()) {
+      throw new EgressReceiptError('persistence', 'egress receipt checkpoint path is not a regular file; restore it before retrying');
+    }
+  } catch (error) {
+    if (error instanceof EgressReceiptError) throw error;
+    if (errorCode(error) !== 'ENOENT') throw asReceiptError(error, 'persistence', 'egress receipt checkpoint could not be inspected');
+  }
+  const base: Omit<ReceiptCheckpoint, 'checkpointHash'> = {
+    version: 1,
+    receiptCount,
+    validThroughHash,
+    fileIdentity: receiptFileIdentity(historyStat),
+  };
+  const checkpoint: ReceiptCheckpoint = { ...base, checkpointHash: sha256(checkpointPayload(base)) };
+  const tempPath = `${checkpointPath}.tmp-${randomUUID()}`;
+  let fd: number | null = null;
+  try {
+    fd = openSync(tempPath, 'wx', 0o600);
+    const bytes = Buffer.from(JSON.stringify(checkpoint) + '\n', 'utf8');
+    try {
+      let offset = 0;
+      while (offset < bytes.length) {
+        const written = writeSync(fd, bytes, offset, bytes.length - offset, null);
+        if (written <= 0) throw new EgressReceiptError('persistence', 'egress receipt checkpoint wrote no bytes');
+        offset += written;
+      }
+      fsyncSync(fd);
+    } finally {
+      bytes.fill(0);
+    }
+    closeSync(fd);
+    fd = null;
+    renameSync(tempPath, checkpointPath);
+  } catch (error) {
+    if (fd !== null) {
+      try { closeSync(fd); } catch { /* preserve the original persistence error */ }
+    }
+    try { unlinkSync(tempPath); } catch { /* no residue is best effort after a failed write */ }
+    if (error instanceof EgressReceiptError) throw error;
+    throw asReceiptError(error, 'persistence', 'egress receipt checkpoint persistence failed');
+  }
+}
+
 function sameReceiptObject(a: ReceiptFileIdentity, b: ReceiptFileIdentity): boolean {
   return a.dev === b.dev && a.ino === b.ino && a.birthtimeMs === b.birthtimeMs;
 }
@@ -469,6 +582,31 @@ function inspectReceiptHistory(path: string): ReceiptHistoryInspection {
   };
 }
 
+/**
+ * Reuse a previously verified tail when the canonical file has not changed.
+ * Any missing/invalid checkpoint, or any file-identity drift, falls back to a
+ * complete scan; the checkpoint is never itself treated as the evidence chain.
+ */
+function inspectReceiptHistoryForAppend(path: string): ReceiptHistoryInspection {
+  const stat = receiptHistoryStat(path);
+  if (stat === null) {
+    return { ok: true, receiptCount: 0, validThroughHash: null, errors: [], present: false, records: [] };
+  }
+  const checkpoint = readReceiptCheckpoint();
+  if (checkpoint && sameReceiptFile(receiptFileIdentity(stat), checkpoint.fileIdentity)) {
+    return {
+      ok: true,
+      receiptCount: checkpoint.receiptCount,
+      validThroughHash: checkpoint.validThroughHash,
+      errors: [],
+      present: true,
+      records: [],
+      identity: receiptFileIdentity(stat),
+    };
+  }
+  return inspectReceiptHistory(path);
+}
+
 function persistReceiptLine(path: string, history: ReceiptHistoryInspection, line: string): void {
   let fd: number | null = null;
   try {
@@ -525,7 +663,7 @@ function persistReceiptLine(path: string, history: ReceiptHistoryInspection, lin
 export function appendEgressReceipt(input: ReceiptInput): EgressReceipt {
   return withReceiptLock(() => {
     const path = egressReceiptPath();
-    const history = inspectReceiptHistory(path);
+    const history = inspectReceiptHistoryForAppend(path);
     if (!history.ok) {
       throw new EgressReceiptError(
         'integrity',
@@ -552,6 +690,7 @@ export function appendEgressReceipt(input: ReceiptInput): EgressReceipt {
     };
     const receipt: EgressReceipt = { ...base, hash: receiptHash(prior, base) };
     persistReceiptLine(path, history, JSON.stringify(receipt) + '\n');
+    writeReceiptCheckpoint(path, history.receiptCount + 1, receipt.hash);
     return receipt;
   });
 }

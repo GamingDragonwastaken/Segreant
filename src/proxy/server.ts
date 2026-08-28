@@ -155,6 +155,11 @@ function copyDownstreamHeaders(upstream: Response): Record<string, string> {
     const k = key.toLowerCase();
     if (HOP_BY_HOP.has(k)) return;
     if (k === 'content-encoding') return; // we requested identity
+    // Fiscus deliberately does not follow upstream redirects. Forwarding a
+    // Location header would let a client SDK follow one on its own, potentially
+    // sending the prompt/body/credential to a destination outside this process
+    // boundary. Leave the redirect status visible, but remove the escape route.
+    if (k === 'location') return;
     out[key] = value;
   });
   return out;
