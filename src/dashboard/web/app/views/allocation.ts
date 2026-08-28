@@ -16,7 +16,7 @@
  */
 
 import { h } from '../core/dom.ts';
-import { signal, effect } from '../core/signal.ts';
+import { signal, scopedEffect } from '../core/signal.ts';
 import { api, type AllocationPayload } from '../core/api.ts';
 import { isPrecise, relative, count } from '../core/fmt.ts';
 import { actionCard } from './spend.ts';
@@ -33,7 +33,7 @@ export function allocationView(): Node {
   const data = signal<AllocationPayload | null>(null);
   const error = signal<string | null>(null);
 
-  effect(() => {
+  scopedEffect(() => {
     void api.allocation()
       .then((payload) => data.set(payload))
       .catch((e: unknown) => error.set(e instanceof Error ? e.message : String(e)));

@@ -21,7 +21,7 @@
  */
 
 import { h } from '../core/dom.ts';
-import { signal, effect } from '../core/signal.ts';
+import { signal, scopedEffect } from '../core/signal.ts';
 import { api, type CausalPayload, type ValuePayload } from '../core/api.ts';
 import { usd, count, pct, isPrecise } from '../core/fmt.ts';
 import { actionCard } from './spend.ts';
@@ -114,7 +114,7 @@ export function valueView(): Node {
   const causal = signal<CausalPayload | null>(null);
   const causalError = signal<string | null>(null);
 
-  effect(() => {
+  scopedEffect(() => {
     void api.value()
       .then((payload) => data.set(payload))
       .catch((e: unknown) => error.set(e instanceof Error ? e.message : String(e)));

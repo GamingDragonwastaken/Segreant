@@ -159,6 +159,11 @@ web/
   reads `isPrecise()` inside a host effect is rebuilt in place, so its listeners
   and focus traps release through `onCleanup` — which runs before the next run —
   and never through a nested effect watching for close.
+- **View effects are scoped to their rendered region.** View factories use
+  `scopedEffect`, which registers their disposer with the active render binding;
+  navigation therefore tears down fetch subscriptions. The Metered range fetch
+  also aborts/sequence-checks stale responses and rejects a payload whose
+  declared range differs from the selected range.
 - **The Claim Inspector reads and never acts.** The drawer owns everything that
   changes state. A panel that argues the evidence and offers the button in the
   same box is the shape of every tool this one exists to disagree with.

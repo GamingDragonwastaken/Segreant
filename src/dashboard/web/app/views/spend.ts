@@ -9,7 +9,7 @@
  */
 
 import { h } from '../core/dom.ts';
-import { signal, effect } from '../core/signal.ts';
+import { signal, scopedEffect, onCleanup } from '../core/signal.ts';
 import { api, RANGES, type Overview, type Range, type GroupRow } from '../core/api.ts';
 import { usd, count, pct, isPrecise, register } from '../core/fmt.ts';
 import { capability } from '../core/registry.ts';
@@ -30,12 +30,29 @@ export function spendView(): Node {
   const data = signal<Overview | null>(null);
   const error = signal<string | null>(null);
 
-  effect(() => {
+  scopedEffect(() => {
     const r = range();
+    const controller = new AbortController();
+    let current = true;
     error.set(null);
-    void api.overview(r)
-      .then((payload) => data.set(payload))
-      .catch((e: unknown) => error.set(e instanceof Error ? e.message : String(e)));
+    data.set(null);
+    void api.overview(r, controller.signal)
+      .then((payload) => {
+        if (!current || controller.signal.aborted) return;
+        if (payload.range !== r) {
+          error.set(`The ledger returned ${payload.range} while ${r} was selected; retry the range.`);
+          return;
+        }
+        data.set(payload);
+      })
+      .catch((e: unknown) => {
+        if (!current || controller.signal.aborted) return;
+        error.set(e instanceof Error ? e.message : String(e));
+      });
+    onCleanup(() => {
+      current = false;
+      controller.abort();
+    });
   });
 
   return h('div', null,

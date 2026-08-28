@@ -9,7 +9,7 @@
  */
 
 import { h } from '../core/dom.ts';
-import { signal, effect } from '../core/signal.ts';
+import { signal, scopedEffect } from '../core/signal.ts';
 import { api, type BillingPayload } from '../core/api.ts';
 import { isPrecise, relative, basisWords, usd, usdFromMicros, count } from '../core/fmt.ts';
 import { actionCard } from './spend.ts';
@@ -125,7 +125,7 @@ export function evidenceView(): Node {
   const data = signal<BillingPayload | null>(null);
   const error = signal<string | null>(null);
 
-  effect(() => {
+  scopedEffect(() => {
     void api.billing()
       .then((payload) => data.set(payload))
       .catch((e: unknown) => error.set(e instanceof Error ? e.message : String(e)));

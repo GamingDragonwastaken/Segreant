@@ -542,7 +542,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   health: () => request<HealthPayload>('/api/health'),
-  overview: (range: string) => request<Overview>(`/api/overview?range=${encodeURIComponent(range)}`),
+  overview: (range: string, signal?: AbortSignal) => request<Overview>(
+    `/api/overview?range=${encodeURIComponent(range)}`,
+    signal ? { signal } : undefined,
+  ),
   billing: () => request<BillingPayload>('/api/billing'),
   allocation: () => request<AllocationPayload>('/api/allocation'),
   causal: (studyId?: string) => request<CausalPayload>(

@@ -19,7 +19,7 @@
  */
 
 import { h } from '../core/dom.ts';
-import { signal, effect } from '../core/signal.ts';
+import { signal, scopedEffect } from '../core/signal.ts';
 import { api, type Importer, type ScanPayload, type Overview } from '../core/api.ts';
 import { count, usd, isPrecise } from '../core/fmt.ts';
 import { actionCard } from './spend.ts';
@@ -32,7 +32,7 @@ export function dataView(): Node {
   const scanError = signal<string | null>(null);
   const error = signal<string | null>(null);
 
-  effect(() => {
+  scopedEffect(() => {
     void Promise.allSettled([api.importers(), api.overview('all')])
       .then(([i, o]) => {
         if (i.status === 'fulfilled') importers.set(i.value.importers);

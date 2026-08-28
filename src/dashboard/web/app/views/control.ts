@@ -29,7 +29,7 @@
  */
 
 import { h } from '../core/dom.ts';
-import { signal, effect } from '../core/signal.ts';
+import { signal, scopedEffect } from '../core/signal.ts';
 import { api, type SettingsSnapshot, type Overview, type ValuePayload, type AlertRow } from '../core/api.ts';
 import { usd, count, pct, isPrecise } from '../core/fmt.ts';
 import { actionCard } from './spend.ts';
@@ -40,7 +40,7 @@ export function controlView(): Node {
   const advice = signal<ValuePayload['budget'] | null>(null);
   const error = signal<string | null>(null);
 
-  effect(() => {
+  scopedEffect(() => {
     void Promise.allSettled([api.settings(), api.overview('today'), api.value()])
       .then(([s, o, v]) => {
         if (s.status === 'fulfilled') settings.set(s.value);

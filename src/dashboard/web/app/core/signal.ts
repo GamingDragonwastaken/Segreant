@@ -114,6 +114,18 @@ export function effect(fn: () => void): Cleanup {
   };
 }
 
+/**
+ * Run an effect and register its disposer with the currently active effect.
+ * View factories use this boundary so navigation/rerender cleanup tears down
+ * fetches and subscriptions that were created while the view was rendered.
+ * Outside an active scope it behaves like a normal effect.
+ */
+export function scopedEffect(fn: () => void): Cleanup {
+  const dispose = effect(fn);
+  onCleanup(dispose);
+  return dispose;
+}
+
 export function onCleanup(fn: Cleanup): void {
   if (active) active.cleanups.push(fn);
 }
