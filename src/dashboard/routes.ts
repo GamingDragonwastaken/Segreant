@@ -107,7 +107,10 @@ export interface Route {
 }
 
 export function json(res: http.ServerResponse, status: number, payload: unknown): void {
-  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
+  res.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    'cache-control': 'no-store',
+  });
   res.end(stringifyJson(payload, 0));
 }
 
@@ -545,6 +548,7 @@ export function handleExportCsv({ res, url, store }: RouteContext): void {
     res.writeHead(200, {
       'content-type': 'text/csv; charset=utf-8',
       'content-disposition': `attachment; filename="fiscus-${safe}.csv"`,
+      'cache-control': 'no-store',
     });
     res.end(csv);
   } catch (err) {

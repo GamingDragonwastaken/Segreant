@@ -68,7 +68,16 @@ export function serveStatic(res: http.ServerResponse, pathname: string): boolean
 
   const resolved = resolve(WEB_ROOT, relative);
   if (resolved !== WEB_ROOT && !resolved.startsWith(WEB_ROOT + sep)) return false;
-  if (!existsSync(resolved) || !statSync(resolved).isFile()) return false;
+  let bytes: Buffer;
+  try {
+    if (!existsSync(resolved) || !statSync(resolved).isFile()) return false;
+    // Read before sending headers. A concurrent rebuild, antivirus scan, or
+    // file removal must degrade to a 404 rather than throw from the request
+    // handler after it has committed a 200 response.
+    bytes = readFileSync(resolved);
+  } catch {
+    return false;
+  }
 
   res.writeHead(200, {
     'content-type': type,
@@ -78,7 +87,7 @@ export function serveStatic(res: http.ServerResponse, pathname: string): boolean
     'content-security-policy': CSP_ASSET,
     'x-content-type-options': 'nosniff',
   });
-  res.end(readFileSync(resolved));
+  res.end(bytes);
   return true;
 }
 
