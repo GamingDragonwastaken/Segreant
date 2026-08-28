@@ -66,9 +66,11 @@ and never overwrites the active ledger. These are sensitive local recovery
 artifacts, not encrypted backups, provider billing, or independent attestations.
 
 Egress receipt verification retains the append-only chain but now streams it in
-bounded chunks (with a 1 MiB individual-line refusal) instead of splitting the
-entire JSONL into memory. The checkpoint is an optimization only; Fiscus does
-not silently prune or restart a present history as genesis.
+bounded chunks (with a 1 MiB individual-line refusal and capped error
+diagnostics) instead of splitting the entire JSONL into memory. A new process
+must validate the full chain before it can append; the persisted checkpoint is
+informational only, so it cannot choose a forged predecessor. Fiscus does not
+silently prune or restart a present history as genesis.
 
 `fiscus diagnostics --json [--out <new-file>]` is a read-only, versioned,
 redacted support bundle with correlation IDs, probe durations/error classes,

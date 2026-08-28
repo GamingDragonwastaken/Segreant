@@ -38,6 +38,8 @@ export interface DiagnosticObservation {
   errorClass?: string;
 }
 
+export type RedactedPricingStatus = Omit<PricingStatus, 'sourceUrl'> & { sourceUrlConfigured: boolean };
+
 export interface RedactedDiagnosticBundle {
   version: 1;
   operationId: string;
@@ -72,7 +74,7 @@ export interface RedactedDiagnosticBundle {
     validThroughHash: string | null;
     errors: string[];
   };
-  pricing: { status: PricingStatus | null; baseline: BaselineManifestStatus | null };
+  pricing: { status: RedactedPricingStatus | null; baseline: BaselineManifestStatus | null };
   resources: { rssBytes: number; heapUsedBytes: number };
   observations: DiagnosticObservation[];
 }
@@ -215,6 +217,11 @@ function egressObservation(observations: DiagnosticObservation[]): RedactedDiagn
   return { path: redactDiagnosticPath(path), status: verified.ok ? 'ok' : 'error', receiptCount: verified.receiptCount, validThroughHash: verified.validThroughHash, errors: verified.errors };
 }
 
+function redactPricingStatus(status: PricingStatus): RedactedPricingStatus {
+  const { sourceUrl, ...safe } = status;
+  return { ...safe, sourceUrlConfigured: sourceUrl !== null };
+}
+
 export function buildDiagnostics(): RedactedDiagnosticBundle {
   const observations: DiagnosticObservation[] = [];
   const configObservationResult = configObservation(observations);
@@ -222,7 +229,10 @@ export function buildDiagnostics(): RedactedDiagnosticBundle {
   const db = databaseObservation(observations);
   const egress = egressObservation(observations);
   const pricing = configObservationResult.value
-    ? observe(observations, 'pricing.status', () => pricingStatus(configObservationResult.value!.pricing.maxAgeDays))
+    ? (() => {
+        const status = observe(observations, 'pricing.status', () => pricingStatus(configObservationResult.value!.pricing.maxAgeDays));
+        return status === null ? null : redactPricingStatus(status);
+      })()
     : null;
   const baseline = observe(observations, 'baseline.status', () => baselineManifestStatus());
   const memory = process.memoryUsage();

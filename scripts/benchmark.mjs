@@ -8,9 +8,10 @@
  */
 
 import { performance } from 'node:perf_hooks';
-import { readdirSync, statSync } from 'node:fs';
+import { mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import os from 'node:os';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Store } from '../src/store/db.ts';
@@ -234,31 +235,49 @@ async function runCase(name, rows, iterations) {
 async function main() {
   const { scales, iterations } = parseArgs(process.argv.slice(2));
   const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
+  const isolatedHome = mkdtempSync(join(tmpdir(), 'fiscus-benchmark-home-'));
+  const previousHome = process.env.FISCUS_HOME;
+  const previousDb = process.env.FISCUS_DB;
+  const previousDemo = process.env.FISCUS_DEMO;
+  process.env.FISCUS_HOME = isolatedHome;
+  delete process.env.FISCUS_DB;
+  delete process.env.FISCUS_DEMO;
   let sourceRevision = 'unknown';
   try {
-    sourceRevision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim() || 'unknown';
-  } catch {
-    // A source archive may not include Git metadata; the measurements remain useful.
+    try {
+      sourceRevision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim() || 'unknown';
+    } catch {
+      // A source archive may not include Git metadata; the measurements remain useful.
+    }
+    const cases = [];
+    for (const scale of scales) cases.push(await runCase(scale, SCALE_ROWS[scale], iterations));
+    process.stdout.write(JSON.stringify({
+      benchmarkVersion: 1,
+      generatedAt: new Date().toISOString(),
+      node: process.version,
+      platform: process.platform,
+      arch: process.arch,
+      cpuCount: os.cpus().length,
+      totalMemoryBytes: os.totalmem(),
+      sourceRevision,
+      iterations,
+      scales,
+      externalNetworkAttempted: false,
+      credentialRead: false,
+      isolatedHome: true,
+      packagedDistBytes: directoryBytes(join(root, 'dist')),
+      cases,
+      interpretation: 'Measurements are local synthetic observations. No threshold or release budget is asserted; choose budgets only after comparing repeated runs on the intended release machine.',
+    }, null, 2) + '\n');
+  } finally {
+    if (previousHome === undefined) delete process.env.FISCUS_HOME;
+    else process.env.FISCUS_HOME = previousHome;
+    if (previousDb === undefined) delete process.env.FISCUS_DB;
+    else process.env.FISCUS_DB = previousDb;
+    if (previousDemo === undefined) delete process.env.FISCUS_DEMO;
+    else process.env.FISCUS_DEMO = previousDemo;
+    rmSync(isolatedHome, { recursive: true, force: true });
   }
-  const cases = [];
-  for (const scale of scales) cases.push(await runCase(scale, SCALE_ROWS[scale], iterations));
-  process.stdout.write(JSON.stringify({
-    benchmarkVersion: 1,
-    generatedAt: new Date().toISOString(),
-    node: process.version,
-    platform: process.platform,
-    arch: process.arch,
-    cpuCount: os.cpus().length,
-    totalMemoryBytes: os.totalmem(),
-    sourceRevision,
-    iterations,
-    scales,
-    externalNetworkAttempted: false,
-    credentialRead: false,
-    packagedDistBytes: directoryBytes(join(root, 'dist')),
-    cases,
-    interpretation: 'Measurements are local synthetic observations. No threshold or release budget is asserted; choose budgets only after comparing repeated runs on the intended release machine.',
-  }, null, 2) + '\n');
 }
 
 main().catch((error) => {

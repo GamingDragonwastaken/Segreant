@@ -15,7 +15,6 @@ import {
   mkdirSync,
   openSync,
   readSync,
-  readFileSync,
   renameSync,
   Stats,
   unlinkSync,
@@ -345,6 +344,8 @@ interface ReceiptHistoryInspection extends ReceiptVerification {
 
 const RECEIPT_READ_CHUNK_BYTES = 64 * 1024;
 const MAX_RECEIPT_LINE_BYTES = 1024 * 1024;
+const MAX_RETAINED_RECEIPT_ERRORS = 64;
+const MAX_RETAINED_RECEIPT_ERROR_BYTES = 16 * 1024;
 
 interface ReceiptFileIdentity {
   dev: number;
@@ -383,45 +384,25 @@ interface ReceiptCheckpoint {
   checkpointHash: string;
 }
 
-const CHECKPOINT_FIELDS = new Set(['version', 'receiptCount', 'validThroughHash', 'fileIdentity', 'checkpointHash']);
-const FILE_IDENTITY_FIELDS = new Set(['dev', 'ino', 'size', 'mtimeMs', 'ctimeMs', 'birthtimeMs']);
-
 function checkpointPayload(value: Omit<ReceiptCheckpoint, 'checkpointHash'>): string {
   return JSON.stringify(value);
 }
 
-function isFileIdentity(value: unknown): value is ReceiptFileIdentity {
-  if (!isObject(value)) return false;
-  const keys = Object.keys(value).sort();
-  return keys.length === FILE_IDENTITY_FIELDS.size
-    && keys.every((key) => FILE_IDENTITY_FIELDS.has(key))
-    && [...FILE_IDENTITY_FIELDS].every((key) => typeof value[key] === 'number' && Number.isFinite(value[key]) && value[key] >= 0);
+/**
+ * A checkpoint is intentionally informational, not an authority: a same-user
+ * process can edit every file in the Fiscus home. Each process therefore earns
+ * an in-memory trusted state only after one complete chain validation; a new
+ * process always starts with that validation, then reuses the state while the
+ * file identity remains stable.
+ */
+interface TrustedReceiptState {
+  path: string;
+  identity: ReceiptFileIdentity;
+  receiptCount: number;
+  validThroughHash: string | null;
 }
 
-function readReceiptCheckpoint(): ReceiptCheckpoint | null {
-  const path = receiptCheckpointPath();
-  let stat: Stats;
-  try {
-    stat = lstatSync(path);
-  } catch (error) {
-    return errorCode(error) === 'ENOENT' ? null : null;
-  }
-  if (!stat.isFile() || stat.isSymbolicLink()) return null;
-  try {
-    const parsed = JSON.parse(readFileSync(path, 'utf8')) as unknown;
-    if (!isObject(parsed)) return null;
-    const keys = Object.keys(parsed).sort();
-    if (keys.length !== CHECKPOINT_FIELDS.size || !keys.every((key) => CHECKPOINT_FIELDS.has(key))) return null;
-    if (parsed.version !== 1 || typeof parsed.receiptCount !== 'number' || !Number.isSafeInteger(parsed.receiptCount) || parsed.receiptCount <= 0) return null;
-    if (parsed.validThroughHash !== null && !isHash(parsed.validThroughHash)) return null;
-    if (!isFileIdentity(parsed.fileIdentity) || !isHash(parsed.checkpointHash)) return null;
-    const { checkpointHash, ...base } = parsed as Omit<ReceiptCheckpoint, 'checkpointHash'> & { checkpointHash: string };
-    if (checkpointHash !== sha256(checkpointPayload(base))) return null;
-    return parsed as unknown as ReceiptCheckpoint;
-  } catch {
-    return null;
-  }
-}
+let trustedReceiptState: TrustedReceiptState | null = null;
 
 function writeReceiptCheckpoint(historyPath: string, receiptCount: number, validThroughHash: string): void {
   const historyStat = receiptHistoryStat(historyPath);
@@ -506,6 +487,21 @@ function inspectReceiptHistory(path: string): ReceiptHistoryInspection {
     }
 
     const errors: string[] = [];
+    let retainedErrorBytes = 0;
+    let omittedErrorCount = 0;
+    const addError = (message: string): void => {
+      // Error text is diagnostic only. Keep a bounded, truncated prefix so a
+      // hostile/malformed line cannot turn fail-closed verification into an
+      // unbounded memory sink of its own.
+      const normalized = message.length > 1024 ? message.slice(0, 1021) + '…' : message;
+      const bytes = Buffer.byteLength(normalized, 'utf8');
+      if (errors.length < MAX_RETAINED_RECEIPT_ERRORS && retainedErrorBytes + bytes <= MAX_RETAINED_RECEIPT_ERROR_BYTES) {
+        errors.push(normalized);
+        retainedErrorBytes += bytes;
+      } else {
+        omittedErrorCount++;
+      }
+    };
     const decoder = new StringDecoder('utf8');
     const chunk = Buffer.allocUnsafe(RECEIPT_READ_CHUNK_BYTES);
     let pending = '';
@@ -522,19 +518,19 @@ function inspectReceiptHistory(path: string): ReceiptHistoryInspection {
       lineNumber++;
       const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
       if (!line.trim()) {
-        errors.push('line ' + lineNumber + ': empty receipt line');
+        addError('line ' + lineNumber + ': empty receipt line');
         return;
       }
       let parsed: unknown;
       try {
         parsed = JSON.parse(line);
       } catch {
-        errors.push('line ' + lineNumber + ': not valid receipt JSON');
+        addError('line ' + lineNumber + ': not valid receipt JSON');
         return;
       }
       const failures = schemaErrors(parsed, lineNumber);
       if (failures.length) {
-        errors.push(...failures);
+        for (const failure of failures) addError(failure);
         return;
       }
       const receipt = parsed as EgressReceipt;
@@ -542,8 +538,8 @@ function inspectReceiptHistory(path: string): ReceiptHistoryInspection {
       const { hash, ...base } = receipt;
       const previousMatches = receipt.previousHash === expectedPrevious;
       const hashMatches = hash === receiptHash(expectedPrevious, base);
-      if (!previousMatches) errors.push('line ' + lineNumber + ': previous-hash link does not match');
-      if (!hashMatches) errors.push('line ' + lineNumber + ': receipt hash does not match');
+      if (!previousMatches) addError('line ' + lineNumber + ': previous-hash link does not match');
+      if (!hashMatches) addError('line ' + lineNumber + ': receipt hash does not match');
       if (previousMatches && hashMatches) {
         expectedPrevious = hash;
         validThroughHash = hash;
@@ -579,16 +575,19 @@ function inspectReceiptHistory(path: string): ReceiptHistoryInspection {
         identity,
       };
     }
-    if (!sawTerminatingNewline) errors.push('receipt history is not terminated by a newline; repair the truncated final record before retrying');
+    if (!sawTerminatingNewline) addError('receipt history is not terminated by a newline; repair the truncated final record before retrying');
     const after = receiptHistoryStat(path);
     if (after === null || !sameReceiptFile(openedIdentity, receiptFileIdentity(after))) {
       throw new EgressReceiptError('persistence', 'egress receipt history changed while it was being read; retry only after the history is stable');
     }
+    const reportedErrors = omittedErrorCount > 0
+      ? [...errors, `... ${omittedErrorCount} additional receipt validation error(s) omitted`]
+      : errors;
     return {
-      ok: errors.length === 0 && sawLine,
+      ok: errors.length === 0 && omittedErrorCount === 0 && sawLine,
       receiptCount,
       validThroughHash,
-      errors,
+      errors: reportedErrors,
       present: true,
       records: [],
       identity,
@@ -607,28 +606,40 @@ function inspectReceiptHistory(path: string): ReceiptHistoryInspection {
 }
 
 /**
- * Reuse a previously verified tail when the canonical file has not changed.
- * Any missing/invalid checkpoint, or any file-identity drift, falls back to a
- * complete scan; the checkpoint is never itself treated as the evidence chain.
+ * Reuse state earned by this process after a complete scan while the canonical
+ * file identity remains stable. A persisted checkpoint is never consulted for
+ * authorization, so a forged self-hashed sidecar cannot choose a predecessor.
  */
 function inspectReceiptHistoryForAppend(path: string): ReceiptHistoryInspection {
   const stat = receiptHistoryStat(path);
   if (stat === null) {
+    trustedReceiptState = null;
     return { ok: true, receiptCount: 0, validThroughHash: null, errors: [], present: false, records: [] };
   }
-  const checkpoint = readReceiptCheckpoint();
-  if (checkpoint && sameReceiptFile(receiptFileIdentity(stat), checkpoint.fileIdentity)) {
+  const identity = receiptFileIdentity(stat);
+  if (trustedReceiptState && trustedReceiptState.path === path && sameReceiptFile(identity, trustedReceiptState.identity)) {
     return {
       ok: true,
-      receiptCount: checkpoint.receiptCount,
-      validThroughHash: checkpoint.validThroughHash,
+      receiptCount: trustedReceiptState.receiptCount,
+      validThroughHash: trustedReceiptState.validThroughHash,
       errors: [],
       present: true,
       records: [],
-      identity: receiptFileIdentity(stat),
+      identity,
     };
   }
-  return inspectReceiptHistory(path);
+  const history = inspectReceiptHistory(path);
+  if (history.ok && history.present && history.identity) {
+    trustedReceiptState = {
+      path,
+      identity: history.identity,
+      receiptCount: history.receiptCount,
+      validThroughHash: history.validThroughHash,
+    };
+  } else {
+    trustedReceiptState = null;
+  }
+  return history;
 }
 
 function persistReceiptLine(path: string, history: ReceiptHistoryInspection, line: string): void {
@@ -714,6 +725,14 @@ export function appendEgressReceipt(input: ReceiptInput): EgressReceipt {
     };
     const receipt: EgressReceipt = { ...base, hash: receiptHash(prior, base) };
     persistReceiptLine(path, history, JSON.stringify(receipt) + '\n');
+    const after = receiptHistoryStat(path);
+    if (after === null) throw new EgressReceiptError('persistence', 'egress receipt history disappeared after append; restore it before retrying');
+    trustedReceiptState = {
+      path,
+      identity: receiptFileIdentity(after),
+      receiptCount: history.receiptCount + 1,
+      validThroughHash: receipt.hash,
+    };
     writeReceiptCheckpoint(path, history.receiptCount + 1, receipt.hash);
     return receipt;
   });

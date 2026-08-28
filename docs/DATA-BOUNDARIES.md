@@ -92,16 +92,21 @@ durability for this local ledger.
 
 The append path keeps a redacted, hash-checked checkpoint in
 `egress-receipts.checkpoint.json` containing only the last verified file
-identity, count, and chain hash. It is an optimization, not a second source of
-truth: a missing/invalid checkpoint or changed receipt identity triggers a
-complete JSONL validation, and `fiscus egress verify` always scans the complete
+identity, count, and chain hash. The persisted sidecar is informational and is
+never trusted to authorize a new process: each process performs one complete
+chain validation before it earns an in-memory append state, then reuses that
+state only while the file identity remains stable. A changed identity or an
+invalid chain fails closed, and `fiscus egress verify` always scans the complete
 history. Verification streams the history in bounded chunks rather than
 materializing every parsed receipt; an individual line above the supported
-1 MiB limit is refused for repair. The history itself is retained until an
-operator explicitly preserves/archives it—Fiscus does not silently delete audit
-receipts. Checkpoint persistence failure fails closed. Status-only egress
-callers cancel the returned response body so repeated health, webhook, and team
-operations do not retain unused response streams.
+1 MiB limit is refused, and retained error diagnostics are capped with an
+omitted-error count. The history itself is retained until an operator explicitly
+preserves/archives it—Fiscus does not silently delete audit receipts. Checkpoint
+or state persistence failure fails closed. Status-only egress callers cancel
+the returned response body so repeated health, webhook, and team operations do
+not retain unused response streams. As with the rest of this local boundary,
+an administrator who can rewrite both the receipt file and the running process
+is outside the guarantee.
 
 When the proxy receives an upstream redirect, it preserves the status/body for
 diagnosis but strips `Location` before returning the response. A downstream

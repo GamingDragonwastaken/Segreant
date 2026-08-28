@@ -8,6 +8,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import {
   closeSync,
+  chmodSync,
   fsyncSync,
   lstatSync,
   mkdirSync,
@@ -243,6 +244,7 @@ export function backupDatabase(db: DatabaseSync, sourcePath: string, destination
     mkdirSync(dirname(destination), { recursive: true });
     db.prepare('PRAGMA quick_check').get();
     db.prepare('VACUUM INTO ?').run(destination);
+    chmodSync(destination, 0o600);
     const inspected = inspectOpenDatabase(destination);
     if (isFailure(inspected)) {
       try { rmSync(destination, { force: true }); } catch { /* retain the error boundary */ }
@@ -261,6 +263,7 @@ export function restoreDatabase(sourcePath: string, destinationPath: string): Ba
   const destination = resolve(destinationPath);
   const inspectedSource = inspectBackup(source);
   if (!inspectedSource.ok) return failure(destination, `source backup is invalid: ${inspectedSource.reason}`);
+  if (!inspectedSource.manifestPresent) return failure(destination, 'source backup is missing its integrity manifest; use a Fiscus-created backup artifact');
   if (pathEntryExists(destination)) return failure(destination, 'restore destination already exists; refusing to overwrite it');
   if (pathEntryExists(manifestPath(destination))) return failure(destination, 'restore manifest destination already exists; refusing to overwrite it');
   let db: DatabaseSync | null = null;
@@ -268,6 +271,7 @@ export function restoreDatabase(sourcePath: string, destinationPath: string): Ba
     mkdirSync(dirname(destination), { recursive: true });
     db = new DatabaseSync(source, { readOnly: true });
     db.prepare('VACUUM INTO ?').run(destination);
+    chmodSync(destination, 0o600);
     const inspected = inspectOpenDatabase(destination);
     if (isFailure(inspected)) {
       try { rmSync(destination, { force: true }); } catch { /* retain the error boundary */ }

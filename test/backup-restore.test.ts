@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Store, type RequestRow } from '../src/store/db.ts';
@@ -114,6 +114,28 @@ test('restore refuses an existing destination without changing it', () => {
   }
 });
 
+test('restore refuses a valid but manifestless SQLite file', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-backup-manifestless-'));
+  const source = join(dir, 'source.sqlite');
+  const manual = join(dir, 'manual.sqlite');
+  const destination = join(dir, 'restored.sqlite');
+  const store = new Store(source);
+  store.insertRequest(request());
+  store.close();
+  try {
+    copyFileSync(source, manual);
+    const inspection = Store.inspectBackup(manual);
+    assert.equal(inspection.ok, true, 'read-only inspection may describe a compatible local database');
+    assert.equal(inspection.manifestPresent, false);
+    const restore = Store.restoreBackup(manual, destination);
+    assert.equal(restore.ok, false);
+    assert.match(restore.reason ?? '', /manifest|backup artifact/i);
+    assert.equal(existsSync(destination), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('backup inspection fails closed when its manifest is tampered with', () => {
   const dir = mkdtempSync(join(tmpdir(), 'fiscus-backup-manifest-'));
   const source = join(dir, 'source.sqlite');
@@ -130,6 +152,24 @@ test('backup inspection fails closed when its manifest is tampered with', () => 
     const invalid = Store.inspectBackup(backup);
     assert.equal(invalid.ok, false);
     assert.match(invalid.reason ?? '', /manifest|match/i);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('backup artifacts receive restrictive owner-only mode bits where supported', (t) => {
+  if (process.platform === 'win32') {
+    t.skip('Windows ACL inheritance does not expose POSIX mode bits; choose a private destination and review ACLs');
+    return;
+  }
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-backup-mode-'));
+  const source = join(dir, 'source.sqlite');
+  const backup = join(dir, 'backup.sqlite');
+  const store = new Store(source);
+  store.backupTo(backup);
+  store.close();
+  try {
+    assert.equal(statSync(backup).mode & 0o777, 0o600);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

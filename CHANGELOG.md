@@ -26,6 +26,17 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
   bounded 503, and the default bind is loopback rather than all interfaces.
 - The supported launcher now propagates spawn/signalled-child failures and
   refuses to bypass the publication lock on filesystem permission errors.
+- Receipt checkpoints are no longer trusted as cross-process authority: a
+  process validates the full chain before earning an in-memory append state;
+  malformed-history diagnostics are bounded, and a 1 MiB line limit prevents a
+  single corrupt record from becoming a memory sink.
+- Restore now requires the integrity manifest emitted by `fiscus backup`; a
+  merely compatible arbitrary SQLite file can still be inspected, but cannot be
+  promoted through the restore path.
+- The synthetic benchmark always creates a temporary `FISCUS_HOME`, so custom
+  pricing caches and provenance in the caller's home cannot affect a run.
+- Redacted diagnostics omit the complete custom pricing URL, retaining only a
+  `sourceUrlConfigured` flag and safe pricing provenance fields.
 
 - SQLite causal evidence tables now enable recursive triggers on every Store
   connection. `INSERT OR REPLACE` therefore cannot silently delete and replace

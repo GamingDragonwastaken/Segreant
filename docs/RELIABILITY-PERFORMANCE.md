@@ -51,9 +51,11 @@ claim that every machine or real workload meets a latency target.
 
 ## Boundaries and next measurement
 
-- The harness never opens the user's default Fiscus home and reports
-  `externalNetworkAttempted: false` and `credentialRead: false` in its JSON.
-- The receipt verifier has its own bounded-memory streaming path; receipt-log
+- The harness creates and removes its own temporary `FISCUS_HOME`, regardless of
+  the caller's environment, and reports `isolatedHome: true`,
+  `externalNetworkAttempted: false`, and `credentialRead: false` in its JSON.
+- The receipt verifier has its own bounded-memory streaming path, capped error
+  diagnostics, and a non-authoritative persisted checkpoint; receipt-log
   retention is intentionally not auto-pruned because deletion would alter audit
   history and needs an explicit archival policy.
 - Tarball entry count, digest, clean installation, and packaged dashboard/API

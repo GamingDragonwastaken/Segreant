@@ -826,7 +826,9 @@ fiscus restore --from .\backups\fiscus-2026-08-28.sqlite --out .\recovered\fiscu
 fiscus restore --from .\backups\fiscus-2026-08-28.sqlite --out .\recovered\fiscus.sqlite --apply --json
 ```
 
-Restore refuses an existing destination and never overwrites the active ledger.
+Restore accepts only a verified Fiscus-created backup artifact with its
+integrity manifest, refuses an existing destination, and never overwrites the
+active ledger.
 Point a later isolated run at the recovered file with `FISCUS_DB` only after
 inspecting the verification result. This is a local recovery artifact, not an
 independent audit attestation or provider-billing record.
