@@ -75,7 +75,50 @@ the existing `dist/cli.js`/deep-import and package-surface contract. The
 historical candidate rows below do not cover these later sources and must not
 be reused as exact-head release evidence.
 
-### Current local candidate record — source commit `a5d1121`, 2026-08-27
+### Current local candidate record — source commit `dd09d07`, 2026-08-29
+
+This record supersedes the `a5d1121` record above without rewriting it. The
+exact candidate head is
+`dd09d07fcd766bebbfd6a292be37b7a1445728fb` in the isolated
+`codex/high-assurance-foundation` worktree. Its parent `07855b8` contains the
+last code-bearing change; `dd09d07` changes only the measured performance
+documentation. The full source suite was run against that code-bearing tree,
+and the only delta to this candidate is documentation. The source/package tree
+was clean before and after the exact-head package/runtime validation below.
+This remains a local developer candidate, not an external release: no push,
+exact-head CI run, registry publication, deployment, provider credential, or
+browser connector evidence exists.
+
+| Requirement | Result |
+| --- | --- |
+| Candidate identity | **Pass.** `git rev-parse HEAD` → `dd09d07fcd766bebbfd6a292be37b7a1445728fb`; the candidate worktree was clean before and after the exact-head validation. |
+| Capability/evidence contract | **Pass.** The capability, causal-protocol, data-boundary, roadmap, handoff, and release-gate documents were reviewed against the candidate. The full suite includes public-claims, egress, causal, billing, backup, diagnostics, and package-surface contracts; no local estimate is promoted to provider billing, causal return, or automatic routing. |
+| Source validation | **Pass.** Root `npm ci --ignore-scripts` → 4 packages, 0 vulnerabilities; `team-server` `npm ci --ignore-scripts` → 19 packages, 0 vulnerabilities; root, browser-app, and team-server typechecks exit 0. Full `npm test` → **911 tests, 908 pass, 0 fail, 3 intentional platform skips** on the immediately preceding code-bearing tree (`07855b8`); `dd09d07` has no source/test delta. `npm run build` exit 0; `npm run build -- --web` exit 0 with the CLI SHA-256 unchanged (`C427AB11B811360FC66950FE03B24F251FBE862D0DAABE3DC5EE8E56E81A2E6`). |
+| Packed artifact | **Pass.** Exact-head `npm pack --ignore-scripts` → **170 entries, 820,950 bytes**, SHA-256 `745DB03EF4BFD873DF57986159241170447059552CAAAB37E8E20D82E0A03A9B`. Required launcher/publication-lock, compiled CLI/store/backup/diagnostics/dashboard, pricing, baselines, seal, and public docs are present; internal `.codex`/superpowers and research-only `dist/value/causalExperiment.js` paths are absent. |
+| Clean installed CLI | **Pass.** The exact tarball was installed with scripts disabled into a fresh prefix. Packaged `fiscus --help` includes `backup` and `diagnostics`; isolated `demo --json`, active-ledger `today --json`, and `causal status --json` ran successfully. The causal status contained `studies: []`. |
+| Packaged dashboard/API | **Pass.** From the exact tarball and isolated `FISCUS_HOME`, `start --demo --port 18190 --dashboard-port 18191` served HTTP 200 for `/api/health`, `/api/overview?range=all`, `/api/value?range=all`, `/api/causal`, `/api/billing`, `/`, `/classic`, and `/app/main.js`. Overview/value/causal/billing payloads self-labelled demo mode; `/` carried `id="app"`; `/classic` carried the labelled renderer; `/app/main.js` resolved as JavaScript; the process was stopped and both test ports were closed. |
+| Model-trial truthfulness | **Pass for the local boundary.** Source and value/frontier contracts continue to require like-task evidence, minimum cohorts, and an anytime-valid separation before `evidence_supported`; the packaged demo remains synthetic and review-only (`trial`) with no automatic routing or provider-savings claim. |
+| Causal-evidence integrity | **Pass for the local boundary, not a causal result.** The exact 911-test suite covers append-only V1/V2 state, scalar lineage, recursive-trigger conflict protection, replay, and collecting/no-outcome precedence. Packaged status reports no retained public study. A governed prospective study, independent outcomes, provider/account scope, and public qualification remain absent. |
+| Billing-boundary truthfulness | **Pass.** Packaged `/api/billing` remains demo-labelled and `not_reconciled`. An isolated source run of `billing scope set --apply` preserved `operator_declared_unverified`; `billing openai-costs preview` returned `applied: false`, `networkAttempted: false`, and `credentialRead: false` for a `proj_gate_release` scope. No provider account or amount was validated. |
+| Direct-Costs connector boundary | **Pass for preview only.** The preview above read no credential and made no network request; live collection and reconciliation remain owner-authorized external gates. |
+| Egress disclosure | **Pass for the local process boundary.** Egress, redirect-`Location` stripping, response-body release, checkpoint, and streaming full-history tests pass. Receipt verification keeps the retained chain without materializing the entire JSONL; the documented scope remains Fiscus-process transport, not a machine-wide firewall or provider-retention guarantee. |
+| Launcher/publication integrity | **Pass.** Spawn/signalled-child errors and publication-lock failures are nonzero/fatal in the supported launcher; build-race/source-fingerprint tests pass. Direct unmanaged `dist/*` readers and `npm pack` remain explicitly outside the whole-tree reader lock. |
+| Backup and recovery integrity | **Pass.** The packaged CLI created a `VACUUM INTO` snapshot with `integrity: ok`, SHA-256/schema fingerprint, required `requests`/`sessions` contract, and a redacted manifest; restore preview reported `applied: false`, and `--apply` restored into a new path. Corrupt/tampered/existing-destination tests fail closed; no active ledger was overwritten. |
+| Reliability/performance observations | **Pass as measurement, not SLA.** The exact-head harness (`sourceRevision: dd09d07`, Node `v24.18.0`, win32/x64, 12 CPUs) covered 100/1,000/10,000 rows with three samples and a 100,000-row one-sample stress case. The recorded medians are ingest 6.02/44.68/479.91/5,000.99 ms, overview 3.03/9.20/94.91/1,395.28 ms, frontier 0.59/1.42/14.75/331.08 ms, and API p95 8.32/12.06/106.88/1,379.76 ms; RSS deltas and compiled-dist size are recorded in `docs/RELIABILITY-PERFORMANCE.md`. No universal threshold is asserted. |
+| Redacted diagnostics | **Pass.** The packaged command emitted a version-1 bundle and atomically exported it without leaking the isolated home path. Source tests prove operation IDs, finite probe durations/error classes, read-only schema/migration inspection, egress/pricing observations, overwrite refusal, and no prompt/source/credential/ledger-row export. |
+| Intended CI | **Not satisfied.** No push was authorized and no CI run exists on this local candidate head. A workflow definition or historical run is not substituted for exact-head evidence. |
+| Visual check | **Not satisfied in this environment.** Source/DOM contracts and packaged HTTP probes pass, but no browser connector is installed here; screenshot, keyboard traversal, contrast, screen-reader tree, and WCAG runtime evidence remain unverified. |
+
+**What this candidate establishes.** This is a clean, locally verified,
+reviewable high-assurance implementation checkpoint with fail-closed budgets and
+egress, causal/evidence separation, exact billing provenance, accessible source
+semantics, non-destructive backup/restore, bounded receipt verification,
+reproducible performance observations, and a redacted support bundle. It does
+not establish provider invoice finality, a qualified causal financial result,
+machine-wide privacy, hosted team-server readiness, a production deployment, or
+an external publication.
+
+### Superseded record — source commit `a5d1121`, 2026-08-27
 
 The record below is bound to source commit
 `a5d112109b42872a206849cd4f8898743806b7c4` in the isolated
