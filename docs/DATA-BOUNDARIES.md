@@ -95,7 +95,11 @@ The append path keeps a redacted, hash-checked checkpoint in
 identity, count, and chain hash. It is an optimization, not a second source of
 truth: a missing/invalid checkpoint or changed receipt identity triggers a
 complete JSONL validation, and `fiscus egress verify` always scans the complete
-history. Checkpoint persistence failure fails closed. Status-only egress
+history. Verification streams the history in bounded chunks rather than
+materializing every parsed receipt; an individual line above the supported
+1 MiB limit is refused for repair. The history itself is retained until an
+operator explicitly preserves/archives it—Fiscus does not silently delete audit
+receipts. Checkpoint persistence failure fails closed. Status-only egress
 callers cancel the returned response body so repeated health, webhook, and team
 operations do not retain unused response streams.
 

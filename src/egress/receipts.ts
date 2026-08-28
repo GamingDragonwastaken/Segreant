@@ -14,6 +14,7 @@ import {
   lstatSync,
   mkdirSync,
   openSync,
+  readSync,
   readFileSync,
   renameSync,
   Stats,
@@ -21,6 +22,7 @@ import {
   writeSync,
 } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
+import { StringDecoder } from 'node:string_decoder';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fiscusHome, type EgressDataClass, type EgressPurpose } from '../config.ts';
@@ -341,6 +343,9 @@ interface ReceiptHistoryInspection extends ReceiptVerification {
   identity?: ReceiptFileIdentity;
 }
 
+const RECEIPT_READ_CHUNK_BYTES = 64 * 1024;
+const MAX_RECEIPT_LINE_BYTES = 1024 * 1024;
+
 interface ReceiptFileIdentity {
   dev: number;
   ino: number;
@@ -488,98 +493,117 @@ function receiptHistoryStat(path: string): Stats | null {
   }
 }
 
-function readReceiptHistory(path: string): { text: string; identity: ReceiptFileIdentity } | null {
-  const before = receiptHistoryStat(path);
-  if (before === null) return null;
-  const identity = receiptFileIdentity(before);
-  let text: string;
-  try {
-    text = readFileSync(path, 'utf8');
-  } catch (error) {
-    if (errorCode(error) === 'ENOENT') {
-      throw new EgressReceiptError('persistence', 'egress receipt history disappeared after its presence was confirmed; restore it before retrying');
-    }
-    throw asReceiptError(error, 'persistence', 'egress receipt history could not be read');
-  }
-  const after = receiptHistoryStat(path);
-  if (after === null || !sameReceiptFile(identity, receiptFileIdentity(after))) {
-    throw new EgressReceiptError('persistence', 'egress receipt history changed while it was being read; retry only after the history is stable');
-  }
-  return { text, identity };
-}
-
 function inspectReceiptHistory(path: string): ReceiptHistoryInspection {
-  const read = readReceiptHistory(path);
-  if (read === null) return { ok: true, receiptCount: 0, validThroughHash: null, errors: [], present: false, records: [] };
-  const { text, identity } = read;
+  const before = receiptHistoryStat(path);
+  if (before === null) return { ok: true, receiptCount: 0, validThroughHash: null, errors: [], present: false, records: [] };
+  const identity = receiptFileIdentity(before);
+  let fd: number | null = null;
+  try {
+    fd = openSync(path, 'r');
+    const openedIdentity = receiptFileIdentity(fstatSync(fd));
+    if (!sameReceiptFile(identity, openedIdentity)) {
+      throw new EgressReceiptError('persistence', 'egress receipt history changed before it was read; retry only after the history is stable');
+    }
 
-  if (text.length === 0) {
+    const errors: string[] = [];
+    const decoder = new StringDecoder('utf8');
+    const chunk = Buffer.allocUnsafe(RECEIPT_READ_CHUNK_BYTES);
+    let pending = '';
+    let lineNumber = 0;
+    let totalBytes = 0;
+    let sawTerminatingNewline = false;
+    let expectedPrevious: string | null = null;
+    let validThroughHash: string | null = null;
+    let receiptCount = 0;
+    let sawLine = false;
+
+    const inspectLine = (rawLine: string): void => {
+      sawLine = true;
+      lineNumber++;
+      const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
+      if (!line.trim()) {
+        errors.push('line ' + lineNumber + ': empty receipt line');
+        return;
+      }
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(line);
+      } catch {
+        errors.push('line ' + lineNumber + ': not valid receipt JSON');
+        return;
+      }
+      const failures = schemaErrors(parsed, lineNumber);
+      if (failures.length) {
+        errors.push(...failures);
+        return;
+      }
+      const receipt = parsed as EgressReceipt;
+      receiptCount++;
+      const { hash, ...base } = receipt;
+      const previousMatches = receipt.previousHash === expectedPrevious;
+      const hashMatches = hash === receiptHash(expectedPrevious, base);
+      if (!previousMatches) errors.push('line ' + lineNumber + ': previous-hash link does not match');
+      if (!hashMatches) errors.push('line ' + lineNumber + ': receipt hash does not match');
+      if (previousMatches && hashMatches) {
+        expectedPrevious = hash;
+        validThroughHash = hash;
+      }
+    };
+
+    while (true) {
+      const bytesRead = readSync(fd, chunk, 0, chunk.length, null);
+      if (bytesRead === 0) break;
+      totalBytes += bytesRead;
+      pending += decoder.write(chunk.subarray(0, bytesRead));
+      let newline = pending.indexOf('\n');
+      while (newline >= 0) {
+        inspectLine(pending.slice(0, newline));
+        pending = pending.slice(newline + 1);
+        sawTerminatingNewline = true;
+        newline = pending.indexOf('\n');
+      }
+      if (Buffer.byteLength(pending, 'utf8') > MAX_RECEIPT_LINE_BYTES) {
+        throw new EgressReceiptError('integrity', 'egress receipt history contains a line larger than the supported limit; repair it before retrying');
+      }
+    }
+    pending += decoder.end();
+    if (pending.length > 0) inspectLine(pending);
+    if (totalBytes === 0) {
+      return {
+        ok: false,
+        receiptCount: 0,
+        validThroughHash: null,
+        errors: ['empty receipt history is present; remove or repair it before retrying'],
+        present: true,
+        records: [],
+        identity,
+      };
+    }
+    if (!sawTerminatingNewline) errors.push('receipt history is not terminated by a newline; repair the truncated final record before retrying');
+    const after = receiptHistoryStat(path);
+    if (after === null || !sameReceiptFile(openedIdentity, receiptFileIdentity(after))) {
+      throw new EgressReceiptError('persistence', 'egress receipt history changed while it was being read; retry only after the history is stable');
+    }
     return {
-      ok: false,
-      receiptCount: 0,
-      validThroughHash: null,
-      errors: ['empty receipt history is present; remove or repair it before retrying'],
+      ok: errors.length === 0 && sawLine,
+      receiptCount,
+      validThroughHash,
+      errors,
       present: true,
       records: [],
       identity,
     };
-  }
-
-  const lines = text.split(/\r?\n/);
-  const errors: string[] = [];
-  if (!text.endsWith('\n')) errors.push('receipt history is not terminated by a newline; repair the truncated final record before retrying');
-  if (lines.at(-1) === '') lines.pop();
-  const records: Array<EgressReceipt | null> = [];
-  for (const [index, line] of lines.entries()) {
-    const lineNumber = index + 1;
-    if (!line.trim()) {
-      errors.push('line ' + lineNumber + ': empty receipt line');
-      records.push(null);
-      continue;
+  } catch (error) {
+    if (error instanceof EgressReceiptError) throw error;
+    if (errorCode(error) === 'ENOENT') {
+      throw new EgressReceiptError('persistence', 'egress receipt history disappeared after its presence was confirmed; restore it before retrying');
     }
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(line);
-    } catch {
-      errors.push('line ' + lineNumber + ': not valid receipt JSON');
-      records.push(null);
-      continue;
-    }
-    const failures = schemaErrors(parsed, lineNumber);
-    if (failures.length) {
-      errors.push(...failures);
-      records.push(null);
-      continue;
-    }
-    records.push(parsed as EgressReceipt);
-  }
-
-  let expectedPrevious: string | null = null;
-  let validThroughHash: string | null = null;
-  let receiptCount = 0;
-  for (const [index, receipt] of records.entries()) {
-    if (receipt === null) continue;
-    receiptCount++;
-    const { hash, ...base } = receipt;
-    const lineNumber = index + 1;
-    const previousMatches = receipt.previousHash === expectedPrevious;
-    const hashMatches = hash === receiptHash(expectedPrevious, base);
-    if (!previousMatches) errors.push('line ' + lineNumber + ': previous-hash link does not match');
-    if (!hashMatches) errors.push('line ' + lineNumber + ': receipt hash does not match');
-    if (previousMatches && hashMatches) {
-      expectedPrevious = hash;
-      validThroughHash = hash;
+    throw asReceiptError(error, 'persistence', 'egress receipt history could not be read');
+  } finally {
+    if (fd !== null) {
+      try { closeSync(fd); } catch { /* preserve the original read result */ }
     }
   }
-  return {
-    ok: errors.length === 0 && records.length > 0,
-    receiptCount,
-    validThroughHash,
-    errors,
-    present: true,
-    records,
-    identity,
-  };
 }
 
 /**

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { appendEgressReceipt, egressReceiptPath, verifyEgressReceipts, type ReceiptInput } from '../src/egress/receipts.ts';
 
 function input(event: ReceiptInput['event']): ReceiptInput {
@@ -59,4 +60,11 @@ test('a malformed checkpoint is an optimization miss and is rebuilt after full v
     else process.env.FISCUS_HOME = previousHome;
     rmSync(home, { recursive: true, force: true });
   }
+});
+
+test('receipt verification does not materialize the complete JSONL history as an array', () => {
+  const sourcePath = fileURLToPath(new URL('../src/egress/receipts.ts', import.meta.url));
+  const source = readFileSync(sourcePath, 'utf8');
+  assert.equal(source.includes('const lines = text.split'), false, 'verification must stream lines instead of splitting the full log');
+  assert.equal(source.includes('const records: Array<EgressReceipt | null>'), false, 'verification must not retain every parsed receipt in memory');
 });
