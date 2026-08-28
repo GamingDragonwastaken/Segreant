@@ -7,9 +7,10 @@ reconciliation has been verified. Treat [docs/RELEASE-GATE.md](docs/RELEASE-GATE
 as the release authority; the current record is bound to its named source SHA,
 not inherited by later code changes.
 
-**Current local checkpoint:** `codex/high-assurance-foundation` at
-`16e123b` (exact-head release record), with source/package evidence bound to
-`dd09d07` and the last code-bearing tree at `07855b8`. The canonical `main`
+**Current local checkpoint:** see the newest “Current local candidate record” in
+[docs/RELEASE-GATE.md](docs/RELEASE-GATE.md). The source/package evidence head
+is `dd09d07`, with the last code-bearing tree at `07855b8`; later branch tips
+are documentation-only evidence and handoff follow-ups. The canonical `main`
 checkout remains a separate dirty recovery source; do not reset, clean, or
 merge it implicitly.
 
