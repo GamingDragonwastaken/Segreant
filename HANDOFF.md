@@ -1,10 +1,17 @@
 # Handoff — Fiscus
 
 **State:** active local development candidate. The package version is `0.1.0`,
-but no npm publication, GitHub release, external deployment, or provider-billing
+and the isolated high-assurance branch has a fresh local release record, but no
+npm publication, GitHub release, external deployment, or provider-billing
 reconciliation has been verified. Treat [docs/RELEASE-GATE.md](docs/RELEASE-GATE.md)
-as the release authority; it must be refreshed against the exact final commit
-before any public claim.
+as the release authority; the current record is bound to its named source SHA,
+not inherited by later code changes.
+
+**Current local checkpoint:** `codex/high-assurance-foundation` at
+`16e123b` (exact-head release record), with source/package evidence bound to
+`dd09d07` and the last code-bearing tree at `07855b8`. The canonical `main`
+checkout remains a separate dirty recovery source; do not reset, clean, or
+merge it implicitly.
 
 ## Canonical checkout
 
@@ -50,6 +57,25 @@ state is repaired and Fiscus is restarted. This protects the control boundary;
 it does not prevent a request already sent before a persistence failure from
 having reached its configured provider.
 
+The local candidate also has a non-destructive `backup --out` and
+preview-first `restore --from/--out --apply` path. Snapshots use SQLite
+`VACUUM INTO`, quick/foreign-key checks, a SHA-256/schema fingerprint, and a
+redacted manifest; restore refuses corrupt, symlinked, or existing destinations
+and never overwrites the active ledger. These are sensitive local recovery
+artifacts, not encrypted backups, provider billing, or independent attestations.
+
+Egress receipt verification retains the append-only chain but now streams it in
+bounded chunks (with a 1 MiB individual-line refusal) instead of splitting the
+entire JSONL into memory. The checkpoint is an optimization only; Fiscus does
+not silently prune or restart a present history as genesis.
+
+`fiscus diagnostics --json [--out <new-file>]` is a read-only, versioned,
+redacted support bundle with correlation IDs, probe durations/error classes,
+schema/migration, egress/pricing, and resource observations. It exports no
+prompts, source, credentials, raw ledger rows, or absolute user paths and does
+not send telemetry. `npm run benchmark` provides synthetic performance
+observations across the documented scale ladder; it asserts no universal SLA.
+
 The current local candidate also includes two bounded internal foundations: a
 Store-owned independent causal-unit producer that derives identity from retained
 Git/request scalars, and exact imported-billing project/account mapping coverage
@@ -68,6 +94,12 @@ provider account or make imported dollars authoritative.
 5. Keep all product copy aligned with
    [docs/DATA-BOUNDARIES.md](docs/DATA-BOUNDARIES.md) and the documented
    local-list-price limitation.
+6. Run `npm run benchmark -- --scale=small,current,10x --iterations=3` and,
+   where the machine can support it, the explicit `--stress` 100× case; retain
+   the JSON with the source revision and machine profile.
+7. Use `fiscus diagnostics --json` for a redacted handoff and exercise backup /
+   restore preview/apply against a new destination before calling recovery
+   ready.
 
 ## Owner-authorized external actions
 
@@ -91,6 +123,12 @@ real PostgreSQL schema/transactions/replay policy, real OIDC authentication and
 authorization, TLS, secrets/rotation, backups/restore, retention/incident
 controls, and a complete synthetic client-to-server flow. See
 [docs/RELEASE-GATE.md](docs/RELEASE-GATE.md).
+
+The remaining local-candidate gates are intentionally visible: browser
+screenshots/keyboard/WCAG runtime evidence is unavailable without a browser
+connector; CI on a pushed exact head, provider-authoritative reconciliation, a
+governed causal study/public qualification, real PostgreSQL/OIDC/TLS/team
+deployment, registry publication, and customer evidence have not occurred.
 
 ## Compatibility
 
