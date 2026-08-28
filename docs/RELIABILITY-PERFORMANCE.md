@@ -31,17 +31,17 @@ delta, so it is an observation rather than a leak verdict.
 ## 2026-08-28 Windows baseline
 
 Environment: Node `v24.18.0`, `win32/x64`, with the source revision recorded in
-the benchmark JSON, compiled `dist/` **1,884,033 bytes**. The small/current/10×
+the benchmark JSON, compiled `dist/` **1,884,757 bytes**. The small/current/10×
 rows used three timed samples; the 100× row used one timed sample to keep the
 stress run bounded. Values are rounded from the exact-head JSON output of the
-harness and are not release thresholds.
+harness (`sourceRevision: a4b91a8`) and are not release thresholds.
 
 | Scale | Rows | Ingest (ms) | Summary (ms) | Overview (ms) | Frontier (ms) | API p95 (ms) | RSS delta |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| small | 100 | 6.02 | 0.05 | 3.03 | 0.59 | 8.32 | 1.88 MiB |
-| current | 1,000 | 44.68 | 0.26 | 9.20 | 1.42 | 12.06 | 13.89 MiB |
-| 10× | 10,000 | 479.91 | 3.10 | 94.91 | 14.75 | 106.88 | 37.07 MiB |
-| 100× stress | 100,000 | 5,000.99 | 43.96 | 1,395.28 | 331.08 | 1,379.76 | 158.75 MiB |
+| small | 100 | 7.14 | 0.05 | 3.94 | 0.67 | 8.17 | 1.70 MiB |
+| current | 1,000 | 59.83 | 0.26 | 12.97 | 1.93 | 16.94 | 14.34 MiB |
+| 10× | 10,000 | 604.77 | 4.44 | 126.74 | 21.86 | 147.87 | 126.95 MiB |
+| 100× stress | 100,000 | 6,726.06 | 69.77 | 1,964.87 | 510.64 | 1,961.76 | 131.75 MiB |
 
 The 100× result is meaningful as a stress observation: ingest remains finite,
 the indexed summaries remain below a tenth of a second in this run, and the
