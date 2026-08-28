@@ -27,6 +27,7 @@ import { cmdCausal } from './cli/causalCmd.ts';
 import { cmdAlerts, cmdDoctor, cmdInit, cmdGuide, cmdAudit } from './cli/opsCmd.ts';
 import { cmdShow, cmdSources, cmdExport, cmdConfig, cmdBudget, cmdPrune, cmdProject } from './cli/showCmd.ts';
 import { cmdStart, cmdDemo, cmdPricing, cmdBaseline, cmdReprice } from './cli/runCmd.ts';
+import { cmdBackup, cmdRestore } from './cli/backupCmd.ts';
 
 function cmdHelp(): void {
   console.log(`
@@ -159,6 +160,10 @@ function cmdHelp(): void {
                           by the tool, inferred from its recorded path, or never
                           attributed at all — an assertion, never verified identity
     prune                 Prune old rows and compact the database
+    backup --out <file>   Create a verified, local SQLite ledger snapshot
+    restore --from <file> --out <file>
+                          Preview a backup, or create a new verified database
+                          with --apply. The active ledger is never overwritten.
     demo                  Generate isolated, clearly-labeled synthetic data so every
                           surface populates without an API key (--serve to launch the
                           dashboard on it; --clear to remove). Add --demo to any read
@@ -334,6 +339,12 @@ async function main(): Promise<void> {
       break;
     case 'prune':
       cmdPrune();
+      break;
+    case 'backup':
+      cmdBackup(flags);
+      break;
+    case 'restore':
+      cmdRestore(flags);
       break;
     case 'pricing':
       await cmdPricing(flags);

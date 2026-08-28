@@ -34,6 +34,19 @@ npx fiscus sources --demo   # spend by connected tool, at honest depth
 npx fiscus budget --recommend --demo   # a cap that fits + the shadow price
 ```
 
+For a local recovery checkpoint, create a verified snapshot and restore only
+into a new path:
+
+```bash
+npx fiscus backup --out ./backups/fiscus.sqlite --json
+npx fiscus restore --from ./backups/fiscus.sqlite --out ./recovered/fiscus.sqlite --json
+npx fiscus restore --from ./backups/fiscus.sqlite --out ./recovered/fiscus.sqlite --apply --json
+```
+
+Restore never overwrites the active ledger. The SQLite file and its manifest are
+sensitive local artifacts (they can include retained proposals or causal
+assignment material) and are not encrypted by Fiscus.
+
 ## 2. Meter your own AI usage
 
 ### The easiest path: zero wiring, if you already use a supported tool

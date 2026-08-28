@@ -40,6 +40,7 @@ import * as billing from './billing.ts';
 import * as causal from './causal.ts';
 import * as causalLineage from './causalLineage.ts';
 import * as causalProducer from './causalProducer.ts';
+import * as backup from './backup.ts';
 import * as realization from './realization.ts';
 import type {
   RealizationCostSync,
@@ -124,6 +125,7 @@ export type {
   IndependentCausalProducerInputV2,
   IndependentCausalProducerReasonCodeV2,
 } from './causalProducer.ts';
+export type { BackupInspection, BackupManifest, BackupResult } from './backup.ts';
 
 export interface RequestRow {
   requestId: string;
@@ -322,10 +324,12 @@ function scopeCaptureForInsert(row: RequestRow): { status: ScopeCaptureStatus; d
 
 export class Store {
   private db: DatabaseSync;
+  private readonly databasePath: string;
   private migrationBackupEvidence: { path: string; sha256: string } | null = null;
 
   constructor(path: string) {
     const databasePath = path === ':memory:' ? path : resolve(path);
+    this.databasePath = databasePath;
     const existingFile = databasePath !== ':memory:' && existsSync(databasePath);
     if (databasePath !== ':memory:') {
       const dir = dirname(databasePath);
@@ -460,6 +464,21 @@ export class Store {
 
   raw(): DatabaseSync {
     return this.db;
+  }
+
+  /** Create a verified, non-destructive snapshot of this Store's ledger. */
+  backupTo(destinationPath: string): backup.BackupResult {
+    return backup.backupDatabase(this.db, this.databasePath, destinationPath);
+  }
+
+  /** Inspect a backup without opening or mutating the active Store. */
+  static inspectBackup(databasePath: string): backup.BackupResult {
+    return backup.inspectBackup(databasePath);
+  }
+
+  /** Restore a verified backup into a new path; never overwrites an active DB. */
+  static restoreBackup(sourcePath: string, destinationPath: string): backup.BackupResult {
+    return backup.restoreDatabase(sourcePath, destinationPath);
   }
 
   /** Evidence for the backup created immediately before this open migrated v2 tables. */

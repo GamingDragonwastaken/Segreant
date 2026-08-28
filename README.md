@@ -251,6 +251,10 @@ fiscus project               Spend by project with aliases applied (--json). Too
                                 each label was obtained — declared, path-inferred,
                                 or never attributed at all
 fiscus prune                 Prune old rows and compact the DB
+fiscus backup --out <file>  Create a verified local SQLite ledger snapshot
+fiscus restore --from <file> --out <file>
+                                Preview a snapshot, or create a new verified
+                                database with --apply (never overwrites the active ledger)
 fiscus demo                  Seed isolated, labeled synthetic data so every surface
                                 populates with no API key (--serve starts the dashboard
                                 on it; --clear removes it). Append --demo to today,
@@ -788,6 +792,7 @@ number.
   transmitted anywhere. Set `metadataOnly: true` in your config to disable
   this and store only token/cost metadata (Acceptance tracking turns off).
   `fiscus prune`, or the dashboard Settings page, purges it early on demand.
+
 - All cost computation happens on-device against a local pricing table.
 - The dashboard itself makes no third-party browser requests: no web fonts, CDNs,
   or Fiscus analytics. This does not remove the explicit provider and
@@ -799,6 +804,32 @@ number.
   alert summaries — severity, title, a short metric like `$35.00 / $30.00` — to
   *your* endpoint. By construction it sends nothing else: no prompts, no code, no
   keys. Off by default.
+
+## Backup and recovery
+
+Create a consistent, integrity-checked snapshot without stopping the local
+service:
+
+```text
+fiscus backup --out .\backups\fiscus-2026-08-28.sqlite --json
+```
+
+The command uses SQLite `VACUUM INTO`, verifies quick/foreign-key integrity, and
+writes a redacted `.manifest.json` containing the artifact hash and schema
+fingerprint. Backups may contain retained local proposals or causal assignment
+material; they are sensitive local files and are not encrypted by Fiscus.
+
+Inspect a backup without writing anything, then restore it into a new path:
+
+```text
+fiscus restore --from .\backups\fiscus-2026-08-28.sqlite --out .\recovered\fiscus.sqlite --json
+fiscus restore --from .\backups\fiscus-2026-08-28.sqlite --out .\recovered\fiscus.sqlite --apply --json
+```
+
+Restore refuses an existing destination and never overwrites the active ledger.
+Point a later isolated run at the recovered file with `FISCUS_DB` only after
+inspecting the verification result. This is a local recovery artifact, not an
+independent audit attestation or provider-billing record.
 
 ---
 

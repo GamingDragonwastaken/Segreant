@@ -21,6 +21,7 @@ whole tree loaded.
 | A CLI verb | `src/cli/` | `src/cli.ts` (dispatch) |
 | Team rollups | `src/team/`, `team-server/` | `docs/TEAM-TIER-DESIGN.md` |
 | Releasing | `docs/RELEASE-GATE.md` | `CLAUDE.md` |
+| Backup/restore and recovery | `src/store/backup.ts` | `src/store/CONTEXT.md`, `docs/RELEASE-GATE.md` |
 
 ## Layer 3 — reference (stable; internalize as constraints)
 

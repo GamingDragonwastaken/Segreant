@@ -52,6 +52,8 @@ test('npm package surface keeps public docs and the README seal while excluding 
   const entries = packageEntries();
   assert.ok(packagePath(entries, 'bin/fiscus.mjs'), 'the packaged CLI launcher must remain present');
   assert.ok(packagePath(entries, 'dist/cli.js'), 'the compiled CLI runtime must remain present');
+  assert.ok(packagePath(entries, 'dist/store/backup.js'), 'the packaged runtime must include verified backup support');
+  assert.ok(packagePath(entries, 'dist/cli/backupCmd.js'), 'the packaged CLI must include backup and restore commands');
   assert.ok(packagePath(entries, 'pricing/models.json'), 'the bundled pricing data must remain present');
   assert.ok(packagePath(entries, 'baselines/lift-baselines.json'), 'the bundled baseline data must remain present');
   assert.ok(packagePath(entries, 'web/assets/seal-256.png'), 'the README seal must be present in the packed artifact');

@@ -19,6 +19,7 @@ above this directory.
 | `allocation.ts` | cost centres, the versioned rule book, allocation runs |
 | `realization.ts` | realized-value snapshots, receipts, repricing and its re-attribution |
 | `rows.ts` | row decoders shared by more than one domain |
+| `backup.ts` | verified SQLite snapshot/restore-to-new-path helpers; never replaces the active ledger |
 
 Domain modules take the `DatabaseSync` handle as their first argument and are
 stateless. Where a domain needs a read that belongs to another one — allocation
@@ -48,6 +49,10 @@ two domain callers goes in `rows.ts`.
 - **Recorded labels are never rewritten.** Alias resolution happens at query
   time (`projectCanonical` beside the recorded `project`), so an export and a
   rollup total identically without either mutating a row.
+- **Backups are additive and integrity-checked.** `Store.backupTo()` uses
+  `VACUUM INTO`, quick/foreign-key checks, a schema fingerprint, and a redacted
+  manifest. `Store.restoreBackup()` refuses existing destinations and never
+  overwrites the active database path.
 
 ## Invariants
 
