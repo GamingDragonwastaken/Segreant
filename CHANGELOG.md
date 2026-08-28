@@ -12,6 +12,21 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ### Security
 
+- Budget/config persistence now fails closed: malformed or unenforceable caps
+  are refused before provider dial, settings bodies are bounded and schema
+  checked, and a ledger-write failure opens an explicit accounting circuit
+  instead of silently allowing traffic.
+- Egress receipt verification streams the retained hash chain in bounded chunks,
+  refuses oversized individual lines, and keeps the checkpoint as an
+  optimization rather than a second source of truth. Upstream `Location`
+  headers are stripped on proxy redirects so downstream clients cannot follow
+  outside Fiscus's configured boundary.
+- Optional team-server OIDC discovery refuses redirects, cross-origin JWKS,
+  oversized responses, and unsafe endpoints; async aggregate failures return a
+  bounded 503, and the default bind is loopback rather than all interfaces.
+- The supported launcher now propagates spawn/signalled-child failures and
+  refuses to bypass the publication lock on filesystem permission errors.
+
 - SQLite causal evidence tables now enable recursive triggers on every Store
   connection. `INSERT OR REPLACE` therefore cannot silently delete and replace
   an append-only evidence row; the regression suite exercises all protected
@@ -55,6 +70,19 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
   `realizedValueUsd` on the payload and only their definitions distinguish them.
 
 ### Changed
+
+- `fiscus backup --out` creates a verified SQLite `VACUUM INTO` snapshot with a
+  hash/schema manifest, and `fiscus restore` is preview-first and restores only
+  into a new path. Corrupt, symlinked, or existing destinations fail closed;
+  the active ledger is never overwritten.
+- `fiscus diagnostics --json` emits a versioned, redacted local handoff bundle
+  with operation IDs, probe durations/error classes, schema/migration, egress,
+  pricing, and resource observations. `--out` is an atomic non-overwriting
+  export; no telemetry, prompts, source, credentials, or raw ledger rows leave
+  the process.
+- `npm run benchmark` provides synthetic small/current/10× and opt-in 100×
+  performance observations for startup, ingest, query/value/API latency, RSS,
+  and compiled artifact size without asserting a universal SLA.
 
 - Concurrent builds now fingerprint their source generation before and after
   compilation and again inside the publication gate, retrying once on source

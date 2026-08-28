@@ -831,6 +831,23 @@ Point a later isolated run at the recovered file with `FISCUS_DB` only after
 inspecting the verification result. This is a local recovery artifact, not an
 independent audit attestation or provider-billing record.
 
+## Diagnostics and support bundles
+
+When a local run needs to be handed off for review, generate a redacted,
+read-only diagnostic bundle:
+
+```text
+fiscus diagnostics --json
+fiscus diagnostics --json --out .\support\fiscus-diagnostics.json
+```
+
+The bundle includes a correlation operation ID, probe durations and error
+classes, runtime/configuration/schema/egress/pricing health, and resource
+observations. It replaces the Fiscus home with `<FISCUS_HOME>/…` and excludes
+prompts, source, credentials, raw ledger rows, and provider response bodies.
+The export is atomic and refuses to overwrite an existing file; it never sends
+telemetry or mutates the active ledger/configuration.
+
 ---
 
 ## Development

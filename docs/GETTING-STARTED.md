@@ -47,6 +47,17 @@ Restore never overwrites the active ledger. The SQLite file and its manifest are
 sensitive local artifacts (they can include retained proposals or causal
 assignment material) and are not encrypted by Fiscus.
 
+If you need to hand a local run to another engineer, export a redacted bundle:
+
+```bash
+npx fiscus diagnostics --json --out ./support/fiscus-diagnostics.json
+```
+
+It contains runtime, schema, egress, pricing, and resource observations with
+correlation IDs and durations, but no prompts, source, credentials, raw ledger
+rows, or absolute user paths. The command is read-only and refuses to overwrite
+an existing export.
+
 ## 2. Meter your own AI usage
 
 ### The easiest path: zero wiring, if you already use a supported tool
