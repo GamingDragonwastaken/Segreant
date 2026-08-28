@@ -13,6 +13,7 @@ import { estimateCausalStudy } from '../causal/estimate.ts';
 import { commitCausalProtocol } from '../causal/protocol.ts';
 import { Store } from '../store/db.ts';
 import type { Flags } from './flags.ts';
+import { printJson } from './ui.ts';
 
 function requireStringFlag(flags: Flags, name: string): string {
   const value = flags[name];
@@ -48,10 +49,10 @@ class CausalCliV2DeferredError extends Error {
 
 function emit(payload: unknown, flags: Flags): void {
   if (flags.json) {
-    process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+    printJson(payload);
     return;
   }
-  console.log(JSON.stringify(payload, null, 2));
+  printJson(payload);
 }
 
 function usage(): void {

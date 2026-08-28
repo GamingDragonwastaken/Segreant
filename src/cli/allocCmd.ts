@@ -14,7 +14,7 @@ import { formatUsdMicros } from '../billing/types.ts';
 import { displayUsd } from '../billing/reconcile.ts';
 import { MATCH_FIELDS, type AllocationMatch, type AllocationMethod, type AllocationTarget } from '../alloc/rules.ts';
 import type { AllocationRunResult } from '../alloc/apply.ts';
-import { color, C } from './ui.ts';
+import { color, C, printJson } from './ui.ts';
 import type { Flags } from './flags.ts';
 
 function usage(): void {
@@ -125,7 +125,7 @@ export function cmdAlloc(flags: Flags): void {
   try {
     if (action === 'centres') {
       const centres = store.costCentres();
-      if (flags.json) return void process.stdout.write(JSON.stringify({ costCentres: centres }, null, 2) + '\n');
+      if (flags.json) return void printJson({ costCentres: centres });
       console.log('');
       if (centres.length === 0) console.log(color(tty, C.gray, '  No cost centres. Add one: fiscus alloc centre eng --name "Engineering"'));
       for (const c of centres) {
@@ -154,7 +154,7 @@ export function cmdAlloc(flags: Flags): void {
 
     if (action === 'rules') {
       const rules = store.allocationRules();
-      if (flags.json) return void process.stdout.write(JSON.stringify({ rules }, null, 2) + '\n');
+      if (flags.json) return void printJson({ rules });
       console.log('');
       if (rules.length === 0) console.log(color(tty, C.gray, '  No allocation rules. Spend allocates to nothing until one exists.'));
       for (const r of rules) {
@@ -229,7 +229,7 @@ export function cmdAlloc(flags: Flags): void {
       }
       const applied = Boolean(flags.apply);
       const allocationRunId = applied ? store.saveAllocationRun(result) : null;
-      if (flags.json) process.stdout.write(JSON.stringify({ applied, allocationRunId, result }, null, 2) + '\n');
+      if (flags.json) printJson({ applied, allocationRunId, result });
       else printRun(result, applied, tty);
       return;
     }

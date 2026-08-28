@@ -16,7 +16,7 @@ import { startOfLocalDay } from '../budget/guard.ts';
 import { pricingCoverage } from '../cost/coverage.ts';
 import { refreshPricing, pricingStatus, computeCost, DEFAULT_MANIFEST_URL, type Provider } from '../cost/pricing.ts';
 import { refreshBaselineManifest, baselineManifestStatus } from '../value/liftBaseline.ts';
-import { C, color, usd, num } from './ui.ts';
+import { C, color, usd, num, printJson } from './ui.ts';
 import { type Flags } from './flags.ts';
 
 export async function cmdStart(flags: Flags): Promise<void> {
@@ -181,7 +181,7 @@ export async function cmdPricing(flags: Flags): Promise<void> {
       });
       const { provenance, total, window: { label } } = payload;
       if (flags.json) {
-        console.log(JSON.stringify(payload, null, 2));
+        printJson(payload);
         return;
       }
       console.log(`\n  ${color(on, C.bold, 'Fiscus pricing provenance')} — ${label}`);
@@ -227,7 +227,7 @@ export async function cmdPricing(flags: Flags): Promise<void> {
     if (!flags.json) console.error(`  Refreshing pricing from ${url ?? DEFAULT_MANIFEST_URL} …`);
     const result = await refreshPricing(url);
     if (flags.json) {
-      console.log(JSON.stringify(result, null, 2));
+      printJson(result);
       process.exitCode = result.ok ? 0 : 1;
       return;
     }
@@ -247,7 +247,7 @@ export async function cmdPricing(flags: Flags): Promise<void> {
 
   const st = pricingStatus(cfg.pricing.maxAgeDays);
   if (flags.json) {
-    console.log(JSON.stringify(st, null, 2));
+    printJson(st);
     return;
   }
   console.log(`\n  ${color(on, C.bold, 'Fiscus pricing')}`);
@@ -284,7 +284,7 @@ export async function cmdBaseline(flags: Flags): Promise<void> {
     if (!url) {
       const msg = 'no URL given — Lift baselines have no default source (unlike pricing). Pass one you trust: fiscus baseline --refresh --url <url>';
       if (flags.json) {
-        console.log(JSON.stringify({ ok: false, error: msg }, null, 2));
+        printJson({ ok: false, error: msg });
         process.exitCode = 1;
         return;
       }
@@ -296,7 +296,7 @@ export async function cmdBaseline(flags: Flags): Promise<void> {
     if (!flags.json) console.error(`  Refreshing Lift baselines from ${url} …`);
     const result = await refreshBaselineManifest(url);
     if (flags.json) {
-      console.log(JSON.stringify(result, null, 2));
+      printJson(result);
       process.exitCode = result.ok ? 0 : 1;
       return;
     }
@@ -313,7 +313,7 @@ export async function cmdBaseline(flags: Flags): Promise<void> {
 
   const st = baselineManifestStatus();
   if (flags.json) {
-    console.log(JSON.stringify(st, null, 2));
+    printJson(st);
     return;
   }
   console.log(`\n  ${color(on, C.bold, 'Fiscus Lift baselines')}`);
@@ -373,7 +373,7 @@ export function cmdReprice(flags: Flags): void {
       // to the stored realized-value snapshots rather than describing the request
       // rows alone and leaving the snapshots' state to be discovered elsewhere.
       const sync = flags.apply && updates.length ? store.applyRepricedCosts(updates) : null;
-      console.log(JSON.stringify({
+      printJson({
         applied: !!flags.apply, estimatedRows: rows.length, repriceable: updates.length,
         stillEstimated, totalBeforeUsd: before, totalAfterUsd: after,
         priceEvidence: updates.length ? {
@@ -384,7 +384,7 @@ export function cmdReprice(flags: Flags): void {
         } : null,
         byModel: [...byModel.entries()].map(([model, v]) => ({ model, rows: v.n, beforeUsd: v.before, afterUsd: v.after })),
         realizationSync: sync,
-      }, null, 2));
+      });
       return;
     }
 

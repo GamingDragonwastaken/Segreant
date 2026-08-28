@@ -14,7 +14,7 @@ import { notifyWebhook } from '../alerts/notify.ts';
 import { pricingStatus } from '../cost/pricing.ts';
 import { baselineManifestStatus } from '../value/liftBaseline.ts';
 import { probeProxyState } from '../egress/proxyHealth.ts';
-import { C, color, usd, num, printNotAGitRepo } from './ui.ts';
+import { C, color, usd, num, printNotAGitRepo, printJson } from './ui.ts';
 import { type Flags } from './flags.ts';
 
 export { probeProxyState };
@@ -72,7 +72,7 @@ export async function cmdAlerts(flags: Flags): Promise<void> {
   }
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify(alerts, null, 2) + '\n');
+    printJson(alerts);
     store.close();
     if (alerts.some((a) => a.severity === 'critical')) process.exitCode = 1;
     return;
@@ -217,7 +217,7 @@ export async function gatherGuideFacts(): Promise<GuideFacts> {
 export async function cmdGuide(flags: Flags): Promise<void> {
   const report = buildGuide(await gatherGuideFacts());
   if (flags.json) {
-    process.stdout.write(JSON.stringify(report, null, 2) + '\n');
+    printJson(report);
     return;
   }
 
@@ -258,7 +258,7 @@ export async function cmdAudit(flags: Flags): Promise<void> {
   const store = new Store(dbPath());
   const rows = await attributeCommits(store, repo, { limit, persist: true });
   if (flags.json) {
-    process.stdout.write(JSON.stringify(rows, null, 2) + '\n');
+    printJson(rows);
     store.close();
     return;
   }

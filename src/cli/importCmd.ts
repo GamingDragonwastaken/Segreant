@@ -14,7 +14,7 @@ import { importClaudeCode, defaultClaudeCodeRoot } from '../connect/claudeCode.t
 import { importOpencode, defaultOpencodeDbPath } from '../connect/opencode.ts';
 import { importCodex, defaultCodexRoot } from '../connect/codex.ts';
 import { type ImportSummary } from '../connect/importShared.ts';
-import { C, color, usd, num } from './ui.ts';
+import { C, color, usd, num, printJson } from './ui.ts';
 import type { Flags } from './flags.ts';
 
 /**
@@ -203,7 +203,7 @@ export async function cmdImport(flags: Flags): Promise<void> {
   store.close();
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify(targets.length === 1 ? results[0]!.sum : Object.fromEntries(results.map((r) => [r.id, r.sum])), null, 2) + '\n');
+    printJson(targets.length === 1 ? results[0]!.sum : Object.fromEntries(results.map((r) => [r.id, r.sum])));
     return;
   }
 
@@ -240,7 +240,7 @@ export async function cmdDiscover(flags: Flags): Promise<void> {
   store.close();
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify({ discovered, projects }, null, 2) + '\n');
+    printJson({ discovered, projects });
     return;
   }
 
@@ -327,7 +327,7 @@ export async function cmdScan(flags: Flags): Promise<void> {
   const present = plan.tools.filter((t) => t.present);
 
   if (flags.json && !flags.setup) {
-    process.stdout.write(JSON.stringify({ ...plan, diff }, null, 2) + '\n');
+    printJson({ ...plan, diff });
     store.close();
     return;
   }
@@ -471,5 +471,5 @@ export async function cmdScan(flags: Flags): Promise<void> {
     console.log('');
   }
 
-  if (flags.json) process.stdout.write(JSON.stringify({ setup: true, totalNew, discovered }, null, 2) + '\n');
+  if (flags.json) printJson({ setup: true, totalNew, discovered });
 }

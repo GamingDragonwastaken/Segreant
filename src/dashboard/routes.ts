@@ -45,6 +45,7 @@ import { pricingStatus } from '../cost/pricing.ts';
 import { pricingCoverage } from '../cost/coverage.ts';
 import { verifyBlockedAssignmentPlan } from '../causal/assignment.ts';
 import { estimateCausalStudy } from '../causal/estimate.ts';
+import { stringifyJson } from '../util/json.ts';
 
 /**
  * Config persistence is injectable so the dashboard can be exercised without
@@ -107,7 +108,7 @@ export interface Route {
 
 export function json(res: http.ServerResponse, status: number, payload: unknown): void {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
-  res.end(JSON.stringify(payload));
+  res.end(stringifyJson(payload, 0));
 }
 
 /** Only honor a ?repo= that is an existing directory; otherwise the dashboard's cwd. */

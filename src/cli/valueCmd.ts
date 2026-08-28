@@ -20,7 +20,7 @@ import { computeFrontier } from '../value/frontier.ts';
 import { valueSpine, usageValue, budgetAdvice } from '../value/report.ts';
 import { instrumentationPriority } from '../value/voi.ts';
 import { GATE_LADDER, GATE_META } from '../value/gates.ts';
-import { C, color, usd, num, pct, glyph, noteSource, printNotAGitRepo } from './ui.ts';
+import { C, color, usd, num, pct, glyph, noteSource, printNotAGitRepo, printJson } from './ui.ts';
 import { type Flags } from './flags.ts';
 
 export async function cmdYield(flags: Flags): Promise<void> {
@@ -36,7 +36,7 @@ export async function cmdYield(flags: Flags): Promise<void> {
   const report = await computeQuality(store, repo, { limit, windowDays, persist: true });
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify(report, null, 2) + '\n');
+    printJson(report);
     store.close();
     return;
   }
@@ -102,7 +102,7 @@ export async function cmdRealize(flags: Flags): Promise<void> {
   const report = loaded.report;
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify(report, null, 2) + '\n');
+    printJson(report);
     store.close();
     return;
   }
@@ -255,7 +255,7 @@ export async function cmdUsage(flags: Flags): Promise<void> {
   const rep = usageValue(store, cfg, { windowDays: days });
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify(rep, null, 2) + '\n');
+    printJson(rep);
     store.close();
     return;
   }
@@ -346,7 +346,7 @@ export async function cmdRoi(flags: Flags): Promise<void> {
   const { roi, drift, driftStreams, voi } = spine;
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify({ ...roi, drift, driftStreams, instrumentNext: voi }, null, 2) + '\n');
+    printJson({ ...roi, drift, driftStreams, instrumentNext: voi });
     store.close();
     return;
   }
@@ -471,7 +471,7 @@ export async function cmdSaved(flags: Flags): Promise<void> {
   const rec = spine.reclaimed;
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify(rec, null, 2) + '\n');
+    printJson(rec);
     store.close();
     return;
   }
@@ -535,7 +535,7 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
   const allocation = null;
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify({ ...rec, allocation, shadowPrice: null }, null, 2) + '\n');
+    printJson({ ...rec, allocation, shadowPrice: null });
     store.close();
     return;
   }
@@ -625,7 +625,7 @@ export async function cmdFrontier(flags: Flags): Promise<void> {
   const fr = computeFrontier(report.units);
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify(fr, null, 2) + '\n');
+    printJson(fr);
     store.close();
     return;
   }

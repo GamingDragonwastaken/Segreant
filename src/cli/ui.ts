@@ -6,6 +6,7 @@
  */
 
 import type { Verdict } from '../value/gates.ts';
+import { stringifyJson } from '../util/json.ts';
 
 // Night Vault brand colors on terminals that declare 24-bit support (molten
 // gold for value, sage for pass, signal red for alerts); the plain ANSI-16
@@ -41,6 +42,11 @@ export function num(n: number): string {
 
 export function pct(n: number): string {
   return `${(n * 100).toFixed(0)}%`;
+}
+
+/** Emit a Fiscus-owned JSON response with stable six-decimal USD fields. */
+export function printJson(value: unknown, space: number | string = 2): void {
+  process.stdout.write(stringifyJson(value, space) + '\n');
 }
 
 /** Actionable not-a-git-repo message: tell the user what to do, not just what's wrong. */

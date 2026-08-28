@@ -31,7 +31,7 @@ import {
 } from '../value/receipt.ts';
 import { buildRollupBody, signRollup, type SignedRollup } from '../team/rollup.ts';
 import { judgeSessionFromStore } from '../judge/orchestrate.ts';
-import { C, color, usd, pct, printNotAGitRepo } from './ui.ts';
+import { C, color, usd, pct, printNotAGitRepo, printJson } from './ui.ts';
 import { type Flags } from './flags.ts';
 
 export async function cmdTeam(flags: Flags): Promise<void> {
@@ -51,7 +51,7 @@ export async function cmdTeam(flags: Flags): Promise<void> {
     const view = selfView(rows, flags.me, opts);
     store.close();
     if (flags.json) {
-      process.stdout.write(JSON.stringify(view, null, 2) + '\n');
+      printJson(view);
       return;
     }
     console.log('');
@@ -80,7 +80,7 @@ export async function cmdTeam(flags: Flags): Promise<void> {
   const rep = computeCohort(store, { ...window, ...opts });
   store.close();
   if (flags.json) {
-    process.stdout.write(JSON.stringify(rep, null, 2) + '\n');
+    printJson(rep);
     return;
   }
   console.log('');
@@ -289,7 +289,7 @@ export async function cmdJudge(flags: Flags): Promise<void> {
   store.close();
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify(judgment, null, 2) + '\n');
+    printJson(judgment);
     return;
   }
 

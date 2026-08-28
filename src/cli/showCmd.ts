@@ -12,7 +12,8 @@ import { requestsToCsv } from '../export/csv.ts';
 import { computeAlerts } from '../alerts/detect.ts';
 import { describeSourceDepth } from '../value/sourceDepth.ts';
 import { isDeclaredAttribution } from '../value/characterization.ts';
-import { C, color, usd, num, pct } from './ui.ts';
+import { C, color, usd, num, pct, printJson } from './ui.ts';
+import { stringifyJson } from '../util/json.ts';
 import { rangeFor, type Flags } from './flags.ts';
 
 export function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void {
@@ -26,7 +27,7 @@ export function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void 
   const bySource = store.bySource(startMs, endMs);
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify({ window, label, demo: isDemo(), summary, byModel, byProject, byUser, bySource }, null, 2) + '\n');
+    printJson({ window, label, demo: isDemo(), summary, byModel, byProject, byUser, bySource });
     store.close();
     return;
   }
@@ -132,7 +133,7 @@ export function cmdSources(flags: Flags): void {
 
   if (flags.json) {
     const enriched = bySource.map((s) => ({ ...s, models: modelsBySource.get(s.label) ?? [] }));
-    process.stdout.write(JSON.stringify({ window: all ? 'all' : '30d', demo: isDemo(), bySource: enriched }, null, 2) + '\n');
+    printJson({ window: all ? 'all' : '30d', demo: isDemo(), bySource: enriched });
     store.close();
     return;
   }
@@ -178,7 +179,7 @@ export function cmdExport(flags: Flags): void {
   const startMs = flags.all ? 0 : now - days * dayMs;
   const rows = store.requestsInRange(startMs, now + 1000);
   const asJson = flags.json === true || flags.format === 'json';
-  const out = asJson ? JSON.stringify(rows, null, 2) + '\n' : requestsToCsv(rows);
+  const out = asJson ? `${stringifyJson(rows)}\n` : requestsToCsv(rows);
 
   if (typeof flags.out === 'string') {
     writeFileSync(flags.out, out);
@@ -193,7 +194,7 @@ export function cmdExport(flags: Flags): void {
 export function cmdConfig(flags: Flags): void {
   const cfg = loadConfig();
   if (flags.json) {
-    process.stdout.write(JSON.stringify({ home: fiscusHome(), configPath: configPath(), dbPath: dbPath(), config: cfg }, null, 2) + '\n');
+    printJson({ home: fiscusHome(), configPath: configPath(), dbPath: dbPath(), config: cfg });
     return;
   }
   console.log('');
@@ -201,7 +202,7 @@ export function cmdConfig(flags: Flags): void {
   console.log(`  Config: ${configPath()}`);
   console.log(`  DB:     ${dbPath()}`);
   console.log('');
-  console.log(JSON.stringify(cfg, null, 2));
+  console.log(stringifyJson(cfg));
   console.log('');
 }
 
@@ -314,7 +315,7 @@ export function cmdProject(flags: Flags): void {
       const demoNote = 'DEMO DATA: these bases are DEPICTED by the seed, not observed. '
         + 'The coverage share below describes a scenario, not this machine.';
       if (flags.json) {
-        process.stdout.write(JSON.stringify({
+        printJson({
           window: { startMs: 0, endMs, label: 'all recorded time' },
           demo: isDemo(),
           total: { costUsd: total, declaredCostUsd: declared },
@@ -323,7 +324,7 @@ export function cmdProject(flags: Flags): void {
             'How each project label was obtained. A declared label is a self-assertion by the calling tool, '
             + 'never a verified identity, and this is not chargeback-grade attribution.'
             + (isDemo() ? ` ${demoNote}` : ''),
-        }, null, 2) + '\n');
+        });
         return;
       }
       console.log('');
@@ -349,7 +350,7 @@ export function cmdProject(flags: Flags): void {
     const byProject = store.byProject(0, Date.now() + 1000);
     const aliases = store.listProjectAliases();
     if (flags.json) {
-      process.stdout.write(JSON.stringify({ projects: byProject, aliases }, null, 2) + '\n');
+      printJson({ projects: byProject, aliases });
       return;
     }
     console.log('');

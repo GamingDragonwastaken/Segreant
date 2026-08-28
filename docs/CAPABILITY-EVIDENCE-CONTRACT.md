@@ -33,6 +33,11 @@ Fiscus keeps four different claims separate:
 
     metered usage != provider-billed cost != allocated cost != realized business value
 
+Fiscus-owned JSON surfaces serialize numeric `*Usd` fields at six-decimal
+microdollar precision. This is a wire-format stabilization for binary floating
+point display tails; it does not change the underlying ledger, upgrade a price
+card into provider billing, or alter signed/canonical evidence bytes.
+
 | Layer | Supported now | Evidence tier | Never infer |
 | --- | --- | --- | --- |
 | Metered usage | Explicitly routed proxy traffic and selected local tool imports; local list-price calculation with retained rate-card basis. | source-tested, fixture-tested, labelled demo, and a real local ledger | Provider billing, completeness, or verified account identity from an imported/logged row. |

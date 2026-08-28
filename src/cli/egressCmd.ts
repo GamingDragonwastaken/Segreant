@@ -9,7 +9,7 @@ import { loadConfig, saveConfig, type EgressConfig, type EgressRule } from '../c
 import { validateEgressRule } from '../egress/policy.ts';
 import { egressReceiptPath, verifyEgressReceipts } from '../egress/receipts.ts';
 import type { Flags } from './flags.ts';
-import { C, color } from './ui.ts';
+import { C, color, printJson } from './ui.ts';
 
 function requestedMode(flags: Flags): EgressConfig['mode'] | null {
   const value = typeof flags.mode === 'string' ? flags.mode : null;
@@ -67,7 +67,7 @@ export function cmdEgress(flags: Flags): void {
   const sub = typeof flags._[0] === 'string' ? flags._[0] : 'status';
   if (sub === 'status') {
     const payload = statusPayload();
-    if (flags.json) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+    if (flags.json) printJson(payload);
     else {
       console.log('');
       console.log(color(tty, C.bold, '  Fiscus egress status'));
@@ -93,7 +93,7 @@ export function cmdEgress(flags: Flags): void {
       ...verified,
       ...(verified.ok ? {} : { action: RECEIPT_REPAIR_ACTION }),
     };
-    if (flags.json) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+    if (flags.json) printJson(payload);
     else {
       console.log('');
       console.log(color(tty, payload.ok ? C.green : C.red, '  Receipt chain ' + (payload.ok ? 'valid' : 'invalid')));
@@ -147,7 +147,7 @@ export function cmdEgress(flags: Flags): void {
   }
   const payload = { wouldWrite: sub === 'apply' && flags.apply === true, mode: next.mode, rules: next.rules };
   if (sub === 'plan' || flags.apply !== true) {
-    if (flags.json) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+    if (flags.json) printJson(payload);
     else {
       console.log('');
       console.log(color(tty, C.yellow, '  Egress plan only — configuration unchanged.'));
@@ -158,7 +158,7 @@ export function cmdEgress(flags: Flags): void {
     return;
   }
   saveConfig({ ...current, egress: next });
-  if (flags.json) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+  if (flags.json) printJson(payload);
   else {
     console.log('');
     console.log(color(tty, C.green, '  Egress configuration saved.'));
