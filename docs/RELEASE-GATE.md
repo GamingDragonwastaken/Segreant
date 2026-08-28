@@ -75,16 +75,16 @@ the existing `dist/cli.js`/deep-import and package-surface contract. The
 historical candidate rows below do not cover these later sources and must not
 be reused as exact-head release evidence.
 
-### Current local candidate record — source commit `0cfd8f9`, 2026-08-29
+### Current local candidate record — source commit `12add59`, 2026-08-29
 
 This record supersedes the `a5d1121` record above without rewriting it. The
 exact candidate head is
-`0cfd8f917b58ec904823269d9797c55b2edb261b` in the isolated
+`12add59834087f0c936c91b561b4804ee4128c0d` in the isolated
 `codex/high-assurance-foundation` worktree. Its code-bearing parent is
-`a4b91a8`; the intervening performance, release-record, handoff, and benchmark
-documentation commits are docs-only. The full source suite was run against the
-code-bearing tree, and the only delta to this candidate is the measured
-performance documentation. The source/package tree
+`a4b91a8`; `0cfd8f9` refreshes the measured performance documentation and
+`12add59` aligns the root handoff. The full source suite was run against the
+code-bearing tree, and the only deltas to this candidate are documentation.
+The source/package tree
 was clean before and after the exact-head package/runtime validation below.
 This remains a local developer candidate, not an external release: no push,
 exact-head CI run, registry publication, deployment, provider credential, or
@@ -92,12 +92,12 @@ browser connector evidence exists.
 
 | Requirement | Result |
 | --- | --- |
-| Candidate identity | **Pass.** `git rev-parse HEAD` → `0cfd8f917b58ec904823269d9797c55b2edb261b`; the candidate worktree was clean before and after the exact-head package/runtime validation. |
+| Candidate identity | **Pass.** `git rev-parse HEAD` → `12add59834087f0c936c91b561b4804ee4128c0d`; the candidate worktree was clean before and after the exact-head package/runtime validation. |
 | Capability/evidence contract | **Pass.** The capability, causal-protocol, data-boundary, roadmap, handoff, and release-gate documents were reviewed against the candidate. The full suite includes public-claims, egress, causal, billing, backup, diagnostics, and package-surface contracts; no local estimate is promoted to provider billing, causal return, or automatic routing. |
-| Source validation | **Pass.** Root `npm ci --ignore-scripts` → 4 packages, 0 vulnerabilities; `team-server` `npm ci --ignore-scripts` → 19 packages, 0 vulnerabilities; root, browser-app, and team-server typechecks exit 0. Full `npm test` → **916 tests, 912 pass, 0 fail, 4 intentional platform skips** on the immediately preceding code-bearing tree (`a4b91a8`); `0cfd8f9` has no source/test delta. `npm run build` exit 0; `npm run build -- --web` exit 0 with the CLI SHA-256 unchanged; the exact code-bearing build and typecheck outputs are recorded in the Round 16 evidence file. |
-| Packed artifact | **Pass for the exact source/package evidence head `0cfd8f9`.** `npm pack --ignore-scripts` → **170 entries, 823,765 bytes**, SHA-256 `098A99C19AE6B42A2B0A23C35FAD925AFC1505ABEAE20F7B7EFCB1798E6E1A02`. Required launcher/publication-lock, compiled CLI/store/backup/diagnostics/dashboard, pricing, baselines, seal, and public docs are present; internal `.codex`/superpowers and research-only `dist/value/causalExperiment.js` paths are absent. The later release-record commit is documentation-only and the hash is explicitly bound to `0cfd8f9`. |
+| Source validation | **Pass.** Root `npm ci --ignore-scripts` → 4 packages, 0 vulnerabilities; `team-server` `npm ci --ignore-scripts` → 19 packages, 0 vulnerabilities; root, browser-app, and team-server typechecks exit 0. Full `npm test` → **916 tests, 912 pass, 0 fail, 4 intentional platform skips** on the immediately preceding code-bearing tree (`a4b91a8`); `0cfd8f9` and `12add59` have no source/test delta. `npm run build` exit 0; `npm run build -- --web` exit 0 with the CLI SHA-256 unchanged; the exact code-bearing build and typecheck outputs are recorded in the Round 16 evidence file. |
+| Packed artifact | **Pass for the exact source/package evidence head `0cfd8f9`.** `npm pack --ignore-scripts` → **170 entries, 823,765 bytes**, SHA-256 `098A99C19AE6B42A2B0A23C35FAD925AFC1505ABEAE20F7B7EFCB1798E6E1A02`. Required launcher/publication-lock, compiled CLI/store/backup/diagnostics/dashboard, pricing, baselines, seal, and public docs are present; internal `.codex`/superpowers and research-only `dist/value/causalExperiment.js` paths are absent. The later handoff/release-record commit is documentation-only and the hash is explicitly bound to `0cfd8f9`. |
 | Clean installed CLI | **Pass.** The exact tarball was installed with scripts disabled into a fresh prefix. Packaged `fiscus --help` includes `backup` and `diagnostics`; isolated `demo --json`, active-ledger `today --json`, and `causal status --json` ran successfully. The causal status contained `studies: []`. |
-| Packaged dashboard/API | **Pass.** From the exact `0cfd8f9` tarball and isolated `FISCUS_HOME`, `start --demo --port 18390 --dashboard-port 18391` served HTTP 200 for `/api/health`, `/api/overview?range=all`, `/api/value?range=all`, `/api/causal`, `/api/billing`, `/`, `/classic`, and `/app/main.js`. Overview/value/causal/billing payloads self-labelled demo mode; `/` carried `id="app"`; `/classic` carried the labelled renderer; `/app/main.js` resolved as JavaScript; the process was stopped and both test ports were closed. |
+| Packaged dashboard/API | **Pass.** From the exact `0cfd8f9` tarball and isolated `FISCUS_HOME`, `start --demo --port 18390 --dashboard-port 18391` served HTTP 200 for `/api/health`, `/api/overview?range=all`, `/api/value?range=all`, `/api/causal`, `/api/billing`, `/`, `/classic`, and `/app/main.js`. Overview/value/causal/billing payloads self-labelled demo mode; `/` carried `id="app"`; `/classic` carried the labelled renderer; `/app/main.js` resolved as JavaScript; the process was stopped and both test ports were closed. The later `12add59` handoff change is root documentation-only. |
 | Model-trial truthfulness | **Pass for the local boundary.** Source and value/frontier contracts continue to require like-task evidence, minimum cohorts, and an anytime-valid separation before `evidence_supported`; the packaged demo remains synthetic and review-only (`trial`) with no automatic routing or provider-savings claim. |
 | Causal-evidence integrity | **Pass for the local boundary, not a causal result.** The exact 916-test suite covers append-only V1/V2 state, scalar lineage, recursive-trigger conflict protection, replay, and collecting/no-outcome precedence. Packaged status reports no retained public study. A governed prospective study, independent outcomes, provider/account scope, and public qualification remain absent. |
 | Billing-boundary truthfulness | **Pass.** Packaged `/api/billing` remains demo-labelled and `not_reconciled`. An isolated source run of `billing scope set --apply` preserved `operator_declared_unverified`; `billing openai-costs preview` returned `applied: false`, `networkAttempted: false`, and `credentialRead: false` for a `proj_gate_release` scope. No provider account or amount was validated. |
