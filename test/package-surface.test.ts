@@ -54,11 +54,14 @@ test('npm package surface keeps public docs and the README seal while excluding 
   assert.ok(packagePath(entries, 'dist/cli.js'), 'the compiled CLI runtime must remain present');
   assert.ok(packagePath(entries, 'dist/store/backup.js'), 'the packaged runtime must include verified backup support');
   assert.ok(packagePath(entries, 'dist/cli/backupCmd.js'), 'the packaged CLI must include backup and restore commands');
+  assert.ok(packagePath(entries, 'dist/diagnostics.js'), 'the packaged runtime must include redacted diagnostics');
+  assert.ok(packagePath(entries, 'dist/cli/diagnosticsCmd.js'), 'the packaged CLI must include the diagnostics command');
   assert.ok(packagePath(entries, 'pricing/models.json'), 'the bundled pricing data must remain present');
   assert.ok(packagePath(entries, 'baselines/lift-baselines.json'), 'the bundled baseline data must remain present');
   assert.ok(packagePath(entries, 'web/assets/seal-256.png'), 'the README seal must be present in the packed artifact');
   assert.ok(packagePath(entries, 'docs/GETTING-STARTED.md'), 'the public getting-started guide must remain packaged');
   assert.ok(packagePath(entries, 'docs/RELEASE-GATE.md'), 'the public release gate must remain packaged');
+  assert.ok(packagePath(entries, 'docs/RELIABILITY-PERFORMANCE.md'), 'the performance evidence guide must remain packaged');
   assert.ok(
     packagePath(entries, 'docs/CAPABILITY-EVIDENCE-CONTRACT.md'),
     'the public capability contract must remain packaged',

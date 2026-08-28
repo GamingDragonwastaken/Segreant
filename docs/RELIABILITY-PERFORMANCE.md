@@ -63,3 +63,8 @@ claim that every machine or real workload meets a latency target.
   release runner and add a deliberate regression margin to each selected
   operation. Record the machine profile and dataset generator revision with
   the chosen budgets.
+- `fiscus diagnostics --json` provides a separate redacted handoff bundle with
+  operation IDs, probe durations/error classes, database/schema/egress/pricing
+  state, and no-network/no-credential/no-prompt/source/ledger-row-export
+  assertions. It is read-only;
+  `--out` is an explicit atomic export and refuses an existing file.

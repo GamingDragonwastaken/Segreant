@@ -28,6 +28,7 @@ import { cmdAlerts, cmdDoctor, cmdInit, cmdGuide, cmdAudit } from './cli/opsCmd.
 import { cmdShow, cmdSources, cmdExport, cmdConfig, cmdBudget, cmdPrune, cmdProject } from './cli/showCmd.ts';
 import { cmdStart, cmdDemo, cmdPricing, cmdBaseline, cmdReprice } from './cli/runCmd.ts';
 import { cmdBackup, cmdRestore } from './cli/backupCmd.ts';
+import { cmdDiagnostics } from './cli/diagnosticsCmd.ts';
 
 function cmdHelp(): void {
   console.log(`
@@ -164,6 +165,8 @@ function cmdHelp(): void {
     restore --from <file> --out <file>
                           Preview a backup, or create a new verified database
                           with --apply. The active ledger is never overwritten.
+    diagnostics [--json]   Emit redacted local runtime/database/egress diagnostics
+                          (--out <file> writes an atomic bundle; no telemetry)
     demo                  Generate isolated, clearly-labeled synthetic data so every
                           surface populates without an API key (--serve to launch the
                           dashboard on it; --clear to remove). Add --demo to any read
@@ -345,6 +348,10 @@ async function main(): Promise<void> {
       break;
     case 'restore':
       cmdRestore(flags);
+      break;
+    case 'diagnostics':
+    case 'diagnostic':
+      cmdDiagnostics(flags);
       break;
     case 'pricing':
       await cmdPricing(flags);

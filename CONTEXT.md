@@ -23,6 +23,7 @@ whole tree loaded.
 | Releasing | `docs/RELEASE-GATE.md` | `CLAUDE.md` |
 | Backup/restore and recovery | `src/store/backup.ts` | `src/store/CONTEXT.md`, `docs/RELEASE-GATE.md` |
 | Reliability/performance evidence | `scripts/benchmark.mjs` | `docs/RELIABILITY-PERFORMANCE.md` |
+| Local diagnostics and redacted support bundles | `src/diagnostics.ts` | `docs/RELIABILITY-PERFORMANCE.md`, `docs/RELEASE-GATE.md` |
 
 ## Layer 3 — reference (stable; internalize as constraints)
 
