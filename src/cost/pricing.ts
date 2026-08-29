@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { egressFetch, EgressError } from '../egress/transport.ts';
 import { dirname, join } from 'node:path';
 import { fiscusHome } from '../config.ts';
+import { computeExactCost, validateExactModelRate, type ExactCostBreakdown, type ExactModelRate } from './exactPricing.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -57,6 +58,8 @@ export interface ModelRate {
   cache_write_1h?: number;
   /** USD per 1M tokens read from the prompt cache. */
   cache_read?: number;
+  /** Optional canonical decimal companion used by the exact accounting path. */
+  exact?: ExactModelRate;
 }
 
 interface PricingFile {
@@ -163,6 +166,8 @@ export interface CostBreakdown {
     cacheWrite: number;
     cacheRead: number;
   };
+  /** Present only when the active rate card carries canonical decimal rates. */
+  exact?: ExactCostBreakdown;
 }
 
 let cached: PricingFile | null = null;
@@ -223,6 +228,13 @@ function pricingValidationError(obj: unknown): string | null {
       if (!validRate(rate['input']) || !validRate(rate['output'])) return `model ${model} must have finite positive input/output rates`;
       for (const key of ['cache_write_5m', 'cache_write_1h', 'cache_read']) {
         if (rate[key] !== undefined && !validRate(rate[key])) return `model ${model} has an invalid ${key} rate`;
+      }
+      if (rate['exact'] !== undefined) {
+        try {
+          validateExactModelRate(rate['exact'] as ExactModelRate);
+        } catch (error) {
+          return `model ${model} has an invalid exact rate: ${error instanceof Error ? error.message : String(error)}`;
+        }
       }
       modelCount += 1;
     }
@@ -852,6 +864,11 @@ export function rateFor(provider: Provider, model: string): ResolvedRate {
   return resolved(pricing.fallbacks.unknown, 'fallback', null, null);
 }
 
+/** Return the explicit decimal companion, if this rate card provides one. */
+export function exactRateFromModelRate(rate: ModelRate): ExactModelRate | null {
+  return rate.exact === undefined ? null : validateExactModelRate(rate.exact);
+}
+
 function per(tokens: number, rate: number | undefined): number {
   if (!tokens || !rate) return 0;
   return (tokens / 1_000_000) * rate;
@@ -880,5 +897,9 @@ export function computeCost(provider: Provider, model: string, usage: Normalized
   const costUsd =
     components.input + components.output + components.cacheWrite + components.cacheRead;
 
-  return { costUsd, estimated, pricing, rate, components };
+  const exactRate = exactRateFromModelRate(rate);
+  const exact = exactRate === null
+    ? undefined
+    : computeExactCost(exactRate, usage, estimated ? 'estimated' : 'list');
+  return { costUsd, estimated, pricing, rate, components, ...(exact === undefined ? {} : { exact }) };
 }

@@ -233,6 +233,7 @@ function addRequest(ctx: Ctx, spec: ReqSpec): void {
     cacheReadTokens,
     reasoningTokens: 0,
     costUsd: cost.costUsd,
+    economicAmount: calculated?.exact?.total,
     estimated: cost.estimated,
     pricing: calculated ? syntheticPricingEvidence(calculated) : cost.pricing,
     streamed: !blocked,

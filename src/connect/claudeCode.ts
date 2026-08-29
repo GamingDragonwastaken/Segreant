@@ -183,6 +183,7 @@ export async function importClaudeCode(store: Store, opts: ImportOptions = {}): 
         cacheReadTokens: ev.cacheReadTokens,
         reasoningTokens: 0,
         costUsd: cost.costUsd,
+        economicAmount: cost.exact?.total,
         estimated: cost.estimated,
         pricing: cost.pricing,
         streamed: true,

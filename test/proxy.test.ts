@@ -233,6 +233,9 @@ test('non-streaming Anthropic: forwards body, injects cost header, logs cost', a
   const today = store.summary(0, Date.now() + 1000);
   assert.equal(today.requests, 1);
   assert.ok(Math.abs(today.costUsd - 0.015625) < 1e-9, `db cost ${today.costUsd}`);
+  const exactRow = store.recent(1)[0]!;
+  assert.equal(store.economicAmountForRequest(exactRow.requestId)?.basis, 'list');
+  assert.equal(store.economicAmountForRequest(exactRow.requestId)?.coefficient, 15625n);
 
   await proxy.close();
   await upstream.close();

@@ -94,6 +94,9 @@ test('import: one API request streamed as many lines lands ONCE, and re-import a
   assert.equal(sum.requests, 2);
   const bySource = store.bySource(0, Date.now());
   assert.equal(bySource[0]!.label, 'claude-code');
+  const economicEvents = store.economic().events().filter((event) => event.id.startsWith('economic:request:req_'));
+  assert.equal(economicEvents.length, 2, 'bundled exact rates issue one economic charge per imported request');
+  assert.ok(economicEvents.every((event) => event.amount?.basis === 'list'));
   store.close();
 });
 

@@ -205,7 +205,7 @@ export async function importCodex(store: Store, opts: ImportOptions = {}): Promi
             cacheWriteTokens: 0,
             cacheReadTokens: ev.cacheReadTokens,
           })
-        : { costUsd: 0, estimated: true, pricing: unpricedPricingEvidence() };
+        : { costUsd: 0, estimated: true, pricing: unpricedPricingEvidence(), exact: undefined };
 
       const row: RequestRow = {
         requestId: ev.requestId,
@@ -222,6 +222,7 @@ export async function importCodex(store: Store, opts: ImportOptions = {}): Promi
         cacheReadTokens: ev.cacheReadTokens,
         reasoningTokens: ev.reasoningTokens,
         costUsd: c.costUsd,
+        economicAmount: prov ? c.exact?.total : undefined,
         estimated: c.estimated,
         pricing: c.pricing,
         streamed: true,

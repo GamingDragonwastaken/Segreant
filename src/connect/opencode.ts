@@ -149,6 +149,7 @@ export function importOpencode(store: Store, opts: ImportOptions = {}): ImportSu
       let costUsd = ev.reportedCostUsd;
       let estimated = false;
       let pricing = toolReportedPricingEvidence();
+      let economicAmount: RequestRow['economicAmount'];
       if (costUsd === 0 && REPRICEABLE[ev.provider]) {
         const c = computeCost(REPRICEABLE[ev.provider]!, ev.model, {
           inputTokens: ev.inputTokens,
@@ -159,6 +160,7 @@ export function importOpencode(store: Store, opts: ImportOptions = {}): ImportSu
         if (!c.estimated) {
           costUsd = c.costUsd; // only adopt an EXACT match; never the fallback rate
           pricing = c.pricing;
+          economicAmount = c.exact?.total;
         }
       }
 
@@ -177,6 +179,7 @@ export function importOpencode(store: Store, opts: ImportOptions = {}): ImportSu
         cacheReadTokens: ev.cacheReadTokens,
         reasoningTokens: ev.reasoningTokens,
         costUsd,
+        economicAmount,
         estimated,
         pricing,
         streamed: true,

@@ -592,6 +592,7 @@ async function handle(
     cacheReadTokens: usage.cacheReadTokens,
     reasoningTokens: usage.reasoningTokens ?? 0,
     costUsd: cost.costUsd,
+    economicAmount: cost.exact?.total,
     estimated: cost.estimated,
     pricing: cost.pricing,
     streamed: isStream,

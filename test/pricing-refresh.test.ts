@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   applyPricingManifest,
+  computeCost,
   loadPricing,
   MAX_PRICING_MANIFEST_BYTES,
   pricingStatus,
@@ -47,6 +48,12 @@ test('a valid manifest is cached and then OVERRIDES the bundled table', () => {
   const { rate, estimated } = rateFor('anthropic', 'claude-opus-4-8');
   assert.equal(rate.input, 999);
   assert.equal(estimated, false);
+  assert.equal(computeCost('anthropic', 'claude-opus-4-8', {
+    inputTokens: 1,
+    outputTokens: 1,
+    cacheWriteTokens: 0,
+    cacheReadTokens: 0,
+  }).exact, undefined, 'numeric-only refreshed cards must not be promoted into exact accounting');
   assert.equal(pricingStatus().source, 'cache');
 });
 
