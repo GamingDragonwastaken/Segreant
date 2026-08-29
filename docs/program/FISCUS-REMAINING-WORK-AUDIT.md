@@ -4,7 +4,7 @@
 **Date:** 2026-08-29  
 **Repository:** `GamingDragonwastaken/Fiscus`  
 **Reconstruction branch:** `gpt56/magnum-opus-reconstruction`  
-**Code baseline reconciled:** `abbcddc6ff5783e9d8da1b57dcc566da1e3256c5`  
+**Code baseline reconciled:** `685b14c57cccf078679a37a929f6234f00522abd`
 **Authority:** owner-approved `FISCUS_FOUNDATIONAL_AUDIT_II_COMPLETE.md` plus all still-valid requirements of the Magnum Opus Master Execution Plan.
 
 ## Purpose
@@ -23,7 +23,7 @@ The reconstruction branch began from the reviewed high-assurance candidate `3157
 
 The original macOS OIDC time-boundary failure has been repaired through injected deterministic verifier time and exact skew-boundary tests. Team-server tests later passed on Windows, Ubuntu and macOS.
 
-The current tranche is intentionally RED rather than falsely green. Root typecheck/tests are blocked by already-committed TDD specifications for robust decision semantics and transitive revocation closure whose production modules do not yet exist. Package smoke also exposes legacy demo expectations that relied on the old unsound realization semantics. Those expectations must be migrated; the strict semantics must not be weakened.
+The immediate recovery tranche is now green at exact implementation SHA `685b14c57cccf078679a37a929f6234f00522abd`. Root typecheck/tests, package smoke, and the configured cross-platform GitHub matrix pass after implementing the two RED specifications and migrating fixtures to explicit lifecycle evidence. The broader kernel and product program remains partial/open as recorded below.
 
 ## Work already implemented and to preserve
 
@@ -49,7 +49,7 @@ Status vocabulary: `CLOSED`, `PARTIAL`, `OPEN`, `RED-SPEC`, `EXTERNAL-GATE`, `SU
 
 | ID | Current status | Remaining closure condition |
 |---|---|---|
-| AII-001 realization lower bound | PARTIAL | Core rule fixed. Migrate fixtures/docs/adapters and prove generalized terminal bounds. |
+| AII-001 realization lower bound | PARTIAL | Core rule and affected fixtures now require every declared predicate. Migrate generalized WorkUnit adapters and prove universal terminal bounds. |
 | AII-002 absence without completeness | PARTIAL | Completeness primitive exists; migrate `clean`, off-path-spend and all analogous negative claims. |
 | AII-003 conflict collapsed | PARTIAL | Four-valued kernel exists; migrate legacy gates/claims/storage/API/UI. |
 | AII-004 commit universal atom | PARTIAL | Non-coding decoupled; implement canonical WorkUnit/OutcomeAdapter and coding adapter. |
@@ -67,7 +67,7 @@ Status vocabulary: `CLOSED`, `PARTIAL`, `OPEN`, `RED-SPEC`, `EXTERNAL-GATE`, `SU
 | AII-016 grain not a truth constraint | PARTIAL | Witness primitive exists; enforce in every derivation/aggregation. |
 | AII-017 money not exact end-to-end | PARTIAL | Migrate ledger/DB/budgets/allocation/reconciliation/API/CSV authoritative paths. |
 | AII-018 analytical economic subledger absent | OPEN | Immutable typed economic events and deterministic projections. |
-| AII-019 immutability inconsistent | RED-SPEC | Implement append-only Claim/Evidence DAG, supersession and transitive revocation. |
+| AII-019 immutability inconsistent | PARTIAL | Additive transitive closure primitive is implemented and tested; persisted append-only Claim/Evidence DAG, supersession events and projections remain. |
 | AII-020 receipt mistaken for truth | PARTIAL | Separate trust dimensions in product UX and interoperable attestation semantics. |
 | AII-021 causal inference/design gaps | OPEN | ITT, blocks, joint inference, missingness, interference, precision and transportability. |
 | AII-022 two causal systems | OPEN | One estimand/design/estimator registry; version/archive superseded path. |
@@ -75,7 +75,7 @@ Status vocabulary: `CLOSED`, `PARTIAL`, `OPEN`, `RED-SPEC`, `EXTERNAL-GATE`, `SU
 | AII-024 Goodhart naming | OPEN | Rename structural drift unless incentive gaming is evidenced. |
 | AII-025 observational frontier `evidence_supported` | OPEN | Observational/statistical label only; causal lane owns causal claims. |
 | AII-026 budget heuristic overclaim | OPEN | Keep scenario advisor; route action-grade choices through decision engine. |
-| AII-027 pseudo-VoI | RED-SPEC/PARTIAL | Rename existing sensitivity metric; implement real decision-theoretic VoI. |
+| AII-027 pseudo-VoI | PARTIAL | Legacy sensitivity metric remains explicitly labelled; separate decision engine now implements perfect-information VOI net of measurement cost. |
 | AII-028 shrinkage weight labelled confidence | OPEN | Correct terminology/assumptions and tests. |
 | AII-029 docs/runtime drift | OPEN | Canonical CapabilitySpec and generated/conformance-tested docs. |
 | AII-030 browser/server schema drift | OPEN | One runtime schema source and shared/generated types. |
@@ -83,20 +83,20 @@ Status vocabulary: `CLOSED`, `PARTIAL`, `OPEN`, `RED-SPEC`, `EXTERNAL-GATE`, `SU
 | AII-032 DB integrity too application-managed | OPEN | Promote critical invariants to DB where sound. |
 | AII-033 supply-chain assurance | OPEN | CodeQL, dependency review, secret scan, SBOM, provenance/signing. |
 | AII-034 hand-rolled OIDC | PARTIAL | Clock fixed; JOSE-vs-custom decision, differential/reference tests, production validation. |
-| AII-035 original exact-head macOS failure | PARTIAL | Specific race fixed; restore a new exact-SHA fully green reconstruction baseline. |
+| AII-035 original exact-head macOS failure | CLOSED | Deterministic OIDC repair plus GitHub run `33253835881` is green across all seven configured jobs at exact SHA `685b14c`. |
 | AII-036 derivation legality absent | PARTIAL | Build canonical Derivation/Claim/Evidence issuance path and make legality unavoidable. |
 
 ## Immediate execution tranche
 
 The next worker should not start another design discussion.
 
-1. Implement the already-RED robust decision module. Initial rule: a dominance certificate is valid only when one action's worst admissible utility exceeds every competitor's best admissible utility. If dominance is unavailable, a declared rule such as minimax regret may choose an action but must not be described as proof of objective optimality.
-2. Implement the already-RED transitive revocation module. Revoking evidence must invalidate dependent descendants while preserving independent siblings. History is additive; no destructive deletion.
-3. Restore root typecheck/tests.
-4. Migrate every legacy realization/demo fixture invalidated by the strict required-gate rule. Do not manufacture pass verdicts for unavailable evidence.
-5. Restore package smoke.
-6. Update `FISCUS-MAGNUM-OPUS-STATE.md`, `AUDIT-REGISTER.md`, decision/evidence registers and exact next action.
-7. Record a new exact-SHA green baseline before widening the kernel again.
+1. **COMPLETED at `b27c0ef`:** Implement the RED robust decision module. Strict dominance is the only proof-level certificate; minimax regret and perfect-information VOI remain explicitly named rules with assumptions and cost.
+2. **COMPLETED at `5647c67`:** Implement additive transitive revocation closure. Dependent descendants are invalidated while independent siblings remain outside the closure; cycles are safe, duplicate edges fail closed, and history is not deleted.
+3. **COMPLETED at `685b14c`:** Restore root and browser typechecks, the full root suite, and package smoke after the fixture migration.
+4. **COMPLETED at `685b14c`:** Migrate every affected realization/demo fixture to explicit required lifecycle evidence; no unknown gate is promoted to pass.
+5. **COMPLETED at `685b14c`:** Observe GitHub Actions run `33253835881` as green on all configured jobs.
+6. **COMPLETED in the following documentation checkpoint:** update program state, audit, decision, and evidence registers with exact implementation/CI identities.
+7. **NEXT:** Continue M1 kernel issuance dependency-first: canonical Evidence -> Claim -> Derivation/Witness -> Assumption/DAG -> persisted revocation/supersession -> as-of reconstruction -> serialization/conformance.
 
 ## Trusted Epistemic Kernel remaining work
 
@@ -268,7 +268,7 @@ For each external gate, repository work must leave an executable protocol, requi
 
 ## Milestone calibration
 
-- M0 stabilize reconstruction: IN PROGRESS.
+- M0 stabilize reconstruction: COMPLETE at implementation SHA `685b14c`; CI run `33253835881` green.
 - M1 constitutional specification/TEK: PARTIAL.
 - M2 exact money/economic events: PARTIAL foundation.
 - M3 evidence kernel v1: PARTIAL.
@@ -277,8 +277,8 @@ For each external gate, repository work must leave an executable protocol, requi
 - M6 financial interoperability: OPEN/PARTIAL.
 - M7 telemetry/integration: operational foundation exists; constitutional migration open.
 - M8 causal v3: strong v2 foundation; mathematical migration open.
-- M9 decision subsystem: RED-SPEC.
-- M10 VoI/evidence planner: OPEN.
+- M9 decision subsystem: PARTIAL foundation (`src/decision/engine.ts`); integration, assurance levels and policy chain remain.
+- M10 VoI/evidence planner: PARTIAL foundation (decision-theoretic VOI exists; evidence-debt planner remains OPEN).
 - M11 safe control: OPEN.
 - M12 attestation/`.fiscuspack`/verifier: OPEN.
 - M13 epistemic UX: OPEN on top of strong existing GUI foundation.
@@ -290,26 +290,20 @@ For each external gate, repository work must leave an executable protocol, requi
 
 ## Exact next queue
 
-1. inspect exact remote head and current CI;
-2. implement decision RED spec;
-3. implement revocation RED spec;
-4. migrate strict realization/demo fixtures;
-5. restore package smoke;
-6. exact-SHA green matrix;
-7. update durable program state/registers;
-8. TDD canonical Evidence;
-9. TDD canonical Claim;
-10. TDD canonical Derivation/Assumption/DAG/as-of semantics;
-11. migrate one real vertical—prefer billing/reconciliation—to exact Money and typed claims;
-12. introduce WorkUnit/OutcomeAdapter and migrate coding;
-13. completeness-aware `clean` and contribution engine;
-14. causal v3 registry/estimators/inference ledger;
-15. DecisionCertificate/true VoI/assurance levels;
-16. CapabilitySpec/canonical schemas/plugins;
-17. standards/attestation/`.fiscuspack`;
-18. resource bounds/fuzz/DB/JOSE/supply chain;
-19. UX/accessibility/performance;
-20. final adversarial reconciliation and external-gate handoff.
+1. TDD canonical Evidence envelope and immutable issuance boundary;
+2. TDD canonical Claim with ClaimProfile, uncertainty and typed basis;
+3. TDD canonical Derivation/Witness/Assumption and illegal-strengthening checks;
+4. persist the Evidence/Claim DAG, supersession and revocation events;
+5. implement as-of reconstruction and canonical serialization/conformance vectors;
+6. migrate billing/reconciliation to exact Money/Rate and typed economic claims;
+7. introduce WorkUnit/OutcomeAdapter and migrate coding/completeness-aware `clean`;
+8. build contribution attribution and adversarial benchmark corpus;
+9. unify causal estimand/design/estimator registry and inference ledger;
+10. integrate DecisionCertificate/true VoI/evidence debt/assurance levels into the control chain;
+11. CapabilitySpec, canonical schemas, plugins, standards and `.fiscuspack` verifier;
+12. resource bounds, fuzzing, DB/JOSE/supply-chain controls;
+13. epistemic UX, accessibility and performance budgets;
+14. final adversarial reconciliation and explicit external-gate handoff.
 
 ## Completion standard
 

@@ -17,6 +17,8 @@ Controlling architecture:
 - Reconstruction branch: `gpt56/magnum-opus-reconstruction`
 - Original reconstruction starting SHA: `31577d5b112653e5aa4dff5a0bdaae9fd58a982c`
 - Code baseline reconciled by the remaining-work audit: `abbcddc6ff5783e9d8da1b57dcc566da1e3256c5`
+- M0 implementation checkpoint: `685b14c57cccf078679a37a929f6234f00522abd`
+- Exact remote verification run for that checkpoint: GitHub Actions `33253835881` (success; root Ubuntu/macOS/Windows, package-smoke, and team-server Ubuntu/macOS/Windows)
 - Remaining-work audit commit: `5e5a82843154a6fd04e0017538919108c5ff06f1`
 - Luna resume-protocol commit: `5c4de94cf7af0a218ecd10946ac91577fdd9eae7`
 - Base high-assurance PR: #8 (`codex/high-assurance-foundation` -> `main`)
@@ -27,7 +29,19 @@ The exact remote reconstruction SHA must always be re-read after `git fetch`; do
 
 ## Program phase
 
-`M0 stabilization + M1 constitutional reconstruction`
+`M0 stabilization complete; M1 constitutional reconstruction next`
+
+## M0 stabilization checkpoint (2026-08-29)
+
+- [x] Re-synchronized a fresh writable execution checkout to the live remote reconstruction tip after preserving the already-pushed canonical snapshot and high-assurance branches.
+- [x] Verified local/remote identity before implementation: `4994582ad7fd389e29820cf3f3a2902a0a967ec7`.
+- [x] Implemented `src/decision/engine.ts`: strict interval-dominance certificates, explicit minimax-regret selection, decision-theoretic perfect-information VOI, validation, assumptions, and deterministic ties.
+- [x] Implemented `src/epistemic/revocation.ts`: additive transitive closure, sibling preservation, cycle-safe traversal, duplicate-edge rejection, and idempotent repeated revocation.
+- [x] Migrated strict realization/demo fixtures to provide explicit `merged`/`shipped` evidence; no unknown gate was converted into pass in production semantics.
+- [x] Restored local root verification: Node typecheck, browser typecheck, 968/968 root tests, and package smoke.
+- [x] Observed exact-SHA GitHub CI success in run `33253835881`.
+
+This checkpoint closes the immediate RED recovery tranche only. It does not close the remaining Trusted Epistemic Kernel, economic, causal, security, UX, research, or external-validation program.
 
 ## Completed in first GPT-5.6 Sol tranche
 
@@ -49,31 +63,23 @@ The exact remote reconstruction SHA must always be re-read after `git fetch`; do
 
 ## Current verification state
 
-This branch is intentionally RED at the current development boundary, not a final green baseline.
+The M0 reconstruction checkpoint is green at exact code SHA `685b14c57cccf078679a37a929f6234f00522abd`:
 
-Known reasons:
+- local Node typecheck: pass;
+- local browser typecheck: pass;
+- local root suite: 968 pass, 0 fail, 4 platform-conditional skips;
+- local packed/installable artifact smoke: pass;
+- GitHub Actions run `33253835881`: success across all seven configured jobs.
 
-1. A robust decision-engine TDD specification exists but production implementation is still absent.
-2. A transitive revocation-closure TDD specification exists but production implementation is still absent.
-3. Stricter realization semantics invalidate several legacy demo/integration expectations that encoded the old unsound contract.
-4. Package smoke therefore still requires truthful demo migration.
-
-Team-server tests were green across Windows, Ubuntu and macOS after the OIDC clock repair.
-
-Do not weaken the new invariants merely to restore green CI.
+The branch is still not a final product-completion baseline. M1 and later audit findings remain open or partial, and external gates remain unperformed. Do not weaken the new invariants merely to preserve superficial green status.
 
 ## Exact next actions
 
-0. Before editing, follow `docs/program/LUNA-RESUME-PROTOCOL.md`: salvage any unique local work, `git fetch --all --prune`, align the local checkout to the exact current `origin/gpt56/magnum-opus-reconstruction` history, verify local/remote SHA identity, then build/test from that synchronized state.
-1. Verify exact remote head and current CI before writing code.
-2. Implement the already-RED robust decision module.
-3. Implement the already-RED transitive revocation module.
-4. Run root typecheck/tests through CI and inspect remaining failures.
-5. Migrate legacy realization/demo fixtures to explicit required evidence; non-coding work must use its own OutcomeContract.
-6. Restore package smoke.
-7. Establish a new exact-SHA fully green reconstruction baseline.
-8. Update `AUDIT-REGISTER.md`, `DECISION-LOG.md`, `EVIDENCE-INDEX.md` and this state file.
-9. Continue Trusted Epistemic Kernel in dependency order: Evidence -> Claim -> Derivation/Assumption/DAG -> revocation/supersession -> as-of reconstruction -> product-vertical migration.
+1. Continue the Trusted Epistemic Kernel in dependency order: canonical Evidence -> Claim -> Derivation/Witness -> Assumption/DAG -> persisted revocation/supersession -> as-of reconstruction -> serialization/conformance.
+2. Migrate one real billing/reconciliation vertical to exact Money/Rate and typed economic evidence, preserving explicit legacy adapters.
+3. Keep every new claim and decision on the kernel path; add regression/property/adversarial tests before widening capability.
+4. After each coherent slice, update this state and the audit/evidence registers with the exact local and remote SHA.
+5. Keep external provider, production-service, independent-security, scholarly, accessibility, and design-partner gates explicit; never fabricate their closure.
 
 ## Non-negotiable execution invariants
 

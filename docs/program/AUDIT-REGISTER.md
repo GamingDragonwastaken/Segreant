@@ -1,10 +1,10 @@
 # Audit Register
 
-Status vocabulary: `OPEN`, `IN_PROGRESS`, `COMPLETED`, `SUPERSEDED`, `EXTERNAL_GATE`, `REJECTED_WITH_REASON`.
+Status vocabulary: `OPEN`, `PARTIAL`, `IN_PROGRESS`, `COMPLETED`, `SUPERSEDED`, `EXTERNAL_GATE`, `REJECTED_WITH_REASON`.
 
 | ID | Severity | Finding | Status | Acceptance condition |
 |---|---|---|---|---|
-| AII-001 | P0 | Realization lower bound counts units with unknown required gates as realized | OPEN | Outcome contracts require all required predicates supported for confirmed realization; lower/upper bounds re-proven and tested |
+| AII-001 | P0 | Realization lower bound counts units with unknown required gates as realized | PARTIAL | Core rule and affected fixtures now require every declared predicate; generalized WorkUnit adapters and universal terminal-bound migration remain |
 | AII-002 | P0 | Negative claims infer absence from missing observations without completeness witness | OPEN | Completeness witness required for `no incident`, `no off-path spend`, and analogous negative claims |
 | AII-003 | P0 | Pass/fail/unknown collapses evidence conflict | OPEN | Kernel supports supported/refuted/conflicted/unknown with conflict-preserving aggregation |
 | AII-004 | P1 | Git commit is treated as universal work atom | OPEN | General WorkUnit/OutcomeContract adapter architecture; coding is one adapter |
@@ -22,7 +22,7 @@ Status vocabulary: `OPEN`, `IN_PROGRESS`, `COMPLETED`, `SUPERSEDED`, `EXTERNAL_G
 | AII-016 | P0 | Grain is not a type-level truth constraint | OPEN | No Granularity Laundering enforced in derivations |
 | AII-017 | P0 | Money not exact end-to-end | OPEN | Exact Money/Rate core; floating USD restricted to presentation/legacy boundaries |
 | AII-018 | P1 | Missing analytical economic subledger | OPEN | EconomicEvent/Charge/Credit/Discount/Tax/FX/Allocation/Adjustment/Reversal/Close semantics |
-| AII-019 | P0 | Immutability model inconsistent | OPEN | Raw observations/claims append-only; supersession explicit; current state projected from history |
+| AII-019 | P0 | Immutability model inconsistent | PARTIAL | Transitive closure primitive now exists and is regression-tested; canonical append-only Evidence/Claim DAG, supersession events, and projections remain |
 | AII-020 | P0 | Signed receipt may be read as proving claim truth | OPEN | Integrity/authenticity/correctness/completeness separated; interoperable provenance/attestation |
 | AII-021 | P0 | Causal subsystem inference/design gaps | OPEN | Joint inference, ITT semantics, blocks, missingness, interference, power/precision corrected |
 | AII-022 | P1 | Two causal systems coexist | OPEN | Single estimand/design/estimator registry; superseded method versioned/archived |
@@ -30,7 +30,7 @@ Status vocabulary: `OPEN`, `IN_PROGRESS`, `COMPLETED`, `SUPERSEDED`, `EXTERNAL_G
 | AII-024 | P1 | Structural drift labelled Goodhart | OPEN | Rename to structural/metric drift; Goodhart only with additional evidence |
 | AII-025 | P0 | Observational frontier can say `evidence_supported` | OPEN | Observational/statistical label only; causal lane owns causal decision claims |
 | AII-026 | P1 | Budget recommendation heuristic overclaims decision quality | OPEN | Scenario label now; later risk/utility/constraint-aware decision engine |
-| AII-027 | P1 | Current VOI is instrumentation sensitivity, not VOI | OPEN | Rename existing metric; implement decision-theoretic VOI separately |
+| AII-027 | P1 | Current VOI is instrumentation sensitivity, not VOI | PARTIAL | Legacy `src/value/voi.ts` remains sensitivity-labelled; separate `src/decision/engine.ts` now implements explicit perfect-information VOI with measurement cost |
 | AII-028 | P1 | Reliability shrinkage weight labelled confidence; theorem overclaim | OPEN | Rename/local-data weight, regularize boundaries, document exchangeability |
 | AII-029 | P0 | Documentation/runtime contract drift | OPEN | Generated/conformance-tested capability/schema/claim/egress contracts |
 | AII-030 | P0 | Browser/server schemas can drift | OPEN | Canonical schema + runtime validation + generated/shared types |
@@ -38,5 +38,5 @@ Status vocabulary: `OPEN`, `IN_PROGRESS`, `COMPLETED`, `SUPERSEDED`, `EXTERNAL_G
 | AII-032 | P1 | DB relies heavily on application-managed integrity | OPEN | Review and push critical invariants into DB where sound |
 | AII-033 | P1 | Supply-chain assurance below target | OPEN | CodeQL/static security, dependency review, SBOM, provenance/signing, secret scanning |
 | AII-034 | P1 | Hand-rolled OIDC requires production-grade scrutiny | IN_PROGRESS | Deterministic clock semantics now; later mature JOSE-vs-custom decision and production validation |
-| AII-035 | P0 | Exact-head CI red on macOS OIDC time-boundary race | IN_PROGRESS | Exact reconstruction SHA green across configured CI matrix |
+| AII-035 | P0 | Exact-head CI red on macOS OIDC time-boundary race | COMPLETED | OIDC clock repair plus exact-SHA GitHub run `33253835881` green across root Ubuntu/macOS/Windows, package-smoke, and team-server Ubuntu/macOS/Windows |
 | AII-036 | P0 | No universal formal legality of evidence derivations | OPEN | Trusted Epistemic Kernel + derivation witnesses + soundness/property tests |
