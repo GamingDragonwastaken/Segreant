@@ -87,3 +87,7 @@
 ## D-022 — Bundled exact rates are explicit companions, not numeric coercions
 **Decision:** The shipped pricing card may carry canonical decimal companions alongside its legacy numeric presentation rates. `computeCost` emits an exact Money breakdown only when those companions validate; live proxy/import/demo writers pass that exact total to the atomic request adapter. A refreshed numeric-only card continues to operate as a compatibility estimator without exact issuance.
 **Reason:** The product can move its shipped path onto exact accounting without claiming that an arbitrary external JSON number has an exact decimal provenance. The companion makes the authority visible and keeps refresh/source limitations honest.
+
+## D-023 — Economic projections keep event roles separate
+**Decision:** Economic events retain their immutable envelope but map to explicit projection roles. Balances group by currency, basis, and role; charge/bill/provider-observation and adjustment/allocation flows cannot be collapsed by a coincidental shared USD basis. Kind-specific basis checks and compatible, bounded allocation reversals fail closed.
+**Reason:** Exact arithmetic alone cannot prevent semantic double counting. Role separation preserves a usable balance projection while making the caller choose when a cross-role comparison or conservation proof is justified.

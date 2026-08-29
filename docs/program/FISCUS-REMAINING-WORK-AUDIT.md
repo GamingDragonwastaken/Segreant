@@ -23,10 +23,10 @@ The reconstruction branch began from the reviewed high-assurance candidate `3157
 
 The original macOS OIDC time-boundary failure has been repaired through injected deterministic verifier time and exact skew-boundary tests. Team-server tests later passed on Windows, Ubuntu and macOS.
 
-The latest local candidate extends the remote reconciliation checkpoint with four
+The latest local candidate extends the remote reconciliation checkpoint with five
 unpublished commits: economic-event foundation `5ef8b58`, canonicalization/replay
 hardening `5c8d9c6`, exact decimal pricing `ad0b6a4`, and atomic exact request
-issuance `ac0efa7`, plus bundled exact-rate/live issuance `3763c9e`. Local verification at that candidate is 1,040 tests (1,036
+issuance `ac0efa7`, plus bundled exact-rate/live issuance `3763c9e` and role-aware projections/reversal constraints `6285bcc`. Local verification at that candidate is 1,041 tests (1,037
 pass, 0 fail, 4 platform-conditional skips), root/browser typecheck, build, and
 isolated-cache package dry-run. These identities are not remote/CI evidence until
 the blocked push succeeds.
@@ -81,7 +81,7 @@ Status vocabulary: `CLOSED`, `PARTIAL`, `OPEN`, `RED-SPEC`, `EXTERNAL-GATE`, `SU
 | AII-015 global evidence strength order | PARTIAL | Implement claim-relative admissibility/incomparable profiles. |
 | AII-016 grain not a truth constraint | PARTIAL | Witness primitive exists; enforce in every derivation/aggregation. |
 | AII-017 money not exact end-to-end | PARTIAL | Provider/local/reconciliation kernel paths, bundled exact decimal pricing, and live proxy/import exact request issuance now use exact Money; migrate refreshed-card provenance and legacy request ledger/DB/budgets/allocation/API/CSV authoritative paths and remove accounting-number authority. |
-| AII-018 analytical economic subledger absent | PARTIAL | Immutable typed economic events, canonical exact pricing, append-only persistence, and deterministic projections now exist as a local candidate; complete event-role/conservation semantics, corrections, FX, allocations, close state and product integration remain. |
+| AII-018 analytical economic subledger absent | PARTIAL | Immutable typed economic events, canonical exact pricing, role-aware append-only projections and basic reversal constraints now exist as a local candidate; complete event-role/conservation semantics, corrections, FX, allocations, close state and product integration remain. |
 | AII-019 immutability inconsistent | PARTIAL | Schema-owned SQLite persistence, digest/trigger checks, assumption/witness links, event-time replay, billing Claims and atomic exact request-charge issuance are implemented/tested; legacy repricing/read models and complete event projections remain. |
 | AII-020 receipt mistaken for truth | PARTIAL | Separate trust dimensions in product UX and interoperable attestation semantics. |
 | AII-021 causal inference/design gaps | OPEN | ITT, blocks, joint inference, missingness, interference, precision and transportability. |
