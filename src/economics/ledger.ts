@@ -92,6 +92,40 @@ export class EconomicLedger {
     }
   }
 
+  private readStored(id: string): EconomicEvent | null {
+    const stored = row<StoredEconomicRow>(this.db.prepare(
+      'SELECT event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest FROM economic_events WHERE event_id = ?',
+    ).get(id));
+    return stored === null ? null : storedRecord(stored);
+  }
+
+  /**
+   * Revalidate references on every read, not only on the normal append path.
+   * `Store.raw()` and SQLite tooling can write canonical bytes directly, so a
+   * persisted row must not become trusted merely because its own digest is
+   * valid. The path set also makes a corrupt reference cycle fail closed.
+   */
+  private validateReferenceClosure(
+    value: EconomicEvent,
+    visiting: Set<string> = new Set<string>(),
+    validated: Set<string> = new Set<string>(),
+  ): void {
+    if (validated.has(value.id)) return;
+    if (visiting.has(value.id)) throw new Error(`economic event reference cycle detected at ${value.id}`);
+    visiting.add(value.id);
+    if (value.reversalOf !== null && !value.sourceEventIds.includes(value.reversalOf)) {
+      throw new Error(`economic event ${value.id} reversalOf must appear in sourceEventIds`);
+    }
+    for (const sourceId of value.sourceEventIds) {
+      if (sourceId === value.id) throw new Error(`economic event ${value.id} cannot reference itself`);
+      const source = this.readStored(sourceId);
+      if (source === null) throw new Error(`unknown source economic event: ${sourceId}`);
+      this.validateReferenceClosure(source, visiting, validated);
+    }
+    visiting.delete(value.id);
+    validated.add(value.id);
+  }
+
   append(value: EconomicEvent | EconomicEventInput): EconomicAppendResult {
     const item = economicEvent(value);
     const encoded = serializeEconomicEvent(item);
@@ -101,6 +135,7 @@ export class EconomicLedger {
       ).get(item.id));
       if (existing !== null) {
         const replay = storedRecord(existing);
+        this.validateReferenceClosure(replay);
         const replayEncoded = serializeEconomicEvent(replay);
         if (replayEncoded.body !== encoded.body || replayEncoded.digest !== encoded.digest) {
           throw new Error(`different economic event already exists for ${item.id}`);
@@ -108,11 +143,10 @@ export class EconomicLedger {
         return 'duplicate';
       }
       for (const sourceId of item.sourceEventIds) {
-        if (this.read(sourceId) === null) throw new Error(`unknown source economic event: ${sourceId}`);
+        const source = this.read(sourceId);
+        if (source === null) throw new Error(`unknown source economic event: ${sourceId}`);
       }
-      if (item.reversalOf !== null && !item.sourceEventIds.includes(item.reversalOf)) {
-        throw new Error(`economic event ${item.id} reversalOf must appear in sourceEventIds`);
-      }
+      this.validateReferenceClosure(item);
       this.db.prepare(
         'INSERT INTO economic_events (event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest) VALUES (?, ?, ?, ?, ?, ?, ?)',
       ).run(item.id, item.kind, item.subject, item.occurredAt, item.recordedAt, encoded.body, encoded.digest);
@@ -122,19 +156,21 @@ export class EconomicLedger {
 
   read(id: string): EconomicEvent | null {
     if (typeof id !== 'string' || id.trim().length === 0) throw new Error('economic event id is required');
-    const stored = row<StoredEconomicRow>(this.db.prepare(
-      'SELECT event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest FROM economic_events WHERE event_id = ?',
-    ).get(id));
-    return stored === null ? null : storedRecord(stored);
+    const value = this.readStored(id);
+    if (value === null) return null;
+    this.validateReferenceClosure(value);
+    return value;
   }
 
   events(asOf?: Instant): readonly EconomicEvent[] {
     const boundary = asOf === undefined ? null : canonicalBoundary(asOf);
-    const boundaryMs = boundary === null ? null : Date.parse(boundary);
-    const rows = this.db.prepare(
-      'SELECT event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest FROM economic_events ORDER BY recorded_at ASC, event_id ASC',
-    ).all() as unknown as StoredEconomicRow[];
-    const values = rows.map(storedRecord).filter((item) => boundaryMs === null || Date.parse(item.recordedAt) <= boundaryMs);
+    const query = boundary === null
+      ? 'SELECT event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest FROM economic_events ORDER BY recorded_at ASC, event_id ASC'
+      : 'SELECT event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest FROM economic_events WHERE recorded_at <= ? ORDER BY recorded_at ASC, event_id ASC';
+    const rows = (boundary === null ? this.db.prepare(query).all() : this.db.prepare(query).all(boundary)) as unknown as StoredEconomicRow[];
+    const values = rows.map(storedRecord);
+    const validated = new Set<string>();
+    for (const value of values) this.validateReferenceClosure(value, new Set<string>(), validated);
     return Object.freeze(values);
   }
 

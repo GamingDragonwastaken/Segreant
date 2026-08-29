@@ -4,6 +4,8 @@ import {
   addMoney,
   compareMoney,
   formatMoneyAmount,
+  MAX_MONEY_COEFFICIENT_DIGITS,
+  MAX_MONEY_SCALE,
   money,
   moneyFromJson,
   moneyToJson,
@@ -64,5 +66,20 @@ test('Money rejects floats, exponent notation, invalid currency codes, and negat
   assert.throws(
     () => moneyFromJson({ coefficient: '1', scale: -1, currency: 'USD', basis: 'billed' }),
     /scale/,
+  );
+});
+
+test('Money rejects coercible currencies and hostile exact-value sizes', () => {
+  assert.throws(
+    () => money('1', { toString: () => 'USD' } as never, 'billed'),
+    /currency/,
+  );
+  assert.throws(
+    () => moneyFromJson({ coefficient: '1', scale: MAX_MONEY_SCALE + 1, currency: 'USD', basis: 'billed' }),
+    /scale|maximum/i,
+  );
+  assert.throws(
+    () => moneyFromJson({ coefficient: '1'.repeat(MAX_MONEY_COEFFICIENT_DIGITS + 1), scale: 0, currency: 'USD', basis: 'billed' }),
+    /coefficient|maximum|size/i,
   );
 });

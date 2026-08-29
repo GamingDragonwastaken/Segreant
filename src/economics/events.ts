@@ -132,6 +132,12 @@ function eventIds(value: unknown): readonly string[] {
   return Object.freeze(result);
 }
 
+function requireJsonFields(value: object, fields: readonly string[], label: string): void {
+  for (const field of fields) {
+    if (!Object.prototype.hasOwnProperty.call(value, field)) throw new Error(`${label} is missing field: ${field}`);
+  }
+}
+
 function canonicalAmount(value: unknown, label: string): Money | null {
   if (value === undefined || value === null) return null;
   if (typeof value !== 'object' || Array.isArray(value) || typeof (value as { coefficient?: unknown }).coefficient !== 'bigint') {
@@ -186,6 +192,7 @@ export function economicEventToJson(value: EconomicEvent): EconomicEventJson {
 
 export function economicEventFromJson(value: unknown): EconomicEvent {
   assertKnownKeys(value, EVENT_KEYS, 'economic event JSON');
+  requireJsonFields(value as object, [...EVENT_KEYS], 'economic event JSON');
   const input = value as EconomicEventJson;
   if (input.amount !== null && (typeof input.amount !== 'object' || Array.isArray(input.amount))) throw new Error('economic event JSON amount must be a Money object or null');
   const amount = input.amount === null ? null : moneyFromJson(input.amount);

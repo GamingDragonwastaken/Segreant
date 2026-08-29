@@ -1,10 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { EconomicLedger } from '../src/economics/ledger.ts';
 import { economicEvent, type EconomicEventInput } from '../src/economics/events.ts';
 import { formatMoneyAmount, money } from '../src/economics/money.ts';
 import { deserializeEconomicEvent, serializeEconomicEvent } from '../src/economics/serialization.ts';
+import { canonicalJson } from '../src/epistemic/serialization.ts';
 import { Store } from '../src/store/db.ts';
 
 function event(overrides: Partial<EconomicEventInput> = {}): EconomicEventInput {
@@ -20,6 +22,14 @@ function event(overrides: Partial<EconomicEventInput> = {}): EconomicEventInput 
     metadata: { invoiceRef: 'invoice-1' },
     schemaVersion: 1,
     ...overrides,
+  };
+}
+
+function withBody(encoded: ReturnType<typeof serializeEconomicEvent>, body: string): ReturnType<typeof serializeEconomicEvent> {
+  return {
+    ...encoded,
+    body,
+    digest: `sha256:${createHash('sha256').update(body, 'utf8').digest('hex')}`,
   };
 }
 
@@ -44,6 +54,37 @@ test('economic serialization canonicalizes Money without BigInt or float coercio
   assert.deepEqual(deserializeEconomicEvent(encoded), value);
   assert.equal(encoded.body.includes('BigInt'), false);
   assert.throws(() => deserializeEconomicEvent({ ...encoded, digest: 'sha256:' + '0'.repeat(64) }), /digest/);
+});
+
+test('economic deserialization refuses non-canonical Money and incomplete event bodies', () => {
+  const encoded = serializeEconomicEvent(economicEvent(event()));
+  const extraMoney = JSON.parse(encoded.body) as Record<string, unknown>;
+  extraMoney.amount = { ...(extraMoney.amount as Record<string, unknown>), extra: 'smuggled' };
+  assert.throws(
+    () => deserializeEconomicEvent(withBody(encoded, canonicalJson(extraMoney))),
+    /unknown.*Money|Money.*unknown/i,
+  );
+
+  const nonNormalized = JSON.parse(encoded.body) as Record<string, unknown>;
+  nonNormalized.amount = { ...(nonNormalized.amount as Record<string, unknown>), coefficient: '100', scale: 2 };
+  assert.throws(
+    () => deserializeEconomicEvent(withBody(encoded, canonicalJson(nonNormalized))),
+    /canonical|normalized/i,
+  );
+
+  const incomplete = JSON.parse(encoded.body) as Record<string, unknown>;
+  delete incomplete.sourceEventIds;
+  assert.throws(
+    () => deserializeEconomicEvent(withBody(encoded, canonicalJson(incomplete))),
+    /missing.*sourceEventIds|required/i,
+  );
+
+  const missingEnvelopeField = { ...encoded } as Record<string, unknown>;
+  delete missingEnvelopeField.digest;
+  assert.throws(
+    () => deserializeEconomicEvent(missingEnvelopeField as never),
+    /missing.*digest|required/i,
+  );
 });
 
 test('economic ledger is append-only, idempotent, and projects each monetary basis separately', () => {
@@ -79,6 +120,31 @@ test('economic projection replay is deterministic and rejects cross-currency or 
   const second = ledger.project();
   assert.deepEqual(second, first);
   assert.deepEqual(first.balances.map((balance) => `${balance.amount.currency}:${balance.amount.basis}`), ['EUR:billed', 'USD:billed']);
+  db.close();
+});
+
+test('economic replay fails closed on persisted dangling source references', () => {
+  const db = new DatabaseSync(':memory:');
+  const ledger = new EconomicLedger(db);
+  const dangling = economicEvent(event({ id: 'event:dangling', sourceEventIds: ['event:missing'] }));
+  const encoded = serializeEconomicEvent(dangling);
+  db.prepare(
+    'INSERT INTO economic_events (event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest) VALUES (?, ?, ?, ?, ?, ?, ?)',
+  ).run(dangling.id, dangling.kind, dangling.subject, dangling.occurredAt, dangling.recordedAt, encoded.body, encoded.digest);
+  assert.throws(() => ledger.read(dangling.id), /unknown source economic event|dangling/i);
+  assert.throws(() => ledger.events(), /unknown source economic event|dangling/i);
+  db.close();
+});
+
+test('economic replay fails closed on persisted reversal links that are not source references', () => {
+  const db = new DatabaseSync(':memory:');
+  const ledger = new EconomicLedger(db);
+  const invalid = economicEvent(event({ id: 'event:invalid-reversal', reversalOf: 'event:missing-source' }));
+  const encoded = serializeEconomicEvent(invalid);
+  db.prepare(
+    'INSERT INTO economic_events (event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest) VALUES (?, ?, ?, ?, ?, ?, ?)',
+  ).run(invalid.id, invalid.kind, invalid.subject, invalid.occurredAt, invalid.recordedAt, encoded.body, encoded.digest);
+  assert.throws(() => ledger.read(invalid.id), /reversalOf.*sourceEventIds/i);
   db.close();
 });
 
