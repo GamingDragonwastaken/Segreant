@@ -79,6 +79,8 @@ export interface ClaimInput {
   readonly derivationRule: string;
   readonly derivationVersion: number;
   readonly assumptions?: readonly string[];
+  /** First-class assumption node IDs; free-form `assumptions` remains legacy/display text. */
+  readonly assumptionIds?: readonly string[];
   readonly uncertainty?: UncertaintyInput | null;
   readonly causalStatus: CausalityStatus;
   /** Optional stored aliases; when supplied they must match profile exactly. */
@@ -106,6 +108,7 @@ export interface Claim {
   readonly derivationRule: string;
   readonly derivationVersion: number;
   readonly assumptions: readonly string[];
+  readonly assumptionIds: readonly string[];
   readonly uncertainty: Uncertainty | null;
   readonly causalStatus: CausalityStatus;
   /** Aliases are copied from profile and are never independently mutable. */
@@ -122,7 +125,7 @@ export interface Claim {
 const CLAIM_KEYS = new Set([
   'id', 'proposition', 'subject', 'scope', 'grain', 'time', 'epistemic', 'profile',
   'measurementModelRef', 'evidenceIds', 'derivationRule', 'derivationVersion', 'assumptions',
-  'uncertainty', 'causalStatus', 'issuedAt', 'supersedes', 'supersededBy', 'revocation',
+  'uncertainty', 'causalStatus', 'issuedAt', 'supersedes', 'supersededBy', 'revocation', 'assumptionIds',
   'decisionCertificateIds', 'schemaVersion', 'monetaryBasis', 'finality',
 ]);
 const PROPOSITION_KEYS = new Set(['predicate', 'value']);
@@ -307,6 +310,7 @@ export function claim(input: ClaimInput): Claim {
   if (issuedAt === null) throw new Error('claim issuedAt must be provided');
   const supersedes = stringList(value.supersedes, 'supersedes');
   const supersededBy = optionalText(value.supersededBy, 'supersededBy');
+  const assumptionIds = stringList(value.assumptionIds, 'assumptionIds');
   const decisionCertificateIds = stringList(value.decisionCertificateIds, 'decisionCertificateIds');
   if (!Number.isSafeInteger(value.schemaVersion) || value.schemaVersion < 1) {
     throw new Error('schemaVersion must be a positive safe integer');
@@ -326,6 +330,7 @@ export function claim(input: ClaimInput): Claim {
     derivationRule,
     derivationVersion: value.derivationVersion,
     assumptions: stringList(value.assumptions, 'assumption'),
+    assumptionIds,
     uncertainty: uncertainty(value.uncertainty),
     causalStatus,
     monetaryBasis: normalizedProfile.monetaryBasis,

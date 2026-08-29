@@ -647,6 +647,13 @@ CREATE TABLE IF NOT EXISTS epistemic_claims (
   FOREIGN KEY (claim_id) REFERENCES epistemic_nodes(node_id)
 );
 
+CREATE TABLE IF NOT EXISTS epistemic_assumptions (
+  assumption_id TEXT PRIMARY KEY,
+  assumption_json TEXT NOT NULL,
+  assumption_digest TEXT NOT NULL,
+  FOREIGN KEY (assumption_id) REFERENCES epistemic_nodes(node_id)
+);
+
 CREATE TABLE IF NOT EXISTS epistemic_derivations (
   derivation_id TEXT PRIMARY KEY,
   derivation_json TEXT NOT NULL,
@@ -830,6 +837,7 @@ export function initializeEpistemicSchema(db: DatabaseSync): void {
     'epistemic_nodes',
     'epistemic_evidence',
     'epistemic_claims',
+    'epistemic_assumptions',
     'epistemic_derivations',
     'epistemic_edges',
     'epistemic_revocations',
@@ -852,6 +860,7 @@ export function initializeEpistemicSchema(db: DatabaseSync): void {
     { table: 'epistemic_nodes', key: 'node_id = NEW.node_id' },
     { table: 'epistemic_evidence', key: 'evidence_id = NEW.evidence_id' },
     { table: 'epistemic_claims', key: 'claim_id = NEW.claim_id' },
+    { table: 'epistemic_assumptions', key: 'assumption_id = NEW.assumption_id' },
     { table: 'epistemic_derivations', key: 'derivation_id = NEW.derivation_id' },
     { table: 'epistemic_edges', key: 'from_id = NEW.from_id AND to_id = NEW.to_id AND relation = NEW.relation' },
     { table: 'epistemic_revocations', key: 'event_id = NEW.event_id' },

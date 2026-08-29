@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { claim, type ClaimInput } from '../src/epistemic/claim.ts';
 import { evidence, type EvidenceInput } from '../src/epistemic/evidence.ts';
+import { assumption } from '../src/epistemic/assumption.ts';
 import { derivation, type DerivationInput } from '../src/epistemic/derivation.ts';
 import { EpistemicLedger } from '../src/epistemic/ledger.ts';
 import { claimProfile } from '../src/epistemic/profile.ts';
@@ -150,6 +151,35 @@ test('ledger revocation events project transitively, preserve siblings, and supp
   assert.deepEqual(projection.revokedIds, ['claim:output', 'claim:source', 'evidence:invoice']);
   assert.equal(value.asOf('2026-08-01T12:00:00.000Z').nodes.length, 0);
   assert.deepEqual(value.asOf('2026-08-03T00:00:00.000Z').nodes.map((node) => node.id), ['claim:output', 'claim:source', 'evidence:invoice']);
+  db.close();
+});
+
+test('ledger persists first-class assumptions and links them to Claims for revocation', () => {
+  const { db, value } = ledger();
+  const e = evidence(evidenceInput());
+  value.appendEvidence(e);
+  const a = assumption({
+    id: 'assumption:coverage',
+    statement: 'The source covers the declared period.',
+    scope: scope({ account: 'acct-1' }),
+    grain: grain(['day']),
+    asOf: '2026-08-02T00:00:00.000Z',
+    epistemic: 'supported',
+    evidenceIds: [e.id],
+    issuedAt: '2026-08-02T00:00:00.000Z',
+    schemaVersion: 1,
+  });
+  assert.equal(value.appendAssumption(a), 'inserted');
+  const c = claim({ ...claimInput('claim:source', e.id), assumptionIds: [a.id] });
+  assert.equal(value.appendClaim(c), 'inserted');
+  assert.deepEqual(value.readAssumption(a.id), a);
+  assert.deepEqual(value.graph().edges, [
+    { from: 'assumption:coverage', to: 'claim:source', relation: 'assumes' },
+    { from: 'evidence:invoice', to: 'assumption:coverage', relation: 'supports' },
+    { from: 'evidence:invoice', to: 'claim:source', relation: 'supports' },
+  ]);
+  assert.equal(value.appendRevocation({ eventId: 'event:assumption-revoked', targetId: a.id, recordedAt: '2026-08-03T00:00:00.000Z', reason: 'coverage invalidated' }), 'inserted');
+  assert.deepEqual(value.revocationProjection().revokedIds, ['assumption:coverage', 'claim:source']);
   db.close();
 });
 

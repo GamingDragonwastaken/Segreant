@@ -5,6 +5,7 @@
 - typed evidence/claim/decision node identities;
 - canonical immutable Evidence envelopes with explicit source, coordinate, trust, completeness and retention metadata;
 - canonical immutable Claim envelopes with typed propositions, profile aliases, uncertainty and derivation dependencies;
+- first-class immutable Assumption envelopes with scope/time, epistemic state and evidence dependencies;
 - canonical immutable Derivation records with explicit transformations, coordinate changes and witness identities;
 - immutable Evidence/Claim dependency DAG snapshots with as-of views, assumption/measurement queries, conflict paths, supersession links and revocation projections;
 - SQLite-backed append-only kernel ledger with canonical JSON/digest revalidation, atomic dependency writes and revocation-event replay;
@@ -33,6 +34,7 @@
 - Dependency edges are prerequisite-to-dependent and acyclic; supersession is lifecycle metadata, not a revocation dependency.
 - As-of views never expose nodes unavailable at the requested boundary; revocation returns traceable projections and never deletes history.
 - Persistent inserts are exact-replay idempotent but divergent same-ID payloads and `INSERT OR REPLACE` attempts fail closed through database triggers.
+- Claims may carry first-class `assumptionIds`; the Store links them as `assumes` edges so assumption revocation reaches dependent claims without treating display text as a trust source.
 
 ## Verify
 
@@ -43,4 +45,5 @@ node --test --experimental-strip-types test/epistemic-claim.test.ts
 node --test --experimental-strip-types test/epistemic-derivation-object.test.ts test/epistemic-derivation.test.ts
 node --test --experimental-strip-types test/epistemic-dag.test.ts
 node --test --experimental-strip-types test/epistemic-ledger.test.ts
+node --test --experimental-strip-types test/epistemic-assumption.test.ts
 ```

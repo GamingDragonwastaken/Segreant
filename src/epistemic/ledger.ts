@@ -12,6 +12,7 @@ import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { initializeEpistemicSchema } from '../store/schema.ts';
 import { claim, type Claim } from './claim.ts';
+import { assumption, type Assumption } from './assumption.ts';
 import { evidence, type Evidence } from './evidence.ts';
 import {
   DAG_NODE_KINDS,
@@ -169,8 +170,15 @@ export class EpistemicLedger {
     });
   }
 
-  private nodePayload(id: string, table: 'epistemic_evidence' | 'epistemic_claims' | 'epistemic_derivations', key: string, label: string): StoredPayloadRow | null {
-    const stored = row<StoredPayloadRow>(this.db.prepare(`SELECT ${key} AS id, ${table === 'epistemic_evidence' ? 'evidence_json AS json, evidence_digest AS digest' : table === 'epistemic_claims' ? 'claim_json AS json, claim_digest AS digest' : 'derivation_json AS json, derivation_digest AS digest'} FROM ${table} WHERE ${key} = ?`).get(id));
+  private nodePayload(id: string, table: 'epistemic_evidence' | 'epistemic_claims' | 'epistemic_assumptions' | 'epistemic_derivations', key: string, label: string): StoredPayloadRow | null {
+    const projection = table === 'epistemic_evidence'
+      ? 'evidence_json AS json, evidence_digest AS digest'
+      : table === 'epistemic_claims'
+        ? 'claim_json AS json, claim_digest AS digest'
+        : table === 'epistemic_assumptions'
+          ? 'assumption_json AS json, assumption_digest AS digest'
+          : 'derivation_json AS json, derivation_digest AS digest';
+    const stored = row<StoredPayloadRow>(this.db.prepare(`SELECT ${key} AS id, ${projection} FROM ${table} WHERE ${key} = ?`).get(id));
     if (stored === null) return null;
     if (typeof stored.json !== 'string' || typeof stored.digest !== 'string' || stored.digest !== digest(stored.json)) {
       throw new Error(`stored ${label} ${id} failed digest verification`);
@@ -193,8 +201,8 @@ export class EpistemicLedger {
 
   appendNode(input: DagNodeInput): AppendResult {
     const id = nonEmpty(input.id, 'DAG node id');
-    if (input.kind === 'evidence' || input.kind === 'claim') {
-      throw new Error(`use appendEvidence or appendClaim for canonical ${input.kind} nodes`);
+    if (input.kind === 'evidence' || input.kind === 'claim' || input.kind === 'assumption') {
+      throw new Error(`use appendEvidence, appendClaim, or appendAssumption for canonical ${input.kind} nodes`);
     }
     return this.transaction(() => {
       const current = this.graph();
@@ -243,6 +251,7 @@ export class EpistemicLedger {
     const encoded = json(item, 'claim');
     return this.transaction(() => {
       this.ensureKinds(item.evidenceIds, 'evidence');
+      this.ensureKinds(item.assumptionIds, 'assumption');
       const current = this.graph();
       const normalized = normalizeNodeForLedger({
         id: item.id, kind: 'claim', availableAt: item.issuedAt, epistemic: item.epistemic, supersedes: item.supersedes,
@@ -262,6 +271,36 @@ export class EpistemicLedger {
         return 'duplicate';
       }
       this.db.prepare('INSERT INTO epistemic_claims (claim_id, claim_json, claim_digest) VALUES (?, ?, ?)').run(item.id, encoded, digest(encoded));
+      for (const evidenceId of item.evidenceIds) this.insertEdge({ from: evidenceId, to: item.id, relation: 'supports' });
+      for (const assumptionId of item.assumptionIds) this.insertEdge({ from: assumptionId, to: item.id, relation: 'assumes' });
+      return nodeResult === 'duplicate' ? 'inserted' : nodeResult;
+    });
+  }
+
+  appendAssumption(value: Assumption): AppendResult {
+    const item = assumption(value);
+    const encoded = json(item, 'assumption');
+    return this.transaction(() => {
+      this.ensureKinds(item.evidenceIds, 'evidence');
+      const current = this.graph();
+      const normalized = normalizeNodeForLedger({
+        id: item.id, kind: 'assumption', availableAt: item.issuedAt, epistemic: item.epistemic, supersedes: item.supersedes,
+      });
+      const existing = current.nodes.find((node) => node.id === item.id);
+      let nodeResult: AppendResult;
+      if (existing !== undefined) {
+        if (!sameNodeIdentity(existing, normalized)) throw new Error(`different DAG node already exists for ${item.id}`);
+        nodeResult = 'duplicate';
+      } else {
+        createEpistemicDag([...current.nodes, normalized], current.edges);
+        nodeResult = this.insertNode(normalized);
+      }
+      const stored = this.nodePayload(item.id, 'epistemic_assumptions', 'assumption_id', 'assumption');
+      if (stored !== null) {
+        if (!sameStoredPayload(stored, encoded)) throw new Error(`different assumption already exists for ${item.id}`);
+        return 'duplicate';
+      }
+      this.db.prepare('INSERT INTO epistemic_assumptions (assumption_id, assumption_json, assumption_digest) VALUES (?, ?, ?)').run(item.id, encoded, digest(encoded));
       for (const evidenceId of item.evidenceIds) this.insertEdge({ from: evidenceId, to: item.id, relation: 'supports' });
       return nodeResult === 'duplicate' ? 'inserted' : nodeResult;
     });
@@ -353,6 +392,18 @@ export class EpistemicLedger {
     }
   }
 
+  readAssumption(id: string): Assumption | null {
+    const stored = this.nodePayload(id, 'epistemic_assumptions', 'assumption_id', 'assumption');
+    if (stored === null) return null;
+    try {
+      const item = assumption(JSON.parse(stored.json) as Assumption);
+      if (item.id !== id) throw new Error('physical identity does not match the requested ID');
+      return item;
+    } catch (error) {
+      throw new Error(`stored assumption ${id} failed canonical validation: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
   readDerivation(id: string): Derivation | null {
     const stored = this.nodePayload(id, 'epistemic_derivations', 'derivation_id', 'derivation');
     if (stored === null) return null;
@@ -377,7 +428,17 @@ export class EpistemicLedger {
     // row cannot hide behind otherwise-valid node metadata.
     for (const node of nodes) {
       if (node.kind === 'evidence' && this.readEvidence(node.id) === null) throw new Error(`stored evidence node ${node.id} has no payload`);
-      if (node.kind === 'claim' && this.readClaim(node.id) === null) throw new Error(`stored claim node ${node.id} has no payload`);
+      if (node.kind === 'claim') {
+        const item = this.readClaim(node.id);
+        if (item === null) throw new Error(`stored claim node ${node.id} has no payload`);
+        this.ensureKinds(item.evidenceIds, 'evidence');
+        this.ensureKinds(item.assumptionIds, 'assumption');
+      }
+      if (node.kind === 'assumption') {
+        const item = this.readAssumption(node.id);
+        if (item === null) throw new Error(`stored assumption node ${node.id} has no payload`);
+        this.ensureKinds(item.evidenceIds, 'evidence');
+      }
     }
     const derivationRows = this.db.prepare('SELECT derivation_id FROM epistemic_derivations ORDER BY derivation_id').all() as unknown as Array<{ derivation_id: string }>;
     for (const stored of derivationRows) {
