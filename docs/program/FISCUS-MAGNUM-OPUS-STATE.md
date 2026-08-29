@@ -36,6 +36,8 @@ Controlling architecture:
 - Exact remote verification run for replay/conformance: GitHub Actions `33260565547` (success across all seven configured jobs)
 - Billing kernel vertical checkpoint: `9a0254ab0766057b53569b396f81c1d7c8dd96e2`
 - Exact remote verification run for the billing vertical: GitHub Actions `33261466500` (success across all seven configured jobs)
+- Persisted reconciliation-kernel checkpoint: `ec8e67ad79211389ba0b8caa5cf40ceb3ccb2872`
+- Exact remote verification run for persisted reconciliation Claims: GitHub Actions `33262733403` (success across all seven configured jobs)
 - Remaining-work audit commit: `5e5a82843154a6fd04e0017538919108c5ff06f1`
 - Luna resume-protocol commit: `5c4de94cf7af0a218ecd10946ac91577fdd9eae7`
 - Base high-assurance PR: #8 (`codex/high-assurance-foundation` -> `main`)
@@ -118,6 +120,15 @@ Replay is now a stable kernel contract; product adapters must still supply all c
 
 This is the first real product vertical crossing the kernel, not completion of the full financial migration. Direct provider-observation evidence, authoritative local Money migration, economic-event subledger, FX, projections, and universal API/CLI/UI issuance remain open.
 
+## M2 persisted reconciliation checkpoint (2026-08-29)
+
+- [x] Provider-observed, local-capture and mixed-basis reconciliation Claims are persisted through `ec8e67a` with immutable reconciliation-run identities; repeated issuance is idempotent and later corrections cannot collide with an earlier run.
+- [x] `billing reconcile --apply` now records the legacy reconciliation run and issues the kernel Claim when provider-day Evidence exists; the API exposes bounded reconciliation Claim summaries alongside provider/billed Claims.
+- [x] The adapter enforces provider-total equality with retained observations and exact `provider − local = residual` conservation; provider-observed and billed bases are never conflated.
+- [x] Focused and full local verification plus GitHub run `33262733403` pass across all seven configured jobs.
+
+The reconciliation kernel path is now end-to-end for this vertical. Legacy request, budget, allocation, export and economic-event paths still require exact Money migration and a typed subledger.
+
 ## Completed in first GPT-5.6 Sol tranche
 
 - [x] Durable program-control directory established.
@@ -138,19 +149,19 @@ This is the first real product vertical crossing the kernel, not completion of t
 
 ## Current verification state
 
-The latest reconstruction checkpoint is green at exact billing-kernel code SHA `9a0254ab0766057b53569b396f81c1d7c8dd96e2`:
+The latest reconstruction checkpoint is green at exact persisted-reconciliation code SHA `ec8e67ad79211389ba0b8caa5cf40ceb3ccb2872`:
 
 - local Node typecheck: pass;
 - local browser typecheck: pass;
-- local root suite: 1018 total, 1014 pass, 0 fail, 4 platform-conditional skips;
+- local root suite: 1023 total, 1019 pass, 0 fail, 4 platform-conditional skips;
 - local packed/installable artifact smoke: pass;
-- GitHub Actions run `33261466500`: success across all seven configured jobs.
+- GitHub Actions run `33262733403`: success across all seven configured jobs.
 
 The branch is still not a final product-completion baseline. M1 and later audit findings remain open or partial, and external gates remain unperformed. Do not weaken the new invariants merely to preserve superficial green status.
 
 ## Exact next actions
 
-1. Finish the billing/reconciliation vertical: provider-observation Evidence, local-capture Evidence, persisted reconciliation Claims and exact Money/Rate migration of authoritative paths, preserving explicit legacy adapters.
+1. Migrate authoritative request/budget/allocation/reconciliation/export paths to exact Money/Rate and introduce the immutable economic-event subledger with conservation projections.
 2. Make kernel issuance unavoidable at every consequential product boundary, then introduce WorkUnit/OutcomeAdapter migration.
 3. Keep every new claim and decision on the kernel path; add regression/property/adversarial tests before widening capability.
 4. After each coherent slice, update this state and the audit/evidence registers with the exact local and remote SHA.

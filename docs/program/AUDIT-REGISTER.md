@@ -16,13 +16,13 @@ Status vocabulary: `OPEN`, `PARTIAL`, `IN_PROGRESS`, `COMPLETED`, `SUPERSEDED`, 
 | AII-010 | P0 | Lift uses arbitrary defaults/fallback bounds | OPEN | Counterfactual estimand + identified set + declared assumptions; no arbitrary Manski-like labels |
 | AII-011 | P0 | Impact maps workflow labels to universal cardinal value | OPEN | Multidimensional outcomes + explicit utility/preferences |
 | AII-012 | P0 | `realizedValueUsd` sometimes names attributed spend | OPEN | Monetary semantic rename/migration; reserve value for outcome/economic value |
-| AII-013 | P0 | Four financial truth layers are too coarse/linear | PARTIAL | Exact Money/Rate and first billing Evidence/Claim vertical exist; complete typed economic claim DAG and subledger remain |
+| AII-013 | P0 | Four financial truth layers are too coarse/linear | PARTIAL | Exact Money/Rate, provider/local Evidence and persisted mixed-basis reconciliation Claims now exist; complete typed economic claim DAG and subledger remain |
 | AII-014 | P0 | `established:boolean` collapses trust/evidence dimensions | PARTIAL | Canonical Claim now embeds ClaimProfile and profile-derived aliases; migrate persisted/API/UI consumers and remove alternate booleans |
 | AII-015 | P1 | Evidence strength treated as global total order | OPEN | Claim-relative partial ordering/evidence predicates |
 | AII-016 | P0 | Grain is not a type-level truth constraint | OPEN | No Granularity Laundering enforced in derivations |
-| AII-017 | P0 | Money not exact end-to-end | PARTIAL | First billing kernel path uses exact Money and canonical string coefficients; migrate legacy ledger/DB/budgets/allocation/reconciliation/API/CSV authoritative paths |
+| AII-017 | P0 | Money not exact end-to-end | PARTIAL | Provider/local/reconciliation kernel paths use exact Money and canonical string coefficients; migrate legacy request ledger/DB/budgets/allocation/API/CSV authoritative paths |
 | AII-018 | P1 | Missing analytical economic subledger | OPEN | EconomicEvent/Charge/Credit/Discount/Tax/FX/Allocation/Adjustment/Reversal/Close semantics |
-| AII-019 | P0 | Immutability model inconsistent | PARTIAL | SQLite-backed immutable Evidence/Assumption/Claim/Derivation/Witness/DAG records, digest/trigger protection, and event-time revocation replay now exist; complete event projections and all product consumers remain |
+| AII-019 | P0 | Immutability model inconsistent | PARTIAL | SQLite-backed immutable Evidence/Assumption/Claim/Derivation/Witness/DAG records, digest/trigger protection, event-time replay and provider/local/reconciliation billing Claims now exist; complete event projections and all product consumers remain |
 | AII-020 | P0 | Signed receipt may be read as proving claim truth | OPEN | Integrity/authenticity/correctness/completeness separated; interoperable provenance/attestation |
 | AII-021 | P0 | Causal subsystem inference/design gaps | OPEN | Joint inference, ITT semantics, blocks, missingness, interference, power/precision corrected |
 | AII-022 | P1 | Two causal systems coexist | OPEN | Single estimand/design/estimator registry; superseded method versioned/archived |
