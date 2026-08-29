@@ -96,21 +96,33 @@ test('verifyIdToken: an expired token is rejected', async () => {
 test('verifyIdToken: a token with nbf inside the 60-second clock-skew allowance is accepted', async () => {
   const idp = await startFakeIdp();
   try {
-    const now = Math.floor(Date.now() / 1000);
-    const token = idp.sign(validPayload(idp, { nbf: now + 30 }));
-    const result = await verifyIdToken(token, cfg(idp));
+    const verifierNow = 1_800_000_000;
+    const token = idp.sign(validPayload(idp, { iat: verifierNow, exp: verifierNow + 3600, nbf: verifierNow + 30 }));
+    const result = await verifyIdToken(token, cfg(idp), { nowEpochSeconds: () => verifierNow });
     assert.equal(result.valid, true);
   } finally {
     await idp.close();
   }
 });
 
-test('verifyIdToken: a token with nbf beyond the clock-skew allowance is rejected', async () => {
+test('verifyIdToken: a token exactly at the 60-second clock-skew boundary is accepted', async () => {
   const idp = await startFakeIdp();
   try {
-    const now = Math.floor(Date.now() / 1000);
-    const token = idp.sign(validPayload(idp, { nbf: now + 61 }));
-    const result = await verifyIdToken(token, cfg(idp));
+    const verifierNow = 1_800_000_000;
+    const token = idp.sign(validPayload(idp, { iat: verifierNow, exp: verifierNow + 3600, nbf: verifierNow + 60 }));
+    const result = await verifyIdToken(token, cfg(idp), { nowEpochSeconds: () => verifierNow });
+    assert.equal(result.valid, true);
+  } finally {
+    await idp.close();
+  }
+});
+
+test('verifyIdToken: a token one second beyond the clock-skew allowance is rejected', async () => {
+  const idp = await startFakeIdp();
+  try {
+    const verifierNow = 1_800_000_000;
+    const token = idp.sign(validPayload(idp, { iat: verifierNow, exp: verifierNow + 3600, nbf: verifierNow + 61 }));
+    const result = await verifyIdToken(token, cfg(idp), { nowEpochSeconds: () => verifierNow });
     assert.equal(result.valid, false);
     if (!result.valid) assert.match(result.reason, /not valid yet \(nbf\)/);
   } finally {
@@ -197,7 +209,6 @@ test('verifyIdToken: alg "none" is rejected outright (the classic JWT vulnerabil
 test('verifyIdToken: alg "HS256" is rejected (prevents RSA-key-as-HMAC-secret algorithm confusion)', async () => {
   const idp = await startFakeIdp();
   try {
-    // Doesn't need a real HMAC signature — the alg whitelist rejects before signature checking.
     const headerB64 = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT', kid: idp.rsaKid })).toString('base64url');
     const payloadB64 = Buffer.from(JSON.stringify(validPayload(idp))).toString('base64url');
     const forged = `${headerB64}.${payloadB64}.deadbeef`;
@@ -250,7 +261,7 @@ test('verifyIdToken: without an explicit jwksUrl, OIDC discovery finds it via .w
   const idp = await startFakeIdp();
   try {
     clearJwksCacheForTests();
-    const c: OidcConfig = { issuerUrl: idp.issuer, clientId: CLIENT_ID }; // no jwksUrl — forces discovery
+    const c: OidcConfig = { issuerUrl: idp.issuer, clientId: CLIENT_ID };
     const token = idp.sign(validPayload(idp));
     const result = await verifyIdToken(token, c);
     assert.equal(result.valid, true);
@@ -263,7 +274,7 @@ test('verifyIdToken: without an explicit jwksUrl, OIDC discovery is cached — a
   const idp = await startFakeIdp();
   try {
     clearJwksCacheForTests();
-    const c: OidcConfig = { issuerUrl: idp.issuer, clientId: CLIENT_ID }; // no jwksUrl — forces discovery
+    const c: OidcConfig = { issuerUrl: idp.issuer, clientId: CLIENT_ID };
     await verifyIdToken(idp.sign(validPayload(idp)), c);
     const hitsAfterFirst = idp.wellKnownHits();
     await verifyIdToken(idp.sign(validPayload(idp)), c);
@@ -278,7 +289,7 @@ test('verifyIdToken: a key rotated in after the JWKS was cached is still accepte
   try {
     clearJwksCacheForTests();
     const c = cfg(idp, { jwksCacheTtlMs: 60_000 });
-    await verifyIdToken(idp.sign(validPayload(idp)), c); // primes the cache with the original two keys
+    await verifyIdToken(idp.sign(validPayload(idp)), c);
     const hitsBeforeRotation = idp.jwksHits();
 
     const rotated = idp.rotateInNewRsaKey();
@@ -295,9 +306,6 @@ test('verifyIdToken: a key rotated in after the JWKS was cached is still accepte
 test('verifyIdToken: a JWT with no kid header is accepted even when multiple JWKS candidates exist (tries every candidate, not just the first)', async () => {
   const idp = await startFakeIdp();
   try {
-    // No kid in the header → verifyIdToken must treat every key in the JWKS as
-    // a candidate and try each one, not bail out after the first constructible
-    // key fails to verify.
     const token = idp.sign(validPayload(idp), { alg: 'RS256', header: { alg: 'RS256', typ: 'JWT' } });
     const result = await verifyIdToken(token, cfg(idp));
     assert.equal(result.valid, true);
