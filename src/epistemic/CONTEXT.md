@@ -10,6 +10,7 @@
 - canonical immutable Derivation records with explicit transformations, coordinate changes and witness identities;
 - immutable Evidence/Claim dependency DAG snapshots with as-of views, assumption/measurement queries, conflict paths, supersession links and revocation projections;
 - SQLite-backed append-only kernel ledger with canonical JSON/digest revalidation, atomic dependency writes and revocation-event replay;
+- a combined `replayAsOf` projection that applies node availability and event-recording boundaries in one immutable result;
 - canonical JSON serialization/digest envelopes for Evidence, Claim, Assumption and Derivation records;
 - directed prerequisite-to-dependent edges;
 - revocation events supplied by an append-only store or protocol layer.
@@ -37,6 +38,7 @@
 - Dependency edges are prerequisite-to-dependent and acyclic; supersession is lifecycle metadata, not a revocation dependency.
 - As-of views never expose nodes unavailable at the requested boundary; revocation returns traceable projections and never deletes history.
 - Revocation of witness evidence transitively reaches the witness and every claim whose derivation cites it.
+- Repeated as-of replay is deterministic across handles; later nodes and later-recorded revocations cannot appear in earlier projections.
 - Persistent inserts are exact-replay idempotent but divergent same-ID payloads and `INSERT OR REPLACE` attempts fail closed through database triggers.
 - Serialized records sort object keys, preserve array order, reject cycles/unsupported values, and verify both digest and canonical bytes before rehydration.
 - Claims may carry first-class `assumptionIds`; the Store links them as `assumes` edges so assumption revocation reaches dependent claims without treating display text as a trust source.
@@ -52,5 +54,6 @@ node --test --experimental-strip-types test/epistemic-dag.test.ts
 node --test --experimental-strip-types test/epistemic-ledger.test.ts
 node --test --experimental-strip-types test/epistemic-assumption.test.ts
 node --test --experimental-strip-types test/epistemic-witness.test.ts
+node --test --experimental-strip-types test/epistemic-replay-conformance.test.ts
 node --test --experimental-strip-types test/epistemic-serialization.test.ts
 ```

@@ -41,6 +41,13 @@ export interface RevocationEventInput {
   readonly reason: string;
 }
 
+/** A single, hindsight-safe projection of the kernel at an observation boundary. */
+export interface EpistemicReplay {
+  readonly asOf: Instant;
+  readonly graph: EpistemicDag;
+  readonly revocation: RevocationProjection;
+}
+
 interface StoredNodeRow {
   node_id: string;
   node_kind: string;
@@ -527,7 +534,26 @@ export class EpistemicLedger {
   }
 
   asOf(asOf: Instant): EpistemicDag {
-    return asOfGraph(this.graph(), asOf);
+    return this.replayAsOf(asOf).graph;
+  }
+
+  /**
+   * Reconstruct every currently modeled kernel projection at one boundary.
+   * Node availability and revocation event time are filtered independently;
+   * later observations or corrections cannot leak into the historical view.
+   */
+  replayAsOf(asOf: Instant): EpistemicReplay {
+    const boundary = canonicalInstant(asOf, 'epistemic replay asOf');
+    const graph = asOfGraph(this.graph(), boundary);
+    const visible = new Set(graph.nodes.map((node) => node.id));
+    const events = this.revocationEvents().filter((event) =>
+      Date.parse(event.recorded_at) <= Date.parse(boundary) && visible.has(event.target_id),
+    );
+    return Object.freeze({
+      asOf: boundary,
+      graph,
+      revocation: projectRevocation(graph, events.map((event) => event.target_id)),
+    });
   }
 
   revocationProjection(): RevocationProjection {
@@ -538,14 +564,7 @@ export class EpistemicLedger {
 
   /** Reconstruct revocation state using only events recorded by the boundary. */
   revocationProjectionAsOf(asOf: Instant): RevocationProjection {
-    const boundary = canonicalInstant(asOf, 'revocation asOf');
-    const graph = this.graph();
-    const historical = asOfGraph(graph, boundary);
-    const visible = new Set(historical.nodes.map((node) => node.id));
-    const events = this.revocationEvents().filter((event) =>
-      Date.parse(event.recorded_at) <= Date.parse(boundary) && visible.has(event.target_id),
-    );
-    return projectRevocation(historical, events.map((event) => event.target_id));
+    return this.replayAsOf(asOf).revocation;
   }
 
   private revocationEvents(): StoredEventRow[] {
