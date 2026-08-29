@@ -19,6 +19,9 @@ Controlling architecture:
 - Code baseline reconciled by the remaining-work audit: `abbcddc6ff5783e9d8da1b57dcc566da1e3256c5`
 - M0 implementation checkpoint: `685b14c57cccf078679a37a929f6234f00522abd`
 - Exact remote verification run for that checkpoint: GitHub Actions `33253835881` (success; root Ubuntu/macOS/Windows, package-smoke, and team-server Ubuntu/macOS/Windows)
+- Evidence kernel checkpoint: `c89d95d341a0ad34f04562f0bad068e0ea60177c`
+- Claim kernel checkpoint: `fa36cc380e6883cc868e2e5b46517ae118a038ae`
+- Exact remote verification run for the Claim checkpoint: GitHub Actions `33255107581` (success across all seven configured jobs)
 - Remaining-work audit commit: `5e5a82843154a6fd04e0017538919108c5ff06f1`
 - Luna resume-protocol commit: `5c4de94cf7af0a218ecd10946ac91577fdd9eae7`
 - Base high-assurance PR: #8 (`codex/high-assurance-foundation` -> `main`)
@@ -43,6 +46,14 @@ The exact remote reconstruction SHA must always be re-read after `git fetch`; do
 
 This checkpoint closes the immediate RED recovery tranche only. It does not close the remaining Trusted Epistemic Kernel, economic, causal, security, UX, research, or external-validation program.
 
+## M1 kernel checkpoint (2026-08-29)
+
+- [x] Canonical immutable Evidence envelope (`c89d95d`) with typed source/coordinates, explicit trust and completeness axes, acquisition times, measurement/monetary references, assumptions, supersession/revocation links, sensitivity/redaction, schema version, and hash/reference-safe payload handling.
+- [x] Canonical immutable Claim envelope (`fa36cc3`) with typed propositions, explicit evidence dependencies, derivation identity, uncertainty, matching profile/causal axes, profile-derived monetary/finality aliases, and additive lifecycle metadata.
+- [x] Evidence/Claim focused tests and full root/browser/build verification remain green; GitHub run `33255107581` validates the exact Claim checkpoint across the configured matrix.
+
+This is a kernel issuance foundation, not universal product migration. Persisted Evidence/Claim DAG storage, Derivation legality, assumptions, as-of reconstruction, serialization/conformance, and downstream vertical adoption remain open.
+
 ## Completed in first GPT-5.6 Sol tranche
 
 - [x] Durable program-control directory established.
@@ -63,19 +74,19 @@ This checkpoint closes the immediate RED recovery tranche only. It does not clos
 
 ## Current verification state
 
-The M0 reconstruction checkpoint is green at exact code SHA `685b14c57cccf078679a37a929f6234f00522abd`:
+The latest reconstruction checkpoint is green at exact Claim code SHA `fa36cc380e6883cc868e2e5b46517ae118a038ae`:
 
 - local Node typecheck: pass;
 - local browser typecheck: pass;
-- local root suite: 968 pass, 0 fail, 4 platform-conditional skips;
+- local root suite: 983 total, 979 pass, 0 fail, 4 platform-conditional skips;
 - local packed/installable artifact smoke: pass;
-- GitHub Actions run `33253835881`: success across all seven configured jobs.
+- GitHub Actions run `33255107581`: success across all seven configured jobs.
 
 The branch is still not a final product-completion baseline. M1 and later audit findings remain open or partial, and external gates remain unperformed. Do not weaken the new invariants merely to preserve superficial green status.
 
 ## Exact next actions
 
-1. Continue the Trusted Epistemic Kernel in dependency order: canonical Evidence -> Claim -> Derivation/Witness -> Assumption/DAG -> persisted revocation/supersession -> as-of reconstruction -> serialization/conformance.
+1. Continue the Trusted Epistemic Kernel in dependency order: canonical Derivation/Witness -> Assumption/DAG -> persisted revocation/supersession -> as-of reconstruction -> serialization/conformance.
 2. Migrate one real billing/reconciliation vertical to exact Money/Rate and typed economic evidence, preserving explicit legacy adapters.
 3. Keep every new claim and decision on the kernel path; add regression/property/adversarial tests before widening capability.
 4. After each coherent slice, update this state and the audit/evidence registers with the exact local and remote SHA.

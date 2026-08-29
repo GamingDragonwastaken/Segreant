@@ -17,7 +17,7 @@ Status vocabulary: `OPEN`, `PARTIAL`, `IN_PROGRESS`, `COMPLETED`, `SUPERSEDED`, 
 | AII-011 | P0 | Impact maps workflow labels to universal cardinal value | OPEN | Multidimensional outcomes + explicit utility/preferences |
 | AII-012 | P0 | `realizedValueUsd` sometimes names attributed spend | OPEN | Monetary semantic rename/migration; reserve value for outcome/economic value |
 | AII-013 | P0 | Four financial truth layers are too coarse/linear | OPEN | Typed economic claim DAG: usage/estimate/provider/billed/effective/allocated/outcome/causal/utility |
-| AII-014 | P0 | `established:boolean` collapses trust/evidence dimensions | OPEN | Multiaxial ClaimState in Trusted Epistemic Kernel |
+| AII-014 | P0 | `established:boolean` collapses trust/evidence dimensions | PARTIAL | Canonical Claim now embeds ClaimProfile and profile-derived aliases; migrate persisted/API/UI consumers and remove alternate booleans |
 | AII-015 | P1 | Evidence strength treated as global total order | OPEN | Claim-relative partial ordering/evidence predicates |
 | AII-016 | P0 | Grain is not a type-level truth constraint | OPEN | No Granularity Laundering enforced in derivations |
 | AII-017 | P0 | Money not exact end-to-end | OPEN | Exact Money/Rate core; floating USD restricted to presentation/legacy boundaries |
@@ -39,4 +39,4 @@ Status vocabulary: `OPEN`, `PARTIAL`, `IN_PROGRESS`, `COMPLETED`, `SUPERSEDED`, 
 | AII-033 | P1 | Supply-chain assurance below target | OPEN | CodeQL/static security, dependency review, SBOM, provenance/signing, secret scanning |
 | AII-034 | P1 | Hand-rolled OIDC requires production-grade scrutiny | IN_PROGRESS | Deterministic clock semantics now; later mature JOSE-vs-custom decision and production validation |
 | AII-035 | P0 | Exact-head CI red on macOS OIDC time-boundary race | COMPLETED | OIDC clock repair plus exact-SHA GitHub run `33253835881` green across root Ubuntu/macOS/Windows, package-smoke, and team-server Ubuntu/macOS/Windows |
-| AII-036 | P0 | No universal formal legality of evidence derivations | OPEN | Trusted Epistemic Kernel + derivation witnesses + soundness/property tests |
+| AII-036 | P0 | No universal formal legality of evidence derivations | PARTIAL | Canonical Evidence/Claim issuance exists; Derivation/Witness checker and unavoidable issuance integration remain |

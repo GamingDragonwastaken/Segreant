@@ -27,3 +27,11 @@
 ## D-007 — Strict realization fixtures carry explicit lifecycle evidence
 **Decision:** Update synthetic and integration fixtures to provide every declared coding predicate (`merged` and `shipped` included) when they claim terminal realization. Keep maturing/uninstrumented fixtures unresolved and preserve the strict production lower bound.
 **Reason:** The old fixtures depended on unknown-as-pass. Making unknown gates pass would reverse the Audit II correction; supplying truthful synthetic evidence exercises the same production funnel without weakening it.
+
+## D-008 — Evidence is an immutable envelope, not a trust bit
+**Decision:** Canonical Evidence requires explicit source identity/class, scope/grain, acquisition time, separate integrity/authenticity/completeness, and schema/version metadata. Raw payloads are cloned/frozen JSON when retained; hash/reference-only evidence is supported for sensitive content. Unknown top-level fields, including `trusted`, are refused.
+**Reason:** A well-formed or signed record can establish integrity without establishing authenticity, completeness, or proposition truth. The envelope makes those axes inspectable and prevents accidental field drift at the kernel boundary.
+
+## D-009 — Claims retain their derivation and profile context
+**Decision:** Canonical Claims require typed propositions, at least one evidence dependency, a derivation rule/version, explicit coordinates/time/uncertainty, and matching epistemic/causal profile axes. Monetary basis and finality aliases are copied from the profile and cannot diverge.
+**Reason:** Claim consumers need a stable issued object without allowing `established:boolean` or duplicate semantic fields to erase uncertainty, provenance, or economic meaning. Persistence, derivation legality, and as-of replay are subsequent kernel slices.

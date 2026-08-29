@@ -4,7 +4,7 @@
 **Date:** 2026-08-29  
 **Repository:** `GamingDragonwastaken/Fiscus`  
 **Reconstruction branch:** `gpt56/magnum-opus-reconstruction`  
-**Code baseline reconciled:** `685b14c57cccf078679a37a929f6234f00522abd`
+**Code baseline reconciled:** `fa36cc380e6883cc868e2e5b46517ae118a038ae`
 **Authority:** owner-approved `FISCUS_FOUNDATIONAL_AUDIT_II_COMPLETE.md` plus all still-valid requirements of the Magnum Opus Master Execution Plan.
 
 ## Purpose
@@ -23,7 +23,7 @@ The reconstruction branch began from the reviewed high-assurance candidate `3157
 
 The original macOS OIDC time-boundary failure has been repaired through injected deterministic verifier time and exact skew-boundary tests. Team-server tests later passed on Windows, Ubuntu and macOS.
 
-The immediate recovery tranche is now green at exact implementation SHA `685b14c57cccf078679a37a929f6234f00522abd`. Root typecheck/tests, package smoke, and the configured cross-platform GitHub matrix pass after implementing the two RED specifications and migrating fixtures to explicit lifecycle evidence. The broader kernel and product program remains partial/open as recorded below.
+The immediate recovery tranche is green at exact implementation SHA `685b14c57cccf078679a37a929f6234f00522abd`, and the first M1 Evidence/Claim issuance slices are green at `fa36cc380e6883cc868e2e5b46517ae118a038ae`. Root typecheck/tests, package smoke, and the configured cross-platform GitHub matrix pass. The broader kernel and product program remains partial/open as recorded below.
 
 ## Work already implemented and to preserve
 
@@ -38,6 +38,7 @@ The first tranche created durable program-control artifacts and implemented mean
 - witnessed scope/grain derivation primitives;
 - multi-axis `ClaimProfile` separating epistemic support, integrity, authenticity, scope, coverage, measurement validity, causal status, monetary basis/finality and decision fitness;
 - `MeasurementModel` construct-validity boundary;
+- canonical immutable Evidence and Claim envelopes with explicit provenance, coordinates, profiles, uncertainty and lifecycle metadata;
 - strict legacy realization fix: unknown required gates no longer count toward the confirmed lower bound;
 - first live removal of the universal-Git-commit assumption: non-coding outcomes now use a domain-neutral OutcomeContract rather than fake coding lifecycle gates.
 
@@ -62,7 +63,7 @@ Status vocabulary: `CLOSED`, `PARTIAL`, `OPEN`, `RED-SPEC`, `EXTERNAL-GATE`, `SU
 | AII-011 workflow label → cardinal Impact | OPEN | Multidimensional outcomes plus explicit preferences/utility. |
 | AII-012 `realizedValueUsd` sometimes spend | OPEN | Rename/schema migration distinguishing spend, scenario value and causal value. |
 | AII-013 financial layers too coarse | PARTIAL | Money/Rate foundation exists; economic claim DAG and subledger remain. |
-| AII-014 `established:boolean` | PARTIAL | ClaimProfile exists; canonical Claim and product migration remain. |
+| AII-014 `established:boolean` | PARTIAL | ClaimProfile is now embedded in canonical Claim; persisted/API/UI migration and alternate-boolean removal remain. |
 | AII-015 global evidence strength order | PARTIAL | Implement claim-relative admissibility/incomparable profiles. |
 | AII-016 grain not a truth constraint | PARTIAL | Witness primitive exists; enforce in every derivation/aggregation. |
 | AII-017 money not exact end-to-end | PARTIAL | Migrate ledger/DB/budgets/allocation/reconciliation/API/CSV authoritative paths. |
@@ -84,7 +85,7 @@ Status vocabulary: `CLOSED`, `PARTIAL`, `OPEN`, `RED-SPEC`, `EXTERNAL-GATE`, `SU
 | AII-033 supply-chain assurance | OPEN | CodeQL, dependency review, secret scan, SBOM, provenance/signing. |
 | AII-034 hand-rolled OIDC | PARTIAL | Clock fixed; JOSE-vs-custom decision, differential/reference tests, production validation. |
 | AII-035 original exact-head macOS failure | CLOSED | Deterministic OIDC repair plus GitHub run `33253835881` is green across all seven configured jobs at exact SHA `685b14c`. |
-| AII-036 derivation legality absent | PARTIAL | Build canonical Derivation/Claim/Evidence issuance path and make legality unavoidable. |
+| AII-036 derivation legality absent | PARTIAL | Evidence/Claim issuance path exists; canonical Derivation/Witness legality and unavoidable integration remain. |
 
 ## Immediate execution tranche
 
@@ -290,8 +291,8 @@ For each external gate, repository work must leave an executable protocol, requi
 
 ## Exact next queue
 
-1. TDD canonical Evidence envelope and immutable issuance boundary;
-2. TDD canonical Claim with ClaimProfile, uncertainty and typed basis;
+1. **COMPLETED at `c89d95d`:** TDD canonical Evidence envelope and immutable issuance boundary.
+2. **COMPLETED at `fa36cc3`:** TDD canonical Claim with ClaimProfile, uncertainty and typed basis aliases.
 3. TDD canonical Derivation/Witness/Assumption and illegal-strengthening checks;
 4. persist the Evidence/Claim DAG, supersession and revocation events;
 5. implement as-of reconstruction and canonical serialization/conformance vectors;
