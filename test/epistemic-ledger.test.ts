@@ -149,6 +149,8 @@ test('ledger revocation events project transitively, preserve siblings, and supp
   assert.equal(value.appendRevocation({ eventId: 'event:invoice-revoked', targetId: e.id, recordedAt: '2026-08-05T00:00:00.000Z', reason: 'provider correction' }), 'duplicate');
   const projection = value.revocationProjection();
   assert.deepEqual(projection.revokedIds, ['claim:output', 'claim:source', 'evidence:invoice']);
+  assert.deepEqual(value.revocationProjectionAsOf('2026-08-04T00:00:00.000Z').revokedIds, []);
+  assert.deepEqual(value.revocationProjectionAsOf('2026-08-06T00:00:00.000Z').revokedIds, ['claim:output', 'claim:source', 'evidence:invoice']);
   assert.equal(value.asOf('2026-08-01T12:00:00.000Z').nodes.length, 0);
   assert.deepEqual(value.asOf('2026-08-03T00:00:00.000Z').nodes.map((node) => node.id), ['claim:output', 'claim:source', 'evidence:invoice']);
   db.close();

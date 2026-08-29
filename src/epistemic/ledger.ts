@@ -456,8 +456,31 @@ export class EpistemicLedger {
   }
 
   revocationProjection(): RevocationProjection {
-    const events = this.db.prepare('SELECT event_id, target_id, recorded_at, reason FROM epistemic_revocations ORDER BY event_id').all() as unknown as StoredEventRow[];
-    return projectRevocation(this.graph(), events.map((event) => event.target_id));
+    const graph = this.graph();
+    const events = this.revocationEvents();
+    return projectRevocation(graph, events.map((event) => event.target_id));
+  }
+
+  /** Reconstruct revocation state using only events recorded by the boundary. */
+  revocationProjectionAsOf(asOf: Instant): RevocationProjection {
+    const boundary = canonicalInstant(asOf, 'revocation asOf');
+    const graph = this.graph();
+    const historical = asOfGraph(graph, boundary);
+    const visible = new Set(historical.nodes.map((node) => node.id));
+    const events = this.revocationEvents().filter((event) =>
+      Date.parse(event.recorded_at) <= Date.parse(boundary) && visible.has(event.target_id),
+    );
+    return projectRevocation(historical, events.map((event) => event.target_id));
+  }
+
+  private revocationEvents(): StoredEventRow[] {
+    const rows = this.db.prepare('SELECT event_id, target_id, recorded_at, reason FROM epistemic_revocations ORDER BY event_id').all() as unknown as StoredEventRow[];
+    return rows.map((event) => ({
+      event_id: nonEmpty(event.event_id, 'stored revocation eventId'),
+      target_id: nonEmpty(event.target_id, 'stored revocation targetId'),
+      recorded_at: canonicalInstant(event.recorded_at, `stored revocation ${event.event_id} recordedAt`),
+      reason: nonEmpty(event.reason, `stored revocation ${event.event_id} reason`),
+    }));
   }
 
   private ensureKinds(ids: readonly string[], kind: DagNode['kind']): void {
