@@ -84,8 +84,9 @@ export interface PricingConfig {
   maxAgeDays: number;
   /**
    * When true, `fiscus start` refreshes pricing on launch if the cache is
-   * older than maxAgeDays. OFF by default to keep "zero external requests" true
-   * out of the box — the manual `fiscus pricing --refresh` always works.
+   * older than maxAgeDays. OFF by default so a normal local start has no
+   * optional manifest request. Any refresh still needs a matching controlled
+   * cloud egress rule; a denied refresh leaves the active local table intact.
    */
   autoRefresh: boolean;
 }
@@ -157,6 +158,50 @@ export interface JudgeConfig {
   hostedSendFullContent: boolean;
 }
 
+/**
+ * A permission is specific to why Fiscus is sending a request and what class of
+ * data the request may carry. A rule never acts as a generic network wildcard.
+ */
+export type EgressPurpose =
+  | 'provider_inference'
+  | 'pricing_refresh'
+  | 'baseline_refresh'
+  | 'alert_delivery'
+  | 'provider_cost_observation'
+  | 'team_rollup'
+  | 'hosted_judge'
+  | 'local_judge'
+  | 'local_healthcheck';
+
+export type EgressDataClass =
+  | 'provider_request'
+  | 'pricing_manifest'
+  | 'baseline_manifest'
+  | 'alert_metadata'
+  | 'provider_cost_aggregate'
+  | 'team_rollup'
+  | 'judge_structural_summary'
+  | 'judge_transcript_excerpt'
+  | 'healthcheck';
+
+export interface EgressRule {
+  id: string;
+  enabled: boolean;
+  purpose: EgressPurpose;
+  dataClass: EgressDataClass;
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD';
+  /** Exact HTTPS origin only: no credential, query, fragment, or wildcard. */
+  origin: string;
+  /** Absolute leading path prefix only; query matching is never delegated to a rule. */
+  pathPrefix: string;
+}
+
+export interface EgressConfig {
+  /** Local mode refuses every non-loopback Fiscus HTTP(S) target before DNS. */
+  mode: 'local_locked' | 'controlled_cloud';
+  rules: EgressRule[];
+}
+
 export interface FiscusConfig {
   port: number;
   dashboardPort: number;
@@ -186,6 +231,7 @@ export interface FiscusConfig {
   judge: JudgeConfig;
   pricing: PricingConfig;
   perUser: PerUserConfig;
+  egress: EgressConfig;
   /** Prune request rows older than this many days during maintenance. */
   retentionDays: number;
   /**
@@ -261,6 +307,12 @@ export const DEFAULT_CONFIG: FiscusConfig = {
   perUser: {
     enabled: false,
     minCohort: 5,
+  },
+  // Strong default: local operation works immediately, while any cloud route
+  // needs a deliberate, inspectable exact rule created through `fiscus egress`.
+  egress: {
+    mode: 'local_locked',
+    rules: [],
   },
   retentionDays: 180,
   metadataOnly: false,

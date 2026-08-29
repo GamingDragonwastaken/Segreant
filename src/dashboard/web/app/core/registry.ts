@@ -70,27 +70,28 @@ export const CAPABILITIES: readonly Capability[] = [
   // ---- Allocation ---------------------------------------------------------
   { id: 'project', label: 'Projects', plain: 'Which project each request belongs to, and how we know.', territory: 'allocation', consequence: 'read', coverage: 'full', command: 'fiscus project --coverage' },
   { id: 'project-alias', label: 'Merge project names', plain: 'Treat two names as the same project.', territory: 'allocation', consequence: 'local', coverage: 'partial', command: 'fiscus project alias' },
-  { id: 'alloc-centres', label: 'Cost centres', plain: 'The teams or budgets that carry the cost.', territory: 'allocation', consequence: 'local', coverage: 'full', command: 'fiscus alloc centre' },
-  { id: 'alloc-rules', label: 'Allocation rules', plain: 'How spend is split across cost centres.', territory: 'allocation', consequence: 'local', coverage: 'full', command: 'fiscus alloc rule' },
-  { id: 'alloc-run', label: 'Run an allocation', plain: 'Apply the rules to a period and record the result.', territory: 'allocation', consequence: 'local', coverage: 'full', command: 'fiscus alloc run --apply' },
+  { id: 'alloc-centres', label: 'Cost centres', plain: 'The teams or budgets that carry the cost.', territory: 'allocation', consequence: 'local', coverage: 'partial', command: 'fiscus alloc centre' },
+  { id: 'alloc-rules', label: 'Allocation rules', plain: 'How spend is split across cost centres.', territory: 'allocation', consequence: 'local', coverage: 'partial', command: 'fiscus alloc rule' },
+  { id: 'alloc-run', label: 'Run an allocation', plain: 'Apply the rules to a period and record the result.', territory: 'allocation', consequence: 'local', coverage: 'partial', command: 'fiscus alloc run --apply' },
 
   // ---- Evidence -----------------------------------------------------------
-  { id: 'billing-scope', label: 'Declare a provider scope', plain: 'Say which provider project this machine is metering.', territory: 'evidence', consequence: 'local', coverage: 'full', command: 'fiscus billing scope set' },
+  { id: 'billing-scope', label: 'Declare a provider scope', plain: 'Say which provider project this machine is metering.', territory: 'evidence', consequence: 'local', coverage: 'partial', command: 'fiscus billing scope set' },
   { id: 'billing-readiness', label: 'Reconciliation readiness', plain: 'Whether a provider check would actually match anything.', territory: 'evidence', consequence: 'read', coverage: 'full', command: 'fiscus billing reconcile' },
-  { id: 'billing-adopt', label: 'Adopt a provider export', plain: 'Use a costs file you exported, with no credential.', territory: 'evidence', consequence: 'local', coverage: 'full', command: 'fiscus billing openai-costs adopt --apply' },
+  { id: 'billing-adopt', label: 'Adopt a provider export', plain: 'Use a costs file you exported, with no credential.', territory: 'evidence', consequence: 'local', coverage: 'partial', command: 'fiscus billing openai-costs adopt --apply' },
   {
     id: 'billing-pull', label: 'Pull provider costs', plain: 'Read your bill directly from the provider.',
     territory: 'evidence', consequence: 'credential', coverage: 'partial', command: 'fiscus billing openai-costs pull',
     warning: 'Reads an OpenAI Admin credential from your environment and makes a network request to OpenAI. Fiscus never stores it. Check readiness first — on a ledger with no proxy traffic on the declared route, a pull reports your entire bill as unexplained.',
   },
-  { id: 'billing-reconcile', label: 'Reconcile', plain: 'Compare what we metered against what you were billed.', territory: 'evidence', consequence: 'local', coverage: 'full', command: 'fiscus billing reconcile --apply' },
+  { id: 'billing-reconcile', label: 'Reconcile', plain: 'Compare what we metered against what you were billed.', territory: 'evidence', consequence: 'local', coverage: 'partial', command: 'fiscus billing reconcile --apply' },
   { id: 'receipt', label: 'Receipts', plain: 'The evidence behind a single claim.', territory: 'evidence', consequence: 'read', coverage: 'partial', command: 'fiscus receipt' },
   { id: 'evidence', label: 'Evidence records', plain: 'Signed CI artifacts and verified outcomes.', territory: 'evidence', consequence: 'read', coverage: 'partial', command: 'fiscus evidence' },
   { id: 'audit', label: 'Audit', plain: 'Check the ledger against itself for inconsistencies.', territory: 'evidence', consequence: 'read', coverage: 'partial', command: 'fiscus audit' },
 
   // ---- Value --------------------------------------------------------------
   { id: 'roi', label: 'Return on Intelligence', plain: 'What the spend produced, with the limits stated.', territory: 'value', consequence: 'read', coverage: 'full', command: 'fiscus roi' },
-  { id: 'realize', label: 'Realized value', plain: 'Work that actually shipped, not work that was proposed.', territory: 'value', consequence: 'local', coverage: 'full', command: 'fiscus realize' },
+  { id: 'causal', label: 'Causal studies', plain: 'Registered randomized evidence and its qualification gates.', territory: 'value', consequence: 'local', coverage: 'partial', command: 'fiscus causal status' },
+  { id: 'realize', label: 'Realized value', plain: 'Work that actually shipped, not work that was proposed.', territory: 'value', consequence: 'local', coverage: 'partial', command: 'fiscus realize' },
   { id: 'frontier', label: 'Model comparison', plain: 'Whether a cheaper model would have done the same job.', territory: 'value', consequence: 'read', coverage: 'full', command: 'fiscus frontier' },
   { id: 'saved', label: 'Savings', plain: 'What routing decisions have avoided so far.', territory: 'value', consequence: 'read', coverage: 'partial', command: 'fiscus saved' },
   { id: 'yield', label: 'Yield', plain: 'Output per dollar across projects.', territory: 'value', consequence: 'read', coverage: 'partial', command: 'fiscus yield' },
@@ -107,7 +108,12 @@ export const CAPABILITIES: readonly Capability[] = [
   { id: 'demo', label: 'Demo data', plain: 'Load labelled sample data to see how it works.', territory: 'data', consequence: 'local', coverage: 'partial', command: 'fiscus demo' },
 
   // ---- System -------------------------------------------------------------
-  { id: 'settings', label: 'Settings', plain: 'How Fiscus behaves on this machine.', territory: 'system', consequence: 'local', coverage: 'full', command: 'fiscus config' },
+  {
+    id: 'egress', label: 'Egress assurance', plain: 'Which cloud routes Fiscus itself may use, with local receipts.',
+    territory: 'system', consequence: 'egress', coverage: 'partial', command: 'fiscus egress status',
+    warning: 'The dashboard shows Fiscus-process status and receipt-chain health. Use the CLI to plan or apply an exact cloud permission. This is not a machine-wide firewall or a provider-retention guarantee.',
+  },
+  { id: 'settings', label: 'Settings', plain: 'How Fiscus behaves on this machine.', territory: 'system', consequence: 'local', coverage: 'partial', command: 'fiscus config' },
   { id: 'pricing', label: 'Pricing', plain: 'The rate cards used to estimate cost.', territory: 'system', consequence: 'read', coverage: 'partial', command: 'fiscus pricing --coverage' },
   {
     id: 'reprice', label: 'Reprice history', plain: 'Recalculate past costs against a corrected rate card.',
@@ -119,7 +125,7 @@ export const CAPABILITIES: readonly Capability[] = [
   {
     id: 'team-push', label: 'Push to team server', plain: 'Send a signed, aggregated rollup to your team server.',
     territory: 'system', consequence: 'egress', coverage: 'planned', command: 'fiscus team push',
-    warning: 'This is the only action in Fiscus that sends data off this machine. It transmits signed aggregate rollups to the team server you configured — never raw requests, prompts, or file contents. The team server is separately gated and is not approved for internet-facing deployment.',
+    warning: 'This is the team-server rollup action. It transmits signed aggregate rollups to the team server you configured — never raw requests, prompts, or file contents. Other explicit outbound paths are documented in DATA-BOUNDARIES.md. The team server is separately gated and is not approved for internet-facing deployment.',
   },
   {
     id: 'prune', label: 'Delete old data', plain: 'Permanently remove records past the retention window.',

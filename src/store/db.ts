@@ -25,6 +25,7 @@ import type { AllocationRule, CostCentre } from '../alloc/rules.ts';
 import type { AllocationRunResult } from '../alloc/apply.ts';
 import * as allocation from './allocation.ts';
 import * as billing from './billing.ts';
+import * as causal from './causal.ts';
 import * as realization from './realization.ts';
 import type {
   RealizationCostSync,
@@ -52,6 +53,12 @@ import type {
   OpenAiCostsObservationRun,
   OpenAiCostsObservationStatus,
 } from './billing.ts';
+import type {
+  CausalAssignmentPlan,
+  CausalExecutionRecord,
+  CausalOutcomeRecord,
+  CommittedCausalStudyProtocol,
+} from '../causal/types.ts';
 
 /**
  * Provider-side evidence shapes now live in ./billing.ts. They are re-exported
@@ -70,6 +77,15 @@ export type {
   OpenAiCostsObservationRun,
   OpenAiCostsObservationStatus,
 } from './billing.ts';
+export type {
+  CausalAssignmentPlan,
+  CausalExecutionRecord,
+  CausalOutcomeRecord,
+  CausalStudyData,
+  CausalStudyEstimate,
+  CommittedCausalStudyProtocol,
+} from '../causal/types.ts';
+export type { CausalAnalysisSnapshot, CausalStudySummary } from './causal.ts';
 
 export interface RequestRow {
   requestId: string;
@@ -1563,6 +1579,58 @@ export class Store {
   /** Snapshot only when a request's resolved OpenAI endpoint exactly matches the active declaration. */
   matchingOpenAiScope(upstreamBase: string): ProviderScopeDeclaration | null {
     return billing.matchingOpenAiScope(this.db, upstreamBase);
+  }
+
+  /**
+   * Commit a validated causal-study protocol. Existing committed records are
+   * idempotent only when byte-for-byte equivalent; no update path exists.
+   */
+  registerCausalProtocol(protocol: CommittedCausalStudyProtocol): 'created' | 'existing' {
+    return causal.registerCausalProtocol(this.db, protocol);
+  }
+
+  /** Persist a complete pre-exposure randomisation block and its decision ledger. */
+  saveCausalAssignmentPlan(plan: CausalAssignmentPlan): 'created' | 'existing' {
+    return causal.saveCausalAssignmentPlan(this.db, plan);
+  }
+
+  /** Append actual execution lineage after a stored randomized decision. */
+  appendCausalExecution(record: CausalExecutionRecord): 'created' | 'existing' {
+    return causal.appendCausalExecution(this.db, record);
+  }
+
+  /** Append outcome lineage after a stored execution. */
+  appendCausalOutcome(record: CausalOutcomeRecord): 'created' | 'existing' {
+    return causal.appendCausalOutcome(this.db, record);
+  }
+
+  /** Load the local evidence objects required for deterministic qualification. */
+  causalStudyData(studyId: string): import('../causal/types.ts').CausalStudyData | null {
+    return causal.causalStudyData(this.db, studyId);
+  }
+
+  causalAssignmentPlans(studyId: string): CausalAssignmentPlan[] {
+    return causal.causalAssignmentPlans(this.db, studyId);
+  }
+
+  /**
+   * Persist one immutable local analysis snapshot. It never changes provider
+   * routing or budget configuration.
+   */
+  saveCausalAnalysis(
+    studyId: string,
+    analysisId: string,
+    computedAtMs = Date.now(),
+  ): causal.CausalAnalysisSnapshot {
+    return causal.saveCausalAnalysis(this.db, studyId, analysisId, computedAtMs);
+  }
+
+  causalAnalysisSnapshots(studyId: string): causal.CausalAnalysisSnapshot[] {
+    return causal.causalAnalysisSnapshots(this.db, studyId);
+  }
+
+  causalStudySummaries(): causal.CausalStudySummary[] {
+    return causal.causalStudySummaries(this.db);
   }
 
   /** Maintenance: prune old requests and compact. Returns rows removed. */

@@ -22,6 +22,8 @@ import { cmdEvidence } from './cli/evidenceCmd.ts';
 import { cmdYield, cmdRealize, cmdReport, cmdExec, cmdUsage, cmdRoi, cmdSaved, cmdBudgetAdvisor, cmdFrontier } from './cli/valueCmd.ts';
 import { cmdTeam, cmdReceipt, cmdJudge, cmdTeamPush } from './cli/teamCmd.ts';
 import { cmdConnect } from './cli/connectCmd.ts';
+import { cmdEgress } from './cli/egressCmd.ts';
+import { cmdCausal } from './cli/causalCmd.ts';
 import { cmdAlerts, cmdDoctor, cmdInit, cmdGuide, cmdAudit } from './cli/opsCmd.ts';
 import { cmdShow, cmdSources, cmdExport, cmdConfig, cmdBudget, cmdPrune, cmdProject } from './cli/showCmd.ts';
 import { cmdStart, cmdDemo, cmdPricing, cmdBaseline, cmdReprice } from './cli/runCmd.ts';
@@ -36,6 +38,18 @@ function cmdHelp(): void {
     guide                 Where you are + the single next step, read from your
                           actual state — also what bare "fiscus" shows (--json)
     start                 Start the proxy + local dashboard
+    egress                Inspect/verify Fiscus-process egress; plan exact cloud
+                          rules without mutation, then persist only with:
+                          egress apply --apply --mode controlled_cloud
+                          (--id, --purpose, --data-class, --method, --origin,
+                          --path-prefix). Default local_locked permits literal
+                          loopback only; this is not a machine-wide firewall.
+    causal                Local randomized-study evidence: status, inspect,
+                          verify, protocol register, pre-exposure assignment,
+                          and append-only analysis snapshots. Ordinary value,
+                          Lift, and price scenarios cannot become causal claims.
+                          Registration/assignment are local-only and require
+                          --apply; this command never changes provider routing.
     today | week | month  Show spend for a window      (--json)
     sources               Spend by connected source — each AI tool routed here
                           (--all for all-time, --json)
@@ -154,10 +168,17 @@ function cmdHelp(): void {
     --version             Print the Fiscus version
 
   Setup
-    1) fiscus start
-    2) $env:ANTHROPIC_BASE_URL="http://localhost:8090"   (PowerShell)
+    1) If routing a cloud provider, review its exact rule first:
+       fiscus egress plan --mode controlled_cloud --id openai-inference
+         --purpose provider_inference --data-class provider_request --method POST
+         --origin https://api.openai.com --path-prefix /v1/
+       Persist the reviewed plan only with the same command as:
+         fiscus egress apply --apply ...
+       (Skip this for a local loopback-only model.)
+    2) fiscus start
+    3) $env:ANTHROPIC_BASE_URL="http://localhost:8090"   (PowerShell)
        $env:OPENAI_BASE_URL="http://localhost:8090/v1"
-    3) Run your AI tools as usual. Watch the dashboard.
+    4) Run your AI tools as usual. Watch the dashboard.
 
   Any OpenAI-compatible provider works through the OpenAI path — point your tool
   at http://localhost:8090/v1. Gemini, for example, via Google's free tier:
@@ -211,6 +232,13 @@ async function main(): Promise<void> {
       break;
     case 'connect':
       cmdConnect(flags);
+      break;
+    case 'egress':
+      cmdEgress(flags);
+      break;
+    case 'causal':
+    case 'study':
+      cmdCausal(flags);
       break;
     case 'init':
       cmdInit();

@@ -20,6 +20,7 @@ import { reconciliationReadiness } from '../billing/readiness.ts';
 import { existsSync, statSync } from 'node:fs';
 import type { Store } from '../store/db.ts';
 import { isDemo, type FiscusConfig } from '../config.ts';
+import { egressFetch } from '../egress/transport.ts';
 import { buildSettingsSnapshot, applySettingsPatch, type SettingsPatch } from './settings.ts';
 import { serveHtml } from './static.ts';
 import { startOfLocalDay } from '../budget/guard.ts';
@@ -42,6 +43,8 @@ import { judgeSessionFromStore } from '../judge/orchestrate.ts';
 import { resolveJudgeTier, hasHostedJudgeApiKey } from '../judge/tier.ts';
 import { pricingStatus } from '../cost/pricing.ts';
 import { pricingCoverage } from '../cost/coverage.ts';
+import { verifyBlockedAssignmentPlan } from '../causal/assignment.ts';
+import { estimateCausalStudy } from '../causal/estimate.ts';
 
 /**
  * Config persistence is injectable so the dashboard can be exercised without
@@ -566,7 +569,11 @@ export function handleGuide({ res, store, config }: RouteContext): void {
       const day = 24 * 60 * 60 * 1000;
       let proxyUp = false;
       try {
-        const r = await fetch(`http://localhost:${config.port}/__fiscus/health`, { signal: AbortSignal.timeout(500) });
+        const r = await egressFetch('http://localhost:' + config.port + '/__fiscus/health', {
+          purpose: 'local_healthcheck',
+          dataClass: 'healthcheck',
+          signal: AbortSignal.timeout(500),
+        });
         proxyUp = r.ok;
       } catch {
         proxyUp = false;
@@ -709,6 +716,66 @@ export function handleValue({ res, url, store, config }: RouteContext): void {
 }
 
 /**
+ * Read-only causal-study inspector. It intentionally omits randomisation
+ * material and raw record payloads: the dashboard gets the evidence state,
+ * protocol hash, counts, and replay verdict, while local CLI/export tooling
+ * remains the controlled surface for detailed evidence handling.
+ */
+export function handleCausal({ res, url, store }: RouteContext): void {
+  try {
+    const summaries = store.causalStudySummaries();
+    const requested = url.searchParams.get('study');
+    const selected = requested
+      ? summaries.find((summary) => summary.studyId === requested) ?? null
+      : summaries[0] ?? null;
+    if (requested && !selected) {
+      return json(res, 404, { error: 'causal study not found', studyId: requested });
+    }
+    if (!selected) {
+      return json(res, 200, {
+        demo: isDemo(),
+        generatedAt: new Date().toISOString(),
+        studies: [],
+        study: null,
+        causalEvidence: 'No registered causal study. Value output remains an observed/manual-equivalent scenario.',
+        boundary: 'Read-only local status. This endpoint cannot change routing, budgets, or provider configuration.',
+      });
+    }
+    const data = store.causalStudyData(selected.studyId);
+    if (!data) throw new Error('causal summary exists without its local protocol');
+    const estimate = estimateCausalStudy(data);
+    const assignmentReplay = store.causalAssignmentPlans(selected.studyId).map((plan) => ({
+      blockId: plan.blockId,
+      allocationHash: plan.allocationHash,
+      errors: verifyBlockedAssignmentPlan(data.protocol, plan),
+    }));
+    return json(res, 200, {
+      demo: isDemo(),
+      generatedAt: new Date().toISOString(),
+      studies: summaries,
+      study: {
+        studyId: selected.studyId,
+        protocolHash: data.protocol.protocolHash,
+        committedAtMs: data.protocol.committedAtMs,
+        question: data.protocol.question,
+        counts: {
+          decisions: data.decisions.length,
+          executions: data.executions.length,
+          outcomes: data.outcomes.length,
+        },
+        qualification: estimate.qualification,
+        allowedClaim: estimate.allowedClaim,
+        assignmentReplay,
+      },
+      causalEvidence: 'Local randomized-study evidence only. Ordinary Lift, pricing, and value scenarios cannot create a causal claim.',
+      boundary: 'Read-only local status. This endpoint cannot change routing, budgets, or provider configuration.',
+    });
+  } catch (err) {
+    return json(res, 500, { error: String(err) });
+  }
+}
+
+/**
  * Settings snapshot for the dashboard's Settings view — read-only, no local-header
  * guard needed (same-machine-only already enforced by the loopback Host check).
  */
@@ -797,6 +864,7 @@ export const ROUTES: readonly Route[] = [
   { path: '/api/guide', methods: ['GET', 'HEAD'], handler: handleGuide },
   { path: '/api/judge', methods: ['POST'], localOnly: ['POST'], handler: handleJudge },
   { path: '/api/value', methods: ['GET', 'HEAD'], handler: handleValue },
+  { path: '/api/causal', methods: ['GET', 'HEAD'], handler: handleCausal },
   // Reads GET only, but has always advertised 'GET, POST' on the 405 — the
   // POST that Settings actually performs goes to /api/settings/update. The
   // header is preserved verbatim rather than "corrected": it is part of the

@@ -13,6 +13,7 @@ import { computeAlerts } from '../alerts/detect.ts';
 import { notifyWebhook } from '../alerts/notify.ts';
 import { pricingStatus } from '../cost/pricing.ts';
 import { baselineManifestStatus } from '../value/liftBaseline.ts';
+import { egressFetch } from '../egress/transport.ts';
 import { C, color, usd, num, printNotAGitRepo } from './ui.ts';
 import { type Flags } from './flags.ts';
 
@@ -110,7 +111,11 @@ export async function cmdDoctor(): Promise<void> {
 
   let proxyUp = false;
   try {
-    const r = await fetch(`http://localhost:${cfg.port}/__fiscus/health`, { signal: AbortSignal.timeout(800) });
+    const r = await egressFetch('http://localhost:' + cfg.port + '/__fiscus/health', {
+      purpose: 'local_healthcheck',
+      dataClass: 'healthcheck',
+      signal: AbortSignal.timeout(800),
+    });
     proxyUp = r.ok;
   } catch {
     proxyUp = false;
@@ -195,7 +200,11 @@ async function gatherGuideFacts(): Promise<GuideFacts> {
 
   let proxyUp = false;
   try {
-    const r = await fetch(`http://localhost:${cfg.port}/__fiscus/health`, { signal: AbortSignal.timeout(800) });
+    const r = await egressFetch('http://localhost:' + cfg.port + '/__fiscus/health', {
+      purpose: 'local_healthcheck',
+      dataClass: 'healthcheck',
+      signal: AbortSignal.timeout(800),
+    });
     proxyUp = r.ok;
   } catch {
     proxyUp = false;

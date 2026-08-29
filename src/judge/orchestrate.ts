@@ -103,7 +103,7 @@ export async function judgeSession(
 
   const summary = buildStructuralSummary(requests, proposals, sessionId);
   try {
-    const judgment = await callJudgeApi(baseUrl!, model!, apiKey, summary, confidence, undefined, sendTranscript);
+    const judgment = await callJudgeApi(baseUrl!, model!, apiKey, summary, confidence, undefined, sendTranscript, isLocal ? 'local_judge' : 'hosted_judge');
     return notes.length ? { ...judgment, rationale: `${judgment.rationale} (${notes.join(' ')})` } : judgment;
   } catch (err) {
     const reason = err instanceof JudgeCallError ? err.message : String(err);

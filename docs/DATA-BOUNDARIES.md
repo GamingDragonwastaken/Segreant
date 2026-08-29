@@ -70,6 +70,18 @@ unreconciled collection, not request spend, and do not affect caps, RoI, or
 recommendations. Failed/partial pulls retain failure metadata with no usable
 provider observations.
 
+All Fiscus-process HTTP(S) transport is now governed by the egress boundary.
+The default `egress.mode: "local_locked"` permits literal loopback targets only
+and refuses non-loopback targets before DNS. A cloud operation needs
+`controlled_cloud` mode plus one enabled exact rule for its purpose, data class,
+method, HTTPS origin, and leading path. Before an allowed request is dialled,
+Fiscus persists redacted local receipts for policy preflight and dial start; it
+adds a response or failure receipt afterwards. The receipt chain contains
+hashes, rule identifiers, event metadata, byte counts, and status only—not
+request bodies, query strings, API keys, headers, raw origins, or response
+bodies. `fiscus egress status` and `fiscus egress verify` expose the configured
+scope and the local chain.
+
 With the default `metadataOnly: false`, Fiscus may also retain parsed proposed
 code lines locally to measure whether an AI proposal later appeared in a Git
 commit. This is a local-only convenience signal, not a claim that source never
@@ -89,18 +101,24 @@ These paths are off unless an operator deliberately invokes or configures them:
 - `fiscus pricing --refresh`, or `pricing.autoRefresh` with a configured manifest,
   downloads a public pricing manifest from the selected HTTPS URL. The request is
   a plain GET with no usage, prompt, or customer data; the accepted normalized
-  card and redacted source provenance remain local under the Fiscus home.
+  card and redacted source provenance remain local under the Fiscus home. It
+  additionally needs an exact `pricing_refresh` egress rule in controlled-cloud
+  mode.
 - `fiscus baseline --refresh --url ...` downloads a baseline manifest from the
-  URL supplied by the operator.
+  URL supplied by the operator and needs an exact `baseline_refresh` rule.
 - `fiscus alerts --set-webhook ...` sends configured alert summaries to the
-  operator's webhook. It is not for prompts, source, or credentials.
+  operator's webhook. It is not for prompts, source, or credentials, and needs
+  an exact `alert_delivery` rule.
 - A hosted judge is an explicit configuration choice. It can send the bounded
   session excerpt described by the selected judge tier to that configured judge
-  provider. The local judge tier remains on-device.
+  provider and needs an exact `hosted_judge` rule. The local judge tier remains
+  on-device through a literal loopback target.
 - `fiscus team push --url ...` sends a signed, numeric rollup to an operator-run
-  team server. It is opt-in and separate from the local product. Fiscus refuses
-  a non-loopback `http://` endpoint for this command; use HTTPS in deployment,
-  or `http://localhost`, `http://127.0.0.1`, or `http://[::1]` only for local
+  team server. It is opt-in and separate from the local product. It needs an
+  exact `team_rollup` rule for a cloud endpoint; literal loopback development
+  targets are permitted without a cloud rule. Fiscus refuses a non-loopback
+  `http://` endpoint for this command; use HTTPS in deployment, or
+  `http://localhost`, `http://127.0.0.1`, or `http://[::1]` only for local
   development.
 
 The signed GitHub Actions outcome importer is offline: it reads an artifact from
@@ -114,3 +132,9 @@ security terms. Review the provider and any optional endpoint you choose before
 routing sensitive material. Fiscus's privacy promise is about its own local
 operation and the explicit controls above, not a guarantee about every service
 you configure around it.
+
+The egress boundary is also not a machine-wide firewall: it cannot stop a
+client from bypassing Fiscus, another process, the operating-system resolver,
+VPN/firewall policy, a machine administrator, or a provider after Fiscus has
+deliberately forwarded a permitted request. Those guarantees need independently
+managed operating-system, network, identity, and provider controls.

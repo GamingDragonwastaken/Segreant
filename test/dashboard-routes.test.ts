@@ -184,6 +184,7 @@ const READ_ONLY_ALLOW: Record<string, string> = {
   '/api/realization': 'GET, HEAD',
   '/api/guide': 'GET, HEAD',
   '/api/value': 'GET, HEAD',
+  '/api/causal': 'GET, HEAD',
   '/': 'GET, HEAD',
   '/index.html': 'GET, HEAD',
   '/classic': 'GET, HEAD',

@@ -264,15 +264,24 @@ Every term is defended:
   evidence does (METR's ~1.4–2× value, not the ~3× raw speed). The metric
   **refuses to print a dollar return** until supervision time is measured — it
   will not invent the denominator (`basis: 'none'`).
-- **The counterfactual λ is applied exactly once.** `RoI_gross` is an honest
-  **upper bound** on the causal return (it does not subtract what you'd have done
-  anyway); multiplying by the Lift lens λ once yields `RoI_causal`. We do **not**
-  also fold the speedup into a separate "leverage" term — that would count the
-  time-savings twice (it already lives in the manual-vs-AI time ratio *and* in λ).
-  Keeping the money number independent of the Index is what avoids the
-  double-count. **RoI_causal ≥ 1 ⟺ the AI paid for itself**; METR's "19 % slower"
-  is the RoI < 1 case, which the metric flags. (The `breakEven` helper is the
-  RoI = 1 line.)
+- **Behavioural Lift is an observational lens, not a causal money credit.**
+  The historical `RoI_gross` / `RoI_causal` terminology describes a formula
+  from before Fiscus had a dedicated causal-evidence lane. Behavioural Lift, a
+  time-speed estimate, and a manual-equivalent valuation do not establish the
+  outcome that would have occurred without AI. The current product therefore
+  renders this money value only as an **observed/manual-equivalent value
+  scenario** and keeps the legacy causal fields null.
+
+  A future Fiscus causal net-benefit result is deliberately a separate object.
+  It requires the registered randomized-study conditions in
+  [CAUSAL-EVIDENCE-PROTOCOL.md](CAUSAL-EVIDENCE-PROTOCOL.md): frozen
+  intervention/control definitions, pre-exposure random assignment, completed
+  execution and outcome lineage, explicit cost-source classification, a
+  predeclared value or quality guardrail, and a conservative lower confidence
+  bound. A model-versus-model experiment can support a scoped comparative
+  claim; an AI-paid-for-itself claim additionally needs a no-AI or incumbent
+  control, full-cost accounting for both arms, a currency/measured-labour
+  outcome basis, and a positive lower bound on causal net benefit.
 
 The two faces differ by Jensen's inequality (value sums dollars per-unit; the
 Index composes lenses) — correct, because one is a sum of dollars and the other a

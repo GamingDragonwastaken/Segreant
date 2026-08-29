@@ -10,6 +10,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Store } from '../store/db.ts';
 import { loadConfig, dbPath, fiscusHome } from '../config.ts';
+import { egressFetch } from '../egress/transport.ts';
 import { isGitRepo, projectName } from '../git/correlate.ts';
 import {
   computeRealization,
@@ -382,7 +383,9 @@ async function signAndPushRollup(
   }
 
   try {
-    const res = await fetch(opts.url!.replace(/\/$/, '') + '/rollups', {
+    const res = await egressFetch(opts.url!.replace(/\/$/, '') + '/rollups', {
+      purpose: 'team_rollup',
+      dataClass: 'team_rollup',
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(signed),

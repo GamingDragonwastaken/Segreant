@@ -1,0 +1,255 @@
+/**
+ * Canonical local evidence records for Fiscus's randomized causal-study lane.
+ *
+ * These are deliberately narrow structural records. They identify a protocol,
+ * randomized allocation, execution lineage, and outcome lineage without making
+ * raw prompts, source text, credentials, or model outputs required evidence.
+ */
+
+export const CAUSAL_PROTOCOL_TYPE = 'fiscus.causal-study' as const;
+export const CAUSAL_PROTOCOL_VERSION = 1 as const;
+
+export type CausalStudyQuestion =
+  | 'model_cost_quality'
+  | 'ai_vs_incumbent_net_benefit';
+
+export type CausalStudyLifecycle =
+  | 'draft'
+  | 'committed'
+  | 'collecting'
+  | 'data_locked'
+  | 'analyzed'
+  | 'qualified'
+  | 'inconclusive'
+  | 'invalid'
+  | 'exported';
+
+export type CausalArmRole =
+  | 'candidate'
+  | 'control'
+  | 'ai'
+  | 'incumbent'
+  | 'no_ai';
+
+export type CostSourceClass =
+  | 'actual_reconciled'
+  | 'actual_observed'
+  | 'modeled_price_card'
+  | 'incomplete_or_unknown';
+
+export type QualityEvidenceClass =
+  | 'deterministic'
+  | 'independent_operational'
+  | 'structured_human'
+  | 'local_ai_judge'
+  | 'operator_attested';
+
+export type OutcomeMaturity = 'pending' | 'matured' | 'censored' | 'invalid';
+
+export type ExecutionAdherence =
+  | 'confirmed'
+  | 'deviated'
+  | 'incomplete'
+  | 'unverifiable';
+
+export type CausalEvidenceGrade =
+  | 'not_identified'
+  | 'protocol_registered'
+  | 'randomized_collecting'
+  | 'randomized_inconclusive'
+  | 'randomized_causal';
+
+export interface NumericBounds {
+  low: number;
+  high: number;
+}
+
+export interface CausalStudyArm {
+  armId: string;
+  role: CausalArmRole;
+  /**
+   * Content hash for the provider/model/prompt-policy/tool/fallback execution
+   * plan. The underlying plan belongs in a separately governed local system;
+   * Fiscus needs the identifier, not the prompt or credentials themselves.
+   */
+  executionPlanHash: string;
+  providerId: string | null;
+  modelId: string | null;
+}
+
+export interface CausalAllocation {
+  method: 'blocked_randomized_equal_allocation';
+  /** Every arm's probability is positive and equal in version 1. */
+  probabilityPerArm: number;
+  blockSize: number;
+}
+
+export interface CausalCostOutcome {
+  metricId: string;
+  /** Bound declared before outcomes for conservative interval construction. */
+  boundsUsd: NumericBounds;
+  acceptedSourceClasses: Array<'actual_reconciled' | 'actual_observed'>;
+}
+
+export interface CausalQualityOutcome {
+  metricId: string;
+  bounds: NumericBounds;
+  evidenceClass: QualityEvidenceClass;
+  /**
+   * Candidate minus control may be no lower than minus this margin. This must
+   * be fixed before collection and cannot be supplied by a local AI judge.
+   */
+  nonInferiorityMargin: number;
+}
+
+export interface CausalEconomicOutcome {
+  metricId: string;
+  boundsUsd: NumericBounds;
+  evidenceClass: Exclude<QualityEvidenceClass, 'local_ai_judge'>;
+  /** Records that both arm costs have the declared full-cost coverage. */
+  fullCostAccountingRequired: true;
+}
+
+export interface CausalAnalysisPlan {
+  estimand: 'intention_to_treat';
+  confidenceLevel: number;
+  minCompletedPerArm: number;
+  maxMissingFractionPerArm: number;
+}
+
+export interface CausalEligibility {
+  cohortId: string;
+  unitOfAssignment: 'agent_run' | 'task' | 'request' | 'repository_change' | 'workflow_block';
+  contextSchemaId: string;
+}
+
+export interface CausalStudyProtocolDraft {
+  type: typeof CAUSAL_PROTOCOL_TYPE;
+  version: typeof CAUSAL_PROTOCOL_VERSION;
+  studyId: string;
+  createdAtMs: number;
+  question: CausalStudyQuestion;
+  eligibility: CausalEligibility;
+  arms: CausalStudyArm[];
+  allocation: CausalAllocation;
+  costOutcome: CausalCostOutcome;
+  qualityOutcome: CausalQualityOutcome;
+  economicOutcome: CausalEconomicOutcome | null;
+  analysis: CausalAnalysisPlan;
+}
+
+export interface CommittedCausalStudyProtocol extends CausalStudyProtocolDraft {
+  lifecycle: 'committed';
+  committedAtMs: number;
+  protocolHash: string;
+}
+
+export interface CausalDecisionRecord {
+  decisionId: string;
+  studyId: string;
+  protocolHash: string;
+  unitIdHash: string;
+  assignedAtMs: number;
+  randomizationBlockId: string;
+  assignedArmId: string;
+  propensity: number;
+  allocationHash: string;
+  randomizationMaterialSha256: string;
+  previousEventHash: string;
+  eventHash: string;
+}
+
+export interface CausalAssignmentPlan {
+  studyId: string;
+  protocolHash: string;
+  blockId: string;
+  createdAtMs: number;
+  unitIdHashes: string[];
+  randomizationMaterialHex: string;
+  randomizationMaterialSha256: string;
+  allocationHash: string;
+  decisions: CausalDecisionRecord[];
+}
+
+export interface CausalExecutionRecord {
+  executionId: string;
+  decisionId: string;
+  studyId: string;
+  protocolHash: string;
+  startedAtMs: number;
+  completedAtMs: number;
+  assignedExecutionPlanHash: string;
+  actualExecutionPlanHash: string | null;
+  adherence: ExecutionAdherence;
+  /** Local references to independently metered Fiscus request records. */
+  requestIds: string[];
+  directAiCostUsd: number | null;
+  directCostSourceClass: CostSourceClass;
+  priceLineageHashes: string[];
+  /** Required for the AI-versus-incumbent net-benefit question. */
+  fullArmCostUsd: number | null;
+  fullCostSourceClass: CostSourceClass;
+  previousEventHash: string;
+  eventHash: string;
+}
+
+export interface CausalOutcomeRecord {
+  outcomeId: string;
+  decisionId: string;
+  studyId: string;
+  protocolHash: string;
+  observedAtMs: number;
+  maturity: OutcomeMaturity;
+  qualityValue: number | null;
+  qualityEvidenceClass: QualityEvidenceClass | null;
+  economicValueUsd: number | null;
+  economicEvidenceClass: Exclude<QualityEvidenceClass, 'local_ai_judge'> | null;
+  outcomeEvidenceRefs: string[];
+  missingReason: string | null;
+  previousEventHash: string;
+  eventHash: string;
+}
+
+export interface CausalStudyData {
+  protocol: CommittedCausalStudyProtocol;
+  decisions: CausalDecisionRecord[];
+  executions: CausalExecutionRecord[];
+  outcomes: CausalOutcomeRecord[];
+}
+
+export interface ArmCounts {
+  assigned: number;
+  completed: number;
+  missing: number;
+  adherenceConfirmed: number;
+}
+
+export interface CausalQualification {
+  state: 'collecting' | 'invalid' | 'inconclusive' | 'qualified';
+  evidenceGrade: CausalEvidenceGrade;
+  reasons: string[];
+  countsByArm: Record<string, ArmCounts>;
+  includedDecisionIds: string[];
+}
+
+export interface CausalEffectInterval {
+  estimate: number;
+  lower: number;
+  upper: number;
+}
+
+export interface CausalStudyEstimate {
+  qualification: CausalQualification;
+  protocolHash: string;
+  costEffectUsd: CausalEffectInterval | null;
+  qualityEffect: CausalEffectInterval | null;
+  netBenefitEffectUsd: CausalEffectInterval | null;
+  qualityNonInferiorityPassed: boolean | null;
+  lowerCostPassed: boolean | null;
+  causalNetBenefitSupported: boolean | null;
+  allowedClaim:
+    | 'not_established'
+    | 'comparative_cost_quality_supported'
+    | 'causal_net_benefit_supported';
+  limitations: string[];
+}

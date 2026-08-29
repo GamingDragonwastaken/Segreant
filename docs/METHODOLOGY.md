@@ -9,8 +9,10 @@ this is the version you can explain to your CFO.*
 ## The problem, in one sentence
 
 Everyone can see their **AI bill**. Nobody can see their **AI return**. Fiscus
-measures the return — honestly, from your own machine, without sending your prompts
-or code anywhere.
+computes an evidence-limited return from records and calculations kept on the
+operator's machine. A request intentionally routed through its proxy still goes
+to the configured AI provider; read
+[DATA-BOUNDARIES.md](DATA-BOUNDARIES.md) before routing sensitive material.
 
 ## Why the usual numbers lie
 
@@ -36,7 +38,7 @@ We score each one separately, then combine them:
 | **λ Lift** | Would you have done it anyway? | The honest counterfactual — did AI actually save time. |
 | **ι Impact** | Did it matter? | Reached production, stuck, no incidents (not "how big"). |
 
-## Why we *multiply* them (the part that can't be gamed)
+## Why we *multiply* them (the one-axis guardrail)
 
 These four are a chain: spend → kept → caused → mattered. To become value, a dollar
 has to pass **all four** — so the odds are the four multiplied together, exactly like
@@ -45,16 +47,18 @@ its weakest link:
 
 > **RoI Index = ρ × α × λ × ι** (as a weighted geometric mean, scored 0–100)
 
-This is the key honesty property: **you cannot fake the score by maxing one number.**
-If any one of the four is near zero, the whole score collapses. A dashboard that just
-*averages* things can be gamed by pumping a single metric — ours can't, by
-construction. (This is a mathematical theorem, not a marketing claim; it's tested.)
+This is the key honesty property: a high observed value on one lens cannot
+compensate for a near-zero observed value on another. A dashboard that simply
+averages lenses can hide a weak necessary condition; this composite cannot.
+That does not make the whole measurement immune to bad instrumentation, so
+Fiscus also reports coverage, assumptions, and unknown lenses.
 
-## The number your CFO cares about: does it pay for itself?
+## The value scenario a CFO can inspect
 
 Separately, we compute a plain dollar ratio:
 
-> **RoI Return = (value of the work the AI actually produced) ÷ (what it truly cost)**
+> **Observed value scenario = (manual-equivalent value of work that realized) ÷
+> (recorded AI and supervision cost)**
 
 - **The value** = what that kept work would have cost a human to produce (priced from
   your own baselines — a cited population prior blended with your own git history,
@@ -64,17 +68,45 @@ Separately, we compute a plain dollar ratio:
   Counting your own time is what keeps this honest: token cost alone makes a $4
   feature look like a 100× win; adding the hour you spent driving it lands the number
   where reality is (about 1–2×).
-- **≥ 1 means it paid for itself.** Below 1 is the "19% slower" case — and we flag it.
+- A ratio above or below 1 describes the recorded value scenario under its
+  stated baseline, labor-rate, realization, and supervision-time assumptions.
+  It does not identify a causal effect or show what the same work would have
+  produced without AI.
 
-We *refuse to print a dollar return* until your supervision time is measured. We will
-not invent the denominator.
+We *refuse to print a dollar scenario* until your supervision time is measured.
+We will not invent the denominator.
+
+## Evidence grades: scenario versus causal study
+
+Fiscus deliberately keeps five grades separate:
+
+1. **Accounted** — provider/request cost and usage with their recorded source.
+2. **Modeled** — a price-card or counterfactual model under named assumptions.
+3. **Observed** — historic association or an observed/manual-equivalent value
+   scenario.
+4. **Quasi-experimental** — an assumption-dependent design such as
+   difference-in-differences, with diagnostics and sensitivity analysis.
+5. **Randomized causal** — a pre-registered, randomized, protocol-qualified
+   study of a stated eligible population.
+
+Only the fifth grade can support Fiscus's strongest causal language. The
+randomized-study contract requires a frozen intervention/control definition,
+assignment before exposure, actual execution and cost lineage, outcome and
+quality evidence, a missingness/attrition account, and conservative intervals.
+The required claim gates are defined in
+[CAUSAL-EVIDENCE-PROTOCOL.md](CAUSAL-EVIDENCE-PROTOCOL.md). Until a real study
+passes those gates, Fiscus renders a value scenario, never a causal break-even
+or a promise that a model preserves value.
 
 ## Two things that make it undeniable
 
-1. **It's honest about what it doesn't know.** Anything we can't observe is marked
-   "not yet measured" — never counted as a pass or a fail. A partly-measured score is
-   labeled an **upper bound**: wiring up more measurement can only move it *down*
-   toward the truth, never inflate it. That's the opposite of every vanity dashboard.
+1. **It's honest about what it doesn't know.** Anything we cannot observe is
+   marked "not yet measured" — never counted as a pass or a fail. A
+   partly-instrumented index is accompanied by a full-instrumentation range:
+   unknown necessary lenses are evaluated at admissible endpoints, while the
+   observed-only score stays visibly separate. Wiring more measurement can move
+   the observed-only score in either direction; it narrows what has to be
+   assumed rather than flattering the result.
 
 2. **It's trustworthy on small samples.** A model that "won" on 2 tasks isn't treated
    like one that won on 200. We shrink thin, noisy results toward the average until
@@ -89,23 +121,27 @@ not invent the denominator.
    looks good is statistically safe. The trade — a slightly wider range — is shown,
    not hidden. (See §10 in the technical doc.)
 
-## The decision it hands you: the Shadow Price of Intelligence
+## The research model: the Shadow Price of Intelligence
 
-Beyond scoring the past, Fiscus answers *"what is one more dollar of AI budget
-worth to me, right now, spent optimally?"* — a single number (**μ**). If μ ≥ $1 of
-value per AI dollar, you have room to invest more. If μ < $1, the next dollar returns
-less than it costs — cut before you grow. No other tool answers this.
+Beyond scoring the past, the Fiscus research model can calculate a hypothetical
+power-law response curve and its shadow price, μ. It is useful for examining
+assumptions, not a current forecast, routing instruction, budget recommendation,
+or automatic action. A decision-grade marginal-value claim requires a
+within-task controlled allocation contract and independent validation; see
+[ECONOMIC-CONTROL-FOUNDATION.md](ECONOMIC-CONTROL-FOUNDATION.md).
 
 ## What we're NOT claiming
 
 The building blocks (geometric mean, diminishing-returns optimization, statistical
 shrinkage, partial-identification bounds) are established, well-understood mathematics
-— we cite them plainly. **The invention is putting them together** into one honest
-instrument that measures AI's real return across any kind of usage, from your own
-machine, and can't be gamed on a single axis. Stating exactly which parts are
-standard is what makes the rest credible.
+— we cite them plainly. **The invention is putting them together** into one
+inspectable instrument whose current evidence is strongest for instrumented coding
+workflows. A strong observed lens cannot compensate for a weak necessary lens,
+but instrumentation and counterfactual assumptions remain visible rather than
+being mistaken for proof. Stating exactly which parts are standard is what makes
+the rest credible.
 
-## Your data never leaves your machine
+## Fiscus-hosted data collection is off by default
 
 This historical heading means that Fiscus has no hosted collection or analytics
 by default. It does not mean a request routed through the proxy bypasses your
@@ -113,7 +149,17 @@ configured AI provider. See **[DATA-BOUNDARIES.md](DATA-BOUNDARIES.md)** for the
 current, complete disclosure of provider traffic, local proposal retention, and
 each opt-in outbound feature.
 
-Everything is computed locally in a file-based database. No prompts, no code, no keys
-are ever transmitted. The only optional outbound traffic is a public pricing-table
-refresh (off by default) and alert webhooks you explicitly configure (which carry
-alert titles only — never content).
+The local ledger and calculations live in a file-based database, and Fiscus has
+no Fiscus-hosted product analytics or telemetry by default. That does **not**
+mean proxy-routed requests stay offline: they travel to the configured AI
+provider and may include prompts, source snippets, tool payloads, and provider
+credentials. Optional outbound paths also include pricing refresh, configured
+alert webhooks, an explicitly selected hosted judge, a deliberate OpenAI Costs
+pull, and an opt-in numeric team rollup. The complete, current list and each
+retention control are in [DATA-BOUNDARIES.md](DATA-BOUNDARIES.md).
+
+New installations run Fiscus-process HTTP(S) in `local_locked` mode. A
+controlled-cloud action needs an exact purpose/data/method/origin/path rule and
+creates a redacted local receipt trail. This strengthens the Fiscus boundary;
+it does not establish machine-wide egress control or a provider-side privacy
+guarantee.

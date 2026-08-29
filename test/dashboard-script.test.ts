@@ -149,6 +149,49 @@ test('GUI sources: no module reaches the network', () => {
   }
 });
 
+function assertNoExternalBrowserTransport(label: string, source: string): void {
+  const quote = String.fromCharCode(96);
+  const absoluteLiteral = new RegExp(
+    '["\\x27' + quote + '](https?:)?//[^"\\x27' + quote + '\\s]+["\\x27' + quote + ']',
+    'g',
+  );
+  for (const match of source.matchAll(absoluteLiteral)) {
+    const url = match[0].slice(1, -1);
+    if (NAMESPACE_URIS.has(url)) continue;
+    try {
+      const parsed = new URL(url);
+      const host = parsed.hostname.toLowerCase();
+      if (host === 'localhost' || host === '127.0.0.1' || host === '[::1]') continue;
+    } catch {
+      // The regular expression only reaches syntactically absolute candidates.
+      // A malformed candidate is not a safe browser destination.
+    }
+    assert.fail(label + ': absolute URL ' + match[0] + ' — the GUI may only address a local origin');
+  }
+  assert.equal(
+    /\bnew\s+(WebSocket|EventSource|XMLHttpRequest)\b/.test(source),
+    false,
+    label + ': opens an external-capable browser transport',
+  );
+  assert.equal(/\bimportScripts\b/.test(source), false, label + ': imports a worker script');
+}
+
+test('GUI source, emitted modules, and inline scripts make no external browser transport', () => {
+  const sourceFiles = walk(join(WEB_SRC, 'app'), '.ts');
+  const emittedFiles = walk(join(WEB_DIST, 'app'), '.js');
+  assert.ok(sourceFiles.length > 5, 'expected the GUI sources');
+  assert.ok(emittedFiles.length > 5, 'build the GUI before running this test');
+
+  for (const file of [...sourceFiles, ...emittedFiles]) {
+    assertNoExternalBrowserTransport(file, readFileSync(file, 'utf8'));
+  }
+  for (const [entry, html] of [[SHELL, readFileSync(SHELL, 'utf8')], [CLASSIC, readFileSync(CLASSIC, 'utf8')]] as const) {
+    for (const [index, script] of inlineScripts(html).entries()) {
+      assertNoExternalBrowserTransport(entry + ' inline script ' + index, script);
+    }
+  }
+});
+
 /**
  * Ledger data is operator-supplied: project names come from folder names, model
  * ids from provider responses, cost-centre labels from a config file. None of it

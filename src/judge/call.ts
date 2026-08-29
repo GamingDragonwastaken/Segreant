@@ -14,6 +14,7 @@
 import type { JudgeConfidence } from './tier.ts';
 import type { StructuralSessionSummary } from './payload.ts';
 import type { TranscriptExcerpt } from './transcript.ts';
+import { egressFetch } from '../egress/transport.ts';
 
 export interface SessionJudgment {
   sessionId: string;
@@ -105,13 +106,16 @@ export async function callJudgeApi(
   confidence: JudgeConfidence,
   timeoutMs = CALL_TIMEOUT_MS,
   transcript: TranscriptExcerpt | null = null,
+  purpose: 'local_judge' | 'hosted_judge' = 'local_judge',
 ): Promise<SessionJudgment> {
   const controller = new AbortController();
   const timeoutTimer = setTimeout(() => controller.abort(), timeoutMs);
 
   let res: Response;
   try {
-    res = await fetch(baseUrl.replace(/\/$/, '') + '/chat/completions', {
+    res = await egressFetch(baseUrl.replace(/\/$/, '') + '/chat/completions', {
+      purpose,
+      dataClass: transcript ? 'judge_transcript_excerpt' : 'judge_structural_summary',
       method: 'POST',
       headers: {
         'content-type': 'application/json',

@@ -9,6 +9,7 @@ import type { Store, ProviderConnection } from '../store/db.ts';
 import type { FiscusConfig, BudgetConfig } from '../config.ts';
 import { fiscusHome, configPath, dbPath } from '../config.ts';
 import { describeBudgetEnforcement, type BudgetEnforcementDescriptor } from '../budget/enforceability.ts';
+import { egressReceiptPath, verifyEgressReceipts } from '../egress/receipts.ts';
 
 export interface SettingsSnapshot {
   version: string;
@@ -22,6 +23,12 @@ export interface SettingsSnapshot {
   metadataOnly: boolean;
   budget: BudgetConfig;
   enforcement: BudgetEnforcementDescriptor;
+  egress: {
+    mode: FiscusConfig['egress']['mode'];
+    rules: FiscusConfig['egress']['rules'];
+    receipts: ReturnType<typeof verifyEgressReceipts> & { path: string };
+    scope: string;
+  };
   connections: ProviderConnection[];
 }
 
@@ -44,6 +51,12 @@ export function buildSettingsSnapshot(
     metadataOnly: config.metadataOnly,
     budget: config.budget,
     enforcement: describeBudgetEnforcement(config.budget),
+    egress: {
+      mode: config.egress.mode,
+      rules: config.egress.rules,
+      receipts: { path: egressReceiptPath(), ...verifyEgressReceipts() },
+      scope: 'Fiscus-process HTTP(S) transport only; not other apps, direct clients, OS networking, or provider retention.',
+    },
     connections: store.recentProviderConnections(sinceMs),
   };
 }
