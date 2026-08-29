@@ -22,6 +22,7 @@ import { Store } from '../store/db.ts';
 import type { Flags } from './flags.ts';
 import { printJson } from './ui.ts';
 import { stringifyJson } from '../util/json.ts';
+import { moneyToJson } from '../economics/money.ts';
 
 function billingEgressRepairAction(failureCode: string): string | undefined {
   return failureCode === 'egress_receipt_integrity_failed' || failureCode === 'egress_receipt_persistence_failed'
@@ -712,13 +713,25 @@ export async function cmdBilling(flags: Flags): Promise<void> {
       const store = new Store(dbPath());
       try {
         const result = store.applyBillingImport(parsed.input);
-        const payload = { applied: true, duplicateFile: result.duplicateFile, preview: parsed.preview, run: result.run };
+        // Keep the legacy provider-evidence tables as a compatibility read
+        // model, but issue the same accepted import through the canonical
+        // Evidence/Claim path before reporting success. A failed kernel issue
+        // is surfaced as a failed command; the immutable import remains safely
+        // resumable on retry.
+        const kernel = store.issueBillingImportToKernel(result.run.importId);
+        // Money carries a BigInt coefficient in-process. Convert only the CLI
+        // envelope to the canonical string coefficient so JSON never coerces or
+        // loses accounting precision.
+        const kernelJson = { ...kernel, total: { ...moneyToJson(kernel.total) } };
+        const payload = { applied: true, duplicateFile: result.duplicateFile, preview: parsed.preview, run: result.run, kernel: kernelJson };
         if (flags.json) {
           printJson(payload);
         } else if (result.duplicateFile) {
-          console.log(`  Identical billing evidence was already imported as ${result.run.importId}; no duplicate records written.`);
+          console.log(`  Identical billing evidence was already imported as ${result.run.importId}; no duplicate provider records written.`);
+          console.log(`  Canonical kernel replay: ${kernel.recordEvidence.duplicate} Evidence and ${kernel.recordClaims.duplicate} billed Claims already present.`);
         } else {
           console.log(`  Imported ${result.run.recordsInserted} provider-declared charge line(s); ${result.run.recordsDuplicate} already existed.`);
+          console.log(`  Canonical kernel: ${kernel.recordEvidence.inserted} Evidence and ${kernel.recordClaims.inserted} billed Claims issued; aggregate ${kernel.aggregateClaim.id}.`);
           console.log('  Status remains not_reconciled. Provider-reported totals are stored separately from local metered estimates.');
         }
       } finally {

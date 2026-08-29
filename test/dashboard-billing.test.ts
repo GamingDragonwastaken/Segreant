@@ -69,6 +69,7 @@ test('GET /api/billing: empty evidence remains explicitly separate and unresolve
         status: { latestRun: unknown };
         coverage: unknown;
       };
+      kernel: { kind: string; claims: unknown[] };
     };
     assert.equal(body.evidence.kind, 'provider_billing_evidence');
     assert.equal(body.evidence.trust, 'operator_supplied_unverified');
@@ -81,6 +82,8 @@ test('GET /api/billing: empty evidence remains explicitly separate and unresolve
     assert.equal(body.summary.recordCount, 0);
     assert.equal(body.summary.reconciliationStatus, 'not_reconciled');
     assert.deepEqual(body.imports, []);
+    assert.equal(body.kernel.kind, 'trusted_epistemic_kernel_billing');
+    assert.deepEqual(body.kernel.claims, []);
     assert.equal(body.mapping.coverageStatus, 'no_records');
     assert.equal(body.mapping.reconciliationStatus, 'blocked_no_records');
     assert.equal(body.mapping.totalRecordCount, 0);
@@ -166,7 +169,8 @@ test('GET /api/billing: imported evidence has provenance but never changes overv
   const store = new Store(':memory:');
   store.insertRequest(meteredRequest());
   const imported = readBillingImportFile(FIXTURE).input;
-  store.applyBillingImport(imported, 1_777);
+  const importedRun = store.applyBillingImport(imported, 1_777);
+  store.issueBillingImportToKernel(importedRun.run.importId);
   const srv = await boot(store);
   try {
     const billing = await fetch(`${srv.base}/api/billing`);
@@ -182,6 +186,7 @@ test('GET /api/billing: imported evidence has provenance but never changes overv
         residualMicros: number;
         excludedFrom: string[];
       };
+      kernel: { kind: string; claims: Array<{ proposition: { predicate: string }; profile: { monetaryBasis: string; authenticity: string }; evidenceIds: string[] }> };
     };
     assert.deepEqual(body.summary, {
       importCount: 1,
@@ -201,6 +206,12 @@ test('GET /api/billing: imported evidence has provenance but never changes overv
     assert.equal(body.mapping.mappedRecordCount, 0);
     assert.equal(body.mapping.residualMicros, 11_345_678);
     assert.deepEqual(body.mapping.excludedFrom, ['budget_enforcement', 'roi', 'model_recommendations']);
+    assert.equal(body.kernel.kind, 'trusted_epistemic_kernel_billing');
+    assert.equal(body.kernel.claims.length, 1);
+    assert.equal(body.kernel.claims[0]!.proposition.predicate, 'billing.billed_period_total');
+    assert.equal(body.kernel.claims[0]!.profile.monetaryBasis, 'billed');
+    assert.equal(body.kernel.claims[0]!.profile.authenticity, 'self_asserted');
+    assert.equal(body.kernel.claims[0]!.evidenceIds.length, 2);
 
     const overview = await fetch(`${srv.base}/api/overview?range=all`);
     assert.equal(overview.status, 200);

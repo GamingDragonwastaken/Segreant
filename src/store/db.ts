@@ -42,6 +42,7 @@ import * as causalLineage from './causalLineage.ts';
 import * as causalProducer from './causalProducer.ts';
 import * as backup from './backup.ts';
 import * as realization from './realization.ts';
+import { billingReconciliationClaim, buildBillingKernelIssuance, type BillingKernelPersistenceResult, type BillingReconciliationClaimInput } from '../billing/epistemic.ts';
 import type {
   RealizationCostSync,
   RealizationUnitRecord,
@@ -81,6 +82,7 @@ import type {
   CommittedCausalStudyProtocol,
 } from '../causal/types.ts';
 import { EpistemicLedger } from '../epistemic/ledger.ts';
+import type { Claim } from '../epistemic/claim.ts';
 
 /**
  * Provider-side evidence shapes now live in ./billing.ts. They are re-exported
@@ -102,6 +104,8 @@ export type {
   OpenAiCostsObservationStatus,
 } from './billing.ts';
 export type { BillingMappingCoverage, BillingRecordMapping, ProviderScopeAuthority } from '../billing/mapping.ts';
+export type { BillingKernelPersistenceResult } from '../billing/epistemic.ts';
+export type { BillingReconciliationClaimInput } from '../billing/epistemic.ts';
 export type {
   AnyCommittedCausalStudyProtocol,
   CausalAssignmentManifestV2,
@@ -1555,6 +1559,68 @@ export class Store {
    */
   applyBillingImport(input: BillingImportInput, importedAtMs = Date.now()): BillingImportResult {
     return billing.applyBillingImport(this.db, input, importedAtMs);
+  }
+
+  /**
+   * Issue one imported provider export through the canonical kernel path.
+   * Legacy billing rows remain intact; this adapter is resumable and exact
+   * replay returns duplicates rather than creating a second financial claim.
+   */
+  issueBillingImportToKernel(importId: string): BillingKernelPersistenceResult {
+    if (typeof importId !== 'string' || importId.trim().length === 0) throw new Error('billing import id is required');
+    const run = this.billingImportRuns(500).find((candidate) => candidate.importId === importId);
+    if (run === undefined) throw new Error(`unknown billing import: ${importId}`);
+    const records = this.billingEvidenceRecords().filter((record) => record.firstImportId === importId);
+    const issuance = buildBillingKernelIssuance({ run, records });
+    let evidenceInserted = 0;
+    let evidenceDuplicate = 0;
+    for (const item of issuance.recordEvidence) {
+      const result = this.epistemic().appendEvidence(item);
+      if (result === 'inserted') evidenceInserted += 1;
+      else evidenceDuplicate += 1;
+    }
+    let claimInserted = 0;
+    let claimDuplicate = 0;
+    for (const item of issuance.recordClaims) {
+      const result = this.epistemic().appendClaim(item);
+      if (result === 'inserted') claimInserted += 1;
+      else claimDuplicate += 1;
+    }
+    const aggregateResult = this.epistemic().appendClaim(issuance.aggregateClaim);
+    return Object.freeze({
+      importId,
+      total: issuance.total,
+      recordEvidence: Object.freeze({ inserted: evidenceInserted, duplicate: evidenceDuplicate }),
+      recordClaims: Object.freeze({ inserted: claimInserted, duplicate: claimDuplicate }),
+      aggregateClaim: Object.freeze({ id: issuance.aggregateClaim.id, result: aggregateResult }),
+    });
+  }
+
+  /** Persist an explicit mixed-basis reconciliation Claim through the kernel. */
+  issueBillingReconciliationClaim(input: BillingReconciliationClaimInput): { claimId: string; result: 'inserted' | 'duplicate' } {
+    const item = billingReconciliationClaim(input);
+    const result = this.epistemic().appendClaim(item);
+    return Object.freeze({ claimId: item.id, result });
+  }
+
+  /** Read canonical billed-period claims without exposing confidential raw payloads. */
+  billingKernelClaims(limit = 25): readonly Pick<Claim, 'id' | 'proposition' | 'profile' | 'evidenceIds' | 'issuedAt' | 'monetaryBasis' | 'finality'>[] {
+    const safeLimit = Math.max(1, Math.min(100, Math.floor(limit)));
+    const claims: Array<Pick<Claim, 'id' | 'proposition' | 'profile' | 'evidenceIds' | 'issuedAt' | 'monetaryBasis' | 'finality'>> = [];
+    for (const run of this.billingImportRuns(safeLimit)) {
+      const item = this.epistemic().readClaim(`claim:billing:billed-total:${run.importId}`);
+      if (item === null) continue;
+      claims.push({
+        id: item.id,
+        proposition: item.proposition,
+        profile: item.profile,
+        evidenceIds: item.evidenceIds,
+        issuedAt: item.issuedAt,
+        monetaryBasis: item.monetaryBasis,
+        finality: item.finality,
+      });
+    }
+    return Object.freeze(claims.map((item) => Object.freeze(item)));
   }
 
   /** Newest first, including empty/replay-only evidence runs for auditability. */

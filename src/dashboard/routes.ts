@@ -412,6 +412,10 @@ export function handleBilling({ res, store }: RouteContext): void {
       },
       summary: store.billingSummary(),
       imports: store.billingImportRuns(25),
+      kernel: {
+        kind: 'trusted_epistemic_kernel_billing',
+        claims: store.billingKernelClaims(25),
+      },
       // Readiness is served BEFORE a credential is minted, which is the only
       // moment it is useful. `directOpenAiCosts.coverage` below is the
       // post-observation partition and is null until a snapshot exists, so on

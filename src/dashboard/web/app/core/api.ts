@@ -134,6 +134,19 @@ export interface BillingPayload {
   demo: boolean;
   evidence: { reconciliationStatus: string };
   summary: { recordCount: number };
+  /** Bounded canonical billed Claims issued by the explicit billing adapter. */
+  kernel?: {
+    kind: string;
+    claims: Array<{
+      id: string;
+      proposition: unknown;
+      profile: Record<string, string>;
+      evidenceIds: string[];
+      issuedAt: string;
+      monetaryBasis: string;
+      finality: string;
+    }>;
+  };
   /**
    * Optional because a payload predating this field must not read as `ready`.
    * Absent means "not reported", which the view has to render differently from

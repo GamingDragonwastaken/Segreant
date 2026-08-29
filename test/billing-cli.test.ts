@@ -37,14 +37,21 @@ test('billing CLI dry-runs by default, applies only with --apply, and exports a 
 
     const apply = await runCli(['billing', 'import', '--file', FIXTURE, '--apply', '--json'], db);
     assert.equal(apply.code, 0, apply.stderr);
-    const appliedPayload = JSON.parse(apply.stdout) as { applied: boolean; duplicateFile: boolean; run: { recordsInserted: number } };
+    const appliedPayload = JSON.parse(apply.stdout) as { applied: boolean; duplicateFile: boolean; run: { recordsInserted: number }; kernel: { recordEvidence: { inserted: number }; recordClaims: { inserted: number }; aggregateClaim: { result: string } } };
     assert.equal(appliedPayload.applied, true);
     assert.equal(appliedPayload.duplicateFile, false);
     assert.equal(appliedPayload.run.recordsInserted, 2);
+    assert.equal(appliedPayload.kernel.recordEvidence.inserted, 2);
+    assert.equal(appliedPayload.kernel.recordClaims.inserted, 2);
+    assert.equal(appliedPayload.kernel.aggregateClaim.result, 'inserted');
 
     const replay = await runCli(['billing', 'import', '--file', FIXTURE, '--apply', '--json'], db);
     assert.equal(replay.code, 0, replay.stderr);
-    assert.equal((JSON.parse(replay.stdout) as { duplicateFile: boolean }).duplicateFile, true);
+    const replayPayload = JSON.parse(replay.stdout) as { duplicateFile: boolean; kernel: { recordEvidence: { duplicate: number }; recordClaims: { duplicate: number }; aggregateClaim: { result: string } } };
+    assert.equal(replayPayload.duplicateFile, true);
+    assert.equal(replayPayload.kernel.recordEvidence.duplicate, 2);
+    assert.equal(replayPayload.kernel.recordClaims.duplicate, 2);
+    assert.equal(replayPayload.kernel.aggregateClaim.result, 'duplicate');
 
     const status = await runCli(['billing', 'status', '--json'], db);
     assert.equal(status.code, 0, status.stderr);
