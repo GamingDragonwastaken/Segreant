@@ -1005,6 +1005,33 @@ export function latestCompleteOpenAiCostsObservation(
   return { run, observations: observations.map(openAiCostsLineFromRecord) };
 }
 
+/** Read one retained OpenAI Costs observation run and its immutable lines. */
+export function openAiCostsObservationById(
+  db: DatabaseSync,
+  observationRunId: string,
+): { run: OpenAiCostsObservationRun; observations: OpenAiCostsObservationLine[] } | null {
+  if (typeof observationRunId !== 'string' || observationRunId.trim().length === 0) throw new Error('OpenAI Costs observation run id is required');
+  const row = db.prepare(
+    `SELECT observation_run_id AS observationRunId, declared_scope_id AS declaredScopeId,
+             provider_project_ref AS providerProjectRef, period_start_ms AS periodStartMs, period_end_ms AS periodEndMs,
+             fetched_at_ms AS fetchedAtMs, pagination_complete AS paginationComplete, page_count AS pageCount,
+             page_digest_chain_sha256 AS pageDigestChainSha256, result_state AS resultState, failure_code AS failureCode,
+             provider_finality AS providerFinality, trust, raw_retention AS rawRetention,
+             observations_stored AS observationsStored, source_kind AS sourceKind
+        FROM openai_cost_observation_runs WHERE observation_run_id = ?`,
+  ).get(observationRunId) as Record<string, unknown> | undefined;
+  if (!row) return null;
+  const run = openAiCostsRunFromRecord(row);
+  const observations = db.prepare(
+    `SELECT observation_id AS observationId, observation_run_id AS observationRunId, declared_scope_id AS declaredScopeId,
+            provider_project_ref AS providerProjectRef, fetched_at_ms AS fetchedAtMs, bucket_start_ms AS bucketStartMs,
+            bucket_end_ms AS bucketEndMs, line_item AS lineItem, currency, amount_decimal AS amountDecimal
+       FROM openai_cost_observation_lines WHERE observation_run_id = ?
+      ORDER BY bucket_start_ms ASC, line_item ASC, currency ASC`,
+  ).all(observationRunId) as Array<Record<string, unknown>>;
+  return { run, observations: observations.map(openAiCostsLineFromRecord) };
+}
+
 /** Status has no financial total by design, so independent snapshots cannot be double counted. */
 export function openAiCostsObservationStatus(db: DatabaseSync): OpenAiCostsObservationStatus {
   const latest = openAiCostsObservationRuns(db, 1)[0] ?? null;

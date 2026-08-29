@@ -69,7 +69,7 @@ test('GET /api/billing: empty evidence remains explicitly separate and unresolve
         status: { latestRun: unknown };
         coverage: unknown;
       };
-      kernel: { kind: string; claims: unknown[] };
+      kernel: { kind: string; claims: unknown[]; observedClaims: unknown[] };
     };
     assert.equal(body.evidence.kind, 'provider_billing_evidence');
     assert.equal(body.evidence.trust, 'operator_supplied_unverified');
@@ -84,6 +84,7 @@ test('GET /api/billing: empty evidence remains explicitly separate and unresolve
     assert.deepEqual(body.imports, []);
     assert.equal(body.kernel.kind, 'trusted_epistemic_kernel_billing');
     assert.deepEqual(body.kernel.claims, []);
+    assert.deepEqual(body.kernel.observedClaims, []);
     assert.equal(body.mapping.coverageStatus, 'no_records');
     assert.equal(body.mapping.reconciliationStatus, 'blocked_no_records');
     assert.equal(body.mapping.totalRecordCount, 0);
@@ -110,7 +111,7 @@ test('GET /api/billing exposes direct OpenAI observation status and local covera
     declaredAtMs: 1,
     activatedAtMs: 1,
   });
-  store.recordOpenAiCostsObservation({
+  const observationRun = store.recordOpenAiCostsObservation({
     declaredScopeId: scope.declarationId,
     providerProjectRef: 'proj_billing_fixture',
     periodStartMs: start,
@@ -130,6 +131,7 @@ test('GET /api/billing exposes direct OpenAI observation status and local covera
       amountDecimal: '7.50',
     }],
   });
+  store.issueOpenAiCostsObservationToKernel(observationRun.observationRunId);
   store.insertRequest({
     ...meteredRequest(),
     requestId: 'direct-coverage-request',
@@ -146,6 +148,7 @@ test('GET /api/billing exposes direct OpenAI observation status and local covera
         status: { latestRun: { resultState: string; observationsStored: number } };
         coverage: { comparisonStatus: string; varianceStatus: string; capturedOnDeclaredRoute: { requestCount: number; costUsd: number }; observation: Record<string, unknown> };
       };
+      kernel: { observedClaims: Array<{ proposition: { predicate: string }; profile: { monetaryBasis: string; authenticity: string }; evidenceIds: string[] }> };
     };
     assert.equal(body.directOpenAiCosts.status.latestRun.resultState, 'succeeded');
     assert.equal(body.directOpenAiCosts.status.latestRun.observationsStored, 1);
@@ -154,6 +157,11 @@ test('GET /api/billing exposes direct OpenAI observation status and local covera
     assert.equal(body.directOpenAiCosts.coverage.capturedOnDeclaredRoute.requestCount, 1);
     assert.equal(body.directOpenAiCosts.coverage.capturedOnDeclaredRoute.costUsd, 2.5);
     assert.equal('providerAmount' in body.directOpenAiCosts.coverage.observation, false);
+    assert.equal(body.kernel.observedClaims.length, 1);
+    assert.equal(body.kernel.observedClaims[0]!.proposition.predicate, 'billing.provider_observed_period_total');
+    assert.equal(body.kernel.observedClaims[0]!.profile.monetaryBasis, 'provider_observed');
+    assert.equal(body.kernel.observedClaims[0]!.profile.authenticity, 'provider_authenticated');
+    assert.equal(body.kernel.observedClaims[0]!.evidenceIds.length, 1);
 
     const overview = await fetch(`${srv.base}/api/overview?range=all`);
     const overviewBody = await overview.json() as { summary: { costUsd: number; requests: number } };

@@ -42,7 +42,7 @@ import * as causalLineage from './causalLineage.ts';
 import * as causalProducer from './causalProducer.ts';
 import * as backup from './backup.ts';
 import * as realization from './realization.ts';
-import { billingReconciliationClaim, buildBillingKernelIssuance, type BillingKernelPersistenceResult, type BillingReconciliationClaimInput } from '../billing/epistemic.ts';
+import { billingReconciliationClaim, buildBillingKernelIssuance, buildOpenAiCostsKernelIssuance, type BillingKernelPersistenceResult, type BillingReconciliationClaimInput, type OpenAiCostsKernelPersistenceResult } from '../billing/epistemic.ts';
 import type {
   RealizationCostSync,
   RealizationUnitRecord,
@@ -106,6 +106,7 @@ export type {
 export type { BillingMappingCoverage, BillingRecordMapping, ProviderScopeAuthority } from '../billing/mapping.ts';
 export type { BillingKernelPersistenceResult } from '../billing/epistemic.ts';
 export type { BillingReconciliationClaimInput } from '../billing/epistemic.ts';
+export type { OpenAiCostsKernelPersistenceResult } from '../billing/epistemic.ts';
 export type {
   AnyCommittedCausalStudyProtocol,
   CausalAssignmentManifestV2,
@@ -1603,12 +1604,61 @@ export class Store {
     return Object.freeze({ claimId: item.id, result });
   }
 
+  /** Issue one complete direct OpenAI Costs observation through the kernel. */
+  issueOpenAiCostsObservationToKernel(observationRunId: string): OpenAiCostsKernelPersistenceResult {
+    const snapshot = billing.openAiCostsObservationById(this.db, observationRunId);
+    if (snapshot === null) throw new Error(`unknown OpenAI Costs observation run: ${observationRunId}`);
+    const issuance = buildOpenAiCostsKernelIssuance(snapshot);
+    let evidenceInserted = 0;
+    let evidenceDuplicate = 0;
+    for (const item of issuance.observationEvidence) {
+      const result = this.epistemic().appendEvidence(item);
+      if (result === 'inserted') evidenceInserted += 1;
+      else evidenceDuplicate += 1;
+    }
+    let claimInserted = 0;
+    let claimDuplicate = 0;
+    for (const item of issuance.observationClaims) {
+      const result = this.epistemic().appendClaim(item);
+      if (result === 'inserted') claimInserted += 1;
+      else claimDuplicate += 1;
+    }
+    const aggregateResult = this.epistemic().appendClaim(issuance.aggregateClaim);
+    return Object.freeze({
+      observationRunId,
+      total: issuance.total,
+      observationEvidence: Object.freeze({ inserted: evidenceInserted, duplicate: evidenceDuplicate }),
+      observationClaims: Object.freeze({ inserted: claimInserted, duplicate: claimDuplicate }),
+      aggregateClaim: Object.freeze({ id: issuance.aggregateClaim.id, result: aggregateResult }),
+    });
+  }
+
   /** Read canonical billed-period claims without exposing confidential raw payloads. */
   billingKernelClaims(limit = 25): readonly Pick<Claim, 'id' | 'proposition' | 'profile' | 'evidenceIds' | 'issuedAt' | 'monetaryBasis' | 'finality'>[] {
     const safeLimit = Math.max(1, Math.min(100, Math.floor(limit)));
     const claims: Array<Pick<Claim, 'id' | 'proposition' | 'profile' | 'evidenceIds' | 'issuedAt' | 'monetaryBasis' | 'finality'>> = [];
     for (const run of this.billingImportRuns(safeLimit)) {
       const item = this.epistemic().readClaim(`claim:billing:billed-total:${run.importId}`);
+      if (item === null) continue;
+      claims.push({
+        id: item.id,
+        proposition: item.proposition,
+        profile: item.profile,
+        evidenceIds: item.evidenceIds,
+        issuedAt: item.issuedAt,
+        monetaryBasis: item.monetaryBasis,
+        finality: item.finality,
+      });
+    }
+    return Object.freeze(claims.map((item) => Object.freeze(item)));
+  }
+
+  /** Read canonical provider-observed Claims issued from complete Costs snapshots. */
+  openAiCostsKernelClaims(limit = 25): readonly Pick<Claim, 'id' | 'proposition' | 'profile' | 'evidenceIds' | 'issuedAt' | 'monetaryBasis' | 'finality'>[] {
+    const safeLimit = Math.max(1, Math.min(100, Math.floor(limit)));
+    const claims: Array<Pick<Claim, 'id' | 'proposition' | 'profile' | 'evidenceIds' | 'issuedAt' | 'monetaryBasis' | 'finality'>> = [];
+    for (const run of this.openAiCostsObservationRuns(safeLimit)) {
+      const item = this.epistemic().readClaim(`claim:billing:provider-observed-total:${run.observationRunId}`);
       if (item === null) continue;
       claims.push({
         id: item.id,

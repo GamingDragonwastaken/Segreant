@@ -405,10 +405,18 @@ async function cmdOpenAiCosts(flags: Flags): Promise<void> {
         failureCode: null,
         observations: collected.observations,
       });
-      const payload = { applied: true, resultState: 'succeeded', run, observationCount: collected.observations.length };
+      // A complete provider snapshot with lines crosses the explicit kernel
+      // adapter. An empty but successful snapshot remains a valid empty
+      // observation and therefore has no Claim to issue.
+      const kernel = collected.observations.length > 0
+        ? store.issueOpenAiCostsObservationToKernel(run.observationRunId)
+        : null;
+      const kernelJson = kernel === null ? null : { ...kernel, total: { ...moneyToJson(kernel.total) } };
+      const payload = { applied: true, resultState: 'succeeded', run, observationCount: collected.observations.length, kernel: kernelJson };
       if (flags.json) printJson(payload);
       else {
         console.log(`  Recorded ${collected.observations.length} immutable OpenAI daily cost observation(s) in run ${run.observationRunId}.`);
+        if (kernel) console.log(`  Canonical kernel: ${kernel.observationEvidence.inserted} Evidence and ${kernel.observationClaims.inserted} provider-observed Claims issued; aggregate ${kernel.aggregateClaim.id}.`);
         console.log('  They remain unreconciled and are excluded from request spend, caps, RoI, and recommendations.');
       }
     } catch (error) {

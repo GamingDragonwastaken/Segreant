@@ -130,6 +130,16 @@ export interface BillingMappingCoveragePayload {
   excludedFrom: string[];
 }
 
+export interface BillingKernelClaimSummary {
+  id: string;
+  proposition: unknown;
+  profile: Record<string, string>;
+  evidenceIds: string[];
+  issuedAt: string;
+  monetaryBasis: string;
+  finality: string;
+}
+
 export interface BillingPayload {
   demo: boolean;
   evidence: { reconciliationStatus: string };
@@ -137,15 +147,8 @@ export interface BillingPayload {
   /** Bounded canonical billed Claims issued by the explicit billing adapter. */
   kernel?: {
     kind: string;
-    claims: Array<{
-      id: string;
-      proposition: unknown;
-      profile: Record<string, string>;
-      evidenceIds: string[];
-      issuedAt: string;
-      monetaryBasis: string;
-      finality: string;
-    }>;
+    claims: BillingKernelClaimSummary[];
+    observedClaims: BillingKernelClaimSummary[];
   };
   /**
    * Optional because a payload predating this field must not read as `ready`.

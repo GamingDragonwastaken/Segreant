@@ -58,7 +58,9 @@ two domain callers goes in `rows.ts`.
   its schema and append-only triggers are still owned by `schema.ts`.
 - **Billing kernel issuance is explicit and additive.** `issueBillingImportToKernel()`
   translates a validated operator export through exact `Money` into canonical
-  Evidence and billed Claims; legacy billing rows remain the compatibility read
+  Evidence and billed Claims; `issueOpenAiCostsObservationToKernel()` does the
+  same for complete direct provider observations with a distinct
+  `provider_observed` basis. Legacy billing rows remain the compatibility read
   model and repeated issuance is idempotent.
 
 ## Invariants

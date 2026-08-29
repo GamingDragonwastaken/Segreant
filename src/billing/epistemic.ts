@@ -16,7 +16,7 @@ import { scope } from '../epistemic/scope.ts';
 import { instant, interval, type Instant } from '../epistemic/time.ts';
 import { addMoney, money, moneyToJson, type EconomicBasis, type Money } from '../economics/money.ts';
 import type { ReconciliationRun } from './reconcile.ts';
-import type { BillingEvidenceRecord, BillingImportRun } from '../store/billing.ts';
+import type { BillingEvidenceRecord, BillingImportRun, OpenAiCostsObservationLine, OpenAiCostsObservationRun } from '../store/billing.ts';
 
 export interface BillingKernelIssuanceInput {
   readonly run: BillingImportRun;
@@ -46,6 +46,26 @@ export interface BillingReconciliationClaimInput {
   /** IDs of the provider and local-capture Evidence records supporting the comparison. */
   readonly evidenceIds: readonly string[];
   readonly issuedAt: Instant;
+}
+
+export interface OpenAiCostsKernelIssuanceInput {
+  readonly run: OpenAiCostsObservationRun;
+  readonly observations: readonly OpenAiCostsObservationLine[];
+}
+
+export interface OpenAiCostsKernelIssuance {
+  readonly observationEvidence: readonly Evidence[];
+  readonly observationClaims: readonly Claim[];
+  readonly aggregateClaim: Claim;
+  readonly total: Money;
+}
+
+export interface OpenAiCostsKernelPersistenceResult {
+  readonly observationRunId: string;
+  readonly total: Money;
+  readonly observationEvidence: Readonly<{ inserted: number; duplicate: number }>;
+  readonly observationClaims: Readonly<{ inserted: number; duplicate: number }>;
+  readonly aggregateClaim: Readonly<{ id: string; result: KernelAppendResult }>;
 }
 
 const BILLING_COVERAGE = new Set(['unknown', 'partial', 'complete']);
@@ -287,6 +307,210 @@ export function buildBillingKernelIssuance(input: BillingKernelIssuanceInput): B
     schemaVersion: 1,
   });
   return Object.freeze({ recordEvidence: Object.freeze(recordEvidence), recordClaims: Object.freeze(recordClaims), aggregateClaim, total });
+}
+
+const OPENAI_COSTS_SOURCE_KINDS = new Set(['provider_api_pull', 'operator_supplied_export', 'legacy_unknown']);
+
+function openAiSourceClass(sourceKind: OpenAiCostsObservationRun['sourceKind']): string {
+  if (sourceKind === 'provider_api_pull') return 'provider_costs_api_observation';
+  if (sourceKind === 'operator_supplied_export') return 'operator_supplied_provider_export';
+  return 'legacy_unknown_provider_observation';
+}
+
+function openAiAuthenticity(sourceKind: OpenAiCostsObservationRun['sourceKind']) {
+  if (sourceKind === 'provider_api_pull') return 'provider_authenticated' as const;
+  if (sourceKind === 'operator_supplied_export') return 'self_asserted' as const;
+  return 'unknown' as const;
+}
+
+function openAiSourceIdentity(run: OpenAiCostsObservationRun): string {
+  if (run.sourceKind === 'provider_api_pull') return `provider:openai:project:${run.providerProjectRef}`;
+  if (run.sourceKind === 'operator_supplied_export') return `operator-export:openai:${run.observationRunId}`;
+  return `legacy-openai-observation:${run.observationRunId}`;
+}
+
+function openAiScope(run: OpenAiCostsObservationRun) {
+  return scope({
+    provider: 'openai',
+    providerProjectRef: run.providerProjectRef,
+    declaredScopeId: run.declaredScopeId,
+    observationRunId: run.observationRunId,
+  });
+}
+
+function openAiProfile(run: OpenAiCostsObservationRun) {
+  return claimProfile({
+    epistemic: 'supported',
+    integrity: 'verified',
+    authenticity: openAiAuthenticity(run.sourceKind),
+    scope: 'conditional',
+    coverage: 'complete',
+    measurement: 'proxy_unvalidated',
+    causality: 'none',
+    monetaryBasis: 'provider_observed',
+    finality: 'provisional',
+    decisionFitness: 'not_assessed',
+  });
+}
+
+function validateOpenAiRun(run: OpenAiCostsObservationRun): void {
+  if (!OPENAI_COSTS_SOURCE_KINDS.has(run.sourceKind)) throw new Error(`unsupported OpenAI Costs source kind: ${String(run.sourceKind)}`);
+  if (run.resultState !== 'succeeded' || !run.paginationComplete || run.failureCode !== null) throw new Error('OpenAI Costs kernel issuance requires a successful complete observation');
+  if (run.providerFinality !== 'undocumented' || run.trust !== 'provider_observation_unreconciled' || run.rawRetention !== 'digest_only') {
+    throw new Error('OpenAI Costs observation trust/finality boundary is unsupported');
+  }
+  nonEmpty(run.observationRunId, 'OpenAI Costs observation run id');
+  nonEmpty(run.declaredScopeId, 'OpenAI Costs declared scope id');
+  if (!/^proj_[A-Za-z0-9_-]+$/.test(run.providerProjectRef)) throw new Error('OpenAI Costs provider project reference is invalid');
+  if (!Number.isSafeInteger(run.pageCount) || run.pageCount < 1 || run.pageCount > 64) throw new Error('OpenAI Costs page count is invalid');
+  if (typeof run.pageDigestChainSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(run.pageDigestChainSha256)) throw new Error('OpenAI Costs page digest chain is invalid');
+  canonicalInstantMs(run.fetchedAtMs, 'OpenAI Costs fetchedAtMs');
+  if (!Number.isSafeInteger(run.observationsStored) || run.observationsStored < 0) throw new Error('OpenAI Costs observation count is invalid');
+  if (!Number.isSafeInteger(run.periodStartMs) || !Number.isSafeInteger(run.periodEndMs) || run.periodEndMs <= run.periodStartMs || (run.periodEndMs - run.periodStartMs) % (24 * 60 * 60 * 1000) !== 0) {
+    throw new Error('OpenAI Costs observation range must be whole UTC days');
+  }
+  intervalFor(run.periodStartMs, run.periodEndMs, 'OpenAI Costs observation period');
+}
+
+function observationMoney(value: unknown, label: string): Money {
+  if (typeof value !== 'string') throw new Error(`${label} must be a canonical decimal string`);
+  try {
+    return money(value, 'USD', 'provider_observed');
+  } catch (error) {
+    throw new Error(`${label}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function validateOpenAiObservation(run: OpenAiCostsObservationRun, line: OpenAiCostsObservationLine): Money {
+  if (line.observationRunId !== run.observationRunId || line.declaredScopeId !== run.declaredScopeId || line.providerProjectRef !== run.providerProjectRef || line.fetchedAtMs !== run.fetchedAtMs) {
+    throw new Error(`OpenAI Costs observation ${line.observationId} is not bound to run ${run.observationRunId}`);
+  }
+  nonEmpty(line.observationId, 'OpenAI Costs observation id');
+  if (!/^[^\u0000-\u001F\u007F]{1,500}$/.test(line.lineItem)) throw new Error('OpenAI Costs line item is invalid');
+  if (line.currency !== 'USD') throw new Error('OpenAI Costs kernel issuance supports USD observations only');
+  if (!Number.isSafeInteger(line.bucketStartMs) || !Number.isSafeInteger(line.bucketEndMs) || line.bucketEndMs - line.bucketStartMs !== 24 * 60 * 60 * 1000 || line.bucketStartMs % (24 * 60 * 60 * 1000) !== 0 || line.bucketStartMs < run.periodStartMs || line.bucketEndMs > run.periodEndMs) {
+    throw new Error(`OpenAI Costs observation ${line.observationId} bucket is invalid`);
+  }
+  intervalFor(line.bucketStartMs, line.bucketEndMs, `OpenAI Costs observation ${line.observationId} bucket`);
+  return observationMoney(line.amountDecimal, `OpenAI Costs observation ${line.observationId} amount`);
+}
+
+function buildOpenAiObservationEvidence(run: OpenAiCostsObservationRun, line: OpenAiCostsObservationLine, amount: Money): Evidence {
+  const validTime = intervalFor(line.bucketStartMs, line.bucketEndMs, `OpenAI Costs observation ${line.observationId} bucket`);
+  const commonAssumptions = [
+    'Provider finality is undocumented for an individual Costs snapshot.',
+    'The local route scope is operator-declared and not provider-verified.',
+  ];
+  if (run.sourceKind === 'operator_supplied_export') commonAssumptions.push('The provider report was supplied by an operator rather than fetched by Fiscus.');
+  return evidence({
+    id: `evidence:openai-costs:${run.observationRunId}:${line.observationId}`,
+    evidenceType: 'billing.provider_observation',
+    sourceIdentity: openAiSourceIdentity(run),
+    sourceClass: openAiSourceClass(run.sourceKind),
+    payload: {
+      amount: { ...moneyToJson(amount) },
+      lineItem: line.lineItem,
+      observationId: line.observationId,
+      sourceKind: run.sourceKind,
+    },
+    scope: openAiScope(run),
+    grain: grain(['provider_project_day_line_item']),
+    occurredAt: validTime.from,
+    validTime,
+    observedAt: canonicalInstantMs(run.fetchedAtMs, 'OpenAI Costs fetchedAtMs'),
+    recordedAt: canonicalInstantMs(run.fetchedAtMs, 'OpenAI Costs fetchedAtMs'),
+    integrity: 'verified',
+    authenticity: openAiAuthenticity(run.sourceKind),
+    completeness: {
+      status: 'complete',
+      method: 'provider_costs_api_complete_pagination',
+      coveredEventTypes: ['billing.provider_observation'],
+      coveredScope: openAiScope(run),
+      coveredTime: intervalFor(run.periodStartMs, run.periodEndMs, 'OpenAI Costs observation period'),
+    },
+    measurementModelRef: null,
+    monetaryBasis: 'provider_observed',
+    assumptions: commonAssumptions,
+    supersedes: [],
+    supersededBy: null,
+    revocation: null,
+    schemaVersion: 1,
+    sensitivity: 'confidential',
+    redaction: 'none',
+  });
+}
+
+/** Issue deterministic kernel Evidence/Claims for one complete OpenAI Costs snapshot. */
+export function buildOpenAiCostsKernelIssuance(input: OpenAiCostsKernelIssuanceInput): OpenAiCostsKernelIssuance {
+  validateOpenAiRun(input.run);
+  if (!Array.isArray(input.observations) || input.observations.length === 0) throw new Error('OpenAI Costs kernel issuance requires at least one observation');
+  if (input.run.observationsStored !== input.observations.length) throw new Error('OpenAI Costs observation count does not match its run');
+  const lineIds = new Set<string>();
+  let total = money('0', 'USD', 'provider_observed');
+  const observationEvidence: Evidence[] = [];
+  const observationClaims: Claim[] = [];
+  for (const line of input.observations) {
+    const amount = validateOpenAiObservation(input.run, line);
+    if (lineIds.has(line.observationId)) throw new Error(`duplicate OpenAI Costs observation id: ${line.observationId}`);
+    lineIds.add(line.observationId);
+    const item = buildOpenAiObservationEvidence(input.run, line, amount);
+    observationEvidence.push(item);
+    observationClaims.push(claim({
+      id: `claim:billing:provider-observed:${input.run.observationRunId}:${line.observationId}`,
+      proposition: { predicate: 'billing.provider_observed_amount', value: { amount: { ...moneyToJson(amount) }, lineItem: line.lineItem, observationId: line.observationId } },
+      subject: `provider-project:${input.run.providerProjectRef}`,
+      scope: openAiScope(input.run),
+      grain: grain(['provider_project_day_line_item']),
+      time: { validTime: intervalFor(line.bucketStartMs, line.bucketEndMs, `OpenAI Costs observation ${line.observationId} bucket`), asOf: canonicalInstantMs(input.run.fetchedAtMs, 'OpenAI Costs fetchedAtMs') },
+      epistemic: 'supported',
+      profile: openAiProfile(input.run),
+      measurementModelRef: null,
+      evidenceIds: [item.id],
+      derivationRule: 'billing.openai_costs.observation.v1',
+      derivationVersion: 1,
+      assumptions: ['Provider finality is undocumented for an individual Costs snapshot.'],
+      uncertainty: { kind: 'qualitative', description: 'Provider-observed arithmetic is exact; finality and route scope remain conditional.' },
+      causalStatus: 'none',
+      monetaryBasis: 'provider_observed',
+      finality: 'provisional',
+      issuedAt: canonicalInstantMs(input.run.fetchedAtMs, 'OpenAI Costs fetchedAtMs'),
+      supersedes: [],
+      supersededBy: null,
+      revocation: null,
+      decisionCertificateIds: [],
+      schemaVersion: 1,
+    }));
+    total = addMoney(total, amount);
+  }
+  const aggregateClaim = claim({
+    id: `claim:billing:provider-observed-total:${input.run.observationRunId}`,
+    proposition: {
+      predicate: 'billing.provider_observed_period_total',
+      value: { amount: { ...moneyToJson(total) }, observationRunId: input.run.observationRunId, lineCount: observationEvidence.length, sourceKind: input.run.sourceKind },
+    },
+    subject: `provider-project:${input.run.providerProjectRef}`,
+    scope: openAiScope(input.run),
+    grain: grain(['provider_project_period']),
+    time: { validTime: intervalFor(input.run.periodStartMs, input.run.periodEndMs, 'OpenAI Costs observation period'), asOf: canonicalInstantMs(input.run.fetchedAtMs, 'OpenAI Costs fetchedAtMs') },
+    epistemic: 'supported',
+    profile: openAiProfile(input.run),
+    measurementModelRef: null,
+    evidenceIds: observationEvidence.map((item) => item.id),
+    derivationRule: 'billing.openai_costs.period_total.v1',
+    derivationVersion: 1,
+    assumptions: ['Provider finality is undocumented for an individual Costs snapshot.', 'The local route scope is operator-declared and not provider-verified.'],
+    uncertainty: { kind: 'qualitative', description: 'Exact arithmetic over the complete retained snapshot; provider finality and route scope remain conditional.' },
+    causalStatus: 'none',
+    monetaryBasis: 'provider_observed',
+    finality: 'provisional',
+    issuedAt: canonicalInstantMs(input.run.fetchedAtMs, 'OpenAI Costs fetchedAtMs'),
+    supersedes: [],
+    supersededBy: null,
+    revocation: null,
+    decisionCertificateIds: [],
+    schemaVersion: 1,
+  });
+  return Object.freeze({ observationEvidence: Object.freeze(observationEvidence), observationClaims: Object.freeze(observationClaims), aggregateClaim, total });
 }
 
 function fixedMicrosDifference(value: number, leftBasis: string, rightBasis: string) {

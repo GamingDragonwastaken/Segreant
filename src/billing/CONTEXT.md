@@ -12,7 +12,9 @@
   local project/account, but only as an operator declaration.
 - `epistemic.ts` issues the first vertical's provider-line Evidence and billed
   Claims through exact `Money`, and can issue a mixed-basis reconciliation Claim
-  when both provider and local-capture evidence IDs are supplied.
+  when both provider and local-capture evidence IDs are supplied. Complete
+  direct OpenAI Costs snapshots issue separate provider-observed Evidence and
+  Claims; they never become billed merely because the endpoint is authoritative.
 
 ## Guarantees
 
