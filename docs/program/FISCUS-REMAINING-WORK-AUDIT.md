@@ -4,7 +4,7 @@
 **Date:** 2026-08-29  
 **Repository:** `GamingDragonwastaken/Fiscus`  
 **Reconstruction branch:** `gpt56/magnum-opus-reconstruction`  
-**Code baseline reconciled:** `774658431739673183066f3c45dd9d01e84346a2`
+**Code baseline reconciled:** `9a0254ab0766057b53569b396f81c1d7c8dd96e2`
 **Authority:** owner-approved `FISCUS_FOUNDATIONAL_AUDIT_II_COMPLETE.md` plus all still-valid requirements of the Magnum Opus Master Execution Plan.
 
 ## Purpose
@@ -23,7 +23,7 @@ The reconstruction branch began from the reviewed high-assurance candidate `3157
 
 The original macOS OIDC time-boundary failure has been repaired through injected deterministic verifier time and exact skew-boundary tests. Team-server tests later passed on Windows, Ubuntu and macOS.
 
-The immediate recovery tranche is green at exact implementation SHA `685b14c57cccf078679a37a929f6234f00522abd`; M1 Evidence/Claim slices are green at `fa36cc380e6883cc868e2e5b46517ae118a038ae`; Derivation/DAG slices are green at `8928bb474ecb93477caa7605c6710b432653a631`; schema-owned persistence is green at `9d8d364013d22f37fc4c3548f57110a26a274b6a`; assumption/event-time/serialization slices are green at `5ab1440e7495a58dcf08083696591e7cf1747d07`; and the canonical witness registry is green at `774658431739673183066f3c45dd9d01e84346a2`. Root typecheck/tests, package smoke, and the configured cross-platform GitHub matrix pass. The broader kernel and product program remains partial/open as recorded below.
+The immediate recovery tranche is green at exact implementation SHA `685b14c57cccf078679a37a929f6234f00522abd`; M1 Evidence/Claim slices are green at `fa36cc380e6883cc868e2e5b46517ae118a038ae`; Derivation/DAG slices are green at `8928bb474ecb93477caa7605c6710b432653a631`; schema-owned persistence is green at `9d8d364013d22f37fc4c3548f57110a26a274b6a`; assumption/event-time/serialization slices are green at `5ab1440e7495a58dcf08083696591e7cf1747d07`; the canonical witness registry is green at `774658431739673183066f3c45dd9d01e84346a2`; hindsight-safe replay/conformance is green at `a7ef58946d941e0e035a38641f59f234b180a0b8`; and the first billing kernel vertical is green at `9a0254ab0766057b53569b396f81c1d7c8dd96e2`. Root typecheck/tests, package smoke, and the configured cross-platform GitHub matrix pass. The broader kernel and product program remains partial/open as recorded below.
 
 ## Work already implemented and to preserve
 
@@ -41,6 +41,7 @@ The first tranche created durable program-control artifacts and implemented mean
 - canonical immutable Evidence and Claim envelopes with explicit provenance, coordinates, profiles, uncertainty and lifecycle metadata;
 - canonical Derivation/Witness legality and immutable Evidence/Claim DAG projections with as-of, supersession and revocation traces;
 - first-class immutable Witness envelopes with persisted evidence grounding and enforced Derivation registry references;
+- first billing vertical adapter: exact Money-backed provider Evidence/billed Claims, conservation-checked reconciliation Claims, CLI replay, and bounded API ClaimProfile summaries;
 - schema-owned SQLite persistence for canonical Evidence/Claim/Derivation/Witness nodes, edges and revocation events with digest/trigger protection;
 - first-class Assumption IDs, event-time-aware revocation replay and canonical serialization/digest envelopes;
 - strict legacy realization fix: unknown required gates no longer count toward the confirmed lower bound;
@@ -66,13 +67,13 @@ Status vocabulary: `CLOSED`, `PARTIAL`, `OPEN`, `RED-SPEC`, `EXTERNAL-GATE`, `SU
 | AII-010 Lift heuristic bounds | OPEN | Explicit estimand/identified set/assumptions. |
 | AII-011 workflow label → cardinal Impact | OPEN | Multidimensional outcomes plus explicit preferences/utility. |
 | AII-012 `realizedValueUsd` sometimes spend | OPEN | Rename/schema migration distinguishing spend, scenario value and causal value. |
-| AII-013 financial layers too coarse | PARTIAL | Money/Rate foundation exists; economic claim DAG and subledger remain. |
+| AII-013 financial layers too coarse | PARTIAL | Money/Rate foundation and first billing Evidence/Claim vertical now exist; complete economic claim DAG and subledger remain. |
 | AII-014 `established:boolean` | PARTIAL | ClaimProfile is now embedded in canonical Claim; persisted/API/UI migration and alternate-boolean removal remain. |
 | AII-015 global evidence strength order | PARTIAL | Implement claim-relative admissibility/incomparable profiles. |
 | AII-016 grain not a truth constraint | PARTIAL | Witness primitive exists; enforce in every derivation/aggregation. |
-| AII-017 money not exact end-to-end | PARTIAL | Migrate ledger/DB/budgets/allocation/reconciliation/API/CSV authoritative paths. |
+| AII-017 money not exact end-to-end | PARTIAL | First billing kernel adapter uses exact Money; migrate legacy ledger/DB/budgets/allocation/reconciliation/API/CSV authoritative paths. |
 | AII-018 analytical economic subledger absent | OPEN | Immutable typed economic events and deterministic projections. |
-| AII-019 immutability inconsistent | PARTIAL | Schema-owned SQLite persistence, digest/trigger checks, assumption and witness links, and event-time revocation replay are implemented/tested; complete event projections and all product consumers remain. |
+| AII-019 immutability inconsistent | PARTIAL | Schema-owned SQLite persistence, digest/trigger checks, assumption and witness links, event-time replay and billing claims are implemented/tested; complete event projections and all product consumers remain. |
 | AII-020 receipt mistaken for truth | PARTIAL | Separate trust dimensions in product UX and interoperable attestation semantics. |
 | AII-021 causal inference/design gaps | OPEN | ITT, blocks, joint inference, missingness, interference, precision and transportability. |
 | AII-022 two causal systems | OPEN | One estimand/design/estimator registry; version/archive superseded path. |
@@ -83,7 +84,7 @@ Status vocabulary: `CLOSED`, `PARTIAL`, `OPEN`, `RED-SPEC`, `EXTERNAL-GATE`, `SU
 | AII-027 pseudo-VoI | PARTIAL | Legacy sensitivity metric remains explicitly labelled; separate decision engine now implements perfect-information VOI net of measurement cost. |
 | AII-028 shrinkage weight labelled confidence | OPEN | Correct terminology/assumptions and tests. |
 | AII-029 docs/runtime drift | OPEN | Canonical CapabilitySpec and generated/conformance-tested docs. |
-| AII-030 browser/server schema drift | OPEN | One runtime schema source and shared/generated types. |
+| AII-030 browser/server schema drift | OPEN | Billing ClaimProfile summaries are now shared by the route contract; one runtime schema source and generated/shared types remain. |
 | AII-031 unbounded major buffers | OPEN | Bound ingress/SSE/tool args/proposals/responses with explicit coverage-loss semantics. |
 | AII-032 DB integrity too application-managed | OPEN | Promote critical invariants to DB where sound. |
 | AII-033 supply-chain assurance | OPEN | CodeQL, dependency review, secret scan, SBOM, provenance/signing. |
@@ -101,7 +102,7 @@ The next worker should not start another design discussion.
 4. **COMPLETED at `685b14c`:** Migrate every affected realization/demo fixture to explicit required lifecycle evidence; no unknown gate is promoted to pass.
 5. **COMPLETED at `685b14c`:** Observe GitHub Actions run `33253835881` as green on all configured jobs.
 6. **COMPLETED in the following documentation checkpoint:** update program state, audit, decision, and evidence registers with exact implementation/CI identities.
-7. **NEXT:** Continue M1 kernel issuance dependency-first: complete event-time replay and conformance vectors -> product issuance adapters -> exact-money billing/reconciliation migration.
+7. **NEXT:** Finish the billing/reconciliation vertical: provider-observation and local-capture Evidence, persisted reconciliation Claims, and exact Money/Rate migration of authoritative paths.
 
 ## Trusted Epistemic Kernel remaining work
 
@@ -299,8 +300,8 @@ For each external gate, repository work must leave an executable protocol, requi
 2. **COMPLETED at `fa36cc3`:** TDD canonical Claim with ClaimProfile, uncertainty and typed basis aliases.
 3. **COMPLETED at `c457b95`:** TDD canonical Derivation/Witness and illegal-strengthening checks.
 4. **COMPLETED at `7746584`:** Persisted canonical Witness registry with evidence grounding, serialization, append-only protection, Derivation-reference enforcement and transitive revocation edges.
-5. implement complete event-time as-of reconstruction and canonical conformance vectors;
-6. migrate billing/reconciliation to exact Money/Rate and typed economic claims;
+5. **COMPLETED at `a7ef589`:** Add one immutable replay projection and table-driven as-of/revocation conformance vectors.
+6. **PARTIAL at `9a0254a`:** Issue billing provider-line Evidence and billed Claims through exact Money, route ClaimProfile through CLI/API, and provide a conservation-checked reconciliation Claim adapter; complete provider-observation/local-capture persistence and authoritative path migration.
 7. introduce WorkUnit/OutcomeAdapter and migrate coding/completeness-aware `clean`;
 8. build contribution attribution and adversarial benchmark corpus;
 9. unify causal estimand/design/estimator registry and inference ledger;

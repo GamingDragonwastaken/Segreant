@@ -32,6 +32,10 @@ Controlling architecture:
 - Exact remote verification run for serialization: GitHub Actions `33258932047` (success across all seven configured jobs)
 - Canonical witness-registry checkpoint: `774658431739673183066f3c45dd9d01e84346a2`
 - Exact remote verification run for the witness registry: GitHub Actions `33260005454` (success across all seven configured jobs)
+- Hindsight-safe replay/conformance checkpoint: `a7ef58946d941e0e035a38641f59f234b180a0b8`
+- Exact remote verification run for replay/conformance: GitHub Actions `33260565547` (success across all seven configured jobs)
+- Billing kernel vertical checkpoint: `9a0254ab0766057b53569b396f81c1d7c8dd96e2`
+- Exact remote verification run for the billing vertical: GitHub Actions `33261466500` (success across all seven configured jobs)
 - Remaining-work audit commit: `5e5a82843154a6fd04e0017538919108c5ff06f1`
 - Luna resume-protocol commit: `5c4de94cf7af0a218ecd10946ac91577fdd9eae7`
 - Base high-assurance PR: #8 (`codex/high-assurance-foundation` -> `main`)
@@ -42,7 +46,7 @@ The exact remote reconstruction SHA must always be re-read after `git fetch`; do
 
 ## Program phase
 
-`M0 stabilization complete; M1 constitutional reconstruction next`
+`M0 stabilization complete; M1/M2 kernel-to-billing integration active`
 
 ## M0 stabilization checkpoint (2026-08-29)
 
@@ -98,6 +102,22 @@ M1 now has a persistence-ready canonical Evidence/Assumption/Claim/Derivation/DA
 
 The witness registry closes the first persistence gap but not universal product issuance. Complete event-time replay/conformance vectors, product adapters and exact-money billing integration remain open.
 
+## M1 replay/conformance checkpoint (2026-08-29)
+
+- [x] `EpistemicLedger.replayAsOf()` (`a7ef589`) now returns one immutable graph-plus-revocation projection, filtering node availability and revocation recording time independently.
+- [x] Table-driven vectors prove no later evidence, witness, claim or revocation leaks into an earlier projection; repeated reads and reopened handles are deterministic.
+- [x] Exact-head GitHub run `33260565547` validates the replay checkpoint across all seven configured jobs.
+
+Replay is now a stable kernel contract; product adapters must still supply all consequential evidence and claims through it.
+
+## M2 billing-kernel vertical checkpoint (2026-08-29)
+
+- [x] Validated operator OpenAI billing exports cross the explicit adapter (`9a0254a`) into exact `Money`-backed provider Evidence and billed Claims, with conservation-checked mixed-basis reconciliation Claims available when supporting Evidence IDs are supplied.
+- [x] CLI apply/replay issues canonical claims and emits string-coefficient Money JSON; `/api/billing` exposes bounded ClaimProfile summaries without raw payloads; legacy billing tables remain a compatibility read model.
+- [x] Focused billing, CLI, Store and dashboard tests plus the full local suite (1018 total; 1014 pass/0 fail/4 skips), Node/browser typechecks, build and package smoke pass; GitHub run `33261466500` validates the exact checkpoint across all seven configured jobs.
+
+This is the first real product vertical crossing the kernel, not completion of the full financial migration. Direct provider-observation evidence, authoritative local Money migration, economic-event subledger, FX, projections, and universal API/CLI/UI issuance remain open.
+
 ## Completed in first GPT-5.6 Sol tranche
 
 - [x] Durable program-control directory established.
@@ -118,20 +138,20 @@ The witness registry closes the first persistence gap but not universal product 
 
 ## Current verification state
 
-The latest reconstruction checkpoint is green at exact witness-registry code SHA `774658431739673183066f3c45dd9d01e84346a2`:
+The latest reconstruction checkpoint is green at exact billing-kernel code SHA `9a0254ab0766057b53569b396f81c1d7c8dd96e2`:
 
 - local Node typecheck: pass;
 - local browser typecheck: pass;
-- local root suite: 1011 total, 1007 pass, 0 fail, 4 platform-conditional skips;
+- local root suite: 1018 total, 1014 pass, 0 fail, 4 platform-conditional skips;
 - local packed/installable artifact smoke: pass;
-- GitHub Actions run `33260005454`: success across all seven configured jobs.
+- GitHub Actions run `33261466500`: success across all seven configured jobs.
 
 The branch is still not a final product-completion baseline. M1 and later audit findings remain open or partial, and external gates remain unperformed. Do not weaken the new invariants merely to preserve superficial green status.
 
 ## Exact next actions
 
-1. Continue the Trusted Epistemic Kernel in dependency order: complete event replay and conformance vectors -> product issuance adapters -> one billing/reconciliation vertical.
-2. Migrate one real billing/reconciliation vertical to exact Money/Rate and typed economic evidence, preserving explicit legacy adapters.
+1. Finish the billing/reconciliation vertical: provider-observation Evidence, local-capture Evidence, persisted reconciliation Claims and exact Money/Rate migration of authoritative paths, preserving explicit legacy adapters.
+2. Make kernel issuance unavoidable at every consequential product boundary, then introduce WorkUnit/OutcomeAdapter migration.
 3. Keep every new claim and decision on the kernel path; add regression/property/adversarial tests before widening capability.
 4. After each coherent slice, update this state and the audit/evidence registers with the exact local and remote SHA.
 5. Keep external provider, production-service, independent-security, scholarly, accessibility, and design-partner gates explicit; never fabricate their closure.

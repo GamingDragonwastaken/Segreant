@@ -16,11 +16,11 @@ Status vocabulary: `OPEN`, `PARTIAL`, `IN_PROGRESS`, `COMPLETED`, `SUPERSEDED`, 
 | AII-010 | P0 | Lift uses arbitrary defaults/fallback bounds | OPEN | Counterfactual estimand + identified set + declared assumptions; no arbitrary Manski-like labels |
 | AII-011 | P0 | Impact maps workflow labels to universal cardinal value | OPEN | Multidimensional outcomes + explicit utility/preferences |
 | AII-012 | P0 | `realizedValueUsd` sometimes names attributed spend | OPEN | Monetary semantic rename/migration; reserve value for outcome/economic value |
-| AII-013 | P0 | Four financial truth layers are too coarse/linear | OPEN | Typed economic claim DAG: usage/estimate/provider/billed/effective/allocated/outcome/causal/utility |
+| AII-013 | P0 | Four financial truth layers are too coarse/linear | PARTIAL | Exact Money/Rate and first billing Evidence/Claim vertical exist; complete typed economic claim DAG and subledger remain |
 | AII-014 | P0 | `established:boolean` collapses trust/evidence dimensions | PARTIAL | Canonical Claim now embeds ClaimProfile and profile-derived aliases; migrate persisted/API/UI consumers and remove alternate booleans |
 | AII-015 | P1 | Evidence strength treated as global total order | OPEN | Claim-relative partial ordering/evidence predicates |
 | AII-016 | P0 | Grain is not a type-level truth constraint | OPEN | No Granularity Laundering enforced in derivations |
-| AII-017 | P0 | Money not exact end-to-end | OPEN | Exact Money/Rate core; floating USD restricted to presentation/legacy boundaries |
+| AII-017 | P0 | Money not exact end-to-end | PARTIAL | First billing kernel path uses exact Money and canonical string coefficients; migrate legacy ledger/DB/budgets/allocation/reconciliation/API/CSV authoritative paths |
 | AII-018 | P1 | Missing analytical economic subledger | OPEN | EconomicEvent/Charge/Credit/Discount/Tax/FX/Allocation/Adjustment/Reversal/Close semantics |
 | AII-019 | P0 | Immutability model inconsistent | PARTIAL | SQLite-backed immutable Evidence/Assumption/Claim/Derivation/Witness/DAG records, digest/trigger protection, and event-time revocation replay now exist; complete event projections and all product consumers remain |
 | AII-020 | P0 | Signed receipt may be read as proving claim truth | OPEN | Integrity/authenticity/correctness/completeness separated; interoperable provenance/attestation |
@@ -33,7 +33,7 @@ Status vocabulary: `OPEN`, `PARTIAL`, `IN_PROGRESS`, `COMPLETED`, `SUPERSEDED`, 
 | AII-027 | P1 | Current VOI is instrumentation sensitivity, not VOI | PARTIAL | Legacy `src/value/voi.ts` remains sensitivity-labelled; separate `src/decision/engine.ts` now implements explicit perfect-information VOI with measurement cost |
 | AII-028 | P1 | Reliability shrinkage weight labelled confidence; theorem overclaim | OPEN | Rename/local-data weight, regularize boundaries, document exchangeability |
 | AII-029 | P0 | Documentation/runtime contract drift | OPEN | Generated/conformance-tested capability/schema/claim/egress contracts |
-| AII-030 | P0 | Browser/server schemas can drift | OPEN | Canonical schema + runtime validation + generated/shared types |
+| AII-030 | P0 | Browser/server schemas can drift | PARTIAL | Billing ClaimProfile summaries now cross a bounded route contract; canonical runtime schema and generated/shared types remain |
 | AII-031 | P0 | Root proxy/body and proposal buffering lacks universal caps | OPEN | Bounded inbound/capture/frame/tool-arg/response buffers + truncation/coverage semantics |
 | AII-032 | P1 | DB relies heavily on application-managed integrity | OPEN | Review and push critical invariants into DB where sound |
 | AII-033 | P1 | Supply-chain assurance below target | OPEN | CodeQL/static security, dependency review, SBOM, provenance/signing, secret scanning |
