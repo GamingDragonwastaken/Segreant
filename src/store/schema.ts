@@ -690,6 +690,22 @@ CREATE TABLE IF NOT EXISTS epistemic_revocations (
 CREATE INDEX IF NOT EXISTS idx_epistemic_revocations_target ON epistemic_revocations(target_id, event_id);
 `;
 
+/** Immutable exact-Money economic event subledger. */
+const ECONOMIC_SCHEMA = `
+CREATE TABLE IF NOT EXISTS economic_events (
+  event_id TEXT PRIMARY KEY,
+  event_kind TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  occurred_at TEXT NOT NULL,
+  recorded_at TEXT NOT NULL,
+  event_json TEXT NOT NULL,
+  event_digest TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_economic_events_recorded ON economic_events(recorded_at, event_id);
+CREATE INDEX IF NOT EXISTS idx_economic_events_subject ON economic_events(subject, recorded_at, event_id);
+`;
+
 /**
  * Configure connection-local SQLite behavior before any schema inspection or
  * causal write.  INSERT OR REPLACE implements conflict resolution by deleting
@@ -883,6 +899,32 @@ export function initializeEpistemicSchema(db: DatabaseSync): void {
       ' BEGIN SELECT RAISE(ABORT, \'epistemic ledger is append-only\'); END',
     ).run();
   }
+}
+
+/**
+ * Create and protect the immutable exact-Money economic event table. DDL stays
+ * in this schema module; `src/economics/ledger.ts` performs validated DML only.
+ */
+export function initializeEconomicSchema(db: DatabaseSync): void {
+  runScript(db, ECONOMIC_SCHEMA);
+  const updateTrigger = 'economic_events_append_only_update';
+  const deleteTrigger = 'economic_events_append_only_delete';
+  db.prepare(
+    'CREATE TRIGGER IF NOT EXISTS ' + updateTrigger +
+    ' BEFORE UPDATE ON economic_events' +
+    ' BEGIN SELECT RAISE(ABORT, \'economic event ledger is append-only\'); END',
+  ).run();
+  db.prepare(
+    'CREATE TRIGGER IF NOT EXISTS ' + deleteTrigger +
+    ' BEFORE DELETE ON economic_events' +
+    ' BEGIN SELECT RAISE(ABORT, \'economic event ledger is append-only\'); END',
+  ).run();
+  db.prepare(
+    'CREATE TRIGGER IF NOT EXISTS economic_events_append_only_insert' +
+    ' BEFORE INSERT ON economic_events' +
+    ' WHEN EXISTS (SELECT 1 FROM economic_events WHERE event_id = NEW.event_id)' +
+    ' BEGIN SELECT RAISE(ABORT, \'economic event ledger is append-only\'); END',
+  ).run();
 }
 
 /** Operator mappings are evidence, not mutable configuration. */
@@ -1741,6 +1783,7 @@ export function initializeSchema(
     }
     runScript(db, SCHEMA);
     initializeEpistemicSchema(db);
+    initializeEconomicSchema(db);
     migrate(db);
     installCausalImmutability(db);
     installBillingMappingImmutability(db);

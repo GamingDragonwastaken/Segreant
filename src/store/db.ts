@@ -83,6 +83,7 @@ import type {
 } from '../causal/types.ts';
 import { EpistemicLedger } from '../epistemic/ledger.ts';
 import type { Claim } from '../epistemic/claim.ts';
+import { EconomicLedger } from '../economics/ledger.ts';
 
 /**
  * Provider-side evidence shapes now live in ./billing.ts. They are re-exported
@@ -333,6 +334,7 @@ export class Store {
   private db: DatabaseSync;
   private readonly databasePath: string;
   private epistemicLedger!: EpistemicLedger;
+  private economicLedger!: EconomicLedger;
   private migrationBackupEvidence: { path: string; sha256: string } | null = null;
 
   constructor(path: string) {
@@ -414,6 +416,7 @@ export class Store {
       // caller can persist canonical evidence/claims alongside the operational
       // ledger without introducing a second database or transaction boundary.
       this.epistemicLedger = new EpistemicLedger(this.db);
+      this.economicLedger = new EconomicLedger(this.db);
     } catch {
       let closeConfirmed = true;
       try {
@@ -481,6 +484,11 @@ export class Store {
   /** Canonical Evidence/Claim/Derivation ledger on this Store's SQLite handle. */
   epistemic(): EpistemicLedger {
     return this.epistemicLedger;
+  }
+
+  /** Exact-Money economic event ledger on this Store's SQLite handle. */
+  economic(): EconomicLedger {
+    return this.economicLedger;
   }
 
   /** Create a verified, non-destructive snapshot of this Store's ledger. */

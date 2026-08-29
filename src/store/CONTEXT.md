@@ -56,6 +56,9 @@ two domain callers goes in `rows.ts`.
 - **The epistemic ledger shares this connection.** `Store.epistemic()` exposes
   canonical Evidence/Claim/Derivation persistence on the same SQLite handle;
   its schema and append-only triggers are still owned by `schema.ts`.
+- **The economic ledger shares this connection.** `Store.economic()` exposes
+  exact-Money immutable events and deterministic basis-separated projections;
+  event DDL and append-only triggers remain owned by `schema.ts`.
 - **Billing kernel issuance is explicit and additive.** `issueBillingImportToKernel()`
   translates a validated operator export through exact `Money` into canonical
   Evidence and billed Claims; `issueOpenAiCostsObservationToKernel()` does the
