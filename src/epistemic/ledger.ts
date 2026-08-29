@@ -10,6 +10,7 @@
 
 import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
+import { initializeEpistemicSchema } from '../store/schema.ts';
 import { claim, type Claim } from './claim.ts';
 import { evidence, type Evidence } from './evidence.ts';
 import {
@@ -62,110 +63,6 @@ interface StoredEdgeRow {
   to_id: string;
   relation: string;
 }
-
-const SCHEMA = `
-PRAGMA foreign_keys = ON;
-
-CREATE TABLE IF NOT EXISTS epistemic_nodes (
-  node_id TEXT PRIMARY KEY,
-  node_kind TEXT NOT NULL,
-  available_at TEXT NOT NULL,
-  epistemic TEXT NOT NULL,
-  supersedes_json TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS epistemic_evidence (
-  evidence_id TEXT PRIMARY KEY,
-  evidence_json TEXT NOT NULL,
-  evidence_digest TEXT NOT NULL,
-  FOREIGN KEY (evidence_id) REFERENCES epistemic_nodes(node_id)
-);
-
-CREATE TABLE IF NOT EXISTS epistemic_claims (
-  claim_id TEXT PRIMARY KEY,
-  claim_json TEXT NOT NULL,
-  claim_digest TEXT NOT NULL,
-  FOREIGN KEY (claim_id) REFERENCES epistemic_nodes(node_id)
-);
-
-CREATE TABLE IF NOT EXISTS epistemic_derivations (
-  derivation_id TEXT PRIMARY KEY,
-  derivation_json TEXT NOT NULL,
-  derivation_digest TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS epistemic_edges (
-  from_id TEXT NOT NULL,
-  to_id TEXT NOT NULL,
-  relation TEXT NOT NULL,
-  PRIMARY KEY (from_id, to_id, relation),
-  FOREIGN KEY (from_id) REFERENCES epistemic_nodes(node_id),
-  FOREIGN KEY (to_id) REFERENCES epistemic_nodes(node_id)
-);
-
-CREATE TABLE IF NOT EXISTS epistemic_revocations (
-  event_id TEXT PRIMARY KEY,
-  target_id TEXT NOT NULL,
-  recorded_at TEXT NOT NULL,
-  reason TEXT NOT NULL,
-  FOREIGN KEY (target_id) REFERENCES epistemic_nodes(node_id)
-);
-
-CREATE TRIGGER IF NOT EXISTS epistemic_nodes_append_only_update
-BEFORE UPDATE ON epistemic_nodes
-BEGIN SELECT RAISE(ABORT, 'epistemic ledger is append-only'); END;
-CREATE TRIGGER IF NOT EXISTS epistemic_nodes_append_only_insert
-BEFORE INSERT ON epistemic_nodes WHEN EXISTS (SELECT 1 FROM epistemic_nodes WHERE node_id = NEW.node_id)
-BEGIN SELECT RAISE(ABORT, 'epistemic ledger is append-only'); END;
-CREATE TRIGGER IF NOT EXISTS epistemic_nodes_append_only_delete
-BEFORE DELETE ON epistemic_nodes
-BEGIN SELECT RAISE(ABORT, 'epistemic ledger is append-only'); END;
-CREATE TRIGGER IF NOT EXISTS epistemic_evidence_append_only_update
-BEFORE UPDATE ON epistemic_evidence
-BEGIN SELECT RAISE(ABORT, 'epistemic ledger is append-only'); END;
-CREATE TRIGGER IF NOT EXISTS epistemic_evidence_append_only_insert
-BEFORE INSERT ON epistemic_evidence WHEN EXISTS (SELECT 1 FROM epistemic_evidence WHERE evidence_id = NEW.evidence_id)
-BEGIN SELECT RAISE(ABORT, 'epistemic ledger is append-only'); END;
-CREATE TRIGGER IF NOT EXISTS epistemic_evidence_append_only_delete
-BEFORE DELETE ON epistemic_evidence
-BEGIN SELECT RAISE(ABORT, 'epistemic ledger is append-only'); END;
-CREATE TRIGGER IF NOT EXISTS epistemic_claims_append_only_update
-BEFORE UPDATE ON epistemic_claims
-BEGIN SELECT RAISE(ABORT, 'epistemic ledger is append-only'); END;
-CREATE TRIGGER IF NOT EXISTS epistemic_claims_append_only_insert
-BEFORE INSERT ON epistemic_claims WHEN EXISTS (SELECT 1 FROM epistemic_claims WHERE claim_id = NEW.claim_id)
-BEGIN SELECT RAISE(ABORT, 'epistemic ledger is append-only'); END;
-CREATE TRIGGER IF NOT EXISTS epistemic_claims_append_only_delete
-BEFORE DELETE ON epistemic_claims
-BEGIN SELECT RAISE(ABORT, 'epistemic ledger is append-only'); END;
-CREATE TRIGGER IF NOT EXISTS epistemic_derivations_append_only_update
-BEFORE UPDATE ON epistemic_derivations
-BEGIN SELECT RAISE(ABORT, 'epistemic ledger is append-only'); END;
-CREATE TRIGGER IF NOT EXISTS epistemic_derivations_append_only_insert
-BEFORE INSERT ON epistemic_derivations WHEN EXISTS (SELECT 1 FROM epistemic_derivations WHERE derivation_id = NEW.derivation_id)
-BEGIN SELECT RAISE(ABORT, 'epistemic ledger is append-only'); END;
-CREATE TRIGGER IF NOT EXISTS epistemic_derivations_append_only_delete
-BEFORE DELETE ON epistemic_derivations
-BEGIN SELECT RAISE(ABORT, 'epistemic ledger is append-only'); END;
-CREATE TRIGGER IF NOT EXISTS epistemic_edges_append_only_update
-BEFORE UPDATE ON epistemic_edges
-BEGIN SELECT RAISE(ABORT, 'epistemic ledger is append-only'); END;
-CREATE TRIGGER IF NOT EXISTS epistemic_edges_append_only_insert
-BEFORE INSERT ON epistemic_edges WHEN EXISTS (SELECT 1 FROM epistemic_edges WHERE from_id = NEW.from_id AND to_id = NEW.to_id AND relation = NEW.relation)
-BEGIN SELECT RAISE(ABORT, 'epistemic ledger is append-only'); END;
-CREATE TRIGGER IF NOT EXISTS epistemic_edges_append_only_delete
-BEFORE DELETE ON epistemic_edges
-BEGIN SELECT RAISE(ABORT, 'epistemic ledger is append-only'); END;
-CREATE TRIGGER IF NOT EXISTS epistemic_revocations_append_only_update
-BEFORE UPDATE ON epistemic_revocations
-BEGIN SELECT RAISE(ABORT, 'epistemic ledger is append-only'); END;
-CREATE TRIGGER IF NOT EXISTS epistemic_revocations_append_only_insert
-BEFORE INSERT ON epistemic_revocations WHEN EXISTS (SELECT 1 FROM epistemic_revocations WHERE event_id = NEW.event_id)
-BEGIN SELECT RAISE(ABORT, 'epistemic ledger is append-only'); END;
-CREATE TRIGGER IF NOT EXISTS epistemic_revocations_append_only_delete
-BEFORE DELETE ON epistemic_revocations
-BEGIN SELECT RAISE(ABORT, 'epistemic ledger is append-only'); END;
-`;
 
 function nonEmpty(value: unknown, label: string): string {
   if (typeof value !== 'string') throw new Error(`${label} must be non-empty`);
@@ -240,7 +137,7 @@ export class EpistemicLedger {
 
   public constructor(db: DatabaseSync) {
     this.db = db;
-    this.db.exec(SCHEMA);
+    initializeEpistemicSchema(this.db);
   }
 
   private transaction<T>(work: () => T): T {

@@ -618,6 +618,65 @@ CREATE TABLE IF NOT EXISTS causal_clock_state (
 `;
 
 /**
+ * Trusted Epistemic Kernel persistence. Keeping these definitions beside the
+ * operational schema preserves the repository's one-writer DDL rule; the
+ * ledger domain only issues DML against these tables.
+ */
+const EPISTEMIC_SCHEMA = `
+CREATE TABLE IF NOT EXISTS epistemic_nodes (
+  node_id TEXT PRIMARY KEY,
+  node_kind TEXT NOT NULL,
+  available_at TEXT NOT NULL,
+  epistemic TEXT NOT NULL,
+  supersedes_json TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_epistemic_nodes_available ON epistemic_nodes(available_at, node_id);
+
+CREATE TABLE IF NOT EXISTS epistemic_evidence (
+  evidence_id TEXT PRIMARY KEY,
+  evidence_json TEXT NOT NULL,
+  evidence_digest TEXT NOT NULL,
+  FOREIGN KEY (evidence_id) REFERENCES epistemic_nodes(node_id)
+);
+
+CREATE TABLE IF NOT EXISTS epistemic_claims (
+  claim_id TEXT PRIMARY KEY,
+  claim_json TEXT NOT NULL,
+  claim_digest TEXT NOT NULL,
+  FOREIGN KEY (claim_id) REFERENCES epistemic_nodes(node_id)
+);
+
+CREATE TABLE IF NOT EXISTS epistemic_derivations (
+  derivation_id TEXT PRIMARY KEY,
+  derivation_json TEXT NOT NULL,
+  derivation_digest TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS epistemic_edges (
+  from_id TEXT NOT NULL,
+  to_id TEXT NOT NULL,
+  relation TEXT NOT NULL,
+  PRIMARY KEY (from_id, to_id, relation),
+  FOREIGN KEY (from_id) REFERENCES epistemic_nodes(node_id),
+  FOREIGN KEY (to_id) REFERENCES epistemic_nodes(node_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_epistemic_edges_from ON epistemic_edges(from_id, to_id, relation);
+CREATE INDEX IF NOT EXISTS idx_epistemic_edges_to ON epistemic_edges(to_id, from_id, relation);
+
+CREATE TABLE IF NOT EXISTS epistemic_revocations (
+  event_id TEXT PRIMARY KEY,
+  target_id TEXT NOT NULL,
+  recorded_at TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  FOREIGN KEY (target_id) REFERENCES epistemic_nodes(node_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_epistemic_revocations_target ON epistemic_revocations(target_id, event_id);
+`;
+
+/**
  * Configure connection-local SQLite behavior before any schema inspection or
  * causal write.  INSERT OR REPLACE implements conflict resolution by deleting
  * the conflicting row first; SQLite only runs that delete through the normal
@@ -755,6 +814,55 @@ function installCausalImmutability(db: DatabaseSync): void {
       'CREATE TRIGGER IF NOT EXISTS ' + deleteTrigger +
       ' BEFORE DELETE ON ' + table +
       ' BEGIN SELECT RAISE(ABORT, \'causal evidence is append-only\'); END',
+    ).run();
+  }
+}
+
+/**
+ * Create and protect the Trusted Epistemic Kernel tables. This is exported so
+ * the standalone kernel ledger can initialize an isolated DatabaseSync handle,
+ * while all DDL remains physically owned by this schema module.
+ */
+export function initializeEpistemicSchema(db: DatabaseSync): void {
+  db.prepare('PRAGMA foreign_keys = ON').run();
+  runScript(db, EPISTEMIC_SCHEMA);
+  const tables = [
+    'epistemic_nodes',
+    'epistemic_evidence',
+    'epistemic_claims',
+    'epistemic_derivations',
+    'epistemic_edges',
+    'epistemic_revocations',
+  ];
+  for (const table of tables) {
+    const updateTrigger = 'epistemic_' + table.replace('epistemic_', '') + '_append_only_update';
+    const deleteTrigger = 'epistemic_' + table.replace('epistemic_', '') + '_append_only_delete';
+    db.prepare(
+      'CREATE TRIGGER IF NOT EXISTS ' + updateTrigger +
+      ' BEFORE UPDATE ON ' + table +
+      ' BEGIN SELECT RAISE(ABORT, \'epistemic ledger is append-only\'); END',
+    ).run();
+    db.prepare(
+      'CREATE TRIGGER IF NOT EXISTS ' + deleteTrigger +
+      ' BEFORE DELETE ON ' + table +
+      ' BEGIN SELECT RAISE(ABORT, \'epistemic ledger is append-only\'); END',
+    ).run();
+  }
+  const duplicateGuards: ReadonlyArray<{ table: string; key: string }> = [
+    { table: 'epistemic_nodes', key: 'node_id = NEW.node_id' },
+    { table: 'epistemic_evidence', key: 'evidence_id = NEW.evidence_id' },
+    { table: 'epistemic_claims', key: 'claim_id = NEW.claim_id' },
+    { table: 'epistemic_derivations', key: 'derivation_id = NEW.derivation_id' },
+    { table: 'epistemic_edges', key: 'from_id = NEW.from_id AND to_id = NEW.to_id AND relation = NEW.relation' },
+    { table: 'epistemic_revocations', key: 'event_id = NEW.event_id' },
+  ];
+  for (const guard of duplicateGuards) {
+    const trigger = 'epistemic_' + guard.table.replace('epistemic_', '') + '_append_only_insert';
+    db.prepare(
+      'CREATE TRIGGER IF NOT EXISTS ' + trigger +
+      ' BEFORE INSERT ON ' + guard.table +
+      ' WHEN EXISTS (SELECT 1 FROM ' + guard.table + ' WHERE ' + guard.key + ')' +
+      ' BEGIN SELECT RAISE(ABORT, \'epistemic ledger is append-only\'); END',
     ).run();
   }
 }
@@ -1614,6 +1722,7 @@ export function initializeSchema(
       throw new Error('causal v2 schema validation failed: CAUSAL_V2_UNRECOGNIZED_PREDECESSOR');
     }
     runScript(db, SCHEMA);
+    initializeEpistemicSchema(db);
     migrate(db);
     installCausalImmutability(db);
     installBillingMappingImmutability(db);

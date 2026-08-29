@@ -14,7 +14,7 @@ above this directory.
 | File | Owns |
 | --- | --- |
 | `db.ts` | the `Store` facade: connection, requests, sessions, projects/aliases, proposals, commits, gate signals, session units, maintenance |
-| `schema.ts` | every `CREATE TABLE`, every guarded `ALTER`, and `runScript` |
+| `schema.ts` | every `CREATE TABLE`, every guarded `ALTER`, kernel tables/triggers, and `runScript` |
 | `billing.ts` | provider evidence imports, OpenAI Costs observations, provider scope declarations, reconciliation |
 | `allocation.ts` | cost centres, the versioned rule book, allocation runs |
 | `realization.ts` | realized-value snapshots, receipts, repricing and its re-attribution |
@@ -53,6 +53,9 @@ two domain callers goes in `rows.ts`.
   `VACUUM INTO`, quick/foreign-key checks, a schema fingerprint, and a redacted
   manifest. `Store.restoreBackup()` refuses existing destinations and never
   overwrites the active database path.
+- **The epistemic ledger shares this connection.** `Store.epistemic()` exposes
+  canonical Evidence/Claim/Derivation persistence on the same SQLite handle;
+  its schema and append-only triggers are still owned by `schema.ts`.
 
 ## Invariants
 
