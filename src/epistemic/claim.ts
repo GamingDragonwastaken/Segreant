@@ -81,6 +81,9 @@ export interface ClaimInput {
   readonly assumptions?: readonly string[];
   readonly uncertainty?: UncertaintyInput | null;
   readonly causalStatus: CausalityStatus;
+  /** Optional stored aliases; when supplied they must match profile exactly. */
+  readonly monetaryBasis?: ClaimProfile['monetaryBasis'];
+  readonly finality?: ClaimProfile['finality'];
   readonly issuedAt: Instant;
   readonly supersedes?: readonly string[];
   readonly supersededBy?: string | null;
@@ -120,7 +123,7 @@ const CLAIM_KEYS = new Set([
   'id', 'proposition', 'subject', 'scope', 'grain', 'time', 'epistemic', 'profile',
   'measurementModelRef', 'evidenceIds', 'derivationRule', 'derivationVersion', 'assumptions',
   'uncertainty', 'causalStatus', 'issuedAt', 'supersedes', 'supersededBy', 'revocation',
-  'decisionCertificateIds', 'schemaVersion',
+  'decisionCertificateIds', 'schemaVersion', 'monetaryBasis', 'finality',
 ]);
 const PROPOSITION_KEYS = new Set(['predicate', 'value']);
 const TIME_KEYS = new Set(['validTime', 'asOf']);
@@ -283,6 +286,12 @@ export function claim(input: ClaimInput): Claim {
   if (epistemic !== normalizedProfile.epistemic) throw new Error('claim epistemic must match profile.epistemic');
   const causalStatus = member(value.causalStatus, CAUSALITY, 'causal status');
   if (causalStatus !== normalizedProfile.causality) throw new Error('claim causalStatus must match profile.causality');
+  if (value.monetaryBasis !== undefined && value.monetaryBasis !== normalizedProfile.monetaryBasis) {
+    throw new Error('claim monetaryBasis must match profile.monetaryBasis');
+  }
+  if (value.finality !== undefined && value.finality !== normalizedProfile.finality) {
+    throw new Error('claim finality must match profile.finality');
+  }
 
   const measurementModelRef = optionalText(value.measurementModelRef, 'measurementModelRef');
   if (normalizedProfile.measurement !== 'proxy_unvalidated' && measurementModelRef === null) {

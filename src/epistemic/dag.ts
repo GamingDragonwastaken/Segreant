@@ -288,7 +288,15 @@ export function asOfGraph(dag: EpistemicDag, asOf: Instant): EpistemicDag {
 }
 
 function dependencyProjectionEdges(dag: EpistemicDag): DependencyEdge[] {
-  return dependencyEdges(dag).map((edge) => ({ from: edge.from, to: edge.to }));
+  const seen = new Set<string>();
+  const projected: DependencyEdge[] = [];
+  for (const edge of dependencyEdges(dag)) {
+    const key = `${edge.from}\u0000${edge.to}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    projected.push({ from: edge.from, to: edge.to });
+  }
+  return projected;
 }
 
 export function projectRevocation(dag: EpistemicDag, revokedNodes: ReadonlyArray<string>): RevocationProjection {

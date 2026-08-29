@@ -7,6 +7,7 @@
 - canonical immutable Claim envelopes with typed propositions, profile aliases, uncertainty and derivation dependencies;
 - canonical immutable Derivation records with explicit transformations, coordinate changes and witness identities;
 - immutable Evidence/Claim dependency DAG snapshots with as-of views, assumption/measurement queries, conflict paths, supersession links and revocation projections;
+- SQLite-backed append-only kernel ledger with canonical JSON/digest revalidation, atomic dependency writes and revocation-event replay;
 - directed prerequisite-to-dependent edges;
 - revocation events supplied by an append-only store or protocol layer.
 
@@ -31,6 +32,7 @@
 - Coordinate witness kinds must match exact source/target coordinates; non-coordinate witnesses cannot smuggle coordinate changes.
 - Dependency edges are prerequisite-to-dependent and acyclic; supersession is lifecycle metadata, not a revocation dependency.
 - As-of views never expose nodes unavailable at the requested boundary; revocation returns traceable projections and never deletes history.
+- Persistent inserts are exact-replay idempotent but divergent same-ID payloads and `INSERT OR REPLACE` attempts fail closed through database triggers.
 
 ## Verify
 
@@ -40,4 +42,5 @@ node --test --experimental-strip-types test/epistemic-evidence.test.ts
 node --test --experimental-strip-types test/epistemic-claim.test.ts
 node --test --experimental-strip-types test/epistemic-derivation-object.test.ts test/epistemic-derivation.test.ts
 node --test --experimental-strip-types test/epistemic-dag.test.ts
+node --test --experimental-strip-types test/epistemic-ledger.test.ts
 ```
