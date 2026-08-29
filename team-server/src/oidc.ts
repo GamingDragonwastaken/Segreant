@@ -36,6 +36,16 @@ export interface OidcConfig {
   jwksCacheTtlMs?: number;
 }
 
+/**
+ * Verification dependencies that are deliberately separate from deploy-time
+ * OIDC configuration. Keeping the clock here means latency in discovery/JWKS
+ * work cannot change the semantics of a boundary test, while production still
+ * defaults to the real wall clock.
+ */
+export interface OidcVerificationContext {
+  nowEpochSeconds?: () => number;
+}
+
 interface Jwk {
   kty: string;
   kid?: string;
@@ -182,8 +192,17 @@ function findCandidates(jwks: Jwks, kid: string | undefined): Jwk[] {
   return kid ? jwks.keys.filter((k) => k.kid === kid) : jwks.keys;
 }
 
+function verifierNow(context: OidcVerificationContext): number | null {
+  const now = context.nowEpochSeconds?.() ?? Math.floor(Date.now() / 1000);
+  return Number.isSafeInteger(now) ? now : null;
+}
+
 /** Verify an OIDC ID token (JWT) against the configured issuer/audience/JWKS. */
-export async function verifyIdToken(token: string, cfg: OidcConfig): Promise<VerifyResult> {
+export async function verifyIdToken(
+  token: string,
+  cfg: OidcConfig,
+  context: OidcVerificationContext = {},
+): Promise<VerifyResult> {
   const parts = token.split('.');
   if (parts.length !== 3) return { valid: false, reason: 'malformed token: expected 3 dot-separated segments' };
   const [headerB64, payloadB64, sigB64] = parts as [string, string, string];
@@ -223,8 +242,6 @@ export async function verifyIdToken(token: string, cfg: OidcConfig): Promise<Ver
   const kid = typeof header.kid === 'string' ? header.kid : undefined;
   let candidates = findCandidates(jwks, kid);
   if (candidates.length === 0) {
-    // The cached JWKS may simply be stale (an IdP key rotation landed mid-TTL)
-    // — force one refresh before concluding the key genuinely doesn't exist.
     try {
       jwks = await fetchJwks(jwksUrl, cacheTtlMs, true);
     } catch (err) {
@@ -258,7 +275,8 @@ export async function verifyIdToken(token: string, cfg: OidcConfig): Promise<Ver
   }
   if (!sigOk) return { valid: false, reason: 'signature mismatch' };
 
-  const now = Math.floor(Date.now() / 1000);
+  const now = verifierNow(context);
+  if (now === null) return { valid: false, reason: 'OIDC verification clock returned invalid epoch seconds' };
   if (typeof payload['exp'] !== 'number' || payload['exp'] <= now) {
     return { valid: false, reason: 'token expired or missing exp' };
   }
@@ -277,16 +295,10 @@ export async function verifyIdToken(token: string, cfg: OidcConfig): Promise<Ver
   if (!audMatches) {
     return { valid: false, reason: `audience mismatch: token aud=${JSON.stringify(aud)}, expected ${cfg.clientId}` };
   }
-  // OpenID Connect requires `azp` when an ID token names multiple audiences,
-  // so a token minted for several applications cannot be replayed here merely
-  // because our client ID appears somewhere in its `aud` array.
   if (Array.isArray(aud) && aud.length > 1 && payload['azp'] !== cfg.clientId) {
     return { valid: false, reason: `authorized party mismatch: token azp=${JSON.stringify(payload['azp'])}, expected ${cfg.clientId} for multiple audiences` };
   }
 
-  // OIDC `sub` is the stable identifier whose uniqueness is scoped to the
-  // issuer. Do not fall back to email: email can change, be absent, and is not
-  // the exact identity an operator configures for aggregate authorization.
   const subject = payload['sub'];
   if (typeof subject !== 'string' || subject.length === 0) {
     return { valid: false, reason: 'token has no non-empty OIDC subject claim (sub)' };
