@@ -8,6 +8,7 @@ Controlling architecture:
 
 - `FISCUS_FOUNDATIONAL_AUDIT_II_COMPLETE.md`, SHA-256 `0092098ce085a63006bfcd6d63f5fca7f5dc2d25b4f7b112daa1dd0d8bdeb8cc`.
 - `docs/program/FISCUS-REMAINING-WORK-AUDIT.md` for the reconciled post-first-tranche remaining-work state.
+- `docs/program/LUNA-RESUME-PROTOCOL.md` for mandatory local-repository resynchronization before Luna/Codex resumes implementation.
 - The earlier Magnum Opus Master Plan remains binding where not superseded by Audit II.
 
 ## Current baseline
@@ -17,9 +18,12 @@ Controlling architecture:
 - Original reconstruction starting SHA: `31577d5b112653e5aa4dff5a0bdaae9fd58a982c`
 - Code baseline reconciled by the remaining-work audit: `abbcddc6ff5783e9d8da1b57dcc566da1e3256c5`
 - Remaining-work audit commit: `5e5a82843154a6fd04e0017538919108c5ff06f1`
+- Luna resume-protocol commit: `5c4de94cf7af0a218ecd10946ac91577fdd9eae7`
 - Base high-assurance PR: #8 (`codex/high-assurance-foundation` -> `main`)
 - Reconstruction review PR: #9 against `codex/high-assurance-foundation`
 - Verification-only PR: #10 against `main`; do not merge it merely because it exists.
+
+The exact remote reconstruction SHA must always be re-read after `git fetch`; documentation/checkpoint commits can move the branch beyond the code baseline above.
 
 ## Program phase
 
@@ -41,6 +45,7 @@ Controlling architecture:
 - [x] Legacy realization lower bound no longer counts unknown required gates as confirmed.
 - [x] Non-coding outcomes removed from the fake coding lifecycle funnel and moved onto a domain-neutral OutcomeContract.
 - [x] Reconciled remaining-work audit created.
+- [x] Mandatory Luna/Codex local-resynchronization protocol created so future local work builds on the remote reconstruction history.
 
 ## Current verification state
 
@@ -59,6 +64,7 @@ Do not weaken the new invariants merely to restore green CI.
 
 ## Exact next actions
 
+0. Before editing, follow `docs/program/LUNA-RESUME-PROTOCOL.md`: salvage any unique local work, `git fetch --all --prune`, align the local checkout to the exact current `origin/gpt56/magnum-opus-reconstruction` history, verify local/remote SHA identity, then build/test from that synchronized state.
 1. Verify exact remote head and current CI before writing code.
 2. Implement the already-RED robust decision module.
 3. Implement the already-RED transitive revocation module.
