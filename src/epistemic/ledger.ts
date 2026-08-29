@@ -28,6 +28,7 @@ import {
 } from './dag.ts';
 import { EPISTEMIC_STATES } from './state.ts';
 import { derivation, type Derivation, type DerivationInput } from './derivation.ts';
+import { canonicalJson } from './serialization.ts';
 import { instant, type Instant } from './time.ts';
 
 export type AppendResult = 'inserted' | 'duplicate';
@@ -104,13 +105,8 @@ function normalizeNodeForLedger(input: DagNodeInput): DagNode {
 }
 
 function json(value: unknown, label: string): string {
-  try {
-    const encoded = JSON.stringify(value);
-    if (encoded === undefined) throw new Error('undefined is not serializable');
-    return encoded;
-  } catch (error) {
-    throw new Error(`${label} is not serializable: ${error instanceof Error ? error.message : String(error)}`);
-  }
+  try { return canonicalJson(value); }
+  catch (error) { throw new Error(`${label} is not serializable: ${error instanceof Error ? error.message : String(error)}`); }
 }
 
 function digest(value: string): string {
