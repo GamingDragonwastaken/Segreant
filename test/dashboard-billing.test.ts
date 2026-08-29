@@ -69,7 +69,7 @@ test('GET /api/billing: empty evidence remains explicitly separate and unresolve
         status: { latestRun: unknown };
         coverage: unknown;
       };
-      kernel: { kind: string; claims: unknown[]; observedClaims: unknown[] };
+      kernel: { kind: string; claims: unknown[]; observedClaims: unknown[]; reconciliationClaims: unknown[] };
     };
     assert.equal(body.evidence.kind, 'provider_billing_evidence');
     assert.equal(body.evidence.trust, 'operator_supplied_unverified');
@@ -85,6 +85,7 @@ test('GET /api/billing: empty evidence remains explicitly separate and unresolve
     assert.equal(body.kernel.kind, 'trusted_epistemic_kernel_billing');
     assert.deepEqual(body.kernel.claims, []);
     assert.deepEqual(body.kernel.observedClaims, []);
+    assert.deepEqual(body.kernel.reconciliationClaims, []);
     assert.equal(body.mapping.coverageStatus, 'no_records');
     assert.equal(body.mapping.reconciliationStatus, 'blocked_no_records');
     assert.equal(body.mapping.totalRecordCount, 0);

@@ -149,6 +149,7 @@ export interface BillingPayload {
     kind: string;
     claims: BillingKernelClaimSummary[];
     observedClaims: BillingKernelClaimSummary[];
+    reconciliationClaims: BillingKernelClaimSummary[];
   };
   /**
    * Optional because a payload predating this field must not read as `ready`.

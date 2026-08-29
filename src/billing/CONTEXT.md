@@ -15,6 +15,8 @@
   when both provider and local-capture evidence IDs are supplied. Complete
   direct OpenAI Costs snapshots issue separate provider-observed Evidence and
   Claims; they never become billed merely because the endpoint is authoritative.
+  A recorded reconciliation can persist the provider, local-capture and mixed
+  residual Claims as one resumable kernel issuance; CLI `--apply` uses that path.
 
 ## Guarantees
 

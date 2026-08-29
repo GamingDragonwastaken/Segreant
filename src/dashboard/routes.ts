@@ -416,6 +416,7 @@ export function handleBilling({ res, store }: RouteContext): void {
         kind: 'trusted_epistemic_kernel_billing',
         claims: store.billingKernelClaims(25),
         observedClaims: store.openAiCostsKernelClaims(25),
+        reconciliationClaims: store.billingReconciliationKernelClaims(25),
       },
       // Readiness is served BEFORE a credential is minted, which is the only
       // moment it is useful. `directOpenAiCosts.coverage` below is the

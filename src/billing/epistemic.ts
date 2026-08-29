@@ -14,7 +14,7 @@ import { claimProfile } from '../epistemic/profile.ts';
 import { grain } from '../epistemic/grain.ts';
 import { scope } from '../epistemic/scope.ts';
 import { instant, interval, type Instant } from '../epistemic/time.ts';
-import { addMoney, money, moneyToJson, type EconomicBasis, type Money } from '../economics/money.ts';
+import { addMoney, compareMoney, money, moneyToJson, type EconomicBasis, type Money } from '../economics/money.ts';
 import type { ReconciliationRun } from './reconcile.ts';
 import type { BillingEvidenceRecord, BillingImportRun, OpenAiCostsObservationLine, OpenAiCostsObservationRun } from '../store/billing.ts';
 
@@ -46,6 +46,9 @@ export interface BillingReconciliationClaimInput {
   /** IDs of the provider and local-capture Evidence records supporting the comparison. */
   readonly evidenceIds: readonly string[];
   readonly issuedAt: Instant;
+  readonly reconciliationRunId?: string;
+  /** Provider-side basis; legacy callers default to billed for imported invoice lines. */
+  readonly providerBasis?: 'billed' | 'provider_observed';
 }
 
 export interface OpenAiCostsKernelIssuanceInput {
@@ -66,6 +69,30 @@ export interface OpenAiCostsKernelPersistenceResult {
   readonly observationEvidence: Readonly<{ inserted: number; duplicate: number }>;
   readonly observationClaims: Readonly<{ inserted: number; duplicate: number }>;
   readonly aggregateClaim: Readonly<{ id: string; result: KernelAppendResult }>;
+}
+
+export interface OpenAiReconciliationKernelIssuanceInput {
+  readonly observation: OpenAiCostsKernelIssuanceInput;
+  readonly reconciliation: ReconciliationRun;
+  readonly reconciliationRunId: string;
+  readonly issuedAt: Instant;
+}
+
+export interface OpenAiReconciliationKernelIssuance {
+  readonly provider: OpenAiCostsKernelIssuance;
+  readonly localEvidence: Evidence;
+  readonly reconciliationClaim: Claim;
+}
+
+export interface OpenAiReconciliationKernelPersistenceResult {
+  readonly reconciliationRunId: string;
+  readonly provider: Readonly<{
+    observationEvidence: { inserted: number; duplicate: number };
+    observationClaims: { inserted: number; duplicate: number };
+    aggregateClaim: { id: string; result: KernelAppendResult };
+  }>;
+  readonly localEvidence: Readonly<{ id: string; result: KernelAppendResult }>;
+  readonly reconciliationClaim: Readonly<{ id: string; result: KernelAppendResult }>;
 }
 
 const BILLING_COVERAGE = new Set(['unknown', 'partial', 'complete']);
@@ -513,6 +540,77 @@ export function buildOpenAiCostsKernelIssuance(input: OpenAiCostsKernelIssuanceI
   return Object.freeze({ observationEvidence: Object.freeze(observationEvidence), observationClaims: Object.freeze(observationClaims), aggregateClaim, total });
 }
 
+function buildLocalCaptureEvidence(reconciliation: ReconciliationRun, reconciliationRunId: string, issuedAt: Instant): Evidence {
+  const validTime = intervalFor(reconciliation.periodStartMs, reconciliation.periodEndMs, 'reconciliation period');
+  const amount = canonicalMoneyFromMicros(reconciliation.localCapturedMicros, 'estimated', 'local captured total');
+  const requestCount = reconciliation.days.reduce((total, day) => {
+    if (!Number.isSafeInteger(day.localRequestCount) || day.localRequestCount < 0) throw new Error('reconciliation local request count is invalid');
+    return total + day.localRequestCount;
+  }, 0);
+  return evidence({
+    id: `evidence:billing:local-capture:${reconciliationRunId}`,
+    evidenceType: 'billing.local_capture',
+    sourceIdentity: 'fiscus:request-ledger',
+    sourceClass: 'fiscus_local_request_ledger',
+    payload: {
+      amount: { ...moneyToJson(amount) },
+      requestCount,
+      declaredScopeId: reconciliation.declaredScopeId,
+      providerProjectRef: reconciliation.providerProjectRef,
+      observationRunId: reconciliation.observationRunId,
+      reconciliationRunId,
+    },
+    scope: scope({ provider: 'openai', declaredScopeId: reconciliation.declaredScopeId, providerProjectRef: reconciliation.providerProjectRef }),
+    grain: grain(['provider_project_period']),
+    occurredAt: validTime.from,
+    validTime,
+    observedAt: issuedAt,
+    recordedAt: issuedAt,
+    integrity: 'verified',
+    authenticity: 'self_asserted',
+    completeness: {
+      status: 'partial',
+      method: 'declared_route_capture',
+      coveredEventTypes: ['billing.local_capture'],
+      coveredScope: scope({ provider: 'openai', declaredScopeId: reconciliation.declaredScopeId, providerProjectRef: reconciliation.providerProjectRef }),
+      coveredTime: validTime,
+    },
+    measurementModelRef: null,
+    monetaryBasis: 'estimated',
+    assumptions: [...reconciliation.conditions, 'Local capture covers only requests observed on the declared route.'],
+    supersedes: [],
+    supersededBy: null,
+    revocation: null,
+    schemaVersion: 1,
+    sensitivity: 'internal',
+    redaction: 'none',
+  });
+}
+
+/** Build provider, local-capture and residual Claims for one recorded reconciliation. */
+export function buildOpenAiReconciliationKernelIssuance(input: OpenAiReconciliationKernelIssuanceInput): OpenAiReconciliationKernelIssuance {
+  const reconciliationRunId = nonEmpty(input.reconciliationRunId, 'reconciliation run id');
+  const provider = buildOpenAiCostsKernelIssuance(input.observation);
+  const run = input.reconciliation;
+  if (run.observationRunId !== input.observation.run.observationRunId || run.declaredScopeId !== input.observation.run.declaredScopeId || run.providerProjectRef !== input.observation.run.providerProjectRef || run.periodStartMs !== input.observation.run.periodStartMs || run.periodEndMs !== input.observation.run.periodEndMs) {
+    throw new Error('reconciliation is not bound to the provider observation run');
+  }
+  if (run.providerSourceKind !== input.observation.run.sourceKind) throw new Error('reconciliation provider source kind does not match its observation run');
+  const providerTotal = canonicalMoneyFromMicros(run.providerReportedMicros, 'provider_observed', 'reconciliation provider total');
+  if (compareMoney(provider.total, providerTotal) !== 0) throw new Error('reconciliation provider total does not match retained provider observations');
+  const issuedAt = canonicalInstantString(input.issuedAt, 'reconciliation claim issuedAt');
+  const localEvidence = buildLocalCaptureEvidence(run, reconciliationRunId, issuedAt);
+  const reconciliationClaim = billingReconciliationClaim({
+    id: `claim:billing:reconciliation:${reconciliationRunId}`,
+    run,
+    evidenceIds: [...provider.observationEvidence.map((item) => item.id), localEvidence.id],
+    issuedAt,
+    reconciliationRunId,
+    providerBasis: 'provider_observed',
+  });
+  return Object.freeze({ provider, localEvidence, reconciliationClaim });
+}
+
 function fixedMicrosDifference(value: number, leftBasis: string, rightBasis: string) {
   if (!Number.isSafeInteger(value)) throw new Error('reconciliation difference must be a safe integer microdollar amount');
   return Object.freeze({ coefficient: String(value), scale: 6, currency: 'USD' as const, leftBasis, rightBasis });
@@ -525,13 +623,13 @@ export function billingReconciliationClaim(input: BillingReconciliationClaimInpu
   if (!Array.isArray(input.evidenceIds) || input.evidenceIds.length === 0) throw new Error('reconciliation claim requires supporting evidence IDs');
   const issuedAt = canonicalInstantString(input.issuedAt, 'reconciliation claim issuedAt');
   const validTime = intervalFor(input.run.periodStartMs, input.run.periodEndMs, 'reconciliation period');
-  const providerReported = canonicalMoneyFromMicros(input.run.providerReportedMicros, 'billed', 'provider reported total');
+  const providerBasis = input.providerBasis ?? 'billed';
+  const providerReported = canonicalMoneyFromMicros(input.run.providerReportedMicros, providerBasis, 'provider reported total');
   const localCaptured = canonicalMoneyFromMicros(input.run.localCapturedMicros, 'estimated', 'local captured total');
   canonicalMoneyFromMicros(input.run.unexplainedVarianceMicros, 'estimated', 'reconciliation residual');
   if (BigInt(input.run.providerReportedMicros) - BigInt(input.run.localCapturedMicros) !== BigInt(input.run.unexplainedVarianceMicros)) {
     throw new Error('reconciliation residual does not conserve provider minus local totals');
   }
-  const authenticity = input.run.providerSourceKind === 'provider_api_pull' ? 'provider_authenticated' : 'self_asserted';
   return claim({
     id: input.id,
     proposition: {
@@ -539,9 +637,10 @@ export function billingReconciliationClaim(input: BillingReconciliationClaimInpu
       value: {
         providerReported: { ...moneyToJson(providerReported) },
         localCaptured: { ...moneyToJson(localCaptured) },
-        unexplainedVariance: fixedMicrosDifference(input.run.unexplainedVarianceMicros, 'billed', 'estimated'),
+        unexplainedVariance: fixedMicrosDifference(input.run.unexplainedVarianceMicros, providerBasis, 'estimated'),
         snapshotStability: input.run.snapshotStability,
         providerSourceKind: input.run.providerSourceKind,
+        ...(input.reconciliationRunId === undefined ? {} : { reconciliationRunId: nonEmpty(input.reconciliationRunId, 'reconciliation run id') }),
       },
     },
     subject: `provider-project:${input.run.providerProjectRef}`,
@@ -550,7 +649,9 @@ export function billingReconciliationClaim(input: BillingReconciliationClaimInpu
     time: { validTime, asOf: issuedAt },
     epistemic: 'supported',
     profile: claimProfile({
-      epistemic: 'supported', integrity: 'verified', authenticity, scope: 'conditional', coverage: 'partial', measurement: 'proxy_unvalidated',
+      // The derived comparison itself is a Fiscus assertion even when its
+      // provider-side input was fetched from an authenticated endpoint.
+      epistemic: 'supported', integrity: 'verified', authenticity: 'self_asserted', scope: 'conditional', coverage: 'partial', measurement: 'proxy_unvalidated',
       causality: 'none', monetaryBasis: 'mixed', finality: 'provisional', decisionFitness: 'not_assessed',
     }),
     measurementModelRef: null,

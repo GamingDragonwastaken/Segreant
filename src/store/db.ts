@@ -42,7 +42,7 @@ import * as causalLineage from './causalLineage.ts';
 import * as causalProducer from './causalProducer.ts';
 import * as backup from './backup.ts';
 import * as realization from './realization.ts';
-import { billingReconciliationClaim, buildBillingKernelIssuance, buildOpenAiCostsKernelIssuance, type BillingKernelPersistenceResult, type BillingReconciliationClaimInput, type OpenAiCostsKernelPersistenceResult } from '../billing/epistemic.ts';
+import { billingReconciliationClaim, buildBillingKernelIssuance, buildOpenAiCostsKernelIssuance, buildOpenAiReconciliationKernelIssuance, type BillingKernelPersistenceResult, type BillingReconciliationClaimInput, type OpenAiCostsKernelPersistenceResult, type OpenAiReconciliationKernelPersistenceResult } from '../billing/epistemic.ts';
 import type {
   RealizationCostSync,
   RealizationUnitRecord,
@@ -107,6 +107,7 @@ export type { BillingMappingCoverage, BillingRecordMapping, ProviderScopeAuthori
 export type { BillingKernelPersistenceResult } from '../billing/epistemic.ts';
 export type { BillingReconciliationClaimInput } from '../billing/epistemic.ts';
 export type { OpenAiCostsKernelPersistenceResult } from '../billing/epistemic.ts';
+export type { OpenAiReconciliationKernelPersistenceResult } from '../billing/epistemic.ts';
 export type {
   AnyCommittedCausalStudyProtocol,
   CausalAssignmentManifestV2,
@@ -1633,6 +1634,45 @@ export class Store {
     });
   }
 
+  /** Persist provider, local-capture, and residual Claims for one recorded reconciliation. */
+  issueOpenAiReconciliationToKernel(reconciliationRunId: string): OpenAiReconciliationKernelPersistenceResult {
+    if (typeof reconciliationRunId !== 'string' || reconciliationRunId.trim().length === 0) throw new Error('reconciliation run id is required');
+    const recorded = this.reconciliationRuns(500).find((candidate) => candidate.reconciliationRunId === reconciliationRunId);
+    if (recorded === undefined) throw new Error(`unknown reconciliation run: ${reconciliationRunId}`);
+    const snapshot = billing.openAiCostsObservationById(this.db, recorded.result.observationRunId);
+    if (snapshot === null) throw new Error(`unknown OpenAI Costs observation run: ${recorded.result.observationRunId}`);
+    if (!Number.isSafeInteger(recorded.computedAtMs)) throw new Error(`reconciliation run ${reconciliationRunId} has an invalid computed timestamp`);
+    const issuedAt = new Date(recorded.computedAtMs).toISOString();
+    const issuance = buildOpenAiReconciliationKernelIssuance({ observation: snapshot, reconciliation: recorded.result, reconciliationRunId, issuedAt });
+    let evidenceInserted = 0;
+    let evidenceDuplicate = 0;
+    for (const item of issuance.provider.observationEvidence) {
+      const result = this.epistemic().appendEvidence(item);
+      if (result === 'inserted') evidenceInserted += 1;
+      else evidenceDuplicate += 1;
+    }
+    let claimInserted = 0;
+    let claimDuplicate = 0;
+    for (const item of issuance.provider.observationClaims) {
+      const result = this.epistemic().appendClaim(item);
+      if (result === 'inserted') claimInserted += 1;
+      else claimDuplicate += 1;
+    }
+    const providerAggregateResult = this.epistemic().appendClaim(issuance.provider.aggregateClaim);
+    const localEvidenceResult = this.epistemic().appendEvidence(issuance.localEvidence);
+    const reconciliationClaimResult = this.epistemic().appendClaim(issuance.reconciliationClaim);
+    return Object.freeze({
+      reconciliationRunId,
+      provider: Object.freeze({
+        observationEvidence: { inserted: evidenceInserted, duplicate: evidenceDuplicate },
+        observationClaims: { inserted: claimInserted, duplicate: claimDuplicate },
+        aggregateClaim: { id: issuance.provider.aggregateClaim.id, result: providerAggregateResult },
+      }),
+      localEvidence: Object.freeze({ id: issuance.localEvidence.id, result: localEvidenceResult }),
+      reconciliationClaim: Object.freeze({ id: issuance.reconciliationClaim.id, result: reconciliationClaimResult }),
+    });
+  }
+
   /** Read canonical billed-period claims without exposing confidential raw payloads. */
   billingKernelClaims(limit = 25): readonly Pick<Claim, 'id' | 'proposition' | 'profile' | 'evidenceIds' | 'issuedAt' | 'monetaryBasis' | 'finality'>[] {
     const safeLimit = Math.max(1, Math.min(100, Math.floor(limit)));
@@ -1659,6 +1699,26 @@ export class Store {
     const claims: Array<Pick<Claim, 'id' | 'proposition' | 'profile' | 'evidenceIds' | 'issuedAt' | 'monetaryBasis' | 'finality'>> = [];
     for (const run of this.openAiCostsObservationRuns(safeLimit)) {
       const item = this.epistemic().readClaim(`claim:billing:provider-observed-total:${run.observationRunId}`);
+      if (item === null) continue;
+      claims.push({
+        id: item.id,
+        proposition: item.proposition,
+        profile: item.profile,
+        evidenceIds: item.evidenceIds,
+        issuedAt: item.issuedAt,
+        monetaryBasis: item.monetaryBasis,
+        finality: item.finality,
+      });
+    }
+    return Object.freeze(claims.map((item) => Object.freeze(item)));
+  }
+
+  /** Read canonical mixed-basis Claims issued for recorded reconciliations. */
+  billingReconciliationKernelClaims(limit = 25): readonly Pick<Claim, 'id' | 'proposition' | 'profile' | 'evidenceIds' | 'issuedAt' | 'monetaryBasis' | 'finality'>[] {
+    const safeLimit = Math.max(1, Math.min(100, Math.floor(limit)));
+    const claims: Array<Pick<Claim, 'id' | 'proposition' | 'profile' | 'evidenceIds' | 'issuedAt' | 'monetaryBasis' | 'finality'>> = [];
+    for (const run of this.reconciliationRuns(safeLimit)) {
+      const item = this.epistemic().readClaim(`claim:billing:reconciliation:${run.reconciliationRunId}`);
       if (item === null) continue;
       claims.push({
         id: item.id,

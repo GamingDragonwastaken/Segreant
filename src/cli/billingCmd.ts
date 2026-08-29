@@ -188,8 +188,17 @@ function cmdReconcile(flags: Flags): void {
     }
     const applied = Boolean(flags.apply);
     const reconciliationRunId = applied ? store.saveReconciliationRun(result) : null;
-    if (flags.json) printJson({ applied, reconciliationRunId, result });
-    else printReconciliation(result, applied);
+    // A provider-day comparison with at least one provider day can cross the
+    // kernel only after the immutable run is recorded. Local-only periods have
+    // no provider Evidence and therefore remain a truthful non-claim.
+    const kernel = applied && reconciliationRunId !== null && result.coverage.providerDays > 0
+      ? store.issueOpenAiReconciliationToKernel(reconciliationRunId)
+      : null;
+    if (flags.json) printJson({ applied, reconciliationRunId, result, kernel });
+    else {
+      printReconciliation(result, applied);
+      if (kernel) console.log(`  Canonical kernel: ${kernel.reconciliationClaim.result} mixed-basis Claim ${kernel.reconciliationClaim.id}.`);
+    }
   } finally {
     store.close();
   }

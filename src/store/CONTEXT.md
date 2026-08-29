@@ -61,7 +61,9 @@ two domain callers goes in `rows.ts`.
   Evidence and billed Claims; `issueOpenAiCostsObservationToKernel()` does the
   same for complete direct provider observations with a distinct
   `provider_observed` basis. Legacy billing rows remain the compatibility read
-  model and repeated issuance is idempotent.
+  model; `issueOpenAiReconciliationToKernel()` adds the exact local-capture and
+  mixed residual Claim only after a reconciliation run is durably recorded, and
+  repeated issuance is idempotent.
 
 ## Invariants
 
