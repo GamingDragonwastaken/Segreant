@@ -4,7 +4,7 @@
 **Date:** 2026-08-29  
 **Repository:** `GamingDragonwastaken/Fiscus`  
 **Reconstruction branch:** `gpt56/magnum-opus-reconstruction`  
-**Code baseline reconciled:** `fa36cc380e6883cc868e2e5b46517ae118a038ae`
+**Code baseline reconciled:** `8928bb474ecb93477caa7605c6710b432653a631`
 **Authority:** owner-approved `FISCUS_FOUNDATIONAL_AUDIT_II_COMPLETE.md` plus all still-valid requirements of the Magnum Opus Master Execution Plan.
 
 ## Purpose
@@ -23,7 +23,7 @@ The reconstruction branch began from the reviewed high-assurance candidate `3157
 
 The original macOS OIDC time-boundary failure has been repaired through injected deterministic verifier time and exact skew-boundary tests. Team-server tests later passed on Windows, Ubuntu and macOS.
 
-The immediate recovery tranche is green at exact implementation SHA `685b14c57cccf078679a37a929f6234f00522abd`, and the first M1 Evidence/Claim issuance slices are green at `fa36cc380e6883cc868e2e5b46517ae118a038ae`. Root typecheck/tests, package smoke, and the configured cross-platform GitHub matrix pass. The broader kernel and product program remains partial/open as recorded below.
+The immediate recovery tranche is green at exact implementation SHA `685b14c57cccf078679a37a929f6234f00522abd`; M1 Evidence/Claim slices are green at `fa36cc380e6883cc868e2e5b46517ae118a038ae`; and the Derivation/DAG slices are green at `8928bb474ecb93477caa7605c6710b432653a631`. Root typecheck/tests, package smoke, and the configured cross-platform GitHub matrix pass. The broader kernel and product program remains partial/open as recorded below.
 
 ## Work already implemented and to preserve
 
@@ -39,6 +39,7 @@ The first tranche created durable program-control artifacts and implemented mean
 - multi-axis `ClaimProfile` separating epistemic support, integrity, authenticity, scope, coverage, measurement validity, causal status, monetary basis/finality and decision fitness;
 - `MeasurementModel` construct-validity boundary;
 - canonical immutable Evidence and Claim envelopes with explicit provenance, coordinates, profiles, uncertainty and lifecycle metadata;
+- canonical Derivation/Witness legality and immutable Evidence/Claim DAG projections with as-of, supersession and revocation traces;
 - strict legacy realization fix: unknown required gates no longer count toward the confirmed lower bound;
 - first live removal of the universal-Git-commit assumption: non-coding outcomes now use a domain-neutral OutcomeContract rather than fake coding lifecycle gates.
 
@@ -68,7 +69,7 @@ Status vocabulary: `CLOSED`, `PARTIAL`, `OPEN`, `RED-SPEC`, `EXTERNAL-GATE`, `SU
 | AII-016 grain not a truth constraint | PARTIAL | Witness primitive exists; enforce in every derivation/aggregation. |
 | AII-017 money not exact end-to-end | PARTIAL | Migrate ledger/DB/budgets/allocation/reconciliation/API/CSV authoritative paths. |
 | AII-018 analytical economic subledger absent | OPEN | Immutable typed economic events and deterministic projections. |
-| AII-019 immutability inconsistent | PARTIAL | Additive transitive closure primitive is implemented and tested; persisted append-only Claim/Evidence DAG, supersession events and projections remain. |
+| AII-019 immutability inconsistent | PARTIAL | Immutable DAG, supersession lookup and revocation projection are implemented/tested; persistence-backed append-only events and product projections remain. |
 | AII-020 receipt mistaken for truth | PARTIAL | Separate trust dimensions in product UX and interoperable attestation semantics. |
 | AII-021 causal inference/design gaps | OPEN | ITT, blocks, joint inference, missingness, interference, precision and transportability. |
 | AII-022 two causal systems | OPEN | One estimand/design/estimator registry; version/archive superseded path. |
@@ -85,7 +86,7 @@ Status vocabulary: `CLOSED`, `PARTIAL`, `OPEN`, `RED-SPEC`, `EXTERNAL-GATE`, `SU
 | AII-033 supply-chain assurance | OPEN | CodeQL, dependency review, secret scan, SBOM, provenance/signing. |
 | AII-034 hand-rolled OIDC | PARTIAL | Clock fixed; JOSE-vs-custom decision, differential/reference tests, production validation. |
 | AII-035 original exact-head macOS failure | CLOSED | Deterministic OIDC repair plus GitHub run `33253835881` is green across all seven configured jobs at exact SHA `685b14c`. |
-| AII-036 derivation legality absent | PARTIAL | Evidence/Claim issuance path exists; canonical Derivation/Witness legality and unavoidable integration remain. |
+| AII-036 derivation legality absent | PARTIAL | Canonical Derivation/Witness legality exists; persistent witness registry and unavoidable integration at all issuance boundaries remain. |
 
 ## Immediate execution tranche
 
@@ -293,9 +294,9 @@ For each external gate, repository work must leave an executable protocol, requi
 
 1. **COMPLETED at `c89d95d`:** TDD canonical Evidence envelope and immutable issuance boundary.
 2. **COMPLETED at `fa36cc3`:** TDD canonical Claim with ClaimProfile, uncertainty and typed basis aliases.
-3. TDD canonical Derivation/Witness/Assumption and illegal-strengthening checks;
-4. persist the Evidence/Claim DAG, supersession and revocation events;
-5. implement as-of reconstruction and canonical serialization/conformance vectors;
+3. **COMPLETED at `c457b95`:** TDD canonical Derivation/Witness and illegal-strengthening checks.
+4. **PARTIAL at `8928bb4`:** Immutable Evidence/Claim DAG snapshot, as-of filtering, supersession and revocation projections; persistence-backed event storage remains.
+5. implement as-of reconstruction over persisted events and canonical serialization/conformance vectors;
 6. migrate billing/reconciliation to exact Money/Rate and typed economic claims;
 7. introduce WorkUnit/OutcomeAdapter and migrate coding/completeness-aware `clean`;
 8. build contribution attribution and adversarial benchmark corpus;

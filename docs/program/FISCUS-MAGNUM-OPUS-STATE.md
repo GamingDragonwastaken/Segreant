@@ -22,6 +22,9 @@ Controlling architecture:
 - Evidence kernel checkpoint: `c89d95d341a0ad34f04562f0bad068e0ea60177c`
 - Claim kernel checkpoint: `fa36cc380e6883cc868e2e5b46517ae118a038ae`
 - Exact remote verification run for the Claim checkpoint: GitHub Actions `33255107581` (success across all seven configured jobs)
+- Derivation/Witness checkpoint: `c457b95496481bc3c4d1eb89100e38ce7862ab32`
+- Immutable DAG checkpoint: `8928bb474ecb93477caa7605c6710b432653a631`
+- Exact remote verification run for the DAG checkpoint: GitHub Actions `33256214683` (success across all seven configured jobs)
 - Remaining-work audit commit: `5e5a82843154a6fd04e0017538919108c5ff06f1`
 - Luna resume-protocol commit: `5c4de94cf7af0a218ecd10946ac91577fdd9eae7`
 - Base high-assurance PR: #8 (`codex/high-assurance-foundation` -> `main`)
@@ -54,6 +57,14 @@ This checkpoint closes the immediate RED recovery tranche only. It does not clos
 
 This is a kernel issuance foundation, not universal product migration. Persisted Evidence/Claim DAG storage, Derivation legality, assumptions, as-of reconstruction, serialization/conformance, and downstream vertical adoption remain open.
 
+## M1 dependency-graph checkpoint (2026-08-29)
+
+- [x] Canonical Derivation/Witness legality (`c457b95`) refuses unsupported coordinate, epistemic, coverage, measurement, causal, monetary-finality, trust and decision-fitness strengthening, and binds output propositions/coordinates to immutable Claim IDs.
+- [x] Immutable Evidence/Claim DAG snapshot (`8928bb4`) provides append-only functional snapshots, cycle prevention, ancestor/descendant and assumption/measurement views, conflict paths, as-of filtering, supersession lookup, minimal support/cut projections, and traceable transitive revocation.
+- [x] Focused DAG/Derivation tests and the full root/browser/build gates remain green; GitHub run `33256214683` validates the exact DAG checkpoint across all configured jobs.
+
+Persistence-backed event storage, canonical witness registries, minimal-cut semantics for richer conjunction graphs, and unavoidable integration at every claim-issuance boundary remain the next M1 work.
+
 ## Completed in first GPT-5.6 Sol tranche
 
 - [x] Durable program-control directory established.
@@ -74,19 +85,19 @@ This is a kernel issuance foundation, not universal product migration. Persisted
 
 ## Current verification state
 
-The latest reconstruction checkpoint is green at exact Claim code SHA `fa36cc380e6883cc868e2e5b46517ae118a038ae`:
+The latest reconstruction checkpoint is green at exact DAG code SHA `8928bb474ecb93477caa7605c6710b432653a631`:
 
 - local Node typecheck: pass;
 - local browser typecheck: pass;
-- local root suite: 983 total, 979 pass, 0 fail, 4 platform-conditional skips;
+- local root suite: 995 total, 991 pass, 0 fail, 4 platform-conditional skips;
 - local packed/installable artifact smoke: pass;
-- GitHub Actions run `33255107581`: success across all seven configured jobs.
+- GitHub Actions run `33256214683`: success across all seven configured jobs.
 
 The branch is still not a final product-completion baseline. M1 and later audit findings remain open or partial, and external gates remain unperformed. Do not weaken the new invariants merely to preserve superficial green status.
 
 ## Exact next actions
 
-1. Continue the Trusted Epistemic Kernel in dependency order: canonical Derivation/Witness -> Assumption/DAG -> persisted revocation/supersession -> as-of reconstruction -> serialization/conformance.
+1. Continue the Trusted Epistemic Kernel in dependency order: persisted Evidence/Claim/Derivation/DAG events -> assumption registry -> revocation/supersession projections -> as-of reconstruction -> serialization/conformance.
 2. Migrate one real billing/reconciliation vertical to exact Money/Rate and typed economic evidence, preserving explicit legacy adapters.
 3. Keep every new claim and decision on the kernel path; add regression/property/adversarial tests before widening capability.
 4. After each coherent slice, update this state and the audit/evidence registers with the exact local and remote SHA.

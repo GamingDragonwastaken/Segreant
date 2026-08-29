@@ -35,3 +35,11 @@
 ## D-009 — Claims retain their derivation and profile context
 **Decision:** Canonical Claims require typed propositions, at least one evidence dependency, a derivation rule/version, explicit coordinates/time/uncertainty, and matching epistemic/causal profile axes. Monetary basis and finality aliases are copied from the profile and cannot diverge.
 **Reason:** Claim consumers need a stable issued object without allowing `established:boolean` or duplicate semantic fields to erase uncertainty, provenance, or economic meaning. Persistence, derivation legality, and as-of replay are subsequent kernel slices.
+
+## D-010 — Derivation strengthening is witness-gated
+**Decision:** A canonical Derivation binds input/output claim identities and propositions, records coordinate changes and reproducibility metadata, and refuses any increase in grain, scope status, coverage, construct validity, causality, monetary finality, integrity, authenticity, epistemic information, or decision fitness without the corresponding witness kind.
+**Reason:** Coordinate geometry and profile labels describe a change but do not authorize it. Keeping the legality assessment explicit makes unsupported semantic escalation machine-checkable and explainable.
+
+## D-011 — DAG snapshots are immutable projections
+**Decision:** Evidence/Claim/Assumption/Measurement/Decision dependencies are represented as validated immutable snapshots. Dependency edges are acyclic; supersession is not a dependency; as-of and revocation are projections with trace paths, never destructive updates.
+**Reason:** The kernel must answer what was knowable and why a descendant became non-certifiable without erasing history. A pure snapshot API is safe to compose now; append-only persistence and event replay follow as a separate slice.
