@@ -1,0 +1,324 @@
+# Fiscus Remaining-Work Audit
+
+**Status:** controlling post–Foundational Audit II remaining-work reconciliation  
+**Date:** 2026-08-29  
+**Repository:** `GamingDragonwastaken/Fiscus`  
+**Reconstruction branch:** `gpt56/magnum-opus-reconstruction`  
+**Code baseline reconciled:** `abbcddc6ff5783e9d8da1b57dcc566da1e3256c5`  
+**Authority:** owner-approved `FISCUS_FOUNDATIONAL_AUDIT_II_COMPLETE.md` plus all still-valid requirements of the Magnum Opus Master Execution Plan.
+
+## Purpose
+
+This document records what is genuinely left after the first GPT-5.6 Sol implementation tranche. It is not another feature wishlist and it does not lower the definition of success. It reconciles completed primitives, partially closed Audit II findings, repository-internal remaining work, external evidence gates, and execution order.
+
+The architectural thesis remains:
+
+> Fiscus should be enormous at the capability boundary and extremely small at the truth boundary.
+
+The trusted core should own evidence legality, claims, scope, grain, time, money, measurement, assumptions, uncertainty, revocation and decision certification. Broad FinOps capability should remain expansive through adapters, interoperable standards and first-party modules.
+
+## Current state
+
+The reconstruction branch began from the reviewed high-assurance candidate `31577d5b112653e5aa4dff5a0bdaae9fd58a982c`.
+
+The original macOS OIDC time-boundary failure has been repaired through injected deterministic verifier time and exact skew-boundary tests. Team-server tests later passed on Windows, Ubuntu and macOS.
+
+The current tranche is intentionally RED rather than falsely green. Root typecheck/tests are blocked by already-committed TDD specifications for robust decision semantics and transitive revocation closure whose production modules do not yet exist. Package smoke also exposes legacy demo expectations that relied on the old unsound realization semantics. Those expectations must be migrated; the strict semantics must not be weakened.
+
+## Work already implemented and to preserve
+
+The first tranche created durable program-control artifacts and implemented meaningful constitutional foundations:
+
+- four-valued epistemic state: `unknown / supported / refuted / conflicted`, with conflict-preserving semilattice properties;
+- canonical grain, scope and bitemporal coordinates;
+- exact arbitrary-precision decimal `Money` with currency and economic-basis compatibility checks;
+- exact rational `Rate` semantics and refusal of implicit non-terminating rounding;
+- generic open-world `OutcomeContract`;
+- `CompletenessWitness` for negative claims;
+- witnessed scope/grain derivation primitives;
+- multi-axis `ClaimProfile` separating epistemic support, integrity, authenticity, scope, coverage, measurement validity, causal status, monetary basis/finality and decision fitness;
+- `MeasurementModel` construct-validity boundary;
+- strict legacy realization fix: unknown required gates no longer count toward the confirmed lower bound;
+- first live removal of the universal-Git-commit assumption: non-coding outcomes now use a domain-neutral OutcomeContract rather than fake coding lifecycle gates.
+
+A primitive existing is not the same thing as an audit finding being closed. Universal product migration remains the standard.
+
+## Audit II reconciliation
+
+Status vocabulary: `CLOSED`, `PARTIAL`, `OPEN`, `RED-SPEC`, `EXTERNAL-GATE`, `SUPERSEDED`, `OWNER-RESERVED`.
+
+| ID | Current status | Remaining closure condition |
+|---|---|---|
+| AII-001 realization lower bound | PARTIAL | Core rule fixed. Migrate fixtures/docs/adapters and prove generalized terminal bounds. |
+| AII-002 absence without completeness | PARTIAL | Completeness primitive exists; migrate `clean`, off-path-spend and all analogous negative claims. |
+| AII-003 conflict collapsed | PARTIAL | Four-valued kernel exists; migrate legacy gates/claims/storage/API/UI. |
+| AII-004 commit universal atom | PARTIAL | Non-coding decoupled; implement canonical WorkUnit/OutcomeAdapter and coding adapter. |
+| AII-005 line survival called quality | OPEN | Retype as artifact persistence; build real quality measurement separately. |
+| AII-006 spend→commit temporal attribution overclaim | OPEN | Typed temporal association/contribution uncertainty and witness. |
+| AII-007 pooled line-retention acceptance | OPEN | Benchmark a richer contribution-attribution engine. |
+| AII-008 four lenses treated as constitutional peers | OPEN | Separate contribution/outcome/causal/utility; demote old composite to descriptive compatibility surface. |
+| AII-009 geometric mean economically forced | OPEN | Correct mathematical claims and preference interpretation. |
+| AII-010 Lift heuristic bounds | OPEN | Explicit estimand/identified set/assumptions. |
+| AII-011 workflow label → cardinal Impact | OPEN | Multidimensional outcomes plus explicit preferences/utility. |
+| AII-012 `realizedValueUsd` sometimes spend | OPEN | Rename/schema migration distinguishing spend, scenario value and causal value. |
+| AII-013 financial layers too coarse | PARTIAL | Money/Rate foundation exists; economic claim DAG and subledger remain. |
+| AII-014 `established:boolean` | PARTIAL | ClaimProfile exists; canonical Claim and product migration remain. |
+| AII-015 global evidence strength order | PARTIAL | Implement claim-relative admissibility/incomparable profiles. |
+| AII-016 grain not a truth constraint | PARTIAL | Witness primitive exists; enforce in every derivation/aggregation. |
+| AII-017 money not exact end-to-end | PARTIAL | Migrate ledger/DB/budgets/allocation/reconciliation/API/CSV authoritative paths. |
+| AII-018 analytical economic subledger absent | OPEN | Immutable typed economic events and deterministic projections. |
+| AII-019 immutability inconsistent | RED-SPEC | Implement append-only Claim/Evidence DAG, supersession and transitive revocation. |
+| AII-020 receipt mistaken for truth | PARTIAL | Separate trust dimensions in product UX and interoperable attestation semantics. |
+| AII-021 causal inference/design gaps | OPEN | ITT, blocks, joint inference, missingness, interference, precision and transportability. |
+| AII-022 two causal systems | OPEN | One estimand/design/estimator registry; version/archive superseded path. |
+| AII-023 anytime inference assumptions | OPEN/RESEARCH | Dependency/cluster/adaptivity-aware validation and disclosed assumptions. |
+| AII-024 Goodhart naming | OPEN | Rename structural drift unless incentive gaming is evidenced. |
+| AII-025 observational frontier `evidence_supported` | OPEN | Observational/statistical label only; causal lane owns causal claims. |
+| AII-026 budget heuristic overclaim | OPEN | Keep scenario advisor; route action-grade choices through decision engine. |
+| AII-027 pseudo-VoI | RED-SPEC/PARTIAL | Rename existing sensitivity metric; implement real decision-theoretic VoI. |
+| AII-028 shrinkage weight labelled confidence | OPEN | Correct terminology/assumptions and tests. |
+| AII-029 docs/runtime drift | OPEN | Canonical CapabilitySpec and generated/conformance-tested docs. |
+| AII-030 browser/server schema drift | OPEN | One runtime schema source and shared/generated types. |
+| AII-031 unbounded major buffers | OPEN | Bound ingress/SSE/tool args/proposals/responses with explicit coverage-loss semantics. |
+| AII-032 DB integrity too application-managed | OPEN | Promote critical invariants to DB where sound. |
+| AII-033 supply-chain assurance | OPEN | CodeQL, dependency review, secret scan, SBOM, provenance/signing. |
+| AII-034 hand-rolled OIDC | PARTIAL | Clock fixed; JOSE-vs-custom decision, differential/reference tests, production validation. |
+| AII-035 original exact-head macOS failure | PARTIAL | Specific race fixed; restore a new exact-SHA fully green reconstruction baseline. |
+| AII-036 derivation legality absent | PARTIAL | Build canonical Derivation/Claim/Evidence issuance path and make legality unavoidable. |
+
+## Immediate execution tranche
+
+The next worker should not start another design discussion.
+
+1. Implement the already-RED robust decision module. Initial rule: a dominance certificate is valid only when one action's worst admissible utility exceeds every competitor's best admissible utility. If dominance is unavailable, a declared rule such as minimax regret may choose an action but must not be described as proof of objective optimality.
+2. Implement the already-RED transitive revocation module. Revoking evidence must invalidate dependent descendants while preserving independent siblings. History is additive; no destructive deletion.
+3. Restore root typecheck/tests.
+4. Migrate every legacy realization/demo fixture invalidated by the strict required-gate rule. Do not manufacture pass verdicts for unavailable evidence.
+5. Restore package smoke.
+6. Update `FISCUS-MAGNUM-OPUS-STATE.md`, `AUDIT-REGISTER.md`, decision/evidence registers and exact next action.
+7. Record a new exact-SHA green baseline before widening the kernel again.
+
+## Trusted Epistemic Kernel remaining work
+
+Implement canonical immutable objects for `Evidence`, `Claim`, `Derivation`, `Assumption`, witnesses, supersession/revocation and dependency graphs.
+
+A Claim must carry a typed proposition, subject, scope, grain, time coordinates, four-valued state, multi-axis ClaimProfile, evidence dependencies, MeasurementModel, assumptions, uncertainty/identified set, causal status, monetary basis/finality, derivation version and issuance/supersession state.
+
+A Derivation checker must refuse any unsupported strengthening: finer grain without disaggregation witness, broader scope without coverage, stronger construct validity without bridge, stronger causality without identification witness, stronger monetary finality without financial evidence, stronger authenticity/integrity without attestation, or disappearance of conflict/unknown without legal evidence.
+
+Build the Evidence/Claim DAG as a first-class structure supporting ancestors, descendants, assumption dependencies, conflicts, revocation closure, minimal supporting sets and minimal cut sets for decision invalidation.
+
+Implement as-of epistemic reconstruction: `occurredAt`, validity, observation, recording, assertion, finalization, decision and action times must remain distinct where applicable. Fiscus must be able to answer “what did we know then?” without hindsight leakage.
+
+Research countermodel-first auditing for tractable domains: construct a world consistent with evidence in which an important claim is false, or show extremal worlds producing numeric bounds.
+
+## Exact economic foundation
+
+Migrate authoritative monetary paths to exact Money/Rate: request metering, pricing, billing evidence, reconciliation, budgets, allocations, forecasts, model comparisons, team rollups, exports and database schemas. JavaScript numbers may remain presentation adapters, not accounting authority.
+
+Expand cost basis semantics to distinguish list, contracted, metered-estimated, provider-observed, billed, effective, allocated, full-workflow, marginal, avoidable, committed, sunk and opportunity cost where data supports them.
+
+Implement an immutable economic event subledger for usage, estimated/provider charges, bills, prices/corrections, credits, discounts, commitments, tax, FX, allocations/reversals, true-ups and write-offs. Current balances are deterministic projections, never history rewritten in place.
+
+Property-test conservation, compatible-basis arithmetic, reversal, reprice/reconciliation and replay.
+
+Implement explicit historical FX with source, effective time, convention and rounding policy. No “current FX” may silently rewrite historical records.
+
+Map appropriate billed/effective semantics to FOCUS while preserving Fiscus-specific assurance semantics.
+
+## WorkUnit / outcome / contribution reconstruction
+
+Create a canonical WorkUnit and OutcomeAdapter protocol. Coding remains a first-class adapter rather than the universal atom. Candidate future adapters include coding, support/resolution, documents/research, agent tasks, data-analysis and CI/release outcomes.
+
+Migrate coding to an explicit versioned OutcomeContract. Required predicates may vary by contract; unknown predicates stay unresolved.
+
+Replace closed-world `clean`: no linked incident observed is not support unless a CompletenessWitness proves relevant source coverage for the event/scope/time.
+
+Retype line survival as artifact persistence. For adequate data, research survival/time-to-event models with censoring/competing risks rather than relying permanently on a fixed 14-day threshold.
+
+Replace pooled line retention with a contribution engine handling file identity, rename/move, structural rewrites, generated/common content, competing proposals, human edits and ambiguous attribution. Benchmark against current line retention and simple diffs on adversarial fixtures.
+
+## Measurement layer
+
+Migrate consequential metrics to explicit MeasurementModels: contribution, persistence, tests, deployment, incidents, task completion, quality, customer impact, time with AI, labor-equivalent baselines, billing coverage and model outcomes.
+
+Enforce No Construct Laundering: line persistence ≠ quality, acceptance ≠ productivity, test pass ≠ business value, shipped ≠ customer impact, spend on a successful unit ≠ economic value without an explicit bridge.
+
+CompletenessWitness must govern negative claims such as no incident, no provider charge, no off-path spend, no duplicate, no policy violation or no security event.
+
+Surrogate bridges need context, calibration, validation, uncertainty, transport conditions and validity period.
+
+## Causal inference v3
+
+Preserve the strong current causal subsystem while repairing its mathematics.
+
+Create one EstimandDefinition registry and one design/estimator registry. Explicitly distinguish ITT, per-protocol and CACE/LATE where justified. Assignment-preserving ITT should normally be primary for randomized treatment.
+
+Use blocked/paired/clustered design information in estimation rather than ignoring it. Joint claims such as “cheaper and non-inferior” require simultaneous/IUT/multiplicity-aware inference.
+
+Formalize missingness, attrition, censoring and interference. Record transportability/treatment identity because model, version, prompt, tools, workflow, user/team, pricing and environment changes can invalidate transport.
+
+Create an inference ledger recording preregistration, candidate estimands, planned/actual exclusions, analysis attempts, estimator/model versions, failed analyses and reported result.
+
+Replace arbitrary minimum-N rules with target width, MDE, power, non-inferiority margin or decision-relevant precision when appropriate.
+
+Keep time-uniform inference but state dependency/exchangeability assumptions and research clustered/adaptive alternatives.
+
+## Decision theory / VoI / safe control
+
+Build robust utility intervals and proof-level dominance certificates. Where dominance fails, support declared ambiguity rules such as minimax regret without relabelling them proof.
+
+Expose preference robustness regions and break-even values instead of hiding every decision inside one composite weight vector.
+
+Allow `wait / collect more evidence` as an action when irreversibility and uncertainty make option value material.
+
+Rename existing `voi.ts` functionality as instrumentation/evidence-gap sensitivity. Implement genuine decision-theoretic Value of Information or robust regret-reduction analogues net of measurement cost. Evidence debt should be weighted by decision impact rather than missing-field count.
+
+Implement Decision Assurance Levels from display-only through recommendation, shadow/canary, material automated policy and hard-to-reverse financial/security action. Evidence/freshness/rollback/human approval requirements increase with consequence.
+
+Required control chain: `Observation -> Evidence -> Claim -> DecisionProblem -> DecisionCertificate -> PolicyProposal -> Assurance/Approval -> Action -> Outcome`.
+
+Support shadow, canary, monitored expansion and rollback. Add policy TTL/epistemic circuit breakers when evidence becomes stale/conflicted, model/pricing/environment changes, instrumentation breaks or assumptions are revoked.
+
+## Legacy value mathematics cleanup
+
+Demote the four-lens RoI Index to an explicitly descriptive compatibility/exploration surface. Separate contribution, outcome evidence, causal effect and utility.
+
+Correct geometric-mean/CES/compensability/continuity claims; retain aggregators only under explicit axioms/preferences.
+
+Separate Lift/time-saving scenarios from causal treatment effects. Replace universal cardinal Impact with real outcome variables and explicit preferences.
+
+Migrate misleading `realizedValueUsd` semantics into distinct spend-on-confirmed-outcome, scenario/manual-equivalent value and causal incremental value concepts.
+
+Relabel observational frontier claims; preserve the capability but do not imply causality. Keep budget advice as scenario guidance until the decision engine qualifies stronger recommendations. Rename shrinkage weights to the statistical object they actually are.
+
+## Capability architecture / adapters / standards
+
+Generalize the current GUI registry/actions seed into a canonical CapabilitySpec defining input/output/preview schemas, consequence, authority, egress, credentials, reversibility, assurance level and CLI/API/GUI/docs bindings. Generate or conformance-test surfaces from it.
+
+Unify browser/server/runtime schemas. Stable plugin interfaces should include UsageSource, BillingSource, PricingSource, IdentitySource, OutcomeSource, MeasurementAdapter, CausalProducer, DecisionPolicy, ControlTarget and AttestationPublisher. Plugins submit evidence; they do not mint truth directly. Add isolation/conformance for untrusted adapters.
+
+Interoperate with OpenTelemetry, FOCUS, W3C PROV, VC/Data Integrity where useful, and in-toto/SLSA patterns rather than inventing isolated equivalents.
+
+Define a versioned `.fiscuspack` portable audit bundle containing evidence, claims, derivations, assumptions, measurement models, decision receipts, attestations, hashes and selected references. Long-term target: an independent verifier with shared public conformance vectors.
+
+## Security / reliability / supply chain
+
+Bound all major ingress and accumulation paths: HTTP body, non-streaming response, SSE frames/total stream, tool-call args, proposals, transcripts, imports, receipt/evidence-pack elements. Truncation must explicitly reduce coverage; it cannot silently preserve completeness.
+
+Review OIDC/JOSE strategy. A mature JOSE dependency is preferable if it materially reduces risk; if custom remains, differential-test against a reference implementation and add hostile JWT/JWKS/rotation/algorithm/type cases.
+
+Review critical DB invariants for CHECK/UNIQUE/FK/trigger/append-only enforcement. Preserve strong backup/restore work and add interruption, disk-full, corruption and migration recovery tests.
+
+Add CodeQL/static analysis, dependency review, secret scanning, SBOM, provenance/signing and exact-SHA release verification. Add fuzzing, fault injection and mutation testing, especially for money conservation, derivation legality, revocation, OIDC, causal qualification and decision certificates.
+
+## UX / accessibility / performance
+
+Use progressive disclosure: `answer -> evidence profile -> derivation -> assumptions -> uncertainty -> raw evidence`.
+
+Build Claim Inspector 2.0, Trace the Dollar, Prove a Claim, What Did We Know Then, What Should We Measure Next, and Preference Map surfaces.
+
+Make GUI/CLI/API parity mechanically checkable. Target WCAG 2.2 AA and later validate in real browsers/assistive technologies.
+
+Benchmark claim issuance, derivation checking, DAG traversal, revocation, as-of reconstruction, economic projection and evidence-pack verification at deterministic scale tiers. Set performance budgets from measurements, not impressive-looking guesses.
+
+## Still-valid broader master-plan workstreams
+
+Do not lose these while rebuilding the constitution:
+
+- living current-market capability matrix and competitor/standards benchmark; competitors are benchmarks, not strategic fences;
+- distinction/non-substitutability review after baseline category completeness;
+- brand/name collision review before major public launch;
+- adaptive experimentation, exploration, provenance-aware off-policy evaluation, constrained online control and tail-risk handling;
+- Complexity Lab, with sophistication admitted to production only when it improves calibration/robustness/decisions;
+- AI-capital/showback/chargeback semantics, spend decomposition, opportunity gaps and allocation fairness without confusing allocation with causation;
+- machine-readable data inventory, user controls, retention/privacy and evidence consequences of deletion;
+- documentation truth audits, mathematical documentation, reproducible research bundles and eventually paper-quality artifacts;
+- professional/public-interest launch readiness, contribution/governance/security/support/release documentation;
+- originality audit, red-team substitution against standards/libraries/products, and periodic complexity-theater review.
+
+## Testing architecture
+
+Final assurance should span ten layers: schema/type validation, unit tests, property tests, metamorphic tests, differential/reference tests, simulation/calibration, fuzzing, fault injection, adversarial economic tests and release/artifact verification.
+
+Mandatory adversaries include mixed cost bases, credits/FX/rate changes, ambiguous attribution, generated/renamed code, high-precision wrong proxies, missing completeness, Simpson's paradox, noncompliance, attrition, interference, clustering, optional stopping, preference reversals, irreversible weak-evidence actions, expired policies and incentive gaming.
+
+## Research/theorem agenda
+
+Maintain research maturity: `CONJECTURE -> FORMALIZED -> UNIT-VERIFIED -> SIMULATION-VALIDATED -> BENCHMARK-VALIDATED -> FIELD-VALIDATED -> DECISION-VALIDATED -> PRODUCTION-QUALIFIED`.
+
+Research directions include abstract interpretation for economic evidence, Epistemic Preservation, No Granularity Laundering, Negative-Claim Soundness, Trust Non-Escalation, Monetary Conservation, Revocation Closure, Decision-Certificate Soundness, minimal evidence acquisition, provenance-aware OPE, surrogate/business transport and proof-carrying economic claims.
+
+Established mathematics must not be relabelled as Fiscus invention. Potential originality lies in a genuinely new integrated AI-economic semantics/verifier only if independent scrutiny supports that claim.
+
+## External gates
+
+Repository engineering cannot fabricate:
+
+- real provider-authorized invoice reconciliation;
+- real causal-study outcomes;
+- production team-server qualification on real infrastructure/IdP;
+- real browser/assistive-technology accessibility qualification;
+- design-partner/user validation;
+- independent security review;
+- independent scholarly/novelty review;
+- long-term adoption or industry-standard status.
+
+For each external gate, repository work must leave an executable protocol, required data, acceptance criterion, tooling and explicit blocker.
+
+## Milestone calibration
+
+- M0 stabilize reconstruction: IN PROGRESS.
+- M1 constitutional specification/TEK: PARTIAL.
+- M2 exact money/economic events: PARTIAL foundation.
+- M3 evidence kernel v1: PARTIAL.
+- M4 coding OutcomeAdapter: PARTIAL.
+- M5 measurement layer: PARTIAL primitive.
+- M6 financial interoperability: OPEN/PARTIAL.
+- M7 telemetry/integration: operational foundation exists; constitutional migration open.
+- M8 causal v3: strong v2 foundation; mathematical migration open.
+- M9 decision subsystem: RED-SPEC.
+- M10 VoI/evidence planner: OPEN.
+- M11 safe control: OPEN.
+- M12 attestation/`.fiscuspack`/verifier: OPEN.
+- M13 epistemic UX: OPEN on top of strong existing GUI foundation.
+- M14 security/reliability/supply-chain: strong partial foundation.
+- M15 mathematical research validation: conjecture/formalization seeds.
+- M16 public standard/conformance: OPEN.
+- M17 public-interest release readiness: OPEN.
+- M18 external validation: EXTERNAL-GATE.
+
+## Exact next queue
+
+1. inspect exact remote head and current CI;
+2. implement decision RED spec;
+3. implement revocation RED spec;
+4. migrate strict realization/demo fixtures;
+5. restore package smoke;
+6. exact-SHA green matrix;
+7. update durable program state/registers;
+8. TDD canonical Evidence;
+9. TDD canonical Claim;
+10. TDD canonical Derivation/Assumption/DAG/as-of semantics;
+11. migrate one real vertical—prefer billing/reconciliation—to exact Money and typed claims;
+12. introduce WorkUnit/OutcomeAdapter and migrate coding;
+13. completeness-aware `clean` and contribution engine;
+14. causal v3 registry/estimators/inference ledger;
+15. DecisionCertificate/true VoI/assurance levels;
+16. CapabilitySpec/canonical schemas/plugins;
+17. standards/attestation/`.fiscuspack`;
+18. resource bounds/fuzz/DB/JOSE/supply chain;
+19. UX/accessibility/performance;
+20. final adversarial reconciliation and external-gate handoff.
+
+## Completion standard
+
+No completion claim until every still-valid Audit II/master-plan item is `CLOSED`, demonstrably `SUPERSEDED` by a stronger solution, an explicit `EXTERNAL-GATE` with repository-side protocol ready, or rejected for a documented technical reason showing implementation would reduce correctness/security/interoperability/usefulness.
+
+“Too difficult”, “competitor already has it”, “requires refactoring”, “math is complicated”, “tests are green”, or “the session is ending” are not valid rejection reasons.
+
+The final internal act must be an adversarial audit performed as if the reviewer did not write the system. It must attempt to falsify exactness, evidence legality, measurement validity, causal identification, decision certification, security, compatibility and the completion claim itself.
+
+The intended destination remains:
+
+> A complete practical AI FinOps system, economic ledger, measurement system, causal inference platform, robust decision engine, safe-control layer, evidence/provenance protocol, and extensible public-interest reference implementation—held together by a small trusted epistemic kernel that refuses to claim more than the evidence warrants.
