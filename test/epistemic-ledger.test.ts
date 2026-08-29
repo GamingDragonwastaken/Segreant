@@ -89,6 +89,7 @@ test('ledger persists canonical Evidence, Claim, Derivation, and dependency edge
   assert.equal(value.appendClaim(source), 'inserted');
   assert.equal(value.appendClaim(output), 'inserted');
   assert.equal(value.appendDerivation(d), 'inserted');
+  assert.equal(value.appendDerivation(d), 'duplicate');
 
   const reopened = new EpistemicLedger(db);
   assert.deepEqual(reopened.readEvidence(e.id), e);
@@ -160,5 +161,6 @@ test('ledger rejects graph cycles and unknown dependency endpoints before mutati
   assert.throws(() => value.appendDependency({ from: 'b', to: 'a', relation: 'derives' }), /cycle/);
   assert.throws(() => value.appendDependency({ from: 'a', to: 'missing', relation: 'supports' }), /unknown node/);
   assert.deepEqual(value.graph().edges, [{ from: 'a', to: 'b', relation: 'derives' }]);
+  assert.throws(() => value.appendNode({ id: 'unmaterialized-claim', kind: 'claim', availableAt: '2026-08-01T00:00:00.000Z' }), /appendClaim/);
   db.close();
 });

@@ -296,6 +296,9 @@ export class EpistemicLedger {
 
   appendNode(input: DagNodeInput): AppendResult {
     const id = nonEmpty(input.id, 'DAG node id');
+    if (input.kind === 'evidence' || input.kind === 'claim') {
+      throw new Error(`use appendEvidence or appendClaim for canonical ${input.kind} nodes`);
+    }
     return this.transaction(() => {
       const current = this.graph();
       const normalized = normalizeNodeForLedger(input);
@@ -382,12 +385,17 @@ export class EpistemicLedger {
         ...item.inputEvidenceIds.map((from) => ({ from, to: item.outputClaimId, relation: 'depends_on' as const })),
         ...item.inputClaimIds.map((from) => ({ from, to: item.outputClaimId, relation: 'derives' as const })),
       ];
-      createEpistemicDag(graph.nodes, [...graph.edges, ...extraEdges]);
       const stored = this.nodePayload(item.id, 'epistemic_derivations', 'derivation_id', 'derivation');
       if (stored !== null) {
         if (!sameStoredPayload(stored, encoded)) throw new Error(`different derivation already exists for ${item.id}`);
+        for (const edge of extraEdges) {
+          if (!graph.edges.some((existing) => existing.from === edge.from && existing.to === edge.to && existing.relation === edge.relation)) {
+            throw new Error(`stored derivation ${item.id} is missing dependency edge ${edge.from} -> ${edge.to}`);
+          }
+        }
         return 'duplicate';
       }
+      createEpistemicDag(graph.nodes, [...graph.edges, ...extraEdges]);
       this.db.prepare('INSERT INTO epistemic_derivations (derivation_id, derivation_json, derivation_digest) VALUES (?, ?, ?)').run(item.id, encoded, digest(encoded));
       for (const edge of extraEdges) this.insertEdge(edge);
       return 'inserted';
@@ -476,7 +484,11 @@ export class EpistemicLedger {
     }
     const derivationRows = this.db.prepare('SELECT derivation_id FROM epistemic_derivations ORDER BY derivation_id').all() as unknown as Array<{ derivation_id: string }>;
     for (const stored of derivationRows) {
-      if (this.readDerivation(stored.derivation_id) === null) throw new Error(`stored derivation ${stored.derivation_id} has no payload`);
+      const item = this.readDerivation(stored.derivation_id);
+      if (item === null) throw new Error(`stored derivation ${stored.derivation_id} has no payload`);
+      if (this.node(item.outputClaimId)?.kind !== 'claim') throw new Error(`stored derivation ${stored.derivation_id} has an unknown output claim`);
+      this.ensureKinds(item.inputEvidenceIds, 'evidence');
+      this.ensureKinds(item.inputClaimIds, 'claim');
     }
     return createEpistemicDag(nodes, edges);
   }
