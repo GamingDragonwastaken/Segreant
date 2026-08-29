@@ -28,6 +28,9 @@ import {
 import { createHash, randomUUID } from 'node:crypto';
 import { legacyPricingEvidence, type RequestPricingEvidence } from '../cost/pricing.ts';
 import { pricingEvidenceFromRecord } from './rows.ts';
+import { formatMoneyAmount, type Money } from '../economics/money.ts';
+import { requestEconomicEvent, requestEconomicEventId } from '../economics/request.ts';
+import { serializeEconomicEvent } from '../economics/serialization.ts';
 import type { ProviderScopeDeclaration, ScopeCaptureStatus } from '../billing/scope.ts';
 import { ATTRIBUTION_BASES, type AttributionBasis } from '../value/characterization.ts';
 import type { OpenAiCostsCaptureCoverage } from '../billing/openaiCostsCoverage.ts';
@@ -161,6 +164,12 @@ export interface RequestRow {
   cacheReadTokens: number;
   reasoningTokens: number;
   costUsd: number;
+  /**
+   * Optional exact monetary authority for a newly written request. When
+   * present, Store persists a corresponding immutable economic event in the
+   * same transaction; absent rows remain legacy numeric compatibility records.
+   */
+  economicAmount?: Money;
   estimated: boolean;
   streamed: boolean;
   statusCode: number | null;
@@ -457,6 +466,122 @@ export class Store {
     runScript(this.db, sql);
   }
 
+  private transaction<T>(work: () => T): T {
+    this.db.prepare('BEGIN IMMEDIATE').run();
+    try {
+      const result = work();
+      this.db.prepare('COMMIT').run();
+      return result;
+    } catch (error) {
+      try { this.db.prepare('ROLLBACK').run(); } catch { /* preserve original failure */ }
+      throw error;
+    }
+  }
+
+  /**
+   * The numeric request column remains a compatibility projection while an
+   * exact Money amount is authoritative for opted-in writes. Reject a lossy or
+   * contradictory projection instead of silently presenting a different cost.
+   */
+  private compatibilityCostUsd(row: RequestRow): number {
+    if (row.economicAmount === undefined) return row.costUsd;
+    if (row.economicAmount.currency !== 'USD') throw new Error('exact request economic amount must be USD');
+    const exactText = formatMoneyAmount(row.economicAmount);
+    const projected = Number(exactText);
+    if (!Number.isFinite(projected) || (row.economicAmount.coefficient !== 0n && projected === 0)) {
+      throw new Error('exact request economic amount cannot be represented by the numeric compatibility projection');
+    }
+    if (!Number.isFinite(row.costUsd)) throw new Error('request costUsd compatibility projection must be finite');
+    const tolerance = Math.max(1e-12, Math.abs(projected) * 1e-12);
+    if (Math.abs(row.costUsd - projected) > tolerance) {
+      throw new Error('request costUsd does not match its exact economic amount');
+    }
+    return projected;
+  }
+
+  private persistRequest(row: RequestRow, idempotent: boolean): boolean {
+    const pricing = row.pricing ?? legacyPricingEvidence();
+    const scope = scopeCaptureForInsert(row);
+    const costUsd = this.compatibilityCostUsd(row);
+    return this.transaction(() => {
+      const sql = `INSERT INTO requests (
+            request_id, session_id, ts_iso, ts_epoch_ms, provider, model, project,
+            task_weight, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens,
+            reasoning_tokens, cost_usd, estimated, streamed, status_code, duration_ms, user, source, cwd, via,
+            cost_basis, rate_card_sha256, rate_card_source_kind, rate_match_kind, rate_match_provider, rate_match_model,
+            scope_capture_status, provider_scope_declaration_id, attribution_basis
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)${idempotent ? ' ON CONFLICT(request_id) DO NOTHING' : ''}`;
+      const info = this.db.prepare(sql).run(
+        row.requestId,
+        row.sessionId,
+        new Date(row.tsEpochMs).toISOString(),
+        row.tsEpochMs,
+        row.provider,
+        row.model,
+        row.project,
+        row.taskWeight,
+        row.inputTokens,
+        row.outputTokens,
+        row.cacheWriteTokens,
+        row.cacheReadTokens,
+        row.reasoningTokens,
+        costUsd,
+        row.estimated ? 1 : 0,
+        row.streamed ? 1 : 0,
+        row.statusCode,
+        row.durationMs,
+        row.user ?? null,
+        row.source ?? null,
+        row.cwd ?? null,
+        row.via ?? 'proxy',
+        pricing.costBasis,
+        pricing.rateCardSha256,
+        pricing.rateCardSourceKind,
+        pricing.rateMatchKind,
+        pricing.rateMatchProvider,
+        pricing.rateMatchModel,
+        scope.status,
+        scope.declarationId,
+        row.attributionBasis ?? 'legacy_unknown',
+      );
+      const inserted = Number(info.changes ?? 0) > 0;
+      if (row.economicAmount !== undefined) {
+        if (inserted) {
+          const exactEvent = requestEconomicEvent({
+            requestId: row.requestId,
+            sessionId: row.sessionId,
+            tsEpochMs: row.tsEpochMs,
+            provider: row.provider,
+            model: row.model,
+            project: row.project,
+            amount: row.economicAmount,
+            recordedAt: new Date().toISOString(),
+          });
+          this.economicLedger.appendWithinTransaction(exactEvent);
+        } else {
+          // A replay of an exact request must find the matching immutable event;
+          // silently filling a missing event would conceal a prior partial write.
+          const existing = this.economicLedger.read(requestEconomicEventId(row.requestId));
+          if (existing === null) throw new Error(`exact economic event is missing for existing request ${row.requestId}`);
+          const expected = requestEconomicEvent({
+            requestId: row.requestId,
+            sessionId: row.sessionId,
+            tsEpochMs: row.tsEpochMs,
+            provider: row.provider,
+            model: row.model,
+            project: row.project,
+            amount: row.economicAmount,
+            recordedAt: existing.recordedAt,
+          });
+          if (serializeEconomicEvent(existing).body !== serializeEconomicEvent(expected).body) {
+            throw new Error(`different economic event already exists for request ${row.requestId}`);
+          }
+        }
+      }
+      return inserted;
+    });
+  }
+
   /**
    * The request/project reads the realization domain needs, bound to this store.
    *
@@ -489,6 +614,12 @@ export class Store {
   /** Exact-Money economic event ledger on this Store's SQLite handle. */
   economic(): EconomicLedger {
     return this.economicLedger;
+  }
+
+  /** Read the exact request charge when this row opted into economic issuance. */
+  economicAmountForRequest(requestId: string): Money | null {
+    const event = this.economicLedger.read(requestEconomicEventId(requestId));
+    return event?.amount ?? null;
   }
 
   /** Create a verified, non-destructive snapshot of this Store's ledger. */
@@ -647,51 +778,7 @@ export class Store {
   }
 
   insertRequest(r: RequestRow): void {
-    const pricing = r.pricing ?? legacyPricingEvidence();
-    const scope = scopeCaptureForInsert(r);
-    this.db
-      .prepare(
-        `INSERT INTO requests (
-            request_id, session_id, ts_iso, ts_epoch_ms, provider, model, project,
-            task_weight, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens,
-            reasoning_tokens, cost_usd, estimated, streamed, status_code, duration_ms, user, source, cwd, via,
-            cost_basis, rate_card_sha256, rate_card_source_kind, rate_match_kind, rate_match_provider, rate_match_model,
-            scope_capture_status, provider_scope_declaration_id, attribution_basis
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      )
-      .run(
-        r.requestId,
-        r.sessionId,
-        new Date(r.tsEpochMs).toISOString(),
-        r.tsEpochMs,
-        r.provider,
-        r.model,
-        r.project,
-        r.taskWeight,
-        r.inputTokens,
-        r.outputTokens,
-        r.cacheWriteTokens,
-        r.cacheReadTokens,
-        r.reasoningTokens,
-        r.costUsd,
-        r.estimated ? 1 : 0,
-        r.streamed ? 1 : 0,
-        r.statusCode,
-        r.durationMs,
-        r.user ?? null,
-        r.source ?? null,
-        r.cwd ?? null,
-        r.via ?? 'proxy',
-        pricing.costBasis,
-        pricing.rateCardSha256,
-        pricing.rateCardSourceKind,
-        pricing.rateMatchKind,
-        pricing.rateMatchProvider,
-        pricing.rateMatchModel,
-        scope.status,
-        scope.declarationId,
-        r.attributionBasis ?? 'legacy_unknown',
-      );
+    this.persistRequest(r, false);
   }
 
   /**
@@ -700,53 +787,7 @@ export class Store {
    * Returns true when the row was actually new.
    */
   insertRequestIfNew(r: RequestRow): boolean {
-    const pricing = r.pricing ?? legacyPricingEvidence();
-    const scope = scopeCaptureForInsert(r);
-    const info = this.db
-      .prepare(
-        `INSERT INTO requests (
-            request_id, session_id, ts_iso, ts_epoch_ms, provider, model, project,
-            task_weight, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens,
-            reasoning_tokens, cost_usd, estimated, streamed, status_code, duration_ms, user, source, cwd, via,
-            cost_basis, rate_card_sha256, rate_card_source_kind, rate_match_kind, rate_match_provider, rate_match_model,
-            scope_capture_status, provider_scope_declaration_id, attribution_basis
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-         ON CONFLICT(request_id) DO NOTHING`,
-      )
-      .run(
-        r.requestId,
-        r.sessionId,
-        new Date(r.tsEpochMs).toISOString(),
-        r.tsEpochMs,
-        r.provider,
-        r.model,
-        r.project,
-        r.taskWeight,
-        r.inputTokens,
-        r.outputTokens,
-        r.cacheWriteTokens,
-        r.cacheReadTokens,
-        r.reasoningTokens,
-        r.costUsd,
-        r.estimated ? 1 : 0,
-        r.streamed ? 1 : 0,
-        r.statusCode,
-        r.durationMs,
-        r.user ?? null,
-        r.source ?? null,
-        r.cwd ?? null,
-        r.via ?? 'proxy',
-        pricing.costBasis,
-        pricing.rateCardSha256,
-        pricing.rateCardSourceKind,
-        pricing.rateMatchKind,
-        pricing.rateMatchProvider,
-        pricing.rateMatchModel,
-        scope.status,
-        scope.declarationId,
-        r.attributionBasis ?? 'legacy_unknown',
-      );
-    return Number(info.changes ?? 0) > 0;
+    return this.persistRequest(r, true);
   }
 
   // `liveOnly` restricts a spend reading to rows that arrived through the proxy —

@@ -126,32 +126,45 @@ export class EconomicLedger {
     validated.add(value.id);
   }
 
+  private appendCanonical(item: EconomicEvent, encoded: ReturnType<typeof serializeEconomicEvent>): EconomicAppendResult {
+    const existing = row<StoredEconomicRow>(this.db.prepare(
+      'SELECT event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest FROM economic_events WHERE event_id = ?',
+    ).get(item.id));
+    if (existing !== null) {
+      const replay = storedRecord(existing);
+      this.validateReferenceClosure(replay);
+      const replayEncoded = serializeEconomicEvent(replay);
+      if (replayEncoded.body !== encoded.body || replayEncoded.digest !== encoded.digest) {
+        throw new Error(`different economic event already exists for ${item.id}`);
+      }
+      return 'duplicate';
+    }
+    for (const sourceId of item.sourceEventIds) {
+      const source = this.read(sourceId);
+      if (source === null) throw new Error(`unknown source economic event: ${sourceId}`);
+    }
+    this.validateReferenceClosure(item);
+    this.db.prepare(
+      'INSERT INTO economic_events (event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    ).run(item.id, item.kind, item.subject, item.occurredAt, item.recordedAt, encoded.body, encoded.digest);
+    return 'inserted';
+  }
+
   append(value: EconomicEvent | EconomicEventInput): EconomicAppendResult {
     const item = economicEvent(value);
     const encoded = serializeEconomicEvent(item);
-    return this.transaction(() => {
-      const existing = row<StoredEconomicRow>(this.db.prepare(
-        'SELECT event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest FROM economic_events WHERE event_id = ?',
-      ).get(item.id));
-      if (existing !== null) {
-        const replay = storedRecord(existing);
-        this.validateReferenceClosure(replay);
-        const replayEncoded = serializeEconomicEvent(replay);
-        if (replayEncoded.body !== encoded.body || replayEncoded.digest !== encoded.digest) {
-          throw new Error(`different economic event already exists for ${item.id}`);
-        }
-        return 'duplicate';
-      }
-      for (const sourceId of item.sourceEventIds) {
-        const source = this.read(sourceId);
-        if (source === null) throw new Error(`unknown source economic event: ${sourceId}`);
-      }
-      this.validateReferenceClosure(item);
-      this.db.prepare(
-        'INSERT INTO economic_events (event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      ).run(item.id, item.kind, item.subject, item.occurredAt, item.recordedAt, encoded.body, encoded.digest);
-      return 'inserted';
-    });
+    return this.transaction(() => this.appendCanonical(item, encoded));
+  }
+
+  /**
+   * Append while the caller owns an existing SQLite transaction. This is the
+   * bridge used by Store request writes so the compatibility request row and
+   * its exact economic event commit or roll back together. Callers must not
+   * invoke this method outside their transaction boundary.
+   */
+  appendWithinTransaction(value: EconomicEvent | EconomicEventInput): EconomicAppendResult {
+    const item = economicEvent(value);
+    return this.appendCanonical(item, serializeEconomicEvent(item));
   }
 
   read(id: string): EconomicEvent | null {
