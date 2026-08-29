@@ -59,3 +59,7 @@
 ## D-015 — Canonical bytes are part of the kernel contract
 **Decision:** Evidence, Claim, Assumption and Derivation records serialize through sorted-key canonical JSON with SHA-256 envelopes; deserialization verifies kind, identity, schema/version, digest and canonical bytes before invoking the domain factory.
 **Reason:** Hashing incidental object insertion order would make equivalent records incomparable and weaken replay/audit evidence. Unsupported values and cycles fail closed rather than being coerced.
+
+## D-016 — Witnesses are first-class evidence-grounded registry records
+**Decision:** A derivation witness is issued as an immutable, versioned Witness node with explicit kind, coordinates where applicable, grounding evidence IDs, issuance time and epistemic state. Stored Derivations must reference a matching registry record; the ledger persists evidence-to-witness and witness-to-claim edges and includes them in revocation/as-of projections.
+**Reason:** An inline witness label can otherwise be invented, changed, or detached from the evidence that supposedly authorizes semantic strengthening. A first-class registry makes proof obligations replayable, revocable and inspectable without collapsing them into a trust bit or allowing a hidden bypass.

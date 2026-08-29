@@ -22,7 +22,7 @@ Status vocabulary: `OPEN`, `PARTIAL`, `IN_PROGRESS`, `COMPLETED`, `SUPERSEDED`, 
 | AII-016 | P0 | Grain is not a type-level truth constraint | OPEN | No Granularity Laundering enforced in derivations |
 | AII-017 | P0 | Money not exact end-to-end | OPEN | Exact Money/Rate core; floating USD restricted to presentation/legacy boundaries |
 | AII-018 | P1 | Missing analytical economic subledger | OPEN | EconomicEvent/Charge/Credit/Discount/Tax/FX/Allocation/Adjustment/Reversal/Close semantics |
-| AII-019 | P0 | Immutability model inconsistent | PARTIAL | SQLite-backed immutable Evidence/Assumption/Claim/Derivation/DAG records, digest/trigger protection, and event-time revocation replay now exist; canonical witness storage, full event projections, and all product consumers remain |
+| AII-019 | P0 | Immutability model inconsistent | PARTIAL | SQLite-backed immutable Evidence/Assumption/Claim/Derivation/Witness/DAG records, digest/trigger protection, and event-time revocation replay now exist; complete event projections and all product consumers remain |
 | AII-020 | P0 | Signed receipt may be read as proving claim truth | OPEN | Integrity/authenticity/correctness/completeness separated; interoperable provenance/attestation |
 | AII-021 | P0 | Causal subsystem inference/design gaps | OPEN | Joint inference, ITT semantics, blocks, missingness, interference, power/precision corrected |
 | AII-022 | P1 | Two causal systems coexist | OPEN | Single estimand/design/estimator registry; superseded method versioned/archived |
@@ -39,4 +39,4 @@ Status vocabulary: `OPEN`, `PARTIAL`, `IN_PROGRESS`, `COMPLETED`, `SUPERSEDED`, 
 | AII-033 | P1 | Supply-chain assurance below target | OPEN | CodeQL/static security, dependency review, SBOM, provenance/signing, secret scanning |
 | AII-034 | P1 | Hand-rolled OIDC requires production-grade scrutiny | IN_PROGRESS | Deterministic clock semantics now; later mature JOSE-vs-custom decision and production validation |
 | AII-035 | P0 | Exact-head CI red on macOS OIDC time-boundary race | COMPLETED | OIDC clock repair plus exact-SHA GitHub run `33253835881` green across root Ubuntu/macOS/Windows, package-smoke, and team-server Ubuntu/macOS/Windows |
-| AII-036 | P0 | No universal formal legality of evidence derivations | PARTIAL | Canonical Derivation/Witness legality and soundness tests now exist; universal issuance integration, persistent witness registry and all product consumers remain |
+| AII-036 | P0 | No universal formal legality of evidence derivations | PARTIAL | Canonical Derivation/Witness legality, evidence-grounded persistent witness registry and soundness tests now exist; universal issuance integration and all product consumers remain |

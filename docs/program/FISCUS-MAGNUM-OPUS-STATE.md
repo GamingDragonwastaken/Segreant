@@ -30,6 +30,8 @@ Controlling architecture:
 - Assumption/event-time checkpoint: `820bad0fe7c636f31bc1fdd99aebfbe47fee5826`
 - Canonical serialization checkpoint: `5ab1440e7495a58dcf08083696591e7cf1747d07`
 - Exact remote verification run for serialization: GitHub Actions `33258932047` (success across all seven configured jobs)
+- Canonical witness-registry checkpoint: `774658431739673183066f3c45dd9d01e84346a2`
+- Exact remote verification run for the witness registry: GitHub Actions `33260005454` (success across all seven configured jobs)
 - Remaining-work audit commit: `5e5a82843154a6fd04e0017538919108c5ff06f1`
 - Luna resume-protocol commit: `5c4de94cf7af0a218ecd10946ac91577fdd9eae7`
 - Base high-assurance PR: #8 (`codex/high-assurance-foundation` -> `main`)
@@ -85,7 +87,16 @@ The ledger is a persistence foundation, not complete product migration: first-cl
 - [x] Canonical JSON/digest envelopes (`5ab1440`) sort object keys, reject cycles/unsupported values, verify canonical bytes before rehydration, and back the SQLite ledger's persisted payloads.
 - [x] GitHub run `33258932047` validates the serialization checkpoint across all seven configured jobs.
 
-M1 now has a persistence-ready canonical Evidence/Assumption/Claim/Derivation/DAG path. The next work is integration: canonical witness storage, complete event replay, one real billing/reconciliation vertical, and conformance at every consequential issuance boundary.
+M1 now has a persistence-ready canonical Evidence/Assumption/Claim/Derivation/DAG/Witness path. The next work is integration: complete event replay, one real billing/reconciliation vertical, and conformance at every consequential issuance boundary.
+
+## M1 witness-registry checkpoint (2026-08-29)
+
+- [x] Canonical immutable, evidence-grounded Witness envelopes (`7746584`) are versioned, time-qualified, coordinate-checked and serialized through the same digest envelope as the other kernel records.
+- [x] SQLite witness persistence is schema-owned and append-only; evidence-to-witness and witness-to-claim edges make witness revocation transitively visible.
+- [x] Stored Derivations now require every inline witness reference to match a persisted registry record and retain the corresponding witness edge; graph reload revalidates the binding.
+- [x] Focused witness, ledger, serialization, full root, browser, build and package gates pass locally; GitHub run `33260005454` validates the exact checkpoint across all seven configured jobs.
+
+The witness registry closes the first persistence gap but not universal product issuance. Complete event-time replay/conformance vectors, product adapters and exact-money billing integration remain open.
 
 ## Completed in first GPT-5.6 Sol tranche
 
@@ -107,19 +118,19 @@ M1 now has a persistence-ready canonical Evidence/Assumption/Claim/Derivation/DA
 
 ## Current verification state
 
-The latest reconstruction checkpoint is green at exact serialization code SHA `5ab1440e7495a58dcf08083696591e7cf1747d07`:
+The latest reconstruction checkpoint is green at exact witness-registry code SHA `774658431739673183066f3c45dd9d01e84346a2`:
 
 - local Node typecheck: pass;
 - local browser typecheck: pass;
-- local root suite: 1007 total, 1003 pass, 0 fail, 4 platform-conditional skips;
+- local root suite: 1011 total, 1007 pass, 0 fail, 4 platform-conditional skips;
 - local packed/installable artifact smoke: pass;
-- GitHub Actions run `33258932047`: success across all seven configured jobs.
+- GitHub Actions run `33260005454`: success across all seven configured jobs.
 
 The branch is still not a final product-completion baseline. M1 and later audit findings remain open or partial, and external gates remain unperformed. Do not weaken the new invariants merely to preserve superficial green status.
 
 ## Exact next actions
 
-1. Continue the Trusted Epistemic Kernel in dependency order: canonical witness registry and complete event replay -> product issuance adapters -> as-of reconstruction/conformance vectors -> one billing/reconciliation vertical.
+1. Continue the Trusted Epistemic Kernel in dependency order: complete event replay and conformance vectors -> product issuance adapters -> one billing/reconciliation vertical.
 2. Migrate one real billing/reconciliation vertical to exact Money/Rate and typed economic evidence, preserving explicit legacy adapters.
 3. Keep every new claim and decision on the kernel path; add regression/property/adversarial tests before widening capability.
 4. After each coherent slice, update this state and the audit/evidence registers with the exact local and remote SHA.

@@ -4,7 +4,7 @@
 **Date:** 2026-08-29  
 **Repository:** `GamingDragonwastaken/Fiscus`  
 **Reconstruction branch:** `gpt56/magnum-opus-reconstruction`  
-**Code baseline reconciled:** `5ab1440e7495a58dcf08083696591e7cf1747d07`
+**Code baseline reconciled:** `774658431739673183066f3c45dd9d01e84346a2`
 **Authority:** owner-approved `FISCUS_FOUNDATIONAL_AUDIT_II_COMPLETE.md` plus all still-valid requirements of the Magnum Opus Master Execution Plan.
 
 ## Purpose
@@ -23,7 +23,7 @@ The reconstruction branch began from the reviewed high-assurance candidate `3157
 
 The original macOS OIDC time-boundary failure has been repaired through injected deterministic verifier time and exact skew-boundary tests. Team-server tests later passed on Windows, Ubuntu and macOS.
 
-The immediate recovery tranche is green at exact implementation SHA `685b14c57cccf078679a37a929f6234f00522abd`; M1 Evidence/Claim slices are green at `fa36cc380e6883cc868e2e5b46517ae118a038ae`; Derivation/DAG slices are green at `8928bb474ecb93477caa7605c6710b432653a631`; schema-owned persistence is green at `9d8d364013d22f37fc4c3548f57110a26a274b6a`; and assumption/event-time/serialization slices are green at `5ab1440e7495a58dcf08083696591e7cf1747d07`. Root typecheck/tests, package smoke, and the configured cross-platform GitHub matrix pass. The broader kernel and product program remains partial/open as recorded below.
+The immediate recovery tranche is green at exact implementation SHA `685b14c57cccf078679a37a929f6234f00522abd`; M1 Evidence/Claim slices are green at `fa36cc380e6883cc868e2e5b46517ae118a038ae`; Derivation/DAG slices are green at `8928bb474ecb93477caa7605c6710b432653a631`; schema-owned persistence is green at `9d8d364013d22f37fc4c3548f57110a26a274b6a`; assumption/event-time/serialization slices are green at `5ab1440e7495a58dcf08083696591e7cf1747d07`; and the canonical witness registry is green at `774658431739673183066f3c45dd9d01e84346a2`. Root typecheck/tests, package smoke, and the configured cross-platform GitHub matrix pass. The broader kernel and product program remains partial/open as recorded below.
 
 ## Work already implemented and to preserve
 
@@ -40,7 +40,8 @@ The first tranche created durable program-control artifacts and implemented mean
 - `MeasurementModel` construct-validity boundary;
 - canonical immutable Evidence and Claim envelopes with explicit provenance, coordinates, profiles, uncertainty and lifecycle metadata;
 - canonical Derivation/Witness legality and immutable Evidence/Claim DAG projections with as-of, supersession and revocation traces;
-- schema-owned SQLite persistence for canonical Evidence/Claim/Derivation nodes, edges and revocation events with digest/trigger protection;
+- first-class immutable Witness envelopes with persisted evidence grounding and enforced Derivation registry references;
+- schema-owned SQLite persistence for canonical Evidence/Claim/Derivation/Witness nodes, edges and revocation events with digest/trigger protection;
 - first-class Assumption IDs, event-time-aware revocation replay and canonical serialization/digest envelopes;
 - strict legacy realization fix: unknown required gates no longer count toward the confirmed lower bound;
 - first live removal of the universal-Git-commit assumption: non-coding outcomes now use a domain-neutral OutcomeContract rather than fake coding lifecycle gates.
@@ -71,7 +72,7 @@ Status vocabulary: `CLOSED`, `PARTIAL`, `OPEN`, `RED-SPEC`, `EXTERNAL-GATE`, `SU
 | AII-016 grain not a truth constraint | PARTIAL | Witness primitive exists; enforce in every derivation/aggregation. |
 | AII-017 money not exact end-to-end | PARTIAL | Migrate ledger/DB/budgets/allocation/reconciliation/API/CSV authoritative paths. |
 | AII-018 analytical economic subledger absent | OPEN | Immutable typed economic events and deterministic projections. |
-| AII-019 immutability inconsistent | PARTIAL | Schema-owned SQLite persistence, digest/trigger checks, assumption links and event-time revocation replay are implemented/tested; canonical witness storage, complete event projections and all product consumers remain. |
+| AII-019 immutability inconsistent | PARTIAL | Schema-owned SQLite persistence, digest/trigger checks, assumption and witness links, and event-time revocation replay are implemented/tested; complete event projections and all product consumers remain. |
 | AII-020 receipt mistaken for truth | PARTIAL | Separate trust dimensions in product UX and interoperable attestation semantics. |
 | AII-021 causal inference/design gaps | OPEN | ITT, blocks, joint inference, missingness, interference, precision and transportability. |
 | AII-022 two causal systems | OPEN | One estimand/design/estimator registry; version/archive superseded path. |
@@ -88,7 +89,7 @@ Status vocabulary: `CLOSED`, `PARTIAL`, `OPEN`, `RED-SPEC`, `EXTERNAL-GATE`, `SU
 | AII-033 supply-chain assurance | OPEN | CodeQL, dependency review, secret scan, SBOM, provenance/signing. |
 | AII-034 hand-rolled OIDC | PARTIAL | Clock fixed; JOSE-vs-custom decision, differential/reference tests, production validation. |
 | AII-035 original exact-head macOS failure | CLOSED | Deterministic OIDC repair plus GitHub run `33253835881` is green across all seven configured jobs at exact SHA `685b14c`. |
-| AII-036 derivation legality absent | PARTIAL | Canonical Derivation/Witness legality exists; persistent witness registry and unavoidable integration at all issuance boundaries remain. |
+| AII-036 derivation legality absent | PARTIAL | Canonical Derivation/Witness legality and a persisted evidence-grounded witness registry now exist; unavoidable integration at all consequential issuance boundaries remains. |
 
 ## Immediate execution tranche
 
@@ -100,7 +101,7 @@ The next worker should not start another design discussion.
 4. **COMPLETED at `685b14c`:** Migrate every affected realization/demo fixture to explicit required lifecycle evidence; no unknown gate is promoted to pass.
 5. **COMPLETED at `685b14c`:** Observe GitHub Actions run `33253835881` as green on all configured jobs.
 6. **COMPLETED in the following documentation checkpoint:** update program state, audit, decision, and evidence registers with exact implementation/CI identities.
-7. **NEXT:** Continue M1 kernel issuance dependency-first: canonical Evidence -> Claim -> Derivation/Witness -> Assumption/DAG -> persisted revocation/supersession -> as-of reconstruction -> serialization/conformance.
+7. **NEXT:** Continue M1 kernel issuance dependency-first: complete event-time replay and conformance vectors -> product issuance adapters -> exact-money billing/reconciliation migration.
 
 ## Trusted Epistemic Kernel remaining work
 
@@ -297,7 +298,7 @@ For each external gate, repository work must leave an executable protocol, requi
 1. **COMPLETED at `c89d95d`:** TDD canonical Evidence envelope and immutable issuance boundary.
 2. **COMPLETED at `fa36cc3`:** TDD canonical Claim with ClaimProfile, uncertainty and typed basis aliases.
 3. **COMPLETED at `c457b95`:** TDD canonical Derivation/Witness and illegal-strengthening checks.
-4. **PARTIAL at `5ab1440`:** Immutable Evidence/Claim DAG plus schema-owned persistence, named assumptions, event-time revocation and canonical serialization; witness registry, full event replay and product integration remain.
+4. **COMPLETED at `7746584`:** Persisted canonical Witness registry with evidence grounding, serialization, append-only protection, Derivation-reference enforcement and transitive revocation edges.
 5. implement complete event-time as-of reconstruction and canonical conformance vectors;
 6. migrate billing/reconciliation to exact Money/Rate and typed economic claims;
 7. introduce WorkUnit/OutcomeAdapter and migrate coding/completeness-aware `clean`;
