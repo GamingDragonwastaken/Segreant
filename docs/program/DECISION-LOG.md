@@ -43,3 +43,7 @@
 ## D-011 — DAG snapshots are immutable projections
 **Decision:** Evidence/Claim/Assumption/Measurement/Decision dependencies are represented as validated immutable snapshots. Dependency edges are acyclic; supersession is not a dependency; as-of and revocation are projections with trace paths, never destructive updates.
 **Reason:** The kernel must answer what was knowable and why a descendant became non-certifiable without erasing history. A pure snapshot API is safe to compose now; append-only persistence and event replay follow as a separate slice.
+
+## D-012 — Kernel persistence stays under the Store schema authority
+**Decision:** Persist canonical Evidence, Claim, Derivation, DAG nodes/edges and revocation events in append-only SQLite tables created and protected by `src/store/schema.ts`; `Store.epistemic()` exposes the same connection, while `ledger.ts` performs validated DML and replay checks only.
+**Reason:** A second database or domain-owned DDL would split transaction and migration authority. Schema-owned triggers prevent update/delete/`INSERT OR REPLACE` bypasses, and exact JSON/digest replay keeps corrections additive and auditable.

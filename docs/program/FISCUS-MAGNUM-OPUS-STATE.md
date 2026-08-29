@@ -25,6 +25,8 @@ Controlling architecture:
 - Derivation/Witness checkpoint: `c457b95496481bc3c4d1eb89100e38ce7862ab32`
 - Immutable DAG checkpoint: `8928bb474ecb93477caa7605c6710b432653a631`
 - Exact remote verification run for the DAG checkpoint: GitHub Actions `33256214683` (success across all seven configured jobs)
+- SQLite epistemic-ledger checkpoint: `9d8d364013d22f37fc4c3548f57110a26a274b6a`
+- Exact remote verification run for the ledger checkpoint: GitHub Actions `33257825704` (success across all seven configured jobs)
 - Remaining-work audit commit: `5e5a82843154a6fd04e0017538919108c5ff06f1`
 - Luna resume-protocol commit: `5c4de94cf7af0a218ecd10946ac91577fdd9eae7`
 - Base high-assurance PR: #8 (`codex/high-assurance-foundation` -> `main`)
@@ -65,6 +67,14 @@ This is a kernel issuance foundation, not universal product migration. Persisted
 
 Persistence-backed event storage, canonical witness registries, minimal-cut semantics for richer conjunction graphs, and unavoidable integration at every claim-issuance boundary remain the next M1 work.
 
+## M1 persistence checkpoint (2026-08-29)
+
+- [x] SQLite-backed canonical Evidence/Claim/Derivation storage (`9d8d364`) now shares the Store connection, retains canonical JSON plus SHA-256 digests, writes dependencies atomically, supports exact replay idempotence, and protects every kernel table against update/delete/replace bypasses with schema-owned triggers.
+- [x] Store integration and old-database regression tests pass; the graph reload validates payload identity and derivation references before exposing a projection.
+- [x] GitHub run `33257825704` validates the exact persistence checkpoint across root Ubuntu/macOS/Windows, package-smoke, and team-server Ubuntu/macOS/Windows.
+
+The ledger is a persistence foundation, not complete product migration: first-class assumptions, event-time-aware revocation, canonical witness storage, downstream claim issuance, and economic/billing integration remain open.
+
 ## Completed in first GPT-5.6 Sol tranche
 
 - [x] Durable program-control directory established.
@@ -85,19 +95,19 @@ Persistence-backed event storage, canonical witness registries, minimal-cut sema
 
 ## Current verification state
 
-The latest reconstruction checkpoint is green at exact DAG code SHA `8928bb474ecb93477caa7605c6710b432653a631`:
+The latest reconstruction checkpoint is green at exact persistence code SHA `9d8d364013d22f37fc4c3548f57110a26a274b6a`:
 
 - local Node typecheck: pass;
 - local browser typecheck: pass;
-- local root suite: 995 total, 991 pass, 0 fail, 4 platform-conditional skips;
+- local root suite: 1001 total, 997 pass, 0 fail, 4 platform-conditional skips;
 - local packed/installable artifact smoke: pass;
-- GitHub Actions run `33256214683`: success across all seven configured jobs.
+- GitHub Actions run `33257825704`: success across all seven configured jobs.
 
 The branch is still not a final product-completion baseline. M1 and later audit findings remain open or partial, and external gates remain unperformed. Do not weaken the new invariants merely to preserve superficial green status.
 
 ## Exact next actions
 
-1. Continue the Trusted Epistemic Kernel in dependency order: persisted Evidence/Claim/Derivation/DAG events -> assumption registry -> revocation/supersession projections -> as-of reconstruction -> serialization/conformance.
+1. Continue the Trusted Epistemic Kernel in dependency order: first-class assumption registry -> event-time-aware revocation/supersession projections -> as-of reconstruction -> serialization/conformance.
 2. Migrate one real billing/reconciliation vertical to exact Money/Rate and typed economic evidence, preserving explicit legacy adapters.
 3. Keep every new claim and decision on the kernel path; add regression/property/adversarial tests before widening capability.
 4. After each coherent slice, update this state and the audit/evidence registers with the exact local and remote SHA.
