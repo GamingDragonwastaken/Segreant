@@ -27,9 +27,10 @@ import {
   type RevocationProjection,
 } from './dag.ts';
 import { EPISTEMIC_STATES } from './state.ts';
-import { derivation, type Derivation, type DerivationInput } from './derivation.ts';
+import { derivation, type Derivation, type DerivationInput, type DerivationWitness } from './derivation.ts';
 import { canonicalJson } from './serialization.ts';
 import { instant, type Instant } from './time.ts';
+import { witness, type Witness } from './witness.ts';
 
 export type AppendResult = 'inserted' | 'duplicate';
 
@@ -125,6 +126,15 @@ function sameNodeIdentity(a: DagNode, b: DagNode): boolean {
     && JSON.stringify(a.supersedes) === JSON.stringify(b.supersedes);
 }
 
+function sameWitnessReference(reference: DerivationWitness, registered: Witness): boolean {
+  return reference.id === registered.id
+    && reference.kind === registered.kind
+    && canonicalJson(reference.evidenceIds ?? []) === canonicalJson(registered.evidenceIds)
+    && (reference.detail ?? null) === registered.detail
+    && canonicalJson(reference.from ?? null) === canonicalJson(registered.from ?? null)
+    && canonicalJson(reference.to ?? null) === canonicalJson(registered.to ?? null);
+}
+
 function row<T>(value: unknown): T | null {
   return value === undefined ? null : value as T;
 }
@@ -166,14 +176,16 @@ export class EpistemicLedger {
     });
   }
 
-  private nodePayload(id: string, table: 'epistemic_evidence' | 'epistemic_claims' | 'epistemic_assumptions' | 'epistemic_derivations', key: string, label: string): StoredPayloadRow | null {
+  private nodePayload(id: string, table: 'epistemic_evidence' | 'epistemic_claims' | 'epistemic_assumptions' | 'epistemic_witnesses' | 'epistemic_derivations', key: string, label: string): StoredPayloadRow | null {
     const projection = table === 'epistemic_evidence'
       ? 'evidence_json AS json, evidence_digest AS digest'
       : table === 'epistemic_claims'
         ? 'claim_json AS json, claim_digest AS digest'
         : table === 'epistemic_assumptions'
           ? 'assumption_json AS json, assumption_digest AS digest'
-          : 'derivation_json AS json, derivation_digest AS digest';
+          : table === 'epistemic_witnesses'
+            ? 'witness_json AS json, witness_digest AS digest'
+            : 'derivation_json AS json, derivation_digest AS digest';
     const stored = row<StoredPayloadRow>(this.db.prepare(`SELECT ${key} AS id, ${projection} FROM ${table} WHERE ${key} = ?`).get(id));
     if (stored === null) return null;
     if (typeof stored.json !== 'string' || typeof stored.digest !== 'string' || stored.digest !== digest(stored.json)) {
@@ -302,12 +314,50 @@ export class EpistemicLedger {
     });
   }
 
+  appendWitness(value: Witness): AppendResult {
+    const item = witness(value);
+    const encoded = json(item, 'witness');
+    return this.transaction(() => {
+      this.ensureKinds(item.evidenceIds, 'evidence');
+      const current = this.graph();
+      const normalized = normalizeNodeForLedger({
+        id: item.id, kind: 'witness', availableAt: item.issuedAt, epistemic: item.epistemic,
+      });
+      const existing = current.nodes.find((node) => node.id === item.id);
+      let nodeResult: AppendResult;
+      if (existing !== undefined) {
+        if (!sameNodeIdentity(existing, normalized)) throw new Error(`different DAG node already exists for ${item.id}`);
+        if (existing.kind !== 'witness') throw new Error(`${item.id} is not a witness node`);
+        nodeResult = 'duplicate';
+      } else {
+        createEpistemicDag([...current.nodes, normalized], current.edges);
+        nodeResult = this.insertNode(normalized);
+      }
+      const stored = this.nodePayload(item.id, 'epistemic_witnesses', 'witness_id', 'witness');
+      if (stored !== null) {
+        if (!sameStoredPayload(stored, encoded)) throw new Error(`different witness already exists for ${item.id}`);
+        return 'duplicate';
+      }
+      this.db.prepare('INSERT INTO epistemic_witnesses (witness_id, witness_json, witness_digest) VALUES (?, ?, ?)').run(item.id, encoded, digest(encoded));
+      for (const evidenceId of item.evidenceIds) this.insertEdge({ from: evidenceId, to: item.id, relation: 'supports' });
+      return nodeResult === 'duplicate' ? 'inserted' : nodeResult;
+    });
+  }
+
   appendDerivation(value: Derivation): AppendResult {
     const item = derivation(value);
     const encoded = json(item, 'derivation');
     return this.transaction(() => {
       this.ensureKinds(item.inputEvidenceIds, 'evidence');
       this.ensureKinds(item.inputClaimIds, 'claim');
+      this.ensureKinds(item.witnesses.map((candidate) => candidate.id), 'witness');
+      for (const reference of item.witnesses) {
+        const registered = this.readWitness(reference.id);
+        if (registered === null) throw new Error(`unknown witness: ${reference.id}`);
+        if (!sameWitnessReference(reference, registered)) {
+          throw new Error(`derivation witness ${reference.id} does not match the registered witness`);
+        }
+      }
       const output = this.readClaim(item.outputClaimId);
       if (output === null) throw new Error(`unknown output claim: ${item.outputClaimId}`);
       if (JSON.stringify(output.proposition) !== JSON.stringify(item.outputProposition)) throw new Error(`derivation output proposition does not match ${item.outputClaimId}`);
@@ -316,6 +366,7 @@ export class EpistemicLedger {
       const extraEdges: DagEdgeInput[] = [
         ...item.inputEvidenceIds.map((from) => ({ from, to: item.outputClaimId, relation: 'depends_on' as const })),
         ...item.inputClaimIds.map((from) => ({ from, to: item.outputClaimId, relation: 'derives' as const })),
+        ...item.witnesses.map((from) => ({ from: from.id, to: item.outputClaimId, relation: 'witnesses' as const })),
       ];
       const stored = this.nodePayload(item.id, 'epistemic_derivations', 'derivation_id', 'derivation');
       if (stored !== null) {
@@ -400,6 +451,18 @@ export class EpistemicLedger {
     }
   }
 
+  readWitness(id: string): Witness | null {
+    const stored = this.nodePayload(id, 'epistemic_witnesses', 'witness_id', 'witness');
+    if (stored === null) return null;
+    try {
+      const item = witness(JSON.parse(stored.json) as Witness);
+      if (item.id !== id) throw new Error('physical identity does not match the requested ID');
+      return item;
+    } catch (error) {
+      throw new Error(`stored witness ${id} failed canonical validation: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
   readDerivation(id: string): Derivation | null {
     const stored = this.nodePayload(id, 'epistemic_derivations', 'derivation_id', 'derivation');
     if (stored === null) return null;
@@ -435,6 +498,11 @@ export class EpistemicLedger {
         if (item === null) throw new Error(`stored assumption node ${node.id} has no payload`);
         this.ensureKinds(item.evidenceIds, 'evidence');
       }
+      if (node.kind === 'witness') {
+        const item = this.readWitness(node.id);
+        if (item === null) throw new Error(`stored witness node ${node.id} has no payload`);
+        this.ensureKinds(item.evidenceIds, 'evidence');
+      }
     }
     const derivationRows = this.db.prepare('SELECT derivation_id FROM epistemic_derivations ORDER BY derivation_id').all() as unknown as Array<{ derivation_id: string }>;
     for (const stored of derivationRows) {
@@ -443,6 +511,17 @@ export class EpistemicLedger {
       if (this.node(item.outputClaimId)?.kind !== 'claim') throw new Error(`stored derivation ${stored.derivation_id} has an unknown output claim`);
       this.ensureKinds(item.inputEvidenceIds, 'evidence');
       this.ensureKinds(item.inputClaimIds, 'claim');
+      this.ensureKinds(item.witnesses.map((candidate) => candidate.id), 'witness');
+      for (const reference of item.witnesses) {
+        const registered = this.readWitness(reference.id);
+        if (registered === null || !sameWitnessReference(reference, registered)) {
+          throw new Error(`stored derivation ${stored.derivation_id} has an unregistered or divergent witness ${reference.id}`);
+        }
+        const witnessEdge = this.db.prepare(
+          'SELECT 1 AS present FROM epistemic_edges WHERE from_id = ? AND to_id = ? AND relation = ?',
+        ).get(reference.id, item.outputClaimId, 'witnesses');
+        if (witnessEdge === undefined) throw new Error(`stored derivation ${stored.derivation_id} is missing witness edge ${reference.id} -> ${item.outputClaimId}`);
+      }
     }
     return createEpistemicDag(nodes, edges);
   }

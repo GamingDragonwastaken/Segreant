@@ -4,7 +4,7 @@
  * Canonicalization sorts object keys, preserves array order, rejects unsupported
  * values/cycles, and is verified again before deserialization. Record factories
  * run on both sides of the boundary, so a valid digest cannot bypass the
- * Evidence/Claim/Assumption/Derivation invariants.
+ * Evidence/Claim/Assumption/Witness/Derivation invariants.
  */
 
 import { createHash } from 'node:crypto';
@@ -12,8 +12,9 @@ import { assumption, type Assumption } from './assumption.ts';
 import { claim, type Claim } from './claim.ts';
 import { derivation, type Derivation } from './derivation.ts';
 import { evidence, type Evidence } from './evidence.ts';
+import { witness, type Witness } from './witness.ts';
 
-export const SERIALIZED_RECORD_KINDS = ['evidence', 'claim', 'assumption', 'derivation'] as const;
+export const SERIALIZED_RECORD_KINDS = ['evidence', 'claim', 'assumption', 'witness', 'derivation'] as const;
 export type SerializedRecordKind = (typeof SERIALIZED_RECORD_KINDS)[number];
 
 export interface SerializedEpistemicRecord {
@@ -87,6 +88,11 @@ export function serializeAssumption(value: Assumption): SerializedEpistemicRecor
   return envelope('assumption', item.id, item.schemaVersion, canonicalJson(item));
 }
 
+export function serializeWitness(value: Witness): SerializedEpistemicRecord {
+  const item = witness(value);
+  return envelope('witness', item.id, item.schemaVersion, canonicalJson(item));
+}
+
 export function serializeDerivation(value: Derivation): SerializedEpistemicRecord {
   const item = derivation(value);
   return envelope('derivation', item.id, item.version, canonicalJson(item));
@@ -125,6 +131,13 @@ export function deserializeAssumption(record: SerializedEpistemicRecord): Assump
   const parsed = decode(record, 'assumption');
   const item = assumption(parsed as unknown as Assumption);
   if (item.id !== record.id || item.schemaVersion !== record.schemaVersion) throw new Error('serialized assumption identity/schemaVersion mismatch');
+  return item;
+}
+
+export function deserializeWitness(record: SerializedEpistemicRecord): Witness {
+  const parsed = decode(record, 'witness');
+  const item = witness(parsed as unknown as Witness);
+  if (item.id !== record.id || item.schemaVersion !== record.schemaVersion) throw new Error('serialized witness identity/schemaVersion mismatch');
   return item;
 }
 

@@ -10,6 +10,7 @@ import { claimProfile } from '../src/epistemic/profile.ts';
 import { grain } from '../src/epistemic/grain.ts';
 import { interval } from '../src/epistemic/time.ts';
 import { scope } from '../src/epistemic/scope.ts';
+import { witness } from '../src/epistemic/witness.ts';
 
 function evidenceInput(id = 'evidence:invoice'): EvidenceInput {
   return {
@@ -194,5 +195,61 @@ test('ledger rejects graph cycles and unknown dependency endpoints before mutati
   assert.throws(() => value.appendDependency({ from: 'a', to: 'missing', relation: 'supports' }), /unknown node/);
   assert.deepEqual(value.graph().edges, [{ from: 'a', to: 'b', relation: 'derives' }]);
   assert.throws(() => value.appendNode({ id: 'unmaterialized-claim', kind: 'claim', availableAt: '2026-08-01T00:00:00.000Z' }), /appendClaim/);
+  db.close();
+});
+
+test('ledger persists canonical witnesses and requires registry identity for derivations', () => {
+  const { db, value } = ledger();
+  const e = evidence(evidenceInput('evidence:witness'));
+  const source = claim(claimInput('claim:witness-source', e.id));
+  const output = claim(claimInput('claim:witness-output', e.id));
+  value.appendEvidence(e);
+  value.appendClaim(source);
+  value.appendClaim(output);
+
+  const proof = witness({
+    id: 'witness:resolution',
+    kind: 'epistemic_resolution',
+    evidenceIds: [e.id],
+    detail: 'The provider export resolves the previously unknown billing state.',
+    issuedAt: '2026-08-02T00:00:02.000Z',
+    epistemic: 'supported',
+    schemaVersion: 1,
+  });
+  assert.equal(value.appendWitness(proof), 'inserted');
+  assert.equal(value.appendWitness(proof), 'duplicate');
+  assert.deepEqual(value.readWitness(proof.id), proof);
+  assert.throws(() => db.prepare("UPDATE epistemic_witnesses SET witness_json = '{}' WHERE witness_id = ?").run(proof.id), /append-only/);
+  assert.throws(() => db.prepare("DELETE FROM epistemic_witnesses WHERE witness_id = ?").run(proof.id), /append-only/);
+  assert.throws(() => db.prepare("INSERT OR REPLACE INTO epistemic_witnesses (witness_id, witness_json, witness_digest) VALUES (?, '{}', 'tampered')").run(proof.id), /append-only/);
+
+  const derivationWithProof = derivation({
+    ...derivationInput(source.id, output.id),
+    id: 'derivation:witnessed',
+    inputEvidenceIds: [e.id],
+    witnesses: [{ id: proof.id, kind: proof.kind, evidenceIds: proof.evidenceIds, detail: proof.detail }],
+  });
+  assert.equal(value.appendDerivation(derivationWithProof), 'inserted');
+  assert.deepEqual(value.graph().edges, [
+    { from: 'claim:witness-source', to: 'claim:witness-output', relation: 'derives' },
+    { from: 'evidence:witness', to: 'claim:witness-output', relation: 'depends_on' },
+    { from: 'evidence:witness', to: 'claim:witness-output', relation: 'supports' },
+    { from: 'evidence:witness', to: 'claim:witness-source', relation: 'supports' },
+    { from: 'evidence:witness', to: 'witness:resolution', relation: 'supports' },
+    { from: 'witness:resolution', to: 'claim:witness-output', relation: 'witnesses' },
+  ]);
+  assert.deepEqual(value.revocationProjection().revokedIds, []);
+  value.appendRevocation({ eventId: 'event:witness-revoked', targetId: e.id, recordedAt: '2026-08-03T00:00:00.000Z', reason: 'provider correction' });
+  assert.deepEqual(value.revocationProjection().revokedIds, [
+    'claim:witness-output', 'claim:witness-source', 'evidence:witness', 'witness:resolution',
+  ]);
+
+  const unregistered = derivation({
+    ...derivationInput(source.id, output.id),
+    id: 'derivation:unregistered-witness',
+    inputEvidenceIds: [e.id],
+    witnesses: [{ id: 'witness:missing', kind: 'epistemic_resolution', evidenceIds: [e.id], detail: null }],
+  });
+  assert.throws(() => value.appendDerivation(unregistered), /unknown witness|registry/);
   db.close();
 });

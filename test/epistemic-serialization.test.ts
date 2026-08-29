@@ -4,6 +4,7 @@ import { claim } from '../src/epistemic/claim.ts';
 import { evidence } from '../src/epistemic/evidence.ts';
 import { assumption } from '../src/epistemic/assumption.ts';
 import { derivation } from '../src/epistemic/derivation.ts';
+import { witness } from '../src/epistemic/witness.ts';
 import {
   canonicalJson,
   deserializeClaim,
@@ -12,6 +13,8 @@ import {
   serializeClaim,
   serializeDerivation,
   serializeEvidence,
+  deserializeWitness,
+  serializeWitness,
   type SerializedEpistemicRecord,
 } from '../src/epistemic/serialization.ts';
 import { claimProfile } from '../src/epistemic/profile.ts';
@@ -56,11 +59,16 @@ test('all canonical kernel records round-trip through verified envelopes', () =>
     outputProposition: c.proposition, coordinateChange: { from: { grain: c.grain, scope: c.scope }, to: { grain: c.grain, scope: c.scope } },
     version: 1, reproducibilityHash: 'sha256:derivation',
   });
-  const records: SerializedEpistemicRecord[] = [serializeEvidence(e), serializeClaim(c), serializeAssumption(a), serializeDerivation(d)];
+  const w = witness({
+    id: 'witness:serialization', kind: 'epistemic_resolution', evidenceIds: [e.id],
+    detail: 'fixture witness', issuedAt: '2026-08-01T00:00:02.000Z', epistemic: 'supported', schemaVersion: 1,
+  });
+  const records: SerializedEpistemicRecord[] = [serializeEvidence(e), serializeClaim(c), serializeAssumption(a), serializeWitness(w), serializeDerivation(d)];
   assert.equal(deserializeEvidence(records[0]!).id, e.id);
   assert.equal(deserializeClaim(records[1]!).id, c.id);
   assert.equal(records[2]!.kind, 'assumption');
-  assert.equal(records[3]!.kind, 'derivation');
+  assert.equal(deserializeWitness(records[3]!).id, w.id);
+  assert.equal(records[4]!.kind, 'derivation');
 });
 
 test('deserialization fails closed on tampered bytes, digest, kind, version, and unsupported values', () => {
