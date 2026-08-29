@@ -193,6 +193,11 @@ function cloneJson(value: unknown, label: string, seen = new WeakSet<object>()):
   return result;
 }
 
+/** Clone and deeply freeze a JSON-compatible value for another kernel object. */
+export function immutableJson(value: unknown, label = 'value'): JsonValue {
+  return cloneJson(value, label);
+}
+
 function canonicalScope(value: unknown): Scope {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error('scope must be an object');
   const constraints = (value as { constraints?: unknown }).constraints;
