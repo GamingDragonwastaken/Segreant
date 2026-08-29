@@ -386,7 +386,12 @@ type Arch = 'realized' | 'realized_light' | 'churned' | 'rejected' | 'reverted' 
 // outcome (realized only if nothing failed AND survived+clean both pass).
 const ARCHETYPES: Record<Arch, { maturing: boolean; survival: number; verdicts: Partial<Record<Gate, Verdict>> }> = {
   realized:       { maturing: false, survival: 0.93, verdicts: { proposed: 'pass', accepted: 'pass', committed: 'pass', tested: 'pass', merged: 'pass', shipped: 'pass', survived: 'pass', clean: 'pass' } },
-  realized_light: { maturing: false, survival: 0.88, verdicts: { proposed: 'pass', accepted: 'pass', committed: 'pass', tested: 'pass', survived: 'pass', clean: 'pass' } },
+  // This is still a lighter *fixture narrative* (it omits no required gate).
+  // Strict realization now requires every gate in the coding contract, so the
+  // demo supplies explicit merged/shipped evidence rather than relying on the
+  // old unknown-as-pass shortcut. The distinction from `realized` is the
+  // authored survival/acceptance profile, not missing lifecycle evidence.
+  realized_light: { maturing: false, survival: 0.88, verdicts: { proposed: 'pass', accepted: 'pass', committed: 'pass', tested: 'pass', merged: 'pass', shipped: 'pass', survived: 'pass', clean: 'pass' } },
   churned:        { maturing: false, survival: 0.22, verdicts: { proposed: 'pass', accepted: 'pass', committed: 'pass', tested: 'pass', survived: 'fail', clean: 'pass' } },
   rejected:       { maturing: false, survival: 0.40, verdicts: { proposed: 'pass', accepted: 'fail', committed: 'pass' } },
   reverted:       { maturing: false, survival: 0.66, verdicts: { proposed: 'pass', accepted: 'pass', committed: 'pass', tested: 'pass', survived: 'pass', clean: 'fail' } },

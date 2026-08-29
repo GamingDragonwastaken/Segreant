@@ -55,12 +55,23 @@ test('store round-trip: rehydrated snapshots feed the SAME rollup (no parallel m
   // SQLite aggregates floating-point values in a different order from the JS
   // reducer. Preserve the meaningful bit-for-bit structural comparison while
   // comparing the two order-sensitive decimal aggregates numerically.
-  const { totalCostUsd: totalA, realizedValueRate: rateA, ...stableA } = repA.matured;
-  const { totalCostUsd: totalB, realizedValueRate: rateB, ...stableB } = repB.matured;
+  const { totalCostUsd: totalA, realizedValueRate: rateA, wasteByStage: wasteA, ...stableA } = repA.matured;
+  const { totalCostUsd: totalB, realizedValueRate: rateB, wasteByStage: wasteB, ...stableB } = repB.matured;
   assert.deepEqual(stableB, stableA);
   assert.ok(Math.abs(totalB - totalA) < 1e-9);
   assert.ok(rateA !== null && rateB !== null, 'both persisted rollups have a realized-value rate');
   assert.ok(Math.abs(rateB - rateA) < 1e-12);
+  // SQLite REAL aggregation and the JS reducer can add the same decimal rows in
+  // different orders. Compare stage identity/counts exactly and their money
+  // aggregates within the same precision tolerance used for the headline total;
+  // this tests lossless rehydration without making binary floating-point order a
+  // realization-semantic gate.
+  assert.equal(wasteB.length, wasteA.length);
+  for (let i = 0; i < wasteA.length; i += 1) {
+    assert.equal(wasteB[i]!.stage, wasteA[i]!.stage);
+    assert.equal(wasteB[i]!.units, wasteA[i]!.units);
+    assert.ok(Math.abs(wasteB[i]!.costUsd - wasteA[i]!.costUsd) < 1e-9);
+  }
   a.close();
   b.close();
 });

@@ -967,7 +967,7 @@ function commit(dir: string, file: string, content: string, msg: string, iso: st
   g(dir, ['commit', '-qm', msg, `--date=${iso}`], { GIT_COMMITTER_DATE: iso });
 }
 
-test('realization: accepted proposal + tested signal + survival → REALIZED; churned commit dies at survived', async () => {
+test('realization: complete lifecycle evidence + survival → REALIZED; churned commit dies at survived', async () => {
   const dir = makeRepo();
   const store = new Store(':memory:');
   try {
@@ -986,9 +986,12 @@ test('realization: accepted proposal + tested signal + survival → REALIZED; ch
       provider: 'anthropic', model: 'claude-opus-4-8', project,
       files: [{ path: 'work.txt', addedLines: Array.from({ length: 10 }, (_, i) => `L${i}`) }],
     });
-    // Outcome signals wired for A.
+    // Outcome signals wired for A. Strict realization requires every declared
+    // coding lifecycle predicate, including merge; an absent signal must remain
+    // unresolved rather than being treated as an implicit pass.
     store.insertSignal({ signalId: 's1', kind: 'tested', commitHash: hashA, project, tsEpochMs: Date.now(), verdict: 'pass', detail: null });
     store.insertSignal({ signalId: 's2', kind: 'shipped', commitHash: hashA, project, tsEpochMs: Date.now(), verdict: 'pass', detail: null });
+    store.insertSignal({ signalId: 's3', kind: 'merged', commitHash: hashA, project, tsEpochMs: Date.now(), verdict: 'pass', detail: null });
 
     // Commit B then C: C rewrites 3 of B's 4 lines → B survival 0.25 < 0.5 → dies at survived.
     commit(dir, 'churn.txt', 'c1\nc2\nc3\nc4\n', 'feat: churn base', '2026-01-03T10:00:00+00:00');
