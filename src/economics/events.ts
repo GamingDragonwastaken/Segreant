@@ -33,6 +33,45 @@ export const ECONOMIC_EVENT_KINDS = [
 ] as const;
 export type EconomicEventKind = (typeof ECONOMIC_EVENT_KINDS)[number];
 
+export const ECONOMIC_EVENT_ROLES = [
+  'usage',
+  'charge',
+  'price',
+  'adjustment',
+  'translation',
+  'allocation',
+  'control',
+] as const;
+export type EconomicEventRole = (typeof ECONOMIC_EVENT_ROLES)[number];
+
+const EVENT_ROLE_BY_KIND: Record<EconomicEventKind, EconomicEventRole> = {
+  usage_observed: 'usage',
+  charge_estimated: 'charge',
+  provider_charge_observed: 'charge',
+  bill_observed: 'charge',
+  price_asserted: 'price',
+  price_corrected: 'price',
+  credit_applied: 'adjustment',
+  discount_applied: 'adjustment',
+  commitment_recognized: 'adjustment',
+  tax_recognized: 'adjustment',
+  fx_translated: 'translation',
+  cost_allocated: 'allocation',
+  allocation_reversed: 'allocation',
+  true_up: 'adjustment',
+  write_off: 'adjustment',
+  close_finalized: 'control',
+  close_reopened: 'control',
+};
+
+/** Classify event semantics before a projection combines any amounts. */
+export function economicEventRole(kind: EconomicEventKind): EconomicEventRole {
+  if (typeof kind !== 'string' || !Object.prototype.hasOwnProperty.call(EVENT_ROLE_BY_KIND, kind)) {
+    throw new Error(`invalid economic event kind: ${String(kind)}`);
+  }
+  return EVENT_ROLE_BY_KIND[kind as EconomicEventKind];
+}
+
 const MONETARY_EVENT_KINDS = new Set<EconomicEventKind>([
   'usage_observed',
   'charge_estimated',
@@ -119,6 +158,20 @@ function eventKind(value: unknown): EconomicEventKind {
   return value as EconomicEventKind;
 }
 
+function validateEventBasis(kind: EconomicEventKind, amount: Money | null, id: string): void {
+  if (amount === null) return;
+  const valid = kind === 'charge_estimated'
+    ? amount.basis === 'list' || amount.basis === 'estimated'
+    : kind === 'provider_charge_observed'
+      ? amount.basis === 'provider_observed'
+      : kind === 'bill_observed'
+        ? amount.basis === 'billed'
+        : kind === 'cost_allocated' || kind === 'allocation_reversed'
+          ? amount.basis === 'allocated'
+          : true;
+  if (!valid) throw new Error(`economic event ${id} kind ${kind} requires a compatible economic basis (received ${amount.basis})`);
+}
+
 function eventIds(value: unknown): readonly string[] {
   if (value === undefined) return Object.freeze([]);
   if (!Array.isArray(value)) throw new Error('economic event sourceEventIds must be an array');
@@ -165,6 +218,7 @@ export function economicEvent(input: EconomicEventInput): EconomicEvent {
   const recordedAt = canonicalInstant(value.recordedAt, `economic event ${id} recordedAt`);
   const amount = canonicalAmount(value.amount, `economic event ${id} amount`);
   if (MONETARY_EVENT_KINDS.has(kind) && amount === null) throw new Error(`economic event ${id} of kind ${kind} requires an amount`);
+  validateEventBasis(kind, amount, id);
   const sourceEventIds = eventIds(value.sourceEventIds);
   const reversalOf = value.reversalOf === undefined || value.reversalOf === null ? null : nonEmpty(value.reversalOf, `economic event ${id} reversalOf`);
   if (reversalOf === id) throw new Error(`economic event ${id} cannot reverse itself`);

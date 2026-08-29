@@ -10,8 +10,8 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { initializeEconomicSchema } from '../store/schema.ts';
 import { instant, type Instant } from '../epistemic/time.ts';
-import { addMoney, type Money } from './money.ts';
-import { economicEvent, type EconomicEvent, type EconomicEventInput } from './events.ts';
+import { addMoney, compareMoney, negateMoney, type Money } from './money.ts';
+import { economicEvent, economicEventRole, type EconomicEvent, type EconomicEventInput, type EconomicEventRole } from './events.ts';
 import { deserializeEconomicEvent, serializeEconomicEvent } from './serialization.ts';
 
 export type EconomicAppendResult = 'inserted' | 'duplicate';
@@ -27,6 +27,7 @@ interface StoredEconomicRow {
 }
 
 export interface EconomicBalance {
+  readonly role: EconomicEventRole;
   readonly currency: string;
   readonly basis: Money['basis'];
   readonly amount: Money;
@@ -116,11 +117,30 @@ export class EconomicLedger {
     if (value.reversalOf !== null && !value.sourceEventIds.includes(value.reversalOf)) {
       throw new Error(`economic event ${value.id} reversalOf must appear in sourceEventIds`);
     }
+    const sources = new Map<string, EconomicEvent>();
     for (const sourceId of value.sourceEventIds) {
       if (sourceId === value.id) throw new Error(`economic event ${value.id} cannot reference itself`);
       const source = this.readStored(sourceId);
       if (source === null) throw new Error(`unknown source economic event: ${sourceId}`);
+      sources.set(sourceId, source);
       this.validateReferenceClosure(source, visiting, validated);
+    }
+    if (value.reversalOf !== null) {
+      const target = sources.get(value.reversalOf);
+      if (target === undefined) throw new Error(`economic event ${value.id} reversalOf must appear in sourceEventIds`);
+      if (target.amount === null || value.amount === null) throw new Error(`economic event ${value.id} reversal requires monetary source and amount`);
+      if (target.amount.currency !== value.amount.currency || target.amount.basis !== value.amount.basis) {
+        throw new Error(`economic event ${value.id} reversal must use the source currency and basis`);
+      }
+      if (value.kind === 'allocation_reversed') {
+        if (target.kind !== 'cost_allocated') throw new Error(`economic event ${value.id} allocation reversal must target cost_allocated`);
+        if (target.subject !== value.subject) throw new Error(`economic event ${value.id} allocation reversal subject must match its source`);
+        if (target.amount.coefficient < 0n) throw new Error(`economic event ${value.id} cannot reverse a negative allocation`);
+        if (value.amount.coefficient > 0n) throw new Error(`economic event ${value.id} allocation reversal must be non-positive`);
+        if (compareMoney(negateMoney(value.amount), target.amount) > 0) {
+          throw new Error(`economic event ${value.id} allocation reversal exceeds its source amount`);
+        }
+      }
     }
     visiting.delete(value.id);
     validated.add(value.id);
@@ -193,7 +213,8 @@ export class EconomicLedger {
     const groups = new Map<string, { amount: Money; eventIds: string[] }>();
     for (const item of values) {
       if (item.amount === null) continue;
-      const key = `${item.amount.currency}\u0000${item.amount.basis}`;
+      const role = economicEventRole(item.kind);
+      const key = `${item.amount.currency}\u0000${item.amount.basis}\u0000${role}`;
       const group = groups.get(key);
       if (group === undefined) groups.set(key, { amount: item.amount, eventIds: [item.id] });
       else {
@@ -201,9 +222,12 @@ export class EconomicLedger {
         group.eventIds.push(item.id);
       }
     }
-    const balances = [...groups.values()]
-      .map((group) => Object.freeze({ currency: group.amount.currency, basis: group.amount.basis, amount: group.amount, eventIds: Object.freeze([...group.eventIds]) }))
-      .sort((a, b) => a.currency.localeCompare(b.currency) || a.basis.localeCompare(b.basis));
+    const balances = [...groups.entries()]
+      .map(([key, group]) => {
+        const [, , role] = key.split('\u0000');
+        return Object.freeze({ role: role as EconomicEventRole, currency: group.amount.currency, basis: group.amount.basis, amount: group.amount, eventIds: Object.freeze([...group.eventIds]) });
+      })
+      .sort((a, b) => a.currency.localeCompare(b.currency) || a.basis.localeCompare(b.basis) || a.role.localeCompare(b.role));
     return Object.freeze({
       asOf: boundary,
       eventIds: Object.freeze(values.map((item) => item.id)),

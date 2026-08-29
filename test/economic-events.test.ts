@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { EconomicLedger } from '../src/economics/ledger.ts';
-import { economicEvent, type EconomicEventInput } from '../src/economics/events.ts';
+import { economicEvent, economicEventRole, type EconomicEventInput } from '../src/economics/events.ts';
 import { formatMoneyAmount, money } from '../src/economics/money.ts';
 import { deserializeEconomicEvent, serializeEconomicEvent } from '../src/economics/serialization.ts';
 import { canonicalJson } from '../src/epistemic/serialization.ts';
@@ -42,12 +42,18 @@ test('economic events are immutable, typed, and preserve exact Money basis', () 
   assert.equal(Object.isFrozen(value), true);
   assert.equal(Object.isFrozen(value.metadata), true);
   assert.throws(() => economicEvent(event({ amount: null })), /requires an amount/);
-  assert.throws(() => economicEvent(event({ kind: 'allocation_reversed', reversalOf: null })), /reversalOf/);
+  assert.throws(() => economicEvent(event({ kind: 'allocation_reversed', amount: money('-1', 'USD', 'allocated'), reversalOf: null })), /reversalOf/);
   assert.throws(() => economicEvent({ ...event(), trusted: true } as never), /unknown field: trusted/);
+  assert.equal(economicEventRole('bill_observed'), 'charge');
+  assert.equal(economicEventRole('credit_applied'), 'adjustment');
+  assert.throws(
+    () => economicEvent(event({ kind: 'bill_observed', amount: money('1', 'USD', 'list') })),
+    /compatible.*basis|basis.*list/i,
+  );
 });
 
 test('economic serialization canonicalizes Money without BigInt or float coercion', () => {
-  const value = economicEvent(event({ amount: money('0.000001', 'USD', 'provider_observed') }));
+  const value = economicEvent(event({ kind: 'provider_charge_observed', amount: money('0.000001', 'USD', 'provider_observed') }));
   const encoded = serializeEconomicEvent(value);
   assert.equal(encoded.kind, 'economic_event');
   assert.match(encoded.digest, /^sha256:[a-f0-9]{64}$/);
@@ -98,12 +104,13 @@ test('economic ledger is append-only, idempotent, and projects each monetary bas
   assert.equal(ledger.append(credit), 'inserted');
   assert.equal(ledger.append(estimate), 'inserted');
   assert.throws(() => ledger.append(economicEvent(event({ amount: money('99.00', 'USD', 'billed') }))), /different economic event/);
-  assert.deepEqual(ledger.project().balances.map((balance) => ({ basis: balance.amount.basis, amount: formatMoneyAmount(balance.amount) })), [
-    { basis: 'billed', amount: '11.34' },
-    { basis: 'estimated', amount: '3' },
+  assert.deepEqual(ledger.project().balances.map((balance) => ({ role: balance.role, basis: balance.amount.basis, amount: formatMoneyAmount(balance.amount) })), [
+    { role: 'adjustment', basis: 'billed', amount: '-1' },
+    { role: 'charge', basis: 'billed', amount: '12.34' },
+    { role: 'charge', basis: 'estimated', amount: '3' },
   ]);
-  assert.deepEqual(ledger.project('2026-08-02T12:00:00.000Z').balances.map((balance) => ({ basis: balance.amount.basis, amount: formatMoneyAmount(balance.amount) })), [
-    { basis: 'billed', amount: '12.34' },
+  assert.deepEqual(ledger.project('2026-08-02T12:00:00.000Z').balances.map((balance) => ({ role: balance.role, basis: balance.amount.basis, amount: formatMoneyAmount(balance.amount) })), [
+    { role: 'charge', basis: 'billed', amount: '12.34' },
   ]);
   assert.throws(() => db.prepare("UPDATE economic_events SET event_json = '{}' WHERE event_id = ?").run(bill.id), /append-only/);
   assert.throws(() => db.prepare("DELETE FROM economic_events WHERE event_id = ?").run(bill.id), /append-only/);
@@ -145,6 +152,47 @@ test('economic replay fails closed on persisted reversal links that are not sour
     'INSERT INTO economic_events (event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest) VALUES (?, ?, ?, ?, ?, ?, ?)',
   ).run(invalid.id, invalid.kind, invalid.subject, invalid.occurredAt, invalid.recordedAt, encoded.body, encoded.digest);
   assert.throws(() => ledger.read(invalid.id), /reversalOf.*sourceEventIds/i);
+  db.close();
+});
+
+test('economic allocation reversals require a compatible, conserving allocation source', () => {
+  const db = new DatabaseSync(':memory:');
+  const ledger = new EconomicLedger(db);
+  const allocation = economicEvent(event({
+    id: 'event:allocation:1',
+    kind: 'cost_allocated',
+    subject: 'allocation:run-1',
+    amount: money('5', 'USD', 'allocated'),
+  }));
+  const bill = economicEvent(event());
+  ledger.append(bill);
+  ledger.append(allocation);
+  const wrongKind = economicEvent(event({
+    id: 'event:allocation-reversal:wrong-kind',
+    kind: 'allocation_reversed',
+    subject: allocation.subject,
+    amount: money('-1', 'USD', 'allocated'),
+    sourceEventIds: [bill.id],
+    reversalOf: bill.id,
+  }));
+  assert.throws(() => ledger.append(wrongKind), /cost_allocated|allocation/i);
+  assert.throws(() => economicEvent(event({
+    id: 'event:allocation-reversal:wrong-basis',
+    kind: 'allocation_reversed',
+    subject: allocation.subject,
+    amount: money('-1', 'USD', 'billed'),
+    sourceEventIds: [allocation.id],
+    reversalOf: allocation.id,
+  })), /currency|basis|compatible/i);
+  const over = economicEvent(event({
+    id: 'event:allocation-reversal:over',
+    kind: 'allocation_reversed',
+    subject: allocation.subject,
+    amount: money('-6', 'USD', 'allocated'),
+    sourceEventIds: [allocation.id],
+    reversalOf: allocation.id,
+  }));
+  assert.throws(() => ledger.append(over), /conserv|exceed|revers/i);
   db.close();
 });
 
