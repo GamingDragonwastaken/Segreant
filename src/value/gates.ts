@@ -1,10 +1,12 @@
 /**
- * The gate ladder — the spine of the Realization Standard (docs/THE-STANDARD.md).
+ * The gate ladder — the legacy coding adapter for the Realization Standard.
  *
- * A unit of work (a commit) travels down eight ordered gates. Each gate returns
- * pass / fail / unknown. `unknown` is first-class: a gate we cannot observe is
- * NOT a failure, and it never inflates or deflates the score. The realization
- * score is "of the checks we could make, how many passed".
+ * A unit of coding work (a commit) travels down eight ordered gates. Each gate
+ * returns pass / fail / unknown. `unknown` is first-class: a gate we cannot
+ * observe is NOT a failure, but it is equally NOT evidence of success. The
+ * realization score remains a progress statistic over observed gates; terminal
+ * realization is stricter and requires every gate declared by this legacy
+ * contract to be confirmed pass.
  *
  * No enums (Node strip-only TS rejects them) — a const tuple + union instead.
  */
@@ -52,7 +54,7 @@ export interface FunnelOutcome {
   reached: Gate | null;
   diedAt: Gate | null; // first FAIL on the ladder, null if none
   diedAtIndex: number | null;
-  realized: boolean; // no fail anywhere AND survived+clean both confirmed pass
+  realized: boolean; // every gate in this declared legacy contract is confirmed pass
   passes: number;
   fails: number;
   unknowns: number;
@@ -65,7 +67,7 @@ export interface FunnelOutcome {
  * partial-identification answer to "what share of this work is realized?" when
  * some gates are unobserved. Per-unit:
  *
- *   lower: confirmed realized (no fail anywhere AND durability confirmed pass)
+ *   lower: confirmed realized (every required legacy gate confirmed pass)
  *   upper: not observed dead (no fail at any observed gate)
  *
  * The truth is provably inside [lower, upper]; the width IS the unobserved
@@ -170,8 +172,8 @@ export function serialRealization(outcomes: ReadonlyArray<FunnelOutcome>): Seria
  * Score a unit's funnel from a verdict per gate. Funnel semantics:
  *  - the unit "reaches" the deepest gate that passed before the first failure;
  *  - `unknown` gates do not stop the funnel and do not count as reached;
- *  - it is "realized" only if nothing failed and the two durability gates
- *    (survived, clean) are confirmed pass — so maturing units are never realized.
+ *  - terminal `realized` means every gate this legacy coding contract declares
+ *    necessary is confirmed pass. An unknown gate is unresolved, not success.
  */
 export function scoreFunnel(verdicts: Record<Gate, GateResult>): FunnelOutcome {
   const results = GATE_LADDER.map((g) => verdicts[g]);
@@ -201,8 +203,7 @@ export function scoreFunnel(verdicts: Record<Gate, GateResult>): FunnelOutcome {
     if (results[i]!.verdict === 'pass') reachedIndex = i;
   }
 
-  const realized =
-    diedAt === null && verdicts.survived.verdict === 'pass' && verdicts.clean.verdict === 'pass';
+  const realized = GATE_LADDER.every((gateName) => verdicts[gateName].verdict === 'pass');
   const instrumented = passes + fails;
 
   // Realization score is MONOTONE along the necessary-condition chain: a unit
