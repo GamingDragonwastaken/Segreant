@@ -83,3 +83,7 @@
 ## D-021 — Exact request charges commit atomically with request rows
 **Decision:** An opted-in request row may carry one exact USD Money amount. Store writes its deterministic `charge_estimated`, `provider_charge_observed`, or `bill_observed` event on the same SQLite transaction; duplicate replays verify the immutable event, conflicts roll back the request, and legacy rows remain without invented exact evidence.
 **Reason:** A request and its economic history cannot diverge at a failure boundary. One deterministic event per request avoids usage/charge double counting while leaving quantity-event semantics for a later typed extension.
+
+## D-022 — Bundled exact rates are explicit companions, not numeric coercions
+**Decision:** The shipped pricing card may carry canonical decimal companions alongside its legacy numeric presentation rates. `computeCost` emits an exact Money breakdown only when those companions validate; live proxy/import/demo writers pass that exact total to the atomic request adapter. A refreshed numeric-only card continues to operate as a compatibility estimator without exact issuance.
+**Reason:** The product can move its shipped path onto exact accounting without claiming that an arbitrary external JSON number has an exact decimal provenance. The companion makes the authority visible and keeps refresh/source limitations honest.

@@ -42,6 +42,7 @@ Controlling architecture:
 - Local candidate economic canonicalization/replay hardening (not yet published): `5c8d9c6343ac5bd95abcd23faef30df38df3c075`
 - Local candidate exact decimal pricing boundary (not yet published): `ad0b6a4781d26afad8df10cfe9d0dd27ec12b155`
 - Local candidate atomic exact request-charge bridge (not yet published): `ac0efa7555b4b87f7f24319c602f2b77f2ab2b85`
+- Local candidate bundled exact-rate integration and live proxy/import issuance (not yet published): `3763c9e86a81c365c7fe08e1ddf4bb9a5f7edb76`
 - Local candidate verification: 1,040 root tests total (1,036 pass, 0 fail, 4 platform-conditional skips), root/browser typecheck, build, and isolated-cache package dry-run pass. No GitHub Actions run exists for these local-only commits because the push was refused by the Codex usage/approval limit.
 - Remaining-work audit commit: `5e5a82843154a6fd04e0017538919108c5ff06f1`
 - Luna resume-protocol commit: `5c4de94cf7af0a218ecd10946ac91577fdd9eae7`
@@ -140,9 +141,10 @@ The reconciliation kernel path is now end-to-end for this vertical. Legacy reque
 - [x] Economic canonicalization and replay hardening (`5c8d9c6`) reject non-canonical Money/event bodies, missing envelope fields, coercible currencies, hostile exact-value sizes, persisted dangling references, invalid reversal links, and unbounded full-ledger replay filtering.
 - [x] Exact decimal pricing boundary (`ad0b6a4`) accepts canonical decimal rate strings and safe integer token counts, derives cache multipliers as exact rationals, and refuses binary numeric rates.
 - [x] Atomic request charge bridge (`ac0efa7`) lets an opted-in request write one deterministic exact charge event in the same SQLite transaction; duplicate replays are idempotent, conflicts roll back the request, and legacy rows remain without invented exact evidence.
+- [x] Bundled exact-rate integration (`3763c9e`) carries canonical decimal companions in the shipped card and threads exact charge totals through the live proxy, Claude Code, Codex, OpenCode, and synthetic-demo request writers; numeric-only refreshed cards remain explicitly non-exact.
 - [x] Local verification at this candidate: 1,040 total root tests, 1,036 pass, 0 fail, 4 platform-conditional skips; root/browser typechecks, build, focused economic/request tests, and isolated-cache package dry-run pass.
 
-This is a local candidate, not a remote or release checkpoint. The exact pricing module and request bridge are not yet wired into the live proxy/import pricing path, and legacy `REAL` request/budget/allocation/value/export consumers remain compatibility authority. GitHub publication and exact-SHA CI are external gates currently blocked by the Codex usage/approval limit.
+This is a local candidate, not a remote or release checkpoint. Legacy `REAL` request/budget/allocation/value/export consumers remain compatibility projections for now, and event-role/conservation, correction, FX, allocation, and close semantics remain open. GitHub publication and exact-SHA CI are external gates currently blocked by the Codex usage/approval limit.
 
 ## Completed in first GPT-5.6 Sol tranche
 
@@ -176,7 +178,7 @@ The branch is still not a final product-completion baseline. M1 and later audit 
 
 ## Exact next actions
 
-1. Migrate authoritative request/budget/allocation/reconciliation/export paths to exact Money/Rate; the local candidate now has an exact pricing boundary and opt-in atomic request-charge events, but the live proxy/import paths still need a canonical exact rate source and unavoidable issuance.
+1. Migrate authoritative request/budget/allocation/reconciliation/export paths to exact Money/Rate; the local candidate now has a bundled canonical exact rate source and live proxy/import issuance, but refreshed-card provenance, legacy read-model migration, and enforcement consumers remain.
 2. Make kernel issuance unavoidable at every consequential product boundary, then introduce WorkUnit/OutcomeAdapter migration.
 3. Keep every new claim and decision on the kernel path; add regression/property/adversarial tests before widening capability.
 4. After each coherent slice, update this state and the audit/evidence registers with the exact local SHA; add a remote SHA and CI run only after publication is actually verified.
