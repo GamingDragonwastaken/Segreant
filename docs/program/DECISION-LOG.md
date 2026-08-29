@@ -47,3 +47,15 @@
 ## D-012 — Kernel persistence stays under the Store schema authority
 **Decision:** Persist canonical Evidence, Claim, Derivation, DAG nodes/edges and revocation events in append-only SQLite tables created and protected by `src/store/schema.ts`; `Store.epistemic()` exposes the same connection, while `ledger.ts` performs validated DML and replay checks only.
 **Reason:** A second database or domain-owned DDL would split transaction and migration authority. Schema-owned triggers prevent update/delete/`INSERT OR REPLACE` bypasses, and exact JSON/digest replay keeps corrections additive and auditable.
+
+## D-013 — Assumptions are named dependencies, not prose confidence
+**Decision:** Add immutable Assumption nodes and optional `Claim.assumptionIds`; preserve existing human-readable assumption strings for compatibility, but only ID-linked assumptions enter the dependency graph and revocation closure.
+**Reason:** A decision cannot explain or invalidate an opaque text list. Named nodes make assumptions queryable, scoped, time-qualified, evidence-linked and independently revocable without pretending they are a global confidence score.
+
+## D-014 — Historical revocation is event-time bounded
+**Decision:** Current revocation uses all retained events; an as-of projection includes only events recorded by the requested boundary and only nodes visible at that boundary.
+**Reason:** Later knowledge must not leak backward into a historical decision replay. The rule preserves present correction while keeping “what did we know then?” reproducible.
+
+## D-015 — Canonical bytes are part of the kernel contract
+**Decision:** Evidence, Claim, Assumption and Derivation records serialize through sorted-key canonical JSON with SHA-256 envelopes; deserialization verifies kind, identity, schema/version, digest and canonical bytes before invoking the domain factory.
+**Reason:** Hashing incidental object insertion order would make equivalent records incomparable and weaken replay/audit evidence. Unsupported values and cycles fail closed rather than being coerced.

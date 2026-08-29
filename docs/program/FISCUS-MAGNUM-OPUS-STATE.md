@@ -27,6 +27,9 @@ Controlling architecture:
 - Exact remote verification run for the DAG checkpoint: GitHub Actions `33256214683` (success across all seven configured jobs)
 - SQLite epistemic-ledger checkpoint: `9d8d364013d22f37fc4c3548f57110a26a274b6a`
 - Exact remote verification run for the ledger checkpoint: GitHub Actions `33257825704` (success across all seven configured jobs)
+- Assumption/event-time checkpoint: `820bad0fe7c636f31bc1fdd99aebfbe47fee5826`
+- Canonical serialization checkpoint: `5ab1440e7495a58dcf08083696591e7cf1747d07`
+- Exact remote verification run for serialization: GitHub Actions `33258932047` (success across all seven configured jobs)
 - Remaining-work audit commit: `5e5a82843154a6fd04e0017538919108c5ff06f1`
 - Luna resume-protocol commit: `5c4de94cf7af0a218ecd10946ac91577fdd9eae7`
 - Base high-assurance PR: #8 (`codex/high-assurance-foundation` -> `main`)
@@ -75,6 +78,15 @@ Persistence-backed event storage, canonical witness registries, minimal-cut sema
 
 The ledger is a persistence foundation, not complete product migration: first-class assumptions, event-time-aware revocation, canonical witness storage, downstream claim issuance, and economic/billing integration remain open.
 
+## M1 assumption, replay, and serialization checkpoint (2026-08-29)
+
+- [x] First-class immutable Assumption envelope and `Claim.assumptionIds` (`ddf17f7`) keep named assumptions distinct from display text and link them through the DAG for dependency/revocation analysis.
+- [x] Revocation replay honors event time (`820bad0`) so historical projections exclude revocations recorded after the as-of boundary.
+- [x] Canonical JSON/digest envelopes (`5ab1440`) sort object keys, reject cycles/unsupported values, verify canonical bytes before rehydration, and back the SQLite ledger's persisted payloads.
+- [x] GitHub run `33258932047` validates the serialization checkpoint across all seven configured jobs.
+
+M1 now has a persistence-ready canonical Evidence/Assumption/Claim/Derivation/DAG path. The next work is integration: canonical witness storage, complete event replay, one real billing/reconciliation vertical, and conformance at every consequential issuance boundary.
+
 ## Completed in first GPT-5.6 Sol tranche
 
 - [x] Durable program-control directory established.
@@ -95,19 +107,19 @@ The ledger is a persistence foundation, not complete product migration: first-cl
 
 ## Current verification state
 
-The latest reconstruction checkpoint is green at exact persistence code SHA `9d8d364013d22f37fc4c3548f57110a26a274b6a`:
+The latest reconstruction checkpoint is green at exact serialization code SHA `5ab1440e7495a58dcf08083696591e7cf1747d07`:
 
 - local Node typecheck: pass;
 - local browser typecheck: pass;
-- local root suite: 1001 total, 997 pass, 0 fail, 4 platform-conditional skips;
+- local root suite: 1007 total, 1003 pass, 0 fail, 4 platform-conditional skips;
 - local packed/installable artifact smoke: pass;
-- GitHub Actions run `33257825704`: success across all seven configured jobs.
+- GitHub Actions run `33258932047`: success across all seven configured jobs.
 
 The branch is still not a final product-completion baseline. M1 and later audit findings remain open or partial, and external gates remain unperformed. Do not weaken the new invariants merely to preserve superficial green status.
 
 ## Exact next actions
 
-1. Continue the Trusted Epistemic Kernel in dependency order: first-class assumption registry -> event-time-aware revocation/supersession projections -> as-of reconstruction -> serialization/conformance.
+1. Continue the Trusted Epistemic Kernel in dependency order: canonical witness registry and complete event replay -> product issuance adapters -> as-of reconstruction/conformance vectors -> one billing/reconciliation vertical.
 2. Migrate one real billing/reconciliation vertical to exact Money/Rate and typed economic evidence, preserving explicit legacy adapters.
 3. Keep every new claim and decision on the kernel path; add regression/property/adversarial tests before widening capability.
 4. After each coherent slice, update this state and the audit/evidence registers with the exact local and remote SHA.
