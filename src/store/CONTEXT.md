@@ -59,6 +59,11 @@ two domain callers goes in `rows.ts`.
 - **The economic ledger shares this connection.** `Store.economic()` exposes
   exact-Money immutable events and deterministic basis-separated projections;
   event DDL and append-only triggers remain owned by `schema.ts`.
+- **Exact request issuance is transactional.** A `RequestRow` carrying
+  `economicAmount` writes one deterministic economic charge event through the
+  same SQLite transaction. `economicAmountForRequest()` reads that exact event;
+  rows without it remain legacy numeric compatibility records and are never
+  silently reconstructed.
 - **Billing kernel issuance is explicit and additive.** `issueBillingImportToKernel()`
   translates a validated operator export through exact `Money` into canonical
   Evidence and billed Claims; `issueOpenAiCostsObservationToKernel()` does the

@@ -13,7 +13,9 @@
 - economic events are canonical JSON plus a SHA-256 digest in an append-only
   SQLite ledger;
 - credits/reversals are additive signed events, not destructive updates;
-- projections are deterministic and can be replayed at a recorded-time boundary.
+- projections are deterministic and can be replayed at a recorded-time boundary;
+- accounting-facing request charges can be issued as one exact Money event on the
+  same Store transaction as the compatibility request row.
 
 ## Invariants
 
@@ -21,7 +23,10 @@
 - monetary event kinds require an exact `Money` amount;
 - `allocation_reversed` names the event it reverses and lists it as a source;
 - source-event IDs must already exist before a new event is appended;
-- no floating-point value is introduced by serialization, replay or projection.
+- no floating-point value is introduced by serialization, replay or projection;
+- exact request issuance accepts only USD Money and maps list/estimated,
+  provider-observed, and billed bases to explicit event kinds;
+- legacy numeric request rows are not backfilled into exact Money without evidence.
 
 ## Verify
 

@@ -71,3 +71,15 @@
 ## D-018 — Reconciliation claims are bound to their immutable run and basis
 **Decision:** A persisted reconciliation Claim carries a unique reconciliation-run identity. Provider-side Money is `provider_observed` for a Costs snapshot and `billed` only for an explicitly imported billed line; local capture remains `estimated`, and the residual is a typed comparison that must satisfy exact provider-minus-local conservation.
 **Reason:** Reusing an observation identity would make later recalculations collide with earlier decisions, while calling every provider number “billed” would erase the distinction between a Costs observation and an invoice. Explicit run identity and basis-aware arithmetic keep corrections additive and auditable.
+
+## D-019 — Economic records must be semantically canonical on reload
+**Decision:** Exact Money JSON and economic-event envelopes reject unknown/missing fields, non-normalized coefficient/scale pairs, coercible currencies, hostile exact-value sizes, and persisted reference/reversal corruption. Every economic read revalidates its source-reference closure; bounded replay filters by recorded time in SQLite.
+**Reason:** A valid digest authenticates bytes, not an intended semantic object. Canonical rehydration and reload-time reference checks prevent direct SQLite writes or malformed interchange from becoming trusted financial history.
+
+## D-020 — Exact pricing is an explicit decimal boundary
+**Decision:** Accounting-facing pricing accepts canonical decimal rate strings and safe integer token counts only. It derives cache multipliers with exact rational arithmetic and returns Money; legacy numeric pricing remains a compatibility estimator until a canonical exact rate source is wired into live request/import paths.
+**Reason:** Converting a binary floating-point cost after calculation cannot prove exactness. Keeping the new boundary explicit allows progressive migration without relabelling legacy numbers or weakening existing product behavior.
+
+## D-021 — Exact request charges commit atomically with request rows
+**Decision:** An opted-in request row may carry one exact USD Money amount. Store writes its deterministic `charge_estimated`, `provider_charge_observed`, or `bill_observed` event on the same SQLite transaction; duplicate replays verify the immutable event, conflicts roll back the request, and legacy rows remain without invented exact evidence.
+**Reason:** A request and its economic history cannot diverge at a failure boundary. One deterministic event per request avoids usage/charge double counting while leaving quantity-event semantics for a later typed extension.

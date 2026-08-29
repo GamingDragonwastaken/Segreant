@@ -38,6 +38,11 @@ Controlling architecture:
 - Exact remote verification run for the billing vertical: GitHub Actions `33261466500` (success across all seven configured jobs)
 - Persisted reconciliation-kernel checkpoint: `ec8e67ad79211389ba0b8caa5cf40ceb3ccb2872`
 - Exact remote verification run for persisted reconciliation Claims: GitHub Actions `33262733403` (success across all seven configured jobs)
+- Local candidate economic-event foundation (not yet published): `5ef8b58d5af5824b439fcf5c41abb3b424fcb4e`
+- Local candidate economic canonicalization/replay hardening (not yet published): `5c8d9c6343ac5bd95abcd23faef30df38df3c075`
+- Local candidate exact decimal pricing boundary (not yet published): `ad0b6a4781d26afad8df10cfe9d0dd27ec12b155`
+- Local candidate atomic exact request-charge bridge (not yet published): `ac0efa7555b4b87f7f24319c602f2b77f2ab2b85`
+- Local candidate verification: 1,040 root tests total (1,036 pass, 0 fail, 4 platform-conditional skips), root/browser typecheck, build, and isolated-cache package dry-run pass. No GitHub Actions run exists for these local-only commits because the push was refused by the Codex usage/approval limit.
 - Remaining-work audit commit: `5e5a82843154a6fd04e0017538919108c5ff06f1`
 - Luna resume-protocol commit: `5c4de94cf7af0a218ecd10946ac91577fdd9eae7`
 - Base high-assurance PR: #8 (`codex/high-assurance-foundation` -> `main`)
@@ -48,7 +53,7 @@ The exact remote reconstruction SHA must always be re-read after `git fetch`; do
 
 ## Program phase
 
-`M0 stabilization complete; M1/M2 kernel-to-billing integration active`
+`M0 stabilization complete; M1/M2 kernel-to-billing integration active; local M2 economic migration candidate under verification`
 
 ## M0 stabilization checkpoint (2026-08-29)
 
@@ -129,6 +134,16 @@ This is the first real product vertical crossing the kernel, not completion of t
 
 The reconciliation kernel path is now end-to-end for this vertical. Legacy request, budget, allocation, export and economic-event paths still require exact Money migration and a typed subledger.
 
+## M2 economic migration candidate checkpoint (local-only, 2026-08-30)
+
+- [x] Immutable typed economic events and exact Money projections (`5ef8b58`) provide an append-only SQLite subledger with canonical JSON/SHA-256 records, recorded-time replay, and currency/basis-separated balances.
+- [x] Economic canonicalization and replay hardening (`5c8d9c6`) reject non-canonical Money/event bodies, missing envelope fields, coercible currencies, hostile exact-value sizes, persisted dangling references, invalid reversal links, and unbounded full-ledger replay filtering.
+- [x] Exact decimal pricing boundary (`ad0b6a4`) accepts canonical decimal rate strings and safe integer token counts, derives cache multipliers as exact rationals, and refuses binary numeric rates.
+- [x] Atomic request charge bridge (`ac0efa7`) lets an opted-in request write one deterministic exact charge event in the same SQLite transaction; duplicate replays are idempotent, conflicts roll back the request, and legacy rows remain without invented exact evidence.
+- [x] Local verification at this candidate: 1,040 total root tests, 1,036 pass, 0 fail, 4 platform-conditional skips; root/browser typechecks, build, focused economic/request tests, and isolated-cache package dry-run pass.
+
+This is a local candidate, not a remote or release checkpoint. The exact pricing module and request bridge are not yet wired into the live proxy/import pricing path, and legacy `REAL` request/budget/allocation/value/export consumers remain compatibility authority. GitHub publication and exact-SHA CI are external gates currently blocked by the Codex usage/approval limit.
+
 ## Completed in first GPT-5.6 Sol tranche
 
 - [x] Durable program-control directory established.
@@ -161,10 +176,10 @@ The branch is still not a final product-completion baseline. M1 and later audit 
 
 ## Exact next actions
 
-1. Migrate authoritative request/budget/allocation/reconciliation/export paths to exact Money/Rate and introduce the immutable economic-event subledger with conservation projections.
+1. Migrate authoritative request/budget/allocation/reconciliation/export paths to exact Money/Rate; the local candidate now has an exact pricing boundary and opt-in atomic request-charge events, but the live proxy/import paths still need a canonical exact rate source and unavoidable issuance.
 2. Make kernel issuance unavoidable at every consequential product boundary, then introduce WorkUnit/OutcomeAdapter migration.
 3. Keep every new claim and decision on the kernel path; add regression/property/adversarial tests before widening capability.
-4. After each coherent slice, update this state and the audit/evidence registers with the exact local and remote SHA.
+4. After each coherent slice, update this state and the audit/evidence registers with the exact local SHA; add a remote SHA and CI run only after publication is actually verified.
 5. Keep external provider, production-service, independent-security, scholarly, accessibility, and design-partner gates explicit; never fabricate their closure.
 
 ## Non-negotiable execution invariants

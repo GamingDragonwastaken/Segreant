@@ -23,6 +23,14 @@ The reconstruction branch began from the reviewed high-assurance candidate `3157
 
 The original macOS OIDC time-boundary failure has been repaired through injected deterministic verifier time and exact skew-boundary tests. Team-server tests later passed on Windows, Ubuntu and macOS.
 
+The latest local candidate extends the remote reconciliation checkpoint with four
+unpublished commits: economic-event foundation `5ef8b58`, canonicalization/replay
+hardening `5c8d9c6`, exact decimal pricing `ad0b6a4`, and atomic exact request
+issuance `ac0efa7`. Local verification at that candidate is 1,040 tests (1,036
+pass, 0 fail, 4 platform-conditional skips), root/browser typecheck, build, and
+isolated-cache package dry-run. These identities are not remote/CI evidence until
+the blocked push succeeds.
+
 The immediate recovery tranche is green at exact implementation SHA `685b14c57cccf078679a37a929f6234f00522abd`; M1 Evidence/Claim slices are green at `fa36cc380e6883cc868e2e5b46517ae118a038ae`; Derivation/DAG slices are green at `8928bb474ecb93477caa7605c6710b432653a631`; schema-owned persistence is green at `9d8d364013d22f37fc4c3548f57110a26a274b6a`; assumption/event-time/serialization slices are green at `5ab1440e7495a58dcf08083696591e7cf1747d07`; the canonical witness registry is green at `774658431739673183066f3c45dd9d01e84346a2`; hindsight-safe replay/conformance is green at `a7ef58946d941e0e035a38641f59f234b180a0b8`; the first billing kernel vertical is green at `9a0254ab0766057b53569b396f81c1d7c8dd96e2`; and persisted provider/local/residual reconciliation Claims are green at `ec8e67ad79211389ba0b8`. Root typecheck/tests, package smoke, and the configured cross-platform GitHub matrix pass. The broader kernel and product program remains partial/open as recorded below.
 
 ## Work already implemented and to preserve
@@ -72,9 +80,9 @@ Status vocabulary: `CLOSED`, `PARTIAL`, `OPEN`, `RED-SPEC`, `EXTERNAL-GATE`, `SU
 | AII-014 `established:boolean` | PARTIAL | ClaimProfile is now embedded in canonical Claim; persisted/API/UI migration and alternate-boolean removal remain. |
 | AII-015 global evidence strength order | PARTIAL | Implement claim-relative admissibility/incomparable profiles. |
 | AII-016 grain not a truth constraint | PARTIAL | Witness primitive exists; enforce in every derivation/aggregation. |
-| AII-017 money not exact end-to-end | PARTIAL | Provider/local/reconciliation kernel paths use exact Money; migrate legacy request ledger/DB/budgets/allocation/API/CSV authoritative paths and remove accounting-number authority. |
-| AII-018 analytical economic subledger absent | OPEN | Immutable typed economic events and deterministic projections. |
-| AII-019 immutability inconsistent | PARTIAL | Schema-owned SQLite persistence, digest/trigger checks, assumption/witness links, event-time replay and provider/local/reconciliation billing Claims are implemented/tested; complete event projections and all product consumers remain. |
+| AII-017 money not exact end-to-end | PARTIAL | Provider/local/reconciliation kernel paths and an opt-in atomic exact request-charge bridge now use exact Money; migrate the live proxy/import pricing source and legacy request ledger/DB/budgets/allocation/API/CSV authoritative paths and remove accounting-number authority. |
+| AII-018 analytical economic subledger absent | PARTIAL | Immutable typed economic events, canonical exact pricing, append-only persistence, and deterministic projections now exist as a local candidate; complete event-role/conservation semantics, corrections, FX, allocations, close state and product integration remain. |
+| AII-019 immutability inconsistent | PARTIAL | Schema-owned SQLite persistence, digest/trigger checks, assumption/witness links, event-time replay, billing Claims and atomic exact request-charge issuance are implemented/tested; legacy repricing/read models and complete event projections remain. |
 | AII-020 receipt mistaken for truth | PARTIAL | Separate trust dimensions in product UX and interoperable attestation semantics. |
 | AII-021 causal inference/design gaps | OPEN | ITT, blocks, joint inference, missingness, interference, precision and transportability. |
 | AII-022 two causal systems | OPEN | One estimand/design/estimator registry; version/archive superseded path. |
@@ -103,7 +111,7 @@ The next worker should not start another design discussion.
 4. **COMPLETED at `685b14c`:** Migrate every affected realization/demo fixture to explicit required lifecycle evidence; no unknown gate is promoted to pass.
 5. **COMPLETED at `685b14c`:** Observe GitHub Actions run `33253835881` as green on all configured jobs.
 6. **COMPLETED in the following documentation checkpoint:** update program state, audit, decision, and evidence registers with exact implementation/CI identities.
-7. **NEXT:** Finish the billing/reconciliation vertical: provider-observation and local-capture Evidence, persisted reconciliation Claims, and exact Money/Rate migration of authoritative paths.
+7. **NEXT:** Finish the billing/reconciliation vertical: provider-observation and local-capture Evidence, persisted reconciliation Claims, and exact Money/Rate migration of authoritative paths. The local candidate has started this with canonical economic events, exact decimal pricing, and an opt-in atomic request-charge bridge; live pricing-source integration and legacy consumer migration remain.
 
 ## Trusted Epistemic Kernel remaining work
 
@@ -303,7 +311,7 @@ For each external gate, repository work must leave an executable protocol, requi
 4. **COMPLETED at `7746584`:** Persisted canonical Witness registry with evidence grounding, serialization, append-only protection, Derivation-reference enforcement and transitive revocation edges.
 5. **COMPLETED at `a7ef589`:** Add one immutable replay projection and table-driven as-of/revocation conformance vectors.
 6. **COMPLETED kernel path at `ec8e67a`:** Issue provider-line and provider-observation Evidence, billed/provider-observed Claims, local-capture Evidence and unique mixed-basis reconciliation Claims through exact Money with CLI/API ClaimProfile routing and conservation checks.
-7. migrate remaining legacy accounting paths to exact Money/Rate and implement the immutable economic-event subledger;
+7. migrate remaining legacy accounting paths to exact Money/Rate and complete the immutable economic-event subledger; local candidate foundations exist at `5ef8b58`, `5c8d9c6`, `ad0b6a4`, and `ac0efa7`, but are not remote checkpoints;
 8. build contribution attribution and adversarial benchmark corpus;
 9. unify causal estimand/design/estimator registry and inference ledger;
 10. integrate DecisionCertificate/true VoI/evidence debt/assurance levels into the control chain;
