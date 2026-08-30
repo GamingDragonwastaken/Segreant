@@ -141,8 +141,13 @@ function runCloseOperation(store: Store, flags: Flags, operation: PeriodCloseOpe
       ...(recordedAt === null ? {} : { recordedAt }),
       ...(id === null ? {} : { id }),
     });
+    // Finalization is a consequential statement, so the supported CLI path
+    // immediately issues its immutable Evidence/Claim pair. The Store method
+    // is idempotent; a retry after a process interruption cannot mint a second
+    // claim or silently change the economic snapshot.
+    const kernel = store.issueEconomicPeriodCloseToKernel(result);
     if (flags.json) {
-      printJson({ kind: 'period_close', schemaVersion: 1, operation, result: finalizationView(result) });
+      printJson({ kind: 'period_close', schemaVersion: 1, operation, result: finalizationView(result), kernel });
     } else {
       console.log('');
       console.log(color(process.stdout.isTTY ?? false, C.bold, '  Economic period finalized'));
@@ -151,6 +156,8 @@ function runCloseOperation(store: Store, flags: Flags, operation: PeriodCloseOpe
       console.log(`  recorded at            ${result.recordedAt}`);
       console.log(`  bound events           ${num(result.eventCount)}`);
       console.log(`  projection digest      ${result.projectionDigest}`);
+      console.log(`  kernel evidence        ${kernel.evidenceId} (${kernel.evidence.result})`);
+      console.log(`  kernel claim           ${kernel.claimId} (${kernel.claim.result})`);
       console.log('  The close is append-only. Reopen explicitly before recording late in-period evidence.');
       console.log('');
     }

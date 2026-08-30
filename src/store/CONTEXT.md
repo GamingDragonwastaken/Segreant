@@ -66,6 +66,13 @@ two domain callers goes in `rows.ts`.
   and `economicPeriodCloseStatus()` replays the control state at an optional
   recording-time boundary. Late in-period evidence is blocked until an
   explicit reopen; conflict never becomes an implicit approval.
+- **Finalized close statements cross the kernel boundary explicitly.**
+  `issueEconomicPeriodCloseToKernel()` revalidates that the supplied snapshot
+  is still the active finalized state, then appends one exact Evidence/Claim
+  pair carrying the source-event set, basis-separated balances and projection
+  digest. Replays are idempotent; forged snapshots and reopened/conflicted
+  periods are refused. External provider completeness and settlement finality
+  remain conditional.
 - **Exact request issuance is transactional.** A `RequestRow` carrying
   `economicAmount` writes one deterministic economic charge event through the
   same SQLite transaction. `economicAmountForRequest()` reads that exact event;

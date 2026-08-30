@@ -112,6 +112,7 @@ import type {
 import { EpistemicLedger } from '../epistemic/ledger.ts';
 import type { Claim } from '../epistemic/claim.ts';
 import { EconomicLedger, type EconomicPeriodCloseStatus, type PeriodFinalizationInput, type PeriodFinalizationResult, type PeriodReopenInput, type PeriodReopenResult } from '../economics/ledger.ts';
+import { buildEconomicPeriodCloseKernelIssuance, type EconomicPeriodCloseKernelPersistenceResult } from '../economics/epistemic.ts';
 
 /**
  * Provider-side evidence shapes now live in ./billing.ts. They are re-exported
@@ -671,6 +672,23 @@ export class Store {
   /** Read period-close state at an optional recorded-time boundary. */
   economicPeriodCloseStatus(startMs: number, endMs: number, asOf?: string): EconomicPeriodCloseStatus {
     return this.economicLedger.periodCloseStatus(startMs, endMs, asOf);
+  }
+
+  /** Issue the active finalized period into the Trusted Epistemic Kernel. */
+  issueEconomicPeriodCloseToKernel(result: PeriodFinalizationResult): EconomicPeriodCloseKernelPersistenceResult {
+    const status = this.economicLedger.periodCloseStatus(result.periodStartMs, result.periodEndMs);
+    if (status.status !== 'finalized' || status.activeFinalizationId !== result.eventId) {
+      throw new Error('economic period finalization is not the active finalized state; kernel issuance refused');
+    }
+    const issuance = buildEconomicPeriodCloseKernelIssuance(result);
+    const evidenceResult = this.epistemicLedger.appendEvidence(issuance.evidence);
+    const claimResult = this.epistemicLedger.appendClaim(issuance.claim);
+    return Object.freeze({
+      evidenceId: issuance.evidence.id,
+      claimId: issuance.claim.id,
+      evidence: Object.freeze({ result: evidenceResult }),
+      claim: Object.freeze({ result: claimResult }),
+    });
   }
 
   /** Read the exact request charge when this row opted into economic issuance. */

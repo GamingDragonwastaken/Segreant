@@ -135,6 +135,7 @@ test('economic CLI exposes explicit period-close finalize, status, and reopen op
       kind: string;
       operation: string;
       result: { status: string; eventId: string; projectionDigest: string; balances: Array<{ amount: { coefficient: string; scale: number; currency: string; basis: string } }> };
+      kernel: { evidenceId: string; claimId: string; evidence: { result: string }; claim: { result: string } };
     };
     assert.equal(finalizedPayload.kind, 'period_close');
     assert.equal(finalizedPayload.operation, 'finalize');
@@ -143,6 +144,10 @@ test('economic CLI exposes explicit period-close finalize, status, and reopen op
     assert.match(finalizedPayload.result.projectionDigest, /^[a-f0-9]{64}$/);
     assert.equal(finalizedPayload.result.balances[0]?.amount.currency, 'USD');
     assert.equal(typeof finalizedPayload.result.balances[0]?.amount.coefficient, 'string');
+    assert.match(finalizedPayload.kernel.evidenceId, /^evidence:economic:period-close:/);
+    assert.match(finalizedPayload.kernel.claimId, /^claim:economic:period-close:/);
+    assert.equal(finalizedPayload.kernel.evidence.result, 'inserted');
+    assert.equal(finalizedPayload.kernel.claim.result, 'inserted');
 
     const reopened = await runCli([
       'economic', '--reopen', '--from', from, '--to', to,

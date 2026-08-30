@@ -38,6 +38,10 @@
   the prior close and permits late evidence only after the lifecycle records
   that reopening; a competing close is surfaced as `conflicted`, never chosen
   silently.
+- the supported Store/CLI finalization path can issue a kernel Evidence/Claim
+  pair with the exact close digest, source-event set, and basis-separated
+  balances; the claim stays provisional and self-authenticated because a local
+  close does not prove provider billing completeness or settlement finality;
 
 ## Invariants
 
