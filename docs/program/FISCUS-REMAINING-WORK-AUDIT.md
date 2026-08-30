@@ -244,16 +244,18 @@ decision and control boundaries still require migration.
 
 The next worker should not start another design discussion.
 
-**Execution-order override after `1428a77`:** the versioned exact
+**Execution-order override after `ad74ea3`:** the versioned exact
 team-rollup protocol/storage migration, bounded classic Value/API exact-coverage
 parity, refreshed-card provenance, runtime dashboard type conformance,
 period-close semantics, route generation, CapabilitySpec, and top-level payload
 contracts are complete locally, and nested interface metadata is generated and
 hash-checked. The period-close statement now crosses the kernel boundary at
-`e2ea654`, and the exact-allocation bridge at `1428a77`. Proceed next with a
-single generated/shared type source and unavoidable kernel issuance across the
-remaining consequential product boundaries; allocation-specific close binding,
-live Postgres execution and remote publication remain explicit gates.
+`e2ea654`, the exact-allocation bridge at `1428a77`, and the coding-realization
+bridge at `ad74ea3`. Proceed next with a single generated/shared type source and
+unavoidable kernel issuance across the remaining consequential product
+boundaries; allocation-specific close binding, revised-value-claim
+supersession, live Postgres execution and remote publication remain explicit
+gates.
 
 1. **COMPLETED at `b27c0ef`:** Implement the RED robust decision module. Strict dominance is the only proof-level certificate; minimax regret and perfect-information VOI remain explicitly named rules with assumptions and cost.
 2. **COMPLETED at `5647c67`:** Implement additive transitive revocation closure. Dependent descendants are invalidated while independent siblings remain outside the closure; cycles are safe, duplicate edges fail closed, and history is not deleted.
@@ -270,7 +272,8 @@ live Postgres execution and remote publication remain explicit gates.
 13. **COMPLETED (bounded) at `aad39bc`:** Generate nested browser-interface metadata with inheritance flattening and an exact source hash, regenerate it under the publication lock, and consume it in seeded runtime conformance. A single generated/shared type source and full docs/claim/egress generation remain.
 14. **COMPLETED (bounded) at `e2ea654`:** Issue active finalized economic periods into the Trusted Epistemic Kernel as exact, idempotent Evidence/Claim pairs with source-event, balance and digest lineage; CLI finalize performs the issuance, and forged/reopened/conflicted states are refused. Universal issuance across the remaining product boundaries remains.
 15. **COMPLETED (bounded) at `1428a77`:** Issue persisted exact allocation runs into the Trusted Epistemic Kernel as one idempotent Evidence/Claim pair with digest-derived identity, allocated-showback semantics, exact source-event lineage and explicit complete/partial coverage. Legacy numeric allocation remains separate, and allocation-specific close binding is still open.
-16. **NEXT:** Complete the single generated/shared type source and make kernel issuance unavoidable at every remaining consequential value, billing, decision and control boundary; then bind exact allocation execution to close state where the control semantics are ready. Trust-anchor governance, live Postgres execution and GitHub publication remain explicit gates.
+16. **COMPLETED (bounded) at `ad74ea3`:** Make the canonical coding-realization save path automatically and atomically issue a digest-bound `value.realization_recorded` Evidence/Claim only for mature, current, fully realized units whose exact effective USD request attribution re-derives from the Store ledger; partial, maturing, stale, synthetic and legacy snapshots remain compatibility-only.
+17. **NEXT:** Complete the single generated/shared type source and make kernel issuance unavoidable at every remaining consequential billing, decision and control boundary; then add supersession/latest-as-of semantics for revised value claims and bind exact allocation execution to close state where the control semantics are ready. Trust-anchor governance, live Postgres execution and GitHub publication remain explicit gates.
 
 ## Trusted Epistemic Kernel remaining work
 
