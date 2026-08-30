@@ -32,6 +32,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import type http from 'node:http';
 import { readFileSync } from 'node:fs';
@@ -40,6 +41,7 @@ import { Store } from '../src/store/db.ts';
 import { DEFAULT_CONFIG } from '../src/config.ts';
 import { createDashboardServer } from '../src/dashboard/server.ts';
 import { DASHBOARD_API_CONTRACTS, DASHBOARD_PAYLOAD_CONTRACTS, type DashboardPayloadContract } from '../src/dashboard/contracts.ts';
+import { DASHBOARD_INTERFACE_CONTRACTS, DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 } from '../src/dashboard/web/app/core/generated-payload-contract.ts';
 import { seedDemo } from '../src/demo/seed.ts';
 
 const API_SRC = join(
@@ -126,6 +128,13 @@ function parseEndpoints(source: string): Array<{ routeId: string; method: string
     out.push({ routeId: contract.id, method: 'GET', type, path: contract.path });
   }
   return out;
+}
+
+function generatedInterfaces(): Map<string, Field[]> {
+  return new Map(Object.entries(DASHBOARD_INTERFACE_CONTRACTS).map(([name, fields]) => [
+    name,
+    fields.map((field) => ({ name: field.name, optional: field.optional, type: field.type })),
+  ]));
 }
 
 function payloadKind(value: unknown): string {
@@ -268,7 +277,12 @@ function checkShape(
 
 test('dashboard contract checker rejects a runtime primitive type mismatch', () => {
   const source = readFileSync(API_SRC, 'utf8');
-  const interfaces = parseInterfaces(source);
+  assert.equal(
+    DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256,
+    createHash('sha256').update(source, 'utf8').digest('hex'),
+    'generated nested interface metadata is stale; run the dashboard contract generator',
+  );
+  const interfaces = generatedInterfaces();
   const problems: string[] = [];
   checkShape('Summary', { requests: 'one', costUsd: 1 }, interfaces, 'Summary', problems, new Set());
   assert.ok(
@@ -279,7 +293,12 @@ test('dashboard contract checker rejects a runtime primitive type mismatch', () 
 
 test('every required field the GUI declares exists in the payload the server sends', async () => {
   const source = readFileSync(API_SRC, 'utf8');
-  const interfaces = parseInterfaces(source);
+  assert.equal(
+    DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256,
+    createHash('sha256').update(source, 'utf8').digest('hex'),
+    'generated nested interface metadata is stale; run the dashboard contract generator',
+  );
+  const interfaces = generatedInterfaces();
   const endpoints = parseEndpoints(source);
 
   assert.ok(interfaces.size >= 8, `expected to parse the GUI interfaces, got ${interfaces.size}`);

@@ -22,6 +22,7 @@ const RENAME_RETRY_MS = 5_000;
 const waitCell = new Int32Array(new SharedArrayBuffer(4));
 const sharedDashboardContract = join(root, 'src', 'dashboard', 'contracts.ts');
 const generatedBrowserDashboardContract = join(root, 'src', 'dashboard', 'web', 'app', 'core', 'generated-contract.ts');
+const dashboardPayloadContractGenerator = join(root, 'scripts', 'generate-dashboard-payload-contract.mjs');
 
 /** Keep the browser's no-node copy byte-identical to the server contract. */
 function syncSharedDashboardContract() {
@@ -33,6 +34,12 @@ function syncSharedDashboardContract() {
   const release = acquirePublicationLock(root);
   try {
     copyFileSync(sharedDashboardContract, generatedBrowserDashboardContract);
+    const generated = spawnSync(process.execPath, [dashboardPayloadContractGenerator], {
+      cwd: root,
+      stdio: 'inherit',
+    });
+    if (generated.error) throw generated.error;
+    if (generated.status !== 0) throw new Error(`dashboard payload contract generation failed (${generated.status ?? 1})`);
   } finally {
     release();
   }
