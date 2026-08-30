@@ -57,7 +57,9 @@ Controlling architecture:
 - Local candidate exact economic dashboard/API projection (not yet published): `ccda34d`
 - Local candidate coding value-attribution/effective snapshot lineage (not yet published): `3871b6fe54b008c22cdc9e12cbe6e549181e7d6c`
 - Local candidate grouped usage/cohort/model/series/budget migration (not yet published): `5e54250083ab0c3ba7db44e4b350a1f2ab150a28`
-- Local candidate verification: 1,076 root tests total (1,072 pass, 0 fail, 4 platform-conditional skips), root/browser typecheck, build, and isolated-cache package dry-run pass. No GitHub Actions run exists for these local-only commits because the push was refused by the Codex usage/approval limit.
+- Local candidate exact frontier/time-reclaimed projections (not yet published): `3c71c51`
+- Local candidate modern Value-view exact coverage disclosure (not yet published): `ebbc571`
+- Local candidate verification: 1,079 root tests total (1,075 pass, 0 fail, 4 platform-conditional skips), root/browser typecheck, build, and isolated-cache package dry-run pass. No GitHub Actions run exists for these local-only commits because the push was refused by the Codex usage/approval limit.
 - Remaining-work audit commit: `5e5a82843154a6fd04e0017538919108c5ff06f1`
 - Luna resume-protocol commit: `5c4de94cf7af0a218ecd10946ac91577fdd9eae7`
 - Base high-assurance PR: #8 (`codex/high-assurance-foundation` -> `main`)
@@ -170,9 +172,11 @@ The reconciliation kernel path is now end-to-end for this vertical. Legacy reque
 - [x] Exact economic dashboard/API projection (`ccda34d`) exposes the shared JSON-safe report at read-only `GET/HEAD /api/economic`, rejects invalid windows, and binds the browser client to the exact Money/coverage schema.
 - [x] Coding value attribution and snapshot lineage (`3871b6f`) join request rows to effective exact events with alias/live scope and strict dimension checks, disclose unresolved legacy rows, expose exact rollups on realization reports, and synchronize exact snapshot lineage during repricing.
 - [x] Grouped usage/cohort/model/series/budget migration (`5e54250`) exposes exact session/user/provider-model/time-bucket coverage, derives safely representable numeric projections from complete exact groups, and keeps unresolved legacy rows explicit in usage, cohort and budget advice.
-- [x] Local verification at this candidate: 1,076 total root tests, 1,072 pass, 0 fail, 4 platform-conditional skips; root/browser typechecks, build, focused exact attribution/realization/reprice/usage/cohort/model/series/budget/API/route/export tests, and isolated-cache package dry-run pass.
+- [x] Frontier/time-reclaimed exact projections (`3c71c51`) carry effective coverage into model/task cells and manual-minute strata, deriving finite numeric compatibility values only when exact coverage is complete.
+- [x] Modern Value-view disclosure (`ebbc571`) renders exact/partial/legacy coverage and unresolved counts beside the spend figure without conflating it with manual-equivalent value.
+- [x] Local verification at this candidate: 1,079 total root tests, 1,075 pass, 0 fail, 4 platform-conditional skips; root/browser typechecks, build, focused exact attribution/realization/reprice/usage/cohort/model/series/budget/frontier/time/UI/API/route/export tests, and isolated-cache package dry-run pass.
 
-This is a local candidate, not a remote or release checkpoint. Coding realization, usage, cohort and budget advice now carry exact effective coverage, but frontier presentation, signed receipts/team transport and other legacy value consumers remain compatibility projections; event-role/conservation, FX consumer integration beyond source-bound translation, refreshed-card provenance, dashboard consumption and close semantics remain open. The economic ledger now has CLI inspection/export and a read-only `/api/economic` projection; the modern dashboard has the typed client contract but does not yet render a dedicated economic view. GitHub publication and exact-SHA CI are external gates currently blocked by the Codex usage/approval limit.
+This is a local candidate, not a remote or release checkpoint. Coding realization, usage, cohort, budget advice, frontier cells, time-reclaimed strata and the modern Value view now carry exact effective coverage, but signed receipts/team transport and other legacy artifacts remain compatibility projections; event-role/conservation, FX consumer integration beyond source-bound translation, refreshed-card provenance, classic-dashboard parity and close semantics remain open. The economic ledger has CLI inspection/export and a read-only `/api/economic` projection. GitHub publication and exact-SHA CI are external gates currently blocked by the Codex usage/approval limit.
 
 ## Completed in first GPT-5.6 Sol tranche
 
@@ -194,7 +198,7 @@ This is a local candidate, not a remote or release checkpoint. Coding realizatio
 
 ## Current verification state
 
-The latest reconstruction checkpoint is green at exact persisted-reconciliation code SHA `ec8e67ad79211389ba0b8caa5cf40ceb3ccb2872`:
+The latest *published* reconstruction checkpoint is green at exact persisted-reconciliation code SHA `ec8e67ad79211389ba0b8caa5cf40ceb3ccb2872`:
 
 - local Node typecheck: pass;
 - local browser typecheck: pass;
@@ -202,11 +206,15 @@ The latest reconstruction checkpoint is green at exact persisted-reconciliation 
 - local packed/installable artifact smoke: pass;
 - GitHub Actions run `33262733403`: success across all seven configured jobs.
 
+The newer local candidate through `ebbc571` is separately recorded above and
+has 1,079 local tests (1,075 pass/0 fail/4 skips), root/browser typechecks and
+build passing; it has no remote CI run because publication is still blocked.
+
 The branch is still not a final product-completion baseline. M1 and later audit findings remain open or partial, and external gates remain unperformed. Do not weaken the new invariants merely to preserve superficial green status.
 
 ## Exact next actions
 
-1. Migrate the remaining value consumers (frontier presentation, time-reclaimed, signed receipts and team rollups) onto the effective economic projection, then add period-close semantics and integrate exact coverage into the dashboard views. The local candidate now has bundled canonical exact rate source, live proxy/import issuance, exact budget enforcement/advice under explicit coverage, CLI inspection/export, bounded correction and historical FX lineage, legacy-reprice convergence, schema-owned exact allocation persistence, a typed read-only API projection, coding value-attribution lineage and grouped usage/cohort/model/series reads, but refreshed-card provenance, effective-projection coverage beyond grouped requests, dashboard rendering and remaining legacy value read models remain.
+1. Migrate signed receipts and team rollups onto the effective economic projection, complete classic-dashboard/API parity, then add refreshed-card provenance and period-close semantics. The local candidate now has bundled canonical exact rate source, live proxy/import issuance, exact budget enforcement/advice under explicit coverage, CLI inspection/export, bounded correction and historical FX lineage, legacy-reprice convergence, schema-owned exact allocation persistence, a typed read-only API projection, coding value-attribution lineage, grouped usage/cohort/model/series reads, exact frontier/time-reclaimed projections and modern Value-view disclosure, but effective coverage for signed/remote artifacts and close semantics remain.
 2. Make kernel issuance unavoidable at every consequential product boundary, then introduce WorkUnit/OutcomeAdapter migration.
 3. Keep every new claim and decision on the kernel path; add regression/property/adversarial tests before widening capability.
 4. After each coherent slice, update this state and the audit/evidence registers with the exact local SHA; add a remote SHA and CI run only after publication is actually verified.

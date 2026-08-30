@@ -30,8 +30,10 @@
   coverage separately from the legacy numeric compatibility fields. A price
   correction updates this lineage transactionally; it never changes funnel
   outcomes. Usage, cohort and budget advice now consume the same grouped exact
-  read model; frontier presentation, receipts and team rollups remain explicit
-  follow-on migrations until their public compatibility boundaries are versioned.
+  read model, and frontier/time-reclaimed projections plus the modern Value view
+  carry its coverage disclosures. Signed receipts and team rollups remain
+  explicit follow-on migrations until their public compatibility boundaries are
+  versioned.
 
 ## Invariants
 
