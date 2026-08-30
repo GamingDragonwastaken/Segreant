@@ -157,7 +157,9 @@ web/
   and a phantom `reconciliation.latest` the Evidence view read forever. A field
   that is on the wire and undeclared is the same defect facing the other way —
   it forces a cast. Presence-checking contract tests do not cover this; the
-  shape does, against a record that actually exists.
+  shape and runtime primitive/array/record/interface/null-union types, against
+  records that actually exist. It is still a conformance gate, not a generated
+  single-source schema; the release gate keeps that distinction explicit.
 - **Exact economic data has a read-only route and a typed client contract.**
   `GET/HEAD /api/economic` serves the CLI's canonical report with exact Money
   strings, source/effective request coverage, role-aware balances and bounded
