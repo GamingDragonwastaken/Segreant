@@ -35,6 +35,12 @@
   explicit follow-on migrations until their public compatibility boundaries are
   versioned.
 
+- Complete exact-covered WorkUnits can emit signed receipt v2 bodies carrying
+  canonical effective Money/source/correction lineage; incomplete or oversized
+  numeric projections stay on receipt v1. A valid signature proves integrity of
+  the signed bytes, not provider authority, causal truth, or completeness beyond
+  the v2 semantic checks.
+
 ## Invariants
 
 - **`realizedValueUsd` is two different claims and they never merge.**
