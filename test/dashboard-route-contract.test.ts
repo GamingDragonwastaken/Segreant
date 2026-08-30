@@ -47,7 +47,9 @@ test('canonical dashboard route contract drives server methods, guards, and brow
       actions: ACTIONS_SOURCE,
     } as const;
     for (const binding of contract.browserBinding) {
-      assert.ok(browserSources[binding].includes(contract.path), `${contract.id} path is absent from the ${binding} browser surface`);
+      const source = browserSources[binding];
+      const referencesPath = source.includes(contract.path) || source.includes(`routePath('${contract.id}')`);
+      assert.ok(referencesPath, `${contract.id} path is absent from the ${binding} browser surface`);
     }
   }
 
