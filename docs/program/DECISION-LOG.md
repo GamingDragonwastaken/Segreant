@@ -91,3 +91,7 @@
 ## D-023 — Economic projections keep event roles separate
 **Decision:** Economic events retain their immutable envelope but map to explicit projection roles. Balances group by currency, basis, and role; charge/bill/provider-observation and adjustment/allocation flows cannot be collapsed by a coincidental shared USD basis. Kind-specific basis checks and compatible, bounded allocation reversals fail closed.
 **Reason:** Exact arithmetic alone cannot prevent semantic double counting. Role separation preserves a usable balance projection while making the caller choose when a cross-role comparison or conservation proof is justified.
+
+## D-024 — Economic source references have a normalized immutable projection
+**Decision:** Persist every `sourceEventIds` edge in `economic_event_sources` with foreign keys and append-only triggers. The ledger backfills links from canonical pre-link event bytes during upgrade and refuses any reload where normalized links diverge from the event JSON.
+**Reason:** JSON-only references cannot be enforced by SQLite and can be bypassed by direct writes. A normalized side table gives the database a referential-integrity boundary while retaining the canonical event envelope as the semantic source.

@@ -44,7 +44,8 @@ Controlling architecture:
 - Local candidate atomic exact request-charge bridge (not yet published): `ac0efa7555b4b87f7f24319c602f2b77f2ab2b85`
 - Local candidate bundled exact-rate integration and live proxy/import issuance (not yet published): `3763c9e86a81c365c7fe08e1ddf4bb9a5f7edb76`
 - Local candidate economic role-aware projections and reversal constraints (not yet published): `6285bccd0f223075bc97c30f34a76db9f9377b98`
-- Local candidate verification: 1,041 root tests total (1,037 pass, 0 fail, 4 platform-conditional skips), root/browser typecheck, build, and isolated-cache package dry-run pass. No GitHub Actions run exists for these local-only commits because the push was refused by the Codex usage/approval limit.
+- Local candidate normalized source-link migration (not yet published): `8fcd2624df2a2041fc2709c0827907e17216be34`
+- Local candidate verification: 1,043 root tests total (1,039 pass, 0 fail, 4 platform-conditional skips), root/browser typecheck, build, and isolated-cache package dry-run pass. No GitHub Actions run exists for these local-only commits because the push was refused by the Codex usage/approval limit.
 - Remaining-work audit commit: `5e5a82843154a6fd04e0017538919108c5ff06f1`
 - Luna resume-protocol commit: `5c4de94cf7af0a218ecd10946ac91577fdd9eae7`
 - Base high-assurance PR: #8 (`codex/high-assurance-foundation` -> `main`)
@@ -144,7 +145,8 @@ The reconciliation kernel path is now end-to-end for this vertical. Legacy reque
 - [x] Atomic request charge bridge (`ac0efa7`) lets an opted-in request write one deterministic exact charge event in the same SQLite transaction; duplicate replays are idempotent, conflicts roll back the request, and legacy rows remain without invented exact evidence.
 - [x] Bundled exact-rate integration (`3763c9e`) carries canonical decimal companions in the shipped card and threads exact charge totals through the live proxy, Claude Code, Codex, OpenCode, and synthetic-demo request writers; numeric-only refreshed cards remain explicitly non-exact.
 - [x] Role-aware economic projections and relation checks (`6285bcc`) separate usage/charge/price/adjustment/translation/allocation/control flows, enforce kind/basis compatibility, and reject incompatible or over-sized allocation reversals without changing the immutable envelope version.
-- [x] Local verification at this candidate: 1,041 total root tests, 1,037 pass, 0 fail, 4 platform-conditional skips; root/browser typechecks, build, focused economic/request tests, and isolated-cache package dry-run pass.
+- [x] Normalized economic source links (`8fcd262`) are foreign-key and append-only protected, backfilled deterministically for pre-link rows, and cross-checked against canonical event JSON on every reload so direct SQLite writes cannot create an unlinked economic graph.
+- [x] Local verification at this candidate: 1,043 total root tests, 1,039 pass, 0 fail, 4 platform-conditional skips; root/browser typechecks, build, focused economic/request tests, and isolated-cache package dry-run pass.
 
 This is a local candidate, not a remote or release checkpoint. Legacy `REAL` request/budget/allocation/value/export consumers remain compatibility projections for now, and event-role/conservation, correction, FX, allocation, and close semantics remain open. GitHub publication and exact-SHA CI are external gates currently blocked by the Codex usage/approval limit.
 
