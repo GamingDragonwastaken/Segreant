@@ -87,7 +87,10 @@ two domain callers goes in `rows.ts`.
   consumes effective charges without float coercion; exact runs persist through
   canonical JSON/digests and foreign-keyed per-line lineage, while incomplete
   legacy coverage stays explicit and the numeric allocation table remains a
-  separate compatibility record.
+  separate compatibility record. `saveExactAllocationRun()` immediately issues
+  an idempotent kernel Evidence/Claim with allocated-showback semantics; the
+  source/effective bases remain in the result and provider settlement is never
+  implied.
 - **Exact economic export is explicit.** `economicRequestsInRange()` and the
   `fiscus export --economic` mode expose original/effective Money, bases,
   correction IDs and legacy coverage; `compatibilityCostUsd` is labelled as a
