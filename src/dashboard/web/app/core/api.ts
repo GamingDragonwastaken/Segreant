@@ -11,6 +11,10 @@
  * consumes fails loudly the moment that screen's data moves.
  */
 
+import { dashboardApiContract, type DashboardApiContractId } from './generated-contract.ts';
+
+const routePath = (id: DashboardApiContractId): string => dashboardApiContract(id).path;
+
 export interface Summary {
   requests: number;
   costUsd: number;
@@ -710,41 +714,41 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  health: () => request<HealthPayload>('/api/health'),
+  health: () => request<HealthPayload>(routePath('health')),
   overview: (range: string, signal?: AbortSignal) => request<Overview>(
-    `/api/overview?range=${encodeURIComponent(range)}`,
+    `${routePath('overview')}?range=${encodeURIComponent(range)}`,
     signal ? { signal } : undefined,
   ),
-  billing: () => request<BillingPayload>('/api/billing'),
-  allocation: () => request<AllocationPayload>('/api/allocation'),
+  billing: () => request<BillingPayload>(routePath('billing')),
+  allocation: () => request<AllocationPayload>(routePath('allocation')),
   economic: (range: '30d' | 'all' = '30d') => request<EconomicPayload>(
-    range === 'all' ? '/api/economic?all=1' : '/api/economic?days=30',
+    range === 'all' ? `${routePath('economic')}?all=1` : `${routePath('economic')}?days=30`,
   ),
   causal: (studyId?: string) => request<CausalPayload>(
-    studyId ? '/api/causal?study=' + encodeURIComponent(studyId) : '/api/causal',
+    studyId ? routePath('causal') + '?study=' + encodeURIComponent(studyId) : routePath('causal'),
   ),
-  value: () => request<ValuePayload>('/api/value'),
-  settings: () => request<SettingsSnapshot>('/api/settings'),
-  guide: () => request<Record<string, unknown>>('/api/guide'),
-  importers: () => request<{ importers: Importer[] }>('/api/importers'),
+  value: () => request<ValuePayload>(routePath('value')),
+  settings: () => request<SettingsSnapshot>(routePath('settings')),
+  guide: () => request<Record<string, unknown>>(routePath('guide')),
+  importers: () => request<{ importers: Importer[] }>(routePath('importers')),
   /** GET /api/scan is the dry run: it detects and reports, and imports nothing. */
-  scan: () => request<ScanPayload>('/api/scan'),
+  scan: () => request<ScanPayload>(routePath('scan')),
 
   /** Mutating calls are grouped so every write in the GUI is greppable in one place. */
   write: {
     settings: (patch: Record<string, unknown>) =>
-      request<SettingsSnapshot>('/api/settings/update', { method: 'POST', body: JSON.stringify(patch) }),
+      request<SettingsSnapshot>(routePath('settings-update'), { method: 'POST', body: JSON.stringify(patch) }),
     clearProposals: () =>
-      request<{ ok: boolean; removed: number }>('/api/settings/clear-proposals', { method: 'POST' }),
+      request<{ ok: boolean; removed: number }>(routePath('clear-proposals'), { method: 'POST' }),
     runImport: (tool = 'all') =>
-      request<ImportResult>(`/api/import?tool=${encodeURIComponent(tool)}`, { method: 'POST' }),
+      request<ImportResult>(`${routePath('import')}?tool=${encodeURIComponent(tool)}`, { method: 'POST' }),
     // POST, not GET. An earlier version of this client called /api/discover with
     // the default GET and the server -- which guards it as a mutating route --
     // answered 405 every time. Both correlation routes below write to the ledger.
     discover: () =>
-      request<{ ok: boolean; foundFolders: number; correlated: number }>('/api/discover', { method: 'POST' }),
+      request<{ ok: boolean; foundFolders: number; correlated: number }>(routePath('discover'), { method: 'POST' }),
     runScan: () =>
-      request<{ ok: boolean; totalNew: number; correlated: number }>('/api/scan', { method: 'POST' }),
+      request<{ ok: boolean; totalNew: number; correlated: number }>(routePath('scan'), { method: 'POST' }),
   },
 };
 

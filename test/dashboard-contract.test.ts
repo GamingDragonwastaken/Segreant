@@ -39,6 +39,7 @@ import { join } from 'node:path';
 import { Store } from '../src/store/db.ts';
 import { DEFAULT_CONFIG } from '../src/config.ts';
 import { createDashboardServer } from '../src/dashboard/server.ts';
+import { DASHBOARD_API_CONTRACTS } from '../src/dashboard/contracts.ts';
 import { seedDemo } from '../src/demo/seed.ts';
 
 const API_SRC = join(
@@ -112,19 +113,17 @@ function parseInterfaces(source: string): Map<string, Field[]> {
  * out of the `api` object literal.
  */
 function parseEndpoints(source: string): Array<{ method: string; type: string; path: string }> {
-  const body = source.slice(source.indexOf('export const api = {'));
-  const stop = body.indexOf('write: {');
-  const reads = stop > 0 ? body.slice(0, stop) : body;
-
   const out: Array<{ method: string; type: string; path: string }> = [];
-  const re = /(\w+):\s*\([^)]*\)\s*=>\s*request<([\w<>, ]+)>\(\s*[`'"]([^`'"]+)[`'"]/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(reads)) !== null) {
-    const [, method, type, path] = m;
-    if (!method || !type || !path) continue;
-    // Inline generics like Record<string, unknown> describe no field contract.
-    if (type.includes('<') || type.includes('{')) continue;
-    out.push({ method, type: type.trim(), path });
+  // The endpoint list is canonical now; the source check below proves the
+  // browser client actually binds each named payload through routePath(...).
+  // Inline response descriptions remain outside this field-level checker until
+  // the generated payload-schema tranche gives them a named interface.
+  for (const contract of DASHBOARD_API_CONTRACTS) {
+    if (!(contract.methods as readonly string[]).includes('GET') || !(contract.browserBinding as readonly string[]).includes('modern-api')) continue;
+    const type = contract.responseType;
+    if (!/^[A-Z]\w*$/.test(type)) continue;
+    if (!source.includes(`request<${type}>`) || !source.includes(`routePath('${contract.id}')`)) continue;
+    out.push({ method: contract.id, type, path: contract.path });
   }
   return out;
 }
