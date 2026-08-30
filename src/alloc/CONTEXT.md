@@ -34,9 +34,9 @@
   distributes across every directly-allocated centre.
 - Everything here allocates **local estimates**. No reconciliation has completed
   against a real provider bill, so accuracy is unknown and the surfaces say so.
-- Exact allocation is read-only until an append-only schema for exact allocation
-  lines exists; it never writes the legacy microdollar run as if that were an
-  exact accounting record.
+- Exact allocation runs persist through schema-owned canonical JSON/digest rows
+  and per-line append-only source links; the legacy microdollar run remains a
+  separate compatibility record and is never relabelled as exact accounting.
 
 ## Verify
 
