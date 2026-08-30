@@ -78,6 +78,7 @@ const MONETARY_EVENT_KINDS = new Set<EconomicEventKind>([
   'provider_charge_observed',
   'bill_observed',
   'credit_applied',
+  'price_corrected',
   'discount_applied',
   'commitment_recognized',
   'tax_recognized',

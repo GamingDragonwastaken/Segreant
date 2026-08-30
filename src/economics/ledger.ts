@@ -10,7 +10,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { initializeEconomicSchema } from '../store/schema.ts';
 import { instant, type Instant } from '../epistemic/time.ts';
-import { addMoney, compareMoney, negateMoney, type Money } from './money.ts';
+import { addMoney, compareMoney, moneyFromJson, negateMoney, subtractMoney, type Money } from './money.ts';
 import { economicEvent, economicEventRole, type EconomicEvent, type EconomicEventInput, type EconomicEventRole } from './events.ts';
 import { deserializeEconomicEvent, serializeEconomicEvent } from './serialization.ts';
 
@@ -165,6 +165,9 @@ export class EconomicLedger {
       if (sourceId === value.id) throw new Error(`economic event ${value.id} cannot reference itself`);
       const source = this.readStored(sourceId);
       if (source === null) throw new Error(`unknown source economic event: ${sourceId}`);
+      if (Date.parse(value.recordedAt) < Date.parse(source.recordedAt)) {
+        throw new Error(`economic event ${value.id} recordedAt cannot precede source ${source.id}`);
+      }
       sources.set(sourceId, source);
       this.validateReferenceClosure(source, visiting, validated);
     }
@@ -183,6 +186,57 @@ export class EconomicLedger {
         if (compareMoney(negateMoney(value.amount), target.amount) > 0) {
           throw new Error(`economic event ${value.id} allocation reversal exceeds its source amount`);
         }
+      }
+    }
+    if (value.kind === 'price_corrected') {
+      if (value.reversalOf !== null) throw new Error(`economic event ${value.id} price correction must not use reversalOf`);
+      if (value.sourceEventIds.length !== 1) throw new Error(`economic event ${value.id} price correction requires exactly one source event`);
+      const sourceId = value.sourceEventIds[0];
+      if (sourceId === undefined) throw new Error(`economic event ${value.id} price correction source is missing`);
+      const source = sources.get(sourceId);
+      if (source === undefined) throw new Error(`economic event ${value.id} price correction source is missing`);
+      if (source.kind !== 'charge_estimated' || source.amount === null || (source.amount.basis !== 'list' && source.amount.basis !== 'estimated')) {
+        throw new Error(`economic event ${value.id} price correction must target a local charge_estimated event`);
+      }
+      if (source.subject !== value.subject) throw new Error(`economic event ${value.id} price correction subject must match its source`);
+      if (value.amount === null) throw new Error(`economic event ${value.id} price correction requires a monetary delta`);
+      if (value.amount.currency !== source.amount.currency || value.amount.basis !== source.amount.basis) {
+        throw new Error(`economic event ${value.id} price correction must use the source currency and basis`);
+      }
+      const metadata = value.metadata;
+      if (metadata === null || typeof metadata !== 'object' || Array.isArray(metadata)) {
+        throw new Error(`economic event ${value.id} price correction metadata must contain typed previousAmount and nextAmount`);
+      }
+      const keys = Object.keys(metadata).sort();
+      if (keys.join('\u0000') !== ['correction', 'nextAmount', 'previousAmount'].join('\u0000')) {
+        throw new Error(`economic event ${value.id} price correction metadata must contain exactly correction, previousAmount, and nextAmount`);
+      }
+      const record = metadata as { correction?: unknown; previousAmount?: unknown; nextAmount?: unknown };
+      if (record.correction !== 'reprice') throw new Error(`economic event ${value.id} price correction metadata correction must be reprice`);
+      let previous: Money;
+      let next: Money;
+      try {
+        previous = moneyFromJson(record.previousAmount as Parameters<typeof moneyFromJson>[0]);
+        next = moneyFromJson(record.nextAmount as Parameters<typeof moneyFromJson>[0]);
+      } catch (error) {
+        throw new Error(`economic event ${value.id} price correction metadata has invalid typed amounts: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      if (compareMoney(previous, source.amount) !== 0) throw new Error(`economic event ${value.id} price correction previousAmount must equal its source amount`);
+      if (next.currency !== source.amount.currency || next.basis !== source.amount.basis) {
+        throw new Error(`economic event ${value.id} price correction nextAmount must use the source currency and basis`);
+      }
+      if (compareMoney(subtractMoney(next, previous), value.amount) !== 0) {
+        throw new Error(`economic event ${value.id} price correction amount must equal nextAmount minus previousAmount`);
+      }
+      const priorCorrections = this.db.prepare(
+        `SELECT s.event_id AS eventId
+         FROM economic_event_sources AS s
+         JOIN economic_events AS e ON e.event_id = s.event_id
+         WHERE s.source_event_id = ? AND s.event_id <> ? AND e.event_kind = 'price_corrected'
+         LIMIT 1`,
+      ).get(source.id, value.id) as { eventId?: unknown } | undefined;
+      if (priorCorrections !== undefined && typeof priorCorrections.eventId === 'string') {
+        throw new Error(`economic event ${value.id} price correction source ${source.id} already has a correction`);
       }
     }
     visiting.delete(value.id);
