@@ -14,7 +14,8 @@
   `price`, `adjustment`, `translation`, `allocation`, `control`) so unlike
   economic flows are not collapsed into one balance;
 - economic events are canonical JSON plus a SHA-256 digest in an append-only
-  SQLite ledger;
+  SQLite ledger, with normalized immutable source-link rows backed by foreign
+  keys;
 - credits/reversals are additive signed events, not destructive updates;
 - projections are deterministic and can be replayed at a recorded-time boundary;
 - accounting-facing request charges can be issued as one exact Money event on the

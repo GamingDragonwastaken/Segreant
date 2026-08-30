@@ -702,8 +702,17 @@ CREATE TABLE IF NOT EXISTS economic_events (
   event_digest TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS economic_event_sources (
+  event_id        TEXT NOT NULL,
+  source_event_id TEXT NOT NULL,
+  PRIMARY KEY (event_id, source_event_id),
+  FOREIGN KEY (event_id) REFERENCES economic_events(event_id),
+  FOREIGN KEY (source_event_id) REFERENCES economic_events(event_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_economic_events_recorded ON economic_events(recorded_at, event_id);
 CREATE INDEX IF NOT EXISTS idx_economic_events_subject ON economic_events(subject, recorded_at, event_id);
+CREATE INDEX IF NOT EXISTS idx_economic_event_sources_source ON economic_event_sources(source_event_id, event_id);
 `;
 
 /**
@@ -924,6 +933,22 @@ export function initializeEconomicSchema(db: DatabaseSync): void {
     ' BEFORE INSERT ON economic_events' +
     ' WHEN EXISTS (SELECT 1 FROM economic_events WHERE event_id = NEW.event_id)' +
     ' BEGIN SELECT RAISE(ABORT, \'economic event ledger is append-only\'); END',
+  ).run();
+  db.prepare(
+    'CREATE TRIGGER IF NOT EXISTS economic_event_sources_append_only_update' +
+    ' BEFORE UPDATE ON economic_event_sources' +
+    ' BEGIN SELECT RAISE(ABORT, \'economic event source links are append-only\'); END',
+  ).run();
+  db.prepare(
+    'CREATE TRIGGER IF NOT EXISTS economic_event_sources_append_only_delete' +
+    ' BEFORE DELETE ON economic_event_sources' +
+    ' BEGIN SELECT RAISE(ABORT, \'economic event source links are append-only\'); END',
+  ).run();
+  db.prepare(
+    'CREATE TRIGGER IF NOT EXISTS economic_event_sources_append_only_insert' +
+    ' BEFORE INSERT ON economic_event_sources' +
+    ' WHEN EXISTS (SELECT 1 FROM economic_event_sources WHERE event_id = NEW.event_id AND source_event_id = NEW.source_event_id)' +
+    ' BEGIN SELECT RAISE(ABORT, \'economic event source links are append-only\'); END',
   ).run();
 }
 

@@ -103,6 +103,12 @@ test('economic ledger is append-only, idempotent, and projects each monetary bas
   assert.equal(ledger.append(bill), 'duplicate');
   assert.equal(ledger.append(credit), 'inserted');
   assert.equal(ledger.append(estimate), 'inserted');
+  assert.deepEqual(
+    (db.prepare('SELECT event_id AS eventId, source_event_id AS sourceEventId FROM economic_event_sources ORDER BY event_id, source_event_id').all() as Array<{ eventId: string; sourceEventId: string }>).map((row) => ({ eventId: row.eventId, sourceEventId: row.sourceEventId })),
+    [{ eventId: credit.id, sourceEventId: bill.id }],
+  );
+  assert.throws(() => db.prepare('UPDATE economic_event_sources SET source_event_id = ? WHERE event_id = ?').run('other', credit.id), /append-only/i);
+  assert.throws(() => db.prepare('DELETE FROM economic_event_sources WHERE event_id = ?').run(credit.id), /append-only/i);
   assert.throws(() => ledger.append(economicEvent(event({ amount: money('99.00', 'USD', 'billed') }))), /different economic event/);
   assert.deepEqual(ledger.project().balances.map((balance) => ({ role: balance.role, basis: balance.amount.basis, amount: formatMoneyAmount(balance.amount) })), [
     { role: 'adjustment', basis: 'billed', amount: '-1' },
@@ -140,6 +146,53 @@ test('economic replay fails closed on persisted dangling source references', () 
   ).run(dangling.id, dangling.kind, dangling.subject, dangling.occurredAt, dangling.recordedAt, encoded.body, encoded.digest);
   assert.throws(() => ledger.read(dangling.id), /unknown source economic event|dangling/i);
   assert.throws(() => ledger.events(), /unknown source economic event|dangling/i);
+  db.close();
+});
+
+test('economic replay fails closed when a persisted source link is omitted', () => {
+  const db = new DatabaseSync(':memory:');
+  const ledger = new EconomicLedger(db);
+  const bill = economicEvent(event({ id: 'event:linked-bill' }));
+  ledger.append(bill);
+  const unlinked = economicEvent(event({ id: 'event:unlinked', sourceEventIds: [bill.id] }));
+  const encoded = serializeEconomicEvent(unlinked);
+  db.prepare(
+    'INSERT INTO economic_events (event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest) VALUES (?, ?, ?, ?, ?, ?, ?)',
+  ).run(unlinked.id, unlinked.kind, unlinked.subject, unlinked.occurredAt, unlinked.recordedAt, encoded.body, encoded.digest);
+  assert.throws(() => ledger.read(unlinked.id), /source.*link|reference/i);
+  db.close();
+});
+
+test('economic schema upgrade backfills normalized source links without rewriting events', () => {
+  const db = new DatabaseSync(':memory:');
+  db.exec(`
+    PRAGMA foreign_keys = ON;
+    CREATE TABLE economic_events (
+      event_id TEXT PRIMARY KEY,
+      event_kind TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      occurred_at TEXT NOT NULL,
+      recorded_at TEXT NOT NULL,
+      event_json TEXT NOT NULL,
+      event_digest TEXT NOT NULL
+    );
+  `);
+  const bill = economicEvent(event({ id: 'event:pre-link-bill' }));
+  const credit = economicEvent(event({ id: 'event:pre-link-credit', kind: 'credit_applied', amount: money('-1', 'USD', 'billed'), sourceEventIds: [bill.id], reversalOf: bill.id }));
+  for (const item of [bill, credit]) {
+    const encoded = serializeEconomicEvent(item);
+    db.prepare(
+      'INSERT INTO economic_events (event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    ).run(item.id, item.kind, item.subject, item.occurredAt, item.recordedAt, encoded.body, encoded.digest);
+  }
+  const before = db.prepare('SELECT event_json, event_digest FROM economic_events ORDER BY event_id').all();
+  const ledger = new EconomicLedger(db);
+  assert.deepEqual(
+    (db.prepare('SELECT event_id AS eventId, source_event_id AS sourceEventId FROM economic_event_sources').all() as Array<{ eventId: string; sourceEventId: string }>).map((row) => ({ eventId: row.eventId, sourceEventId: row.sourceEventId })),
+    [{ eventId: credit.id, sourceEventId: bill.id }],
+  );
+  assert.deepEqual(db.prepare('SELECT event_json, event_digest FROM economic_events ORDER BY event_id').all(), before);
+  assert.equal(ledger.read(credit.id)?.reversalOf, bill.id);
   db.close();
 });
 

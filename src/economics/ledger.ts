@@ -79,6 +79,39 @@ export class EconomicLedger {
   public constructor(db: DatabaseSync) {
     this.db = db;
     initializeEconomicSchema(this.db);
+    this.backfillSourceLinks();
+  }
+
+  /**
+   * Upgrade rows written before the normalized link table existed. The links
+   * are a deterministic projection of the already-authenticated event JSON,
+   * not a rewrite of economic history. A missing source or malformed event
+   * aborts the upgrade so an old database cannot open with a partial graph.
+   */
+  private backfillSourceLinks(): void {
+    const rows = this.db.prepare(
+      'SELECT event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest FROM economic_events ORDER BY event_id ASC',
+    ).all() as unknown as StoredEconomicRow[];
+    if (rows.length === 0) return;
+    const has = this.db.prepare(
+      'SELECT 1 AS present FROM economic_event_sources WHERE event_id = ? AND source_event_id = ?',
+    );
+    const add = this.db.prepare(
+      'INSERT INTO economic_event_sources (event_id, source_event_id) VALUES (?, ?)',
+    );
+    this.db.prepare('BEGIN IMMEDIATE').run();
+    try {
+      for (const rowValue of rows) {
+        const value = storedRecord(rowValue);
+        for (const sourceId of value.sourceEventIds) {
+          if (has.get(value.id, sourceId) === undefined) add.run(value.id, sourceId);
+        }
+      }
+      this.db.prepare('COMMIT').run();
+    } catch (error) {
+      try { this.db.prepare('ROLLBACK').run(); } catch { /* preserve original failure */ }
+      throw error;
+    }
   }
 
   private transaction<T>(work: () => T): T {
@@ -97,7 +130,17 @@ export class EconomicLedger {
     const stored = row<StoredEconomicRow>(this.db.prepare(
       'SELECT event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest FROM economic_events WHERE event_id = ?',
     ).get(id));
-    return stored === null ? null : storedRecord(stored);
+    if (stored === null) return null;
+    const value = storedRecord(stored);
+    const links = this.db.prepare(
+      'SELECT source_event_id AS sourceEventId FROM economic_event_sources WHERE event_id = ? ORDER BY source_event_id ASC',
+    ).all(id) as Array<{ sourceEventId: string }>;
+    const expected = [...value.sourceEventIds].sort();
+    const actual = links.map((link) => link.sourceEventId);
+    if (actual.length !== expected.length || actual.some((sourceId, index) => sourceId !== expected[index])) {
+      throw new Error(`stored economic event ${id} source links diverge from its canonical record`);
+    }
+    return value;
   }
 
   /**
@@ -167,6 +210,10 @@ export class EconomicLedger {
     this.db.prepare(
       'INSERT INTO economic_events (event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest) VALUES (?, ?, ?, ?, ?, ?, ?)',
     ).run(item.id, item.kind, item.subject, item.occurredAt, item.recordedAt, encoded.body, encoded.digest);
+    const link = this.db.prepare(
+      'INSERT INTO economic_event_sources (event_id, source_event_id) VALUES (?, ?)',
+    );
+    for (const sourceId of item.sourceEventIds) link.run(item.id, sourceId);
     return 'inserted';
   }
 
