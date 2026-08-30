@@ -24,6 +24,13 @@
   (`valueSpine` / `usageValue` / `budgetAdvice` / `valueReport`). The primitives
   are shared; so is the SEQUENCE that assembles them, so the CLI and
   `/api/value` cannot drift apart by hand-editing one of them.
+- Coding attribution now carries an additive exact seam: each WorkUnit can
+  retain JSON-safe effective Money/source-event coverage from the Store read
+  model, and mature rollups disclose `exact`, `partial`, or `legacy_unknown`
+  coverage separately from the legacy numeric compatibility fields. A price
+  correction updates this lineage transactionally; it never changes funnel
+  outcomes. Usage, cohort, frontier, receipts and team rollups remain explicit
+  follow-on migrations until their grouped exact read models exist.
 
 ## Invariants
 
