@@ -49,6 +49,7 @@ import * as causalLineage from './causalLineage.ts';
 import * as causalProducer from './causalProducer.ts';
 import * as backup from './backup.ts';
 import * as realization from './realization.ts';
+import { buildEconomicRequestExportRows, type EconomicRequestExportRow } from '../export/economic.ts';
 import { billingReconciliationClaim, buildBillingKernelIssuance, buildOpenAiCostsKernelIssuance, buildOpenAiReconciliationKernelIssuance, type BillingKernelPersistenceResult, type BillingReconciliationClaimInput, type OpenAiCostsKernelPersistenceResult, type OpenAiReconciliationKernelPersistenceResult } from '../billing/epistemic.ts';
 import type {
   RealizationCostSync,
@@ -1422,6 +1423,11 @@ export class Store {
       )
       .all(startMs, endMs) as Array<Record<string, unknown>>;
     return rows.map(requestRowFromRecord);
+  }
+
+  /** Exact-safe request export rows with original/effective Money and lineage. */
+  economicRequestsInRange(startMs: number, endMs: number): EconomicRequestExportRow[] {
+    return buildEconomicRequestExportRows(this.requestsInRange(startMs, endMs), this.economicLedger);
   }
 
   insertCommit(c: {

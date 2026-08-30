@@ -44,6 +44,7 @@ export interface EconomicProjection {
 /** One charge after any visible, validated local price correction. */
 export interface EffectiveEconomicCharge {
   readonly sourceEventId: string;
+  readonly sourceAmount: Money;
   readonly amount: Money;
   readonly eventIds: readonly string[];
   readonly sourceBases: readonly Money['basis'][];
@@ -456,6 +457,7 @@ export class EconomicLedger {
       }
       result.set(sourceId, Object.freeze({
         sourceEventId: sourceId,
+        sourceAmount: source.amount!,
         amount: money(formatMoneyAmount(amount), amount.currency, 'effective'),
         eventIds: Object.freeze(eventIds),
         sourceBases: Object.freeze([...sourceBases].sort()),

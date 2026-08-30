@@ -9,6 +9,7 @@ import { Store } from '../store/db.ts';
 import { loadConfig, saveConfig, dbPath, configPath, fiscusHome, isDemo, type FiscusConfig } from '../config.ts';
 import { startOfLocalDay } from '../budget/guard.ts';
 import { requestsToCsv } from '../export/csv.ts';
+import { economicRequestsToCsv, economicRequestsToJson } from '../export/economic.ts';
 import { computeAlerts } from '../alerts/detect.ts';
 import { describeSourceDepth } from '../value/sourceDepth.ts';
 import { isDeclaredAttribution } from '../value/characterization.ts';
@@ -177,14 +178,18 @@ export function cmdExport(flags: Flags): void {
   const dayMs = 24 * 60 * 60 * 1000;
   const days = flags.days ? Number(flags.days) : 30;
   const startMs = flags.all ? 0 : now - days * dayMs;
+  const economic = flags.economic === true || flags['exact-money'] === true;
   const rows = store.requestsInRange(startMs, now + 1000);
+  const economicRows = economic ? store.economicRequestsInRange(startMs, now + 1000) : null;
   const asJson = flags.json === true || flags.format === 'json';
-  const out = asJson ? `${stringifyJson(rows)}\n` : requestsToCsv(rows);
+  const out = economic
+    ? (asJson ? economicRequestsToJson(economicRows!) : economicRequestsToCsv(economicRows!))
+    : (asJson ? `${stringifyJson(rows)}\n` : requestsToCsv(rows));
 
   if (typeof flags.out === 'string') {
     writeFileSync(flags.out, out);
     const tty = process.stdout.isTTY ?? false;
-    console.error(color(tty, C.green, `  Exported ${num(rows.length)} requests (${asJson ? 'json' : 'csv'}) → ${flags.out}`));
+    console.error(color(tty, C.green, `  Exported ${num(rows.length)} requests (${economic ? 'economic-' : ''}${asJson ? 'json' : 'csv'}) → ${flags.out}`));
   } else {
     process.stdout.write(out);
   }

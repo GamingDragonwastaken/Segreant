@@ -134,7 +134,8 @@ function cmdHelp(): void {
                           Deliver to your own webhook: --set-webhook <url>, then --notify
                           (cron it; sends ONLY alert metadata — never prompts/code/keys)
     export                Export the request ledger for BI/finance (--csv default | --json,
-                          --days N | --all, --out <file>; otherwise stdout)
+                          --economic for exact Money/lineage, --days N | --all,
+                          --out <file>; otherwise stdout)
     init                  Write default config + print setup steps
     doctor                First-run health check: config, DB, proxy, caps, data quality
     config                Show config and file paths    (--json)
