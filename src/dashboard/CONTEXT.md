@@ -174,7 +174,9 @@ web/
   response bindings and browser-surface bindings; the build copies it into the
   browser under the publication lock. Its top-level JSON/text payload contracts
   are validated by seeded conformance and by the modern client before a typed
-  response is returned. Detailed nested payload schemas remain a separate
+  response is returned. Nested interface metadata is generated with an exact
+  `api.ts` source hash under the same lock; replacing the hand-written browser
+  declarations with a generated/shared type source remains a separate
   migration boundary.
 - **Capability parity is an immutable contract.** `CAPABILITY_SPECS` augments
   every GUI registry entry with input/preview/output schema classes, authority,

@@ -129,7 +129,8 @@ paths/methods/guards, and its top-level payload contracts fail closed at runtime
 `test/dashboard-contract.test.ts` derives endpoint→interface pairings from the
 canonical descriptor, fetches every JSON read envelope against a real server,
 and asserts every required field and primitive/container kind actually arrives.
-The browser's detailed nested interfaces and the classic inline HTML remain
+Nested browser-interface metadata is generated with an exact `api.ts` source
+hash, while the hand-written declarations and classic inline HTML remain
 explicit follow-on migration surfaces. The GUI parity registry additionally
 exposes immutable `CapabilitySpec` metadata for consequence, authority,
 egress, credentials, reversibility, assurance, and surface bindings.

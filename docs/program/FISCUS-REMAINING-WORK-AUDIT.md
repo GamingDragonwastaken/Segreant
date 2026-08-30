@@ -45,9 +45,10 @@ parity `16c5a15`, immutable refreshed-card provenance
 `28905c5` and canonical/generated dashboard route-contract enforcement
 `d6243c7`, immutable CapabilitySpec `0467830`, and shared top-level payload
 envelopes/client validation `92ecbbd`. Local verification at this candidate
-is 1,100 root tests (1,096 pass, 0 fail, 4 platform-conditional skips),
-team-server 61/61, root/team typecheck, full Node/browser build, and npm pack
-dry-run.
+has generated nested dashboard-interface metadata `aad39bc`; local verification
+at this candidate is 1,100 root tests (1,096 pass, 0 fail, 4 platform-conditional
+skips), team-server 61/61, root/team typecheck, full Node/browser build, and npm
+pack dry-run.
 These identities are not remote/CI evidence until the blocked push succeeds.
 
 The coding value path now has a bounded exact seam: `3871b6f` adds a
@@ -86,8 +87,9 @@ descriptor and regenerates the browser copy under the publication lock.
 conservative input/preview/output schemas and authority/egress/credential/
 reversibility/assurance/CLI/API/GUI/docs metadata. `92ecbbd` adds shared
 top-level payload envelopes for every API method, seeded runtime validation,
-and fail-closed modern-client handling. Nested payload schemas and full
-docs/claim/egress generation remain.
+and fail-closed modern-client handling. `aad39bc` generates nested browser
+interface metadata with a source hash and makes the seeded checker consume it.
+A single generated type source plus full docs/claim/egress generation remain.
 
 The receipt checkpoint at `443c74d` adds a strict v2 signed body for complete
 exact-covered units, with canonical effective Money/source/correction lineage
@@ -216,16 +218,25 @@ error; seeded conformance covers named browser interfaces plus all remaining
 JSON envelopes. This does not yet close the universal nested-schema, claim,
 egress, documentation-generation, or independent verifier requirements.
 
+**Nested-contract addendum (2026-08-30):** `aad39bc` replaces ad hoc
+test-time interface parsing with a deterministic generator that flattens
+exported browser-interface inheritance, records the exact `api.ts` source
+SHA-256, and emits browser-safe field metadata. The build regenerates it under
+the publication lock, and seeded conformance fails if the generated artifact is
+stale. The hand-written TypeScript declarations remain the source input rather
+than a second runtime authority; replacing them with a generated/shared type
+source and generating docs/claim/egress contracts remain open.
+
 The next worker should not start another design discussion.
 
-**Execution-order override after `92ecbbd`:** the versioned exact
+**Execution-order override after `aad39bc`:** the versioned exact
 team-rollup protocol/storage migration, bounded classic Value/API exact-coverage
 parity, refreshed-card provenance, runtime dashboard type conformance,
 period-close semantics, route generation, CapabilitySpec, and top-level payload
-contracts are complete locally. Proceed next with nested payload/schema
-generation and unavoidable kernel issuance across consequential product
-boundaries; live Postgres execution and remote publication remain explicit
-gates.
+contracts are complete locally, and nested interface metadata is generated and
+hash-checked. Proceed next with a single generated/shared type source and
+unavoidable kernel issuance across consequential product boundaries; live
+Postgres execution and remote publication remain explicit gates.
 
 1. **COMPLETED at `b27c0ef`:** Implement the RED robust decision module. Strict dominance is the only proof-level certificate; minimax regret and perfect-information VOI remain explicitly named rules with assumptions and cost.
 2. **COMPLETED at `5647c67`:** Implement additive transitive revocation closure. Dependent descendants are invalidated while independent siblings remain outside the closure; cycles are safe, duplicate edges fail closed, and history is not deleted.
@@ -239,7 +250,8 @@ gates.
 10. **COMPLETED (bounded) at `e244115`:** Extend dashboard endpoint conformance from required-field presence to runtime primitive, array, record, named-interface and null-union validation across seeded browser read endpoints. The universal generated single-source contract remains open.
 11. **COMPLETED at `28905c5`:** Implement exact economic period-close semantics: canonical half-open periods, digest-bound basis-separated snapshots, as-of replay, explicit append-only reopen controls, conflict-preserving transitions, late-event blocking, JSON-safe CLI lifecycle operations, and typed read-only dashboard/API state. Live Postgres execution and GitHub publication remain explicit gates.
 12. **COMPLETED (bounded) at `92ecbbd` (route generation `d6243c7`, CapabilitySpec `0467830`):** Canonicalize and regenerate dashboard API route paths, methods, Allow headers, CSRF gates, response bindings, browser-surface bindings, top-level JSON/text payload envelopes, and conservative capability metadata; the browser copy is synchronized under the publication lock, seeded runtime conformance covers all JSON envelopes, and the modern client rejects contract violations. Nested payload schemas and full docs/claim/egress generation remain.
-13. **NEXT:** Complete nested payload-field schema generation and then make kernel issuance unavoidable at every consequential product boundary. Trust-anchor governance, live Postgres execution and GitHub publication remain explicit gates.
+13. **COMPLETED (bounded) at `aad39bc`:** Generate nested browser-interface metadata with inheritance flattening and an exact source hash, regenerate it under the publication lock, and consume it in seeded runtime conformance. A single generated/shared type source and full docs/claim/egress generation remain.
+14. **NEXT:** Complete the single generated/shared type source and then make kernel issuance unavoidable at every consequential product boundary. Trust-anchor governance, live Postgres execution and GitHub publication remain explicit gates.
 
 ## Trusted Epistemic Kernel remaining work
 
