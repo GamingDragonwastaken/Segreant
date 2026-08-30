@@ -40,6 +40,7 @@ import type { BillingMappingCoverage, BillingRecordMapping } from '../billing/ma
 import type { AllocationRule, CostCentre } from '../alloc/rules.ts';
 import type { AllocationRunResult } from '../alloc/apply.ts';
 import type { ExactAllocationRunResult } from '../alloc/exact.ts';
+import { buildExactAllocationKernelIssuance, type ExactAllocationKernelPersistenceResult } from '../alloc/epistemic.ts';
 import * as allocation from './allocation.ts';
 import type { ExactAllocationRunRecord } from './allocation.ts';
 import * as exactAllocation from '../alloc/exact.ts';
@@ -2239,7 +2240,11 @@ export class Store {
 
   /** Persist an exact allocation projection as a canonical append-only record. */
   saveExactAllocationRun(result: ExactAllocationRunResult, computedAtMs = Date.now()): string {
-    return allocation.saveExactAllocationRun(this.db, result, computedAtMs);
+    const allocationRunId = allocation.saveExactAllocationRun(this.db, result, computedAtMs);
+    const persisted = this.exactAllocationRun(allocationRunId);
+    if (persisted === null) throw new Error(`exact allocation run ${allocationRunId} disappeared before kernel issuance`);
+    this.issueExactAllocationToKernel(persisted);
+    return allocationRunId;
   }
 
   /** Read one exact allocation run after digest and normalized lineage verification. */
@@ -2250,6 +2255,19 @@ export class Store {
   /** Read bounded exact allocation history, newest computation first. */
   exactAllocationRuns(limit = 20): ExactAllocationRunRecord[] {
     return allocation.exactAllocationRuns(this.db, limit);
+  }
+
+  /** Issue one persisted exact allocation run into the Trusted Epistemic Kernel. */
+  issueExactAllocationToKernel(record: ExactAllocationRunRecord): ExactAllocationKernelPersistenceResult {
+    const issuance = buildExactAllocationKernelIssuance(record.allocationRunId, record.result, record.computedAtMs);
+    const evidenceResult = this.epistemicLedger.appendEvidence(issuance.evidence);
+    const claimResult = this.epistemicLedger.appendClaim(issuance.claim);
+    return Object.freeze({
+      evidenceId: issuance.evidence.id,
+      claimId: issuance.claim.id,
+      evidence: Object.freeze({ result: evidenceResult }),
+      claim: Object.freeze({ result: claimResult }),
+    });
   }
 
   /**
