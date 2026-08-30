@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { applyExactAllocation, type ExactAllocatableRow } from '../src/alloc/exact.ts';
 import type { AllocationRule, CostCentre } from '../src/alloc/rules.ts';
 import { formatMoneyAmount, money } from '../src/economics/money.ts';
+import { deserializeExactAllocationRun, serializeExactAllocationRun } from '../src/alloc/exact.ts';
 import { Store, type RequestRow } from '../src/store/db.ts';
 
 const centre = (costCentreId: string): CostCentre => ({ costCentreId, name: costCentreId, owner: null, createdAtMs: 0, archivedAtMs: null });
@@ -117,6 +118,49 @@ test('exact proportional allocation refuses a non-terminating share instead of i
     ], rules),
     /non-terminating|quantiz/i,
   );
+});
+
+test('exact proportional pools ignore archived placeholder targets and follow open direct drivers', () => {
+  const result = applyExactAllocation({
+    rows: [
+      row({ project: 'direct', sourceEventIds: ['economic:direct'], amount: money('1', 'USD', 'list') }),
+      row({ project: 'pool', sourceEventIds: ['economic:pool'], amount: money('1', 'USD', 'list') }),
+    ],
+    rules: [
+      rule({ ruleId: 'direct', match: { project: 'direct' }, targets: [{ costCentreId: 'platform', ratio: 1 }] }),
+      rule({ ruleId: 'pool', priority: 2, method: 'proportional_to_direct', match: { project: 'pool' }, targets: [
+        { costCentreId: 'eng', ratio: 0 },
+        { costCentreId: 'platform', ratio: 0 },
+      ] }),
+    ],
+    costCentres: [centre('platform'), { ...centre('eng'), archivedAtMs: 1 }],
+    periodStartMs: 0,
+    periodEndMs: 100,
+    runAtMs: 100,
+  });
+  assert.equal(result.unallocated.length, 0);
+  assert.deepEqual(result.lines.filter((line) => line.ruleId === 'pool').map((line) => [line.costCentreId, formatMoneyAmount(line.amount)]), [['platform', '1']]);
+});
+
+test('exact allocation canonical result ordering is independent of input row order', () => {
+  const rules = [
+    rule({ ruleId: 'pool-a', match: { project: 'pool-a' }, method: 'proportional_to_direct', targets: [{ costCentreId: 'eng', ratio: 0 }] }),
+    rule({ ruleId: 'pool-b', match: { project: 'pool-b' }, method: 'proportional_to_direct', targets: [{ costCentreId: 'eng', ratio: 0 }] }),
+  ];
+  const rows = [
+    row({ project: 'pool-a', amount: money('1', 'USD', 'list'), sourceEventIds: ['economic:pool-a'] }),
+    row({ project: 'pool-b', amount: money('2', 'USD', 'list'), sourceEventIds: ['economic:pool-b'] }),
+  ];
+  const first = run(rows, rules);
+  const second = run([...rows].reverse(), rules);
+  assert.equal(serializeExactAllocationRun(first).body, serializeExactAllocationRun(second).body);
+});
+
+test('exact allocation replay rejects an unknown envelope field and a non-conserving result', () => {
+  const result = run([row({ sourceEventIds: ['economic:serialization'] })]);
+  const serialized = serializeExactAllocationRun(result);
+  assert.throws(() => deserializeExactAllocationRun({ ...serialized, extra: true } as never), /unknown.*envelope|envelope.*field/i);
+  assert.throws(() => serializeExactAllocationRun({ ...result, totalByIdentity: [] }), /conserv|identity|lineage/i);
 });
 
 test('Store exact allocation uses effective charges and discloses unresolved legacy coverage', () => {

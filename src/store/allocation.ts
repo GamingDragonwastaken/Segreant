@@ -338,6 +338,7 @@ export function exactAllocationRun(db: DatabaseSync, allocationRunId: string): E
   if (row === undefined) return null;
   const result = deserializeExactAllocationRun({ kind: 'exact_allocation_run', schemaVersion: 1, body: String(row.resultJson), digest: String(row.resultDigest) });
   if (String(row.allocationRunId) !== allocationRunId || Number(row.periodStartMs) !== result.periodStartMs || Number(row.periodEndMs) !== result.periodEndMs || Number(row.runAtMs) !== result.runAtMs || Boolean(row.complete) !== result.complete || Boolean(row.conserves) !== result.conserves) throw new Error(`exact allocation run ${allocationRunId} failed physical identity verification`);
+  if (!Number.isSafeInteger(Number(row.computedAtMs))) throw new Error(`exact allocation run ${allocationRunId} has an invalid computedAt timestamp`);
   verifyExactAllocationLineage(db, allocationRunId, result);
   return { allocationRunId, computedAtMs: Number(row.computedAtMs), result };
 }

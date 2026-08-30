@@ -716,7 +716,7 @@ CREATE INDEX IF NOT EXISTS idx_economic_events_occurred ON economic_events(occur
 CREATE INDEX IF NOT EXISTS idx_economic_event_sources_source ON economic_event_sources(source_event_id, event_id);
 
 CREATE TABLE IF NOT EXISTS economic_allocation_runs (
-  allocation_run_id TEXT PRIMARY KEY,
+  allocation_run_id TEXT PRIMARY KEY NOT NULL,
   period_start_ms INTEGER NOT NULL,
   period_end_ms INTEGER NOT NULL,
   run_at_ms INTEGER NOT NULL,

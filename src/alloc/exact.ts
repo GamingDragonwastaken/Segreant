@@ -74,6 +74,8 @@ export interface ExactAllocationRunResult {
   readonly excludedFrom: readonly ['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations'];
 }
 
+const EXACT_EXCLUDED_FROM = ['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations'] as const;
+
 export interface SerializedExactAllocationRun {
   readonly kind: 'exact_allocation_run';
   readonly schemaVersion: 1;
@@ -137,6 +139,7 @@ function digest(body: string): string {
 }
 
 export function serializeExactAllocationRun(value: ExactAllocationRunResult): SerializedExactAllocationRun {
+  validateExactAllocationResult(value);
   const body = canonicalJson(exactAllocationToJson(value) as never);
   return Object.freeze({ kind: 'exact_allocation_run', schemaVersion: 1, body, digest: digest(body) });
 }
@@ -231,8 +234,111 @@ function parsedUnallocated(value: unknown, label: string): ExactUnallocatedLine 
   return Object.freeze({ reason, amount, sourceBasis, sourceEventIds: stringArray(record.sourceEventIds, `${label}.sourceEventIds`), topProjects });
 }
 
+function amountMap(values: readonly ExactMoneyBucket[], label: string): { amounts: Map<string, Money>; sources: Map<string, Set<string>> } {
+  const amounts = new Map<string, Money>();
+  const sources = new Map<string, Set<string>>();
+  for (const [index, bucket] of values.entries()) {
+    exactFields(bucket as unknown as Record<string, unknown>, BUCKET_KEYS, `${label}[${index}]`);
+    const amount = exactMoney(bucket.amount, `${label}[${index}].amount`);
+    const key = identityKey(amount);
+    if (amounts.has(key)) throw new Error(`${label} contains duplicate currency/basis identity: ${key}`);
+    if (bucket.currency !== amount.currency || bucket.basis !== amount.basis) throw new Error(`${label}[${index}] identity does not match its Money amount`);
+    const ids = stringArray(bucket.sourceEventIds, `${label}[${index}].sourceEventIds`);
+    amounts.set(key, amount);
+    sources.set(key, new Set(ids));
+  }
+  return { amounts, sources };
+}
+
+function addAggregate(map: Map<string, Money>, amount: Money): void {
+  const key = identityKey(amount);
+  const prior = map.get(key);
+  map.set(key, prior === undefined ? amount : addMoney(prior, amount));
+}
+
+function aggregateSources(map: Map<string, Set<string>>, amount: Money, ids: readonly string[]): void {
+  const key = identityKey(amount);
+  const target = map.get(key) ?? new Set<string>();
+  for (const id of ids) target.add(id);
+  map.set(key, target);
+}
+
+function sameSourceSet(left: Set<string> | undefined, right: Set<string> | undefined): boolean {
+  const a = [...(left ?? new Set<string>())].sort();
+  const b = [...(right ?? new Set<string>())].sort();
+  return a.length === b.length && a.every((id, index) => id === b[index]);
+}
+
+/** Recompute the conservation and identity invariants before a result is serialized or trusted. */
+export function validateExactAllocationResult(value: ExactAllocationRunResult): void {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error('exact allocation result must be an object');
+  exactFields(value as unknown as Record<string, unknown>, RESULT_KEYS, 'exact allocation result');
+  if (!Number.isSafeInteger(value.periodStartMs) || !Number.isSafeInteger(value.periodEndMs) || value.periodStartMs >= value.periodEndMs) throw new Error('exact allocation result period is not ordered');
+  if (!Number.isSafeInteger(value.runAtMs)) throw new Error('exact allocation result runAt must be a safe timestamp');
+  if (!Array.isArray(value.totalByIdentity) || !Array.isArray(value.allocatedByIdentity) || !Array.isArray(value.unallocatedByIdentity) || !Array.isArray(value.lines) || !Array.isArray(value.unallocated) || !Array.isArray(value.sourceBases) || !Array.isArray(value.unresolvedRequestIds) || !Array.isArray(value.excludedFrom)) throw new Error('exact allocation result arrays are malformed');
+  if (value.trust !== 'derived_allocation_of_exact_effective_charges') throw new Error('exact allocation result trust is invalid');
+  if (value.excludedFrom.length !== EXACT_EXCLUDED_FROM.length || value.excludedFrom.some((item, index) => item !== EXACT_EXCLUDED_FROM[index])) throw new Error('exact allocation result excludedFrom is invalid');
+  if (typeof value.complete !== 'boolean' || typeof value.conserves !== 'boolean') throw new Error('exact allocation result status is invalid');
+  if (!value.conserves) throw new Error('exact allocation result is not conserving');
+  const unresolved = stringArray(value.unresolvedRequestIds, 'unresolvedRequestIds', true);
+  if (value.complete !== (unresolved.length === 0)) throw new Error('exact allocation result completeness disagrees with unresolved requests');
+  const total = amountMap(value.totalByIdentity, 'totalByIdentity');
+  const allocated = amountMap(value.allocatedByIdentity, 'allocatedByIdentity');
+  const unallocated = amountMap(value.unallocatedByIdentity, 'unallocatedByIdentity');
+  const lineAmounts = new Map<string, Money>();
+  const lineSources = new Map<string, Set<string>>();
+  for (const [index, line] of value.lines.entries()) {
+    exactFields(line as unknown as Record<string, unknown>, LINE_KEYS, `lines[${index}]`);
+    const amount = exactMoney(line.amount, `lines[${index}].amount`);
+    if (line.sourceBasis !== amount.basis) throw new Error(`lines[${index}] source basis does not match its Money amount`);
+    if (!ALLOCATION_METHODS.has(line.method) || !Number.isSafeInteger(line.ruleVersion) || line.ruleVersion < 1 || !Number.isSafeInteger(line.ratioParts) || line.ratioParts < 0 || line.ratioParts > RATIO_SCALE) throw new Error(`lines[${index}] has invalid rule metadata`);
+    const ids = stringArray(line.sourceEventIds, `lines[${index}].sourceEventIds`);
+    addAggregate(lineAmounts, amount);
+    aggregateSources(lineSources, amount, ids);
+  }
+  const unallocatedAmounts = new Map<string, Money>();
+  const unallocatedSources = new Map<string, Set<string>>();
+  for (const [index, line] of value.unallocated.entries()) {
+    exactFields(line as unknown as Record<string, unknown>, UNALLOCATED_KEYS, `unallocated[${index}]`);
+    const amount = exactMoney(line.amount, `unallocated[${index}].amount`);
+    if (line.sourceBasis !== amount.basis || !UNALLOCATED_REASONS.has(line.reason)) throw new Error(`unallocated[${index}] has invalid identity/reason`);
+    const ids = stringArray(line.sourceEventIds, `unallocated[${index}].sourceEventIds`);
+    if (!Array.isArray(line.topProjects)) throw new Error(`unallocated[${index}].topProjects must be an array`);
+    for (const [projectIndex, project] of line.topProjects.entries()) {
+      if (project === null || typeof project !== 'object' || typeof project.project !== 'string' || project.project.trim().length === 0) throw new Error(`unallocated[${index}].topProjects[${projectIndex}] is malformed`);
+      exactFields(project as unknown as Record<string, unknown>, TOP_PROJECT_KEYS, `unallocated[${index}].topProjects[${projectIndex}]`);
+      const projectAmount = exactMoney(project.amount, `unallocated[${index}].topProjects[${projectIndex}].amount`);
+      if (projectAmount.currency !== amount.currency || projectAmount.basis !== amount.basis) throw new Error(`unallocated[${index}].topProjects[${projectIndex}] identity mismatch`);
+    }
+    addAggregate(unallocatedAmounts, amount);
+    aggregateSources(unallocatedSources, amount, ids);
+  }
+  const keys = new Set([...total.amounts.keys(), ...allocated.amounts.keys(), ...unallocated.amounts.keys(), ...lineAmounts.keys(), ...unallocatedAmounts.keys()]);
+  for (const key of keys) {
+    const identity = splitIdentity(key);
+    const zero = money('0', identity.currency, identity.basis);
+    const expected = total.amounts.get(key) ?? zero;
+    const expectedAllocated = allocated.amounts.get(key) ?? zero;
+    const expectedUnallocated = unallocated.amounts.get(key) ?? zero;
+    const actualAllocated = lineAmounts.get(key) ?? zero;
+    const actualUnallocated = unallocatedAmounts.get(key) ?? zero;
+    if (compareMoney(expectedAllocated, actualAllocated) !== 0 || compareMoney(expectedUnallocated, actualUnallocated) !== 0) throw new Error(`exact allocation result identity ${key} does not match its line totals`);
+    if (compareMoney(expected, addMoney(actualAllocated, actualUnallocated)) !== 0) throw new Error(`exact allocation result identity ${key} does not conserve`);
+    const expectedSources = total.sources.get(key);
+    const actualSources = new Set<string>([...(lineSources.get(key) ?? new Set<string>()), ...(unallocatedSources.get(key) ?? new Set<string>())]);
+    if (!sameSourceSet(expectedSources, actualSources)) throw new Error(`exact allocation result identity ${key} source lineage does not cover its total`);
+    if (!sameSourceSet(allocated.sources.get(key), lineSources.get(key))) throw new Error(`exact allocation result identity ${key} allocated lineage diverges`);
+    if (!sameSourceSet(unallocated.sources.get(key), unallocatedSources.get(key))) throw new Error(`exact allocation result identity ${key} unallocated lineage diverges`);
+  }
+  const expectedBases = [...new Set([...total.amounts.values()].map((amount) => amount.basis))].sort();
+  const actualBases = [...new Set(value.sourceBases)].sort();
+  if (actualBases.length !== value.sourceBases.length || !actualBases.every((basis) => (ECONOMIC_BASES as readonly string[]).includes(basis)) || actualBases.length !== expectedBases.length || actualBases.some((basis, index) => basis !== expectedBases[index])) throw new Error('exact allocation result sourceBases diverge from total identities');
+}
+
 export function deserializeExactAllocationRun(record: SerializedExactAllocationRun): ExactAllocationRunResult {
   if (record === null || typeof record !== 'object' || Array.isArray(record)) throw new Error('serialized exact allocation run must be an object');
+  const envelopeKeys = Object.keys(record).sort();
+  if (envelopeKeys.join('\u0000') !== ['body', 'digest', 'kind', 'schemaVersion'].join('\u0000')) throw new Error('serialized exact allocation run contains unknown or missing envelope fields');
   if (record.kind !== 'exact_allocation_run' || record.schemaVersion !== 1) throw new Error('serialized exact allocation run kind/schemaVersion is invalid');
   if (typeof record.body !== 'string' || record.body.length === 0 || record.digest !== digest(record.body)) throw new Error('serialized exact allocation run digest verification failed');
   let parsed: unknown;
@@ -240,11 +346,15 @@ export function deserializeExactAllocationRun(record: SerializedExactAllocationR
   if (canonicalJson(parsed as never) !== record.body) throw new Error('serialized exact allocation run body is not canonical JSON');
   const value = object(parsed, 'exact allocation run body');
   exactFields(value, RESULT_KEYS, 'exact allocation run body');
-  const totalByIdentity = Object.freeze((Array.isArray(value.totalByIdentity) ? value.totalByIdentity : []).map((item, index) => parsedBucket(item, `totalByIdentity[${index}]`)));
-  const allocatedByIdentity = Object.freeze((Array.isArray(value.allocatedByIdentity) ? value.allocatedByIdentity : []).map((item, index) => parsedBucket(item, `allocatedByIdentity[${index}]`)));
-  const unallocatedByIdentity = Object.freeze((Array.isArray(value.unallocatedByIdentity) ? value.unallocatedByIdentity : []).map((item, index) => parsedBucket(item, `unallocatedByIdentity[${index}]`)));
-  const lines = Object.freeze((Array.isArray(value.lines) ? value.lines : []).map((item, index) => parsedLine(item, `lines[${index}]`)));
-  const unallocated = Object.freeze((Array.isArray(value.unallocated) ? value.unallocated : []).map((item, index) => parsedUnallocated(item, `unallocated[${index}]`)));
+  const arrayValue = (item: unknown, label: string): unknown[] => {
+    if (!Array.isArray(item)) throw new Error(`${label} must be an array`);
+    return item;
+  };
+  const totalByIdentity = Object.freeze(arrayValue(value.totalByIdentity, 'totalByIdentity').map((item, index) => parsedBucket(item, `totalByIdentity[${index}]`)));
+  const allocatedByIdentity = Object.freeze(arrayValue(value.allocatedByIdentity, 'allocatedByIdentity').map((item, index) => parsedBucket(item, `allocatedByIdentity[${index}]`)));
+  const unallocatedByIdentity = Object.freeze(arrayValue(value.unallocatedByIdentity, 'unallocatedByIdentity').map((item, index) => parsedBucket(item, `unallocatedByIdentity[${index}]`)));
+  const lines = Object.freeze(arrayValue(value.lines, 'lines').map((item, index) => parsedLine(item, `lines[${index}]`)));
+  const unallocated = Object.freeze(arrayValue(value.unallocated, 'unallocated').map((item, index) => parsedUnallocated(item, `unallocated[${index}]`)));
   if (!Array.isArray(value.sourceBases) || !Array.isArray(value.unresolvedRequestIds) || !Array.isArray(value.excludedFrom)) throw new Error('exact allocation run arrays are malformed');
   const sourceBases = Object.freeze(stringArray(value.sourceBases, 'sourceBases', true).map((basis) => {
     if (!(ECONOMIC_BASES as readonly string[]).includes(basis)) throw new Error(`sourceBases contains an unsupported basis: ${basis}`);
@@ -259,7 +369,7 @@ export function deserializeExactAllocationRun(record: SerializedExactAllocationR
   const periodStartMs = safeInteger(value.periodStartMs, 'periodStartMs');
   const periodEndMs = safeInteger(value.periodEndMs, 'periodEndMs');
   if (periodStartMs >= periodEndMs) throw new Error('exact allocation run period is not ordered');
-  return Object.freeze({
+  const result = Object.freeze({
     periodStartMs,
     periodEndMs,
     runAtMs: safeInteger(value.runAtMs, 'runAtMs'),
@@ -273,8 +383,10 @@ export function deserializeExactAllocationRun(record: SerializedExactAllocationR
     complete: value.complete,
     conserves: value.conserves,
     trust: 'derived_allocation_of_exact_effective_charges',
-    excludedFrom: ['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations'] as const,
+    excludedFrom: EXACT_EXCLUDED_FROM,
   });
+  validateExactAllocationResult(result);
+  return result;
 }
 
 interface Bucket {
@@ -452,7 +564,7 @@ export function applyExactAllocation(input: {
     };
     const rule = rules.find((candidate) => ruleAppliesAt(candidate, row.tsEpochMs) && matchesRow(candidate, matchingRow));
     if (rule === undefined) addGrouped(unmatched, row);
-    else if (rule.targets.some((target) => archived.has(target.costCentreId))) addGrouped(archivedRows, row);
+    else if (rule.method !== 'proportional_to_direct' && rule.targets.some((target) => archived.has(target.costCentreId))) addGrouped(archivedRows, row);
     else {
       const target = rule.method === 'proportional_to_direct' ? pools : claimed;
       const key = `${rule.ruleId}\u0000${rule.version}\u0000${identityKey(row.amount)}`;
@@ -545,7 +657,7 @@ export function applyExactAllocation(input: {
   }
 
   lines.sort((a, b) => a.amount.currency.localeCompare(b.amount.currency) || a.amount.basis.localeCompare(b.amount.basis) || a.ruleId.localeCompare(b.ruleId) || a.ruleVersion - b.ruleVersion || a.costCentreId.localeCompare(b.costCentreId));
-  unallocatedLines.sort((a, b) => a.amount.currency.localeCompare(b.amount.currency) || a.amount.basis.localeCompare(b.amount.basis) || a.reason.localeCompare(b.reason));
+  unallocatedLines.sort((a, b) => a.amount.currency.localeCompare(b.amount.currency) || a.amount.basis.localeCompare(b.amount.basis) || a.reason.localeCompare(b.reason) || a.sourceEventIds.join('\u0000').localeCompare(b.sourceEventIds.join('\u0000')));
 
   const allKeys = new Set([...total.keys(), ...allocated.keys(), ...unallocated.keys()]);
   let conserves = true;

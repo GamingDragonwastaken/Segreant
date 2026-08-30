@@ -188,6 +188,19 @@ test('alloc: a pool with no driver stays unallocated rather than splitting evenl
   assert.equal(result.conserves, true);
 });
 
+test('alloc: proportional pool ignores archived placeholder targets and follows open drivers', () => {
+  const result = run({
+    rows: [row(1, { project: 'driver' }), row(1, { project: 'shared-infra' })],
+    rules: [
+      rule({ ruleId: 'driver', match: { project: 'driver' }, targets: [{ costCentreId: 'platform', ratio: 1 }] }),
+      rule({ ruleId: 'pool', priority: 2, method: 'proportional_to_direct', match: { project: 'shared-infra' }, targets: [{ costCentreId: 'eng', ratio: 0 }] }),
+    ],
+    costCentres: [centre('platform'), { ...centre('eng'), archivedAtMs: 1 }],
+  });
+  assert.equal(result.unallocatedMicros, 0);
+  assert.equal(result.byCostCentre.find((item) => item.costCentreId === 'platform')?.allocatedMicros, 2_000_000);
+});
+
 test('alloc: rules match the instant the SPEND happened, not the instant of the run', () => {
   // Re-running a closed period after writing a new rule must not restate it
   // under rules that were not in force at the time.
