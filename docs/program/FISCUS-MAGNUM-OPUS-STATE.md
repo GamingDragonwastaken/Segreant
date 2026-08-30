@@ -52,7 +52,8 @@ Controlling architecture:
 - Local candidate effective correction projection and legacy-reprice convergence (not yet published): `60592584621d530c4a07d6ddd7dd806082aed4e7`
 - Local candidate exact-money allocation projection (not yet published): `d8d260f`
 - Local candidate schema-owned exact allocation persistence (not yet published): `3fa9a20e2b58284f0cd9ad4730a6de5e92bde51f`
-- Local candidate verification: 1,058 root tests total (1,054 pass, 0 fail, 4 platform-conditional skips), root/browser typecheck, build, and isolated-cache package dry-run pass. No GitHub Actions run exists for these local-only commits because the push was refused by the Codex usage/approval limit.
+- Local candidate exact-allocation replay/parity hardening (not yet published): `baee5c659aba906b2959df7f8322a1092dad1018`
+- Local candidate verification: 1,062 root tests total (1,058 pass, 0 fail, 4 platform-conditional skips), root/browser typecheck, build, and isolated-cache package dry-run pass. No GitHub Actions run exists for these local-only commits because the push was refused by the Codex usage/approval limit.
 - Remaining-work audit commit: `5e5a82843154a6fd04e0017538919108c5ff06f1`
 - Luna resume-protocol commit: `5c4de94cf7af0a218ecd10946ac91577fdd9eae7`
 - Base high-assurance PR: #8 (`codex/high-assurance-foundation` -> `main`)
@@ -160,7 +161,8 @@ The reconciliation kernel path is now end-to-end for this vertical. Legacy reque
 - [x] Effective correction projection and legacy-reprice convergence (`6059258`) applies validated local corrections to the explicit `effective` charge projection, emits canonical corrections from `reprice --apply` for exact rows, refuses numeric-only exact reprices atomically, and keeps legacy numeric rows as compatibility projections.
 - [x] Exact-money allocation projection (`d8d260f`) preserves arbitrary-precision amounts, partitions currency/basis identities, carries source event IDs, refuses non-terminating proportional shares without a policy, and discloses unresolved legacy request coverage without writing the legacy numeric run schema.
 - [x] Exact allocation persistence (`3fa9a20`) stores canonical JSON/digest runs, derives immutable IDs, persists per-line/unallocated source links with foreign keys and append-only triggers, and verifies idempotent replay and physical lineage.
-- [x] Local verification at this candidate: 1,058 total root tests, 1,054 pass, 0 fail, 4 platform-conditional skips; root/browser typechecks, build, focused economic/request/correction/FX/reprice/allocation/persistence tests, and isolated-cache package dry-run pass.
+- [x] Exact-allocation replay/parity hardening (`baee5c6`) ignores archived proportional placeholders, makes result ordering permutation-invariant, rejects unknown/missing envelope fields, recomputes identity/source-lineage/conservation invariants, and validates persisted timestamps.
+- [x] Local verification at this candidate: 1,062 total root tests, 1,058 pass, 0 fail, 4 platform-conditional skips; root/browser typechecks, build, focused economic/request/correction/FX/reprice/allocation/persistence tests, and isolated-cache package dry-run pass.
 
 This is a local candidate, not a remote or release checkpoint. Legacy `REAL` request/value/export consumers remain compatibility projections for now, and event-role/conservation, FX consumer integration beyond source-bound translation, value/export migration, and close semantics remain open. The economic ledger has an operator inspection command but no `/api/economic` or dashboard surface yet. GitHub publication and exact-SHA CI are external gates currently blocked by the Codex usage/approval limit.
 

@@ -31,9 +31,10 @@ exact-rate/live issuance `3763c9e`, role-aware projections/reversal constraints
 `05f26e6`, exact economic CLI inspection `e3a280f`, and additive local price
 correction lineage `2b81173`, historical exact FX lineage `11a9212`, and
 effective correction projection/converged reprice integration `6059258`, and
-exact-money allocation projection `d8d260f`. Local verification at this
-candidate is 1,058
-tests (1,054 pass, 0 fail, 4 platform-conditional skips), root/browser
+exact-money allocation projection `d8d260f`, schema-owned exact allocation
+persistence `3fa9a20`, and adversarial replay/parity hardening `baee5c6`. Local
+verification at this candidate is 1,062
+tests (1,058 pass, 0 fail, 4 platform-conditional skips), root/browser
 typecheck, build, focused economic checks, and isolated-cache package dry-run.
 These identities are not remote/CI evidence until the blocked push succeeds.
 
@@ -169,6 +170,11 @@ proportional shares without a quantization policy, and marks legacy requests
 unresolved instead of rounding them into the numeric run schema. Exact runs are
 now persisted canonically with immutable per-line lineage, while the legacy
 numeric run remains a distinct compatibility surface.
+
+The allocation persistence boundary is hardened at `baee5c6`: proportional
+pools ignore archived placeholder targets, result ordering is independent of
+input row order, envelopes reject unknown/missing fields, and replay recomputes
+identity, source lineage and conservation before a run is trusted.
 
 Property-test conservation, compatible-basis arithmetic, reversal, reprice/reconciliation and replay.
 

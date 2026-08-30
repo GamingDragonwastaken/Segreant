@@ -35,8 +35,9 @@
 - Everything here allocates **local estimates**. No reconciliation has completed
   against a real provider bill, so accuracy is unknown and the surfaces say so.
 - Exact allocation runs persist through schema-owned canonical JSON/digest rows
-  and per-line append-only source links; the legacy microdollar run remains a
-  separate compatibility record and is never relabelled as exact accounting.
+  and per-line append-only source links; replay recomputes identity, lineage and
+  conservation rather than trusting persisted flags. The legacy microdollar run
+  remains a separate compatibility record and is never relabelled as exact.
 
 ## Verify
 
