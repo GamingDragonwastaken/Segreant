@@ -86,3 +86,23 @@ test('modern Value view discloses exact economic coverage instead of leaving the
   assert.match(source, /legacy_unknown/);
   assert.match(source, /unresolvedRequests/);
 });
+
+test('classic Value view discloses exact economic coverage for every value-bearing section', () => {
+  const source = readFileSync(join(import.meta.dirname, '..', 'src', 'dashboard', 'web', 'classic.html'), 'utf8');
+  assert.match(source, /function economicCoverageHtml/);
+  assert.match(source, /d\.realization\?\.matured\?\.economic/);
+  assert.match(source, /d\.usage\?\.economic/);
+  assert.match(source, /d\.budget\?\.economic/);
+  assert.match(source, /p\.economic/);
+  assert.match(source, /team\?\.distribution\?\.economic/);
+  assert.match(source, /Exact economic coverage/);
+  assert.match(source, /unresolved legacy request/);
+  assert.match(source, /exact coverage was not reported/);
+});
+
+test('browser Value contract includes project exact economic coverage', () => {
+  const source = readFileSync(join(import.meta.dirname, '..', 'src', 'dashboard', 'web', 'app', 'core', 'api.ts'), 'utf8');
+  assert.match(source, /export interface ValueProjectPayload/);
+  assert.match(source, /projects\?: ValueProjectPayload\[\]/);
+  assert.match(source, /economic\?: RealizationEconomicRollupPayload/);
+});

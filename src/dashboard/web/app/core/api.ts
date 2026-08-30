@@ -355,9 +355,24 @@ export interface Matured {
   economic?: RealizationEconomicRollupPayload;
 }
 
+/** A persisted project value row rendered by both Value-view implementations. */
+export interface ValueProjectPayload {
+  project: string;
+  units: number;
+  costUsd: number;
+  realizationRate: number;
+  realizedValueUsd: number;
+  netRealizedValueUsd: number;
+  roiIndex: number | null;
+  sources: string[];
+  economic?: RealizationEconomicRollupPayload;
+}
+
 export interface ValuePayload {
   demo: boolean;
   allocation: unknown;
+  /** Per-project value rows; classic rendering consumes this list directly. */
+  projects?: ValueProjectPayload[];
   frontier?: { modelSwitches?: Array<{ confidence: string }> } | null;
   /** 'git' | 'store' | null. Null means no matured outcomes could be observed. */
   valueSource?: string | null;
