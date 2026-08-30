@@ -156,6 +156,7 @@ egress, credentials, reversibility, assurance, and surface bindings.
 | System scan | `src/scan/scan.ts`, `src/scan/knownApps.ts` | Proactive, read-only discovery: the 3 importable tools, repos under a root, and a wider best-effort inventory of other AI coding tools detected (never a claim of import capability) |
 | Config | `src/config.ts` | Load/save `~/.fiscus/config.json`, resolve paths |
 | Dashboard API | `src/dashboard/server.ts` | JSON API over the store, plus six CSRF-guarded mutating routes (`/api/import`, `/api/discover`, `POST /api/scan`, `/api/judge`, `/api/settings/update`, `/api/settings/clear-proposals`) |
+| Dashboard contracts/types | `src/dashboard/contracts.ts`, `src/dashboard/shared-types.ts`, `scripts/generate-dashboard-payload-contract.mjs` | One no-runtime source for named payload interfaces plus route/method/envelope metadata; locked generation emits the browser copy and nested runtime contract hash |
 | Web GUI | `src/dashboard/web/` | The browser application: four-claim spine, seven routes, preview-then-commit drawer. Built, not inlined — see §2.1 |
 | CLI | `src/cli.ts` + `src/cli/` | Thin dispatcher (`src/cli.ts`: help, version, main) over per-command modules — `showCmd`, `valueCmd`, `teamCmd`, `importCmd`, `connectCmd`, `opsCmd`, `runCmd`, with shared `ui`/`flags` helpers |
 
