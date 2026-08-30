@@ -42,6 +42,40 @@ export interface Capability {
   warning?: string;
 }
 
+/** Machine-readable contract for a capability and every surface that binds it. */
+export type CapabilityAuthority = 'fiscus_local' | 'operator' | 'provider' | 'external_service';
+export type CapabilityEgress = 'none' | 'local_filesystem' | 'loopback' | 'declared_cloud' | 'team_server';
+export type CapabilityCredentials = 'none' | 'local_tool_logs' | 'operator_environment';
+export type CapabilityReversibility = 'read_only' | 'append_only' | 'config_reversible' | 'destructive' | 'external_irreversible';
+export type CapabilityAssurance = 'display' | 'recommendation' | 'reviewed_local_apply' | 'credentialed_review' | 'external_egress_review' | 'destructive_confirmation';
+export type CapabilitySchemaKind = 'none' | 'flags' | 'file' | 'command' | 'json';
+
+export interface CapabilitySchema {
+  kind: CapabilitySchemaKind;
+  required: readonly string[];
+  optional: readonly string[];
+}
+
+export interface CapabilityBindings {
+  cli: string;
+  api: readonly string[];
+  gui: readonly ('modern' | 'classic' | 'action')[];
+  docs: readonly string[];
+}
+
+export interface CapabilitySpec extends Capability {
+  schemaVersion: 1;
+  inputSchema: CapabilitySchema;
+  previewSchema: CapabilitySchema;
+  outputSchema: CapabilitySchema;
+  authority: CapabilityAuthority;
+  egress: CapabilityEgress;
+  credentials: CapabilityCredentials;
+  reversibility: CapabilityReversibility;
+  assurance: CapabilityAssurance;
+  bindings: CapabilityBindings;
+}
+
 export const TERRITORIES: ReadonlyArray<{ id: Territory; label: string; plain: string; icon: string }> = [
   { id: 'spend', label: 'Spend', plain: 'What AI is costing you, and where it went.', icon: 'meter' },
   { id: 'control', label: 'Control', plain: 'Budgets and alerts, so nothing surprises you.', icon: 'shield' },
@@ -139,12 +173,113 @@ export const CAPABILITIES: readonly Capability[] = [
   },
 ];
 
+type CapabilityMetadata = Omit<CapabilitySpec, keyof Capability>;
+type CapabilityMetadataOverride = Partial<Omit<CapabilityMetadata, 'bindings'>> & {
+  bindings?: Partial<CapabilityBindings>;
+};
+
+function schema(kind: CapabilitySchemaKind, required: readonly string[] = [], optional: readonly string[] = []): CapabilitySchema {
+  return Object.freeze({
+    kind,
+    required: Object.freeze([...required]),
+    optional: Object.freeze([...optional]),
+  });
+}
+
+const API_BINDINGS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  today: ['/api/overview'], week: ['/api/overview'], month: ['/api/overview'], usage: ['/api/value'], report: ['/api/value'], export: ['/api/export.csv'],
+  budget: ['/api/settings/update'], 'budget-recommend': ['/api/value'], alerts: ['/api/overview'], project: ['/api/overview'], 'project-alias': ['/api/settings/update'],
+  'alloc-centres': ['/api/allocation'], 'alloc-rules': ['/api/allocation'], 'alloc-run': ['/api/allocation'], 'billing-scope': ['/api/billing'],
+  'billing-readiness': ['/api/billing'], 'billing-adopt': ['/api/billing'], 'billing-pull': ['/api/billing'], 'billing-reconcile': ['/api/billing'], receipt: ['/api/value'], evidence: ['/api/billing'], audit: ['/api/billing'],
+  roi: ['/api/value'], causal: ['/api/causal'], realize: ['/api/value'], frontier: ['/api/value'], saved: ['/api/value'], yield: ['/api/value'], judge: ['/api/judge'], team: ['/api/value'],
+  sources: ['/api/overview'], discover: ['/api/importers'], connect: ['/api/importers'], import: ['/api/import'], scan: ['/api/scan'], baseline: ['/api/value'], demo: ['/api/overview'],
+  egress: ['/api/settings'], settings: ['/api/settings', '/api/settings/update'], pricing: ['/api/overview'], reprice: ['/api/value'], doctor: ['/api/guide'], guide: ['/api/guide'], 'team-push': [], prune: ['/api/settings'], 'clear-proposals': ['/api/settings/clear-proposals'],
+});
+
+const DOC_BINDINGS: Readonly<Record<Territory, readonly string[]>> = Object.freeze({
+  spend: ['docs/GETTING-STARTED.md', 'docs/ARCHITECTURE.md'],
+  control: ['docs/GETTING-STARTED.md', 'docs/THE-STANDARD.md'],
+  allocation: ['docs/ALLOCATION.md', 'docs/ARCHITECTURE.md'],
+  evidence: ['docs/EVIDENCE-PROVENANCE.md', 'docs/PROVIDER-RECONCILIATION.md'],
+  value: ['docs/RETURN-ON-INTELLIGENCE.md', 'docs/METHODOLOGY.md'],
+  data: ['docs/INTEGRATIONS.md', 'docs/DATA-BOUNDARIES.md'],
+  system: ['docs/ARCHITECTURE.md', 'docs/RELEASE-GATE.md'],
+});
+
+const CAPABILITY_METADATA_OVERRIDES: Readonly<Record<string, CapabilityMetadataOverride>> = Object.freeze({
+  'billing-pull': { authority: 'operator', egress: 'declared_cloud', credentials: 'operator_environment', assurance: 'credentialed_review' },
+  egress: { egress: 'declared_cloud', assurance: 'external_egress_review' },
+  'team-push': { egress: 'team_server', reversibility: 'external_irreversible', assurance: 'external_egress_review' },
+  connect: { egress: 'local_filesystem', credentials: 'local_tool_logs' },
+  import: { egress: 'local_filesystem', credentials: 'local_tool_logs' },
+  scan: { egress: 'local_filesystem', credentials: 'local_tool_logs' },
+  reprice: { reversibility: 'destructive', assurance: 'destructive_confirmation' },
+  prune: { reversibility: 'destructive', assurance: 'destructive_confirmation' },
+  'clear-proposals': { reversibility: 'destructive', assurance: 'destructive_confirmation' },
+});
+
+function capabilityMetadata(capability: Capability): CapabilityMetadata {
+  const inputSchema = capability.id === 'exec'
+    ? schema('command', ['command'], ['kind', 'commit', 'session'])
+    : capability.id === 'export'
+      ? schema('flags', [], ['days', 'all', 'out', 'json'])
+      : capability.consequence === 'read'
+        ? schema('flags', [], ['json', 'days', 'all'])
+        : schema('flags', [], ['apply', 'json']);
+  const defaults: CapabilityMetadata = {
+    schemaVersion: 1,
+    inputSchema,
+    previewSchema: schema('json', ['applicable', 'summary'], ['blockedReason', 'rows', 'notes']),
+    outputSchema: schema(capability.coverage === 'planned' ? 'none' : 'json'),
+    authority: capability.consequence === 'read' ? 'fiscus_local' : 'operator',
+    egress: 'none',
+    credentials: 'none',
+    reversibility: capability.consequence === 'destructive'
+      ? 'destructive'
+      : capability.consequence === 'read'
+        ? 'read_only'
+        : 'append_only',
+    assurance: capability.consequence === 'read'
+      ? 'display'
+      : capability.consequence === 'credential'
+        ? 'credentialed_review'
+        : capability.consequence === 'egress'
+          ? 'external_egress_review'
+          : capability.consequence === 'destructive'
+            ? 'destructive_confirmation'
+            : capability.coverage === 'partial'
+              ? 'reviewed_local_apply'
+              : 'recommendation',
+    bindings: {
+      cli: capability.command,
+      api: Object.freeze([...(API_BINDINGS[capability.id] ?? [])]),
+      gui: Object.freeze(capability.coverage === 'planned' ? [] : ['modern']),
+      docs: Object.freeze([...(DOC_BINDINGS[capability.territory] ?? [])]),
+    },
+  };
+  const override = CAPABILITY_METADATA_OVERRIDES[capability.id] ?? {};
+  return Object.freeze({
+    ...defaults,
+    ...override,
+    bindings: Object.freeze({ ...defaults.bindings, ...(override.bindings ?? {}) }),
+  });
+}
+
+/** Canonical capability contract consumed by the System view and future generators. */
+export const CAPABILITY_SPECS: readonly CapabilitySpec[] = Object.freeze(
+  CAPABILITIES.map((capability) => Object.freeze({ ...capability, ...capabilityMetadata(capability) })),
+);
+
+export function capabilitySpec(id: string): CapabilitySpec | undefined {
+  return CAPABILITY_SPECS.find((spec) => spec.id === id);
+}
+
 export function byTerritory(territory: Territory): Capability[] {
-  return CAPABILITIES.filter((c) => c.territory === territory);
+  return CAPABILITY_SPECS.filter((c) => c.territory === territory);
 }
 
 export function capability(id: string): Capability | undefined {
-  return CAPABILITIES.find((c) => c.id === id);
+  return CAPABILITY_SPECS.find((c) => c.id === id);
 }
 
 export interface ParitySummary {
@@ -156,9 +291,9 @@ export interface ParitySummary {
 
 export function paritySummary(): ParitySummary {
   return {
-    total: CAPABILITIES.length,
-    full: CAPABILITIES.filter((c) => c.coverage === 'full').length,
-    partial: CAPABILITIES.filter((c) => c.coverage === 'partial').length,
-    planned: CAPABILITIES.filter((c) => c.coverage === 'planned').length,
+    total: CAPABILITY_SPECS.length,
+    full: CAPABILITY_SPECS.filter((c) => c.coverage === 'full').length,
+    partial: CAPABILITY_SPECS.filter((c) => c.coverage === 'partial').length,
+    planned: CAPABILITY_SPECS.filter((c) => c.coverage === 'planned').length,
   };
 }

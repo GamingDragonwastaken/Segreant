@@ -9,7 +9,7 @@
  */
 
 import { h } from '../core/dom.ts';
-import { CAPABILITIES, TERRITORIES, paritySummary } from '../core/registry.ts';
+import { CAPABILITY_SPECS, TERRITORIES, paritySummary } from '../core/registry.ts';
 import { isPrecise } from '../core/fmt.ts';
 import { actionCard } from './spend.ts';
 
@@ -54,7 +54,7 @@ export function systemView(): Node {
             h('th', { text: 'Consequence' }),
             h('th', { text: 'Here' }),
             h('th', { text: 'Command' }))),
-          h('tbody', null, ...CAPABILITIES.map((c) => h('tr', null,
+          h('tbody', null, ...CAPABILITY_SPECS.map((c) => h('tr', null,
             h('td', null, h('strong', { text: c.label }), h('br'), h('span', { class: 'action-plain', text: c.plain })),
             h('td', { text: TERRITORIES.find((t) => t.id === c.territory)?.label ?? c.territory }),
             h('td', null, h('span', { class: `tag tag-${c.consequence}`, text: c.consequence === 'read' ? 'reads only' : c.consequence })),
