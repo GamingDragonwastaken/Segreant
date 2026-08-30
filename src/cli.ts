@@ -29,6 +29,7 @@ import { cmdShow, cmdSources, cmdExport, cmdConfig, cmdBudget, cmdPrune, cmdProj
 import { cmdStart, cmdDemo, cmdPricing, cmdBaseline, cmdReprice } from './cli/runCmd.ts';
 import { cmdBackup, cmdRestore } from './cli/backupCmd.ts';
 import { cmdDiagnostics } from './cli/diagnosticsCmd.ts';
+import { cmdEconomic } from './cli/economicCmd.ts';
 
 function cmdHelp(): void {
   console.log(`
@@ -52,6 +53,8 @@ function cmdHelp(): void {
                           Ordinary value, Lift, and price scenarios cannot become
                           causal claims; this command never changes provider routing.
     today | week | month  Show spend for a window      (--json)
+    economic              Inspect exact economic events, roles, bases, and legacy coverage
+                          (--days N | --all, --json)
     sources               Spend by connected source — each AI tool routed here
                           (--all for all-time, --json)
     connect <tool>        Connect an AI tool as a source so its spend is metered:
@@ -233,6 +236,10 @@ async function main(): Promise<void> {
       break;
     case 'month':
       cmdShow('month', flags);
+      break;
+    case 'economic':
+    case 'economics':
+      cmdEconomic(flags);
       break;
     case 'sources':
       cmdSources(flags);
