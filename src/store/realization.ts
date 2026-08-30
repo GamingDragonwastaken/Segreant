@@ -25,6 +25,8 @@ import type { EconomicLedger } from '../economics/ledger.ts';
 import type { Money } from '../economics/money.ts';
 import { requestEconomicEventId } from '../economics/request.ts';
 import { priceCorrectionEvent } from '../economics/corrections.ts';
+import { economicAttributionFromRows } from '../economics/attribution.ts';
+import type { EffectiveRequestRow } from './economicReadModel.ts';
 
 /**
  * A persisted snapshot of one computed work unit. The store keeps these so
@@ -117,6 +119,8 @@ export interface RealizationDeps {
     endMs: number,
     project?: string,
   ) => Array<SpendBucket & { provider: string; cacheReadTokens: number; cacheWriteTokens: number }>;
+  /** Exact request rows used to keep persisted value snapshots in step. */
+  economicRequestRows?: (startMs: number, endMs: number, project?: string) => EffectiveRequestRow[];
   /** Shared economic ledger; exact reprices must append through this handle. */
   economicLedger?: EconomicLedger;
 }
@@ -438,6 +442,8 @@ function syncRealizationCosts(
     const scoped = scope === 'project' ? row.project : undefined;
     const spend = deps.summary(startMs, endMs, scoped);
     const modelSpend = deps.byModel(startMs, endMs, scoped);
+    const economicRows = deps.economicRequestRows?.(startMs, endMs, scoped);
+    const economic = economicRows === undefined ? undefined : economicAttributionFromRows(economicRows);
     const windowModelTotal = modelSpend.reduce((s, m) => s + m.costUsd, 0);
     const totalLines = Number(unit.linesAdded ?? 0) + Number(unit.linesDeleted ?? 0);
 
@@ -449,6 +455,7 @@ function syncRealizationCosts(
     unit.dominantModelCostUsd = modelSpend.length > 0 ? modelSpend[0]!.costUsd : null;
     unit.dominantModelCostShare =
       modelSpend.length > 0 && windowModelTotal > 0 ? modelSpend[0]!.costUsd / windowModelTotal : null;
+    if (economic !== undefined) unit.economic = economic;
 
     writeBack.run(spend.costUsd, JSON.stringify(unit), row.commitHash);
     out.resynced += 1;

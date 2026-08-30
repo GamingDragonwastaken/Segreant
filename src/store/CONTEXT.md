@@ -18,6 +18,7 @@ above this directory.
 | `billing.ts` | provider evidence imports, OpenAI Costs observations, provider scope declarations, reconciliation |
 | `allocation.ts` | cost centres, the versioned rule book, allocation runs |
 | `realization.ts` | realized-value snapshots, receipts, repricing and its re-attribution |
+| `economicReadModel.ts` | request-level joins from compatibility dimensions to exact effective economic events |
 | `rows.ts` | row decoders shared by more than one domain |
 | `backup.ts` | verified SQLite snapshot/restore-to-new-path helpers; never replaces the active ledger |
 
@@ -78,6 +79,13 @@ two domain callers goes in `rows.ts`.
   `fiscus export --economic` mode expose original/effective Money, bases,
   correction IDs and legacy coverage; `compatibilityCostUsd` is labelled as a
   presentation projection rather than accounting authority.
+- **Value attribution has an exact read seam.**
+  `economicRequestRowsInRange()` applies the same alias-family and live/import
+  scope as numeric summaries, validates request/event dimensions, preserves
+  effective Money plus source/correction IDs, and marks legacy rows unresolved.
+  Coding realization attaches that JSON-safe coverage to each WorkUnit; its
+  legacy numeric fields remain compatibility projections until downstream value
+  consumers complete the migration.
 - **Billing kernel issuance is explicit and additive.** `issueBillingImportToKernel()`
   translates a validated operator export through exact `Money` into canonical
   Evidence and billed Claims; `issueOpenAiCostsObservationToKernel()` does the

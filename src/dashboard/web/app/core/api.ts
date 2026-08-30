@@ -202,6 +202,23 @@ export interface EconomicBalance extends EconomicMoney {
   eventIds: string[];
 }
 
+export interface EconomicMoneyJson {
+  coefficient: string;
+  scale: number;
+  currency: string;
+  basis: string;
+}
+
+export interface EconomicAttributionPayload {
+  amount: EconomicMoneyJson;
+  amountText: string;
+  eventIds: string[];
+  sourceBases: string[];
+  requestCount: number;
+  unresolvedRequests: number;
+  complete: boolean;
+}
+
 export interface EconomicPayload {
   kind: 'economic_projection';
   schemaVersion: number;
@@ -216,6 +233,12 @@ export interface EconomicPayload {
     eventIds: string[];
     balances: EconomicBalance[];
   };
+}
+
+export interface RealizationEconomicRollupPayload {
+  coverage: 'exact' | 'partial' | 'legacy_unknown';
+  total: EconomicAttributionPayload | null;
+  realized: EconomicAttributionPayload | null;
 }
 
 /** One recorded run. `result` is the immutable reconciliation record itself. */
@@ -309,6 +332,8 @@ export interface Matured {
   instrumentation?: Record<string, number>;
   /** Partial-identification bounds on the realization rate. */
   realizationBounds?: { lower: number; upper: number; n: number };
+  /** Exact effective spend coverage; numeric fields remain compatibility projections. */
+  economic?: RealizationEconomicRollupPayload;
 }
 
 export interface ValuePayload {

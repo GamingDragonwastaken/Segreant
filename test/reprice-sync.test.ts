@@ -19,6 +19,7 @@ process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'fiscus-home-'));
 import { DatabaseSync } from 'node:sqlite';
 import { Store, type RequestRow, type RepriceUpdate, type CostScope } from '../src/store/db.ts';
 import { computeCost, type Provider } from '../src/cost/pricing.ts';
+import { formatMoneyAmount, money, moneyToJson } from '../src/economics/money.ts';
 import { realizationFromStore } from '../src/value/realization.ts';
 import { computeFrontier } from '../src/value/frontier.ts';
 
@@ -113,6 +114,43 @@ test('reprice: a snapshot whose window was repriced is re-attributed, not left o
   assert.ok(Math.abs(unit.dominantModelCostUsd! - expected) < 1e-9);
   assert.equal(unit.dominantModelCostShare, 1);
   assert.ok(Math.abs(unit.costPerHundredLines! - (expected / 100) * 100) < 1e-9);
+  store.close();
+});
+
+test('reprice: an exact realization snapshot follows the effective correction lineage', () => {
+  const store = new Store(':memory:');
+  const sourceAmount = money('3', 'USD', 'estimated');
+  store.insertRequest(req({ economicAmount: sourceAmount }));
+  saveUnit(store, 'project', {
+    economic: {
+      amount: { coefficient: '3', scale: 0, currency: 'USD', basis: 'effective' },
+      amountText: '3',
+      eventIds: ['economic:request:r1:charge'],
+      sourceBases: ['estimated'],
+      requestCount: 1,
+      unresolvedRequests: 0,
+      complete: true,
+    },
+  });
+
+  const exact = computeCost('anthropic' as Provider, 'claude-opus-4-8', {
+    inputTokens: 1_000_000, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0,
+  }).exact;
+  assert.ok(exact, 'the fixture model must have a canonical exact rate');
+  const update = updatesFor(store)[0];
+  assert.ok(update, 'the estimated request must be a reprice candidate');
+  const replacement = money(formatMoneyAmount(exact.total), 'USD', 'estimated');
+  store.applyRepricedCosts([{ ...update, economicAmount: replacement }]);
+
+  const after = realizationFromStore(store).units[0]!;
+  assert.equal(after.economic?.amountText, formatMoneyAmount(replacement));
+  assert.deepEqual(after.economic?.amount, moneyToJson(money(formatMoneyAmount(replacement), 'USD', 'effective')));
+  assert.deepEqual(after.economic?.eventIds, [
+    'economic:request:r1:charge',
+    'economic:request:r1:price-corrected',
+  ]);
+  assert.equal(after.economic?.sourceBases.includes('estimated'), true);
+  assert.equal(after.economic?.complete, true);
   store.close();
 });
 

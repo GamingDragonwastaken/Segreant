@@ -36,6 +36,8 @@ import {
 import { classifyTaskType, type TaskType } from './taskType.ts';
 import { computeReturnOnIntelligence, type RoIOptions } from './lenses.ts';
 import { liftFromData, timeWithAiMinutes, type AiEvent, type DataLiftResult } from './lift.ts';
+import { addMoney, money, moneyFromJson, type EconomicBasis } from '../economics/money.ts';
+import { economicAttributionView, type EconomicAttribution } from '../economics/attribution.ts';
 
 const run = promisify(execFile);
 
@@ -188,7 +190,19 @@ export interface RealizationReport {
     // conditional pass rates, with uninstrumented gates disclosed in `skipped`
     // rather than silently assumed passed. See gates.ts.
     serial: SerialRealization;
+    /** Exact effective spend for mature units; numeric fields remain compatibility projections. */
+    economic?: RealizationEconomicRollup;
   };
+}
+
+export type RealizationEconomicCoverage = 'exact' | 'partial' | 'legacy_unknown';
+
+export interface RealizationEconomicRollup {
+  coverage: RealizationEconomicCoverage;
+  /** Resolved effective amount for all mature unit windows, when any exact lineage exists. */
+  total: EconomicAttribution | null;
+  /** Resolved effective amount for mature units whose funnel realized, when any exists. */
+  realized: EconomicAttribution | null;
 }
 
 export interface RealizationOptions {
@@ -617,6 +631,39 @@ export function rollupRealization(
     for (const r of u.funnel.results) if (r.verdict !== 'unknown') instrumentation[r.gate] += 1;
   }
 
+  const aggregateEconomic = (values: readonly EconomicAttribution[]): EconomicAttribution => {
+    let amount = money('0', 'USD', 'effective');
+    const eventIds: string[] = [];
+    const sourceBases = new Set<EconomicBasis>();
+    let requestCount = 0;
+    let unresolvedRequests = 0;
+    for (const value of values) {
+      amount = addMoney(amount, moneyFromJson(value.amount));
+      eventIds.push(...value.eventIds);
+      for (const basis of value.sourceBases) sourceBases.add(basis);
+      requestCount += value.requestCount;
+      unresolvedRequests += value.unresolvedRequests;
+    }
+    return economicAttributionView({
+      amount,
+      eventIds: eventIds.sort(),
+      sourceBases: [...sourceBases].sort(),
+      requestCount,
+      unresolvedRequests,
+    });
+  };
+  const matureEconomic = mature.flatMap((unit) => unit.economic === undefined ? [] : [unit.economic]);
+  const realizedEconomic = realizedUnits.flatMap((unit) => unit.economic === undefined ? [] : [unit.economic]);
+  const economic: RealizationEconomicRollup = {
+    coverage: matureEconomic.length === 0
+      ? 'legacy_unknown'
+      : matureEconomic.length === mature.length && aggregateEconomic(matureEconomic).complete
+        ? 'exact'
+        : 'partial',
+    total: matureEconomic.length === 0 ? null : aggregateEconomic(matureEconomic),
+    realized: matureEconomic.length === 0 ? null : aggregateEconomic(realizedEconomic),
+  };
+
   return {
     generatedAt: new Date(generatedMs).toISOString(),
     windowDays: opts.windowDays,
@@ -639,6 +686,7 @@ export function rollupRealization(
       instrumentation,
       realizationBounds: terminalRealizationBounds(mature.map((u) => u.funnel)),
       serial: serialRealization(mature.map((u) => u.funnel)),
+      economic,
     },
   };
 }

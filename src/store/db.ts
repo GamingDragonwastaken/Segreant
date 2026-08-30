@@ -49,6 +49,7 @@ import * as causalLineage from './causalLineage.ts';
 import * as causalProducer from './causalProducer.ts';
 import * as backup from './backup.ts';
 import * as realization from './realization.ts';
+import { effectiveRequestRows, type EffectiveRequestRow } from './economicReadModel.ts';
 import { buildEconomicRequestExportRows, type EconomicRequestExportRow } from '../export/economic.ts';
 import { billingReconciliationClaim, buildBillingKernelIssuance, buildOpenAiCostsKernelIssuance, buildOpenAiReconciliationKernelIssuance, type BillingKernelPersistenceResult, type BillingReconciliationClaimInput, type OpenAiCostsKernelPersistenceResult, type OpenAiReconciliationKernelPersistenceResult } from '../billing/epistemic.ts';
 import type {
@@ -65,6 +66,7 @@ export type {
   RepriceUpdate,
   RequestPriceEvent,
 } from './realization.ts';
+export type { EffectiveRequestRow, EconomicRequestUnresolvedReason } from './economicReadModel.ts';
 import type {
   BillingEvidenceRecord,
   BillingRecordMappingDeclarationInput,
@@ -612,6 +614,7 @@ export class Store {
       canonicalProject: (name) => this.canonicalProject(name),
       summary: (startMs, endMs, project) => this.summary(startMs, endMs, project),
       byModel: (startMs, endMs, project) => this.byModel(startMs, endMs, project),
+      economicRequestRows: (startMs, endMs, project) => this.economicRequestRowsInRange(startMs, endMs, { project }),
       economicLedger: this.economicLedger,
     };
   }
@@ -911,6 +914,24 @@ export class Store {
          FROM requests WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ?` + this.viaClause(liveOnly) + `
          ORDER BY ts_epoch_ms ASC, request_id ASC`,
     ).all(startMs, endMs) as Array<{ requestId: string; tsEpochMs: number; via: string | null }>;
+    return this.exactSpendFromRows(rows, startMs, endMs, liveOnly);
+  }
+
+  /**
+   * Exact charge projection for one project's alias family. Value attribution
+   * must use the same project scope as `summary(start,end,project)`; applying
+   * an exact projection to the project-blind request set would attach another
+   * project's evidence to this work unit.
+   */
+  exactSpendBetweenScoped(startMs: number, endMs: number, project: string, liveOnly = false): ExactSpendProjection {
+    const fam = this.familyFilter('r.project', project);
+    const rows = this.db.prepare(
+      `SELECT r.request_id AS requestId, r.ts_epoch_ms AS tsEpochMs, r.via
+         FROM requests r
+        WHERE r.ts_epoch_ms >= ? AND r.ts_epoch_ms < ?
+          AND ${fam.sql}` + this.viaClause(liveOnly) + `
+        ORDER BY r.ts_epoch_ms ASC, r.request_id ASC`,
+    ).all(startMs, endMs, ...fam.args) as Array<{ requestId: string; tsEpochMs: number; via: string | null }>;
     return this.exactSpendFromRows(rows, startMs, endMs, liveOnly);
   }
 
@@ -1428,6 +1449,24 @@ export class Store {
   /** Exact-safe request export rows with original/effective Money and lineage. */
   economicRequestsInRange(startMs: number, endMs: number): EconomicRequestExportRow[] {
     return buildEconomicRequestExportRows(this.requestsInRange(startMs, endMs), this.economicLedger);
+  }
+
+  /**
+   * Exact request-level economic rows for value consumers. The optional project
+   * filter follows the alias family used by `summary()`; `liveOnly` preserves
+   * the budget distinction between proxy traffic and imported observations.
+   */
+  economicRequestRowsInRange(
+    startMs: number,
+    endMs: number,
+    options: { project?: string; liveOnly?: boolean } = {},
+  ): EffectiveRequestRow[] {
+    const rows = this.requestsInRange(startMs, endMs).filter((row) => {
+      if (options.project !== undefined && row.projectCanonical !== this.canonicalProject(options.project)) return false;
+      if (options.liveOnly === true && (row.via ?? 'proxy') !== 'proxy') return false;
+      return true;
+    });
+    return effectiveRequestRows(rows, this.economicLedger);
   }
 
   insertCommit(c: {
