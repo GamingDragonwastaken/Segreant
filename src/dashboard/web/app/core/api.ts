@@ -178,6 +178,46 @@ export interface BillingPayload {
   };
 }
 
+/** JSON-safe exact economic projection served by `/api/economic`. */
+export interface EconomicMoney {
+  /** Canonical human-readable decimal amount, never a JavaScript number. */
+  amount: string;
+  /** Exact signed coefficient and decimal scale used for replay. */
+  coefficient: string;
+  scale: number;
+  currency: string;
+  basis: string;
+}
+
+export interface EconomicCoverage extends EconomicMoney {
+  eventIds: string[];
+  sourceBases: string[];
+  requestCount: number;
+  unresolvedRequests: number;
+  complete: boolean;
+}
+
+export interface EconomicBalance extends EconomicMoney {
+  role: string;
+  eventIds: string[];
+}
+
+export interface EconomicPayload {
+  kind: 'economic_projection';
+  schemaVersion: number;
+  demo: boolean;
+  window: {
+    startMs: number;
+    endMs: number;
+    requestCoverage: EconomicCoverage;
+  };
+  projection: {
+    asOf: string | null;
+    eventIds: string[];
+    balances: EconomicBalance[];
+  };
+}
+
 /** One recorded run. `result` is the immutable reconciliation record itself. */
 export interface ReconciliationRunRecord {
   reconciliationRunId: string;
@@ -565,6 +605,9 @@ export const api = {
   ),
   billing: () => request<BillingPayload>('/api/billing'),
   allocation: () => request<AllocationPayload>('/api/allocation'),
+  economic: (range: '30d' | 'all' = '30d') => request<EconomicPayload>(
+    range === 'all' ? '/api/economic?all=1' : '/api/economic?days=30',
+  ),
   causal: (studyId?: string) => request<CausalPayload>(
     studyId ? '/api/causal?study=' + encodeURIComponent(studyId) : '/api/causal',
   ),

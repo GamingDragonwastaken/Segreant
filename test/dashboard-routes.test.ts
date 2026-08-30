@@ -179,6 +179,7 @@ const READ_ONLY_ALLOW: Record<string, string> = {
   '/api/health': 'GET, HEAD',
   '/api/importers': 'GET, HEAD',
   '/api/overview': 'GET, HEAD',
+  '/api/economic': 'GET, HEAD',
   '/api/pricing': 'GET, HEAD',
   '/api/export.csv': 'GET, HEAD',
   '/api/realization': 'GET, HEAD',

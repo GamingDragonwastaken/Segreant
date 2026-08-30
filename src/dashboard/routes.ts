@@ -43,6 +43,7 @@ import { judgeSessionFromStore } from '../judge/orchestrate.ts';
 import { resolveJudgeTier, hasHostedJudgeApiKey } from '../judge/tier.ts';
 import { pricingStatus } from '../cost/pricing.ts';
 import { pricingCoverage } from '../cost/coverage.ts';
+import { buildEconomicReport } from '../cli/economicCmd.ts';
 import { verifyBlockedAssignmentPlan } from '../causal/assignment.ts';
 import { estimateCausalStudy } from '../causal/estimate.ts';
 import { stringifyJson } from '../util/json.ts';
@@ -510,6 +511,36 @@ export function handleAllocation({ res, store }: RouteContext): void {
 }
 
 /**
+ * Exact economic-ledger projection — the dashboard/API counterpart of
+ * `fiscus economic --json`. This is deliberately a read-only projection: it
+ * exposes the same source/effective coverage and role-aware balances as the
+ * CLI, without recomputing or mutating historical events.
+ *
+ * `all=1` (or `all=true`) takes precedence over `days`. An invalid window is a
+ * 400 rather than a silent fallback, because a caller must not mistake a
+ * different time range for the one it requested. The upper bound mirrors the
+ * CLI so an accidental multi-century query cannot turn a local dashboard poll
+ * into an unbounded replay.
+ */
+export function handleEconomic({ res, url, store }: RouteContext): void {
+  try {
+    const all = url.searchParams.get('all') === '1' || url.searchParams.get('all') === 'true';
+    const rawDays = url.searchParams.get('days');
+    const days = rawDays === null ? 30 : Number(rawDays);
+    if (!all && (!Number.isFinite(days) || days <= 0 || days > 3650)) {
+      return json(res, 400, { error: 'days must be a finite number between 0 and 3650 (or pass all=1)' });
+    }
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    const startMs = all ? 0 : now - days * dayMs;
+    const endMs = now + 1000;
+    return json(res, 200, buildEconomicReport(store, { startMs, endMs, demo: isDemo() }));
+  } catch (err) {
+    return json(res, 500, { error: String(err) });
+  }
+}
+
+/**
  * Pricing provenance — the read-only GUI counterpart of `fiscus pricing
  * --coverage`, answering how each recorded amount was actually priced.
  *
@@ -885,6 +916,7 @@ export const ROUTES: readonly Route[] = [
   { path: '/api/overview', methods: ['GET', 'HEAD'], handler: handleOverview },
   { path: '/api/billing', methods: ['GET'], handler: handleBilling },
   { path: '/api/allocation', methods: ['GET'], handler: handleAllocation },
+  { path: '/api/economic', methods: ['GET', 'HEAD'], handler: handleEconomic },
   { path: '/api/pricing', methods: ['GET', 'HEAD'], handler: handlePricing },
   { path: '/api/export.csv', methods: ['GET', 'HEAD'], handler: handleExportCsv },
   { path: '/api/realization', methods: ['GET', 'HEAD'], handler: handleRealization },

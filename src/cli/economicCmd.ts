@@ -44,6 +44,7 @@ export function buildEconomicReport(store: Store, options: EconomicReportOptions
   const projection = store.economic().project();
   const coverage = store.exactSpendBetween(options.startMs, options.endMs, false);
   return Object.freeze({
+    kind: 'economic_projection' as const,
     schemaVersion: 1,
     demo: options.demo,
     window: Object.freeze({
