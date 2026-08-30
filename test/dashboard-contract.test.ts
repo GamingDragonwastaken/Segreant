@@ -39,7 +39,7 @@ import { join } from 'node:path';
 import { Store } from '../src/store/db.ts';
 import { DEFAULT_CONFIG } from '../src/config.ts';
 import { createDashboardServer } from '../src/dashboard/server.ts';
-import { DASHBOARD_API_CONTRACTS } from '../src/dashboard/contracts.ts';
+import { DASHBOARD_API_CONTRACTS, DASHBOARD_PAYLOAD_CONTRACTS, type DashboardPayloadContract } from '../src/dashboard/contracts.ts';
 import { seedDemo } from '../src/demo/seed.ts';
 
 const API_SRC = join(
@@ -112,8 +112,8 @@ function parseInterfaces(source: string): Map<string, Field[]> {
  * Pair each read endpoint with the interface the GUI claims it returns, straight
  * out of the `api` object literal.
  */
-function parseEndpoints(source: string): Array<{ method: string; type: string; path: string }> {
-  const out: Array<{ method: string; type: string; path: string }> = [];
+function parseEndpoints(source: string): Array<{ routeId: string; method: string; type: string; path: string }> {
+  const out: Array<{ routeId: string; method: string; type: string; path: string }> = [];
   // The endpoint list is canonical now; the source check below proves the
   // browser client actually binds each named payload through routePath(...).
   // Inline response descriptions remain outside this field-level checker until
@@ -123,9 +123,35 @@ function parseEndpoints(source: string): Array<{ method: string; type: string; p
     const type = contract.responseType;
     if (!/^[A-Z]\w*$/.test(type)) continue;
     if (!source.includes(`request<${type}>`) || !source.includes(`routePath('${contract.id}')`)) continue;
-    out.push({ method: contract.id, type, path: contract.path });
+    out.push({ routeId: contract.id, method: 'GET', type, path: contract.path });
   }
   return out;
+}
+
+function payloadKind(value: unknown): string {
+  if (Array.isArray(value)) return 'array';
+  if (value !== null && typeof value === 'object') return 'object';
+  return typeof value;
+}
+
+function checkPayloadContract(contract: DashboardPayloadContract, payload: unknown, where: string, problems: string[]): void {
+  if (contract.contentType === 'text') return;
+  if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
+    problems.push(`${where} — expected an object envelope, got ${payloadKind(payload)}`);
+    return;
+  }
+  const object = payload as Record<string, unknown>;
+  for (const field of contract.required) {
+    if (!(field.name in object)) {
+      problems.push(`${where}.${field.name} — required by the shared payload contract, absent from the response`);
+      continue;
+    }
+    const value = object[field.name];
+    if (value === null && field.nullable === true) continue;
+    if (payloadKind(value) !== field.kind) {
+      problems.push(`${where}.${field.name} — expected ${field.kind}${field.nullable ? ' or null' : ''}, got ${payloadKind(value)}`);
+    }
+  }
 }
 
 function boot(store: Store): Promise<{ base: string; close: () => Promise<void> }> {
@@ -265,6 +291,7 @@ test('every required field the GUI declares exists in the payload the server sen
   seedDemo(store);
   const srv = await boot(store);
   const problems: string[] = [];
+  const checkedPayloads = new Set<string>();
 
   try {
     for (const endpoint of endpoints) {
@@ -277,7 +304,24 @@ test('every required field the GUI declares exists in the payload the server sen
         `${endpoint.method}: GET ${endpoint.path} returned ${res.status} — the GUI issues this exact request`,
       );
       const payload: unknown = await res.json();
+      const payloadContract = DASHBOARD_PAYLOAD_CONTRACTS.find((candidate) => candidate.routeId === endpoint.routeId && candidate.method === endpoint.method);
+      assert.ok(payloadContract, `${endpoint.routeId} has no shared payload contract`);
+      checkPayloadContract(payloadContract!, payload, `${endpoint.type} (${endpoint.path})`, problems);
+      checkedPayloads.add(endpoint.routeId + ':' + endpoint.method);
       checkShape(endpoint.type, payload, interfaces, `${endpoint.type} (${endpoint.path})`, problems, new Set());
+    }
+
+    // Named browser interfaces cover the modern app's most-used endpoints. Run
+    // the remaining JSON envelopes too, including classic/API-only surfaces,
+    // so a new route cannot evade the shared schema merely by using an inline
+    // response generic.
+    for (const contract of DASHBOARD_PAYLOAD_CONTRACTS) {
+      if (contract.method !== 'GET' || contract.contentType !== 'json' || checkedPayloads.has(contract.routeId + ':GET')) continue;
+      const route = DASHBOARD_API_CONTRACTS.find((candidate) => candidate.id === contract.routeId);
+      assert.ok(route, `${contract.routeId} payload contract has no route contract`);
+      const res = await fetch(`${srv.base}${route!.path}`);
+      assert.equal(res.status, 200, `GET ${route!.path} returned ${res.status}`);
+      checkPayloadContract(contract, await res.json(), `${contract.responseType} (${route!.path})`, problems);
     }
   } finally {
     await srv.close();
