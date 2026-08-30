@@ -69,6 +69,15 @@ two domain callers goes in `rows.ts`.
   an explicit `effective` control basis while preserving source bases and
   live/import scope. BudgetGuard uses them when coverage is complete and falls
   back to numeric aggregates only for unresolved legacy rows.
+- **Exact allocation is source-traced and append-only.** `allocatePeriodExact()`
+  consumes effective charges without float coercion; exact runs persist through
+  canonical JSON/digests and foreign-keyed per-line lineage, while incomplete
+  legacy coverage stays explicit and the numeric allocation table remains a
+  separate compatibility record.
+- **Exact economic export is explicit.** `economicRequestsInRange()` and the
+  `fiscus export --economic` mode expose original/effective Money, bases,
+  correction IDs and legacy coverage; `compatibilityCostUsd` is labelled as a
+  presentation projection rather than accounting authority.
 - **Billing kernel issuance is explicit and additive.** `issueBillingImportToKernel()`
   translates a validated operator export through exact `Money` into canonical
   Evidence and billed Claims; `issueOpenAiCostsObservationToKernel()` does the
