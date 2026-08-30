@@ -13,6 +13,7 @@
 import type { Store } from '../store/db.ts';
 import { timeWithAiMinutes } from './lift.ts';
 import type { RealizationReport } from './realization.ts';
+import { economicAttributionFromAttributions, economicAttributionNumber, type EconomicAttribution } from '../economics/attribution.ts';
 
 export const WORK_WEEK_MINUTES = 40 * 60;
 
@@ -25,6 +26,8 @@ export interface TimeReclaimedStratum {
   manualMinutesHigh: number;
   baselined: boolean;
   costUsd: number; // attributed spend across the stratum's matured units
+  /** Exact effective spend coverage for this task stratum, when available. */
+  economic?: EconomicAttribution;
 }
 
 export interface TimeReclaimedReport {
@@ -39,15 +42,22 @@ export interface TimeReclaimedReport {
   workWeeksRange: { low: number; high: number } | null;
   uncreditedUnits: number; // died + realized-but-unbaselined
   notes: string[];
+  /** Exact effective spend coverage, separate from manual-minute estimates. */
+  economic?: {
+    coverage: 'exact' | 'partial' | 'legacy_unknown';
+    total: EconomicAttribution | null;
+    realized: EconomicAttribution | null;
+  };
 }
 
 export function computeTimeReclaimed(
-  matureUnits: Array<{ taskType: string; realized: boolean; attributedCostUsd: number }>,
+  matureUnits: Array<{ taskType: string; realized: boolean; attributedCostUsd: number; economic?: EconomicAttribution }>,
   aiMinutes: number,
   baseline: Record<string, number>,
   bounds?: { low: Record<string, number>; high: Record<string, number> },
 ): TimeReclaimedReport {
   const byType = new Map<string, TimeReclaimedStratum>();
+  const economicByType = new Map<string, EconomicAttribution[]>();
   let uncreditedUnits = 0;
   for (const u of matureUnits) {
     const b = baseline[u.taskType];
@@ -57,7 +67,12 @@ export function computeTimeReclaimed(
       manualMinutes: 0, manualMinutesLow: 0, manualMinutesHigh: 0,
       baselined, costUsd: 0,
     };
-    s.costUsd += u.attributedCostUsd;
+    s.costUsd += economicAttributionNumber(u.economic, u.attributedCostUsd);
+    if (u.economic !== undefined) {
+      const values = economicByType.get(u.taskType) ?? [];
+      values.push(u.economic);
+      economicByType.set(u.taskType, values);
+    }
     if (u.realized && baselined) {
       s.realizedUnits += 1;
       s.manualMinutes += b!;
@@ -77,6 +92,20 @@ export function computeTimeReclaimed(
   const manualMinutesLow = strata.reduce((t, s) => t + s.manualMinutesLow, 0);
   const manualMinutesHigh = strata.reduce((t, s) => t + s.manualMinutesHigh, 0);
 
+  for (const stratum of strata) {
+    const values = economicByType.get(stratum.taskType);
+    if (values !== undefined && values.length > 0) stratum.economic = economicAttributionFromAttributions(values);
+  }
+  const exactValues = matureUnits.flatMap((unit) => unit.economic === undefined ? [] : [unit.economic]);
+  const realizedValues = matureUnits.flatMap((unit) => unit.realized && unit.economic !== undefined ? [unit.economic] : []);
+  const economic = exactValues.length === 0
+    ? { coverage: 'legacy_unknown' as const, total: null, realized: null }
+    : {
+        coverage: exactValues.length === matureUnits.length && economicAttributionFromAttributions(exactValues).complete ? 'exact' as const : 'partial' as const,
+        total: economicAttributionFromAttributions(exactValues),
+        realized: economicAttributionFromAttributions(realizedValues),
+      };
+
   const instrumented = manualMinutes > 0 && aiMinutes > 0;
   const savedMinutes = instrumented ? manualMinutes - aiMinutes : null;
   const savedRange = instrumented ? { low: manualMinutesLow - aiMinutes, high: manualMinutesHigh - aiMinutes } : null;
@@ -93,6 +122,7 @@ export function computeTimeReclaimed(
     workWeeksSaved: savedMinutes === null ? null : savedMinutes / WORK_WEEK_MINUTES,
     workWeeksRange: savedRange === null ? null : { low: savedRange.low / WORK_WEEK_MINUTES, high: savedRange.high / WORK_WEEK_MINUTES },
     uncreditedUnits, notes,
+    economic,
   };
 }
 
@@ -116,7 +146,7 @@ export function timeReclaimedFromStore(
     aiMinutes = timeWithAiMinutes(events).totalMin;
   }
   return computeTimeReclaimed(
-    mature.map((u) => ({ taskType: u.taskType, realized: u.funnel.realized, attributedCostUsd: u.attributedCostUsd })),
+    mature.map((u) => ({ taskType: u.taskType, realized: u.funnel.realized, attributedCostUsd: u.attributedCostUsd, economic: u.economic })),
     aiMinutes, baseline, bounds,
   );
 }

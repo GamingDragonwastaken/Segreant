@@ -13,6 +13,7 @@
 import type { WorkUnit } from './realization.ts';
 import { computeReturnOnIntelligence, lensRedundancy, type LensRedundancy } from './lenses.ts';
 import { anytimeRateInterval } from './anytime.ts';
+import { economicAttributionFromAttributions, economicAttributionNumber, type EconomicAttribution } from '../economics/attribution.ts';
 
 export interface FrontierCell {
   key: string;
@@ -30,6 +31,12 @@ export interface FrontierCell {
   // production reach + durability) — kept so the cells double as the sample
   // for the lens-redundancy statistic below.
   impact: number | null;
+  /** Exact effective spend coverage; legacy numeric fields remain compatible projections. */
+  economic?: {
+    coverage: 'exact' | 'partial' | 'legacy_unknown';
+    total: EconomicAttribution | null;
+    realized: EconomicAttribution | null;
+  };
 }
 
 /**
@@ -134,12 +141,12 @@ export interface FrontierReport {
 
 function makeCell(key: string, model: string | null, taskType: string | null, units: WorkUnit[]): FrontierCell {
   const realized = units.filter((u) => u.funnel.realized);
-  const costUsd = units.reduce((s, u) => s + u.attributedCostUsd, 0);
-  const realizedValueUsd = realized.reduce((s, u) => s + u.attributedCostUsd, 0);
+  const costUsd = units.reduce((s, u) => s + economicAttributionNumber(u.economic, u.attributedCostUsd), 0);
+  const realizedValueUsd = realized.reduce((s, u) => s + economicAttributionNumber(u.economic, u.attributedCostUsd), 0);
   // Net of rework: discount each realized unit's value by its first-pass acceptance
   // (unknown acceptance → full credit), matching the headline's net efficiency so
   // the frontier + allocation rank contexts by the SAME value the Index rewards.
-  const netRealizedValueUsd = realized.reduce((s, u) => s + u.attributedCostUsd * (u.acceptance ?? 1), 0);
+  const netRealizedValueUsd = realized.reduce((s, u) => s + economicAttributionNumber(u.economic, u.attributedCostUsd) * (u.acceptance ?? 1), 0);
   const withAcc = units.filter((u) => u.acceptance !== null);
   const acceptance = withAcc.length > 0 ? withAcc.reduce((s, u) => s + (u.acceptance ?? 0), 0) / withAcc.length : null;
   const realizationRate = units.length > 0 ? realized.length / units.length : 0;
@@ -148,6 +155,15 @@ function makeCell(key: string, model: string | null, taskType: string | null, un
     units,
     matured: { realizationRate, totalCostUsd: costUsd, realizedValueUsd, netRealizedValueUsd },
   });
+  const exactValues = units.flatMap((unit) => unit.economic === undefined ? [] : [unit.economic]);
+  const realizedExactValues = realized.flatMap((unit) => unit.economic === undefined ? [] : [unit.economic]);
+  const economic = exactValues.length === 0
+    ? { coverage: 'legacy_unknown' as const, total: null, realized: null }
+    : {
+        coverage: exactValues.length === units.length && economicAttributionFromAttributions(exactValues).complete ? 'exact' as const : 'partial' as const,
+        total: economicAttributionFromAttributions(exactValues),
+        realized: economicAttributionFromAttributions(realizedExactValues),
+      };
   return {
     key,
     model,
@@ -161,6 +177,7 @@ function makeCell(key: string, model: string | null, taskType: string | null, un
     costPerUnit: units.length > 0 ? costUsd / units.length : 0,
     roiIndex: roi.roiIndex,
     impact: roi.lenses.impact.value,
+    economic,
   };
 }
 
@@ -329,7 +346,7 @@ function lineageValues(units: WorkUnit[], pick: (u: WorkUnit) => string | null):
 }
 
 function makeSwitchCell(model: string, units: WorkUnit[]): SwitchCell {
-  const modelCostUsd = units.reduce((s, u) => s + (u.dominantModelCostUsd ?? 0), 0);
+  const modelCostUsd = units.reduce((s, u) => s + economicAttributionNumber(u.dominantModelEconomic, u.dominantModelCostUsd ?? 0), 0);
   const realized = units.filter((u) => u.funnel.realized).length;
   const times = units.map((u) => u.tsEpochMs);
   const totalLines = units.reduce((s, u) => s + u.linesAdded + u.linesDeleted, 0);

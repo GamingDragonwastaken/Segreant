@@ -11,6 +11,9 @@ import { computeUsageRoI } from '../src/value/usage.ts';
 import { userValueRows } from '../src/value/cohort.ts';
 import { budgetAdvice } from '../src/value/report.ts';
 import { DEFAULT_CONFIG } from '../src/config.ts';
+import { computeTimeReclaimed } from '../src/value/timeReclaimed.ts';
+import { economicAttributionView } from '../src/economics/attribution.ts';
+import { computeFrontier } from '../src/value/frontier.ts';
 import { money } from '../src/economics/money.ts';
 import { economicEvent } from '../src/economics/events.ts';
 import { instant } from '../src/epistemic/time.ts';
@@ -320,5 +323,43 @@ test('budget advice consumes exact effective buckets and discloses unresolved le
     assert.equal(advice.spendBasis, 'live_proxy');
   } finally {
     store.close();
+  }
+});
+
+test('time-reclaimed strata carry exact effective spend coverage beside manual-minute claims', () => {
+  const exact = economicAttributionView({
+    amount: money('1.234567', 'USD', 'effective'),
+    eventIds: ['economic:request:time:charge'],
+    sourceBases: ['list'],
+    requestCount: 1,
+    unresolvedRequests: 0,
+  });
+  const report = computeTimeReclaimed([
+    { taskType: 'feature', realized: true, attributedCostUsd: 1.234567, economic: exact },
+  ], 10, { feature: 30 });
+  const stratum = report.strata[0];
+  if (stratum === undefined || stratum.economic === undefined) throw new Error('time-reclaimed stratum is missing exact coverage');
+  assert.equal(stratum.economic.amountText, '1.234567');
+  assert.equal(stratum.economic.complete, true);
+  assert.equal(report.economic?.coverage, 'exact');
+  assert.equal(report.economic?.total?.amountText, '1.234567');
+});
+
+test('frontier cells expose exact effective spend coverage for model/task comparisons', async () => {
+  const dir = repo();
+  const store = new Store(':memory:');
+  try {
+    commit(dir, 'base\n', 'feat: base', '2026-06-01T10:00:00+00:00');
+    commit(dir, 'base\nmore\n', 'feat: exact', '2026-06-01T11:00:00+00:00');
+    const project = await projectName(dir);
+    store.insertRequest(request(project, 'frontier-exact', money('1.234567', 'USD', 'list')));
+    const report = await computeRealization(store, dir, { limit: 5, windowDays: 14 });
+    const cell = computeFrontier(report.units).byTaskType.find((row) => row.taskType === 'feature');
+    if (cell === undefined || cell.economic === undefined || cell.economic.total === null) throw new Error('frontier cell is missing exact economic coverage');
+    assert.equal(cell.economic.coverage, 'exact');
+    assert.equal(cell.economic.total.amountText, '1.234567');
+  } finally {
+    store.close();
+    rmSync(dir, { recursive: true, force: true });
   }
 });
