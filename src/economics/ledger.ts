@@ -13,6 +13,7 @@ import { instant, type Instant } from '../epistemic/time.ts';
 import { addMoney, compareMoney, moneyFromJson, negateMoney, subtractMoney, type Money } from './money.ts';
 import { economicEvent, economicEventRole, type EconomicEvent, type EconomicEventInput, type EconomicEventRole } from './events.ts';
 import { deserializeEconomicEvent, serializeEconomicEvent } from './serialization.ts';
+import { applyExactRate, rateFromJson } from './rate.ts';
 
 export type EconomicAppendResult = 'inserted' | 'duplicate';
 
@@ -238,6 +239,70 @@ export class EconomicLedger {
       if (priorCorrections !== undefined && typeof priorCorrections.eventId === 'string') {
         throw new Error(`economic event ${value.id} price correction source ${source.id} already has a correction`);
       }
+    }
+    if (value.kind === 'fx_translated') {
+      if (value.reversalOf !== null) throw new Error(`economic event ${value.id} FX translation must not use reversalOf`);
+      if (value.sourceEventIds.length !== 1) throw new Error(`economic event ${value.id} FX translation requires exactly one source event`);
+      const sourceId = value.sourceEventIds[0];
+      if (sourceId === undefined) throw new Error(`economic event ${value.id} FX translation source is missing`);
+      const source = sources.get(sourceId);
+      if (source === undefined || source.amount === null) throw new Error(`economic event ${value.id} FX translation must target a monetary source`);
+      if (source.subject !== value.subject) throw new Error(`economic event ${value.id} FX translation subject must match its source`);
+      if (value.occurredAt !== source.occurredAt) throw new Error(`economic event ${value.id} FX translation occurrence must match its source`);
+      if (value.amount === null) throw new Error(`economic event ${value.id} FX translation requires a monetary amount`);
+      if (value.amount.currency === source.amount.currency || value.amount.basis !== source.amount.basis) {
+        throw new Error(`economic event ${value.id} FX translation must change currency while preserving basis`);
+      }
+      const metadata = value.metadata;
+      if (metadata === null || typeof metadata !== 'object' || Array.isArray(metadata)) {
+        throw new Error(`economic event ${value.id} FX translation metadata is missing historical lineage`);
+      }
+      const metadataKeys = Object.keys(metadata).sort();
+      if (metadataKeys.join('\u0000') !== ['convention', 'effectiveAt', 'rate', 'rateSource', 'rounding', 'sourceAmount'].join('\u0000')) {
+        throw new Error(`economic event ${value.id} FX translation metadata must contain exactly sourceAmount, rate, rateSource, effectiveAt, convention, and rounding`);
+      }
+      const record = metadata as { sourceAmount?: unknown; rate?: unknown; rateSource?: unknown; effectiveAt?: unknown; convention?: unknown; rounding?: unknown };
+      let sourceAmount: Money;
+      try {
+        sourceAmount = moneyFromJson(record.sourceAmount as Parameters<typeof moneyFromJson>[0]);
+      } catch (error) {
+        throw new Error(`economic event ${value.id} FX translation sourceAmount is invalid: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      if (compareMoney(sourceAmount, source.amount) !== 0) throw new Error(`economic event ${value.id} FX translation sourceAmount must equal its source amount`);
+      if (record.rate === null || typeof record.rate !== 'object' || Array.isArray(record.rate)) throw new Error(`economic event ${value.id} FX translation rate is missing`);
+      const rateRecord = record.rate as Record<string, unknown>;
+      const rateKeys = Object.keys(rateRecord).sort();
+      if (rateKeys.join('\u0000') !== ['denominator', 'numerator', 'sourceUnit', 'targetUnit'].join('\u0000')) {
+        throw new Error(`economic event ${value.id} FX translation rate contains unknown or missing fields`);
+      }
+      let rate;
+      try {
+        rate = rateFromJson(rateRecord as unknown as Parameters<typeof rateFromJson>[0]);
+      } catch (error) {
+        throw new Error(`economic event ${value.id} FX translation rate is invalid: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      if (rate.numerator <= 0n || rate.denominator <= 0n) throw new Error(`economic event ${value.id} FX translation rate must be positive`);
+      if (rate.sourceUnit !== source.amount.currency || rate.targetUnit !== value.amount.currency) {
+        throw new Error(`economic event ${value.id} FX translation rate currency identity does not match source and target`);
+      }
+      if (rate.targetUnit === rate.sourceUnit) throw new Error(`economic event ${value.id} FX translation must change currency`);
+      if (typeof record.rateSource !== 'string' || record.rateSource.trim().length === 0) throw new Error(`economic event ${value.id} FX translation rateSource must be non-empty`);
+      let effectiveAt: Instant;
+      try {
+        effectiveAt = instant(record.effectiveAt as string);
+      } catch (error) {
+        throw new Error(`economic event ${value.id} FX translation effectiveAt is invalid: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      if (record.convention !== 'source-to-target') throw new Error(`economic event ${value.id} FX translation convention must be source-to-target`);
+      if (record.rounding !== 'none') throw new Error(`economic event ${value.id} FX translation rounding must be none`);
+      if (Date.parse(effectiveAt) > Date.parse(value.occurredAt)) throw new Error(`economic event ${value.id} FX translation effectiveAt cannot be after occurrence`);
+      let expected: Money;
+      try {
+        expected = applyExactRate(source.amount, rate, source.amount.basis);
+      } catch (error) {
+        throw new Error(`economic event ${value.id} FX translation cannot be reproduced exactly: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      if (compareMoney(expected, value.amount) !== 0) throw new Error(`economic event ${value.id} FX translation amount does not match its historical rate`);
     }
     visiting.delete(value.id);
     validated.add(value.id);
