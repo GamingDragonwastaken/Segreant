@@ -60,6 +60,12 @@ two domain callers goes in `rows.ts`.
 - **The economic ledger shares this connection.** `Store.economic()` exposes
   exact-Money immutable events and deterministic basis-separated projections;
   event DDL and append-only triggers remain owned by `schema.ts`.
+- **Period close is Store-owned.** `finalizeEconomicPeriod()` records an
+  immutable exact snapshot for a canonical half-open period,
+  `reopenEconomicPeriod()` records an explicit additive lifecycle transition,
+  and `economicPeriodCloseStatus()` replays the control state at an optional
+  recording-time boundary. Late in-period evidence is blocked until an
+  explicit reopen; conflict never becomes an implicit approval.
 - **Exact request issuance is transactional.** A `RequestRow` carrying
   `economicAmount` writes one deterministic economic charge event through the
   same SQLite transaction. `economicAmountForRequest()` reads that exact event;

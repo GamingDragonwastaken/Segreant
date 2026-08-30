@@ -30,6 +30,14 @@ test('GET /api/economic serves the shared exact report and stays read-only', asy
       schemaVersion: number;
       window: { requestCoverage: { amount: string; currency: string; basis: string; complete: boolean } };
       projection: { balances: Array<{ role: string; amount: string; currency: string; basis: string }> };
+      periodClose: {
+        status: string;
+        activeFinalizationId: string | null;
+        latestFinalizationId: string | null;
+        latestReopenId: string | null;
+        projectionDigest: string | null;
+        eventCount: number | null;
+      };
     };
     assert.equal(body.kind, 'economic_projection');
     assert.equal(body.schemaVersion, 1);
@@ -38,6 +46,12 @@ test('GET /api/economic serves the shared exact report and stays read-only', asy
     assert.equal(body.window.requestCoverage.basis, 'effective');
     assert.equal(body.window.requestCoverage.complete, true);
     assert.ok(body.projection.balances.some((balance) => balance.role === 'charge' && balance.amount === '1' && balance.currency === 'USD' && balance.basis === 'list'));
+    assert.equal(body.periodClose.status, 'open');
+    assert.equal(body.periodClose.activeFinalizationId, null);
+    assert.equal(body.periodClose.latestFinalizationId, null);
+    assert.equal(body.periodClose.latestReopenId, null);
+    assert.equal(body.periodClose.projectionDigest, null);
+    assert.equal(body.periodClose.eventCount, null);
     assert.equal(JSON.stringify(body).includes('BigInt'), false);
 
     const head = await fetch(`http://127.0.0.1:${port}/api/economic?all=1`, { method: 'HEAD' });

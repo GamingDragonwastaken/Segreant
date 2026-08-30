@@ -254,6 +254,19 @@ export interface EconomicAttributionPayload {
   complete: boolean;
 }
 
+/** Read-only period-close control state carried with the exact projection. */
+export interface EconomicPeriodClosePayload {
+  periodStartMs: number;
+  periodEndMs: number;
+  asOf: string | null;
+  status: 'open' | 'finalized' | 'reopened' | 'conflicted';
+  activeFinalizationId: string | null;
+  latestFinalizationId: string | null;
+  latestReopenId: string | null;
+  projectionDigest: string | null;
+  eventCount: number | null;
+}
+
 export interface EconomicPayload {
   kind: 'economic_projection';
   schemaVersion: number;
@@ -268,6 +281,7 @@ export interface EconomicPayload {
     eventIds: string[];
     balances: EconomicBalance[];
   };
+  periodClose: EconomicPeriodClosePayload;
 }
 
 export interface RealizationEconomicRollupPayload {

@@ -11,6 +11,7 @@
 import { immutableJson, type JsonValue } from '../epistemic/evidence.ts';
 import { instant, type Instant } from '../epistemic/time.ts';
 import { moneyFromJson, moneyToJson, type EconomicBasis, type Money, type MoneyJson } from './money.ts';
+import { closeFinalizationMetadata, closeReopenMetadata } from './close.ts';
 
 export const ECONOMIC_EVENT_KINDS = [
   'usage_observed',
@@ -225,6 +226,13 @@ export function economicEvent(input: EconomicEventInput): EconomicEvent {
   if (reversalOf === id) throw new Error(`economic event ${id} cannot reverse itself`);
   if (kind === 'allocation_reversed' && reversalOf === null) throw new Error(`economic event ${id} allocation_reversed requires reversalOf`);
   const metadata = value.metadata === undefined || value.metadata === null ? null : immutableJson(value.metadata, `economic event ${id} metadata`);
+  if (kind === 'close_finalized') {
+    if (amount !== null) throw new Error('economic event ' + id + ' close_finalized must not have an amount');
+    closeFinalizationMetadata(metadata);
+  } else if (kind === 'close_reopened') {
+    if (amount !== null) throw new Error('economic event ' + id + ' close_reopened must not have an amount');
+    closeReopenMetadata(metadata);
+  }
   if (!Number.isSafeInteger(value.schemaVersion) || value.schemaVersion < 1) throw new Error('economic event schemaVersion must be a positive safe integer');
   return Object.freeze({ id, kind, subject, occurredAt, recordedAt, amount, sourceEventIds, reversalOf, metadata, schemaVersion: value.schemaVersion });
 }

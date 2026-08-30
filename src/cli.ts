@@ -54,7 +54,10 @@ function cmdHelp(): void {
                           causal claims; this command never changes provider routing.
     today | week | month  Show spend for a window      (--json)
     economic              Inspect exact economic events, roles, bases, and legacy coverage
-                          (--days N | --all, --json)
+                          (--days N | --all, --json). Period controls use canonical
+                          UTC instants: --close-status|--finalize|--reopen
+                          --from <ISO> --to <ISO> [--recorded-at <ISO>]
+                          [--reason <text>] [--as-of <ISO>] [--json]
     sources               Spend by connected source — each AI tool routed here
                           (--all for all-time, --json)
     connect <tool>        Connect an AI tool as a source so its spend is metered:

@@ -111,7 +111,7 @@ import type {
 } from '../causal/types.ts';
 import { EpistemicLedger } from '../epistemic/ledger.ts';
 import type { Claim } from '../epistemic/claim.ts';
-import { EconomicLedger } from '../economics/ledger.ts';
+import { EconomicLedger, type EconomicPeriodCloseStatus, type PeriodFinalizationInput, type PeriodFinalizationResult, type PeriodReopenInput, type PeriodReopenResult } from '../economics/ledger.ts';
 
 /**
  * Provider-side evidence shapes now live in ./billing.ts. They are re-exported
@@ -656,6 +656,21 @@ export class Store {
   /** Exact-Money economic event ledger on this Store's SQLite handle. */
   economic(): EconomicLedger {
     return this.economicLedger;
+  }
+
+  /** Finalize one half-open economic period through the Store-owned ledger. */
+  finalizeEconomicPeriod(input: PeriodFinalizationInput): PeriodFinalizationResult {
+    return this.economicLedger.finalizePeriod(input);
+  }
+
+  /** Reopen one finalized economic period with an explicit operator reason. */
+  reopenEconomicPeriod(input: PeriodReopenInput): PeriodReopenResult {
+    return this.economicLedger.reopenPeriod(input);
+  }
+
+  /** Read period-close state at an optional recorded-time boundary. */
+  economicPeriodCloseStatus(startMs: number, endMs: number, asOf?: string): EconomicPeriodCloseStatus {
+    return this.economicLedger.periodCloseStatus(startMs, endMs, asOf);
   }
 
   /** Read the exact request charge when this row opted into economic issuance. */

@@ -14,6 +14,7 @@ import { addMoney, compareMoney, formatMoneyAmount, money, moneyFromJson, negate
 import { economicEvent, economicEventRole, type EconomicEvent, type EconomicEventInput, type EconomicEventRole } from './events.ts';
 import { deserializeEconomicEvent, serializeEconomicEvent } from './serialization.ts';
 import { applyExactRate, rateFromJson } from './rate.ts';
+import { canonicalPeriod, closeFinalizationMetadata, closeProjectionDigest, closeReopenMetadata, isCloseKind, type CloseFinalizationMetadata, type CloseProjectionBalance, type CloseReopenMetadata, type EconomicPeriod } from './close.ts';
 
 export type EconomicAppendResult = 'inserted' | 'duplicate';
 
@@ -39,6 +40,57 @@ export interface EconomicProjection {
   readonly asOf: Instant | null;
   readonly eventIds: readonly string[];
   readonly balances: readonly EconomicBalance[];
+}
+
+export type PeriodCloseState = 'open' | 'finalized' | 'reopened' | 'conflicted';
+
+export interface EconomicPeriodCloseStatus {
+  readonly periodStartMs: number;
+  readonly periodEndMs: number;
+  readonly asOf: Instant | null;
+  readonly status: PeriodCloseState;
+  readonly activeFinalizationId: string | null;
+  readonly latestFinalizationId: string | null;
+  readonly latestReopenId: string | null;
+  readonly projectionDigest: string | null;
+  readonly eventCount: number | null;
+}
+
+export interface PeriodFinalizationResult {
+  readonly status: 'finalized';
+  readonly eventId: string;
+  readonly periodStartMs: number;
+  readonly periodEndMs: number;
+  readonly recordedAt: Instant;
+  readonly projectionDigest: string;
+  readonly eventCount: number;
+  readonly balances: readonly CloseProjectionBalance[];
+  readonly sourceEventIds: readonly string[];
+}
+
+export interface PeriodReopenResult {
+  readonly status: 'reopened';
+  readonly eventId: string;
+  readonly periodStartMs: number;
+  readonly periodEndMs: number;
+  readonly recordedAt: Instant;
+  readonly reason: string;
+  readonly reopenedFinalizationId: string;
+}
+
+export interface PeriodFinalizationInput {
+  readonly periodStartMs: number;
+  readonly periodEndMs: number;
+  readonly recordedAt?: Instant;
+  readonly id?: string;
+}
+
+export interface PeriodReopenInput {
+  readonly periodStartMs: number;
+  readonly periodEndMs: number;
+  readonly recordedAt?: Instant;
+  readonly reason: string;
+  readonly id?: string;
 }
 
 /** One charge after any visible, validated local price correction. */
@@ -81,6 +133,37 @@ function storedRecord(rowValue: StoredEconomicRow): EconomicEvent {
     throw new Error(`stored economic event ${rowValue.event_id} failed physical identity verification`);
   }
   return item;
+}
+
+function closeBalances(events: readonly EconomicEvent[]): CloseProjectionBalance[] {
+  const groups = new Map<string, { role: EconomicEventRole; currency: string; basis: Money['basis']; amount: Money; eventIds: string[] }>();
+  for (const item of events) {
+    if (item.amount === null) continue;
+    const role = economicEventRole(item.kind);
+    const key = item.amount.currency + '\u0000' + item.amount.basis + '\u0000' + role;
+    const group = groups.get(key);
+    if (group === undefined) {
+      groups.set(key, {
+        role,
+        currency: item.amount.currency,
+        basis: item.amount.basis,
+        amount: item.amount,
+        eventIds: [item.id],
+      });
+    } else {
+      group.amount = addMoney(group.amount, item.amount);
+      group.eventIds.push(item.id);
+    }
+  }
+  return [...groups.values()]
+    .map((group) => Object.freeze({
+      role: group.role,
+      currency: group.currency,
+      basis: group.basis,
+      amount: group.amount,
+      eventIds: Object.freeze([...group.eventIds].sort()),
+    }))
+    .sort((a, b) => a.currency.localeCompare(b.currency) || a.basis.localeCompare(b.basis) || a.role.localeCompare(b.role));
 }
 
 export class EconomicLedger {
@@ -151,6 +234,52 @@ export class EconomicLedger {
       throw new Error(`stored economic event ${id} source links diverge from its canonical record`);
     }
     return value;
+  }
+
+  private validateCloseEvent(value: EconomicEvent, sources: ReadonlyMap<string, EconomicEvent>): void {
+    if (!isCloseKind(value.kind)) return;
+    const metadata = value.kind === 'close_finalized'
+      ? closeFinalizationMetadata(value.metadata)
+      : closeReopenMetadata(value.metadata);
+    const period = canonicalPeriod(metadata.periodStartMs, metadata.periodEndMs);
+    if (value.subject !== period.subject) throw new Error('economic close event subject does not match its period');
+    if (value.occurredAt !== period.end) throw new Error('economic close event occurrence must equal the exclusive period end');
+    if (Date.parse(value.recordedAt) < period.endMs) throw new Error('economic close event recordedAt cannot precede its period end');
+
+    if (value.kind === 'close_finalized') {
+      const finalMetadata = metadata as CloseFinalizationMetadata;
+      const sourceIds = [...value.sourceEventIds].sort();
+      if (sourceIds.some((id, index) => id !== value.sourceEventIds[index])) {
+        throw new Error('economic close finalization sourceEventIds must be sorted');
+      }
+      const allEvents = this.eventsInOccurrenceRange(period.startMs, period.endMs)
+        .filter((event) => Date.parse(event.recordedAt) <= Date.parse(value.recordedAt));
+      const allIds = allEvents.map((event) => event.id).sort();
+      if (allIds.length !== sourceIds.length || allIds.some((id, index) => id !== sourceIds[index])) {
+        throw new Error('economic close finalization must bind every in-period event exactly once');
+      }
+      if (finalMetadata.eventCount !== allIds.length) throw new Error('economic close finalization eventCount does not match its source events');
+      if ([...sources.values()].some((event) => isCloseKind(event.kind))) {
+        throw new Error('economic close finalization cannot include another close control event');
+      }
+      const balances = closeBalances(allEvents);
+      const expectedDigest = closeProjectionDigest(period, allIds, balances);
+      if (finalMetadata.projectionDigest !== expectedDigest) throw new Error('economic close finalization projection digest mismatch');
+      return;
+    }
+
+    const reopenMetadata = metadata as CloseReopenMetadata;
+    if (value.sourceEventIds.length !== 1 || value.sourceEventIds[0] !== reopenMetadata.closeEventId) {
+      throw new Error('economic close reopen must reference exactly its finalized close event');
+    }
+    const source = sources.get(reopenMetadata.closeEventId);
+    if (source === undefined || source.kind !== 'close_finalized') {
+      throw new Error('economic close reopen must reference a close_finalized event');
+    }
+    const sourceMetadata = closeFinalizationMetadata(source.metadata);
+    if (sourceMetadata.periodStartMs !== period.startMs || sourceMetadata.periodEndMs !== period.endMs) {
+      throw new Error('economic close reopen period does not match its finalized close');
+    }
   }
 
   /**
@@ -315,6 +444,7 @@ export class EconomicLedger {
       }
       if (compareMoney(expected, value.amount) !== 0) throw new Error(`economic event ${value.id} FX translation amount does not match its historical rate`);
     }
+    this.validateCloseEvent(value, sources);
     visiting.delete(value.id);
     validated.add(value.id);
   }
@@ -347,10 +477,186 @@ export class EconomicLedger {
     return 'inserted';
   }
 
+  periodCloseStatus(startMs: number, endMs: number, asOf?: Instant): EconomicPeriodCloseStatus {
+    const period = canonicalPeriod(startMs, endMs);
+    const boundary = asOf === undefined ? null : canonicalBoundary(asOf);
+    const values = this.events(boundary ?? undefined);
+    let status: PeriodCloseState = 'open';
+    let activeFinalizationId: string | null = null;
+    let latestFinalizationId: string | null = null;
+    let latestReopenId: string | null = null;
+    let latestMetadata: CloseFinalizationMetadata | null = null;
+
+    for (const value of values) {
+      if (value.kind === 'close_finalized') {
+        const metadata = closeFinalizationMetadata(value.metadata);
+        if (metadata.periodStartMs !== period.startMs || metadata.periodEndMs !== period.endMs) continue;
+        latestFinalizationId = value.id;
+        latestMetadata = metadata;
+        if (status === 'finalized') {
+          status = 'conflicted';
+        } else if (status !== 'conflicted') {
+          status = 'finalized';
+          activeFinalizationId = value.id;
+        }
+      } else if (value.kind === 'close_reopened') {
+        const metadata = closeReopenMetadata(value.metadata);
+        if (metadata.periodStartMs !== period.startMs || metadata.periodEndMs !== period.endMs) continue;
+        latestReopenId = value.id;
+        if (status !== 'finalized' || activeFinalizationId !== metadata.closeEventId) {
+          status = 'conflicted';
+        } else {
+          status = 'reopened';
+          activeFinalizationId = null;
+        }
+      }
+    }
+
+    return Object.freeze({
+      periodStartMs: period.startMs,
+      periodEndMs: period.endMs,
+      asOf: boundary,
+      status,
+      activeFinalizationId,
+      latestFinalizationId,
+      latestReopenId,
+      projectionDigest: latestMetadata?.projectionDigest ?? null,
+      eventCount: latestMetadata?.eventCount ?? null,
+    });
+  }
+
+  private assertPeriodOpenForEvent(value: EconomicEvent): void {
+    if (isCloseKind(value.kind)) return;
+    const eventTimes = [Date.parse(value.occurredAt)];
+    for (const sourceId of value.sourceEventIds) {
+      const source = this.read(sourceId);
+      if (source !== null) eventTimes.push(Date.parse(source.occurredAt));
+    }
+    const periods = new Map<string, EconomicPeriod>();
+    for (const control of this.events()) {
+      if (control.kind === 'close_finalized') {
+        const metadata = closeFinalizationMetadata(control.metadata);
+        const period = canonicalPeriod(metadata.periodStartMs, metadata.periodEndMs);
+        periods.set(period.subject, period);
+      } else if (control.kind === 'close_reopened') {
+        const metadata = closeReopenMetadata(control.metadata);
+        const period = canonicalPeriod(metadata.periodStartMs, metadata.periodEndMs);
+        periods.set(period.subject, period);
+      }
+    }
+    for (const period of periods.values()) {
+      const state = this.periodCloseStatus(period.startMs, period.endMs);
+      if (state.status !== 'finalized' && state.status !== 'conflicted') continue;
+      if (eventTimes.some((time) => time >= period.startMs && time < period.endMs)) {
+        throw new Error('economic period ' + period.startMs + '/' + period.endMs + ' is finalized; reopen it before recording an in-period event');
+      }
+    }
+  }
+
+  finalizePeriod(input: PeriodFinalizationInput): PeriodFinalizationResult {
+    const period = canonicalPeriod(input.periodStartMs, input.periodEndMs);
+    const recordedAt = canonicalBoundary(input.recordedAt ?? new Date().toISOString());
+    if (Date.parse(recordedAt) < period.endMs) throw new Error('economic period finalization recordedAt cannot precede the period end');
+    return this.transaction(() => {
+      const state = this.periodCloseStatus(period.startMs, period.endMs);
+      if (state.status === 'finalized') throw new Error('economic period is already finalized; reopen it before finalizing again');
+      if (state.status === 'conflicted') throw new Error('economic period close state is conflicted; refuse finalization');
+      const events = this.eventsInOccurrenceRange(period.startMs, period.endMs)
+        .filter((event) => Date.parse(event.recordedAt) <= Date.parse(recordedAt));
+      const sourceEventIds = events.map((event) => event.id).sort();
+      const balances = closeBalances(events);
+      const projectionDigest = closeProjectionDigest(period, sourceEventIds, balances);
+      const countRow = this.db.prepare(
+        'SELECT COUNT(*) AS count FROM economic_events WHERE event_kind = ? AND subject = ?',
+      ).get('close_finalized', period.subject) as { count: number };
+      const id = input.id ?? 'economic:close:' + period.startMs + ':' + period.endMs + ':' + (Number(countRow.count) + 1);
+      const close = economicEvent({
+        id,
+        kind: 'close_finalized',
+        subject: period.subject,
+        occurredAt: period.end,
+        recordedAt,
+        amount: null,
+        sourceEventIds,
+        reversalOf: null,
+        metadata: {
+          closeSchemaVersion: 1,
+          periodStartMs: period.startMs,
+          periodEndMs: period.endMs,
+          projectionDigest,
+          eventCount: sourceEventIds.length,
+        },
+        schemaVersion: 1,
+      });
+      this.appendCanonical(close, serializeEconomicEvent(close));
+      return Object.freeze({
+        status: 'finalized' as const,
+        eventId: close.id,
+        periodStartMs: period.startMs,
+        periodEndMs: period.endMs,
+        recordedAt,
+        projectionDigest,
+        eventCount: sourceEventIds.length,
+        balances: Object.freeze(balances),
+        sourceEventIds: Object.freeze(sourceEventIds),
+      });
+    });
+  }
+
+  reopenPeriod(input: PeriodReopenInput): PeriodReopenResult {
+    const period = canonicalPeriod(input.periodStartMs, input.periodEndMs);
+    const recordedAt = canonicalBoundary(input.recordedAt ?? new Date().toISOString());
+    if (Date.parse(recordedAt) < period.endMs) throw new Error('economic period reopen recordedAt cannot precede the period end');
+    if (typeof input.reason !== 'string' || input.reason.trim().length === 0) throw new Error('economic period reopen reason must be non-empty');
+    return this.transaction(() => {
+      const state = this.periodCloseStatus(period.startMs, period.endMs);
+      if (state.status !== 'finalized' || state.activeFinalizationId === null) {
+        throw new Error('economic period is not actively finalized; nothing to reopen');
+      }
+      const countRow = this.db.prepare(
+        'SELECT COUNT(*) AS count FROM economic_events WHERE event_kind = ? AND subject = ?',
+      ).get('close_reopened', period.subject) as { count: number };
+      const id = input.id ?? 'economic:reopen:' + period.startMs + ':' + period.endMs + ':' + (Number(countRow.count) + 1);
+      const reopened = economicEvent({
+        id,
+        kind: 'close_reopened',
+        subject: period.subject,
+        occurredAt: period.end,
+        recordedAt,
+        amount: null,
+        sourceEventIds: [state.activeFinalizationId],
+        reversalOf: null,
+        metadata: {
+          closeSchemaVersion: 1,
+          periodStartMs: period.startMs,
+          periodEndMs: period.endMs,
+          closeEventId: state.activeFinalizationId,
+          reason: input.reason.trim(),
+        },
+        schemaVersion: 1,
+      });
+      this.appendCanonical(reopened, serializeEconomicEvent(reopened));
+      return Object.freeze({
+        status: 'reopened' as const,
+        eventId: reopened.id,
+        periodStartMs: period.startMs,
+        periodEndMs: period.endMs,
+        recordedAt,
+        reason: input.reason.trim(),
+        reopenedFinalizationId: state.activeFinalizationId,
+      });
+    });
+  }
+
   append(value: EconomicEvent | EconomicEventInput): EconomicAppendResult {
     const item = economicEvent(value);
     const encoded = serializeEconomicEvent(item);
-    return this.transaction(() => this.appendCanonical(item, encoded));
+    return this.transaction(() => {
+      const existing = this.db.prepare('SELECT event_id FROM economic_events WHERE event_id = ?').get(item.id);
+      if (existing !== undefined) return this.appendCanonical(item, encoded);
+      this.assertPeriodOpenForEvent(item);
+      return this.appendCanonical(item, encoded);
+    });
   }
 
   /**
@@ -361,6 +667,9 @@ export class EconomicLedger {
    */
   appendWithinTransaction(value: EconomicEvent | EconomicEventInput): EconomicAppendResult {
     const item = economicEvent(value);
+    const existing = this.db.prepare('SELECT event_id FROM economic_events WHERE event_id = ?').get(item.id);
+    if (existing !== undefined) return this.appendCanonical(item, serializeEconomicEvent(item));
+    this.assertPeriodOpenForEvent(item);
     return this.appendCanonical(item, serializeEconomicEvent(item));
   }
 

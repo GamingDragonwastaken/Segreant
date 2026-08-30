@@ -30,6 +30,14 @@
   through an explicit `effective` basis; the immutable source and correction
   event IDs remain inspectable while the legacy request row stays a compatibility
   projection;
+- a period can be finalized as an immutable, half-open snapshot whose digest
+  binds every in-period event known at the recording boundary, its exact
+  basis-separated balances, and its source-event set; status is replayable at
+  an `asOf` recording boundary;
+- reopening is an additive control event with an explicit reason. It preserves
+  the prior close and permits late evidence only after the lifecycle records
+  that reopening; a competing close is surfaced as `conflicted`, never chosen
+  silently.
 
 ## Invariants
 
@@ -56,9 +64,19 @@
 - legacy numeric request rows are not backfilled into exact Money without evidence;
 - when an exact request already exists, a numeric-only reprice is refused rather
   than allowing the compatibility row and economic history to diverge;
+- close controls have no monetary amount, occur exactly at the exclusive period
+  end, and are recorded no earlier than that end;
+- a finalization's source IDs are sorted, unique and exactly equal to every
+  non-control event in the period visible at its recording boundary; its
+  event count, digest and basis-separated balances are recomputed on replay;
+- an in-period event cannot be appended while its period is `finalized` or
+  `conflicted`; reopening is explicit and does not delete or rewrite history;
+- a malformed, duplicate-transition or competing close never degrades to
+  `open` or selects a winner: the status is `conflicted` and downstream
+  finalization is refused;
 
 ## Verify
 
 ```bash
-node --test --experimental-strip-types test/economic-events.test.ts
+node --test --experimental-strip-types test/economic-events.test.ts test/economic-close.test.ts
 ```
