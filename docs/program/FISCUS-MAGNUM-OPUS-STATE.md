@@ -47,6 +47,7 @@ Controlling architecture:
 - Local candidate normalized source-link migration (not yet published): `8fcd2624df2a2041fc2709c0827907e17216be34`
 - Local candidate exact budget projection migration (not yet published): `05f26e6110b45a03e34d27d42890ca2535ece6fd`
 - Local candidate exact economic CLI inspection surface (not yet published): `e3a280fb1d1ab3874b946259e251ab8b5ffbf3c0`
+- Local candidate additive price-correction lineage (not yet published): `2b811730a1a7a56a5a2acfe6840e5af205ddf162`
 - Local candidate verification: 1,046 root tests total (1,042 pass, 0 fail, 4 platform-conditional skips), root/browser typecheck, build, and isolated-cache package dry-run pass. No GitHub Actions run exists for these local-only commits because the push was refused by the Codex usage/approval limit.
 - Remaining-work audit commit: `5e5a82843154a6fd04e0017538919108c5ff06f1`
 - Luna resume-protocol commit: `5c4de94cf7af0a218ecd10946ac91577fdd9eae7`
@@ -150,9 +151,10 @@ The reconciliation kernel path is now end-to-end for this vertical. Legacy reque
 - [x] Normalized economic source links (`8fcd262`) are foreign-key and append-only protected, backfilled deterministically for pre-link rows, and cross-checked against canonical event JSON on every reload so direct SQLite writes cannot create an unlinked economic graph.
 - [x] Exact budget projection migration (`05f26e6`) uses complete charge-event coverage for daily, session, and runaway enforcement, preserves live-only/imported scope, rebases only within the explicit `effective` budget-policy comparison basis, and falls back to numeric compatibility totals when legacy rows remain unresolved.
 - [x] Exact economic CLI inspection (`e3a280f`) exposes JSON-safe role-aware balances, canonical Money strings, source bases, event IDs and unresolved legacy coverage through `fiscus economic --json` (`--days N`/`--all`).
-- [x] Local verification at this candidate: 1,046 total root tests, 1,042 pass, 0 fail, 4 platform-conditional skips; root/browser typechecks, build, focused economic/request tests, and isolated-cache package dry-run pass.
+- [x] Additive price-correction lineage (`2b81173`) emits exact signed deltas with typed previous/replacement amounts, restricts local repricing to one estimated/list-price source, rejects provider/billed relabelling and repeated corrections, and prevents dependent records from predating their sources.
+- [x] Local verification at this candidate: 1,048 total root tests, 1,044 pass, 0 fail, 4 platform-conditional skips; root/browser typechecks, build, focused economic/request/correction tests, and isolated-cache package dry-run pass.
 
-This is a local candidate, not a remote or release checkpoint. Legacy `REAL` request/allocation/value/export consumers remain compatibility projections for now, and event-role/conservation, correction, FX, allocation, and close semantics remain open. The economic ledger has an operator inspection command but no `/api/economic` or dashboard surface yet. GitHub publication and exact-SHA CI are external gates currently blocked by the Codex usage/approval limit.
+This is a local candidate, not a remote or release checkpoint. Legacy `REAL` request/allocation/value/export consumers remain compatibility projections for now, and event-role/conservation, correction integration, FX, allocation, and close semantics remain open. The economic ledger has an operator inspection command but no `/api/economic` or dashboard surface yet. GitHub publication and exact-SHA CI are external gates currently blocked by the Codex usage/approval limit.
 
 ## Completed in first GPT-5.6 Sol tranche
 
@@ -186,7 +188,7 @@ The branch is still not a final product-completion baseline. M1 and later audit 
 
 ## Exact next actions
 
-1. Migrate authoritative request/budget/allocation/reconciliation/export paths to exact Money/Rate; the local candidate now has bundled canonical exact rate source, live proxy/import issuance, exact budget enforcement under complete coverage, and CLI inspection, but refreshed-card provenance, API/dashboard exposure and legacy allocation/value/export read-model migration remain.
+1. Implement historical exact FX translation and connect additive corrections to an effective economic projection; then migrate authoritative request/budget/allocation/reconciliation/export paths to exact Money/Rate. The local candidate now has bundled canonical exact rate source, live proxy/import issuance, exact budget enforcement under complete coverage, CLI inspection and bounded local correction lineage, but refreshed-card provenance, API/dashboard exposure and legacy allocation/value/export read-model migration remain.
 2. Make kernel issuance unavoidable at every consequential product boundary, then introduce WorkUnit/OutcomeAdapter migration.
 3. Keep every new claim and decision on the kernel path; add regression/property/adversarial tests before widening capability.
 4. After each coherent slice, update this state and the audit/evidence registers with the exact local SHA; add a remote SHA and CI run only after publication is actually verified.

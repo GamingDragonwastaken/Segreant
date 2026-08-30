@@ -103,3 +103,7 @@
 ## D-026 — Economic inspection is a CLI-first, JSON-safe surface
 **Decision:** Expose the economic ledger first through `fiscus economic`, with canonical Money strings, event roles, source bases, event IDs and unresolved legacy coverage. Keep the initial surface read-only and CLI-first; add API/dashboard bindings only after a shared contract is defined.
 **Reason:** Operators need inspectable evidence immediately, but adding a second browser schema before the canonical contract exists would recreate the documented server/UI drift risk.
+
+## D-027 — Local repricing corrections are bounded additive events
+**Decision:** `price_corrected` targets exactly one `charge_estimated` source whose basis is `list` or `estimated`. It records the typed previous and replacement Money values, emits only their exact signed delta, must be recorded no earlier than its source, and a source may have at most one such correction. Provider-observed and billed restatements require distinct adjustment/reconciliation semantics.
+**Reason:** Reusing the original source for multiple independent restatements would sum deltas and overstate the effective amount; allowing a provider or invoice observation to masquerade as local repricing would erase its authority boundary. A deliberately bounded one-correction rule is conservative until a versioned correction-chain projection is specified.

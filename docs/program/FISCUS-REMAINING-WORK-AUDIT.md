@@ -23,13 +23,16 @@ The reconstruction branch began from the reviewed high-assurance candidate `3157
 
 The original macOS OIDC time-boundary failure has been repaired through injected deterministic verifier time and exact skew-boundary tests. Team-server tests later passed on Windows, Ubuntu and macOS.
 
-The latest local candidate extends the remote reconciliation checkpoint with five
-unpublished commits: economic-event foundation `5ef8b58`, canonicalization/replay
-hardening `5c8d9c6`, exact decimal pricing `ad0b6a4`, and atomic exact request
-issuance `ac0efa7`, plus bundled exact-rate/live issuance `3763c9e`, role-aware projections/reversal constraints `6285bcc`, normalized source links `8fcd262`, exact budget projection migration `05f26e6`, and exact economic CLI inspection `e3a280f`. Local verification at that candidate is 1,046 tests (1,042
-pass, 0 fail, 4 platform-conditional skips), root/browser typecheck, build, and
-isolated-cache package dry-run. These identities are not remote/CI evidence until
-the blocked push succeeds.
+The latest local candidate extends the remote reconciliation checkpoint with the
+economic-event foundation `5ef8b58`, canonicalization/replay hardening `5c8d9c6`,
+exact decimal pricing `ad0b6a4`, atomic exact request issuance `ac0efa7`, bundled
+exact-rate/live issuance `3763c9e`, role-aware projections/reversal constraints
+`6285bcc`, normalized source links `8fcd262`, exact budget projection migration
+`05f26e6`, exact economic CLI inspection `e3a280f`, and additive local price
+correction lineage `2b81173`. Local verification at this candidate is 1,048
+tests (1,044 pass, 0 fail, 4 platform-conditional skips), root/browser
+typecheck, build, focused economic checks, and isolated-cache package dry-run.
+These identities are not remote/CI evidence until the blocked push succeeds.
 
 The immediate recovery tranche is green at exact implementation SHA `685b14c57cccf078679a37a929f6234f00522abd`; M1 Evidence/Claim slices are green at `fa36cc380e6883cc868e2e5b46517ae118a038ae`; Derivation/DAG slices are green at `8928bb474ecb93477caa7605c6710b432653a631`; schema-owned persistence is green at `9d8d364013d22f37fc4c3548f57110a26a274b6a`; assumption/event-time/serialization slices are green at `5ab1440e7495a58dcf08083696591e7cf1747d07`; the canonical witness registry is green at `774658431739673183066f3c45dd9d01e84346a2`; hindsight-safe replay/conformance is green at `a7ef58946d941e0e035a38641f59f234b180a0b8`; the first billing kernel vertical is green at `9a0254ab0766057b53569b396f81c1d7c8dd96e2`; and persisted provider/local/residual reconciliation Claims are green at `ec8e67ad79211389ba0b8`. Root typecheck/tests, package smoke, and the configured cross-platform GitHub matrix pass. The broader kernel and product program remains partial/open as recorded below.
 
@@ -81,8 +84,8 @@ Status vocabulary: `CLOSED`, `PARTIAL`, `OPEN`, `RED-SPEC`, `EXTERNAL-GATE`, `SU
 | AII-015 global evidence strength order | PARTIAL | Implement claim-relative admissibility/incomparable profiles. |
 | AII-016 grain not a truth constraint | PARTIAL | Witness primitive exists; enforce in every derivation/aggregation. |
 | AII-017 money not exact end-to-end | PARTIAL | Provider/local/reconciliation kernel paths, bundled exact decimal pricing, live proxy/import exact request issuance, and complete-coverage exact budget enforcement now use exact Money; migrate refreshed-card provenance and legacy request ledger/DB/allocation/API/CSV authoritative paths and remove accounting-number authority. |
-| AII-018 analytical economic subledger absent | PARTIAL | Immutable typed economic events, canonical exact pricing, role-aware append-only projections and basic reversal constraints now exist as a local candidate; complete event-role/conservation semantics, corrections, FX, allocations, close state and product integration remain. |
-| AII-019 immutability inconsistent | PARTIAL | Schema-owned SQLite persistence, digest/trigger checks, assumption/witness/source links, event-time replay, billing Claims and atomic exact request-charge issuance are implemented/tested; legacy repricing/read models and complete event projections remain. |
+| AII-018 analytical economic subledger absent | PARTIAL | Immutable typed economic events, canonical exact pricing, role-aware append-only projections, and one-source additive local price-correction lineage now exist as a local candidate; complete event-role/conservation semantics, correction integration, FX, allocations, close state and product integration remain. |
+| AII-019 immutability inconsistent | PARTIAL | Schema-owned SQLite persistence, digest/trigger checks, assumption/witness/source links, event-time replay, billing Claims, atomic exact request-charge issuance and validated additive price corrections are implemented/tested; legacy repricing/read models and complete event projections remain. |
 | AII-020 receipt mistaken for truth | PARTIAL | Separate trust dimensions in product UX and interoperable attestation semantics. |
 | AII-021 causal inference/design gaps | OPEN | ITT, blocks, joint inference, missingness, interference, precision and transportability. |
 | AII-022 two causal systems | OPEN | One estimand/design/estimator registry; version/archive superseded path. |
@@ -111,7 +114,7 @@ The next worker should not start another design discussion.
 4. **COMPLETED at `685b14c`:** Migrate every affected realization/demo fixture to explicit required lifecycle evidence; no unknown gate is promoted to pass.
 5. **COMPLETED at `685b14c`:** Observe GitHub Actions run `33253835881` as green on all configured jobs.
 6. **COMPLETED in the following documentation checkpoint:** update program state, audit, decision, and evidence registers with exact implementation/CI identities.
-7. **NEXT:** Finish the billing/reconciliation vertical: provider-observation and local-capture Evidence, persisted reconciliation Claims, and exact Money/Rate migration of authoritative paths. The local candidate now carries bundled exact decimal pricing into live proxy/import writers; refreshed-card provenance, event-role/conservation semantics, and legacy consumer migration remain.
+7. **NEXT:** Continue the economic migration with historical FX lineage and then integrate exact corrections into the effective projection. The local candidate now carries bundled exact decimal pricing into live proxy/import writers, exact budget enforcement, CLI inspection, and a bounded local reprice event; refreshed-card provenance, FX/allocation/close semantics, and legacy consumer migration remain.
 
 ## Trusted Epistemic Kernel remaining work
 
@@ -134,6 +137,13 @@ Migrate authoritative monetary paths to exact Money/Rate: request metering, pric
 Expand cost basis semantics to distinguish list, contracted, metered-estimated, provider-observed, billed, effective, allocated, full-workflow, marginal, avoidable, committed, sunk and opportunity cost where data supports them.
 
 Implement an immutable economic event subledger for usage, estimated/provider charges, bills, prices/corrections, credits, discounts, commitments, tax, FX, allocations/reversals, true-ups and write-offs. Current balances are deterministic projections, never history rewritten in place.
+
+The current correction slice is intentionally bounded: `price_corrected` may
+target exactly one locally estimated/list-price charge, records typed previous
+and replacement Money, is additive and recorded after its source, and rejects a
+second correction for the same source. Provider/billed restatements and a
+multi-correction chain remain separate future semantics rather than being
+silently conflated with local repricing.
 
 Property-test conservation, compatible-basis arithmetic, reversal, reprice/reconciliation and replay.
 
