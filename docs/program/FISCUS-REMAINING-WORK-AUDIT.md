@@ -38,9 +38,10 @@ dashboard/API projection `ccda34d` and coding value-attribution lineage
 `3871b6f`, followed by grouped usage/cohort/model/series/budget migration
 `5e54250`, exact frontier/time-reclaimed projections `3c71c51`, modern
 Value-view disclosure `ebbc571`, exact receipt v2 `443c74d`, exact
-team-rollup v2 `2d567c2`, and bounded classic Value/API exact-coverage
-parity `16c5a15`. Local verification at this candidate is 1,086 root
-tests (1,082 pass, 0 fail, 4 platform-conditional skips), team-server 61/61,
+team-rollup v2 `2d567c2`, bounded classic Value/API exact-coverage
+parity `16c5a15`, and immutable refreshed-card provenance
+`47ed621`. Local verification at this candidate is 1,088 root tests
+(1,084 pass, 0 fail, 4 platform-conditional skips), team-server 61/61,
 root/team typecheck, full Node/browser build, and npm pack dry-run.
 These identities are not remote/CI evidence until the blocked push succeeds.
 
@@ -62,8 +63,10 @@ model/task cells and manual-time strata, and the modern Value view checkpoint
 `ebbc571` renders complete/partial/legacy status and unresolved counts beside
 the spend figure. Signed receipts and team transport now have additive exact
 v2 paths, and the classic Value view now discloses the same exact/partial/legacy
-coverage for mature, usage, budget, project and team sections. Broader generated
-dashboard/API contracts, refreshed-card provenance and period close remain open.
+coverage for mature, usage, budget, project and team sections. Immutable
+refreshed-card provenance now records hash-bound source/acceptance metadata for
+each new card; broader generated dashboard/API contracts and period close remain
+open.
 
 The receipt checkpoint at `443c74d` adds a strict v2 signed body for complete
 exact-covered units, with canonical effective Money/source/correction lineage
@@ -158,13 +161,20 @@ project lineage to the browser Value contract. It does not close AII-029/030:
 the universal generated capability/schema contract and all non-Value browser
 surfaces remain future work.
 
+**Pricing provenance addendum (2026-08-30):** `47ed621` adds immutable
+hash-addressed card sidecars with source kind, redacted source identity,
+acceptance time, declared upstream date, validators and conditional-request
+metadata. Request cohorts expose the sidecar when it is available; missing or
+tampered historical sidecars remain explicitly unavailable rather than being
+reconstructed from the current card.
+
 The next worker should not start another design discussion.
 
-**Execution-order override after `16c5a15`:** the versioned exact team-rollup
-protocol/storage migration and bounded classic Value/API exact-coverage parity
-are complete locally. Proceed next with the remaining generated dashboard/API
-contract work, then refreshed-card provenance, then period-close semantics; live
-Postgres execution and remote publication remain explicit gates.
+**Execution-order override after `47ed621`:** the versioned exact
+team-rollup protocol/storage migration, bounded classic Value/API exact-coverage
+parity and refreshed-card provenance are complete locally. Proceed next with
+the remaining generated dashboard/API contract work, then period-close
+semantics; live Postgres execution and remote publication remain explicit gates.
 
 1. **COMPLETED at `b27c0ef`:** Implement the RED robust decision module. Strict dominance is the only proof-level certificate; minimax regret and perfect-information VOI remain explicitly named rules with assumptions and cost.
 2. **COMPLETED at `5647c67`:** Implement additive transitive revocation closure. Dependent descendants are invalidated while independent siblings remain outside the closure; cycles are safe, duplicate edges fail closed, and history is not deleted.
@@ -174,7 +184,8 @@ Postgres execution and remote publication remain explicit gates.
 6. **COMPLETED in the following documentation checkpoint:** update program state, audit, decision, and evidence registers with exact implementation/CI identities.
 7. **COMPLETED at `2d567c2`:** Add the versioned exact team-rollup protocol/storage migration. Complete exact-covered projects emit signed v2 lineage; v1 remains the compatibility fallback; the server validates v2 before insertion and stores additive `economic_json` JSONB alongside the signed raw body. Local root 1,084/1,080 and team-server 61/61 are green.
 8. **COMPLETED (bounded) at `16c5a15`:** Make the legacy Value renderer and browser Value contract disclose exact/partial/legacy effective coverage for mature, usage, budget, project and team sections, with missing coverage rendered as `legacy_unknown`. The universal generated dashboard/schema contract remains open.
-9. **NEXT:** Complete the remaining generated dashboard/API contract work, then add refreshed-card provenance and period-close semantics. Live Postgres execution, trust-anchor governance and GitHub publication remain explicit gates.
+9. **COMPLETED (bounded) at `47ed621`:** Preserve immutable hash-addressed pricing-card provenance with source kind, redacted source identity, acceptance time, upstream date, conditional metadata and strict card/sidecar validation; expose it through pricing coverage, CLI text and the classic pricing health card. Missing or tampered historical sidecars remain unavailable.
+10. **NEXT:** Complete the remaining generated dashboard/API contract work, then implement period-close semantics. Live Postgres execution, trust-anchor governance and GitHub publication remain explicit gates.
 
 ## Trusted Epistemic Kernel remaining work
 

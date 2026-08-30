@@ -54,6 +54,12 @@
   the browser contract types project lineage explicitly. This closes only the
   bounded Value parity gap, not the universal generated dashboard/schema drift.
 
+- Pricing-card lineage is now preserved separately from the mutable active-cache
+  pointer: each newly accepted card has a hash-addressed immutable sidecar with
+  source/acceptance metadata, and historical cohorts expose it only when the
+  card and sidecar validate together. Pre-sidecar or tampered history remains
+  unavailable; a local rate card is never provider-billed evidence.
+
 ## Invariants
 
 - **`realizedValueUsd` is two different claims and they never merge.**
