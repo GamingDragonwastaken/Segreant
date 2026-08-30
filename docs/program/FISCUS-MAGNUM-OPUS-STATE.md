@@ -45,7 +45,8 @@ Controlling architecture:
 - Local candidate bundled exact-rate integration and live proxy/import issuance (not yet published): `3763c9e86a81c365c7fe08e1ddf4bb9a5f7edb76`
 - Local candidate economic role-aware projections and reversal constraints (not yet published): `6285bccd0f223075bc97c30f34a76db9f9377b98`
 - Local candidate normalized source-link migration (not yet published): `8fcd2624df2a2041fc2709c0827907e17216be34`
-- Local candidate verification: 1,043 root tests total (1,039 pass, 0 fail, 4 platform-conditional skips), root/browser typecheck, build, and isolated-cache package dry-run pass. No GitHub Actions run exists for these local-only commits because the push was refused by the Codex usage/approval limit.
+- Local candidate exact budget projection migration (not yet published): `05f26e6110b45a03e34d27d42890ca2535ece6fd`
+- Local candidate verification: 1,045 root tests total (1,041 pass, 0 fail, 4 platform-conditional skips), root/browser typecheck, build, and isolated-cache package dry-run pass. No GitHub Actions run exists for these local-only commits because the push was refused by the Codex usage/approval limit.
 - Remaining-work audit commit: `5e5a82843154a6fd04e0017538919108c5ff06f1`
 - Luna resume-protocol commit: `5c4de94cf7af0a218ecd10946ac91577fdd9eae7`
 - Base high-assurance PR: #8 (`codex/high-assurance-foundation` -> `main`)
@@ -146,9 +147,10 @@ The reconciliation kernel path is now end-to-end for this vertical. Legacy reque
 - [x] Bundled exact-rate integration (`3763c9e`) carries canonical decimal companions in the shipped card and threads exact charge totals through the live proxy, Claude Code, Codex, OpenCode, and synthetic-demo request writers; numeric-only refreshed cards remain explicitly non-exact.
 - [x] Role-aware economic projections and relation checks (`6285bcc`) separate usage/charge/price/adjustment/translation/allocation/control flows, enforce kind/basis compatibility, and reject incompatible or over-sized allocation reversals without changing the immutable envelope version.
 - [x] Normalized economic source links (`8fcd262`) are foreign-key and append-only protected, backfilled deterministically for pre-link rows, and cross-checked against canonical event JSON on every reload so direct SQLite writes cannot create an unlinked economic graph.
-- [x] Local verification at this candidate: 1,043 total root tests, 1,039 pass, 0 fail, 4 platform-conditional skips; root/browser typechecks, build, focused economic/request tests, and isolated-cache package dry-run pass.
+- [x] Exact budget projection migration (`05f26e6`) uses complete charge-event coverage for daily, session, and runaway enforcement, preserves live-only/imported scope, rebases only within the explicit `effective` budget-policy comparison basis, and falls back to numeric compatibility totals when legacy rows remain unresolved.
+- [x] Local verification at this candidate: 1,045 total root tests, 1,041 pass, 0 fail, 4 platform-conditional skips; root/browser typechecks, build, focused economic/request tests, and isolated-cache package dry-run pass.
 
-This is a local candidate, not a remote or release checkpoint. Legacy `REAL` request/budget/allocation/value/export consumers remain compatibility projections for now, and event-role/conservation, correction, FX, allocation, and close semantics remain open. GitHub publication and exact-SHA CI are external gates currently blocked by the Codex usage/approval limit.
+This is a local candidate, not a remote or release checkpoint. Legacy `REAL` request/allocation/value/export consumers remain compatibility projections for now, and event-role/conservation, correction, FX, allocation, and close semantics remain open. GitHub publication and exact-SHA CI are external gates currently blocked by the Codex usage/approval limit.
 
 ## Completed in first GPT-5.6 Sol tranche
 
@@ -182,7 +184,7 @@ The branch is still not a final product-completion baseline. M1 and later audit 
 
 ## Exact next actions
 
-1. Migrate authoritative request/budget/allocation/reconciliation/export paths to exact Money/Rate; the local candidate now has a bundled canonical exact rate source and live proxy/import issuance, but refreshed-card provenance, legacy read-model migration, and enforcement consumers remain.
+1. Migrate authoritative request/budget/allocation/reconciliation/export paths to exact Money/Rate; the local candidate now has bundled canonical exact rate source, live proxy/import issuance, and exact budget enforcement under complete coverage, but refreshed-card provenance and legacy allocation/value/export read-model migration remain.
 2. Make kernel issuance unavoidable at every consequential product boundary, then introduce WorkUnit/OutcomeAdapter migration.
 3. Keep every new claim and decision on the kernel path; add regression/property/adversarial tests before widening capability.
 4. After each coherent slice, update this state and the audit/evidence registers with the exact local SHA; add a remote SHA and CI run only after publication is actually verified.

@@ -64,6 +64,11 @@ two domain callers goes in `rows.ts`.
   same SQLite transaction. `economicAmountForRequest()` reads that exact event;
   rows without it remain legacy numeric compatibility records and are never
   silently reconstructed.
+- **Exact budget projections are coverage-aware.** `exactSpendBetween()`,
+  `exactSpendForSession()`, and `exactSpendInWindow()` sum charge-role events in
+  an explicit `effective` control basis while preserving source bases and
+  live/import scope. BudgetGuard uses them when coverage is complete and falls
+  back to numeric aggregates only for unresolved legacy rows.
 - **Billing kernel issuance is explicit and additive.** `issueBillingImportToKernel()`
   translates a validated operator export through exact `Money` into canonical
   Evidence and billed Claims; `issueOpenAiCostsObservationToKernel()` does the

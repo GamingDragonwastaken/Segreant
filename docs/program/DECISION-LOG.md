@@ -95,3 +95,7 @@
 ## D-024 — Economic source references have a normalized immutable projection
 **Decision:** Persist every `sourceEventIds` edge in `economic_event_sources` with foreign keys and append-only triggers. The ledger backfills links from canonical pre-link event bytes during upgrade and refuses any reload where normalized links diverge from the event JSON.
 **Reason:** JSON-only references cannot be enforced by SQLite and can be bypassed by direct writes. A normalized side table gives the database a referential-integrity boundary while retaining the canonical event envelope as the semantic source.
+
+## D-025 — Budget enforcement uses a declared effective control projection
+**Decision:** When every request in a governed window has one valid charge-role economic event, BudgetGuard sums exact Money after an explicit `effective` control projection that retains source bases and live/import scope. If any legacy request is unresolved, it falls back to the existing numeric compatibility aggregate; it never silently treats incomplete exact coverage as zero.
+**Reason:** Budget caps are operational controls over local observed/estimated spend, not provider-billing claims. A named policy projection makes the cross-basis comparison explicit while preserving safe behavior for pre-migration rows.
