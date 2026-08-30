@@ -29,8 +29,9 @@
   model, and mature rollups disclose `exact`, `partial`, or `legacy_unknown`
   coverage separately from the legacy numeric compatibility fields. A price
   correction updates this lineage transactionally; it never changes funnel
-  outcomes. Usage, cohort, frontier, receipts and team rollups remain explicit
-  follow-on migrations until their grouped exact read models exist.
+  outcomes. Usage, cohort and budget advice now consume the same grouped exact
+  read model; frontier presentation, receipts and team rollups remain explicit
+  follow-on migrations until their public compatibility boundaries are versioned.
 
 ## Invariants
 

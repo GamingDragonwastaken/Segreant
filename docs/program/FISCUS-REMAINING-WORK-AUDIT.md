@@ -35,9 +35,10 @@ exact-money allocation projection `d8d260f`, schema-owned exact allocation
 persistence `3fa9a20`, adversarial replay/parity hardening `baee5c6`, and exact
 economic export/CLI surface `c1f7ec4`, plus the read-only exact economic
 dashboard/API projection `ccda34d` and coding value-attribution lineage
-`3871b6f`. Local verification at this candidate is
-1,070
-tests (1,066 pass, 0 fail, 4 platform-conditional skips), root/browser
+`3871b6f`, followed by grouped usage/cohort/model/series/budget migration
+`5e54250`. Local verification at this candidate is
+1,076
+tests (1,072 pass, 0 fail, 4 platform-conditional skips), root/browser
 typecheck, build, focused economic checks, and isolated-cache package dry-run.
 These identities are not remote/CI evidence until the blocked push succeeds.
 
@@ -47,6 +48,12 @@ checks, carries effective Money/source lineage on coding WorkUnits and mature
 rollups, and refreshes that lineage during transactional repricing. The
 numeric fields remain compatibility projections; usage, cohort, frontier,
 receipts and team-rollup consumers still require their own grouped migration.
+
+The grouped migration at `5e54250` extends that seam to exact session, user,
+provider/model and fixed-width time buckets. Usage, cohort and budget advice
+now consume those groups and expose complete/partial/legacy coverage; numeric
+fields remain compatibility projections, while frontier presentation, signed
+receipts/team transport, refreshed-card provenance and period close remain open.
 
 The immediate recovery tranche is green at exact implementation SHA `685b14c57cccf078679a37a929f6234f00522abd`; M1 Evidence/Claim slices are green at `fa36cc380e6883cc868e2e5b46517ae118a038ae`; Derivation/DAG slices are green at `8928bb474ecb93477caa7605c6710b432653a631`; schema-owned persistence is green at `9d8d364013d22f37fc4c3548f57110a26a274b6a`; assumption/event-time/serialization slices are green at `5ab1440e7495a58dcf08083696591e7cf1747d07`; the canonical witness registry is green at `774658431739673183066f3c45dd9d01e84346a2`; hindsight-safe replay/conformance is green at `a7ef58946d941e0e035a38641f59f234b180a0b8`; the first billing kernel vertical is green at `9a0254ab0766057b53569b396f81c1d7c8dd96e2`; and persisted provider/local/residual reconciliation Claims are green at `ec8e67ad79211389ba0b8`. Root typecheck/tests, package smoke, and the configured cross-platform GitHub matrix pass. The broader kernel and product program remains partial/open as recorded below.
 
@@ -128,7 +135,7 @@ The next worker should not start another design discussion.
 4. **COMPLETED at `685b14c`:** Migrate every affected realization/demo fixture to explicit required lifecycle evidence; no unknown gate is promoted to pass.
 5. **COMPLETED at `685b14c`:** Observe GitHub Actions run `33253835881` as green on all configured jobs.
 6. **COMPLETED in the following documentation checkpoint:** update program state, audit, decision, and evidence registers with exact implementation/CI identities.
-7. **NEXT:** Migrate the remaining value consumers (frontier/model trials, usage, cohort, time-reclaimed, budget advice, receipts and team rollups) onto the effective projection, then add period-close semantics and integrate the exact API payload into dashboard views. The local candidate now carries bundled exact decimal pricing into live proxy/import writers, exact budget enforcement, CLI inspection/export, bounded local repricing, source/rate-bound historical FX, legacy-reprice convergence, schema-owned exact allocation persistence, a read-only exact economic API and coding realization lineage; refreshed-card provenance, effective-projection coverage beyond coding requests, remaining value migration and close semantics remain.
+7. **NEXT:** Migrate the remaining value consumers (frontier presentation, time-reclaimed, signed receipts and team rollups) onto the effective projection, then add period-close semantics and integrate exact coverage into dashboard views. The local candidate now carries bundled exact decimal pricing into live proxy/import writers, exact budget enforcement/advice, CLI inspection/export, bounded local repricing, source/rate-bound historical FX, legacy-reprice convergence, schema-owned exact allocation persistence, read-only exact economic API, coding realization lineage and grouped usage/cohort/model/series reads; refreshed-card provenance, effective-projection coverage beyond grouped requests and close semantics remain.
 
 ## Trusted Epistemic Kernel remaining work
 

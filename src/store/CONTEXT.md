@@ -85,7 +85,10 @@ two domain callers goes in `rows.ts`.
   effective Money plus source/correction IDs, and marks legacy rows unresolved.
   Coding realization attaches that JSON-safe coverage to each WorkUnit; its
   legacy numeric fields remain compatibility projections until downstream value
-  consumers complete the migration.
+  consumers complete the migration. `economicSessionUnits()`,
+  `economicSessionUnitsByUser()`, `economicModelUnits()` and `economicSeries()`
+  are deterministic grouped facades over that same join, so usage/cohort/budget
+  consumers cannot quietly invent a second scope or pricing rule.
 - **Billing kernel issuance is explicit and additive.** `issueBillingImportToKernel()`
   translates a validated operator export through exact `Money` into canonical
   Evidence and billed Claims; `issueOpenAiCostsObservationToKernel()` does the
