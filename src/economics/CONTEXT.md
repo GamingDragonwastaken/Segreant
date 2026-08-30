@@ -20,6 +20,9 @@
 - local repricing is an additive, typed `price_corrected` event that retains
   the previous and replacement amounts, targets one estimated/list-price
   charge, and cannot be recorded before that source;
+- historical FX is an additive `fx_translated` derivative with one monetary
+  source, an exact rational rate, explicit rate provenance/effective time,
+  source-to-target convention and an explicit no-rounding policy;
 - projections are deterministic and can be replayed at a recorded-time boundary;
 - accounting-facing request charges can be issued as one exact Money event on the
   same Store transaction as the compatibility request row.
@@ -37,6 +40,9 @@
 - every dependent event is recorded no earlier than each source it references;
 - provider-observed and billed corrections use their own provider/billing
   adjustment semantics; they cannot be relabelled as local repricing;
+- `fx_translated` must reproduce its target exactly from the retained source,
+  rate and basis; non-terminating conversions are refused until a quantization
+  policy is explicitly specified;
 - allocation reversals must target a compatible, non-negative allocation and
   cannot exceed it;
 - source-event IDs must already exist before a new event is appended;
