@@ -41,6 +41,7 @@ const REALIZATION_ASSUMPTIONS = Object.freeze([
   'Terminal realization means every gate in the declared legacy coding contract was observed pass; it is not a causal or business-value claim.',
   'Git, signal and proposal gates are local Fiscus observations; provider authority, human approval and downstream business outcomes are not established.',
   'The retained effective amount is exact request-lineage spend on the work window, not realized economic value or settlement; a window-scoped amount is project-blind and is not commit-specific cost proof.',
+  'Completeness is bounded to the retained Fiscus observation boundary; absence of an unlinked incident is not a universal claim that no incident occurred.',
 ]);
 
 interface ParsedUnit {
@@ -258,7 +259,7 @@ export function buildCodingRealizationKernelIssuance(input: CodingRealizationKer
     completeness: {
       status: 'complete',
       method: 'coding_realization_funnel',
-      coveredEventTypes: ['git_commit', 'proposal_capture', 'gate_signal', 'economic_request'],
+      coveredEventTypes: ['git_commit', 'proposal_capture', 'gate_signal', 'revert_scan', 'economic_request'],
       coveredScope: scopeValue,
       coveredTime: validTime,
     },

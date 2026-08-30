@@ -24,7 +24,7 @@ import { realizationFromStore } from '../src/value/realization.ts';
 import { computeFrontier } from '../src/value/frontier.ts';
 
 const WINDOW_START = 1_000;
-const WINDOW_END = 5_000;
+const WINDOW_END = 3_000;
 
 function req(over: Partial<RequestRow>): RequestRow {
   return {
@@ -67,7 +67,7 @@ function saveUnit(store: Store, costScope: CostScope, over: Record<string, unkno
   const json = unitJson(over);
   const u = JSON.parse(json) as { hash: string; tsEpochMs: number; attributedCostUsd: number; maturing: boolean };
   store.saveRealizationUnits([{
-    commitHash: u.hash, project, tsEpochMs: u.tsEpochMs, computedAtMs: 0,
+    commitHash: u.hash, project, tsEpochMs: u.tsEpochMs, computedAtMs: WINDOW_END,
     attributedCostUsd: u.attributedCostUsd, maturing: u.maturing, realized: true, unitJson: json, costScope,
   }]);
 }
@@ -122,6 +122,7 @@ test('reprice: an exact realization snapshot follows the effective correction li
   const sourceAmount = money('3', 'USD', 'estimated');
   store.insertRequest(req({ economicAmount: sourceAmount }));
   saveUnit(store, 'project', {
+    acceptance: 1,
     economic: {
       amount: { coefficient: '3', scale: 0, currency: 'USD', basis: 'effective' },
       amountText: '3',
