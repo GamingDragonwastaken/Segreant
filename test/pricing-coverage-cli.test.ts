@@ -57,9 +57,13 @@ test('pricing --coverage is read-only and returns immutable local pricing proven
       provider: 'openai', model: 'gpt-5', costBasis: 'local_list_price', rateCardSha256: 'c'.repeat(64),
       rateCardSourceKind: 'bundled', rateMatchKind: 'exact_provider', rateMatchProvider: 'openai',
       rateMatchModel: 'gpt-5', requests: 1, costUsd: 1.25, estimatedCostUsd: 0, inputTokens: 100, outputTokens: 20,
+      rateCardProvenance: null,
     }]);
     assert.match(body.boundary, /does not fetch pricing, reprice history/i);
     assert.equal(result.stdout.includes('provider-billed'), true);
+    const human = await runCli(['pricing', '--coverage', '--all'], dbPath, home);
+    assert.equal(human.code, 0, human.stderr);
+    assert.match(human.stdout, /card provenance unavailable/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

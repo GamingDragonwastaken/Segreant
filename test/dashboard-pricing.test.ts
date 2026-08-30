@@ -119,6 +119,10 @@ test('GET /api/overview exposes local rate-card freshness and estimated-rate cov
     assert.match(html, /fiscus pricing --refresh/);
     assert.match(html, /Recorded basis/);
     assert.match(html, /immutable evidence cohort/);
+    assert.match(html, /rateCardProvenance/);
+    assert.match(html, /accepted locally/);
+    assert.match(html, /card provenance unavailable/);
+    assert.match(html, /esc\(cardProvenanceLine\)/);
   } finally {
     await srv.close();
     store.close();

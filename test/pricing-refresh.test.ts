@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, existsSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -9,11 +9,13 @@ import {
   loadPricing,
   MAX_PRICING_MANIFEST_BYTES,
   pricingStatus,
+  pricingCardProvenance,
   rateFor,
   refreshPricing,
   refreshPricingFromResponses,
   transformLiteLLMManifest,
 } from '../src/cost/pricing.ts';
+import { Store } from '../src/store/db.ts';
 
 // These exercise the refresh/override path against an isolated FISCUS_HOME so the
 // real ~/.fiscus is never touched. node's test runner isolates each FILE in
@@ -173,6 +175,85 @@ test('accepted cards retain a hash-addressed local archive and verified provenan
   const status = pricingStatus();
   assert.equal(status.cacheIntegrity, 'verified');
   assert.equal(status.cardSha256, result.cardSha256);
+});
+
+test('each accepted card retains immutable hash-bound provenance and coverage exposes it', () => {
+  const home = freshHome();
+  const first = applyPricingManifest(manifest(66), {
+    sourceUrl: 'https://pricing.example.test/models.json?private=never-display',
+    sourceKind: 'native_manifest',
+    fetchedAt: '2026-08-29T10:00:00.000Z',
+    etag: '"card-v1"',
+  });
+  assert.equal(first.ok, true);
+  const firstSha = first.cardSha256!;
+  const firstProvenance = pricingCardProvenance(firstSha);
+  assert.ok(firstProvenance);
+  assert.equal(firstProvenance!.cardSha256, firstSha);
+  assert.equal(firstProvenance!.sourceUrl, 'https://pricing.example.test/models.json');
+  assert.equal(firstProvenance!.sourceUrlSha256?.length, 64);
+  assert.equal(firstProvenance!.sourceKind, 'native_manifest');
+  assert.equal(firstProvenance!.fetchedAt, '2026-08-29T10:00:00.000Z');
+  assert.equal(firstProvenance!.etag, '"card-v1"');
+  assert.equal(existsSync(join(home, 'pricing', 'cards', firstSha + '.provenance.json')), true);
+
+  const second = applyPricingManifest(manifest(77), {
+    sourceUrl: 'https://pricing.example.test/models.json?private=never-display',
+    sourceKind: 'native_manifest',
+    fetchedAt: '2026-08-29T11:00:00.000Z',
+    etag: '"card-v2"',
+  });
+  assert.equal(second.ok, true);
+  assert.deepEqual(pricingCardProvenance(firstSha), firstProvenance, 'a later card must not rewrite an earlier card provenance record');
+  assert.equal(pricingCardProvenance(second.cardSha256!)!.etag, '"card-v2"');
+
+  const store = new Store(':memory:');
+  const cost = computeCost('anthropic', 'claude-opus-4-8', {
+    inputTokens: 1_000,
+    outputTokens: 100,
+    cacheWriteTokens: 0,
+    cacheReadTokens: 0,
+  });
+  store.insertRequest({
+    requestId: 'card-provenance-request',
+    sessionId: null,
+    tsEpochMs: Date.now(),
+    provider: 'anthropic',
+    model: 'claude-opus-4-8',
+    project: 'provenance',
+    taskWeight: 1,
+    inputTokens: 1_000,
+    outputTokens: 100,
+    cacheWriteTokens: 0,
+    cacheReadTokens: 0,
+    reasoningTokens: 0,
+    costUsd: cost.costUsd,
+    estimated: cost.estimated,
+    streamed: true,
+    statusCode: 200,
+    durationMs: 1,
+    pricing: cost.pricing,
+  });
+  const bucket = store.pricingEvidenceByModel(0, Date.now() + 1_000)[0]!;
+  assert.equal(bucket.rateCardSha256, second.cardSha256);
+  assert.equal(bucket.rateCardProvenance?.cardSha256, second.cardSha256);
+  assert.equal(bucket.rateCardProvenance?.fetchedAt, '2026-08-29T11:00:00.000Z');
+  store.close();
+});
+
+test('card provenance is rejected when its archive sidecar no longer matches the card identity', () => {
+  const home = freshHome();
+  const result = applyPricingManifest(manifest(88), {
+    sourceUrl: 'https://pricing.example.test/models.json',
+    sourceKind: 'native_manifest',
+    fetchedAt: '2026-08-29T12:00:00.000Z',
+  });
+  assert.equal(result.ok, true);
+  const sidecar = join(home, 'pricing', 'cards', result.cardSha256! + '.provenance.json');
+  const body = JSON.parse(readFileSync(sidecar, 'utf8')) as Record<string, unknown>;
+  body.cardSha256 = '0'.repeat(64);
+  writeFileSync(sidecar, JSON.stringify(body), 'utf8');
+  assert.equal(pricingCardProvenance(result.cardSha256!), null);
 });
 
 test('a mismatched active cache recovers only the provenance-named archived card', () => {

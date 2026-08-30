@@ -192,8 +192,13 @@ export async function cmdPricing(flags: Flags): Promise<void> {
         for (const row of provenance.slice(0, 25)) {
           const match = row.rateMatchKind.replaceAll('_', ' ');
           const card = row.rateCardSha256?.slice(0, 12) ?? 'no-card';
+          const cardProvenance = row.rateCardProvenance;
+          const cardDetail = cardProvenance
+            ? cardProvenance.sourceKind + ' · accepted locally ' + cardProvenance.fetchedAt + (cardProvenance.sourceUrl ? ' · ' + cardProvenance.sourceUrl : '')
+            : 'card provenance unavailable';
           console.log(`  ${usd(row.costUsd).padStart(10)}  ${num(row.requests).padStart(5)} req  ${row.provider}/${row.model}`);
           console.log(`                 ${row.costBasis.replaceAll('_', ' ')} · ${match} · ${row.rateCardSourceKind} · ${card}`);
+          console.log('                 card provenance: ' + cardDetail);
         }
         if (provenance.length > 25) console.log(`  ${color(on, C.dim, `… ${provenance.length - 25} more evidence cohorts (use --json for the complete result)`)}`);
       }

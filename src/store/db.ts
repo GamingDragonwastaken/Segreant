@@ -26,7 +26,7 @@ import {
   realpathSync,
 } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
-import { legacyPricingEvidence, type RequestPricingEvidence } from '../cost/pricing.ts';
+import { legacyPricingEvidence, pricingCardProvenance, type PricingCardProvenance, type RequestPricingEvidence } from '../cost/pricing.ts';
 import { pricingEvidenceFromRecord } from './rows.ts';
 import { addMoney, formatMoneyAmount, money, type EconomicBasis, type Money } from '../economics/money.ts';
 import { requestEconomicEvent, requestEconomicEventId } from '../economics/request.ts';
@@ -248,6 +248,8 @@ export interface PricingEvidenceBucket {
   estimatedCostUsd: number;
   inputTokens: number;
   outputTokens: number;
+  /** Immutable card-sidecar metadata; null means the hash is historical/unresolved. */
+  rateCardProvenance: PricingCardProvenance | null;
 }
 
 /**
@@ -998,7 +1000,7 @@ export class Store {
    * call the current pricing table: rows retain their historical evidence.
    */
   pricingEvidenceByModel(startMs: number, endMs: number): PricingEvidenceBucket[] {
-    return this.db
+    const rows = this.db
       .prepare(
         `SELECT provider, model,
                 cost_basis AS costBasis, rate_card_sha256 AS rateCardSha256,
@@ -1012,7 +1014,11 @@ export class Store {
                   rate_match_kind, rate_match_provider, rate_match_model
          ORDER BY costUsd DESC, requests DESC`,
       )
-      .all(startMs, endMs) as unknown as PricingEvidenceBucket[];
+      .all(startMs, endMs) as unknown as Array<Omit<PricingEvidenceBucket, 'rateCardProvenance'>>;
+    return rows.map((row) => ({
+      ...row,
+      rateCardProvenance: row.rateCardSha256 === null ? null : pricingCardProvenance(row.rateCardSha256),
+    }));
   }
 
   /**

@@ -24,7 +24,7 @@ const anOverview = (costUsd: number, requests: number): Overview => ({
   range: '30d',
   generatedAt: '2026-08-01T00:00:00.000Z',
   summary: { requests, costUsd },
-  pricing: { status: { fresh: true }, estimatedCostUsd: 0, estimatedSpendShare: 0 },
+  pricing: { status: { fresh: true }, estimatedCostUsd: 0, estimatedSpendShare: 0, provenance: [] },
   byModel: [], byProject: [], bySource: [], series: [], recent: [],
 });
 

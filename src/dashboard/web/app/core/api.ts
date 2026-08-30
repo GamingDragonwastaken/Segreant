@@ -18,6 +18,36 @@ export interface Summary {
   outputTokens?: number;
 }
 
+export interface PricingCardProvenancePayload {
+  schemaVersion: 1;
+  sourceUrl: string | null;
+  sourceUrlSha256: string | null;
+  sourceKind: string;
+  fetchedAt: string;
+  upstreamDeclaredUpdated: string | null;
+  cardSha256: string;
+  modelCount: number;
+  etag: string | null;
+  lastModified: string | null;
+}
+
+export interface PricingEvidencePayload {
+  provider: string;
+  model: string;
+  costBasis: string;
+  rateCardSha256: string | null;
+  rateCardSourceKind: string;
+  rateMatchKind: string;
+  rateMatchProvider: string | null;
+  rateMatchModel: string | null;
+  requests: number;
+  costUsd: number;
+  estimatedCostUsd: number;
+  inputTokens: number;
+  outputTokens: number;
+  rateCardProvenance: PricingCardProvenancePayload | null;
+}
+
 export interface GroupRow {
   /** The payload's actual key for the thing being grouped. Every grouping
    *  endpoint uses `label`; writing this interface from memory instead of from
@@ -67,9 +97,14 @@ export interface Overview {
   generatedAt: string;
   summary: Summary;
   pricing: {
-    status: { fresh?: boolean; ageDays?: number | null } | string;
+    status: {
+      fresh?: boolean;
+      ageDays?: number | null;
+      cardProvenance?: PricingCardProvenancePayload | null;
+    } | string;
     estimatedCostUsd: number;
     estimatedSpendShare: number;
+    provenance: PricingEvidencePayload[];
   };
   byModel: GroupRow[];
   byProject: GroupRow[];

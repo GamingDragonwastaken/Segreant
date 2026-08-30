@@ -776,6 +776,10 @@ function render(d) {
     const stale = ps.stale === true;
     const age = ps.ageDays == null ? 'freshness unknown' : `${ps.ageDays}d old`;
     const source = ps.source === 'cache' ? 'refreshed local cache' : 'bundled package card';
+    const activeCardProvenance = ps.cardProvenance;
+    const activeCardLine = activeCardProvenance
+      ? String(activeCardProvenance.sourceKind || 'unknown') + ' · accepted locally ' + String(activeCardProvenance.fetchedAt || 'unknown') + (activeCardProvenance.sourceUrl ? ' · ' + String(activeCardProvenance.sourceUrl) : '')
+      : 'card provenance unavailable';
     const estimateShare = Number(pricing.estimatedSpendShare || 0);
     const estimate = pricing.estimatedCostUsd > 0
       ? `$${usd(pricing.estimatedCostUsd)} (${estimateShare >= 0.01 ? Math.round(estimateShare * 100) : '<1'}% of shown spend)`
@@ -786,6 +790,10 @@ function render(d) {
       : 'Manual only; run fiscus pricing --refresh to check the configured public source.';
     const provenanceRows = provenance.slice(0, 5).map((row) => {
       const card = row.rateCardSha256 ? String(row.rateCardSha256).slice(0, 12) : 'no rate card';
+      const cardProvenance = row.rateCardProvenance;
+      const cardProvenanceLine = cardProvenance
+        ? String(cardProvenance.sourceKind || 'unknown') + ' · accepted locally ' + String(cardProvenance.fetchedAt || 'unknown') + (cardProvenance.sourceUrl ? ' · ' + String(cardProvenance.sourceUrl) : '')
+        : 'card provenance unavailable';
       const match = row.rateMatchKind === 'exact_provider'
         ? 'exact local match'
         : String(row.rateMatchKind || 'unknown').replace(/_/g, ' ');
@@ -794,7 +802,7 @@ function render(d) {
         : null;
       const model = `${row.provider || 'unknown'} / ${row.model || 'unknown'}`;
       const matchEvidence = matched && matched !== model ? `${match} → ${matched}` : match;
-      return `<tr><td class="model">${esc(model)}</td><td class="num">${Number(row.requests || 0).toLocaleString()}</td><td class="num">${esc(String(row.costBasis || 'legacy_unknown').replace(/_/g, ' '))}</td><td class="num">${esc(matchEvidence)} · ${esc(card)}</td><td class="cost">$${usd(Number(row.costUsd || 0))}</td></tr>`;
+      return `<tr><td class="model">${esc(model)}</td><td class="num">${Number(row.requests || 0).toLocaleString()}</td><td class="num">${esc(String(row.costBasis || 'legacy_unknown').replace(/_/g, ' '))}</td><td class="num">${esc(matchEvidence)} · ${esc(card)}<div class="bsub">${esc(cardProvenanceLine)}</div></td><td class="cost">$${usd(Number(row.costUsd || 0))}</td></tr>`;
     }).join('');
     const provenanceTable = provenance.length === 0
       ? '<div class="tag" style="margin-top:var(--s4)">No metered requests in this window, so there is no recorded rate-card provenance to inspect.</div>'
@@ -803,7 +811,7 @@ function render(d) {
       <div class="label">Rate-card health · local list-price estimates</div>
       <div style="display:flex;gap:var(--s5);align-items:flex-start;justify-content:space-between;flex-wrap:wrap">
         <div><div style="font-family:var(--mono);font-size:16px;color:${stale ? 'var(--coral)' : 'var(--mint)'}">${stale ? 'STALE' : 'FRESH'} · ${esc(age)}</div>
-          <div class="tag" style="margin-top:6px">${esc(source)} · ${Number(ps.modelCount || 0).toLocaleString()} models · ${esc(ps.cacheIntegrity || 'unknown integrity')}</div></div>
+           <div class="tag" style="margin-top:6px">${esc(source)} · ${Number(ps.modelCount || 0).toLocaleString()} models · ${esc(ps.cacheIntegrity || 'unknown integrity')} · ${esc(activeCardLine)}</div></div>
         <div><div class="label" style="margin-bottom:4px">Estimated-rate share</div><div style="font-family:var(--mono);color:${pricing.estimatedCostUsd > 0 ? 'var(--coral)' : 'var(--mint)'}">${esc(estimate)}</div></div>
       </div>
       <div class="tag" style="margin-top:var(--s4)">${esc(maintenance)} Historical rows keep their recorded card evidence; Fiscus does not claim provider-billed cost here.</div>
