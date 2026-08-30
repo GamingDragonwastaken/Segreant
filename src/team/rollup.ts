@@ -26,8 +26,9 @@
 import { sign as cryptoSign, verify as cryptoVerify, createHash, createPublicKey, type KeyObject } from 'node:crypto';
 import { canonical, keyIdForPem, type KeyPair } from '../value/receipt.ts';
 import type { ProjectValue, ProjectTaskStratum } from '../value/realization.ts';
+import { canonicalEconomicAttribution, type EconomicAttribution } from '../economics/attribution.ts';
 
-export interface RollupBody {
+export interface RollupBodyV1 {
   v: 1;
   keyId: string; // the pushing developer's team-rollup key fingerprint
   generatedAt: string;
@@ -44,6 +45,23 @@ export interface RollupBody {
   // `projects`: counts and dollars only.
   strata?: ProjectTaskStratum[];
 }
+
+export interface EconomicProjectValue extends ProjectValue {
+  economic: {
+    coverage: 'exact' | 'partial' | 'legacy_unknown';
+    total: EconomicAttribution | null;
+    realized: EconomicAttribution | null;
+  };
+}
+
+/** Versioned team artifact that can carry exact project-level lineage. */
+export interface RollupBodyV2 extends Omit<RollupBodyV1, 'v' | 'projects'> {
+  v: 2;
+  /** Untrusted callers are checked at the semantic boundary before use. */
+  projects: ProjectValue[];
+}
+
+export type RollupBody = RollupBodyV1 | RollupBodyV2;
 
 export interface SignedRollup {
   body: RollupBody;
@@ -62,12 +80,69 @@ export function buildRollupBody(
   projects: ProjectValue[],
   period: { from: string; to: string },
   strata?: ProjectTaskStratum[],
-): RollupBody {
-  const body: RollupBody = { v: 1, keyId: keys.keyId, generatedAt: new Date().toISOString(), period, projects };
+): RollupBodyV1 {
+  const body: RollupBodyV1 = { v: 1, keyId: keys.keyId, generatedAt: new Date().toISOString(), period, projects };
   // Only attach the key when there is something to say — an absent field and an
   // empty array canonicalize differently, and absent is the older-client shape.
   if (strata && strata.length > 0) body.strata = strata;
   return body;
+}
+
+function canonicalEconomicProject(project: EconomicProjectValue): EconomicProjectValue {
+  if (project.economic === null || typeof project.economic !== 'object' || Array.isArray(project.economic)) {
+    throw new Error(`economic team rollup project ${project.project} is missing economic coverage`);
+  }
+  const total = project.economic.total === null ? null : canonicalEconomicAttribution(project.economic.total);
+  const realized = project.economic.realized === null ? null : canonicalEconomicAttribution(project.economic.realized);
+  const coverage = project.economic.coverage;
+  if (coverage !== 'exact' && coverage !== 'partial' && coverage !== 'legacy_unknown') throw new Error(`economic team rollup project ${project.project} has invalid coverage`);
+  if (coverage === 'exact' && (total === null || realized === null || !total.complete || !realized.complete)) {
+    throw new Error(`economic team rollup project ${project.project} requires complete exact coverage`);
+  }
+  if (total !== null) {
+    const projected = Number(total.amountText);
+    if (!Number.isFinite(projected) || !Number.isFinite(project.costUsd) || Math.abs(project.costUsd - projected) > Math.max(1e-12, Math.abs(projected) * 1e-12)) {
+      throw new Error(`economic team rollup project ${project.project} compatibility cost disagrees with exact amount`);
+    }
+  }
+  return Object.freeze({
+    ...project,
+    economic: Object.freeze({ coverage, total, realized }),
+  });
+}
+
+/** Build a v2 team rollup when every project carries an exact attribution object. */
+export function buildEconomicRollupBody(
+  keys: KeyPair,
+  projects: EconomicProjectValue[],
+  period: { from: string; to: string },
+  strata?: ProjectTaskStratum[],
+): RollupBodyV2 {
+  if (!Array.isArray(projects) || projects.length === 0) throw new Error('economic team rollup projects must be a non-empty array');
+  const canonicalProjects = projects.map(canonicalEconomicProject);
+  const body: RollupBodyV2 = {
+    v: 2,
+    keyId: keys.keyId,
+    generatedAt: new Date().toISOString(),
+    period,
+    projects: canonicalProjects,
+  };
+  if (strata && strata.length > 0) body.strata = strata;
+  return Object.freeze(body);
+}
+
+/** Validate v2 exact project lineage after a signature has established bytes. */
+export function validateRollupBody(body: RollupBody): string | null {
+  if (body.v === 1) return null;
+  if (body.v !== 2 || !Array.isArray(body.projects)) return 'economic team rollup body version is invalid';
+  for (const project of body.projects) {
+    try {
+      canonicalEconomicProject(project as EconomicProjectValue);
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+  }
+  return null;
 }
 
 export function signRollup(body: RollupBody, keys: KeyPair): SignedRollup {
@@ -126,6 +201,9 @@ export function verifyRollup(rollup: SignedRollup, opts: RollupVerifyOptions = {
   }
   const ok = cryptoVerify(null, Buffer.from(c), publicKey, Buffer.from(rollup.signature, 'base64'));
   if (!ok) return { valid: false, reason: 'signature mismatch', keyId: embeddedKeyId, pinned: false };
+
+  const semanticError = validateRollupBody(rollup.body);
+  if (semanticError !== null) return { valid: false, reason: semanticError, keyId: embeddedKeyId, pinned: false };
 
   let pinned = false;
   if (opts.trustedPublicKeyPem !== undefined) {

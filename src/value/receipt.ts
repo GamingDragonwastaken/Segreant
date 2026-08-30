@@ -19,8 +19,7 @@ import {
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Gate, Verdict, FunnelOutcome } from './gates.ts';
-import { economicAttributionView, type EconomicAttribution } from '../economics/attribution.ts';
-import { ECONOMIC_BASES, formatMoneyAmount, moneyFromJson, type EconomicBasis } from '../economics/money.ts';
+import { canonicalEconomicAttribution, type EconomicAttribution } from '../economics/attribution.ts';
 
 export interface ReceiptBodyV1 {
   v: 1;
@@ -127,32 +126,7 @@ export function buildReceiptBody(
 }
 
 function canonicalEconomic(value: EconomicAttribution): EconomicAttribution {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error('economic receipt coverage must be an object');
-  const keys = Object.keys(value).sort();
-  const expected = ['amount', 'amountText', 'complete', 'eventIds', 'requestCount', 'sourceBases', 'unresolvedRequests'].sort();
-  if (keys.join('\u0000') !== expected.join('\u0000')) throw new Error('economic receipt coverage has unknown or missing fields');
-  if (!Array.isArray(value.eventIds) || value.eventIds.some((id) => typeof id !== 'string' || id.length === 0)) throw new Error('economic receipt eventIds are invalid');
-  if (new Set(value.eventIds).size !== value.eventIds.length || value.eventIds.some((id, index) => index > 0 && id < value.eventIds[index - 1]!)) {
-    throw new Error('economic receipt eventIds must be unique and sorted');
-  }
-  if (!Array.isArray(value.sourceBases) || value.sourceBases.some((basis) => !(ECONOMIC_BASES as readonly string[]).includes(basis))) throw new Error('economic receipt sourceBases are invalid');
-  if (new Set(value.sourceBases).size !== value.sourceBases.length || value.sourceBases.some((basis, index) => index > 0 && basis < value.sourceBases[index - 1]!)) {
-    throw new Error('economic receipt sourceBases must be unique and sorted');
-  }
-  if (!Number.isSafeInteger(value.requestCount) || value.requestCount < 0 || !Number.isSafeInteger(value.unresolvedRequests) || value.unresolvedRequests < 0) {
-    throw new Error('economic receipt request coverage counts are invalid');
-  }
-  const amount = moneyFromJson(value.amount);
-  if (amount.basis !== 'effective' || value.amountText !== formatMoneyAmount(amount)) throw new Error('economic receipt amount is not canonical effective Money');
-  const canonical = economicAttributionView({
-    amount,
-    eventIds: value.eventIds,
-    sourceBases: value.sourceBases as EconomicBasis[],
-    requestCount: value.requestCount,
-    unresolvedRequests: value.unresolvedRequests,
-  });
-  if (canonical.complete !== value.complete || canonical.amountText !== value.amountText) throw new Error('economic receipt coverage is internally inconsistent');
-  return canonical;
+  return canonicalEconomicAttribution(value);
 }
 
 /** Build a strict v2 receipt for a WorkUnit with complete exact coverage. */

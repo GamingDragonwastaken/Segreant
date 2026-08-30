@@ -33,7 +33,7 @@
 
 import http from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
-import { verifyRollup, type SignedRollup } from '../../src/team/rollup.ts';
+import { validateRollupBody, verifyRollup, type SignedRollup } from '../../src/team/rollup.ts';
 import { keyIdForPem } from '../../src/value/receipt.ts';
 import type { RollupStore, PeriodFilter } from './store.ts';
 import { verifyIdToken, type OidcConfig } from './oidc.ts';
@@ -161,7 +161,7 @@ function isPlausibleSignedRollup(x: unknown): x is SignedRollup {
   if (typeof r['publicKey'] !== 'string' || typeof r['signature'] !== 'string') return false;
   if (typeof r['body'] !== 'object' || r['body'] === null) return false;
   const b = r['body'] as Record<string, unknown>;
-  if (b['v'] !== 1 || typeof b['keyId'] !== 'string' || typeof b['generatedAt'] !== 'string') return false;
+  if (b['v'] !== 1 && b['v'] !== 2 || typeof b['keyId'] !== 'string' || typeof b['generatedAt'] !== 'string') return false;
   if (typeof b['period'] !== 'object' || b['period'] === null) return false;
   if (!Array.isArray(b['projects'])) return false;
   return true;
@@ -240,6 +240,11 @@ function validateRollupSemantics(signed: SignedRollup): string | null {
     if (project['roiIndex'] !== null && (!finiteNonNegative(project['roiIndex']) || (project['roiIndex'] as number) > 100)) return `${label}.roiIndex must be null or between 0 and 100`;
     const sourceError = validateSources(project['sources'], label);
     if (sourceError) return sourceError;
+  }
+
+  if (body['v'] === 2) {
+    const exactError = validateRollupBody(signed.body);
+    if (exactError !== null) return exactError;
   }
 
   const strata = body['strata'];

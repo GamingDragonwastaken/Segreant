@@ -14,7 +14,9 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadOrCreateKeyPair, type KeyPair } from '../../src/value/receipt.ts';
-import { buildRollupBody, signRollup, type SignedRollup } from '../../src/team/rollup.ts';
+import { buildEconomicRollupBody, buildRollupBody, signRollup, type EconomicProjectValue, type SignedRollup } from '../../src/team/rollup.ts';
+import { economicAttributionView } from '../../src/economics/attribution.ts';
+import { money } from '../../src/economics/money.ts';
 import type { ProjectValue } from '../../src/value/realization.ts';
 import { createTeamServer, type TeamServerDeps } from '../src/server.ts';
 import { FakeRollupStore } from './fakeStore.ts';
@@ -196,6 +198,44 @@ test('team-server: POST /rollups from a registered key with a valid signature is
       const stored = await store.listRollups({ keyId: dev.keyId });
       assert.equal(stored.length, 1);
       assert.equal(stored[0]!.body.projects[0]!.project, 'fiscus');
+    } finally {
+      await srv.close();
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('team-server: POST /rollups accepts exact economic v2 and retains its project lineage', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-server-economic-'));
+  try {
+    const dev: KeyPair = loadOrCreateKeyPair(join(dir, 'dev.json'));
+    const exact = economicAttributionView({
+      amount: money('1.234567', 'USD', 'effective'),
+      eventIds: ['economic:request:r1:charge'],
+      sourceBases: ['list'],
+      requestCount: 1,
+      unresolvedRequests: 0,
+    });
+    const project: EconomicProjectValue = {
+      project: 'fiscus', units: 1, costUsd: 1.234567, realizationRate: 1,
+      realizedValueUsd: 2, netRealizedValueUsd: 2, roiIndex: 2, sources: ['codex'],
+      economic: { coverage: 'exact', total: exact, realized: exact },
+    };
+    const signed = signRollup(buildEconomicRollupBody(dev, [project], period), dev);
+    const store = new FakeRollupStore();
+    await store.registerDeveloper(dev.keyId, dev.publicPem, null);
+    const srv = await startTeamServer({ store, adminToken: null, oidc: null, aggregate: DEFAULT_TEST_AGGREGATE_CONFIG });
+    try {
+      const res = await fetch(`${srv.url}/rollups`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(signed),
+      });
+      assert.equal(res.status, 201);
+      const stored = (await store.listRollups({ keyId: dev.keyId }))[0]!;
+      assert.equal(stored.body.v, 2);
+      const storedProject = stored.body.projects[0]!;
+      assert.ok(storedProject.economic);
+      assert.equal(storedProject.economic.total?.amountText, '1.234567');
     } finally {
       await srv.close();
     }

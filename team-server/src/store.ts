@@ -210,9 +210,9 @@ export class PgRollupStore implements RollupStore {
       for (const p of signed.body.projects) {
         await client.query(
           `INSERT INTO rollup_projects
-             (rollup_id, project, units, cost_usd, realization_rate, realized_value_usd, net_realized_value_usd, roi_index, sources)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-          [inserted.id, p.project, p.units, p.costUsd, p.realizationRate, p.realizedValueUsd, p.netRealizedValueUsd, p.roiIndex, JSON.stringify(p.sources)],
+             (rollup_id, project, units, cost_usd, realization_rate, realized_value_usd, net_realized_value_usd, roi_index, sources, economic_json)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          [inserted.id, p.project, p.units, p.costUsd, p.realizationRate, p.realizedValueUsd, p.netRealizedValueUsd, p.roiIndex, JSON.stringify(p.sources), p.economic === undefined ? null : JSON.stringify(p.economic)],
         );
       }
       await client.query('COMMIT');

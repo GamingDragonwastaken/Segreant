@@ -1,6 +1,6 @@
 /** JSON-safe exact economic coverage attached to a value attribution window. */
 
-import { addMoney, formatMoneyAmount, money, moneyFromJson, moneyToJson, type EconomicBasis, type Money, type MoneyJson } from './money.ts';
+import { addMoney, ECONOMIC_BASES, formatMoneyAmount, money, moneyFromJson, moneyToJson, type EconomicBasis, type Money, type MoneyJson } from './money.ts';
 
 export interface EconomicAttribution {
   /** Effective amount of the exact rows resolved in this window. */
@@ -53,6 +53,37 @@ export function economicAttributionView(projection: {
     unresolvedRequests: projection.unresolvedRequests,
     complete: projection.unresolvedRequests === 0,
   });
+}
+
+/**
+ * Validate and canonicalize an untrusted JSON-safe attribution object. This is
+ * shared by signed receipts and team rollups so both artifact protocols apply
+ * the same exact-money and coverage invariants.
+ */
+export function canonicalEconomicAttribution(value: unknown): EconomicAttribution {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error('economic attribution must be an object');
+  const record = value as Record<string, unknown>;
+  const expected = ['amount', 'amountText', 'complete', 'eventIds', 'requestCount', 'sourceBases', 'unresolvedRequests'].sort();
+  if (Object.keys(record).sort().join('\u0000') !== expected.join('\u0000')) throw new Error('economic attribution has unknown or missing fields');
+  const eventIds = record.eventIds;
+  if (!Array.isArray(eventIds) || eventIds.some((id) => typeof id !== 'string' || id.length === 0)) throw new Error('economic attribution eventIds are invalid');
+  if (new Set(eventIds).size !== eventIds.length || eventIds.some((id, index) => index > 0 && id < eventIds[index - 1]!)) throw new Error('economic attribution eventIds must be unique and sorted');
+  const sourceBases = record.sourceBases;
+  if (!Array.isArray(sourceBases) || sourceBases.some((basis) => !ECONOMIC_BASES.includes(basis as EconomicBasis))) throw new Error('economic attribution sourceBases are invalid');
+  if (new Set(sourceBases).size !== sourceBases.length || sourceBases.some((basis, index) => index > 0 && basis < sourceBases[index - 1]!)) throw new Error('economic attribution sourceBases must be unique and sorted');
+  if (!Number.isSafeInteger(record.requestCount) || (record.requestCount as number) < 0 || !Number.isSafeInteger(record.unresolvedRequests) || (record.unresolvedRequests as number) < 0) throw new Error('economic attribution coverage counts are invalid');
+  if (typeof record.complete !== 'boolean' || typeof record.amountText !== 'string') throw new Error('economic attribution status/rendering is invalid');
+  const amount = moneyFromJson(record.amount as MoneyJson);
+  if (amount.basis !== 'effective' || formatMoneyAmount(amount) !== record.amountText) throw new Error('economic attribution amount is not canonical effective Money');
+  const canonical = economicAttributionView({
+    amount,
+    eventIds: eventIds as string[],
+    sourceBases: sourceBases as EconomicBasis[],
+    requestCount: record.requestCount as number,
+    unresolvedRequests: record.unresolvedRequests as number,
+  });
+  if (canonical.complete !== record.complete) throw new Error('economic attribution completeness is inconsistent');
+  return canonical;
 }
 
 /** Aggregate exact request rows without converting the effective basis to a float. */

@@ -471,6 +471,8 @@ export interface ProjectValue {
   // Which AI tools produced this project's spend (repo↔project↔tool interconnection).
   // Empty when the project has no cwd-tagged traffic (e.g. untagged proxy).
   sources: string[];
+  /** Exact effective spend coverage for this project's mature units, when available. */
+  economic?: RealizationEconomicRollup;
 }
 
 /**
@@ -501,6 +503,7 @@ export function projectValueBreakdown(
       netRealizedValueUsd: rep.matured.netRealizedValueUsd,
       roiIndex: roi.roiIndex,
       sources: sourcesByProject.get(project) ?? [],
+      ...(rep.matured.economic === undefined ? {} : { economic: rep.matured.economic }),
     });
   }
   return out.sort((a, b) => b.costUsd - a.costUsd);

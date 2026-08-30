@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Store, type RequestRow } from '../src/store/db.ts';
 import { attributeCommits, projectName } from '../src/git/correlate.ts';
-import { computeRealization } from '../src/value/realization.ts';
+import { computeRealization, projectValueBreakdown } from '../src/value/realization.ts';
 import { computeUsageRoI } from '../src/value/usage.ts';
 import { userValueRows } from '../src/value/cohort.ts';
 import { budgetAdvice } from '../src/value/report.ts';
@@ -358,6 +358,26 @@ test('frontier cells expose exact effective spend coverage for model/task compar
     if (cell === undefined || cell.economic === undefined || cell.economic.total === null) throw new Error('frontier cell is missing exact economic coverage');
     assert.equal(cell.economic.coverage, 'exact');
     assert.equal(cell.economic.total.amountText, '1.234567');
+  } finally {
+    store.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('persisted project-value breakdown retains exact effective attribution for team artifacts', async () => {
+  const dir = repo();
+  const store = new Store(':memory:');
+  try {
+    commit(dir, 'base\n', 'feat: base', '2026-06-01T10:00:00+00:00');
+    commit(dir, 'base\nmore\n', 'feat: exact', '2026-06-01T11:00:00+00:00');
+    const project = await projectName(dir);
+    store.insertRequest(request(project, 'project-exact', money('1.234567', 'USD', 'list')));
+    await computeRealization(store, dir, { limit: 5, windowDays: 14, persist: true });
+    const value = projectValueBreakdown(store, { windowDays: 14 });
+    const row = value.find((item) => item.project === project);
+    if (row === undefined || row.economic === undefined || row.economic.total === null) throw new Error('project value is missing exact economic coverage');
+    assert.equal(row.economic.coverage, 'exact');
+    assert.equal(row.economic.total.amountText, '1.234567');
   } finally {
     store.close();
     rmSync(dir, { recursive: true, force: true });

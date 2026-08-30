@@ -30,7 +30,7 @@ import {
   type VerifyOptions,
   type KeyPair,
 } from '../value/receipt.ts';
-import { buildRollupBody, signRollup, type SignedRollup } from '../team/rollup.ts';
+import { buildEconomicRollupBody, buildRollupBody, signRollup, type EconomicProjectValue, type SignedRollup } from '../team/rollup.ts';
 import { judgeSessionFromStore } from '../judge/orchestrate.ts';
 import { C, color, usd, pct, printNotAGitRepo, printJson } from './ui.ts';
 import { type Flags } from './flags.ts';
@@ -393,7 +393,10 @@ async function signAndPushRollup(
 
   const to = new Date();
   const from = new Date(to.getTime() - opts.windowDays * 86_400_000);
-  const body = buildRollupBody(opts.keys, projects, { from: from.toISOString(), to: to.toISOString() }, opts.strata);
+  const period = { from: from.toISOString(), to: to.toISOString() };
+  const body = projects.every((project) => project.economic !== undefined)
+    ? buildEconomicRollupBody(opts.keys, projects as EconomicProjectValue[], period, opts.strata)
+    : buildRollupBody(opts.keys, projects, period, opts.strata);
   const signed: SignedRollup = signRollup(body, opts.keys);
 
   if (opts.dryRun) {
