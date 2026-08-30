@@ -25,7 +25,11 @@
   source-to-target convention and an explicit no-rounding policy;
 - projections are deterministic and can be replayed at a recorded-time boundary;
 - accounting-facing request charges can be issued as one exact Money event on the
-  same Store transaction as the compatibility request row.
+  same Store transaction as the compatibility request row;
+- exact request budget projections can apply a validated local price correction
+  through an explicit `effective` basis; the immutable source and correction
+  event IDs remain inspectable while the legacy request row stays a compatibility
+  projection;
 
 ## Invariants
 
@@ -49,7 +53,9 @@
 - no floating-point value is introduced by serialization, replay or projection;
 - exact request issuance accepts only USD Money and maps list/estimated,
   provider-observed, and billed bases to explicit event kinds;
-- legacy numeric request rows are not backfilled into exact Money without evidence.
+- legacy numeric request rows are not backfilled into exact Money without evidence;
+- when an exact request already exists, a numeric-only reprice is refused rather
+  than allowing the compatibility row and economic history to diverge;
 
 ## Verify
 
