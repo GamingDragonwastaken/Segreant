@@ -241,6 +241,25 @@ export interface RealizationEconomicRollupPayload {
   realized: EconomicAttributionPayload | null;
 }
 
+export interface UsageUnitPayload {
+  sessionId: string;
+  costUsd: number;
+  requests: number;
+  economic?: EconomicAttributionPayload;
+  maturing: boolean;
+  acceptance: number | null;
+  reach: string | null;
+  realized: boolean;
+}
+
+export interface UsagePayload {
+  units: UsageUnitPayload[];
+  realizedUnits: number;
+  totalCostUsd: number;
+  outcomeMix: { published: number; resolved: number; used: number; none: number };
+  economic?: RealizationEconomicRollupPayload;
+}
+
 /** One recorded run. `result` is the immutable reconciliation record itself. */
 export interface ReconciliationRunRecord {
   reconciliationRunId: string;
@@ -398,8 +417,10 @@ export interface ValuePayload {
       dispersion: number;
       broadBased: boolean;
       coachingHeadroomUsd: number;
+      economic?: RealizationEconomicRollupPayload;
     } | null;
   } | null;
+  usage?: UsagePayload;
   budget?: BudgetAdvice | null;
 }
 
@@ -416,6 +437,8 @@ export interface BudgetAdvice {
   realizedValueRate?: number | null;
   /** Spend not turning into kept outcomes, projected monthly. The number to attack. */
   projectedMonthlyWasteUsd?: number | null;
+  /** Exact effective spend coverage behind the observed daily series. */
+  economic?: { coverage: 'exact' | 'partial' | 'legacy_unknown'; total: EconomicAttributionPayload | null };
   rationale?: string[];
   spendBasis?: string;
   windowDays?: number;

@@ -7,6 +7,10 @@ import { join } from 'node:path';
 import { Store, type RequestRow } from '../src/store/db.ts';
 import { attributeCommits, projectName } from '../src/git/correlate.ts';
 import { computeRealization } from '../src/value/realization.ts';
+import { computeUsageRoI } from '../src/value/usage.ts';
+import { userValueRows } from '../src/value/cohort.ts';
+import { budgetAdvice } from '../src/value/report.ts';
+import { DEFAULT_CONFIG } from '../src/config.ts';
 import { money } from '../src/economics/money.ts';
 import { economicEvent } from '../src/economics/events.ts';
 import { instant } from '../src/epistemic/time.ts';
@@ -195,5 +199,126 @@ test('realization rollup exposes exact effective spend coverage separately from 
   } finally {
     store.close();
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('grouped session reads preserve exact effective coverage and legacy compatibility totals', () => {
+  const store = new Store(':memory:');
+  try {
+    store.insertRequest({ ...request('fiscus', 's1-exact', money('1.25', 'USD', 'list'), 1.25), sessionId: 's1', user: 'ada' });
+    store.insertRequest({ ...request('fiscus', 's1-legacy', undefined, 2), sessionId: 's1', user: 'ada' });
+    store.insertRequest({ ...request('fiscus', 's2-exact', money('0.75', 'USD', 'list'), 0.75), sessionId: 's2', user: 'lin' });
+    const start = Date.parse('2026-06-01T10:00:00Z');
+    const end = Date.parse('2026-06-01T11:00:00Z');
+
+    const sessions = store.economicSessionUnits(start, end);
+    const s1 = sessions.find((row) => row.sessionId === 's1');
+    if (s1 === undefined || s1.economic === undefined) throw new Error('s1 exact session row is missing');
+    assert.equal(s1.costUsd, 3.25);
+    assert.equal(s1.requests, 2);
+    assert.equal(s1.economic.amountText, '1.25');
+    assert.equal(s1.economic.unresolvedRequests, 1);
+    assert.equal(s1.economic.complete, false);
+
+    const users = store.economicSessionUnitsByUser(start, end);
+    assert.deepEqual(users.map((row) => [row.sessionId, row.user]).sort(), [['s1', 'ada'], ['s2', 'lin']]);
+    const ada = users.find((row) => row.user === 'ada');
+    if (ada === undefined || ada.economic === undefined) throw new Error('ada exact user row is missing');
+    assert.equal(ada.economic.unresolvedRequests, 1);
+    assert.equal(ada.economic.amountText, '1.25');
+  } finally {
+    store.close();
+  }
+});
+
+test('non-coding usage reports exact session economics without changing outcome classification', () => {
+  const store = new Store(':memory:');
+  try {
+    store.insertRequest({ ...request('fiscus', 'usage-exact', money('0.333333', 'USD', 'list'), 0.333333), sessionId: 'usage-session', user: 'ada' });
+    const report = computeUsageRoI(store, {
+      startMs: Date.parse('2026-06-01T10:00:00Z'),
+      endMs: Date.parse('2026-06-01T11:00:00Z'),
+    });
+    const unit = report.units.find((row) => row.sessionId === 'usage-session');
+    if (unit === undefined || unit.economic === undefined) throw new Error('usage session is missing exact economic coverage');
+    assert.equal(unit.economic.amountText, '0.333333');
+    assert.equal(unit.economic.complete, true);
+    assert.equal(unit.economic.amount.basis, 'effective');
+    assert.equal(unit.realized, false, 'no outcome signal remains unknown and unrealized');
+    if (report.economic === undefined || report.economic.total === null) throw new Error('usage report is missing economic rollup');
+    assert.equal(report.economic.coverage, 'exact');
+    assert.equal(report.economic.total.amountText, '0.333333');
+  } finally {
+    store.close();
+  }
+});
+
+test('per-user value rows retain exact effective spend coverage under the existing privacy aggregation', () => {
+  const store = new Store(':memory:');
+  try {
+    store.insertRequest({ ...request('fiscus', 'cohort-exact', money('0.125', 'USD', 'list'), 0.125), sessionId: 'cohort-session', user: 'ada' });
+    const rows = userValueRows(store, {
+      startMs: Date.parse('2026-06-01T10:00:00Z'),
+      endMs: Date.parse('2026-06-01T11:00:00Z'),
+    });
+    const ada = rows.find((row) => row.user === 'ada');
+    if (ada === undefined || ada.economic === undefined) throw new Error('user value row is missing exact economic coverage');
+    assert.equal(ada.economic.amountText, '0.125');
+    assert.equal(ada.economic.complete, true);
+    assert.equal(ada.costUsd, 0.125, 'legacy cost remains a compatibility projection');
+  } finally {
+    store.close();
+  }
+});
+
+test('model-grouped effective reads keep provider/model identity and exact own-spend coverage', () => {
+  const store = new Store(':memory:');
+  try {
+    store.insertRequest({ ...request('fiscus', 'model-a', money('0.000001', 'USD', 'list'), 0.000001), sessionId: 'model-session', provider: 'anthropic', model: 'claude-opus-4-8' });
+    store.insertRequest({ ...request('fiscus', 'model-b', money('2', 'USD', 'list'), 2), sessionId: 'model-session', provider: 'openai', model: 'gpt-4o' });
+    const models = store.economicModelUnits(Date.parse('2026-06-01T10:00:00Z'), Date.parse('2026-06-01T11:00:00Z'));
+    const anthropic = models.find((row) => row.provider === 'anthropic');
+    if (anthropic === undefined || anthropic.economic === undefined) throw new Error('anthropic exact model row is missing');
+    assert.equal(anthropic.economic.amountText, '0.000001');
+    assert.equal(anthropic.costUsd, 0.000001);
+    assert.equal(anthropic.economic.complete, true);
+    assert.equal(anthropic.requests, 1);
+  } finally {
+    store.close();
+  }
+});
+
+test('daily effective series preserves per-bucket exact coverage for budget advice', () => {
+  const store = new Store(':memory:');
+  try {
+    const ts = Date.parse('2026-06-01T10:30:00Z');
+    store.insertRequest({ ...request('fiscus', 'series-exact', money('1.5', 'USD', 'list'), 1.5), tsEpochMs: ts, via: 'proxy' });
+    store.insertRequest({ ...request('fiscus', 'series-legacy', undefined, 2.5), tsEpochMs: ts + 1000, via: 'proxy' });
+    const series = store.economicSeries(Date.parse('2026-06-01T00:00:00Z'), Date.parse('2026-06-02T00:00:00Z'), 86_400_000, true);
+    assert.equal(series.length, 1);
+    assert.equal(series[0]!.costUsd, 4);
+    assert.equal(series[0]!.economic.amountText, '1.5');
+    assert.equal(series[0]!.economic.unresolvedRequests, 1);
+    assert.equal(series[0]!.economic.complete, false);
+  } finally {
+    store.close();
+  }
+});
+
+test('budget advice consumes exact effective buckets and discloses unresolved legacy spend', () => {
+  const store = new Store(':memory:');
+  try {
+    const now = Date.parse('2026-06-02T00:00:00Z');
+    store.insertRequest({ ...request('fiscus', 'budget-exact', money('0.125', 'USD', 'list'), 0.125), tsEpochMs: now - 60_000, via: 'proxy' });
+    store.insertRequest({ ...request('fiscus', 'budget-legacy', undefined, 4), tsEpochMs: now - 30_000, via: 'proxy' });
+    const config = structuredClone(DEFAULT_CONFIG);
+    const advice = budgetAdvice(store, config, { nowMs: now, windowDays: 2 });
+    if (advice.economic === undefined) throw new Error('budget advice is missing economic coverage');
+    assert.equal(advice.economic.coverage, 'partial');
+    assert.equal(advice.economic.total?.amountText, '0.125');
+    assert.equal(advice.economic.total?.unresolvedRequests, 1);
+    assert.equal(advice.spendBasis, 'live_proxy');
+  } finally {
+    store.close();
   }
 });

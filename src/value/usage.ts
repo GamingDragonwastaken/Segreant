@@ -24,6 +24,7 @@ import { evaluateOutcomeContract } from '../outcomes/contract.ts';
 import { computeReturnOnIntelligence, type RoIResult } from './lenses.ts';
 import { timeWithAiMinutes } from './lift.ts';
 import type { Gate } from './gates.ts';
+import { economicAttributionFromAttributions, economicAttributionNumber, type EconomicAttribution } from '../economics/attribution.ts';
 
 const POSITIVE_OUTCOMES = new Set(['used', 'resolved', 'published', 'shipped', 'accepted']);
 const NEGATIVE_OUTCOMES = new Set(['incident', 'redone', 'discarded']);
@@ -68,6 +69,8 @@ export interface UsageUnit {
   sessionId: string;
   costUsd: number;
   requests: number;
+  /** Exact effective session economics; numeric costUsd is compatibility-only. */
+  economic?: EconomicAttribution;
   maturing: boolean;
   acceptance: number | null;
   reach: Reach | null;
@@ -81,6 +84,14 @@ export interface UsageReport {
   outcomeMix: { published: number; resolved: number; used: number; none: number };
   money: { priced: boolean; grossRealizedValueUsd: number | null; supervisionMinutes: number | null };
   roi: RoIResult;
+  /** Exact effective usage coverage, separate from the legacy numeric ROI input. */
+  economic?: UsageEconomicRollup;
+}
+
+export interface UsageEconomicRollup {
+  coverage: 'exact' | 'partial' | 'legacy_unknown';
+  total: EconomicAttribution | null;
+  realized: EconomicAttribution | null;
 }
 
 export interface UsageMoneyOptions {
@@ -93,7 +104,7 @@ function reachName(reach: Reach): 'published' | 'resolved' | 'used' {
 }
 
 export function computeUsageRoI(store: Store, opts: { startMs: number; endMs: number; money?: UsageMoneyOptions }): UsageReport {
-  const sessions = store.sessionUnits(opts.startMs, opts.endMs).filter((s) => !s.hasProposals);
+  const sessions = store.economicSessionUnits(opts.startMs, opts.endMs).filter((s) => !s.hasProposals);
 
   // The legacy lens layer currently needs only `funnel.realized` plus an array of
   // gate-shaped observations for Impact compatibility. Non-coding has no coding
@@ -116,8 +127,9 @@ export function computeUsageRoI(store: Store, opts: { startMs: number; endMs: nu
 
     units.push({
       sessionId: s.sessionId,
-      costUsd: s.costUsd,
+      costUsd: economicAttributionNumber(s.economic, s.costUsd),
       requests: s.requests,
+      economic: s.economic,
       maturing: false,
       acceptance: null,
       reach: outcome.reach,
@@ -129,6 +141,18 @@ export function computeUsageRoI(store: Store, opts: { startMs: number; endMs: nu
   const realized = units.filter((u) => u.realized);
   const totalCostUsd = units.reduce((s, u) => s + u.costUsd, 0);
   const realizedValueUsd = realized.reduce((s, u) => s + u.costUsd, 0);
+
+  const exactValues = units.flatMap((unit) => unit.economic === undefined ? [] : [unit.economic]);
+  const realizedExactValues = realized.flatMap((unit) => unit.economic === undefined ? [] : [unit.economic]);
+  const economic: UsageEconomicRollup = {
+    coverage: exactValues.length === 0
+      ? 'legacy_unknown'
+      : exactValues.length === units.length && economicAttributionFromAttributions(exactValues).complete
+        ? 'exact'
+        : 'partial',
+    total: exactValues.length === 0 ? null : economicAttributionFromAttributions(exactValues),
+    realized: exactValues.length === 0 ? null : economicAttributionFromAttributions(realizedExactValues),
+  };
 
   const money: UsageReport['money'] = { priced: false, grossRealizedValueUsd: null, supervisionMinutes: null };
   const rate = opts.money?.laborRatePerHour ?? null;
@@ -180,5 +204,5 @@ export function computeUsageRoI(store: Store, opts: { startMs: number; endMs: nu
     },
   );
 
-  return { units, realizedUnits: realized.length, totalCostUsd, outcomeMix, money, roi };
+  return { units, realizedUnits: realized.length, totalCostUsd, outcomeMix, money, roi, economic };
 }

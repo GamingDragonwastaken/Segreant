@@ -11,6 +11,7 @@
 import type { RequestRow } from './db.ts';
 import type { EconomicLedger } from '../economics/ledger.ts';
 import type { EconomicBasis, Money } from '../economics/money.ts';
+import { economicAttributionFromRows, economicAttributionNumber, type EconomicAttribution } from '../economics/attribution.ts';
 import { economicEventRole, type EconomicEventKind } from '../economics/events.ts';
 import { requestEconomicEventId } from '../economics/request.ts';
 
@@ -27,11 +28,44 @@ export interface EffectiveRequestRow {
   source: string | null;
   user: string | null;
   via: 'proxy' | 'import';
+  /** Legacy numeric column retained only as a compatibility projection. */
+  compatibilityCostUsd: number;
   /** Effective exact charge, or null when this legacy row has no event. */
   effectiveAmount: Money | null;
   sourceBases: readonly EconomicBasis[];
   sourceEventIds: readonly string[];
   unresolvedReason: EconomicRequestUnresolvedReason | null;
+}
+
+export interface EconomicSessionUnit {
+  sessionId: string;
+  costUsd: number;
+  requests: number;
+  hasProposals: boolean;
+  economic: EconomicAttribution;
+}
+
+export interface EconomicSessionUserUnit {
+  sessionId: string;
+  user: string;
+  costUsd: number;
+  requests: number;
+  economic: EconomicAttribution;
+}
+
+export interface EconomicModelUnit {
+  provider: string;
+  model: string;
+  costUsd: number;
+  requests: number;
+  economic: EconomicAttribution;
+}
+
+export interface EconomicSeriesPoint {
+  bucketMs: number;
+  costUsd: number;
+  requests: number;
+  economic: EconomicAttribution;
 }
 
 function metadataRecord(value: unknown, id: string): Record<string, unknown> {
@@ -84,6 +118,7 @@ export function effectiveRequestRow(request: RequestRow, ledger: EconomicLedger)
     source: request.source ?? null,
     user: request.user ?? null,
     via: (request.via ?? 'proxy') as 'proxy' | 'import',
+    compatibilityCostUsd: request.costUsd,
   };
   if (source === null) {
     return Object.freeze({
@@ -110,4 +145,105 @@ export function effectiveRequestRow(request: RequestRow, ledger: EconomicLedger)
 export function effectiveRequestRows(rows: readonly RequestRow[], ledger: EconomicLedger): EffectiveRequestRow[] {
   if (!Array.isArray(rows)) throw new Error('economic request rows must be an array');
   return rows.map((row) => effectiveRequestRow(row, ledger));
+}
+
+/** Group exact request rows by session while preserving compatibility totals. */
+export function groupEconomicSessions(rows: readonly EffectiveRequestRow[], proposalSessionIds: ReadonlySet<string>): EconomicSessionUnit[] {
+  const grouped = new Map<string, EffectiveRequestRow[]>();
+  for (const row of rows) {
+    if (row.sessionId === null) continue;
+    const bucket = grouped.get(row.sessionId);
+    if (bucket === undefined) grouped.set(row.sessionId, [row]);
+    else bucket.push(row);
+  }
+  return [...grouped.entries()]
+    .map(([sessionId, sessionRows]) => {
+      const economic = economicAttributionFromRows(sessionRows);
+      const compatibility = sessionRows.reduce((sum, row) => sum + row.compatibilityCostUsd, 0);
+      return Object.freeze({
+        sessionId,
+        costUsd: economicAttributionNumber(economic, compatibility),
+        requests: sessionRows.length,
+        hasProposals: proposalSessionIds.has(sessionId),
+        economic,
+      });
+    })
+    .sort((a, b) => b.costUsd - a.costUsd || a.sessionId.localeCompare(b.sessionId));
+}
+
+/** Group exact request rows by (session,user), retaining the existing user split. */
+export function groupEconomicSessionUsers(rows: readonly EffectiveRequestRow[]): EconomicSessionUserUnit[] {
+  const grouped = new Map<string, EffectiveRequestRow[]>();
+  for (const row of rows) {
+    if (row.sessionId === null) continue;
+    const user = row.user ?? 'unassigned';
+    const key = `${row.sessionId}\u0000${user}`;
+    const bucket = grouped.get(key);
+    if (bucket === undefined) grouped.set(key, [row]);
+    else bucket.push(row);
+  }
+  return [...grouped.values()]
+    .map((sessionRows) => {
+      const first = sessionRows[0]!;
+      const user = first.user ?? 'unassigned';
+      const economic = economicAttributionFromRows(sessionRows);
+      const compatibility = sessionRows.reduce((sum, row) => sum + row.compatibilityCostUsd, 0);
+      return Object.freeze({
+        sessionId: first.sessionId!,
+        user,
+        costUsd: economicAttributionNumber(economic, compatibility),
+        requests: sessionRows.length,
+        economic,
+      });
+    })
+    .sort((a, b) => b.costUsd - a.costUsd || a.sessionId.localeCompare(b.sessionId) || a.user.localeCompare(b.user));
+}
+
+/** Group exact request rows by provider/model for model-trial comparisons. */
+export function groupEconomicModels(rows: readonly EffectiveRequestRow[]): EconomicModelUnit[] {
+  const grouped = new Map<string, EffectiveRequestRow[]>();
+  for (const row of rows) {
+    const key = `${row.provider}\u0000${row.model}`;
+    const bucket = grouped.get(key);
+    if (bucket === undefined) grouped.set(key, [row]);
+    else bucket.push(row);
+  }
+  return [...grouped.values()]
+    .map((modelRows) => {
+      const first = modelRows[0]!;
+      const economic = economicAttributionFromRows(modelRows);
+      const compatibility = modelRows.reduce((sum, row) => sum + row.compatibilityCostUsd, 0);
+      return Object.freeze({
+        provider: first.provider,
+        model: first.model,
+        costUsd: economicAttributionNumber(economic, compatibility),
+        requests: modelRows.length,
+        economic,
+      });
+    })
+    .sort((a, b) => b.costUsd - a.costUsd || a.provider.localeCompare(b.provider) || a.model.localeCompare(b.model));
+}
+
+/** Group exact request rows into deterministic fixed-width time buckets. */
+export function groupEconomicSeries(rows: readonly EffectiveRequestRow[], bucketMs: number): EconomicSeriesPoint[] {
+  if (!Number.isSafeInteger(bucketMs) || bucketMs <= 0) throw new Error('economic series bucket must be a positive safe integer');
+  const grouped = new Map<number, EffectiveRequestRow[]>();
+  for (const row of rows) {
+    const bucket = Math.floor(row.tsEpochMs / bucketMs) * bucketMs;
+    const current = grouped.get(bucket);
+    if (current === undefined) grouped.set(bucket, [row]);
+    else current.push(row);
+  }
+  return [...grouped.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([bucketMsValue, bucketRows]) => {
+      const economic = economicAttributionFromRows(bucketRows);
+      const compatibility = bucketRows.reduce((sum, row) => sum + row.compatibilityCostUsd, 0);
+      return Object.freeze({
+        bucketMs: bucketMsValue,
+        costUsd: economicAttributionNumber(economic, compatibility),
+        requests: bucketRows.length,
+        economic,
+      });
+    });
 }

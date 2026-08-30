@@ -63,6 +63,7 @@ import { computeFrontier, type FrontierReport } from './frontier.ts';
 import { computeUsageRoI, type UsageReport } from './usage.ts';
 import { computeCohort, type CohortReport } from './cohort.ts';
 import { recommendBudget, type BudgetRecommendation } from '../budget/recommend.ts';
+import { economicAttributionFromRows, type EconomicAttribution } from '../economics/attribution.ts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -315,6 +316,11 @@ export type BudgetAdvice = BudgetRecommendation & {
   spendBasis: 'live_proxy' | 'all_observed';
   /** The observation window behind `observed`, in days. */
   windowDays: number;
+  /** Exact effective spend coverage behind the advisor's observed series. */
+  economic?: {
+    coverage: 'exact' | 'partial' | 'legacy_unknown';
+    total: EconomicAttribution | null;
+  };
 };
 
 /**
@@ -336,7 +342,11 @@ export function budgetAdvice(
   const now = opts.nowMs ?? Date.now();
   const days = opts.windowDays ?? DEFAULT_SPEND_WINDOW_DAYS;
   const liveOnly = !config.budget.capIncludesImported;
-  const series = store.series(now - days * DAY_MS, now + 1000, DAY_MS, liveOnly);
+  const startMs = now - days * DAY_MS;
+  const endMs = now + 1000;
+  const exactRows = store.economicRequestRowsInRange(startMs, endMs, { liveOnly });
+  const exact = economicAttributionFromRows(exactRows);
+  const series = store.economicSeries(startMs, endMs, DAY_MS, liveOnly);
   return {
     ...recommendBudget({
       dailySpends: series.map((s) => s.costUsd),
@@ -345,6 +355,10 @@ export function budgetAdvice(
     }),
     spendBasis: liveOnly ? 'live_proxy' : 'all_observed',
     windowDays: days,
+    economic: {
+      coverage: exactRows.length === 0 ? 'legacy_unknown' : exact.complete ? 'exact' : 'partial',
+      total: exactRows.length === 0 ? null : exact,
+    },
   };
 }
 

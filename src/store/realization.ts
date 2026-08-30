@@ -25,8 +25,8 @@ import type { EconomicLedger } from '../economics/ledger.ts';
 import type { Money } from '../economics/money.ts';
 import { requestEconomicEventId } from '../economics/request.ts';
 import { priceCorrectionEvent } from '../economics/corrections.ts';
-import { economicAttributionFromRows } from '../economics/attribution.ts';
-import type { EffectiveRequestRow } from './economicReadModel.ts';
+import { economicAttributionFromRows, economicAttributionNumber } from '../economics/attribution.ts';
+import type { EconomicModelUnit, EffectiveRequestRow } from './economicReadModel.ts';
 
 /**
  * A persisted snapshot of one computed work unit. The store keeps these so
@@ -121,6 +121,8 @@ export interface RealizationDeps {
   ) => Array<SpendBucket & { provider: string; cacheReadTokens: number; cacheWriteTokens: number }>;
   /** Exact request rows used to keep persisted value snapshots in step. */
   economicRequestRows?: (startMs: number, endMs: number, project?: string) => EffectiveRequestRow[];
+  /** Exact provider/model groups used to keep model-trial attribution in step. */
+  economicModelUnits?: (startMs: number, endMs: number, project?: string) => EconomicModelUnit[];
   /** Shared economic ledger; exact reprices must append through this handle. */
   economicLedger?: EconomicLedger;
 }
@@ -444,23 +446,34 @@ function syncRealizationCosts(
     const modelSpend = deps.byModel(startMs, endMs, scoped);
     const economicRows = deps.economicRequestRows?.(startMs, endMs, scoped);
     const economic = economicRows === undefined ? undefined : economicAttributionFromRows(economicRows);
-    const windowModelTotal = modelSpend.reduce((s, m) => s + m.costUsd, 0);
+    const exactModelSpend = deps.economicModelUnits?.(startMs, endMs, scoped);
+    const windowModelTotal = exactModelSpend === undefined || exactModelSpend.length === 0
+      ? modelSpend.reduce((s, m) => s + m.costUsd, 0)
+      : exactModelSpend.reduce((s, m) => s + m.costUsd, 0);
     const totalLines = Number(unit.linesAdded ?? 0) + Number(unit.linesDeleted ?? 0);
 
-    unit.attributedCostUsd = spend.costUsd;
+    const projectedCost = economic === undefined
+      ? spend.costUsd
+      : economicAttributionNumber(economic, spend.costUsd);
+    unit.attributedCostUsd = projectedCost;
     unit.attributedRequests = spend.requests;
     unit.attributedOutputTokens = spend.outputTokens;
-    unit.costPerHundredLines = totalLines > 0 ? (spend.costUsd / totalLines) * 100 : null;
+    unit.costPerHundredLines = totalLines > 0 ? (projectedCost / totalLines) * 100 : null;
     unit.dominantModel = modelSpend.length > 0 ? modelSpend[0]!.label : null;
-    unit.dominantModelCostUsd = modelSpend.length > 0 ? modelSpend[0]!.costUsd : null;
+    const exactDominantModel = unit.dominantModel === null || exactModelSpend === undefined
+      ? undefined
+      : exactModelSpend.find((m) => m.provider === modelSpend[0]!.provider && m.model === unit.dominantModel);
+    unit.dominantModelCostUsd = exactDominantModel?.costUsd ?? (modelSpend.length > 0 ? modelSpend[0]!.costUsd : null);
+    const dominantCostForShare = exactDominantModel?.costUsd ?? (modelSpend.length > 0 ? modelSpend[0]!.costUsd : null);
     unit.dominantModelCostShare =
-      modelSpend.length > 0 && windowModelTotal > 0 ? modelSpend[0]!.costUsd / windowModelTotal : null;
+      dominantCostForShare !== null && windowModelTotal > 0 ? dominantCostForShare / windowModelTotal : null;
+    if (exactDominantModel !== undefined) unit.dominantModelEconomic = exactDominantModel.economic;
     if (economic !== undefined) unit.economic = economic;
 
-    writeBack.run(spend.costUsd, JSON.stringify(unit), row.commitHash);
+    writeBack.run(projectedCost, JSON.stringify(unit), row.commitHash);
     out.resynced += 1;
     out.costUsdBefore += row.attributedCostUsd;
-    out.costUsdAfter += spend.costUsd;
+    out.costUsdAfter += projectedCost;
   }
   return out;
 }

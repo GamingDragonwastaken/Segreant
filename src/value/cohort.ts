@@ -29,6 +29,8 @@
 import type { Store } from '../store/db.ts';
 import { classifySession } from './usage.ts';
 import { estimateBetaPrior, reliability, type Observation } from './reliability.ts';
+import { economicAttributionFromAttributions, type EconomicAttribution } from '../economics/attribution.ts';
+import type { UsageEconomicRollup } from './usage.ts';
 
 /** Raw per-user inputs. `realizedValueUsd ≤ costUsd`, so extraction ∈ [0,1]. */
 export interface UserValueRow {
@@ -37,6 +39,10 @@ export interface UserValueRow {
   realizedSessions: number;
   costUsd: number;
   realizedValueUsd: number;
+  /** Exact effective spend across this user's sessions; numeric fields remain compatibility-only. */
+  economic?: EconomicAttribution;
+  /** Exact effective spend on the subset of sessions with a confirmed outcome. */
+  realizedEconomic?: EconomicAttribution;
 }
 
 export interface CohortOptions {
@@ -58,6 +64,8 @@ export interface CohortDistribution {
   coachingHeadroomUsd: number;
   totalCostUsd: number;
   totalRealizedValueUsd: number;
+  /** Exact effective spend coverage for the same identified-user distribution. */
+  economic?: UsageEconomicRollup;
 }
 
 export interface CohortReport {
@@ -140,6 +148,18 @@ export function computeCohortDistribution(rows: UserValueRow[], broadThreshold =
     if (e < median) headroom += r.costUsd * (median - e);
   }
 
+  const exactValues = ppl.flatMap((row) => row.economic === undefined ? [] : [row.economic]);
+  const realizedExactValues = ppl.flatMap((row) => row.realizedEconomic === undefined ? [] : [row.realizedEconomic]);
+  const economic: UsageEconomicRollup = {
+    coverage: exactValues.length === 0
+      ? 'legacy_unknown'
+      : exactValues.length === ppl.length && economicAttributionFromAttributions(exactValues).complete
+        ? 'exact'
+        : 'partial',
+    total: exactValues.length === 0 ? null : economicAttributionFromAttributions(exactValues),
+    realized: exactValues.length === 0 ? null : economicAttributionFromAttributions(realizedExactValues),
+  };
+
   return {
     cohortSize: ppl.length,
     medianExtraction: median,
@@ -150,6 +170,7 @@ export function computeCohortDistribution(rows: UserValueRow[], broadThreshold =
     coachingHeadroomUsd: headroom,
     totalCostUsd: ppl.reduce((s, r) => s + r.costUsd, 0),
     totalRealizedValueUsd: ppl.reduce((s, r) => s + r.realizedValueUsd, 0),
+    economic,
   };
 }
 
@@ -217,8 +238,10 @@ export function selfView(rows: UserValueRow[], user: string, opts: CohortOptions
  * it's git-attributed, not user-attributed, so mixing it in would mislead).
  */
 export function userValueRows(store: Store, opts: { startMs: number; endMs: number }): UserValueRow[] {
-  const sessions = store.sessionUnitsByUser(opts.startMs, opts.endMs);
+  const sessions = store.economicSessionUnitsByUser(opts.startMs, opts.endMs);
   const agg = new Map<string, UserValueRow>();
+  const exactByUser = new Map<string, EconomicAttribution[]>();
+  const realizedExactByUser = new Map<string, EconomicAttribution[]>();
   for (const s of sessions) {
     const outcome = classifySession(store.signalsForCommit(s.sessionId));
     let row = agg.get(s.user);
@@ -228,10 +251,20 @@ export function userValueRows(store: Store, opts: { startMs: number; endMs: numb
     }
     row.sessions += 1;
     row.costUsd += s.costUsd;
+    const exact = exactByUser.get(s.user) ?? [];
+    exact.push(s.economic);
+    exactByUser.set(s.user, exact);
     if (outcome.realized) {
       row.realizedSessions += 1;
       row.realizedValueUsd += s.costUsd; // realized value = the spend that turned into a kept outcome
+      const realizedExact = realizedExactByUser.get(s.user) ?? [];
+      realizedExact.push(s.economic);
+      realizedExactByUser.set(s.user, realizedExact);
     }
+  }
+  for (const [user, row] of agg) {
+    row.economic = economicAttributionFromAttributions(exactByUser.get(user) ?? []);
+    row.realizedEconomic = economicAttributionFromAttributions(realizedExactByUser.get(user) ?? []);
   }
   return [...agg.values()];
 }

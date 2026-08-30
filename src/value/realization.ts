@@ -36,8 +36,7 @@ import {
 import { classifyTaskType, type TaskType } from './taskType.ts';
 import { computeReturnOnIntelligence, type RoIOptions } from './lenses.ts';
 import { liftFromData, timeWithAiMinutes, type AiEvent, type DataLiftResult } from './lift.ts';
-import { addMoney, money, moneyFromJson, type EconomicBasis } from '../economics/money.ts';
-import { economicAttributionView, type EconomicAttribution } from '../economics/attribution.ts';
+import { economicAttributionFromAttributions, type EconomicAttribution } from '../economics/attribution.ts';
 
 const run = promisify(execFile);
 
@@ -116,6 +115,8 @@ export interface WorkUnit extends CommitAttribution {
    * spend was observed in the window.
    */
   dominantModelCostShare: number | null;
+  /** Exact effective spend for the dominant model, when request lineage exists. */
+  dominantModelEconomic?: EconomicAttribution;
   /**
    * True when this unit was rehydrated from a snapshot whose dollars predate a
    * reprice that touched its window and could not be re-attributed (its snapshot
@@ -298,13 +299,20 @@ export async function computeRealization(
     // model read to the SAME project the dollars were scoped to, or the label could
     // be taken from another project's concurrent traffic.
     const modelSpend = store.byModel(a.windowStartMs, a.windowEndMs, projectScoped ? project : undefined);
+    const exactModelSpend = store.economicModelUnits(a.windowStartMs, a.windowEndMs, projectScoped ? project : undefined);
     const dominantModel = modelSpend.length > 0 ? modelSpend[0]!.label : null;
     // Keep the dominant model's OWN spend and its share of the window separately
     // from the window total: the total is what the commit cost, the share is how
     // much of that is really attributable to this model. Model comparison needs
     // both, and conflating them books one model's dollars to another.
-    const windowModelTotal = modelSpend.reduce((s, m) => s + m.costUsd, 0);
-    const dominantModelCostUsd = modelSpend.length > 0 ? modelSpend[0]!.costUsd : null;
+    const windowModelTotal = exactModelSpend.length > 0
+      ? exactModelSpend.reduce((s, m) => s + m.costUsd, 0)
+      : modelSpend.reduce((s, m) => s + m.costUsd, 0);
+    const dominantModelRow = dominantModel === null
+      ? undefined
+      : exactModelSpend.find((m) => m.provider === modelSpend[0]!.provider && m.model === dominantModel);
+    const dominantModelEconomic = dominantModelRow?.economic;
+    const dominantModelCostUsd = dominantModelRow?.costUsd ?? (modelSpend.length > 0 ? modelSpend[0]!.costUsd : null);
     const dominantModelCostShare =
       modelSpend.length > 0 && windowModelTotal > 0 ? modelSpend[0]!.costUsd / windowModelTotal : null;
     // Record HOW that model's dollars were priced, not just how many there were.
@@ -337,6 +345,7 @@ export async function computeRealization(
       dominantModel,
       dominantModelCostUsd,
       dominantModelCostShare,
+      ...(dominantModelEconomic === undefined ? {} : { dominantModelEconomic }),
       dominantModelCostBasis,
       dominantModelRateCard,
       costStale: false, // priced from the ledger as it stands right now
@@ -631,27 +640,8 @@ export function rollupRealization(
     for (const r of u.funnel.results) if (r.verdict !== 'unknown') instrumentation[r.gate] += 1;
   }
 
-  const aggregateEconomic = (values: readonly EconomicAttribution[]): EconomicAttribution => {
-    let amount = money('0', 'USD', 'effective');
-    const eventIds: string[] = [];
-    const sourceBases = new Set<EconomicBasis>();
-    let requestCount = 0;
-    let unresolvedRequests = 0;
-    for (const value of values) {
-      amount = addMoney(amount, moneyFromJson(value.amount));
-      eventIds.push(...value.eventIds);
-      for (const basis of value.sourceBases) sourceBases.add(basis);
-      requestCount += value.requestCount;
-      unresolvedRequests += value.unresolvedRequests;
-    }
-    return economicAttributionView({
-      amount,
-      eventIds: eventIds.sort(),
-      sourceBases: [...sourceBases].sort(),
-      requestCount,
-      unresolvedRequests,
-    });
-  };
+  const aggregateEconomic = (values: readonly EconomicAttribution[]): EconomicAttribution =>
+    economicAttributionFromAttributions(values);
   const matureEconomic = mature.flatMap((unit) => unit.economic === undefined ? [] : [unit.economic]);
   const realizedEconomic = realizedUnits.flatMap((unit) => unit.economic === undefined ? [] : [unit.economic]);
   const economic: RealizationEconomicRollup = {

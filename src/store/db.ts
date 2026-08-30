@@ -49,7 +49,18 @@ import * as causalLineage from './causalLineage.ts';
 import * as causalProducer from './causalProducer.ts';
 import * as backup from './backup.ts';
 import * as realization from './realization.ts';
-import { effectiveRequestRows, type EffectiveRequestRow } from './economicReadModel.ts';
+import {
+  effectiveRequestRows,
+  groupEconomicSessions,
+  groupEconomicSessionUsers,
+  groupEconomicModels,
+  groupEconomicSeries,
+  type EffectiveRequestRow,
+  type EconomicSessionUnit,
+  type EconomicSessionUserUnit,
+  type EconomicModelUnit,
+  type EconomicSeriesPoint,
+} from './economicReadModel.ts';
 import { buildEconomicRequestExportRows, type EconomicRequestExportRow } from '../export/economic.ts';
 import { billingReconciliationClaim, buildBillingKernelIssuance, buildOpenAiCostsKernelIssuance, buildOpenAiReconciliationKernelIssuance, type BillingKernelPersistenceResult, type BillingReconciliationClaimInput, type OpenAiCostsKernelPersistenceResult, type OpenAiReconciliationKernelPersistenceResult } from '../billing/epistemic.ts';
 import type {
@@ -66,7 +77,14 @@ export type {
   RepriceUpdate,
   RequestPriceEvent,
 } from './realization.ts';
-export type { EffectiveRequestRow, EconomicRequestUnresolvedReason } from './economicReadModel.ts';
+export type {
+  EffectiveRequestRow,
+  EconomicRequestUnresolvedReason,
+  EconomicSessionUnit,
+  EconomicSessionUserUnit,
+  EconomicModelUnit,
+  EconomicSeriesPoint,
+} from './economicReadModel.ts';
 import type {
   BillingEvidenceRecord,
   BillingRecordMappingDeclarationInput,
@@ -615,6 +633,7 @@ export class Store {
       summary: (startMs, endMs, project) => this.summary(startMs, endMs, project),
       byModel: (startMs, endMs, project) => this.byModel(startMs, endMs, project),
       economicRequestRows: (startMs, endMs, project) => this.economicRequestRowsInRange(startMs, endMs, { project }),
+      economicModelUnits: (startMs, endMs, project) => this.economicModelUnits(startMs, endMs, project),
       economicLedger: this.economicLedger,
     };
   }
@@ -1682,6 +1701,35 @@ export class Store {
          GROUP BY session_id, COALESCE(user, 'unassigned')`,
       )
       .all(startMs, endMs) as Array<{ sessionId: string; user: string; costUsd: number }>;
+  }
+
+  /** Exact effective session groups for non-coding value consumers. */
+  economicSessionUnits(startMs: number, endMs: number, liveOnly = false): EconomicSessionUnit[] {
+    const rows = this.economicRequestRowsInRange(startMs, endMs, { liveOnly });
+    const proposalRows = this.db
+      .prepare(`SELECT DISTINCT session_id AS sessionId FROM proposals WHERE session_id IS NOT NULL`)
+      .all() as Array<{ sessionId: string }>;
+    return groupEconomicSessions(rows, new Set(proposalRows.map((row) => row.sessionId)));
+  }
+
+  /** Exact effective (session,user) groups, excluding sessions with coding proposals. */
+  economicSessionUnitsByUser(startMs: number, endMs: number, liveOnly = false): EconomicSessionUserUnit[] {
+    const rows = this.economicRequestRowsInRange(startMs, endMs, { liveOnly });
+    const proposalRows = this.db
+      .prepare(`SELECT DISTINCT session_id AS sessionId FROM proposals WHERE session_id IS NOT NULL`)
+      .all() as Array<{ sessionId: string }>;
+    const proposalIds = new Set(proposalRows.map((row) => row.sessionId));
+    return groupEconomicSessionUsers(rows.filter((row) => row.sessionId !== null && !proposalIds.has(row.sessionId)));
+  }
+
+  /** Exact effective provider/model groups for frontier and model-trial consumers. */
+  economicModelUnits(startMs: number, endMs: number, project?: string, liveOnly = false): EconomicModelUnit[] {
+    return groupEconomicModels(this.economicRequestRowsInRange(startMs, endMs, { project, liveOnly }));
+  }
+
+  /** Exact effective time buckets for budget/advisor consumers. */
+  economicSeries(startMs: number, endMs: number, bucketMs: number, liveOnly = false): EconomicSeriesPoint[] {
+    return groupEconomicSeries(this.economicRequestRowsInRange(startMs, endMs, { liveOnly }), bucketMs);
   }
 
   saveReceipt(r: { unit: string; project: string; tsEpochMs: number; realized: boolean; receiptJson: string }): void {

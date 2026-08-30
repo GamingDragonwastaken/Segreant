@@ -1,6 +1,6 @@
 /** JSON-safe exact economic coverage attached to a value attribution window. */
 
-import { addMoney, formatMoneyAmount, money, moneyToJson, type EconomicBasis, type Money, type MoneyJson } from './money.ts';
+import { addMoney, formatMoneyAmount, money, moneyFromJson, moneyToJson, type EconomicBasis, type Money, type MoneyJson } from './money.ts';
 
 export interface EconomicAttribution {
   /** Effective amount of the exact rows resolved in this window. */
@@ -17,6 +17,18 @@ export interface EconomicAttribution {
   unresolvedRequests: number;
   /** True only when every request in the window has exact effective evidence. */
   complete: boolean;
+}
+
+/**
+ * Project an exact decimal into a legacy numeric field only when the exact
+ * window is complete and the projection is finite. Incomplete or oversized
+ * windows keep their caller-supplied compatibility value and remain disclosed
+ * through the exact coverage object.
+ */
+export function economicAttributionNumber(value: EconomicAttribution | undefined, compatibilityValue: number): number {
+  if (value === undefined || !value.complete) return compatibilityValue;
+  const projected = Number(value.amountText);
+  return Number.isFinite(projected) ? projected : compatibilityValue;
 }
 
 /**
@@ -70,6 +82,30 @@ export function economicAttributionFromRows(rows: ReadonlyArray<{
     eventIds: eventIds.sort(),
     sourceBases: [...sourceBases].sort(),
     requestCount: rows.length,
+    unresolvedRequests,
+  });
+}
+
+/** Aggregate already-built attribution windows without losing coverage state. */
+export function economicAttributionFromAttributions(values: ReadonlyArray<EconomicAttribution>): EconomicAttribution {
+  if (!Array.isArray(values)) throw new Error('economic attributions must be an array');
+  let amount = money('0', 'USD', 'effective');
+  const eventIds: string[] = [];
+  const sourceBases = new Set<EconomicBasis>();
+  let requestCount = 0;
+  let unresolvedRequests = 0;
+  for (const value of values) {
+    amount = addMoney(amount, moneyFromJson(value.amount));
+    eventIds.push(...value.eventIds);
+    for (const basis of value.sourceBases) sourceBases.add(basis);
+    requestCount += value.requestCount;
+    unresolvedRequests += value.unresolvedRequests;
+  }
+  return economicAttributionView({
+    amount,
+    eventIds: eventIds.sort(),
+    sourceBases: [...sourceBases].sort(),
+    requestCount,
     unresolvedRequests,
   });
 }
