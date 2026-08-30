@@ -608,6 +608,7 @@ export class Store {
       canonicalProject: (name) => this.canonicalProject(name),
       summary: (startMs, endMs, project) => this.summary(startMs, endMs, project),
       byModel: (startMs, endMs, project) => this.byModel(startMs, endMs, project),
+      economicLedger: this.economicLedger,
     };
   }
 
@@ -872,6 +873,7 @@ export class Store {
       if (byRequest.has(requestId)) throw new Error(`multiple economic charge events exist for request ${requestId}`);
       byRequest.set(requestId, event);
     }
+    const effectiveBySource = this.economicLedger.effectiveChargesFor([...byRequest.values()].map((event) => event.id));
     let unresolvedRequests = 0;
     for (const row of rows) {
       const event = byRequest.get(row.requestId);
@@ -879,11 +881,15 @@ export class Store {
         unresolvedRequests += 1;
         continue;
       }
-      if (event.amount === null || event.amount.currency !== 'USD') throw new Error(`economic request event ${event.id} is not a USD charge`);
-      const projected = money(formatMoneyAmount(event.amount), 'USD', 'effective');
-      amount = addMoney(amount, projected);
-      eventIds.push(event.id);
-      sourceBases.add(event.amount.basis);
+      const effective = effectiveBySource.get(event.id);
+      if (effective === undefined) {
+        unresolvedRequests += 1;
+        continue;
+      }
+      if (effective.amount.currency !== 'USD') throw new Error(`economic request event ${event.id} is not a USD charge`);
+      amount = addMoney(amount, effective.amount);
+      eventIds.push(...effective.eventIds);
+      for (const basis of effective.sourceBases) sourceBases.add(basis);
     }
     return Object.freeze({
       amount,

@@ -10,7 +10,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { initializeEconomicSchema } from '../store/schema.ts';
 import { instant, type Instant } from '../epistemic/time.ts';
-import { addMoney, compareMoney, moneyFromJson, negateMoney, subtractMoney, type Money } from './money.ts';
+import { addMoney, compareMoney, formatMoneyAmount, money, moneyFromJson, negateMoney, subtractMoney, type Money } from './money.ts';
 import { economicEvent, economicEventRole, type EconomicEvent, type EconomicEventInput, type EconomicEventRole } from './events.ts';
 import { deserializeEconomicEvent, serializeEconomicEvent } from './serialization.ts';
 import { applyExactRate, rateFromJson } from './rate.ts';
@@ -39,6 +39,14 @@ export interface EconomicProjection {
   readonly asOf: Instant | null;
   readonly eventIds: readonly string[];
   readonly balances: readonly EconomicBalance[];
+}
+
+/** One charge after any visible, validated local price correction. */
+export interface EffectiveEconomicCharge {
+  readonly sourceEventId: string;
+  readonly amount: Money;
+  readonly eventIds: readonly string[];
+  readonly sourceBases: readonly Money['basis'][];
 }
 
 function row<T>(value: unknown): T | null {
@@ -201,6 +209,7 @@ export class EconomicLedger {
       }
       if (source.subject !== value.subject) throw new Error(`economic event ${value.id} price correction subject must match its source`);
       if (value.amount === null) throw new Error(`economic event ${value.id} price correction requires a monetary delta`);
+      if (source.amount.coefficient < 0n) throw new Error(`economic event ${value.id} price correction source amount must be non-negative`);
       if (value.amount.currency !== source.amount.currency || value.amount.basis !== source.amount.basis) {
         throw new Error(`economic event ${value.id} price correction must use the source currency and basis`);
       }
@@ -226,6 +235,7 @@ export class EconomicLedger {
       if (next.currency !== source.amount.currency || next.basis !== source.amount.basis) {
         throw new Error(`economic event ${value.id} price correction nextAmount must use the source currency and basis`);
       }
+      if (next.coefficient < 0n) throw new Error(`economic event ${value.id} price correction nextAmount must be non-negative`);
       if (compareMoney(subtractMoney(next, previous), value.amount) !== 0) {
         throw new Error(`economic event ${value.id} price correction amount must equal nextAmount minus previousAmount`);
       }
@@ -388,6 +398,76 @@ export class EconomicLedger {
     const validated = new Set<string>();
     for (const value of values) this.validateReferenceClosure(value, new Set<string>(), validated);
     return Object.freeze(values);
+  }
+
+  /**
+   * Project charge events onto the explicit `effective` basis.  The source
+   * event remains retained and visible in the ordinary role-aware projection;
+   * this method is the narrow consumer boundary that applies an additive local
+  * price correction without creating a second accounting history.
+  */
+  effectiveChargesFor(sourceEventIds: readonly string[], asOf?: Instant): ReadonlyMap<string, EffectiveEconomicCharge> {
+    if (!Array.isArray(sourceEventIds)) throw new Error('economic source event ids must be an array');
+    for (const sourceEventId of sourceEventIds) {
+      if (typeof sourceEventId !== 'string' || sourceEventId.trim().length === 0) throw new Error('economic source event id must be non-empty');
+    }
+    const boundary = asOf === undefined ? undefined : canonicalBoundary(asOf);
+    const requested = new Set(sourceEventIds);
+    if (requested.size === 0) return new Map<string, EffectiveEconomicCharge>();
+    const sources = new Map<string, EconomicEvent>();
+    const corrections = new Map<string, EconomicEvent[]>();
+    for (const sourceId of requested) {
+      const source = this.read(sourceId);
+      if (source === null || (boundary !== undefined && Date.parse(source.recordedAt) > Date.parse(boundary))) continue;
+      if (economicEventRole(source.kind) === 'charge' && source.amount !== null) sources.set(source.id, source);
+    }
+    if (sources.size > 0) {
+      const ids = [...sources.keys()];
+      const placeholders = ids.map(() => '?').join(', ');
+      const recordedClause = boundary === undefined ? '' : ' AND e.recorded_at <= ?';
+      const correctionRows = this.db.prepare(
+        `SELECT e.event_id, e.event_kind, e.subject, e.occurred_at, e.recorded_at, e.event_json, e.event_digest
+           FROM economic_events AS e
+           JOIN economic_event_sources AS s ON s.event_id = e.event_id
+          WHERE e.event_kind = 'price_corrected' AND s.source_event_id IN (${placeholders})${recordedClause}
+          ORDER BY e.recorded_at ASC, e.event_id ASC`,
+      ).all(...ids, ...(boundary === undefined ? [] : [boundary])) as unknown as StoredEconomicRow[];
+      for (const rowValue of correctionRows) {
+        const correction = this.read(rowValue.event_id);
+        if (correction === null) continue;
+        for (const sourceId of correction.sourceEventIds) {
+          if (!sources.has(sourceId)) continue;
+          const list = corrections.get(sourceId);
+          if (list === undefined) corrections.set(sourceId, [correction]);
+          else list.push(correction);
+        }
+      }
+    }
+    const result = new Map<string, EffectiveEconomicCharge>();
+    for (const [sourceId, source] of sources) {
+      let amount = source.amount!;
+      const eventIds = [source.id];
+      const sourceBases = new Set<Money['basis']>([source.amount!.basis]);
+      for (const correction of corrections.get(sourceId) ?? []) {
+        if (correction.amount === null) throw new Error(`economic price correction ${correction.id} has no amount`);
+        amount = addMoney(amount, correction.amount);
+        eventIds.push(correction.id);
+        sourceBases.add(correction.amount.basis);
+      }
+      result.set(sourceId, Object.freeze({
+        sourceEventId: sourceId,
+        amount: money(formatMoneyAmount(amount), amount.currency, 'effective'),
+        eventIds: Object.freeze(eventIds),
+        sourceBases: Object.freeze([...sourceBases].sort()),
+      }));
+    }
+    return result;
+  }
+
+  /** Project one charge onto `effective`, or return null if it is not visible. */
+  effectiveChargeFor(sourceEventId: string, asOf?: Instant): EffectiveEconomicCharge | null {
+    if (typeof sourceEventId !== 'string' || sourceEventId.trim().length === 0) throw new Error('economic source event id is required');
+    return this.effectiveChargesFor([sourceEventId], asOf).get(sourceEventId) ?? null;
   }
 
   project(asOf?: Instant): EconomicProjection {

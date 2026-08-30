@@ -21,6 +21,10 @@ import { runScript } from './schema.ts';
 import type { RequestPricingEvidence } from '../cost/pricing.ts';
 import { pricingEvidenceFromRecord } from './rows.ts';
 import type { SpendBucket } from './db.ts';
+import type { EconomicLedger } from '../economics/ledger.ts';
+import type { Money } from '../economics/money.ts';
+import { requestEconomicEventId } from '../economics/request.ts';
+import { priceCorrectionEvent } from '../economics/corrections.ts';
 
 /**
  * A persisted snapshot of one computed work unit. The store keeps these so
@@ -80,6 +84,8 @@ export interface RepriceUpdate {
   requestId: string;
   costUsd: number;
   pricing: RequestPricingEvidence;
+  /** Exact replacement when the request already has canonical economic history. */
+  economicAmount?: Money;
 }
 
 /** One append-only price change, with the evidence on both sides of it. */
@@ -111,6 +117,8 @@ export interface RealizationDeps {
     endMs: number,
     project?: string,
   ) => Array<SpendBucket & { provider: string; cacheReadTokens: number; cacheWriteTokens: number }>;
+  /** Shared economic ledger; exact reprices must append through this handle. */
+  economicLedger?: EconomicLedger;
 }
 
 export function saveReceipt(
@@ -297,6 +305,21 @@ export function applyRepricedCosts(
     for (const u of updates) {
       const old = prior.get(u.requestId) as Record<string, unknown> | undefined;
       if (!old || !Boolean(old.estimated)) continue;
+      const exactSource = deps.economicLedger?.read(requestEconomicEventId(u.requestId)) ?? null;
+      if (exactSource !== null) {
+        if (u.economicAmount === undefined) {
+          throw new Error(`exact reprice for request ${u.requestId} requires an exact replacement amount`);
+        }
+        const recordedAt = new Date(appliedAtMs).toISOString();
+        const correction = priceCorrectionEvent({
+          id: `economic:request:${u.requestId}:price-corrected`,
+          source: exactSource,
+          previousAmount: exactSource.amount!,
+          nextAmount: u.economicAmount,
+          recordedAt,
+        });
+        deps.economicLedger!.appendWithinTransaction(correction);
+      }
       const oldPricing = pricingEvidenceFromRecord(old);
       const written = update.run(
         u.costUsd,

@@ -356,7 +356,7 @@ export function cmdReprice(flags: Flags): void {
         stillEstimated++;
         continue; // still a guess — keep the original guess rather than churn numbers
       }
-      updates.push({ requestId: r.requestId, costUsd: c.costUsd, pricing: c.pricing });
+      updates.push({ requestId: r.requestId, costUsd: c.costUsd, pricing: c.pricing, ...(c.exact === undefined ? {} : { economicAmount: c.exact.total }) });
       const key = `${r.provider}/${r.model}`;
       const agg = byModel.get(key) ?? { n: 0, before: 0, after: 0 };
       agg.n++;

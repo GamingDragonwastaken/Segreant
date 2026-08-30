@@ -50,12 +50,14 @@ export function priceCorrectionEvent(input: PriceCorrectionEventInput): Economic
     throw new Error(`price correction source must be a local charge_estimated event (received ${source.kind})`);
   }
   if (source.amount === null) throw new Error('price correction source must have a monetary amount');
+  if (source.amount.coefficient < 0n) throw new Error('price correction source amount must be non-negative');
   if (compareMoney(previousAmount, source.amount) !== 0) {
     throw new Error('price correction previousAmount must equal the source amount');
   }
   if (previousAmount.currency !== nextAmount.currency || previousAmount.basis !== nextAmount.basis) {
     throw new Error('price correction previousAmount and nextAmount must use the same currency and basis');
   }
+  if (nextAmount.coefficient < 0n) throw new Error('price correction nextAmount must be non-negative');
   const delta = subtractMoney(nextAmount, previousAmount);
   const correction = economicEvent({
     id: input.id,
