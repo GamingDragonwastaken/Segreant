@@ -714,6 +714,30 @@ CREATE INDEX IF NOT EXISTS idx_economic_events_recorded ON economic_events(recor
 CREATE INDEX IF NOT EXISTS idx_economic_events_subject ON economic_events(subject, recorded_at, event_id);
 CREATE INDEX IF NOT EXISTS idx_economic_events_occurred ON economic_events(occurred_at, event_id);
 CREATE INDEX IF NOT EXISTS idx_economic_event_sources_source ON economic_event_sources(source_event_id, event_id);
+
+CREATE TABLE IF NOT EXISTS economic_allocation_runs (
+  allocation_run_id TEXT PRIMARY KEY,
+  period_start_ms INTEGER NOT NULL,
+  period_end_ms INTEGER NOT NULL,
+  run_at_ms INTEGER NOT NULL,
+  computed_at_ms INTEGER NOT NULL,
+  complete INTEGER NOT NULL CHECK (complete IN (0, 1)),
+  conserves INTEGER NOT NULL CHECK (conserves IN (0, 1)),
+  result_json TEXT NOT NULL,
+  result_digest TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS economic_allocation_lineage (
+  allocation_run_id TEXT NOT NULL,
+  item_kind TEXT NOT NULL CHECK (item_kind IN ('line', 'unallocated')),
+  item_index INTEGER NOT NULL CHECK (item_index >= 0),
+  source_event_id TEXT NOT NULL,
+  PRIMARY KEY (allocation_run_id, item_kind, item_index, source_event_id),
+  FOREIGN KEY (allocation_run_id) REFERENCES economic_allocation_runs(allocation_run_id),
+  FOREIGN KEY (source_event_id) REFERENCES economic_events(event_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_economic_allocation_lineage_source ON economic_allocation_lineage(source_event_id, allocation_run_id);
 `;
 
 /**
@@ -950,6 +974,38 @@ export function initializeEconomicSchema(db: DatabaseSync): void {
     ' BEFORE INSERT ON economic_event_sources' +
     ' WHEN EXISTS (SELECT 1 FROM economic_event_sources WHERE event_id = NEW.event_id AND source_event_id = NEW.source_event_id)' +
     ' BEGIN SELECT RAISE(ABORT, \'economic event source links are append-only\'); END',
+  ).run();
+  db.prepare(
+    'CREATE TRIGGER IF NOT EXISTS economic_allocation_runs_append_only_update' +
+    ' BEFORE UPDATE ON economic_allocation_runs' +
+    ' BEGIN SELECT RAISE(ABORT, \'exact economic allocation runs are append-only\'); END',
+  ).run();
+  db.prepare(
+    'CREATE TRIGGER IF NOT EXISTS economic_allocation_runs_append_only_delete' +
+    ' BEFORE DELETE ON economic_allocation_runs' +
+    ' BEGIN SELECT RAISE(ABORT, \'exact economic allocation runs are append-only\'); END',
+  ).run();
+  db.prepare(
+    'CREATE TRIGGER IF NOT EXISTS economic_allocation_runs_append_only_insert' +
+    ' BEFORE INSERT ON economic_allocation_runs' +
+    ' WHEN EXISTS (SELECT 1 FROM economic_allocation_runs WHERE allocation_run_id = NEW.allocation_run_id)' +
+    ' BEGIN SELECT RAISE(ABORT, \'exact economic allocation runs are append-only\'); END',
+  ).run();
+  db.prepare(
+    'CREATE TRIGGER IF NOT EXISTS economic_allocation_lineage_append_only_update' +
+    ' BEFORE UPDATE ON economic_allocation_lineage' +
+    ' BEGIN SELECT RAISE(ABORT, \'exact economic allocation lineage is append-only\'); END',
+  ).run();
+  db.prepare(
+    'CREATE TRIGGER IF NOT EXISTS economic_allocation_lineage_append_only_delete' +
+    ' BEFORE DELETE ON economic_allocation_lineage' +
+    ' BEGIN SELECT RAISE(ABORT, \'exact economic allocation lineage is append-only\'); END',
+  ).run();
+  db.prepare(
+    'CREATE TRIGGER IF NOT EXISTS economic_allocation_lineage_append_only_insert' +
+    ' BEFORE INSERT ON economic_allocation_lineage' +
+    ' WHEN EXISTS (SELECT 1 FROM economic_allocation_lineage WHERE allocation_run_id = NEW.allocation_run_id AND item_kind = NEW.item_kind AND item_index = NEW.item_index AND source_event_id = NEW.source_event_id)' +
+    ' BEGIN SELECT RAISE(ABORT, \'exact economic allocation lineage is append-only\'); END',
   ).run();
 }
 

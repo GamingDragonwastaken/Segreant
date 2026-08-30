@@ -21,6 +21,7 @@ import {
   type CostCentre,
 } from '../alloc/rules.ts';
 import { applyAllocation, type AllocationRunResult } from '../alloc/apply.ts';
+import { deserializeExactAllocationRun, serializeExactAllocationRun, type ExactAllocationRunResult, type SerializedExactAllocationRun } from '../alloc/exact.ts';
 import type { RequestRow } from './db.ts';
 
 export function upsertCostCentre(
@@ -241,4 +242,116 @@ export function allocationRuns(
     computedAtMs: Number(row.computedAtMs),
     result: JSON.parse(String(row.resultJson)) as AllocationRunResult,
   }));
+}
+
+export interface ExactAllocationRunRecord {
+  allocationRunId: string;
+  computedAtMs: number;
+  result: ExactAllocationRunResult;
+}
+
+function exactRunId(serialized: SerializedExactAllocationRun): string {
+  return `economic:allocation:${serialized.digest.slice('sha256:'.length)}`;
+}
+
+function lineageRows(db: DatabaseSync, allocationRunId: string): Array<{ itemKind: string; itemIndex: number; sourceEventId: string }> {
+  return db.prepare(
+    `SELECT item_kind AS itemKind, item_index AS itemIndex, source_event_id AS sourceEventId
+       FROM economic_allocation_lineage
+      WHERE allocation_run_id = ?
+      ORDER BY item_kind ASC, item_index ASC, source_event_id ASC`,
+  ).all(allocationRunId) as Array<{ itemKind: string; itemIndex: number; sourceEventId: string }>;
+}
+
+function expectedLineage(result: ExactAllocationRunResult): Array<{ itemKind: string; itemIndex: number; sourceEventId: string }> {
+  const rows: Array<{ itemKind: string; itemIndex: number; sourceEventId: string }> = [];
+  for (const [itemIndex, line] of result.lines.entries()) for (const sourceEventId of line.sourceEventIds) rows.push({ itemKind: 'line', itemIndex, sourceEventId });
+  for (const [itemIndex, line] of result.unallocated.entries()) for (const sourceEventId of line.sourceEventIds) rows.push({ itemKind: 'unallocated', itemIndex, sourceEventId });
+  return rows.sort((a, b) => a.itemKind.localeCompare(b.itemKind) || a.itemIndex - b.itemIndex || a.sourceEventId.localeCompare(b.sourceEventId));
+}
+
+function verifyExactAllocationLineage(db: DatabaseSync, allocationRunId: string, result: ExactAllocationRunResult): void {
+  const expected = expectedLineage(result);
+  const actual = lineageRows(db, allocationRunId);
+  if (actual.length !== expected.length || actual.some((row, index) => row.itemKind !== expected[index]!.itemKind || row.itemIndex !== expected[index]!.itemIndex || row.sourceEventId !== expected[index]!.sourceEventId)) {
+    throw new Error(`exact allocation run ${allocationRunId} lineage diverges from its canonical result`);
+  }
+}
+
+function insertExactAllocationLineage(db: DatabaseSync, allocationRunId: string, result: ExactAllocationRunResult): void {
+  const exists = db.prepare('SELECT 1 AS present FROM economic_events WHERE event_id = ?');
+  const insert = db.prepare(
+    'INSERT INTO economic_allocation_lineage (allocation_run_id, item_kind, item_index, source_event_id) VALUES (?, ?, ?, ?)',
+  );
+  for (const row of expectedLineage(result)) {
+    if (exists.get(row.sourceEventId) === undefined) throw new Error(`unknown source economic event for exact allocation: ${row.sourceEventId}`);
+    insert.run(allocationRunId, row.itemKind, row.itemIndex, row.sourceEventId);
+  }
+}
+
+/** Persist one canonical exact allocation result without mutating an earlier run. */
+export function saveExactAllocationRun(db: DatabaseSync, result: ExactAllocationRunResult, computedAtMs = Date.now()): string {
+  if (!result.conserves) throw new Error('refusing to record an exact allocation run that does not conserve its input');
+  if (!Number.isSafeInteger(computedAtMs)) throw new Error('exact allocation computedAt must be a safe timestamp');
+  const serialized = serializeExactAllocationRun(result);
+  const canonical = deserializeExactAllocationRun(serialized);
+  const allocationRunId = exactRunId(serialized);
+  runScript(db, 'BEGIN IMMEDIATE');
+  try {
+    const existing = db.prepare(
+      `SELECT allocation_run_id AS allocationRunId, period_start_ms AS periodStartMs, period_end_ms AS periodEndMs,
+              run_at_ms AS runAtMs, computed_at_ms AS computedAtMs, complete, conserves, result_json AS resultJson, result_digest AS resultDigest
+         FROM economic_allocation_runs WHERE allocation_run_id = ?`,
+    ).get(allocationRunId) as Record<string, unknown> | undefined;
+    if (existing !== undefined) {
+      if (String(existing.resultJson) !== serialized.body || String(existing.resultDigest) !== serialized.digest || Number(existing.periodStartMs) !== canonical.periodStartMs || Number(existing.periodEndMs) !== canonical.periodEndMs || Number(existing.runAtMs) !== canonical.runAtMs || Boolean(existing.complete) !== canonical.complete || Boolean(existing.conserves) !== canonical.conserves) {
+        throw new Error(`different exact allocation result already exists for ${allocationRunId}`);
+      }
+      const existingResult = deserializeExactAllocationRun({ kind: 'exact_allocation_run', schemaVersion: 1, body: String(existing.resultJson), digest: String(existing.resultDigest) });
+      verifyExactAllocationLineage(db, allocationRunId, existingResult);
+      runScript(db, 'COMMIT');
+      return allocationRunId;
+    }
+    db.prepare(
+      `INSERT INTO economic_allocation_runs
+          (allocation_run_id, period_start_ms, period_end_ms, run_at_ms, computed_at_ms, complete, conserves, result_json, result_digest)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(allocationRunId, canonical.periodStartMs, canonical.periodEndMs, canonical.runAtMs, computedAtMs, canonical.complete ? 1 : 0, canonical.conserves ? 1 : 0, serialized.body, serialized.digest);
+    insertExactAllocationLineage(db, allocationRunId, canonical);
+    verifyExactAllocationLineage(db, allocationRunId, canonical);
+    runScript(db, 'COMMIT');
+    return allocationRunId;
+  } catch (error) {
+    try { runScript(db, 'ROLLBACK'); } catch { /* preserve original failure */ }
+    throw error;
+  }
+}
+
+/** Read and re-authenticate one exact allocation result plus every source link. */
+export function exactAllocationRun(db: DatabaseSync, allocationRunId: string): ExactAllocationRunRecord | null {
+  if (typeof allocationRunId !== 'string' || allocationRunId.trim().length === 0) throw new Error('exact allocation run id is required');
+  const row = db.prepare(
+    `SELECT allocation_run_id AS allocationRunId, period_start_ms AS periodStartMs, period_end_ms AS periodEndMs,
+            run_at_ms AS runAtMs, computed_at_ms AS computedAtMs, complete, conserves, result_json AS resultJson, result_digest AS resultDigest
+       FROM economic_allocation_runs WHERE allocation_run_id = ?`,
+  ).get(allocationRunId) as Record<string, unknown> | undefined;
+  if (row === undefined) return null;
+  const result = deserializeExactAllocationRun({ kind: 'exact_allocation_run', schemaVersion: 1, body: String(row.resultJson), digest: String(row.resultDigest) });
+  if (String(row.allocationRunId) !== allocationRunId || Number(row.periodStartMs) !== result.periodStartMs || Number(row.periodEndMs) !== result.periodEndMs || Number(row.runAtMs) !== result.runAtMs || Boolean(row.complete) !== result.complete || Boolean(row.conserves) !== result.conserves) throw new Error(`exact allocation run ${allocationRunId} failed physical identity verification`);
+  verifyExactAllocationLineage(db, allocationRunId, result);
+  return { allocationRunId, computedAtMs: Number(row.computedAtMs), result };
+}
+
+/** Read bounded exact allocation history, newest computation first. */
+export function exactAllocationRuns(db: DatabaseSync, limit = 20): ExactAllocationRunRecord[] {
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 10_000) throw new Error('exact allocation run limit must be between 1 and 10000');
+  const rows = db.prepare(
+    `SELECT allocation_run_id AS allocationRunId FROM economic_allocation_runs
+      ORDER BY computed_at_ms DESC, allocation_run_id DESC LIMIT ?`,
+  ).all(limit) as Array<{ allocationRunId: string }>;
+  return rows.map((row) => {
+    const result = exactAllocationRun(db, row.allocationRunId);
+    if (result === null) throw new Error(`exact allocation run ${row.allocationRunId} disappeared during read`);
+    return result;
+  });
 }

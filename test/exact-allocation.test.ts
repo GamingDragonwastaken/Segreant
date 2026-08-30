@@ -144,6 +144,15 @@ test('Store exact allocation uses effective charges and discloses unresolved leg
     assert.deepEqual(result.totalByIdentity.map((item) => formatMoneyAmount(item.amount)), ['0.0000004']);
     assert.deepEqual(result.lines[0]!.sourceEventIds, ['economic:request:request:exact-allocation:charge']);
     assert.equal(result.conserves, true);
+    const runId = store.saveExactAllocationRun(result, 2);
+    assert.match(runId, /^economic:allocation:/);
+    assert.deepEqual(store.exactAllocationRun(runId)?.result, result);
+    assert.equal(store.saveExactAllocationRun(result, 3), runId, 'the same canonical result is idempotent');
+    const lineage = store.raw().prepare('SELECT item_kind AS itemKind, item_index AS itemIndex, source_event_id AS sourceEventId FROM economic_allocation_lineage WHERE allocation_run_id = ? ORDER BY item_kind, item_index, source_event_id').all(runId) as Array<{ itemKind: string; itemIndex: number; sourceEventId: string }>;
+    assert.deepEqual(lineage.map((item) => ({ ...item })), [{ itemKind: 'line', itemIndex: 0, sourceEventId: 'economic:request:request:exact-allocation:charge' }]);
+    assert.throws(() => store.raw().prepare('UPDATE economic_allocation_runs SET result_json = ? WHERE allocation_run_id = ?').run('{}', runId), /append-only/i);
+    assert.throws(() => store.raw().prepare('DELETE FROM economic_allocation_lineage WHERE allocation_run_id = ?').run(runId), /append-only/i);
+    assert.throws(() => store.raw().prepare('INSERT OR REPLACE INTO economic_allocation_runs (allocation_run_id, period_start_ms, period_end_ms, run_at_ms, computed_at_ms, complete, conserves, result_json, result_digest) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(runId, 0, 1, 1, 4, 1, 1, '{}', 'sha256:' + '0'.repeat(64)), /append-only/i);
   } finally {
     store.close();
   }

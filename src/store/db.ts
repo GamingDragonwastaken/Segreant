@@ -41,6 +41,7 @@ import type { AllocationRule, CostCentre } from '../alloc/rules.ts';
 import type { AllocationRunResult } from '../alloc/apply.ts';
 import type { ExactAllocationRunResult } from '../alloc/exact.ts';
 import * as allocation from './allocation.ts';
+import type { ExactAllocationRunRecord } from './allocation.ts';
 import * as exactAllocation from '../alloc/exact.ts';
 import * as billing from './billing.ts';
 import * as causal from './causal.ts';
@@ -2102,6 +2103,21 @@ export class Store {
       unresolvedRequestIds: Object.freeze(unresolvedRequestIds.sort()),
       complete: unresolvedRequestIds.length === 0,
     });
+  }
+
+  /** Persist an exact allocation projection as a canonical append-only record. */
+  saveExactAllocationRun(result: ExactAllocationRunResult, computedAtMs = Date.now()): string {
+    return allocation.saveExactAllocationRun(this.db, result, computedAtMs);
+  }
+
+  /** Read one exact allocation run after digest and normalized lineage verification. */
+  exactAllocationRun(allocationRunId: string): ExactAllocationRunRecord | null {
+    return allocation.exactAllocationRun(this.db, allocationRunId);
+  }
+
+  /** Read bounded exact allocation history, newest computation first. */
+  exactAllocationRuns(limit = 20): ExactAllocationRunRecord[] {
+    return allocation.exactAllocationRuns(this.db, limit);
   }
 
   /**
