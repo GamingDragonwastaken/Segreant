@@ -25,7 +25,17 @@ const generatedBrowserDashboardContract = join(root, 'src', 'dashboard', 'web', 
 
 /** Keep the browser's no-node copy byte-identical to the server contract. */
 function syncSharedDashboardContract() {
-  copyFileSync(sharedDashboardContract, generatedBrowserDashboardContract);
+  // Builders start concurrently in the supported workflow. The generated
+  // target is a source input for both TypeScript passes, so even a byte-identical
+  // copy must be serialized: Windows can reject a second copy while the first
+  // process still has the destination open. Reuse the same gate as publication
+  // and the launcher; this is deliberately before source fingerprint capture.
+  const release = acquirePublicationLock(root);
+  try {
+    copyFileSync(sharedDashboardContract, generatedBrowserDashboardContract);
+  } finally {
+    release();
+  }
 }
 
 syncSharedDashboardContract();
