@@ -101,7 +101,7 @@ test('classic Value view discloses exact economic coverage for every value-beari
 });
 
 test('browser Value contract includes project exact economic coverage', () => {
-  const source = readFileSync(join(import.meta.dirname, '..', 'src', 'dashboard', 'web', 'app', 'core', 'api.ts'), 'utf8');
+  const source = readFileSync(join(import.meta.dirname, '..', 'src', 'dashboard', 'shared-types.ts'), 'utf8');
   assert.match(source, /export interface ValueProjectPayload/);
   assert.match(source, /projects\?: ValueProjectPayload\[\]/);
   assert.match(source, /economic\?: RealizationEconomicRollupPayload/);

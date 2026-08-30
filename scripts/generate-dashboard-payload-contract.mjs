@@ -4,8 +4,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const sourcePath = join(root, 'src', 'dashboard', 'web', 'app', 'core', 'api.ts');
+const sourcePath = join(root, 'src', 'dashboard', 'shared-types.ts');
 const targetPath = join(root, 'src', 'dashboard', 'web', 'app', 'core', 'generated-payload-contract.ts');
+const generatedTypesPath = join(root, 'src', 'dashboard', 'web', 'app', 'core', 'generated-types.ts');
 
 function parseInterfaces(source) {
   const raw = new Map();
@@ -73,9 +74,21 @@ const source = readFileSync(sourcePath, 'utf8');
 const sourceSha256 = createHash('sha256').update(source, 'utf8').digest('hex');
 const interfaces = flattenInterfaces(parseInterfaces(source));
 const generated = [
-  '/** Generated from src/dashboard/web/app/core/api.ts; do not edit by hand. */',
+  '/** Generated from src/dashboard/shared-types.ts; do not edit by hand. */',
   `export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = ${JSON.stringify(sourceSha256)};`,
   `export const DASHBOARD_INTERFACE_CONTRACTS = ${JSON.stringify(interfaces, null, 2)} as const;`,
   '',
 ].join('\n');
 writeFileSync(targetPath, generated, 'utf8');
+
+// The browser compiler intentionally has a rootDir of web/app and cannot import
+// the server-side shared source directly. Copy the canonical declarations into
+// that root as a hash-bound, type-only build artifact; api.ts consumes this copy,
+// while server code and contract tests consume src/dashboard/shared-types.ts.
+const generatedTypes = [
+  '/** Generated from src/dashboard/shared-types.ts; do not edit by hand. */',
+  `/** Source SHA-256: ${sourceSha256} */`,
+  source.trim(),
+  '',
+].join('\n');
+writeFileSync(generatedTypesPath, generatedTypes, 'utf8');

@@ -48,6 +48,7 @@ import { verifyBlockedAssignmentPlan } from '../causal/assignment.ts';
 import { estimateCausalStudy } from '../causal/estimate.ts';
 import { stringifyJson } from '../util/json.ts';
 import { dashboardApiContract, type DashboardApiContractId } from './contracts.ts';
+import type { DashboardResponseFor } from './shared-types.ts';
 
 /**
  * Config persistence is injectable so the dashboard can be exercised without
@@ -156,7 +157,7 @@ function resolveRange(range: RangeKey, now: number): { startMs: number; endMs: n
   }
 }
 
-export function buildOverview(store: Store, config: FiscusConfig, range: RangeKey) {
+export function buildOverview(store: Store, config: FiscusConfig, range: RangeKey): DashboardResponseFor<'overview'> {
   const now = Date.now();
   const { startMs, endMs, bucketMs } = resolveRange(range, now);
 

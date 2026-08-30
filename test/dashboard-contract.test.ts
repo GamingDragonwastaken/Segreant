@@ -1,11 +1,9 @@
 /**
  * The GUI/server payload contract.
  *
- * The browser app declares its own view of every payload in
- * `src/dashboard/web/app/core/api.ts`. Nothing checks those declarations against
- * what the server actually sends: the browser tsconfig cannot see the node
- * source, so the two sides are structurally unrelated to the typechecker, and a
- * field name invented in the GUI is not a compile error.
+ * The canonical payload declarations live in `src/dashboard/shared-types.ts`;
+ * the browser consumes a hash-bound generated copy. The endpoint client remains
+ * in `src/dashboard/web/app/core/api.ts`, where route bindings are checked below.
  *
  * It is not a runtime error either, which is what makes this class of defect
  * expensive. Reading a field the payload does not have yields `undefined`, and
@@ -54,6 +52,7 @@ const API_SRC = join(
   'core',
   'api.ts',
 );
+const SHARED_TYPES_SRC = join(import.meta.dirname, '..', 'src', 'dashboard', 'shared-types.ts');
 
 interface Field {
   name: string;
@@ -276,7 +275,7 @@ function checkShape(
 }
 
 test('dashboard contract checker rejects a runtime primitive type mismatch', () => {
-  const source = readFileSync(API_SRC, 'utf8');
+  const source = readFileSync(SHARED_TYPES_SRC, 'utf8');
   assert.equal(
     DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256,
     createHash('sha256').update(source, 'utf8').digest('hex'),
@@ -292,14 +291,14 @@ test('dashboard contract checker rejects a runtime primitive type mismatch', () 
 });
 
 test('every required field the GUI declares exists in the payload the server sends', async () => {
-  const source = readFileSync(API_SRC, 'utf8');
+  const source = readFileSync(SHARED_TYPES_SRC, 'utf8');
   assert.equal(
     DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256,
     createHash('sha256').update(source, 'utf8').digest('hex'),
     'generated nested interface metadata is stale; run the dashboard contract generator',
   );
   const interfaces = generatedInterfaces();
-  const endpoints = parseEndpoints(source);
+  const endpoints = parseEndpoints(readFileSync(API_SRC, 'utf8'));
 
   assert.ok(interfaces.size >= 8, `expected to parse the GUI interfaces, got ${interfaces.size}`);
   assert.ok(endpoints.length >= 5, `expected to parse the GUI endpoints, got ${endpoints.length}`);

@@ -21,6 +21,7 @@ const tsc = join(root, 'node_modules', 'typescript', 'bin', 'tsc');
 const RENAME_RETRY_MS = 5_000;
 const waitCell = new Int32Array(new SharedArrayBuffer(4));
 const sharedDashboardContract = join(root, 'src', 'dashboard', 'contracts.ts');
+const sharedDashboardTypes = join(root, 'src', 'dashboard', 'shared-types.ts');
 const generatedBrowserDashboardContract = join(root, 'src', 'dashboard', 'web', 'app', 'core', 'generated-contract.ts');
 const dashboardPayloadContractGenerator = join(root, 'scripts', 'generate-dashboard-payload-contract.mjs');
 
@@ -202,7 +203,7 @@ function publish(stage, { prune, inputPaths, sourceGeneration }) {
  */
 const webOnly = process.argv.includes('--web');
 const sourceInputs = webOnly
-  ? ['src/dashboard/web']
+  ? ['src/dashboard/web', sharedDashboardTypes]
   : ['src', 'tsconfig.json', 'tsconfig.build.json'];
 const SOURCE_RETRY_LIMIT = 1;
 let exitCode = 0;

@@ -24,8 +24,10 @@ const anOverview = (costUsd: number, requests: number): Overview => ({
   range: '30d',
   generatedAt: '2026-08-01T00:00:00.000Z',
   summary: { requests, costUsd },
-  pricing: { status: { fresh: true }, estimatedCostUsd: 0, estimatedSpendShare: 0, provenance: [] },
-  byModel: [], byProject: [], bySource: [], series: [], recent: [],
+  pricing: { status: { fresh: true }, autoRefresh: false, estimatedCostUsd: 0, estimatedSpendShare: 0, provenance: [] },
+  budget: { dailyUsd: null, dailySoftUsd: null, todaySpendUsd: 0, todayImportedUsd: 0, capExcludesImported: true, remainingDailyUsd: null },
+  byModel: [], byProject: [], attributionEvidence: [], bySource: [], byUser: [],
+  characterization: { byProject: [], byModel: [], bySource: [], byUser: [] }, dimensions: [], series: [], recent: [],
 });
 
 const aBilling = (recordCount: number, runs: ReconciliationRunRecord[] = []): BillingPayload => ({

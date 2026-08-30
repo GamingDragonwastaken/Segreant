@@ -278,23 +278,23 @@ test('the realized band carries the value claim, not the cost of realized work',
 
   // The hazard is documented where the type is declared, so the next person to
   // write this interface from memory meets the warning first.
-  const api = readFileSync(join(WEB_SRC, 'app', 'core', 'api.ts'), 'utf8');
+  const api = readFileSync(join(import.meta.dirname, '..', 'src', 'dashboard', 'shared-types.ts'), 'utf8');
   assert.match(
     api,
     /not the value they produced/,
-    'api.ts must warn that matured.realizedValueUsd is a cost, not a value',
+    'shared dashboard types must warn that matured.realizedValueUsd is a cost, not a value',
   );
 });
 
 /**
- * The GUI declares its own copy of BudgetConfig, and a wrong field name there is
+ * The browser consumes the generated shared BudgetConfig, and a wrong field name
  * SILENT in both directions: reading `budget.dailyCapUsd` off a payload that
  * spells it `dailyUsd` yields undefined, which the Control screen rendered as
  * "no cap set" while a cap was configured and enforcing; and posting the same
  * wrong key to /api/settings/update succeeds with a healthy-looking response,
  * because `applySettingsPatch` copies only the keys it recognises and ignores
  * the rest. No typecheck can catch it — the browser tsconfig cannot see the node
- * source, so the two interfaces are structurally unrelated.
+  * source, so the two interfaces used to be structurally unrelated.
  *
  * So the contract is pinned across the boundary: every field the server's
  * BudgetConfig declares must exist in the GUI's, spelled identically.
@@ -307,7 +307,7 @@ test('the GUI budget type matches the server budget config field for field', () 
 
   assert.ok(fields.length >= 5, `expected to parse the server BudgetConfig, got ${fields.length} fields`);
 
-  const gui = readFileSync(join(WEB_SRC, 'app', 'core', 'api.ts'), 'utf8');
+  const gui = readFileSync(join(import.meta.dirname, '..', 'src', 'dashboard', 'shared-types.ts'), 'utf8');
   const guiBlock = gui.slice(gui.indexOf('export interface BudgetConfig'));
   const guiBody = guiBlock.slice(0, guiBlock.indexOf(String.fromCharCode(10) + '}'));
 

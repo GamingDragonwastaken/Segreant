@@ -146,7 +146,7 @@ test('the GUI declares readiness with the shape the wire actually sends', async 
   // which type-checked on both sides and silently broke the Billed band. So the
   // declaration is compared against a REAL response here, never against itself.
   const src = readFileSync(
-    join(import.meta.dirname, '..', 'src', 'dashboard', 'web', 'app', 'core', 'api.ts'),
+    join(import.meta.dirname, '..', 'src', 'dashboard', 'shared-types.ts'),
     'utf8',
   );
   assert.ok(/readiness/.test(src), 'the browser app must declare the readiness field');

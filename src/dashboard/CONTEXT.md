@@ -6,6 +6,8 @@
 
 - `src/store/db.ts` (read, and write on the mutating routes), `src/config.ts`.
 - The value, billing, alloc and cost modules for computed payloads.
+- `src/dashboard/shared-types.ts` for the canonical no-runtime payload declarations;
+  the build emits a hash-bound browser copy under `web/app/core/generated-types.ts`.
 - Nothing from the network. Not at build time, not at run time.
 
 ## Layout
@@ -26,7 +28,8 @@ web/
       signal.ts      reactive primitive (~80 lines, no framework)
       dom.ts         h() / render(); no HTML-parsing sink anywhere
       fmt.ts         money, dates, and the plain/precise REGISTER
-      api.ts         typed client for this server
+      api.ts         typed client for this server; consumes generated-types.ts
+      generated-types.ts  generated browser copy of shared-types.ts; never edit
       claimTypes.ts  Layer + ClaimInspection: the shape of a claim's evidence
       claimLayers.ts the four claims, DERIVED from payloads. Pure; tested.
       chain.ts       the I/O half: four independent reads, each degrading alone
@@ -169,15 +172,16 @@ web/
   controls. It does not rewrite legacy value payloads or invent provider/billed
   authority; a dedicated dashboard view remains a downstream consumer
   migration rather than a second accounting implementation.
-- **Route and envelope metadata are shared and fail closed.** The no-node
+- **Route, envelope and named payload types are shared and fail closed.** The no-node
   dashboard contract drives API paths, methods, Allow headers, CSRF gates,
   response bindings and browser-surface bindings; the build copies it into the
   browser under the publication lock. Its top-level JSON/text payload contracts
   are validated by seeded conformance and by the modern client before a typed
-  response is returned. Nested interface metadata is generated with an exact
-  `api.ts` source hash under the same lock; replacing the hand-written browser
-  declarations with a generated/shared type source remains a separate
-  migration boundary.
+  response is returned. The named payload interfaces now have one canonical
+  no-runtime source in `shared-types.ts`; the build generates both the browser
+  declaration copy and nested runtime metadata with the exact source hash under
+  the same publication lock. Inline route responses and full docs/claim/egress
+  generation remain explicit future boundaries.
 - **Capability parity is an immutable contract.** `CAPABILITY_SPECS` augments
   every GUI registry entry with input/preview/output schema classes, authority,
   egress, credentials, reversibility, assurance and CLI/API/GUI/docs bindings.

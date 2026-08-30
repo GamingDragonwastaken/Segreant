@@ -4,9 +4,10 @@
  * This module deliberately has no Node or DOM imports. The server consumes it
  * directly, and the build copies the exact bytes into the browser app so route
  * paths, methods and CSRF declarations cannot fork between the two runtimes.
- * Payload field schemas are being migrated in the next contract tranche; the
- * responseType names here make that migration explicit rather than hiding it
- * behind an untyped route map.
+ * Named payload types live in the no-runtime shared-types source; responseType
+ * names here bind route metadata to those declarations without importing Node or
+ * DOM runtime code into either side of the boundary. Inline response descriptions
+ * remain explicit until they receive named types.
  */
 
 export type DashboardHttpMethod = 'GET' | 'HEAD' | 'POST';

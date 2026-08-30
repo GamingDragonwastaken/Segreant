@@ -1,5 +1,5 @@
-/** Generated from src/dashboard/web/app/core/api.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "5315318294a0506ccf153fc25a4681c436c705ff52eefe6cd2a908eb4d9e7118";
+/** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "46e0c38c87f576b519e35c6c81689b3b6251de3a92e47af7029e8126e1371c99";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -250,6 +250,11 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "type": "{"
     },
     {
+      "name": "budget",
+      "optional": false,
+      "type": "{"
+    },
+    {
       "name": "byModel",
       "optional": false,
       "type": "GroupRow[]"
@@ -260,9 +265,29 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "type": "GroupRow[]"
     },
     {
+      "name": "attributionEvidence",
+      "optional": false,
+      "type": "Array<{ project: string; attributionBasis: string; requests: number; costUsd: number }>"
+    },
+    {
       "name": "bySource",
       "optional": false,
       "type": "GroupRow[]"
+    },
+    {
+      "name": "byUser",
+      "optional": false,
+      "type": "GroupRow[]"
+    },
+    {
+      "name": "characterization",
+      "optional": false,
+      "type": "{"
+    },
+    {
+      "name": "dimensions",
+      "optional": false,
+      "type": "readonly string[]"
     },
     {
       "name": "series",
@@ -272,7 +297,7 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
     {
       "name": "recent",
       "optional": false,
-      "type": "Array<Record<string, unknown>>"
+      "type": "unknown[]"
     },
     {
       "name": "alerts",
@@ -1462,6 +1487,48 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "service",
       "optional": false,
       "type": "string"
+    }
+  ],
+  "DashboardResponseMap": [
+    {
+      "name": "health",
+      "optional": false,
+      "type": "HealthPayload"
+    },
+    {
+      "name": "overview",
+      "optional": false,
+      "type": "Overview"
+    },
+    {
+      "name": "billing",
+      "optional": false,
+      "type": "BillingPayload"
+    },
+    {
+      "name": "allocation",
+      "optional": false,
+      "type": "AllocationPayload"
+    },
+    {
+      "name": "economic",
+      "optional": false,
+      "type": "EconomicPayload"
+    },
+    {
+      "name": "value",
+      "optional": false,
+      "type": "ValuePayload"
+    },
+    {
+      "name": "causal",
+      "optional": false,
+      "type": "CausalPayload"
+    },
+    {
+      "name": "settings",
+      "optional": false,
+      "type": "SettingsSnapshot"
     }
   ]
 } as const;
