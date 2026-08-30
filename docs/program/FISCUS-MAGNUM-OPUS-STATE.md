@@ -54,7 +54,8 @@ Controlling architecture:
 - Local candidate schema-owned exact allocation persistence (not yet published): `3fa9a20e2b58284f0cd9ad4730a6de5e92bde51f`
 - Local candidate exact-allocation replay/parity hardening (not yet published): `baee5c659aba906b2959df7f8322a1092dad1018`
 - Local candidate exact economic export surface (not yet published): `c1f7ec482f0d676c1301b3d3876551f391e2256d`
-- Local candidate verification: 1,063 root tests total (1,059 pass, 0 fail, 4 platform-conditional skips), root/browser typecheck, build, and isolated-cache package dry-run pass. No GitHub Actions run exists for these local-only commits because the push was refused by the Codex usage/approval limit.
+- Local candidate exact economic dashboard/API projection (not yet published): `ccda34d`
+- Local candidate verification: 1,064 root tests total (1,060 pass, 0 fail, 4 platform-conditional skips), root/browser typecheck, build, and isolated-cache package dry-run pass. No GitHub Actions run exists for these local-only commits because the push was refused by the Codex usage/approval limit.
 - Remaining-work audit commit: `5e5a82843154a6fd04e0017538919108c5ff06f1`
 - Luna resume-protocol commit: `5c4de94cf7af0a218ecd10946ac91577fdd9eae7`
 - Base high-assurance PR: #8 (`codex/high-assurance-foundation` -> `main`)
@@ -164,9 +165,10 @@ The reconciliation kernel path is now end-to-end for this vertical. Legacy reque
 - [x] Exact allocation persistence (`3fa9a20`) stores canonical JSON/digest runs, derives immutable IDs, persists per-line/unallocated source links with foreign keys and append-only triggers, and verifies idempotent replay and physical lineage.
 - [x] Exact-allocation replay/parity hardening (`baee5c6`) ignores archived proportional placeholders, makes result ordering permutation-invariant, rejects unknown/missing envelope fields, recomputes identity/source-lineage/conservation invariants, and validates persisted timestamps.
 - [x] Exact economic export surface (`c1f7ec4`) exposes original/effective Money, source bases, correction IDs and explicit legacy coverage through `Store.economicRequestsInRange()` and `fiscus export --economic`, while retaining the old numeric export as a labelled compatibility mode.
-- [x] Local verification at this candidate: 1,063 total root tests, 1,059 pass, 0 fail, 4 platform-conditional skips; root/browser typechecks, build, focused economic/request/correction/FX/reprice/allocation/export tests, and isolated-cache package dry-run pass.
+- [x] Exact economic dashboard/API projection (`ccda34d`) exposes the shared JSON-safe report at read-only `GET/HEAD /api/economic`, rejects invalid windows, and binds the browser client to the exact Money/coverage schema.
+- [x] Local verification at this candidate: 1,064 total root tests, 1,060 pass, 0 fail, 4 platform-conditional skips; root/browser typechecks, build, focused economic/API/route/export tests, and isolated-cache package dry-run pass.
 
-This is a local candidate, not a remote or release checkpoint. Legacy `REAL` request/value consumers remain compatibility projections for now, and event-role/conservation, FX consumer integration beyond source-bound translation, value migration, and close semantics remain open. The economic ledger has CLI inspection/export but no `/api/economic` or dashboard surface yet. GitHub publication and exact-SHA CI are external gates currently blocked by the Codex usage/approval limit.
+This is a local candidate, not a remote or release checkpoint. Legacy `REAL` request/value consumers remain compatibility projections for now, and event-role/conservation, FX consumer integration beyond source-bound translation, value migration, dashboard consumption and close semantics remain open. The economic ledger now has CLI inspection/export and a read-only `/api/economic` projection; the modern dashboard has the typed client contract but does not yet render a dedicated economic view. GitHub publication and exact-SHA CI are external gates currently blocked by the Codex usage/approval limit.
 
 ## Completed in first GPT-5.6 Sol tranche
 
@@ -200,7 +202,7 @@ The branch is still not a final product-completion baseline. M1 and later audit 
 
 ## Exact next actions
 
-1. Migrate value consumers onto the effective economic projection, then add period close semantics and the API/dashboard contract. The local candidate now has bundled canonical exact rate source, live proxy/import issuance, exact budget enforcement under complete coverage, CLI inspection/export, bounded correction and historical FX lineage, legacy-reprice convergence, and schema-owned exact allocation persistence, but refreshed-card provenance, effective-projection coverage beyond requests, API/dashboard exposure and legacy value read-model migration remain.
+1. Migrate value consumers onto the effective economic projection, then add period-close semantics and integrate the exact economic API into the dashboard views. The local candidate now has bundled canonical exact rate source, live proxy/import issuance, exact budget enforcement under complete coverage, CLI inspection/export, bounded correction and historical FX lineage, legacy-reprice convergence, schema-owned exact allocation persistence and a typed read-only API projection, but refreshed-card provenance, effective-projection coverage beyond requests, dashboard rendering and legacy value read-model migration remain.
 2. Make kernel issuance unavoidable at every consequential product boundary, then introduce WorkUnit/OutcomeAdapter migration.
 3. Keep every new claim and decision on the kernel path; add regression/property/adversarial tests before widening capability.
 4. After each coherent slice, update this state and the audit/evidence registers with the exact local SHA; add a remote SHA and CI run only after publication is actually verified.

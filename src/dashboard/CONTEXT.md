@@ -99,7 +99,8 @@ web/
 - **A CLI/GUI parity claim is a shared function, never a comment.** Where a
   route answers the same question as a CLI verb, both call one module:
   `/api/value` and the value commands compose `src/value/report.ts`;
-  `/api/pricing` and `pricing --coverage` compose `src/cost/coverage.ts`. This
+  `/api/pricing` and `pricing --coverage` compose `src/cost/coverage.ts`;
+  `/api/economic` and `economic --json` compose `src/cli/economicCmd.ts`. This
   repo has already paid for the alternative — five comments in the dashboard
   asserting its arithmetic matched the CLI's, which is asserting, not enforcing.
   A new route that restates a CLI computation inline is the defect.
@@ -157,6 +158,12 @@ web/
   that is on the wire and undeclared is the same defect facing the other way —
   it forces a cast. Presence-checking contract tests do not cover this; the
   shape does, against a record that actually exists.
+- **Exact economic data has a read-only route and a typed client contract.**
+  `GET/HEAD /api/economic` serves the CLI's canonical report with exact Money
+  strings, source/effective request coverage, role-aware balances and bounded
+  time-window validation. It does not rewrite legacy value payloads or invent
+  provider/billed authority; a dedicated dashboard view remains a downstream
+  consumer migration rather than a second accounting implementation.
 - **Overlays mount once, on `body`, outside the shell's render root.** The shell
   effect re-runs on every register change and `render(root, …)` clears `#app`.
   Mounting inside it appended a fresh host and a never-disposed effect per

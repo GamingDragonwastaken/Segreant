@@ -33,9 +33,10 @@ correction lineage `2b81173`, historical exact FX lineage `11a9212`, and
 effective correction projection/converged reprice integration `6059258`, and
 exact-money allocation projection `d8d260f`, schema-owned exact allocation
 persistence `3fa9a20`, adversarial replay/parity hardening `baee5c6`, and exact
-economic export/CLI surface `c1f7ec4`. Local verification at this candidate is
-1,063
-tests (1,059 pass, 0 fail, 4 platform-conditional skips), root/browser
+economic export/CLI surface `c1f7ec4`, plus the read-only exact economic
+dashboard/API projection `ccda34d`. Local verification at this candidate is
+1,064
+tests (1,060 pass, 0 fail, 4 platform-conditional skips), root/browser
 typecheck, build, focused economic checks, and isolated-cache package dry-run.
 These identities are not remote/CI evidence until the blocked push succeeds.
 
@@ -88,9 +89,9 @@ Status vocabulary: `CLOSED`, `PARTIAL`, `OPEN`, `RED-SPEC`, `EXTERNAL-GATE`, `SU
 | AII-014 `established:boolean` | PARTIAL | ClaimProfile is now embedded in canonical Claim; persisted/API/UI migration and alternate-boolean removal remain. |
 | AII-015 global evidence strength order | PARTIAL | Implement claim-relative admissibility/incomparable profiles. |
 | AII-016 grain not a truth constraint | PARTIAL | Witness primitive exists; enforce in every derivation/aggregation. |
-| AII-017 money not exact end-to-end | PARTIAL | Provider/local/reconciliation kernel paths, bundled exact decimal pricing, live proxy/import exact request issuance, complete-coverage exact budget enforcement, schema-owned exact allocation projection/persistence and an exact economic export surface now use exact Money; migrate refreshed-card provenance and legacy request/DB/value/API authoritative paths and remove accounting-number authority. |
-| AII-018 analytical economic subledger absent | PARTIAL | Immutable typed economic events, canonical exact pricing, role-aware append-only projections, one-source additive local price-correction lineage, historical exact FX translation, effective request-charge projection, exact allocation persistence and exact economic export now exist as a local candidate; complete event-role/conservation semantics, FX consumer integration, value/API/dashboard projections, close state and product integration remain. |
-| AII-019 immutability inconsistent | PARTIAL | Schema-owned SQLite persistence, digest/trigger checks, assumption/witness/source links, event-time dependency ordering, billing Claims, atomic exact request-charge issuance, validated additive price corrections, legacy-reprice convergence and schema-owned exact allocation lineage are implemented/tested; value/export read models and complete event projections remain. |
+| AII-017 money not exact end-to-end | PARTIAL | Provider/local/reconciliation kernel paths, bundled exact decimal pricing, live proxy/import exact request issuance, complete-coverage exact budget enforcement, schema-owned exact allocation projection/persistence, exact economic export and the read-only exact economic API now use exact Money; migrate refreshed-card provenance and legacy request/DB/value authoritative paths and remove accounting-number authority. |
+| AII-018 analytical economic subledger absent | PARTIAL | Immutable typed economic events, canonical exact pricing, role-aware append-only projections, one-source additive local price-correction lineage, historical exact FX translation, effective request-charge projection, exact allocation persistence, exact economic export and `/api/economic` now exist as a local candidate; complete event-role/conservation semantics, FX consumer integration, value/dashboard consumption, close state and product integration remain. |
+| AII-019 immutability inconsistent | PARTIAL | Schema-owned SQLite persistence, digest/trigger checks, assumption/witness/source links, event-time dependency ordering, billing Claims, atomic exact request-charge issuance, validated additive price corrections, legacy-reprice convergence, schema-owned exact allocation lineage and read-only exact economic projections are implemented/tested; value read-model migration and complete event projections remain. |
 | AII-020 receipt mistaken for truth | PARTIAL | Separate trust dimensions in product UX and interoperable attestation semantics. |
 | AII-021 causal inference/design gaps | OPEN | ITT, blocks, joint inference, missingness, interference, precision and transportability. |
 | AII-022 two causal systems | OPEN | One estimand/design/estimator registry; version/archive superseded path. |
@@ -100,8 +101,8 @@ Status vocabulary: `CLOSED`, `PARTIAL`, `OPEN`, `RED-SPEC`, `EXTERNAL-GATE`, `SU
 | AII-026 budget heuristic overclaim | OPEN | Keep scenario advisor; route action-grade choices through decision engine. |
 | AII-027 pseudo-VoI | PARTIAL | Legacy sensitivity metric remains explicitly labelled; separate decision engine now implements perfect-information VOI net of measurement cost. |
 | AII-028 shrinkage weight labelled confidence | OPEN | Correct terminology/assumptions and tests. |
-| AII-029 docs/runtime drift | OPEN | Canonical CapabilitySpec and generated/conformance-tested docs. Economic CLI inspection now exists, but universal generated contracts remain. |
-| AII-030 browser/server schema drift | OPEN | Billing ClaimProfile summaries are now shared by the route contract; one runtime schema source and generated/shared types remain. |
+| AII-029 docs/runtime drift | OPEN | Canonical CapabilitySpec and generated/conformance-tested docs. Economic CLI inspection and a typed `/api/economic` contract now exist, but universal generated contracts remain. |
+| AII-030 browser/server schema drift | OPEN | Billing ClaimProfile summaries and the exact economic projection are now shared by bounded route/client contracts; one runtime schema source and generated/shared types remain. |
 | AII-031 unbounded major buffers | OPEN | Bound ingress/SSE/tool args/proposals/responses with explicit coverage-loss semantics. |
 | AII-032 DB integrity too application-managed | OPEN | Promote critical invariants to DB where sound. |
 | AII-033 supply-chain assurance | OPEN | CodeQL, dependency review, secret scan, SBOM, provenance/signing. |
@@ -119,7 +120,7 @@ The next worker should not start another design discussion.
 4. **COMPLETED at `685b14c`:** Migrate every affected realization/demo fixture to explicit required lifecycle evidence; no unknown gate is promoted to pass.
 5. **COMPLETED at `685b14c`:** Observe GitHub Actions run `33253835881` as green on all configured jobs.
 6. **COMPLETED in the following documentation checkpoint:** update program state, audit, decision, and evidence registers with exact implementation/CI identities.
-7. **NEXT:** Migrate value consumers onto the effective economic projection, then add period close semantics and the API/dashboard contract. The local candidate now carries bundled exact decimal pricing into live proxy/import writers, exact budget enforcement, CLI inspection, bounded local repricing, source/rate-bound historical FX, legacy-reprice convergence, schema-owned exact allocation persistence and an exact economic export surface; refreshed-card provenance, effective-projection coverage beyond requests, value/API/dashboard migration and close semantics remain.
+7. **NEXT:** Migrate value consumers onto the effective economic projection, then add period-close semantics and integrate the exact API payload into the dashboard views. The local candidate now carries bundled exact decimal pricing into live proxy/import writers, exact budget enforcement, CLI inspection/export, bounded local repricing, source/rate-bound historical FX, legacy-reprice convergence, schema-owned exact allocation persistence and a read-only exact economic API; refreshed-card provenance, effective-projection coverage beyond requests, value migration and close semantics remain.
 
 ## Trusted Epistemic Kernel remaining work
 
