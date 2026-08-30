@@ -37,10 +37,11 @@ economic export/CLI surface `c1f7ec4`, plus the read-only exact economic
 dashboard/API projection `ccda34d` and coding value-attribution lineage
 `3871b6f`, followed by grouped usage/cohort/model/series/budget migration
 `5e54250`, exact frontier/time-reclaimed projections `3c71c51`, modern
-Value-view disclosure `ebbc571`, exact receipt v2 `443c74d`, and exact
-team-rollup v2 `2d567c2`. Local verification at this candidate is 1,084
-root tests (1,080 pass, 0 fail, 4 platform-conditional skips), team-server
-61/61, root/team typecheck, full Node/browser build, and npm pack dry-run.
+Value-view disclosure `ebbc571`, exact receipt v2 `443c74d`, exact
+team-rollup v2 `2d567c2`, and bounded classic Value/API exact-coverage
+parity `16c5a15`. Local verification at this candidate is 1,086 root
+tests (1,082 pass, 0 fail, 4 platform-conditional skips), team-server 61/61,
+root/team typecheck, full Node/browser build, and npm pack dry-run.
 These identities are not remote/CI evidence until the blocked push succeeds.
 
 The coding value path now has a bounded exact seam: `3871b6f` adds a
@@ -60,8 +61,9 @@ The frontier/time slice at `3c71c51` carries the same exact coverage into
 model/task cells and manual-time strata, and the modern Value view checkpoint
 `ebbc571` renders complete/partial/legacy status and unresolved counts beside
 the spend figure. Signed receipts and team transport now have additive exact
-v2 paths; classic-dashboard parity, refreshed-card provenance and period close
-remain open.
+v2 paths, and the classic Value view now discloses the same exact/partial/legacy
+coverage for mature, usage, budget, project and team sections. Broader generated
+dashboard/API contracts, refreshed-card provenance and period close remain open.
 
 The receipt checkpoint at `443c74d` adds a strict v2 signed body for complete
 exact-covered units, with canonical effective Money/source/correction lineage
@@ -150,12 +152,19 @@ storage/trust-anchor governance, complete event-role/conservation semantics and
 universal product integration. The older table wording above is historical
 context and must be read with this addendum.
 
+**Classic parity addendum (2026-08-30):** `16c5a15` closes the bounded
+exact-coverage disclosure gap in the legacy Value renderer and adds the missing
+project lineage to the browser Value contract. It does not close AII-029/030:
+the universal generated capability/schema contract and all non-Value browser
+surfaces remain future work.
+
 The next worker should not start another design discussion.
 
-**Execution-order override after `2d567c2`:** the versioned exact team-rollup
-protocol/storage migration is complete locally. Proceed next with classic
-dashboard/API parity, then refreshed-card provenance, then period-close
-semantics; live Postgres execution and remote publication remain explicit gates.
+**Execution-order override after `16c5a15`:** the versioned exact team-rollup
+protocol/storage migration and bounded classic Value/API exact-coverage parity
+are complete locally. Proceed next with the remaining generated dashboard/API
+contract work, then refreshed-card provenance, then period-close semantics; live
+Postgres execution and remote publication remain explicit gates.
 
 1. **COMPLETED at `b27c0ef`:** Implement the RED robust decision module. Strict dominance is the only proof-level certificate; minimax regret and perfect-information VOI remain explicitly named rules with assumptions and cost.
 2. **COMPLETED at `5647c67`:** Implement additive transitive revocation closure. Dependent descendants are invalidated while independent siblings remain outside the closure; cycles are safe, duplicate edges fail closed, and history is not deleted.
@@ -164,7 +173,8 @@ semantics; live Postgres execution and remote publication remain explicit gates.
 5. **COMPLETED at `685b14c`:** Observe GitHub Actions run `33253835881` as green on all configured jobs.
 6. **COMPLETED in the following documentation checkpoint:** update program state, audit, decision, and evidence registers with exact implementation/CI identities.
 7. **COMPLETED at `2d567c2`:** Add the versioned exact team-rollup protocol/storage migration. Complete exact-covered projects emit signed v2 lineage; v1 remains the compatibility fallback; the server validates v2 before insertion and stores additive `economic_json` JSONB alongside the signed raw body. Local root 1,084/1,080 and team-server 61/61 are green.
-8. **NEXT:** Complete classic-dashboard/API parity, then add refreshed-card provenance and period-close semantics. Live Postgres execution, trust-anchor governance and GitHub publication remain explicit gates.
+8. **COMPLETED (bounded) at `16c5a15`:** Make the legacy Value renderer and browser Value contract disclose exact/partial/legacy effective coverage for mature, usage, budget, project and team sections, with missing coverage rendered as `legacy_unknown`. The universal generated dashboard/schema contract remains open.
+9. **NEXT:** Complete the remaining generated dashboard/API contract work, then add refreshed-card provenance and period-close semantics. Live Postgres execution, trust-anchor governance and GitHub publication remain explicit gates.
 
 ## Trusted Epistemic Kernel remaining work
 

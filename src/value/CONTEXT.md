@@ -48,6 +48,12 @@
   This is a transport/read-model migration, not provider attestation or causal
   proof; live Postgres execution and trust-anchor governance remain external.
 
+- The classic Value renderer now carries the same exact/partial/legacy coverage
+  disclosure as the modern view for mature, usage, budget, project and team
+  sections. Missing or malformed economic objects render as `legacy_unknown`;
+  the browser contract types project lineage explicitly. This closes only the
+  bounded Value parity gap, not the universal generated dashboard/schema drift.
+
 ## Invariants
 
 - **`realizedValueUsd` is two different claims and they never merge.**
