@@ -8,8 +8,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { DASHBOARD_API_CONTRACTS, type DashboardApiContract } from '../src/dashboard/contracts.ts';
+import { DASHBOARD_API_CONTRACTS, dashboardPayloadContract, validateDashboardPayload, type DashboardApiContract } from '../src/dashboard/contracts.ts';
 import { ROUTES } from '../src/dashboard/routes.ts';
+import { ApiError, api } from '../src/dashboard/web/app/core/api.ts';
 
 const ROOT = join(import.meta.dirname, '..');
 const API_SOURCE = readFileSync(join(ROOT, 'src', 'dashboard', 'web', 'app', 'core', 'api.ts'), 'utf8');
@@ -56,4 +57,29 @@ test('canonical dashboard route contract drives server methods, guards, and brow
   const apiRoutes = ROUTES.filter((route) => route.path.startsWith('/api/'));
   assert.equal(apiRoutes.length, DASHBOARD_API_CONTRACTS.length, 'server API routes and canonical contracts disagree in cardinality');
   assert.equal(GENERATED_SOURCE, CANONICAL_SOURCE, 'browser generated contract is stale; run the shared-contract generator');
+});
+
+test('shared dashboard payload validator rejects a wrong primitive at the client boundary', () => {
+  const contract = dashboardPayloadContract('health', 'GET');
+  assert.throws(
+    () => validateDashboardPayload(contract, { ok: 'yes', service: 'fiscus-dashboard' }),
+    /health\.ok|expected boolean/i,
+  );
+  assert.doesNotThrow(() => validateDashboardPayload(contract, { ok: true, service: 'fiscus-dashboard' }));
+});
+
+test('modern browser API fails closed when the server envelope violates the shared contract', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ ok: 'yes', service: 'fiscus-dashboard' }), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  });
+  try {
+    await assert.rejects(
+      () => api.health(),
+      (error: unknown) => error instanceof ApiError && error.status === 502 && /payload contract violation/i.test(error.message),
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

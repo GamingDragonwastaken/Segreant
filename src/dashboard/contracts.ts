@@ -110,3 +110,28 @@ export function dashboardPayloadContract(routeId: DashboardApiContractId, method
   if (contract === undefined) throw new Error(`unknown dashboard payload contract: ${routeId} ${method}`);
   return contract;
 }
+
+function payloadKind(value: unknown): string {
+  if (Array.isArray(value)) return 'array';
+  if (value !== null && typeof value === 'object') return 'object';
+  return typeof value;
+}
+
+/** Fail-closed top-level payload validation shared by the browser and tests. */
+export function validateDashboardPayload(contract: DashboardPayloadContract, payload: unknown): void {
+  if (contract.contentType === 'text') return;
+  if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new Error(`${contract.routeId}.${contract.method} payload must be an object envelope`);
+  }
+  const object = payload as Record<string, unknown>;
+  for (const required of contract.required) {
+    if (!(required.name in object)) {
+      throw new Error(`${contract.routeId}.${contract.method}.${required.name} is required by the dashboard payload contract`);
+    }
+    const value = object[required.name];
+    if (value === null && required.nullable === true) continue;
+    if (payloadKind(value) !== required.kind) {
+      throw new Error(`${contract.routeId}.${contract.method}.${required.name} expected ${required.kind}${required.nullable ? ' or null' : ''}, got ${payloadKind(value)}`);
+    }
+  }
+}

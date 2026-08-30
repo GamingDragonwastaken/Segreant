@@ -11,7 +11,13 @@
  * consumes fails loudly the moment that screen's data moves.
  */
 
-import { dashboardApiContract, type DashboardApiContractId } from './generated-contract.ts';
+import {
+  DASHBOARD_API_CONTRACTS,
+  DASHBOARD_PAYLOAD_CONTRACTS,
+  dashboardApiContract,
+  validateDashboardPayload,
+  type DashboardApiContractId,
+} from './generated-contract.ts';
 
 const routePath = (id: DashboardApiContractId): string => dashboardApiContract(id).path;
 
@@ -710,7 +716,31 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(detail.slice(0, 400) || `${response.status} ${response.statusText}`, response.status, path);
   }
 
-  return (await response.json()) as T;
+  const payload: unknown = await response.json();
+  // The generic type gives the compiler a view of what the caller consumes;
+  // this shared runtime contract prevents a server-side envelope/type drift
+  // from becoming an undefined field and an honest-looking empty screen.
+  const method = (init?.method ?? 'GET').toUpperCase();
+  const route = DASHBOARD_API_CONTRACTS.find((candidate) =>
+    path === candidate.path || path.startsWith(candidate.path + '?'),
+  );
+  if (route !== undefined && (route.methods as readonly string[]).includes(method)) {
+    const payloadContract = DASHBOARD_PAYLOAD_CONTRACTS.find((candidate) =>
+      candidate.routeId === route.id && candidate.method === method,
+    );
+    if (payloadContract !== undefined) {
+      try {
+        validateDashboardPayload(payloadContract, payload);
+      } catch (error) {
+        throw new ApiError(
+          `Dashboard payload contract violation: ${error instanceof Error ? error.message : String(error)}`,
+          502,
+          path,
+        );
+      }
+    }
+  }
+  return payload as T;
 }
 
 export const api = {
