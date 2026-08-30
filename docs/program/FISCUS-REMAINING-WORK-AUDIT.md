@@ -41,8 +41,9 @@ Value-view disclosure `ebbc571`, exact receipt v2 `443c74d`, exact
 team-rollup v2 `2d567c2`, bounded classic Value/API exact-coverage
 parity `16c5a15`, immutable refreshed-card provenance
 `47ed621`, and bounded dashboard runtime type conformance
-`e244115`. Local verification at this candidate is 1,089 root tests
-(1,085 pass, 0 fail, 4 platform-conditional skips), team-server 61/61,
+`e244115`, followed by exact period-close lifecycle integration
+`28905c5`. Local verification at this candidate is 1,095 root tests
+(1,091 pass, 0 fail, 4 platform-conditional skips), team-server 61/61,
 root/team typecheck, full Node/browser build, and npm pack dry-run.
 These identities are not remote/CI evidence until the blocked push succeeds.
 
@@ -56,8 +57,10 @@ receipts and team-rollup consumers still require their own grouped migration.
 The grouped migration at `5e54250` extends that seam to exact session, user,
 provider/model and fixed-width time buckets. Usage, cohort and budget advice
 now consume those groups and expose complete/partial/legacy coverage; numeric
-fields remain compatibility projections, while frontier presentation, signed
-receipts, refreshed-card provenance and period close remain open.
+fields remain compatibility projections. Frontier presentation, signed
+receipts, refreshed-card provenance and period close were subsequently handled
+by the bounded follow-on checkpoints recorded below; universal generated
+contracts and broader product integration remain open.
 
 The frontier/time slice at `3c71c51` carries the same exact coverage into
 model/task cells and manual-time strata, and the modern Value view checkpoint
@@ -68,7 +71,11 @@ coverage for mature, usage, budget, project and team sections. Immutable
 refreshed-card provenance now records hash-bound source/acceptance metadata for
 each new card; runtime browser/server type conformance now catches primitive,
 array, record, interface and nullability drift on all read endpoints. The
-universal generated dashboard/API contract and period close remain open.
+period-close slice at `28905c5` adds canonical half-open periods, exact
+digest-bound snapshots, as-of lifecycle replay, explicit append-only reopen
+controls, conflict-preserving transitions, late-event blocking, JSON-safe CLI
+operations, and typed dashboard/API state. The universal generated
+dashboard/API contract remains open.
 
 The receipt checkpoint at `443c74d` adds a strict v2 signed body for complete
 exact-covered units, with canonical effective Money/source/correction lineage
@@ -126,8 +133,8 @@ Status vocabulary: `CLOSED`, `PARTIAL`, `OPEN`, `RED-SPEC`, `EXTERNAL-GATE`, `SU
 | AII-014 `established:boolean` | PARTIAL | ClaimProfile is now embedded in canonical Claim; persisted/API/UI migration and alternate-boolean removal remain. |
 | AII-015 global evidence strength order | PARTIAL | Implement claim-relative admissibility/incomparable profiles. |
 | AII-016 grain not a truth constraint | PARTIAL | Witness primitive exists; enforce in every derivation/aggregation. |
-| AII-017 money not exact end-to-end | PARTIAL | Provider/local/reconciliation kernel paths, bundled exact decimal pricing, live proxy/import exact request issuance, complete-coverage exact budget enforcement, schema-owned exact allocation projection/persistence, exact economic export and the read-only exact economic API now use exact Money; migrate refreshed-card provenance and legacy request/DB/value authoritative paths and remove accounting-number authority. |
-| AII-018 analytical economic subledger absent | PARTIAL | Immutable typed economic events, canonical exact pricing, role-aware append-only projections, one-source additive local price-correction lineage, historical exact FX translation, effective request-charge projection, exact allocation persistence, exact economic export and `/api/economic` now exist as a local candidate; complete event-role/conservation semantics, FX consumer integration, value/dashboard consumption, close state and product integration remain. |
+| AII-017 money not exact end-to-end | PARTIAL | Provider/local/reconciliation kernel paths, bundled exact decimal pricing, live proxy/import exact request issuance, complete-coverage exact budget enforcement, schema-owned exact allocation projection/persistence, exact economic export, immutable refreshed-card provenance and the read-only exact economic API now use exact Money; legacy request/DB/value authoritative paths and accounting-number authority still require migration. |
+| AII-018 analytical economic subledger absent | PARTIAL | Immutable typed economic events, canonical exact pricing, role-aware append-only projections, one-source additive local price-correction lineage, historical exact FX translation, effective request-charge projection, exact allocation persistence, exact economic export, `/api/economic`, and digest-bound period-close/reopen controls now exist as a local candidate; complete event-role/conservation semantics, FX consumer integration beyond source-bound translation, value/dashboard consumption beyond bounded seams, and universal product integration remain. |
 | AII-019 immutability inconsistent | PARTIAL | Schema-owned SQLite persistence, digest/trigger checks, assumption/witness/source links, event-time dependency ordering, billing Claims, atomic exact request-charge issuance, validated additive price corrections, legacy-reprice convergence, schema-owned exact allocation lineage and read-only exact economic projections are implemented/tested; value read-model migration and complete event projections remain. |
 | AII-020 receipt mistaken for truth | PARTIAL | Separate trust dimensions in product UX and interoperable attestation semantics. |
 | AII-021 causal inference/design gaps | OPEN | ITT, blocks, joint inference, missingness, interference, precision and transportability. |
@@ -176,14 +183,27 @@ runtime primitive, array, record, named-interface and null-union validation.
 This reduces browser/server drift without claiming a generated single-source
 schema; that broader contract and documentation generation remains open.
 
+**Period-close addendum (2026-08-30):** `28905c5` implements the next
+dependency-ordered economic control slice. Finalization binds every eligible
+in-period event known at its recording boundary to a canonical exact,
+basis-separated projection digest; status replays at an `asOf` boundary;
+reopen is an additive, reason-bearing control event; competing or malformed
+transitions remain `conflicted`; late in-period events require an explicit
+reopen. The read-only `/api/economic` payload and browser contract carry the
+close state, and `fiscus economic` exposes canonical `--close-status`,
+`--finalize`, and `--reopen` operations. This is local evidence only; live
+Postgres execution, universal generated contracts, trust-anchor governance and
+GitHub publication remain external gates.
+
 The next worker should not start another design discussion.
 
-**Execution-order override after `e244115`:** the versioned exact
+**Execution-order override after `28905c5`:** the versioned exact
 team-rollup protocol/storage migration, bounded classic Value/API exact-coverage
-parity, refreshed-card provenance and runtime dashboard type conformance are
-complete locally. Proceed next with the remaining generated dashboard/API
-contract work, then period-close semantics; live Postgres execution and remote
-publication remain explicit gates.
+parity, refreshed-card provenance, runtime dashboard type conformance, and
+period-close semantics are complete locally. Proceed next with the remaining
+universal generated dashboard/API contract work, then unavoidable kernel
+issuance across consequential product boundaries; live Postgres execution and
+remote publication remain explicit gates.
 
 1. **COMPLETED at `b27c0ef`:** Implement the RED robust decision module. Strict dominance is the only proof-level certificate; minimax regret and perfect-information VOI remain explicitly named rules with assumptions and cost.
 2. **COMPLETED at `5647c67`:** Implement additive transitive revocation closure. Dependent descendants are invalidated while independent siblings remain outside the closure; cycles are safe, duplicate edges fail closed, and history is not deleted.
@@ -195,7 +215,8 @@ publication remain explicit gates.
 8. **COMPLETED (bounded) at `16c5a15`:** Make the legacy Value renderer and browser Value contract disclose exact/partial/legacy effective coverage for mature, usage, budget, project and team sections, with missing coverage rendered as `legacy_unknown`. The universal generated dashboard/schema contract remains open.
 9. **COMPLETED (bounded) at `47ed621`:** Preserve immutable hash-addressed pricing-card provenance with source kind, redacted source identity, acceptance time, upstream date, conditional metadata and strict card/sidecar validation; expose it through pricing coverage, CLI text and the classic pricing health card. Missing or tampered historical sidecars remain unavailable.
 10. **COMPLETED (bounded) at `e244115`:** Extend dashboard endpoint conformance from required-field presence to runtime primitive, array, record, named-interface and null-union validation across seeded browser read endpoints. The universal generated single-source contract remains open.
-11. **NEXT:** Complete the remaining generated dashboard/API contract work, then implement period-close semantics. Live Postgres execution, trust-anchor governance and GitHub publication remain explicit gates.
+11. **COMPLETED at `28905c5`:** Implement exact economic period-close semantics: canonical half-open periods, digest-bound basis-separated snapshots, as-of replay, explicit append-only reopen controls, conflict-preserving transitions, late-event blocking, JSON-safe CLI lifecycle operations, and typed read-only dashboard/API state. Live Postgres execution and GitHub publication remain explicit gates.
+12. **NEXT:** Complete the remaining universal generated dashboard/API contract work, then make kernel issuance unavoidable at every consequential product boundary. Trust-anchor governance, live Postgres execution and GitHub publication remain explicit gates.
 
 ## Trusted Epistemic Kernel remaining work
 

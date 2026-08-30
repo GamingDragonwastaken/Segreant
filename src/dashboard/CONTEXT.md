@@ -163,9 +163,12 @@ web/
 - **Exact economic data has a read-only route and a typed client contract.**
   `GET/HEAD /api/economic` serves the CLI's canonical report with exact Money
   strings, source/effective request coverage, role-aware balances and bounded
-  time-window validation. It does not rewrite legacy value payloads or invent
-  provider/billed authority; a dedicated dashboard view remains a downstream
-  consumer migration rather than a second accounting implementation.
+  time-window validation. Its `periodClose` field carries the canonical
+  half-open period's append-only finalization/reopen/conflict state and exact
+  projection digest; the route remains read-only and never mutates close
+  controls. It does not rewrite legacy value payloads or invent provider/billed
+  authority; a dedicated dashboard view remains a downstream consumer
+  migration rather than a second accounting implementation.
 - **Overlays mount once, on `body`, outside the shell's render root.** The shell
   effect re-runs on every register change and `render(root, …)` clears `#app`.
   Mounting inside it appended a fresh host and a never-disposed effect per
