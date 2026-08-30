@@ -712,6 +712,7 @@ CREATE TABLE IF NOT EXISTS economic_event_sources (
 
 CREATE INDEX IF NOT EXISTS idx_economic_events_recorded ON economic_events(recorded_at, event_id);
 CREATE INDEX IF NOT EXISTS idx_economic_events_subject ON economic_events(subject, recorded_at, event_id);
+CREATE INDEX IF NOT EXISTS idx_economic_events_occurred ON economic_events(occurred_at, event_id);
 CREATE INDEX IF NOT EXISTS idx_economic_event_sources_source ON economic_event_sources(source_event_id, event_id);
 `;
 

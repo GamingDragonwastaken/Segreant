@@ -28,9 +28,10 @@ import {
 import { createHash, randomUUID } from 'node:crypto';
 import { legacyPricingEvidence, type RequestPricingEvidence } from '../cost/pricing.ts';
 import { pricingEvidenceFromRecord } from './rows.ts';
-import { formatMoneyAmount, type Money } from '../economics/money.ts';
+import { addMoney, formatMoneyAmount, money, type EconomicBasis, type Money } from '../economics/money.ts';
 import { requestEconomicEvent, requestEconomicEventId } from '../economics/request.ts';
 import { serializeEconomicEvent } from '../economics/serialization.ts';
+import { economicEventRole, type EconomicEvent } from '../economics/events.ts';
 import type { ProviderScopeDeclaration, ScopeCaptureStatus } from '../billing/scope.ts';
 import { ATTRIBUTION_BASES, type AttributionBasis } from '../value/characterization.ts';
 import type { OpenAiCostsCaptureCoverage } from '../billing/openaiCostsCoverage.ts';
@@ -192,6 +193,16 @@ export interface RequestRow {
    * label is a self-assertion. Missing only means a pre-lineage/legacy row.
    */
   attributionBasis?: AttributionBasis;
+}
+
+/** Exact control projection for a request window. `effective` is a named
+ * budget-policy comparison basis, not a provider-billing assertion. */
+export interface ExactSpendProjection {
+  amount: Money;
+  eventIds: readonly string[];
+  sourceBases: readonly EconomicBasis[];
+  requestCount: number;
+  unresolvedRequests: number;
 }
 
 /**
@@ -555,6 +566,7 @@ export class Store {
             model: row.model,
             project: row.project,
             amount: row.economicAmount,
+            via: row.via ?? 'proxy',
             recordedAt: new Date().toISOString(),
           });
           this.economicLedger.appendWithinTransaction(exactEvent);
@@ -571,6 +583,7 @@ export class Store {
             model: row.model,
             project: row.project,
             amount: row.economicAmount,
+            via: row.via ?? 'proxy',
             recordedAt: existing.recordedAt,
           });
           if (serializeEconomicEvent(existing).body !== serializeEconomicEvent(expected).body) {
@@ -825,6 +838,95 @@ export class Store {
       )
       .get(nowMs - windowMs) as { total: number; n: number };
     return { costUsd: row.total, requests: row.n };
+  }
+
+  private exactSpendFromRows(
+    rows: Array<{ requestId: string; tsEpochMs: number; via: string | null }>,
+    startMs: number,
+    endMs: number,
+    liveOnly: boolean,
+  ): ExactSpendProjection {
+    let amount = money('0', 'USD', 'effective');
+    const eventIds: string[] = [];
+    const sourceBases = new Set<EconomicBasis>();
+    const requestIds = new Set(rows.map((row) => row.requestId));
+    const rowById = new Map(rows.map((row) => [row.requestId, row]));
+    const byRequest = new Map<string, EconomicEvent>();
+    for (const event of this.economicLedger.eventsInOccurrenceRange(startMs, endMs)) {
+      if (economicEventRole(event.kind) !== 'charge' || event.amount === null) continue;
+      const metadata = event.metadata;
+      if (metadata === null || typeof metadata !== 'object' || Array.isArray(metadata)) continue;
+      const metadataRecord = metadata as Record<string, unknown>;
+      const requestId = metadataRecord.requestId;
+      if (typeof requestId !== 'string' || !requestIds.has(requestId)) continue;
+      const row = rowById.get(requestId)!;
+      const eventVia = metadataRecord.via;
+      if (eventVia !== undefined && eventVia !== 'proxy' && eventVia !== 'import') {
+        throw new Error(`economic request event ${event.id} has invalid via provenance`);
+      }
+      const rowVia = row.via ?? 'proxy';
+      if (eventVia !== undefined && eventVia !== rowVia) {
+        throw new Error(`economic request event ${event.id} via provenance disagrees with request ${requestId}`);
+      }
+      if (liveOnly && (eventVia ?? rowVia) !== 'proxy') continue;
+      if (byRequest.has(requestId)) throw new Error(`multiple economic charge events exist for request ${requestId}`);
+      byRequest.set(requestId, event);
+    }
+    let unresolvedRequests = 0;
+    for (const row of rows) {
+      const event = byRequest.get(row.requestId);
+      if (event === undefined) {
+        unresolvedRequests += 1;
+        continue;
+      }
+      if (event.amount === null || event.amount.currency !== 'USD') throw new Error(`economic request event ${event.id} is not a USD charge`);
+      const projected = money(formatMoneyAmount(event.amount), 'USD', 'effective');
+      amount = addMoney(amount, projected);
+      eventIds.push(event.id);
+      sourceBases.add(event.amount.basis);
+    }
+    return Object.freeze({
+      amount,
+      eventIds: Object.freeze(eventIds.sort()),
+      sourceBases: Object.freeze([...sourceBases].sort()),
+      requestCount: rows.length,
+      unresolvedRequests,
+    });
+  }
+
+  /** Exact charge projection for requests in [startMs, endMs). */
+  exactSpendBetween(startMs: number, endMs: number, liveOnly = false): ExactSpendProjection {
+    const rows = this.db.prepare(
+      `SELECT request_id AS requestId, ts_epoch_ms AS tsEpochMs, via
+         FROM requests WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ?` + this.viaClause(liveOnly) + `
+         ORDER BY ts_epoch_ms ASC, request_id ASC`,
+    ).all(startMs, endMs) as Array<{ requestId: string; tsEpochMs: number; via: string | null }>;
+    return this.exactSpendFromRows(rows, startMs, endMs, liveOnly);
+  }
+
+  /** Exact charge projection for all requests belonging to one session. */
+  exactSpendForSession(sessionId: string, liveOnly = false): ExactSpendProjection {
+    const rows = this.db.prepare(
+      `SELECT request_id AS requestId, ts_epoch_ms AS tsEpochMs, via
+         FROM requests WHERE session_id = ?` + this.viaClause(liveOnly) + `
+         ORDER BY ts_epoch_ms ASC, request_id ASC`,
+    ).all(sessionId) as Array<{ requestId: string; tsEpochMs: number; via: string | null }>;
+    if (rows.length === 0) {
+      return Object.freeze({ amount: money('0', 'USD', 'effective'), eventIds: Object.freeze([]), sourceBases: Object.freeze([]), requestCount: 0, unresolvedRequests: 0 });
+    }
+    let startMs = rows[0]!.tsEpochMs;
+    let maxMs = rows[0]!.tsEpochMs;
+    for (const row of rows.slice(1)) {
+      if (row.tsEpochMs < startMs) startMs = row.tsEpochMs;
+      if (row.tsEpochMs > maxMs) maxMs = row.tsEpochMs;
+    }
+    return this.exactSpendFromRows(rows, startMs, maxMs === Number.MAX_SAFE_INTEGER ? maxMs : maxMs + 1, liveOnly);
+  }
+
+  /** Exact charge projection for the trailing runaway window. */
+  exactSpendInWindow(nowMs: number, windowMs: number, liveOnly = false): ExactSpendProjection {
+    const endMs = nowMs === Number.MAX_SAFE_INTEGER ? nowMs : nowMs + 1;
+    return this.exactSpendBetween(nowMs - windowMs, endMs, liveOnly);
   }
 
   /** Health counts for governance alerts: blocked (429) requests and estimated-priced spend. */

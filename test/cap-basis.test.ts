@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Store, type RequestRow } from '../src/store/db.ts';
 import { BudgetGuard } from '../src/budget/guard.ts';
+import { formatMoneyAmount, money } from '../src/economics/money.ts';
 import type { BudgetConfig } from '../src/config.ts';
 
 function req(over: Partial<RequestRow>): RequestRow {
@@ -75,6 +76,35 @@ test('cap basis: a runtime config supplier makes an already-running guard honor 
     assert.equal(guard.evaluate().action, 'allow');
     live = budget({ dailyUsd: 5 });
     assert.equal(guard.evaluate().action, 'block', 'the proxy must not need a restart before a saved cap takes effect');
+  } finally {
+    store.close();
+  }
+});
+
+test('cap basis: complete exact request coverage enforces a cross-basis effective projection', () => {
+  const store = new Store(':memory:');
+  try {
+    const now = Date.now();
+    store.insertRequest(req({ requestId: 'exact-list', tsEpochMs: now - 2_000, costUsd: 2, economicAmount: money('2', 'USD', 'list') }));
+    store.insertRequest(req({ requestId: 'exact-estimated', tsEpochMs: now - 1_000, costUsd: 3, economicAmount: money('3', 'USD', 'estimated') }));
+    const projection = store.exactSpendBetween(now - 10_000, now + 1_000, true);
+    assert.equal(formatMoneyAmount(projection.amount), '5');
+    assert.deepEqual(projection.sourceBases, ['estimated', 'list']);
+    assert.equal(projection.unresolvedRequests, 0);
+    assert.equal(new BudgetGuard(store, budget({ dailyUsd: 5 })).evaluate({ nowMs: now }).action, 'block');
+  } finally {
+    store.close();
+  }
+});
+
+test('cap basis: exact projections preserve live-only versus imported coverage', () => {
+  const store = new Store(':memory:');
+  try {
+    const now = Date.now();
+    store.insertRequest(req({ requestId: 'exact-import', tsEpochMs: now - 2_000, costUsd: 100, via: 'import', economicAmount: money('100', 'USD', 'estimated') }));
+    store.insertRequest(req({ requestId: 'exact-proxy', tsEpochMs: now - 1_000, costUsd: 2, via: 'proxy', economicAmount: money('2', 'USD', 'list') }));
+    assert.equal(formatMoneyAmount(store.exactSpendBetween(now - 10_000, now + 1_000, true).amount), '2');
+    assert.equal(formatMoneyAmount(store.exactSpendBetween(now - 10_000, now + 1_000, false).amount), '102');
   } finally {
     store.close();
   }

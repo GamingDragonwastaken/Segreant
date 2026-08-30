@@ -12,10 +12,11 @@ export interface RequestEconomicEventInput {
   readonly model: string;
   readonly project: string;
   readonly amount: Money;
+  readonly via?: 'proxy' | 'import';
   readonly recordedAt?: Instant;
 }
 
-const REQUEST_KEYS = new Set(['requestId', 'sessionId', 'tsEpochMs', 'provider', 'model', 'project', 'amount', 'recordedAt']);
+const REQUEST_KEYS = new Set(['requestId', 'sessionId', 'tsEpochMs', 'provider', 'model', 'project', 'amount', 'via', 'recordedAt']);
 
 function assertObject(value: unknown, label: string): asserts value is Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object`);
@@ -68,6 +69,7 @@ export function requestEconomicEvent(input: RequestEconomicEventInput): Economic
   const provider = nonEmpty(input.provider, 'provider');
   const model = nonEmpty(input.model, 'model');
   const project = nonEmpty(input.project, 'project');
+  if (input.via !== undefined && input.via !== 'proxy' && input.via !== 'import') throw new Error('request economic via must be proxy or import');
   if (input.amount === null || typeof input.amount !== 'object' || Array.isArray(input.amount)) throw new Error('request economic amount must be exact Money');
   const amount = moneyFromJson(moneyToJson(input.amount));
   if (amount.currency !== 'USD') throw new Error('request economic amount currency must be USD');
@@ -89,6 +91,7 @@ export function requestEconomicEvent(input: RequestEconomicEventInput): Economic
       model,
       project,
       ...(sessionId === null ? {} : { sessionId }),
+      ...(input.via === undefined ? {} : { via: input.via }),
     },
     schemaVersion: 1,
   });

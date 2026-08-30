@@ -254,6 +254,23 @@ export class EconomicLedger {
     return Object.freeze(values);
   }
 
+  /** Load events whose modeled occurrence lies in [startMs, endMs). */
+  eventsInOccurrenceRange(startMs: number, endMs: number): readonly EconomicEvent[] {
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || startMs >= endMs) {
+      throw new Error('economic occurrence range must contain ordered finite timestamps');
+    }
+    const from = new Date(startMs);
+    const to = new Date(endMs);
+    if (!Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime())) throw new Error('economic occurrence range is outside the supported date range');
+    const rows = this.db.prepare(
+      'SELECT event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest FROM economic_events WHERE occurred_at >= ? AND occurred_at < ? ORDER BY occurred_at ASC, event_id ASC',
+    ).all(from.toISOString(), to.toISOString()) as unknown as StoredEconomicRow[];
+    const values = rows.map(storedRecord);
+    const validated = new Set<string>();
+    for (const value of values) this.validateReferenceClosure(value, new Set<string>(), validated);
+    return Object.freeze(values);
+  }
+
   project(asOf?: Instant): EconomicProjection {
     const boundary = asOf === undefined ? null : canonicalBoundary(asOf);
     const values = this.events(boundary ?? undefined);

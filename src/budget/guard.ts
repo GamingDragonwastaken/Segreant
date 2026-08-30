@@ -16,6 +16,7 @@
 
 import type { Store } from '../store/db.ts';
 import type { BudgetConfig } from '../config.ts';
+import { formatMoneyAmount, type Money } from '../economics/money.ts';
 
 export type GuardAction = 'allow' | 'warn' | 'block';
 
@@ -38,6 +39,13 @@ export function startOfLocalDay(now: number = Date.now()): number {
 
 export function endOfLocalDay(now: number = Date.now()): number {
   return startOfLocalDay(now) + 24 * 60 * 60 * 1000;
+}
+
+function exactNumber(value: Money): number {
+  if (value.currency !== 'USD') throw new Error('budget exact projection must be USD');
+  const number = Number(formatMoneyAmount(value));
+  if (!Number.isFinite(number)) throw new Error('budget exact projection exceeds numeric decision range');
+  return number;
 }
 
 export class BudgetGuard {
@@ -64,15 +72,32 @@ export class BudgetGuard {
     // proxy that had spent almost nothing (dogfood). capIncludesImported opts
     // into governing total observed spend instead.
     const liveOnly = !cfg.capIncludesImported;
-    const daySpend = this.store.spendBetween(dayStart, dayEnd, liveOnly);
+    const exactDay = typeof this.store.exactSpendBetween === 'function'
+      ? this.store.exactSpendBetween(dayStart, dayEnd, liveOnly)
+      : null;
+    const daySpend = exactDay !== null && exactDay.unresolvedRequests === 0
+      ? exactNumber(exactDay.amount)
+      : this.store.spendBetween(dayStart, dayEnd, liveOnly);
 
     const dailyLimit = cfg.dailyUsd;
     const remainingDaily = dailyLimit === null ? null : Math.max(0, dailyLimit - daySpend);
 
-    const sessionSpend = opts.sessionId ? this.store.spendForSession(opts.sessionId, liveOnly) : null;
+    const exactSession = opts.sessionId && typeof this.store.exactSpendForSession === 'function'
+      ? this.store.exactSpendForSession(opts.sessionId, liveOnly)
+      : null;
+    const sessionSpend = opts.sessionId
+      ? exactSession !== null && exactSession.unresolvedRequests === 0
+        ? exactNumber(exactSession.amount)
+        : this.store.spendForSession(opts.sessionId, liveOnly)
+      : null;
 
     const windowMs = cfg.runawayWindowSec * 1000;
-    const window = this.store.spendInWindow(now, windowMs, liveOnly);
+    const exactWindow = typeof this.store.exactSpendInWindow === 'function'
+      ? this.store.exactSpendInWindow(now, windowMs, liveOnly)
+      : null;
+    const window = exactWindow !== null && exactWindow.unresolvedRequests === 0
+      ? { costUsd: exactNumber(exactWindow.amount), requests: exactWindow.requestCount }
+      : this.store.spendInWindow(now, windowMs, liveOnly);
     const runawayTripped =
       cfg.runawayMaxUsd !== null && window.costUsd >= cfg.runawayMaxUsd;
 
