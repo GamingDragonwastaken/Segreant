@@ -30,9 +30,10 @@ exact-rate/live issuance `3763c9e`, role-aware projections/reversal constraints
 `6285bcc`, normalized source links `8fcd262`, exact budget projection migration
 `05f26e6`, exact economic CLI inspection `e3a280f`, and additive local price
 correction lineage `2b81173`, historical exact FX lineage `11a9212`, and
-effective correction projection/converged reprice integration `6059258`. Local
-verification at this candidate is 1,053
-tests (1,049 pass, 0 fail, 4 platform-conditional skips), root/browser
+effective correction projection/converged reprice integration `6059258`, and
+exact-money allocation projection `d8d260f`. Local verification at this
+candidate is 1,058
+tests (1,054 pass, 0 fail, 4 platform-conditional skips), root/browser
 typecheck, build, focused economic checks, and isolated-cache package dry-run.
 These identities are not remote/CI evidence until the blocked push succeeds.
 
@@ -85,9 +86,9 @@ Status vocabulary: `CLOSED`, `PARTIAL`, `OPEN`, `RED-SPEC`, `EXTERNAL-GATE`, `SU
 | AII-014 `established:boolean` | PARTIAL | ClaimProfile is now embedded in canonical Claim; persisted/API/UI migration and alternate-boolean removal remain. |
 | AII-015 global evidence strength order | PARTIAL | Implement claim-relative admissibility/incomparable profiles. |
 | AII-016 grain not a truth constraint | PARTIAL | Witness primitive exists; enforce in every derivation/aggregation. |
-| AII-017 money not exact end-to-end | PARTIAL | Provider/local/reconciliation kernel paths, bundled exact decimal pricing, live proxy/import exact request issuance, and complete-coverage exact budget enforcement now use exact Money; migrate refreshed-card provenance and legacy request ledger/DB/allocation/API/CSV authoritative paths and remove accounting-number authority. |
-| AII-018 analytical economic subledger absent | PARTIAL | Immutable typed economic events, canonical exact pricing, role-aware append-only projections, one-source additive local price-correction lineage, historical exact FX translation and an effective request-charge projection now exist as a local candidate; complete event-role/conservation semantics, FX consumer integration, allocations, close state and product integration remain. |
-| AII-019 immutability inconsistent | PARTIAL | Schema-owned SQLite persistence, digest/trigger checks, assumption/witness/source links, event-time dependency ordering, billing Claims, atomic exact request-charge issuance, validated additive price corrections and legacy-reprice convergence are implemented/tested; allocation/value/export read models and complete event projections remain. |
+| AII-017 money not exact end-to-end | PARTIAL | Provider/local/reconciliation kernel paths, bundled exact decimal pricing, live proxy/import exact request issuance, complete-coverage exact budget enforcement and a read-only exact allocation projection now use exact Money; migrate refreshed-card provenance, persisted allocation, and legacy request/DB/value/API/CSV authoritative paths and remove accounting-number authority. |
+| AII-018 analytical economic subledger absent | PARTIAL | Immutable typed economic events, canonical exact pricing, role-aware append-only projections, one-source additive local price-correction lineage, historical exact FX translation, effective request-charge projection and a read-only exact allocation projection now exist as a local candidate; complete event-role/conservation semantics, FX consumer integration, persisted allocation/value/export projections, close state and product integration remain. |
+| AII-019 immutability inconsistent | PARTIAL | Schema-owned SQLite persistence, digest/trigger checks, assumption/witness/source links, event-time dependency ordering, billing Claims, atomic exact request-charge issuance, validated additive price corrections, legacy-reprice convergence and source-traced exact allocation projection are implemented/tested; persisted allocation/value/export read models and complete event projections remain. |
 | AII-020 receipt mistaken for truth | PARTIAL | Separate trust dimensions in product UX and interoperable attestation semantics. |
 | AII-021 causal inference/design gaps | OPEN | ITT, blocks, joint inference, missingness, interference, precision and transportability. |
 | AII-022 two causal systems | OPEN | One estimand/design/estimator registry; version/archive superseded path. |
@@ -116,7 +117,7 @@ The next worker should not start another design discussion.
 4. **COMPLETED at `685b14c`:** Migrate every affected realization/demo fixture to explicit required lifecycle evidence; no unknown gate is promoted to pass.
 5. **COMPLETED at `685b14c`:** Observe GitHub Actions run `33253835881` as green on all configured jobs.
 6. **COMPLETED in the following documentation checkpoint:** update program state, audit, decision, and evidence registers with exact implementation/CI identities.
-7. **NEXT:** Migrate allocation/value/export consumers onto the effective economic projection, then add period close semantics and the API/dashboard contract. The local candidate now carries bundled exact decimal pricing into live proxy/import writers, exact budget enforcement, CLI inspection, bounded local repricing, source/rate-bound historical FX, and legacy-reprice convergence; refreshed-card provenance, effective-projection coverage beyond requests, allocation/close semantics, and legacy migration remain.
+7. **NEXT:** Persist exact allocation with immutable source lineage, then migrate value/export consumers onto the effective economic projection, add period close semantics and the API/dashboard contract. The local candidate now carries bundled exact decimal pricing into live proxy/import writers, exact budget enforcement, CLI inspection, bounded local repricing, source/rate-bound historical FX, legacy-reprice convergence and a read-only exact allocation adapter; refreshed-card provenance, persisted allocation, effective-projection coverage beyond requests, close semantics and legacy migration remain.
 
 ## Trusted Epistemic Kernel remaining work
 
@@ -160,6 +161,12 @@ correction event IDs, and is emitted transactionally by `reprice --apply` when
 an exact request event exists. Numeric-only repricing against exact history is
 refused; allocation, value, export, API and dashboard consumers still require
 the same convergence treatment.
+
+The exact allocation adapter is a read-only bridge over that projection. It
+keeps every currency/basis identity separate, performs ratio arithmetic as exact
+rational Money, carries all source event IDs, refuses non-terminating
+proportional shares without a quantization policy, and marks legacy requests
+unresolved instead of rounding or persisting them into the numeric run schema.
 
 Property-test conservation, compatible-basis arithmetic, reversal, reprice/reconciliation and replay.
 
