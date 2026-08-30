@@ -206,13 +206,22 @@ logic without a live database (`test/fakeStore.ts` stands in for Postgres,
 implementing the exact same weighting semantics as the real SQL — see its
 header comment) and without a real SSO provider (`test/fakeIdp.ts` runs a real
 local OIDC-shaped server, signing tokens with genuine RS256/ES256 keypairs, so
-`oidc.ts` is proven against real signatures, not just assumed to work). 48
+`oidc.ts` is proven against real signatures, not just assumed to work). 61
 tests total: `test/aggregate.test.ts` covers the privacy-gating logic in
 isolation (k-anonymity boundaries, the opt-in gate, the $0-cost rate-exclusion
 edge case), and `test/server.test.ts`'s dashboard tests push hand-computed
 rollups through the real HTTP layer and assert exact expected numbers — chosen
 specifically so a naive (unweighted) average would produce a *different*,
 wrong answer, not just an untested one.
+
+The server accepts the additive team-rollup v2 protocol as well as v1. A v2
+project carries a canonical exact effective/source attribution object; the
+server validates that object after signature verification, retains the signed
+body in `rollups.body`, and stores the same project lineage in the nullable
+`rollup_projects.economic_json` JSONB column. The existing numeric columns stay
+as compatibility aggregates for older clients and dashboards. This proves
+protocol and semantic validation in the fake-store HTTP suite, not provider
+authority, causal truth, or execution against a live Postgres instance.
 
 It does not exercise `schema.sql` or the real SQL in `src/store.ts`'s
 `PgRollupStore` (including the two new aggregate queries) against an actual

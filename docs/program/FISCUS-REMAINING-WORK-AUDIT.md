@@ -37,11 +37,10 @@ economic export/CLI surface `c1f7ec4`, plus the read-only exact economic
 dashboard/API projection `ccda34d` and coding value-attribution lineage
 `3871b6f`, followed by grouped usage/cohort/model/series/budget migration
 `5e54250`, exact frontier/time-reclaimed projections `3c71c51`, modern
-Value-view disclosure `ebbc571`, and exact receipt v2 `443c74d`. Local
-verification at this candidate is
-1,081
-tests (1,077 pass, 0 fail, 4 platform-conditional skips), root/browser
-typecheck, build, focused economic checks, and isolated-cache package dry-run.
+Value-view disclosure `ebbc571`, exact receipt v2 `443c74d`, and exact
+team-rollup v2 `2d567c2`. Local verification at this candidate is 1,084
+root tests (1,080 pass, 0 fail, 4 platform-conditional skips), team-server
+61/61, root/team typecheck, full Node/browser build, and npm pack dry-run.
 These identities are not remote/CI evidence until the blocked push succeeds.
 
 The coding value path now has a bounded exact seam: `3871b6f` adds a
@@ -55,19 +54,21 @@ The grouped migration at `5e54250` extends that seam to exact session, user,
 provider/model and fixed-width time buckets. Usage, cohort and budget advice
 now consume those groups and expose complete/partial/legacy coverage; numeric
 fields remain compatibility projections, while frontier presentation, signed
-receipts/team transport, refreshed-card provenance and period close remain open.
+receipts, refreshed-card provenance and period close remain open.
 
 The frontier/time slice at `3c71c51` carries the same exact coverage into
 model/task cells and manual-time strata, and the modern Value view checkpoint
 `ebbc571` renders complete/partial/legacy status and unresolved counts beside
-the spend figure. Signed receipts/team transport, classic-dashboard parity,
-refreshed-card provenance and period close remain open.
+the spend figure. Signed receipts and team transport now have additive exact
+v2 paths; classic-dashboard parity, refreshed-card provenance and period close
+remain open.
 
 The receipt checkpoint at `443c74d` adds a strict v2 signed body for complete
 exact-covered units, with canonical effective Money/source/correction lineage
 and semantic verification; incomplete, legacy or oversized numeric projections
-remain on v1. Team-server rollups still require a separately versioned remote
-protocol/storage migration.
+remain on v1. The follow-on team checkpoint `2d567c2` adds a signed v2 rollup
+body carrying per-project exact lineage, validates it before server storage,
+and retains the signed body plus additive `economic_json` JSONB columns.
 
 The immediate recovery tranche is green at exact implementation SHA `685b14c57cccf078679a37a929f6234f00522abd`; M1 Evidence/Claim slices are green at `fa36cc380e6883cc868e2e5b46517ae118a038ae`; Derivation/DAG slices are green at `8928bb474ecb93477caa7605c6710b432653a631`; schema-owned persistence is green at `9d8d364013d22f37fc4c3548f57110a26a274b6a`; assumption/event-time/serialization slices are green at `5ab1440e7495a58dcf08083696591e7cf1747d07`; the canonical witness registry is green at `774658431739673183066f3c45dd9d01e84346a2`; hindsight-safe replay/conformance is green at `a7ef58946d941e0e035a38641f59f234b180a0b8`; the first billing kernel vertical is green at `9a0254ab0766057b53569b396f81c1d7c8dd96e2`; and persisted provider/local/residual reconciliation Claims are green at `ec8e67ad79211389ba0b8`. Root typecheck/tests, package smoke, and the configured cross-platform GitHub matrix pass. The broader kernel and product program remains partial/open as recorded below.
 
@@ -141,7 +142,20 @@ Status vocabulary: `CLOSED`, `PARTIAL`, `OPEN`, `RED-SPEC`, `EXTERNAL-GATE`, `SU
 
 ## Immediate execution tranche
 
+**Checkpoint addendum (2026-08-30):** The exact receipt v2 and signed team-rollup
+v2 paths are now implemented locally at `2d567c2`. They carry canonical
+effective/source lineage and retain explicit compatibility projections; the
+remaining AII-017--020 closure work is refreshed-card provenance, live remote
+storage/trust-anchor governance, complete event-role/conservation semantics and
+universal product integration. The older table wording above is historical
+context and must be read with this addendum.
+
 The next worker should not start another design discussion.
+
+**Execution-order override after `2d567c2`:** the versioned exact team-rollup
+protocol/storage migration is complete locally. Proceed next with classic
+dashboard/API parity, then refreshed-card provenance, then period-close
+semantics; live Postgres execution and remote publication remain explicit gates.
 
 1. **COMPLETED at `b27c0ef`:** Implement the RED robust decision module. Strict dominance is the only proof-level certificate; minimax regret and perfect-information VOI remain explicitly named rules with assumptions and cost.
 2. **COMPLETED at `5647c67`:** Implement additive transitive revocation closure. Dependent descendants are invalidated while independent siblings remain outside the closure; cycles are safe, duplicate edges fail closed, and history is not deleted.
@@ -149,7 +163,8 @@ The next worker should not start another design discussion.
 4. **COMPLETED at `685b14c`:** Migrate every affected realization/demo fixture to explicit required lifecycle evidence; no unknown gate is promoted to pass.
 5. **COMPLETED at `685b14c`:** Observe GitHub Actions run `33253835881` as green on all configured jobs.
 6. **COMPLETED in the following documentation checkpoint:** update program state, audit, decision, and evidence registers with exact implementation/CI identities.
-7. **NEXT:** Add a versioned exact team-rollup protocol/storage migration, complete classic-dashboard/API parity, then add refreshed-card provenance and period-close semantics. The local candidate now carries bundled exact decimal pricing into live proxy/import writers, exact budget enforcement/advice, CLI inspection/export, bounded local repricing, source/rate-bound historical FX, legacy-reprice convergence, schema-owned exact allocation persistence, read-only exact economic API, coding realization lineage, grouped usage/cohort/model/series reads, exact frontier/time-reclaimed projections, modern Value-view disclosure and strict exact receipt v2; effective remote-rollup coverage, classic rendering, refreshed-card provenance and close semantics remain.
+7. **COMPLETED at `2d567c2`:** Add the versioned exact team-rollup protocol/storage migration. Complete exact-covered projects emit signed v2 lineage; v1 remains the compatibility fallback; the server validates v2 before insertion and stores additive `economic_json` JSONB alongside the signed raw body. Local root 1,084/1,080 and team-server 61/61 are green.
+8. **NEXT:** Complete classic-dashboard/API parity, then add refreshed-card provenance and period-close semantics. Live Postgres execution, trust-anchor governance and GitHub publication remain explicit gates.
 
 ## Trusted Epistemic Kernel remaining work
 

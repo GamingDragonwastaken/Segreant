@@ -41,6 +41,13 @@
   the signed bytes, not provider authority, causal truth, or completeness beyond
   the v2 semantic checks.
 
+- Exact-covered project values can travel through signed team-rollup v2 bodies
+  carrying the same canonical effective/source lineage. The team server keeps
+  v1 numeric columns for compatibility, stores the signed body and an additive
+  `economic_json` project read model, and validates v2 semantics before insert.
+  This is a transport/read-model migration, not provider attestation or causal
+  proof; live Postgres execution and trust-anchor governance remain external.
+
 ## Invariants
 
 - **`realizedValueUsd` is two different claims and they never merge.**

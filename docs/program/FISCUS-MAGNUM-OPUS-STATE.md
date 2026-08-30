@@ -60,7 +60,8 @@ Controlling architecture:
 - Local candidate exact frontier/time-reclaimed projections (not yet published): `3c71c51`
 - Local candidate modern Value-view exact coverage disclosure (not yet published): `ebbc571`
 - Local candidate exact receipt v2 protocol (not yet published): `443c74d`
-- Local candidate verification: 1,081 root tests total (1,077 pass, 0 fail, 4 platform-conditional skips), root/browser typecheck, build, and isolated-cache package dry-run pass. No GitHub Actions run exists for these local-only commits because the push was refused by the Codex usage/approval limit.
+- Local candidate exact team-rollup v2 protocol/storage migration (not yet published): `2d567c28027a264fdba1bb302bafbdc4f9e944e3`
+- Local candidate verification: 1,084 root tests total (1,080 pass, 0 fail, 4 platform-conditional skips), team-server 61/61, root/team typechecks, full Node/browser build, and npm pack dry-run pass. No GitHub Actions run exists for these local-only commits because the push was refused by the Codex usage/approval limit.
 - Remaining-work audit commit: `5e5a82843154a6fd04e0017538919108c5ff06f1`
 - Luna resume-protocol commit: `5c4de94cf7af0a218ecd10946ac91577fdd9eae7`
 - Base high-assurance PR: #8 (`codex/high-assurance-foundation` -> `main`)
@@ -71,7 +72,7 @@ The exact remote reconstruction SHA must always be re-read after `git fetch`; do
 
 ## Program phase
 
-`M0 stabilization complete; M1/M2 kernel-to-billing integration active; local M2 economic migration candidate under verification`
+`M0 stabilization complete; M1/M2 kernel-to-billing integration active; local M2 exact economic and team-transport migration candidate under verification`
 
 ## M0 stabilization checkpoint (2026-08-29)
 
@@ -176,9 +177,10 @@ The reconciliation kernel path is now end-to-end for this vertical. Legacy reque
 - [x] Frontier/time-reclaimed exact projections (`3c71c51`) carry effective coverage into model/task cells and manual-minute strata, deriving finite numeric compatibility values only when exact coverage is complete.
 - [x] Modern Value-view disclosure (`ebbc571`) renders exact/partial/legacy coverage and unresolved counts beside the spend figure without conflating it with manual-equivalent value.
 - [x] Exact receipt v2 (`443c74d`) emits canonical effective Money/source/correction lineage for complete covered WorkUnits, verifies semantic consistency after signatures, and falls back to v1 for incomplete/legacy/oversized values.
-- [x] Local verification at this candidate: 1,081 total root tests, 1,077 pass, 0 fail, 4 platform-conditional skips; root/browser typechecks, build, focused exact attribution/realization/reprice/usage/cohort/model/series/budget/frontier/time/UI/API/receipt/route/export tests, and isolated-cache package dry-run pass.
+- [x] Exact team-rollup v2 (`2d567c2`) carries per-project exact economic lineage in a signed versioned body; v1 remains the compatibility fallback, the team server validates v2 before storage, and `rollup_projects.economic_json` is an additive JSONB read model while the signed raw body remains authoritative.
+- [x] Local verification at this candidate: 1,084 total root tests, 1,080 pass, 0 fail, 4 platform-conditional skips; team-server 61/61; root/team typechecks, full Node/browser build, focused exact attribution/realization/reprice/usage/cohort/model/series/budget/frontier/time/UI/API/receipt/team/route/export tests, and npm pack dry-run pass.
 
-This is a local candidate, not a remote or release checkpoint. Coding realization, usage, cohort, budget advice, frontier cells, time-reclaimed strata, the modern Value view and complete-covered receipts now carry exact effective coverage; team transport and other legacy artifacts remain compatibility projections pending a versioned remote protocol/storage migration. Event-role/conservation, FX consumer integration beyond source-bound translation, refreshed-card provenance, classic-dashboard parity and close semantics remain open. The economic ledger has CLI inspection/export and a read-only `/api/economic` projection. GitHub publication and exact-SHA CI are external gates currently blocked by the Codex usage/approval limit.
+This is a local candidate, not a remote or release checkpoint. Coding realization, usage, cohort, budget advice, frontier cells, time-reclaimed strata, the modern Value view, complete-covered receipts and signed team rollups now carry exact effective coverage; v1 team artifacts remain compatibility projections and the live Postgres schema still needs external execution. Event-role/conservation, FX consumer integration beyond source-bound translation, refreshed-card provenance, classic-dashboard parity and close semantics remain open. The economic ledger has CLI inspection/export and a read-only `/api/economic` projection. GitHub publication and exact-SHA CI are external gates currently blocked by the Codex usage/approval limit.
 
 ## Completed in first GPT-5.6 Sol tranche
 
@@ -208,15 +210,18 @@ The latest *published* reconstruction checkpoint is green at exact persisted-rec
 - local packed/installable artifact smoke: pass;
 - GitHub Actions run `33262733403`: success across all seven configured jobs.
 
-The newer local candidate through `ebbc571` is separately recorded above and
-has 1,079 local tests (1,075 pass/0 fail/4 skips), root/browser typechecks and
-build passing; it has no remote CI run because publication is still blocked.
+The newer local candidate through `2d567c2` is separately recorded above and
+has 1,084 root tests (1,080 pass/0 fail/4 skips), team-server 61/61, root/team
+typechecks, full build and package dry-run passing; it has no remote CI run
+because publication is still blocked.
 
 The branch is still not a final product-completion baseline. M1 and later audit findings remain open or partial, and external gates remain unperformed. Do not weaken the new invariants merely to preserve superficial green status.
 
 ## Exact next actions
 
-1. Add a versioned exact team-rollup protocol/storage migration, complete classic-dashboard/API parity, then add refreshed-card provenance and period-close semantics. The local candidate now has bundled canonical exact rate source, live proxy/import issuance, exact budget enforcement/advice under explicit coverage, CLI inspection/export, bounded correction and historical FX lineage, legacy-reprice convergence, schema-owned exact allocation persistence, a typed read-only API projection, coding value-attribution lineage, grouped usage/cohort/model/series reads, exact frontier/time-reclaimed projections, modern Value-view disclosure and strict exact receipt v2, but effective remote-rollup coverage and close semantics remain.
+Current checkpoint override: team-rollup v2 is implemented at `2d567c2`; the next implementation slice is classic-dashboard/API parity, followed by refreshed-card provenance and period-close semantics. Live Postgres execution and GitHub publication remain external gates.
+
+1. Complete classic-dashboard/API parity, then add refreshed-card provenance and period-close semantics. The local candidate now has bundled canonical exact rate source, live proxy/import issuance, exact budget enforcement/advice under explicit coverage, CLI inspection/export, bounded correction and historical exact FX lineage, legacy-reprice convergence, schema-owned exact allocation persistence, a typed read-only API projection, coding value-attribution lineage, grouped usage/cohort/model/series reads, exact frontier/time-reclaimed projections, modern Value-view disclosure, strict exact receipt v2 and signed exact team-rollup v2 with additive server storage; live Postgres execution, classic rendering, refreshed-card provenance and close semantics remain.
 2. Make kernel issuance unavoidable at every consequential product boundary, then introduce WorkUnit/OutcomeAdapter migration.
 3. Keep every new claim and decision on the kernel path; add regression/property/adversarial tests before widening capability.
 4. After each coherent slice, update this state and the audit/evidence registers with the exact local SHA; add a remote SHA and CI run only after publication is actually verified.
