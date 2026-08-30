@@ -156,6 +156,64 @@ function concretePath(path: string): string {
  * declared interfaces. Absent optional fields are fine; absent REQUIRED ones are
  * the defect this file exists to catch.
  */
+function checkValueType(
+  type: string,
+  value: unknown,
+  where: string,
+  interfaces: Map<string, Field[]>,
+  problems: string[],
+  seen: Set<string>,
+): void {
+  const normalized = type.replace(/\s+/g, ' ').trim();
+  const alternatives = normalized.split('|').map((part) => part.trim());
+  if (alternatives.length > 1) {
+    if (value === null && alternatives.includes('null')) return;
+    if (value === undefined && alternatives.includes('undefined')) return;
+    if (alternatives.some((alternative) => alternative !== 'null' && alternative !== 'undefined'
+      && valueMatchesType(alternative, value, where, interfaces, problems, seen))) return;
+    problems.push(where + ' — expected ' + type + ', got ' + (value === null ? 'null' : typeof value));
+    return;
+  }
+  if (value === undefined) return;
+  if (!valueMatchesType(normalized, value, where, interfaces, problems, seen)) {
+    problems.push(where + ' — expected ' + type + ', got ' + (value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value));
+  }
+}
+
+function valueMatchesType(
+  type: string,
+  value: unknown,
+  where: string,
+  interfaces: Map<string, Field[]>,
+  problems: string[],
+  seen: Set<string>,
+): boolean {
+  if (type === 'unknown' || type === 'any') return true;
+  if (type === 'string') return typeof value === 'string';
+  if (type === 'number') return typeof value === 'number' && Number.isFinite(value);
+  if (type === 'boolean') return typeof value === 'boolean';
+  if (type === 'null') return value === null;
+  if (type.endsWith('[]')) {
+    if (!Array.isArray(value)) return false;
+    const elementType = type.slice(0, -2).trim();
+    for (const [index, element] of value.entries()) {
+      checkValueType(elementType, element, where + '[' + index + ']', interfaces, problems, seen);
+    }
+    return true;
+  }
+  if (type.startsWith('Record<')) return value !== null && typeof value === 'object' && !Array.isArray(value);
+  if (type.startsWith('{') || type.startsWith('(') || type.includes('=>')) return true;
+  const literal = /^['"](.+)['"]$/.exec(type);
+  if (literal) return typeof value === 'string' && value === literal[1];
+  const named = /^([A-Z]\w*)$/.exec(type);
+  if (named && interfaces.has(named[1]!)) {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+    checkShape(named[1]!, value, interfaces, where, problems, seen);
+    return true;
+  }
+  return true;
+}
+
 function checkShape(
   typeName: string,
   value: unknown,
@@ -177,20 +235,22 @@ function checkShape(
       }
       continue;
     }
-    // Recurse only into a single named interface, which is where the nesting
-    // that hid the budget defect actually lives.
-    const named = /^([A-Z]\w*)(\[\])?$/.exec(field.type.replace(/\s*\|\s*null$/, ''));
-    const inner = named?.[1];
-    if (inner && interfaces.has(inner)) {
-      const next = new Set(seen);
-      next.add(typeName);
-      const target = named?.[2] ? (obj[field.name] as unknown[])?.[0] : obj[field.name];
-      if (target !== undefined) {
-        checkShape(inner, target, interfaces, `${where}.${field.name}`, problems, next);
-      }
-    }
+    const next = new Set(seen);
+    next.add(typeName);
+    checkValueType(field.type, obj[field.name], where + '.' + field.name, interfaces, problems, next);
   }
 }
+
+test('dashboard contract checker rejects a runtime primitive type mismatch', () => {
+  const source = readFileSync(API_SRC, 'utf8');
+  const interfaces = parseInterfaces(source);
+  const problems: string[] = [];
+  checkShape('Summary', { requests: 'one', costUsd: 1 }, interfaces, 'Summary', problems, new Set());
+  assert.ok(
+    problems.some((problem) => problem.includes('Summary.requests') && problem.includes('number')),
+    'a string where the browser declares a number must be a contract failure',
+  );
+});
 
 test('every required field the GUI declares exists in the payload the server sends', async () => {
   const source = readFileSync(API_SRC, 'utf8');
