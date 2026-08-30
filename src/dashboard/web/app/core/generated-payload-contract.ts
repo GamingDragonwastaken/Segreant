@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "46e0c38c87f576b519e35c6c81689b3b6251de3a92e47af7029e8126e1371c99";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "705c3a01577c00d7371bf08e2c6385f31f6df8e974bc95aa65207da36ad1285e";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -1489,11 +1489,254 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "type": "string"
     }
   ],
+  "ImportersPayload": [
+    {
+      "name": "importers",
+      "optional": false,
+      "type": "Importer[]"
+    }
+  ],
+  "DiscoveredProjectPayload": [
+    {
+      "name": "project",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "repoPath",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "sources",
+      "optional": false,
+      "type": "string[]"
+    },
+    {
+      "name": "costUsd",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "requests",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "units",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "realizedUnits",
+      "optional": false,
+      "type": "number"
+    }
+  ],
+  "DiscoverPayload": [
+    {
+      "name": "ok",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "foundFolders",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "correlated",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "discovered",
+      "optional": false,
+      "type": "DiscoveredProjectPayload[]"
+    }
+  ],
+  "ScanSetupPayload": [
+    {
+      "name": "ok",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "totalNew",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "imported",
+      "optional": false,
+      "type": "Record<string, { inserted: number; costUsd: number; available: boolean }>"
+    },
+    {
+      "name": "correlated",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "discovered",
+      "optional": false,
+      "type": "DiscoveredProjectPayload[]"
+    }
+  ],
+  "PricingPayload": [
+    {
+      "name": "demo",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "generatedAt",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "window",
+      "optional": false,
+      "type": "{ startMs: number; endMs: number; label: string }"
+    },
+    {
+      "name": "activeRateCard",
+      "optional": false,
+      "type": "Record<string, unknown>"
+    },
+    {
+      "name": "total",
+      "optional": false,
+      "type": "{ costUsd: number; requests: number }"
+    },
+    {
+      "name": "provenance",
+      "optional": false,
+      "type": "PricingEvidencePayload[]"
+    },
+    {
+      "name": "boundary",
+      "optional": false,
+      "type": "string"
+    }
+  ],
+  "RealizationPayload": [
+    {
+      "name": "available",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "repo",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "source",
+      "optional": true,
+      "type": "'git' | 'store'"
+    },
+    {
+      "name": "report",
+      "optional": true,
+      "type": "Record<string, unknown>"
+    }
+  ],
+  "GuidePayload": [
+    {
+      "name": "stage",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "headline",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "steps",
+      "optional": false,
+      "type": "Array<{"
+    },
+    {
+      "name": "next",
+      "optional": false,
+      "type": "{"
+    },
+    {
+      "name": "hint",
+      "optional": false,
+      "type": "string | null"
+    }
+  ],
+  "JudgePayload": [
+    {
+      "name": "error",
+      "optional": true,
+      "type": "string"
+    },
+    {
+      "name": "project",
+      "optional": true,
+      "type": "string"
+    },
+    {
+      "name": "windowDays",
+      "optional": true,
+      "type": "number"
+    },
+    {
+      "name": "judgment",
+      "optional": true,
+      "type": "unknown"
+    },
+    {
+      "name": "session",
+      "optional": true,
+      "type": "{ sessionId: string; tool: string; requestCount: number }"
+    },
+    {
+      "name": "tier",
+      "optional": true,
+      "type": "{ tier: string; sendsContentOffDevice: boolean }"
+    }
+  ],
+  "ClearProposalsPayload": [
+    {
+      "name": "ok",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "removed",
+      "optional": false,
+      "type": "number"
+    }
+  ],
   "DashboardResponseMap": [
     {
       "name": "health",
       "optional": false,
       "type": "HealthPayload"
+    },
+    {
+      "name": "importers",
+      "optional": false,
+      "type": "ImportersPayload"
+    },
+    {
+      "name": "import",
+      "optional": false,
+      "type": "ImportResult"
+    },
+    {
+      "name": "discover",
+      "optional": false,
+      "type": "DiscoverPayload"
+    },
+    {
+      "name": "scan",
+      "optional": false,
+      "type": "ScanPayload | ScanSetupPayload"
     },
     {
       "name": "overview",
@@ -1514,6 +1757,26 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "economic",
       "optional": false,
       "type": "EconomicPayload"
+    },
+    {
+      "name": "pricing",
+      "optional": false,
+      "type": "PricingPayload"
+    },
+    {
+      "name": "realization",
+      "optional": false,
+      "type": "RealizationPayload"
+    },
+    {
+      "name": "guide",
+      "optional": false,
+      "type": "GuidePayload"
+    },
+    {
+      "name": "judge",
+      "optional": false,
+      "type": "JudgePayload"
     },
     {
       "name": "value",

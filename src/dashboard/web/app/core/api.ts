@@ -62,6 +62,14 @@ import type {
   ScanPayload,
   ImportResult,
   HealthPayload,
+  ImportersPayload,
+  DiscoverPayload,
+  ScanSetupPayload,
+  PricingPayload,
+  RealizationPayload,
+  GuidePayload,
+  JudgePayload,
+  ClearProposalsPayload,
   Range,
 } from './generated-types.ts';
 
@@ -105,6 +113,14 @@ export type {
   ScanPayload,
   ImportResult,
   HealthPayload,
+  ImportersPayload,
+  DiscoverPayload,
+  ScanSetupPayload,
+  PricingPayload,
+  RealizationPayload,
+  GuidePayload,
+  JudgePayload,
+  ClearProposalsPayload,
   Range,
 } from './generated-types.ts';
 
@@ -192,8 +208,8 @@ export const api = {
   ),
   value: () => request<ValuePayload>(routePath('value')),
   settings: () => request<SettingsSnapshot>(routePath('settings')),
-  guide: () => request<Record<string, unknown>>(routePath('guide')),
-  importers: () => request<{ importers: Importer[] }>(routePath('importers')),
+  guide: () => request<GuidePayload>(routePath('guide')),
+  importers: () => request<ImportersPayload>(routePath('importers')),
   /** GET /api/scan is the dry run: it detects and reports, and imports nothing. */
   scan: () => request<ScanPayload>(routePath('scan')),
 
@@ -202,16 +218,16 @@ export const api = {
     settings: (patch: Record<string, unknown>) =>
       request<SettingsSnapshot>(routePath('settings-update'), { method: 'POST', body: JSON.stringify(patch) }),
     clearProposals: () =>
-      request<{ ok: boolean; removed: number }>(routePath('clear-proposals'), { method: 'POST' }),
+      request<ClearProposalsPayload>(routePath('clear-proposals'), { method: 'POST' }),
     runImport: (tool = 'all') =>
       request<ImportResult>(`${routePath('import')}?tool=${encodeURIComponent(tool)}`, { method: 'POST' }),
     // POST, not GET. An earlier version of this client called /api/discover with
     // the default GET and the server -- which guards it as a mutating route --
     // answered 405 every time. Both correlation routes below write to the ledger.
     discover: () =>
-      request<{ ok: boolean; foundFolders: number; correlated: number }>(routePath('discover'), { method: 'POST' }),
+      request<DiscoverPayload>(routePath('discover'), { method: 'POST' }),
     runScan: () =>
-      request<{ ok: boolean; totalNew: number; correlated: number }>(routePath('scan'), { method: 'POST' }),
+      request<ScanSetupPayload>(routePath('scan'), { method: 'POST' }),
   },
 };
 

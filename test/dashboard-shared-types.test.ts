@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { DASHBOARD_API_CONTRACTS, DASHBOARD_PAYLOAD_CONTRACTS } from '../src/dashboard/contracts.ts';
 
 const ROOT = join(import.meta.dirname, '..');
 const SHARED_TYPES = join(ROOT, 'src', 'dashboard', 'shared-types.ts');
@@ -20,4 +21,11 @@ test('dashboard payload types have one canonical source and a hash-bound browser
   assert.equal(generatedDeclarations, sourceDeclarations, 'browser shared type copy must be generated from the canonical declarations');
   assert.doesNotMatch(api, /^export interface /m, 'api.ts must not retain a second hand-written payload type source');
   assert.match(api, /generated-types\.ts/, 'api.ts must consume the generated browser type copy');
+});
+
+test('named dashboard response contracts contain no remaining inline JSON response descriptions', () => {
+  const inline = [...DASHBOARD_API_CONTRACTS, ...DASHBOARD_PAYLOAD_CONTRACTS]
+    .map((contract) => contract.responseType)
+    .filter((responseType) => responseType !== 'text/csv' && (responseType.includes('inline') || responseType.startsWith('{') || responseType.includes('Record<string')));
+  assert.deepEqual(inline, [], 'every JSON dashboard route should bind a named shared response type');
 });

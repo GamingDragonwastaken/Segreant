@@ -180,8 +180,8 @@ web/
   response is returned. The named payload interfaces now have one canonical
   no-runtime source in `shared-types.ts`; the build generates both the browser
   declaration copy and nested runtime metadata with the exact source hash under
-  the same publication lock. Inline route responses and full docs/claim/egress
-  generation remain explicit future boundaries.
+  the same publication lock. Text/CSV and opaque nested report details remain
+  explicit future boundaries, as do full docs/claim/egress generation.
 - **Capability parity is an immutable contract.** `CAPABILITY_SPECS` augments
   every GUI registry entry with input/preview/output schema classes, authority,
   egress, credentials, reversibility, assurance and CLI/API/GUI/docs bindings.

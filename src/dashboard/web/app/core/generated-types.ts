@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: 46e0c38c87f576b519e35c6c81689b3b6251de3a92e47af7029e8126e1371c99 */
+/** Source SHA-256: 705c3a01577c00d7371bf08e2c6385f31f6df8e974bc95aa65207da36ad1285e */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -678,19 +678,119 @@ export interface HealthPayload {
   service: string;
 }
 
+/** Named response for the native-import discovery route. */
+export interface ImportersPayload {
+  importers: Importer[];
+}
+
+export interface DiscoveredProjectPayload {
+  project: string;
+  repoPath: string;
+  sources: string[];
+  costUsd: number;
+  requests: number;
+  units: number;
+  realizedUnits: number;
+}
+
+/** Named response for POST /api/discover. */
+export interface DiscoverPayload {
+  ok: boolean;
+  foundFolders: number;
+  correlated: number;
+  discovered: DiscoveredProjectPayload[];
+}
+
+/** Named response for the mutating scan/setup route. */
+export interface ScanSetupPayload {
+  ok: boolean;
+  totalNew: number;
+  imported: Record<string, { inserted: number; costUsd: number; available: boolean }>;
+  correlated: number;
+  discovered: DiscoveredProjectPayload[];
+}
+
+/** Named response for GET /api/pricing. */
+export interface PricingPayload {
+  demo: boolean;
+  generatedAt: string;
+  window: { startMs: number; endMs: number; label: string };
+  activeRateCard: Record<string, unknown>;
+  total: { costUsd: number; requests: number };
+  provenance: PricingEvidencePayload[];
+  boundary: string;
+}
+
+/** Read-only realization response; the report is intentionally opaque until its full shared schema is migrated. */
+export interface RealizationPayload {
+  available: boolean;
+  repo: string;
+  source?: 'git' | 'store';
+  report?: Record<string, unknown>;
+}
+
+/** Named response for the guide journey engine. */
+export interface GuidePayload {
+  stage: string;
+  headline: string;
+  steps: Array<{
+    id: string;
+    title: string;
+    done: boolean;
+    state: string;
+    why: string;
+    commands: string[];
+    notice?: string;
+  }>;
+  next: {
+    id: string;
+    title: string;
+    done: boolean;
+    state: string;
+    why: string;
+    commands: string[];
+    notice?: string;
+  };
+  hint: string | null;
+}
+
+/** POST /api/judge returns either an honest empty-window result or a judgment. */
+export interface JudgePayload {
+  error?: string;
+  project?: string;
+  windowDays?: number;
+  judgment?: unknown;
+  session?: { sessionId: string; tool: string; requestCount: number };
+  tier?: { tier: string; sendsContentOffDevice: boolean };
+}
+
+export interface ClearProposalsPayload {
+  ok: boolean;
+  removed: number;
+}
+
 export type Range = 'today' | '7d' | '30d' | 'all';
 
 /** Compile-time response map shared by server adapters and the browser client. */
 export interface DashboardResponseMap {
   health: HealthPayload;
+  importers: ImportersPayload;
+  import: ImportResult;
+  discover: DiscoverPayload;
+  scan: ScanPayload | ScanSetupPayload;
   overview: Overview;
   billing: BillingPayload;
   allocation: AllocationPayload;
   economic: EconomicPayload;
+  pricing: PricingPayload;
+  realization: RealizationPayload;
+  guide: GuidePayload;
+  judge: JudgePayload;
   value: ValuePayload;
   causal: CausalPayload;
   settings: SettingsSnapshot;
   'settings-update': SettingsSnapshot;
+  'clear-proposals': ClearProposalsPayload;
 }
 
 export type DashboardResponseFor<Id extends keyof DashboardResponseMap> = DashboardResponseMap[Id];
