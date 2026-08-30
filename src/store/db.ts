@@ -32,6 +32,8 @@ import { addMoney, formatMoneyAmount, money, type EconomicBasis, type Money } fr
 import { requestEconomicEvent, requestEconomicEventId } from '../economics/request.ts';
 import { serializeEconomicEvent } from '../economics/serialization.ts';
 import { economicEventRole, type EconomicEvent } from '../economics/events.ts';
+import { canonicalEconomicAttribution, economicAttributionFromRows } from '../economics/attribution.ts';
+import { canonicalJson } from '../epistemic/serialization.ts';
 import type { ProviderScopeDeclaration, ScopeCaptureStatus } from '../billing/scope.ts';
 import { ATTRIBUTION_BASES, type AttributionBasis } from '../value/characterization.ts';
 import type { OpenAiCostsCaptureCoverage } from '../billing/openaiCostsCoverage.ts';
@@ -41,6 +43,7 @@ import type { AllocationRule, CostCentre } from '../alloc/rules.ts';
 import type { AllocationRunResult } from '../alloc/apply.ts';
 import type { ExactAllocationRunResult } from '../alloc/exact.ts';
 import { buildExactAllocationKernelIssuance, type ExactAllocationKernelPersistenceResult } from '../alloc/epistemic.ts';
+import { buildCodingRealizationKernelIssuance, codingRealizationKernelEligible, type CodingRealizationKernelPersistenceResult } from '../value/epistemic.ts';
 import * as allocation from './allocation.ts';
 import type { ExactAllocationRunRecord } from './allocation.ts';
 import * as exactAllocation from '../alloc/exact.ts';
@@ -78,6 +81,7 @@ export type {
   RepriceUpdate,
   RequestPriceEvent,
 } from './realization.ts';
+export type { CodingRealizationKernelPersistenceResult } from '../value/epistemic.ts';
 export type {
   EffectiveRequestRow,
   EconomicRequestUnresolvedReason,
@@ -1783,10 +1787,101 @@ export class Store {
   /**
    * Persist a snapshot of computed work units so realized value survives the
    * process that computed it. Keyed by commit hash, so re-running `realize`
-   * refreshes the snapshot rather than double-counting.
+   * refreshes the snapshot rather than double-counting. The canonical path
+   * automatically preflights and issues eligible exact/mature/realized units;
+   * synthetic, legacy and partial rows remain explicit compatibility records.
    */
   saveRealizationUnits(records: RealizationUnitRecord[]): void {
-    realization.saveRealizationUnits(this.db, records);
+    // Every reproducible exact/mature/realized record crosses the kernel on the
+    // canonical save path. Legacy, synthetic and partial snapshots remain
+    // compatibility records by explicit eligibility policy, not by a public
+    // opt-out that could silently bypass the trust boundary.
+    const kernelIssuances = records
+      .filter((record) => codingRealizationKernelEligible(record))
+      .map((record) => {
+        const issuance = buildCodingRealizationKernelIssuance(record);
+        this.assertRealizationEconomicLineage(record, issuance);
+        return { record, issuance };
+      });
+    if (kernelIssuances.length === 0) {
+      realization.saveRealizationUnits(this.db, records);
+      return;
+    }
+
+    this.epistemicLedger.runInTransaction(() => {
+      realization.saveRealizationUnits(this.db, records);
+      for (const { record, issuance } of kernelIssuances) {
+        // Re-derive inside the same write transaction as the snapshot and
+        // kernel pair. This closes the race where another handle changes the
+        // request/economic ledger after preflight but before publication.
+        this.assertRealizationEconomicLineage(record, issuance);
+        this.assertPersistedRealizationRow(record);
+        this.appendCodingRealizationKernel(issuance);
+      }
+    });
+  }
+
+  /** Issue one persisted exact, mature and fully realized coding unit into the kernel. */
+  issueRealizationUnitToKernel(record: RealizationUnitRecord): CodingRealizationKernelPersistenceResult {
+    const issuance = buildCodingRealizationKernelIssuance(record);
+    this.assertRealizationEconomicLineage(record, issuance);
+    return this.epistemicLedger.runInTransaction(() => {
+      this.assertRealizationEconomicLineage(record, issuance);
+      this.assertPersistedRealizationRow(record);
+      return this.appendCodingRealizationKernel(issuance);
+    });
+  }
+
+  private appendCodingRealizationKernel(issuance: ReturnType<typeof buildCodingRealizationKernelIssuance>): CodingRealizationKernelPersistenceResult {
+    const evidenceResult = this.epistemicLedger.appendEvidenceWithinTransaction(issuance.evidence);
+    const claimResult = this.epistemicLedger.appendClaimWithinTransaction(issuance.claim);
+    return Object.freeze({
+      evidenceId: issuance.evidence.id,
+      claimId: issuance.claim.id,
+      evidence: Object.freeze({ result: evidenceResult }),
+      claim: Object.freeze({ result: claimResult }),
+    });
+  }
+
+  private assertPersistedRealizationRow(record: RealizationUnitRecord): void {
+    const row = this.db.prepare(
+      `SELECT project, ts_epoch_ms AS tsEpochMs, computed_at_ms AS computedAtMs,
+              unit_json AS unitJson, cost_scope AS costScope, cost_stale AS costStale
+         FROM realization_units WHERE commit_hash = ?`,
+    ).get(record.commitHash) as {
+      project: string; tsEpochMs: number; computedAtMs: number; unitJson: string; costScope: string; costStale: number;
+    } | undefined;
+    if (row === undefined) throw new Error(`realization unit ${record.commitHash} is not persisted; kernel issuance refused`);
+    if (row.project !== record.project || Number(row.tsEpochMs) !== record.tsEpochMs || Number(row.computedAtMs) !== record.computedAtMs
+      || row.unitJson !== record.unitJson || row.costScope !== record.costScope || Number(row.costStale) !== 0) {
+      throw new Error(`persisted realization unit ${record.commitHash} diverges from the kernel candidate`);
+    }
+  }
+
+  private assertRealizationEconomicLineage(
+    record: RealizationUnitRecord,
+    issuance: ReturnType<typeof buildCodingRealizationKernelIssuance>,
+  ): void {
+    const value = issuance.claim.proposition.value;
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error('coding realization kernel payload is not an object');
+    const payload = value as Record<string, unknown>;
+    const startMs = payload.windowStartMs;
+    const endMs = payload.windowEndMs;
+    const project = payload.project;
+    const spendScope = payload.spendAttributionScope;
+    if (!Number.isSafeInteger(startMs) || !Number.isSafeInteger(endMs) || typeof project !== 'string'
+      || (spendScope !== 'project' && spendScope !== 'window')) {
+      throw new Error('coding realization kernel payload has invalid economic coordinates');
+    }
+    const actual = canonicalEconomicAttribution(payload.economic);
+    const expected = economicAttributionFromRows(this.economicRequestRowsInRange(
+      startMs as number,
+      endMs as number,
+      spendScope === 'project' ? { project: record.project } : {},
+    ));
+    if (canonicalJson(actual) !== canonicalJson(expected)) {
+      throw new Error('coding realization economic attribution does not match the current effective ledger');
+    }
   }
 
   /**

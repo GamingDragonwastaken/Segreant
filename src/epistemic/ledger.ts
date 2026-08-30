@@ -166,6 +166,11 @@ export class EpistemicLedger {
     }
   }
 
+  /** Run work on this SQLite handle inside the kernel transaction boundary. */
+  runInTransaction<T>(work: () => T): T {
+    return this.transaction(work);
+  }
+
   private node(id: string): DagNode | null {
     const stored = row<StoredNodeRow>(this.db.prepare(
       'SELECT node_id, node_kind, available_at, epistemic, supersedes_json FROM epistemic_nodes WHERE node_id = ?',
@@ -233,63 +238,69 @@ export class EpistemicLedger {
   }
 
   appendEvidence(value: Evidence): AppendResult {
+    return this.transaction(() => this.appendEvidenceWithinTransaction(value));
+  }
+
+  /** Append Evidence while the caller owns the surrounding SQLite transaction. */
+  appendEvidenceWithinTransaction(value: Evidence): AppendResult {
     const item = evidence(value);
     const availableAt = item.observedAt ?? item.recordedAt ?? item.assertedAt;
     if (availableAt === null) throw new Error(`evidence ${item.id} has no acquisition timestamp`);
     const encoded = json(item, 'evidence');
-    return this.transaction(() => {
-      const current = this.graph();
-      const normalized = normalizeNodeForLedger({
-        id: item.id, kind: 'evidence', availableAt, supersedes: item.supersedes,
-      });
-      const existing = current.nodes.find((node) => node.id === item.id);
-      let nodeResult: AppendResult;
-      if (existing !== undefined) {
-        if (!sameNodeIdentity(existing, normalized)) throw new Error(`different DAG node already exists for ${item.id}`);
-        nodeResult = 'duplicate';
-      } else {
-        createEpistemicDag([...current.nodes, normalized], current.edges);
-        nodeResult = this.insertNode(normalized);
-      }
-      const stored = this.nodePayload(item.id, 'epistemic_evidence', 'evidence_id', 'evidence');
-      if (stored !== null) {
-        if (!sameStoredPayload(stored, encoded)) throw new Error(`different evidence already exists for ${item.id}`);
-        return 'duplicate';
-      }
-      this.db.prepare('INSERT INTO epistemic_evidence (evidence_id, evidence_json, evidence_digest) VALUES (?, ?, ?)').run(item.id, encoded, digest(encoded));
-      return nodeResult === 'duplicate' ? 'inserted' : nodeResult;
+    const current = this.graph();
+    const normalized = normalizeNodeForLedger({
+      id: item.id, kind: 'evidence', availableAt, supersedes: item.supersedes,
     });
+    const existing = current.nodes.find((node) => node.id === item.id);
+    let nodeResult: AppendResult;
+    if (existing !== undefined) {
+      if (!sameNodeIdentity(existing, normalized)) throw new Error(`different DAG node already exists for ${item.id}`);
+      nodeResult = 'duplicate';
+    } else {
+      createEpistemicDag([...current.nodes, normalized], current.edges);
+      nodeResult = this.insertNode(normalized);
+    }
+    const stored = this.nodePayload(item.id, 'epistemic_evidence', 'evidence_id', 'evidence');
+    if (stored !== null) {
+      if (!sameStoredPayload(stored, encoded)) throw new Error(`different evidence already exists for ${item.id}`);
+      return 'duplicate';
+    }
+    this.db.prepare('INSERT INTO epistemic_evidence (evidence_id, evidence_json, evidence_digest) VALUES (?, ?, ?)').run(item.id, encoded, digest(encoded));
+    return nodeResult === 'duplicate' ? 'inserted' : nodeResult;
   }
 
   appendClaim(value: Claim): AppendResult {
+    return this.transaction(() => this.appendClaimWithinTransaction(value));
+  }
+
+  /** Append Claim while the caller owns the surrounding SQLite transaction. */
+  appendClaimWithinTransaction(value: Claim): AppendResult {
     const item = claim(value);
     const encoded = json(item, 'claim');
-    return this.transaction(() => {
-      this.ensureKinds(item.evidenceIds, 'evidence');
-      this.ensureKinds(item.assumptionIds, 'assumption');
-      const current = this.graph();
-      const normalized = normalizeNodeForLedger({
-        id: item.id, kind: 'claim', availableAt: item.issuedAt, epistemic: item.epistemic, supersedes: item.supersedes,
-      });
-      const existing = current.nodes.find((node) => node.id === item.id);
-      let nodeResult: AppendResult;
-      if (existing !== undefined) {
-        if (!sameNodeIdentity(existing, normalized)) throw new Error(`different DAG node already exists for ${item.id}`);
-        nodeResult = 'duplicate';
-      } else {
-        createEpistemicDag([...current.nodes, normalized], current.edges);
-        nodeResult = this.insertNode(normalized);
-      }
-      const stored = this.nodePayload(item.id, 'epistemic_claims', 'claim_id', 'claim');
-      if (stored !== null) {
-        if (!sameStoredPayload(stored, encoded)) throw new Error(`different claim already exists for ${item.id}`);
-        return 'duplicate';
-      }
-      this.db.prepare('INSERT INTO epistemic_claims (claim_id, claim_json, claim_digest) VALUES (?, ?, ?)').run(item.id, encoded, digest(encoded));
-      for (const evidenceId of item.evidenceIds) this.insertEdge({ from: evidenceId, to: item.id, relation: 'supports' });
-      for (const assumptionId of item.assumptionIds) this.insertEdge({ from: assumptionId, to: item.id, relation: 'assumes' });
-      return nodeResult === 'duplicate' ? 'inserted' : nodeResult;
+    this.ensureKinds(item.evidenceIds, 'evidence');
+    this.ensureKinds(item.assumptionIds, 'assumption');
+    const current = this.graph();
+    const normalized = normalizeNodeForLedger({
+      id: item.id, kind: 'claim', availableAt: item.issuedAt, epistemic: item.epistemic, supersedes: item.supersedes,
     });
+    const existing = current.nodes.find((node) => node.id === item.id);
+    let nodeResult: AppendResult;
+    if (existing !== undefined) {
+      if (!sameNodeIdentity(existing, normalized)) throw new Error(`different DAG node already exists for ${item.id}`);
+      nodeResult = 'duplicate';
+    } else {
+      createEpistemicDag([...current.nodes, normalized], current.edges);
+      nodeResult = this.insertNode(normalized);
+    }
+    const stored = this.nodePayload(item.id, 'epistemic_claims', 'claim_id', 'claim');
+    if (stored !== null) {
+      if (!sameStoredPayload(stored, encoded)) throw new Error(`different claim already exists for ${item.id}`);
+      return 'duplicate';
+    }
+    this.db.prepare('INSERT INTO epistemic_claims (claim_id, claim_json, claim_digest) VALUES (?, ?, ?)').run(item.id, encoded, digest(encoded));
+    for (const evidenceId of item.evidenceIds) this.insertEdge({ from: evidenceId, to: item.id, relation: 'supports' });
+    for (const assumptionId of item.assumptionIds) this.insertEdge({ from: assumptionId, to: item.id, relation: 'assumes' });
+    return nodeResult === 'duplicate' ? 'inserted' : nodeResult;
   }
 
   appendAssumption(value: Assumption): AppendResult {

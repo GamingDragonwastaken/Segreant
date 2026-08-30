@@ -60,6 +60,16 @@
   card and sidecar validate together. Pre-sidecar or tampered history remains
   unavailable; a local rate card is never provider-billed evidence.
 
+- The canonical realization persistence path automatically crosses the Trusted
+  Epistemic Kernel. It preflights and atomically persists one idempotent
+  `value.realization_recorded` Evidence/Claim per mature, current, fully realized
+  unit with complete exact effective request coverage, re-derived from the Store
+  ledger on the same project/window basis. Partial, maturing, stale,
+  synthetic-demo and legacy snapshots remain outside the kernel. The claim is a
+  provisional local lifecycle/showback statement, never causal effect, business
+  value, provider billing or settlement; window-scoped spend is explicitly
+  project-blind.
+
 ## Invariants
 
 - **`realizedValueUsd` is two different claims and they never merge.**
@@ -75,6 +85,9 @@
   inside one transaction and leaves gates, maturity, survival, acceptance, and
   the realized flag untouched — pinned by a diff-the-whole-funnel test.
 - List price is not billed cost. Any comparison priced from a rate card says so.
+- A realized coding unit is not realized economic value. The kernel bridge carries
+  lifecycle gate evidence and exact request-lineage spend only; it never upgrades
+  either into causal or business-value truth.
 
 ## Verify
 
