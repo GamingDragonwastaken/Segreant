@@ -1,0 +1,373 @@
+/** Exact-Money allocation adapter for the immutable economic projection. */
+
+import { applyExactRate, exactRate } from '../economics/rate.ts';
+import { addMoney, compareMoney, money, moneyFromJson, moneyToJson, type EconomicBasis, type Money } from '../economics/money.ts';
+import {
+  orderRules,
+  matchesRow,
+  ratioToParts,
+  ruleAppliesAt,
+  RATIO_SCALE,
+  validateRule,
+  type AllocatableRow,
+  type AllocationRule,
+  type CostCentre,
+} from './rules.ts';
+
+const EXACT_ROW_KEYS = new Set(['sourceEventIds', 'amount', 'project', 'provider', 'model', 'source', 'user', 'tsEpochMs']);
+
+export interface ExactAllocatableRow {
+  readonly sourceEventIds: readonly string[];
+  readonly amount: Money;
+  readonly project: string;
+  readonly provider: string;
+  readonly model: string;
+  readonly source: string | null;
+  readonly user: string | null;
+  readonly tsEpochMs: number;
+}
+
+export interface ExactMoneyBucket {
+  readonly currency: string;
+  readonly basis: EconomicBasis;
+  readonly amount: Money;
+  readonly sourceEventIds: readonly string[];
+}
+
+export interface ExactAllocationLine {
+  readonly costCentreId: string;
+  readonly ruleId: string;
+  readonly ruleVersion: number;
+  readonly method: AllocationRule['method'];
+  readonly ratioParts: number;
+  readonly amount: Money;
+  readonly sourceBasis: EconomicBasis;
+  readonly sourceEventIds: readonly string[];
+}
+
+export type ExactUnallocatedReason = 'no_matching_rule' | 'no_driver_for_proportional_pool' | 'target_cost_centre_archived';
+
+export interface ExactUnallocatedLine {
+  readonly reason: ExactUnallocatedReason;
+  readonly amount: Money;
+  readonly sourceBasis: EconomicBasis;
+  readonly sourceEventIds: readonly string[];
+  readonly topProjects: readonly { project: string; amount: Money }[];
+}
+
+export interface ExactAllocationRunResult {
+  readonly periodStartMs: number;
+  readonly periodEndMs: number;
+  readonly runAtMs: number;
+  readonly totalByIdentity: readonly ExactMoneyBucket[];
+  readonly allocatedByIdentity: readonly ExactMoneyBucket[];
+  readonly unallocatedByIdentity: readonly ExactMoneyBucket[];
+  readonly lines: readonly ExactAllocationLine[];
+  readonly unallocated: readonly ExactUnallocatedLine[];
+  readonly sourceBases: readonly EconomicBasis[];
+  readonly unresolvedRequestIds: readonly string[];
+  readonly complete: boolean;
+  readonly conserves: boolean;
+  readonly trust: 'derived_allocation_of_exact_effective_charges';
+  readonly excludedFrom: readonly ['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations'];
+}
+
+interface Bucket {
+  amount: Money;
+  sourceEventIds: string[];
+  rows: ExactAllocatableRow[];
+  byProject: Map<string, Money>;
+}
+
+function identityKey(value: Money): string {
+  return `${value.currency}\u0000${value.basis}`;
+}
+
+function splitIdentity(key: string): { currency: string; basis: EconomicBasis } {
+  const [currency, basis] = key.split('\u0000');
+  if (currency === undefined || basis === undefined) throw new Error('exact allocation identity is malformed');
+  return { currency, basis: basis as EconomicBasis };
+}
+
+function emptyBucket(amount: Money): Bucket {
+  return { amount: money('0', amount.currency, amount.basis), sourceEventIds: [], rows: [], byProject: new Map() };
+}
+
+function addToBucket(bucket: Bucket, row: ExactAllocatableRow): void {
+  bucket.amount = addMoney(bucket.amount, row.amount);
+  bucket.sourceEventIds.push(...row.sourceEventIds);
+  bucket.rows.push(row);
+  const existing = bucket.byProject.get(row.project);
+  bucket.byProject.set(row.project, existing === undefined ? row.amount : addMoney(existing, row.amount));
+}
+
+function exactMoney(value: unknown, label: string): Money {
+  if (value === null || typeof value !== 'object' || Array.isArray(value) || typeof (value as { coefficient?: unknown }).coefficient !== 'bigint') {
+    throw new Error(`${label} must be an exact Money value`);
+  }
+  const keys = Object.keys(value).sort();
+  if (keys.join('\u0000') !== ['basis', 'coefficient', 'currency', 'scale'].join('\u0000')) throw new Error(`${label} contains unknown or missing Money fields`);
+  try {
+    return moneyFromJson(moneyToJson(value as Money));
+  } catch (error) {
+    throw new Error(`${label}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function canonicalRows(rows: readonly ExactAllocatableRow[], periodStartMs: number, periodEndMs: number): ExactAllocatableRow[] {
+  if (!Array.isArray(rows)) throw new Error('exact allocation rows must be an array');
+  if (!Number.isSafeInteger(periodStartMs) || !Number.isSafeInteger(periodEndMs) || periodStartMs >= periodEndMs) throw new Error('exact allocation period must be ordered safe timestamps');
+  const seenSources = new Set<string>();
+  return rows.map((raw, index) => {
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) throw new Error(`exact allocation row ${index} must be an object`);
+    for (const key of Object.keys(raw)) if (!EXACT_ROW_KEYS.has(key)) throw new Error(`exact allocation row ${index} contains unknown field: ${key}`);
+    const row = raw as ExactAllocatableRow;
+    if (!Array.isArray(row.sourceEventIds) || row.sourceEventIds.length === 0) throw new Error(`exact allocation row ${index} requires source event ids`);
+    const sourceEventIds = [...row.sourceEventIds].map((sourceId, sourceIndex) => {
+      if (typeof sourceId !== 'string' || sourceId.trim().length === 0) throw new Error(`exact allocation row ${index} sourceEventIds[${sourceIndex}] must be non-empty`);
+      if (seenSources.has(sourceId)) throw new Error(`exact allocation source event is assigned more than once: ${sourceId}`);
+      seenSources.add(sourceId);
+      return sourceId;
+    });
+    if (!Number.isSafeInteger(row.tsEpochMs) || row.tsEpochMs < periodStartMs || row.tsEpochMs >= periodEndMs) throw new Error(`exact allocation row ${index} is outside the requested period`);
+    for (const [value, label] of [[row.project, 'project'], [row.provider, 'provider'], [row.model, 'model']] as const) {
+      if (typeof value !== 'string' || value.trim().length === 0) throw new Error(`exact allocation row ${index} ${label} must be non-empty`);
+    }
+    if (row.source !== null && row.source !== undefined && typeof row.source !== 'string') throw new Error(`exact allocation row ${index} source must be a string or null`);
+    if (row.user !== null && row.user !== undefined && typeof row.user !== 'string') throw new Error(`exact allocation row ${index} user must be a string or null`);
+    const amount = exactMoney(row.amount, `exact allocation row ${index} amount`);
+    return Object.freeze({
+      sourceEventIds: Object.freeze(sourceEventIds),
+      amount,
+      project: row.project.trim(),
+      provider: row.provider.trim(),
+      model: row.model.trim(),
+      source: row.source ?? null,
+      user: row.user ?? null,
+      tsEpochMs: row.tsEpochMs,
+    });
+  });
+}
+
+function addGrouped(map: Map<string, Bucket>, row: ExactAllocatableRow): void {
+  const key = identityKey(row.amount);
+  const bucket = map.get(key);
+  if (bucket === undefined) {
+    const created = emptyBucket(row.amount);
+    addToBucket(created, row);
+    map.set(key, created);
+  } else addToBucket(bucket, row);
+}
+
+function sourceIds(bucket: Bucket): readonly string[] {
+  return Object.freeze([...new Set(bucket.sourceEventIds)].sort());
+}
+
+function splitByWeights(total: Money, weights: readonly { costCentreId: string; weight: bigint }[]): Map<string, Money> {
+  const positive = weights.filter((item) => item.weight > 0n);
+  const denominator = positive.reduce((sum, item) => sum + item.weight, 0n);
+  if (denominator <= 0n) return new Map();
+  const result = new Map<string, Money>();
+  for (const item of positive) {
+    try {
+      const rate = exactRate({ numerator: item.weight, denominator, sourceUnit: total.currency, targetUnit: total.currency });
+      result.set(item.costCentreId, applyExactRate(total, rate, total.basis));
+    } catch (error) {
+      throw new Error(`exact allocation requires an explicit quantization policy for a non-terminating share: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  return result;
+}
+
+function asBucketMap(map: Map<string, Money>, sourceIdsByKey: Map<string, Set<string>>): ExactMoneyBucket[] {
+  return [...map.entries()]
+    .map(([key, amount]) => {
+      const identity = splitIdentity(key);
+      return Object.freeze({
+        currency: identity.currency,
+        basis: identity.basis,
+        amount,
+        sourceEventIds: Object.freeze([...(sourceIdsByKey.get(key) ?? new Set<string>())].sort()),
+      });
+    })
+    .sort((a, b) => a.currency.localeCompare(b.currency) || a.basis.localeCompare(b.basis));
+}
+
+function addAmount(map: Map<string, Money>, sourceIdsByKey: Map<string, Set<string>>, amount: Money, sourceIds: readonly string[]): void {
+  const key = identityKey(amount);
+  const prior = map.get(key);
+  map.set(key, prior === undefined ? amount : addMoney(prior, amount));
+  const ids = sourceIdsByKey.get(key) ?? new Set<string>();
+  for (const sourceId of sourceIds) ids.add(sourceId);
+  sourceIdsByKey.set(key, ids);
+}
+
+function topProjects(bucket: Bucket): readonly { project: string; amount: Money }[] {
+  return Object.freeze([...bucket.byProject.entries()]
+    .map(([project, amount]) => ({ project, amount }))
+    .sort((a, b) => compareMoney(b.amount, a.amount) || a.project.localeCompare(b.project))
+    .slice(0, 5)
+    .map((item) => Object.freeze(item)));
+}
+
+/** Apply allocation rules without converting exact Money to a numeric microdollar projection. */
+export function applyExactAllocation(input: {
+  rows: readonly ExactAllocatableRow[];
+  rules: readonly AllocationRule[];
+  costCentres: readonly CostCentre[];
+  periodStartMs: number;
+  periodEndMs: number;
+  runAtMs: number;
+}): ExactAllocationRunResult {
+  const rows = canonicalRows(input.rows, input.periodStartMs, input.periodEndMs);
+  if (!Array.isArray(input.rules) || !Array.isArray(input.costCentres)) throw new Error('exact allocation rules and cost centres must be arrays');
+  for (const rule of input.rules) validateRule(rule);
+  if (!Number.isSafeInteger(input.runAtMs)) throw new Error('exact allocation runAt must be a safe timestamp');
+  const rules = orderRules(input.rules);
+  const archived = new Set(input.costCentres.filter((centre) => centre.archivedAtMs !== null).map((centre) => centre.costCentreId));
+  const knownCentres = new Set(input.costCentres.map((centre) => centre.costCentreId));
+  for (const rule of rules) {
+    for (const target of rule.targets) {
+      if (!knownCentres.has(target.costCentreId)) throw new Error(`exact allocation rule ${rule.ruleId} names an unknown cost centre: ${target.costCentreId}`);
+    }
+  }
+  const total = new Map<string, Money>();
+  const totalSources = new Map<string, Set<string>>();
+  const claimed = new Map<string, { rule: AllocationRule; bucket: Bucket }>();
+  const pools = new Map<string, { rule: AllocationRule; bucket: Bucket }>();
+  const unmatched = new Map<string, Bucket>();
+  const archivedRows = new Map<string, Bucket>();
+
+  for (const row of rows) {
+    addAmount(total, totalSources, row.amount, row.sourceEventIds);
+    const matchingRow: AllocatableRow = {
+      project: row.project, provider: row.provider, model: row.model,
+      source: row.source, user: row.user, tsEpochMs: row.tsEpochMs,
+      costUsd: 0, costBasis: row.amount.basis,
+    };
+    const rule = rules.find((candidate) => ruleAppliesAt(candidate, row.tsEpochMs) && matchesRow(candidate, matchingRow));
+    if (rule === undefined) addGrouped(unmatched, row);
+    else if (rule.targets.some((target) => archived.has(target.costCentreId))) addGrouped(archivedRows, row);
+    else {
+      const target = rule.method === 'proportional_to_direct' ? pools : claimed;
+      const key = `${rule.ruleId}\u0000${rule.version}\u0000${identityKey(row.amount)}`;
+      const entry = target.get(key) ?? { rule, bucket: emptyBucket(row.amount) };
+      addToBucket(entry.bucket, row);
+      target.set(key, entry);
+    }
+  }
+
+  const lines: ExactAllocationLine[] = [];
+  const allocated = new Map<string, Money>();
+  const allocatedSources = new Map<string, Set<string>>();
+  const unallocated = new Map<string, Money>();
+  const unallocatedSources = new Map<string, Set<string>>();
+  const directDrivers = new Map<string, Map<string, Money>>();
+
+  for (const { rule, bucket } of claimed.values()) {
+    const weights = rule.targets.map((target) => ({ costCentreId: target.costCentreId, weight: BigInt(ratioToParts(target.ratio)) }));
+    const split = splitByWeights(bucket.amount, weights);
+    const identity = identityKey(bucket.amount);
+    for (const target of rule.targets) {
+      const amount = split.get(target.costCentreId) ?? money('0', bucket.amount.currency, bucket.amount.basis);
+      lines.push(Object.freeze({
+        costCentreId: target.costCentreId,
+        ruleId: rule.ruleId,
+        ruleVersion: rule.version,
+        method: rule.method,
+        ratioParts: ratioToParts(target.ratio),
+        amount,
+        sourceBasis: bucket.amount.basis,
+        sourceEventIds: sourceIds(bucket),
+      }));
+      addAmount(allocated, allocatedSources, amount, bucket.sourceEventIds);
+      if (amount.coefficient > 0n) {
+        const drivers = directDrivers.get(identity) ?? new Map<string, Money>();
+        const prior = drivers.get(target.costCentreId);
+        drivers.set(target.costCentreId, prior === undefined ? amount : addMoney(prior, amount));
+        directDrivers.set(identity, drivers);
+      }
+    }
+  }
+
+  for (const { rule, bucket } of pools.values()) {
+    const identity = identityKey(bucket.amount);
+    const drivers = [...(directDrivers.get(identity) ?? new Map<string, Money>()).entries()]
+      .filter(([, amount]) => amount.coefficient > 0n);
+    if (drivers.length === 0) {
+      addAmount(unallocated, unallocatedSources, bucket.amount, bucket.sourceEventIds);
+      continue;
+    }
+    const commonScale = Math.max(...drivers.map(([, amount]) => amount.scale));
+    const weights = drivers.map(([costCentreId, amount]) => ({
+      costCentreId,
+      weight: amount.coefficient * (10n ** BigInt(commonScale - amount.scale)),
+    }));
+    const split = splitByWeights(bucket.amount, weights);
+    const denominator = weights.reduce((sum, item) => sum + item.weight, 0n);
+    for (const [costCentreId, amount] of split) {
+      lines.push(Object.freeze({
+        costCentreId,
+        ruleId: rule.ruleId,
+        ruleVersion: rule.version,
+        method: rule.method,
+        ratioParts: Number((weights.find((item) => item.costCentreId === costCentreId)?.weight ?? 0n) * BigInt(RATIO_SCALE) / denominator),
+        amount,
+        sourceBasis: bucket.amount.basis,
+        sourceEventIds: sourceIds(bucket),
+      }));
+      addAmount(allocated, allocatedSources, amount, bucket.sourceEventIds);
+    }
+  }
+
+  const unallocatedLines: ExactUnallocatedLine[] = [];
+  const appendUnallocated = (reason: ExactUnallocatedReason, groups: Map<string, Bucket>): void => {
+    for (const bucket of groups.values()) {
+      unallocatedLines.push(Object.freeze({ reason, amount: bucket.amount, sourceBasis: bucket.amount.basis, sourceEventIds: sourceIds(bucket), topProjects: topProjects(bucket) }));
+      addAmount(unallocated, unallocatedSources, bucket.amount, bucket.sourceEventIds);
+    }
+  };
+  appendUnallocated('no_matching_rule', unmatched);
+  appendUnallocated('target_cost_centre_archived', archivedRows);
+  for (const { rule, bucket } of pools.values()) {
+    const identity = identityKey(bucket.amount);
+    if (!(directDrivers.get(identity)?.size ?? 0)) {
+      unallocatedLines.push(Object.freeze({ reason: 'no_driver_for_proportional_pool', amount: bucket.amount, sourceBasis: bucket.amount.basis, sourceEventIds: sourceIds(bucket), topProjects: topProjects(bucket) }));
+      // The pool was added above only when it had no driver; avoid adding it a second time.
+      const already = [...unallocatedSources.get(identity) ?? new Set<string>()];
+      if (!already.some((sourceId) => bucket.sourceEventIds.includes(sourceId))) addAmount(unallocated, unallocatedSources, bucket.amount, bucket.sourceEventIds);
+    }
+  }
+
+  lines.sort((a, b) => a.amount.currency.localeCompare(b.amount.currency) || a.amount.basis.localeCompare(b.amount.basis) || a.ruleId.localeCompare(b.ruleId) || a.ruleVersion - b.ruleVersion || a.costCentreId.localeCompare(b.costCentreId));
+  unallocatedLines.sort((a, b) => a.amount.currency.localeCompare(b.amount.currency) || a.amount.basis.localeCompare(b.amount.basis) || a.reason.localeCompare(b.reason));
+
+  const allKeys = new Set([...total.keys(), ...allocated.keys(), ...unallocated.keys()]);
+  let conserves = true;
+  for (const key of allKeys) {
+    const identity = splitIdentity(key);
+    const expected = total.get(key) ?? money('0', identity.currency, identity.basis);
+    const placed = addMoney(
+      allocated.get(key) ?? money('0', identity.currency, identity.basis),
+      unallocated.get(key) ?? money('0', identity.currency, identity.basis),
+    );
+    if (compareMoney(expected, placed) !== 0) conserves = false;
+  }
+
+  return Object.freeze({
+    periodStartMs: input.periodStartMs,
+    periodEndMs: input.periodEndMs,
+    runAtMs: input.runAtMs,
+    totalByIdentity: Object.freeze(asBucketMap(total, totalSources)),
+    allocatedByIdentity: Object.freeze(asBucketMap(allocated, allocatedSources)),
+    unallocatedByIdentity: Object.freeze(asBucketMap(unallocated, unallocatedSources)),
+    lines: Object.freeze(lines),
+    unallocated: Object.freeze(unallocatedLines),
+    sourceBases: Object.freeze([...new Set(rows.map((row) => row.amount.basis))].sort()),
+    unresolvedRequestIds: Object.freeze([]),
+    complete: true,
+    conserves,
+    trust: 'derived_allocation_of_exact_effective_charges',
+    excludedFrom: ['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations'] as const,
+  });
+}

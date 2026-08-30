@@ -39,7 +39,9 @@ import type { ReconciliationCoverage, ReconciliationResult, ReconciliationRun } 
 import type { BillingMappingCoverage, BillingRecordMapping } from '../billing/mapping.ts';
 import type { AllocationRule, CostCentre } from '../alloc/rules.ts';
 import type { AllocationRunResult } from '../alloc/apply.ts';
+import type { ExactAllocationRunResult } from '../alloc/exact.ts';
 import * as allocation from './allocation.ts';
+import * as exactAllocation from '../alloc/exact.ts';
 import * as billing from './billing.ts';
 import * as causal from './causal.ts';
 import * as causalLineage from './causalLineage.ts';
@@ -2059,6 +2061,47 @@ export class Store {
       periodEndMs,
       runAtMs,
     );
+  }
+
+  /**
+   * Compute an exact-money allocation projection from effective economic
+   * charges. Legacy request rows remain explicitly unresolved and are omitted
+   * rather than coerced into numeric micros.
+   */
+  allocatePeriodExact(periodStartMs: number, periodEndMs: number, runAtMs = Date.now()): ExactAllocationRunResult {
+    const requests = this.requestsInRange(periodStartMs, periodEndMs);
+    const rows: exactAllocation.ExactAllocatableRow[] = [];
+    const unresolvedRequestIds: string[] = [];
+    for (const request of requests) {
+      const effective = this.economicLedger.effectiveChargeFor(requestEconomicEventId(request.requestId));
+      if (effective === null) {
+        unresolvedRequestIds.push(request.requestId);
+        continue;
+      }
+      rows.push({
+        sourceEventIds: effective.eventIds,
+        amount: effective.amount,
+        project: request.projectCanonical ?? request.project,
+        provider: request.provider,
+        model: request.model,
+        source: request.source ?? null,
+        user: request.user ?? null,
+        tsEpochMs: request.tsEpochMs,
+      });
+    }
+    const result = exactAllocation.applyExactAllocation({
+      rows,
+      rules: allocation.allocationRules(this.db),
+      costCentres: allocation.costCentres(this.db),
+      periodStartMs,
+      periodEndMs,
+      runAtMs,
+    });
+    return Object.freeze({
+      ...result,
+      unresolvedRequestIds: Object.freeze(unresolvedRequestIds.sort()),
+      complete: unresolvedRequestIds.length === 0,
+    });
   }
 
   /**
