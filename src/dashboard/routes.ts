@@ -47,6 +47,7 @@ import { buildEconomicReport } from '../cli/economicCmd.ts';
 import { verifyBlockedAssignmentPlan } from '../causal/assignment.ts';
 import { estimateCausalStudy } from '../causal/estimate.ts';
 import { stringifyJson } from '../util/json.ts';
+import { dashboardApiContract, type DashboardApiContractId } from './contracts.ts';
 
 /**
  * Config persistence is injectable so the dashboard can be exercised without
@@ -105,6 +106,18 @@ export interface Route {
    */
   localOnly?: readonly string[];
   handler: (ctx: RouteContext) => void;
+}
+
+/** Declare an API route from the shared contract, never a second path/method literal. */
+function apiRoute(id: DashboardApiContractId, handler: Route['handler']): Route {
+  const contract = dashboardApiContract(id);
+  return {
+    path: contract.path,
+    methods: contract.methods,
+    ...(contract.allow === undefined ? {} : { allow: contract.allow }),
+    ...(contract.localOnly.length === 0 ? {} : { localOnly: contract.localOnly }),
+    handler,
+  };
 }
 
 export function json(res: http.ServerResponse, status: number, payload: unknown): void {
@@ -906,31 +919,31 @@ export function handleHtmlEntry({ res, url }: RouteContext): void {
  * through to the static assets and then to 404.
  */
 export const ROUTES: readonly Route[] = [
-  { path: '/api/health', methods: ['GET', 'HEAD'], handler: handleHealth },
-  { path: '/api/importers', methods: ['GET', 'HEAD'], handler: handleImporters },
-  { path: '/api/import', methods: ['POST'], localOnly: ['POST'], handler: handleImport },
-  { path: '/api/discover', methods: ['POST'], localOnly: ['POST'], handler: handleDiscover },
+  apiRoute('health', handleHealth),
+  apiRoute('importers', handleImporters),
+  apiRoute('import', handleImport),
+  apiRoute('discover', handleDiscover),
   // GET previews (read-only), POST performs the import+correlate — so only the
   // POST carries the CSRF gate.
-  { path: '/api/scan', methods: ['GET', 'POST'], localOnly: ['POST'], handler: handleScan },
-  { path: '/api/overview', methods: ['GET', 'HEAD'], handler: handleOverview },
-  { path: '/api/billing', methods: ['GET'], handler: handleBilling },
-  { path: '/api/allocation', methods: ['GET'], handler: handleAllocation },
-  { path: '/api/economic', methods: ['GET', 'HEAD'], handler: handleEconomic },
-  { path: '/api/pricing', methods: ['GET', 'HEAD'], handler: handlePricing },
-  { path: '/api/export.csv', methods: ['GET', 'HEAD'], handler: handleExportCsv },
-  { path: '/api/realization', methods: ['GET', 'HEAD'], handler: handleRealization },
-  { path: '/api/guide', methods: ['GET', 'HEAD'], handler: handleGuide },
-  { path: '/api/judge', methods: ['POST'], localOnly: ['POST'], handler: handleJudge },
-  { path: '/api/value', methods: ['GET', 'HEAD'], handler: handleValue },
-  { path: '/api/causal', methods: ['GET', 'HEAD'], handler: handleCausal },
+  apiRoute('scan', handleScan),
+  apiRoute('overview', handleOverview),
+  apiRoute('billing', handleBilling),
+  apiRoute('allocation', handleAllocation),
+  apiRoute('economic', handleEconomic),
+  apiRoute('pricing', handlePricing),
+  apiRoute('export-csv', handleExportCsv),
+  apiRoute('realization', handleRealization),
+  apiRoute('guide', handleGuide),
+  apiRoute('judge', handleJudge),
+  apiRoute('value', handleValue),
+  apiRoute('causal', handleCausal),
   // Reads GET only, but has always advertised 'GET, POST' on the 405 — the
   // POST that Settings actually performs goes to /api/settings/update. The
   // header is preserved verbatim rather than "corrected": it is part of the
   // published response contract, and changing it is a behaviour change.
-  { path: '/api/settings', methods: ['GET'], allow: 'GET, POST', handler: handleSettings },
-  { path: '/api/settings/update', methods: ['POST'], localOnly: ['POST'], handler: handleSettingsUpdate },
-  { path: '/api/settings/clear-proposals', methods: ['POST'], localOnly: ['POST'], handler: handleClearProposals },
+  apiRoute('settings', handleSettings),
+  apiRoute('settings-update', handleSettingsUpdate),
+  apiRoute('clear-proposals', handleClearProposals),
   { path: '/', methods: ['GET', 'HEAD'], handler: handleHtmlEntry },
   { path: '/index.html', methods: ['GET', 'HEAD'], handler: handleHtmlEntry },
   { path: '/classic', methods: ['GET', 'HEAD'], handler: handleHtmlEntry },

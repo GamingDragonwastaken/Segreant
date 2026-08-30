@@ -20,6 +20,15 @@ const dist = join(root, 'dist');
 const tsc = join(root, 'node_modules', 'typescript', 'bin', 'tsc');
 const RENAME_RETRY_MS = 5_000;
 const waitCell = new Int32Array(new SharedArrayBuffer(4));
+const sharedDashboardContract = join(root, 'src', 'dashboard', 'contracts.ts');
+const generatedBrowserDashboardContract = join(root, 'src', 'dashboard', 'web', 'app', 'core', 'generated-contract.ts');
+
+/** Keep the browser's no-node copy byte-identical to the server contract. */
+function syncSharedDashboardContract() {
+  copyFileSync(sharedDashboardContract, generatedBrowserDashboardContract);
+}
+
+syncSharedDashboardContract();
 
 class BuildFailure extends Error {
   constructor(label, exitCode) {
