@@ -23,6 +23,7 @@ import { computeCohort, userValueRows, selfView } from '../value/cohort.ts';
 import {
   loadOrCreateKeyPair,
   buildReceiptBody,
+  buildEconomicReceiptBody,
   signReceipt,
   verifyReceipt,
   type SignedReceipt,
@@ -191,9 +192,18 @@ export async function cmdReceipt(flags: Flags): Promise<void> {
   const units = report.units.filter(
     (u) => !u.maturing && (!flags.unit || u.hash.startsWith(String(flags.unit))),
   );
-  const receipts = units.map((u) =>
-    signReceipt(buildReceiptBody(u.hash, project, u.attributedCostUsd, u.acceptance, u.funnel), keys),
-  );
+  const receipts = units.map((u) => {
+    // Emit the strict v2 body only when the exact effective amount has complete
+    // coverage and can be represented by the legacy numeric compatibility field.
+    // Oversized exact amounts remain valid v1 integrity receipts rather than
+    // being rounded or making the command fail; the exact export remains the
+    // authoritative handoff for those values.
+    const exact = u.economic;
+    const body = exact?.complete && Number.isFinite(Number(exact.amountText))
+      ? buildEconomicReceiptBody(u.hash, project, u.attributedCostUsd, u.acceptance, u.funnel, exact)
+      : buildReceiptBody(u.hash, project, u.attributedCostUsd, u.acceptance, u.funnel);
+    return signReceipt(body, keys);
+  });
   for (const r of receipts) {
     store.saveReceipt({ unit: r.body.unit, project, tsEpochMs: Date.now(), realized: r.body.realized, receiptJson: JSON.stringify(r) });
   }

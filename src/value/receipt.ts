@@ -19,8 +19,10 @@ import {
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Gate, Verdict, FunnelOutcome } from './gates.ts';
+import { economicAttributionView, type EconomicAttribution } from '../economics/attribution.ts';
+import { ECONOMIC_BASES, formatMoneyAmount, moneyFromJson, type EconomicBasis } from '../economics/money.ts';
 
-export interface ReceiptBody {
+export interface ReceiptBodyV1 {
   v: 1;
   unit: string; // commit hash
   project: string;
@@ -33,6 +35,15 @@ export interface ReceiptBody {
   realizationScore: number;
   gates: Array<{ gate: Gate; verdict: Verdict }>;
 }
+
+/** Exact-economics receipt. The v1 body remains valid for legacy/partial units. */
+export interface ReceiptBodyV2 extends Omit<ReceiptBodyV1, 'v'> {
+  v: 2;
+  /** Complete effective request coverage; unresolved legacy rows are forbidden. */
+  economic: EconomicAttribution;
+}
+
+export type ReceiptBody = ReceiptBodyV1 | ReceiptBodyV2;
 
 export interface SignedReceipt {
   body: ReceiptBody;
@@ -99,7 +110,7 @@ export function buildReceiptBody(
   costUsd: number,
   acceptance: number | null,
   funnel: FunnelOutcome,
-): ReceiptBody {
+): ReceiptBodyV1 {
   return {
     v: 1,
     unit,
@@ -113,6 +124,71 @@ export function buildReceiptBody(
     realizationScore: funnel.realizationScore,
     gates: funnel.results.map((r) => ({ gate: r.gate, verdict: r.verdict })),
   };
+}
+
+function canonicalEconomic(value: EconomicAttribution): EconomicAttribution {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error('economic receipt coverage must be an object');
+  const keys = Object.keys(value).sort();
+  const expected = ['amount', 'amountText', 'complete', 'eventIds', 'requestCount', 'sourceBases', 'unresolvedRequests'].sort();
+  if (keys.join('\u0000') !== expected.join('\u0000')) throw new Error('economic receipt coverage has unknown or missing fields');
+  if (!Array.isArray(value.eventIds) || value.eventIds.some((id) => typeof id !== 'string' || id.length === 0)) throw new Error('economic receipt eventIds are invalid');
+  if (new Set(value.eventIds).size !== value.eventIds.length || value.eventIds.some((id, index) => index > 0 && id < value.eventIds[index - 1]!)) {
+    throw new Error('economic receipt eventIds must be unique and sorted');
+  }
+  if (!Array.isArray(value.sourceBases) || value.sourceBases.some((basis) => !(ECONOMIC_BASES as readonly string[]).includes(basis))) throw new Error('economic receipt sourceBases are invalid');
+  if (new Set(value.sourceBases).size !== value.sourceBases.length || value.sourceBases.some((basis, index) => index > 0 && basis < value.sourceBases[index - 1]!)) {
+    throw new Error('economic receipt sourceBases must be unique and sorted');
+  }
+  if (!Number.isSafeInteger(value.requestCount) || value.requestCount < 0 || !Number.isSafeInteger(value.unresolvedRequests) || value.unresolvedRequests < 0) {
+    throw new Error('economic receipt request coverage counts are invalid');
+  }
+  const amount = moneyFromJson(value.amount);
+  if (amount.basis !== 'effective' || value.amountText !== formatMoneyAmount(amount)) throw new Error('economic receipt amount is not canonical effective Money');
+  const canonical = economicAttributionView({
+    amount,
+    eventIds: value.eventIds,
+    sourceBases: value.sourceBases as EconomicBasis[],
+    requestCount: value.requestCount,
+    unresolvedRequests: value.unresolvedRequests,
+  });
+  if (canonical.complete !== value.complete || canonical.amountText !== value.amountText) throw new Error('economic receipt coverage is internally inconsistent');
+  return canonical;
+}
+
+/** Build a strict v2 receipt for a WorkUnit with complete exact coverage. */
+export function buildEconomicReceiptBody(
+  unit: string,
+  project: string,
+  costUsd: number,
+  acceptance: number | null,
+  funnel: FunnelOutcome,
+  economic: EconomicAttribution,
+): ReceiptBodyV2 {
+  const canonical = canonicalEconomic(economic);
+  if (!canonical.complete || canonical.unresolvedRequests !== 0) throw new Error('economic receipt requires complete exact coverage');
+  if (!Number.isFinite(costUsd) || costUsd < 0) throw new Error('economic receipt compatibility cost must be finite and non-negative');
+  const projected = Number(canonical.amountText);
+  if (!Number.isFinite(projected) || Math.abs(costUsd - projected) > Math.max(1e-12, Math.abs(projected) * 1e-12)) {
+    throw new Error('economic receipt compatibility cost disagrees with exact amount');
+  }
+  const legacy = buildReceiptBody(unit, project, costUsd, acceptance, funnel);
+  return Object.freeze({ ...legacy, v: 2, economic: canonical });
+}
+
+function receiptSemanticError(body: ReceiptBody): string | null {
+  if (body.v !== 2) return null;
+  try {
+    const economic = canonicalEconomic(body.economic);
+    if (!economic.complete || economic.unresolvedRequests !== 0) return 'economic receipt requires complete exact coverage';
+    const projected = Number(economic.amountText);
+    if (!Number.isFinite(body.costUsd) || body.costUsd < 0 || !Number.isFinite(projected)
+        || Math.abs(body.costUsd - projected) > Math.max(1e-12, Math.abs(projected) * 1e-12)) {
+      return 'economic receipt compatibility cost disagrees with exact amount';
+    }
+    return null;
+  } catch (error) {
+    return `economic receipt invalid: ${error instanceof Error ? error.message : String(error)}`;
+  }
 }
 
 export function signReceipt(body: ReceiptBody, keys: KeyPair): SignedReceipt {
@@ -176,6 +252,9 @@ export function verifyReceipt(receipt: SignedReceipt, opts: VerifyOptions = {}):
   }
   const ok = cryptoVerify(null, Buffer.from(c), publicKey, Buffer.from(receipt.signature, 'base64'));
   if (!ok) return { valid: false, reason: 'signature mismatch', keyId: embeddedKeyId, pinned: false };
+
+  const semanticError = receiptSemanticError(receipt.body);
+  if (semanticError !== null) return { valid: false, reason: semanticError, keyId: embeddedKeyId, pinned: false };
 
   // Integrity holds. Now the authenticity / trust-anchor check.
   let pinned = false;
