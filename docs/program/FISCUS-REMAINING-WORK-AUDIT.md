@@ -26,7 +26,7 @@ The original macOS OIDC time-boundary failure has been repaired through injected
 The latest local candidate extends the remote reconciliation checkpoint with five
 unpublished commits: economic-event foundation `5ef8b58`, canonicalization/replay
 hardening `5c8d9c6`, exact decimal pricing `ad0b6a4`, and atomic exact request
-issuance `ac0efa7`, plus bundled exact-rate/live issuance `3763c9e`, role-aware projections/reversal constraints `6285bcc`, normalized source links `8fcd262`, and exact budget projection migration `05f26e6`. Local verification at that candidate is 1,045 tests (1,041
+issuance `ac0efa7`, plus bundled exact-rate/live issuance `3763c9e`, role-aware projections/reversal constraints `6285bcc`, normalized source links `8fcd262`, exact budget projection migration `05f26e6`, and exact economic CLI inspection `e3a280f`. Local verification at that candidate is 1,046 tests (1,042
 pass, 0 fail, 4 platform-conditional skips), root/browser typecheck, build, and
 isolated-cache package dry-run. These identities are not remote/CI evidence until
 the blocked push succeeds.
@@ -92,7 +92,7 @@ Status vocabulary: `CLOSED`, `PARTIAL`, `OPEN`, `RED-SPEC`, `EXTERNAL-GATE`, `SU
 | AII-026 budget heuristic overclaim | OPEN | Keep scenario advisor; route action-grade choices through decision engine. |
 | AII-027 pseudo-VoI | PARTIAL | Legacy sensitivity metric remains explicitly labelled; separate decision engine now implements perfect-information VOI net of measurement cost. |
 | AII-028 shrinkage weight labelled confidence | OPEN | Correct terminology/assumptions and tests. |
-| AII-029 docs/runtime drift | OPEN | Canonical CapabilitySpec and generated/conformance-tested docs. |
+| AII-029 docs/runtime drift | OPEN | Canonical CapabilitySpec and generated/conformance-tested docs. Economic CLI inspection now exists, but universal generated contracts remain. |
 | AII-030 browser/server schema drift | OPEN | Billing ClaimProfile summaries are now shared by the route contract; one runtime schema source and generated/shared types remain. |
 | AII-031 unbounded major buffers | OPEN | Bound ingress/SSE/tool args/proposals/responses with explicit coverage-loss semantics. |
 | AII-032 DB integrity too application-managed | OPEN | Promote critical invariants to DB where sound. |

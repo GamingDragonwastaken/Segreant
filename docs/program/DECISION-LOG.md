@@ -99,3 +99,7 @@
 ## D-025 — Budget enforcement uses a declared effective control projection
 **Decision:** When every request in a governed window has one valid charge-role economic event, BudgetGuard sums exact Money after an explicit `effective` control projection that retains source bases and live/import scope. If any legacy request is unresolved, it falls back to the existing numeric compatibility aggregate; it never silently treats incomplete exact coverage as zero.
 **Reason:** Budget caps are operational controls over local observed/estimated spend, not provider-billing claims. A named policy projection makes the cross-basis comparison explicit while preserving safe behavior for pre-migration rows.
+
+## D-026 — Economic inspection is a CLI-first, JSON-safe surface
+**Decision:** Expose the economic ledger first through `fiscus economic`, with canonical Money strings, event roles, source bases, event IDs and unresolved legacy coverage. Keep the initial surface read-only and CLI-first; add API/dashboard bindings only after a shared contract is defined.
+**Reason:** Operators need inspectable evidence immediately, but adding a second browser schema before the canonical contract exists would recreate the documented server/UI drift risk.
