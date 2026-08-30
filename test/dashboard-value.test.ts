@@ -79,3 +79,10 @@ test('value dashboard reveals the observed mature-unit and realization evidence 
   assert.match(html, /intervals overlap — keep this as a measured trial/);
   assert.match(html, /Fiscus does <b>not<\/b> change routing/);
 });
+
+test('modern Value view discloses exact economic coverage instead of leaving the numeric cost basis implicit', () => {
+  const source = readFileSync(join(import.meta.dirname, '..', 'src', 'dashboard', 'web', 'app', 'views', 'value.ts'), 'utf8');
+  assert.match(source, /Exact economic coverage/);
+  assert.match(source, /legacy_unknown/);
+  assert.match(source, /unresolvedRequests/);
+});

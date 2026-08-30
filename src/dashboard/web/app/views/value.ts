@@ -160,6 +160,7 @@ export function valueView(): Node {
       const team = d.team ?? null;
       const drift = d.drift ?? null;
       const ret = d.roi?.returnRatio ?? null;
+      const economic = matured?.economic ?? null;
 
       return h('div', null,
         d.demo ? h('div', { class: 'banner banner-demo' },
@@ -195,6 +196,24 @@ export function valueView(): Node {
                 ? `${count(d.realization?.costStaleUnits)} unit(s) carry stale cost attribution.`
                 : `${count(d.realization?.costStaleUnits)} of these have out-of-date cost information.`) })
             : null),
+          economic
+            ? h('p', { class: 'basis', role: 'status', text: () => {
+                if (economic.coverage === 'legacy_unknown' || economic.total === null) {
+                  return isPrecise()
+                    ? 'Exact economic coverage: legacy_unknown — these snapshots predate exact request evidence, so numeric costs are compatibility projections.'
+                    : 'Exact economic coverage is not available for these snapshots; the cost figures are legacy compatibility totals.';
+                }
+                const total = economic.total;
+                if (economic.coverage === 'partial' || total.unresolvedRequests > 0) {
+                  return isPrecise()
+                    ? `Exact economic coverage: partial — ${total.amountText} effective spend resolved across ${count(total.requestCount)} requests; ${count(total.unresolvedRequests)} unresolved legacy request(s) remain in the numeric compatibility total.`
+                    : `Some exact cost evidence is available (${total.amountText}), but ${count(total.unresolvedRequests)} request(s) lack it; the headline cost includes a compatibility projection.`;
+                }
+                return isPrecise()
+                  ? `Exact economic coverage: complete — ${total.amountText} effective spend across ${count(total.requestCount)} requests; source bases: ${total.sourceBases.join(', ') || 'none'}.`
+                  : `Cost evidence is complete for ${count(total.requestCount)} requests (${total.amountText} exact effective spend).`;
+              } })
+            : null,
 
         // The value claim and the cost figure, kept apart on purpose.
         //
