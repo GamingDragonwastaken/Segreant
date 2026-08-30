@@ -122,10 +122,17 @@ in the GUI is not a compile error, and reading an absent field yields `undefined
 which renders as whatever a screen shows for "absent": usually a legitimate,
 honest-looking state. That failure mode shipped three times (a breakdown table of
 em-dashes; "no cap set" on a machine with a $30 cap enforcing; a silently
-discarded settings patch). `test/dashboard-contract.test.ts` now derives the
-endpoint→interface pairings from the API client itself, fetches every read
-endpoint against a real server, and asserts every required field actually
-arrives.
+discarded settings patch). The no-node route/envelope descriptor in
+`src/dashboard/contracts.ts` is copied byte-for-byte into the browser build
+under the publication lock; the server route table and modern client consume its
+paths/methods/guards, and its top-level payload contracts fail closed at runtime.
+`test/dashboard-contract.test.ts` derives endpoint→interface pairings from the
+canonical descriptor, fetches every JSON read envelope against a real server,
+and asserts every required field and primitive/container kind actually arrives.
+The browser's detailed nested interfaces and the classic inline HTML remain
+explicit follow-on migration surfaces. The GUI parity registry additionally
+exposes immutable `CapabilitySpec` metadata for consequence, authority,
+egress, credentials, reversibility, assurance, and surface bindings.
 
 ### Component responsibilities
 

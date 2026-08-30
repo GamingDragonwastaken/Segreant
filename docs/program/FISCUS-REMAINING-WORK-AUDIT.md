@@ -43,9 +43,11 @@ parity `16c5a15`, immutable refreshed-card provenance
 `47ed621`, and bounded dashboard runtime type conformance
 `e244115`, followed by exact period-close lifecycle integration
 `28905c5` and canonical/generated dashboard route-contract enforcement
-`d6243c7`. Local verification at this candidate is 1,096 root tests
-(1,092 pass, 0 fail, 4 platform-conditional skips), team-server 61/61,
-root/team typecheck, full Node/browser build, and npm pack dry-run.
+`d6243c7`, immutable CapabilitySpec `0467830`, and shared top-level payload
+envelopes/client validation `92ecbbd`. Local verification at this candidate
+is 1,100 root tests (1,096 pass, 0 fail, 4 platform-conditional skips),
+team-server 61/61, root/team typecheck, full Node/browser build, and npm pack
+dry-run.
 These identities are not remote/CI evidence until the blocked push succeeds.
 
 The coding value path now has a bounded exact seam: `3871b6f` adds a
@@ -79,9 +81,13 @@ operations, and typed dashboard/API state. The universal generated
 dashboard/API contract remains open. The follow-on route-contract slice at
 `d6243c7` now sources every API path, method set, Allow header, CSRF gate,
 response binding, and declared browser-surface binding from one no-node
-descriptor and regenerates the browser copy under the publication lock. It
-does not yet generate/validate all payload-field schemas or the broader
-CapabilitySpec.
+descriptor and regenerates the browser copy under the publication lock.
+`0467830` adds an immutable CapabilitySpec for every GUI capability with
+conservative input/preview/output schemas and authority/egress/credential/
+reversibility/assurance/CLI/API/GUI/docs metadata. `92ecbbd` adds shared
+top-level payload envelopes for every API method, seeded runtime validation,
+and fail-closed modern-client handling. Nested payload schemas and full
+docs/claim/egress generation remain.
 
 The receipt checkpoint at `443c74d` adds a strict v2 signed body for complete
 exact-covered units, with canonical effective Money/source/correction lineage
@@ -201,16 +207,25 @@ close state, and `fiscus economic` exposes canonical `--close-status`,
 Postgres execution, universal generated contracts, trust-anchor governance and
 GitHub publication remain external gates.
 
+**Capability/payload-contract addendum (2026-08-30):** `0467830` and
+`92ecbbd` complete the bounded contract tranche: every GUI capability now has
+an immutable, conservative CapabilitySpec, and every dashboard API method has
+a shared top-level JSON/text envelope contract copied into the browser build.
+The modern client rejects a wrong or missing envelope with a typed boundary
+error; seeded conformance covers named browser interfaces plus all remaining
+JSON envelopes. This does not yet close the universal nested-schema, claim,
+egress, documentation-generation, or independent verifier requirements.
+
 The next worker should not start another design discussion.
 
-**Execution-order override after `28905c5`:** the versioned exact
+**Execution-order override after `92ecbbd`:** the versioned exact
 team-rollup protocol/storage migration, bounded classic Value/API exact-coverage
-parity, refreshed-card provenance, runtime dashboard type conformance, and
-period-close semantics are complete locally. Proceed next with the remaining
-universal generated dashboard/API contract work (the route/method/guard slice
-is complete at `d6243c7`; payload schemas and CapabilitySpec remain), then
-unavoidable kernel issuance across consequential product boundaries; live
-Postgres execution and remote publication remain explicit gates.
+parity, refreshed-card provenance, runtime dashboard type conformance,
+period-close semantics, route generation, CapabilitySpec, and top-level payload
+contracts are complete locally. Proceed next with nested payload/schema
+generation and unavoidable kernel issuance across consequential product
+boundaries; live Postgres execution and remote publication remain explicit
+gates.
 
 1. **COMPLETED at `b27c0ef`:** Implement the RED robust decision module. Strict dominance is the only proof-level certificate; minimax regret and perfect-information VOI remain explicitly named rules with assumptions and cost.
 2. **COMPLETED at `5647c67`:** Implement additive transitive revocation closure. Dependent descendants are invalidated while independent siblings remain outside the closure; cycles are safe, duplicate edges fail closed, and history is not deleted.
@@ -223,8 +238,8 @@ Postgres execution and remote publication remain explicit gates.
 9. **COMPLETED (bounded) at `47ed621`:** Preserve immutable hash-addressed pricing-card provenance with source kind, redacted source identity, acceptance time, upstream date, conditional metadata and strict card/sidecar validation; expose it through pricing coverage, CLI text and the classic pricing health card. Missing or tampered historical sidecars remain unavailable.
 10. **COMPLETED (bounded) at `e244115`:** Extend dashboard endpoint conformance from required-field presence to runtime primitive, array, record, named-interface and null-union validation across seeded browser read endpoints. The universal generated single-source contract remains open.
 11. **COMPLETED at `28905c5`:** Implement exact economic period-close semantics: canonical half-open periods, digest-bound basis-separated snapshots, as-of replay, explicit append-only reopen controls, conflict-preserving transitions, late-event blocking, JSON-safe CLI lifecycle operations, and typed read-only dashboard/API state. Live Postgres execution and GitHub publication remain explicit gates.
-12. **IN PROGRESS at `d6243c7` (bounded):** Canonicalize and regenerate dashboard API route paths, methods, Allow headers, CSRF gates, response bindings and browser-surface bindings; the browser copy is synchronized under the publication lock and conformance is tested. Payload-field schema generation and CapabilitySpec bindings remain before this item can close.
-13. **NEXT:** Complete payload-field schema/CapabilitySpec generation and then make kernel issuance unavoidable at every consequential product boundary. Trust-anchor governance, live Postgres execution and GitHub publication remain explicit gates.
+12. **COMPLETED (bounded) at `92ecbbd` (route generation `d6243c7`, CapabilitySpec `0467830`):** Canonicalize and regenerate dashboard API route paths, methods, Allow headers, CSRF gates, response bindings, browser-surface bindings, top-level JSON/text payload envelopes, and conservative capability metadata; the browser copy is synchronized under the publication lock, seeded runtime conformance covers all JSON envelopes, and the modern client rejects contract violations. Nested payload schemas and full docs/claim/egress generation remain.
+13. **NEXT:** Complete nested payload-field schema generation and then make kernel issuance unavoidable at every consequential product boundary. Trust-anchor governance, live Postgres execution and GitHub publication remain explicit gates.
 
 ## Trusted Epistemic Kernel remaining work
 

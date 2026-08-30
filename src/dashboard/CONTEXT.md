@@ -169,6 +169,18 @@ web/
   controls. It does not rewrite legacy value payloads or invent provider/billed
   authority; a dedicated dashboard view remains a downstream consumer
   migration rather than a second accounting implementation.
+- **Route and envelope metadata are shared and fail closed.** The no-node
+  dashboard contract drives API paths, methods, Allow headers, CSRF gates,
+  response bindings and browser-surface bindings; the build copies it into the
+  browser under the publication lock. Its top-level JSON/text payload contracts
+  are validated by seeded conformance and by the modern client before a typed
+  response is returned. Detailed nested payload schemas remain a separate
+  migration boundary.
+- **Capability parity is an immutable contract.** `CAPABILITY_SPECS` augments
+  every GUI registry entry with input/preview/output schema classes, authority,
+  egress, credentials, reversibility, assurance and CLI/API/GUI/docs bindings.
+  Planned, read-only and destructive consequences are checked conservatively;
+  the System view renders the specs rather than a second capability list.
 - **Overlays mount once, on `body`, outside the shell's render root.** The shell
   effect re-runs on every register change and `render(root, …)` clears `#app`.
   Mounting inside it appended a fresh host and a never-disposed effect per
