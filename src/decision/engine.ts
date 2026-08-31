@@ -51,7 +51,12 @@ export interface PosteriorScenario {
 }
 
 export interface ValueOfInformationInput {
-  readonly currentExpectedUtilities: Readonly<Record<string, number>>;
+  /**
+   * Optional compatibility assertion for the prior expectations. The
+   * posterior scenario mixture is the sole authority; when supplied, this
+   * map must agree with the mixture within the documented tolerance.
+   */
+  readonly currentExpectedUtilities?: Readonly<Record<string, number>>;
   readonly posteriorScenarios: readonly PosteriorScenario[];
   /** Measurement cost in the same utility units as the expected utilities. */
   readonly measurementCost: number;
@@ -60,6 +65,8 @@ export interface ValueOfInformationInput {
 export interface ValueOfInformationResult {
   readonly rule: 'expected_value_of_perfect_information';
   readonly assumption: 'finite_exhaustive_posterior_scenarios';
+  /** Prior expectations derived from the posterior scenario mixture. */
+  readonly priorExpectedUtilities: Readonly<Record<string, number>>;
   readonly currentOptimalExpectedUtility: number;
   readonly informedOptimalExpectedUtility: number;
   readonly grossValue: number;
@@ -85,9 +92,13 @@ const REGRET_ASSUMPTIONS = Object.freeze([
 const VOI_ASSUMPTIONS = Object.freeze([
   'Posterior scenarios are mutually exclusive and exhaustive.',
   'Scenario probabilities and expected utilities are finite and use one common utility basis.',
+  'Prior expected utilities are derived from the scenario mixture; an optional supplied map is only a consistency assertion.',
   'The measurement reveals the scenario before the action is selected (perfect information).',
   'Measurement cost is expressed in the same utility units and is paid once.',
 ]);
+
+const VOI_CONSISTENCY_TOLERANCE = 1e-9;
+const VOI_MAX_SAFE_UTILITY = Number.MAX_SAFE_INTEGER;
 
 function nonEmptyAction(value: unknown, label: string): string {
   if (typeof value !== 'string') throw new Error(`${label} must be a non-empty string`);
@@ -231,7 +242,11 @@ function validateUtilityMap(input: unknown, label: string): Record<string, numbe
   const values: Record<string, number> = {};
   for (const action of Object.keys(input)) {
     if (action.trim().length === 0) throw new Error(`${label} contains an empty action`);
-    values[action] = finiteNumber((input as Record<string, unknown>)[action], `${label}.${action}`);
+    const value = finiteNumber((input as Record<string, unknown>)[action], `${label}.${action}`);
+    if (Math.abs(value) > VOI_MAX_SAFE_UTILITY) {
+      throw new Error(`${label}.${action} must be within the safe utility range`);
+    }
+    values[action] = value;
   }
   if (Object.keys(values).length === 0) throw new Error(`${label} must contain at least one action`);
   return values;
@@ -243,6 +258,36 @@ function assertSameActionSet(expected: readonly string[], actual: readonly strin
   }
 }
 
+function derivePriorExpectedUtilities(
+  scenarios: readonly Readonly<{ probability: number; expectedUtilities: Readonly<Record<string, number>> }>[],
+  actions: readonly string[],
+): Record<string, number> {
+  const prior: Record<string, number> = {};
+  for (const action of actions) {
+    let expected = 0;
+    for (const scenario of scenarios) {
+      const contribution = scenario.probability * scenario.expectedUtilities[action]!;
+      if (!Number.isFinite(contribution)) {
+        throw new Error(`computed prior expected utility for ${action} must be finite`);
+      }
+      expected += contribution;
+      if (!Number.isFinite(expected)) {
+        throw new Error(`computed prior expected utility for ${action} must be finite`);
+      }
+    }
+    prior[action] = expected;
+  }
+  return prior;
+}
+
+function approximatelyEqual(left: number, right: number): boolean {
+  if (Object.is(left, right)) return true;
+  const difference = Math.abs(left - right);
+  if (!Number.isFinite(difference)) return false;
+  const scale = Math.max(1, Math.abs(left), Math.abs(right));
+  return difference <= VOI_CONSISTENCY_TOLERANCE * scale;
+}
+
 function cleanZero(value: number): number {
   return Object.is(value, -0) ? 0 : value;
 }
@@ -252,14 +297,16 @@ function cleanZero(value: number): number {
  * minus the declared cost of acquiring that measurement.
  */
 export function valueOfInformation(input: ValueOfInformationInput): ValueOfInformationResult {
-  const current = validateUtilityMap(input?.currentExpectedUtilities, 'currentExpectedUtilities');
+  const suppliedCurrent = input?.currentExpectedUtilities === undefined
+    ? null
+    : validateUtilityMap(input.currentExpectedUtilities, 'currentExpectedUtilities');
   if (!Array.isArray(input?.posteriorScenarios) || input.posteriorScenarios.length === 0) {
     throw new Error('posteriorScenarios must contain at least one scenario');
   }
   const measurementCost = finiteNumber(input?.measurementCost, 'measurementCost');
   if (measurementCost < 0) throw new Error('measurementCost must be >= 0');
 
-  const actions = sortedActionNames(current);
+  let actions = suppliedCurrent === null ? null : sortedActionNames(suppliedCurrent);
   let probabilityTotal = 0;
   const scenarios = input.posteriorScenarios.map((scenario, index) => {
     if (scenario === null || typeof scenario !== 'object') {
@@ -274,24 +321,50 @@ export function valueOfInformation(input: ValueOfInformationInput): ValueOfInfor
       scenario.expectedUtilities,
       `posterior scenario ${index} expectedUtilities`,
     );
-    assertSameActionSet(actions, sortedActionNames(expectedUtilities), `posterior scenario ${index} expectedUtilities`);
+    const scenarioActions = sortedActionNames(expectedUtilities);
+    if (actions === null) actions = scenarioActions;
+    else assertSameActionSet(actions, scenarioActions, `posterior scenario ${index} expectedUtilities`);
     const optimal = maxActions(expectedUtilities);
     return Object.freeze({ probability, expectedUtilities, optimal });
   });
 
-  if (Math.abs(probabilityTotal - 1) > 1e-9) throw new Error('probabilities must sum to 1');
+  if (!Number.isFinite(probabilityTotal) || Math.abs(probabilityTotal - 1) > VOI_CONSISTENCY_TOLERANCE) {
+    throw new Error('probabilities must sum to 1');
+  }
 
+  if (actions === null) throw new Error('posteriorScenarios must contain at least one action');
+  const priorExpectedUtilities = derivePriorExpectedUtilities(scenarios, actions);
+  if (suppliedCurrent !== null) {
+    for (const action of actions) {
+      if (!approximatelyEqual(suppliedCurrent[action]!, priorExpectedUtilities[action]!)) {
+        throw new Error(`currentExpectedUtilities is inconsistent with scenario mixture for action ${action}`);
+      }
+    }
+  }
+
+  const current = suppliedCurrent ?? priorExpectedUtilities;
   const currentOptimal = maxActions(current);
-  const informedOptimalExpectedUtility = scenarios.reduce(
-    (sum, scenario) => sum + scenario.probability * scenario.optimal.value,
-    0,
-  );
-  const grossValue = cleanZero(informedOptimalExpectedUtility - currentOptimal.value);
+  let informedOptimalExpectedUtility = 0;
+  for (const scenario of scenarios) {
+    const contribution = scenario.probability * scenario.optimal.value;
+    if (!Number.isFinite(contribution)) throw new Error('computed informed expected utility must be finite');
+    informedOptimalExpectedUtility += contribution;
+    if (!Number.isFinite(informedOptimalExpectedUtility)) {
+      throw new Error('computed informed expected utility must be finite');
+    }
+  }
+  const rawGrossValue = informedOptimalExpectedUtility - currentOptimal.value;
+  if (!Number.isFinite(rawGrossValue)) throw new Error('computed gross EVPI must be finite');
+  const grossTolerance = VOI_CONSISTENCY_TOLERANCE
+    * Math.max(1, Math.abs(informedOptimalExpectedUtility), Math.abs(currentOptimal.value));
+  if (rawGrossValue < -grossTolerance) throw new Error('gross EVPI must be non-negative');
+  const grossValue = cleanZero(rawGrossValue < 0 ? 0 : rawGrossValue);
   const netValue = cleanZero(grossValue - measurementCost);
 
   return Object.freeze({
     rule: 'expected_value_of_perfect_information',
     assumption: 'finite_exhaustive_posterior_scenarios',
+    priorExpectedUtilities: Object.freeze(priorExpectedUtilities),
     currentOptimalExpectedUtility: currentOptimal.value,
     informedOptimalExpectedUtility,
     grossValue,

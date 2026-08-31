@@ -43,18 +43,90 @@ test('minimax regret is explicit about the rectangular interval uncertainty set'
 
 test('value of information prices expected decision-loss reduction and subtracts measurement cost', () => {
   const voi = valueOfInformation({
-    currentExpectedUtilities: { a: 5, b: 4 },
+    currentExpectedUtilities: { a: 4.5, b: 4.5 },
     posteriorScenarios: [
       { probability: 0.5, expectedUtilities: { a: 8, b: 2 } },
       { probability: 0.5, expectedUtilities: { a: 1, b: 7 } },
     ],
     measurementCost: 1,
   });
-  // Current best = 5. With information: 0.5*8 + 0.5*7 = 7.5. Gross VOI 2.5, net 1.5.
-  assert.equal(voi.currentOptimalExpectedUtility, 5);
+  // Scenario-implied prior tie = 4.5. With information: 0.5*8 + 0.5*7 = 7.5. Gross VOI 3, net 2.
+  assert.equal(voi.currentOptimalExpectedUtility, 4.5);
   assert.equal(voi.informedOptimalExpectedUtility, 7.5);
-  assert.equal(voi.grossValue, 2.5);
-  assert.equal(voi.netValue, 1.5);
+  assert.equal(voi.grossValue, 3);
+  assert.equal(voi.netValue, 2);
+});
+
+test('value of information rejects an independently supplied prior that disagrees with the scenario mixture', () => {
+  assert.throws(() => valueOfInformation({
+    currentExpectedUtilities: { a: 5, b: 4 },
+    posteriorScenarios: [
+      { probability: 0.5, expectedUtilities: { a: 8, b: 2 } },
+      { probability: 0.5, expectedUtilities: { a: 1, b: 7 } },
+    ],
+    measurementCost: 0,
+  }), /inconsistent.*scenario/i);
+});
+
+test('value of information derives the prior from scenarios when no compatibility assertion is supplied', () => {
+  const voi = valueOfInformation({
+    posteriorScenarios: [
+      { probability: 0.5, expectedUtilities: { a: 8, b: 2 } },
+      { probability: 0.5, expectedUtilities: { a: 1, b: 7 } },
+    ],
+    measurementCost: 0,
+  });
+  assert.deepEqual(voi.priorExpectedUtilities, { a: 4.5, b: 4.5 });
+  assert.equal(voi.currentOptimalExpectedUtility, 4.5);
+  assert.deepEqual(voi.currentOptimalActions, ['a', 'b']);
+  assert.equal(voi.grossValue, 3);
+});
+
+test('deterministic perfect information has zero gross value before measurement cost', () => {
+  const voi = valueOfInformation({
+    posteriorScenarios: [{ probability: 1, expectedUtilities: { a: 8, b: 2 } }],
+    measurementCost: 0,
+  });
+  assert.equal(voi.grossValue, 0);
+  assert.equal(voi.netValue, 0);
+});
+
+test('measurement cost can make net VoI negative without changing gross VoI', () => {
+  const voi = valueOfInformation({
+    posteriorScenarios: [
+      { probability: 0.5, expectedUtilities: { a: 8, b: 2 } },
+      { probability: 0.5, expectedUtilities: { a: 1, b: 7 } },
+    ],
+    measurementCost: 4,
+  });
+  assert.equal(voi.grossValue, 3);
+  assert.equal(voi.netValue, -1);
+});
+
+test('finite coherent scenario mixtures never produce negative gross VoI', () => {
+  const probabilities = [0.2, 0.3, 0.5];
+  for (let seed = 1; seed <= 50; seed += 1) {
+    const scenarios = probabilities.map((probability, index) => ({
+      probability,
+      expectedUtilities: {
+        a: ((seed * 17 + index * 11) % 29) - 7,
+        b: ((seed * 13 + index * 19) % 31) - 9,
+        c: ((seed * 23 + index * 7) % 37) - 12,
+      },
+    }));
+    const voi = valueOfInformation({ posteriorScenarios: scenarios, measurementCost: 0 });
+    assert.ok(voi.grossValue >= 0, `seed ${seed} produced negative gross VoI`);
+  }
+});
+
+test('VoI fails closed when finite inputs would overflow an expected utility', () => {
+  assert.throws(() => valueOfInformation({
+    posteriorScenarios: [
+      { probability: 0.5, expectedUtilities: { a: Number.MAX_VALUE, b: 0 } },
+      { probability: 0.5, expectedUtilities: { a: Number.MAX_VALUE, b: 0 } },
+    ],
+    measurementCost: 0,
+  }), /safe utility range/i);
 });
 
 test('value of information validates probabilities and identical action sets', () => {

@@ -6,11 +6,21 @@
 - finite posterior scenario probabilities and conditional expected utilities;
 - an explicitly declared measurement cost.
 
+`currentExpectedUtilities` is an optional compatibility assertion only. The
+scenario mixture is the sole authority for the prior: each action's prior
+expectation is derived as the probability-weighted sum of its conditional
+scenario utilities, and a supplied compatibility map must agree within the
+documented tolerance. Utility magnitudes above `Number.MAX_SAFE_INTEGER` are
+rejected so expected-value arithmetic cannot silently lose materially relevant
+precision.
+
 ## Guarantees
 
 - strict robust dominance is certified only when one action's lower bound clears every rival's upper bound;
 - overlapping intervals remain `undetermined`;
 - minimax regret and value of information identify their rule and assumptions;
+- gross perfect-information value is non-negative under one coherent scenario
+  mixture; measurement cost is applied only afterward;
 - invalid, duplicate, non-finite, or mismatched inputs fail closed;
 - ties are returned in deterministic action-identifier order.
 
