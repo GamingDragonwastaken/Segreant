@@ -78,6 +78,11 @@
   revalidated before a kernel Evidence/Claim is issued; an asserted `qualified`
   flag or witness identity cannot substitute for the canonical coverage check.
 
+- Proposal extraction is intrinsically bounded: tool arguments, fenced-code
+  text, file count, line count, fragment count and aggregate retained bytes use
+  the shared resource policy. A `truncated` extraction returns no files and
+  cannot feed the acceptance gate; storage preserves the coverage state.
+
 ## Invariants
 
 - **`realizedValueUsd` is two different claims and they never merge.**

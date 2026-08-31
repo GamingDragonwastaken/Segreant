@@ -49,7 +49,8 @@ CREATE TABLE IF NOT EXISTS requests (
   rate_match_model  TEXT,
   scope_capture_status TEXT NOT NULL DEFAULT 'legacy_unknown',
   provider_scope_declaration_id TEXT,
-  attribution_basis TEXT NOT NULL DEFAULT 'legacy_unknown'
+  attribution_basis TEXT NOT NULL DEFAULT 'legacy_unknown',
+  capture_coverage TEXT NOT NULL DEFAULT 'legacy_unknown'
 );
 
 CREATE INDEX IF NOT EXISTS idx_requests_ts      ON requests(ts_epoch_ms);
@@ -129,7 +130,8 @@ CREATE TABLE IF NOT EXISTS proposals (
   provider    TEXT NOT NULL,
   model       TEXT NOT NULL,
   project     TEXT NOT NULL DEFAULT 'default',
-  files_json  TEXT NOT NULL
+  files_json  TEXT NOT NULL,
+  capture_coverage TEXT NOT NULL DEFAULT 'legacy_unknown'
 );
 
 CREATE INDEX IF NOT EXISTS idx_proposals_ts      ON proposals(ts_epoch_ms);
@@ -808,6 +810,11 @@ function migrate(db: DatabaseSync): void {
     // certainty this column exists to remove. New rows are stamped at insert.
     db.prepare("ALTER TABLE requests ADD COLUMN attribution_basis TEXT NOT NULL DEFAULT 'legacy_unknown'").run();
   }
+  if (!cols.some((c) => c.name === 'capture_coverage')) {
+    // Existing rows predate response-capture coverage tracking. Preserve their
+    // uncertainty rather than upgrading them to a complete observation.
+    db.prepare("ALTER TABLE requests ADD COLUMN capture_coverage TEXT NOT NULL DEFAULT 'legacy_unknown'").run();
+  }
   const unitCols = db.prepare('PRAGMA table_info(realization_units)').all() as Array<{ name: string }>;
   if (!unitCols.some((c) => c.name === 'cost_scope')) {
     // No backfill. A snapshot written before this column does not record
@@ -830,6 +837,12 @@ function migrate(db: DatabaseSync): void {
     // unit identity, and deriving one from unit_json would make ordinary
     // realization data appear to be randomized-study evidence.
     db.prepare('ALTER TABLE realization_units ADD COLUMN causal_unit_id_digest TEXT').run();
+  }
+  const proposalCols = db.prepare('PRAGMA table_info(proposals)').all() as Array<{ name: string }>;
+  if (!proposalCols.some((c) => c.name === 'capture_coverage')) {
+    // Existing proposal rows were captured before truncation was tracked. Keep
+    // their coverage unknown rather than silently upgrading them to complete.
+    db.prepare("ALTER TABLE proposals ADD COLUMN capture_coverage TEXT NOT NULL DEFAULT 'legacy_unknown'").run();
   }
   const obsRunCols = db.prepare('PRAGMA table_info(openai_cost_observation_runs)').all() as Array<{ name: string }>;
   if (obsRunCols.length > 0 && !obsRunCols.some((c) => c.name === 'source_kind')) {

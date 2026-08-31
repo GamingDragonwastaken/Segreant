@@ -13,6 +13,7 @@ import { claim, type Claim } from './claim.ts';
 import { derivation, type Derivation } from './derivation.ts';
 import { evidence, type Evidence } from './evidence.ts';
 import { witness, type Witness } from './witness.ts';
+import { RESOURCE_LIMITS } from '../util/resource-limits.ts';
 
 export const SERIALIZED_RECORD_KINDS = ['evidence', 'claim', 'assumption', 'witness', 'derivation'] as const;
 export type SerializedRecordKind = (typeof SERIALIZED_RECORD_KINDS)[number];
@@ -31,9 +32,15 @@ function jsonString(value: string): string {
   return JSON.stringify(value);
 }
 
-function canonicalValue(value: unknown, path: string, seen: WeakSet<object>): string {
+function canonicalValue(value: unknown, path: string, seen: WeakSet<object>, state: { nodes: number }, depth: number): string {
+  if (depth > RESOURCE_LIMITS.canonicalDepth) throw new Error(`${path} exceeds maximum nesting depth`);
+  state.nodes += 1;
+  if (state.nodes > RESOURCE_LIMITS.canonicalNodes) throw new Error(`${path} exceeds maximum node count`);
   if (value === null) return 'null';
-  if (typeof value === 'string') return jsonString(value);
+  if (typeof value === 'string') {
+    if (Buffer.byteLength(value, 'utf8') > RESOURCE_LIMITS.canonicalStringBytes) throw new Error(`${path} exceeds maximum string size`);
+    return jsonString(value);
+  }
   if (typeof value === 'boolean') return value ? 'true' : 'false';
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) throw new Error(`${path} must contain only finite JSON-compatible numbers`);
@@ -44,7 +51,10 @@ function canonicalValue(value: unknown, path: string, seen: WeakSet<object>): st
   seen.add(value);
   let result: string;
   if (Array.isArray(value)) {
-    result = `[${value.map((item, index) => canonicalValue(item, `${path}[${index}]`, seen)).join(',')}]`;
+    if (value.length > RESOURCE_LIMITS.canonicalNodes) throw new Error(`${path} exceeds maximum item count`);
+    const parts: string[] = [];
+    for (let index = 0; index < value.length; index += 1) parts.push(canonicalValue(value[index], `${path}[${index}]`, seen, state, depth + 1));
+    result = `[${parts.join(',')}]`;
   } else {
     let prototype: object | null;
     try { prototype = Object.getPrototypeOf(value); } catch { throw new Error(`${path} must be JSON-compatible`); }
@@ -52,17 +62,18 @@ function canonicalValue(value: unknown, path: string, seen: WeakSet<object>): st
     const parts: string[] = [];
     for (const key of Object.keys(value).sort((a, b) => a.localeCompare(b))) {
       if (key === '__proto__' || key === 'constructor' || key === 'prototype') throw new Error(`${path}.${key} is not an allowed JSON field`);
-      parts.push(`${jsonString(key)}:${canonicalValue((value as Record<string, unknown>)[key], `${path}.${key}`, seen)}`);
+      parts.push(`${jsonString(key)}:${canonicalValue((value as Record<string, unknown>)[key], `${path}.${key}`, seen, state, depth + 1)}`);
     }
     result = `{${parts.join(',')}}`;
   }
   seen.delete(value);
+  if (Buffer.byteLength(result, 'utf8') > RESOURCE_LIMITS.canonicalBytes) throw new Error(`${path} exceeds maximum byte size`);
   return result;
 }
 
 /** Return deterministic JSON bytes for a JSON-compatible value. */
 export function canonicalJson(value: unknown): string {
-  return canonicalValue(value, 'value', new WeakSet<object>());
+  return canonicalValue(value, 'value', new WeakSet<object>(), { nodes: 0 }, 0);
 }
 
 function digest(body: string): string {

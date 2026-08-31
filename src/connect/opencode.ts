@@ -22,7 +22,8 @@ import { DatabaseSync } from 'node:sqlite';
 import type { Store, RequestRow } from '../store/db.ts';
 import { computeCost, toolReportedPricingEvidence, type Provider } from '../cost/pricing.ts';
 import { projectKeyWithBasis, type AttributionBasis } from '../value/characterization.ts';
-import { type ImportSummary, type ImportOptions, emptyImportSummary, recordInsert } from './importShared.ts';
+import { type ImportSummary, type ImportOptions, emptyImportSummary, recordInsert, markImportTruncated } from './importShared.ts';
+import { RESOURCE_LIMITS } from '../util/resource-limits.ts';
 
 /** Locate opencode's data dir across platforms; first existing wins. null = not installed. */
 export function defaultOpencodeDbPath(): string | null {
@@ -69,6 +70,7 @@ interface OpencodeMessageData {
 
 /** Parse one opencode message row into a usage event, or null for anything that isn't billable traffic. */
 export function parseOpencodeMessage(id: string, dataJson: string, fallbackTsMs?: number): OpencodeUsageEvent | null {
+  if (Buffer.byteLength(dataJson, 'utf8') > RESOURCE_LIMITS.transcriptLineBytes) return null;
   let d: OpencodeMessageData;
   try {
     d = JSON.parse(dataJson) as OpencodeMessageData;
@@ -133,13 +135,23 @@ export function importOpencode(store: Store, opts: ImportOptions = {}): ImportSu
 
   const summary = emptyImportSummary(1);
   try {
-    const rows = db.prepare('SELECT id, session_id AS sessionId, time_created AS tc, data FROM message').all() as Array<{
+    const statement = db.prepare('SELECT id, session_id AS sessionId, time_created AS tc, data FROM message ORDER BY time_created ASC, id ASC');
+    let scannedRows = 0;
+    for (const r of statement.iterate() as Iterable<{
       id: string;
       sessionId: string | null;
       tc: number | null;
       data: string;
-    }>;
-    for (const r of rows) {
+    }>) {
+      scannedRows += 1;
+      if (scannedRows > RESOURCE_LIMITS.importRows) {
+        markImportTruncated(summary, 'rows');
+        break;
+      }
+      if (Buffer.byteLength(r.data, 'utf8') > RESOURCE_LIMITS.transcriptLineBytes) {
+        markImportTruncated(summary, 'lines');
+        continue;
+      }
       const ev = parseOpencodeMessage(r.id, r.data, r.tc ?? undefined);
       if (!ev || ev.tsEpochMs < sinceMs) continue;
 

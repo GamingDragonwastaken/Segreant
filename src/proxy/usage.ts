@@ -29,6 +29,7 @@
  */
 
 import type { NormalizedUsage, Provider } from '../cost/pricing.ts';
+import { RESOURCE_LIMITS, type CaptureCoverage } from '../util/resource-limits.ts';
 
 interface AnthropicUsage {
   input_tokens?: number;
@@ -115,6 +116,8 @@ export function emptyUsage(): NormalizedUsage {
  */
 export class StreamUsageAccumulator {
   private buffer = '';
+  private truncated = false;
+  private frameCount = 0;
   private partial: NormalizedUsage = emptyUsage();
   private seenModel: string | null = null;
   private maxOutput = 0;
@@ -132,8 +135,19 @@ export class StreamUsageAccumulator {
     return { ...this.partial, outputTokens: Math.max(this.partial.outputTokens, this.maxOutput) };
   }
 
+  get captureCoverage(): CaptureCoverage {
+    return this.truncated ? 'truncated' : 'complete';
+  }
+
   /** Feed a decoded chunk of the SSE stream. */
   push(chunk: string): void {
+    if (this.truncated) return;
+    // A single hostile decoder chunk must not force an arbitrarily large
+    // concatenation before the bounded remainder check below can run.
+    if (Buffer.byteLength(chunk, 'utf8') > RESOURCE_LIMITS.sseFrameBytes + RESOURCE_LIMITS.sseRemainderBytes) {
+      this.truncated = true;
+      return;
+    }
     this.buffer += chunk;
     // SSE frames are separated by a blank line. Process all complete frames and
     // keep the trailing partial in the buffer.
@@ -141,12 +155,31 @@ export class StreamUsageAccumulator {
     while ((idx = this.buffer.indexOf('\n\n')) !== -1) {
       const frame = this.buffer.slice(0, idx);
       this.buffer = this.buffer.slice(idx + 2);
+      this.frameCount += 1;
+      if (this.frameCount > RESOURCE_LIMITS.sseFragments) {
+        this.truncated = true;
+        this.buffer = '';
+        return;
+      }
+      if (Buffer.byteLength(frame, 'utf8') > RESOURCE_LIMITS.sseFrameBytes) {
+        this.truncated = true;
+        this.buffer = '';
+        return;
+      }
       this.consumeFrame(frame);
+    }
+    if (Buffer.byteLength(this.buffer, 'utf8') > RESOURCE_LIMITS.sseRemainderBytes) {
+      this.truncated = true;
+      this.buffer = '';
     }
   }
 
   /** Flush any trailing frame at end-of-stream. */
   end(): void {
+    if (this.truncated) {
+      this.buffer = '';
+      return;
+    }
     if (this.buffer.trim()) this.consumeFrame(this.buffer);
     this.buffer = '';
   }

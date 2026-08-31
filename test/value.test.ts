@@ -14,8 +14,8 @@ import {
   type GateResult,
   type Verdict,
 } from '../src/value/gates.ts';
-import { extractProposals, acceptanceRatio, acceptanceForCommit } from '../src/value/proposals.ts';
-import { loadOrCreateKeyPair, buildReceiptBody, signReceipt, verifyReceipt } from '../src/value/receipt.ts';
+import { extractProposals, extractProposalsWithCoverage, acceptanceRatio, acceptanceForCommit } from '../src/value/proposals.ts';
+import { canonical, loadOrCreateKeyPair, buildReceiptBody, signReceipt, verifyReceipt } from '../src/value/receipt.ts';
 import { computeRealization } from '../src/value/realization.ts';
 import { computeReturnOnIntelligence, lensRedundancy, type RealizationLike } from '../src/value/lenses.ts';
 import { timeWithAiMinutes, boundedLift, breakEven, liftFromData } from '../src/value/lift.ts';
@@ -145,6 +145,32 @@ test('extractProposals: Anthropic tool_use, OpenAI tool_calls, fenced fallback',
   assert.equal(fenced.length, 1);
   assert.equal(fenced[0]!.path, null);
   assert.ok(fenced[0]!.addedLines.includes('code1'));
+});
+
+test('extractProposals: hostile tool arguments and fenced floods truncate before line-array expansion', () => {
+  const oversizedArgument = JSON.stringify({
+    path: 'x.ts',
+    content: `x\n${'a'.repeat(2 * 1024 * 1024)}`,
+  });
+  const argumentResult = extractProposalsWithCoverage('openai', {
+    choices: [{ message: { tool_calls: [{ function: { name: 'write_file', arguments: oversizedArgument } }] } }],
+  });
+  assert.equal(argumentResult.captureCoverage, 'truncated');
+  assert.deepEqual(argumentResult.files, []);
+
+  const fencedFlood = '```ts\n' + 'x\n'.repeat(200_005) + '```';
+  const fencedResult = extractProposalsWithCoverage('anthropic', {
+    content: [{ type: 'text', text: fencedFlood }],
+  });
+  assert.equal(fencedResult.captureCoverage, 'truncated');
+  assert.deepEqual(fencedResult.files, []);
+});
+
+test('receipt canonicalization rejects cycles and oversized values before signing', () => {
+  const cyclic: Record<string, unknown> = {};
+  cyclic.self = cyclic;
+  assert.throws(() => canonical(cyclic), /cycle/);
+  assert.throws(() => canonical({ payload: 'x'.repeat(2 * 1024 * 1024 + 1) }), /string size/);
 });
 
 test('acceptanceForCommit returns null when nothing was proposed (→ gate unknown)', () => {

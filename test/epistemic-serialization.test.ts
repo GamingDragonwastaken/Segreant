@@ -82,3 +82,10 @@ test('deserialization fails closed on tampered bytes, digest, kind, version, and
   cyclic.self = cyclic;
   assert.throws(() => canonicalJson(cyclic), /cycle/);
 });
+
+test('canonical kernel JSON rejects hostile depth and string size before signing or verifying', () => {
+  let nested: unknown = 'leaf';
+  for (let i = 0; i < 130; i += 1) nested = { next: nested };
+  assert.throws(() => canonicalJson(nested), /nesting depth/);
+  assert.throws(() => canonicalJson({ payload: 'x'.repeat(2 * 1024 * 1024 + 1) }), /string size/);
+});

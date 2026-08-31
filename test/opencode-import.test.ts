@@ -103,3 +103,15 @@ test('opencode import: a missing database is an honest empty result, not a crash
   assert.deepEqual([sum.files, sum.eventsSeen, sum.inserted], [0, 0, 0]);
   store.close();
 });
+
+test('opencode import: an oversized message row is skipped before JSON.parse and disclosed', () => {
+  const dbPath = makeOpencodeDb([
+    { id: 'msg-large', session: 's', data: { role: 'assistant', modelID: 'm', content: 'x'.repeat(2 * 1024 * 1024) } },
+  ]);
+  const store = new Store(join(mkdtempSync(join(tmpdir(), 'oc-large-store-')), 'test.db'));
+  const sum = importOpencode(store, { root: dbPath });
+  assert.equal(sum.eventsSeen, 0);
+  assert.equal(sum.captureCoverage, 'truncated');
+  assert.equal(sum.truncatedLines, 1);
+  store.close();
+});

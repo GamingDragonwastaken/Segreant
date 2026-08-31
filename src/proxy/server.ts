@@ -34,9 +34,10 @@ import {
   normalizeOpenAIUsage,
   emptyUsage,
 } from './usage.ts';
-import { extractProposals, type ProposedFile } from '../value/proposals.ts';
+import { extractProposalsWithCoverage, type ProposedFile } from '../value/proposals.ts';
 import { StreamProposalAccumulator } from './stream-proposals.ts';
 import { EgressError, egressFetchWithConfig } from '../egress/transport.ts';
+import { readBoundedResponseText, RESOURCE_LIMITS, ResourceLimitError, type CaptureCoverage } from '../util/resource-limits.ts';
 
 const HOP_BY_HOP = new Set([
   'connection',
@@ -130,10 +131,45 @@ export function detectRoute(req: http.IncomingMessage, cfg: FiscusConfig): Route
 function readBody(req: http.IncomingMessage): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on('data', (c: Buffer) => chunks.push(c));
-    req.on('end', () => resolve(Buffer.concat(chunks)));
-    req.on('error', reject);
+    let size = 0;
+    let settled = false;
+    const declaredLength = typeof req.headers['content-length'] === 'string'
+      ? Number(req.headers['content-length'])
+      : NaN;
+    if (Number.isSafeInteger(declaredLength) && declaredLength > RESOURCE_LIMITS.inboundRequestBytes) {
+      settled = true;
+      req.resume();
+      reject(new ResourceLimitError('inbound_request_bytes', RESOURCE_LIMITS.inboundRequestBytes));
+      return;
+    }
+    req.on('data', (c: Buffer) => {
+      if (settled) return;
+      size += c.length;
+      if (size > RESOURCE_LIMITS.inboundRequestBytes) {
+        settled = true;
+        req.resume();
+        reject(new ResourceLimitError('inbound_request_bytes', RESOURCE_LIMITS.inboundRequestBytes));
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on('end', () => {
+      if (!settled) {
+        settled = true;
+        resolve(Buffer.concat(chunks, size));
+      }
+    });
+    req.on('error', (error) => {
+      if (!settled) {
+        settled = true;
+        reject(error);
+      }
+    });
   });
+}
+
+async function readResponseText(upstream: Response): Promise<string> {
+  return readBoundedResponseText(upstream, RESOURCE_LIMITS.upstreamResponseBytes, 'upstream_response_bytes');
 }
 
 function buildUpstreamHeaders(req: http.IncomingMessage): Record<string, string> {
@@ -234,6 +270,27 @@ function providerUpstreamErrorBody(provider: Provider, message: string, code: 'u
   return JSON.stringify({ error: { message, type: 'fiscus_upstream_error', code } });
 }
 
+function providerResourceLimitBody(provider: Provider, message: string): string {
+  if (provider === 'anthropic') {
+    return JSON.stringify({ type: 'error', error: { type: 'fiscus_resource_limit', code: 'capture_limit_exceeded', message } });
+  }
+  return JSON.stringify({ error: { message, type: 'fiscus_resource_limit', code: 'capture_limit_exceeded' } });
+}
+
+function waitForDrainOrClose(res: http.ServerResponse): Promise<'drain' | 'close'> {
+  return new Promise((resolve) => {
+    const finish = (event: 'drain' | 'close'): void => {
+      res.off('drain', onDrain);
+      res.off('close', onClose);
+      resolve(event);
+    };
+    const onDrain = (): void => finish('drain');
+    const onClose = (): void => finish('close');
+    res.once('drain', onDrain);
+    res.once('close', onClose);
+  });
+}
+
 export interface ProxyDeps {
   store: Store;
   config: FiscusConfig;
@@ -298,7 +355,22 @@ async function handle(
       : JSON.stringify({ error: { type: 'fiscus_budget_unavailable', code: 'budget_enforcement_unavailable', message } }));
     return;
   }
-  const body = await readBody(req);
+  let body: Buffer;
+  try {
+    body = await readBody(req);
+  } catch (error) {
+    if (error instanceof ResourceLimitError) {
+      res.writeHead(413, {
+        'content-type': 'application/json',
+        'x-fiscus-resource-limit': error.kind,
+      });
+      res.end(route
+        ? providerResourceLimitBody(route.provider, error.message)
+        : JSON.stringify({ error: { type: 'fiscus_resource_limit', code: error.kind, message: error.message } }));
+      return;
+    }
+    throw error;
+  }
 
   if (!route) {
     res.writeHead(400, { 'content-type': 'application/json' });
@@ -517,6 +589,7 @@ async function handle(
 
   let usage: NormalizedUsage = emptyUsage();
   let resolvedModel = parsed.model;
+  let captureCoverage: RequestRow['captureCoverage'] = 'complete';
 
   if (isStream && upstream.body) {
     // Stream through, teeing into the usage accumulator AND the proposal
@@ -527,27 +600,94 @@ async function handle(
     const propAcc = new StreamProposalAccumulator(provider);
     const decoder = new TextDecoder();
     const reader = upstream.body.getReader();
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (value) {
-        res.write(Buffer.from(value));
-        const textChunk = decoder.decode(value, { stream: true });
-        acc.push(textChunk);
-        propAcc.push(textChunk);
+    let clientClosed = false;
+    const onClose = (): void => {
+      if (res.writableEnded) return;
+      clientClosed = true;
+      controller.abort();
+      void reader.cancel('downstream client disconnected');
+    };
+    res.once('close', onClose);
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done || clientClosed) break;
+        if (value) {
+          if (!res.write(Buffer.from(value))) {
+            const event = await waitForDrainOrClose(res);
+            if (event === 'close' || clientClosed) break;
+          }
+          const textChunk = decoder.decode(value, { stream: true });
+          acc.push(textChunk);
+          propAcc.push(textChunk);
+        }
+      }
+    } finally {
+      res.off('close', onClose);
+    }
+    if (!clientClosed) {
+      const tail = decoder.decode();
+      if (tail) {
+        acc.push(tail);
+        propAcc.push(tail);
       }
     }
     acc.end();
     propAcc.end();
-    res.end();
+    if (!res.writableEnded && !res.destroyed) res.end();
     usage = acc.usage;
+    captureCoverage = clientClosed ? 'truncated' : acc.captureCoverage;
     if (acc.model) resolvedModel = acc.model;
     // Capture proposed edits reassembled from the SSE tool-call fragments — the
     // in-path Accepted-gate signal for streamed agent traffic.
-    persistProposals(deps, { requestId, sessionId, tsEpochMs: startedAt, provider, model: resolvedModel, project }, propAcc.proposals());
+    persistProposals(
+      deps,
+      { requestId, sessionId, tsEpochMs: startedAt, provider, model: resolvedModel, project },
+      propAcc.proposals(),
+      clientClosed ? 'truncated' : propAcc.captureCoverage,
+    );
   } else {
     // Buffer the full response, parse usage, add cost headers, then send.
-    const text = await upstream.text();
+    let text: string;
+    try {
+      text = await readResponseText(upstream);
+    } catch (error) {
+      if (error instanceof ResourceLimitError) {
+        res.writeHead(502, {
+          'content-type': 'application/json',
+          'x-fiscus-resource-limit': error.kind,
+        });
+        res.end(providerResourceLimitBody(provider, error.message));
+        safeLog(deps, {
+          requestId,
+          sessionId,
+          tsEpochMs: startedAt,
+          provider,
+          model: parsed.model,
+          project,
+          attributionBasis,
+          user,
+          source,
+          cwd,
+          taskWeight,
+          inputTokens: 0,
+          outputTokens: 0,
+          cacheWriteTokens: 0,
+          cacheReadTokens: 0,
+          reasoningTokens: 0,
+          costUsd: 0,
+          estimated: true,
+          pricing: unpricedPricingEvidence(),
+          streamed: false,
+          statusCode: 502,
+          durationMs: Date.now() - startedAt,
+          captureCoverage: 'truncated',
+          ...scopeCapture,
+        }, decision, () => { state.accountingFailure = true; });
+        return;
+      }
+      throw error;
+    }
     try {
       const json = JSON.parse(text) as Record<string, unknown>;
       if (typeof json.model === 'string') resolvedModel = json.model;
@@ -558,7 +698,13 @@ async function handle(
       // Capture proposed edits — the in-path signal for the Accepted gate.
       // Same extraction as the streaming path; what can't be parsed stays
       // `unknown`, never a false signal.
-      persistProposals(deps, { requestId, sessionId, tsEpochMs: startedAt, provider, model: resolvedModel, project }, extractProposals(provider, json));
+      const extracted = extractProposalsWithCoverage(provider, json);
+      persistProposals(
+        deps,
+        { requestId, sessionId, tsEpochMs: startedAt, provider, model: resolvedModel, project },
+        extracted.files,
+        extracted.captureCoverage,
+      );
     } catch {
       /* non-JSON (e.g. error HTML) — usage stays empty */
     }
@@ -598,6 +744,7 @@ async function handle(
     streamed: isStream,
     statusCode: upstream.status,
     durationMs: Date.now() - startedAt,
+    captureCoverage,
     ...scopeCapture,
   }, decision, () => { state.accountingFailure = true; });
 }
@@ -615,13 +762,33 @@ function persistProposals(
   deps: ProxyDeps,
   meta: { requestId: string; sessionId: string | null; tsEpochMs: number; provider: Provider; model: string; project: string },
   files: ProposedFile[],
+  captureCoverage: CaptureCoverage = 'complete',
 ): void {
   try {
     // Honor metadataOnly: when set, the local store keeps only token/cost metadata,
     // so the AI's proposed code lines are never persisted (this turns off First-Pass
     // Acceptance, by the user's choice).
     if (deps.config.metadataOnly) return;
-    if (files.length === 0) return;
+    let retainedFiles = files;
+    let finalCoverage = captureCoverage;
+    let lineCount = 0;
+    if (finalCoverage === 'complete') {
+      if (files.length > RESOURCE_LIMITS.proposalFiles) {
+        finalCoverage = 'truncated';
+      } else {
+        for (const file of files) {
+          lineCount += file.addedLines.length;
+          if (lineCount > RESOURCE_LIMITS.proposalLines) {
+            finalCoverage = 'truncated';
+            break;
+          }
+        }
+      }
+    }
+    // A truncated capture is retained as an explicit coverage record, but its
+    // incomplete file fragments are never fed back into acceptance calculations.
+    if (finalCoverage === 'truncated') retainedFiles = [];
+    if (retainedFiles.length === 0 && finalCoverage === 'complete') return;
     deps.store.insertProposal({
       proposalId: meta.requestId,
       requestId: meta.requestId,
@@ -630,7 +797,8 @@ function persistProposals(
       provider: meta.provider,
       model: meta.model,
       project: meta.project,
-      files,
+      files: retainedFiles,
+      captureCoverage: finalCoverage,
     });
   } catch {
     // Proposal capture is best-effort; never let it affect the response path.

@@ -47,21 +47,50 @@ function json(res: http.ServerResponse, status: number, payload: unknown): void 
   res.end(JSON.stringify(payload));
 }
 
+class BodyTooLargeError extends Error {
+  readonly code = 'resource_limit' as const;
+  constructor(readonly limitBytes: number) {
+    super('request body too large');
+    this.name = 'BodyTooLargeError';
+  }
+}
+
 function readBody(req: http.IncomingMessage, maxBytes: number): Promise<Buffer> {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) throw new Error('max body bytes must be a positive safe integer');
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let total = 0;
+    let settled = false;
+    const declared = Number(req.headers['content-length'] ?? '');
+    if (Number.isSafeInteger(declared) && declared > maxBytes) {
+      settled = true;
+      req.resume();
+      reject(new BodyTooLargeError(maxBytes));
+      return;
+    }
     req.on('data', (c: Buffer) => {
+      if (settled) return;
       total += c.length;
       if (total > maxBytes) {
-        reject(new Error('request body too large'));
-        req.destroy();
+        settled = true;
+        // Drain for connection hygiene, but never retain or parse the excess.
+        // The typed rejection lets the route return a stable 413 envelope.
+        req.resume();
+        reject(new BodyTooLargeError(maxBytes));
         return;
       }
       chunks.push(c);
     });
-    req.on('end', () => resolve(Buffer.concat(chunks)));
-    req.on('error', reject);
+    req.on('end', () => {
+      if (settled) return;
+      settled = true;
+      resolve(Buffer.concat(chunks, total));
+    });
+    req.on('error', (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    });
   });
 }
 
@@ -332,6 +361,7 @@ export function createTeamServer(deps: TeamServerDeps): http.Server {
           await store.registerDeveloper(keyId, publicKey, label);
           return json(res, 201, { ok: true, keyId });
         } catch (err) {
+          if (err instanceof BodyTooLargeError) return json(res, 413, { ok: false, error: 'request body too large', code: err.code, limitBytes: err.limitBytes });
           return json(res, 400, { ok: false, error: `bad request: ${String(err)}` });
         }
       });
@@ -350,6 +380,7 @@ export function createTeamServer(deps: TeamServerDeps): http.Server {
           const raw = await readBody(req, maxBodyBytes);
           parsed = JSON.parse(raw.toString('utf8'));
         } catch (err) {
+          if (err instanceof BodyTooLargeError) return json(res, 413, { ok: false, error: 'request body too large', code: err.code, limitBytes: err.limitBytes });
           return json(res, 400, { ok: false, error: `bad request: ${String(err)}` });
         }
         if (!isPlausibleSignedRollup(parsed)) {

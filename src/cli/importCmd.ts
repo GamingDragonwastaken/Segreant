@@ -143,6 +143,14 @@ function renderImportSummary(tty: boolean, id: string, location: string, sum: Im
   console.log(`  Consumption  ${color(tty, C.green, usd(sum.costUsd))}${sum.estimatedCostUsd > 0 ? color(tty, C.yellow, `  (~est ${usd(sum.estimatedCostUsd)})`) : ''}`);
   const models = Object.entries(sum.byModel).sort((a, b) => b[1].costUsd - a[1].costUsd).slice(0, 5);
   for (const [m, v] of models) console.log(`    ${m.padEnd(26)} ${usd(v.costUsd).padStart(10)}  ${color(tty, C.gray, `${num(v.requests)} req`)}`);
+  if (sum.captureCoverage === 'truncated') {
+    const details = [
+      sum.truncatedFiles ? `${num(sum.truncatedFiles)} files` : '',
+      sum.truncatedLines ? `${num(sum.truncatedLines)} lines` : '',
+      sum.truncatedRows ? `${num(sum.truncatedRows)} rows` : '',
+    ].filter(Boolean).join(', ');
+    console.log(color(tty, C.yellow, `  Coverage     TRUNCATED${details ? ` (${details})` : ''} — imported values are not a complete source capture.`));
+  }
   // Rows already in the ledger keep the label they were written with, so a
   // relabel means the same work now appears under two names. Say so and hand
   // over the merge — silently splitting a project's money is the worse failure.

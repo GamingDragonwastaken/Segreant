@@ -398,7 +398,16 @@ process.stdout.on('error', (err: NodeJS.ErrnoException) => {
   throw err;
 });
 
-main().catch((err) => {
-  console.error('  Fiscus error:', err);
-  process.exitCode = 1;
+// Defer command dispatch until the launcher has finished importing the compiled
+// module and released its publication lock. Some commands (notably `demo`)
+// perform substantial synchronous work before their first `await`; invoking
+// them directly here would make every concurrent CLI reader hold the build gate
+// for the whole command and can starve a legitimate publication queue. The
+// modules are fully loaded before this callback runs, so publication can no
+// longer create a missing-dependency window for this process.
+setImmediate(() => {
+  main().catch((err) => {
+    console.error('  Fiscus error:', err);
+    process.exitCode = 1;
+  });
 });

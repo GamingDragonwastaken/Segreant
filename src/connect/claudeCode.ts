@@ -18,7 +18,7 @@
  *    this wherever the number is shown.
  */
 
-import { createReadStream, readdirSync, statSync } from 'node:fs';
+import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
@@ -32,7 +32,10 @@ import {
   recordInsert,
   createRepoResolver,
   noteRelabel,
+  boundedJsonlFiles,
+  markImportTruncated,
 } from './importShared.ts';
+import { RESOURCE_LIMITS } from '../util/resource-limits.ts';
 
 export type { ImportSummary, ImportOptions } from './importShared.ts';
 
@@ -126,23 +129,10 @@ export async function importClaudeCode(store: Store, opts: ImportOptions = {}): 
   const source = opts.source ?? 'claude-code';
   const sinceMs = opts.sinceMs ?? 0;
 
-  let files: string[] = [];
-  try {
-    files = (readdirSync(root, { recursive: true }) as string[])
-      .filter((f) => f.endsWith('.jsonl'))
-      .map((f) => join(root, f))
-      .filter((f) => {
-        try {
-          return statSync(f).isFile();
-        } catch {
-          return false;
-        }
-      });
-  } catch {
-    files = []; // no Claude Code install → an honest empty import, not a crash
-  }
-
+  const fileScan = boundedJsonlFiles(root);
+  const files = fileScan.files;
   const summary = emptyImportSummary(files.length);
+  if (fileScan.truncated) markImportTruncated(summary, 'files');
   // Resolve each transcript cwd to its repository root once. A Claude Code
   // session is routinely started inside a package or a subdirectory, and the
   // basename of that directory is not the project — see createRepoResolver.
@@ -152,9 +142,17 @@ export async function importClaudeCode(store: Store, opts: ImportOptions = {}): 
     const seenInFile = new Set<string>(); // one API request = many transcript lines; first wins
     const rl = createInterface({ input: createReadStream(file), crlfDelay: Infinity });
     for await (const line of rl) {
+      if (Buffer.byteLength(line, 'utf8') > RESOURCE_LIMITS.transcriptLineBytes) {
+        markImportTruncated(summary, 'lines');
+        continue;
+      }
       const ev = parseTranscriptLine(line);
       if (!ev || ev.tsEpochMs < sinceMs) continue;
       if (seenInFile.has(ev.requestId)) continue;
+      if (seenInFile.size >= RESOURCE_LIMITS.importDedupeKeys) {
+        markImportTruncated(summary, 'rows');
+        break;
+      }
       seenInFile.add(ev.requestId);
 
       const attribution = await resolveProject(ev.cwd, 'claude-code');

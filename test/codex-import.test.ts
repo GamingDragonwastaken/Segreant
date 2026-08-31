@@ -111,3 +111,20 @@ test('codex import: no Codex install is an honest empty result', async () => {
   assert.deepEqual([sum.eventsSeen, sum.inserted], [0, 0]);
   store.close();
 });
+
+test('codex import: oversized rollout lines are skipped before JSON.parse and disclosed', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'codex-large-line-'));
+  const day = join(root, 'sessions', '2026', '06', '08');
+  mkdirSync(day, { recursive: true });
+  writeFileSync(
+    join(day, 'rollout-large.jsonl'),
+    `${JSON.stringify({ type: 'session_meta', payload: { id: 'sess-large' } })}\n${'x'.repeat(2 * 1024 * 1024 + 1)}`,
+    'utf8',
+  );
+  const store = new Store(join(mkdtempSync(join(tmpdir(), 'codex-large-db-')), 'test.db'));
+  const sum = await importCodex(store, { root });
+  assert.equal(sum.eventsSeen, 0);
+  assert.equal(sum.captureCoverage, 'truncated');
+  assert.equal(sum.truncatedLines, 1);
+  store.close();
+});

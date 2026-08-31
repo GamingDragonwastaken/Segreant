@@ -108,6 +108,18 @@ test('import: missing transcripts directory is an honest empty result, not a cra
   store.close();
 });
 
+test('import: an oversized JSONL line is skipped before parsing and disclosed as incomplete coverage', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-large-line-'));
+  const oversized = JSON.stringify({ type: 'assistant', message: { model: 'claude-opus-4-8', usage: {}, content: 'x'.repeat(2 * 1024 * 1024) } });
+  writeFileSync(join(root, 'oversized.jsonl'), oversized, 'utf8');
+  const store = new Store(join(mkdtempSync(join(tmpdir(), 'cc-large-db-')), 'test.db'));
+  const sum = await importClaudeCode(store, { root });
+  assert.equal(sum.eventsSeen, 0);
+  assert.equal(sum.captureCoverage, 'truncated');
+  assert.equal(sum.truncatedLines, 1);
+  store.close();
+});
+
 test('import: --days cutoff drops older traffic', async () => {
   const root = mkdtempSync(join(tmpdir(), 'cc-transcripts2-'));
   writeFileSync(

@@ -1,7 +1,7 @@
 /** Local emit/import commands for signed CI outcome evidence. */
 
 import { createPrivateKey } from 'node:crypto';
-import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { dbPath } from '../config.ts';
 import { Store } from '../store/db.ts';
@@ -13,6 +13,7 @@ import {
   type GithubActionsConclusion,
   type SignedGithubActionsOutcome,
 } from '../githubActionsEvidence.ts';
+import { readBoundedUtf8File, RESOURCE_LIMITS } from '../util/resource-limits.ts';
 
 function value(flags: Flags, name: string): string | null {
   const raw = flags[name];
@@ -32,9 +33,7 @@ function printUsage(): void {
 
 function readJsonArtifact(path: string): SignedGithubActionsOutcome {
   try {
-    const size = statSync(path).size;
-    if (size > 1_048_576) throw new Error('artifact exceeds the 1 MiB local-import limit');
-    return JSON.parse(readFileSync(path, 'utf8')) as SignedGithubActionsOutcome;
+    return JSON.parse(readBoundedUtf8File(path, RESOURCE_LIMITS.evidenceArtifactBytes, 'evidence_artifact_bytes')) as SignedGithubActionsOutcome;
   } catch (error) {
     throw new Error(`could not read evidence artifact: ${String(error)}`);
   }

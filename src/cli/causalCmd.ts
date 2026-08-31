@@ -6,7 +6,6 @@
  * public-operation slices; Slice 3's version-2 substrate is Store-only.
  */
 
-import { readFileSync } from 'node:fs';
 import { dbPath } from '../config.ts';
 import { verifyBlockedAssignmentPlan } from '../causal/assignment.ts';
 import { estimateCausalStudy } from '../causal/estimate.ts';
@@ -14,6 +13,7 @@ import { commitCausalProtocol } from '../causal/protocol.ts';
 import { Store } from '../store/db.ts';
 import type { Flags } from './flags.ts';
 import { printJson } from './ui.ts';
+import { readBoundedUtf8File, RESOURCE_LIMITS } from '../util/resource-limits.ts';
 
 function requireStringFlag(flags: Flags, name: string): string {
   const value = flags[name];
@@ -23,7 +23,7 @@ function requireStringFlag(flags: Flags, name: string): string {
 
 function readJsonFile(file: string): unknown {
   try {
-    return JSON.parse(readFileSync(file, 'utf8'));
+    return JSON.parse(readBoundedUtf8File(file, RESOURCE_LIMITS.jsonDocumentBytes, 'json_document_bytes'));
   } catch (err) {
     throw new Error('cannot read causal JSON file ' + file + ': ' + (err instanceof Error ? err.message : String(err)));
   }

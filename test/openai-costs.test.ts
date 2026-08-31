@@ -118,6 +118,26 @@ test('pagination loop and malformed responses create no usable collected observa
   }
 });
 
+test('chunked OpenAI Costs responses are bounded before arrayBuffer materialization', async () => {
+  const { store } = scopedStore();
+  try {
+    const preview = previewOpenAiCosts(store.activeOpenAiScope(), '2026-01-01', '2026-01-03');
+    const payload = new TextEncoder().encode('x'.repeat(2 * 1024 * 1024 + 1));
+    const response = new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(payload);
+        controller.close();
+      },
+    }), { status: 200 });
+    await assert.rejects(
+      collectOpenAiCostsFromResponses({ preview, responses: [response] }),
+      (error: unknown) => error instanceof OpenAiCostsPullError && error.failure.failureCode === 'response_too_large',
+    );
+  } finally {
+    store.close();
+  }
+});
+
 test('default OpenAI Costs transport refuses a corrupt receipt history before DNS or socket creation', async () => {
   const home = mkdtempSync(join(tmpdir(), 'fiscus-openai-costs-receipt-refusal-'));
   const previousHome = process.env.FISCUS_HOME;

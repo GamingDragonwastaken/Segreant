@@ -133,6 +133,20 @@ test('callJudgeApi: a non-JSON outer HTTP body throws malformed-response', async
   }
 });
 
+test('callJudgeApi: an oversized chunked response is rejected at the bounded reader', async () => {
+  const mock = await startMockJudge(() => ({ status: 200, body: 'x'.repeat(5 * 1024 * 1024) }));
+  try {
+    await assert.rejects(
+      () => callJudgeApi(mock.url, 'test-model', null, summary, 'local-llm'),
+      (err: unknown) => err instanceof JudgeCallError
+        && err.reason === 'malformed-response'
+        && /response.*limit/i.test(err.message),
+    );
+  } finally {
+    await mock.close();
+  }
+});
+
 test('callJudgeApi: a well-formed envelope missing choices[0].message.content throws malformed-response', async () => {
   const mock = await startMockJudge(() => ({ status: 200, body: { choices: [] } }));
   try {

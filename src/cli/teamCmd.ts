@@ -34,6 +34,7 @@ import { buildEconomicRollupBody, buildRollupBody, signRollup, type EconomicProj
 import { judgeSessionFromStore } from '../judge/orchestrate.ts';
 import { C, color, usd, pct, printNotAGitRepo, printJson } from './ui.ts';
 import { type Flags } from './flags.ts';
+import { readBoundedUtf8File, RESOURCE_LIMITS } from '../util/resource-limits.ts';
 
 export async function cmdTeam(flags: Flags): Promise<void> {
   const cfg = loadConfig();
@@ -139,7 +140,7 @@ export async function cmdReceipt(flags: Flags): Promise<void> {
     const file = String(flags.verify);
     let receipt: SignedReceipt;
     try {
-      receipt = JSON.parse(readFileSync(file, 'utf8')) as SignedReceipt;
+      receipt = JSON.parse(readBoundedUtf8File(file, RESOURCE_LIMITS.receiptBytes, 'receipt_bytes')) as SignedReceipt;
     } catch (e) {
       console.error(`  Could not read receipt: ${String(e)}`);
       process.exitCode = 1;

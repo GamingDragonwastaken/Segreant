@@ -19,13 +19,15 @@
  * saying so rather than pretending. Widen deliberately, per source, with tests.
  */
 
-import { createReadStream, readdirSync, statSync, existsSync } from 'node:fs';
+import { createReadStream, existsSync } from 'node:fs';
 import { createInterface } from 'node:readline';
-import { join, basename } from 'node:path';
+import { basename } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { defaultClaudeCodeRoot } from '../connect/claudeCode.ts';
 import { defaultOpencodeDbPath } from '../connect/opencode.ts';
 import { defaultCodexRoot, codexRolloutFiles } from '../connect/codex.ts';
+import { boundedJsonlFiles } from '../connect/importShared.ts';
+import { RESOURCE_LIMITS, type CaptureCoverage } from '../util/resource-limits.ts';
 
 /** One conversational turn, already truncated to the caps below. */
 export interface TranscriptTurn {
@@ -44,6 +46,9 @@ export interface TranscriptExcerpt {
   droppedTurns: number;
   /** Where this came from — shown in rationale so the user can audit the source. */
   sourcePath: string;
+  /** Optional explicit input-coverage disclosure for giant source lines. */
+  captureCoverage?: CaptureCoverage;
+  truncatedLines?: number;
 }
 
 // Bounded by construction: an unbounded transcript in a judge prompt is both a
@@ -62,20 +67,9 @@ export const MAX_TOTAL_CHARS = 48_000;
 export function findClaudeCodeTranscript(sessionId: string, root = defaultClaudeCodeRoot()): string | null {
   if (!/^[A-Za-z0-9-]{8,}$/.test(sessionId)) return null; // not a Claude Code session id shape
   const wanted = `${sessionId}.jsonl`;
-  let entries: string[] = [];
-  try {
-    entries = readdirSync(root, { recursive: true }) as string[];
-  } catch {
-    return null; // no Claude Code install — honestly nothing to read
-  }
-  for (const entry of entries) {
-    if (basename(entry) !== wanted) continue;
-    const full = join(root, entry);
-    try {
-      if (statSync(full).isFile()) return full;
-    } catch {
-      /* raced deletion — keep scanning */
-    }
+  const scan = boundedJsonlFiles(root);
+  for (const full of scan.files) {
+    if (basename(full) === wanted) return full;
   }
   return null;
 }
@@ -84,19 +78,37 @@ export function findClaudeCodeTranscript(sessionId: string, root = defaultClaude
  * Code writes either as a plain string or as an array of typed parts. Tool
  * calls/results become short structural markers, not payload — the judge needs
  * the shape of the work, not a second copy of every file the session touched. */
-function contentToText(content: unknown): string {
-  if (typeof content === 'string') return content;
-  if (!Array.isArray(content)) return '';
+function contentToText(content: unknown): { text: string; truncated: boolean } {
+  if (typeof content === 'string') {
+    const truncated = Buffer.byteLength(content, 'utf8') > RESOURCE_LIMITS.transcriptLineBytes;
+    return { text: truncated ? content.slice(0, RESOURCE_LIMITS.transcriptLineBytes) : content, truncated };
+  }
+  if (!Array.isArray(content)) return { text: '', truncated: false };
   const parts: string[] = [];
+  let bytes = 0;
+  let truncated = false;
   for (const p of content) {
     if (!p || typeof p !== 'object') continue;
     const part = p as { type?: string; text?: unknown; name?: unknown };
-    if (part.type === 'text' && typeof part.text === 'string') parts.push(part.text);
-    else if (part.type === 'tool_use') parts.push(`[tool: ${typeof part.name === 'string' ? part.name : 'unknown'}]`);
-    else if (part.type === 'tool_result') parts.push('[tool result]');
-    else if (part.type === 'thinking') parts.push('[thinking]');
+    const value = part.type === 'text' && typeof part.text === 'string'
+      ? part.text
+      : part.type === 'tool_use'
+        ? `[tool: ${typeof part.name === 'string' ? part.name : 'unknown'}]`
+        : part.type === 'tool_result'
+          ? '[tool result]'
+          : part.type === 'thinking'
+            ? '[thinking]'
+            : '';
+    if (!value) continue;
+    const valueBytes = Buffer.byteLength(value, 'utf8');
+    if (bytes + valueBytes > RESOURCE_LIMITS.transcriptLineBytes) {
+      truncated = true;
+      break;
+    }
+    parts.push(value);
+    bytes += valueBytes;
   }
-  return parts.join(' ');
+  return { text: parts.join(' '), truncated };
 }
 
 /**
@@ -108,10 +120,15 @@ export async function extractTranscriptTurns(sourcePath: string, sessionId: stri
   const turns: TranscriptTurn[] = [];
   let clippedTurns = 0;
   let droppedTurns = 0;
+  let truncatedLines = 0;
   let totalChars = 0;
 
   const rl = createInterface({ input: createReadStream(sourcePath), crlfDelay: Infinity });
   for await (const line of rl) {
+    if (Buffer.byteLength(line, 'utf8') > RESOURCE_LIMITS.transcriptLineBytes) {
+      truncatedLines++;
+      continue;
+    }
     let o: unknown;
     try {
       o = JSON.parse(line);
@@ -122,7 +139,9 @@ export async function extractTranscriptTurns(sourcePath: string, sessionId: stri
     const e = o as { type?: string; message?: { content?: unknown; model?: string } };
     if (e.type !== 'user' && e.type !== 'assistant') continue;
     if (e.type === 'assistant' && e.message?.model === '<synthetic>') continue; // error placeholder, not a turn
-    const raw = contentToText(e.message?.content).trim();
+    const converted = contentToText(e.message?.content);
+    if (converted.truncated) truncatedLines++;
+    const raw = converted.text.trim();
     if (!raw) continue;
 
     if (totalChars >= MAX_TOTAL_CHARS) {
@@ -138,7 +157,7 @@ export async function extractTranscriptTurns(sourcePath: string, sessionId: stri
     turns.push({ role: e.type, text });
   }
 
-  return { sessionId, turns, clippedTurns, droppedTurns, sourcePath };
+  return { sessionId, turns, clippedTurns, droppedTurns, sourcePath, captureCoverage: truncatedLines > 0 ? 'truncated' : 'complete', truncatedLines };
 }
 
 /**
@@ -159,20 +178,22 @@ export function extractOpencodeTranscript(
     return null; // locked/absent — honest null, never a crash
   }
   try {
-    const rows = db
-      .prepare(
-        `SELECT m.data AS msgData, p.data AS partData
-           FROM part p JOIN message m ON m.id = p.message_id
-          WHERE p.session_id = ?
-          ORDER BY p.time_created ASC, p.id ASC`,
-      )
-      .all(sessionId) as Array<{ msgData: string; partData: string }>;
-
     const turns: TranscriptTurn[] = [];
     let clippedTurns = 0;
     let droppedTurns = 0;
+    let truncatedLines = 0;
     let totalChars = 0;
-    for (const r of rows) {
+    const statement = db.prepare(
+      `SELECT m.data AS msgData, p.data AS partData
+         FROM part p JOIN message m ON m.id = p.message_id
+        WHERE p.session_id = ?
+        ORDER BY p.time_created ASC, p.id ASC`,
+    );
+    for (const r of statement.iterate(sessionId) as Iterable<{ msgData: string; partData: string }>) {
+      if (Buffer.byteLength(r.msgData, 'utf8') + Buffer.byteLength(r.partData, 'utf8') > RESOURCE_LIMITS.transcriptLineBytes) {
+        truncatedLines++;
+        continue;
+      }
       let role: string | undefined;
       let part: { type?: string; text?: unknown };
       try {
@@ -202,7 +223,9 @@ export function extractOpencodeTranscript(
       if (last && last.role === role) last.text += ' ' + text;
       else turns.push({ role, text });
     }
-    return turns.length > 0 ? { sessionId, turns, clippedTurns, droppedTurns, sourcePath: dbPath } : null;
+    return turns.length > 0
+      ? { sessionId, turns, clippedTurns, droppedTurns, sourcePath: dbPath, captureCoverage: truncatedLines > 0 ? 'truncated' : 'complete', truncatedLines }
+      : null;
   } finally {
     db.close();
   }
@@ -247,6 +270,7 @@ export async function extractCodexTranscript(
   const turns: TranscriptTurn[] = [];
   let clippedTurns = 0;
   let droppedTurns = 0;
+  let truncatedLines = 0;
   let totalChars = 0;
   const push = (role: 'user' | 'assistant', raw: string): void => {
     const trimmed = raw.trim();
@@ -266,6 +290,10 @@ export async function extractCodexTranscript(
 
   const rl = createInterface({ input: createReadStream(file), crlfDelay: Infinity });
   for await (const lineText of rl) {
+    if (Buffer.byteLength(lineText, 'utf8') > RESOURCE_LIMITS.transcriptLineBytes) {
+      truncatedLines++;
+      continue;
+    }
     let o: { type?: string; payload?: Record<string, unknown> };
     try {
       o = JSON.parse(lineText);
@@ -278,7 +306,9 @@ export async function extractCodexTranscript(
     else if (o.type === 'response_item' && p.type === 'function_call')
       push('assistant', `[tool: ${typeof p.name === 'string' ? p.name : 'unknown'}]`);
   }
-  return turns.length > 0 ? { sessionId, turns, clippedTurns, droppedTurns, sourcePath: file } : null;
+  return turns.length > 0
+    ? { sessionId, turns, clippedTurns, droppedTurns, sourcePath: file, captureCoverage: truncatedLines > 0 ? 'truncated' : 'complete', truncatedLines }
+    : null;
 }
 
 /** Per-tool transcript locations, overridable for tests. Each default resolves

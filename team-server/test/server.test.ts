@@ -361,6 +361,27 @@ test('team-server: POST /rollups rejects malformed JSON and well-formed-but-wron
   }
 });
 
+test('team-server: POST /rollups rejects an oversized body with a typed 413 before parsing', async () => {
+  const srv = await startTeamServer({
+    store: new FakeRollupStore(),
+    adminToken: null,
+    oidc: null,
+    aggregate: DEFAULT_TEST_AGGREGATE_CONFIG,
+    maxBodyBytes: 1024,
+  });
+  try {
+    const res = await fetch(`${srv.url}/rollups`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'x'.repeat(1025),
+    });
+    assert.equal(res.status, 413);
+    assert.deepEqual(await res.json(), { ok: false, error: 'request body too large', code: 'resource_limit', limitBytes: 1024 });
+  } finally {
+    await srv.close();
+  }
+});
+
 test('team-server: GET /rollups is method-not-allowed (405, Allow: POST); unknown routes are 404', async () => {
   const srv = await startTeamServer({ store: new FakeRollupStore(), adminToken: null, oidc: null, aggregate: DEFAULT_TEST_AGGREGATE_CONFIG });
   try {

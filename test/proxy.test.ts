@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { Store } from '../src/store/db.ts';
 import { createProxyServer, detectRoute } from '../src/proxy/server.ts';
 import { StreamProposalAccumulator } from '../src/proxy/stream-proposals.ts';
+import { StreamUsageAccumulator } from '../src/proxy/usage.ts';
 import { DEFAULT_CONFIG, type FiscusConfig } from '../src/config.ts';
 
 const originalFiscusHome = process.env.FISCUS_HOME;
@@ -242,6 +243,61 @@ test('non-streaming Anthropic: forwards body, injects cost header, logs cost', a
   store.close();
 });
 
+test('proxy rejects an oversized inbound request before opening an upstream connection', async () => {
+  const upstream = await startMockUpstream();
+  const store = new Store(':memory:');
+  const proxy = await startProxy(store, {}, upstream.url);
+  try {
+    const oversized = JSON.stringify({
+      model: 'claude-opus-4-8',
+      messages: [{ role: 'user', content: 'x'.repeat(9 * 1024 * 1024) }],
+    });
+    const res = await fetch(`${proxy.base}/v1/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': 'sk-test' },
+      body: oversized,
+    });
+    assert.equal(res.status, 413);
+    assert.equal(res.headers.get('x-fiscus-resource-limit'), 'inbound_request_bytes');
+    assert.equal((await res.json() as { error?: { type?: string } }).error?.type, 'fiscus_resource_limit');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(upstream.connections(), 0, 'an oversized body is rejected before any upstream socket');
+  } finally {
+    await proxy.close();
+    await upstream.close();
+    store.close();
+  }
+});
+
+test('proxy bounds a non-streaming upstream response before retaining it for parsing', async () => {
+  const upstream = http.createServer(async (req, res) => {
+    req.resume();
+    await once(req, 'end');
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end('x'.repeat(17 * 1024 * 1024));
+  });
+  upstream.listen(0, '127.0.0.1');
+  await once(upstream, 'listening');
+  const address = upstream.address() as { port: number };
+  const store = new Store(':memory:');
+  const proxy = await startProxy(store, {}, `http://127.0.0.1:${address.port}`);
+  try {
+    const res = await fetch(`${proxy.base}/v1/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': 'sk-test' },
+      body: JSON.stringify({ model: 'claude-opus-4-8', messages: [{ role: 'user', content: 'hi' }] }),
+    });
+    assert.equal(res.status, 502);
+    assert.equal(res.headers.get('x-fiscus-resource-limit'), 'upstream_response_bytes');
+    assert.equal((await res.json() as { error?: { type?: string } }).error?.type, 'fiscus_resource_limit');
+  } finally {
+    await proxy.close();
+    upstream.closeAllConnections?.();
+    await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    store.close();
+  }
+});
+
 test('streaming Anthropic: tees SSE and accumulates usage', async () => {
   const upstream = await startMockUpstream();
   const store = new Store(':memory:');
@@ -265,6 +321,37 @@ test('streaming Anthropic: tees SSE and accumulates usage', async () => {
   await proxy.close();
   await upstream.close();
   store.close();
+});
+
+test('streaming capture truncation is carried into the request ledger while bytes continue to the client', async () => {
+  const upstream = http.createServer(async (req, res) => {
+    req.resume();
+    await once(req, 'end');
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    res.end('x'.repeat(3 * 1024 * 1024));
+  });
+  upstream.listen(0, '127.0.0.1');
+  await once(upstream, 'listening');
+  const address = upstream.address() as { port: number };
+  const store = new Store(':memory:');
+  const proxy = await startProxy(store, {}, `http://127.0.0.1:${address.port}`);
+  try {
+    const res = await fetch(`${proxy.base}/v1/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': 'sk-test' },
+      body: JSON.stringify({ model: 'claude-opus-4-8', stream: true, messages: [{ role: 'user', content: 'hi' }] }),
+    });
+    assert.equal(res.status, 200);
+    const body = await res.text();
+    assert.equal(body.length, 3 * 1024 * 1024, 'capture bounds do not truncate provider bytes sent to the client');
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    assert.equal(store.recent(1)[0]!.captureCoverage, 'truncated');
+  } finally {
+    await proxy.close();
+    upstream.closeAllConnections?.();
+    await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    store.close();
+  }
 });
 
 test('streaming OpenAI: proxy injects stream_options so usage is captured', async () => {
@@ -449,6 +536,21 @@ test('StreamProposalAccumulator: a malformed tool input never manufactures a pro
   assert.deepEqual(acc.proposals(), []); // unparseable → no proposal, never a false signal
 });
 
+test('StreamProposalAccumulator bounds an unterminated SSE remainder and exposes truncated coverage', () => {
+  const acc = new StreamProposalAccumulator('anthropic');
+  acc.push('x'.repeat(3 * 1024 * 1024));
+  assert.equal(acc.captureCoverage, 'truncated');
+  assert.deepEqual(acc.proposals(), []);
+});
+
+test('StreamUsageAccumulator bounds an unterminated SSE remainder and exposes truncated coverage', () => {
+  const acc = new StreamUsageAccumulator('anthropic');
+  acc.push('x'.repeat(3 * 1024 * 1024));
+  assert.equal(acc.captureCoverage, 'truncated');
+  acc.end();
+  assert.deepEqual(acc.usage, { inputTokens: 0, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0 });
+});
+
 test('streaming proxy captures proposed edits from SSE tool_use (the First-Pass Acceptance signal)', async () => {
   const toolInput = JSON.stringify({ file_path: 'src/x.ts', content: 'export const x = 1;\nexport const y = 2;' });
   const upstream = await startToolUseUpstream(toolInput);
@@ -473,6 +575,65 @@ test('streaming proxy captures proposed edits from SSE tool_use (the First-Pass 
   await proxy.close();
   await upstream.close();
   store.close();
+});
+
+test('streaming proposal truncation is persisted as partial capture, never as a complete proposal', async () => {
+  const oversizedToolInput = JSON.stringify({ file_path: 'src/huge.ts', content: 'x'.repeat(3 * 1024 * 1024) });
+  const upstream = await startToolUseUpstream(oversizedToolInput);
+  const store = new Store(':memory:');
+  const proxy = await startProxy(store, {}, upstream.url);
+  try {
+    const res = await fetch(`${proxy.base}/v1/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': 'sk-test', 'x-fiscus-project': 'demo' },
+      body: JSON.stringify({ model: 'claude-opus-4-8', stream: true, messages: [{ role: 'user', content: 'edit it' }] }),
+    });
+    assert.equal(res.status, 200);
+    await res.text();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const props = store.proposalsInWindow('demo', 0, Date.now() + 1000);
+    assert.equal(props.length, 1);
+    assert.equal(props[0]!.captureCoverage, 'truncated');
+    assert.deepEqual(props[0]!.files, [], 'a truncated tool argument is not exposed as a complete proposed file');
+  } finally {
+    await proxy.close();
+    await upstream.close();
+    store.close();
+  }
+});
+
+test('non-streaming proposal capture over the line budget is marked truncated', async () => {
+  const upstream = http.createServer(async (req, res) => {
+    req.resume();
+    await once(req, 'end');
+    const code = Array.from({ length: 200_001 }, () => 'x').join('\n');
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ model: 'claude-opus-4-8', usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: 'text', text: '```\n' + code + '\n```' }] }));
+  });
+  upstream.listen(0, '127.0.0.1');
+  await once(upstream, 'listening');
+  const address = upstream.address() as { port: number };
+  const store = new Store(':memory:');
+  const proxy = await startProxy(store, {}, `http://127.0.0.1:${address.port}`);
+  try {
+    const res = await fetch(`${proxy.base}/v1/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': 'sk-test' },
+      body: JSON.stringify({ model: 'claude-opus-4-8', messages: [{ role: 'user', content: 'hi' }] }),
+    });
+    assert.equal(res.status, 200);
+    await res.text();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const props = store.proposalsInWindow('default', 0, Date.now() + 1000);
+    assert.equal(props.length, 1);
+    assert.equal(props[0]!.captureCoverage, 'truncated');
+    assert.deepEqual(props[0]!.files, []);
+  } finally {
+    await proxy.close();
+    upstream.closeAllConnections?.();
+    await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    store.close();
+  }
 });
 
 test('proxy attributes spend to the x-fiscus-user header (per-developer FinOps)', async () => {

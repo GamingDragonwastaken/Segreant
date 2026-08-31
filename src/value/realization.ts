@@ -16,7 +16,7 @@
 
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import type { Store, GateSignalRow, RealizationUnitRecord } from '../store/db.ts';
+import type { Store, GateSignalRow, RealizationUnitRecord, ProposalCaptureCoverage } from '../store/db.ts';
 import { attributeCommits, isGitRepo, projectName, type CommitAttribution } from '../git/correlate.ts';
 import { isDemo } from '../config.ts';
 import { survivingLines, revertedHashes } from '../git/quality.ts';
@@ -155,6 +155,8 @@ export interface WorkUnit extends CommitAttribution {
   funnel: FunnelOutcome;
   /** Completeness evidence required before the negative clean predicate can pass. */
   cleanCompleteness?: CleanCompleteness;
+  /** Coverage of the retained proposal capture used by the accepted gate. */
+  proposalCaptureCoverage?: ProposalCaptureCoverage;
 }
 
 export const CLEAN_COMPLETENESS_EVENT_TYPES = CODING_CLEAN_COMPLETENESS_EVENT_TYPES;
@@ -323,13 +325,21 @@ export async function computeRealization(
     const addedByFile = await addedLinesByFile(repoPath, a.hash);
     const committedPaths = [...addedByFile.keys()];
     const winProposals = store.proposalsInWindow(project, a.windowStartMs, a.windowEndMs);
+    const proposalCaptureCoverage: ProposalCaptureCoverage = winProposals.length === 0
+      ? 'unknown'
+      : winProposals.some((proposal) => proposal.captureCoverage === 'truncated')
+        ? 'truncated'
+        : winProposals.some((proposal) => proposal.captureCoverage === 'legacy_unknown')
+          ? 'legacy_unknown'
+          : 'complete';
     const matched: ProposedFile[] = [];
     for (const p of winProposals) {
+      if (p.captureCoverage !== undefined && p.captureCoverage !== 'complete') continue;
       for (const f of p.files) {
         if (matchesCommitFile(f.path, committedPaths)) matched.push(f);
       }
     }
-    const acceptance = acceptanceForCommit(matched, addedByFile);
+    const acceptance = proposalCaptureCoverage === 'complete' ? acceptanceForCommit(matched, addedByFile) : null;
     const hadProposal = acceptance !== null;
 
     // signal gates
@@ -341,7 +351,17 @@ export async function computeRealization(
     const completeness = cleanCompleteness(project, a.hash, a.tsEpochMs, now, opts.completenessWitnesses ?? []);
 
     const verdicts: Record<Gate, GateResult> = {
-      proposed: gate('proposed', hadProposal ? 'pass' : 'unknown', hadProposal ? 'AI proposal captured' : 'no proposal captured'),
+      proposed: gate(
+        'proposed',
+        hadProposal ? 'pass' : 'unknown',
+        hadProposal
+          ? 'AI proposal captured'
+          : proposalCaptureCoverage === 'truncated'
+            ? 'proposal capture truncated; coverage incomplete'
+            : proposalCaptureCoverage === 'legacy_unknown'
+              ? 'proposal capture predates coverage tracking'
+              : 'no complete proposal captured',
+      ),
       accepted: gate(
         'accepted',
         acceptance === null ? 'unknown' : acceptance >= acceptanceThreshold ? 'pass' : 'fail',
@@ -427,6 +447,7 @@ export async function computeRealization(
       costStale: false, // priced from the ledger as it stands right now
       funnel: scoreFunnel(verdicts),
       cleanCompleteness: completeness,
+      proposalCaptureCoverage,
     });
   }
 

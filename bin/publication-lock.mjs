@@ -14,7 +14,11 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 
-export const LOCK_WAIT_MS = 120_000;
+// A full cross-platform test/build fan-out can legitimately queue several
+// publication attempts behind slow filesystem/module-loader work. Keep the
+// wait finite for a genuinely wedged live owner, but do not turn that queue into
+// a false build failure at the old two-minute boundary.
+export const LOCK_WAIT_MS = 300_000;
 export const LOCK_STALE_MS = 10 * 60_000;
 export const LOCK_POLL_MS = 25;
 export const RENAME_RETRY_MS = 5_000;
@@ -26,6 +30,19 @@ const waitCell = new Int32Array(new SharedArrayBuffer(4));
 
 function sleep(milliseconds) {
   Atomics.wait(waitCell, 0, 0, milliseconds);
+}
+
+function removeQuarantine(path) {
+  try {
+    // Windows antivirus/indexer handles can briefly keep a just-renamed file
+    // open. Retry the generated quarantine cleanup so a successful publication
+    // does not leave a misleading lock-generation directory in the repository.
+    rmSync(path, { recursive: true, force: true, maxRetries: 20, retryDelay: LOCK_POLL_MS });
+  } catch {
+    // The canonical lock has already been moved away. Preserve an uncertain
+    // quarantine rather than risking a path-based delete of a new generation;
+    // the next acquisition can safely inspect/reclaim it by owner token.
+  }
 }
 
 function processIsAlive(pid) {
@@ -147,7 +164,7 @@ function quarantineUnknownLock(root, buildLock) {
     return false;
   }
 
-  rmSync(quarantine, { recursive: true, force: true });
+  removeQuarantine(quarantine);
   return true;
 }
 
@@ -183,7 +200,7 @@ function quarantineKnownLock(root, buildLock, snapshot) {
     return false;
   }
 
-  rmSync(quarantine, { recursive: true, force: true });
+  removeQuarantine(quarantine);
   return true;
 }
 
@@ -216,7 +233,7 @@ function releasePublicationLock(root, buildLock, token) {
     restoreQuarantinedLock(buildLock, quarantine);
     return;
   }
-  rmSync(quarantine, { recursive: true, force: true });
+  removeQuarantine(quarantine);
 }
 
 /**

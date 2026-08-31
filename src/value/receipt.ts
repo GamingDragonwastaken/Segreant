@@ -20,6 +20,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Gate, Verdict, FunnelOutcome } from './gates.ts';
 import { canonicalEconomicAttribution, type EconomicAttribution } from '../economics/attribution.ts';
+import { RESOURCE_LIMITS } from '../util/resource-limits.ts';
 
 export interface ReceiptBodyV1 {
   v: 1;
@@ -52,13 +53,42 @@ export interface SignedReceipt {
   signature: string; // base64
 }
 
-/** Deterministic JSON: object keys sorted recursively. */
+/** Deterministic JSON: object keys sorted recursively, with structural bounds. */
 export function canonical(value: unknown): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return '[' + value.map(canonical).join(',') + ']';
-  const obj = value as Record<string, unknown>;
-  const keys = Object.keys(obj).sort();
-  return '{' + keys.map((k) => JSON.stringify(k) + ':' + canonical(obj[k])).join(',') + '}';
+  const seen = new WeakSet<object>();
+  let nodes = 0;
+  const visit = (current: unknown, depth: number): string => {
+    if (depth > RESOURCE_LIMITS.canonicalDepth) throw new Error('canonical value exceeds maximum nesting depth');
+    nodes += 1;
+    if (nodes > RESOURCE_LIMITS.canonicalNodes) throw new Error('canonical value exceeds maximum node count');
+    if (current === null || typeof current !== 'object') {
+      const rendered = JSON.stringify(current);
+      if (rendered === undefined) throw new Error('canonical value must be JSON-compatible');
+      if (Buffer.byteLength(rendered, 'utf8') > RESOURCE_LIMITS.canonicalStringBytes) throw new Error('canonical value exceeds maximum string size');
+      return rendered;
+    }
+    if (seen.has(current)) throw new Error('canonical value must not contain a cycle');
+    seen.add(current);
+    let rendered: string;
+    if (Array.isArray(current)) {
+      if (current.length > RESOURCE_LIMITS.canonicalNodes) throw new Error('canonical array exceeds maximum item count');
+      const parts: string[] = [];
+      for (const item of current) parts.push(visit(item, depth + 1));
+      rendered = `[${parts.join(',')}]`;
+    } else {
+      const obj = current as Record<string, unknown>;
+      const parts: string[] = [];
+      for (const key of Object.keys(obj).sort()) {
+        if (key === '__proto__' || key === 'constructor' || key === 'prototype') throw new Error('canonical object contains a forbidden key');
+        parts.push(`${JSON.stringify(key)}:${visit(obj[key], depth + 1)}`);
+      }
+      rendered = `{${parts.join(',')}}`;
+    }
+    seen.delete(current);
+    if (Buffer.byteLength(rendered, 'utf8') > RESOURCE_LIMITS.canonicalBytes) throw new Error('canonical value exceeds maximum byte size');
+    return rendered;
+  };
+  return visit(value, 0);
 }
 
 function sha256Hex(s: string): string {

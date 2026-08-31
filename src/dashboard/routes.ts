@@ -43,6 +43,7 @@ import { judgeSessionFromStore } from '../judge/orchestrate.ts';
 import { resolveJudgeTier, hasHostedJudgeApiKey } from '../judge/tier.ts';
 import { pricingStatus } from '../cost/pricing.ts';
 import { pricingCoverage } from '../cost/coverage.ts';
+import { RESOURCE_LIMITS } from '../util/resource-limits.ts';
 import { buildEconomicReport } from '../cli/economicCmd.ts';
 import { verifyBlockedAssignmentPlan } from '../causal/assignment.ts';
 import { estimateCausalStudy } from '../causal/estimate.ts';
@@ -659,7 +660,16 @@ export function handleJudge({ req, res, store, config }: RouteContext): void {
   void (async () => {
     try {
       const chunks: Buffer[] = [];
-      for await (const c of req) chunks.push(c as Buffer);
+      let bytes = 0;
+      for await (const c of req) {
+        const chunk = c as Buffer;
+        bytes += chunk.byteLength;
+        if (bytes > RESOURCE_LIMITS.dashboardRequestBytes) {
+          req.resume();
+          return json(res, 413, { error: { code: 'DASHBOARD_REQUEST_TOO_LARGE', message: 'judge request body exceeds the bounded dashboard limit' } });
+        }
+        chunks.push(chunk);
+      }
       let body: { project?: string; sessionId?: string; windowDays?: number } = {};
       try {
         body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
@@ -856,7 +866,7 @@ export function handleSettingsUpdate({ req, res, store, config, version, configP
       for await (const c of req) {
         const chunk = c as Buffer;
         bytes += chunk.byteLength;
-        if (bytes > 16 * 1024) {
+        if (bytes > RESOURCE_LIMITS.dashboardRequestBytes) {
           req.resume();
           throw new SettingsValidationError('request body exceeds the 16 KiB settings limit');
         }

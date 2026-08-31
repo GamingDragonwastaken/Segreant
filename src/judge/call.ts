@@ -15,6 +15,7 @@ import type { JudgeConfidence } from './tier.ts';
 import type { StructuralSessionSummary } from './payload.ts';
 import type { TranscriptExcerpt } from './transcript.ts';
 import { egressFetch, EgressError, type EgressErrorCode } from '../egress/transport.ts';
+import { readBoundedResponseText, ResourceLimitError, RESOURCE_LIMITS } from '../util/resource-limits.ts';
 
 export interface SessionJudgment {
   sessionId: string;
@@ -53,6 +54,7 @@ function judgePrompt(summary: StructuralSessionSummary, transcript: TranscriptEx
     {
       requestCount: summary.requestCount,
       proposalCount: summary.proposalCount,
+      proposalCaptureCoverage: summary.proposalCaptureCoverage ?? 'unknown',
       interTurnGapsSec: summary.interTurnGapsSec,
       requestSizeTrend: summary.requestSizeTrend,
       spanMinutes: Math.round(summary.spanMinutes * 10) / 10,
@@ -79,8 +81,8 @@ function judgePrompt(summary: StructuralSessionSummary, transcript: TranscriptEx
   // model prompted either way is judging the same question on more evidence.
   const turnsBlock = transcript.turns.map((t) => `${t.role.toUpperCase()}: ${t.text}`).join('\n');
   const clipNote =
-    transcript.clippedTurns > 0 || transcript.droppedTurns > 0
-      ? `\n(Excerpt bounded: ${transcript.clippedTurns} turns clipped, ${transcript.droppedTurns} later turns dropped.)`
+    transcript.clippedTurns > 0 || transcript.droppedTurns > 0 || (transcript.truncatedLines ?? 0) > 0
+      ? `\n(Excerpt bounded: ${transcript.clippedTurns} turns clipped, ${transcript.droppedTurns} later turns dropped, ${transcript.truncatedLines ?? 0} oversized source lines skipped.)`
       : '';
   return (
     'You are judging how EFFICIENTLY an AI coding session used its time — not whether the code was good. ' +
@@ -156,12 +158,27 @@ export async function callJudgeApi(
   }
 
   if (!res.ok) {
+    try {
+      await readBoundedResponseText(res, RESOURCE_LIMITS.judgeResponseBytes, 'judge_response_bytes');
+    } catch {
+      // The status is still the primary failure classification; the body is
+      // drained only up to the same bounded capture policy.
+    }
     throw new JudgeCallError(`judge endpoint returned HTTP ${res.status}`, 'http-status');
   }
 
+  let responseText: string;
+  try {
+    responseText = await readBoundedResponseText(res, RESOURCE_LIMITS.judgeResponseBytes, 'judge_response_bytes');
+  } catch (error) {
+    if (error instanceof ResourceLimitError) {
+      throw new JudgeCallError('judge endpoint response exceeded the bounded response capture limit', 'malformed-response');
+    }
+    throw new JudgeCallError('judge endpoint response was not valid JSON', 'malformed-response');
+  }
   let envelope: unknown;
   try {
-    envelope = await res.json();
+    envelope = JSON.parse(responseText);
   } catch {
     throw new JudgeCallError('judge endpoint response was not valid JSON', 'malformed-response');
   }

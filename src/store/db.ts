@@ -34,6 +34,7 @@ import { serializeEconomicEvent } from '../economics/serialization.ts';
 import { economicEventRole, type EconomicEvent } from '../economics/events.ts';
 import { canonicalEconomicAttribution, economicAttributionFromRows } from '../economics/attribution.ts';
 import { canonicalJson } from '../epistemic/serialization.ts';
+import { RESOURCE_LIMITS } from '../util/resource-limits.ts';
 import type { ProviderScopeDeclaration, ScopeCaptureStatus } from '../billing/scope.ts';
 import { ATTRIBUTION_BASES, type AttributionBasis } from '../value/characterization.ts';
 import type { OpenAiCostsCaptureCoverage } from '../billing/openaiCostsCoverage.ts';
@@ -223,6 +224,8 @@ export interface RequestRow {
    * label is a self-assertion. Missing only means a pre-lineage/legacy row.
    */
   attributionBasis?: AttributionBasis;
+  /** Coverage of response/token capture for this request; legacy rows are unknown. */
+  captureCoverage?: 'complete' | 'truncated' | 'unknown' | 'legacy_unknown';
 }
 
 /** Exact control projection for a request window. `effective` is a named
@@ -294,6 +297,8 @@ export interface Characterization {
   byUser: SpendBucket[];
 }
 
+export type ProposalCaptureCoverage = 'complete' | 'truncated' | 'unknown' | 'legacy_unknown';
+
 export interface ProposalRow {
   proposalId: string;
   requestId: string | null;
@@ -303,6 +308,8 @@ export interface ProposalRow {
   model: string;
   project: string;
   files: Array<{ path: string | null; addedLines: string[] }>;
+  /** Whether the upstream capture was complete; legacy rows remain unknown. */
+  captureCoverage?: ProposalCaptureCoverage;
 }
 
 /** A provider/model that has routed proxy traffic recently — dashboard connection status. */
@@ -370,6 +377,12 @@ function requestRowFromRecord(record: Record<string, unknown>): RequestRow {
     providerScopeDeclarationId: typeof record.providerScopeDeclarationId === 'string'
       ? record.providerScopeDeclarationId
       : null,
+    captureCoverage: record.captureCoverage === 'complete'
+      || record.captureCoverage === 'truncated'
+      || record.captureCoverage === 'unknown'
+      || record.captureCoverage === 'legacy_unknown'
+      ? record.captureCoverage
+      : 'legacy_unknown',
   };
 }
 
@@ -552,8 +565,8 @@ export class Store {
             task_weight, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens,
             reasoning_tokens, cost_usd, estimated, streamed, status_code, duration_ms, user, source, cwd, via,
             cost_basis, rate_card_sha256, rate_card_source_kind, rate_match_kind, rate_match_provider, rate_match_model,
-            scope_capture_status, provider_scope_declaration_id, attribution_basis
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)${idempotent ? ' ON CONFLICT(request_id) DO NOTHING' : ''}`;
+            scope_capture_status, provider_scope_declaration_id, attribution_basis, capture_coverage
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)${idempotent ? ' ON CONFLICT(request_id) DO NOTHING' : ''}`;
       const info = this.db.prepare(sql).run(
         row.requestId,
         row.sessionId,
@@ -586,6 +599,7 @@ export class Store {
         scope.status,
         scope.declarationId,
         row.attributionBasis ?? 'legacy_unknown',
+        row.captureCoverage ?? 'complete',
       );
       const inserted = Number(info.changes ?? 0) > 0;
       if (row.economicAmount !== undefined) {
@@ -1474,9 +1488,10 @@ export class Store {
                 cost_basis AS costBasis, rate_card_sha256 AS rateCardSha256,
                 rate_card_source_kind AS rateCardSourceKind, rate_match_kind AS rateMatchKind,
                 rate_match_provider AS rateMatchProvider, rate_match_model AS rateMatchModel,
-                scope_capture_status AS scopeCaptureStatus,
-                provider_scope_declaration_id AS providerScopeDeclarationId,
-                attribution_basis AS attributionBasis
+                 scope_capture_status AS scopeCaptureStatus,
+                 provider_scope_declaration_id AS providerScopeDeclarationId,
+                 attribution_basis AS attributionBasis,
+                 capture_coverage AS captureCoverage
          FROM requests ORDER BY ts_epoch_ms DESC LIMIT ?`,
       )
       .all(limit) as Array<Record<string, unknown>>;
@@ -1499,9 +1514,10 @@ export class Store {
                 cost_basis AS costBasis, rate_card_sha256 AS rateCardSha256,
                 rate_card_source_kind AS rateCardSourceKind, rate_match_kind AS rateMatchKind,
                 rate_match_provider AS rateMatchProvider, rate_match_model AS rateMatchModel,
-                scope_capture_status AS scopeCaptureStatus,
-                provider_scope_declaration_id AS providerScopeDeclarationId,
-                attribution_basis AS attributionBasis
+                 scope_capture_status AS scopeCaptureStatus,
+                 provider_scope_declaration_id AS providerScopeDeclarationId,
+                 attribution_basis AS attributionBasis,
+                 capture_coverage AS captureCoverage
          FROM requests r LEFT JOIN project_aliases a ON a.alias = r.project
          WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ? ORDER BY ts_epoch_ms ASC`,
       )
@@ -1593,13 +1609,35 @@ export class Store {
   }
 
   insertProposal(p: ProposalRow): void {
+    const captureCoverage = p.captureCoverage === undefined
+      ? 'complete'
+      : p.captureCoverage;
+    if (captureCoverage !== 'complete' && captureCoverage !== 'truncated' && captureCoverage !== 'unknown' && captureCoverage !== 'legacy_unknown') {
+      throw new Error('proposal capture coverage is invalid');
+    }
+    if (!Array.isArray(p.files)) throw new Error('proposal files must be an array');
+    if (captureCoverage === 'truncated' && p.files.length > 0) {
+      throw new Error('truncated proposal captures cannot retain file contents');
+    }
+    if (p.files.length > RESOURCE_LIMITS.proposalFiles) throw new Error('proposal file count exceeds resource limit');
+    let lineCount = 0;
+    for (const file of p.files) {
+      if (file === null || typeof file !== 'object' || !Array.isArray(file.addedLines)) throw new Error('proposal file shape is invalid');
+      if (file.path !== null && typeof file.path !== 'string') throw new Error('proposal path shape is invalid');
+      if (typeof file.path === 'string' && file.path.length > RESOURCE_LIMITS.metadataFieldChars) throw new Error('proposal path exceeds resource limit');
+      if (file.addedLines.some((line) => typeof line !== 'string')) throw new Error('proposal line shape is invalid');
+      lineCount += file.addedLines.length;
+      if (lineCount > RESOURCE_LIMITS.proposalLines) throw new Error('proposal line count exceeds resource limit');
+    }
+    const filesJson = JSON.stringify(p.files);
+    if (Buffer.byteLength(filesJson, 'utf8') > RESOURCE_LIMITS.proposalCaptureBytes) throw new Error('proposal capture exceeds resource limit');
     this.db
       .prepare(
-        `INSERT INTO proposals (proposal_id, request_id, session_id, ts_epoch_ms, provider, model, project, files_json)
-         VALUES (?,?,?,?,?,?,?,?)
+        `INSERT INTO proposals (proposal_id, request_id, session_id, ts_epoch_ms, provider, model, project, files_json, capture_coverage)
+         VALUES (?,?,?,?,?,?,?,?,?)
          ON CONFLICT(proposal_id) DO NOTHING`,
       )
-      .run(p.proposalId, p.requestId, p.sessionId, p.tsEpochMs, p.provider, p.model, p.project, JSON.stringify(p.files));
+      .run(p.proposalId, p.requestId, p.sessionId, p.tsEpochMs, p.provider, p.model, p.project, filesJson, captureCoverage);
   }
 
   /** Proposals logged for a project within [startMs, endMs). */
@@ -1608,7 +1646,8 @@ export class Store {
     const rows = this.db
       .prepare(
         `SELECT proposal_id AS proposalId, request_id AS requestId, session_id AS sessionId,
-                ts_epoch_ms AS tsEpochMs, provider, model, project, files_json AS filesJson
+        ts_epoch_ms AS tsEpochMs, provider, model, project, files_json AS filesJson,
+                capture_coverage AS captureCoverage
          FROM proposals WHERE ${fam.sql} AND ts_epoch_ms >= ? AND ts_epoch_ms < ?
          ORDER BY ts_epoch_ms ASC`,
       )
@@ -1622,6 +1661,13 @@ export class Store {
       model: r.model as string,
       project: r.project as string,
       files: JSON.parse((r.filesJson as string) || '[]'),
+      captureCoverage: r.captureCoverage === 'truncated'
+        ? 'truncated' as const
+        : r.captureCoverage === 'complete'
+          ? 'complete' as const
+          : r.captureCoverage === 'unknown'
+            ? 'unknown' as const
+            : 'legacy_unknown' as const,
     }));
   }
 
