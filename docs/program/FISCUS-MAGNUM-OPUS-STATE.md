@@ -272,3 +272,38 @@ Current checkpoint override: team-rollup v2 is implemented at 2d567c2, bounded c
 - Research maturity and production truth remain separate.
 - External evidence is never fabricated.
 - Owner-reserved irreversible/public actions remain unperformed without explicit authorization.
+
+## Dossier III execution checkpoint — WP-A01 through WP-A04 (2026-08-31)
+
+- [x] WP-A01 (`17baca9`) makes perfect-information VoI probabilistically
+  coherent: the posterior scenario mixture is the sole prior authority;
+  separately supplied priors are compatibility assertions checked within
+  tolerance; finite/non-negative EVPI and safe utility bounds are enforced.
+- [x] WP-A02 (`651122e`) adds an exact pull-request candidate-head CI job and
+  runtime checkout-SHA assertions to the integration jobs, separating merge-ref
+  integration coverage from the code-under-review head. Exact run
+  `33423985725` passed across eight configured jobs.
+- [x] WP-A03 (`bd405d1`) makes mature coding `clean` open-world and
+  completeness-gated: direct revert/incident evidence fails, maturing or
+  missing completeness remains unknown, and JSON-safe witness provenance is
+  revalidated at the realization kernel boundary.
+- [x] WP-A04 (`66320e4`) centralizes bounded resource policy and explicit
+  truncation coverage across provider ingress/response/SSE/proposal capture,
+  intrinsic extraction and storage, judge/cost readers, native imports and
+  transcripts, team-server bodies, canonical receipt/kernel serialization and
+  publication concurrency. Partial proposal captures retain no file fragments
+  and cannot satisfy acceptance. The launcher no longer holds the build gate
+  during long synchronous CLI dispatch.
+- [x] Exact local verification at `66320e4`: root `npm.cmd test` 1,142 total,
+  1,138 pass, 0 fail, 4 Windows platform skips; team-server 62/62; root and
+  browser typechecks; build; package dry-run (213 files, ~940 KB); focused A04
+  adversarial suites; local/remote SHA equality and zero divergence.
+- [x] Published to `origin/gpt56/magnum-opus-reconstruction`; GitHub Actions
+  run `33432485480` was queued for this exact head at checkpoint creation and
+  remains an external remote-verification gate until its conclusion is read.
+
+This checkpoint does not claim the full program is complete. AII-031 is
+`PARTIAL`: the future versioned streaming `.fiscuspack` format/verifier, broad
+kernel issuance, exact model authority, causal correction, remaining value and
+control semantics, supply-chain/UX/standards work, and all external gates remain
+explicit. The next dependency-ordered packet is WP-A05 exact model attribution.

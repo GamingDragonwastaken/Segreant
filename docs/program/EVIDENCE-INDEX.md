@@ -79,3 +79,5 @@ Rows labeled “Local candidate” preserve the historical evidence state at the
 time each slice was recorded. Those slices are included in the published
 reconstruction checkpoint above; the labels are not a statement that the
 current branch remains unpublished.
+
+| Dossier III WP-A01–A04 checkpoint | Git commit `66320e4f81b9b2ad492ec117f4ada9b864180e5c` on `origin/gpt56/magnum-opus-reconstruction` | Coherent VoI, exact-head CI identity, completeness-gated clean, shared bounded resource/truncation semantics, intrinsic proposal/storage limits, bounded native imports/transcripts, canonical serialization guards, typed team-server 413 and contention-safe publication; local root 1,142 total (1,138 pass/0 fail/4 Windows skips), team-server 62/62, typechecks/build/pack pass | GitHub Actions run `33432485480` was queued for the exact head; `.fiscuspack` design/verifier and remaining program/external gates are still open |
