@@ -77,5 +77,5 @@
 
 Rows labeled “Local candidate” preserve the historical evidence state at the
 time each slice was recorded. Those slices are included in the published
-reconstruction branch tip above; the labels are not a statement that the
+reconstruction checkpoint above; the labels are not a statement that the
 current branch remains unpublished.
