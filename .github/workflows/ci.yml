@@ -19,6 +19,17 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Assert integration checkout identity
+        shell: bash
+        env:
+          EXPECTED_INTEGRATION_SHA: ${{ github.sha }}
+        run: |
+          actual="$(git rev-parse HEAD)"
+          if [ "$actual" != "$EXPECTED_INTEGRATION_SHA" ]; then
+            echo "expected integration checkout $EXPECTED_INTEGRATION_SHA, got $actual" >&2
+            exit 1
+          fi
+          echo "integration checkout: $actual"
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '24'
@@ -35,6 +46,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Assert integration checkout identity
+        shell: bash
+        env:
+          EXPECTED_INTEGRATION_SHA: ${{ github.sha }}
+        run: |
+          actual="$(git rev-parse HEAD)"
+          if [ "$actual" != "$EXPECTED_INTEGRATION_SHA" ]; then
+            echo "expected integration checkout $EXPECTED_INTEGRATION_SHA, got $actual" >&2
+            exit 1
+          fi
+          echo "integration checkout: $actual"
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '24'
@@ -114,6 +136,17 @@ jobs:
         working-directory: team-server
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Assert integration checkout identity
+        shell: bash
+        env:
+          EXPECTED_INTEGRATION_SHA: ${{ github.sha }}
+        run: |
+          actual="$(git rev-parse HEAD)"
+          if [ "$actual" != "$EXPECTED_INTEGRATION_SHA" ]; then
+            echo "expected integration checkout $EXPECTED_INTEGRATION_SHA, got $actual" >&2
+            exit 1
+          fi
+          echo "integration checkout: $actual"
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '24'
@@ -122,3 +155,40 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+
+  # The pull_request event's default checkout is GitHub's synthetic merge ref.
+  # Keep this separate from the integration matrix and explicitly verify the
+  # candidate head so a green merge-ref run cannot be misreported as head proof.
+  candidate-head:
+    if: github.event_name == 'pull_request'
+    timeout-minutes: 25
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Assert candidate checkout identity
+        shell: bash
+        env:
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          actual="$(git rev-parse HEAD)"
+          if [ "$actual" != "$EXPECTED_HEAD_SHA" ]; then
+            echo "expected candidate head $EXPECTED_HEAD_SHA, got $actual" >&2
+            exit 1
+          fi
+          echo "candidate head checkout: $actual"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: node ./node_modules/typescript/bin/tsc --noEmit -p src/dashboard/web/app/tsconfig.json
+      - run: npm test
+      - run: npm ci
+        working-directory: team-server
+      - run: npm run typecheck
+        working-directory: team-server
+      - run: npm test
+        working-directory: team-server
