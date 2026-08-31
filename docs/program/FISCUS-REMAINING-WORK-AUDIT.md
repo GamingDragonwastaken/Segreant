@@ -46,11 +46,12 @@ parity `16c5a15`, immutable refreshed-card provenance
 `d6243c7`, immutable CapabilitySpec `0467830`, and shared top-level payload
 envelopes/client validation `92ecbbd`. Local verification at this candidate
 has generated nested dashboard-interface metadata `aad39bc`, the close-to-kernel
-bridge `e2ea654`, and exact allocation-to-kernel issuance `1428a77`; local
-verification at this candidate is 1,104 root tests (1,100 pass, 0 fail, 4
-platform-conditional skips), with the exact allocation kernel tests and root
-typecheck passing. Team-server 61/61, root/team typecheck, full Node/browser
-build, and npm pack dry-run are being refreshed at this checkpoint.
+bridge `e2ea654`, exact allocation-to-kernel issuance `1428a77`, strict
+coding-realization-to-kernel issuance `ad74ea3`, canonical shared dashboard
+types `e00f7f9`, and named JSON response contracts `cfb1fc7`; local verification
+at this candidate is 1,113 root tests (1,109 pass, 0 fail, 4
+platform-conditional skips). Team-server 61/61, root/team typecheck, full
+Node/browser build, and npm pack dry-run pass at this checkpoint.
 These identities are not remote/CI evidence until the blocked push succeeds.
 
 The coding value path now has a bounded exact seam: `3871b6f` adds a
@@ -91,7 +92,8 @@ reversibility/assurance/CLI/API/GUI/docs metadata. `92ecbbd` adds shared
 top-level payload envelopes for every API method, seeded runtime validation,
 and fail-closed modern-client handling. `aad39bc` generates nested browser
 interface metadata with a source hash and makes the seeded checker consume it.
-A single generated type source plus full docs/claim/egress generation remain.
+The canonical named type source and JSON route identifiers now exist; opaque
+nested detail schemas plus full docs/claim/egress generation remain.
 
 The receipt checkpoint at `443c74d` adds a strict v2 signed body for complete
 exact-covered units, with canonical effective Money/source/correction lineage
@@ -252,19 +254,27 @@ server Overview builder consumes the same response map, and contract tests hash
 the canonical source rather than reparsing a duplicate in `api.ts`. Inline route
 responses and full documentation/claim/egress generation remain open.
 
-**Execution-order override after `e00f7f9`:** the versioned exact
+The named-response follow-on at `cfb1fc7` replaces the remaining inline JSON
+route descriptions with explicit shared interfaces for importers, discovery,
+scan setup, pricing, realization, guide, judge and proposal clearing. The
+browser write methods consume the same names; text/CSV and opaque nested
+realization/report details remain intentionally bounded. The next contract work
+is full nested detail promotion and generation of documentation, claim and
+egress bindings from this source.
+
+**Execution-order override after `cfb1fc7`:** the versioned exact
 team-rollup protocol/storage migration, bounded classic Value/API exact-coverage
 parity, refreshed-card provenance, runtime dashboard type conformance,
 period-close semantics, route generation, CapabilitySpec, and top-level payload
 contracts are complete locally, and nested interface metadata is generated and
 hash-checked. The period-close statement now crosses the kernel boundary at
 `e2ea654`, the exact-allocation bridge at `1428a77`, and the coding-realization
-bridge at `ad74ea3`, and the canonical named dashboard type source at `e00f7f9`.
-Proceed next with named inline response types and generated docs/claim/egress
-bindings, followed by unavoidable kernel issuance across the remaining
-consequential product boundaries; allocation-specific close binding,
-revised-value-claim supersession, live Postgres execution and remote publication
-remain explicit gates.
+bridge at `ad74ea3`, the canonical named dashboard type source at `e00f7f9`,
+and named JSON response contracts at `cfb1fc7`. Proceed next with opaque nested
+detail schemas and generated docs/claim/egress bindings, followed by unavoidable
+kernel issuance across the remaining consequential product boundaries;
+allocation-specific close binding, revised-value-claim supersession, live
+Postgres execution and remote publication remain explicit gates.
 
 1. **COMPLETED at `b27c0ef`:** Implement the RED robust decision module. Strict dominance is the only proof-level certificate; minimax regret and perfect-information VOI remain explicitly named rules with assumptions and cost.
 2. **COMPLETED at `5647c67`:** Implement additive transitive revocation closure. Dependent descendants are invalidated while independent siblings remain outside the closure; cycles are safe, duplicate edges fail closed, and history is not deleted.
@@ -282,8 +292,9 @@ remain explicit gates.
 14. **COMPLETED (bounded) at `e2ea654`:** Issue active finalized economic periods into the Trusted Epistemic Kernel as exact, idempotent Evidence/Claim pairs with source-event, balance and digest lineage; CLI finalize performs the issuance, and forged/reopened/conflicted states are refused. Universal issuance across the remaining product boundaries remains.
 15. **COMPLETED (bounded) at `1428a77`:** Issue persisted exact allocation runs into the Trusted Epistemic Kernel as one idempotent Evidence/Claim pair with digest-derived identity, allocated-showback semantics, exact source-event lineage and explicit complete/partial coverage. Legacy numeric allocation remains separate, and allocation-specific close binding is still open.
 16. **COMPLETED (bounded) at `ad74ea3`:** Make the canonical coding-realization save path automatically and atomically issue a digest-bound `value.realization_recorded` Evidence/Claim only for mature, current, fully realized units whose exact effective USD request attribution re-derives from the Store ledger; partial, maturing, stale, synthetic and legacy snapshots remain compatibility-only.
-17. **COMPLETED (bounded) at `e00f7f9`:** Move the named dashboard payload declarations into one no-runtime shared source, generate a hash-bound browser declaration copy plus nested runtime metadata under the publication lock, and bind the server Overview builder to the shared response map. Inline route responses and full docs/claim/egress generation remain open.
-18. **NEXT:** Name the remaining inline dashboard responses and generate docs/claim/egress bindings from the shared source, then make kernel issuance unavoidable at every remaining consequential billing, decision and control boundary; add supersession/latest-as-of semantics for revised value claims and bind exact allocation execution to close state where the control semantics are ready. Trust-anchor governance, live Postgres execution and GitHub publication remain explicit gates.
+17. **COMPLETED (bounded) at `e00f7f9`:** Move the named dashboard payload declarations into one no-runtime shared source, generate a hash-bound browser declaration copy plus nested runtime metadata under the publication lock, and bind the server Overview builder to the shared response map.
+18. **COMPLETED (bounded) at `cfb1fc7`:** Replace the remaining inline JSON route descriptions with named shared response interfaces and method-specific scan contracts; browser write methods consume the names and contract tests reject any reintroduction of inline JSON descriptions. Text/CSV and opaque nested realization/report details remain bounded.
+19. **NEXT:** Promote opaque nested dashboard detail schemas and generate docs/claim/egress bindings from the shared source, then make kernel issuance unavoidable at every remaining consequential billing, decision and control boundary; add supersession/latest-as-of semantics for revised value claims and bind exact allocation execution to close state where the control semantics are ready. Trust-anchor governance, live Postgres execution and GitHub publication remain explicit gates.
 
 ## Trusted Epistemic Kernel remaining work
 
