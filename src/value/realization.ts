@@ -37,6 +37,13 @@ import { classifyTaskType, type TaskType } from './taskType.ts';
 import { computeReturnOnIntelligence, type RoIOptions } from './lenses.ts';
 import { liftFromData, timeWithAiMinutes, type AiEvent, type DataLiftResult } from './lift.ts';
 import { economicAttributionFromAttributions, type EconomicAttribution } from '../economics/attribution.ts';
+import {
+  assessCompleteness,
+  CODING_CLEAN_COMPLETENESS_EVENT_TYPES,
+  type CompletenessWitness,
+} from '../measurement/completeness.ts';
+import { scope } from '../epistemic/scope.ts';
+import { interval } from '../epistemic/time.ts';
 
 const run = promisify(execFile);
 
@@ -146,6 +153,28 @@ export interface WorkUnit extends CommitAttribution {
    */
   dominantModelRateCard: string | null;
   funnel: FunnelOutcome;
+  /** Completeness evidence required before the negative clean predicate can pass. */
+  cleanCompleteness?: CleanCompleteness;
+}
+
+export const CLEAN_COMPLETENESS_EVENT_TYPES = CODING_CLEAN_COMPLETENESS_EVENT_TYPES;
+export type CleanCompletenessEventType = (typeof CODING_CLEAN_COMPLETENESS_EVENT_TYPES)[number];
+
+export interface CleanCompletenessWitness {
+  readonly id: string;
+  readonly sourceId: string;
+  readonly state: string;
+  readonly eventTypes: readonly string[];
+  /** JSON-safe scope constraints supplied by the completeness source. */
+  readonly scope: Readonly<Record<string, string>>;
+  readonly period: { readonly from: string; readonly to: string };
+}
+
+export interface CleanCompleteness {
+  readonly qualified: boolean;
+  readonly requiredEventTypes: readonly CleanCompletenessEventType[];
+  readonly qualifyingWitnessIds: readonly string[];
+  readonly witnesses: readonly CleanCompletenessWitness[];
 }
 
 export interface WasteBucket {
@@ -212,10 +241,48 @@ export interface RealizationOptions {
   acceptanceThreshold?: number;
   survivalThreshold?: number;
   persist?: boolean;
+  /** Supported completeness witnesses for the negative clean channels. */
+  completenessWitnesses?: readonly CompletenessWitness[];
 }
 
 function gate(g: Gate, verdict: Verdict, detail: string): GateResult {
   return { gate: g, verdict, detail };
+}
+
+function cleanCompleteness(
+  project: string,
+  commitHash: string,
+  commitTsEpochMs: number,
+  observedAtMs: number,
+  witnesses: readonly CompletenessWitness[],
+): CleanCompleteness {
+  const requiredEventTypes = [...CLEAN_COMPLETENESS_EVENT_TYPES] as CleanCompletenessEventType[];
+  const storedWitnesses = witnesses.map((witness): CleanCompletenessWitness => ({
+    id: witness.id,
+    sourceId: witness.sourceId,
+    state: witness.state,
+    eventTypes: [...witness.eventTypes],
+    scope: Object.fromEntries(witness.scope.constraints.map((constraint) => [constraint.key, constraint.value])),
+    period: { from: witness.period.from, to: witness.period.to },
+  }));
+  if (observedAtMs <= commitTsEpochMs) {
+    return { qualified: false, requiredEventTypes, qualifyingWitnessIds: [], witnesses: storedWitnesses };
+  }
+  const target = {
+    scope: scope({ project, commit: commitHash }),
+    period: interval(new Date(commitTsEpochMs).toISOString(), new Date(observedAtMs).toISOString()),
+  };
+  const assessments = requiredEventTypes.map((eventType) => assessCompleteness(
+    { eventType, ...target },
+    witnesses,
+  ));
+  const qualifyingWitnessIds = [...new Set(assessments.flatMap((assessment) => assessment.qualifyingWitnessIds))].sort();
+  return {
+    qualified: assessments.every((assessment) => assessment.qualifiesAbsenceInference),
+    requiredEventTypes,
+    qualifyingWitnessIds,
+    witnesses: storedWitnesses,
+  };
 }
 
 export async function computeRealization(
@@ -271,6 +338,7 @@ export async function computeRealization(
     // an unrelated commit look tested, merged, shipped, or clean by timing.
     const signals = store.signalsForCommit(a.hash);
     const incidentFail = signals.some((s) => s.kind === 'incident');
+    const completeness = cleanCompleteness(project, a.hash, a.tsEpochMs, now, opts.completenessWitnesses ?? []);
 
     const verdicts: Record<Gate, GateResult> = {
       proposed: gate('proposed', hadProposal ? 'pass' : 'unknown', hadProposal ? 'AI proposal captured' : 'no proposal captured'),
@@ -290,8 +358,16 @@ export async function computeRealization(
       ),
       clean: gate(
         'clean',
-        isReverted || incidentFail ? 'fail' : maturing ? 'unknown' : 'pass',
-        isReverted ? 'reverted' : incidentFail ? 'linked incident' : maturing ? 'maturing' : 'no revert/incident',
+        isReverted || incidentFail ? 'fail' : maturing ? 'unknown' : completeness.qualified ? 'pass' : 'unknown',
+        isReverted
+          ? 'reverted'
+          : incidentFail
+            ? 'linked incident'
+            : maturing
+              ? 'maturing'
+              : completeness.qualified
+                ? 'no revert/incident in completeness-covered sources'
+                : 'absence unresolved: completeness witness required for revert and incident channels',
       ),
     };
 
@@ -350,6 +426,7 @@ export async function computeRealization(
       dominantModelRateCard,
       costStale: false, // priced from the ledger as it stands right now
       funnel: scoreFunnel(verdicts),
+      cleanCompleteness: completeness,
     });
   }
 

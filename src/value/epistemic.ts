@@ -10,6 +10,12 @@ import { instant, interval } from '../epistemic/time.ts';
 import { canonicalJson } from '../epistemic/serialization.ts';
 import { canonicalEconomicAttribution, type EconomicAttribution } from '../economics/attribution.ts';
 import { GATE_LADDER, type Gate } from './gates.ts';
+import {
+  assessCompleteness,
+  completenessWitness,
+  CODING_CLEAN_COMPLETENESS_EVENT_TYPES,
+  type CompletenessWitness,
+} from '../measurement/completeness.ts';
 
 export type ValueKernelAppendResult = 'inserted' | 'duplicate';
 
@@ -41,7 +47,7 @@ const REALIZATION_ASSUMPTIONS = Object.freeze([
   'Terminal realization means every gate in the declared legacy coding contract was observed pass; it is not a causal or business-value claim.',
   'Git, signal and proposal gates are local Fiscus observations; provider authority, human approval and downstream business outcomes are not established.',
   'The retained effective amount is exact request-lineage spend on the work window, not realized economic value or settlement; a window-scoped amount is project-blind and is not commit-specific cost proof.',
-  'Completeness is bounded to the retained Fiscus observation boundary; absence of an unlinked incident is not a universal claim that no incident occurred.',
+  'A negative clean predicate is supported only by explicit supported completeness witnesses covering both commit-reverted and linked-incident channels for the unit scope and observation period; it is not a universal claim beyond those sources.',
 ]);
 
 interface ParsedUnit {
@@ -62,6 +68,12 @@ interface ParsedUnit {
   readonly funnel: {
     readonly realized: boolean;
     readonly results: ReadonlyArray<{ readonly gate: string; readonly verdict: string }>;
+  };
+  readonly cleanCompleteness?: {
+    readonly qualified: boolean;
+    readonly requiredEventTypes: ReadonlyArray<string>;
+    readonly qualifyingWitnessIds: ReadonlyArray<string>;
+    readonly witnesses: ReadonlyArray<CompletenessWitness>;
   };
   readonly economic?: unknown;
 }
@@ -104,6 +116,61 @@ function booleanFlag(value: unknown, label: string): boolean {
   return value;
 }
 
+function jsonRecord(value: unknown, label: string): Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object`);
+  return value as Record<string, unknown>;
+}
+
+function storedWitness(value: unknown, index: number): CompletenessWitness {
+  const row = jsonRecord(value, `coding realization completeness witness ${index}`);
+  const witnessScope = jsonRecord(row.scope, `coding realization completeness witness ${index} scope`);
+  const scopeValues: Record<string, string> = {};
+  for (const [key, scopeValue] of Object.entries(witnessScope)) {
+    if (typeof scopeValue !== 'string') throw new Error(`coding realization completeness witness ${index} scope value is invalid`);
+    scopeValues[key] = scopeValue;
+  }
+  const period = jsonRecord(row.period, `coding realization completeness witness ${index} period`);
+  const state = row.state;
+  if (state !== 'unknown' && state !== 'supported' && state !== 'refuted' && state !== 'conflicted') {
+    throw new Error(`coding realization completeness witness ${index} state is invalid`);
+  }
+  if (!Array.isArray(row.eventTypes)) throw new Error(`coding realization completeness witness ${index} eventTypes is invalid`);
+  if (typeof period.from !== 'string' || typeof period.to !== 'string') {
+    throw new Error(`coding realization completeness witness ${index} period is invalid`);
+  }
+  return completenessWitness({
+    id: text(row.id, `coding realization completeness witness ${index} id`),
+    sourceId: text(row.sourceId, `coding realization completeness witness ${index} sourceId`),
+    state,
+    eventTypes: row.eventTypes.map((eventType, eventIndex) => text(eventType, `coding realization completeness witness ${index} event type ${eventIndex}`)),
+    scope: scope(scopeValues),
+    period: interval(period.from, period.to),
+  });
+}
+
+function storedCleanCompleteness(value: unknown): ParsedUnit['cleanCompleteness'] {
+  if (value === undefined) return undefined;
+  const row = jsonRecord(value, 'coding realization clean completeness');
+  if (!Array.isArray(row.requiredEventTypes)
+    || row.requiredEventTypes.length !== CODING_CLEAN_COMPLETENESS_EVENT_TYPES.length
+    || row.requiredEventTypes.some((eventType, index) => eventType !== CODING_CLEAN_COMPLETENESS_EVENT_TYPES[index])) {
+    throw new Error('coding realization clean completeness required event types are invalid');
+  }
+  if (!Array.isArray(row.qualifyingWitnessIds)) throw new Error('coding realization clean completeness witness ids are invalid');
+  const qualifyingWitnessIds = row.qualifyingWitnessIds.map((id, index) => text(id, `coding realization completeness witness id ${index}`));
+  if (new Set(qualifyingWitnessIds).size !== qualifyingWitnessIds.length) {
+    throw new Error('coding realization clean completeness witness ids must be unique');
+  }
+  if (!Array.isArray(row.witnesses)) throw new Error('coding realization clean completeness witnesses are invalid');
+  const witnesses = row.witnesses.map((witness, index) => storedWitness(witness, index));
+  return {
+    qualified: booleanFlag(row.qualified, 'coding realization clean completeness qualified'),
+    requiredEventTypes: [...CODING_CLEAN_COMPLETENESS_EVENT_TYPES],
+    qualifyingWitnessIds: [...qualifyingWitnessIds].sort(),
+    witnesses,
+  };
+}
+
 function parseUnit(unitJson: string): ParsedUnit {
   if (typeof unitJson !== 'string' || unitJson.length === 0) throw new Error('coding realization unit JSON is required');
   let parsed: unknown;
@@ -143,6 +210,7 @@ function parseUnit(unitJson: string): ParsedUnit {
     reverted: booleanFlag(value.reverted, 'coding realization reverted'),
     survivalRatio: ratio(value.survivalRatio, 'coding realization survivalRatio'),
     funnel: { realized: funnelRecord.realized, results },
+    cleanCompleteness: storedCleanCompleteness(value.cleanCompleteness),
     economic: value.economic,
   };
 }
@@ -156,9 +224,30 @@ function allGatesPass(unit: ParsedUnit): boolean {
   return unit.funnel.results.every((result, index) => result.gate === GATE_LADDER[index] && result.verdict === 'pass');
 }
 
+function hasQualifyingCleanCompleteness(unit: ParsedUnit, project: string, computedAtMs: number): boolean {
+  const clean = unit.cleanCompleteness;
+  if (clean === undefined || !clean.qualified) return false;
+  const target = {
+    scope: scope({ project, commit: unit.hash }),
+    period: interval(new Date(unit.tsEpochMs).toISOString(), new Date(computedAtMs).toISOString()),
+  };
+  const assessments = CODING_CLEAN_COMPLETENESS_EVENT_TYPES.map((eventType) => assessCompleteness(
+    { eventType, ...target },
+    clean.witnesses,
+  ));
+  if (!assessments.every((assessment) => assessment.qualifiesAbsenceInference)) {
+    throw new Error('coding realization kernel issuance requires completeness witnesses for revert and incident channels');
+  }
+  const expectedIds = [...new Set(assessments.flatMap((assessment) => assessment.qualifyingWitnessIds))].sort();
+  if (canonicalJson(expectedIds) !== canonicalJson(clean.qualifyingWitnessIds)) {
+    throw new Error('coding realization clean completeness witness identity is inconsistent');
+  }
+  return true;
+}
+
 function validated(input: CodingRealizationKernelInput): { unit: ParsedUnit; economic: EconomicAttribution; validTime: ReturnType<typeof interval>; computed: ReturnType<typeof instant> } {
   const commitHash = text(input.commitHash, 'coding realization commitHash');
-  text(input.project, 'coding realization project');
+  const project = text(input.project, 'coding realization project');
   const recorded = safeMs(input.computedAtMs, 'coding realization computedAtMs');
   if (input.maturing) throw new Error('coding realization kernel issuance requires a mature unit');
   if (!input.realized) throw new Error('coding realization kernel issuance requires a realized unit');
@@ -172,6 +261,9 @@ function validated(input: CodingRealizationKernelInput): { unit: ParsedUnit; eco
   if (unit.maturing || unit.costStale) throw new Error('coding realization kernel issuance requires a current mature unit');
   if (unit.reverted) throw new Error('coding realization kernel issuance refuses a reverted unit');
   if (!allGatesPass(unit)) throw new Error('every legacy realization gate must be pass before kernel issuance');
+  if (!hasQualifyingCleanCompleteness(unit, project, recorded)) {
+    throw new Error('coding realization kernel issuance requires qualifying completeness witnesses for the clean gate');
+  }
   if (unit.acceptance === null) throw new Error('coding realization kernel issuance requires an observed acceptance value');
   const economic = canonicalEconomicAttribution(unit.economic);
   if (!economic.complete || economic.unresolvedRequests !== 0) throw new Error('coding realization kernel issuance requires complete exact economic coverage');
@@ -209,6 +301,7 @@ export function codingRealizationKernelEligible(input: CodingRealizationKernelIn
   }
   const unit = parseUnit(input.unitJson);
   if (unit.economic === undefined) return false;
+  if (!hasQualifyingCleanCompleteness(unit, text(input.project, 'coding realization project'), safeMs(input.computedAtMs, 'coding realization computedAtMs'))) return false;
   const economic = canonicalEconomicAttribution(unit.economic);
   return economic.complete && economic.unresolvedRequests === 0;
 }
@@ -236,6 +329,7 @@ export function buildCodingRealizationKernelIssuance(input: CodingRealizationKer
     acceptance: unit.acceptance,
     realized: true,
     gates: GATE_LADDER.map((gate) => ({ gate, verdict: 'pass' as const })),
+    cleanCompleteness: unit.cleanCompleteness,
     economic,
   };
   const realizationDigest = digestPayload(corePayload);
@@ -259,7 +353,7 @@ export function buildCodingRealizationKernelIssuance(input: CodingRealizationKer
     completeness: {
       status: 'complete',
       method: 'coding_realization_funnel',
-      coveredEventTypes: ['git_commit', 'proposal_capture', 'gate_signal', 'revert_scan', 'economic_request'],
+      coveredEventTypes: ['git_commit', 'proposal_capture', 'gate_signal', 'commit_reverted', 'linked_incident', 'economic_request'],
       coveredScope: scopeValue,
       coveredTime: validTime,
     },

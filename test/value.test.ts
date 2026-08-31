@@ -25,6 +25,9 @@ import { recommendBudget } from '../src/budget/recommend.ts';
 import { computeUsageRoI } from '../src/value/usage.ts';
 import type { WorkUnit } from '../src/value/realization.ts';
 import { projectName, resolveCommit } from '../src/git/correlate.ts';
+import { completenessWitness } from '../src/measurement/completeness.ts';
+import { scope } from '../src/epistemic/scope.ts';
+import { interval } from '../src/epistemic/time.ts';
 
 function vr(map: Partial<Record<Gate, Verdict>>): Record<Gate, GateResult> {
   const out = {} as Record<Gate, GateResult>;
@@ -993,11 +996,30 @@ test('realization: complete lifecycle evidence + survival → REALIZED; churned 
     store.insertSignal({ signalId: 's2', kind: 'shipped', commitHash: hashA, project, tsEpochMs: Date.now(), verdict: 'pass', detail: null });
     store.insertSignal({ signalId: 's3', kind: 'merged', commitHash: hashA, project, tsEpochMs: Date.now(), verdict: 'pass', detail: null });
 
+    const cleanCompleteness = [
+      completenessWitness({
+        id: 'realization-test-incident-source',
+        sourceId: 'incident-feed',
+        state: 'supported',
+        eventTypes: ['linked_incident'],
+        scope: scope({ project }),
+        period: interval('2025-01-01T00:00:00.000Z', '2027-01-01T00:00:00.000Z'),
+      }),
+      completenessWitness({
+        id: 'realization-test-revert-scan',
+        sourceId: 'git-history',
+        state: 'supported',
+        eventTypes: ['commit_reverted'],
+        scope: scope({ project }),
+        period: interval('2025-01-01T00:00:00.000Z', '2027-01-01T00:00:00.000Z'),
+      }),
+    ];
+
     // Commit B then C: C rewrites 3 of B's 4 lines → B survival 0.25 < 0.5 → dies at survived.
     commit(dir, 'churn.txt', 'c1\nc2\nc3\nc4\n', 'feat: churn base', '2026-01-03T10:00:00+00:00');
     commit(dir, 'churn.txt', 'c1\nx2\nx3\nx4\n', 'fix: rewrite three', '2026-01-04T10:00:00+00:00');
 
-    const report = await computeRealization(store, dir, { limit: 10, windowDays: 14 });
+    const report = await computeRealization(store, dir, { limit: 10, windowDays: 14, completenessWitnesses: cleanCompleteness });
 
     const a = report.units.find((u) => u.subject === 'feat: ten')!;
     assert.ok(a, 'commit A present');

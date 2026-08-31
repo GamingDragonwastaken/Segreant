@@ -22,6 +22,30 @@ const ECONOMIC = economicAttributionView({
   unresolvedRequests: 0,
 });
 
+const CLEAN_COMPLETENESS = {
+  qualified: true,
+  requiredEventTypes: ['commit_reverted', 'linked_incident'],
+  qualifyingWitnessIds: ['complete-incident-source', 'complete-revert-scan'],
+  witnesses: [
+    {
+      id: 'complete-incident-source',
+      sourceId: 'incident-feed',
+      state: 'supported',
+      eventTypes: ['linked_incident'],
+      scope: { project: 'fiscus' },
+      period: { from: '1970-01-01T00:00:00.000Z', to: '1970-01-02T00:00:00.000Z' },
+    },
+    {
+      id: 'complete-revert-scan',
+      sourceId: 'git-history',
+      state: 'supported',
+      eventTypes: ['commit_reverted'],
+      scope: { project: 'fiscus' },
+      period: { from: '1970-01-01T00:00:00.000Z', to: '1970-01-02T00:00:00.000Z' },
+    },
+  ],
+} as const;
+
 function input(overrides: Partial<CodingRealizationKernelInput> = {}): CodingRealizationKernelInput {
   const unit = {
     hash: 'a'.repeat(40),
@@ -39,6 +63,7 @@ function input(overrides: Partial<CodingRealizationKernelInput> = {}): CodingRea
     reverted: false,
     survivalRatio: 1,
     funnel: scoreFunnel(ALL_PASS),
+    cleanCompleteness: CLEAN_COMPLETENESS,
     economic: ECONOMIC,
   };
   return {
@@ -104,6 +129,20 @@ test('coding realization kernel refuses unresolved or contradictory lifecycle in
   assert.throws(() => buildCodingRealizationKernelIssuance(input({ commitHash: 'b'.repeat(40) })), /hash does not match/);
   const stale = { ...base, costStale: true };
   assert.throws(() => buildCodingRealizationKernelIssuance(input({ unitJson: JSON.stringify(stale) })), /current mature/);
+  const withoutCompleteness = { ...base };
+  delete withoutCompleteness.cleanCompleteness;
+  assert.throws(
+    () => buildCodingRealizationKernelIssuance(input({ unitJson: JSON.stringify(withoutCompleteness) })),
+    /qualifying completeness witnesses/,
+  );
+  const forgedCompleteness = {
+    ...base,
+    cleanCompleteness: { ...CLEAN_COMPLETENESS, qualifyingWitnessIds: [] },
+  };
+  assert.throws(
+    () => buildCodingRealizationKernelIssuance(input({ unitJson: JSON.stringify(forgedCompleteness) })),
+    /witness identity is inconsistent/,
+  );
 });
 
 test('Store canonical realization persistence issues the value Claim once and replays idempotently', () => {

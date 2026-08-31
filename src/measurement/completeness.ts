@@ -35,6 +35,10 @@ export interface CompletenessAssessment {
   readonly qualifyingWitnessIds: readonly string[];
 }
 
+/** Negative event channels that must both be covered before coding `clean` can pass. */
+export const CODING_CLEAN_COMPLETENESS_EVENT_TYPES = ['commit_reverted', 'linked_incident'] as const;
+export type CodingCleanCompletenessEventType = (typeof CODING_CLEAN_COMPLETENESS_EVENT_TYPES)[number];
+
 function nonEmpty(value: string, label: string): string {
   const normalized = value.trim();
   if (normalized.length === 0) throw new Error(`${label} must be non-empty`);

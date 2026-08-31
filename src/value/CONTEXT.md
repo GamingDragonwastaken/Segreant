@@ -70,6 +70,14 @@
   value, provider billing or settlement; window-scoped spend is explicitly
   project-blind.
 
+- The coding `clean` gate is open-world: a mature unit with no observed revert or
+  incident is still `unknown` unless supported `CompletenessWitness` records cover
+  both `commit_reverted` and `linked_incident` for the commit scope and the full
+  observation interval. Direct revert/incident evidence remains `fail` regardless
+  of witness coverage. The completeness metadata travels with the WorkUnit and is
+  revalidated before a kernel Evidence/Claim is issued; an asserted `qualified`
+  flag or witness identity cannot substitute for the canonical coverage check.
+
 ## Invariants
 
 - **`realizedValueUsd` is two different claims and they never merge.**
