@@ -3,8 +3,8 @@
 Executor: Codex GPT-5.6 Sol (lead implementation engineer/verifier)
 Branch: `gpt56/magnum-opus-reconstruction`
 Remote head at the start of this dossier round: `fce3df1451be7fc6910699639bd929637a6eed44`
-Current local/remote head: `66320e4f81b9b2ad492ec117f4ada9b864180e5c`
-Active packet: WP-A05 (A01–A04 checkpointed)
+Current local/remote head: `31911cb3743f7062cfbec22fff003f61793d012a`
+Active packet: WP-A06 (A01–A05 checkpointed)
 Status: READY
 
 Mission:
@@ -30,12 +30,16 @@ Completed packets in this execution round:
   proxy ingress/upstream/judge/cost responses, SSE usage/proposals, intrinsic
   proposal extraction/storage, native imports/transcripts, team-server rollups,
   canonical serialization, and publication concurrency. Commit `66320e4`.
+- WP-A05 — one exact provider/model attribution authority, correction-safe
+  ranking, exact purity/share, provider identity and compatibility-only legacy
+  fallback. Commit `7678b7b`; CI portability fix `31911cb`.
 
-Last verified commands for `66320e4`:
+Last verified commands for `7678b7b` / `31911cb`:
 
-- `npm.cmd test` -> 1,142 total; 1,138 pass / 0 fail / 4 Windows platform
-  conditional skips (duration ~371 seconds).
-- `npm.cmd exec -- tsx --test team-server/test/*.test.ts` -> 62 pass / 0 fail.
+- `npm.cmd test` -> 1,146 total; 1,142 pass / 0 fail / 4 Windows platform
+  conditional skips (A05 full-suite run).
+- `npm.cmd exec -- tsx --test team-server/test/server.test.ts` -> 26 pass / 0 fail;
+  team-server typecheck -> pass.
 - `npm.cmd run typecheck` -> pass.
 - `npm.cmd exec -- tsc --noEmit -p src/dashboard/web/app/tsconfig.json` -> pass.
 - Focused A04 proxy/judge/transcript/import/proposal/serialization suites -> pass.
@@ -43,13 +47,16 @@ Last verified commands for `66320e4`:
 - `npm.cmd pack --dry-run --ignore-scripts` -> pass (213 files; ~940 KB package).
 - `git diff --cached --check` -> clean before commit.
 - `git fetch origin gpt56/magnum-opus-reconstruction` -> local and remote exact
-  identity at `66320e4`; zero branch divergence.
+  identity at `31911cb`; zero branch divergence.
 
 Remote verification:
 
-- GitHub Actions run `33432485480` for exact head `66320e4` was queued at the
-  checkpoint. It must be re-read before treating the remote gate as green.
-- The preceding exact-head run `33424828051` for `bd405d1` was successful.
+- GitHub Actions run `33433809771` for exact code head `7678b7b` was queued when
+  the A05 code was pushed; its team-server typecheck failure was diagnosed as
+  TS1294 in the new parameter property.
+- The corrective code head `31911cb` has a new CI run that must be re-read before
+  treating the remote gate as green. Runs `33424828051` and `33423985725` remain
+  successful historical checkpoints for A03/A02.
 
 Known residuals (not silently closed by A04):
 
@@ -59,14 +66,13 @@ Known residuals (not silently closed by A04):
 - The A04 proxy path deliberately drains an oversized request after rejecting
   it for connection hygiene; this bounds retained memory, not attacker
   bandwidth. A future operator policy may choose connection destruction.
-- Repository-wide P0/P1 findings, exact model attribution (A05), joint causal
-  error control (A06), remaining value semantics, contract/security/UX and
+- Repository-wide P0/P1 findings, joint causal error control (A06), remaining
+  value semantics, contract/security/UX and
   standards packets remain open until their own evidence gates pass.
 
 Next exact action:
 
-- Implement WP-A05 exact model authority: derive dominant provider/model and
-  model spend/share/basis from the exact effective economic read model, add the
-  RED regression where legacy numeric ordering disagrees, preserve an explicit
-  compatibility fallback only for genuinely unresolved legacy windows, and
-  verify before publishing the next checkpoint.
+- Implement WP-A06 joint cost/quality causal error control: audit the estimator
+  and its simultaneous decision rule, add RED tests for the cost/quality
+  conjunction and adverse-selection/multiplicity boundaries, then verify before
+  publishing the next checkpoint.

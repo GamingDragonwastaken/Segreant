@@ -307,3 +307,30 @@ This checkpoint does not claim the full program is complete. AII-031 is
 kernel issuance, exact model authority, causal correction, remaining value and
 control semantics, supply-chain/UX/standards work, and all external gates remain
 explicit. The next dependency-ordered packet is WP-A05 exact model attribution.
+
+## Dossier III WP-A05 checkpoint — exact model authority (2026-08-31)
+
+- [x] `canonicalModelAttribution()` (`7678b7b`) now ranks provider/model groups
+  from one effective request-row snapshot. Exact effective `Money` is compared
+  before numeric projection; exact purity uses integer-coefficient ratios;
+  deterministic provider/model tie-breaking and safe numeric-edge disclosure
+  are explicit.
+- [x] Partial exact/legacy windows have no dominant winner, while wholly legacy
+  windows retain only display labels with null cost/share. This keeps compatibility
+  data visible but prevents it from entering high-assurance frontier/model-trial
+  comparisons.
+- [x] Live realization and transactional reprice-sync consume the same authority;
+  provider identity is carried through WorkUnits/frontier cells and same-named
+  models from different providers remain separate comparison identities.
+- [x] Adversarial tests cover correction-changing winner semantics, partial
+  coverage, equal exact ties, huge exact amounts, provider collisions and legacy
+  repricing. Local root suite at this packet: 1,146 total, 1,142 pass, 0 fail,
+  4 Windows platform skips; team-server 26 focused tests pass; root/browser/team
+  typechecks and build pass.
+- [x] Published code tip `31911cb` includes the CI portability repair for the
+  typed team-server resource-limit error; local/remote identity was verified.
+
+Remote CI for `31911cb` is the outstanding external exact-SHA gate and must be
+read before declaring this packet remotely green. The next implementation packet
+is WP-A06 joint cost/quality causal error control; A01–A05 remain preserved in the
+history and can be independently reviewed on GitHub.
