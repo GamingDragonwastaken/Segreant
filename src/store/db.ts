@@ -1294,7 +1294,7 @@ export class Store {
   }
 
   /**
-   * The pricing lineage behind ONE model's spend in a window: which cost bases
+   * The pricing lineage behind ONE provider/model's spend in a window: which cost bases
    * priced it, and which rate-card revisions produced those amounts.
    *
    * Model-vs-model comparison is a claim about price, so it can only mean
@@ -1302,21 +1302,28 @@ export class Store {
    * pooling `local_list_price` rows with `fallback_estimate` guesses, or spanning
    * a rate-card refresh, is comparing eras and methods as much as models. Returns
    * distinct sorted values so the caller can collapse them to "one" or "mixed"
-   * without re-deriving the rule.
+   * without re-deriving the rule. The provider is optional for compatibility
+   * with older display callers, but exact WorkUnit attribution always supplies
+   * it so same-named models from different providers cannot be merged.
    */
   modelPricingBasis(
     startMs: number,
     endMs: number,
     model: string,
     project?: string,
+    provider?: string,
   ): { costBases: string[]; rateCardShas: string[] } {
     const fam = project !== undefined ? this.familyFilter('project', project) : null;
-    const args: Array<number | string> = fam ? [startMs, endMs, model, ...fam.args] : [startMs, endMs, model];
+    const args: Array<number | string> = [startMs, endMs, model];
+    if (provider !== undefined) args.push(provider);
+    if (fam) args.push(...fam.args);
     const rows = this.db
       .prepare(
         `SELECT DISTINCT cost_basis AS costBasis, rate_card_sha256 AS rateCardSha256
          FROM requests
-         WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ? AND model = ?` + (fam ? ` AND ${fam.sql}` : ``),
+         WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ? AND model = ?` +
+          (provider !== undefined ? ` AND provider = ?` : ``) +
+          (fam ? ` AND ${fam.sql}` : ``),
       )
       .all(...args) as Array<{ costBasis: string; rateCardSha256: string | null }>;
     const bases = new Set<string>();

@@ -784,6 +784,7 @@ export interface RealizationUnitPayload {
   hadProposal: boolean;
   acceptance: number | null;
   taskType: string;
+  dominantProvider?: string | null;
   dominantModel: string | null;
   dominantModelCostUsd: number | null;
   dominantModelCostShare: number | null;

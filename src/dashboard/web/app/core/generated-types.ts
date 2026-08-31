@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: 0d7b4e7856582633355698683f4e408483f3259add2fb7a1be7af5992156322e */
+/** Source SHA-256: cd8e10c9327fc86323ee14e183508d3f28129f68154b303defadda77f25183ab */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -786,6 +786,7 @@ export interface RealizationUnitPayload {
   hadProposal: boolean;
   acceptance: number | null;
   taskType: string;
+  dominantProvider?: string | null;
   dominantModel: string | null;
   dominantModelCostUsd: number | null;
   dominantModelCostShare: number | null;

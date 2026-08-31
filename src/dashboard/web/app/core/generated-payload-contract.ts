@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "0d7b4e7856582633355698683f4e408483f3259add2fb7a1be7af5992156322e";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "cd8e10c9327fc86323ee14e183508d3f28129f68154b303defadda77f25183ab";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -1854,6 +1854,11 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "taskType",
       "optional": false,
       "type": "string"
+    },
+    {
+      "name": "dominantProvider",
+      "optional": true,
+      "type": "string | null"
     },
     {
       "name": "dominantModel",

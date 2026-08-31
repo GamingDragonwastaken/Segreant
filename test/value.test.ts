@@ -491,6 +491,18 @@ test('frontier: recommends routing a task-type to the model that returns more pe
   assert.equal(trial!.unitsExcludedUnknownAttribution, 0);
 });
 
+test('frontier: same model names from different providers remain separate comparison identities', () => {
+  const anthropic = Array.from({ length: 3 }, () => ({ ...wu('feature', 'same-model', true, 4), dominantProvider: 'anthropic' }));
+  const openai = Array.from({ length: 3 }, () => ({ ...wu('feature', 'same-model', true, 1), dominantProvider: 'openai' }));
+  const report = computeFrontier([...anthropic, ...openai]);
+  assert.equal(report.byModel.length, 2);
+  assert.equal(report.byModelAndTask.filter((cell) => cell.model === 'same-model').length, 2);
+  assert.equal(report.modelSwitches.length, 1, 'provider/model pairs, not display-name collisions, are compared');
+  const trial = report.modelSwitches[0]!;
+  assert.equal(trial.candidateProvider, 'openai');
+  assert.equal(trial.incumbentProvider, 'anthropic');
+});
+
 // ---- Cheaper-model trial: the refusals ----
 // The advisor's whole premise is restraint, so each gate needs a test that it
 // actually WITHHOLDS. A happy-path test alone cannot distinguish a working gate

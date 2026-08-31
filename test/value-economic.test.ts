@@ -18,6 +18,7 @@ import { money } from '../src/economics/money.ts';
 import { economicEvent } from '../src/economics/events.ts';
 import { instant } from '../src/epistemic/time.ts';
 import { requestEconomicEventId } from '../src/economics/request.ts';
+import { canonicalModelAttribution, type EffectiveRequestRow } from '../src/store/economicReadModel.ts';
 
 function git(cwd: string, args: string[], env: Record<string, string> = {}): void {
   execFileSync('git', args, { cwd, env: { ...process.env, ...env }, stdio: 'ignore' });
@@ -289,6 +290,76 @@ test('model-grouped effective reads keep provider/model identity and exact own-s
   } finally {
     store.close();
   }
+});
+
+function modelRow(
+  id: string,
+  provider: string,
+  model: string,
+  exactAmount: string | null,
+  compatibilityCostUsd: number,
+): EffectiveRequestRow {
+  return {
+    requestId: id,
+    tsEpochMs: Date.parse('2026-06-01T10:30:00Z'),
+    sessionId: null,
+    provider,
+    model,
+    project: 'fiscus',
+    projectCanonical: 'fiscus',
+    source: 'proxy',
+    user: null,
+    via: 'proxy',
+    compatibilityCostUsd,
+    effectiveAmount: exactAmount === null ? null : money(exactAmount, 'USD', 'effective'),
+    sourceBases: exactAmount === null ? [] : ['list'],
+    sourceEventIds: exactAmount === null ? [] : [`economic:request:${id}:charge`],
+    unresolvedReason: exactAmount === null ? 'no_exact_economic_event' : null,
+  };
+}
+
+test('canonical model attribution lets corrected exact Money choose the winner and computes exact purity', () => {
+  // Legacy numeric grouping says A is more expensive (100 > 1), while the
+  // corrected effective ledger says B is the dominant model (20 > 10). The
+  // canonical projection must follow the latter, not decorate the old winner.
+  const result = canonicalModelAttribution([
+    modelRow('a', 'anthropic', 'model-a', '10', 100),
+    modelRow('b', 'openai', 'model-b', '20', 1),
+  ]);
+  assert.equal(result.coverage, 'exact');
+  assert.equal(result.dominant?.provider, 'openai');
+  assert.equal(result.dominant?.model, 'model-b');
+  assert.equal(result.dominant?.economic.amountText, '20');
+  assert.equal(result.dominantShare, 2 / 3);
+});
+
+test('canonical model attribution with partial coverage has no exact winner, while huge exact amounts remain rankable', () => {
+  const partial = canonicalModelAttribution([
+    modelRow('a', 'anthropic', 'model-a', '10', 100),
+    modelRow('legacy', 'openai', 'model-b', null, 1),
+  ]);
+  assert.equal(partial.coverage, 'partial');
+  assert.equal(partial.dominant, null);
+  assert.equal(partial.dominantShare, null);
+
+  const huge = canonicalModelAttribution([
+    modelRow('huge', 'openai', 'model-huge', '1' + '0'.repeat(200), 0),
+    modelRow('small', 'anthropic', 'model-small', '9', 999),
+  ]);
+  assert.equal(huge.coverage, 'exact');
+  assert.equal(huge.dominant?.model, 'model-huge');
+  assert.equal(huge.dominantShare, 1);
+  assert.equal(huge.dominantCostUsd, null, 'unrepresentable exact dollars stay unknown at the numeric edge');
+});
+
+test('canonical model attribution ties exact totals deterministically by provider then model', () => {
+  const result = canonicalModelAttribution([
+    modelRow('z', 'openai', 'z-model', '5', 5),
+    modelRow('a', 'anthropic', 'a-model', '5', 1),
+  ]);
+  assert.equal(result.dominant?.provider, 'anthropic');
+  assert.equal(result.dominant?.model, 'a-model');
+  assert.equal(result.dominantShare, 0.5);
 });
 
 test('daily effective series preserves per-bucket exact coverage for budget advice', () => {

@@ -17,6 +17,8 @@ import { economicAttributionFromAttributions, economicAttributionNumber, type Ec
 
 export interface FrontierCell {
   key: string;
+  /** Provider paired with `model`; null means a legacy/unattributed snapshot. */
+  provider?: string | null;
   model: string | null;
   taskType: string | null;
   units: number;
@@ -46,6 +48,8 @@ export interface FrontierCell {
  */
 export interface ModelSwitchRecommendation {
   taskType: string;
+  incumbentProvider?: string | null;
+  candidateProvider?: string | null;
   incumbentModel: string;
   candidateModel: string;
   incumbentUnits: number;
@@ -141,6 +145,8 @@ export interface FrontierReport {
 
 function makeCell(key: string, model: string | null, taskType: string | null, units: WorkUnit[]): FrontierCell {
   const realized = units.filter((u) => u.funnel.realized);
+  const providers = new Set(units.map((u) => u.dominantProvider ?? null));
+  const provider = providers.size === 1 ? [...providers][0] ?? null : null;
   const costUsd = units.reduce((s, u) => s + economicAttributionNumber(u.economic, u.attributedCostUsd), 0);
   const realizedValueUsd = realized.reduce((s, u) => s + economicAttributionNumber(u.economic, u.attributedCostUsd), 0);
   // Net of rework: discount each realized unit's value by its first-pass acceptance
@@ -166,6 +172,7 @@ function makeCell(key: string, model: string | null, taskType: string | null, un
       };
   return {
     key,
+    provider,
     model,
     taskType,
     units: units.length,
@@ -179,6 +186,19 @@ function makeCell(key: string, model: string | null, taskType: string | null, un
     impact: roi.lenses.impact.value,
     economic,
   };
+}
+
+/** Provider/model identity used for every consequential frontier comparison. */
+function modelIdentity(u: WorkUnit): string {
+  if (u.dominantModel === null) return 'unattributed';
+  return `${u.dominantProvider ?? ''}\u0000${u.dominantModel}`;
+}
+
+function modelIdentityParts(identity: string): { provider: string | null; model: string | null } {
+  if (identity === 'unattributed') return { provider: null, model: null };
+  const separator = identity.indexOf('\u0000');
+  if (separator < 0) return { provider: null, model: identity };
+  return { provider: identity.slice(0, separator) || null, model: identity.slice(separator + 1) || null };
 }
 
 function groupBy<K>(units: WorkUnit[], keyFn: (u: WorkUnit) => K): Map<K, WorkUnit[]> {
@@ -196,8 +216,9 @@ export function computeFrontier(units: WorkUnit[]): FrontierReport {
   const mature = units.filter((u) => !u.maturing);
 
   const byModel: FrontierCell[] = [];
-  for (const [model, us] of groupBy(mature, (u) => u.dominantModel ?? 'unattributed')) {
-    byModel.push(makeCell(model, model, null, us));
+  for (const [identity, us] of groupBy(mature, modelIdentity)) {
+    const parts = modelIdentityParts(identity);
+    byModel.push(makeCell(parts.provider ? `${parts.provider} · ${parts.model}` : (parts.model ?? 'unattributed'), parts.model, null, us));
   }
   byModel.sort(byRoiDesc);
 
@@ -209,8 +230,9 @@ export function computeFrontier(units: WorkUnit[]): FrontierReport {
 
   const byModelAndTask: FrontierCell[] = [];
   for (const [tt, tus] of groupBy(mature, (u) => u.taskType)) {
-    for (const [model, us] of groupBy(tus, (u) => u.dominantModel ?? 'unattributed')) {
-      byModelAndTask.push(makeCell(`${tt} · ${model}`, model, tt, us));
+    for (const [identity, us] of groupBy(tus, modelIdentity)) {
+      const parts = modelIdentityParts(identity);
+      byModelAndTask.push(makeCell(`${tt} · ${parts.provider ? `${parts.provider} · ` : ''}${parts.model ?? 'unattributed'}`, parts.model, tt, us));
     }
   }
   byModelAndTask.sort(byRoiDesc);
@@ -266,6 +288,8 @@ function isPriceable(u: WorkUnit): boolean {
 
 /** A model-vs-model cell priced by the model's OWN spend, not the window total. */
 interface SwitchCell {
+  identity: string;
+  provider: string | null;
   model: string;
   units: number;
   /** Realized-outcome count — kept as a raw count so the interval math never round-trips through a rate. */
@@ -345,12 +369,16 @@ function lineageValues(units: WorkUnit[], pick: (u: WorkUnit) => string | null):
   return [...out].sort();
 }
 
-function makeSwitchCell(model: string, units: WorkUnit[]): SwitchCell {
+function makeSwitchCell(identity: string, units: WorkUnit[]): SwitchCell {
+  const parts = modelIdentityParts(identity);
+  const model = parts.model ?? 'unattributed';
   const modelCostUsd = units.reduce((s, u) => s + economicAttributionNumber(u.dominantModelEconomic, u.dominantModelCostUsd ?? 0), 0);
   const realized = units.filter((u) => u.funnel.realized).length;
   const times = units.map((u) => u.tsEpochMs);
   const totalLines = units.reduce((s, u) => s + u.linesAdded + u.linesDeleted, 0);
   return {
+    identity,
+    provider: parts.provider,
     model,
     units: units.length,
     realized,
@@ -405,7 +433,7 @@ function buildModelSwitchRecommendations(mature: WorkUnit[]): ModelSwitchRecomme
   const eligibleComparisons = Math.max(
     1,
     taskGroups.reduce((total, [, units]) => {
-      const models = new Set(units.filter(isPriceable).map((u) => u.dominantModel ?? 'unattributed'));
+      const models = new Set(units.filter(isPriceable).map(modelIdentity));
       models.delete('unattributed');
       return total + (models.size >= 2 ? models.size - 1 : 0);
     }, 0),
@@ -429,8 +457,8 @@ function buildModelSwitchRecommendations(mature: WorkUnit[]): ModelSwitchRecomme
     );
     const attributable = priced.filter(isPriceable);
 
-    const cells = [...groupBy(attributable, (u) => u.dominantModel ?? 'unattributed')]
-      .map(([model, grouped]) => makeSwitchCell(model, grouped))
+    const cells = [...groupBy(attributable, modelIdentity)]
+      .map(([identity, grouped]) => makeSwitchCell(identity, grouped))
       .filter((cell) => cell.units >= minUnits && cell.model !== 'unattributed' && cell.costPerUnit > 0);
     if (cells.length < 2) continue;
 
@@ -438,7 +466,7 @@ function buildModelSwitchRecommendations(mature: WorkUnit[]): ModelSwitchRecomme
     const candidate = cells
       .filter(
         (cell) =>
-          cell.model !== incumbent.model &&
+          cell.identity !== incumbent.identity &&
           cell.costPerUnit < incumbent.costPerUnit &&
           cell.realizationRate >= incumbent.realizationRate,
       )
@@ -568,6 +596,8 @@ function buildModelSwitchRecommendations(mature: WorkUnit[]): ModelSwitchRecomme
 
     recs.push({
       taskType,
+      incumbentProvider: incumbent.provider,
+      candidateProvider: candidate.provider,
       incumbentModel: incumbent.model!,
       candidateModel: candidate.model!,
       incumbentUnits: incumbent.units,

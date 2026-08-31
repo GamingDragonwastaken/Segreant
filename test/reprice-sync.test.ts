@@ -111,8 +111,8 @@ test('reprice: a snapshot whose window was repriced is re-attributed, not left o
   // Per-model attribution is re-derived too, or the model trial would keep
   // comparing prices that no longer exist.
   const unit = rep.units[0]!;
-  assert.ok(Math.abs(unit.dominantModelCostUsd! - expected) < 1e-9);
-  assert.equal(unit.dominantModelCostShare, 1);
+  assert.equal(unit.dominantModelCostUsd, null, 'legacy numeric repricing is not an exact model-cost authority');
+  assert.equal(unit.dominantModelCostShare, null, 'unknown exact coverage cannot claim model purity');
   assert.ok(Math.abs(unit.costPerHundredLines! - (expected / 100) * 100) < 1e-9);
   store.close();
 });

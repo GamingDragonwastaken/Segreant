@@ -10,7 +10,7 @@
 
 import type { RequestRow } from './db.ts';
 import type { EconomicLedger } from '../economics/ledger.ts';
-import type { EconomicBasis, Money } from '../economics/money.ts';
+import { compareMoney, moneyFromJson, type EconomicBasis, type Money } from '../economics/money.ts';
 import { economicAttributionFromRows, economicAttributionNumber, type EconomicAttribution } from '../economics/attribution.ts';
 import { economicEventRole, type EconomicEventKind } from '../economics/events.ts';
 import { requestEconomicEventId } from '../economics/request.ts';
@@ -59,6 +59,26 @@ export interface EconomicModelUnit {
   costUsd: number;
   requests: number;
   economic: EconomicAttribution;
+}
+
+export type EconomicModelCoverage = 'exact' | 'partial' | 'legacy_unknown';
+
+/**
+ * The one authority used when a consequential consumer needs to name a
+ * dominant provider/model. `groups` remains useful for descriptive displays,
+ * but `dominant` is populated only when every request in the window has an
+ * exact effective charge. A partial window therefore cannot combine corrected
+ * exact dollars with legacy compatibility dollars to manufacture a winner.
+ */
+export interface CanonicalModelAttribution {
+  groups: EconomicModelUnit[];
+  coverage: EconomicModelCoverage;
+  total: EconomicAttribution;
+  dominant: EconomicModelUnit | null;
+  /** Exact dominant/total ratio, projected to a bounded UI number only at the edge. */
+  dominantShare: number | null;
+  /** Finite compatibility projection, or null when exact dollars exceed safe numeric magnitude. */
+  dominantCostUsd: number | null;
 }
 
 export interface EconomicSeriesPoint {
@@ -222,6 +242,61 @@ export function groupEconomicModels(rows: readonly EffectiveRequestRow[]): Econo
       });
     })
     .sort((a, b) => b.costUsd - a.costUsd || a.provider.localeCompare(b.provider) || a.model.localeCompare(b.model));
+}
+
+function exactRatio(numerator: Money, denominator: Money): number | null {
+  if (numerator.currency !== denominator.currency || numerator.basis !== denominator.basis || denominator.coefficient <= 0n) return null;
+  const scale = Math.max(numerator.scale, denominator.scale);
+  const n = numerator.coefficient * (10n ** BigInt(scale - numerator.scale));
+  const d = denominator.coefficient * (10n ** BigInt(scale - denominator.scale));
+  if (n <= 0n) return 0;
+  if (n >= d) return 1;
+  // Keep the division exact until the final UI-compatible projection. The
+  // scaled quotient is <= 1e18, so Number conversion cannot overflow even when
+  // the original exact amounts have thousands of decimal digits.
+  const scaled = (n * 1_000_000_000_000_000_000n) / d;
+  const ratio = Number(scaled) / 1_000_000_000_000_000_000;
+  return Number.isFinite(ratio) ? Math.min(1, Math.max(0, ratio)) : null;
+}
+
+function boundedNumericAmount(value: EconomicAttribution): number | null {
+  const projected = Number(value.amountText);
+  return Number.isFinite(projected) && Math.abs(projected) <= Number.MAX_SAFE_INTEGER ? projected : null;
+}
+
+/**
+ * Rank provider/model groups from one effective request-row snapshot. Exact
+ * Money is compared before any numeric compatibility projection; deterministic
+ * provider/model ordering resolves exact ties. Partial/legacy windows expose
+ * their groups and coverage but deliberately have no dominant winner.
+ */
+export function canonicalModelAttribution(rows: readonly EffectiveRequestRow[]): CanonicalModelAttribution {
+  if (!Array.isArray(rows)) throw new Error('canonical model attribution rows must be an array');
+  const groups = groupEconomicModels(rows);
+  const total = economicAttributionFromRows(rows);
+  const coverage: EconomicModelCoverage = rows.length === 0 || total.unresolvedRequests === rows.length
+    ? 'legacy_unknown'
+    : total.unresolvedRequests > 0
+      ? 'partial'
+      : 'exact';
+  if (coverage !== 'exact' || groups.length === 0) {
+    return { groups, coverage, total, dominant: null, dominantShare: null, dominantCostUsd: null };
+  }
+
+  const ranked = [...groups].sort((left, right) => {
+    const byAmount = compareMoney(moneyFromJson(left.economic.amount), moneyFromJson(right.economic.amount));
+    if (byAmount !== 0) return byAmount === 1 ? -1 : 1;
+    return left.provider.localeCompare(right.provider) || left.model.localeCompare(right.model);
+  });
+  const dominant = ranked[0]!;
+  return {
+    groups: ranked,
+    coverage,
+    total,
+    dominant,
+    dominantShare: exactRatio(moneyFromJson(dominant.economic.amount), moneyFromJson(total.amount)),
+    dominantCostUsd: boundedNumericAmount(dominant.economic),
+  };
 }
 
 /** Group exact request rows into deterministic fixed-width time buckets. */

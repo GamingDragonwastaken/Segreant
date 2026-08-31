@@ -44,6 +44,7 @@ import {
 } from '../measurement/completeness.ts';
 import { scope } from '../epistemic/scope.ts';
 import { interval } from '../epistemic/time.ts';
+import { canonicalModelAttribution } from '../store/economicReadModel.ts';
 
 const run = promisify(execFile);
 
@@ -103,6 +104,8 @@ export interface WorkUnit extends CommitAttribution {
   hadProposal: boolean;
   acceptance: number | null;
   taskType: TaskType; // the "context" axis of the frontier
+  /** Provider paired with the dominant model when exact model authority exists. */
+  dominantProvider?: string | null;
   dominantModel: string | null; // model that spent the most in this unit's window
   /**
    * The dominant model's OWN spend in this unit's window — not the window total.
@@ -391,37 +394,49 @@ export async function computeRealization(
       ),
     };
 
-    // Attribute the unit to the model that spent the most in its window. Scope the
-    // model read to the SAME project the dollars were scoped to, or the label could
-    // be taken from another project's concurrent traffic.
+    // Attribute the unit to the provider/model that spent the most in its window.
+    // Exact effective Money is the sole winner authority. Scope the model read to
+    // the SAME project the dollars were scoped to, or the label could be taken
+    // from another project's concurrent traffic. A partial exact window has no
+    // winner; a wholly legacy window retains a display-only compatibility label
+    // with null cost/share so the frontier cannot treat it as priceable evidence.
     const modelSpend = store.byModel(a.windowStartMs, a.windowEndMs, projectScoped ? project : undefined);
-    const exactModelSpend = store.economicModelUnits(a.windowStartMs, a.windowEndMs, projectScoped ? project : undefined);
-    const dominantModel = modelSpend.length > 0 ? modelSpend[0]!.label : null;
+    const economicModelRows = store.economicRequestRowsInRange(a.windowStartMs, a.windowEndMs, {
+      project: projectScoped ? project : undefined,
+    });
+    const modelAuthority = canonicalModelAttribution(economicModelRows);
+    const dominantProvider = modelAuthority.coverage === 'exact'
+      ? modelAuthority.dominant?.provider ?? null
+      : modelAuthority.coverage === 'legacy_unknown'
+        ? modelSpend[0]?.provider ?? null
+        : null;
+    const dominantModel = modelAuthority.coverage === 'exact'
+      ? modelAuthority.dominant?.model ?? null
+      : modelAuthority.coverage === 'legacy_unknown'
+        ? modelSpend[0]?.label ?? null
+        : null;
     // Keep the dominant model's OWN spend and its share of the window separately
     // from the window total: the total is what the commit cost, the share is how
     // much of that is really attributable to this model. Model comparison needs
     // both, and conflating them books one model's dollars to another.
-    const windowModelTotal = exactModelSpend.length > 0
-      ? exactModelSpend.reduce((s, m) => s + m.costUsd, 0)
-      : modelSpend.reduce((s, m) => s + m.costUsd, 0);
-    const dominantModelRow = dominantModel === null
-      ? undefined
-      : exactModelSpend.find((m) => m.provider === modelSpend[0]!.provider && m.model === dominantModel);
+    const dominantModelRow = modelAuthority.coverage === 'exact' ? modelAuthority.dominant : undefined;
     const dominantModelEconomic = dominantModelRow?.economic;
-    const dominantModelCostUsd = dominantModelRow?.costUsd ?? (modelSpend.length > 0 ? modelSpend[0]!.costUsd : null);
-    const dominantModelCostShare =
-      modelSpend.length > 0 && windowModelTotal > 0 ? modelSpend[0]!.costUsd / windowModelTotal : null;
+    const dominantModelCostUsd = modelAuthority.coverage === 'exact'
+      ? modelAuthority.dominantCostUsd
+      : null;
+    const dominantModelCostShare = modelAuthority.coverage === 'exact' ? modelAuthority.dominantShare : null;
     // Record HOW that model's dollars were priced, not just how many there were.
     // Collapsed to one value or the sentinel 'mixed' here so every reader applies
     // the same rule; the raw sets stay in the ledger for `fiscus pricing --coverage`.
     let dominantModelCostBasis: string | null = null;
     let dominantModelRateCard: string | null = null;
-    if (dominantModel !== null) {
+    if (dominantProvider !== null && dominantModel !== null) {
       const lineage = store.modelPricingBasis(
         a.windowStartMs,
         a.windowEndMs,
         dominantModel,
         projectScoped ? project : undefined,
+        dominantProvider,
       );
       dominantModelCostBasis =
         lineage.costBases.length === 1 ? lineage.costBases[0]! : lineage.costBases.length > 1 ? 'mixed' : null;
@@ -438,6 +453,7 @@ export async function computeRealization(
       hadProposal,
       acceptance,
       taskType: classifyTaskType(a.subject),
+      dominantProvider,
       dominantModel,
       dominantModelCostUsd,
       dominantModelCostShare,
@@ -496,6 +512,7 @@ export function realizationFromStore(
     const u = JSON.parse(r.unitJson) as WorkUnit;
     return {
       ...u,
+      dominantProvider: u.dominantProvider ?? null,
       dominantModelCostUsd: u.dominantModelCostUsd ?? null,
       dominantModelCostShare: u.dominantModelCostShare ?? null,
       // Same normalization, same reason: a snapshot that predates pricing lineage

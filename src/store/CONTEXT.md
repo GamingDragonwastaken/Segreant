@@ -105,6 +105,12 @@ two domain callers goes in `rows.ts`.
   `economicSessionUnitsByUser()`, `economicModelUnits()` and `economicSeries()`
   are deterministic grouped facades over that same join, so usage/cohort/budget
   consumers cannot quietly invent a second scope or pricing rule.
+- **Model attribution has one exact authority.** `canonicalModelAttribution()`
+  compares effective `Money` before any numeric projection, returns a
+  deterministic provider/model tie-break, computes purity from exact integer
+  coefficients, and withholds a winner for partial/legacy windows. Legacy
+  numeric labels may remain display-only, with null cost/share preventing entry
+  into high-assurance frontier comparisons.
 - **Billing kernel issuance is explicit and additive.** `issueBillingImportToKernel()`
   translates a validated operator export through exact `Money` into canonical
   Evidence and billed Claims; `issueOpenAiCostsObservationToKernel()` does the

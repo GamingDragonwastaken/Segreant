@@ -26,7 +26,7 @@ import type { Money } from '../economics/money.ts';
 import { requestEconomicEventId } from '../economics/request.ts';
 import { priceCorrectionEvent } from '../economics/corrections.ts';
 import { economicAttributionFromRows, economicAttributionNumber } from '../economics/attribution.ts';
-import type { EconomicModelUnit, EffectiveRequestRow } from './economicReadModel.ts';
+import { canonicalModelAttribution, type EconomicModelUnit, type EffectiveRequestRow } from './economicReadModel.ts';
 
 /**
  * A persisted snapshot of one computed work unit. The store keeps these so
@@ -446,10 +446,7 @@ function syncRealizationCosts(
     const modelSpend = deps.byModel(startMs, endMs, scoped);
     const economicRows = deps.economicRequestRows?.(startMs, endMs, scoped);
     const economic = economicRows === undefined ? undefined : economicAttributionFromRows(economicRows);
-    const exactModelSpend = deps.economicModelUnits?.(startMs, endMs, scoped);
-    const windowModelTotal = exactModelSpend === undefined || exactModelSpend.length === 0
-      ? modelSpend.reduce((s, m) => s + m.costUsd, 0)
-      : exactModelSpend.reduce((s, m) => s + m.costUsd, 0);
+    const modelAuthority = economicRows === undefined ? undefined : canonicalModelAttribution(economicRows);
     const totalLines = Number(unit.linesAdded ?? 0) + Number(unit.linesDeleted ?? 0);
 
     const projectedCost = economic === undefined
@@ -459,15 +456,22 @@ function syncRealizationCosts(
     unit.attributedRequests = spend.requests;
     unit.attributedOutputTokens = spend.outputTokens;
     unit.costPerHundredLines = totalLines > 0 ? (projectedCost / totalLines) * 100 : null;
-    unit.dominantModel = modelSpend.length > 0 ? modelSpend[0]!.label : null;
-    const exactDominantModel = unit.dominantModel === null || exactModelSpend === undefined
-      ? undefined
-      : exactModelSpend.find((m) => m.provider === modelSpend[0]!.provider && m.model === unit.dominantModel);
-    unit.dominantModelCostUsd = exactDominantModel?.costUsd ?? (modelSpend.length > 0 ? modelSpend[0]!.costUsd : null);
-    const dominantCostForShare = exactDominantModel?.costUsd ?? (modelSpend.length > 0 ? modelSpend[0]!.costUsd : null);
-    unit.dominantModelCostShare =
-      dominantCostForShare !== null && windowModelTotal > 0 ? dominantCostForShare / windowModelTotal : null;
-    if (exactDominantModel !== undefined) unit.dominantModelEconomic = exactDominantModel.economic;
+    // The canonical exact projection owns the winner. Partial coverage has no
+    // winner; all-legacy snapshots keep only a display label and remain
+    // unpriceable in the frontier through null cost/share.
+    unit.dominantProvider = modelAuthority?.coverage === 'exact'
+      ? modelAuthority.dominant?.provider ?? null
+      : modelAuthority?.coverage === 'legacy_unknown'
+        ? modelSpend[0]?.provider ?? null
+        : null;
+    unit.dominantModel = modelAuthority?.coverage === 'exact'
+      ? modelAuthority.dominant?.model ?? null
+      : modelAuthority?.coverage === 'legacy_unknown'
+        ? modelSpend[0]?.label ?? null
+        : null;
+    unit.dominantModelCostUsd = modelAuthority?.coverage === 'exact' ? modelAuthority.dominantCostUsd : null;
+    unit.dominantModelCostShare = modelAuthority?.coverage === 'exact' ? modelAuthority.dominantShare : null;
+    if (modelAuthority?.coverage === 'exact' && modelAuthority.dominant !== null) unit.dominantModelEconomic = modelAuthority.dominant.economic;
     if (economic !== undefined) unit.economic = economic;
 
     writeBack.run(projectedCost, JSON.stringify(unit), row.commitHash);

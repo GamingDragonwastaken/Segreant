@@ -82,6 +82,11 @@
   text, file count, line count, fragment count and aggregate retained bytes use
   the shared resource policy. A `truncated` extraction returns no files and
   cannot feed the acceptance gate; storage preserves the coverage state.
+- Dominant provider/model attribution comes from `canonicalModelAttribution()`
+  over effective request rows. Exact Money chooses the winner and share before
+  numeric projection; partial windows have no winner, and wholly legacy windows
+  retain only display labels with null price/share so model trials cannot treat
+  compatibility arithmetic as exact evidence.
 
 ## Invariants
 
