@@ -49,9 +49,12 @@ function json(res: http.ServerResponse, status: number, payload: unknown): void 
 
 class BodyTooLargeError extends Error {
   readonly code = 'resource_limit' as const;
-  constructor(readonly limitBytes: number) {
+  readonly limitBytes: number;
+
+  constructor(limitBytes: number) {
     super('request body too large');
     this.name = 'BodyTooLargeError';
+    this.limitBytes = limitBytes;
   }
 }
 
