@@ -405,9 +405,9 @@ process.stdout.on('error', (err: NodeJS.ErrnoException) => {
 // for the whole command and can starve a legitimate publication queue. The
 // modules are fully loaded before this callback runs, so publication can no
 // longer create a missing-dependency window for this process.
-setImmediate(() => {
+export const cliCompletion = new Promise<void>((resolve) => setImmediate(() => {
   main().catch((err) => {
     console.error('  Fiscus error:', err);
     process.exitCode = 1;
-  });
-});
+  }).finally(resolve);
+}));

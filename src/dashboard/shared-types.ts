@@ -550,6 +550,19 @@ export interface CausalPayload {
       }>;
     };
     allowedClaim: 'not_established' | 'comparative_cost_quality_supported' | 'causal_net_benefit_supported';
+    jointInference: {
+      method: 'bonferroni';
+      endpointFamily: 'cost_quality' | 'net_benefit';
+      endpointCount: number;
+      alphaAllocation: 'equal';
+      nonInferiorityMargin: number;
+      costSuperiorityThresholdUsd: number;
+      secondaryEndpointPolicy: 'none' | 'descriptive_only';
+      overallConfidenceLevel: number;
+      endpointConfidenceLevel: number;
+      endpointAlpha: number;
+      ruleSource: 'protocol' | 'version_default';
+    };
     assignmentReplay: Array<{ blockId: string; allocationHash: string; errors: string[] }>;
   } | null;
   causalEvidence: string;

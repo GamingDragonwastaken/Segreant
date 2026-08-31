@@ -93,6 +93,27 @@ function inspectLock(buildLock) {
   const owner = readOwnerFile(ownerPath);
   if (owner) return { lockStat, owner, ownerPath };
 
+  // The creator writes a complete JSON owner record to a token-specific temp
+  // name before the same-directory rename to owner.json. If that creator is
+  // interrupted in the tiny interval between those operations, the lock is
+  // still recoverable: retain the token-bearing temp path as the identity and
+  // run the normal PID-aware quarantine flow. Treating it as an unknown,
+  // owner-less lock would impose the full stale age even when its process is
+  // already dead, which can wedge every queued build/reader for minutes.
+  let ownerTemps = [];
+  try {
+    ownerTemps = readdirSync(buildLock, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && /^\.owner-[0-9a-f-]+\.tmp$/i.test(entry.name))
+      .map((entry) => entry.name)
+      .sort();
+  } catch {
+    ownerTemps = [];
+  }
+  for (const name of ownerTemps) {
+    const temporaryOwner = readOwnerFile(join(buildLock, name));
+    if (temporaryOwner) return { lockStat, owner: temporaryOwner, ownerPath: join(buildLock, name) };
+  }
+
   // A reclaimer may have atomically moved the owner record aside and then
   // crashed. Keep that token-bearing record as the lock identity so a later
   // reclaimer cannot mistake the partially recovered directory for a new one.
@@ -114,6 +135,25 @@ function lockIsStale(buildLock, snapshot = inspectLock(buildLock)) {
   // partially-written lock as live; recover an interrupted creator after a
   // bounded age rather than deleting another process's lock.
   return Date.now() - snapshot.lockStat.mtimeMs > LOCK_STALE_MS;
+}
+
+function reapOrphanQuarantines(root) {
+  let entries;
+  try {
+    entries = readdirSync(root, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entry.name.startsWith(LOCK_QUARANTINE_PREFIX)) continue;
+    const path = join(root, entry.name);
+    const snapshot = inspectLock(path);
+    // A quarantine is no longer on the acquisition path. It is safe to reap
+    // only when its owner is demonstrably dead (or its owner-less generation
+    // has aged past the same stale threshold); a live/uncertain generation is
+    // preserved for a later acquisition rather than deleted by pathname.
+    if (lockIsStale(path, snapshot)) removeQuarantine(path);
+  }
 }
 
 function sameOwner(left, right) {
@@ -245,6 +285,7 @@ function releasePublicationLock(root, buildLock, token) {
  * recovery is token- and PID-aware and never falls back to path-based deletion.
  */
 export function acquirePublicationLock(root) {
+  reapOrphanQuarantines(root);
   const buildLock = join(root, '.fiscus-build.lock');
   const waitStarted = Date.now();
   const token = randomUUID();

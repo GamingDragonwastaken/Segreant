@@ -167,10 +167,9 @@ function hasExactCommittedProtocolV1Shape(value: unknown): value is CommittedCau
         || !hasExactKeys(value.economicOutcome.boundsUsd, ['low', 'high']))) {
     return false;
   }
-  return hasExactKeys(
-    value.analysis,
-    ['estimand', 'confidenceLevel', 'minCompletedPerArm', 'maxMissingFractionPerArm'],
-  );
+  const analysisKeys = ['estimand', 'confidenceLevel', 'minCompletedPerArm', 'maxMissingFractionPerArm'];
+  if (isRecord(value.analysis) && Object.hasOwn(value.analysis, 'jointInference')) analysisKeys.push('jointInference');
+  return hasExactKeys(value.analysis, analysisKeys);
 }
 
 const SQLITE_INT64_MIN = -9223372036854775808n;

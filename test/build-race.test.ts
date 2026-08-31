@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const BUILD = join(ROOT, 'scripts', 'build.mjs');
@@ -63,16 +63,30 @@ test('concurrent builds keep the compiled CLI runnable throughout publication', 
 test('the supported CLI launcher waits for publication and leaves no lock residue', async () => {
   // Use a tiny fixture runtime so the assertion is about lock observation, not
   // the startup cost of Fiscus's real SQLite-backed CLI. The copied launcher
-  // still resolves its normal ../dist/cli.js path and its sibling lock.
+  // still resolves its normal ../dist/cli.js path and its sibling lock. The
+  // delayed completion also proves the launcher keeps the private snapshot
+  // alive until deferred command work has actually finished.
   const fixture = mkdtempSync(join(ROOT, '.fiscus-build-race-'));
   const fixtureBin = join(fixture, 'bin');
   const fixtureDist = join(fixture, 'dist');
   const fixtureLock = join(fixture, '.fiscus-build.lock');
   mkdirSync(fixtureBin);
   mkdirSync(fixtureDist);
+  mkdirSync(join(fixture, 'pricing'));
   copyFileSync(CLI, join(fixtureBin, 'fiscus.mjs'));
   copyFileSync(PUBLICATION_LOCK, join(fixtureBin, 'publication-lock.mjs'));
-  writeFileSync(join(fixtureDist, 'cli.js'), "process.stdout.write('fixture-cli-ready\\n');", 'utf8');
+  writeFileSync(join(fixture, 'pricing', 'models.json'), 'fixture-resource-ready\n', 'utf8');
+  writeFileSync(join(fixtureDist, 'cli.js'), `
+import { readFileSync } from 'node:fs';
+export const cliCompletion = new Promise((resolve, reject) => setTimeout(() => {
+  try {
+    process.stdout.write(readFileSync(new URL('../pricing/models.json', import.meta.url), 'utf8'));
+    resolve();
+  } catch (error) {
+    reject(error);
+  }
+}, 75));
+`, 'utf8');
   mkdirSync(fixtureLock);
   writeFileSync(join(fixtureLock, 'owner.json'), JSON.stringify({ pid: process.pid, token: 'held-for-test' }), 'utf8');
 
@@ -84,7 +98,7 @@ test('the supported CLI launcher waits for publication and leaves no lock residu
 
     const result = await reader.result;
     assert.equal(result.code, 0, result.stderr || 'the launcher failed after publication completed');
-    assert.equal(result.stdout, 'fixture-cli-ready\n');
+    assert.equal(result.stdout, 'fixture-resource-ready\n');
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }
@@ -96,6 +110,31 @@ test('the launcher cannot turn a spawn or publication-lock failure into exit 0',
   const source = readFileSync(CLI, 'utf8');
   assert.doesNotMatch(source, /result\.status \?\? 0/, 'a signaled or failed child must never become success');
   assert.doesNotMatch(source, /\['EACCES', 'EPERM', 'EROFS'\]\.includes\(error\?\.code\)/, 'an inaccessible publication lock must fail closed');
+});
+
+test('publication lock reclaims a dead creator whose owner rename was interrupted', async () => {
+  const fixture = mkdtempSync(join(ROOT, '.fiscus-build-orphan-'));
+  const lock = join(fixture, '.fiscus-build.lock');
+  mkdirSync(lock);
+  // The owner record is valid but remains under the atomic temp name. A PID
+  // outside the process table makes the recovery assertion deterministic on
+  // supported Windows and POSIX runners.
+  writeFileSync(
+    join(lock, '.owner-00000000-0000-0000-0000-000000000000.tmp'),
+    JSON.stringify({ pid: 2_147_483_647, token: 'dead-owner-token' }),
+    'utf8',
+  );
+  try {
+    const lockModule = await import(pathToFileURL(PUBLICATION_LOCK).href) as unknown as {
+      acquirePublicationLock: (root: string) => () => void;
+    };
+    const release = lockModule.acquirePublicationLock(fixture);
+    assert.equal(typeof release, 'function', 'a dead temp owner must not hold the queue');
+    release();
+    assert.equal(existsSync(lock), false, 'recovery and release must leave no canonical lock');
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
 });
 
 test('source generation fingerprints distinguish changed build inputs', async () => {

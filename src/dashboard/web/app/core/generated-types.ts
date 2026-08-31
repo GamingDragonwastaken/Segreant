@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: cd8e10c9327fc86323ee14e183508d3f28129f68154b303defadda77f25183ab */
+/** Source SHA-256: cd05058f957512e56886b5177ecdcd9055d332e77589fc9847c634a4ed444734 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -552,6 +552,19 @@ export interface CausalPayload {
       }>;
     };
     allowedClaim: 'not_established' | 'comparative_cost_quality_supported' | 'causal_net_benefit_supported';
+    jointInference: {
+      method: 'bonferroni';
+      endpointFamily: 'cost_quality' | 'net_benefit';
+      endpointCount: number;
+      alphaAllocation: 'equal';
+      nonInferiorityMargin: number;
+      costSuperiorityThresholdUsd: number;
+      secondaryEndpointPolicy: 'none' | 'descriptive_only';
+      overallConfidenceLevel: number;
+      endpointConfidenceLevel: number;
+      endpointAlpha: number;
+      ruleSource: 'protocol' | 'version_default';
+    };
     assignmentReplay: Array<{ blockId: string; allocationHash: string; errors: string[] }>;
   } | null;
   causalEvidence: string;

@@ -156,6 +156,23 @@ estimate, confidence interval, arm counts, completion/missingness/adherence
 table, quality result, cost source classification, protocol hash, and exact
 result state. Fiscus does not turn a p-value alone into a winner badge.
 
+For the `model_cost_quality` conjunction, the registered analysis plan uses a
+family-wise confidence level: the overall alpha is split equally across the cost
+and quality endpoints with a Bonferroni rule, so a 95% study reports 97.5%
+component bounds rather than incorrectly AND-ing two independent 95% intervals.
+An explicit `analysis.jointInference` records the method, equal alpha allocation,
+endpoint family/count, the exact non-inferiority margin, the minimum USD cost
+superiority threshold, and whether secondary endpoints are absent or descriptive
+only. Those values are committed with the protocol and cannot be changed after
+outcomes exist. Older version-1 protocols retain their original hash and receive
+the same deterministic version default, disclosed in the estimate. For
+`ai_vs_incumbent_net_benefit`, the direct net-benefit estimand is the one endpoint
+governing the causal claim; quality and cost are reported context, not silently
+added to the family. The overall level, component level, allocation, endpoint
+family/count, thresholds, secondary-endpoint treatment and rule source are
+returned in the estimate, CLI and dashboard status. A passing cost or quality
+endpoint alone never authorizes the conjunction.
+
 Quasi-experimental designs may later be supported, but are not a default
 shortcut. A difference-in-differences result must surface its parallel-trends,
 no-anticipation, comparison-cohort, pre-period, sensitivity, staggered-adoption,

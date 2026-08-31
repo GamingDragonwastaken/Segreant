@@ -826,6 +826,7 @@ export function handleCausal({ res, url, store }: RouteContext): void {
         },
         qualification: estimate.qualification,
         allowedClaim: estimate.allowedClaim,
+        jointInference: estimate.jointInference,
         assignmentReplay,
       },
       causalEvidence: 'Local randomized-study evidence only. Ordinary Lift, pricing, and value scenarios cannot create a causal claim.',

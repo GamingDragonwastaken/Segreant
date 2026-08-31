@@ -92,6 +92,7 @@ function summaryFor(store: Store, studyId: string): Record<string, unknown> {
     },
     qualification: estimate.qualification,
     allowedClaim: estimate.allowedClaim,
+    jointInference: estimate.jointInference,
     latestSnapshots: store.causalAnalysisSnapshots(studyId).slice(0, 5),
     boundary: 'Local randomized-study evidence only; no automatic provider routing or budget change.',
   };

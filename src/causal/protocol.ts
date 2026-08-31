@@ -17,6 +17,7 @@ import {
   type CommittedCausalStudyProtocolV2,
   type CausalStudyProtocolDraft,
   type CommittedCausalStudyProtocol,
+  type CausalJointEndpointFamily,
 } from './types.ts';
 
 const ID_RE = /^[A-Za-z0-9._:-]{1,160}$/;
@@ -74,6 +75,41 @@ function rejectUnexpectedKeys(
   }
 }
 
+function validateJointInference(
+  value: unknown,
+  question: unknown,
+  label: string,
+  errors: string[],
+  qualityMargin: unknown,
+): void {
+  if (value === undefined) return; // legacy protocols use the version default
+  if (!isRecord(value)) {
+    errors.push(label + ' must be an object');
+    return;
+  }
+  rejectUnexpectedKeys(value, [
+    'method', 'endpointFamily', 'endpointCount', 'alphaAllocation',
+    'nonInferiorityMargin', 'costSuperiorityThresholdUsd', 'secondaryEndpointPolicy',
+  ], label, errors);
+  if (value.method !== 'bonferroni') errors.push(label + '.method must be bonferroni');
+  const expectedFamily: CausalJointEndpointFamily = question === 'model_cost_quality' ? 'cost_quality' : 'net_benefit';
+  if (value.endpointFamily !== expectedFamily) errors.push(`${label}.endpointFamily must be ${expectedFamily} for this question`);
+  const expectedCount = expectedFamily === 'cost_quality' ? 2 : 1;
+  if (value.endpointCount !== expectedCount) errors.push(`${label}.endpointCount must be ${expectedCount} for this endpoint family`);
+  if (value.alphaAllocation !== 'equal') errors.push(label + '.alphaAllocation must be equal');
+  if (!finite(value.nonInferiorityMargin) || value.nonInferiorityMargin < 0) {
+    errors.push(label + '.nonInferiorityMargin must be finite and nonnegative');
+  } else if (finite(qualityMargin) && value.nonInferiorityMargin !== qualityMargin) {
+    errors.push(label + '.nonInferiorityMargin must equal qualityOutcome.nonInferiorityMargin');
+  }
+  if (!finite(value.costSuperiorityThresholdUsd) || value.costSuperiorityThresholdUsd < 0) {
+    errors.push(label + '.costSuperiorityThresholdUsd must be finite and nonnegative');
+  }
+  if (value.secondaryEndpointPolicy !== 'none' && value.secondaryEndpointPolicy !== 'descriptive_only') {
+    errors.push(label + '.secondaryEndpointPolicy must be none or descriptive_only');
+  }
+}
+
 /**
  * Canonical JSON is used only for stable local content hashing. It rejects
  * undefined/functions/symbols rather than silently changing the value being
@@ -99,7 +135,7 @@ export function sha256(value: string | Uint8Array): string {
 }
 
 function protocolMaterialV1(draft: CausalStudyProtocolDraft): CausalStudyProtocolDraft {
-  return {
+  const material = {
     type: draft.type,
     version: draft.version,
     studyId: draft.studyId,
@@ -147,7 +183,19 @@ function protocolMaterialV1(draft: CausalStudyProtocolDraft): CausalStudyProtoco
       minCompletedPerArm: draft.analysis.minCompletedPerArm,
       maxMissingFractionPerArm: draft.analysis.maxMissingFractionPerArm,
     },
-  };
+  } as CausalStudyProtocolDraft;
+  if (draft.analysis.jointInference !== undefined) {
+    material.analysis.jointInference = {
+      method: draft.analysis.jointInference.method,
+      endpointFamily: draft.analysis.jointInference.endpointFamily,
+      endpointCount: draft.analysis.jointInference.endpointCount,
+      alphaAllocation: draft.analysis.jointInference.alphaAllocation,
+      nonInferiorityMargin: draft.analysis.jointInference.nonInferiorityMargin,
+      costSuperiorityThresholdUsd: draft.analysis.jointInference.costSuperiorityThresholdUsd,
+      secondaryEndpointPolicy: draft.analysis.jointInference.secondaryEndpointPolicy,
+    };
+  }
+  return material;
 }
 
 function protocolHashV1(draft: CausalStudyProtocolDraft): string {
@@ -259,7 +307,16 @@ function validateCausalProtocolV1(draft: CausalStudyProtocolDraft): string[] {
       draft.analysis.maxMissingFractionPerArm >= 1) {
     errors.push('analysis requires ITT, a valid confidence level, sample floor, and missingness limit');
   }
-  rejectUnexpectedKeys(draft.analysis, ['estimand', 'confidenceLevel', 'minCompletedPerArm', 'maxMissingFractionPerArm'], 'analysis', errors);
+  rejectUnexpectedKeys(draft.analysis, ['estimand', 'confidenceLevel', 'minCompletedPerArm', 'maxMissingFractionPerArm', 'jointInference'], 'analysis', errors);
+  if (isRecord(draft.analysis)) {
+    validateJointInference(
+      draft.analysis.jointInference,
+      draft.question,
+      'analysis.jointInference',
+      errors,
+      isRecord(draft.qualityOutcome) ? draft.qualityOutcome.nonInferiorityMargin : undefined,
+    );
+  }
   return errors;
 }
 
@@ -525,6 +582,17 @@ function protocolMaterialV2(draft: CausalStudyProtocolDraftV2): CausalStudyProto
       invalid: draft.claimTemplateIds.invalid,
     },
   } as CausalStudyProtocolDraftV2Base;
+  if (draft.analysis.jointInference !== undefined) {
+    material.analysis.jointInference = {
+      method: draft.analysis.jointInference.method,
+      endpointFamily: draft.analysis.jointInference.endpointFamily,
+      endpointCount: draft.analysis.jointInference.endpointCount,
+      alphaAllocation: draft.analysis.jointInference.alphaAllocation,
+      nonInferiorityMargin: draft.analysis.jointInference.nonInferiorityMargin,
+      costSuperiorityThresholdUsd: draft.analysis.jointInference.costSuperiorityThresholdUsd,
+      secondaryEndpointPolicy: draft.analysis.jointInference.secondaryEndpointPolicy,
+    };
+  }
   if (Object.hasOwn(draft, 'followUpWindowMs')) {
     return { ...material, followUpWindowMs: draft.followUpWindowMs } as CausalStudyProtocolDraftV2Policy;
   }
@@ -710,12 +778,9 @@ function validateCausalProtocolV2(draft: unknown): string[] {
     }
   }
 
-  if (validateExactRecord(
-    draft.analysis,
-    ['estimand', 'confidenceLevel', 'minCompletedPerArm', 'maxMissingFractionPerArm', 'exclusionPolicyId'],
-    'analysis',
-    errors,
-  )) {
+  const analysisKeys = ['estimand', 'confidenceLevel', 'minCompletedPerArm', 'maxMissingFractionPerArm', 'exclusionPolicyId'];
+  if (ownPropertyPresence(draft.analysis, 'jointInference') === true) analysisKeys.push('jointInference');
+  if (validateExactRecord(draft.analysis, analysisKeys, 'analysis', errors)) {
     if (draft.analysis.estimand !== 'intention_to_treat') errors.push('analysis.estimand must be intention_to_treat');
     if (!finite(draft.analysis.confidenceLevel) || draft.analysis.confidenceLevel <= 0 || draft.analysis.confidenceLevel >= 1) {
       errors.push('analysis.confidenceLevel must be finite and strictly between zero and one');
@@ -729,6 +794,13 @@ function validateCausalProtocolV2(draft: unknown): string[] {
       errors.push('analysis.maxMissingFractionPerArm must be finite in [0,1)');
     }
     validateV2Id(draft.analysis.exclusionPolicyId, 'analysis.exclusionPolicyId', errors);
+    validateJointInference(
+      draft.analysis.jointInference,
+      draft.question,
+      'analysis.jointInference',
+      errors,
+      isRecord(draft.qualityOutcome) ? draft.qualityOutcome.nonInferiorityMargin : undefined,
+    );
   }
 
   if (validateExactRecord(
