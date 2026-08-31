@@ -164,8 +164,8 @@ Status vocabulary: `CLOSED`, `PARTIAL`, `OPEN`, `RED-SPEC`, `EXTERNAL-GATE`, `SU
 | AII-026 budget heuristic overclaim | OPEN | Keep scenario advisor; route action-grade choices through decision engine. |
 | AII-027 pseudo-VoI | PARTIAL | Legacy sensitivity metric remains explicitly labelled; separate decision engine now implements perfect-information VOI net of measurement cost. |
 | AII-028 shrinkage weight labelled confidence | OPEN | Correct terminology/assumptions and tests. |
-| AII-029 docs/runtime drift | OPEN | Canonical CapabilitySpec and generated/conformance-tested docs. Economic CLI inspection and a typed `/api/economic` contract now exist, but universal generated contracts remain. |
-| AII-030 browser/server schema drift | OPEN | Billing ClaimProfile summaries and the exact economic projection are now shared by bounded route/client contracts; one runtime schema source and generated/shared types remain. |
+| AII-029 docs/runtime drift | PARTIAL | Canonical CapabilitySpec, generated route/top-level/nested contracts, named shared payload source, named JSON responses and typed realization detail now exist with runtime conformance; full docs/claim/egress generation and independent verifier remain. |
+| AII-030 browser/server schema drift | PARTIAL | Billing ClaimProfile summaries, exact economic/value projections, route/method/guard metadata, generated nested interfaces, canonical named payload source, named JSON responses and typed realization detail now cross bounded runtime/client contracts; deeper nested consumers and universal generated bindings remain. |
 | AII-031 unbounded major buffers | OPEN | Bound ingress/SSE/tool args/proposals/responses with explicit coverage-loss semantics. |
 | AII-032 DB integrity too application-managed | OPEN | Promote critical invariants to DB where sound. |
 | AII-033 supply-chain assurance | OPEN | CodeQL, dependency review, secret scan, SBOM, provenance/signing. |
