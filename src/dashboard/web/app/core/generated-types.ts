@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: 705c3a01577c00d7371bf08e2c6385f31f6df8e974bc95aa65207da36ad1285e */
+/** Source SHA-256: 0d7b4e7856582633355698683f4e408483f3259add2fb7a1be7af5992156322e */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -721,12 +721,105 @@ export interface PricingPayload {
   boundary: string;
 }
 
-/** Read-only realization response; the report is intentionally opaque until its full shared schema is migrated. */
+export type GateName = 'proposed' | 'accepted' | 'committed' | 'tested' | 'merged' | 'shipped' | 'survived' | 'clean';
+export type GateVerdict = 'pass' | 'fail' | 'unknown';
+
+export interface GateResultPayload {
+  gate: GateName;
+  verdict: GateVerdict;
+  detail: string;
+}
+
+export interface RealizationFunnelPayload {
+  results: GateResultPayload[];
+  reachedIndex: number;
+  reached: GateName | null;
+  diedAt: GateName | null;
+  diedAtIndex: number | null;
+  realized: boolean;
+  passes: number;
+  fails: number;
+  unknowns: number;
+  instrumented: number;
+  realizationScore: number;
+}
+
+export interface SerialGatePayload {
+  gate: GateName;
+  alive: number;
+  passes: number;
+  fails: number;
+  q: number | null;
+}
+
+export interface SerialRealizationPayload {
+  sG: number | null;
+  gates: SerialGatePayload[];
+  included: GateName[];
+  skipped: GateName[];
+}
+
+export interface RealizationWasteBucketPayload {
+  stage: string;
+  units: number;
+  costUsd: number;
+}
+
+/** One browser-visible coding WorkUnit; numeric spend stays a compatibility projection. */
+export interface RealizationUnitPayload {
+  hash: string;
+  tsEpochMs: number;
+  subject: string;
+  linesAdded: number;
+  linesDeleted: number;
+  filesChanged: number;
+  windowStartMs: number;
+  windowEndMs: number;
+  attributedCostUsd: number;
+  attributedRequests: number;
+  attributedOutputTokens: number;
+  costPerHundredLines: number | null;
+  ageDays: number;
+  maturing: boolean;
+  survivalRatio: number;
+  reverted: boolean;
+  hadProposal: boolean;
+  acceptance: number | null;
+  taskType: string;
+  dominantModel: string | null;
+  dominantModelCostUsd: number | null;
+  dominantModelCostShare: number | null;
+  dominantModelEconomic?: EconomicAttributionPayload;
+  costStale: boolean;
+  dominantModelCostBasis: string | null;
+  dominantModelRateCard: string | null;
+  economic?: EconomicAttributionPayload;
+  funnel: RealizationFunnelPayload;
+}
+
+/** Full named nested report returned by the read-only realization route. */
+export interface RealizationReportPayload {
+  generatedAt: string;
+  windowDays: number;
+  acceptanceThreshold: number;
+  survivalThreshold: number;
+  projectScoped: boolean;
+  units: RealizationUnitPayload[];
+  firstPassAcceptance: number | null;
+  proposalCoverage: number;
+  costStaleUnits: number;
+  matured: Matured & {
+    serial?: SerialRealizationPayload;
+    wasteByStage: RealizationWasteBucketPayload[];
+  };
+}
+
+/** Read-only realization response with a generated nested report contract. */
 export interface RealizationPayload {
   available: boolean;
   repo: string;
   source?: 'git' | 'store';
-  report?: Record<string, unknown>;
+  report?: RealizationReportPayload;
 }
 
 /** Named response for the guide journey engine. */

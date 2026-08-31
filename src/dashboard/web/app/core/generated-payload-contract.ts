@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "705c3a01577c00d7371bf08e2c6385f31f6df8e974bc95aa65207da36ad1285e";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "0d7b4e7856582633355698683f4e408483f3259add2fb7a1be7af5992156322e";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -1619,6 +1619,340 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "type": "string"
     }
   ],
+  "GateResultPayload": [
+    {
+      "name": "gate",
+      "optional": false,
+      "type": "GateName"
+    },
+    {
+      "name": "verdict",
+      "optional": false,
+      "type": "GateVerdict"
+    },
+    {
+      "name": "detail",
+      "optional": false,
+      "type": "string"
+    }
+  ],
+  "RealizationFunnelPayload": [
+    {
+      "name": "results",
+      "optional": false,
+      "type": "GateResultPayload[]"
+    },
+    {
+      "name": "reachedIndex",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "reached",
+      "optional": false,
+      "type": "GateName | null"
+    },
+    {
+      "name": "diedAt",
+      "optional": false,
+      "type": "GateName | null"
+    },
+    {
+      "name": "diedAtIndex",
+      "optional": false,
+      "type": "number | null"
+    },
+    {
+      "name": "realized",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "passes",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "fails",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "unknowns",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "instrumented",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "realizationScore",
+      "optional": false,
+      "type": "number"
+    }
+  ],
+  "SerialGatePayload": [
+    {
+      "name": "gate",
+      "optional": false,
+      "type": "GateName"
+    },
+    {
+      "name": "alive",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "passes",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "fails",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "q",
+      "optional": false,
+      "type": "number | null"
+    }
+  ],
+  "SerialRealizationPayload": [
+    {
+      "name": "sG",
+      "optional": false,
+      "type": "number | null"
+    },
+    {
+      "name": "gates",
+      "optional": false,
+      "type": "SerialGatePayload[]"
+    },
+    {
+      "name": "included",
+      "optional": false,
+      "type": "GateName[]"
+    },
+    {
+      "name": "skipped",
+      "optional": false,
+      "type": "GateName[]"
+    }
+  ],
+  "RealizationWasteBucketPayload": [
+    {
+      "name": "stage",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "units",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "costUsd",
+      "optional": false,
+      "type": "number"
+    }
+  ],
+  "RealizationUnitPayload": [
+    {
+      "name": "hash",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "tsEpochMs",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "subject",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "linesAdded",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "linesDeleted",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "filesChanged",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "windowStartMs",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "windowEndMs",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "attributedCostUsd",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "attributedRequests",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "attributedOutputTokens",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "costPerHundredLines",
+      "optional": false,
+      "type": "number | null"
+    },
+    {
+      "name": "ageDays",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "maturing",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "survivalRatio",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "reverted",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "hadProposal",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "acceptance",
+      "optional": false,
+      "type": "number | null"
+    },
+    {
+      "name": "taskType",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "dominantModel",
+      "optional": false,
+      "type": "string | null"
+    },
+    {
+      "name": "dominantModelCostUsd",
+      "optional": false,
+      "type": "number | null"
+    },
+    {
+      "name": "dominantModelCostShare",
+      "optional": false,
+      "type": "number | null"
+    },
+    {
+      "name": "dominantModelEconomic",
+      "optional": true,
+      "type": "EconomicAttributionPayload"
+    },
+    {
+      "name": "costStale",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "dominantModelCostBasis",
+      "optional": false,
+      "type": "string | null"
+    },
+    {
+      "name": "dominantModelRateCard",
+      "optional": false,
+      "type": "string | null"
+    },
+    {
+      "name": "economic",
+      "optional": true,
+      "type": "EconomicAttributionPayload"
+    },
+    {
+      "name": "funnel",
+      "optional": false,
+      "type": "RealizationFunnelPayload"
+    }
+  ],
+  "RealizationReportPayload": [
+    {
+      "name": "generatedAt",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "windowDays",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "acceptanceThreshold",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "survivalThreshold",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "projectScoped",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "units",
+      "optional": false,
+      "type": "RealizationUnitPayload[]"
+    },
+    {
+      "name": "firstPassAcceptance",
+      "optional": false,
+      "type": "number | null"
+    },
+    {
+      "name": "proposalCoverage",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "costStaleUnits",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "matured",
+      "optional": false,
+      "type": "Matured & {"
+    }
+  ],
   "RealizationPayload": [
     {
       "name": "available",
@@ -1638,7 +1972,7 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
     {
       "name": "report",
       "optional": true,
-      "type": "Record<string, unknown>"
+      "type": "RealizationReportPayload"
     }
   ],
   "GuidePayload": [
