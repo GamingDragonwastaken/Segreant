@@ -23,7 +23,7 @@ The reconstruction branch began from the reviewed high-assurance candidate `3157
 
 The original macOS OIDC time-boundary failure has been repaired through injected deterministic verifier time and exact skew-boundary tests. Team-server tests later passed on Windows, Ubuntu and macOS.
 
-The latest local candidate extends the remote reconciliation checkpoint with the
+The latest reconstructed candidate extends the remote reconciliation checkpoint with the
 economic-event foundation `5ef8b58`, canonicalization/replay hardening `5c8d9c6`,
 exact decimal pricing `ad0b6a4`, atomic exact request issuance `ac0efa7`, bundled
 exact-rate/live issuance `3763c9e`, role-aware projections/reversal constraints
@@ -52,8 +52,12 @@ types `e00f7f9`, named JSON response contracts `cfb1fc7`, and typed realization
 detail `2f1e509`; local verification at this candidate is 1,113 root tests
 (1,109 pass, 0 fail, 4
 platform-conditional skips). Team-server 61/61, root/team typecheck, full
-Node/browser build, and npm pack dry-run pass at this checkpoint.
-These identities are not remote/CI evidence until the blocked push succeeds.
+Node/browser build, and npm pack dry-run pass at this checkpoint. The complete
+candidate is now published at remote SHA `200b9a40fba6dd0cbe2ab2bf314e39eb214bbe32`
+on `origin/gpt56/magnum-opus-reconstruction`, with local/remote identity and
+zero divergence verified. GitHub Actions run `33400471876` for that exact SHA
+completed successfully across all seven configured jobs (root Ubuntu/macOS/
+Windows, package smoke, and team-server Ubuntu/macOS/Windows).
 
 The coding value path now has a bounded exact seam: `3871b6f` adds a
 Store-owned request read model with alias/live scope and strict dimensional
@@ -210,9 +214,10 @@ reopen is an additive, reason-bearing control event; competing or malformed
 transitions remain `conflicted`; late in-period events require an explicit
 reopen. The read-only `/api/economic` payload and browser contract carry the
 close state, and `fiscus economic` exposes canonical `--close-status`,
-`--finalize`, and `--reopen` operations. This is local evidence only; live
-Postgres execution, universal generated contracts, trust-anchor governance and
-GitHub publication remain external gates.
+`--finalize`, and `--reopen` operations. This repository evidence is published
+at reconstruction SHA `200b9a40`; GitHub Actions run `33400471876` is green
+across all seven configured jobs. Live Postgres execution, universal generated
+contracts and trust-anchor governance remain explicit gates.
 
 **Capability/payload-contract addendum (2026-08-30):** `0467830` and
 `92ecbbd` complete the bounded contract tranche: every GUI capability now has
@@ -278,7 +283,9 @@ and named JSON response contracts at `cfb1fc7`, plus typed realization detail at
 `2f1e509`. Proceed next with generated docs/claim/egress bindings, followed by
 unavoidable kernel issuance across the remaining consequential product boundaries;
 allocation-specific close binding, revised-value-claim supersession, live
-Postgres execution and remote publication remain explicit gates.
+Postgres execution remain explicit gates. Remote publication is complete at
+`200b9a40`, and exact-SHA CI run `33400471876` is green across all seven
+configured jobs.
 
 1. **COMPLETED at `b27c0ef`:** Implement the RED robust decision module. Strict dominance is the only proof-level certificate; minimax regret and perfect-information VOI remain explicitly named rules with assumptions and cost.
 2. **COMPLETED at `5647c67`:** Implement additive transitive revocation closure. Dependent descendants are invalidated while independent siblings remain outside the closure; cycles are safe, duplicate edges fail closed, and history is not deleted.
@@ -290,7 +297,7 @@ Postgres execution and remote publication remain explicit gates.
 8. **COMPLETED (bounded) at `16c5a15`:** Make the legacy Value renderer and browser Value contract disclose exact/partial/legacy effective coverage for mature, usage, budget, project and team sections, with missing coverage rendered as `legacy_unknown`. The universal generated dashboard/schema contract remains open.
 9. **COMPLETED (bounded) at `47ed621`:** Preserve immutable hash-addressed pricing-card provenance with source kind, redacted source identity, acceptance time, upstream date, conditional metadata and strict card/sidecar validation; expose it through pricing coverage, CLI text and the classic pricing health card. Missing or tampered historical sidecars remain unavailable.
 10. **COMPLETED (bounded) at `e244115`:** Extend dashboard endpoint conformance from required-field presence to runtime primitive, array, record, named-interface and null-union validation across seeded browser read endpoints. The universal generated single-source contract remains open.
-11. **COMPLETED at `28905c5`:** Implement exact economic period-close semantics: canonical half-open periods, digest-bound basis-separated snapshots, as-of replay, explicit append-only reopen controls, conflict-preserving transitions, late-event blocking, JSON-safe CLI lifecycle operations, and typed read-only dashboard/API state. Live Postgres execution and GitHub publication remain explicit gates.
+11. **COMPLETED at `28905c5`:** Implement exact economic period-close semantics: canonical half-open periods, digest-bound basis-separated snapshots, as-of replay, explicit append-only reopen controls, conflict-preserving transitions, late-event blocking, JSON-safe CLI lifecycle operations, and typed read-only dashboard/API state. Live Postgres execution remains an explicit gate; the reconstruction containing this slice is published at `200b9a40`.
 12. **COMPLETED (bounded) at `92ecbbd` (route generation `d6243c7`, CapabilitySpec `0467830`):** Canonicalize and regenerate dashboard API route paths, methods, Allow headers, CSRF gates, response bindings, browser-surface bindings, top-level JSON/text payload envelopes, and conservative capability metadata; the browser copy is synchronized under the publication lock, seeded runtime conformance covers all JSON envelopes, and the modern client rejects contract violations. Nested payload schemas and full docs/claim/egress generation remain.
 13. **COMPLETED (bounded) at `aad39bc`:** Generate nested browser-interface metadata with inheritance flattening and an exact source hash, regenerate it under the publication lock, and consume it in seeded runtime conformance. A single generated/shared type source and full docs/claim/egress generation remain.
 14. **COMPLETED (bounded) at `e2ea654`:** Issue active finalized economic periods into the Trusted Epistemic Kernel as exact, idempotent Evidence/Claim pairs with source-event, balance and digest lineage; CLI finalize performs the issuance, and forged/reopened/conflicted states are refused. Universal issuance across the remaining product boundaries remains.
@@ -299,7 +306,7 @@ Postgres execution and remote publication remain explicit gates.
 17. **COMPLETED (bounded) at `e00f7f9`:** Move the named dashboard payload declarations into one no-runtime shared source, generate a hash-bound browser declaration copy plus nested runtime metadata under the publication lock, and bind the server Overview builder to the shared response map.
 18. **COMPLETED (bounded) at `cfb1fc7`:** Replace the remaining inline JSON route descriptions with named shared response interfaces and method-specific scan contracts; browser write methods consume the names and contract tests reject any reintroduction of inline JSON descriptions. Text/CSV and opaque nested realization/report details remain bounded.
 19. **COMPLETED (bounded) at `2f1e509`:** Promote the read-only realization report from an opaque record to named nested gate, maturity, waste, serial-bound and exact-economic lineage fields in the generated shared dashboard contract.
-20. **NEXT:** Generate docs/claim/egress bindings from the shared source, then make kernel issuance unavoidable at every remaining consequential billing, decision and control boundary; add supersession/latest-as-of semantics for revised value claims and bind exact allocation execution to close state where the control semantics are ready. Trust-anchor governance, live Postgres execution and GitHub publication remain explicit gates.
+20. **NEXT:** Generate docs/claim/egress bindings from the shared source, then make kernel issuance unavoidable at every remaining consequential billing, decision and control boundary; add supersession/latest-as-of semantics for revised value claims and bind exact allocation execution to close state where the control semantics are ready. Trust-anchor governance and live Postgres execution remain explicit gates. Remote publication is complete at `200b9a40`, and exact-SHA CI run `33400471876` is green across all seven configured jobs.
 
 ## Trusted Epistemic Kernel remaining work
 
