@@ -19,6 +19,8 @@ import {
   isOnDeclaredRoute,
   displayUsd,
   signedUsd,
+  offPathBoundFromResidual,
+  describeOffPathBound,
   SETTLEMENT_LAG_MS,
   DEFAULT_MATERIALITY_USD,
   type ReconciliationRun,
@@ -364,4 +366,46 @@ test('reconcile: the store round-trips a run immutably and reports no reconcilia
   store.saveReconciliationRun(result, NOW + 1000);
   assert.equal(store.reconciliationRuns().length, 2);
   store.close();
+});
+
+// ---------------------------------------------------------------------------
+// What the residual bounds, and when it bounds nothing (AII-002).
+// ---------------------------------------------------------------------------
+
+test('a residual bounds off-path spend only while the local estimate stays under the provider total', () => {
+  // Write P for the provider total, L for what Fiscus metered, T for the true
+  // billed cost of on-path traffic and O for off-path. P = T + O, so the
+  // residual R = P - L = O + (T - L), and `O <= R` holds exactly when L <= T.
+  assert.equal(offPathBoundFromResidual(1_334_567, 1_000_000), 'upper_bound_conditional');
+  assert.equal(offPathBoundFromResidual(1_000_000, 1_000_000), 'upper_bound_conditional');
+
+  // R < 0 says L > P = T + O >= T, which refutes L <= T outright. No upper
+  // bound survives: local over-estimation has absorbed an unknown amount of
+  // off-path spend — and a small or negative number invites exactly the
+  // opposite conclusion.
+  assert.equal(offPathBoundFromResidual(900_000, 1_000_000), 'none_local_estimate_exceeds_provider');
+});
+
+test('each bound state says what it licenses, and neither claims off-path spend was measured', () => {
+  const bounded = describeOffPathBound('upper_bound_conditional');
+  const unbounded = describeOffPathBound('none_local_estimate_exceeds_provider');
+
+  assert.match(bounded, /upper bound/i);
+  assert.match(bounded, /conditional/i);
+  assert.match(bounded, /not a measurement/i);
+
+  assert.match(unbounded, /no upper bound/i);
+  assert.match(unbounded, /not evidence that nothing went off-path/i);
+  // A reader shown the wrong one draws exactly the wrong conclusion.
+  assert.notEqual(bounded, unbounded);
+});
+
+test('a real reconciliation carries the bound state, and it tracks the totals', () => {
+  // Non-vacuous: the field must come from the run rather than being a constant.
+  assert.equal(
+    offPathBoundFromResidual(0, 1),
+    'none_local_estimate_exceeds_provider',
+    'one micro of over-estimate is already enough to lose the bound',
+  );
+  assert.equal(offPathBoundFromResidual(1, 0), 'upper_bound_conditional');
 });

@@ -153,6 +153,13 @@ export interface ReconciliationRun {
     materialDays: number;
   };
   days: ReconciliationDayLine[];
+  /**
+   * What the residual bounds, and whether it bounds anything at all (AII-002).
+   * A residual near zero invites the reading "then nothing went off-path", and
+   * that reading is an absence inference the arithmetic does not license. See
+   * `offPathBoundFromResidual`.
+   */
+  offPathBound: OffPathBound;
   snapshotStability: SnapshotStability;
   /** Days whose provider total changed between independent observations. */
   unstableDayStartMs: number[];
@@ -166,6 +173,51 @@ export interface ReconciliationRun {
   conditions: readonly ReconciliationCondition[];
   trust: 'scope_conditional_reconciliation';
   excludedFrom: readonly ['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations'];
+}
+
+/**
+ * What a residual can and cannot say about spend that never passed through
+ * Fiscus (AII-002).
+ *
+ * Write P for the provider's reported total on the declared scope, L for what
+ * Fiscus metered on it, T for the true billed cost of the traffic that DID pass
+ * through, and O for the true billed cost of the traffic that did not. The
+ * provider bills both, so P = T + O, and the residual is
+ *
+ *   R = P - L = O + (T - L)
+ *
+ * Therefore `O <= R` holds exactly when `L <= T`: when the local rate-card
+ * ESTIMATE does not exceed the true billed cost of on-path traffic. That is a
+ * condition, not a fact, and it is the reason a residual is an upper bound
+ * rather than a measurement.
+ *
+ * R < 0 is the interesting case. It says L > P = T + O >= T, which REFUTES the
+ * condition outright: the local estimate exceeds everything the provider billed
+ * on this scope. No upper bound on off-path spend survives, because local
+ * over-estimation has absorbed an unknown amount of it. Reporting "unexplained:
+ * -$3.10" and letting a reader conclude that nothing went off-path is inferring
+ * absence from an observation that specifically undermines the inference.
+ */
+export type OffPathBound =
+  /** `O <= R`, conditional on the route declaration and on `L <= T`. */
+  | 'upper_bound_conditional'
+  /** The local estimate exceeds the provider total, so no upper bound holds. */
+  | 'none_local_estimate_exceeds_provider';
+
+/**
+ * Classify what this residual bounds. Deliberately a pure function of the two
+ * totals: it introduces no threshold and no materiality, because the question
+ * is which inequality holds, not whether the gap is large.
+ */
+export function offPathBoundFromResidual(providerMicros: number, localMicros: number): OffPathBound {
+  return providerMicros - localMicros < 0 ? 'none_local_estimate_exceeds_provider' : 'upper_bound_conditional';
+}
+
+/** One sentence an operator can act on, for each bound state. */
+export function describeOffPathBound(bound: OffPathBound): string {
+  return bound === 'upper_bound_conditional'
+    ? 'Upper bound on spend that never passed through Fiscus — conditional on your route declaration and on the local rate-card estimate not exceeding the true on-path billed cost. Not a measurement of off-path spend.'
+    : 'No upper bound on off-path spend: the local rate-card estimate exceeds the provider total for this scope, so over-estimation has absorbed an unknown amount of it. A residual at or below zero is not evidence that nothing went off-path.';
 }
 
 export interface ReconciliationRefused {
@@ -339,6 +391,7 @@ export function reconcileOpenAiCosts(input: {
     providerReportedMicros: providerTotal,
     localCapturedMicros: localTotal,
     unexplainedVarianceMicros: providerTotal - localTotal,
+    offPathBound: offPathBoundFromResidual(providerTotal, localTotal),
     coverage: {
       providerDays: providerByDay.size,
       localDays: localByDay.size,

@@ -97,7 +97,7 @@ test('combined billing reconciliation issuance keeps provider and local Evidence
     periodStartMs: run.periodStartMs, periodEndMs: run.periodEndMs, currency: 'USD', materialityUsd: 0.5,
     providerReportedMicros: 1_734_567, localCapturedMicros: 1_000_000, unexplainedVarianceMicros: 734_567,
     coverage: { providerDays: 2, localDays: 2, daysWithBoth: 2, providerOnlyDays: 0, localOnlyDays: 0, materialDays: 1 }, days: [],
-    snapshotStability: 'single_observation', unstableDayStartMs: [], providerSourceKind: 'provider_api_pull',
+    offPathBound: 'upper_bound_conditional', snapshotStability: 'single_observation', unstableDayStartMs: [], providerSourceKind: 'provider_api_pull',
     conditions: ['local_route_scope_is_not_provider_verified', 'off_path_provider_usage_is_not_observable', 'provider_line_items_do_not_join_to_requests_or_models', 'local_request_amounts_are_rate_card_estimates'],
     trust: 'scope_conditional_reconciliation', excludedFrom: ['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations'],
   };
@@ -112,7 +112,7 @@ test('combined billing reconciliation issuance keeps provider and local Evidence
     providerReported: { coefficient: '1734567', scale: 6, currency: 'USD', basis: 'provider_observed' },
     localCaptured: { coefficient: '1', scale: 0, currency: 'USD', basis: 'estimated' },
     unexplainedVariance: { coefficient: '734567', scale: 6, currency: 'USD', leftBasis: 'provider_observed', rightBasis: 'estimated' },
-    snapshotStability: 'single_observation', providerSourceKind: 'provider_api_pull', reconciliationRunId: 'reconciliation:fixture:1',
+    offPathBound: 'upper_bound_conditional', snapshotStability: 'single_observation', providerSourceKind: 'provider_api_pull', reconciliationRunId: 'reconciliation:fixture:1',
   });
 });
 
@@ -145,7 +145,7 @@ test('Store persists a recorded reconciliation as provider, local-capture, and m
         { dayStartMs: run.periodStartMs, providerReportedMicros: 1_234_567, localCapturedMicros: 700_000, localRequestCount: 1, differenceMicros: 534_567, residualReason: 'provider_exceeds_local', material: true, providerLineItems: ['completions'] },
         { dayStartMs: Date.parse('2026-08-02T00:00:00.000Z'), providerReportedMicros: 500_000, localCapturedMicros: 300_000, localRequestCount: 1, differenceMicros: 200_000, residualReason: 'provider_exceeds_local', material: false, providerLineItems: ['embeddings'] },
       ],
-      snapshotStability: 'single_observation', unstableDayStartMs: [], providerSourceKind: 'provider_api_pull',
+      offPathBound: 'upper_bound_conditional', snapshotStability: 'single_observation', unstableDayStartMs: [], providerSourceKind: 'provider_api_pull',
       conditions: ['local_route_scope_is_not_provider_verified', 'off_path_provider_usage_is_not_observable', 'provider_line_items_do_not_join_to_requests_or_models', 'local_request_amounts_are_rate_card_estimates'],
       trust: 'scope_conditional_reconciliation', excludedFrom: ['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations'],
     };

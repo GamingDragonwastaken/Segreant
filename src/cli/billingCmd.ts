@@ -13,7 +13,7 @@ import {
   type OpenAiCostsPreview,
 } from '../billing/openaiCosts.ts';
 import { newOpenAiScopeDeclaration } from '../billing/scope.ts';
-import { displayUsd, signedUsd, type ReconciliationReadiness, type ReconciliationRun } from '../billing/reconcile.ts';
+import { describeOffPathBound, displayUsd, signedUsd, type ReconciliationReadiness, type ReconciliationRun } from '../billing/reconcile.ts';
 import { reconciliationReadiness } from '../billing/readiness.ts';
 import { formatUsdMicros } from '../billing/types.ts';
 import { readBillingImportFile } from '../billing/importer.ts';
@@ -128,6 +128,13 @@ function printReconciliation(result: ReconciliationRun, applied: boolean): void 
   console.log(`  Provider reported   $${displayUsd(result.providerReportedMicros)}`);
   console.log(`  Fiscus metered      $${displayUsd(result.localCapturedMicros)}  (local rate-card estimate)`);
   console.log(`  Unexplained         ${signedUsd(result.unexplainedVarianceMicros)}`);
+  // The residual invites exactly one wrong reading — "near zero, so nothing
+  // went off-path" — and that reading is an absence inference the arithmetic
+  // does not license (AII-002). Say what it bounds, next to the number, before
+  // an operator acts on it.
+  for (const line of wrapText(describeOffPathBound(result.offPathBound), 74)) {
+    console.log(`    ${line}`);
+  }
   console.log('');
   console.log(`  Coverage      ${result.coverage.daysWithBoth} day(s) with both sides · ${result.coverage.providerOnlyDays} provider-only · ${result.coverage.localOnlyDays} local-only`);
   console.log(`  Material      ${result.coverage.materialDays} day(s) differ by more than $${result.materialityUsd.toFixed(2)}`);
@@ -688,6 +695,19 @@ function renderPreview(preview: ReturnType<typeof readBillingImportFile>['previe
   console.log('  Reconcile     not_reconciled (no verified provider-account binding on local request rows)');
   console.log('');
   console.log('  No data written. Apply with: fiscus billing import --file <evidence.json> --apply');
+}
+
+/** Wrap a sentence to a column, so a condition is readable next to the number it qualifies. */
+function wrapText(text: string, width: number): string[] {
+  const lines: string[] = [];
+  let current = '';
+  for (const word of text.split(/\s+/)) {
+    if (current.length === 0) current = word;
+    else if (current.length + 1 + word.length <= width) current += ` ${word}`;
+    else { lines.push(current); current = word; }
+  }
+  if (current.length > 0) lines.push(current);
+  return lines;
 }
 
 /** `fiscus billing` — immutable local provider-cost evidence, never an implicit reconciliation. */

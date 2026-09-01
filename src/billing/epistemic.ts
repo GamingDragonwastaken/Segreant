@@ -640,6 +640,12 @@ export function billingReconciliationClaim(input: BillingReconciliationClaimInpu
         providerReported: { ...moneyToJson(providerReported) },
         localCaptured: { ...moneyToJson(localCaptured) },
         unexplainedVariance: fixedMicrosDifference(input.run.unexplainedVarianceMicros, providerBasis, 'estimated'),
+        // What that residual licenses travels WITH it (AII-002). A persisted
+        // Claim carrying the number and not the condition would reopen at the
+        // kernel exactly the gap the CLI and the dashboard just closed: a
+        // reader would get a residual with no statement of whether it bounds
+        // off-path spend at all.
+        offPathBound: input.run.offPathBound,
         snapshotStability: input.run.snapshotStability,
         providerSourceKind: input.run.providerSourceKind,
         ...(input.reconciliationRunId === undefined ? {} : { reconciliationRunId: nonEmpty(input.reconciliationRunId, 'reconciliation run id') }),

@@ -54,7 +54,7 @@ test('reconciliation claim keeps billed and local estimate bases explicit and pr
     periodStartMs: run.periodStartMs, periodEndMs: run.periodEndMs, currency: 'USD', materialityUsd: 0.5,
     providerReportedMicros: 1_334_567, localCapturedMicros: 1_000_000, unexplainedVarianceMicros: 334_567,
     coverage: { providerDays: 2, localDays: 2, daysWithBoth: 2, providerOnlyDays: 0, localOnlyDays: 0, materialDays: 1 },
-    days: [], snapshotStability: 'single_observation', unstableDayStartMs: [], providerSourceKind: 'operator_supplied_export',
+    days: [], offPathBound: 'upper_bound_conditional', snapshotStability: 'single_observation', unstableDayStartMs: [], providerSourceKind: 'operator_supplied_export',
     conditions: ['local_route_scope_is_not_provider_verified', 'off_path_provider_usage_is_not_observable', 'provider_line_items_do_not_join_to_requests_or_models', 'local_request_amounts_are_rate_card_estimates', 'provider_report_is_operator_supplied_and_unverified'],
     trust: 'scope_conditional_reconciliation', excludedFrom: ['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations'],
   };
@@ -68,7 +68,7 @@ test('reconciliation claim keeps billed and local estimate bases explicit and pr
     providerReported: { coefficient: '1334567', scale: 6, currency: 'USD', basis: 'billed' },
     localCaptured: { coefficient: '1', scale: 0, currency: 'USD', basis: 'estimated' },
     unexplainedVariance: { coefficient: '334567', scale: 6, currency: 'USD', leftBasis: 'billed', rightBasis: 'estimated' },
-    snapshotStability: 'single_observation', providerSourceKind: 'operator_supplied_export',
+    offPathBound: 'upper_bound_conditional', snapshotStability: 'single_observation', providerSourceKind: 'operator_supplied_export',
   });
 });
 
@@ -78,7 +78,7 @@ test('reconciliation claim refuses a non-conserving residual instead of certifyi
     periodStartMs: run.periodStartMs, periodEndMs: run.periodEndMs, currency: 'USD', materialityUsd: 0.5,
     providerReportedMicros: 10, localCapturedMicros: 3, unexplainedVarianceMicros: 8,
     coverage: { providerDays: 1, localDays: 1, daysWithBoth: 1, providerOnlyDays: 0, localOnlyDays: 0, materialDays: 1 }, days: [],
-    snapshotStability: 'single_observation', unstableDayStartMs: [], providerSourceKind: 'operator_supplied_export',
+    offPathBound: 'upper_bound_conditional', snapshotStability: 'single_observation', unstableDayStartMs: [], providerSourceKind: 'operator_supplied_export',
     conditions: [], trust: 'scope_conditional_reconciliation', excludedFrom: ['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations'],
   };
   assert.throws(() => billingReconciliationClaim({ id: 'claim:reconciliation:bad', run: reconciliation, evidenceIds: ['evidence:provider', 'evidence:local'], issuedAt: '2026-08-10T12:01:00.000Z' }), /does not conserve/);
@@ -150,7 +150,7 @@ test('Store persists a mixed-basis reconciliation Claim only from existing Evide
       periodStartMs: run.periodStartMs, periodEndMs: run.periodEndMs, currency: 'USD', materialityUsd: 0.5,
       providerReportedMicros: 1_334_567, localCapturedMicros: 1_000_000, unexplainedVarianceMicros: 334_567,
       coverage: { providerDays: 2, localDays: 2, daysWithBoth: 2, providerOnlyDays: 0, localOnlyDays: 0, materialDays: 1 }, days: [],
-      snapshotStability: 'single_observation', unstableDayStartMs: [], providerSourceKind: 'operator_supplied_export',
+      offPathBound: 'upper_bound_conditional', snapshotStability: 'single_observation', unstableDayStartMs: [], providerSourceKind: 'operator_supplied_export',
       conditions: ['local_route_scope_is_not_provider_verified', 'off_path_provider_usage_is_not_observable', 'provider_line_items_do_not_join_to_requests_or_models', 'local_request_amounts_are_rate_card_estimates', 'provider_report_is_operator_supplied_and_unverified'],
       trust: 'scope_conditional_reconciliation', excludedFrom: ['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations'],
     };

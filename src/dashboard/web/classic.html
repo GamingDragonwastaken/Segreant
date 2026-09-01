@@ -1093,6 +1093,15 @@ function renderBilling(d) {
     const variance = Number(latest.unexplainedVarianceMicros || 0);
     const cov = latest.coverage && typeof latest.coverage === 'object' ? latest.coverage : {};
     const stability = String(latest.snapshotStability || 'single_observation').replace(/_/g, ' ');
+    // A residual at or below zero means the local rate-card ESTIMATE exceeds
+    // everything the provider billed on this scope, which refutes the very
+    // condition under which the residual bounds off-path spend. Reading it as
+    // "nothing went off-path" is an absence inference the arithmetic does not
+    // license (AII-002), and it is the reading a small number invites.
+    const offPathBound = String(latest.offPathBound || 'upper_bound_conditional');
+    const offPathNote = offPathBound === 'upper_bound_conditional'
+      ? 'The residual is an <b>upper bound</b> on spend that never passed through Fiscus — conditional on your route declaration and on the local rate-card estimate not exceeding the true on-path billed cost. It is not a measurement of off-path spend.'
+      : 'The local rate-card estimate <b>exceeds</b> the provider total for this scope, so this residual bounds nothing: over-estimation has absorbed an unknown amount of any off-path spend. A residual at or below zero is not evidence that nothing went off-path.';
     const days = Array.isArray(latest.days) ? latest.days : [];
     const notable = days.filter((x) => x && (x.material || x.residualReason === 'no_local_capture' || x.residualReason === 'no_provider_report')).slice(0, 8);
     const dayRows = notable.map((x) => `<tr>
@@ -1104,7 +1113,8 @@ function renderBilling(d) {
     </tr>`).join('');
     return `<div class="card billing-note fade" style="grid-column:1/-1">
       <div class="label">Provider reconciliation ${tip('A comparison of two totals for one provider project, per UTC day: what the provider Costs API reported, and what Fiscus metered on the route you declared belongs to that project. The <b>grain is a day total</b> — provider line items do not join to models or requests, and pretending otherwise would mean inventing an allocation. The residual is the OUTPUT, not an error: it is an upper bound on spend that never passed through Fiscus, and it holds only if your route declaration is true, which nothing here verifies with the provider.')}</div>
-      <div class="billing-state">RECONCILED WITH RESIDUAL · SCOPE-CONDITIONAL${latest.providerSourceKind === 'operator_supplied_export' ? ' · OPERATOR-SUPPLIED PROVIDER SIDE' : ''}</div>
+      <div class="billing-state">RECONCILED WITH RESIDUAL · SCOPE-CONDITIONAL${offPathBound === 'upper_bound_conditional' ? '' : ' · RESIDUAL BOUNDS NOTHING'}${latest.providerSourceKind === 'operator_supplied_export' ? ' · OPERATOR-SUPPLIED PROVIDER SIDE' : ''}</div>
+      <p class="bsub" style="margin-top:var(--s3)">${offPathNote}</p>
       ${latest.providerSourceKind === 'operator_supplied_export' ? '<p class="bsub" style="margin-top:var(--s3)">The provider figures in this comparison were <b>supplied by an operator</b>, not read from the provider by Fiscus. The arithmetic is identical and the evidence is weaker: nothing here can detect a report that was edited before it was handed over. A read-only Costs pull is the stronger route.</p>' : ''}
       <div class="bars" style="margin-top:var(--s3)">
         <div class="bar"><div class="top"><span class="name">Provider reported</span><span class="cost">${billingUsd(latest.providerReportedMicros)}</span></div><div class="meta">${esc(String(latest.providerProjectRef || '—'))}</div></div>

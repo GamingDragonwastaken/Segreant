@@ -114,6 +114,15 @@ card, `/app/main.js` 404'd. Reproduced locally before any fix, then repaired.
   Fixed, with support and refutation using opposite containment tests.
   See D-067.
 
+- **The residual says what it bounds (AII-002).** P = T + O, so
+  R = P − L = O + (T − L), and `O ≤ R` holds exactly when the local rate-card
+  estimate does not exceed the true on-path billed cost. R < 0 refutes that
+  condition outright — local over-estimation has absorbed an unknown amount of
+  off-path spend — yet the CLI printed `Unexplained -$3.10` and stopped, and a
+  small number invites exactly one reading. `offPathBound` now travels on the
+  run, in the CLI beneath the number, on the dashboard state line, and inside
+  the issued Claim. See D-068.
+
 ## Last verified commands
 
 Run against the WP-B01 tree:
@@ -125,7 +134,7 @@ Run against the WP-B01 tree:
   `src/team/`** — CI found two red heads this program because the root gates
   cannot see it.
 - `node scripts/build.mjs` -> pass
-- full `node --test test/*.test.ts` -> 1,187 tests / 1,183 pass / 0 fail / 4 skipped
+- full `node --test test/*.test.ts` -> 1,190 tests / 1,186 pass / 0 fail / 4 skipped
 
 ## Known residuals
 
@@ -148,10 +157,10 @@ Run against the WP-B01 tree:
 
 ## Next exact action
 
-- AII-002's remaining scope: negative claims outside the coding `clean`
-  channels. `no off-path spend` is the load-bearing one — the residual in a
-  billing reconciliation is presented as unexplained variance, and nothing
-  requires a completeness witness before that residual is read as absence.
+- Nothing in the product yet EMITS a refuting completeness witness, so the
+  guard added in D-067 is unexercised outside tests. Find the first real source
+  that can report its own coverage gap — the git revert scan over a shallow
+  clone is the obvious candidate — and have it emit one.
 - Then carry the ClaimProfile axes to the wire (AII-014's remainder), and
   migrate the three `unmigrated_authority` boundaries named in
   `docs/program/ISSUANCE-MAP.md`.
