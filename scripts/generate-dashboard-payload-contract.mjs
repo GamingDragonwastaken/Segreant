@@ -1,31 +1,29 @@
-import { createHash, randomUUID } from 'node:crypto';
-import { readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 /**
- * Publish a generated file atomically.
- *
- * These land inside the live source tree, which other processes read: the
+ * These files land in the live source tree, which other processes read: the
  * browser compiler root during a concurrent build, and `dashboard-script`'s
- * source sweep, which walks `src/dashboard/web/app` while `build-race` is
- * running two builds through it. A plain `writeFileSync` leaves a window in
- * which that reader sees a truncated file or, mid-rewrite on Windows, no file
- * at all. Same-directory rename removes the window rather than asking readers
- * to retry around it.
+ * source sweep, which walks `src/dashboard/web/app` while `build-race` runs two
+ * builds through it. A plain write leaves a window in which such a reader sees a
+ * truncated file or a failed open.
+ *
+ * SAME-DIRECTORY RENAME WAS TRIED AND REVERTED. It removes that window on POSIX
+ * and creates a worse one on Windows: `MoveFileEx` with REPLACE_EXISTING fails
+ * EPERM while any process holds the destination open, so `build-race`'s two
+ * concurrent builders failed the build outright rather than reading a short
+ * file. Measured, not predicted — the rename made a green suite red on the first
+ * run.
+ *
+ * The window therefore stands, documented, in `docs/program/ACTIVE-EXECUTION.md`.
+ * If it is closed later, the fix belongs on the reader: `scripts/build-integrity.mjs`
+ * already retries a transient open for exactly this reason, and the one observed
+ * failure was a read that errored rather than a read that was short.
  */
-function publishGenerated(path, contents) {
-  const temp = `${path}.${process.pid}-${randomUUID()}.tmp`;
-  try {
-    writeFileSync(temp, contents, 'utf8');
-    renameSync(temp, path);
-  } catch (error) {
-    rmSync(temp, { force: true });
-    throw error;
-  }
-}
 const sourcePath = join(root, 'src', 'dashboard', 'shared-types.ts');
 const targetPath = join(root, 'src', 'dashboard', 'web', 'app', 'core', 'generated-payload-contract.ts');
 const generatedTypesPath = join(root, 'src', 'dashboard', 'web', 'app', 'core', 'generated-types.ts');
@@ -101,7 +99,7 @@ const generated = [
   `export const DASHBOARD_INTERFACE_CONTRACTS = ${JSON.stringify(interfaces, null, 2)} as const;`,
   '',
 ].join('\n');
-publishGenerated(targetPath, generated);
+writeFileSync(targetPath, generated, 'utf8');
 
 // The browser compiler intentionally has a rootDir of web/app and cannot import
 // the server-side shared source directly. Copy the canonical declarations into
@@ -113,4 +111,4 @@ const generatedTypes = [
   source.trim(),
   '',
 ].join('\n');
-publishGenerated(generatedTypesPath, generatedTypes);
+writeFileSync(generatedTypesPath, generatedTypes, 'utf8');

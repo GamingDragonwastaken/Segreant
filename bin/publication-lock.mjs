@@ -19,7 +19,26 @@ import { join } from 'node:path';
 // wait finite for a genuinely wedged live owner, but do not turn that queue into
 // a false build failure at the old two-minute boundary.
 export const LOCK_WAIT_MS = 300_000;
+/**
+ * How long an owner-less runtime-snapshot tree is left before it is reaped.
+ *
+ * This constant is now the SNAPSHOT reaper's, not the lock's — see
+ * `bin/runtime-snapshot.mjs`. The two once shared it because they share a
+ * shape (owner-bearing objects judged by PID liveness, owner-less ones by age),
+ * but not a cost: nothing waits on a snapshot tree, so a generous grace there
+ * only leaves a directory on disk a while longer. Waiting is exactly what the
+ * lock does, which is why it needed its own, much shorter budget.
+ */
 export const LOCK_STALE_MS = 10 * 60_000;
+/**
+ * How long a lock carrying no owner token in any form is treated as live.
+ *
+ * Reaching that state means a creator died inside a one-syscall window, so the
+ * grace only has to exceed that. It must stay well under `LOCK_WAIT_MS`: at ten
+ * minutes it exceeded the wait, and a single such directory wedged every
+ * contender until each one timed out.
+ */
+export const OWNERLESS_LOCK_STALE_MS = 10_000;
 export const LOCK_POLL_MS = 25;
 export const RENAME_RETRY_MS = 5_000;
 /**
@@ -146,10 +165,28 @@ function lockIsStale(buildLock, snapshot = inspectLock(buildLock)) {
   if (!snapshot) return true;
   if (snapshot.owner) return !processIsAlive(snapshot.owner.pid);
 
-  // The creator writes owner.json immediately after mkdir. Treat a very young,
-  // partially-written lock as live; recover an interrupted creator after a
-  // bounded age rather than deleting another process's lock.
-  return Date.now() - snapshot.lockStat.mtimeMs > LOCK_STALE_MS;
+  // The timer governs ONE case: a directory carrying no token at all, in any
+  // form — no owner.json, no `.owner-<token>.tmp`, no quarantined record.
+  // `inspectLock` recovers a token from all three, so reaching here means the
+  // creator died between `mkdir` and its first write. That window is a single
+  // syscall wide, and `LOCK_STALE_MS` (ten minutes) was calibrated for a
+  // different question: it is longer than `LOCK_WAIT_MS`, so one such directory
+  // parked every contender until they each timed out. An owner-bearing lock is
+  // still judged by whether its process is alive, which is the case that
+  // legitimately lasts minutes.
+  return Date.now() - snapshot.lockStat.mtimeMs > OWNERLESS_LOCK_STALE_MS;
+}
+
+/**
+ * Is this lock one we created and failed to publish?
+ *
+ * The token is the proof. A directory carrying OUR token is ours whatever state
+ * it is in, and reclaiming it is sound; a directory carrying no token, or
+ * someone else's, is not ours to touch. The old cleanup acted on the ABSENCE of
+ * a token, which is the one thing that proves nothing.
+ */
+function ownedByToken(snapshot, token) {
+  return snapshot?.owner?.token === token;
 }
 
 function reapOrphanQuarantines(root) {
@@ -165,8 +202,16 @@ function reapOrphanQuarantines(root) {
     const snapshot = inspectLock(path);
     // A quarantine is no longer on the acquisition path. It is safe to reap
     // only when its owner is demonstrably dead (or its owner-less generation
-    // has aged past the same stale threshold); a live/uncertain generation is
+    // has aged past `OWNERLESS_LOCK_STALE_MS`); a live/uncertain generation is
     // preserved for a later acquisition rather than deleted by pathname.
+    //
+    // Shortening that timer does not endanger an in-progress quarantine:
+    // `quarantineKnownLock` moves the token-bearing record INTO the directory
+    // before renaming the directory aside, so a quarantine it is still working
+    // on always carries a token and is judged by whether that process is alive.
+    // Reaching the timer here means a `quarantineUnknownLock` died partway and
+    // left a directory that never had an owner — garbage, and the sooner the
+    // better.
     if (lockIsStale(path, snapshot)) removeQuarantine(path);
   }
 }
@@ -282,7 +327,36 @@ function releasePublicationLock(root, buildLock, token) {
   }
 
   const quarantine = join(root, `${LOCK_QUARANTINE_PREFIX}release-${process.pid}-${randomUUID()}`);
-  if (!renameForQuarantine(buildLock, quarantine)) return;
+  if (!renameForQuarantine(buildLock, quarantine)) {
+    // A RELEASE THAT GIVES UP DOES NOT LEAVE THE LOCK ALONE. IT LEAVES IT HELD.
+    //
+    // This was `return`, and that is the most expensive line in the file. By
+    // here the owner record has ALREADY been renamed to `.owner-quarantine.json`
+    // — so returning leaves the canonical directory in place, carrying a
+    // token-bearing record that `inspectLock` reads as an owner and
+    // `lockIsStale` then clears as live, because the process it names is this
+    // one and this one is still running. The lock is abandoned and permanently
+    // un-recoverable: every contender waits out `LOCK_WAIT_MS` and reports
+    // `timed out waiting for another Fiscus build`, naming a build that has
+    // long since moved on. Observed directly — the repository root held
+    // `.owner-quarantine.json` for a live PID across a full minute while
+    // `build-race` timed out behind it.
+    //
+    // The directory rename fails for a reason that has nothing to do with
+    // ownership: on Windows a single open handle anywhere inside the directory
+    // — another contender mid-`readdirSync`, an indexer, a virus scanner — is
+    // enough, and `RENAME_RETRY_MS` is five seconds.
+    //
+    // Removing it in place is sound HERE and nowhere else. The whole point of
+    // claiming the owner record first is that the claim is exclusive: the
+    // rename of `owner.json` succeeded and the moved record still carries our
+    // token, so this generation is ours and no other process can be inside it.
+    // That is the same proof the move itself relies on — the move only buys
+    // speed, getting the canonical path free sooner. Losing the speed is not a
+    // reason to keep the lock.
+    removeQuarantine(buildLock);
+    return;
+  }
   const quarantinedOwner = readOwnerFile(join(quarantine, ownerName));
   if (!quarantinedOwner || quarantinedOwner.token !== token) {
     restoreQuarantinedLock(buildLock, quarantine);
@@ -353,14 +427,23 @@ export function acquirePublicationLock(root) {
       const code = error?.code;
 
       if (created) {
-        // Deliberately NO cleanup here. The old catch quarantined `buildLock` by
-        // pathname to tidy up after itself, which is unsound at exactly this
-        // point: our record never landed, so nothing proves the directory now at
-        // that path is still the one we made. Removing it takes a fresh lock
-        // away from another process inside ITS own owner-write window and
-        // propagates the failure onward — one lost race cascading through every
-        // contender. A directory we really did abandon carries no owner, and the
-        // stale path exists for that.
+        // Clean up ONLY what carries our token. The original code quarantined
+        // `buildLock` by pathname, which is unsound here: our owner record never
+        // landed, so a pathname says nothing about whose directory it now is,
+        // and removing it takes a fresh lock from another process inside ITS own
+        // publish window. Removing the cleanup entirely was worse in a different
+        // way — a half-written `.owner-<token>.tmp` of OUR OWN is recovered by
+        // `inspectLock` as a live owner whose PID is this very process, so the
+        // next lap sees a lock owned by someone alive and waits for itself until
+        // `LOCK_WAIT_MS`. CI deadlocked eight contenders that way.
+        //
+        // The token settles it. A directory carrying our token is ours whatever
+        // state it is in; one carrying another token, or none, is not ours to
+        // touch. `quarantineKnownLock` re-verifies the record after moving it,
+        // so a generation that changed under us is restored rather than removed.
+        const snapshot = inspectLock(buildLock);
+        if (ownedByToken(snapshot, token)) quarantineKnownLock(root, buildLock, snapshot);
+
         unusableSince ??= Date.now();
         if (Date.now() - unusableSince > PATH_CONTENTION_MS) throw error;
       } else if (code === 'EEXIST') {
@@ -369,7 +452,14 @@ export function acquirePublicationLock(root) {
         // can outlast it by minutes, and `LOCK_WAIT_MS` is its bound.
         unusableSince = null;
         const snapshot = inspectLock(buildLock);
-        if (lockIsStale(buildLock, snapshot) && quarantineStaleLock(root, buildLock, snapshot)) continue;
+        // Our own orphan from an earlier lap. Waiting on it is waiting on this
+        // process, which never ends: `lockIsStale` asks whether the owner's PID
+        // is alive, and for our own token the answer is always yes.
+        if (ownedByToken(snapshot, token)) {
+          if (quarantineKnownLock(root, buildLock, snapshot)) continue;
+        } else if (lockIsStale(buildLock, snapshot) && quarantineStaleLock(root, buildLock, snapshot)) {
+          continue;
+        }
       } else if (code === 'ENOENT') {
         // `mkdir` cannot answer ENOENT because of anything happening at the lock
         // path itself; the parent directory is missing. Nothing to wait for.

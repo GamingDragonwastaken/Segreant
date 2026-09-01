@@ -94,9 +94,15 @@ node --test --experimental-strip-types test/value.test.ts
 node --test --experimental-strip-types --test-name-pattern="realized" test/value.test.ts
 ```
 
-`npm test` runs `pretest` first (`scripts/build.mjs --web`, ~3s) because three
-GUI tests read the emitted `dist/` tree rather than the source. Invoking
-`node --test` on a single file skips that — rebuild first if it is one of them.
+`npm test` runs `pretest` first because three GUI tests read the emitted
+`dist/` tree rather than the source. Invoking `node --test` on a single file
+skips that — rebuild first if it is one of them.
+
+`pretest` is the **full** `node scripts/build.mjs`, not the `--web` shortcut it
+used to be (`d23245f` changed it). That matters more than it sounds: it means
+nothing in the ordinary workflow exercises `--web`, so `--web` broke at `e00f7f9`
+and stayed broken until somebody ran the command this paragraph used to claim
+`pretest` used. If you shorten a build path, check what still runs it.
 
 Exercising the CLI should not touch your own ledger:
 

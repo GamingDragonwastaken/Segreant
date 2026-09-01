@@ -151,7 +151,41 @@ card, `/app/main.js` 404'd. Reproduced locally before any fix, then repaired.
   observation run recorded" while describing one. See D-070.
 
 
-- **The lock decides by position, not by errno (D-071, corrected by D-072).**
+- **The release path was leaking held locks (D-077).** `releasePublicationLock`
+  renames the owner record aside to claim the generation, then moves the
+  directory; if that move failed it RETURNED, leaving the canonical directory
+  in place carrying a token for a live PID. Nothing can recover that, so every
+  contender waits `LOCK_WAIT_MS` and blames a build that finished minutes ago.
+  Observed directly: the repo root held `.owner-quarantine.json` for a live PID
+  across a minute while `build-race` timed out behind it at 300s, running alone.
+  This is the defect D-071, D-072 and D-074 were each chasing from the acquire
+  side — the process reporting the timeout was never the one that caused it.
+- **`--web` had been broken for three weeks (D-076).** `node scripts/build.mjs
+  --web` fails on every platform since `e00f7f9`, which put an ABSOLUTE path in
+  a list `sourceFingerprint` joins onto the root. CI stayed green because
+  nothing runs it: `pretest` moved to the full build at `d23245f`, and every
+  other lifecycle hook was already the full build. Found by running the command
+  `CLAUDE.md` claimed `pretest` used — a stale claim, now corrected. The guard
+  went into `sourceFingerprint`, whose contract is what was unstated.
+- **The lock waited on itself (D-074).** D-072 corrected D-071's errno list and
+  introduced a worse defect in the same breath: concluding that pathname cleanup
+  is unsound, it removed the created-branch cleanup entirely. But `inspectLock`
+  deliberately recovers an owner from a `.owner-<token>.tmp`, so a publish that
+  failed between the write and the rename left OUR token in OUR directory, and
+  the next lap found an owner whose process was alive — this one — and waited
+  five minutes for itself. CI `33507233437` went green on Windows and red on
+  ubuntu, macOS and candidate-head with `timed out waiting for another Fiscus
+  build (300000ms)`. Pathname and absence were wrong identities in opposite
+  directions; the TOKEN is the right one. Three incomplete repairs of one defect
+  in three commits, and the first to name an invariant instead of a symptom.
+- **A residue test that measured the filesystem (D-075).** Instrumenting the
+  module put a 115ms median and a 763ms maximum inside `renameForQuarantine`
+  under contention, with the reaper and the recursive delete never exceeding
+  50ms — so the eight-workers-by-twenty-five-cycles test was timing two hundred
+  serialized critical sections, not its own claim. `896c093` measures the same,
+  so it is not a regression. Now bounded by wall clock with a lap floor, and
+  every child killed well below `LOCK_WAIT_MS` so a self-wait fails fast.
+- **The lock decides by position, not by errno (D-071, corrected by D-072, then D-074).**
   D-071 listed the three codes Windows produces; CI then went green on Windows
   and red on macOS with a fourth, `EINVAL`. The list was a property of the
   kernel the job ran on. Once the directory is created, ANY failure to publish
@@ -181,7 +215,7 @@ card, `/app/main.js` 404'd. Reproduced locally before any fix, then repaired.
 
 ## Last verified commands
 
-Run against the D-073 tree:
+Run against the D-077 tree:
 
 - `node ./node_modules/typescript/bin/tsc --noEmit -p tsconfig.json` -> pass
 - `node ./node_modules/typescript/bin/tsc --noEmit -p src/dashboard/web/app/tsconfig.json` -> pass
@@ -190,7 +224,17 @@ Run against the D-073 tree:
   `src/team/`** — CI found two red heads this program because the root gates
   cannot see it.
 - `node scripts/build.mjs` -> pass
-- full `node --test test/*.test.ts` -> 1,213 tests / 1,209 pass / 0 fail / 4 skipped
+- root suite -> **1,219 tests / 1,215 pass / 0 fail / 4 skipped**, run as 160 files
+  at default concurrency plus the 9 repo-root-lock-contending files one at a
+  time. The concurrent whole-suite run is NOT a clean gate on this machine:
+  `test/build-race.test.ts` runs real builds at the repo root holding the
+  publication lock while four other files spawn the CLI and queue behind it,
+  and at `81c20c6` that produced 8 failures locally. Splitting the run is a
+  workaround for the harness, not a fix for the contention.
+- `node scripts/build.mjs --web` -> exit 0 (broken since `e00f7f9`; see D-076)
+- `npm pack` -> exit 0, 217 files
+- `test/build-race.test.ts` 4/4 consecutive, 95-131s, no residue (it timed out
+  at 369s before D-077)
 
 ## Known residuals
 
@@ -208,9 +252,17 @@ Run against the D-073 tree:
   remains the place a third cause would appear.
 - One full-suite run failed `GUI sources: no HTML injection sink`, which walks
   `src/dashboard/web/app` while `build-race` rewrites generated files in that
-  tree. Four paired re-runs did not reproduce it. The generator now publishes by
-  same-directory rename, which closes that window; the failure itself was never
-  diagnosed.
+  tree. Four paired re-runs did not reproduce it, and the failure was never
+  diagnosed. **The window is still open.** Publishing the generated files by
+  same-directory rename was tried and REVERTED: on Windows `MoveFileEx` with
+  REPLACE_EXISTING fails `EPERM` while any process holds the destination open,
+  so `build-race`'s two concurrent builders failed the build outright instead of
+  occasionally reading a short file — measured on the first run, not predicted.
+  A trade of a rare short read for a reliable hard failure is not a fix. If it
+  is closed later the repair belongs on the READER, as it already does in
+  `scripts/build-integrity.mjs`, whose bounded retry exists for this same tree;
+  the one observed failure was a read that errored rather than one that was
+  short.
 - AII-009/025/027 moved OPEN -> PARTIAL, not closed: each still has a downstream
   consumer requirement (composite decision-fitness, control-path refusal of
   observational input, evidence-debt planner).

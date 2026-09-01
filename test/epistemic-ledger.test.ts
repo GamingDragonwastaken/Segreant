@@ -80,6 +80,64 @@ function ledger(): { db: DatabaseSync; value: EpistemicLedger } {
   return { db, value: new EpistemicLedger(db) };
 }
 
+test('the ledger refuses a derivation that strengthens a claim without the witness for it', () => {
+  // `assessDerivationLegality` was correct, tested as a pure function, and had
+  // no caller anywhere in `src/`. This ledger is the only place a Derivation can
+  // be persisted, and it did not consult it — so the refusal that separates a
+  // claim bound to its evidence from one asserted beside it was not actually
+  // guarding anything. Wiring it in without this test would leave the same gap
+  // one level down: a call whose refusal is never shown to be reachable.
+  const { db, value } = ledger();
+  const e = evidence(evidenceInput());
+  const source = claim(claimInput('claim:observational', e.id));
+
+  // The largest strengthening the product can express: an observational input
+  // becoming a randomized-causal output. Nothing else about the two claims
+  // differs, so `causal_identification` is the only witness that can be missing.
+  const outputInput = claimInput('claim:randomized', e.id);
+  const output = claim({
+    ...outputInput,
+    causalStatus: 'randomized',
+    profile: claimProfile({ ...outputInput.profile, causality: 'randomized' }),
+  });
+
+  assert.equal(value.appendEvidence(e), 'inserted');
+  assert.equal(value.appendClaim(source), 'inserted');
+  assert.equal(value.appendClaim(output), 'inserted');
+
+  const unwitnessed = derivation({
+    ...derivationInput(source.id, output.id),
+    id: 'derivation:unwitnessed-causal',
+  });
+  assert.throws(
+    () => value.appendDerivation(unwitnessed),
+    /causal_identification/,
+    'a derivation may not promote an observational claim to a randomized one unwitnessed',
+  );
+  assert.equal(value.readDerivation('derivation:unwitnessed-causal'), null, 'a refused derivation must not persist');
+
+  // The same strengthening WITH its witness is legal. Without this half the
+  // assertion above would also pass against a ledger that refused every
+  // derivation, which is the failure mode a one-sided refusal test hides.
+  const proof = witness({
+    id: 'witness:randomization',
+    kind: 'causal_identification',
+    evidenceIds: [e.id],
+    detail: 'assignment protocol committed before exposure',
+    issuedAt: '2026-08-02T00:00:02.000Z',
+    epistemic: 'supported',
+    schemaVersion: 1,
+  });
+  assert.equal(value.appendWitness(proof), 'inserted');
+  const witnessed = derivation({
+    ...derivationInput(source.id, output.id),
+    id: 'derivation:witnessed-causal',
+    witnesses: [{ id: proof.id, kind: proof.kind, evidenceIds: proof.evidenceIds, detail: proof.detail }],
+  });
+  assert.equal(value.appendDerivation(witnessed), 'inserted');
+  db.close();
+});
+
 test('ledger persists canonical Evidence, Claim, Derivation, and dependency edges across handles', () => {
   const { db, value } = ledger();
   const e = evidence(evidenceInput());

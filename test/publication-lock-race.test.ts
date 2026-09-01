@@ -53,17 +53,45 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const LOCK_MODULE = pathToFileURL(join(ROOT, 'bin', 'publication-lock.mjs')).href;
 
-function run(script: string, args: string[]): Promise<{ code: number; stderr: string }> {
+/**
+ * Run a child, and KILL IT rather than let it hang.
+ *
+ * Every failure mode in this file ends in `acquirePublicationLock` waiting, and
+ * its own bound is `LOCK_WAIT_MS` — five minutes. A deadlocked worker therefore
+ * fails the suite five minutes later with `timed out waiting for another Fiscus
+ * build`, which names the wrong problem: nothing else held the lock. That is
+ * how run `33507233437` reported a self-deadlock, and it cost a CI round to
+ * read. A kill window well below that bound turns the same defect into a fast,
+ * legible failure that says which worker stopped making progress.
+ */
+function run(
+  script: string,
+  args: string[],
+  killAfterMs = 90_000,
+): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [script, ...args], {
       env: { ...process.env, NODE_OPTIONS: '' },
-      stdio: ['ignore', 'ignore', 'pipe'],
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
+    let stdout = '';
     let stderr = '';
+    let killed = false;
+    const timer = setTimeout(() => {
+      killed = true;
+      child.kill('SIGKILL');
+    }, killAfterMs);
+    timer.unref?.();
+    child.stdout?.setEncoding('utf8');
+    child.stdout?.on('data', (chunk: string) => { stdout += chunk; });
     child.stderr?.setEncoding('utf8');
     child.stderr?.on('data', (chunk: string) => { stderr += chunk; });
-    child.once('error', reject);
-    child.once('close', (code) => resolve({ code: code ?? 1, stderr }));
+    child.once('error', (error) => { clearTimeout(timer); reject(error); });
+    child.once('close', (code) => {
+      clearTimeout(timer);
+      if (killed) stderr += `\n[killed after ${killAfterMs}ms without exiting — it stopped making progress]`;
+      resolve({ code: killed ? -1 : code ?? 1, stdout, stderr });
+    });
   });
 }
 
@@ -124,26 +152,173 @@ test('a contender whose own lock directory is removed retries instead of dying',
   }
 });
 
+test('a contender never waits on its own half-published lock', async () => {
+  // THE REPAIR'S OWN DEFECT, WHICH IS A DIFFERENT ONE FROM THE DEFECT IT FIXED.
+  //
+  // Removing the created-branch cleanup (D-072) was right about pathnames and
+  // wrong about tokens. `acquirePublicationLock` publishes ownership in two
+  // steps — write `.owner-<token>.tmp`, then rename it to `owner.json` — so a
+  // failure BETWEEN them leaves our own token-bearing temp inside our own lock
+  // directory. `inspectLock` deliberately recovers a token from that temp, and
+  // `lockIsStale` then asks whether the owner's process is alive. The owner is
+  // this process. It is alive. So the contender waited on itself for the full
+  // `LOCK_WAIT_MS` and the suite reported `timed out waiting for another Fiscus
+  // build` — naming another build that never existed. Run `33507233437` failed
+  // that way on ubuntu and macOS simultaneously.
+  //
+  // Manufacturing it deterministically needs the rename to fail while the temp
+  // SURVIVES, which is the one interleaving the saboteur above cannot produce:
+  // it deletes the directory, taking the temp with it. Planting a DIRECTORY at
+  // `owner.json` does it exactly — `rename` cannot replace a directory, so the
+  // publish fails with the temp still in place, which is the state a
+  // mid-publish interruption leaves on a real filesystem.
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-lock-self-'));
+
+  const worker = join(dir, 'worker.mjs');
+  writeFileSync(worker, [
+    `import { acquirePublicationLock } from ${JSON.stringify(LOCK_MODULE)};`,
+    'const [root, untilMs] = [process.argv[2], Number(process.argv[3])];',
+    'let laps = 0;',
+    'while (Date.now() < untilMs) {',
+    '  acquirePublicationLock(root)();',
+    '  laps += 1;',
+    '}',
+    'process.stdout.write(String(laps));',
+  ].join('\n'), 'utf8');
+
+  const saboteur = join(dir, 'saboteur.mjs');
+  writeFileSync(saboteur, [
+    "import { mkdirSync } from 'node:fs';",
+    "import { join } from 'node:path';",
+    'const [root, untilMs] = [process.argv[2], Number(process.argv[3])];',
+    "const blocker = join(root, '.fiscus-build.lock', 'owner.json');",
+    // NOT recursive, deliberately: this must only ever plant the blocker inside
+    // a lock directory somebody else already created. Creating the lock itself
+    // would squat the path as an owner-less directory and test the staleness
+    // timer instead of the thing under test.
+    'while (Date.now() < untilMs) {',
+    '  try { mkdirSync(blocker); } catch { /* no lock right now, or already planted */ }',
+    '}',
+  ].join('\n'), 'utf8');
+
+  try {
+    // The sabotage window stays well inside PATH_CONTENTION_MS (10s): a run of
+    // failures longer than that budget is meant to be reported as a real fault
+    // rather than absorbed, and this is contention, not a fault.
+    const until = Date.now() + 2_000;
+    const [worked, sabotage] = await Promise.all([
+      run(worker, [dir, String(until)], 30_000),
+      run(saboteur, [dir, String(until)], 30_000),
+    ]);
+
+    assert.equal(sabotage!.code, 0, sabotage!.stderr);
+    // On the unrepaired code this is the assertion that fires: the worker is
+    // still blocked on its own orphaned lock when the kill window closes.
+    assert.equal(
+      worked!.code,
+      0,
+      worked!.stderr || 'the contender never returned from acquiring a lock it had abandoned itself',
+    );
+
+    // And it must not have solved the problem by abandoning the directory: a
+    // surviving generation would mean the reclamation moved on without it.
+    const residue = readdirSync(dir).filter((name) => name.startsWith('.fiscus-build.lock'));
+    assert.deepEqual(residue, [], `lock residue left behind: ${residue.join(', ')}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 25 });
+  }
+});
+
 test('ordinary contention leaves no lock residue', async () => {
+  // A FIXED CYCLE COUNT MADE THIS A THROUGHPUT MEASUREMENT.
+  //
+  // It ran eight workers through twenty-five acquisitions each, and every
+  // acquisition is serialized behind the others, so the test's wall clock was
+  // two hundred times the cost of one critical section. That cost is not small
+  // and not ours: releasing renames the owner record aside, renames the lock
+  // directory to a quarantine and deletes it, and on Windows those renames
+  // measured a 115ms median and a 763ms maximum under this very contention.
+  // Timing the module's internals put ~4s of a ~34s run inside
+  // `renameForQuarantine` alone, with the reaper and the recursive delete never
+  // once exceeding 50ms — so the duration is the release protocol's atomicity,
+  // which is the property that makes it safe, rather than a defect to remove.
+  //
+  // Idle, that was 17-22s. Inside the full suite, with the runner executing
+  // other files in parallel, it exceeded a minute. A load-sensitive duration is
+  // not something this test is entitled to assert: its claim is that nothing is
+  // LEFT BEHIND, and that claim needs contention, not a particular number of
+  // laps. So the budget is wall-clock and the laps are whatever fits — more
+  // than twenty-five on a fast machine, fewer on a loaded CI runner, and never
+  // a hang either way.
   const dir = mkdtempSync(join(tmpdir(), 'fiscus-lock-clean-'));
   const worker = join(dir, 'worker.mjs');
   writeFileSync(worker, [
     `import { acquirePublicationLock } from ${JSON.stringify(LOCK_MODULE)};`,
-    'const [root, cycles] = [process.argv[2], Number(process.argv[3])];',
-    'for (let i = 0; i < cycles; i += 1) acquirePublicationLock(root)();',
+    'const [root, untilMs] = [process.argv[2], Number(process.argv[3])];',
+    'let laps = 0;',
+    'while (Date.now() < untilMs) {',
+    '  acquirePublicationLock(root)();',
+    '  laps += 1;',
+    '}',
+    'process.stdout.write(String(laps));',
   ].join('\n'), 'utf8');
 
   try {
+    const until = Date.now() + 5_000;
     const results = await Promise.all(
-      Array.from({ length: 8 }, () => run(worker, [dir, '25'])),
+      Array.from({ length: 8 }, () => run(worker, [dir, String(until)])),
     );
     for (const result of results) assert.equal(result.code, 0, result.stderr);
 
-    // Every acquisition was released, so nothing may be left at the canonical
-    // path or in a quarantine. A surviving generation would mean one was
-    // abandoned rather than cleaned.
+    // A wall-clock budget can be satisfied by doing nothing, which would make
+    // the residue assertion below vacuous. What has to be true is that the lock
+    // was genuinely contended — not that some number of laps happened.
+    //
+    // A total-lap floor is the wrong way to say that. It reads as a claim about
+    // correctness and is really a claim about how fast the machine is: at 24 it
+    // passed idle, then failed at 11 under load, because a contended
+    // acquire-release costs hundreds of milliseconds of directory renames (see
+    // D-075) and eight workers only get through so many in five seconds. The
+    // invariant that does not depend on the hardware is that EVERY worker took
+    // and released the lock at least once — eight processes serialized through
+    // one gate, which is the contention this test is about.
+    const laps = results.map((result) => Number(result.stdout) || 0);
+    assert.ok(
+      laps.every((count) => count >= 1),
+      `every worker must complete an acquire/release; got ${JSON.stringify(laps)}`,
+    );
+
+    // THE CANONICAL PATH IS THE STRICT CLAIM. A directory left at
+    // `.fiscus-build.lock` once every worker has exited is a HELD lock, and
+    // whether it can still be recovered depends on whether the token it carries
+    // names a living process. That is the defect this test exists for (D-077),
+    // and it is asserted immediately, with no sweep allowed first.
+    const canonical = readdirSync(dir).filter((name) => name === '.fiscus-build.lock');
+    assert.deepEqual(canonical, [], 'the canonical lock survived every worker exiting, so it was abandoned held');
+
+    // QUARANTINES ARE A WEAKER CLAIM, AND ASSERTING THE STRONGER ONE WAS WRONG.
+    // `removeQuarantine` swallows a failed delete deliberately — on Windows a
+    // recursive delete loses to an open handle exactly as a rename does — and
+    // `reapOrphanQuarantines` exists because of it, running at the top of every
+    // acquisition. So the design never promised "no quarantine ever survives";
+    // it promised that an abandoned generation is collected by the next
+    // acquisition. This test asserted the former and passed only because the
+    // delete usually wins the race. Under real contention it does not: this run
+    // left three, two from ordinary releases and one from a reclamation.
+    //
+    // So sweep, then assert. A quarantine that survives its own reaper is a
+    // real leak; one that survives only until the next acquisition is the
+    // documented behaviour.
+    const reaper = join(dir, 'reaper.mjs');
+    writeFileSync(reaper, [
+      `import { acquirePublicationLock } from ${JSON.stringify(LOCK_MODULE)};`,
+      'acquirePublicationLock(process.argv[2])();',
+    ].join('\n'), 'utf8');
+    const swept = await run(reaper, [dir]);
+    assert.equal(swept.code, 0, swept.stderr || 'the sweeping acquisition failed');
+
     const residue = readdirSync(dir).filter((name) => name.startsWith('.fiscus-build.lock'));
-    assert.deepEqual(residue, [], `lock residue left behind: ${residue.join(', ')}`);
+    assert.deepEqual(residue, [], `lock residue survived a sweeping acquisition: ${residue.join(', ')}`);
   } finally {
     rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 25 });
   }
@@ -195,4 +370,83 @@ test('the publish branch decides by position, not by error code', () => {
   // directory spins until the 300s wait and reports the wrong problem.
   assert.match(branch[1]!, /PATH_CONTENTION_MS/, 'the retry must be bounded');
   assert.match(branch[1]!, /throw error/, 'a persistent failure must be reported as itself');
+
+  // It must clean up after itself, and ONLY by token. Both halves are load
+  // bearing and each was got wrong once: cleaning up by pathname took a fresh
+  // lock away from another process, and cleaning up not at all left our own
+  // orphan for us to wait on. `ownedByToken` is the only thing that separates
+  // them, so a cleanup that stops consulting it has reintroduced one or the
+  // other.
+  assert.match(
+    branch[1]!,
+    /ownedByToken\(snapshot, token\)/,
+    'the created branch must reclaim only what carries our own token',
+  );
+});
+
+test('a release that cannot move the lock removes it instead of abandoning it held', () => {
+  // THE MOST EXPENSIVE LINE IN THE FILE WAS A BARE `return`.
+  //
+  // `releasePublicationLock` renames `owner.json` to `.owner-quarantine.json`
+  // to claim the generation, then renames the whole directory aside. If that
+  // second rename failed it returned — leaving the canonical directory in place
+  // carrying a token-bearing record. `inspectLock` reads that record as an
+  // owner and `lockIsStale` clears it as live, because the PID it names is the
+  // releasing process, which is still running. Nothing can ever recover it, so
+  // every contender waits out `LOCK_WAIT_MS` and reports `timed out waiting for
+  // another Fiscus build` about a build that finished minutes ago.
+  //
+  // Observed, not theorised: the repository root sat holding
+  // `.owner-quarantine.json` for a live PID across a full minute of polling
+  // while `test/build-race.test.ts` timed out behind it at 300s.
+  //
+  // WHY THIS IS A SOURCE-LEVEL TEST. Reaching the branch needs the directory
+  // rename to fail while the removal that follows can still succeed, and the
+  // real cause — a momentary open handle from an indexer or another
+  // contender's `readdirSync` — is Windows-only and cannot be held to a
+  // schedule. Holding a handle open deliberately blocks the removal too, so it
+  // manufactures a different state than the one that occurs. The end-to-end
+  // guard for this defect is `ordinary contention leaves no lock residue`,
+  // which is what caught it; this pins the specific line so it cannot quietly
+  // return to `return`.
+  const source = readFileSync(join(ROOT, 'bin', 'publication-lock.mjs'), 'utf8');
+  const release = /function releasePublicationLock\([\s\S]*?\n\}/.exec(source);
+  assert.ok(release, 'releasePublicationLock was not found — this test is pinned to its shape');
+
+  const failedMove = /if \(!renameForQuarantine\(buildLock, quarantine\)\) \{([\s\S]*?)\n  \}/.exec(release[0]);
+  assert.ok(failedMove, 'the failed-directory-move branch is no longer a block — check it still removes the lock');
+  assert.match(
+    failedMove[1]!,
+    /removeQuarantine\(buildLock\)/,
+    'a release that cannot move the lock must remove it in place, never leave it holding a live token',
+  );
+});
+
+test('an owner-less lock cannot outlast the wait that queues behind it', () => {
+  // A directory carrying no token in any form is recovered on a timer rather
+  // than by PID, and that timer has to clear inside the window contenders are
+  // willing to wait. At `LOCK_STALE_MS` it did not: ten minutes of staleness
+  // against five minutes of waiting means every contender times out first and
+  // the directory is still there for the next one. Whatever the two values
+  // become, this relation is the one that has to hold.
+  // Read from the source rather than imported: `bin/` ships no declarations, so
+  // a typed import of a `.mjs` module is an implicit `any` under this config.
+  const source = readFileSync(join(ROOT, 'bin', 'publication-lock.mjs'), 'utf8');
+  const declared = (name: string): number => {
+    const match = new RegExp(`export const ${name} = ([0-9_*\\s]+);`).exec(source);
+    assert.ok(match, `${name} is no longer declared where this test reads it`);
+    // The declarations are numeric literals with separators, and one is a
+    // product (`10 * 60_000`). Evaluating the literal keeps the test reading the
+    // real value rather than a copy of it that can drift.
+    return Number(new Function(`return ${match[1]!.replace(/_/g, '')};`)());
+  };
+
+  const ownerless = declared('OWNERLESS_LOCK_STALE_MS');
+  const wait = declared('LOCK_WAIT_MS');
+  assert.ok(Number.isFinite(ownerless) && ownerless > 0, 'the owner-less grace must be a positive duration');
+  assert.ok(
+    ownerless < wait,
+    `an owner-less lock is recovered after ${ownerless}ms but contenders give up after `
+    + `${wait}ms, so one such directory parks every one of them`,
+  );
 });

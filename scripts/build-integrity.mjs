@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, sep } from 'node:path';
+import { isAbsolute, join, sep } from 'node:path';
 
 /**
  * Windows fails an open with EBUSY/EPERM while another process holds the file
@@ -55,6 +55,14 @@ export function sourceFingerprint(root, inputPaths) {
   }
 
   for (const inputPath of inputPaths) {
+    // An absolute input silently becomes `<root>/<absolute>` under `join`, which
+    // fails as an ENOENT naming a path no one wrote. `--web` shipped in that
+    // state from `e00f7f9` until it was next run, because the workflow builds
+    // everything and nothing exercised the flag. Say what is wrong instead: the
+    // caller chooses roots, and the paths under them are relative to one.
+    if (isAbsolute(inputPath)) {
+      throw new Error(`build input must be relative to the root, got an absolute path: ${inputPath}`);
+    }
     collect(join(root, inputPath), inputPath.replaceAll(sep, '/'));
   }
 

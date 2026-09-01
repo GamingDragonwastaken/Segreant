@@ -27,7 +27,13 @@ import {
   type RevocationProjection,
 } from './dag.ts';
 import { EPISTEMIC_STATES } from './state.ts';
-import { derivation, type Derivation, type DerivationInput, type DerivationWitness } from './derivation.ts';
+import {
+  assessDerivationLegality,
+  derivation,
+  type Derivation,
+  type DerivationInput,
+  type DerivationWitness,
+} from './derivation.ts';
 import { canonicalJson } from './serialization.ts';
 import { instant, type Instant } from './time.ts';
 import { witness, type Witness } from './witness.ts';
@@ -379,6 +385,33 @@ export class EpistemicLedger {
       const output = this.readClaim(item.outputClaimId);
       if (output === null) throw new Error(`unknown output claim: ${item.outputClaimId}`);
       if (JSON.stringify(output.proposition) !== JSON.stringify(item.outputProposition)) throw new Error(`derivation output proposition does not match ${item.outputClaimId}`);
+
+      // LEGALITY IS CHECKED HERE OR NOWHERE. `assessDerivationLegality` decides
+      // whether a derivation may strengthen a claim on any profile axis without
+      // the matching witness — the refusal that separates a claim bound to its
+      // evidence from one asserted beside it. It was correct, tested, and had no
+      // caller in `src/` at all: this ledger is the only place a Derivation can
+      // be persisted, and it did not consult it. So a derivation could take an
+      // observational input claim and emit a randomized-causal output, and the
+      // kernel would store it.
+      //
+      // Every input claim is assessed, not just the first. A derivation declares
+      // ONE `coordinateChange`, so its inputs share coordinates by construction;
+      // an input that does not match is a malformed record, and the assessment
+      // throws for it rather than returning a refusal, which is the right
+      // distinction — a mismatch is a broken derivation, an unwitnessed
+      // strengthening is a refused one.
+      for (const sourceId of item.inputClaimIds) {
+        const source = this.readClaim(sourceId);
+        if (source === null) throw new Error(`unknown input claim: ${sourceId}`);
+        const legality = assessDerivationLegality(source, output, item);
+        if (!legality.allowed) {
+          throw new Error(
+            `derivation ${item.id} strengthens ${sourceId} into ${output.id} without `
+            + `${legality.missingWitnesses.join(', ')}`,
+          );
+        }
+      }
 
       const graph = this.graph();
       const extraEdges: DagEdgeInput[] = [
