@@ -1520,8 +1520,8 @@ function renderValue(d) {
     ? `<div class="card fade" style="grid-column:1/-1">
         <div class="label">Cheaper model trials ${tip('Local historical comparison only. Fiscus does <b>not</b> change routing. A candidate must cost less and have no worse observed realized-outcome rate for the same task type. Each model is priced by <b>its own attributed spend</b>, not by the whole window it worked in — a unit whose window is more than 20% other models cannot price a model and is excluded and counted. <b>Historical-equivalent headroom</b> is what the incumbent\'s observed units would have saved at the candidate\'s historical per-unit cost; it is a local list-price estimate, not provider-billed savings and not a guarantee of future cost.<br><br>A result is capped at <b>TRIAL</b> whenever the comparison cannot isolate the model: the saving does not survive dividing by changed lines, the units come from too few working sessions to be independent, the two sides were priced on different bases or across a rate-card change, the cohorts differ sharply in unit size, or the models were used in non-overlapping periods. Each reason is named on the card.')}</div>
         ${switches.slice(0, 4).map((m) => {
-          const tag = m.confidence === 'evidence_supported' ? 'EVIDENCE' : 'TRIAL';
-          const cls = m.confidence === 'evidence_supported' ? 'grow' : 'trim';
+          const tag = m.confidence === 'observational_separation' ? 'SEPARATED' : 'TRIAL';
+          const cls = m.confidence === 'observational_separation' ? 'grow' : 'trim';
           const candidateRate = Math.round(Number(m.candidateRealizationRate || 0) * 100);
           const incumbentRate = Math.round(Number(m.incumbentRealizationRate || 0) * 100);
           // Surface the excluded units on the card itself: a sample that silently
@@ -1542,8 +1542,8 @@ function renderValue(d) {
           const sessions = ` · from ${Number(m.candidateSessions || 0)} vs ${Number(m.incumbentSessions || 0)} working sessions`;
           const evidence = `${Number(m.candidateUnits || 0)} vs ${Number(m.incumbentUnits || 0)} mature units · observed realization ${candidateRate}% vs ${incumbentRate}%${perLine}${sessions}${droppedNote}${staleNote}`;
           const confounders = m.confounders || [];
-          const confidenceNote = m.confidence === 'evidence_supported'
-            ? 'anytime-valid outcome bounds separate'
+          const confidenceNote = m.confidence === 'observational_separation'
+            ? 'anytime-valid outcome bounds separate under the observational procedure — not a causal effect'
             : confounders.length
               ? 'confounded — see below; kept as a trial regardless of the statistics'
               : 'intervals overlap — keep this as a measured trial, not a default change';

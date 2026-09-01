@@ -1,6 +1,15 @@
 /**
- * Value of Information — which measurement to buy next.
+ * Instrumentation sensitivity — which un-instrumented lens moves the Index most.
  * (docs/RETURN-ON-INTELLIGENCE.md §12.)
+ *
+ * This is NOT value of information. VoI needs a decision, a utility model and a
+ * distribution over what the measurement might reveal; this module has none of
+ * those. It reports how far the composite would move if a missing lens were
+ * measured at one disclosed reference value — a sensitivity ranking of the
+ * aggregator, useful for choosing instrumentation, and not a claim about what
+ * that measurement is worth. Decision-theoretic VoI lives in
+ * `src/decision/engine.ts`, where a scenario mixture supplies the probabilistic
+ * model this ranking deliberately does not have.
  *
  * The observed Index is not generally a ceiling while lenses are un-instrumented:
  * weight renormalization means a missing lens can move the score either direction.
@@ -9,7 +18,7 @@
  * completing the decision calculus:
  *
  *   shadow price (§9)  — where does the next DOLLAR go?
- *   VoI (this)         — which MEASUREMENT do I buy next?
+ *   sensitivity (this) — which MEASUREMENT moves the composite most?
  *   anytime CS (§10)   — when do I actually KNOW?
  *
  * The arithmetic is transparent — no invented priors. If lens k (weight w_k)
@@ -31,7 +40,7 @@ export type LensName = 'realization' | 'acceptance' | 'lift' | 'impact';
 
 export interface InstrumentationPriority {
   lens: LensName;
-  /** The lens's output elasticity in the composite — its leverage. */
+  /** The lens's disclosed weight in the composite — its leverage there, never a fitted elasticity. */
   weight: number;
   /** The Index if this lens were measured at the reference value. */
   indexAtReference: number;

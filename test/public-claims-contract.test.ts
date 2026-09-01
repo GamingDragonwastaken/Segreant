@@ -140,7 +140,12 @@ const CURRENT_CLAIM_SURFACES = [
   'src/dashboard/web/app/views/data.ts',
   'src/dashboard/web/app/views/value.ts',
   'src/store/db.ts',
-  'src/value/voi.ts',
+  'src/cli/teamCmd.ts',
+  'src/value/instrumentationSensitivity.ts',
+  'src/value/lenses.ts',
+  'src/value/frontier.ts',
+  'src/value/reliability.ts',
+  'src/value/cohort.ts',
   'src/judge/tier.ts',
   'src/judge/orchestrate.ts',
   'web/index.html',
@@ -162,6 +167,17 @@ const REJECTED_LIVE_CLAIMS: ReadonlyArray<[string, RegExp]> = [
   ['historical path-prefix machine-boundary claim', /proving the prefix never leaves the machine\./i],
   ['causal RoI formula in live docs', /RoI_causal\s*=\s*RoI_gross/i],
   ['causal RoI break-even formula in live docs', /RoI_causal[^\n]{0,240}(?:pays for itself|break-even)/is],
+  // WP-A07. The aggregator, its weights and the shrinkage weight are all
+  // legitimate calculations described in language stronger than the mathematics
+  // supports. Each pattern below names one specific overclaim, not the
+  // calculation it decorates.
+  ['geometric form asserted as forced without its axiom set', /\b(?:form is forced|forces the log generator)\b/i],
+  ['lens weights called empirical output elasticities', /lens(?:es)?['’]?s? (?:\*\*)?output elasticit/i],
+  ['CES substitution parameter called the elasticity of substitution', /θ is the elasticity of substitution/],
+  ['aggregator zero-collapse asserted as economic impossibility', /no (?:single )?axis can (?:compensate|be bought back)/i],
+  ['Stein dominance claimed for empirical-Bayes rate shrinkage', /Stein['’]s result|strictly beats the raw rate/i],
+  ['shrinkage weight labelled confidence', /plain-language ["“]confidence["”]|Confidence[^\n]{0,32}(?:view\.reliability|\.reliability\b)/i],
+  ['observational separation labelled evidence-supported', /evidence_supported/],
 ];
 
 const INTENTIONAL_REJECTED_CLAIMS = [
@@ -178,6 +194,15 @@ const INTENTIONAL_REJECTED_CLAIMS = [
     text: 'proving the prefix never leaves the machine.',
     count: 1,
     reason: 'historical path-prefix forwarding evidence retained verbatim',
+  },
+  {
+    relativePath: 'docs/RELEASE-GATE.md',
+    label: 'observational separation labelled evidence-supported',
+    text: 'evidence_supported',
+    count: 11,
+    reason:
+      'commit-bound gate rows record the label the packaged artifact carried at that commit — each row says the demo showed NO evidence_supported. ' +
+      'Rewriting them would falsify the evidence they exist to preserve. New rows use the observational label; this count must be reviewed, not bumped.',
   },
 ] as const;
 
@@ -245,14 +270,14 @@ test('CLI and ROI documentation qualify scenario values separately from causal r
   assert.match(roiDocs, /qualified causal-study result|causal net benefit result is separate/i);
 });
 
-test('VoI and methodology describe coverage and two-direction sensitivity', () => {
+test('instrumentation sensitivity and methodology describe coverage and two-direction movement', () => {
   const methodology = read('docs', 'METHODOLOGY.md');
-  const voi = read('src', 'value', 'voi.ts');
+  const sensitivity = read('src', 'value', 'instrumentationSensitivity.ts');
 
   assert.match(methodology, /measured|unmeasured|unknown necessary lenses/i);
   assert.match(methodology, /coverage/i);
-  assert.match(voi, /reference|sensitivity/i);
-  assert.match(voi, /may raise or lower|either direction/i);
+  assert.match(sensitivity, /reference|sensitivity/i);
+  assert.match(sensitivity, /may raise or lower|either direction/i);
 });
 
 test('intentional historical or quoted claim matches are explicit and narrow', () => {

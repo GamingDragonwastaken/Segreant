@@ -4,14 +4,18 @@
  *
  * Two honest faces of the same per-unit evidence, kept distinct on purpose:
  *
- *   1. RoI INDEX (0..100, unitless) — the four lenses composed by a weighted
- *      GEOMETRIC mean. The geometric FORM is forced: value composes
- *      multiplicatively along the funnel, so the aggregator must satisfy
- *      M(x·y)=M(x)·M(y), and the weighted geometric mean is the
- *      constant-returns-to-scale Cobb–Douglas production function whose weights
- *      are the lenses' output ELASTICITIES (disclosed calibration, Σ=1; set them
- *      equal for the pure symmetric axiomatic index). Any lens at 0 collapses it
- *      — no single axis can compensate for a collapsed one.
+ *   1. RoI INDEX (0..100, unitless) — a DESCRIPTIVE, PREFERENCE-DEPENDENT
+ *      composite of the four lenses, aggregated by a weighted GEOMETRIC mean.
+ *      The geometric form follows from a stated axiom set, not from economics:
+ *      assume the aggregator is quasi-arithmetic and multiplicative
+ *      (M(x·y)=M(x)·M(y)), and the weighted geometric mean is what satisfies
+ *      both. Whether AI value in fact composes multiplicatively along the funnel
+ *      is a MODELLING CHOICE this repository has not tested. The weights are
+ *      disclosed preference parameters (Σ normalized to 1), NOT estimated output
+ *      elasticities — no production function has been fitted to this ledger. Any
+ *      lens at 0 collapses the composite, which is a property of this aggregator
+ *      (chosen so a collapsed lens cannot be scored away), not a finding that a
+ *      real shortfall on one axis cannot be made up elsewhere.
  *
  *   2. RoI VALUE SCENARIO (a dimensionless observed/manual-equivalent ratio) —
  *      realized, rework-discounted manual-equivalent value over the HONEST cost
@@ -155,7 +159,7 @@ export interface RoIOptions {
   impact?: number | null; // orthogonal outcome impact in [0,1]; absent => uninstrumented
   impactHow?: string; // provenance for Impact; never inferred from Realization gates
   weights?: { realization: number; acceptance: number; lift: number; impact: number };
-  theta?: number; // CES substitution parameter; 0 (default) = the forced geometric mean
+  theta?: number; // CES substitution parameter; 0 (default) = the weighted geometric mean
   // --- the money number (RoI return) ---
   grossRealizedValueUsd?: number | null; // Σ over realized units of baseline manual $ × acceptance (the numerator)
   supervisionMinutes?: number | null; // measured human time-with-AI; priced into the honest denominator
@@ -172,11 +176,14 @@ export interface RoIOptions {
  * service criticality, explicitly reported external reach, etc.) or stay unknown.
  */
 /**
- * Default lens weights, calibrated from the productivity literature
- * (docs/RETURN-ON-INTELLIGENCE.md §research): value/quality signals dominate,
- * raw acceptance is moderate. Lift (the counterfactual) carries the most weight
+ * Default lens weights — DISCLOSED PREFERENCES, informed by the productivity
+ * literature (docs/RETURN-ON-INTELLIGENCE.md §research), not parameters fitted
+ * to any ledger. They express which signals this project chooses to weight,
+ * never measured output elasticities: Lift (the counterfactual) carries the most
  * because it is the closest thing to "was it worth it"; survival-anchored
  * Realization and Impact are high; Acceptance is a faster but shallower signal.
+ * An operator with different priorities should set different weights, and the
+ * Index will legitimately differ. That is what a preference parameter means.
  */
 export const DEFAULT_LENS_WEIGHTS = { realization: 1.0, acceptance: 0.7, lift: 1.2, impact: 1.0 } as const;
 
@@ -185,18 +192,20 @@ export const DEFAULT_LENS_WEIGHTS = { realization: 1.0, acceptance: 0.7, lift: 1
  * generalizes the aggregator (docs/RETURN-ON-INTELLIGENCE.md §3–4):
  *
  *   θ → 0   weighted GEOMETRIC mean (the default). Among quasi-arithmetic means
- *           the log generator is the one whose FORM is multiplicative:
- *           M(x·y)=M(x)·M(y). That form is forced by requiring quality to compose
- *           the way value composes along the funnel; equivalently it is a
- *           constant-returns-to-scale Cobb–Douglas function whose weights are the
- *           lenses' output ELASTICITIES (Σ wₖ normalized to 1). The weights are a
- *           disclosed calibration, NOT forced — set them equal and you get the
- *           symmetric axiomatic index (the unique SYMMETRIC multiplicative mean).
+ *           the log generator is the one that is multiplicative:
+ *           M(x·y)=M(x)·M(y). GIVEN those two axioms the geometric form follows
+ *           — but they are assumptions about how we choose to compose lens
+ *           scores, not facts established about AI value. With equal weights it
+ *           is the symmetric member of that family.
  *   θ = 1   arithmetic mean (perfect substitutes — gameable; never the default).
  *   θ → −∞  minimum (Leontief, pure weakest-link).
  *
- * θ is the elasticity of substitution between lenses. For θ ≤ 0 any zero value
- * collapses the result — by design, no axis can be bought back.
+ * θ is the CES SUBSTITUTION PARAMETER, not the elasticity of substitution. The
+ * elasticity is σ = 1/(1−θ): θ=0 gives σ=1 (the geometric / unit-elasticity
+ * case), θ=1 gives σ=∞ (perfect substitutes), θ→−∞ gives σ→0 (Leontief). For
+ * θ ≤ 0 any zero value collapses the result — a deliberate property of this
+ * aggregator, so a collapsed lens cannot be scored away, and not a claim that
+ * the underlying shortfall is economically uncompensable.
  */
 export function weightedPowerMean(pairs: Array<{ value: number; weight: number }>, theta = 0): number {
   if (pairs.length === 0) return 0;
@@ -254,12 +263,13 @@ export function computeReturnOnIntelligence(report: RealizationLike, opts: RoIOp
     notes.push('Impact uninstrumented: needs an outcome signal independent of the Realization funnel.');
   }
 
-  // --- Composite: the weighted geometric aggregator (CRS Cobb–Douglas, CES θ=0) ---
-  // docs/RETURN-ON-INTELLIGENCE.md §4 derives the FORM: value composes
-  // multiplicatively along the funnel, so the aggregator must satisfy
-  // M(x·y)=M(x)·M(y) — which forces the log generator (geometric form). The
-  // weights are the lenses' output elasticities (disclosed; equal → the symmetric
-  // axiomatic index), not part of what's forced.
+  // --- Composite: the weighted geometric aggregator (CES θ=0) ---
+  // docs/RETURN-ON-INTELLIGENCE.md §4 states the axioms this form follows from:
+  // assume a quasi-arithmetic, multiplicative aggregator (M(x·y)=M(x)·M(y)) and
+  // the log generator is what satisfies them. Those axioms are a declared
+  // modelling choice, not an established property of AI value. The weights are
+  // disclosed preference parameters (equal → the symmetric member), never fitted
+  // output elasticities.
   const all = [realization, acceptance, lift, impact];
   const w = opts.weights ?? DEFAULT_LENS_WEIGHTS;
   const theta = opts.theta ?? 0;

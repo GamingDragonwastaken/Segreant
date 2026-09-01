@@ -65,7 +65,10 @@ export async function cmdTeam(flags: Flags): Promise<void> {
     console.log(color(tty, C.bold, `  Your AI value — ${view.user}`));
     console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
     console.log(`  Extraction          ${color(tty, C.cyan, pct(view.extraction))}   ${color(tty, C.gray, 'of your session-scored AI spend (usage without code signals) reached a realized outcome')}`);
-    console.log(`  Confidence          ${pct(view.reliability)}   ${color(tty, C.gray, `${view.sessions} sessions of evidence`)}`);
+    // The shrinkage mixing weight, named as what it is. It says how much of the
+    // figure above is your own sessions rather than the cohort prior — not how
+    // confident anyone should be that the figure is right.
+    console.log(`  Own-data weight     ${pct(view.localDataWeight)}   ${color(tty, C.gray, `${view.sessions} sessions of evidence; the rest is the cohort prior`)}`);
     if (view.cohortComparable && view.percentile !== null && view.vsMedianPct !== null) {
       const sign = view.vsMedianPct >= 0 ? '+' : '';
       console.log(`  vs. team median     ${color(tty, view.vsMedianPct >= 0 ? C.green : C.yellow, `${sign}${(view.vsMedianPct * 100).toFixed(0)}%`)}   ${color(tty, C.gray, `you extract more than ${(view.percentile * 100).toFixed(0)}% of the team`)}`);

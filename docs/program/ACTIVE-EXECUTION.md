@@ -1,78 +1,66 @@
 # Active Execution
 
-Executor: Codex GPT-5.6 Sol (lead implementation engineer/verifier)
+Executor: Claude Opus 5 (lead implementation engineer/verifier)
 Branch: `gpt56/magnum-opus-reconstruction`
-Remote head at the start of this dossier round: `fce3df1451be7fc6910699639bd929637a6eed44`
-Current local/remote head: `31911cb3743f7062cfbec22fff003f61793d012a`
-Active packet: WP-A06 (A01–A05 checkpointed)
+Remote head at the start of this session: `359e4b96771bc19c1f94b935727778238470bc29`
+Current local head: see `git rev-parse HEAD`
+Active packet: WP-A08 (A01–A07 checkpointed)
 Status: READY
 
-Mission:
+## What this session found first
 
-- Execute Fiscus Execution Dossier III from WP-A01 forward, preserving the
-  Trusted Epistemic Kernel boundary and leaving each packet independently
-  verifiable.
-- Keep the capability boundary ambitious while refusing to strengthen a claim
-  when its evidence, scope, grain, time, money or causal basis is incomplete.
+The inherited tip `359e4b9` was **red on CI** (run `33439468753`, `package-smoke`),
+which the previous checkpoint did not record. Root cause was not in the A06 work:
+`bin/fiscus.mjs` deleted the private runtime snapshot as soon as `cliCompletion`
+resolved, but `fiscus start` resolves that promise the moment its sockets are
+listening and then serves for hours. A live server therefore lost its module tree
+and copied package resources — `/api/overview` answered ENOENT on its own pricing
+card, `/app/main.js` 404'd. Reproduced locally before any fix, then repaired.
 
-Completed packets in this execution round:
+## Completed in this session
 
-- WP-A01 — probabilistically coherent perfect-information VoI; posterior
-  scenario mixture is the sole prior authority; compatibility priors are checked
-  rather than independently trusted. Commit `17baca9`.
-- WP-A02 — exact candidate-head CI job plus runtime checkout identity assertions
-  on integration jobs. Commit `651122e`; exact CI run `33423985725` was green
-  across eight configured jobs.
-- WP-A03 — mature coding `clean` is completeness-gated; missing revert/incident
-  coverage stays unknown; persisted realization snapshots carry revalidated
-  witness evidence. Commit `bd405d1`.
-- WP-A04 — shared bounded resource policy and explicit truncation coverage for
-  proxy ingress/upstream/judge/cost responses, SSE usage/proposals, intrinsic
-  proposal extraction/storage, native imports/transcripts, team-server rollups,
-  canonical serialization, and publication concurrency. Commit `66320e4`.
-- WP-A05 — one exact provider/model attribution authority, correction-safe
-  ranking, exact purity/share, provider identity and compatibility-only legacy
-  fallback. Commit `7678b7b`; CI portability fix `31911cb`.
+- **Launcher snapshot lifetime.** Cleanup moved to process exit; orphaned
+  snapshots are reaped by owner liveness, never by pathname. New
+  `bin/runtime-snapshot.mjs`. The package-surface test now derives the required
+  tarball contents from the launcher's own local imports instead of naming one
+  file. Commit `404a590`; CI run `33473535818` green across all eight jobs.
+- **WP-A07 — legacy value-semantic corrections.** RoI Index retyped as a
+  descriptive preference-dependent composite; `θ` correctly named the CES
+  substitution parameter (σ = 1/(1−θ)); lens weights are disclosed preferences,
+  not fitted output elasticities; zero-collapse is an aggregator property.
+  `voi.ts` → `instrumentationSensitivity.ts`, stating it is not VoI. Frontier
+  `evidence_supported` → `observational_separation`. `reliability()` →
+  `localDataWeight()`, James–Stein dominance claim removed, exchangeability
+  documented. Enforced by pattern in the existing `public-claims-contract` sweep,
+  now covering the value modules. See D-058.
 
-Last verified commands for `7678b7b` / `31911cb`:
+## Last verified commands
 
-- `npm.cmd test` -> 1,146 total; 1,142 pass / 0 fail / 4 Windows platform
-  conditional skips (A05 full-suite run).
-- `npm.cmd exec -- tsx --test team-server/test/server.test.ts` -> 26 pass / 0 fail;
-  team-server typecheck -> pass.
-- `npm.cmd run typecheck` -> pass.
-- `npm.cmd exec -- tsc --noEmit -p src/dashboard/web/app/tsconfig.json` -> pass.
-- Focused A04 proxy/judge/transcript/import/proposal/serialization suites -> pass.
-- `node scripts/build.mjs` -> pass.
-- `npm.cmd pack --dry-run --ignore-scripts` -> pass (213 files; ~940 KB package).
-- `git diff --cached --check` -> clean before commit.
-- `git fetch origin gpt56/magnum-opus-reconstruction` -> local and remote exact
-  identity at `31911cb`; zero branch divergence.
+- `node ./node_modules/typescript/bin/tsc --noEmit -p tsconfig.json` -> pass
+- `node ./node_modules/typescript/bin/tsc --noEmit -p src/dashboard/web/app/tsconfig.json` -> pass
+- `node scripts/build.mjs` -> pass
+- full `node --test test/*.test.ts` -> 1,156 tests / 1,152 pass / 0 fail / 4 skipped
+- packaged-launcher probe: live `fiscus start --demo` served `overview.demo=true`,
+  `summary.requests=78`, `modelSwitches=1`, `/app/main.js` HTTP 200
 
-Remote verification:
+## Known residuals
 
-- GitHub Actions run `33433809771` for exact code head `7678b7b` was queued when
-  the A05 code was pushed; its team-server typecheck failure was diagnosed as
-  TS1294 in the new parameter property.
-- The corrective code head `31911cb` has a new CI run that must be re-read before
-  treating the remote gate as green. Runs `33424828051` and `33423985725` remain
-  successful historical checkpoints for A03/A02.
+- `docs/RELEASE-GATE.md` keeps eleven historical `evidence_supported` mentions.
+  They are commit-bound evidence rows recording what the packaged artifact showed
+  and are scoped by exact count in the sweep, not rewritten.
+- The launcher copies ~2.8 MB of `dist/` on every CLI invocation. That is the
+  cost of the publication-race guarantee, not a defect, but it is unmeasured.
+- `test/build-race.test.ts`'s concurrent-builders case flaked once on Windows
+  with `EBUSY` on `generated-contract.ts` — two concurrent builds contend for a
+  generated source file. Pre-existing, not introduced here, and unaddressed.
+- AII-009/025/027 moved OPEN -> PARTIAL, not closed: each still has a downstream
+  consumer requirement (composite decision-fitness, control-path refusal of
+  observational input, evidence-debt planner).
 
-Known residuals (not silently closed by A04):
+## Next exact action
 
-- AII-031 is `PARTIAL`: the core readers/importers/proposal paths are bounded,
-  but the versioned streaming `.fiscuspack` format and verifier remain a named
-  dependency. Any new external ingestion surface must use the shared policy.
-- The A04 proxy path deliberately drains an oversized request after rejecting
-  it for connection hygiene; this bounds retained memory, not attacker
-  bandwidth. A future operator policy may choose connection destruction.
-- Repository-wide P0/P1 findings, joint causal error control (A06), remaining
-  value semantics, contract/security/UX and
-  standards packets remain open until their own evidence gates pass.
-
-Next exact action:
-
-- Implement WP-A06 joint cost/quality causal error control: audit the estimator
-  and its simultaneous decision rule, add RED tests for the cost/quality
-  conjunction and adverse-selection/multiplicity boundaries, then verify before
-  publishing the next checkpoint.
+- WP-A08: finish the remaining legacy value-semantic corrections — Lift /
+  counterfactual bound labelling, Impact's cardinal-utility mapping,
+  `realizedValueUsd` terminology split, Budget advisor scenario labelling, and
+  structural-drift vs Goodhart naming. Start by inventorying the live surfaces
+  for each in `src/value/lift.ts`, `src/value/drift.ts` and `src/value/report.ts`.

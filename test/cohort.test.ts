@@ -85,7 +85,7 @@ test('cohort: thin samples are shrunk toward the mean (nobody judged on 2 sessio
   const big = self('bigwin');
   const thin = self('thinwin');
   assert.ok(thin.extraction < big.extraction, 'the thin 100% is shrunk below the well-evidenced 100%');
-  assert.ok(thin.reliability < big.reliability, 'thin sample carries less reliability');
+  assert.ok(thin.localDataWeight < big.localDataWeight, 'a thin sample carries less of its own weight and more of the cohort prior');
 });
 
 test('cohort: selfView returns your own number always, but gates the peer comparison', () => {

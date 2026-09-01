@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { computeReturnOnIntelligence } from '../src/value/lenses.ts';
-import { instrumentationPriority } from '../src/value/voi.ts';
+import { instrumentationPriority } from '../src/value/instrumentationSensitivity.ts';
 import { scoreFunnel, type Gate, type GateResult, type Verdict } from '../src/value/gates.ts';
 
 function gate(g: Gate, verdict: Verdict): GateResult {
@@ -31,7 +31,7 @@ function roiWithMissingLenses() {
   }, { impact: 0.7, impactHow: 'fixture outcome signal' });
 }
 
-test('voi: ranks the heavier missing lens first, with the exposure quantified transparently', () => {
+test('sensitivity: ranks the heavier missing lens first, with the exposure quantified transparently', () => {
   const roi = roiWithMissingLenses();
   const pri = instrumentationPriority(roi);
   assert.equal(pri.length, 2, 'exactly the un-instrumented lenses');
@@ -47,14 +47,14 @@ test('voi: ranks the heavier missing lens first, with the exposure quantified tr
   assert.ok(Math.abs(p.indexAtReference - expected) < 1e-9, 'transparent arithmetic, no hidden priors');
 });
 
-test("voi: measuring at a mid reference moves this strong-lens fixture's Index down", () => {
+test("sensitivity: measuring at a mid reference moves this strong-lens fixture's Index down", () => {
   const roi = roiWithMissingLenses();
   for (const p of instrumentationPriority(roi)) {
     assert.ok(p.deltaAtReference < 0, `${p.lens}: this fixture's disclosed midpoint sensitivity lowers a strong observed Index`);
   }
 });
 
-test('voi: nothing to buy when fully instrumented; nothing to move from when nothing is', () => {
+test('sensitivity: nothing to buy when fully instrumented; nothing to move from when nothing is', () => {
   const full = computeReturnOnIntelligence(
     { firstPassAcceptance: 0.8, units: units(7, 3), matured: { realizationRate: 0.7, totalCostUsd: 10, realizedValueUsd: 7 } },
     { lift: 0.6, impact: 0.7, impactHow: 'fixture outcome signal' },

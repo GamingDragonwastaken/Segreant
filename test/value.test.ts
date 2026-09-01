@@ -594,7 +594,7 @@ test('model switch: a perfect 3-unit streak is NOT evidence — the separation m
   assert.match(trial!.rationale, /does not survive a single flipped outcome/);
 });
 
-test('model switch: a large, robust separation IS evidence-supported', () => {
+test('model switch: a large, robust separation is an OBSERVATIONAL separation, never causal evidence', () => {
   // 8/8 candidate vs 2/40 incumbent survives a flip on each side.
   const units: WorkUnit[] = [
     ...Array.from({ length: 8 }, () => wu('feature', 'claude-haiku-4-5', true, 1)),
@@ -603,8 +603,15 @@ test('model switch: a large, robust separation IS evidence-supported', () => {
   ];
   const trial = computeFrontier(units).modelSwitches.find((r) => r.taskType === 'feature');
   assert.ok(trial);
-  assert.equal(trial!.confidence, 'evidence_supported');
+  assert.equal(trial!.confidence, 'observational_separation');
   assert.match(trial!.rationale, /still does if one outcome flips/);
+  // AII-025. The strongest result this procedure can reach must still say what
+  // it is. Nothing on the payload may read as a treatment effect: models were
+  // never assigned, so the separation is a property of the observed comparison.
+  assert.match(trial!.rationale, /observational procedure/);
+  assert.match(trial!.rationale, /not a treatment effect/);
+  const serialized = JSON.stringify(computeFrontier(units));
+  assert.doesNotMatch(serialized, /evidence_supported|evidence-supported/, 'the observational lane cannot label itself evidence-supported');
 });
 
 /** A unit with explicit size and timestamp, for the confounder gates. */
@@ -697,7 +704,7 @@ test('model switch: a saving that survives per-line normalization keeps its evid
   ];
   const rec = computeFrontier(units).modelSwitches.find((r) => r.taskType === 'feature');
   assert.ok(rec);
-  assert.equal(rec!.confidence, 'evidence_supported');
+  assert.equal(rec!.confidence, 'observational_separation');
   assert.deepEqual(rec!.confounders, []);
   assert.equal(rec!.candidateCostPerHundredLinesUsd, 1);
   assert.equal(rec!.incumbentCostPerHundredLinesUsd, 4);

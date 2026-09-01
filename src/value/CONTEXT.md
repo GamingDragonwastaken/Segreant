@@ -13,6 +13,17 @@
 
 - Confidence is a label with a precondition, not a vibe: `trial` is the ceiling
   unless the anytime-valid separation survives one flipped outcome on each side.
+  The stronger label is `observational_separation`, and it means exactly that —
+  models are never assigned, so no frontier result is causal evidence at any
+  level. A causal claim about switching requires the randomized lane.
+- The RoI Index is a descriptive, preference-dependent composite. Its geometric
+  form follows from declared axioms, its weights are disclosed preferences and
+  not fitted output elasticities, and its zero-collapse is a property of the
+  aggregator rather than an economic impossibility. `instrumentationSensitivity`
+  ranks how far the composite would move if a missing lens were measured; it is
+  not value of information. `localDataWeight` is the empirical-Bayes mixing
+  weight on a cell's own data, not a confidence level, and shrinkage here carries
+  no dominance theorem.
 - Named `confounders` (unit-size gap, non-overlapping periods, session
   clustering, mixed pricing bases, spanned card revision) **cap** the result
   regardless of the statistics, and are surfaced in the CLI and the GUI.

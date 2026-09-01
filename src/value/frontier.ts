@@ -63,12 +63,19 @@ export interface ModelSwitchRecommendation {
   historicalEquivalentHeadroomUsd: number;
   historicalHeadroomPercent: number;
   /**
-   * `evidence_supported` requires the anytime-valid bounds to separate AND the
-   * separation to survive one outcome flipping the wrong way on each side.
-   * Everything else — overlapping bounds, or a separation that hinges on a single
-   * observation — is a `trial`.
+   * What the OBSERVATIONAL procedure returned — never a treatment effect.
+   *
+   * `observational_separation` means the anytime-valid bounds separated AND the
+   * separation survived one outcome flipping the wrong way on each side, with no
+   * named confounder. Everything else — overlapping bounds, a separation that
+   * hinges on a single observation, or any named confounder — is a `trial`.
+   *
+   * Neither value is causal evidence. Models are not assigned; which model ran on
+   * which unit was chosen by whoever was working, so a separation here is a
+   * property of the observed comparison, not of the models. A causal claim about
+   * switching requires the randomized lane in `src/causal/`.
    */
-  confidence: 'trial' | 'evidence_supported';
+  confidence: 'trial' | 'observational_separation';
   /**
    * How the per-unit costs above were priced. `dominant_model_attributed` means
    * each model was charged only its own spend in the unit's window — a local
@@ -576,7 +583,7 @@ function buildModelSwitchRecommendations(mature: WorkUnit[]): ModelSwitchRecomme
       );
     }
 
-    const confidence = separates && survivesOneFlip && confounders.length === 0 ? 'evidence_supported' : 'trial';
+    const confidence = separates && survivesOneFlip && confounders.length === 0 ? 'observational_separation' : 'trial';
     const savingsPerUnitUsd = incumbent.costPerUnit - candidate.costPerUnit;
     const historicalEquivalentHeadroomUsd = savingsPerUnitUsd * incumbent.units;
     // Percent of the incumbent MODEL's own attributed spend — the same basis the
@@ -586,8 +593,8 @@ function buildModelSwitchRecommendations(mature: WorkUnit[]): ModelSwitchRecomme
     // A trial now arises two different ways, and saying "the intervals overlap"
     // when they in fact separated would be a false rationale.
     const confidenceText =
-      confidence === 'evidence_supported'
-        ? "the candidate's anytime-valid lower outcome bound exceeds the incumbent's upper bound, and still does if one outcome flips either way"
+      confidence === 'observational_separation'
+        ? "the candidate's anytime-valid lower outcome bound exceeds the incumbent's upper bound under the observational procedure, and still does if one outcome flips either way; models were not assigned, so this is a separation, not a treatment effect"
         : confounders.length > 0
           ? `the comparison is confounded — ${confounders[0]}`
           : separates
@@ -640,8 +647,8 @@ function buildModelSwitchStrings(switches: ModelSwitchRecommendation[]): string[
   }
   return switches.map((item) => {
     const confidence =
-      item.confidence === 'evidence_supported'
-        ? 'evidence-supported comparison'
+      item.confidence === 'observational_separation'
+        ? 'observational separation, not a causal effect'
         : 'review-only trial; continue measuring before changing a default';
     // A confounder is the single most decision-relevant thing about the result —
     // it is why the number may not be about the model at all — so it goes in the

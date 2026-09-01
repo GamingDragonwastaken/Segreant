@@ -2,7 +2,7 @@
  * Per-user value — "how much of the AI spend each person turns into real
  * outcomes" — computed under a hard anti-surveillance guardrail.
  *
- * The metric is EXTRACTION: the reliability-adjusted share of a user's AI spend
+ * The metric is EXTRACTION: the shrinkage-adjusted share of a user's AI spend
  * that reached a realized outcome (∈ [0,1]). It answers "am I getting value out
  * of this tool?" per person — the thing a developer actually wants to know about
  * themselves, and the thing an org needs in aggregate to know its spend is
@@ -28,7 +28,7 @@
 
 import type { Store } from '../store/db.ts';
 import { classifySession } from './usage.ts';
-import { estimateBetaPrior, reliability, type Observation } from './reliability.ts';
+import { estimateBetaPrior, localDataWeight, type Observation } from './reliability.ts';
 import { economicAttributionFromAttributions, type EconomicAttribution } from '../economics/attribution.ts';
 import type { UsageEconomicRollup } from './usage.ts';
 
@@ -78,8 +78,12 @@ export interface CohortReport {
 export interface SelfView {
   user: string;
   sessions: number;
-  extraction: number; // your reliability-adjusted realized share
-  reliability: number; // 0..1: how much sample you have to stand on
+  extraction: number; // your shrinkage-adjusted realized share
+  /**
+   * 0..1 mixing weight on your OWN sessions vs the cohort prior — not a
+   * confidence level and not a probability that the figure is right.
+   */
+  localDataWeight: number;
   cohortComparable: boolean; // enough peers to compare without identifying them
   percentile: number | null; // your standing within the cohort (null if not comparable)
   vsMedianPct: number | null; // +/- % vs the cohort median (null if not comparable)
@@ -105,22 +109,24 @@ function identified(rows: UserValueRow[]): UserValueRow[] {
 }
 
 /**
- * Reliability-adjusted extraction per user: the share of realized value, shrunk
- * toward the cohort mean by how many sessions back it. The prior is estimated
- * from the cohort's own dispersion (extra-binomial), so a coherent team barely
- * shrinks and a noisy one shrinks hard.
+ * Shrunken extraction per user: the share of realized value, pulled toward the
+ * cohort mean by how many sessions back it. The prior is estimated from the
+ * cohort's own dispersion (extra-binomial), so a coherent team barely shrinks
+ * and a noisy one shrinks hard. Shrinkage assumes the cohort is exchangeable;
+ * where people do materially different work, the pooled mean is the wrong
+ * target (see reliability.ts).
  */
-function shrunkExtraction(rows: UserValueRow[]): Map<string, { extraction: number; reliability: number }> {
+function shrunkExtraction(rows: UserValueRow[]): Map<string, { extraction: number; localDataWeight: number }> {
   const obs: Observation[] = rows.map((r) => ({ k: r.realizedSessions, n: r.sessions }));
   const prior = estimateBetaPrior(obs, {});
-  const out = new Map<string, { extraction: number; reliability: number }>();
+  const out = new Map<string, { extraction: number; localDataWeight: number }>();
   for (const r of rows) {
     // Shrink the realized SHARE toward the mean using session counts as evidence,
     // then anchor it in dollars: extraction is value-weighted, its trust is count-weighted.
     const rawShare = r.costUsd > 0 ? r.realizedValueUsd / r.costUsd : 0;
-    const rel = reliability(r.sessions, prior);
-    const shrunkShare = rel * rawShare + (1 - rel) * prior.mean;
-    out.set(r.user, { extraction: clamp01(shrunkShare), reliability: rel });
+    const own = localDataWeight(r.sessions, prior);
+    const shrunkShare = own * rawShare + (1 - own) * prior.mean;
+    out.set(r.user, { extraction: clamp01(shrunkShare), localDataWeight: own });
   }
   return out;
 }
@@ -198,8 +204,8 @@ export function cohortReport(rows: UserValueRow[], opts: CohortOptions): CohortR
 }
 
 /**
- * A single person's view OF THEMSELVES. Their own extraction and reliability are
- * always returned (it's their data). The comparison to peers (percentile, gap to
+ * A single person's view OF THEMSELVES. Their own extraction and local-data
+ * weight are always returned (it's their data). The comparison to peers (percentile, gap to
  * median) is gated by cohort size, so seeing where you stand can never reveal an
  * individual peer.
  */
@@ -225,7 +231,7 @@ export function selfView(rows: UserValueRow[], user: string, opts: CohortOptions
     user,
     sessions: mine.sessions,
     extraction: me.extraction,
-    reliability: me.reliability,
+    localDataWeight: me.localDataWeight,
     cohortComparable: comparable,
     percentile,
     vsMedianPct,

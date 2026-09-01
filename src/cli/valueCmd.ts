@@ -18,7 +18,7 @@ import { computeFrontier } from '../value/frontier.ts';
 // These commands used to sequence the same primitives themselves; the sequence
 // now has a single home, so the two surfaces cannot drift apart.
 import { valueSpine, usageValue, budgetAdvice } from '../value/report.ts';
-import { instrumentationPriority } from '../value/voi.ts';
+import { instrumentationPriority } from '../value/instrumentationSensitivity.ts';
 import { GATE_LADDER, GATE_META } from '../value/gates.ts';
 import { C, color, usd, num, pct, glyph, noteSource, printNotAGitRepo, printJson } from './ui.ts';
 import { type Flags } from './flags.ts';
@@ -298,7 +298,7 @@ export async function cmdUsage(flags: Flags): Promise<void> {
     if (m.used > 0) parts.push(`${m.used} used`);
     console.log(`  Reach               ${parts.join(color(tty, C.gray, ' · '))}${m.none > 0 ? color(tty, C.gray, ` · ${m.none} no outcome yet`) : ''}`);
   }
-  // VoI: which measurement to buy next for this modality.
+  // Instrumentation sensitivity: which measurement moves the composite most.
   const usageVoi = instrumentationPriority(rep.roi);
   if (usageVoi.length > 0 && rep.roi.roiIndex !== null) {
     const top = usageVoi[0]!;
@@ -423,7 +423,7 @@ export async function cmdRoi(flags: Flags): Promise<void> {
     }
   }
 
-  // VoI: name the next measurement worth buying, with the exposure quantified.
+  // Sensitivity: name the next measurement worth buying, with the exposure quantified.
   if (voi.length > 0 && roi.roiIndex !== null) {
     const top = voi[0]!;
     console.log('');

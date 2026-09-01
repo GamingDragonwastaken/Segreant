@@ -1,7 +1,10 @@
 /**
  * Properties of the Return-on-Intelligence equation (docs/RETURN-ON-INTELLIGENCE.md).
- * These are the mathematical claims the derivation rests on — if any fails, the
- * "forced, not chosen" argument breaks, so they are tested as first-class.
+ * These are the mathematical claims the derivation rests on. The derivation is
+ * conditional: GIVEN a quasi-arithmetic, multiplicative aggregator, the weighted
+ * geometric form follows. If any property below fails, that conditional breaks,
+ * so they are tested as first-class. The axioms themselves remain a declared
+ * modelling choice, and the weights remain disclosed preferences.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

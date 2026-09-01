@@ -128,10 +128,15 @@ two-stage process equals the product of the stage indices, `M(x·y) = M(x)·M(y)
 > x,y — is **φ = log**, i.e. the (weighted) **geometric** form. Among *symmetric*
 > means it is the unique multiplicative one.
 
-So the **functional form is forced** — require quality to compose the way value
-composes and you must use a weighted geometric mean. Equivalently it is a
-**constant-returns-to-scale Cobb–Douglas** function whose exponents are the
-lenses' **output elasticities** wₖ:
+So the functional form **follows from those two axioms** — assume the aggregator
+is quasi-arithmetic and multiplicative, and it must be a weighted geometric mean.
+Both axioms are modelling choices. "Quality composes the way value composes along
+the funnel" is a stance this project adopts because a funnel multiplies through;
+it is not an economic result, and nothing here has tested it against outcomes.
+Algebraically the expression coincides with a constant-returns-to-scale
+**Cobb–Douglas form** — an analogy for the shape only. No production function has
+been estimated on this ledger, so wₖ are not measured output elasticities of any
+real output:
 
 ```
 RoI Index = 100 · ρ^wρ · α^wα · λ^wλ · ι^wι ,   Σ wₖ = 1   (Cobb–Douglas, CRS)
@@ -139,9 +144,12 @@ RoI Index = 100 · ρ^wρ · α^wα · λ^wλ · ι^wι ,   Σ wₖ = 1   (Cobb�
 
 Two things are **disclosed, not forced**, and we say so plainly:
 
-1. **The weights.** wₖ is the elasticity of the Index w.r.t. lens k —
-   `∂ln(Index)/∂ln(xₖ) = wₖ` — "a 1 % gain in lens k lifts the Index wₖ %." They
-   are calibrated from the literature (§7), normalized to sum to 1. The
+1. **The weights.** wₖ is the elasticity of **the Index** w.r.t. lens k —
+   `∂ln(Index)/∂ln(xₖ) = wₖ` — "a 1 % gain in lens k lifts the Index wₖ %."
+   That is an algebraic identity of this formula, and says nothing about output,
+   productivity or value: it describes how our own score responds, not how the
+   world does. The values are **disclosed preferences** informed by the
+   literature (§7), normalized to sum to 1. The
    implementation divides by Σw internally, so the raw defaults
    `{1.0, 0.7, 1.2, 1.0}` realize elasticities `{0.26, 0.18, 0.31, 0.26}`. Set
    them **equal** (0.25 each) and you recover the **symmetric axiomatic index** —
@@ -150,8 +158,9 @@ Two things are **disclosed, not forced**, and we say so plainly:
 2. **The substitution θ** (§4.3): θ = 0 (geometric) is the distinguished neutral
    point, but the whole CES family is exposed.
 
-What is *not* a taste choice is the multiplicativity itself: any zero lens
-collapses the Index, no matter the weights. Proof: GM(x·y) = ∏(xₖyₖ)^wₖ =
+Given multiplicativity, one consequence is not a further taste choice: any zero
+lens collapses the Index, no matter the weights. (Multiplicativity itself remains
+an assumption — see above.) Proof: GM(x·y) = ∏(xₖyₖ)^wₖ =
 ∏xₖ^wₖ · ∏yₖ^wₖ = GM(x)·GM(y); the arithmetic mean fails it,
 Σwₖxₖyₖ ≠ (Σwₖxₖ)(Σwₖyₖ). (Tested in `test/equation.test.ts`.)
 
@@ -162,8 +171,8 @@ classification near zero can flip a ranking. The composite-indicator
 literature's alternative is a hurdle decomposition — `Index = H · G₊`, a hard
 eligibility indicator times a smooth strictly-positive score (or a penalized
 geometric mean) — which keeps low compensability without the cliff. We keep
-the single-product form deliberately: the veto **is** the message ("no axis
-can be bought back"), and separating it would blunt exactly the property that
+the single-product form deliberately: the veto **is** the message (a collapsed
+lens cannot be scored away), and separating it would blunt exactly the property that
 makes the Index resistant to single-axis gaming. But the choice is a design
 stance, not a mathematical necessity, and an integrator who needs ranking
 stability near zero should use the hurdle form on top of the same lenses.
@@ -179,9 +188,12 @@ The geometric mean is the θ→0 case of the **CES / power mean**
 | **→ 0** | **geometric** | unit elasticity of substitution; scale-free; multiplicative |
 | → −∞ | minimum | Leontief, pure weakest-link |
 
-θ is the elasticity of substitution between lenses — how much surplus on one axis
-may compensate a deficit on another. Geometric (θ=0) is the distinguished neutral
-point; a buyer who wants it even harder to game slides θ<0 toward the min.
+θ is the CES **substitution parameter**, not the elasticity of substitution
+itself: the elasticity is `σ = 1/(1−θ)`, so θ=0 gives σ=1 (the unit-elasticity
+geometric case in the table above), θ=1 gives σ=∞, and θ→−∞ gives σ→0. σ is
+what governs how much surplus on one axis may compensate a deficit on another.
+Geometric (θ=0) is the distinguished neutral point; a buyer who wants it even
+harder to game slides θ<0 toward the min.
 
 ### 4.4 RoI is an INTERVAL, not a number (the honest core)
 
@@ -565,9 +577,16 @@ A raw rate lies with confidence on thin data: **2 of 2 realized (100%)** out-ran
 model" recommendations. This is the batting-average fallacy, and unaddressed it is
 the fastest way a skeptic discredits the whole tool.
 
-The fix is the **James–Stein** result: an estimator that shrinks each cell's rate
-toward the population mean strictly beats the raw rate in total squared error once
-there are ≥ 3 cells. We model realized/total as **Beta–Binomial** — each context's
+The response is **empirical-Bayes shrinkage**: pull each cell's rate toward the
+population mean in proportion to how little data backs it. The intuition is the
+one James–Stein made famous, but the theorem itself does **not** apply here.
+James–Stein dominance is a result about p ≥ 3 Gaussian means with *known*
+variance under total squared-error loss; this estimator is Beta–Binomial with a
+hyperprior *estimated from the same cells*, so no dominance guarantee carries
+over. Shrinkage here is a modelling choice that usually reduces error on thin
+cells — not a proof that it beats the raw rate. It also assumes the cells are
+**exchangeable**; where they are not, the pooled mean is the wrong target. We
+model realized/total as **Beta–Binomial** — each context's
 `k` of `n` outcomes has its own success probability drawn from a shared
 `Beta(α, β)` prior — and report each context's **reliable rate** as the posterior
 mean:
@@ -731,7 +750,13 @@ gamed metric both trip it. Its job is to force the question no dashboard asks �
 (`src/value/drift.ts`, `test/drift.test.ts`; the "Stability" line in
 `fiscus roi` and the dashboard.)
 
-## 12. Value of Information — which measurement to buy next
+## 12. Instrumentation sensitivity — which measurement moves the Index most
+
+> **Not value of information.** VoI needs a decision, a utility model, and a
+> distribution over what a measurement might reveal. This section has none of
+> them: it is a sensitivity ranking of the aggregator. The decision-theoretic
+> VoI lives in `src/decision/engine.ts` (§EVPI), where a scenario mixture supplies
+> the probabilistic model this ranking deliberately does not have.
 
 Missing lenses create unmeasured exposure, not a universal upper-bound theorem
 (§4.4). "Wire more lenses" is not a decision — "wire **this** lens next" is. For
@@ -757,5 +782,5 @@ hands an organization:
 | When do I actually **know**? | the anytime-valid interval | §10 |
 | Is the number being **bent**? | the Goodhart alarm | §11 |
 
-(`src/value/voi.ts`, `test/voi.test.ts`; the "Instrument next" line in
+(`src/value/instrumentationSensitivity.ts`, `test/instrumentation-sensitivity.test.ts`; the "Instrument next" line in
 `fiscus roi` / `usage`.)

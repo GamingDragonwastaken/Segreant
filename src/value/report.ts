@@ -57,7 +57,7 @@ import { resolveBaselineMinutesForRepo, type ResolvedBaseline } from './liftBase
 import { boundedLift } from './lift.ts';
 import { computeReturnOnIntelligence, type RoIOptions, type RoIResult } from './lenses.ts';
 import { goodhartStreams, type DriftReport, type NamedDriftReport } from './drift.ts';
-import { instrumentationPriority, type InstrumentationPriority } from './voi.ts';
+import { instrumentationPriority, type InstrumentationPriority } from './instrumentationSensitivity.ts';
 import { timeReclaimedFromStore, type TimeReclaimedReport } from './timeReclaimed.ts';
 import { computeFrontier, type FrontierReport } from './frontier.ts';
 import { computeUsageRoI, type UsageReport } from './usage.ts';
@@ -255,7 +255,7 @@ export async function valueSpine(
   // Back-compat: `drift` stays the realization stream's report, as before.
   const drift = driftStreams.find((s) => s.stream === 'realization')?.report ?? null;
 
-  // VoI (docs §12): which measurement to buy next — the un-instrumented lens
+  // Instrumentation sensitivity (docs §12): the un-instrumented lens
   // whose measurement would move the Index most, at a disclosed mid reference.
   const voi = instrumentationPriority(roi);
 

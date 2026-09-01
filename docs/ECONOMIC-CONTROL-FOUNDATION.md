@@ -636,7 +636,7 @@ learn whether a new plan was better.
 
 ## 17. True Value of Information, and what Fiscus currently has
 
-The current `src/value/voi.ts` is valuable sensitivity analysis but is not yet Value of
+The current `src/value/instrumentationSensitivity.ts` is valuable sensitivity analysis but is not yet Value of
 Information in the formal decision-theoretic sense. It inserts a disclosed reference
 value (0.5 by default) for each missing lens and ranks the score movement. That answers:
 
@@ -736,7 +736,7 @@ Do not strengthen it until comparable marginal-return evidence exists. The code 
 states that generic cells may be unlike work and are not actionable allocation evidence;
 that restraint should become the design pattern for the entire allocator.
 
-### `src/value/voi.ts` — repair immediately after current correctness work
+### `src/value/instrumentationSensitivity.ts` — repair immediately after current correctness work
 
 Phase-1 already showed that an observed-lens score under weight renormalization is not a
 universal ceiling: measuring a missing lens can move the observed score either way. Any

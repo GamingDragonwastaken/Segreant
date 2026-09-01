@@ -489,10 +489,12 @@ product surfaces because model/task and project cells can be unlike work. -->
   attribution window it worked in: a unit whose window is more than 20% other
   models cannot price a single model, so it is excluded — and the excluded count
   is reported alongside the result rather than quietly shrinking the sample.
-  A result is labelled **evidence-supported** only when the anytime-valid outcome
-  bounds separate *and* that separation survives one outcome flipping the wrong
-  way on each side; anything resting on a single observation stays a **trial**,
-  not a proven switch. It never changes routing.
+  A result is labelled **observational separation** only when the anytime-valid
+  outcome bounds separate *and* that separation survives one outcome flipping the
+  wrong way on each side; anything resting on a single observation stays a
+  **trial**, not a proven switch. Neither label is causal evidence — models are
+  not assigned, so a separation describes the observed comparison, not the
+  models. It never changes routing.
 - **It says when a comparison is confounded.** Cost-per-unit is blind to how big
   each unit was, so if the two models' median changed lines differ by more than
   2×, "cheaper" may just mean "smaller work" — that is named on the result and
