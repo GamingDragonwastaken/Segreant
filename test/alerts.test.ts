@@ -19,7 +19,7 @@ function base(over: Partial<AlertInputs> = {}): AlertInputs {
     blocked24h: 0,
     estimatedShare: 0,
     runaway: null,
-    realizedValueRate: null,
+    realizedSpendShare: null,
     ...over,
   };
 }
@@ -69,9 +69,9 @@ test('alerts: blocked requests surface throttling', () => {
 });
 
 test('alerts: value crater only when instrumented', () => {
-  assert.ok(ids(base({ realizedValueRate: 0.2 })).includes('value-crater'));
-  assert.ok(!ids(base({ realizedValueRate: 0.8 })).includes('value-crater'));
-  assert.ok(!ids(base({ realizedValueRate: null })).includes('value-crater'), 'uninstrumented never alerts');
+  assert.ok(ids(base({ realizedSpendShare: 0.2 })).includes('value-crater'));
+  assert.ok(!ids(base({ realizedSpendShare: 0.8 })).includes('value-crater'));
+  assert.ok(!ids(base({ realizedSpendShare: null })).includes('value-crater'), 'uninstrumented never alerts');
 });
 
 test('alerts: runaway is critical; estimated pricing is info', () => {

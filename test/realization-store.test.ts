@@ -55,8 +55,8 @@ test('store round-trip: rehydrated snapshots feed the SAME rollup (no parallel m
   // SQLite aggregates floating-point values in a different order from the JS
   // reducer. Preserve the meaningful bit-for-bit structural comparison while
   // comparing the two order-sensitive decimal aggregates numerically.
-  const { totalCostUsd: totalA, realizedValueRate: rateA, wasteByStage: wasteA, ...stableA } = repA.matured;
-  const { totalCostUsd: totalB, realizedValueRate: rateB, wasteByStage: wasteB, ...stableB } = repB.matured;
+  const { totalCostUsd: totalA, realizedSpendShare: rateA, wasteByStage: wasteA, ...stableA } = repA.matured;
+  const { totalCostUsd: totalB, realizedSpendShare: rateB, wasteByStage: wasteB, ...stableB } = repB.matured;
   assert.deepEqual(stableB, stableA);
   assert.ok(Math.abs(totalB - totalA) < 1e-9);
   assert.ok(rateA !== null && rateB !== null, 'both persisted rollups have a realized-value rate');
@@ -168,15 +168,15 @@ test('value math: net-of-rework realized value ≤ gross, discounted by acceptan
   const rep = realizationFromStore(store, { windowDays: 14 });
   const m = rep.matured;
 
-  assert.ok(m.netRealizedValueUsd > 0);
-  assert.ok(m.netRealizedValueUsd <= m.realizedValueUsd, 'net never exceeds gross');
-  assert.ok(m.netRealizedValueUsd < m.realizedValueUsd, 'realized units were < 100% accepted → a real discount');
+  assert.ok(m.acceptanceWeightedSpendUsd > 0);
+  assert.ok(m.acceptanceWeightedSpendUsd <= m.spendOnRealizedUnitsUsd, 'net never exceeds gross');
+  assert.ok(m.acceptanceWeightedSpendUsd < m.spendOnRealizedUnitsUsd, 'realized units were < 100% accepted → a real discount');
 
   // Net = Σ over realized matured units of cost × acceptance (the production formula).
   const expected = rep.units
     .filter((u) => !u.maturing && u.funnel.realized)
     .reduce((s, u) => s + u.attributedCostUsd * (u.acceptance ?? 1), 0);
-  assert.ok(Math.abs(m.netRealizedValueUsd - expected) < 1e-9, `${m.netRealizedValueUsd} ≈ ${expected}`);
+  assert.ok(Math.abs(m.acceptanceWeightedSpendUsd - expected) < 1e-9, `${m.acceptanceWeightedSpendUsd} ≈ ${expected}`);
   store.close();
 });
 
@@ -189,7 +189,7 @@ test('team view: per-project value + RoI ranks projects for the budget owner', (
   for (const p of projects) {
     assert.ok(p.costUsd > 0, `${p.project} has spend`);
     assert.ok(p.roiIndex !== null, `${p.project} has an RoI`);
-    assert.ok(p.netRealizedValueUsd <= p.realizedValueUsd, 'net ≤ gross per project');
+    assert.ok(p.acceptanceWeightedSpendUsd <= p.spendOnRealizedUnitsUsd, 'net ≤ gross per project');
   }
   // backend-api (opus features, all realized) must out-RoI data-pipeline (gpt-4o
   // refactors that churned/reverted) — the manager's "fund this, not that" signal.

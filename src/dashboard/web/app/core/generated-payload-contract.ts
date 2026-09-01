@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "ffafe7f77c8a27df123a9a1797f589ed9293a343d0673c63666f3ee85dda2351";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "5aaf81a60819ca9d2d02065a4ae9935741068ba396d4e06d3b0a36d09cbe5ad6";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -1002,17 +1002,17 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "type": "number"
     },
     {
-      "name": "realizedValueUsd",
+      "name": "spendOnRealizedUnitsUsd",
       "optional": false,
       "type": "number"
     },
     {
-      "name": "netRealizedValueUsd",
+      "name": "acceptanceWeightedSpendUsd",
       "optional": true,
       "type": "number"
     },
     {
-      "name": "realizedValueRate",
+      "name": "realizedSpendShare",
       "optional": true,
       "type": "number"
     },
@@ -1059,12 +1059,12 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "type": "number"
     },
     {
-      "name": "realizedValueUsd",
+      "name": "spendOnRealizedUnitsUsd",
       "optional": false,
       "type": "number"
     },
     {
-      "name": "netRealizedValueUsd",
+      "name": "acceptanceWeightedSpendUsd",
       "optional": false,
       "type": "number"
     },
@@ -1198,7 +1198,7 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "type": "number | null"
     },
     {
-      "name": "realizedValueRate",
+      "name": "realizedSpendShare",
       "optional": true,
       "type": "number | null"
     },

@@ -19,7 +19,7 @@ export interface AllocationCell {
   key: string;
   costUsd: number;
   roiIndex: number | null; // null = unscored: held at status quo, never re-weighted
-  realizedValueUsd: number;
+  spendOnRealizedUnitsUsd: number;
 }
 
 export interface AllocationItem {
@@ -55,7 +55,7 @@ export interface AllocationPlan {
 }
 
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
-const rvrOf = (c: AllocationCell) => (c.costUsd > 0 ? clamp01(c.realizedValueUsd / c.costUsd) : 0);
+const rvrOf = (c: AllocationCell) => (c.costUsd > 0 ? clamp01(c.spendOnRealizedUnitsUsd / c.costUsd) : 0);
 
 function fmt(n: number): string {
   return (n < 0 ? '-$' : '$') + Math.abs(n).toFixed(2);

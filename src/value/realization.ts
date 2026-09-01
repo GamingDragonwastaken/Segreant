@@ -211,9 +211,9 @@ export interface RealizationReport {
     realizedUnits: number;
     realizationRate: number;
     totalCostUsd: number;
-    realizedValueUsd: number;
-    netRealizedValueUsd: number; // realized value discounted by first-pass acceptance (reworked output is worth less)
-    realizedValueRate: number | null;
+    spendOnRealizedUnitsUsd: number;
+    acceptanceWeightedSpendUsd: number; // realized value discounted by first-pass acceptance (reworked output is worth less)
+    realizedSpendShare: number | null;
     wasteByStage: WasteBucket[];
     instrumentation: Record<Gate, number>;
     // Partial-identification interval on the realization rate: lower = confirmed
@@ -580,8 +580,8 @@ export interface ProjectValue {
   units: number;
   costUsd: number;
   realizationRate: number;
-  realizedValueUsd: number;
-  netRealizedValueUsd: number;
+  spendOnRealizedUnitsUsd: number;
+  acceptanceWeightedSpendUsd: number;
   roiIndex: number | null;
   // Which AI tools produced this project's spend (repo↔project↔tool interconnection).
   // Empty when the project has no cwd-tagged traffic (e.g. untagged proxy).
@@ -614,8 +614,8 @@ export function projectValueBreakdown(
       units: rep.matured.units,
       costUsd: rep.matured.totalCostUsd,
       realizationRate: rep.matured.realizationRate,
-      realizedValueUsd: rep.matured.realizedValueUsd,
-      netRealizedValueUsd: rep.matured.netRealizedValueUsd,
+      spendOnRealizedUnitsUsd: rep.matured.spendOnRealizedUnitsUsd,
+      acceptanceWeightedSpendUsd: rep.matured.acceptanceWeightedSpendUsd,
       roiIndex: roi.roiIndex,
       sources: sourcesByProject.get(project) ?? [],
       ...(rep.matured.economic === undefined ? {} : { economic: rep.matured.economic }),
@@ -738,11 +738,11 @@ export function rollupRealization(
   const mature = units.filter((u) => !u.maturing);
   const realizedUnits = mature.filter((u) => u.funnel.realized);
   const totalCostUsd = mature.reduce((s, u) => s + u.attributedCostUsd, 0);
-  const realizedValueUsd = realizedUnits.reduce((s, u) => s + u.attributedCostUsd, 0);
+  const spendOnRealizedUnitsUsd = realizedUnits.reduce((s, u) => s + u.attributedCostUsd, 0);
   // Net of rework: each realized unit's dollars discounted by its first-pass
   // acceptance — output that had to be heavily rewritten delivered less value.
   // Unknown acceptance → full credit (the unknown-never-penalizes rule).
-  const netRealizedValueUsd = realizedUnits.reduce((s, u) => s + u.attributedCostUsd * (u.acceptance ?? 1), 0);
+  const acceptanceWeightedSpendUsd = realizedUnits.reduce((s, u) => s + u.attributedCostUsd * (u.acceptance ?? 1), 0);
 
   const wasteMap = new Map<string, WasteBucket>();
   for (const u of mature) {
@@ -787,9 +787,9 @@ export function rollupRealization(
       realizedUnits: realizedUnits.length,
       realizationRate: mature.length > 0 ? realizedUnits.length / mature.length : 0,
       totalCostUsd,
-      realizedValueUsd,
-      netRealizedValueUsd,
-      realizedValueRate: totalCostUsd > 0 ? realizedValueUsd / totalCostUsd : null,
+      spendOnRealizedUnitsUsd,
+      acceptanceWeightedSpendUsd,
+      realizedSpendShare: totalCostUsd > 0 ? spendOnRealizedUnitsUsd / totalCostUsd : null,
       wasteByStage: [...wasteMap.values()].sort((a, b) => b.costUsd - a.costUsd),
       instrumentation,
       realizationBounds: terminalRealizationBounds(mature.map((u) => u.funnel)),

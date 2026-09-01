@@ -27,7 +27,7 @@ function roiWithMissingLenses() {
   return computeReturnOnIntelligence({
     firstPassAcceptance: null,
     units: units(7, 3),
-    matured: { realizationRate: 0.7, totalCostUsd: 10, realizedValueUsd: 7 },
+    matured: { realizationRate: 0.7, totalCostUsd: 10, spendOnRealizedUnitsUsd: 7 },
   }, { impact: 0.7, impactHow: 'fixture outcome signal' });
 }
 
@@ -56,11 +56,11 @@ test("sensitivity: measuring at a mid reference moves this strong-lens fixture's
 
 test('sensitivity: nothing to buy when fully instrumented; nothing to move from when nothing is', () => {
   const full = computeReturnOnIntelligence(
-    { firstPassAcceptance: 0.8, units: units(7, 3), matured: { realizationRate: 0.7, totalCostUsd: 10, realizedValueUsd: 7 } },
+    { firstPassAcceptance: 0.8, units: units(7, 3), matured: { realizationRate: 0.7, totalCostUsd: 10, spendOnRealizedUnitsUsd: 7 } },
     { lift: 0.6, impact: 0.7, impactHow: 'fixture outcome signal' },
   );
   assert.equal(instrumentationPriority(full).length, 0, 'all four instrumented → empty');
 
-  const none = computeReturnOnIntelligence({ firstPassAcceptance: null, units: [], matured: { realizationRate: 0, totalCostUsd: 0, realizedValueUsd: 0 } });
+  const none = computeReturnOnIntelligence({ firstPassAcceptance: null, units: [], matured: { realizationRate: 0, totalCostUsd: 0, spendOnRealizedUnitsUsd: 0 } });
   assert.equal(instrumentationPriority(none).length, 0, 'no Index → no base to move from');
 });

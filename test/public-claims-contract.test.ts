@@ -6,7 +6,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const ROOT = join(import.meta.dirname, '..');
@@ -280,6 +280,33 @@ test('instrumentation sensitivity and methodology describe coverage and two-dire
   assert.match(methodology, /coverage/i);
   assert.match(sensitivity, /reference|sensitivity/i);
   assert.match(sensitivity, /may raise or lower|either direction/i);
+});
+
+test('the ambiguous realized-value identifier cannot return to the source tree', () => {
+  // AII-012. `realizedValueUsd` named two different claims: the attributed
+  // SPEND on units that realized, and the manual-equivalent VALUE they produced.
+  // Reading one where the other was meant is not a typo — it is the collapse of
+  // cost into value that this product exists to refuse, and it shipped once
+  // precisely because both fields were real, numeric and identically named, so
+  // neither the compiler nor a reviewer could see it. The split identifiers make
+  // that substitution a type error; this keeps the ambiguous name from coming
+  // back and quietly re-enabling it.
+  const offenders: string[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(join(ROOT, dir), { withFileTypes: true })) {
+      const rel = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) { walk(rel); continue; }
+      if (!/\.(ts|html|mjs)$/.test(entry.name)) continue;
+      // Backtick-quoted mentions are prose explaining why the name was split,
+      // which is worth keeping. Anything else is the identifier itself.
+      const source = read(...rel.split('/'));
+      // `realizedValueRate` was the same conflation one derivative down: a share
+      // of attributed SPEND, named as a rate of value.
+      if (/(?<![A-Za-z`])(?:realizedValueUsd|realizedValueRate)(?![A-Za-z`])/.test(source)) offenders.push(rel);
+    }
+  };
+  walk('src');
+  assert.deepEqual(offenders, [], 'use spendOnRealizedUnitsUsd / realizedSpendShare for cost, manualEquivalentValueUsd for value; never the ambiguous names');
 });
 
 test('intentional historical or quoted claim matches are explicit and narrow', () => {

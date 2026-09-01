@@ -44,8 +44,8 @@ export interface RealizationLike {
   matured: {
     realizationRate: number;
     totalCostUsd: number;
-    realizedValueUsd: number;
-    netRealizedValueUsd?: number; // realized value net of rework; falls back to gross when absent
+    spendOnRealizedUnitsUsd: number;
+    acceptanceWeightedSpendUsd?: number; // realized value net of rework; falls back to gross when absent
   };
 }
 
@@ -77,7 +77,7 @@ export interface RoIReturn {
   grossRatio: number | null; // realized manual-equivalent value ÷ honest cost (observational scenario)
   causalRatio: number | null; // reserved legacy field; ordinary value reports always return null
   causalRange: { low: number | null; high: number | null }; // reserved legacy field; ordinary value reports are null
-  realizedValueUsd: number | null; // numerator: realized, rework-discounted, manual-equivalent $
+  manualEquivalentValueUsd: number | null; // numerator: realized, rework-discounted, manual-equivalent $
   costUsd: number; // denominator: token cost + measured time-with-AI × labor rate
   counterfactualCredit: number | null; // reserved legacy field; Lift is no longer used as economic credit
   supervisionPriced: boolean; // true when the denominator includes measured human time (not the rework proxy)
@@ -356,7 +356,7 @@ export function computeReturnOnIntelligence(report: RealizationLike, opts: RoIOp
   // Value-for-money uses realized value NET of rework (reworked output is worth
   // less); falls back to gross realized value when the net isn't supplied.
   const totalCost = tokenCostUsd + effortTaxUsd;
-  const realizedValueForEff = report.matured.netRealizedValueUsd ?? report.matured.realizedValueUsd;
+  const realizedValueForEff = report.matured.acceptanceWeightedSpendUsd ?? report.matured.spendOnRealizedUnitsUsd;
   const realizedEfficiency = totalCost > 0 ? realizedValueForEff / totalCost : null;
 
   // --- The money number: Return on Intelligence as a real ratio --------------
@@ -390,7 +390,7 @@ export function computeReturnOnIntelligence(report: RealizationLike, opts: RoIOp
         low: null,
         high: null,
       },
-      realizedValueUsd: grossValue,
+      manualEquivalentValueUsd: grossValue,
       costUsd: honestCostUsd,
       counterfactualCredit: credit,
       supervisionPriced,
@@ -408,7 +408,7 @@ export function computeReturnOnIntelligence(report: RealizationLike, opts: RoIOp
       grossRatio: null,
       causalRatio: null,
       causalRange: { low: null, high: null },
-      realizedValueUsd: grossValue,
+      manualEquivalentValueUsd: grossValue,
       costUsd: honestCostUsd,
       counterfactualCredit: lift.instrumented ? lift.value : null,
       supervisionPriced,

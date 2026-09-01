@@ -78,7 +78,7 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
   cap-setting action is no longer accepted and silently discarded.
 - The Realized band of the four-claim spine no longer renders attributed spend
   where it claims to report produced value. Both quantities are spelled
-  `realizedValueUsd` on the payload and only their definitions distinguish them.
+  `spendOnRealizedUnitsUsd` on the payload and only their definitions distinguish them.
 
 ### Changed
 

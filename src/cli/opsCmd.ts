@@ -42,11 +42,11 @@ export async function cmdAlerts(flags: Flags): Promise<void> {
   const store = new Store(dbPath());
 
   // Include realized-value alerts only when a git repo is available to measure them.
-  let realizedValueRate: number | null = null;
+  let realizedSpendShare: number | null = null;
   const repo = flags.repo as string | undefined;
   const loadedValue = await loadRealization(store, repo, { persist: false });
-  if (loadedValue) realizedValueRate = loadedValue.report.matured.realizedValueRate;
-  const alerts = computeAlerts(store, cfg, { realizedValueRate });
+  if (loadedValue) realizedSpendShare = loadedValue.report.matured.realizedSpendShare;
+  const alerts = computeAlerts(store, cfg, { realizedSpendShare });
 
   // Deliver to the configured webhook (cron-friendly), then exit.
   if (flags.notify) {

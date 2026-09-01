@@ -255,7 +255,7 @@ test('RoI: geometric mean collapses to 0 if any lens is 0 (no axis can carry the
   const report: RealizationLike = {
     firstPassAcceptance: 0, // kept nothing first-try
     units: [ru({ realized: true, acceptance: 0 })],
-    matured: { realizationRate: 0.8, totalCostUsd: 10, realizedValueUsd: 8 },
+    matured: { realizationRate: 0.8, totalCostUsd: 10, spendOnRealizedUnitsUsd: 8 },
   };
   const r = computeReturnOnIntelligence(report);
   assert.equal(r.roiIndex, 0, 'one collapsed lens collapses the index');
@@ -268,7 +268,7 @@ test('RoI: injected lift widens coverage; index is the geometric mean of instrum
   const report: RealizationLike = {
     firstPassAcceptance: 0.9,
     units: [ru({ realized: true, acceptance: 0.9, shipped: true })],
-    matured: { realizationRate: 0.8, totalCostUsd: 10, realizedValueUsd: 8 },
+    matured: { realizationRate: 0.8, totalCostUsd: 10, spendOnRealizedUnitsUsd: 8 },
   };
   const r = computeReturnOnIntelligence(report, { lift: 0.5, impact: 0.8, impactHow: 'external outcome signal' });
   assert.equal(r.coverage, 1, 'all four lenses instrumented only when Impact is supplied independently');
@@ -279,7 +279,7 @@ test('RoI composite interval: statistical width (realization CS) enters even wit
   const report: RealizationLike = {
     firstPassAcceptance: 0.9,
     units: [ru({ realized: true, acceptance: 0.9, shipped: true }), ru({ realized: false, acceptance: 0.9 })],
-    matured: { realizationRate: 0.5, totalCostUsd: 10, realizedValueUsd: 5 },
+    matured: { realizationRate: 0.5, totalCostUsd: 10, spendOnRealizedUnitsUsd: 5 },
   };
   const r = computeReturnOnIntelligence(report, { lift: 0.5 });
   const ci = r.compositeInterval;
@@ -296,7 +296,7 @@ test('RoI composite interval: identification (Lift range) and statistical (CS) w
   const report: RealizationLike = {
     firstPassAcceptance: 0.9,
     units: [ru({ realized: true, acceptance: 0.9, shipped: true }), ru({ realized: false, acceptance: 0.9 })],
-    matured: { realizationRate: 0.5, totalCostUsd: 10, realizedValueUsd: 5 },
+    matured: { realizationRate: 0.5, totalCostUsd: 10, spendOnRealizedUnitsUsd: 5 },
   };
   const r = computeReturnOnIntelligence(report, { lift: 0.5, liftRange: { low: 0.4, high: 0.7 } });
   const ci = r.compositeInterval!;
@@ -338,7 +338,7 @@ test('RoI: effort tax raises the denominator, lowering realized efficiency', () 
   const report: RealizationLike = {
     firstPassAcceptance: 0.5,
     units: [ru({ realized: true, acceptance: 0.5 })],
-    matured: { realizationRate: 1, totalCostUsd: 10, realizedValueUsd: 10 },
+    matured: { realizationRate: 1, totalCostUsd: 10, spendOnRealizedUnitsUsd: 10 },
   };
   const tokenOnly = computeReturnOnIntelligence(report);
   const withLabor = computeReturnOnIntelligence(report, { laborRatePerHour: 120, minutesPerUnitRework: 10 });
@@ -351,7 +351,7 @@ test('RoI: Impact is independently supplied and can diverge from raw realization
   const report: RealizationLike = {
     firstPassAcceptance: null,
     units: [ru({ realized: true, acceptance: null, shipped: true }), ru({ realized: false, acceptance: null })],
-    matured: { realizationRate: 0.5, totalCostUsd: 5, realizedValueUsd: 3 },
+    matured: { realizationRate: 0.5, totalCostUsd: 5, spendOnRealizedUnitsUsd: 3 },
   };
   const absent = computeReturnOnIntelligence(report);
   assert.equal(absent.lenses.impact.value, null);
@@ -876,7 +876,7 @@ test('model switch: does not compare across different task types', () => {
 
 test('budget advisor: cap fits usage; low realized value tightens it and projects waste', () => {
   const daily = [2, 3, 4, 5, 2, 3, 10, 4, 3, 5];
-  const usageOnly = recommendBudget({ dailySpends: daily, realizedValueRate: null });
+  const usageOnly = recommendBudget({ dailySpends: daily, realizedSpendShare: null });
   assert.ok(usageOnly.recommendedDailyUsd != null && usageOnly.recommendedDailyUsd > 0);
   assert.ok(
     usageOnly.recommendedSoftUsd != null &&
@@ -885,41 +885,41 @@ test('budget advisor: cap fits usage; low realized value tightens it and project
   );
   assert.equal(usageOnly.projectedMonthlyWasteUsd, null);
 
-  const lowValue = recommendBudget({ dailySpends: daily, realizedValueRate: 0.3 });
+  const lowValue = recommendBudget({ dailySpends: daily, realizedSpendShare: 0.3 });
   assert.ok(lowValue.projectedMonthlyWasteUsd !== null && lowValue.projectedMonthlyWasteUsd > 0);
   assert.ok(lowValue.rationale.some((r) => /low/i.test(r)));
 });
 
 test('budget advisor: raw frontier cells do not create cross-context trim/grow actions', () => {
   const cells: FrontierCell[] = [
-    { key: 'feature · opus', model: 'opus', taskType: 'feature', units: 3, costUsd: 12, realizedValueUsd: 4, netRealizedValueUsd: 4, realizationRate: 0.33, acceptance: null, costPerUnit: 4, roiIndex: 40, impact: 0.33 },
-    { key: 'fix · haiku', model: 'haiku', taskType: 'fix', units: 3, costUsd: 3, realizedValueUsd: 3, netRealizedValueUsd: 3, realizationRate: 1, acceptance: null, costPerUnit: 1, roiIndex: 95, impact: 1 },
+    { key: 'feature · opus', model: 'opus', taskType: 'feature', units: 3, costUsd: 12, spendOnRealizedUnitsUsd: 4, acceptanceWeightedSpendUsd: 4, realizationRate: 0.33, acceptance: null, costPerUnit: 4, roiIndex: 40, impact: 0.33 },
+    { key: 'fix · haiku', model: 'haiku', taskType: 'fix', units: 3, costUsd: 3, spendOnRealizedUnitsUsd: 3, acceptanceWeightedSpendUsd: 3, realizationRate: 1, acceptance: null, costPerUnit: 1, roiIndex: 95, impact: 1 },
   ];
-  const rec = recommendBudget({ dailySpends: [5, 5, 5, 5, 5, 5, 5], realizedValueRate: 0.6, frontier: cells });
+  const rec = recommendBudget({ dailySpends: [5, 5, 5, 5, 5, 5, 5], realizedSpendShare: 0.6, frontier: cells });
   assert.deepEqual(rec.reallocations, [], 'generic task/model cells are not comparable enough for an actionable allocation');
 });
 
 test('budget advisor: cold start is honest — no spend history yields no cap, not $0', () => {
-  const empty = recommendBudget({ dailySpends: [], realizedValueRate: null });
+  const empty = recommendBudget({ dailySpends: [], realizedSpendShare: null });
   assert.equal(empty.recommendedDailyUsd, null);
   assert.equal(empty.recommendedSoftUsd, null);
   assert.equal(empty.basisDays, 0);
   assert.ok(empty.rationale.some((r) => /not enough/i.test(r)));
 
   // Zero-cost-only days (e.g. all-blocked) are not "active days" and don't fabricate a cap.
-  const zeros = recommendBudget({ dailySpends: [0, 0, 0], realizedValueRate: null });
+  const zeros = recommendBudget({ dailySpends: [0, 0, 0], realizedSpendShare: null });
   assert.equal(zeros.recommendedDailyUsd, null);
   assert.equal(zeros.basisDays, 0);
 });
 
 test('budget advisor: thin history stays review-only and cannot be applied', () => {
-  const thin = recommendBudget({ dailySpends: [3, 4, 5], realizedValueRate: null });
+  const thin = recommendBudget({ dailySpends: [3, 4, 5], realizedSpendShare: null });
   assert.equal(thin.status, 'insufficient_history');
   assert.equal(thin.canApply, false);
   assert.equal(thin.recommendedDailyUsd, null);
   assert.match(thin.rationale[0]!, /at least 7 active days/i);
 
-  const ready = recommendBudget({ dailySpends: [3, 4, 5, 3, 4, 5, 4], realizedValueRate: null });
+  const ready = recommendBudget({ dailySpends: [3, 4, 5, 3, 4, 5, 4], realizedSpendShare: null });
   assert.equal(ready.status, 'usage_only');
   assert.equal(ready.canApply, true);
   assert.ok(ready.recommendedDailyUsd !== null);

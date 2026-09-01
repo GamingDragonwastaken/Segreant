@@ -217,9 +217,9 @@ export function valueView(): Node {
 
         // The value claim and the cost figure, kept apart on purpose.
         //
-        // The payload spells two different quantities `realizedValueUsd`:
-        // `roi.returnRatio.realizedValueUsd` is manual-equivalent value produced,
-        // and `matured.realizedValueUsd` is the attributed SPEND on units that
+        // Two different quantities sit side by side:
+        // `roi.returnRatio.manualEquivalentValueUsd` is value produced, and
+        // `matured.spendOnRealizedUnitsUsd` is the attributed SPEND on units that
         // realized. An earlier version of this screen showed the second one under
         // the heading "what it produced", which reported a cost as a value --
         // the collapse this whole product is built to refuse. They now sit in
@@ -229,7 +229,7 @@ export function valueView(): Node {
               h('div', { class: 'card' },
                 h('div', { class: 'card-head' },
                   h('span', { class: 'card-title', text: () => (isPrecise() ? 'Realized value' : 'What the work was worth') })),
-                h('div', { class: 'stat', text: usd(ret.realizedValueUsd) }),
+                h('div', { class: 'stat', text: usd(ret.manualEquivalentValueUsd) }),
                 h('span', { class: 'basis', text: () => (isPrecise()
                   ? 'manual-equivalent dollars for realized work, net of rework'
                   : 'what that work would have cost to do by hand instead') })),
@@ -295,8 +295,8 @@ export function valueView(): Node {
           ? h('section', { class: 'section' },
               h('h2', { class: 'section-title', text: () => (isPrecise() ? 'Where value is lost' : 'Where the work fell over') }),
               h('p', { class: 'view-plain', text: () => (isPrecise()
-                ? `Of ${usd(matured?.totalCostUsd)} attributed to matured units, ${usd(matured?.realizedValueUsd)} reached a kept outcome and ${usd(wasteCost)} did not. These are spend figures, not value.`
-                : `Of the ${usd(matured?.totalCostUsd)} spent on this work, ${usd(matured?.realizedValueUsd)} went on work that stuck and ${usd(wasteCost)} went on work that did not.`) }),
+                ? `Of ${usd(matured?.totalCostUsd)} attributed to matured units, ${usd(matured?.spendOnRealizedUnitsUsd)} reached a kept outcome and ${usd(wasteCost)} did not. These are spend figures, not value.`
+                : `Of the ${usd(matured?.totalCostUsd)} spent on this work, ${usd(matured?.spendOnRealizedUnitsUsd)} went on work that stuck and ${usd(wasteCost)} went on work that did not.`) }),
               h('div', { class: 'ledger' },
                 ...waste
                   .slice()

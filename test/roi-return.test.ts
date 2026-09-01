@@ -26,7 +26,7 @@ function rep(over: Partial<RealizationLike> = {}): RealizationLike {
   return {
     firstPassAcceptance: 0.8,
     units: [unit(true, true), unit(true), unit(false)],
-    matured: { realizationRate: 2 / 3, totalCostUsd: 10, realizedValueUsd: 6, netRealizedValueUsd: 5 },
+    matured: { realizationRate: 2 / 3, totalCostUsd: 10, spendOnRealizedUnitsUsd: 6, acceptanceWeightedSpendUsd: 5 },
     ...over,
   };
 }
@@ -105,7 +105,7 @@ test('certainty-equivalent: γ slides the Index from the point estimate toward t
 });
 
 test('Impact is not reconstructed from production gates already counted by Realization', () => {
-  const matured = { realizationRate: 0.5, totalCostUsd: 5, realizedValueUsd: 3, netRealizedValueUsd: 3 };
+  const matured = { realizationRate: 0.5, totalCostUsd: 5, spendOnRealizedUnitsUsd: 3, acceptanceWeightedSpendUsd: 3 };
   const reached = computeReturnOnIntelligence(rep({ units: [unit(true, true), unit(false)], matured }));
   const notReached = computeReturnOnIntelligence(rep({ units: [unit(true, false), unit(false)], matured }));
   assert.equal(reached.lenses.impact.value, null);

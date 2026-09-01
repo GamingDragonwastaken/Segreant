@@ -96,7 +96,7 @@ easy to stand up; the enterprise's job is everything downstream of `docker run`.
 > check as `GET /me`. Getting the SQL right took more care than expected:
 > `ProjectValue.realizationRate` (the metric shown everywhere else in this
 > codebase) is a *unit-count* ratio (`realizedUnits/units`), not a dollar
-> ratio — a naive `SUM(realizedValueUsd)/SUM(costUsd)` at the team level would
+> ratio — a naive `SUM(spendOnRealizedUnitsUsd)/SUM(costUsd)` at the team level would
 > have silently redefined what "realization rate" means between the
 > single-machine dashboard and the team view, exactly the class of bug
 > `docs/`'s earlier "value-math consistency" work existed to catch. The fix:

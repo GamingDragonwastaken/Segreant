@@ -7,7 +7,7 @@ import { stringifyJson } from '../src/util/json.ts';
 test('wire JSON rounds numeric USD fields to microdollar precision', () => {
   const raw = stringifyJson({
     costUsd: 38.780311499999996,
-    nested: { realizedValueUsd: 0.30000000000000004 },
+    nested: { spendOnRealizedUnitsUsd: 0.30000000000000004 },
     spend30dUsd: 12.3456789,
     requests: 3,
     generatedAtMs: 1_787_931_529_765,
@@ -16,7 +16,7 @@ test('wire JSON rounds numeric USD fields to microdollar precision', () => {
 
   assert.deepEqual(JSON.parse(raw), {
     costUsd: 38.780311,
-    nested: { realizedValueUsd: 0.3 },
+    nested: { spendOnRealizedUnitsUsd: 0.3 },
     spend30dUsd: 12.345679,
     requests: 3,
     generatedAtMs: 1_787_931_529_765,

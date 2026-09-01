@@ -23,8 +23,8 @@ export interface FrontierCell {
   taskType: string | null;
   units: number;
   costUsd: number;
-  realizedValueUsd: number;
-  netRealizedValueUsd: number;
+  spendOnRealizedUnitsUsd: number;
+  acceptanceWeightedSpendUsd: number;
   realizationRate: number;
   acceptance: number | null;
   costPerUnit: number;
@@ -155,18 +155,18 @@ function makeCell(key: string, model: string | null, taskType: string | null, un
   const providers = new Set(units.map((u) => u.dominantProvider ?? null));
   const provider = providers.size === 1 ? [...providers][0] ?? null : null;
   const costUsd = units.reduce((s, u) => s + economicAttributionNumber(u.economic, u.attributedCostUsd), 0);
-  const realizedValueUsd = realized.reduce((s, u) => s + economicAttributionNumber(u.economic, u.attributedCostUsd), 0);
+  const spendOnRealizedUnitsUsd = realized.reduce((s, u) => s + economicAttributionNumber(u.economic, u.attributedCostUsd), 0);
   // Net of rework: discount each realized unit's value by its first-pass acceptance
   // (unknown acceptance → full credit), matching the headline's net efficiency so
   // the frontier + allocation rank contexts by the SAME value the Index rewards.
-  const netRealizedValueUsd = realized.reduce((s, u) => s + economicAttributionNumber(u.economic, u.attributedCostUsd) * (u.acceptance ?? 1), 0);
+  const acceptanceWeightedSpendUsd = realized.reduce((s, u) => s + economicAttributionNumber(u.economic, u.attributedCostUsd) * (u.acceptance ?? 1), 0);
   const withAcc = units.filter((u) => u.acceptance !== null);
   const acceptance = withAcc.length > 0 ? withAcc.reduce((s, u) => s + (u.acceptance ?? 0), 0) / withAcc.length : null;
   const realizationRate = units.length > 0 ? realized.length / units.length : 0;
   const roi = computeReturnOnIntelligence({
     firstPassAcceptance: acceptance,
     units,
-    matured: { realizationRate, totalCostUsd: costUsd, realizedValueUsd, netRealizedValueUsd },
+    matured: { realizationRate, totalCostUsd: costUsd, spendOnRealizedUnitsUsd, acceptanceWeightedSpendUsd },
   });
   const exactValues = units.flatMap((unit) => unit.economic === undefined ? [] : [unit.economic]);
   const realizedExactValues = realized.flatMap((unit) => unit.economic === undefined ? [] : [unit.economic]);
@@ -184,8 +184,8 @@ function makeCell(key: string, model: string | null, taskType: string | null, un
     taskType,
     units: units.length,
     costUsd,
-    realizedValueUsd,
-    netRealizedValueUsd,
+    spendOnRealizedUnitsUsd,
+    acceptanceWeightedSpendUsd,
     realizationRate,
     acceptance,
     costPerUnit: units.length > 0 ? costUsd / units.length : 0,

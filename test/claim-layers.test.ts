@@ -113,7 +113,7 @@ test('a recorded run establishes Billed, and carries the provider report conditi
 });
 
 test('the realized figure is the VALUE produced, never the spend attributed to it', () => {
-  // The payload carries two fields spelled `realizedValueUsd`. `matured` holds
+  // The payload carries two fields spelled `spendOnRealizedUnitsUsd`. `matured` holds
   // the attributed COST of the units that realized; `roi.returnRatio` holds the
   // manual-equivalent VALUE they produced. Reading the first one renders a cost
   // in the band whose entire job is to not be a cost.
@@ -123,8 +123,8 @@ test('the realized figure is the VALUE produced, never the spend attributed to i
     valueSource: 'git',
     gitRepo: true,
     projectScoped: true,
-    realization: { matured: { units: 4, realizedUnits: 2, realizationRate: 0.5, totalCostUsd: 9, realizedValueUsd: 2 } },
-    roi: { coverage: 0.5, notes: ['lift is uninstrumented'], returnRatio: { basis: 'usd', realizedValueUsd: 40 } },
+    realization: { matured: { units: 4, realizedUnits: 2, realizationRate: 0.5, totalCostUsd: 9, spendOnRealizedUnitsUsd: 2 } },
+    roi: { coverage: 0.5, notes: ['lift is uninstrumented'], returnRatio: { basis: 'usd', manualEquivalentValueUsd: 40 } },
   } as unknown as ValuePayload;
 
   const realized = buildClaimLayers({ ...NOTHING, value }, '30d')[3]!;
@@ -137,7 +137,7 @@ test('the realized figure is the VALUE produced, never the spend attributed to i
 test('matured units with no labour rate are units, not dollars', () => {
   const value = {
     demo: false, allocation: null, valueSource: 'git', gitRepo: true, projectScoped: true,
-    realization: { matured: { units: 4, realizedUnits: 2, realizationRate: 0.5, totalCostUsd: 9, realizedValueUsd: 2 } },
+    realization: { matured: { units: 4, realizedUnits: 2, realizationRate: 0.5, totalCostUsd: 9, spendOnRealizedUnitsUsd: 2 } },
     roi: { coverage: 0.5, returnRatio: { basis: 'ratio', grossRatio: 3 } },
   } as unknown as ValuePayload;
 

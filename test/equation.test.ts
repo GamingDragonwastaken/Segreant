@@ -21,7 +21,7 @@ function report(over: Partial<RealizationLike> = {}): RealizationLike {
   return {
     firstPassAcceptance: 0.8,
     units: [unit(true), unit(true), unit(false)],
-    matured: { realizationRate: 2 / 3, totalCostUsd: 10, realizedValueUsd: 6 },
+    matured: { realizationRate: 2 / 3, totalCostUsd: 10, spendOnRealizedUnitsUsd: 6 },
     ...over,
   };
 }
@@ -80,7 +80,7 @@ test('partial instrumentation is bounded honestly: the observed-only score is NO
 });
 
 test('a collapsed realization lens zeroes the whole Index — no axis can carry it', () => {
-  const dead = report({ matured: { realizationRate: 0, totalCostUsd: 10, realizedValueUsd: 0 } });
+  const dead = report({ matured: { realizationRate: 0, totalCostUsd: 10, spendOnRealizedUnitsUsd: 0 } });
   const r = computeReturnOnIntelligence(dead, { lift: 0.6 });
   assert.equal(r.roiIndex, 0);
   assert.ok(r.notes.some((n) => n.includes('collapsed')));

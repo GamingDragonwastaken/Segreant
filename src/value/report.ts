@@ -15,17 +15,19 @@
  * invariant; it is a defect waiting for the next edit. This module IS that
  * invariant.
  *
- * THE ONE DISTINCTION THIS FILE MUST NOT COLLAPSE. Two different quantities are
- * both spelled `realizedValueUsd`, and they are different claims:
+ * THE ONE DISTINCTION THIS FILE MUST NOT COLLAPSE. Two different quantities sit
+ * next to each other in the payload, and they are different claims:
  *
- *   realization.matured.realizedValueUsd   attributed SPEND on units that
+ *   realization.matured.spendOnRealizedUnitsUsd   attributed SPEND on units that
  *                                          realized — a COST that landed well.
- *   roi.returnRatio.realizedValueUsd       manual-equivalent VALUE produced —
- *                                          what the work would have cost done
- *                                          by hand, net of rework.
+ *   roi.returnRatio.manualEquivalentValueUsd      manual-equivalent VALUE
+ *                                          produced — what the work would have
+ *                                          cost done by hand, net of rework.
  *
  * They come from different evidence and answer different questions. Neither is
  * ever renamed into the other, and neither is ever computed from the other.
+ * Until AII-012 they were BOTH spelled `realizedValueUsd`, which is how the
+ * value spine came to render a cost while every typecheck passed.
  *
  * Ordering matters and is load-bearing:
  *   1. realization  — the spine; everything downstream is a lens on it.
@@ -335,7 +337,7 @@ export function budgetAdvice(
   opts: {
     windowDays?: number;
     nowMs?: number;
-    realizedValueRate?: number | null;
+    realizedSpendShare?: number | null;
     frontier?: BudgetInputsFrontier;
   } = {},
 ): BudgetAdvice {
@@ -350,7 +352,7 @@ export function budgetAdvice(
   return {
     ...recommendBudget({
       dailySpends: series.map((s) => s.costUsd),
-      realizedValueRate: opts.realizedValueRate ?? null,
+      realizedSpendShare: opts.realizedSpendShare ?? null,
       frontier: opts.frontier ?? [],
     }),
     spendBasis: liveOnly ? 'live_proxy' : 'all_observed',
@@ -428,7 +430,7 @@ export async function valueReport(
   const budget = budgetAdvice(store, config, {
     windowDays: spendWindowDays,
     nowMs: now,
-    realizedValueRate: spine?.loaded.report.matured.realizedValueRate ?? null,
+    realizedSpendShare: spine?.loaded.report.matured.realizedSpendShare ?? null,
     frontier: spine?.frontier.byModelAndTask ?? [],
   });
 

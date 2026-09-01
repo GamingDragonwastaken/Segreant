@@ -1423,8 +1423,8 @@ function renderValue(d) {
     const verdict = 'observed/manual-equivalent; not causal evidence';
     const detail = ' · realized manual-equivalent value; a qualified randomized study is required for causal net benefit';
     returnHtml = `<div class="sub" style="margin-top:10px;font-size:12.5px;color:var(--muted)">${title} ${tip('Realized manual-equivalent value divided by honest cost. This scenario cannot establish what would have happened without AI.')}<b style="color:var(--gold);font-family:var(--mono)">${head.toFixed(2)}×</b> — ${verdict}`
-      + `<div style="color:var(--faint);font-size:11px;margin-top:2px">$${money(rr.realizedValueUsd)} realized work ÷ $${money(rr.costUsd)} cost (tokens + your time)${detail}</div></div>`;
-  } else if (rr && rr.realizedValueUsd != null && !rr.supervisionPriced) {
+      + `<div style="color:var(--faint);font-size:11px;margin-top:2px">$${money(rr.manualEquivalentValueUsd)} realized work ÷ $${money(rr.costUsd)} cost (tokens + your time)${detail}</div></div>`;
+  } else if (rr && rr.manualEquivalentValueUsd != null && !rr.supervisionPriced) {
     returnHtml = `<div class="sub" style="margin-top:10px;font-size:11.5px;color:var(--faint)">Observed value scenario — not yet priced. Route real traffic through the proxy so your time-with-AI can be measured${tip('The dollar scenario cannot be priced until your <b>time-with-AI</b> is measured. Route real traffic through the proxy so supervision time is captured; without it, a dollar figure would be invented.')}</div>`;
   }
 
@@ -1599,7 +1599,7 @@ function renderValue(d) {
       <div class="rrow"><span style="color:var(--muted)">Spread</span><span style="font-family:var(--mono)">${spread} <span style="color:var(--faint)">· ${t.cohortSize} people, unidentified</span></span></div>
       <div class="rrow"><span style="color:var(--muted)">Coaching headroom ${tip('Latent value if everyone below the median were enabled up to it, at their own current spend. A case for training/support — <b>not</b> a ranking of people.')}</span><span style="font-family:var(--mono);color:var(--mint)">+$${money(t.coachingHeadroomUsd)}</span></div>
       ${teamEconomicLine}
-      <div class="lenshow">Realized value $${money(t.totalRealizedValueUsd)} of $${money(t.totalCostUsd)} spent (sessions without code signals). A person sees their own number with <span style="color:var(--gold)">fiscus team --me &lt;user&gt;</span>.</div>
+      <div class="lenshow">Realized value $${money(t.totalSpendOnRealizedUnitsUsd)} of $${money(t.totalCostUsd)} spent (sessions without code signals). A person sees their own number with <span style="color:var(--gold)">fiscus team --me &lt;user&gt;</span>.</div>
     </div>`;
   } else if (team && team.enabled && team.suppressed) {
     teamCard = `<div class="card fade" style="grid-column:1/-1">

@@ -8,7 +8,7 @@ import {
 } from '../src/value/cohort.ts';
 
 function row(user: string, sessions: number, realizedSessions: number, costUsd: number): UserValueRow {
-  return { user, sessions, realizedSessions, costUsd, realizedValueUsd: (realizedSessions / sessions) * costUsd };
+  return { user, sessions, realizedSessions, costUsd, spendOnRealizedUnitsUsd: (realizedSessions / sessions) * costUsd };
 }
 
 // A cohort of 6 identical-cost users with a spread of realized shares.

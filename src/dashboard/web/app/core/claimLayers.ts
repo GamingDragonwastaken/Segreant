@@ -160,26 +160,27 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
   // that was accepted but never survived is not value; conflating the two is the
   // headline number every other tool in this category reports.
   //
-  // The FIGURE, though, must be the value claim rather than a cost. The payload
-  // carries two fields spelled `realizedValueUsd`: `matured.realizedValueUsd` is
-  // the attributed SPEND on units that realized, and `roi.returnRatio
-  // .realizedValueUsd` is the manual-equivalent VALUE those units produced. This
-  // band sat on the first one, so the fourth claim in
+  // The FIGURE, though, must be the value claim rather than a cost.
+  // `matured.spendOnRealizedUnitsUsd` is the attributed SPEND on units that
+  // realized; `roi.returnRatio.manualEquivalentValueUsd` is the VALUE those
+  // units produced. This band sat on the first one, so the fourth claim in
   // `metered != billed != allocated != realized value` was rendering a cost --
   // the precise collapse the spine exists to refuse, committed by the spine.
+  // Both fields were then spelled `realizedValueUsd`, which is why nothing
+  // caught it; they are distinct identifiers now (AII-012).
   const matured = v?.realization?.matured;
   const realizedUnits = matured?.realizedUnits ?? 0;
   const ret = v?.roi?.returnRatio ?? null;
   // `basis: 'usd'` is the payload's own statement that the value figure is
   // priced. Without it there is a ratio but no dollars, and a dollar figure must
   // not be invented from one.
-  const valued = ret?.basis === 'usd' && typeof ret.realizedValueUsd === 'number';
+  const valued = ret?.basis === 'usd' && typeof ret.manualEquivalentValueUsd === 'number';
 
   const realized: Layer = {
     id: 'realized',
     label: 'Realized',
     claim: 'what it produced',
-    valueUsd: valued ? (ret?.realizedValueUsd ?? null) : null,
+    valueUsd: valued ? (ret?.manualEquivalentValueUsd ?? null) : null,
     established: realizedUnits > 0 && valued,
     basis: realizedUnits === 0
       ? 'no work units have matured into verified outcomes'

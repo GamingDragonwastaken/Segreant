@@ -6,7 +6,7 @@ const results = ['proposed','accepted','committed','tested','merged','shipped','
 const report = {
   firstPassAcceptance: 1,
   units: [{ maturing: false, acceptance: 1, funnel: { realized: true, results } }],
-  matured: { realizationRate: 1, totalCostUsd: 1, realizedValueUsd: 1 },
+  matured: { realizationRate: 1, totalCostUsd: 1, spendOnRealizedUnitsUsd: 1 },
 };
 
 test('Impact never self-instruments from the same gates that establish Realization', () => {

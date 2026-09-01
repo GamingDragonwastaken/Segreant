@@ -28,7 +28,7 @@ import type { FrontierCell } from '../value/frontier.ts';
 
 export interface BudgetInputs {
   dailySpends: number[]; // recent per-day spend totals (USD)
-  realizedValueRate: number | null; // share of spend that realized (0..1)
+  realizedSpendShare: number | null; // share of attributed SPEND that reached a kept outcome (0..1) — not a value rate
   frontier?: FrontierCell[]; // byModelAndTask cells, for reallocation hints
 }
 
@@ -50,7 +50,7 @@ export interface BudgetRecommendation {
   observed: { medianDaily: number; p90Daily: number; maxDaily: number; avgDaily: number };
   recommendedDailyUsd: number | null; // null = not enough spend history to recommend a cap
   recommendedSoftUsd: number | null;
-  realizedValueRate: number | null;
+  realizedSpendShare: number | null;
   projectedMonthlyWasteUsd: number | null;
   rationale: string[];
   reallocations: Reallocation[];
@@ -82,7 +82,7 @@ export function recommendBudget(
   const spends = inp.dailySpends.filter((x) => x > 0);
   const headroom = opts.headroom ?? 1.2;
   const minActiveDays = opts.minActiveDays ?? 7;
-  const rvr = inp.realizedValueRate;
+  const rvr = inp.realizedSpendShare;
 
   // Cold start: nothing real to base a cap on. Say so instead of recommending $0.
   if (spends.length === 0) {
@@ -94,7 +94,7 @@ export function recommendBudget(
       observed: { medianDaily: 0, p90Daily: 0, maxDaily: 0, avgDaily: 0 },
       recommendedDailyUsd: null,
       recommendedSoftUsd: null,
-      realizedValueRate: rvr,
+      realizedSpendShare: rvr,
       projectedMonthlyWasteUsd: null,
       rationale: ['Not enough spend history yet — keep metering. A value-aware cap appears once there are a few active days of real usage.'],
       reallocations: [],
@@ -110,7 +110,7 @@ export function recommendBudget(
       observed: { medianDaily: 0, p90Daily: 0, maxDaily: 0, avgDaily: 0 },
       recommendedDailyUsd: null,
       recommendedSoftUsd: null,
-      realizedValueRate: rvr,
+      realizedSpendShare: rvr,
       projectedMonthlyWasteUsd: null,
       rationale: [
         `Only ${spends.length} active day${spends.length === 1 ? '' : 's'} of real spend observed; keep metering until at least ${minActiveDays} active days exist before applying a cap.`,
@@ -187,7 +187,7 @@ export function recommendBudget(
     observed: { medianDaily, p90Daily, maxDaily, avgDaily },
     recommendedDailyUsd,
     recommendedSoftUsd,
-    realizedValueRate: rvr,
+    realizedSpendShare: rvr,
     projectedMonthlyWasteUsd,
     rationale,
     reallocations,

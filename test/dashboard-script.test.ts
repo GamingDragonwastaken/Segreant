@@ -225,12 +225,16 @@ test('the two interfaces link to each other in both directions', () => {
 });
 
 /**
- * The payload spells two entirely different quantities `realizedValueUsd`:
+ * The payload carries two entirely different quantities side by side:
  *
- *   realization.matured.realizedValueUsd  the attributed SPEND on units that
+ *   realization.matured.spendOnRealizedUnitsUsd  the attributed SPEND on units that
  *                                         realized (sum of attributedCostUsd)
- *   roi.returnRatio.realizedValueUsd      the manual-equivalent VALUE those
+ *   roi.returnRatio.manualEquivalentValueUsd     the manual-equivalent VALUE those
  *                                         units produced, net of rework
+ *
+ * They were both spelled `realizedValueUsd` when the bug below happened, which
+ * is why nothing caught it. AII-012 gave them distinct identifiers, so the
+ * substitution is now a type error too — this grep is the second line.
  *
  * The spine shipped reading the first one into the fourth claim, so the band
  * labelled "Realized" — the value end of
@@ -264,9 +268,9 @@ test('the realized band carries the value claim, not the cost of realized work',
 
   // And it must not fall back to the cost field for that figure.
   assert.equal(
-    /valueUsd:\s*matured[?.]*\.realizedValueUsd/.test(claims),
+    /valueUsd:\s*matured[?.]*\.spendOnRealizedUnitsUsd/.test(claims),
     false,
-    'claimLayers.ts must not use matured.realizedValueUsd as the realized VALUE figure — that field is attributed spend',
+    'claimLayers.ts must not use matured.spendOnRealizedUnitsUsd as the realized VALUE figure — that field is attributed spend',
   );
 
   // A dollar figure is only shown when the payload says it priced one.
@@ -281,8 +285,19 @@ test('the realized band carries the value claim, not the cost of realized work',
   const api = readFileSync(join(import.meta.dirname, '..', 'src', 'dashboard', 'shared-types.ts'), 'utf8');
   assert.match(
     api,
-    /not the value they produced/,
-    'shared dashboard types must warn that matured.realizedValueUsd is a cost, not a value',
+    /never the value it produced/,
+    'shared dashboard types must warn that matured.spendOnRealizedUnitsUsd is a cost, not a value',
+  );
+
+  // The stronger guarantee, added by AII-012: the two quantities no longer share
+  // an identifier, so substituting one for the other is a type error rather than
+  // something only a comment stands between you and.
+  assert.match(api, /spendOnRealizedUnitsUsd/, 'the cost field must be named as a cost');
+  assert.match(api, /manualEquivalentValueUsd/, 'the value field must be named as a value');
+  assert.doesNotMatch(
+    api,
+    /(?<![A-Za-z`])realizedValueUsd(?![A-Za-z`])/,
+    'the ambiguous identifier must not return to the shared payload types',
   );
 });
 

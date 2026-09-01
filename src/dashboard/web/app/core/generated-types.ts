@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: ffafe7f77c8a27df123a9a1797f589ed9293a343d0673c63666f3ee85dda2351 */
+/** Source SHA-256: 5aaf81a60819ca9d2d02065a4ae9935741068ba396d4e06d3b0a36d09cbe5ad6 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -397,17 +397,20 @@ export interface Matured {
   realizationRate: number;
   totalCostUsd: number;
   /**
-   * CAUTION: this is the attributed SPEND on units that realized
-   * (`sum of attributedCostUsd`), not the value they produced. The value claim
-   * lives on `roi.returnRatio.realizedValueUsd`, which is manual-equivalent
-   * dollars and a completely different quantity. Both fields are spelled
-   * `realizedValueUsd` in the payload; presenting this one as realized value
-   * collapses cost into value, which is the exact failure this product exists
-   * to refuse.
+   * The attributed SPEND on units that realized (`sum of attributedCostUsd`) —
+   * a cost that landed well, never the value it produced. The value claim is
+   * `roi.returnRatio.manualEquivalentValueUsd`, a different quantity from
+   * different evidence.
+   *
+   * Both were once spelled `realizedValueUsd`, and the spine shipped rendering
+   * this one as the value band — the exact collapse the product exists to
+   * refuse, invisible to the typechecker because both fields were real, numeric
+   * and identically named. They are now distinct identifiers, so that specific
+   * substitution is a type error rather than a judgement call (AII-012).
    */
-  realizedValueUsd: number;
-  netRealizedValueUsd?: number;
-  realizedValueRate?: number;
+  spendOnRealizedUnitsUsd: number;
+  acceptanceWeightedSpendUsd?: number;
+  realizedSpendShare?: number;
   /** Where units died, in stage order. The stage that costs most is the one to fix. */
   wasteByStage?: Array<{ stage: string; units: number; costUsd: number }>;
   instrumentation?: Record<string, number>;
@@ -423,8 +426,8 @@ export interface ValueProjectPayload {
   units: number;
   costUsd: number;
   realizationRate: number;
-  realizedValueUsd: number;
-  netRealizedValueUsd: number;
+  spendOnRealizedUnitsUsd: number;
+  acceptanceWeightedSpendUsd: number;
   roiIndex: number | null;
   sources: string[];
   economic?: RealizationEconomicRollupPayload;
@@ -455,12 +458,12 @@ export interface ValuePayload {
     /** Deprecated compatibility flag; the observed score is not a ceiling when lenses are missing. */
     indexIsUpperBound?: boolean;
     coverage?: number | null;
-    /** The money claim. `realizedValueUsd` here IS value, not cost. */
+    /** The money claim. This field IS value, never cost. */
     returnRatio?: {
       grossRatio?: number | null;
       causalRatio?: number | null;
       causalRange?: { low: number | null; high: number | null };
-      realizedValueUsd?: number | null;
+      manualEquivalentValueUsd?: number | null;
       costUsd?: number;
       counterfactualCredit?: number | null;
       supervisionPriced?: boolean;
@@ -511,7 +514,7 @@ export interface BudgetAdvice {
   observed?: { medianDaily: number; p90Daily: number; maxDaily: number; avgDaily: number };
   recommendedDailyUsd?: number | null;
   recommendedSoftUsd?: number | null;
-  realizedValueRate?: number | null;
+  realizedSpendShare?: number | null;
   /** Spend not turning into kept outcomes, projected monthly. The number to attack. */
   projectedMonthlyWasteUsd?: number | null;
   /** Exact effective spend coverage behind the observed daily series. */

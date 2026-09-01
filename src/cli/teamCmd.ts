@@ -110,7 +110,8 @@ export async function cmdTeam(flags: Flags): Promise<void> {
   console.log('');
   console.log(`  Extraction          median ${color(tty, C.cyan, pct(d.medianExtraction))}   ${color(tty, C.gray, `range ${pct(d.p25Extraction)}–${pct(d.p75Extraction)} (p25–p75)`)}`);
   console.log(`  Spread              ${d.broadBased ? color(tty, C.green, 'broad-based') : color(tty, C.yellow, 'concentrated')}   ${color(tty, C.gray, `dispersion ${d.dispersion.toFixed(2)}`)}`);
-  console.log(`  Realized value      ${color(tty, C.gray, `${usd(d.totalRealizedValueUsd)} of ${usd(d.totalCostUsd)} spent`)}`);
+  // Spend, not value: the share of attributed cost that reached a kept outcome.
+  console.log(`  Spend that realized ${color(tty, C.gray, `${usd(d.totalSpendOnRealizedUnitsUsd)} of ${usd(d.totalCostUsd)} spent reached a kept outcome`)}`);
   console.log('');
   console.log(color(tty, C.bold, `  Coaching headroom   ${color(tty, C.green, usd(d.coachingHeadroomUsd))}`));
   console.log(color(tty, C.gray, '  Latent value if everyone below the median were enabled up to it — at their'));

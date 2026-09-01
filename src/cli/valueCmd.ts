@@ -121,7 +121,7 @@ export async function cmdRealize(flags: Flags): Promise<void> {
     console.log(color(tty, C.gray, `  No units older than ${windowDays}d yet — realization needs the window to elapse.`));
   } else {
     const rr = pct(m.realizationRate);
-    const rv = m.realizedValueRate === null ? '—' : pct(m.realizedValueRate);
+    const rv = m.realizedSpendShare === null ? '—' : pct(m.realizedSpendShare);
     console.log(`  ${color(tty, C.bold, 'Realization Rate')}    ${color(tty, m.realizationRate > 0.6 ? C.green : C.yellow, rr.padStart(4))}   ${color(tty, C.gray, 'production — units that reached verified durable value')}`);
     // The partial-ID interval: confirmed-realized up to not-observed-dead. Shown
     // whenever unobserved gates leave real width, so the confirmed rate is never
@@ -132,8 +132,11 @@ export async function cmdRealize(flags: Flags): Promise<void> {
     if (m.serial.sG !== null && m.serial.skipped.length > 0) {
       console.log(color(tty, C.gray, `                      survival chain ${pct(m.serial.sG)} over ${m.serial.included.length}/${GATE_LADDER.length} observed stages (unobserved: ${m.serial.skipped.join(', ')})`));
     }
-    console.log(`  Realized Value      ${color(tty, C.green, usd(m.realizedValueUsd))} / ${usd(m.totalCostUsd)}  ${color(tty, C.gray, `(${rv})  the money lens`)}`);
-    console.log(`  Net of rework       ${color(tty, C.green, usd(m.netRealizedValueUsd))}  ${color(tty, C.gray, 'realized value after first-pass acceptance — reworked output is worth less')}`);
+    // Both of these are SPEND, not value: the share of attributed cost that
+    // landed on units that realized. The value claim is the Value scenario
+    // below, priced from manual-equivalent baselines (AII-012).
+    console.log(`  Spend that realized ${color(tty, C.green, usd(m.spendOnRealizedUnitsUsd))} / ${usd(m.totalCostUsd)}  ${color(tty, C.gray, `(${rv})  cost that reached a kept outcome — not value`)}`);
+    console.log(`  Net of rework       ${color(tty, C.green, usd(m.acceptanceWeightedSpendUsd))}  ${color(tty, C.gray, 'that spend weighted by first-pass acceptance — reworked output cost more per kept line')}`);
   }
   const fpa = report.firstPassAcceptance;
   console.log(`  First-Pass Accept.  ${fpa === null ? color(tty, C.gray, 'n/a (no proposals captured)') : color(tty, fpa > 0.7 ? C.green : C.yellow, pct(fpa).padStart(4)) + color(tty, C.gray, '   collaboration — of AI-proposed lines, how much shipped')}`);
@@ -380,8 +383,8 @@ export async function cmdRoi(flags: Flags): Promise<void> {
   const rr = roi.returnRatio;
   if (rr.basis === 'usd' && rr.grossRatio !== null) {
     console.log(`  ${color(tty, C.bold, 'Value scenario')}       ${color(tty, C.yellow, rr.grossRatio.toFixed(2) + '×')}   ${color(tty, C.gray, 'observed/manual-equivalent; causal study required for break-even')}`);
-    console.log(color(tty, C.gray, `  ${''.padEnd(20)}$${(rr.realizedValueUsd ?? 0).toFixed(0)} realized work (manual-equiv, net of rework) ÷ $${rr.costUsd.toFixed(2)} cost (tokens + your time)`));
-  } else if (rr.realizedValueUsd !== null && !rr.supervisionPriced) {
+    console.log(color(tty, C.gray, `  ${''.padEnd(20)}$${(rr.manualEquivalentValueUsd ?? 0).toFixed(0)} realized work (manual-equiv, net of rework) ÷ $${rr.costUsd.toFixed(2)} cost (tokens + your time)`));
+  } else if (rr.manualEquivalentValueUsd !== null && !rr.supervisionPriced) {
     console.log(`  ${color(tty, C.bold, 'RoI return')}           ${color(tty, C.gray, 'un-priced — wire proxy traffic so your time-with-AI can be measured')}`);
   } else {
     console.log(`  ${color(tty, C.bold, 'RoI return')}           ${color(tty, C.gray, 'pass --labor-rate (or set lift.laborRatePerHour) to price the dollar return')}`);
@@ -517,19 +520,19 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
   const store = new Store(dbPath());
   const days = flags.days ? Number(flags.days) : 30;
 
-  let realizedValueRate: number | null = null;
+  let realizedSpendShare: number | null = null;
   let frontierCells: ReturnType<typeof computeFrontier>['byModelAndTask'] = [];
   const repo = flags.repo as string | undefined;
   const loadedValue = await loadRealization(store, repo, { persist: false });
   if (loadedValue) {
-    realizedValueRate = loadedValue.report.matured.realizedValueRate;
+    realizedSpendShare = loadedValue.report.matured.realizedSpendShare;
     frontierCells = computeFrontier(loadedValue.report.units).byModelAndTask;
   }
 
   // The cap and its basis disclosure come from the shared composition, so this
   // command and `/api/value` recommend from the same spend series — and the
   // recommendation is always fitted to the spend its --apply action can govern.
-  const rec = budgetAdvice(store, cfg, { windowDays: days, realizedValueRate, frontier: frontierCells });
+  const rec = budgetAdvice(store, cfg, { windowDays: days, realizedSpendShare, frontier: frontierCells });
   const spendBasis = rec.spendBasis;
   // Raw RoI cells can mix unlike tasks. The actionable guidance is the
   // separately gated same-task model-switch trial, never a generic allocator.
@@ -557,8 +560,8 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
   const softCap = rec.recommendedSoftUsd;
   console.log(`  Recommended daily cap   ${color(tty, C.green, usd(dailyCap))}   ${color(tty, C.gray, `soft warn ${usd(softCap)}`)}`);
   console.log(`  Observed daily          median ${usd(rec.observed.medianDaily)} · p90 ${usd(rec.observed.p90Daily)} · max ${usd(rec.observed.maxDaily)}`);
-  if (rec.realizedValueRate !== null) {
-    console.log(`  Realized-value rate     ${color(tty, rec.realizedValueRate > 0.5 ? C.green : C.yellow, pct(rec.realizedValueRate))}`);
+  if (rec.realizedSpendShare !== null) {
+    console.log(`  Realized-value rate     ${color(tty, rec.realizedSpendShare > 0.5 ? C.green : C.yellow, pct(rec.realizedSpendShare))}`);
   }
   if (rec.projectedMonthlyWasteUsd !== null) {
     console.log(`  Projected monthly waste ${color(tty, C.red, usd(rec.projectedMonthlyWasteUsd))}   ${color(tty, C.gray, 'spend not turning into kept outcomes')}`);

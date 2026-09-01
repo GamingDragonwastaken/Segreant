@@ -32,13 +32,13 @@ import { estimateBetaPrior, localDataWeight, type Observation } from './reliabil
 import { economicAttributionFromAttributions, type EconomicAttribution } from '../economics/attribution.ts';
 import type { UsageEconomicRollup } from './usage.ts';
 
-/** Raw per-user inputs. `realizedValueUsd ≤ costUsd`, so extraction ∈ [0,1]. */
+/** Raw per-user inputs. `spendOnRealizedUnitsUsd ≤ costUsd`, so extraction ∈ [0,1]. */
 export interface UserValueRow {
   user: string;
   sessions: number;
   realizedSessions: number;
   costUsd: number;
-  realizedValueUsd: number;
+  spendOnRealizedUnitsUsd: number;
   /** Exact effective spend across this user's sessions; numeric fields remain compatibility-only. */
   economic?: EconomicAttribution;
   /** Exact effective spend on the subset of sessions with a confirmed outcome. */
@@ -63,7 +63,7 @@ export interface CohortDistribution {
   /** Latent value if sub-median extractors were enabled up to the median, at their own spend. */
   coachingHeadroomUsd: number;
   totalCostUsd: number;
-  totalRealizedValueUsd: number;
+  totalSpendOnRealizedUnitsUsd: number;
   /** Exact effective spend coverage for the same identified-user distribution. */
   economic?: UsageEconomicRollup;
 }
@@ -123,7 +123,7 @@ function shrunkExtraction(rows: UserValueRow[]): Map<string, { extraction: numbe
   for (const r of rows) {
     // Shrink the realized SHARE toward the mean using session counts as evidence,
     // then anchor it in dollars: extraction is value-weighted, its trust is count-weighted.
-    const rawShare = r.costUsd > 0 ? r.realizedValueUsd / r.costUsd : 0;
+    const rawShare = r.costUsd > 0 ? r.spendOnRealizedUnitsUsd / r.costUsd : 0;
     const own = localDataWeight(r.sessions, prior);
     const shrunkShare = own * rawShare + (1 - own) * prior.mean;
     out.set(r.user, { extraction: clamp01(shrunkShare), localDataWeight: own });
@@ -175,7 +175,7 @@ export function computeCohortDistribution(rows: UserValueRow[], broadThreshold =
     broadBased: dispersion <= broadThreshold,
     coachingHeadroomUsd: headroom,
     totalCostUsd: ppl.reduce((s, r) => s + r.costUsd, 0),
-    totalRealizedValueUsd: ppl.reduce((s, r) => s + r.realizedValueUsd, 0),
+    totalSpendOnRealizedUnitsUsd: ppl.reduce((s, r) => s + r.spendOnRealizedUnitsUsd, 0),
     economic,
   };
 }
@@ -252,7 +252,7 @@ export function userValueRows(store: Store, opts: { startMs: number; endMs: numb
     const outcome = classifySession(store.signalsForCommit(s.sessionId));
     let row = agg.get(s.user);
     if (!row) {
-      row = { user: s.user, sessions: 0, realizedSessions: 0, costUsd: 0, realizedValueUsd: 0 };
+      row = { user: s.user, sessions: 0, realizedSessions: 0, costUsd: 0, spendOnRealizedUnitsUsd: 0 };
       agg.set(s.user, row);
     }
     row.sessions += 1;
@@ -262,7 +262,7 @@ export function userValueRows(store: Store, opts: { startMs: number; endMs: numb
     exactByUser.set(s.user, exact);
     if (outcome.realized) {
       row.realizedSessions += 1;
-      row.realizedValueUsd += s.costUsd; // realized value = the spend that turned into a kept outcome
+      row.spendOnRealizedUnitsUsd += s.costUsd; // realized value = the spend that turned into a kept outcome
       const realizedExact = realizedExactByUser.get(s.user) ?? [];
       realizedExact.push(s.economic);
       realizedExactByUser.set(s.user, realizedExact);

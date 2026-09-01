@@ -172,7 +172,7 @@ export function computeUsageRoI(
 
   const realized = units.filter((u) => u.realized);
   const totalCostUsd = units.reduce((s, u) => s + u.costUsd, 0);
-  const realizedValueUsd = realized.reduce((s, u) => s + u.costUsd, 0);
+  const spendOnRealizedUnitsUsd = realized.reduce((s, u) => s + u.costUsd, 0);
 
   const exactValues = units.flatMap((unit) => unit.economic === undefined ? [] : [unit.economic]);
   const realizedExactValues = realized.flatMap((unit) => unit.economic === undefined ? [] : [unit.economic]);
@@ -227,7 +227,7 @@ export function computeUsageRoI(
       matured: {
         realizationRate: units.length > 0 ? realized.length / units.length : 0,
         totalCostUsd,
-        realizedValueUsd,
+        spendOnRealizedUnitsUsd,
       },
     },
     {

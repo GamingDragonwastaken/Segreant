@@ -40,7 +40,7 @@ export interface AlertInputs {
   blocked24h: number; // count of budget-blocked (429) requests in the last 24h
   estimatedShare: number; // 0..1 share of recent spend priced with estimated rates
   runaway: { tripped: boolean; windowCostUsd: number; windowSec: number } | null;
-  realizedValueRate: number | null; // null = uninstrumented (no git / no matured units)
+  realizedSpendShare: number | null; // share of spend that reached a kept outcome; null = uninstrumented (no git / no matured units)
 }
 
 const SEVERITY_ORDER: Record<AlertSeverity, number> = { critical: 0, warn: 1, info: 2 };
@@ -118,13 +118,13 @@ export function detectAlerts(inp: AlertInputs): Alert[] {
   }
 
   // Value crater — spend isn't converting into kept outcomes (only when instrumented).
-  if (inp.realizedValueRate !== null && inp.realizedValueRate < 0.3) {
+  if (inp.realizedSpendShare !== null && inp.realizedSpendShare < 0.3) {
     out.push({
       id: 'value-crater',
       severity: 'warn',
       title: 'Low realized value',
       detail: 'Most recent spend is not turning into kept, verified outcomes. Check the frontier for where it is leaking.',
-      metric: `${Math.round(inp.realizedValueRate * 100)}% realized`,
+      metric: `${Math.round(inp.realizedSpendShare * 100)}% realized`,
     });
   }
 
@@ -142,11 +142,11 @@ export function detectAlerts(inp: AlertInputs): Alert[] {
   return out.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
 }
 
-/** Gather alert inputs from the store + config and detect. `realizedValueRate` is passed in (git-gated). */
+/** Gather alert inputs from the store + config and detect. `realizedSpendShare` is passed in (git-gated). */
 export function computeAlerts(
   store: Store,
   config: FiscusConfig,
-  opts: { now?: number; realizedValueRate?: number | null } = {},
+  opts: { now?: number; realizedSpendShare?: number | null } = {},
 ): Alert[] {
   const now = opts.now ?? Date.now();
   const day = 24 * 60 * 60 * 1000;
@@ -185,6 +185,6 @@ export function computeAlerts(
     blocked24h,
     estimatedShare,
     runaway,
-    realizedValueRate: opts.realizedValueRate ?? null,
+    realizedSpendShare: opts.realizedSpendShare ?? null,
   });
 }

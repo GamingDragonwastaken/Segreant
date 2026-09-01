@@ -253,7 +253,7 @@ function recommendation(rec: NonNullable<ValuePayload['budget']>, currentCap: nu
       ? h('div', { class: 'waste-call' },
           h('span', { class: 'waste-fig', text: `${usd(rec.projectedMonthlyWasteUsd)}/mo` }),
           h('span', { class: 'waste-say', text: () => (isPrecise()
-            ? `projected spend not converting to kept outcomes, at the current realized-value rate (${pct(rec.realizedValueRate, 0)})`
+            ? `projected spend not converting to kept outcomes, at the current realized-value rate (${pct(rec.realizedSpendShare, 0)})`
             : `is heading for work that never gets used, if things carry on as they are`) }))
       : null,
 

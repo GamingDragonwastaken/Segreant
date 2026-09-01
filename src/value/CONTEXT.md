@@ -101,11 +101,16 @@
 
 ## Invariants
 
-- **`realizedValueUsd` is two different claims and they never merge.**
-  `realization.matured.realizedValueUsd` is attributed SPEND on units that
-  realized (a cost); `roi.returnRatio.realizedValueUsd` is manual-equivalent
+- **Spend on realized units and manual-equivalent value never merge.**
+  `realization.matured.spendOnRealizedUnitsUsd` is attributed SPEND on units
+  that realized (a cost); `roi.returnRatio.manualEquivalentValueUsd` is the
   VALUE produced. Different evidence, different question — never renamed into
-  each other, never derived from each other.
+  each other, never derived from each other. Both were once spelled
+  `realizedValueUsd`, which is how the value spine came to render a cost with
+  every typecheck green. `realizedValueRate` was the same conflation one
+  derivative down and is now `realizedSpendShare`. Both old identifiers are
+  banned repo-wide and the ban is tested; reintroducing either is how this
+  defect comes back.
 - **A gate on the label is not a fix to the estimator.** Never correct for
   clustering inside the interval math and then claim the guarantee still holds.
 - **Withhold or disclose; never strengthen.** If evidence does not carry the
