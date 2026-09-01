@@ -135,9 +135,25 @@ card, `/app/main.js` 404'd. Reproduced locally before any fix, then repaired.
   supplies none. The `clean` gate is unchanged: `linked_incident` has no local
   source, so one witnessed channel out of two cannot pass it. See D-069.
 
+- **The claim-support axes reach the wire (AII-014).** WP-B02 gave the GUI four
+  named axes and left the JUDGEMENT in the browser, inferred from whatever
+  collapsed field the payload carried. Every derivation was a two-branch
+  ternary, so the four-valued axis could reach two values, and three defects
+  followed: a reconciliation whose provider snapshots CHANGED between
+  observations read as established, a window with no spend read as complete
+  pricing coverage, and a residual bounding nothing (D-068) read as complete.
+  All four routes now carry a required `claimSupport` derived server-side, and
+  three fields the server was already sending — `snapshotStability`,
+  `unstableDayStartMs`, `offPathBound` — are declared so the browser can read
+  them. Making `conflicted` reachable made two existing sentences false, both
+  fixed here: the spine called a contradiction "an absence of evidence", and the
+  Evidence card's headline was keyed on a records-level constant that said "no
+  observation run recorded" while describing one. See D-070.
+
+
 ## Last verified commands
 
-Run against the D-069 tree:
+Run against the D-070 tree:
 
 - `node ./node_modules/typescript/bin/tsc --noEmit -p tsconfig.json` -> pass
 - `node ./node_modules/typescript/bin/tsc --noEmit -p src/dashboard/web/app/tsconfig.json` -> pass
@@ -146,7 +162,7 @@ Run against the D-069 tree:
   `src/team/`** — CI found two red heads this program because the root gates
   cannot see it.
 - `node scripts/build.mjs` -> pass
-- full `node --test test/*.test.ts` -> 1,192 tests / 1,188 pass / 0 fail / 4 skipped
+- full `node --test test/*.test.ts` -> 1,207 tests / 1,203 pass / 0 fail / 4 skipped
 
 ## Known residuals
 
@@ -169,10 +185,15 @@ Run against the D-069 tree:
 
 ## Next exact action
 
-- Carry the ClaimProfile axes to the wire (AII-014's remainder). WP-B02 gave
-  the browser four named support axes, but it derives them from payloads that
-  still describe status in collapsed fields, so the axes reach the projection
-  and not the wire. Persisted records are untouched.
+- The wire carries FOUR of `ClaimProfile`'s nine axes, chosen because the GUI
+  reads four. Integrity, authenticity, measurement, causality and finality
+  still reach no consumer, and the first four are exactly the ones that decide
+  whether a provider report can be trusted. Decide whether the wire carries the
+  full profile or whether four is the honest surface, and write the reason
+  down either way.
+- Persisted records still carry collapsed status fields. A stored realization
+  snapshot or reconciliation row is not re-read through the axes and no
+  migration exists, which is the remainder of AII-014 after D-070.
 - Migrate the three `unmigrated_authority` boundaries named in
   `docs/program/ISSUANCE-MAP.md`, starting with `causal.qualification`: it is
   the observational-to-causal boundary and the largest claim strengthening in

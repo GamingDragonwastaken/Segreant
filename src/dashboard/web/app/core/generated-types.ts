@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: 126f1373cfb8ded6807dbcc41bffbf3b2247ee2c27def522a141095744c582eb */
+/** Source SHA-256: 22b1222d20b95f9b61b0702021bd1c71cf815baf58f5b99211d3356e400c5f78 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -80,8 +80,74 @@ export interface AlertRow {
   metric: string | null;
 }
 
+/**
+ * A claim's support, stated on named axes rather than collapsed into one bit.
+ *
+ * WHY THIS IS ON THE WIRE (AII-014). WP-B02 replaced the GUI's
+ * `established: boolean` with four axes, but the GUI still DERIVED them, in the
+ * browser, from whatever collapsed field happened to be in the payload — a
+ * count of runs, a share of estimated spend, whether a ratio said `usd`. So the
+ * server, which holds the evidence, said nothing about its own claims, and the
+ * browser inferred them from their shadows. Two things follow, and both were
+ * real:
+ *
+ *   The inference could not reach `conflicted`. Every browser derivation was
+ *   a two-branch ternary, so a reconciliation whose provider snapshots
+ *   DISAGREED across observations rendered exactly like one that did not.
+ *
+ *   No other consumer got an answer at all. The CLI, a script, anything
+ *   reading `/api/*` had to repeat the browser's guesswork, with nothing
+ *   holding the two in agreement.
+ *
+ * The vocabularies are the kernel's, copied — this file must not import, since
+ * the build copies it verbatim into the browser compiler root.
+ * `test/claim-support-axes.test.ts` reads both and fails on drift.
+ */
+export type ClaimEpistemicState = 'unknown' | 'supported' | 'refuted' | 'conflicted';
+export type ClaimCoverageStatus = 'unknown' | 'partial' | 'complete';
+export type ClaimMonetaryBasis =
+  | 'none'
+  | 'list'
+  | 'estimated'
+  | 'provider_observed'
+  | 'billed'
+  | 'effective'
+  | 'allocated'
+  | 'full_cost'
+  | 'mixed';
+
+/**
+ * Why the value slot shows what it shows — a SEPARATE question from whether the
+ * claim holds. Matured units with no labour rate set is a supported claim with
+ * no priced figure, and it used to render exactly like no outcome evidence.
+ */
+export type ClaimFigureStatus =
+  | 'shown'
+  | 'withheld_unsupported'
+  | 'withheld_uncosted'
+  | 'not_a_money_claim';
+
+export interface ClaimSupportPayload {
+  /** Four-valued. `unknown` is an absence of evidence, never a measured no. */
+  epistemic: ClaimEpistemicState;
+  /** How much of what the claim covers the evidence actually reaches. */
+  coverage: ClaimCoverageStatus;
+  /** What kind of money the figure is, when this claim carries one. */
+  monetaryBasis: ClaimMonetaryBasis;
+  figure: ClaimFigureStatus;
+  /**
+   * The server's own reason for the axes above, in one line, when the reason is
+   * something the payload does not otherwise show. The browser writes the
+   * operator-facing prose; this is the part only the server knows.
+   */
+  note?: string;
+}
+
 export interface Overview {
   demo: boolean;
+  /** The server's statement of this claim's support, on named axes (AII-014). */
+  claimSupport: ClaimSupportPayload;
+
   range: string;
   /**
    * ISO instant the server computed this payload. On the wire since the route
@@ -190,6 +256,9 @@ export interface BillingKernelClaimSummary {
 
 export interface BillingPayload {
   demo: boolean;
+  /** The server's statement of this claim's support, on named axes (AII-014). */
+  claimSupport: ClaimSupportPayload;
+
   evidence: { reconciliationStatus: string };
   summary: { recordCount: number };
   /** Bounded canonical billed Claims issued by the explicit billing adapter. */
@@ -332,6 +401,24 @@ export interface ReconciliationRunRecord {
     conditions?: string[];
     providerReportedMicros?: number;
     localCapturedMicros?: number;
+    /**
+     * Whether repeated provider observations of the SAME days agreed.
+     * `store.reconciliationRuns()` serves the whole `ReconciliationRun`, so this
+     * has been on the wire since the field existed and was simply undeclared —
+     * which is the same defect as declaring a collection a number, one field
+     * over. The CLI printed it; the GUI could not see it, and so rendered a
+     * reconciliation whose provider snapshots CONTRADICTED each other exactly
+     * like one that did not.
+     */
+    snapshotStability?: 'single_observation' | 'stable_across_observations' | 'changed_across_observations';
+    /** The specific day starts whose provider figure changed between observations. */
+    unstableDayStartMs?: number[];
+    /**
+     * Whether the residual bounds off-path spend from above at all (D-068). A
+     * residual below zero refutes the condition rather than reading as "nothing
+     * went off-path".
+     */
+    offPathBound?: 'upper_bound_conditional' | 'none_local_estimate_exceeds_provider';
   };
 }
 
@@ -352,6 +439,9 @@ export interface AllocationRule {
 
 export interface AllocationPayload {
   demo: boolean;
+  /** The server's statement of this claim's support, on named axes (AII-014). */
+  claimSupport: ClaimSupportPayload;
+
   kind: string;
   trust: string;
   basis: string;
@@ -437,6 +527,9 @@ export interface ValueProjectPayload {
 
 export interface ValuePayload {
   demo: boolean;
+  /** The server's statement of this claim's support, on named axes (AII-014). */
+  claimSupport: ClaimSupportPayload;
+
   allocation: unknown;
   /** Per-project value rows; classic rendering consumes this list directly. */
   projects?: ValueProjectPayload[];

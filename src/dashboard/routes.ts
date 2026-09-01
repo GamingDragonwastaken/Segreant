@@ -19,6 +19,12 @@ import type http from 'node:http';
 import { reconciliationReadiness } from '../billing/readiness.ts';
 import { existsSync, statSync } from 'node:fs';
 import type { Store } from '../store/db.ts';
+import {
+  allocatedClaimSupport,
+  billedClaimSupport,
+  meteredClaimSupport,
+  realizedClaimSupport,
+} from './claim-support.ts';
 import { isDemo, type FiscusConfig } from '../config.ts';
 import { probeProxyState } from '../egress/proxyHealth.ts';
 import { buildSettingsSnapshot, applySettingsPatch, SettingsValidationError, type SettingsPatch } from './settings.ts';
@@ -174,6 +180,13 @@ export function buildOverview(store: Store, config: FiscusConfig, range: RangeKe
   return {
     range,
     demo: isDemo(),
+    // What this claim's evidence reaches, on named axes, stated by the side that
+    // holds the evidence. The GUI used to infer this from `estimatedSpendShare`
+    // in the browser, which answered `complete` for a window with no spend in it.
+    claimSupport: meteredClaimSupport({
+      totalCostUsd: pricingWindow.totalCostUsd,
+      estimatedCostUsd: pricingWindow.estimatedCostUsd,
+    }),
     generatedAt: new Date(now).toISOString(),
     budget: {
       dailyUsd: config.budget.dailyUsd,
@@ -407,8 +420,22 @@ export function handleOverview({ res, url, store, config }: RouteContext): void 
  */
 export function handleBilling({ res, store }: RouteContext): void {
   try {
+    // Read once: the same recorded runs decide the claim's support and are
+    // served as the evidence behind it. Reading them twice would let the two
+    // disagree the moment a run landed between the calls.
+    const runs = store.reconciliationRuns(10);
+    const summary = store.billingSummary();
     return json(res, 200, {
       demo: isDemo(),
+      // `conflicted` lives here and nowhere else in this payload. Repeated
+      // provider observations of the same days that disagree contradict the
+      // billed claim rather than establishing it, and the browser's count-based
+      // inference had no branch that could say so.
+      claimSupport: billedClaimSupport({
+        recordCount: summary.recordCount,
+        runCount: runs.length,
+        latest: runs[0]?.result ?? null,
+      }),
       generatedAt: new Date().toISOString(),
       evidence: {
         kind: 'provider_billing_evidence',
@@ -426,7 +453,7 @@ export function handleBilling({ res, store }: RouteContext): void {
           'model_recommendations',
         ],
       },
-      summary: store.billingSummary(),
+      summary,
       imports: store.billingImportRuns(25),
       kernel: {
         kind: 'trusted_epistemic_kernel_billing',
@@ -464,7 +491,7 @@ export function handleBilling({ res, store }: RouteContext): void {
       reconciliation: {
         kind: 'scope_conditional_reconciliation',
         grain: 'provider_project_day_total',
-        runs: store.reconciliationRuns(10),
+        runs,
         excludedFrom: [
           'request_metered_spend',
           'budget_enforcement',
@@ -495,8 +522,16 @@ export function handleBilling({ res, store }: RouteContext): void {
 export function handleAllocation({ res, store }: RouteContext): void {
   try {
     const reconciliationRuns = store.reconciliationRuns(1);
+    const costCentres = store.costCentres();
+    const allocationRuns = store.allocationRuns(10);
     return json(res, 200, {
       demo: isDemo(),
+      // Showback: cost centres with no recorded run are partial coverage of a
+      // claim that is still unknown, never a refuted one.
+      claimSupport: allocatedClaimSupport({
+        costCentreCount: costCentres.length,
+        runCount: allocationRuns.length,
+      }),
       generatedAt: new Date().toISOString(),
       kind: 'derived_cost_allocation',
       trust: 'derived_allocation_of_local_estimates',
@@ -508,9 +543,9 @@ export function handleAllocation({ res, store }: RouteContext): void {
         'roi',
         'model_recommendations',
       ],
-      costCentres: store.costCentres(),
+      costCentres,
       rules: store.allocationRules(),
-      runs: store.allocationRuns(10),
+      runs: allocationRuns,
       // A cross-reference, not a computation. Whether ANY reconciliation has
       // been recorded decides whether the residual underneath every figure
       // on that page has been looked at — which is the difference between a
@@ -748,8 +783,24 @@ export function handleValue({ res, url, store, config }: RouteContext): void {
       // Cross-project allocation is not comparable/reliable enough to
       // recommend from raw RoI alone; per-project value stays descriptive.
       const projectAllocation = null;
+      // The money claim is `returnRatio.manualEquivalentValueUsd`, and only when
+      // the payload's own `basis` says it is priced. A dollar figure is never
+      // invented from a bare ratio.
+      const ratio = spine?.roi?.returnRatio ?? null;
+      const roiCoverage = spine?.roi?.coverage;
       return json(res, 200, {
         demo: value.demo,
+        // Contradicted gate evidence lands on COVERAGE here rather than on the
+        // epistemic axis, because mature units are different propositions and a
+        // population of contradictions is not a contradiction in the aggregate.
+        // See `src/dashboard/claim-support.ts`.
+        claimSupport: realizedClaimSupport({
+          maturedUnits: rep?.matured?.units ?? 0,
+          realizedUnits: rep?.matured?.realizedUnits ?? 0,
+          gateConflicts: rep?.matured?.gateConflicts ?? null,
+          roiCoverage: typeof roiCoverage === 'number' ? roiCoverage : null,
+          valued: ratio?.basis === 'usd' && typeof ratio.manualEquivalentValueUsd === 'number',
+        }),
         gitRepo: spine?.loaded.source === 'git',
         valueSource: spine?.loaded.source ?? null,
         // Whether the realized-value dollars came from spend SCOPED to this

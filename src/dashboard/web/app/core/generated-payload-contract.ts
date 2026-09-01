@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "126f1373cfb8ded6807dbcc41bffbf3b2247ee2c27def522a141095744c582eb";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "22b1222d20b95f9b61b0702021bd1c71cf815baf58f5b99211d3356e400c5f78";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -223,11 +223,43 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "type": "string | null"
     }
   ],
+  "ClaimSupportPayload": [
+    {
+      "name": "epistemic",
+      "optional": false,
+      "type": "ClaimEpistemicState"
+    },
+    {
+      "name": "coverage",
+      "optional": false,
+      "type": "ClaimCoverageStatus"
+    },
+    {
+      "name": "monetaryBasis",
+      "optional": false,
+      "type": "ClaimMonetaryBasis"
+    },
+    {
+      "name": "figure",
+      "optional": false,
+      "type": "ClaimFigureStatus"
+    },
+    {
+      "name": "note",
+      "optional": true,
+      "type": "string"
+    }
+  ],
   "Overview": [
     {
       "name": "demo",
       "optional": false,
       "type": "boolean"
+    },
+    {
+      "name": "claimSupport",
+      "optional": false,
+      "type": "ClaimSupportPayload"
     },
     {
       "name": "range",
@@ -478,6 +510,11 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "demo",
       "optional": false,
       "type": "boolean"
+    },
+    {
+      "name": "claimSupport",
+      "optional": false,
+      "type": "ClaimSupportPayload"
     },
     {
       "name": "evidence",
@@ -923,6 +960,11 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "type": "boolean"
     },
     {
+      "name": "claimSupport",
+      "optional": false,
+      "type": "ClaimSupportPayload"
+    },
+    {
       "name": "kind",
       "optional": false,
       "type": "string"
@@ -1094,6 +1136,11 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "demo",
       "optional": false,
       "type": "boolean"
+    },
+    {
+      "name": "claimSupport",
+      "optional": false,
+      "type": "ClaimSupportPayload"
     },
     {
       "name": "allocation",

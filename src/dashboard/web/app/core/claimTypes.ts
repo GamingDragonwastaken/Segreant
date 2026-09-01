@@ -25,64 +25,53 @@
 export type LayerId = 'metered' | 'billed' | 'allocated' | 'realized';
 
 /**
- * The axes a layer's support is stated on (AII-014, WP-B02).
+ * The axes a layer's support is stated on (AII-014, WP-B02, WP-B04).
  *
- * These vocabularies are copied from `src/epistemic/state.ts` and
- * `src/epistemic/profile.ts`. The browser app cannot import node source, so
- * this is a hand-written mirror, which is the failure mode this repository has
- * been bitten by before — `test/claim-support-axes.test.ts` reads both files
- * and asserts the members are identical, so drift fails rather than compiles.
+ * These are no longer a hand-written mirror. WP-B02 wrote them out here and
+ * `test/claim-support-axes.test.ts` checked them against `src/epistemic/`; the
+ * axes are now on the WIRE, so the browser imports the generated copy of the
+ * canonical payload source instead and there is nothing here left to drift.
+ * `src/dashboard/shared-types.ts` is the one remaining mirror of the kernel
+ * vocabularies — it must not import, because the build copies it verbatim into
+ * this compiler root — and the drift test now reads that file.
  */
-export type LayerEpistemicState = 'unknown' | 'supported' | 'refuted' | 'conflicted';
-export type LayerCoverage = 'unknown' | 'partial' | 'complete';
-export type LayerMonetaryBasis =
-  | 'none'
-  | 'list'
-  | 'estimated'
-  | 'provider_observed'
-  | 'billed'
-  | 'effective'
-  | 'allocated'
-  | 'full_cost'
-  | 'mixed';
+export type {
+  ClaimEpistemicState as LayerEpistemicState,
+  ClaimCoverageStatus as LayerCoverage,
+  ClaimMonetaryBasis as LayerMonetaryBasis,
+  ClaimFigureStatus as LayerFigure,
+} from './generated-types.ts';
 
-/**
- * Why the value slot shows what it shows. This is a SEPARATE question from
- * whether the claim holds, and collapsing the two is the specific defect this
- * type exists to prevent: forty matured, shipped units with no labour rate set
- * is a supported claim with no priced figure, and it used to render exactly
- * like no outcome evidence at all.
- */
-export type LayerFigure =
-  /** A figure is available and shown. */
-  | 'shown'
-  /** No figure because the claim itself is not supported. */
-  | 'withheld_unsupported'
-  /** The claim IS supported; an input needed to price it is missing. */
-  | 'withheld_uncosted'
-  /** This layer never carries a dollar on the band — it is evidence or showback. */
-  | 'not_a_money_claim';
+import type { ClaimSupportPayload, ClaimFigureStatus } from './generated-types.ts';
 
 /**
  * What the evidence for one layer actually reaches.
  *
- * This replaces a single `established: boolean`, which stood for three
- * different questions at once — is the claim supported, is there a figure, and
- * should the operator be shown a next step — and answered all three with one
- * bit. `src/epistemic/profile.ts` opens by saying a claim is never reduced to
+ * This replaces a single `established: boolean`, which stood for three different
+ * questions at once — is the claim supported, is there a figure, and should the
+ * operator be shown a next step — and answered all three with one bit.
+ * `src/epistemic/profile.ts` opens by saying a claim is never reduced to
  * `established: boolean`; the spine was doing it anyway.
  *
  * There is deliberately no score here. Replacing one boolean with a number
  * between 0 and 1 is the same collapse with a decimal point.
+ *
+ * The SERVER decides these now. What is left in the browser is the one judgement
+ * the server cannot make about itself: what a claim's support is when the
+ * endpoint that would have stated it did not answer.
  */
-export interface LayerSupport {
-  /** Four-valued. `unknown` is an absence of evidence, never a measured no. */
-  readonly epistemic: LayerEpistemicState;
-  /** How much of what the claim covers the evidence actually reaches. */
-  readonly coverage: LayerCoverage;
-  /** What kind of money the figure is, when this layer carries one. */
-  readonly monetaryBasis: LayerMonetaryBasis;
-  readonly figure: LayerFigure;
+export type LayerSupport = ClaimSupportPayload;
+
+/**
+ * The support of a claim whose endpoint did not answer.
+ *
+ * `unknown` is the whole of the honest answer — a dead endpoint is an absence of
+ * evidence, never a measured zero — and each layer keeps its own `figure`,
+ * because whether a band ever carries a dollar is a property of the claim rather
+ * than of whether the fetch succeeded.
+ */
+export function unreachableSupport(figure: ClaimFigureStatus): LayerSupport {
+  return { epistemic: 'unknown', coverage: 'unknown', monetaryBasis: 'none', figure };
 }
 
 /**
@@ -92,6 +81,28 @@ export interface LayerSupport {
  */
 export function claimIsSupported(layer: Layer): boolean {
   return layer.support.epistemic === 'supported';
+}
+
+/**
+ * Does the evidence CONTRADICT itself? Distinct from unsupported, and the
+ * distinction is the whole reason the axis is four-valued: an absence of
+ * evidence and two sources that disagree are opposite situations, and the
+ * sentence "an absence of evidence, never a measured zero" is false about the
+ * second one. Reachable since the axes moved to the wire — the browser's old
+ * two-branch inference had no state that could say it.
+ */
+export function claimIsConflicted(layer: Layer): boolean {
+  return layer.support.epistemic === 'conflicted';
+}
+
+/** Is the claim REFUTED — a measured no, rather than nothing measured? */
+export function claimIsRefuted(layer: Layer): boolean {
+  return layer.support.epistemic === 'refuted';
+}
+
+/** Is the claim simply unevidenced? The only case that is an absence. */
+export function claimIsUnevidenced(layer: Layer): boolean {
+  return layer.support.epistemic === 'unknown';
 }
 
 /** Is the operator being shown a number? A different question from the above. */

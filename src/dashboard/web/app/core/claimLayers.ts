@@ -1,11 +1,22 @@
 /**
- * Derives the four claims, and their evidence, from the live payloads.
+ * Renders the four claims, and their evidence, from the live payloads.
  *
- * The rule this module exists to enforce: a layer is `established` only when
- * evidence actually substantiates it. Not when the API returned a number, not
- * when the number is zero, not when a related feature exists. An unestablished
- * layer reports what is missing and what would close the gap — because the most
- * useful thing this product can tell an operator is where their evidence stops.
+ * The rule this module exists to enforce: a layer reports what is missing and
+ * what would close the gap, because the most useful thing this product can tell
+ * an operator is where their evidence stops.
+ *
+ * WHAT MOVED (AII-014). The support AXES are no longer derived here. Each
+ * payload now carries its own `claimSupport`, stated by the side that holds the
+ * evidence — see `src/dashboard/claim-support.ts` for why, and for the three
+ * defects that inferring them in the browser produced. What remains here is the
+ * PROSE: the one-line basis, the next step, and the six inspection dimensions,
+ * which belong next to the pixels that show them. Where the server attaches a
+ * `note`, this module renders it rather than restating the axes in its own
+ * words — two descriptions of one judgement is how they come apart.
+ *
+ * The one judgement still made here is what a claim's support is when its
+ * endpoint did not answer. A server cannot state that about a payload it never
+ * sent.
  *
  * This is a PURE function of four payloads. The fetching lives in `chain.ts`,
  * which is the half that can fail per-endpoint; the split exists so that the
@@ -16,7 +27,7 @@
  */
 
 import type { Overview, BillingPayload, AllocationPayload, ValuePayload } from './api.ts';
-import type { Layer } from './claimTypes.ts';
+import { unreachableSupport, type Layer } from './claimTypes.ts';
 
 export interface ClaimInputs {
   overview: Overview | null;
@@ -46,12 +57,7 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
     // there is a priced count. Coverage is partial whenever any row was priced
     // from an estimate rather than a matched rate card — the figure exists, but
     // it does not wholly reach what it claims to measure.
-    support: {
-      epistemic: o === null ? 'unknown' : 'supported',
-      coverage: o === null ? 'unknown' : (estimatedShare === null || estimatedShare > 0 ? 'partial' : 'complete'),
-      monetaryBasis: o === null ? 'none' : (estimatedShare !== null && estimatedShare > 0 ? 'mixed' : 'list'),
-      figure: o === null ? 'withheld_unsupported' : 'shown',
-    },
+    support: o?.claimSupport ?? unreachableSupport('withheld_unsupported'),
     basis: o === null
       ? 'could not read the ledger'
       : 'counted from requests, priced from a rate card',
@@ -60,9 +66,10 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
       provenance: 'local request ledger + recorded pricing basis',
       scope: o ? `${range}; ${o.summary.requests} recorded request(s)` : range,
       freshness: o?.generatedAt ?? 'not established',
-      coverage: estimatedShare === null
-        ? 'pricing coverage unavailable'
-        : `${Math.round((1 - estimatedShare) * 100)}% of spend priced from a matched rate card, not estimated`,
+      coverage: o?.claimSupport?.note
+        ?? (estimatedShare === null
+          ? 'pricing coverage unavailable'
+          : `${Math.round((1 - estimatedShare) * 100)}% of spend priced from a matched rate card, not estimated`),
       // The distinction the whole product is built on, stated where someone is
       // most likely to reach for the metered figure as if it were the bill.
       enforceability: 'observation claim; local caps can govern future in-path requests, but metered cost does not become billed cost',
@@ -85,6 +92,7 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
   // read "not established" even with reconciliations recorded.
   const latestRun = b?.reconciliation?.runs?.[0] ?? null;
   const runs = b?.reconciliation?.runs?.length ?? 0;
+  const billedNote = b?.claimSupport?.note ?? null;
   const billed: Layer = {
     id: 'billed',
     label: 'Billed',
@@ -95,20 +103,28 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
     // at all; records held but never compared is still `unknown` about the
     // BILLED claim while being visibly non-empty in coverage — which is what
     // the operator needs to see in order to know the next step is theirs.
-    support: {
-      epistemic: runs > 0 ? 'supported' : 'unknown',
-      coverage: runs > 0 ? 'complete' : (b && b.summary.recordCount > 0 ? 'partial' : 'unknown'),
-      monetaryBasis: runs > 0 ? 'billed' : 'none',
-      // The band deliberately carries no dollar: this is an evidence claim
-      // about whether a comparison happened, not a second cost figure.
-      figure: 'not_a_money_claim',
-    },
-    basis: runs > 0
-      ? 'reconciled against a provider report, with a residual'
-      : b && b.summary.recordCount > 0
-        ? `${b.summary.recordCount} provider records held, none reconciled yet`
-        : 'no provider bill has been compared against this ledger',
-    nextStep: runs > 0 ? undefined : 'Check readiness in Evidence before spending a credential on it.',
+    // The band deliberately carries no dollar in any branch: this is an evidence
+    // claim about whether a comparison happened, not a second cost figure.
+    support: b?.claimSupport ?? unreachableSupport('not_a_money_claim'),
+    basis: billedNote
+      // A reconciliation whose provider snapshots contradicted each other is not
+      // a reconciliation that established anything, and saying "reconciled" here
+      // while the axis says `conflicted` is the disagreement this line exists to
+      // avoid.
+      ? `reconciled against a provider report, but ${billedNote}`
+      : runs > 0
+        ? 'reconciled against a provider report, with a residual'
+        : b && b.summary.recordCount > 0
+          ? `${b.summary.recordCount} provider records held, none reconciled yet`
+          : 'no provider bill has been compared against this ledger',
+    // A contradiction with no next action leaves an operator looking at a
+    // problem they are not told how to work on. Resolving a disagreement is a
+    // different task from collecting more evidence, so it gets its own sentence.
+    nextStep: b?.claimSupport?.epistemic === 'conflicted'
+      ? 'Re-observe the disagreeing days before relying on this reconciliation.'
+      : runs > 0
+        ? undefined
+        : 'Check readiness in Evidence before spending a credential on it.',
     inspection: {
       provenance: latestRun?.result.providerSourceKind
         ?? (b && b.summary.recordCount > 0 ? 'operator-supplied provider evidence, unreconciled' : 'none'),
@@ -139,13 +155,9 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
     // Cost centres defined with no run recorded is partial coverage of a claim
     // that is still unknown, not a refuted one: nothing has been apportioned,
     // and nothing says it cannot be.
-    support: {
-      epistemic: allocRuns > 0 ? 'supported' : 'unknown',
-      coverage: allocRuns > 0 ? 'complete' : (centres > 0 ? 'partial' : 'unknown'),
-      monetaryBasis: allocRuns > 0 ? 'allocated' : 'none',
-      // Showback: the claim is whose cost it is, not how much.
-      figure: 'not_a_money_claim',
-    },
+    // Showback: the claim is whose cost it is, not how much, so the band never
+    // carries a dollar.
+    support: a?.claimSupport ?? unreachableSupport('not_a_money_claim'),
     basis: allocRuns > 0
       ? 'apportioned by recorded rules — showback only'
       : centres > 0
@@ -223,14 +235,7 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
     // Both rendered as "not established", which an operator reads as "your work
     // produced nothing" — an inference from a missing input, in the band whose
     // entire job is to keep realized value distinct from the three cost claims.
-    support: {
-      epistemic: realizedUnits > 0 ? 'supported' : 'unknown',
-      coverage: typeof v?.roi?.coverage !== 'number'
-        ? 'unknown'
-        : v.roi.coverage >= 1 ? 'complete' : 'partial',
-      monetaryBasis: valued ? 'estimated' : 'none',
-      figure: realizedUnits === 0 ? 'withheld_unsupported' : valued ? 'shown' : 'withheld_uncosted',
-    },
+    support: v?.claimSupport ?? unreachableSupport('withheld_unsupported'),
     basis: realizedUnits === 0
       ? 'no work units have matured into verified outcomes'
       : valued
@@ -251,9 +256,15 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
       freshness: v
         ? (v.gitRepo ? 'derived from live repository history on read' : 'derived from persisted outcome evidence on read')
         : 'not established',
-      coverage: typeof v?.roi?.coverage === 'number'
-        ? `${Math.round(v.roi.coverage * 100)}% RoI lens coverage`
-        : 'RoI lens coverage not established',
+      // Two different holes reach this one axis, and they stay separate here even
+      // though they merge into `partial` above: the RoI lens may not reach every
+      // unit, and some mature units may hold contradicted gate evidence.
+      coverage: [
+        typeof v?.roi?.coverage === 'number'
+          ? `${Math.round(v.roi.coverage * 100)}% RoI lens coverage`
+          : 'RoI lens coverage not established',
+        v?.claimSupport?.note,
+      ].filter(Boolean).join('; '),
       enforceability: 'outcome/value claim; it is never evidence that a provider bill or a local budget was enforced',
       evidenceSource: v?.gitRepo
         ? 'repository history + recorded outcome signals'

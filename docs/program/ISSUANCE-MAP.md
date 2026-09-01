@@ -49,6 +49,7 @@ file anywhere in `src/` that calls `claim({...})` without appearing here fails.
 | `outcomes.contract` | `src/outcomes/contract.ts` | kernel_primitive | A domain-neutral outcome contract is confirmed, unresolved, or conflicted |
 | `value.receipt` | `src/value/receipt.ts` | integrity_only | This exact record was produced by the holder of this key and has not been altered |
 | `team.rollup` | `src/team/rollup.ts` | integrity_only | A project-level aggregate of locally computed values, signed for transport |
+| `dashboard.claimSupport` | `src/dashboard/claim-support.ts` | display_only | What each of the four product claims’ evidence reaches, on named axes, as sent to any consumer of `/api/*` |
 | `judge.session` | `src/judge/orchestrate.ts` | display_only | A model-graded quality judgment for a session |
 | `causal.qualification` | `src/causal/qualification.ts` | **unmigrated_authority** | A local randomized study qualifies as causal evidence |
 | `causal.estimate` | `src/causal/estimate.ts` | **unmigrated_authority** | An assigned-arm difference with a finite-range interval |

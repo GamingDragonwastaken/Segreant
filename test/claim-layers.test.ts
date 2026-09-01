@@ -16,11 +16,21 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildClaimLayers, type ClaimInputs } from '../src/dashboard/web/app/core/claimLayers.ts';
 import type { Overview, BillingPayload, AllocationPayload, ValuePayload, ReconciliationRunRecord } from '../src/dashboard/web/app/core/api.ts';
+// The fixtures state their support the way the server does, by calling the
+// server's own derivation. Hand-writing the axes here would make every
+// assertion below a tautology over a constant this file invented.
+import {
+  allocatedClaimSupport,
+  billedClaimSupport,
+  meteredClaimSupport,
+  realizedClaimSupport,
+} from '../src/dashboard/claim-support.ts';
 
 const NOTHING: ClaimInputs = { overview: null, billing: null, allocation: null, value: null };
 
 const anOverview = (costUsd: number, requests: number): Overview => ({
   demo: false,
+  claimSupport: meteredClaimSupport({ totalCostUsd: costUsd, estimatedCostUsd: 0 }),
   range: '30d',
   generatedAt: '2026-08-01T00:00:00.000Z',
   summary: { requests, costUsd },
@@ -32,6 +42,7 @@ const anOverview = (costUsd: number, requests: number): Overview => ({
 
 const aBilling = (recordCount: number, runs: ReconciliationRunRecord[] = []): BillingPayload => ({
   demo: false,
+  claimSupport: billedClaimSupport({ recordCount, runCount: runs.length, latest: runs[0]?.result ?? null }),
   evidence: { reconciliationStatus: 'not_reconciled' },
   summary: { recordCount },
   reconciliation: { runs },
@@ -129,6 +140,9 @@ test('the realized figure is the VALUE produced, never the spend attributed to i
     projectScoped: true,
     realization: { matured: { units: 4, realizedUnits: 2, realizationRate: 0.5, totalCostUsd: 9, spendOnRealizedUnitsUsd: 2 } },
     roi: { coverage: 0.5, notes: ['lift is uninstrumented'], returnRatio: { basis: 'usd', manualEquivalentValueUsd: 40 } },
+    claimSupport: realizedClaimSupport({
+      maturedUnits: 4, realizedUnits: 2, gateConflicts: null, roiCoverage: 0.5, valued: true,
+    }),
   } as unknown as ValuePayload;
 
   const realized = buildClaimLayers({ ...NOTHING, value }, '30d')[3]!;
@@ -144,6 +158,9 @@ test('matured units with no labour rate are units, not dollars', () => {
     demo: false, allocation: null, valueSource: 'git', gitRepo: true, projectScoped: true,
     realization: { matured: { units: 4, realizedUnits: 2, realizationRate: 0.5, totalCostUsd: 9, spendOnRealizedUnitsUsd: 2 } },
     roi: { coverage: 0.5, returnRatio: { basis: 'ratio', grossRatio: 3 } },
+    claimSupport: realizedClaimSupport({
+      maturedUnits: 4, realizedUnits: 2, gateConflicts: null, roiCoverage: 0.5, valued: false,
+    }),
   } as unknown as ValuePayload;
 
   const realized = buildClaimLayers({ ...NOTHING, value }, '30d')[3]!;
@@ -161,6 +178,7 @@ test('allocation and realized state the boundary of what they can enforce', () =
     demo: false, kind: 'showback', trust: 'local_rule', basis: 'metered_request_cost',
     excludedFrom: ['provider_invoice'], costCentres: [{ id: 'a' }], rules: [],
     runs: [{ allocationRunId: 'run-1', computedAtMs: Date.UTC(2026, 7, 2) }],
+    claimSupport: allocatedClaimSupport({ costCentreCount: 1, runCount: 1 }),
     reconciliation: { everRun: false, latestComputedAtMs: null },
   };
   const layers = buildClaimLayers({ ...NOTHING, allocation }, '30d');
@@ -184,6 +202,7 @@ test('the allocation claim is never dated by the billing reconciliation', () => 
     demo: false, kind: 'derived_cost_allocation', trust: 'derived_allocation_of_local_estimates',
     basis: 'showback_only', excludedFrom: ['request_metered_spend'],
     costCentres: [], rules: [], runs: [],
+    claimSupport: allocatedClaimSupport({ costCentreCount: 0, runCount: 0 }),
     reconciliation: { everRun: true, latestComputedAtMs: billingRunMs },
   };
   const allocated = buildClaimLayers({ ...NOTHING, allocation }, '30d')[2]!;
@@ -207,6 +226,7 @@ test('an unreconciled allocation says its inputs were never checked against a bi
     demo: false, kind: 'derived_cost_allocation', trust: 'derived_allocation_of_local_estimates',
     basis: 'showback_only', excludedFrom: [], costCentres: [], rules: [],
     runs: [{ allocationRunId: 'run-1', computedAtMs: Date.UTC(2026, 7, 2) }],
+    claimSupport: allocatedClaimSupport({ costCentreCount: 0, runCount: 1 }),
     reconciliation: { everRun: false, latestComputedAtMs: null },
   };
   const allocated = buildClaimLayers({ ...NOTHING, allocation }, '30d')[2]!;
@@ -223,4 +243,33 @@ test('a dead endpoint degrades its own layer, and reads as missing evidence rath
   assert.equal(layers[2]!.inspection.coverage, 'allocation endpoint unavailable');
   assert.equal(layers[3]!.inspection.provenance, 'no outcome source established');
   for (const l of layers.slice(1)) assert.equal(l.valueUsd, null);
+});
+
+test('a payload that answers without stating its support reads as unknown, and does not crash', () => {
+  // The GUI is served by the process that answers these routes, so in practice
+  // the field is always there. "In practice always there" is what was assumed
+  // about `FunnelOutcome.conflicts` one packet ago, and reading it off a
+  // snapshot written before it existed threw on the CLI status line. The cost of
+  // being wrong about that is a blank dashboard; the cost of guarding is one
+  // `??`. An absent statement of support is an absent statement, not a zero.
+  const overview = { ...anOverview(5, 10) } as Partial<Overview>;
+  delete overview.claimSupport;
+  const billing = { ...aBilling(9) } as Partial<BillingPayload>;
+  delete billing.claimSupport;
+
+  const layers = buildClaimLayers(
+    { ...NOTHING, overview: overview as Overview, billing: billing as BillingPayload },
+    '30d',
+  );
+
+  assert.equal(layers[0]!.support.epistemic, 'unknown');
+  assert.equal(layers[0]!.support.coverage, 'unknown');
+  assert.equal(layers[0]!.support.figure, 'withheld_unsupported');
+  // Billed never carries a dollar, and that stays true whether or not the server
+  // said anything: it is a property of the claim, not of the fetch.
+  assert.equal(layers[1]!.support.figure, 'not_a_money_claim');
+  assert.equal(layers[1]!.support.epistemic, 'unknown');
+  // And the prose still renders, from the fields that ARE present.
+  assert.match(layers[1]!.basis, /9 provider records held/);
+  assert.equal(layers[0]!.inspection.coverage, '100% of spend priced from a matched rate card, not estimated');
 });

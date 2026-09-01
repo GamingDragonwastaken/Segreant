@@ -240,6 +240,10 @@ body {
 /* A claim that holds but cannot be priced is not an open claim, and must not
    read like one. Distinct from the unsubstantiated line above it. */
 .spine-uncosted { margin-top: var(--s2); color: var(--gold-text); }
+/* Contradicted evidence is not missing evidence and must not read as the same
+   sentence in the same colour. --coral is the palette's "the evidence says
+   something is wrong here" and clears 4.5:1 in both themes. */
+.spine-conflicted, .spine-refuted { margin-top: var(--s2); color: var(--coral); }
 .spine-loading { min-height: 120px; }
 
 @media (max-width: 900px) {

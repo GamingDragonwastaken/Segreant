@@ -122,6 +122,13 @@ export const ISSUANCE_MAP: readonly IssuanceBoundary[] = Object.freeze([
     note: 'The transport authenticates the sender; it adds nothing to the strength of the values carried. An aggregate of compatibility-basis rows stays compatibility-basis after signing.',
   },
   {
+    id: 'dashboard.claimSupport',
+    module: 'src/dashboard/claim-support.ts',
+    asserts: 'What each of the four product claims\u2019 evidence reaches, on named axes, as sent to any consumer of /api/*.',
+    issuanceClass: 'display_only',
+    note: 'It states what the payload-building code already knows and issues nothing. It is on this map because it is the first place a consumer meets a claim\u2019s strength as a value rather than as prose \u2014 which is exactly the position from which a stronger semantics gets minted beside the kernel without anyone noticing. Where it cannot tell, it must say unknown.',
+  },
+  {
     id: 'judge.session',
     module: 'src/judge/orchestrate.ts',
     asserts: 'A model-graded quality judgment for a session.',
