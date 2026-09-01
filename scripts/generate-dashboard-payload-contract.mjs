@@ -1,9 +1,31 @@
-import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
+import { readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+/**
+ * Publish a generated file atomically.
+ *
+ * These land inside the live source tree, which other processes read: the
+ * browser compiler root during a concurrent build, and `dashboard-script`'s
+ * source sweep, which walks `src/dashboard/web/app` while `build-race` is
+ * running two builds through it. A plain `writeFileSync` leaves a window in
+ * which that reader sees a truncated file or, mid-rewrite on Windows, no file
+ * at all. Same-directory rename removes the window rather than asking readers
+ * to retry around it.
+ */
+function publishGenerated(path, contents) {
+  const temp = `${path}.${process.pid}-${randomUUID()}.tmp`;
+  try {
+    writeFileSync(temp, contents, 'utf8');
+    renameSync(temp, path);
+  } catch (error) {
+    rmSync(temp, { force: true });
+    throw error;
+  }
+}
 const sourcePath = join(root, 'src', 'dashboard', 'shared-types.ts');
 const targetPath = join(root, 'src', 'dashboard', 'web', 'app', 'core', 'generated-payload-contract.ts');
 const generatedTypesPath = join(root, 'src', 'dashboard', 'web', 'app', 'core', 'generated-types.ts');
@@ -79,7 +101,7 @@ const generated = [
   `export const DASHBOARD_INTERFACE_CONTRACTS = ${JSON.stringify(interfaces, null, 2)} as const;`,
   '',
 ].join('\n');
-writeFileSync(targetPath, generated, 'utf8');
+publishGenerated(targetPath, generated);
 
 // The browser compiler intentionally has a rootDir of web/app and cannot import
 // the server-side shared source directly. Copy the canonical declarations into
@@ -91,4 +113,4 @@ const generatedTypes = [
   source.trim(),
   '',
 ].join('\n');
-writeFileSync(generatedTypesPath, generatedTypes, 'utf8');
+publishGenerated(generatedTypesPath, generatedTypes);

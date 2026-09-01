@@ -151,9 +151,21 @@ card, `/app/main.js` 404'd. Reproduced locally before any fix, then repaired.
   observation run recorded" while describing one. See D-070.
 
 
+- **A lost lock is not a failed lock (D-071).** CI at `afca277` went red on
+  Windows: `ENOENT` on `.fiscus-build.lock\.owner-<uuid>.tmp` thrown out of
+  `acquirePublicationLock` and out of `bin/fiscus.mjs`, so `fiscus --help` died
+  while two builds were publishing. The lock is made in two steps and carries no
+  owner between them, which is indistinguishable from an abandoned one; a
+  contender removing it in that window leaves the creator's write failing — and
+  on Windows the same removal answers `EEXIST`, `EPERM` or `ENOENT` depending on
+  exactly when the call lands. Only `EEXIST` was recognised. The pathname
+  cleanup that ran afterwards was worse than the crash: it could take a fresh
+  lock away from another process inside its own publish window. Both are gone.
+
+
 ## Last verified commands
 
-Run against the D-070 tree:
+Run against the D-071 tree:
 
 - `node ./node_modules/typescript/bin/tsc --noEmit -p tsconfig.json` -> pass
 - `node ./node_modules/typescript/bin/tsc --noEmit -p src/dashboard/web/app/tsconfig.json` -> pass
@@ -162,7 +174,7 @@ Run against the D-070 tree:
   `src/team/`** — CI found two red heads this program because the root gates
   cannot see it.
 - `node scripts/build.mjs` -> pass
-- full `node --test test/*.test.ts` -> 1,207 tests / 1,203 pass / 0 fail / 4 skipped
+- full `node --test test/*.test.ts` -> 1,210 tests / 1,206 pass / 0 fail / 4 skipped
 
 ## Known residuals
 
@@ -171,14 +183,18 @@ Run against the D-070 tree:
   and are scoped by exact count in the sweep, not rewritten.
 - The launcher copies ~2.8 MB of `dist/` on every CLI invocation. That is the
   cost of the publication-race guarantee, not a defect, but it is unmeasured.
-- `test/build-race.test.ts`'s concurrent-builders case flaked on Windows with
-  `EBUSY` on `generated-contract.ts` — `sourceFingerprint` read a generated
-  source while a concurrent build held it for writing, which Windows fails and
-  POSIX does not. `scripts/build-integrity.mjs` now retries a transient
-  `EBUSY`/`EPERM` open for up to two seconds. Seven consecutive runs pass where
-  it previously failed roughly one in three; that is evidence the cause was
-  identified, not proof the race is gone, and CI's Windows job is the place it
-  would show up again.
+- `test/build-race.test.ts` has now failed on Windows twice, from two different
+  causes. The `EBUSY` read of `generated-contract.ts` was fixed by a bounded
+  retry in `scripts/build-integrity.mjs`; the `ENOENT`/`EPERM` lock crash was
+  fixed in `bin/publication-lock.mjs` (D-071). Neither repair establishes what
+  interleaving produced the condition — both were diagnosed from a signature in
+  a CI log and reproduced by manufacturing the state directly. CI's Windows job
+  remains the place a third cause would appear.
+- One full-suite run failed `GUI sources: no HTML injection sink`, which walks
+  `src/dashboard/web/app` while `build-race` rewrites generated files in that
+  tree. Four paired re-runs did not reproduce it. The generator now publishes by
+  same-directory rename, which closes that window; the failure itself was never
+  diagnosed.
 - AII-009/025/027 moved OPEN -> PARTIAL, not closed: each still has a downstream
   consumer requirement (composite decision-fitness, control-path refusal of
   observational input, evidence-debt planner).
