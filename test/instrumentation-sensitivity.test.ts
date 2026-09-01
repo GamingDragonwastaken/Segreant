@@ -2,10 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { computeReturnOnIntelligence } from '../src/value/lenses.ts';
 import { instrumentationPriority } from '../src/value/instrumentationSensitivity.ts';
-import { scoreFunnel, type Gate, type GateResult, type Verdict } from '../src/value/gates.ts';
+import { gateResultFromVerdict, scoreFunnel, type Gate, type GateResult, type Verdict } from '../src/value/gates.ts';
 
 function gate(g: Gate, verdict: Verdict): GateResult {
-  return { gate: g, verdict, detail: '' };
+  return gateResultFromVerdict(g, verdict, '');
 }
 
 /** Matured units instrument Realization; Impact is supplied separately when known. */

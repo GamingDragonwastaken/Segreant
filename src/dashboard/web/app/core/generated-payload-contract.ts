@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "5aaf81a60819ca9d2d02065a4ae9935741068ba396d4e06d3b0a36d09cbe5ad6";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "126f1373cfb8ded6807dbcc41bffbf3b2247ee2c27def522a141095744c582eb";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -1027,6 +1027,11 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "type": "Record<string, number>"
     },
     {
+      "name": "gateConflicts",
+      "optional": true,
+      "type": "Record<string, number>"
+    },
+    {
       "name": "realizationBounds",
       "optional": true,
       "type": "{ lower: number; upper: number; n: number }"
@@ -1626,6 +1631,11 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "type": "GateName"
     },
     {
+      "name": "polarity",
+      "optional": false,
+      "type": "GatePolarity"
+    },
+    {
       "name": "verdict",
       "optional": false,
       "type": "GateVerdict"
@@ -1666,6 +1676,11 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "realized",
       "optional": false,
       "type": "boolean"
+    },
+    {
+      "name": "conflicts",
+      "optional": false,
+      "type": "GateName[]"
     },
     {
       "name": "passes",

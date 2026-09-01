@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { economicAttributionView } from '../src/economics/attribution.ts';
 import { money } from '../src/economics/money.ts';
 import { evidence } from '../src/epistemic/evidence.ts';
-import { GATE_LADDER, scoreFunnel, type Gate, type GateResult } from '../src/value/gates.ts';
+import { GATE_LADDER, gateResultFromVerdict, scoreFunnel, type Gate, type GateResult } from '../src/value/gates.ts';
 import {
   buildCodingRealizationKernelIssuance,
   type CodingRealizationKernelInput,
@@ -11,7 +11,7 @@ import {
 import { Store } from '../src/store/db.ts';
 
 const ALL_PASS = Object.fromEntries(
-  GATE_LADDER.map((gate) => [gate, { gate, verdict: 'pass', detail: 'fixture evidence' }]),
+  GATE_LADDER.map((gate) => [gate, gateResultFromVerdict(gate, 'pass', 'fixture evidence')]),
 ) as Record<Gate, GateResult>;
 
 const ECONOMIC = economicAttributionView({
@@ -120,10 +120,23 @@ test('coding realization kernel refuses unresolved or contradictory lifecycle in
     () => buildCodingRealizationKernelIssuance(input({ unitJson: JSON.stringify({ ...base, economic: partialEconomic }) })),
     /complete exact economic coverage/,
   );
-  const unknown = { ...ALL_PASS, shipped: { gate: 'shipped' as const, verdict: 'unknown' as const, detail: 'not observed' } };
+  const unknown = { ...ALL_PASS, shipped: gateResultFromVerdict('shipped', 'unknown', 'not observed') };
   assert.throws(
     () => buildCodingRealizationKernelIssuance(input({ unitJson: JSON.stringify({ ...base, funnel: scoreFunnel(unknown) }) })),
     /every legacy realization gate must be pass/,
+  );
+
+  // A gate two sources disagreed about is refused for its OWN reason (AII-003,
+  // WP-B03). Its verdict already projects to `fail`, so the check above would
+  // catch it too — but a caller reading that message would be told the gate
+  // FAILED, when what happened is that the evidence contradicted itself.
+  const conflicted = {
+    ...ALL_PASS,
+    tested: { gate: 'tested' as const, polarity: 'conflicted' as const, verdict: 'fail' as const, detail: 'two runs disagreed' },
+  };
+  assert.throws(
+    () => buildCodingRealizationKernelIssuance(input({ unitJson: JSON.stringify({ ...base, funnel: scoreFunnel(conflicted) }) })),
+    /refuses a conflicted gate: tested/,
   );
   assert.throws(() => buildCodingRealizationKernelIssuance(input({ maturing: true })), /mature/);
   assert.throws(() => buildCodingRealizationKernelIssuance(input({ commitHash: 'b'.repeat(40) })), /hash does not match/);

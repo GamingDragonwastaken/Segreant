@@ -412,6 +412,8 @@ export interface Matured {
   /** Where units died, in stage order. The stage that costs most is the one to fix. */
   wasteByStage?: Array<{ stage: string; units: number; costUsd: number }>;
   instrumentation?: Record<string, number>;
+  /** Per-gate count of mature units whose evidence contradicted itself (AII-003). */
+  gateConflicts?: Record<string, number>;
   /** Partial-identification bounds on the realization rate. */
   realizationBounds?: { lower: number; upper: number; n: number };
   /** Exact effective spend coverage; numeric fields remain compatibility projections. */
@@ -737,9 +739,17 @@ export interface PricingPayload {
 
 export type GateName = 'proposed' | 'accepted' | 'committed' | 'tested' | 'merged' | 'shipped' | 'survived' | 'clean';
 export type GateVerdict = 'pass' | 'fail' | 'unknown';
+/** Mirrors `EpistemicState` in `src/epistemic/state.ts` (AII-003, WP-B03). */
+export type GatePolarity = 'unknown' | 'supported' | 'refuted' | 'conflicted';
 
 export interface GateResultPayload {
   gate: GateName;
+  /**
+   * The four-valued truth. `conflicted` means several sources both supported
+   * and refuted this gate, which `verdict` has no way to say — it projects a
+   * conflict to `fail`, deliberately and never to `pass`.
+   */
+  polarity: GatePolarity;
   verdict: GateVerdict;
   detail: string;
 }
@@ -751,6 +761,8 @@ export interface RealizationFunnelPayload {
   diedAt: GateName | null;
   diedAtIndex: number | null;
   realized: boolean;
+  /** Gates where the evidence both supported and refuted the proposition. */
+  conflicts: GateName[];
   passes: number;
   fails: number;
   unknowns: number;

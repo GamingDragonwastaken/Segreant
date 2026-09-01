@@ -6,11 +6,12 @@ import { join } from 'node:path';
 import { loadOrCreateKeyPair, buildEconomicReceiptBody, signReceipt, verifyReceipt, type ReceiptBodyV2 } from '../src/value/receipt.ts';
 import { economicAttributionView } from '../src/economics/attribution.ts';
 import { money } from '../src/economics/money.ts';
-import type { FunnelOutcome } from '../src/value/gates.ts';
+import { gateResultFromVerdict, type FunnelOutcome } from '../src/value/gates.ts';
 
 const funnel: FunnelOutcome = {
   realized: true,
-  results: [{ gate: 'committed', verdict: 'pass', detail: 'fixture' }],
+  results: [gateResultFromVerdict('committed', 'pass', 'fixture')],
+  conflicts: [],
   reachedIndex: 0,
   reached: 'committed',
   diedAt: null,

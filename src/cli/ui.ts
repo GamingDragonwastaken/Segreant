@@ -5,7 +5,7 @@
  * every command module import from here so the CLI speaks with one voice.
  */
 
-import type { Verdict } from '../value/gates.ts';
+import type { GateResult, Verdict } from '../value/gates.ts';
 import { stringifyJson } from '../util/json.ts';
 
 // Night Vault brand colors on terminals that declare 24-bit support (molten
@@ -87,4 +87,17 @@ export function glyph(tty: boolean, v: Verdict): string {
   if (v === 'pass') return color(tty, C.green, '✓');
   if (v === 'fail') return color(tty, C.red, '✗');
   return color(tty, C.gray, '·');
+}
+
+/**
+ * A gate's glyph from its four-valued polarity (AII-003, WP-B03).
+ *
+ * A conflicted gate projects to `fail`, so rendering the verdict alone showed
+ * an operator a red ✗ — "the tests failed" — when what actually happened is
+ * that two runs disagreed and neither has been adjudicated. Those call for
+ * different actions, so they get different glyphs.
+ */
+export function gateGlyph(tty: boolean, result: GateResult): string {
+  if (result.polarity === 'conflicted') return color(tty, C.yellow, '!');
+  return glyph(tty, result.verdict);
 }

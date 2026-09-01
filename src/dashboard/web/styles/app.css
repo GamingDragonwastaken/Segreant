@@ -620,6 +620,11 @@ body.claim-open { overflow: hidden; }
   font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em;
   text-transform: uppercase; color: var(--faint); margin-bottom: var(--s4);
 }
+/* Evidence that contradicts itself is neither a pass nor a failure, and must
+   not be styled as either. Gold reads as "resolve this", not "this is bad". */
+.section-note {
+  margin-top: var(--s3); font-size: 12.5px; color: var(--gold-text); max-width: 78ch;
+}
 
 .firstrun-mark { margin-bottom: var(--s5); }
 .choice-eg {

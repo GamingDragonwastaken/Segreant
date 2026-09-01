@@ -154,6 +154,10 @@ export function valueView(): Node {
       }
 
       const funnel = matured?.instrumentation ?? {};
+      // Gates where two sources disagreed. Shown separately from the counts
+      // because a contradiction is not a measurement of the gate, and because
+      // the legacy projection renders it as a plain failure (AII-003).
+      const gateConflicts = Object.entries(matured?.gateConflicts ?? {}).filter(([, n]) => n > 0);
       const waste = (matured?.wasteByStage ?? []).filter((w) => w.stage !== 'realized');
       const wasteCost = waste.reduce((s, w) => s + w.costUsd, 0);
       const bounds = matured?.realizationBounds ?? null;
@@ -321,7 +325,12 @@ export function valueView(): Node {
               h('div', { class: 'facts' },
                 ...Object.entries(funnel).map(([stage, n]) => h('div', { class: 'fact' },
                   h('span', { class: 'fact-key', text: () => (isPrecise() ? stage : (GATE_WORDS[stage] ?? stage)) }),
-                  h('span', { class: 'fact-val', text: count(n) })))))
+                  h('span', { class: 'fact-val', text: count(n) })))),
+              gateConflicts.length > 0
+                ? h('p', { class: 'section-note', text: () => (isPrecise()
+                    ? `Contradicted evidence at ${gateConflicts.map(([stage, n]) => `${stage} (${n})`).join(', ')}: sources both supported and refuted these gates. The unit records a failure only because the three-valued projection has no other option — it is unadjudicated, not refuted.`
+                    : `Some evidence disagrees with itself at ${gateConflicts.map(([stage]) => (GATE_WORDS[stage] ?? stage)).join(', ')}. That is a conflict to resolve, not a result.`) })
+                : null)
           : null,
 
         d.reclaimed && typeof d.reclaimed.workWeeksSaved === 'number'

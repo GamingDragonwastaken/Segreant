@@ -21,6 +21,7 @@ import { attributeCommits, isGitRepo, projectName, type CommitAttribution } from
 import { isDemo } from '../config.ts';
 import { survivingLines, revertedHashes } from '../git/quality.ts';
 import { acceptanceForCommit, type ProposedFile } from './proposals.ts';
+import type { EpistemicState } from '../epistemic/state.ts';
 import {
   GATE_LADDER,
   scoreFunnel,
@@ -32,6 +33,8 @@ import {
   type FunnelOutcome,
   type TerminalRealizationBounds,
   type SerialRealization,
+  aggregatePolarity,
+  verdictFromPolarity,
 } from './gates.ts';
 import { classifyTaskType, type TaskType } from './taskType.ts';
 import { computeReturnOnIntelligence, type RoIOptions } from './lenses.ts';
@@ -86,14 +89,25 @@ function matchesCommitFile(proposalPath: string | null, committedPaths: string[]
 }
 
 /** Resolve a gate from ingested signals: any fail → fail, else any pass → pass, else unknown. */
-function signalVerdict(signals: GateSignalRow[], kind: string): Verdict {
-  let sawPass = false;
+/**
+ * Aggregate every recorded signal of one kind into four-valued polarity.
+ *
+ * This used to return on the first `fail`, which meant a gate with a passing CI
+ * run AND a failing one reported plain `fail` and lost the fact that both were
+ * observed. Two runs disagreeing is not the same evidential situation as one
+ * run failing, and the difference matters most exactly where it was being
+ * discarded: at the gate that decides whether work realized (AII-003, WP-B03).
+ */
+function signalPolarity(signals: GateSignalRow[], kind: string): EpistemicState {
+  const observations: boolean[] = [];
   for (const s of signals) {
     if (s.kind !== kind) continue;
-    if (s.verdict === 'fail') return 'fail';
-    if (s.verdict === 'pass') sawPass = true;
+    if (s.verdict === 'pass') observations.push(true);
+    else if (s.verdict === 'fail') observations.push(false);
+    // Anything else is an unobserved signal and contributes nothing, which is
+    // not the same as contributing a negative.
   }
-  return sawPass ? 'pass' : 'unknown';
+  return aggregatePolarity(observations);
 }
 
 export interface WorkUnit extends CommitAttribution {
@@ -216,6 +230,14 @@ export interface RealizationReport {
     realizedSpendShare: number | null;
     wasteByStage: WasteBucket[];
     instrumentation: Record<Gate, number>;
+    /**
+     * Mature units whose evidence for a gate both supported and refuted it
+     * (AII-003, WP-B03). Counted separately from `instrumentation` because a
+     * contradiction is not a measurement of the gate — it is a measurement of
+     * the sources disagreeing, and it calls for adjudication rather than for
+     * reading the projected verdict.
+     */
+    gateConflicts: Record<Gate, number>;
     // Partial-identification interval on the realization rate: lower = confirmed
     // realized (== realizationRate), upper = not observed dead. The truth is inside;
     // the width is exactly the unobserved region. Guards the per-unit progress score
@@ -250,8 +272,18 @@ export interface RealizationOptions {
   completenessWitnesses?: readonly CompletenessWitness[];
 }
 
-function gate(g: Gate, verdict: Verdict, detail: string): GateResult {
-  return { gate: g, verdict, detail };
+/**
+ * Build a gate result from its four-valued polarity, deriving the legacy
+ * verdict rather than accepting one. The projection lives in exactly one place
+ * so that `conflicted` cannot become `pass` by a caller's oversight.
+ */
+function gate(g: Gate, polarity: EpistemicState, detail: string): GateResult {
+  return { gate: g, polarity, verdict: verdictFromPolarity(polarity), detail };
+}
+
+/** A gate whose evidence is boolean by construction and cannot disagree with itself. */
+function decided(value: boolean): EpistemicState {
+  return value ? 'supported' : 'refuted';
 }
 
 function cleanCompleteness(
@@ -356,7 +388,7 @@ export async function computeRealization(
     const verdicts: Record<Gate, GateResult> = {
       proposed: gate(
         'proposed',
-        hadProposal ? 'pass' : 'unknown',
+        hadProposal ? 'supported' : 'unknown',
         hadProposal
           ? 'AI proposal captured'
           : proposalCaptureCoverage === 'truncated'
@@ -367,21 +399,21 @@ export async function computeRealization(
       ),
       accepted: gate(
         'accepted',
-        acceptance === null ? 'unknown' : acceptance >= acceptanceThreshold ? 'pass' : 'fail',
+        acceptance === null ? 'unknown' : decided(acceptance >= acceptanceThreshold),
         acceptance === null ? 'no proposal to compare' : `${Math.round(acceptance * 100)}% of proposal shipped`,
       ),
-      committed: gate('committed', 'pass', `${added} lines in ${committedPaths.length || a.filesChanged} files`),
-      tested: gate('tested', signalVerdict(signals, 'tested'), 'CI/test signal'),
-      merged: gate('merged', signalVerdict(signals, 'merged'), 'merge signal'),
-      shipped: gate('shipped', signalVerdict(signals, 'shipped'), 'deploy signal'),
+      committed: gate('committed', 'supported', `${added} lines in ${committedPaths.length || a.filesChanged} files`),
+      tested: gate('tested', signalPolarity(signals, 'tested'), 'CI/test signal'),
+      merged: gate('merged', signalPolarity(signals, 'merged'), 'merge signal'),
+      shipped: gate('shipped', signalPolarity(signals, 'shipped'), 'deploy signal'),
       survived: gate(
         'survived',
-        maturing ? 'unknown' : survivalRatio >= survivalThreshold ? 'pass' : 'fail',
+        maturing ? 'unknown' : decided(survivalRatio >= survivalThreshold),
         maturing ? 'maturing' : `${Math.round(survivalRatio * 100)}% of lines survive`,
       ),
       clean: gate(
         'clean',
-        isReverted || incidentFail ? 'fail' : maturing ? 'unknown' : completeness.qualified ? 'pass' : 'unknown',
+        isReverted || incidentFail ? 'refuted' : maturing ? 'unknown' : completeness.qualified ? 'supported' : 'unknown',
         isReverted
           ? 'reverted'
           : incidentFail
@@ -746,7 +778,15 @@ export function rollupRealization(
 
   const wasteMap = new Map<string, WasteBucket>();
   for (const u of mature) {
-    const stage = u.funnel.realized ? 'realized' : u.funnel.diedAt ?? 'unverified';
+    // A unit stopped by a contradiction did not die at that gate. Bucketing it
+    // under the gate name would report a refutation the evidence does not
+    // support, and would put adjudicable work in the same column as work that
+    // demonstrably failed.
+    const stage = u.funnel.realized
+      ? 'realized'
+      : u.funnel.conflicts.length > 0
+        ? 'conflicted'
+        : u.funnel.diedAt ?? 'unverified';
     const b = wasteMap.get(stage) ?? { stage, units: 0, costUsd: 0 };
     b.units += 1;
     b.costUsd += u.attributedCostUsd;
@@ -754,8 +794,12 @@ export function rollupRealization(
   }
 
   const instrumentation = Object.fromEntries(GATE_LADDER.map((g) => [g, 0])) as Record<Gate, number>;
+  const gateConflicts = Object.fromEntries(GATE_LADDER.map((g) => [g, 0])) as Record<Gate, number>;
   for (const u of mature) {
-    for (const r of u.funnel.results) if (r.verdict !== 'unknown') instrumentation[r.gate] += 1;
+    for (const r of u.funnel.results) {
+      if (r.verdict !== 'unknown') instrumentation[r.gate] += 1;
+      if (r.polarity === 'conflicted') gateConflicts[r.gate] += 1;
+    }
   }
 
   const aggregateEconomic = (values: readonly EconomicAttribution[]): EconomicAttribution =>
@@ -792,6 +836,7 @@ export function rollupRealization(
       realizedSpendShare: totalCostUsd > 0 ? spendOnRealizedUnitsUsd / totalCostUsd : null,
       wasteByStage: [...wasteMap.values()].sort((a, b) => b.costUsd - a.costUsd),
       instrumentation,
+      gateConflicts,
       realizationBounds: terminalRealizationBounds(mature.map((u) => u.funnel)),
       serial: serialRealization(mature.map((u) => u.funnel)),
       economic,

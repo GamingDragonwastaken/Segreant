@@ -7,12 +7,13 @@ import {
   type Gate,
   type GateResult,
   type Verdict,
+  gateResultFromVerdict,
 } from '../src/value/gates.ts';
 
 function verdicts(map: Partial<Record<Gate, Verdict>>): Record<Gate, GateResult> {
   const out = {} as Record<Gate, GateResult>;
   for (const gate of GATE_LADDER) {
-    out[gate] = { gate, verdict: map[gate] ?? 'unknown', detail: '' };
+    out[gate] = gateResultFromVerdict(gate, map[gate] ?? 'unknown', '');
   }
   return out;
 }

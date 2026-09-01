@@ -26,7 +26,7 @@ import type { Store, RequestRow, RealizationUnitRecord } from '../store/db.ts';
 import { computeCost, syntheticPricingEvidence, unpricedPricingEvidence, type Provider } from '../cost/pricing.ts';
 import { startOfLocalDay } from '../budget/guard.ts';
 import type { WorkUnit } from '../value/realization.ts';
-import { GATE_LADDER, scoreFunnel, type Gate, type GateResult, type Verdict } from '../value/gates.ts';
+import { GATE_LADDER, gateResultFromVerdict, scoreFunnel, type Gate, type GateResult, type Verdict } from '../value/gates.ts';
 import { classifyTaskType } from '../value/taskType.ts';
 import { boundedLift } from '../value/lift.ts';
 
@@ -452,7 +452,9 @@ function makeRealizationUnit(ctx: Ctx, now: number, spec: UnitSpec, hash: string
   const arch = ARCHETYPES[spec.arch];
   const tsEpochMs = now - Math.floor(spec.daysAgo * DAY_MS);
   const verdicts = {} as Record<Gate, GateResult>;
-  for (const g of GATE_LADDER) verdicts[g] = { gate: g, verdict: arch.verdicts[g] ?? 'unknown', detail: 'demo' };
+  // Demo archetypes are declared as legacy verdicts, so they come through the
+  // compatibility constructor and can never produce a conflicted gate.
+  for (const g of GATE_LADDER) verdicts[g] = gateResultFromVerdict(g, arch.verdicts[g] ?? 'unknown', 'demo');
   return {
     hash,
     tsEpochMs,

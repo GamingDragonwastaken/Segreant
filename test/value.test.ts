@@ -13,6 +13,7 @@ import {
   type Gate,
   type GateResult,
   type Verdict,
+  gateResultFromVerdict,
 } from '../src/value/gates.ts';
 import { extractProposals, extractProposalsWithCoverage, acceptanceRatio, acceptanceForCommit } from '../src/value/proposals.ts';
 import { canonical, loadOrCreateKeyPair, buildReceiptBody, signReceipt, verifyReceipt } from '../src/value/receipt.ts';
@@ -31,7 +32,7 @@ import { interval } from '../src/epistemic/time.ts';
 
 function vr(map: Partial<Record<Gate, Verdict>>): Record<Gate, GateResult> {
   const out = {} as Record<Gate, GateResult>;
-  for (const g of GATE_LADDER) out[g] = { gate: g, verdict: map[g] ?? 'unknown', detail: '' };
+  for (const g of GATE_LADDER) out[g] = gateResultFromVerdict(g, map[g] ?? 'unknown', '');
   return out;
 }
 
@@ -488,7 +489,7 @@ function wu(
     // A comparably-priced baseline: one basis, one rate card on both sides. Tests
     // for the pricing-comparability gate override these.
     dominantModelCostBasis: 'local_list_price', dominantModelRateCard: 'card-a',
-    funnel: { realized, results: [{ gate: 'shipped', verdict: 'unknown', detail: '' }], reachedIndex: 0, reached: null, diedAt: null, diedAtIndex: null, passes: 0, fails: 0, unknowns: 0, instrumented: 0, realizationScore: 0 },
+    funnel: { realized, results: [gateResultFromVerdict('shipped', 'unknown', '')], conflicts: [], reachedIndex: 0, reached: null, diedAt: null, diedAtIndex: null, passes: 0, fails: 0, unknowns: 0, instrumented: 0, realizationScore: 0 },
   } as WorkUnit;
 }
 

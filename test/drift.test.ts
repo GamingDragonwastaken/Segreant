@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { driftEProcess, rateDriftStreams } from '../src/value/drift.ts';
-import { GATE_LADDER, scoreFunnel, type Gate, type GateResult, type Verdict, type FunnelOutcome } from '../src/value/gates.ts';
+import { GATE_LADDER, gateResultFromVerdict, scoreFunnel, type Gate, type GateResult, type Verdict, type FunnelOutcome } from '../src/value/gates.ts';
 
 function vr(map: Partial<Record<Gate, Verdict>>): Record<Gate, GateResult> {
   const out = {} as Record<Gate, GateResult>;
-  for (const g of GATE_LADDER) out[g] = { gate: g, verdict: map[g] ?? 'unknown', detail: '' };
+  for (const g of GATE_LADDER) out[g] = gateResultFromVerdict(g, map[g] ?? 'unknown', '');
   return out;
 }
 

@@ -20,7 +20,7 @@ import { computeFrontier } from '../value/frontier.ts';
 import { valueSpine, usageValue, budgetAdvice } from '../value/report.ts';
 import { instrumentationPriority } from '../value/instrumentationSensitivity.ts';
 import { GATE_LADDER, GATE_META } from '../value/gates.ts';
-import { C, color, usd, num, pct, glyph, noteSource, printNotAGitRepo, printJson } from './ui.ts';
+import { C, color, usd, num, pct, gateGlyph, noteSource, printNotAGitRepo, printJson } from './ui.ts';
 import { type Flags } from './flags.ts';
 
 export async function cmdYield(flags: Flags): Promise<void> {
@@ -165,17 +165,22 @@ export async function cmdRealize(flags: Flags): Promise<void> {
 
   // Per unit
   console.log('');
-  console.log(color(tty, C.bold, '  Per unit') + color(tty, C.gray, `   funnel: ${GATE_LADDER.map((g) => g[0]).join(' ')}  (✓pass ✗fail ·unknown)`));
+  console.log(color(tty, C.bold, '  Per unit') + color(tty, C.gray, `   funnel: ${GATE_LADDER.map((g) => g[0]).join(' ')}  (✓pass ✗fail !conflicted ·unknown)`));
   for (const u of report.units.slice(0, 16)) {
     const short = u.hash.slice(0, 7);
     const age = u.ageDays < 1 ? `${Math.round(u.ageDays * 24)}h` : `${Math.round(u.ageDays)}d`;
     const acc = u.acceptance === null ? '  —' : pct(u.acceptance).padStart(3);
-    const funnel = u.funnel.results.map((r) => glyph(tty, r.verdict)).join(' ');
+    const funnel = u.funnel.results.map((r) => gateGlyph(tty, r)).join(' ');
+    // A unit stopped by a contradiction did not die at that gate — its evidence
+    // disagreed there. Reporting `died:tested` would state a refutation the
+    // evidence does not support, in the line an operator acts on.
     const status = u.maturing
       ? color(tty, C.yellow, 'maturing')
       : u.funnel.realized
         ? color(tty, C.green, 'REALIZED')
-        : color(tty, C.red, `died:${u.funnel.diedAt ?? '—'}`);
+        : u.funnel.conflicts.length > 0
+          ? color(tty, C.yellow, `conflicted:${u.funnel.conflicts[0]}`)
+          : color(tty, C.red, `died:${u.funnel.diedAt ?? '—'}`);
     console.log(`    ${short}  ${age.padStart(4)}  ${usd(u.attributedCostUsd).padStart(9)}  acc ${acc}  ${funnel}  ${status}`);
   }
   console.log('');

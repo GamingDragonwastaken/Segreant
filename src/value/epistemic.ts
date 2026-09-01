@@ -71,7 +71,12 @@ interface ParsedUnit {
   readonly survivalRatio: number;
   readonly funnel: {
     readonly realized: boolean;
-    readonly results: ReadonlyArray<{ readonly gate: string; readonly verdict: string }>;
+    readonly results: ReadonlyArray<{
+      readonly gate: string;
+      readonly verdict: string;
+      /** Absent on rows persisted before four-valued gates (AII-003, WP-B03). */
+      readonly polarity: string | null;
+    }>;
   };
   readonly cleanCompleteness?: {
     readonly qualified: boolean;
@@ -196,7 +201,18 @@ function parseUnit(unitJson: string): ParsedUnit {
   const results = funnelRecord.results.map((item, index) => {
     if (item === null || typeof item !== 'object' || Array.isArray(item)) throw new Error(`coding realization gate ${index} is invalid`);
     const row = item as Record<string, unknown>;
-    return { gate: text(row.gate, `coding realization gate ${index} name`), verdict: text(row.verdict, `coding realization gate ${index} verdict`) };
+    // `polarity` is optional so a snapshot written before four-valued gates
+    // still parses. It is read as null rather than inferred from the verdict:
+    // a stored `fail` may have been a refutation or a conflict, and guessing
+    // which is exactly the inference the four-valued state exists to refuse.
+    const polarity = row.polarity === undefined || row.polarity === null
+      ? null
+      : text(row.polarity, `coding realization gate ${index} polarity`);
+    return {
+      gate: text(row.gate, `coding realization gate ${index} name`),
+      verdict: text(row.verdict, `coding realization gate ${index} verdict`),
+      polarity,
+    };
   });
   return {
     hash: text(value.hash, 'coding realization unit hash'),
@@ -226,6 +242,28 @@ function canonicalTimestamp(value: number, label: string): ReturnType<typeof ins
 function allGatesPass(unit: ParsedUnit): boolean {
   if (!unit.funnel.realized || unit.funnel.results.length !== GATE_LADDER.length) return false;
   return unit.funnel.results.every((result, index) => result.gate === GATE_LADDER[index] && result.verdict === 'pass');
+}
+
+/**
+ * A gate whose evidence both supported and refuted the proposition (AII-003,
+ * WP-B03). `verdict` already projects that to `fail`, so `allGatesPass` is
+ * false and issuance is refused either way — but a caller reading only the
+ * projection would be told the gate FAILED, when what happened is that two
+ * sources disagreed. The kernel refuses to issue on a contradiction for its own
+ * reason, and says which reason.
+ *
+ * Rows persisted before this distinction existed carry a null polarity. They
+ * are NOT read back as a polarity inferred from their verdict: a stored `fail`
+ * may have been a refutation or a conflict, and choosing one is the inference
+ * the four-valued state exists to refuse. Such a row simply cannot report a
+ * conflict, which is a limit of the stored form rather than a finding that none
+ * occurred — and the `verdict === 'pass'` requirement below still holds, so a
+ * legacy row can never issue through an unexamined disagreement.
+ */
+function conflictedGates(unit: ParsedUnit): string[] {
+  return unit.funnel.results
+    .filter((result) => result.polarity === 'conflicted')
+    .map((result) => result.gate);
 }
 
 function hasQualifyingCleanCompleteness(unit: ParsedUnit, project: string, computedAtMs: number): boolean {
@@ -264,6 +302,10 @@ function validated(input: CodingRealizationKernelInput): { unit: ParsedUnit; eco
   if (recorded < unit.windowEndMs) throw new Error('coding realization computedAtMs must be at or after its attribution window');
   if (unit.maturing || unit.costStale) throw new Error('coding realization kernel issuance requires a current mature unit');
   if (unit.reverted) throw new Error('coding realization kernel issuance refuses a reverted unit');
+  const conflicted = conflictedGates(unit);
+  if (conflicted.length > 0) {
+    throw new Error(`coding realization kernel issuance refuses a conflicted gate: ${conflicted.join(', ')}`);
+  }
   if (!allGatesPass(unit)) throw new Error('every legacy realization gate must be pass before kernel issuance');
   if (!hasQualifyingCleanCompleteness(unit, project, recorded)) {
     throw new Error('coding realization kernel issuance requires qualifying completeness witnesses for the clean gate');
