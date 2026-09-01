@@ -86,12 +86,33 @@ export interface LiftEstimate {
   high: number | null;
   lensScore: number | null; // 0..1 for the composite (0.5 = break-even, 1× speed)
   // The bound in LENS-SCORE units (0..1), so the interval propagates into the RoI
-  // Index. The counterfactual is partially identified (Manski), so this is a real
-  // interval, never a false point. lensLow ≤ lensScore ≤ lensHigh.
+  // Index. lensLow ≤ lensScore ≤ lensHigh.
   lensLow: number | null;
   lensHigh: number | null;
+  /**
+   * Where each endpoint came from. AII-010: a numerically cautious number is not
+   * an identified bound. Only `observed_old_task_lift` gives the floor an
+   * empirical source; `declared_fallback_fraction` means no observation
+   * constrained it and the endpoint is a disclosed scenario floor. The interval
+   * is a partially identified set ONLY when `lowBasis` is not the fallback.
+   */
+  lowBasis: 'observed_old_task_lift' | 'declared_fallback_fraction' | null;
+  /** The ceiling is the design's stated TSF upper bound in both cases. */
+  highBasis: 'tsf_upper_bound' | null;
   notes: string[];
 }
+
+/**
+ * The floor used when no old-task lift was observed, as a fraction of the
+ * discounted point estimate.
+ *
+ * This is a DECLARED scenario floor, not an identified lower bound. Nothing
+ * observed rules out a smaller effect — the true counterfactual may be zero or
+ * negative — and the interval carrying this endpoint must not be described as a
+ * partially identified set. It exists so a display has a defensible band to draw
+ * rather than a false point, and `lowBasis` records that this is what happened.
+ */
+export const DECLARED_LIFT_FLOOR_FRACTION = 0.7;
 
 /**
  * Turn a TSF upper bound into a discounted, bounded value-uplift estimate.
@@ -103,7 +124,7 @@ export function boundedLift(inp: LiftInputs): LiftEstimate {
   const tsf = inp.tsfUpperBound ?? null;
   if (tsf === null || !(tsf > 0)) {
     notes.push('Lift uninstrumented: supply a behavioral TSF (transcript judge or A/B), never self-report.');
-    return { tsfUpperBound: null, point: null, low: null, high: null, lensScore: null, lensLow: null, lensHigh: null, notes };
+    return { tsfUpperBound: null, point: null, low: null, high: null, lensScore: null, lensLow: null, lensHigh: null, lowBasis: null, highBasis: null, notes };
   }
   const d = inp.discounts ?? {};
   const sel = d.selection ?? 0.5;
@@ -113,7 +134,12 @@ export function boundedLift(inp: LiftInputs): LiftEstimate {
 
   const point = tsf * sel * sub * con * eff; // discounted toward value uplift
   const high = tsf; // ceiling = new-task uplift (the inequality's upper bound)
-  const low = inp.oldTaskLift ?? Math.max(0, point * 0.7); // floor
+  // Two very different floors. An observed old-task lift constrains the
+  // counterfactual from below; the fallback does not constrain anything, it just
+  // keeps the band from collapsing onto the point. They are never conflated.
+  const observedFloor = inp.oldTaskLift ?? null;
+  const lowBasis = observedFloor !== null ? 'observed_old_task_lift' as const : 'declared_fallback_fraction' as const;
+  const low = observedFloor ?? Math.max(0, point * DECLARED_LIFT_FLOOR_FRACTION);
   // Saturating map multiplier → lens score in [0,1): 1×→0.5, 2×→0.67, 0.81×→0.45.
   const sat = (v: number) => v / (v + 1);
   const lensScore = sat(point);
@@ -121,10 +147,15 @@ export function boundedLift(inp: LiftInputs): LiftEstimate {
   const lensHigh = sat(high);
 
   notes.push(
-    `Lift ≈ ${point.toFixed(2)}×, bounded [${low.toFixed(2)}×, ${high.toFixed(2)}×] ` +
+    `Lift ≈ ${point.toFixed(2)}×, ranged [${low.toFixed(2)}×, ${high.toFixed(2)}×] ` +
       `(TSF upper bound ${tsf.toFixed(2)}×, discounted for selection/substitution/concurrency per METR).`,
   );
-  return { tsfUpperBound: tsf, point, low, high, lensScore, lensLow, lensHigh, notes };
+  notes.push(
+    lowBasis === 'observed_old_task_lift'
+      ? 'Lower endpoint is an OBSERVED old-task lift, so the range is a partially identified set under the stated design.'
+      : `Lower endpoint is a DECLARED floor at ${DECLARED_LIFT_FLOOR_FRACTION}× the discounted estimate — nothing observed rules out a smaller or negative effect, so this range is a disclosed scenario band, not an identified set.`,
+  );
+  return { tsfUpperBound: tsf, point, low, high, lensScore, lensLow, lensHigh, lowBasis, highBasis: 'tsf_upper_bound', notes };
 }
 
 export interface BreakEven {
@@ -197,8 +228,10 @@ export interface DataLiftResult {
  * rate — never a self-reported speedup). Because only realized work enters the
  * numerator while ALL measured AI time enters the denominator, time burned on work
  * that never realized pulls the TSF DOWN: you cannot inflate Lift by spending more.
- * The pooled TSF feeds the same METR-discounted `boundedLift`, so the result is a
- * conservative partially-identified interval, never a false point. Returns
+ * The pooled TSF feeds the same METR-discounted `boundedLift`. The result is a
+ * disclosed range rather than a false point; whether that range is a partially
+ * identified SET depends on `lowBasis` — a declared fallback floor is not an
+ * identified bound however cautious the number looks. Returns
  * uninstrumented (null) when there's no baselined realized work or no measured AI
  * time — we never invent a counterfactual.
  */

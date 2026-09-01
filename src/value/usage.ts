@@ -103,7 +103,39 @@ function reachName(reach: Reach): 'published' | 'resolved' | 'used' {
   return reach === 'shipped' ? 'published' : reach === 'merged' ? 'resolved' : 'used';
 }
 
-export function computeUsageRoI(store: Store, opts: { startMs: number; endMs: number; money?: UsageMoneyOptions }): UsageReport {
+/**
+ * The DECLARED utility assigned to each reach category, for the Impact lens.
+ *
+ * Reach is an ordinal descriptor: published reached further than resolved,
+ * which reached further than used. Nothing observed says how much further, and
+ * the Impact lens needs a number in [0,1] to enter the composite. These three
+ * values are therefore a stated PREFERENCE about how much further each step
+ * counts — an outcome/utility model this project declares, never a measurement
+ * and never a universal cardinal scale. AII-011 exists because the previous
+ * inline `1 / 0.75 / 0.5` made that assignment invisible at the call site, so a
+ * workflow label arrived in the composite looking like an observation.
+ *
+ * An operator whose `published` work is worth far more than its `resolved` work
+ * should say so here; the Index will legitimately differ, and `impactHow` will
+ * carry the model that produced it.
+ */
+export const DECLARED_REACH_UTILITY: Readonly<Record<Reach, number>> = {
+  shipped: 1,
+  merged: 0.75,
+  kept: 0.5,
+} as const;
+
+function describeReachUtility(model: Readonly<Record<Reach, number>>): string {
+  const parts = (Object.keys(DECLARED_REACH_UTILITY) as Reach[])
+    .map((reach) => `${reachName(reach)}=${model[reach]}`)
+    .join(', ');
+  return `operator-reported outcome reach, conditional on confirmed reported-outcome sessions, scored by the DECLARED reach-utility model (${parts}) — a stated preference, not a measured cardinal impact`;
+}
+
+export function computeUsageRoI(
+  store: Store,
+  opts: { startMs: number; endMs: number; money?: UsageMoneyOptions; reachUtility?: Readonly<Record<Reach, number>> },
+): UsageReport {
   const sessions = store.economicSessionUnits(opts.startMs, opts.endMs).filter((s) => !s.hasProposals);
 
   // The legacy lens layer currently needs only `funnel.realized` plus an array of
@@ -180,9 +212,13 @@ export function computeUsageRoI(store: Store, opts: { startMs: number; endMs: nu
     }
   }
 
+  // Ordinal reach becomes a cardinal lens value only through the declared model
+  // above. Keeping the mapping named (rather than inline) is what stops a
+  // workflow label from entering the composite as if it were an observation.
+  const reachUtility = opts.reachUtility ?? DECLARED_REACH_UTILITY;
   const realizedImpact = realized.length === 0
     ? null
-    : realized.reduce((sum, u) => sum + (u.reach === 'shipped' ? 1 : u.reach === 'merged' ? 0.75 : 0.5), 0) / realized.length;
+    : realized.reduce((sum, u) => sum + (u.reach === null ? 0 : reachUtility[u.reach]), 0) / realized.length;
 
   const roi = computeReturnOnIntelligence(
     {
@@ -200,7 +236,7 @@ export function computeUsageRoI(store: Store, opts: { startMs: number; endMs: nu
         : {}),
       ...(realizedImpact === null
         ? {}
-        : { impact: realizedImpact, impactHow: 'operator-reported outcome reach, conditional on confirmed reported-outcome sessions' }),
+        : { impact: realizedImpact, impactHow: describeReachUtility(reachUtility) }),
     },
   );
 

@@ -470,7 +470,7 @@ export interface ValuePayload {
     effortTaxUsd?: number;
     notes?: string[];
   } | null;
-  /** Goodhart drift alarm — an e-process over mature units. Needs ten to exist. */
+  /** Rate-drift alarm — an e-process over mature units. Needs ten to exist. */
   drift?: { n: number; alarm: boolean; recentRate?: number; overallRate?: number } | null;
   reclaimed?: {
     savedMinutes?: number | null;

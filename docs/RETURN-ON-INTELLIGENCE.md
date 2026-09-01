@@ -96,7 +96,7 @@ lens, normalized to [0,1], is a *conditional survival rate* along the chain
 | You'd have done it anyway | Lift (counterfactual) | λ |
 | It didn't matter | Impact | ι |
 
-### 4.1 Why they MULTIPLY (and why that is Goodhart-proof)
+### 4.1 Why they MULTIPLY (and what that does and does not resist)
 
 These are *necessary conditions in series*. The probability a unit of spend
 becomes real intelligence-value is the joint probability of clearing all of them,
@@ -108,9 +108,15 @@ the joint of a chain is the product:
 ```
 
 Same mathematics as manufacturing yield through sequential quality gates, or the
-reliability of a series system (R = ∏ Rᵢ). This *derives* Goodhart-resistance
-rather than asserting it: pumping one axis to 1.0 while another sits at 0.05
-leaves π ≤ 0.05 — **the score is hostage to its weakest link.** The arithmetic
+reliability of a series system (R = ∏ Rᵢ). What follows is a specific, bounded
+resistance — **resistance to SINGLE-AXIS gaming** — and it is derived rather than
+asserted: pumping one axis to 1.0 while another sits at 0.05 leaves π ≤ 0.05, so
+**the score is hostage to its weakest link.** That is not immunity to Goodhart's
+law. An optimizer who can move every lens, or who can move the MEASUREMENT of a
+lens rather than the thing it stands for, is not constrained by this structure at
+all; multiplicativity raises the cost of gaming, it does not close the door. The
+funnel chain-rule reading is itself a model of how value converts, not something
+this repository has measured. The arithmetic
 mean every dashboard uses, (ρ+α+λ+ι)/4, has no such floor — a single pumped axis
 lifts it regardless of a zero elsewhere. The product structure is *forced* by the
 requirement "no single axis can be gamed."
@@ -356,10 +362,12 @@ invention is the synthesis**, which has not been built:
    *derived* as the four independent ways raw output overstates value (§4), not a
    convenient list — and Lift is what makes it return on *intelligence*, not on
    spend.
-2. **Value-conversion as a necessary-condition chain ⟹ the aggregator is forced.**
-   The funnel chain-rule makes value multiplicative; multiplicative consistency
-   then forces the geometric mean via the Kolmogorov–Nagumo characterization
-   (§4.2). The Goodhart-resistance is a theorem, not a hope.
+2. **Value-conversion modelled as a necessary-condition chain ⟹ the aggregator
+   follows.** Modelling conversion as a chain of necessary conditions makes
+   value multiplicative; multiplicative consistency then gives the geometric
+   mean via the Kolmogorov–Nagumo characterization (§4.2). What is a theorem is
+   the resistance to SINGLE-AXIS gaming, conditional on that model. Immunity to
+   Goodhart's law is not claimed, and the model is a declared assumption.
 3. **Interval-valued, honest-by-construction.** RoI exposes a point together with
    its stated baseline, coverage, and sensitivity range rather than a false
    universal guarantee. Valid evidence may narrow uncertainty, while measuring a
@@ -716,7 +724,14 @@ dependency — the Beta ratio is built by the exact recurrence
 `k/n`, so the interval falls out of bisection. (`src/value/anytime.ts`,
 `test/anytime.test.ts` — including the simulated-peeking coverage test.)
 
-## 11. The Goodhart alarm — detecting a bent metric
+## 11. The rate-drift alarm — detecting that a rate is not constant
+
+> **Named for what it observes.** This test rejects "one constant Bernoulli rate
+> generated this stream". Drift is a *necessary* signature of a metric being bent
+> under incentive pressure, which is why the alarm is worth having — it is not a
+> *sufficient* one. Calling a firing "Goodhart" would assert an incentive
+> mechanism the 0/1 stream carries no evidence about. Below, Goodhart is the
+> motivating hypothesis the alarm sends you to investigate, never its finding.
 
 Goodhart's law is the fate of every metric: once a number is a target, people
 optimize the number instead of the value it stood for. A gamed metric doesn't
@@ -741,7 +756,8 @@ sup-denominator only makes Eₙ smaller — so Ville's inequality bounds the fal
 alarm rate by α **over all of time, for every constant rate at once**. It is
 deterministic (no randomization, unlike conformal martingales on binary data).
 Measured: false alarms 0.2% against a 5% budget across three stable rates; an
-abrupt regime collapse caught 100/100; slow Goodhart-style creep caught 93/100.
+abrupt regime collapse caught 100/100; the slow creep a bent metric would produce
+caught 93/100.
 
 The honest framing travels with the output: the alarm detects that the rate
 **moved**, not *why*. A genuine regime change (new model, new workflow) and a
@@ -780,7 +796,7 @@ hands an organization:
 | Where does the next **dollar** go? | the shadow price μ | §9 |
 | Which **measurement** do I buy next? | instrumentation priority | §12 |
 | When do I actually **know**? | the anytime-valid interval | §10 |
-| Is the number being **bent**? | the Goodhart alarm | §11 |
+| Has the rate **moved**? | the drift alarm | §11 |
 
 (`src/value/instrumentationSensitivity.ts`, `test/instrumentation-sensitivity.test.ts`; the "Instrument next" line in
 `fiscus roi` / `usage`.)

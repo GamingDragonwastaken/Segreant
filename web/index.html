@@ -508,9 +508,9 @@ signed    ed25519:9c3a…</pre>
         <div class="measured">measured: classical 90% interval wrong in 63.8% of monitored runs · this one 6.0%</div>
       </div>
       <div class="mcard">
-        <div class="n">03 · The Goodhart alarm</div>
-        <h3>It notices when the metric is being bent</h3>
-        <p>Any metric that matters gets gamed — so the metric ships with its own tamper alarm. The <b>Stability line</b> races a forecaster that only ever sees the past against the best constant-rate story in hindsight; when your realization rate genuinely drifts, the alarm fires and asks the only fair question: <em>did the work change, or did the measuring?</em></p>
+        <div class="n">03 · The drift alarm</div>
+        <h3>It notices when the rate stops being constant</h3>
+        <p>Any metric that matters gets gamed — so the metric ships with an alarm for the signature that gaming would leave. The <b>Stability line</b> races a forecaster that only ever sees the past against the best constant-rate story in hindsight; when your realization rate genuinely drifts, the alarm fires and asks the only fair question: <em>did the work change, or did the measuring?</em> It detects the movement, not the motive — a new model and a bent metric both trip it, and answering which takes evidence this stream does not carry.</p>
         <div class="measured">false alarms capped at 5% over all time · measured 0.2% · abrupt collapse caught 100/100</div>
       </div>
       <div class="mcard">

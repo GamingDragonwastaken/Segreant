@@ -18,11 +18,11 @@ import { extractProposals, extractProposalsWithCoverage, acceptanceRatio, accept
 import { canonical, loadOrCreateKeyPair, buildReceiptBody, signReceipt, verifyReceipt } from '../src/value/receipt.ts';
 import { computeRealization } from '../src/value/realization.ts';
 import { computeReturnOnIntelligence, lensRedundancy, type RealizationLike } from '../src/value/lenses.ts';
-import { timeWithAiMinutes, boundedLift, breakEven, liftFromData } from '../src/value/lift.ts';
+import { timeWithAiMinutes, boundedLift, breakEven, liftFromData, DECLARED_LIFT_FLOOR_FRACTION } from '../src/value/lift.ts';
 import { classifyTaskType, type TaskType } from '../src/value/taskType.ts';
 import { computeFrontier, type FrontierCell } from '../src/value/frontier.ts';
 import { recommendBudget } from '../src/budget/recommend.ts';
-import { computeUsageRoI } from '../src/value/usage.ts';
+import { computeUsageRoI, DECLARED_REACH_UTILITY } from '../src/value/usage.ts';
 import type { WorkUnit } from '../src/value/realization.ts';
 import { projectName, resolveCommit } from '../src/git/correlate.ts';
 import { completenessWitness } from '../src/measurement/completeness.ts';
@@ -385,6 +385,31 @@ test('Lift: TSF is discounted to a bounded value estimate; no baseline → unins
   const none = boundedLift({ tsfUpperBound: null });
   assert.equal(none.lensScore, null);
   assert.ok(none.notes.some((n) => n.includes('uninstrumented')));
+});
+
+test('Lift: a declared fallback floor is never presented as an identified bound', () => {
+  // AII-010. Both calls return a band, and the bands look alike. Only one of
+  // them is a partially identified set: without an observed old-task lift the
+  // floor is a chosen fraction of the point estimate, which rules nothing out —
+  // the true counterfactual may be zero or negative. The two cases must be
+  // distinguishable by a consumer, not merely by whoever reads the source.
+  const fallback = boundedLift({ tsfUpperBound: 5 });
+  assert.equal(fallback.lowBasis, 'declared_fallback_fraction');
+  assert.equal(fallback.highBasis, 'tsf_upper_bound');
+  assert.ok(Math.abs(fallback.low! - fallback.point! * DECLARED_LIFT_FLOOR_FRACTION) < 1e-9);
+  assert.ok(
+    fallback.notes.some((n) => /DECLARED floor/.test(n) && /not an identified set/.test(n)),
+    'the fallback band must say it is a scenario band',
+  );
+  assert.ok(!fallback.notes.some((n) => /partially identified set/.test(n) && !/not an identified set/.test(n)));
+
+  const observed = boundedLift({ tsfUpperBound: 5, oldTaskLift: 0.9 });
+  assert.equal(observed.lowBasis, 'observed_old_task_lift');
+  assert.equal(observed.low, 0.9);
+  assert.ok(
+    observed.notes.some((n) => /OBSERVED old-task lift/.test(n) && /partially identified set/.test(n)),
+    'an observed floor may be described as identification under the stated design',
+  );
 });
 
 test('Lift: baseline-interval propagation — a band straddling break-even reaches the lens as real width, never a false point', () => {
@@ -963,6 +988,48 @@ test('cross-modality: outcome is GRADED — realizing a further-reaching outcome
   assert.equal(published.outcomeMix.none, 4);
   assert.equal(resolved.outcomeMix.resolved, 4);
   assert.equal(used.outcomeMix.used, 4);
+});
+
+test('cross-modality: reach becomes cardinal Impact only through a DECLARED utility model', () => {
+  // AII-011. Reach is ordinal: published outreaches resolved outreaches kept.
+  // Nothing observed says by how much, so the [0,1] the Impact lens needs comes
+  // from a stated preference. It used to be an inline 1/0.75/0.5 at the call
+  // site, which is how a workflow label arrived in the composite looking like a
+  // measurement. Two things must now hold: the model is what produces the
+  // number, and the number says so wherever it is displayed.
+  const build = (reachUtility?: Readonly<Record<'shipped' | 'merged' | 'kept', number>>) => {
+    const store = new Store(':memory:');
+    try {
+      const t = Date.parse('2026-06-01T10:00:00Z');
+      for (let i = 0; i < 4; i++) {
+        store.insertRequest({
+          requestId: `r${i}`, sessionId: `s${i}`, tsEpochMs: t, provider: 'anthropic', model: 'claude-opus-4-8', project: 'p', taskWeight: 1,
+          inputTokens: 0, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, reasoningTokens: 0,
+          costUsd: 2, estimated: false, streamed: false, statusCode: 200, durationMs: 1,
+        });
+        store.insertSignal({ signalId: `g${i}`, kind: 'resolved', commitHash: `s${i}`, project: 'p', tsEpochMs: t + 1000, verdict: 'pass', detail: null });
+      }
+      return computeUsageRoI(store, { startMs: t - 1000, endMs: t + 10_000, ...(reachUtility ? { reachUtility } : {}) });
+    } finally {
+      store.close();
+    }
+  };
+
+  const declared = build();
+  assert.equal(declared.roi.lenses.impact.value, DECLARED_REACH_UTILITY.merged, 'the declared model is what sets the cardinal value');
+
+  // A different declared preference must produce a different Impact. If it did
+  // not, the number would be coming from somewhere other than the stated model.
+  const reweighted = build({ shipped: 1, merged: 0.2, kept: 0.1 });
+  assert.equal(reweighted.roi.lenses.impact.value, 0.2, 'a different declared preference must move Impact');
+  assert.notEqual(reweighted.roi.lenses.impact.value, declared.roi.lenses.impact.value);
+
+  // The provenance string travels with the lens, so no surface can present this
+  // as an observed cardinal impact.
+  const how = declared.roi.lenses.impact.how;
+  assert.match(how, /DECLARED reach-utility model/);
+  assert.match(how, /stated preference, not a measured cardinal impact/);
+  assert.match(how, /resolved=0\.75/, 'the actual model in force must appear, not a generic caveat');
 });
 
 test('cross-modality: outcome baselines price the dollar face — and never touch the efficiency lens', () => {

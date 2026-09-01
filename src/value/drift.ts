@@ -1,14 +1,26 @@
 /**
- * The Goodhart drift alarm — an anytime-valid test that a rate is being BENT.
+ * The rate-drift alarm — an anytime-valid test that a rate is NOT CONSTANT.
  * (docs/RETURN-ON-INTELLIGENCE.md §11.)
  *
- * Goodhart's law is the fate of every metric: once a number is a target, people
- * optimize the number, not the value it stood for. A gamed metric doesn't
- * announce itself — it shows up as the rate DRIFTING (acceptance creeping up
- * while nothing else improves; realization sagging as easy wins are cherry-
- * picked). The alarm below detects exactly that, with the same anytime-valid
- * guarantee as §10 — it may be watched continuously — and WITHOUT reading any
- * content: drift is visible in the 0/1 stream alone.
+ * What it tests is exactly that and nothing more: the null is "one constant
+ * Bernoulli rate generated this stream", and the alarm rejects it. It is named
+ * for what it observes, because the thing it is most useful for is something it
+ * cannot itself establish.
+ *
+ * THE MOTIVATING HYPOTHESIS (which this alarm does not confirm). Goodhart's law
+ * is the fate of every metric: once a number is a target, people optimize the
+ * number, not the value it stood for. A gamed metric doesn't announce itself —
+ * it shows up as the rate drifting (acceptance creeping up while nothing else
+ * improves; realization sagging as easy wins are cherry-picked). So drift is a
+ * NECESSARY signature of that story, which makes this alarm worth having. It is
+ * not a sufficient one: calling a detected movement "Goodhart" would assert an
+ * incentive mechanism the 0/1 stream carries no evidence about. Establishing
+ * that requires evidence that a proxy was under optimization pressure and that
+ * the target construct diverged — neither of which is in this data.
+ *
+ * The alarm carries the same anytime-valid guarantee as §10 — it may be watched
+ * continuously — and reads no content: drift is visible in the 0/1 stream
+ * alone.
  *
  * THE CONSTRUCTION (universal inference / running-MLE e-process). The null is
  * composite: "the stream is i.i.d. Bernoulli(p) for SOME constant p". Race two
@@ -37,10 +49,11 @@
  * hindsight fit is torn between regimes, and Eₙ grows without bound.
  *
  * HONEST FRAMING (travels with the output): the alarm detects that the rate
- * MOVED, not why. Bending-toward-the-metric (Goodhart) and a real regime change
- * (new model, new team, new workflow) both trip it. Its job is to force the
- * question — "did the work change, or did the measuring get gamed?" — which no
- * dashboard today even asks.
+ * MOVED, not why. Bending-toward-the-metric and a real regime change (new model,
+ * new team, new workflow) both trip it, and this test cannot separate them. Its
+ * job is to force the question — "did the work change, or did the measuring get
+ * gamed?" — which no dashboard today even asks. The answer comes from evidence
+ * outside this stream.
  */
 
 import type { FunnelOutcome, Gate } from './gates.ts';
@@ -124,10 +137,10 @@ export function driftEProcess(
   };
 }
 
-// ---- The multi-stream Goodhart watch ---------------------------------------
+// ---- The multi-stream drift watch ------------------------------------------
 //
-// One drifting rate forces one question; the PATTERN across streams often
-// answers it. Acceptance creeping up while realization stagnates is the
+// One drifting rate forces one question; the PATTERN across streams is more
+// suggestive, though still not proof of an incentive mechanism. Acceptance creeping up while realization stagnates is the
 // signature of proposal-inflation gaming; hard-gate unknowns climbing while
 // the headline holds is coverage suppression (measure less, look better).
 // Each stream gets its own e-process — the same anytime-valid guarantee —
@@ -150,8 +163,12 @@ export interface NamedDriftReport {
  * Run the drift e-process over the three gaming-sensitive 0/1 streams derivable
  * from funnel outcomes (oldest first). Streams shorter than `minN` observed
  * points are omitted — an alarm needs a stream to say anything, honestly.
+ *
+ * Each `reading` names what a movement in that stream would mean IF the metric
+ * were being bent. That is a hypothesis worth checking, never a conclusion this
+ * function has reached.
  */
-export function goodhartStreams(
+export function rateDriftStreams(
   outcomes: ReadonlyArray<FunnelOutcome>,
   opts: { alpha?: number; window?: number; minN?: number } = {},
 ): NamedDriftReport[] {

@@ -1,12 +1,25 @@
 /**
- * Value-aware budget recommendations.
+ * Value-aware budget SCENARIOS — a heuristic advisor, not an optimizer.
  *
- * The original budget caps are blunt dollar ceilings. This derives *accurate*
- * budgets from two things measurement now gives us:
- *   1. What you actually spend (so the cap fits real usage, not a guess).
- *   2. What that spend actually returns (so a low realized-value rate tightens
- *      the cap and surfaces projected waste — and the frontier says where to
- *      reallocate).
+ * The original budget caps are blunt dollar ceilings. This proposes a better-
+ * fitting one from two things measurement gives us:
+ *   1. What you actually spend (so the cap fits observed usage, not a guess).
+ *   2. What share of that spend reached a realized outcome (so a low rate
+ *      tightens the cap and surfaces projected waste — and the frontier says
+ *      where an operator might look to reallocate).
+ *
+ * WHAT THIS IS NOT (AII-026). It is not an optimization: no objective is stated,
+ * no constraint set is solved, and no alternative cap is evaluated against one.
+ * The headroom multiplier and the realized-rate tightening are disclosed
+ * heuristics chosen for plausibility, not derived from a utility model. The
+ * realized-value RATE it consumes is a lifecycle share of attributed spend, not
+ * evidence that the spend caused the outcome, so "projected waste" is a
+ * scenario under that share continuing — not a forecast and not a saving.
+ *
+ * A cap that materially changes behaviour is a decision, and decisions belong to
+ * `src/decision/engine.ts` and the assurance chain above it. Until a proposal
+ * carries a DecisionCertificate, this output stays advisory: it is rendered for
+ * review, and `canApply` gates whether an operator may even act on it.
  *
  * Pure function over precomputed inputs, so it is testable without a store.
  */

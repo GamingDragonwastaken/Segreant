@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: cd05058f957512e56886b5177ecdcd9055d332e77589fc9847c634a4ed444734 */
+/** Source SHA-256: ffafe7f77c8a27df123a9a1797f589ed9293a343d0673c63666f3ee85dda2351 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -472,7 +472,7 @@ export interface ValuePayload {
     effortTaxUsd?: number;
     notes?: string[];
   } | null;
-  /** Goodhart drift alarm — an e-process over mature units. Needs ten to exist. */
+  /** Rate-drift alarm — an e-process over mature units. Needs ten to exist. */
   drift?: { n: number; alarm: boolean; recentRate?: number; overallRate?: number } | null;
   reclaimed?: {
     savedMinutes?: number | null;

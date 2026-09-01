@@ -146,6 +146,7 @@ const CURRENT_CLAIM_SURFACES = [
   'src/value/frontier.ts',
   'src/value/reliability.ts',
   'src/value/cohort.ts',
+  'src/value/drift.ts',
   'src/judge/tier.ts',
   'src/judge/orchestrate.ts',
   'web/index.html',
@@ -178,6 +179,7 @@ const REJECTED_LIVE_CLAIMS: ReadonlyArray<[string, RegExp]> = [
   ['Stein dominance claimed for empirical-Bayes rate shrinkage', /Stein['’]s result|strictly beats the raw rate/i],
   ['shrinkage weight labelled confidence', /plain-language ["“]confidence["”]|Confidence[^\n]{0,32}(?:view\.reliability|\.reliability\b)/i],
   ['observational separation labelled evidence-supported', /evidence_supported/],
+  ['rate drift labelled Goodhart without an incentive model', /Goodhart(?:-proof|-resistance| alarm| streams| watch)/i],
 ];
 
 const INTENTIONAL_REJECTED_CLAIMS = [

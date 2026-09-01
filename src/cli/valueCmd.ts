@@ -319,7 +319,7 @@ export async function cmdRoi(flags: Flags): Promise<void> {
   const cfg = loadConfig();
   const store = new Store(dbPath());
   // The whole composition — realization, this project's resolved baseline, the
-  // Lift source, the money inputs, RoI, the Goodhart streams, VoI — is one
+  // Lift source, the money inputs, RoI, the drift streams, sensitivity — is one
   // sequence in src/value/report.ts, shared with `/api/value`. The three inputs
   // below are this command's own flags; everything else the module decides, so
   // the CLI and the dashboard cannot disagree about what any of it means.
@@ -406,9 +406,10 @@ export async function cmdRoi(flags: Flags): Promise<void> {
   lensRow('Lift', roi.lenses.lift);
   lensRow('Impact', roi.lenses.impact);
 
-  // Stability: the Goodhart alarms. Each detects that a rate MOVED, not why —
-  // gaming and a genuine regime change both trip them; their job is to force the
-  // question, and each firing stream carries its own typical reading.
+  // Stability: the rate-drift alarms. Each detects that a rate MOVED, not why —
+  // gaming and a genuine regime change both trip them, and this test cannot
+  // separate them; their job is to force the question, and each firing stream
+  // carries the reading that WOULD apply if the metric were being bent.
   if (driftStreams.length > 0) {
     console.log('');
     const firing = driftStreams.filter((s) => s.report.alarm);

@@ -3,7 +3,7 @@
  *
  * The primitives in this directory are already deep and already shared:
  * `loadRealization`, `resolveBaselineMinutesForRepo`, `liftOptionsFromStore`,
- * `moneyInputsFromStore`, `computeReturnOnIntelligence`, `goodhartStreams`,
+ * `moneyInputsFromStore`, `computeReturnOnIntelligence`, `rateDriftStreams`,
  * `timeReclaimedFromStore`, `computeFrontier`, `computeUsageRoI`,
  * `computeCohort`, `recommendBudget`. What was NOT shared was the SEQUENCE that
  * assembles them into a report — the dashboard's `/api/value` and the CLI's
@@ -56,7 +56,7 @@ import {
 import { resolveBaselineMinutesForRepo, type ResolvedBaseline } from './liftBaseline.ts';
 import { boundedLift } from './lift.ts';
 import { computeReturnOnIntelligence, type RoIOptions, type RoIResult } from './lenses.ts';
-import { goodhartStreams, type DriftReport, type NamedDriftReport } from './drift.ts';
+import { rateDriftStreams, type DriftReport, type NamedDriftReport } from './drift.ts';
 import { instrumentationPriority, type InstrumentationPriority } from './instrumentationSensitivity.ts';
 import { timeReclaimedFromStore, type TimeReclaimedReport } from './timeReclaimed.ts';
 import { computeFrontier, type FrontierReport } from './frontier.ts';
@@ -133,7 +133,7 @@ export interface ValueSpine {
   /** Lift/baseline provenance, already unshifted onto `roi.notes`. */
   liftNotes: string[];
   roi: RoIResult;
-  /** The realization stream's Goodhart alarm — back-compat name for `driftStreams[realization]`. */
+  /** The realization stream's rate-drift alarm — back-compat name for `driftStreams[realization]`. */
   drift: DriftReport | null;
   /** All gaming-sensitive streams; each carries its own typical reading. */
   driftStreams: NamedDriftReport[];
@@ -244,14 +244,14 @@ export async function valueSpine(
   });
   roi.notes.unshift(...liftNotes);
 
-  // Goodhart drift alarm (docs §11): is a rate being BENT? Anytime-valid
+  // Rate-drift alarm (docs §11): is a rate NOT CONSTANT? Anytime-valid
   // e-processes over mature units in time order — realization, acceptance, and
   // hard-gate coverage (each stream needs ≥10 observed points; silent below
   // that, honestly). The PATTERN across streams is the tell: acceptance rising
   // while realization stagnates = proposal inflation; hard-gate unknowns rising
   // while the headline holds = coverage suppression.
   const matureOrdered = report.units.filter((u) => !u.maturing).sort((a, b) => a.tsEpochMs - b.tsEpochMs);
-  const driftStreams = goodhartStreams(matureOrdered.map((u) => u.funnel));
+  const driftStreams = rateDriftStreams(matureOrdered.map((u) => u.funnel));
   // Back-compat: `drift` stays the realization stream's report, as before.
   const drift = driftStreams.find((s) => s.stream === 'realization')?.report ?? null;
 

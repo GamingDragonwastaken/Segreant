@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { driftEProcess, goodhartStreams } from '../src/value/drift.ts';
+import { driftEProcess, rateDriftStreams } from '../src/value/drift.ts';
 import { GATE_LADDER, scoreFunnel, type Gate, type GateResult, type Verdict, type FunnelOutcome } from '../src/value/gates.ts';
 
 function vr(map: Partial<Record<Gate, Verdict>>): Record<Gate, GateResult> {
@@ -58,7 +58,7 @@ test('drift: POWER — an abrupt regime change is caught, with the direction vis
   assert.ok(caught / runs >= 0.9, `abrupt drift caught in ${caught}/${runs} runs`);
 });
 
-test('drift: POWER — slow Goodhart-style creep (the metric being bent) is also caught', () => {
+test('drift: POWER — a slow creep of the kind a bent metric would produce is also caught', () => {
   const rand = rng(33);
   let caught = 0;
   const runs = 100;
@@ -94,9 +94,9 @@ test('drift: the e-value is a crossing memory — maxLogE never decreases below 
   assert.equal(rep.alarm, true, 'the excursion is not forgotten');
 });
 
-// ---- the multi-stream Goodhart watch ----
+// ---- the multi-stream drift watch ----
 
-test('goodhartStreams: all three streams reported when observed; coverage suppression is caught as drift', () => {
+test('rateDriftStreams: all three streams reported when observed; coverage suppression is caught as drift', () => {
   // First 30 units: hard gates instrumented (tested pass), realized mix.
   // Next 30: hard gates silently un-wired (unknown) — the coverage stream drifts 0 → 1.
   const instrumented: FunnelOutcome[] = Array.from({ length: 30 }, (_, i) =>
@@ -105,7 +105,7 @@ test('goodhartStreams: all three streams reported when observed; coverage suppre
   const suppressed: FunnelOutcome[] = Array.from({ length: 30 }, (_, i) =>
     scoreFunnel(vr({ proposed: 'pass', accepted: i % 3 === 0 ? 'fail' : 'pass', committed: 'pass', survived: 'pass', clean: 'pass' })),
   );
-  const streams = goodhartStreams([...instrumented, ...suppressed]);
+  const streams = rateDriftStreams([...instrumented, ...suppressed]);
   const names = streams.map((s) => s.stream);
   assert.deepEqual(names.sort(), ['acceptance', 'hard-gate-coverage', 'realization'].sort(), 'all three streams have enough data');
   const coverage = streams.find((s) => s.stream === 'hard-gate-coverage')!;
@@ -113,13 +113,13 @@ test('goodhartStreams: all three streams reported when observed; coverage suppre
   assert.match(coverage.reading, /coverage suppression/i, 'the alarm must carry its typical reading');
 });
 
-test('goodhartStreams: acceptance stream uses only OBSERVED accepted verdicts; short streams are omitted, never invented', () => {
+test('rateDriftStreams: acceptance stream uses only OBSERVED accepted verdicts; short streams are omitted, never invented', () => {
   // 12 units with observed accepted verdicts, but only 5 total units for other checks? — here:
   // acceptance observed on all 12, so acceptance + realization + coverage all have n=12.
   const outcomes: FunnelOutcome[] = Array.from({ length: 12 }, () =>
     scoreFunnel(vr({ proposed: 'pass', accepted: 'pass', committed: 'pass' })),
   );
-  const streams = goodhartStreams(outcomes);
+  const streams = rateDriftStreams(outcomes);
   const acc = streams.find((s) => s.stream === 'acceptance');
   assert.ok(acc, 'acceptance stream present with 12 observed verdicts');
   assert.equal(acc!.report.n, 12);
@@ -128,7 +128,7 @@ test('goodhartStreams: acceptance stream uses only OBSERVED accepted verdicts; s
   const thin: FunnelOutcome[] = Array.from({ length: 12 }, (_, i) =>
     scoreFunnel(vr({ proposed: 'pass', accepted: i < 5 ? 'pass' : 'unknown', committed: 'pass' })),
   );
-  const thinStreams = goodhartStreams(thin);
+  const thinStreams = rateDriftStreams(thin);
   assert.equal(thinStreams.find((s) => s.stream === 'acceptance'), undefined, 'only 5 observed accepted verdicts — no invented stream');
   assert.ok(thinStreams.find((s) => s.stream === 'realization'), 'realization still has its 12 outcomes');
 });
