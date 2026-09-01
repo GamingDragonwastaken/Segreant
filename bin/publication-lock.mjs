@@ -45,7 +45,12 @@ function removeQuarantine(path) {
   }
 }
 
-function processIsAlive(pid) {
+/**
+ * Shared with the runtime-snapshot reaper: both subsystems decide whether a
+ * recorded owner is gone, and the EPERM case below is exactly the distinction
+ * that must not be reimplemented differently in two places.
+ */
+export function processIsAlive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try {
     process.kill(pid, 0);

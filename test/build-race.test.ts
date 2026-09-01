@@ -9,6 +9,7 @@ const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const BUILD = join(ROOT, 'scripts', 'build.mjs');
 const CLI = join(ROOT, 'bin', 'fiscus.mjs');
 const PUBLICATION_LOCK = join(ROOT, 'bin', 'publication-lock.mjs');
+const RUNTIME_SNAPSHOT = join(ROOT, 'bin', 'runtime-snapshot.mjs');
 
 interface ProcessResult {
   code: number;
@@ -75,6 +76,7 @@ test('the supported CLI launcher waits for publication and leaves no lock residu
   mkdirSync(join(fixture, 'pricing'));
   copyFileSync(CLI, join(fixtureBin, 'fiscus.mjs'));
   copyFileSync(PUBLICATION_LOCK, join(fixtureBin, 'publication-lock.mjs'));
+  copyFileSync(RUNTIME_SNAPSHOT, join(fixtureBin, 'runtime-snapshot.mjs'));
   writeFileSync(join(fixture, 'pricing', 'models.json'), 'fixture-resource-ready\n', 'utf8');
   writeFileSync(join(fixtureDist, 'cli.js'), `
 import { readFileSync } from 'node:fs';
@@ -152,5 +154,73 @@ test('source generation fingerprints distinguish changed build inputs', async ()
     assert.notEqual(second, first, 'a changed source generation must not reuse the previous fingerprint');
   } finally {
     rmSync(fixture, { recursive: true, force: true });
+  }
+});
+
+test('the runtime snapshot outlives a command that keeps running after its completion promise', async () => {
+  // `fiscus start` resolves its command promise the moment the proxy and
+  // dashboard sockets are listening, and then serves requests for hours. The
+  // dashboard reads the bundled pricing card per request rather than at import,
+  // so a snapshot deleted at completion is deleted out from under a live
+  // server: `/api/overview` answers ENOENT on its own copied pricing card and
+  // `/app/main.js` 404s. The whole local suite stays green while that happens,
+  // because nothing else drives the packaged launcher past completion.
+  const fixture = mkdtempSync(join(ROOT, '.fiscus-runtime-life-'));
+  const fixtureBin = join(fixture, 'bin');
+  const fixtureDist = join(fixture, 'dist');
+  mkdirSync(fixtureBin);
+  mkdirSync(fixtureDist);
+  mkdirSync(join(fixture, 'pricing'));
+  copyFileSync(CLI, join(fixtureBin, 'fiscus.mjs'));
+  copyFileSync(PUBLICATION_LOCK, join(fixtureBin, 'publication-lock.mjs'));
+  copyFileSync(RUNTIME_SNAPSHOT, join(fixtureBin, 'runtime-snapshot.mjs'));
+  writeFileSync(join(fixture, 'pricing', 'models.json'), 'fixture-resource-ready\n', 'utf8');
+  // Completion settles immediately; the work that still resolves a package
+  // resource happens afterwards, exactly like a served dashboard request.
+  writeFileSync(join(fixtureDist, 'cli.js'), `
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+console.log(fileURLToPath(new URL('../', import.meta.url)));
+export const cliCompletion = Promise.resolve();
+setTimeout(() => {
+  process.stdout.write(readFileSync(new URL('../pricing/models.json', import.meta.url), 'utf8'));
+}, 150);
+`, 'utf8');
+
+  try {
+    const result = await runNode(join(fixtureBin, 'fiscus.mjs'), []);
+    assert.equal(result.code, 0, result.stderr || 'a command outliving its completion promise lost its runtime snapshot');
+    const [snapshotRoot = '', resource] = result.stdout.split('\n');
+    assert.equal(`${resource}\n`, 'fixture-resource-ready\n', 'the post-completion resource read must still resolve inside the snapshot');
+    assert.notEqual(snapshotRoot, '', 'the fixture runtime must report the snapshot it was imported from');
+    assert.equal(existsSync(snapshotRoot), false, 'the snapshot must be removed when the process that owns it exits');
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
+});
+
+test('orphan runtime snapshots are reaped by owner liveness, never by pathname', async () => {
+  // A process killed outright (SIGKILL, a closed terminal) never runs its exit
+  // handler, so the reaper is what keeps temp from accumulating 2.8 MB copies.
+  // It must still refuse to delete a snapshot whose owner is alive — a running
+  // `fiscus start` would lose its module tree to another CLI invocation.
+  const parent = mkdtempSync(join(ROOT, '.fiscus-runtime-reap-'));
+  const dead = join(parent, 'fiscus-runtime-dead');
+  const live = join(parent, 'fiscus-runtime-live');
+  const foreign = join(parent, 'unrelated-directory');
+  for (const path of [dead, live, foreign]) mkdirSync(path);
+  writeFileSync(join(dead, 'owner.json'), JSON.stringify({ pid: 2_147_483_647 }), 'utf8');
+  writeFileSync(join(live, 'owner.json'), JSON.stringify({ pid: process.pid }), 'utf8');
+
+  try {
+    const snapshotModule = await import(pathToFileURL(RUNTIME_SNAPSHOT).href) as unknown as {
+      reapOrphanRuntimeSnapshots: (parent: string) => void;
+    };
+    snapshotModule.reapOrphanRuntimeSnapshots(parent);
+    assert.equal(existsSync(dead), false, 'a snapshot whose owner is gone must be reaped');
+    assert.equal(existsSync(live), true, 'a snapshot whose owner is still running must be preserved');
+    assert.equal(existsSync(foreign), true, 'reaping must not reach outside the snapshot naming convention');
+  } finally {
+    rmSync(parent, { recursive: true, force: true });
   }
 });

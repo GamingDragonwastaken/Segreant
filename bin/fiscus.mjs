@@ -8,10 +8,9 @@
 // the only knob that reliably suppresses it for `npx fiscus`.
 import { spawnSync } from 'node:child_process';
 import { acquirePublicationLock } from './publication-lock.mjs';
-import { cpSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { createRuntimeSnapshot, reapOrphanRuntimeSnapshots } from './runtime-snapshot.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
-import { tmpdir } from 'node:os';
 
 // Fail fast with a human message on too-old Node before Node's SQLite runtime
 // dependency reports a less actionable error.
@@ -42,48 +41,44 @@ if (!process.env.__FISCUS_CHILD) {
   process.exit(1);
 } else {
   const here = dirname(self);
-  const release = acquirePublicationLock(join(here, '..'));
-  const runtimeRoot = join(here, '..', 'dist');
-  let snapshotRoot;
+  // Collect snapshots whose owning process is gone before adding another one,
+  // so a killed `fiscus start` cannot make temp grow without bound.
+  reapOrphanRuntimeSnapshots();
 
+  // The launcher participates in the same exclusive gate as publication.
+  // Acquiring (rather than merely checking) the lock closes the race where a
+  // build starts immediately after a reader's old existsSync check. Lock
+  // failure is intentionally fatal: bypassing it would make a reader's artifact
+  // guarantee depend on an unverified filesystem assumption.
+  const release = acquirePublicationLock(join(here, '..'));
+  let snapshot;
   try {
-    snapshotRoot = mkdtempSync(join(tmpdir(), 'fiscus-runtime-'));
-    const snapshotDist = join(snapshotRoot, 'dist');
     // Copy while the publisher is excluded. Once the lock is released all
-    // module resolution happens inside this private tree, so no later build can
-    // replace a dependency half-way through the import graph.
-    cpSync(runtimeRoot, snapshotDist, { recursive: true, force: true, errorOnExist: false });
-    // The compiled runtime intentionally resolves a few package resources
-    // relative to the package root (the bundled pricing card, Lift baselines,
-    // and package version). Preserve those alongside the copied dist tree so a
-    // snapshot is behaviorally equivalent to the checked-out/package layout.
-    for (const resource of ['pricing', 'baselines', 'package.json']) {
-      const source = join(here, '..', resource);
-      if (existsSync(source)) cpSync(source, join(snapshotRoot, resource), { recursive: true, force: true, errorOnExist: false });
-    }
-  } catch (error) {
-    if (snapshotRoot) {
-      try { rmSync(snapshotRoot, { recursive: true, force: true, maxRetries: 20, retryDelay: 25 }); } catch { /* preserve the original startup error */ }
-    }
-    throw error;
+    // module resolution and resource reading happens inside this private tree,
+    // so no later build can replace a dependency half-way through the import
+    // graph — or half-way through a request served hours later.
+    snapshot = createRuntimeSnapshot(join(here, '..'));
   } finally {
     release?.();
   }
 
-  try {
-    // Direct imports of dist/* and tools such as npm pack do not participate in
-    // this gate; the atomic reader guarantee is intentionally limited to the
-    // supported bin launcher and the build protocol.
-    const runtime = await import(pathToFileURL(join(snapshotRoot, 'dist', 'cli.js')).href);
-    // The production CLI schedules dispatch with setImmediate so the launcher
-    // can release the publication lock before command work begins. Await that
-    // completion promise before deleting the private snapshot; otherwise a
-    // command such as `demo` can start after import() returns and observe its
-    // copied pricing/baseline resources disappearing underneath it.
-    if (runtime.cliCompletion && typeof runtime.cliCompletion.then === 'function') {
-      await runtime.cliCompletion;
-    }
-  } finally {
-    try { rmSync(snapshotRoot, { recursive: true, force: true, maxRetries: 20, retryDelay: 25 }); } catch { /* preserve command result; temp is outside the repository */ }
+  // Registered before the import so a failed import still cleans up. The
+  // snapshot has to outlive the imported runtime, not merely the promise that
+  // runtime resolves when its deferred command work settles: `fiscus start`
+  // settles that promise as soon as its sockets are listening and then serves
+  // for hours. Process exit is the only point at which no copied module or
+  // resource can still be needed.
+  process.on('exit', snapshot.dispose);
+
+  // Direct imports of dist/* and tools such as npm pack do not participate in
+  // this gate; the atomic reader guarantee is intentionally limited to the
+  // supported bin launcher and the build protocol.
+  const runtime = await import(pathToFileURL(snapshot.entry).href);
+  // The production CLI schedules dispatch with setImmediate so the launcher can
+  // release the publication lock before command work begins. Awaiting the
+  // completion promise keeps the launcher's own frame alive for the whole of a
+  // short command; it is no longer what decides when the snapshot dies.
+  if (runtime.cliCompletion && typeof runtime.cliCompletion.then === 'function') {
+    await runtime.cliCompletion;
   }
 }

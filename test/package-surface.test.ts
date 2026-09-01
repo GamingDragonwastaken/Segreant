@@ -38,6 +38,12 @@ function packagePath(entries: string[], suffix: string): string | undefined {
   return entries.find((entry) => entry === suffix || entry.endsWith(`/${suffix}`));
 }
 
+/** Relative `./x.mjs` specifiers the launcher imports from its own directory. */
+function launcherLocalImports(): string[] {
+  const source = readFileSync(join(ROOT, 'bin', 'fiscus.mjs'), 'utf8');
+  return [...source.matchAll(/from '\.\/([\w.-]+\.mjs)'/g)].map((match) => match[1]!);
+}
+
 test('npm package surface keeps public docs and the README seal while excluding internal plans', () => {
   const packageJson = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as { files?: string[] };
   const allowlist = packageJson.files ?? [];
@@ -51,6 +57,17 @@ test('npm package surface keeps public docs and the README seal while excluding 
 
   const entries = packageEntries();
   assert.ok(packagePath(entries, 'bin/fiscus.mjs'), 'the packaged CLI launcher must remain present');
+  // Naming one launcher file was not enough: the launcher grew sibling modules
+  // (the publication gate, the runtime snapshot) that it imports before it can
+  // reach dist/, so any of them missing from the tarball is a CLI that cannot
+  // start at all. Derive the requirement from the source rather than restating
+  // a list that the next sibling would silently fall out of.
+  for (const specifier of launcherLocalImports()) {
+    assert.ok(
+      packagePath(entries, `bin/${specifier}`),
+      `the launcher imports ./${specifier} before dist/, so it must be packaged`,
+    );
+  }
   assert.ok(packagePath(entries, 'dist/cli.js'), 'the compiled CLI runtime must remain present');
   assert.ok(packagePath(entries, 'dist/store/backup.js'), 'the packaged runtime must include verified backup support');
   assert.ok(packagePath(entries, 'dist/cli/backupCmd.js'), 'the packaged CLI must include backup and restore commands');
