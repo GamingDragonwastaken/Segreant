@@ -1,4 +1,8 @@
-/** Exact economic period-close issuance into the Trusted Epistemic Kernel. */
+/**
+ * Exact economic period-close issuance into the Trusted Epistemic Kernel.
+ *
+ * ISSUANCE CLASS: canonical — see `src/epistemic/issuance-map.ts`.
+ */
 
 import { claim, type Claim } from '../epistemic/claim.ts';
 import { evidence, type Evidence } from '../epistemic/evidence.ts';

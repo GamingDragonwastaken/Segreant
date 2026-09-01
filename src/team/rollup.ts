@@ -1,4 +1,9 @@
 /**
+ * ISSUANCE CLASS: integrity_only — see `src/epistemic/issuance-map.ts`. The
+ * signature authenticates the sender and fixes the bytes. It adds nothing to
+ * the strength of the values carried: an aggregate of compatibility-basis rows
+ * is still compatibility-basis after signing.
+ *
  * Team-tier rollup: a signed, numeric-only, cross-project snapshot of ONE
  * developer's local ledger, pushed to an enterprise-run, bring-your-own team
  * server. See docs/TEAM-TIER-DESIGN.md §2 — "this isn't a new crypto

@@ -1,4 +1,10 @@
 /**
+ * ISSUANCE CLASS: unmigrated_authority — see `src/epistemic/issuance-map.ts`.
+ * Depends on `qualification.ts` and inherits its position. The estimator
+ * pre-declares its bounds and does not adapt, but the interval is not carried
+ * as kernel uncertainty on an issued Claim, so nothing downstream can be
+ * invalidated when the study it rests on is revoked.
+ *
  * Conservative, transparent estimators for the initial randomized-study lane.
  *
  * The first version deliberately avoids adaptive modelling and p-value badges.

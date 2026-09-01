@@ -1,4 +1,8 @@
-/** Narrow coding-realization issuance into the Trusted Epistemic Kernel. */
+/**
+ * Narrow coding-realization issuance into the Trusted Epistemic Kernel.
+ *
+ * ISSUANCE CLASS: canonical — see `src/epistemic/issuance-map.ts`.
+ */
 
 import { createHash } from 'node:crypto';
 import { claim, type Claim } from '../epistemic/claim.ts';

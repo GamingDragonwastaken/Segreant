@@ -1,4 +1,12 @@
 /**
+ * ISSUANCE CLASS: unmigrated_authority — see `src/epistemic/issuance-map.ts`.
+ * A dominance certificate is a decision-fitness claim, and
+ * `src/epistemic/derivation.ts` already refuses unsupported decision-fitness
+ * strengthening — but only for claims routed through it, and this one is not.
+ * The engine is honest in isolation: `undetermined` is a real outcome and a
+ * rule-selected action is labelled as such. What is missing is a Derivation
+ * binding the certificate to the evidence its intervals came from.
+ *
  * Conservative decision primitives for bounded utility evidence.
  *
  * These functions deliberately operate on intervals and explicitly declared

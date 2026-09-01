@@ -13,7 +13,8 @@
 - a combined `replayAsOf` projection that applies node availability and event-recording boundaries in one immutable result;
 - canonical JSON serialization/digest envelopes for Evidence, Claim, Assumption and Derivation records;
 - directed prerequisite-to-dependent edges;
-- revocation events supplied by an append-only store or protocol layer.
+- revocation events supplied by an append-only store or protocol layer;
+- a declared map of every repository boundary that creates or strengthens a claim, with the class of authority each holds (`issuance-map.ts`).
 
 ## Guarantees
 
@@ -26,6 +27,7 @@
 - Claims retain evidence IDs and derivation identity; a profile mismatch or absent evidence dependency fails closed.
 - Witnesses are first-class persisted nodes; every witness used by a stored derivation must match the registered kind, coordinates, detail and evidence IDs.
 - Derivation legality refuses unsupported strengthening of coordinates, epistemic state, coverage, measurement, causality, monetary finality, trust or decision fitness.
+- Every product path that issues a kernel Claim is declared in `issuance-map.ts`, and a path that issues without appearing there fails a test rather than becoming a second authority.
 
 ## Invariants
 
@@ -42,6 +44,7 @@
 - Persistent inserts are exact-replay idempotent but divergent same-ID payloads and `INSERT OR REPLACE` attempts fail closed through database triggers.
 - Serialized records sort object keys, preserve array order, reject cycles/unsupported values, and verify both digest and canonical bytes before rehydration.
 - Claims may carry first-class `assumptionIds`; the Store links them as `assumes` edges so assumption revocation reaches dependent claims without treating display text as a trust source.
+- The issuance map's `unmigrated_authority` list is non-empty by construction while AII-036 is `PARTIAL`: emptying it requires closing the finding, not editing the list. Three boundaries — causal qualification, causal estimation and decision certificates — strengthen claims outside the kernel today, which means revoking their sources cannot invalidate what depends on them.
 
 ## Verify
 
@@ -56,4 +59,5 @@ node --test --experimental-strip-types test/epistemic-assumption.test.ts
 node --test --experimental-strip-types test/epistemic-witness.test.ts
 node --test --experimental-strip-types test/epistemic-replay-conformance.test.ts
 node --test --experimental-strip-types test/epistemic-serialization.test.ts
+node --test --experimental-strip-types test/issuance-map.test.ts
 ```

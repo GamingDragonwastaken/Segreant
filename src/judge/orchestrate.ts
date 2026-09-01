@@ -1,4 +1,9 @@
 /**
+ * ISSUANCE CLASS: display_only — see `src/epistemic/issuance-map.ts`. A judge
+ * verdict is one model's opinion under a declared trust tier. It is never
+ * converted into a supported quality Claim, and no canonical issuance boundary
+ * consumes it.
+ *
  * Ties the trust-ladder gate (tier.ts), the structural payload (payload.ts), and
  * the outbound call (call.ts) into one entry point: `judgeSession`. This is the
  * ONLY function anything else in the codebase should call to get a judgment —

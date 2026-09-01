@@ -1,4 +1,15 @@
 /**
+ * ISSUANCE CLASS: unmigrated_authority — see `src/epistemic/issuance-map.ts`.
+ * This is the observational-to-causal boundary, the single largest claim
+ * strengthening in the product, and it decides OUTSIDE the Trusted Epistemic
+ * Kernel. The gates below are conservative and refuse to derive causality from
+ * Lift, a baseline or a model comparison — so this is unchecked, not wrong.
+ * Closing it (AII-036, AII-021) requires qualification to issue a canonical
+ * Claim whose Derivation legality refuses causal strengthening without a
+ * committed protocol and an assignment witness, so that revoking the assignment
+ * evidence invalidates everything derived from it. Until then, nothing
+ * downstream of this file can be revoked by revoking its inputs.
+ *
  * Pure qualification gates for local randomized-study evidence.
  *
  * This module deliberately prefers an explicit collecting, inconclusive, or

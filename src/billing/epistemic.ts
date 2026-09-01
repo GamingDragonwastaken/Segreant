@@ -1,6 +1,8 @@
 /**
  * Billing-to-kernel issuance adapter.
  *
+ * ISSUANCE CLASS: canonical — see `src/epistemic/issuance-map.ts`.
+ *
  * The legacy billing tables remain a compatibility/read model with integer
  * microdollars. This adapter is the first product vertical that crosses into
  * the Trusted Epistemic Kernel: every provider line becomes immutable Evidence

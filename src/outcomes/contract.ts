@@ -1,4 +1,8 @@
 /**
+ * ISSUANCE CLASS: kernel_primitive — see `src/epistemic/issuance-map.ts`. This
+ * evaluates a contract in four-valued state; issuing the result is the caller's
+ * boundary, not this one.
+ *
  * Domain-neutral outcome contracts.
  *
  * Confirmation is conjunctive over required predicates: every required fact

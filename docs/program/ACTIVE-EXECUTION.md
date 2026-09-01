@@ -4,7 +4,7 @@ Executor: Claude Opus 5 (lead implementation engineer/verifier)
 Branch: `gpt56/magnum-opus-reconstruction`
 Remote head at the start of this session: `359e4b96771bc19c1f94b935727778238470bc29`
 Current local head: see `git rev-parse HEAD`
-Active packet: WP-A09 (A01–A08 checkpointed; A09 in flight)
+Active packet: WP-B01 (A01–A09 checkpointed and remotely green)
 Status: READY
 
 ## What this session found first
@@ -65,22 +65,32 @@ card, `/app/main.js` 404'd. Reproduced locally before any fix, then repaired.
   aliases and its two stored `rollup_projects` columns; the identifier ban walks
   `team-server/`; `CLAUDE.md` records the three-domain rule. See D-062.
 
+- **WP-B01 — the claim-issuance map, as code.** `src/epistemic/issuance-map.ts`
+  declares all twelve boundaries at which this repository creates or
+  strengthens a claim, each with one of five classes of authority.
+  `test/issuance-map.test.ts` reads the map and the source tree together: a
+  `canonical` boundary that stops calling the kernel fails, a non-canonical one
+  that starts fails, and any file under `src/` that calls `claim({...})` while
+  absent from the map fails. Each module states its own class in its own
+  docblock. Three boundaries are classified `unmigrated_authority` —
+  `causal.qualification`, `causal.estimate`, `decision.certificate` — and the
+  test asserts that list is non-empty, so emptying it requires closing AII-036
+  rather than editing a list. The sweep also surfaced an AII-020 overclaim in
+  the receipt docstring ("trust the claim without trusting us"), now corrected.
+  See D-063 and D-064.
+
 ## Last verified commands
 
-Run against the WP-A08 tree, immediately before commit `c1f7ac5`:
+Run against the WP-B01 tree:
 
 - `node ./node_modules/typescript/bin/tsc --noEmit -p tsconfig.json` -> pass
 - `node ./node_modules/typescript/bin/tsc --noEmit -p src/dashboard/web/app/tsconfig.json` -> pass
+- `cd team-server && node ./node_modules/typescript/bin/tsc --noEmit` -> pass;
+  `npm test` -> 62/62. **Run this pass whenever you touch `src/value/` or
+  `src/team/`** — CI found two red heads this program because the root gates
+  cannot see it.
 - `node scripts/build.mjs` -> pass
-- full `node --test test/*.test.ts` -> 1,159 tests / 1,155 pass / 0 fail / 4 skipped
-- `npm pack --dry-run` -> exit 0
-- live wire probe against `fiscus start --demo`, because `classic.html` is
-  untyped and a declaration cannot prove what the server sends:
-  `matured.spendOnRealizedUnitsUsd = 17.23`,
-  `matured.acceptanceWeightedSpendUsd = 15.1052`,
-  `returnRatio.manualEquivalentValueUsd = 3351.6`; zero occurrences of either
-  banned identifier in the served payload, in `/classic` (179,442 bytes) or in
-  `/app/core/claimLayers.js` beyond one explanatory comment.
+- full `node --test test/*.test.ts` -> 1,171 tests / 1,167 pass / 0 fail / 4 skipped
 
 ## Known residuals
 
@@ -89,18 +99,24 @@ Run against the WP-A08 tree, immediately before commit `c1f7ac5`:
   and are scoped by exact count in the sweep, not rewritten.
 - The launcher copies ~2.8 MB of `dist/` on every CLI invocation. That is the
   cost of the publication-race guarantee, not a defect, but it is unmeasured.
-- `test/build-race.test.ts`'s concurrent-builders case flaked once on Windows
-  with `EBUSY` on `generated-contract.ts` — two concurrent builds contend for a
-  generated source file. Pre-existing, not introduced here, and unaddressed.
+- `test/build-race.test.ts`'s concurrent-builders case flaked on Windows with
+  `EBUSY` on `generated-contract.ts` — `sourceFingerprint` read a generated
+  source while a concurrent build held it for writing, which Windows fails and
+  POSIX does not. `scripts/build-integrity.mjs` now retries a transient
+  `EBUSY`/`EPERM` open for up to two seconds. Seven consecutive runs pass where
+  it previously failed roughly one in three; that is evidence the cause was
+  identified, not proof the race is gone, and CI's Windows job is the place it
+  would show up again.
 - AII-009/025/027 moved OPEN -> PARTIAL, not closed: each still has a downstream
   consumer requirement (composite decision-fitness, control-path refusal of
   observational input, evidence-debt planner).
 
 ## Next exact action
 
-- WP-A09 is closed: commit `0497b0e`, exact-head run `33478486392` concluded
-  success across all eight jobs, and its `PENDING` evidence row was filled from
-  the observed conclusion rather than left for the next reader.
-- Frontier B in dependency order: WP-B01 universal issuance legality (in
-  progress — the issuance map and its enforcement), then WP-B02 (remove
-  `established:boolean`, AII-014).
+- WP-B02: remove the alternate `established: boolean` authority (AII-014). The
+  live consumer is `src/dashboard/web/app/core/claimTypes.ts:60`; replace it
+  with the ClaimProfile axes or a projection that names them, and with specific
+  predicates at the call sites. Do not substitute a numeric confidence score —
+  that is the same collapse with a decimal point.
+- Then WP-B03 (conflict-preserving adapters) and the migration of the three
+  `unmigrated_authority` boundaries the map now names.

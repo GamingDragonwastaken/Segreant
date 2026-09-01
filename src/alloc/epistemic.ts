@@ -1,4 +1,8 @@
-/** Exact allocation-to-kernel issuance adapter. */
+/**
+ * Exact allocation-to-kernel issuance adapter.
+ *
+ * ISSUANCE CLASS: canonical — see `src/epistemic/issuance-map.ts`.
+ */
 
 import { claim, type Claim } from '../epistemic/claim.ts';
 import { evidence, type Evidence } from '../epistemic/evidence.ts';

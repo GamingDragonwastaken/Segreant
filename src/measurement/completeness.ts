@@ -1,4 +1,9 @@
 /**
+ * ISSUANCE CLASS: kernel_primitive — see `src/epistemic/issuance-map.ts`. This
+ * produces the witness that lets a canonical boundary support a negative claim.
+ * It issues nothing itself, so it can never be the place a stronger claim first
+ * appears.
+ *
  * Completeness witnesses for negative claims.
  *
  * Absence in an observation stream is not evidence of absence unless Fiscus has

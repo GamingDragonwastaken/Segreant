@@ -39,7 +39,7 @@ Status vocabulary: `OPEN`, `PARTIAL`, `IN_PROGRESS`, `COMPLETED`, `SUPERSEDED`, 
 | AII-033 | P1 | Supply-chain assurance below target | OPEN | CodeQL/static security, dependency review, SBOM, provenance/signing, secret scanning |
 | AII-034 | P1 | Hand-rolled OIDC requires production-grade scrutiny | IN_PROGRESS | Deterministic clock semantics now; later mature JOSE-vs-custom decision and production validation |
 | AII-035 | P0 | Exact-head CI red on macOS OIDC time-boundary race | COMPLETED | OIDC clock repair plus exact-SHA GitHub run `33253835881` green across root Ubuntu/macOS/Windows, package-smoke, and team-server Ubuntu/macOS/Windows |
-| AII-036 | P0 | No universal formal legality of evidence derivations | PARTIAL | Canonical Derivation/Witness legality, evidence-grounded persistent witness registry and soundness tests now exist; universal issuance integration and all product consumers remain |
+| AII-036 | P0 | No universal formal legality of evidence derivations | PARTIAL | Canonical Derivation/Witness legality, evidence-grounded persistent witness registry and soundness tests now exist; a repository-wide issuance map now declares every claim-issuance boundary and its class of authority, enforced against the source tree, and three boundaries are named `unmigrated_authority`; universal issuance integration at those three and all product consumers remain |
 
 ## Residual requirements behind each PARTIAL (WP-A09, 2026-09-01)
 
@@ -58,4 +58,6 @@ has not earned.
 | AII-026 | `recommendBudget` is documented as a heuristic scenario advisor with no objective and no evaluated alternative | An evidence-debt planner, or an actual optimizer with a stated objective and constraint set. Documenting the absence of an objective is not the same as having one |
 | AII-027 | The legacy module is `instrumentationSensitivity.ts` and states that it is not value of information | A decision-theoretic VoI consumer: `src/decision/engine.ts` computes EVPI, but no product surface routes an instrumentation decision through it |
 | AII-028 | `localDataWeight()` is documented as a mixing weight; the James–Stein dominance claim is removed and exchangeability is stated | COMPLETED |
+| AII-036 | `src/epistemic/issuance-map.ts` declares all twelve claim-issuance boundaries with their class of authority; `test/issuance-map.test.ts` checks the map against the source tree, so a file that issues a Claim while on no map fails. Each module states its own class in its own docblock | Three boundaries are `unmigrated_authority`: `causal.qualification`, `causal.estimate` and `decision.certificate`. None is producing a false result, but none binds its conclusion to its evidence by a Derivation, so revoking a source cannot invalidate what depends on it. Closing requires issuance at each of those three points |
+| AII-020 | The receipt module now separates what a verified signature establishes (emitter identity, byte integrity) from what it does not (verdict correctness, billed cost, outcome meaning), and is classified `integrity_only` on the map | Interoperable attestation semantics and remote verification remain |
 

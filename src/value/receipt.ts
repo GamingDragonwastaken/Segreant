@@ -1,10 +1,22 @@
 /**
- * Value Receipts — what turns a private metric into a verifiable standard.
+ * ISSUANCE CLASS: integrity_only — see `src/epistemic/issuance-map.ts`.
  *
- * Each unit of work emits a canonical, ed25519-signed record of cost → gate
- * verdicts → outcome. Anyone with the public key can verify a receipt without
- * any access to the source code, so a buyer/auditor/another tool can trust the
- * claim without trusting us. See docs/THE-STANDARD.md §7.
+ * Value Receipts — a canonical, ed25519-signed record of cost → gate verdicts →
+ * outcome for one unit of work.
+ *
+ * WHAT A VERIFIED SIGNATURE ESTABLISHES: that this exact record was produced by
+ * the holder of that key, and that no byte of it has changed since. Anyone with
+ * the public key can check both without access to the source.
+ *
+ * WHAT IT DOES NOT ESTABLISH: that the gate verdicts inside are correct, that
+ * the attributed cost is the provider-billed cost, or that the outcome means
+ * what a reader wants it to mean. Those rest entirely on the boundary that
+ * produced them. Authenticity and integrity are not truth, correctness or
+ * completeness (AII-020) — a faithfully signed wrong number verifies perfectly.
+ * The semantic exact-coverage validation in this file is a separate check that
+ * inherits no strength from the signature.
+ *
+ * See docs/THE-STANDARD.md §7.
  */
 
 import {
