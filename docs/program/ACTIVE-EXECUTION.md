@@ -98,8 +98,9 @@ Run against the WP-A08 tree, immediately before commit `c1f7ac5`:
 
 ## Next exact action
 
-- Push the WP-A09 packet, read its exact-head CI conclusion, and only then
-  record it in `EVIDENCE-INDEX.md` — that row is written `PENDING` on purpose
-  and is the first thing `grep -rn PENDING docs/` will surface.
-- Then Frontier B in dependency order, starting with WP-B01 universal issuance
-  legality, followed by WP-B02 (remove `established:boolean`, AII-014).
+- WP-A09 is closed: commit `0497b0e`, exact-head run `33478486392` concluded
+  success across all eight jobs, and its `PENDING` evidence row was filled from
+  the observed conclusion rather than left for the next reader.
+- Frontier B in dependency order: WP-B01 universal issuance legality (in
+  progress — the issuance map and its enforcement), then WP-B02 (remove
+  `established:boolean`, AII-014).
