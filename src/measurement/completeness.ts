@@ -10,6 +10,31 @@
  * positive evidence that the relevant source was complete for the event type,
  * scope, and time in question. Completeness is itself epistemic evidence and
  * therefore only the `supported` state qualifies an absence inference.
+ *
+ * COMPLETENESS ITSELF CAN BE CONTRADICTED (AII-003, WP-B03). A witness whose
+ * state is `refuted` says the source did NOT completely cover that scope and
+ * period. Such a witness used to be dropped by the same test that dropped an
+ * irrelevant one, so a target with one supporting and one refuting witness
+ * qualified on the strength of the supporter alone — a contradiction resolved
+ * silently, in the most permissive direction available, at the gate that
+ * decides whether "no incident was observed" may become "no incident
+ * occurred".
+ *
+ * The two directions do not inherit the same way, and that asymmetry is the
+ * whole of the fix:
+ *
+ *   COMPLETENESS INHERITS DOWNWARD. A source complete over the whole quarter
+ *   is complete over March, so a supporting witness qualifies a target whose
+ *   scope and period it CONTAINS.
+ *
+ *   INCOMPLETENESS INHERITS UPWARD. A source with a gap in March is incomplete
+ *   over the quarter — but a gap somewhere in the quarter says nothing about
+ *   March, because the gap may lie elsewhere. So a refuting witness bears on a
+ *   target whose scope and period CONTAIN it.
+ *
+ * Treating refutation as the mirror image of support would be the more obvious
+ * code and would refuse absence inferences that the evidence does not actually
+ * contradict.
  */
 
 import type { EpistemicState } from '../epistemic/state.ts';
@@ -38,6 +63,18 @@ export interface NegativeClaimTarget {
 export interface CompletenessAssessment {
   readonly qualifiesAbsenceInference: boolean;
   readonly qualifyingWitnessIds: readonly string[];
+  /**
+   * Witnesses that bear against completeness of this target. Non-empty means
+   * the sources disagree about whether the stream was complete, which is not
+   * the same as their agreeing that it was not.
+   */
+  readonly conflictingWitnessIds: readonly string[];
+  /**
+   * Four-valued state of the completeness proposition itself, so a caller can
+   * tell "no witness" from "witnesses that contradict each other" without
+   * inferring either from the boolean.
+   */
+  readonly state: EpistemicState;
 }
 
 /** Negative event channels that must both be covered before coding `clean` can pass. */
@@ -79,6 +116,25 @@ function witnessCovers(target: NegativeClaimTarget, witness: CompletenessWitness
   return timeCoverage === 'equal' || timeCoverage === 'contains';
 }
 
+/**
+ * Does this witness bear AGAINST the target's completeness?
+ *
+ * Only `refuted` and `conflicted` witnesses can, and only when their own scope
+ * and period sit inside the target's — see the asymmetry in the module comment.
+ * A `conflicted` witness counts here because a source whose own completeness is
+ * contradicted cannot license an absence inference either.
+ */
+function witnessRefutes(target: NegativeClaimTarget, witness: CompletenessWitness): boolean {
+  if (witness.state !== 'refuted' && witness.state !== 'conflicted') return false;
+  if (!witness.eventTypes.includes(target.eventType)) return false;
+
+  const scopeCoverage = scopeRelation(witness.scope, target.scope);
+  if (scopeCoverage !== 'equal' && scopeCoverage !== 'narrower') return false;
+
+  const timeCoverage = intervalRelation(witness.period, target.period);
+  return timeCoverage === 'equal' || timeCoverage === 'within';
+}
+
 export function assessCompleteness(
   target: NegativeClaimTarget,
   witnesses: ReadonlyArray<CompletenessWitness>,
@@ -89,8 +145,26 @@ export function assessCompleteness(
     .filter((witness) => witnessCovers(canonicalTarget, witness))
     .map((witness) => witness.id)
     .sort();
+  const conflictingWitnessIds = witnesses
+    .filter((witness) => witnessRefutes(canonicalTarget, witness))
+    .map((witness) => witness.id)
+    .sort();
+
+  const supported = qualifyingWitnessIds.length > 0;
+  const refuted = conflictingWitnessIds.length > 0;
+  const state: EpistemicState = supported
+    ? (refuted ? 'conflicted' : 'supported')
+    : (refuted ? 'refuted' : 'unknown');
+
   return Object.freeze({
-    qualifiesAbsenceInference: qualifyingWitnessIds.length > 0,
+    // Only an uncontradicted `supported` licenses reading absence as a
+    // negative. A contradiction about whether the source was complete leaves
+    // the negative claim unearned — which is the conservative direction, and
+    // the only one consistent with refusing to infer absence in the first
+    // place.
+    qualifiesAbsenceInference: state === 'supported',
     qualifyingWitnessIds: Object.freeze(qualifyingWitnessIds),
+    conflictingWitnessIds: Object.freeze(conflictingWitnessIds),
+    state,
   });
 }

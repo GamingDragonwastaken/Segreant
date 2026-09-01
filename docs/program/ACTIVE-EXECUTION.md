@@ -4,7 +4,7 @@ Executor: Claude Opus 5 (lead implementation engineer/verifier)
 Branch: `gpt56/magnum-opus-reconstruction`
 Remote head at the start of this session: `359e4b96771bc19c1f94b935727778238470bc29`
 Current local head: see `git rev-parse HEAD`
-Active packet: WP-B03 (A01–A09, B01 and B02 checkpointed and remotely green)
+Active packet: WP-B03 breadth (A01–A09, B01–B03 checkpointed and remotely green)
 Status: READY
 
 ## What this session found first
@@ -102,6 +102,18 @@ card, `/app/main.js` 404'd. Reproduced locally before any fix, then repaired.
   contradictions from failures. `classifySession` and the outcome contract were
   checked and were already conflict-preserving. See D-066.
 
+- **Conflict lanes beyond coding realization, assessed.** `classifySession`,
+  the outcome contract and billing reconciliation were each read and found
+  already conflict-preserving — the third models cross-observation
+  disagreement as `snapshotStability: changed_across_observations` with the
+  unstable days listed. One lane was collapsing a real conflict:
+  `witnessCovers` began `if (witness.state !== 'supported') return false`, so a
+  witness explicitly asserting that a source did NOT completely cover a scope
+  was discarded by the same line that discards an irrelevant one, and a
+  contested completeness qualified an absence inference on the supporter alone.
+  Fixed, with support and refutation using opposite containment tests.
+  See D-067.
+
 ## Last verified commands
 
 Run against the WP-B01 tree:
@@ -113,7 +125,7 @@ Run against the WP-B01 tree:
   `src/team/`** — CI found two red heads this program because the root gates
   cannot see it.
 - `node scripts/build.mjs` -> pass
-- full `node --test test/*.test.ts` -> 1,182 tests / 1,178 pass / 0 fail / 4 skipped
+- full `node --test test/*.test.ts` -> 1,187 tests / 1,183 pass / 0 fail / 4 skipped
 
 ## Known residuals
 
@@ -136,13 +148,10 @@ Run against the WP-B01 tree:
 
 ## Next exact action
 
-- Assess the conflict-capable lanes outside coding realization. Polarity does
-  persist (verified against a real store), and legacy snapshots are normalized,
-  so AII-003's remaining scope is breadth, not storage: which other propositions
-  in this repository can be independently supported and refuted, and which
-  genuinely cannot conflict by construction. `classifySession` and the outcome
-  contract are already done; billing reconciliation against several provider
-  reports is the first candidate to examine.
+- AII-002's remaining scope: negative claims outside the coding `clean`
+  channels. `no off-path spend` is the load-bearing one — the residual in a
+  billing reconciliation is presented as unexplained variance, and nothing
+  requires a completeness witness before that residual is read as absence.
 - Then carry the ClaimProfile axes to the wire (AII-014's remainder), and
   migrate the three `unmigrated_authority` boundaries named in
   `docs/program/ISSUANCE-MAP.md`.
