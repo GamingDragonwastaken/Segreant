@@ -34,6 +34,7 @@ import {
   type TerminalRealizationBounds,
   type SerialRealization,
   aggregatePolarity,
+  polarityFromVerdict,
   verdictFromPolarity,
 } from './gates.ts';
 import { classifyTaskType, type TaskType } from './taskType.ts';
@@ -530,6 +531,18 @@ export async function computeRealization(
  * a live run. Reads every project by default (the team aggregate); pass a project
  * to scope it. `generatedAt` reflects the freshest snapshot in the set.
  */
+/**
+ * Fill four-valued gate fields on a snapshot that predates them, using only
+ * what the stored three-valued row can honestly support.
+ */
+function normalizeFunnelPolarity(funnel: FunnelOutcome): FunnelOutcome {
+  const results = funnel.results.map((result) =>
+    result.polarity === undefined || result.polarity === null
+      ? { ...result, polarity: polarityFromVerdict(result.verdict) }
+      : result);
+  return { ...funnel, results, conflicts: funnel.conflicts ?? [] };
+}
+
 export function realizationFromStore(
   store: Store,
   opts: { project?: string; windowDays?: number; acceptanceThreshold?: number; survivalThreshold?: number } = {},
@@ -544,6 +557,19 @@ export function realizationFromStore(
     const u = JSON.parse(r.unitJson) as WorkUnit;
     return {
       ...u,
+      // Snapshots persisted before four-valued gates carry neither `polarity`
+      // nor `conflicts` (AII-003, WP-B03), and both are required fields — a
+      // missing `conflicts` threw on `.length` in the waste rollup and the CLI
+      // status line the moment anything read a legacy row.
+      //
+      // A legacy verdict maps through `polarityFromVerdict`, which can never
+      // produce `conflicted`, so an empty `conflicts` is not an assertion that
+      // no disagreement occurred: it is the only thing a three-valued row can
+      // say, and it says it consistently with its own gates. This deliberately
+      // differs from `src/value/epistemic.ts`, which reads a missing polarity
+      // as null rather than deriving one — the kernel refuses to infer at all,
+      // while a compatibility read must satisfy the type it hands on.
+      funnel: normalizeFunnelPolarity(u.funnel),
       dominantProvider: u.dominantProvider ?? null,
       dominantModelCostUsd: u.dominantModelCostUsd ?? null,
       dominantModelCostShare: u.dominantModelCostShare ?? null,

@@ -20,7 +20,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Store } from '../src/store/db.ts';
-import { computeRealization } from '../src/value/realization.ts';
+import { computeRealization, realizationFromStore } from '../src/value/realization.ts';
 import { projectName, resolveCommit } from '../src/git/correlate.ts';
 import {
   GATE_LADDER,
@@ -194,5 +194,42 @@ test('two recorded runs that agree are not a conflict', async () => {
   } finally {
     store.close();
     rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('a snapshot persisted before four-valued gates still rehydrates', () => {
+  // The fields are required, and a legacy row has neither. `conflicts` being
+  // undefined threw on `.length` in the waste rollup and in the CLI status line
+  // the moment anything read one — a crash introduced by the type, not by the
+  // data. Reproduced before the normalization was added.
+  const store = new Store(':memory:');
+  try {
+    const legacy = {
+      hash: 'a'.repeat(40), subject: 'legacy unit', tsEpochMs: 1, ageDays: 30, maturing: false,
+      survivalRatio: 1, reverted: false, hadProposal: true, acceptance: 0.9, taskType: 'feature',
+      dominantModel: null, dominantModelCostUsd: null, attributedCostUsd: 1,
+      linesAdded: 1, linesDeleted: 0, filesChanged: 1,
+      funnel: {
+        // The full ladder as it was stored: no `polarity` on any gate, no
+        // `conflicts` on the funnel.
+        results: GATE_LADDER.map((gate) => ({ gate, verdict: 'pass', detail: '' })),
+        reachedIndex: GATE_LADDER.length - 1, reached: 'clean', diedAt: null, diedAtIndex: null,
+        realized: true, passes: GATE_LADDER.length, fails: 0, unknowns: 0,
+        instrumented: GATE_LADDER.length, realizationScore: 1,
+      },
+    };
+    (store as unknown as { db: { prepare(q: string): { run(...args: unknown[]): void } } }).db
+      .prepare('INSERT INTO realization_units (commit_hash, project, ts_epoch_ms, computed_at_ms, unit_json, cost_scope, cost_stale) VALUES (?,?,?,?,?,?,0)')
+      .run('a'.repeat(40), 'legacy-project', 1, 2, JSON.stringify(legacy), 'project');
+
+    const report = realizationFromStore(store, { project: 'legacy-project' });
+    const unit = report.units[0]!;
+
+    assert.equal(unit.funnel.results[0]!.polarity, 'supported', 'a stored pass reads as supported');
+    assert.deepEqual(unit.funnel.conflicts, [], 'and a three-valued row can report no conflict');
+    // Not an assertion that none occurred — only the one thing this row can say.
+    assert.ok(report.matured, 'the rollup completes rather than throwing');
+  } finally {
+    store.close();
   }
 });

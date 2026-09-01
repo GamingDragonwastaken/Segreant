@@ -136,10 +136,13 @@ Run against the WP-B01 tree:
 
 ## Next exact action
 
-- Persist gate polarity. AII-003 stays `PARTIAL` because the gate-signal schema
-  and the realization snapshot are three-valued: a conflict observed at compute
-  time cannot be recovered from a stored row, and rows written before WP-B03
-  are read back without inference — correctly, but blindly.
+- Assess the conflict-capable lanes outside coding realization. Polarity does
+  persist (verified against a real store), and legacy snapshots are normalized,
+  so AII-003's remaining scope is breadth, not storage: which other propositions
+  in this repository can be independently supported and refuted, and which
+  genuinely cannot conflict by construction. `classifySession` and the outcome
+  contract are already done; billing reconciliation against several provider
+  reports is the first candidate to examine.
 - Then carry the ClaimProfile axes to the wire (AII-014's remainder), and
   migrate the three `unmigrated_authority` boundaries named in
   `docs/program/ISSUANCE-MAP.md`.
