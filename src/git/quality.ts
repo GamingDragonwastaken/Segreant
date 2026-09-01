@@ -86,14 +86,79 @@ export async function survivingLines(repoPath: string, hash: string): Promise<{ 
 }
 
 /** Set of commit hashes that were later reverted (git's default revert message). */
-export async function revertedHashes(repoPath: string, limit: number): Promise<Set<string>> {
-  const out = await git(repoPath, ['log', `-n${limit * 3}`, '--format=%b%x1e']);
+/**
+ * What a revert scan actually looked at, alongside what it found.
+ *
+ * The scan walks back from HEAD over a bounded window, so "no revert found" is
+ * only informative for commits the window reached. This carries the boundary so
+ * a caller can tell the two apart instead of reading a bounded scan as a
+ * complete one (AII-002).
+ */
+export interface RevertScan {
+  /** 7-char prefixes of commits observed to have been reverted. */
+  readonly reverted: ReadonlySet<string>;
+  /** Commits the scan read. */
+  readonly examined: number;
+  /**
+   * Author timestamp of the OLDEST commit the scan read, or null when it read
+   * none. Every commit at or after this instant had its whole post-commit
+   * history examined for a revert; anything older did not.
+   */
+  readonly oldestExaminedMs: number | null;
+  /**
+   * True when the scan stopped at its window rather than at the beginning of
+   * available history — so older reverts exist unobserved, rather than not
+   * existing.
+   */
+  readonly truncated: boolean;
+}
+
+/**
+ * Scan recent history for reverts, and report the boundary of what was read.
+ *
+ * A revert of a commit is necessarily NEWER than that commit, so a scan that
+ * reached back to a commit has seen every revert of it. That is why the oldest
+ * examined timestamp is the completeness boundary, and why a shallow clone —
+ * which truncates OLD history — does not by itself impair revert detection for
+ * a commit that is visible at all.
+ */
+export async function revertScan(repoPath: string, limit: number): Promise<RevertScan> {
+  const requested = limit * 3;
+
+  // Two reads rather than one delimited read. A commit body can contain any
+  // byte, so a single `--format` combining timestamp and body needs a separator
+  // that cannot appear in the body — which means an ASCII control character,
+  // sitting invisibly in this source file where the next edit would silently
+  // destroy it. Two `git log` calls over the same bounded window cost one extra
+  // process and keep the parsing legible.
+  //
+  // %ct (committer timestamp) rather than %at: the boundary is about the order
+  // commits entered this history, not when they were originally authored, and a
+  // rebase can move %at behind an ancestor's.
+  const stampsOut = await git(repoPath, ['log', `-n${requested}`, '--format=%ct']);
+  const stamps = stampsOut
+    .split(/\r?\n/)
+    .map((line) => Number.parseInt(line.trim(), 10))
+    .filter((seconds) => Number.isFinite(seconds));
+
+  const bodies = await git(repoPath, ['log', `-n${requested}`, '--format=%b']);
   const reverted = new Set<string>();
-  const re = /This reverts commit ([0-9a-f]{7,40})/g;
   // Normalize to the 7-char prefix so detection works regardless of the
-  // abbreviation length git wrote into the revert message (7, 8, …, 40).
-  for (const m of out.matchAll(re)) reverted.add(m[1]!.slice(0, 7));
-  return reverted;
+  // abbreviation length git wrote into the revert message (7, 8, ..., 40).
+  for (const match of bodies.matchAll(/This reverts commit ([0-9a-f]{7,40})/g)) {
+    reverted.add(match[1]!.slice(0, 7));
+  }
+
+  return {
+    reverted,
+    examined: stamps.length,
+    oldestExaminedMs: stamps.length === 0 ? null : Math.min(...stamps) * 1000,
+    truncated: stamps.length >= requested,
+  };
+}
+
+export async function revertedHashes(repoPath: string, limit: number): Promise<Set<string>> {
+  return new Set((await revertScan(repoPath, limit)).reverted);
 }
 
 export interface CommitQuality extends CommitAttribution {

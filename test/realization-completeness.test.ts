@@ -10,6 +10,8 @@ import { scope } from '../src/epistemic/scope.ts';
 import { interval } from '../src/epistemic/time.ts';
 import { Store } from '../src/store/db.ts';
 import { computeRealization } from '../src/value/realization.ts';
+import { revertScan } from '../src/git/quality.ts';
+import { revertCompletenessWitness } from '../src/git/completeness.ts';
 
 function git(cwd: string, args: string[]): void {
   execFileSync('git', args, { cwd, stdio: 'ignore' });
@@ -107,4 +109,58 @@ test('a witness for only one negative channel leaves the clean predicate unresol
     store.close();
     rmSync(repo, { recursive: true, force: true });
   }
+});
+
+// ---------------------------------------------------------------------------
+// The first completeness witness emitted from real evidence.
+// ---------------------------------------------------------------------------
+
+test('a real repository scan witnesses its own revert coverage — and only that channel', async () => {
+  const repo = mkdtempSync(join(tmpdir(), 'fiscus-revert-witness-'));
+  const store = new Store(':memory:');
+  try {
+    git(repo, ['init', '-q']);
+    git(repo, ['config', 'user.email', 't@example.invalid']);
+    git(repo, ['config', 'user.name', 'T']);
+    writeFileSync(join(repo, 'a.ts'), 'export const x = 1;\n');
+    git(repo, ['add', '.']);
+    git(repo, ['commit', '-qm', 'feat: x']);
+
+    const scan = await revertScan(repo, 10);
+    assert.ok(scan.examined > 0, 'the scan read at least the one commit');
+    assert.ok(scan.oldestExaminedMs !== null);
+    assert.equal(scan.truncated, false, 'a one-commit history is not a truncated window');
+
+    const witness = revertCompletenessWitness('demo-project', scan, scan.oldestExaminedMs! + 60_000)!;
+    assert.ok(witness, 'a scan that read history can witness its coverage');
+    assert.equal(witness.state, 'supported');
+    assert.deepEqual([...witness.eventTypes], ['commit_reverted']);
+    assert.equal(witness.sourceId, 'git-history');
+
+    // The channel with no local source gets no witness, so `clean` still cannot
+    // pass on git evidence alone. This packet supplies evidence; it does not
+    // loosen a gate.
+    assert.equal(witness.eventTypes.includes('linked_incident'), false);
+
+    // Identity is keyed on coverage, not on when the scan ran: two scans that
+    // reached the same commit witness the same fact.
+    const again = revertCompletenessWitness('demo-project', scan, scan.oldestExaminedMs! + 120_000)!;
+    assert.equal(again.id, witness.id);
+  } finally {
+    store.close();
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('a scan that read nothing witnesses nothing, rather than witnessing incompleteness', async () => {
+  // "We did not look" is unknown. A refuting witness would assert that the
+  // source IS incomplete, which is a stronger and different claim.
+  const empty = { reverted: new Set<string>(), examined: 0, oldestExaminedMs: null, truncated: false };
+  assert.equal(revertCompletenessWitness('demo-project', empty, Date.now()), null);
+
+  // And a witness whose period would be empty or inverted is refused rather
+  // than emitted as zero-width coverage.
+  const now = Date.now();
+  const degenerate = { reverted: new Set<string>(), examined: 3, oldestExaminedMs: now, truncated: false };
+  assert.equal(revertCompletenessWitness('demo-project', degenerate, now), null);
 });

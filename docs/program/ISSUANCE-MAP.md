@@ -45,6 +45,7 @@ file anywhere in `src/` that calls `claim({...})` without appearing here fails.
 | `alloc.exactRun` | `src/alloc/epistemic.ts` | canonical | An exact allocation run produced this distribution from these source events |
 | `value.codingRealization` | `src/value/epistemic.ts` | canonical | A unit of coding work reached a terminal lifecycle state under the declared gate ladder |
 | `measurement.completeness` | `src/measurement/completeness.ts` | kernel_primitive | A source completely covers a scope and interval, so absence within it is informative |
+| `git.revertCompleteness` | `src/git/completeness.ts` | kernel_primitive | This git history was completely read for revert evidence over this project and period |
 | `outcomes.contract` | `src/outcomes/contract.ts` | kernel_primitive | A domain-neutral outcome contract is confirmed, unresolved, or conflicted |
 | `value.receipt` | `src/value/receipt.ts` | integrity_only | This exact record was produced by the holder of this key and has not been altered |
 | `team.rollup` | `src/team/rollup.ts` | integrity_only | A project-level aggregate of locally computed values, signed for transport |

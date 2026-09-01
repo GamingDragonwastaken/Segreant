@@ -94,6 +94,13 @@ export const ISSUANCE_MAP: readonly IssuanceBoundary[] = Object.freeze([
     note: 'Produces the witness that lets a canonical boundary support a negative claim, and is the reason absence is never silently read as a negative. It issues nothing itself, so it cannot be the place a stronger claim first appears.',
   },
   {
+    id: 'git.revertCompleteness',
+    module: 'src/git/completeness.ts',
+    asserts: 'This git history was completely read for revert evidence over this project and period.',
+    issuanceClass: 'kernel_primitive',
+    note: 'The first completeness witness the product emits from real evidence. It witnesses coverage, never the absence of a revert: a revert is necessarily newer than what it reverts, so a scan that reached a commit has seen every revert of it. Covers `commit_reverted` only, so the coding `clean` gate still cannot pass on git evidence alone.',
+  },
+  {
     id: 'outcomes.contract',
     module: 'src/outcomes/contract.ts',
     asserts: 'A domain-neutral outcome contract is confirmed, unresolved, or conflicted.',

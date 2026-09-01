@@ -123,9 +123,21 @@ card, `/app/main.js` 404'd. Reproduced locally before any fix, then repaired.
   run, in the CLI beneath the number, on the dashboard state line, and inside
   the issued Claim. See D-068.
 
+- **The first completeness witness from a real source (AII-002).**
+  `completenessWitnesses` was an option nothing but a test ever passed, so the
+  machinery that lets absence become a negative claim was correct and entirely
+  unexercised. Git can witness its own coverage, and the argument is exact: a
+  revert is necessarily newer than what it reverts, so a scan that walked back
+  from HEAD as far as a given commit has by construction seen every revert of
+  it that exists in this history. The boundary is the oldest commit actually
+  read — which is why a shallow clone does NOT impair this and a truncated scan
+  window does. `computeRealization` now emits the witness when the caller
+  supplies none. The `clean` gate is unchanged: `linked_incident` has no local
+  source, so one witnessed channel out of two cannot pass it. See D-069.
+
 ## Last verified commands
 
-Run against the WP-B01 tree:
+Run against the D-069 tree:
 
 - `node ./node_modules/typescript/bin/tsc --noEmit -p tsconfig.json` -> pass
 - `node ./node_modules/typescript/bin/tsc --noEmit -p src/dashboard/web/app/tsconfig.json` -> pass
@@ -134,7 +146,7 @@ Run against the WP-B01 tree:
   `src/team/`** — CI found two red heads this program because the root gates
   cannot see it.
 - `node scripts/build.mjs` -> pass
-- full `node --test test/*.test.ts` -> 1,190 tests / 1,186 pass / 0 fail / 4 skipped
+- full `node --test test/*.test.ts` -> 1,192 tests / 1,188 pass / 0 fail / 4 skipped
 
 ## Known residuals
 
@@ -157,10 +169,13 @@ Run against the WP-B01 tree:
 
 ## Next exact action
 
-- Nothing in the product yet EMITS a refuting completeness witness, so the
-  guard added in D-067 is unexercised outside tests. Find the first real source
-  that can report its own coverage gap — the git revert scan over a shallow
-  clone is the obvious candidate — and have it emit one.
-- Then carry the ClaimProfile axes to the wire (AII-014's remainder), and
-  migrate the three `unmigrated_authority` boundaries named in
-  `docs/program/ISSUANCE-MAP.md`.
+- Carry the ClaimProfile axes to the wire (AII-014's remainder). WP-B02 gave
+  the browser four named support axes, but it derives them from payloads that
+  still describe status in collapsed fields, so the axes reach the projection
+  and not the wire. Persisted records are untouched.
+- Migrate the three `unmigrated_authority` boundaries named in
+  `docs/program/ISSUANCE-MAP.md`, starting with `causal.qualification`: it is
+  the observational-to-causal boundary and the largest claim strengthening in
+  the product, and `causal.estimate` inherits its position.
+- Dossier III WP-B04 (countermodel and assumption-fragility engine) and WP-B05
+  (claim-relative evidence ordering) are not started.

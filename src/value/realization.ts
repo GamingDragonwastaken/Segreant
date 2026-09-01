@@ -19,7 +19,8 @@ import { promisify } from 'node:util';
 import type { Store, GateSignalRow, RealizationUnitRecord, ProposalCaptureCoverage } from '../store/db.ts';
 import { attributeCommits, isGitRepo, projectName, type CommitAttribution } from '../git/correlate.ts';
 import { isDemo } from '../config.ts';
-import { survivingLines, revertedHashes } from '../git/quality.ts';
+import { survivingLines, revertScan } from '../git/quality.ts';
+import { revertCompletenessWitness } from '../git/completeness.ts';
 import { acceptanceForCommit, type ProposedFile } from './proposals.ts';
 import type { EpistemicState } from '../epistemic/state.ts';
 import {
@@ -347,7 +348,16 @@ export async function computeRealization(
     persist: opts.persist,
     scopeProject: projectScoped ? project : undefined,
   });
-  const reverted = await revertedHashes(repoPath, limit);
+  const scan = await revertScan(repoPath, limit);
+  const reverted = scan.reverted;
+  // The first completeness witness this product emits from real evidence.
+  // A caller-supplied set still wins outright: an operator who has wired a
+  // real incident feed knows more about their own coverage than this does,
+  // and silently merging would make the resulting assessment untraceable to
+  // either source.
+  const gitWitness = revertCompletenessWitness(project, scan, now);
+  const witnesses = opts.completenessWitnesses
+    ?? (gitWitness === null ? [] : [gitWitness]);
 
   const units: WorkUnit[] = [];
   for (const a of attributions) {
@@ -384,7 +394,7 @@ export async function computeRealization(
     // an unrelated commit look tested, merged, shipped, or clean by timing.
     const signals = store.signalsForCommit(a.hash);
     const incidentFail = signals.some((s) => s.kind === 'incident');
-    const completeness = cleanCompleteness(project, a.hash, a.tsEpochMs, now, opts.completenessWitnesses ?? []);
+    const completeness = cleanCompleteness(project, a.hash, a.tsEpochMs, now, witnesses);
 
     const verdicts: Record<Gate, GateResult> = {
       proposed: gate(
