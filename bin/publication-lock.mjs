@@ -220,22 +220,44 @@ function sameOwner(left, right) {
   return left?.pid === right?.pid && left?.token === right?.token;
 }
 
+/**
+ * Claim `source` as `target` by rename. Answers whether the claim succeeded.
+ *
+ * THE ERRNO LIST LIVED HERE TOO. D-072 removed an enumeration of platform error
+ * codes from the acquire loop on the grounds that the list is a property of
+ * whichever kernel the job runs on, and the next platform adds an entry. It did
+ * not remove this one, and macOS supplied the entry: renaming inside a
+ * directory a contender has just unlinked answers `EINVAL`, which was not on
+ * the list, so it was rethrown — out of `releasePublicationLock`, out of
+ * `bin/fiscus.mjs`, killing a CLI that had merely lost a race.
+ *
+ * The position argument is the same one. This function answers ONE question —
+ * did I manage to claim this by rename? — and every caller handles `false` by
+ * carrying on. There is no failure here that means "you claimed it", so no
+ * failure needs to be fatal. `ENOENT` and `EEXIST` are still distinguished, and
+ * not because of what they are called: both mean another process has already
+ * settled this claim, so retrying cannot change the answer. Everything else is
+ * the path being momentarily unusable, which is what the budget is for.
+ *
+ * A permanently broken filesystem now returns `false` after `RENAME_RETRY_MS`
+ * rather than throwing its exact errno. That is a real loss of diagnostic
+ * precision, and it is the right trade: acquisition still surfaces a persistent
+ * fault through `PATH_CONTENTION_MS`, and no lock helper should be able to kill
+ * the launcher over an errno nobody enumerated.
+ */
 function renameForQuarantine(source, target) {
   const started = Date.now();
-  while (Date.now() - started < RENAME_RETRY_MS) {
+  while (true) {
     try {
       renameSync(source, target);
       return true;
     } catch (error) {
-      // A competing reclaimer may have claimed the owner record first. On
-      // Windows, antivirus/indexer handles can also briefly deny a rename;
-      // retry those transient states without ever falling back to deletion.
-      if (error?.code === 'ENOENT' || error?.code === 'EEXIST') return false;
-      if (!['EACCES', 'EBUSY', 'EPERM'].includes(error?.code)) throw error;
+      const code = error?.code;
+      if (code === 'ENOENT' || code === 'EEXIST') return false;
+      if (Date.now() - started >= RENAME_RETRY_MS) return false;
       sleep(LOCK_POLL_MS);
     }
   }
-  return false;
 }
 
 function restoreQuarantinedLock(buildLock, quarantine) {

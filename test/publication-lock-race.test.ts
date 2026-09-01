@@ -67,7 +67,7 @@ const LOCK_MODULE = pathToFileURL(join(ROOT, 'bin', 'publication-lock.mjs')).hre
 function run(
   script: string,
   args: string[],
-  killAfterMs = 90_000,
+  killAfterMs = 180_000,
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [script, ...args], {
@@ -254,9 +254,15 @@ test('ordinary contention leaves no lock residue', async () => {
   const worker = join(dir, 'worker.mjs');
   writeFileSync(worker, [
     `import { acquirePublicationLock } from ${JSON.stringify(LOCK_MODULE)};`,
-    'const [root, untilMs] = [process.argv[2], Number(process.argv[3])];',
+    // A DURATION, NOT A DEADLINE THE PARENT PICKED. An absolute `until` is
+    // fixed before the child is spawned, so on a loaded two-core runner a
+    // worker can spend the whole budget starting up and complete zero laps —
+    // failing the floor below for a reason that has nothing to do with the
+    // lock. Timing from the child's own start also guarantees one full lap.
+    'const [root, forMs] = [process.argv[2], Number(process.argv[3])];',
+    'const until = Date.now() + forMs;',
     'let laps = 0;',
-    'while (Date.now() < untilMs) {',
+    'while (Date.now() < until) {',
     '  acquirePublicationLock(root)();',
     '  laps += 1;',
     '}',
@@ -264,9 +270,14 @@ test('ordinary contention leaves no lock residue', async () => {
   ].join('\n'), 'utf8');
 
   try {
-    const until = Date.now() + 5_000;
+    // FOUR WORKERS, NOT EIGHT. Eight processes acquiring at maximum rate for
+    // five seconds is a thundering herd rather than the "ordinary contention"
+    // this test is named for, and on a two-core CI runner the backlog took
+    // longer to drain than the kill window allowed — each worker must still
+    // finish the acquire it is inside when its budget expires. Four processes
+    // serialized through one gate is genuine contention and drains faster.
     const results = await Promise.all(
-      Array.from({ length: 8 }, () => run(worker, [dir, String(until)])),
+      Array.from({ length: 4 }, () => run(worker, [dir, '3000'])),
     );
     for (const result of results) assert.equal(result.code, 0, result.stderr);
 

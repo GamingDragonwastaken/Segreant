@@ -151,6 +151,21 @@ card, `/app/main.js` 404'd. Reproduced locally before any fix, then repaired.
   observation run recorded" while describing one. See D-070.
 
 
+- **Five repairs to one file, and the pattern is the finding (D-078).** CI at
+  `0980721` failed on macOS with `EINVAL` thrown out of `renameForQuarantine`,
+  killing the CLI. D-072 removed exactly this errno enumeration from the
+  acquire loop and never asked where else the same mistake lived — it was three
+  functions away, in the helper both paths call. The sequence is now D-071
+  enumerate, D-072 replace with position (acquire path only), D-074 fix the
+  self-wait D-072 introduced, D-077 the release path abandoning locks held,
+  D-078 D-072's principle unapplied in the shared helper. Every repair was
+  correct and every one was local. **The next thing this file needs is that
+  question asked deliberately, not a sixth fix.**
+- **A contention test encoded how fast the machine is (D-079).** The same run
+  killed an ubuntu worker at the 90s window: eight workers at maximum rate is a
+  thundering herd, and a deadline computed before spawning lets a slow child
+  burn its budget on startup. Now four workers, each timing its own duration.
+  Third time this session a test of mine asserted something about the hardware.
 - **The release path was leaking held locks (D-077).** `releasePublicationLock`
   renames the owner record aside to claim the generation, then moves the
   directory; if that move failed it RETURNED, leaving the canonical directory
