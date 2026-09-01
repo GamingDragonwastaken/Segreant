@@ -265,7 +265,7 @@ function validateRollupSemantics(signed: SignedRollup): string | null {
     if (projectNames.has(project['project'])) return 'body.projects must not contain duplicate project names';
     projectNames.add(project['project']);
     if (!safeNonNegativeInteger(project['units'])) return `${label}.units must be a finite non-negative integer`;
-    if (!finiteNonNegative(project['costUsd']) || !finiteNonNegative(project['realizedValueUsd']) || !finiteNonNegative(project['netRealizedValueUsd'])) {
+    if (!finiteNonNegative(project['costUsd']) || !finiteNonNegative(project['spendOnRealizedUnitsUsd']) || !finiteNonNegative(project['acceptanceWeightedSpendUsd'])) {
       return `${label} dollar values must be finite and non-negative`;
     }
     if (!finiteNonNegative(project['realizationRate']) || (project['realizationRate'] as number) > 1) return `${label}.realizationRate must be between 0 and 1`;

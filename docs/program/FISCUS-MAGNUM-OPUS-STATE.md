@@ -130,7 +130,7 @@ The ledger is a persistence foundation, not complete product migration: first-cl
 - [x] First-class immutable Assumption envelope and `Claim.assumptionIds` (`ddf17f7`) keep named assumptions distinct from display text and link them through the DAG for dependency/revocation analysis.
 - [x] Revocation replay honors event time (`820bad0`) so historical projections exclude revocations recorded after the as-of boundary.
 - [x] Canonical JSON/digest envelopes (`5ab1440`) sort object keys, reject cycles/unsupported values, verify canonical bytes before rehydration, and back the SQLite ledger's persisted payloads.
-- [x] GitHub run `33258932047` validates the serialization checkpoint across all seven configured jobs.
+- [x] GitHub run `33258932047` concluded success and validates the serialization checkpoint across all seven configured jobs.
 
 M1 now has a persistence-ready canonical Evidence/Assumption/Claim/Derivation/DAG/Witness path. The next work is integration: complete event replay, one real billing/reconciliation vertical, and conformance at every consequential issuance boundary.
 
@@ -147,7 +147,7 @@ The witness registry closes the first persistence gap but not universal product 
 
 - [x] `EpistemicLedger.replayAsOf()` (`a7ef589`) now returns one immutable graph-plus-revocation projection, filtering node availability and revocation recording time independently.
 - [x] Table-driven vectors prove no later evidence, witness, claim or revocation leaks into an earlier projection; repeated reads and reopened handles are deterministic.
-- [x] Exact-head GitHub run `33260565547` validates the replay checkpoint across all seven configured jobs.
+- [x] Exact-head GitHub run `33260565547` concluded success and validates the replay checkpoint across all seven configured jobs.
 
 Replay is now a stable kernel contract; product adapters must still supply all consequential evidence and claims through it.
 
@@ -299,8 +299,20 @@ Current checkpoint override: team-rollup v2 is implemented at 2d567c2, bounded c
   browser typechecks; build; package dry-run (213 files, ~940 KB); focused A04
   adversarial suites; local/remote SHA equality and zero divergence.
 - [x] Published to `origin/gpt56/magnum-opus-reconstruction`; GitHub Actions
-  run `33432485480` was queued for this exact head at checkpoint creation and
-  remains an external remote-verification gate until its conclusion is read.
+  run `33432485480` was queued for this exact head at checkpoint creation, and
+  the checkpoint left its conclusion unread.
+- [!] **Read on 2026-09-01 (WP-A09): run `33432485480` concluded FAILURE.**
+  `test` passed on all three operating systems and `package-smoke` passed;
+  `team-server-test` failed on Ubuntu, macOS and Windows, and `candidate-head`
+  failed with it. The cause was TS1294 from a team-server parameter property —
+  the root typecheck cannot see `team-server/`, so the local gates this
+  checkpoint records were all green while the code did not compile. The
+  successor run for `f937ac2` (`33432641338`) failed the same way. Repaired at
+  `31911cb`, whose exact-head run `33433920022` concluded success.
+
+  The local evidence in this section is accurate as written. What it did not
+  establish — and what the sentence above implied by omission — is that the
+  published head compiled everywhere it has to.
 
 This checkpoint does not claim the full program is complete. AII-031 is
 `PARTIAL`: the future versioned streaming `.fiscuspack` format/verifier, broad
@@ -330,7 +342,115 @@ explicit. The next dependency-ordered packet is WP-A05 exact model attribution.
 - [x] Published code tip `31911cb` includes the CI portability repair for the
   typed team-server resource-limit error; local/remote identity was verified.
 
-Remote CI for `31911cb` is the outstanding external exact-SHA gate and must be
-read before declaring this packet remotely green. The next implementation packet
-is WP-A06 joint cost/quality causal error control; A01–A05 remain preserved in the
-history and can be independently reviewed on GitHub.
+- [!] **Read on 2026-09-01 (WP-A09).** Run `33433809771` for the code tip
+  `7678b7b` concluded FAILURE — the same team-server TS1294 as WP-A04, since
+  `7678b7b` predates the repair. The exact-head run for the published tip
+  `31911cb`, run `33433920022`, concluded success across all eight configured
+  jobs, so this packet is remotely green at `31911cb` and was never green at
+  `7678b7b`.
+
+A01–A05 remain preserved in the history and can be independently reviewed on
+GitHub.
+
+## Dossier III WP-A06 checkpoint — causal joint decisions and publication reads (2026-08-31)
+
+- [x] `359e4b9` makes joint cost/quality decisions and publication reads
+  explicit. Local gates green at the time of publication.
+- [!] **Exact-head run `33439468753` concluded FAILURE** on `package-smoke`
+  only; the seven other jobs passed. The cause was not in the A06 work. See the
+  launcher packet below.
+
+## Launcher runtime-snapshot repair (2026-09-01)
+
+The defect this packet fixed had shipped through six checkpoints because no
+local gate exercises a long-lived process.
+
+- [x] `bin/fiscus.mjs` deleted the private runtime snapshot as soon as
+  `cliCompletion` resolved. `cmdStart` resolves that promise the moment its
+  sockets are listening and then serves indefinitely, so a live server lost its
+  own module tree and its copied `pricing`/`baselines`: `/api/overview` answered
+  ENOENT on its own pricing card and `/app/main.js` 404'd. Reproduced locally
+  before any fix.
+- [x] Cleanup moved to `process.on('exit')`, which is the only point at which no
+  copied module or resource can still be needed. Orphaned snapshots are reaped
+  by owner PID liveness, never by pathname or age alone — new
+  `bin/runtime-snapshot.mjs`.
+- [x] The structural hole that let it ship is closed: `test/package-surface.ts`
+  now derives the required tarball contents from the launcher's own local
+  imports rather than naming one file.
+- [x] Commit `404a590`; exact-head run `33473535818` concluded success across
+  all eight configured jobs. Live probe after the fix: the server serves
+  correctly, a force-kill leaves exactly one orphan snapshot, and the next CLI
+  invocation reaps it to zero.
+
+## Dossier III WP-A07 checkpoint — legacy value semantics (2026-09-01)
+
+- [x] `3068350`. The RoI Index is retyped as a descriptive, preference-dependent
+  composite whose geometric form follows from a stated axiom set rather than
+  from economics; `θ` is correctly named the CES substitution parameter, with
+  the elasticity σ = 1/(1−θ) stated separately; lens weights are disclosed
+  preferences, never fitted output elasticities. `voi.ts` became
+  `instrumentationSensitivity.ts` and says it is not value of information.
+  `reliability()` became `localDataWeight()`; the James–Stein dominance claim is
+  removed, because the theorem's conditions (p ≥ 3 Gaussian means, KNOWN
+  variance, squared-error loss) do not hold for a Beta–Binomial posterior with an
+  estimated hyperprior. The frontier's strongest label is
+  `observational_separation`.
+- [x] Enforced by pattern in the existing `public-claims-contract` sweep, so each
+  prohibition is machine-checked rather than reviewed once.
+- [x] Exact-head run `33474731747` concluded success across all eight jobs.
+  See D-058.
+
+## Dossier III WP-A08 checkpoint — declared models and the value/cost split (2026-09-01)
+
+- [x] `b38aee4`. Four arbitrary constants became declared, overridable models
+  with a stated basis: `DECLARED_REACH_UTILITY` (AII-011) replaces an inline
+  ternary and reports itself through `impactHow`; `DECLARED_LIFT_FLOOR_FRACTION`
+  (AII-010) is named, and lift bounds carry `lowBasis`/`highBasis` so a partially
+  identified set is never presented as the same kind of object as a disclosed
+  scenario band. The budget advisor is relabelled a heuristic scenario generator
+  (AII-026). The rate-drift alarm tests that a rate is not constant and says so
+  (AII-024). Exact-head run `33475544810` concluded success. See D-059.
+- [x] `c1f7ac5`. `realizedValueUsd` named a COST on one payload branch and a
+  VALUE on the other, which is how the value spine came to render a cost as the
+  fourth claim in `metered != billed != allocated != realized value` while every
+  contract test passed. Split into `spendOnRealizedUnitsUsd`,
+  `acceptanceWeightedSpendUsd`, `totalSpendOnRealizedUnitsUsd` and
+  `realizedSpendShare` for cost, `manualEquivalentValueUsd` for value, with both
+  old identifiers banned repo-wide by a test that walks the tree. See D-060.
+- [!] **Exact-head run `33477085151` for `c1f7ac5` concluded FAILURE**:
+  `team-server-test` on all three operating systems, plus `candidate-head`,
+  with sixteen TS2339/TS2353 errors. `team-server/` is a third compilation
+  domain that the root typecheck cannot see, and it imports `ProjectValue`
+  straight out of `src/team/rollup.ts`. The migration renamed `src/` only.
+  This is the second time in this program that the same gap produced a red
+  head — the first was TS1294 at WP-A04. Repaired in the WP-A09 packet, which
+  extends the split through `team-server/` including its Postgres columns,
+  extends the identifier ban to walk `team-server/`, and records the
+  three-domain rule in `CLAUDE.md` so the next agent does not rediscover it.
+  See D-062.
+
+## Dossier III WP-A09 checkpoint — program evidence reconciled (2026-09-01)
+
+- [x] Read every GitHub Actions run identifier cited anywhere in
+  `docs/program/` and `docs/RELEASE-GATE.md` and recorded its actual
+  conclusion. Two checkpoints had described a gate in the future tense and never
+  returned to it; **both of those runs had concluded FAILURE.** All other cited
+  runs were verified to have concluded success, exactly as their records
+  implied.
+- [x] `test/program-evidence-contract.test.ts` now requires every run identifier
+  in a program record to state that run's outcome, where `PENDING` is an
+  accepted and deliberately greppable outcome, and forbids predicting an
+  outcome that has not been observed. No test can check whether a PENDING was
+  ever revisited, so that half remains discipline — but the debt is now visible
+  to `grep -rn PENDING docs/`.
+- [x] The `(not yet published)` labels throughout **Current baseline** are
+  historical: they record each slice's state when it was written, and every one
+  of them is included in the publication checkpoint at `200b9a4`. They are not a
+  claim that the branch is unpublished.
+
+Remaining after A09: Frontier B (universal issuance legality, removal of
+`established:boolean`, WorkUnit/OutcomeAdapter migration) and every external
+gate. The register's `PARTIAL` rows each carry an explicit residual requirement
+in `docs/program/AUDIT-REGISTER.md`; a `PARTIAL` is not a nearly-finished
+`COMPLETED`.

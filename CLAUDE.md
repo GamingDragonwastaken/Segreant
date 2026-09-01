@@ -63,15 +63,26 @@ npm run typecheck # the NODE pass only — see below
 npm run build     # two compiler passes -> dist/, plus web assets
 ```
 
-**`npm run typecheck` does not check the GUI.** `tsconfig.json` excludes
-`src/dashboard/web/app/**`, because the browser app compiles under its own
-config. A dashboard change needs both passes, and green on the first says
-nothing about the second:
+**There are three compilation domains and `npm run typecheck` checks one.**
+`tsconfig.json` excludes `src/dashboard/web/app/**` (the browser app compiles
+under its own config), and it does not see `team-server/` at all — that is a
+separate npm project with its own `tsconfig.json`, its own `node_modules`, and
+its own suite. Green on the root pass says nothing about the other two:
 
 ```bash
 node ./node_modules/typescript/bin/tsc --noEmit -p tsconfig.json
 node ./node_modules/typescript/bin/tsc --noEmit -p src/dashboard/web/app/tsconfig.json
+cd team-server && node ./node_modules/typescript/bin/tsc --noEmit && npm test
 ```
+
+`team-server/` imports root source directly (`../../src/team/rollup.ts`,
+`../../src/value/receipt.ts`), so a rename anywhere in `src/team/` or
+`src/value/` can break it while every root gate stays green. That has now
+happened twice on CI — TS1294 at `31911cb`, sixteen TS2339/TS2353 errors at
+`c1f7ac5` — both times because the local check stopped at the root. **Run the
+team-server pass whenever you touch `src/value/`, `src/team/`, or anything they
+export.** CI runs it on three operating systems; you should not be finding out
+from CI.
 
 `npx tsc` fails on this checkout's space-containing path. Use the explicit
 `node ./node_modules/typescript/bin/tsc` form everywhere.

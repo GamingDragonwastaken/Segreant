@@ -40,3 +40,22 @@ Status vocabulary: `OPEN`, `PARTIAL`, `IN_PROGRESS`, `COMPLETED`, `SUPERSEDED`, 
 | AII-034 | P1 | Hand-rolled OIDC requires production-grade scrutiny | IN_PROGRESS | Deterministic clock semantics now; later mature JOSE-vs-custom decision and production validation |
 | AII-035 | P0 | Exact-head CI red on macOS OIDC time-boundary race | COMPLETED | OIDC clock repair plus exact-SHA GitHub run `33253835881` green across root Ubuntu/macOS/Windows, package-smoke, and team-server Ubuntu/macOS/Windows |
 | AII-036 | P0 | No universal formal legality of evidence derivations | PARTIAL | Canonical Derivation/Witness legality, evidence-grounded persistent witness registry and soundness tests now exist; universal issuance integration and all product consumers remain |
+
+## Residual requirements behind each PARTIAL (WP-A09, 2026-09-01)
+
+`PARTIAL` is not a nearly-finished `COMPLETED`. Each row below names the exact
+work that is still missing, so that a status word cannot be read as progress it
+has not earned.
+
+| ID | What was done | What is still required |
+|---|---|---|
+| AII-009 | The geometric aggregator's form is presented as following from two declared axioms rather than as economically forced, and θ is correctly named the CES substitution parameter | A composite decision-fitness consumer: nothing yet refuses to route a decision on a composite whose lenses are not commensurable. Correcting the description did not add the check |
+| AII-010 | `DECLARED_LIFT_FLOOR_FRACTION` is named and `boundedLift` reports `lowBasis`/`highBasis` | The declared fallback is still a chosen number. Closing this requires either an estimated floor from the operator's own observed old-task lifts, or a documented refusal to emit a band at all when no such observation exists |
+| AII-011 | `DECLARED_REACH_UTILITY` is overridable and `impactHow` reports the model in force | No evidence establishes that a shipped unit is worth twice a kept one. Closing this requires either an elicited operator utility with its elicitation recorded, or removal of the cardinal mapping from any composite that feeds a decision |
+| AII-012 | Split end to end across `src/`, both dashboards, the CLI, the tests and `team-server/` including its stored columns; both old identifiers banned by a tree-walking test | COMPLETED |
+| AII-024 | `rateDriftStreams` names the test for what it observes | COMPLETED |
+| AII-025 | The observational frontier's strongest label is `observational_separation` and its rationale states that models were not assigned | Control-path refusal: no surface yet refuses to accept an observational separation as an input to an action that changes spend. The label is honest; the gate does not exist |
+| AII-026 | `recommendBudget` is documented as a heuristic scenario advisor with no objective and no evaluated alternative | An evidence-debt planner, or an actual optimizer with a stated objective and constraint set. Documenting the absence of an objective is not the same as having one |
+| AII-027 | The legacy module is `instrumentationSensitivity.ts` and states that it is not value of information | A decision-theoretic VoI consumer: `src/decision/engine.ts` computes EVPI, but no product surface routes an instrumentation decision through it |
+| AII-028 | `localDataWeight()` is documented as a mixing weight; the James–Stein dominance claim is removed and exchangeability is stated | COMPLETED |
+

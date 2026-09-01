@@ -19,10 +19,10 @@ function project(overrides: Partial<ProjectTotals> = {}): ProjectTotals {
     rollupCount: 5,
     totalUnits: 100,
     totalCostUsd: 500,
-    totalRealizedValueUsd: 400,
-    totalNetRealizedValueUsd: 380,
+    totalSpendOnRealizedUnitsUsd: 400,
+    totalAcceptanceWeightedSpendUsd: 380,
     realizationRate: 0.8,
-    realizedValueRate: 0.8,
+    realizedSpendShare: 0.8,
     avgRoiIndex: 2.5,
     ...overrides,
   };
@@ -34,8 +34,8 @@ function developer(overrides: Partial<DeveloperTotals> = {}): DeveloperTotals {
     label: null,
     rollupCount: 3,
     totalCostUsd: 100,
-    totalRealizedValueUsd: 80,
-    realizedValueRate: 0.8,
+    totalSpendOnRealizedUnitsUsd: 80,
+    realizedSpendShare: 0.8,
     lastPushedAt: '2026-06-15T00:00:00.000Z',
     ...overrides,
   };
@@ -56,7 +56,7 @@ test('buildProjectReport: one developer short of the floor is suppressed, and le
   const keys = Object.keys(row!);
   // The discriminated union's suppressed branch must not carry any financial field —
   // this is the actual privacy boundary, not just a status flag.
-  for (const leaky of ['totalCostUsd', 'totalRealizedValueUsd', 'realizationRate', 'avgRoiIndex']) {
+  for (const leaky of ['totalCostUsd', 'totalSpendOnRealizedUnitsUsd', 'realizationRate', 'avgRoiIndex']) {
     assert.equal(keys.includes(leaky), false, `suppressed row must not carry ${leaky}`);
   }
   assert.match((row as { reason: string }).reason, /fewer than 5 distinct developers/);
@@ -99,11 +99,11 @@ test('buildDeveloperReport: enabled but below the k-anonymity floor is still sup
 
 test('buildDeveloperReport: exactly at the floor is shown as a distribution, never a named list', () => {
   const totals = [
-    developer({ keyId: 'a', totalCostUsd: 100, totalRealizedValueUsd: 90, realizedValueRate: 0.9 }),
-    developer({ keyId: 'b', totalCostUsd: 200, totalRealizedValueUsd: 100, realizedValueRate: 0.5 }),
-    developer({ keyId: 'c', totalCostUsd: 300, totalRealizedValueUsd: 300, realizedValueRate: 1.0 }),
-    developer({ keyId: 'd', totalCostUsd: 400, totalRealizedValueUsd: 40, realizedValueRate: 0.1 }),
-    developer({ keyId: 'e', totalCostUsd: 500, totalRealizedValueUsd: 250, realizedValueRate: 0.5 }),
+    developer({ keyId: 'a', totalCostUsd: 100, totalSpendOnRealizedUnitsUsd: 90, realizedSpendShare: 0.9 }),
+    developer({ keyId: 'b', totalCostUsd: 200, totalSpendOnRealizedUnitsUsd: 100, realizedSpendShare: 0.5 }),
+    developer({ keyId: 'c', totalCostUsd: 300, totalSpendOnRealizedUnitsUsd: 300, realizedSpendShare: 1.0 }),
+    developer({ keyId: 'd', totalCostUsd: 400, totalSpendOnRealizedUnitsUsd: 40, realizedSpendShare: 0.1 }),
+    developer({ keyId: 'e', totalCostUsd: 500, totalSpendOnRealizedUnitsUsd: 250, realizedSpendShare: 0.5 }),
   ];
   const config: TeamAggregateConfig = { minCohort: 5, exposeDeveloperBreakdown: true };
   const report = buildDeveloperReport(totals, config);
@@ -114,7 +114,7 @@ test('buildDeveloperReport: exactly at the floor is shown as a distribution, nev
   // Median of [100,200,300,400,500] = 300; verifies quantile() isn't silently wired to the wrong array.
   assert.equal(d.medianCostUsd, 300);
   assert.equal(d.totalCostUsd, 1500);
-  assert.equal(d.totalRealizedValueUsd, 780);
+  assert.equal(d.totalSpendOnRealizedUnitsUsd, 780);
   // No individual keyId/label anywhere in the response shape — this IS the privacy contract.
   assert.equal(JSON.stringify(report).includes('"a"'), false);
   assert.equal(JSON.stringify(report).includes('keyId'), false);
@@ -122,10 +122,10 @@ test('buildDeveloperReport: exactly at the floor is shown as a distribution, nev
 
 test('buildDeveloperReport: a developer with $0 cost is counted in cohortSize but excluded from the rate distribution, not folded in as 0', () => {
   const totals = [
-    developer({ keyId: 'a', totalCostUsd: 0, totalRealizedValueUsd: 0, realizedValueRate: null }),
-    developer({ keyId: 'b', totalCostUsd: 100, totalRealizedValueUsd: 100, realizedValueRate: 1.0 }),
-    developer({ keyId: 'c', totalCostUsd: 100, totalRealizedValueUsd: 100, realizedValueRate: 1.0 }),
-    developer({ keyId: 'd', totalCostUsd: 100, totalRealizedValueUsd: 100, realizedValueRate: 1.0 }),
+    developer({ keyId: 'a', totalCostUsd: 0, totalSpendOnRealizedUnitsUsd: 0, realizedSpendShare: null }),
+    developer({ keyId: 'b', totalCostUsd: 100, totalSpendOnRealizedUnitsUsd: 100, realizedSpendShare: 1.0 }),
+    developer({ keyId: 'c', totalCostUsd: 100, totalSpendOnRealizedUnitsUsd: 100, realizedSpendShare: 1.0 }),
+    developer({ keyId: 'd', totalCostUsd: 100, totalSpendOnRealizedUnitsUsd: 100, realizedSpendShare: 1.0 }),
   ];
   const config: TeamAggregateConfig = { minCohort: 3, exposeDeveloperBreakdown: true };
   const report = buildDeveloperReport(totals, config);
@@ -139,11 +139,11 @@ test('buildDeveloperReport: a developer with $0 cost is counted in cohortSize bu
 
 test('buildDeveloperReport: the rate distribution is suppressed on its own when excluding $0-cost developers drops it below the k-anonymity floor, even though the raw cohort clears it', () => {
   const totals = [
-    developer({ keyId: 'a', totalCostUsd: 0, totalRealizedValueUsd: 0, realizedValueRate: null }),
-    developer({ keyId: 'b', totalCostUsd: 0, totalRealizedValueUsd: 0, realizedValueRate: null }),
-    developer({ keyId: 'c', totalCostUsd: 100, totalRealizedValueUsd: 100, realizedValueRate: 1.0 }),
-    developer({ keyId: 'd', totalCostUsd: 100, totalRealizedValueUsd: 100, realizedValueRate: 1.0 }),
-    developer({ keyId: 'e', totalCostUsd: 100, totalRealizedValueUsd: 100, realizedValueRate: 1.0 }),
+    developer({ keyId: 'a', totalCostUsd: 0, totalSpendOnRealizedUnitsUsd: 0, realizedSpendShare: null }),
+    developer({ keyId: 'b', totalCostUsd: 0, totalSpendOnRealizedUnitsUsd: 0, realizedSpendShare: null }),
+    developer({ keyId: 'c', totalCostUsd: 100, totalSpendOnRealizedUnitsUsd: 100, realizedSpendShare: 1.0 }),
+    developer({ keyId: 'd', totalCostUsd: 100, totalSpendOnRealizedUnitsUsd: 100, realizedSpendShare: 1.0 }),
+    developer({ keyId: 'e', totalCostUsd: 100, totalSpendOnRealizedUnitsUsd: 100, realizedSpendShare: 1.0 }),
   ];
   const config: TeamAggregateConfig = { minCohort: 5, exposeDeveloperBreakdown: true };
   const report = buildDeveloperReport(totals, config);

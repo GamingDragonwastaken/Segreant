@@ -292,20 +292,34 @@ test('the ambiguous realized-value identifier cannot return to the source tree',
   // that substitution a type error; this keeps the ambiguous name from coming
   // back and quietly re-enabling it.
   const offenders: string[] = [];
+  let scanned = 0;
   const walk = (dir: string): void => {
     for (const entry of readdirSync(join(ROOT, dir), { withFileTypes: true })) {
       const rel = `${dir}/${entry.name}`;
-      if (entry.isDirectory()) { walk(rel); continue; }
+      if (entry.isDirectory()) {
+        if (entry.name === 'node_modules' || entry.name === 'dist') continue;
+        walk(rel);
+        continue;
+      }
       if (!/\.(ts|html|mjs)$/.test(entry.name)) continue;
       // Backtick-quoted mentions are prose explaining why the name was split,
       // which is worth keeping. Anything else is the identifier itself.
       const source = read(...rel.split('/'));
+      scanned += 1;
       // `realizedValueRate` was the same conflation one derivative down: a share
       // of attributed SPEND, named as a rate of value.
       if (/(?<![A-Za-z`])(?:realizedValueUsd|realizedValueRate)(?![A-Za-z`])/.test(source)) offenders.push(rel);
     }
   };
   walk('src');
+  // `team-server/` is a separate npm project with its own tsconfig, so the root
+  // typecheck cannot see it — but it imports `ProjectValue` straight out of
+  // `src/team/rollup.ts`. The first attempt at this migration renamed `src/`
+  // only, passed every root gate, and broke the team-server typecheck on CI in
+  // sixteen places. A ban that stops at `src/` is a ban with a hole in it.
+  walk('team-server/src');
+  walk('team-server/test');
+  assert.ok(scanned > 150, `the walk must be non-vacuous, scanned ${scanned}`);
   assert.deepEqual(offenders, [], 'use spendOnRealizedUnitsUsd / realizedSpendShare for cost, manualEquivalentValueUsd for value; never the ambiguous names');
 });
 

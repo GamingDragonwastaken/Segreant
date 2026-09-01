@@ -37,10 +37,10 @@ export type ProjectAggregateRow =
       rollupCount: number;
       totalUnits: number;
       totalCostUsd: number;
-      totalRealizedValueUsd: number;
-      totalNetRealizedValueUsd: number;
+      totalSpendOnRealizedUnitsUsd: number;
+      totalAcceptanceWeightedSpendUsd: number;
       realizationRate: number | null;
-      realizedValueRate: number | null;
+      realizedSpendShare: number | null;
       avgRoiIndex: number | null;
     };
 
@@ -51,7 +51,7 @@ export interface TeamDeveloperDistribution {
   p25RealizedValueRate: number;
   p75RealizedValueRate: number;
   totalCostUsd: number;
-  totalRealizedValueUsd: number;
+  totalSpendOnRealizedUnitsUsd: number;
 }
 
 export interface TeamDeveloperReport {
@@ -86,10 +86,10 @@ export function buildProjectReport(totals: ProjectTotals[], minCohort: number): 
       rollupCount: t.rollupCount,
       totalUnits: t.totalUnits,
       totalCostUsd: t.totalCostUsd,
-      totalRealizedValueUsd: t.totalRealizedValueUsd,
-      totalNetRealizedValueUsd: t.totalNetRealizedValueUsd,
+      totalSpendOnRealizedUnitsUsd: t.totalSpendOnRealizedUnitsUsd,
+      totalAcceptanceWeightedSpendUsd: t.totalAcceptanceWeightedSpendUsd,
       realizationRate: t.realizationRate,
-      realizedValueRate: t.realizedValueRate,
+      realizedSpendShare: t.realizedSpendShare,
       avgRoiIndex: t.avgRoiIndex,
     };
   });
@@ -127,10 +127,10 @@ export function buildDeveloperReport(totals: DeveloperTotals[], config: TeamAggr
   const costs = totals.map((t) => t.totalCostUsd).sort((a, b) => a - b);
   // Rate is undefined (not zero) at $0 cost — exclude those rows from the rate
   // distribution rather than fold them in as 0, the same "unknown never
-  // penalizes" discipline realization.ts's netRealizedValueUsd uses.
+  // penalizes" discipline realization.ts's acceptanceWeightedSpendUsd uses.
   const rates = totals
-    .filter((t): t is DeveloperTotals & { realizedValueRate: number } => t.realizedValueRate !== null)
-    .map((t) => t.realizedValueRate)
+    .filter((t): t is DeveloperTotals & { realizedSpendShare: number } => t.realizedSpendShare !== null)
+    .map((t) => t.realizedSpendShare)
     .sort((a, b) => a - b);
   // The k-anonymity floor must hold for whatever population a statistic is
   // actually computed over — the rate axis is computed over a SMALLER,
@@ -155,7 +155,7 @@ export function buildDeveloperReport(totals: DeveloperTotals[], config: TeamAggr
       p25RealizedValueRate: quantile(rates, 0.25),
       p75RealizedValueRate: quantile(rates, 0.75),
       totalCostUsd: totals.reduce((s, t) => s + t.totalCostUsd, 0),
-      totalRealizedValueUsd: totals.reduce((s, t) => s + t.totalRealizedValueUsd, 0),
+      totalSpendOnRealizedUnitsUsd: totals.reduce((s, t) => s + t.totalSpendOnRealizedUnitsUsd, 0),
     },
   };
 }

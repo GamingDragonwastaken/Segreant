@@ -74,8 +74,8 @@ export class FakeRollupStore implements RollupStore {
       rollups: Set<string>;
       totalUnits: number;
       totalCostUsd: number;
-      totalRealizedValueUsd: number;
-      totalNetRealizedValueUsd: number;
+      totalSpendOnRealizedUnitsUsd: number;
+      totalAcceptanceWeightedSpendUsd: number;
       realizationNumerator: number;
       roiNumerator: number;
       roiDenominator: number;
@@ -90,8 +90,8 @@ export class FakeRollupStore implements RollupStore {
             rollups: new Set(),
             totalUnits: 0,
             totalCostUsd: 0,
-            totalRealizedValueUsd: 0,
-            totalNetRealizedValueUsd: 0,
+            totalSpendOnRealizedUnitsUsd: 0,
+            totalAcceptanceWeightedSpendUsd: 0,
             realizationNumerator: 0,
             roiNumerator: 0,
             roiDenominator: 0,
@@ -102,8 +102,8 @@ export class FakeRollupStore implements RollupStore {
         acc.rollups.add(r.id);
         acc.totalUnits += p.units;
         acc.totalCostUsd += p.costUsd;
-        acc.totalRealizedValueUsd += p.realizedValueUsd;
-        acc.totalNetRealizedValueUsd += p.netRealizedValueUsd;
+        acc.totalSpendOnRealizedUnitsUsd += p.spendOnRealizedUnitsUsd;
+        acc.totalAcceptanceWeightedSpendUsd += p.acceptanceWeightedSpendUsd;
         acc.realizationNumerator += p.realizationRate * p.units;
         if (p.roiIndex !== null) {
           acc.roiNumerator += p.roiIndex * p.costUsd;
@@ -118,10 +118,10 @@ export class FakeRollupStore implements RollupStore {
         rollupCount: acc.rollups.size,
         totalUnits: acc.totalUnits,
         totalCostUsd: acc.totalCostUsd,
-        totalRealizedValueUsd: acc.totalRealizedValueUsd,
-        totalNetRealizedValueUsd: acc.totalNetRealizedValueUsd,
+        totalSpendOnRealizedUnitsUsd: acc.totalSpendOnRealizedUnitsUsd,
+        totalAcceptanceWeightedSpendUsd: acc.totalAcceptanceWeightedSpendUsd,
         realizationRate: acc.totalUnits > 0 ? acc.realizationNumerator / acc.totalUnits : null,
-        realizedValueRate: acc.totalCostUsd > 0 ? acc.totalRealizedValueUsd / acc.totalCostUsd : null,
+        realizedSpendShare: acc.totalCostUsd > 0 ? acc.totalSpendOnRealizedUnitsUsd / acc.totalCostUsd : null,
         avgRoiIndex: acc.roiDenominator > 0 ? acc.roiNumerator / acc.roiDenominator : null,
       }))
       .sort((a, b) => b.totalCostUsd - a.totalCostUsd);
@@ -137,18 +137,18 @@ export class FakeRollupStore implements RollupStore {
     return [...latestPerDev.values()]
       .map((r) => {
         let totalCostUsd = 0;
-        let totalRealizedValueUsd = 0;
+        let totalSpendOnRealizedUnitsUsd = 0;
         for (const p of r.body.projects) {
           totalCostUsd += p.costUsd;
-          totalRealizedValueUsd += p.realizedValueUsd;
+          totalSpendOnRealizedUnitsUsd += p.spendOnRealizedUnitsUsd;
         }
         return {
           keyId: r.keyId,
           label: this.developers.get(r.keyId)?.label ?? null,
           rollupCount: 1,
           totalCostUsd,
-          totalRealizedValueUsd,
-          realizedValueRate: totalCostUsd > 0 ? totalRealizedValueUsd / totalCostUsd : null,
+          totalSpendOnRealizedUnitsUsd,
+          realizedSpendShare: totalCostUsd > 0 ? totalSpendOnRealizedUnitsUsd / totalCostUsd : null,
           lastPushedAt: r.receivedAt,
         };
       })
