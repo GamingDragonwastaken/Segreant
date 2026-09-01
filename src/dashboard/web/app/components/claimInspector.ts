@@ -25,7 +25,11 @@
 import { h, render, captureFocus, restoreFocus, trapFocus, type FocusTarget } from '../core/dom.ts';
 import { signal, effect, onCleanup } from '../core/signal.ts';
 import { usd, isPrecise } from '../core/fmt.ts';
-import type { Layer } from '../core/claimTypes.ts';
+import {
+  claimIsSupported,
+  claimShowsFigure,
+  type Layer,
+} from '../core/claimTypes.ts';
 
 const active = signal<Layer | null>(null);
 let opener: FocusTarget | null = null;
@@ -70,13 +74,30 @@ export function mountClaimInspector(root: HTMLElement): void {
   });
 }
 
+/**
+ * What the value slot says, and why. Each branch names a different situation
+ * that the old `established: boolean` reported identically.
+ */
+function figureText(layer: Layer): string {
+  switch (layer.support.figure) {
+    case 'shown':
+      return usd(layer.valueUsd);
+    case 'withheld_uncosted':
+      return isPrecise() ? 'supported; not priced' : 'happened, but not priced';
+    case 'not_a_money_claim':
+      return isPrecise() ? 'not a money claim' : 'not a dollar figure';
+    case 'withheld_unsupported':
+      return 'not established';
+  }
+}
+
 function panel(layer: Layer): Node {
   const i = layer.inspection;
 
   const scrim = h('div', { class: 'claim-scrim', onclick: () => closeClaimInspector() });
 
   const body = h('aside', {
-    class: `claim-panel${layer.established ? '' : ' claim-panel-open'}`,
+    class: `claim-panel${claimIsSupported(layer) ? '' : ' claim-panel-open'}`,
     role: 'dialog',
     'aria-modal': 'true',
     'aria-label': `Evidence for the ${layer.label.toLowerCase()} claim`,
@@ -86,12 +107,13 @@ function panel(layer: Layer): Node {
       h('h2', { class: 'claim-title', text: layer.claim }),
       h('button', { class: 'claim-close', 'aria-label': 'Close', onclick: () => closeClaimInspector() }, '×')),
 
-    // The figure repeats the band exactly, including its refusal to show one.
-    // An inspector that quietly resolved "not established" into a number would
-    // be the collapse this panel exists to document.
-    layer.established
-      ? h('div', { class: 'claim-figure', text: usd(layer.valueUsd) })
-      : h('div', { class: 'claim-figure claim-unset', text: 'not established' }),
+    // The figure repeats the band exactly, including its refusal to show one,
+    // and for the same stated reason. An inspector that quietly resolved a
+    // withheld figure into a number would be the collapse this panel exists to
+    // document; one that reported "not established" for a supported claim whose
+    // pricing input is missing would be a different collapse in the same place.
+    h('div', { class: `claim-figure${claimShowsFigure(layer) ? '' : ' claim-unset'}`,
+      text: figureText(layer) }),
 
     h('p', { class: 'claim-basis', text: layer.basis }),
 
@@ -113,7 +135,7 @@ function panel(layer: Layer): Node {
           ? 'No missing evidence is named for this claim.'
           : 'Nothing is missing for this one.' }),
 
-    !layer.established && layer.nextStep
+    layer.nextStep
       ? h('p', { class: 'claim-next', text: `Next action: ${layer.nextStep}` })
       : null);
 

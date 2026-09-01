@@ -4,7 +4,7 @@ Executor: Claude Opus 5 (lead implementation engineer/verifier)
 Branch: `gpt56/magnum-opus-reconstruction`
 Remote head at the start of this session: `359e4b96771bc19c1f94b935727778238470bc29`
 Current local head: see `git rev-parse HEAD`
-Active packet: WP-B01 (A01–A09 checkpointed and remotely green)
+Active packet: WP-B02 (A01–A09 and B01 checkpointed and remotely green)
 Status: READY
 
 ## What this session found first
@@ -79,6 +79,17 @@ card, `/app/main.js` 404'd. Reproduced locally before any fix, then repaired.
   the receipt docstring ("trust the claim without trusting us"), now corrected.
   See D-063 and D-064.
 
+- **WP-B02 — the GUI's collapsed boolean is gone (AII-014).** A claim layer now
+  carries `support` on four named axes instead of `established: boolean`, and
+  the call sites ask `claimIsSupported`, `claimShowsFigure` and
+  `claimIsSupportedButUncosted` rather than one bit. Three visible defects fell
+  out of the same collapse: a Realized band with matured, shipped units and no
+  labour rate read "not established"; a reconciled Billed band rendered a bare
+  em dash from `usd(null)`; and held-but-unreconciled provider records were
+  indistinguishable from no provider evidence. The browser's axis unions mirror
+  `src/epistemic/`, and `test/claim-support-axes.test.ts` fails on drift. No
+  score replaces the boolean. See D-065.
+
 ## Last verified commands
 
 Run against the WP-B01 tree:
@@ -90,7 +101,7 @@ Run against the WP-B01 tree:
   `src/team/`** — CI found two red heads this program because the root gates
   cannot see it.
 - `node scripts/build.mjs` -> pass
-- full `node --test test/*.test.ts` -> 1,171 tests / 1,167 pass / 0 fail / 4 skipped
+- full `node --test test/*.test.ts` -> 1,174 tests / 1,170 pass / 0 fail / 4 skipped
 
 ## Known residuals
 
@@ -113,10 +124,11 @@ Run against the WP-B01 tree:
 
 ## Next exact action
 
-- WP-B02: remove the alternate `established: boolean` authority (AII-014). The
-  live consumer is `src/dashboard/web/app/core/claimTypes.ts:60`; replace it
-  with the ClaimProfile axes or a projection that names them, and with specific
-  predicates at the call sites. Do not substitute a numeric confidence score —
-  that is the same collapse with a decimal point.
-- Then WP-B03 (conflict-preserving adapters) and the migration of the three
-  `unmigrated_authority` boundaries the map now names.
+- Carry the ClaimProfile axes to the wire. WP-B02 removed the GUI's alternate
+  boolean, but the browser derives `support` from payloads that still describe
+  status in collapsed fields; AII-014 cannot close while the API and persisted
+  records disagree with the projection built on top of them.
+- Then WP-B03 (conflict-preserving adapters where evidence can genuinely
+  conflict) and the migration of the three `unmigrated_authority` boundaries in
+  `docs/program/ISSUANCE-MAP.md`, in that order — B03 changes the adapters those
+  boundaries would issue through.

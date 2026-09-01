@@ -20,7 +20,13 @@
 
 import { h } from '../core/dom.ts';
 import { usd, isPrecise } from '../core/fmt.ts';
-import type { Layer, LayerId } from '../core/claimTypes.ts';
+import {
+  claimIsSupported,
+  claimIsSupportedButUncosted,
+  claimShowsFigure,
+  type Layer,
+  type LayerId,
+} from '../core/claimTypes.ts';
 
 /**
  * `Layer` and its evidence moved down to `core/claimTypes.ts` so that
@@ -73,10 +79,26 @@ function separator(): Node {
  * face opened a dialog would make the spine unusable as navigation, which is
  * the job it already had.
  */
+/** The value slot's text, named for the situation rather than for a bit. */
+function bandValue(layer: Layer): string {
+  switch (layer.support.figure) {
+    case 'shown':
+      return usd(layer.valueUsd);
+    case 'withheld_uncosted':
+      return isPrecise() ? 'supported; not priced' : 'happened, but not priced';
+    case 'not_a_money_claim':
+      return isPrecise() ? 'not a money claim' : 'not a dollar figure';
+    case 'withheld_unsupported':
+      return 'not established';
+  }
+}
+
 function band(layer: Layer, state: SpineState): Node {
   const active = state.active === layer.id;
 
-  return h('div', { class: `band${active ? ' band-active' : ''}${layer.established ? '' : ' band-open'}` },
+  const supported = claimIsSupported(layer);
+
+  return h('div', { class: `band${active ? ' band-active' : ''}${supported ? '' : ' band-open'}` },
     h('button', {
       class: 'band-hit',
       'aria-current': active ? 'page' : false,
@@ -84,13 +106,16 @@ function band(layer: Layer, state: SpineState): Node {
     },
       h('span', { class: 'band-label', text: layer.label }),
 
-      layer.established
-        ? h('span', { class: 'band-value', text: usd(layer.valueUsd) })
-        : h('span', { class: 'band-value band-unset', text: 'not established' }),
+      // Three distinct situations, three different words. `established` said
+      // "not established" for all of them, including a Billed band that had
+      // been reconciled (no dollar by design, so `usd(null)` rendered a bare
+      // em dash) and a Realized band whose units shipped but were never priced.
+      h('span', { class: `band-value${claimShowsFigure(layer) ? '' : ' band-unset'}`,
+        text: bandValue(layer) }),
 
       h('span', { class: 'band-basis', text: layer.basis }),
 
-      !layer.established && layer.nextStep
+      layer.nextStep
         ? h('span', { class: 'band-next', text: layer.nextStep })
         : null),
 
@@ -109,8 +134,18 @@ export function spine(state: SpineState): Node {
     if (state.layers[i + 1]) children.push(separator());
   });
 
-  const open = state.layers.filter((l) => !l.established);
+  // A claim missing its evidence and a claim missing only its pricing input are
+  // different sentences. Counting the second as "unsubstantiated" told an
+  // operator whose units had shipped that nothing had been established.
+  const open = state.layers.filter((l) => !claimIsSupported(l));
   const missing = open.map((l) => l.label.toLowerCase());
+  const uncosted = state.layers.filter(claimIsSupportedButUncosted).map((l) => l.label.toLowerCase());
+
+  const uncostedLine = uncosted.length === 0
+    ? null
+    : h('p', { class: 'spine-read spine-uncosted' }, isPrecise()
+        ? `${uncosted.join(' and ')} ${uncosted.length === 1 ? 'is' : 'are'} substantiated but unpriced: the evidence holds and an input needed to state a dollar figure is absent. That is a withheld figure, not an absent claim.`
+        : `We can see that ${uncosted.join(' and ')} happened — we just cannot put a number on ${uncosted.length === 1 ? 'it' : 'them'} yet.`);
 
   return h('section', { class: 'spine', 'aria-label': 'The four claims' },
     h('div', { class: 'spine-rail' }, ...children),
@@ -121,5 +156,6 @@ export function spine(state: SpineState): Node {
             : 'All four of these are backed by evidence on this machine.')
         : (isPrecise()
             ? `Four separate claims with four evidence standards; ${missing.join(' and ')} ${open.length === 1 ? 'is' : 'are'} unsubstantiated here. An unsubstantiated layer is an absence of evidence, never a measured zero.`
-            : `These are four different questions, not four versions of one number — and we cannot answer ${missing.join(' or ')} yet. That is missing evidence, not an answer of nothing.`)));
+            : `These are four different questions, not four versions of one number — and we cannot answer ${missing.join(' or ')} yet. That is missing evidence, not an answer of nothing.`)),
+    uncostedLine);
 }

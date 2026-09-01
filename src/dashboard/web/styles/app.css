@@ -237,6 +237,9 @@ body {
 }
 
 .spine-read { margin-top: var(--s5); color: var(--muted); font-size: 13px; max-width: 78ch; }
+/* A claim that holds but cannot be priced is not an open claim, and must not
+   read like one. Distinct from the unsubstantiated line above it. */
+.spine-uncosted { margin-top: var(--s2); color: var(--gold-text); }
 .spine-loading { min-height: 120px; }
 
 @media (max-width: 900px) {

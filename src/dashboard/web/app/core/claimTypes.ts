@@ -24,6 +24,90 @@
 
 export type LayerId = 'metered' | 'billed' | 'allocated' | 'realized';
 
+/**
+ * The axes a layer's support is stated on (AII-014, WP-B02).
+ *
+ * These vocabularies are copied from `src/epistemic/state.ts` and
+ * `src/epistemic/profile.ts`. The browser app cannot import node source, so
+ * this is a hand-written mirror, which is the failure mode this repository has
+ * been bitten by before — `test/claim-support-axes.test.ts` reads both files
+ * and asserts the members are identical, so drift fails rather than compiles.
+ */
+export type LayerEpistemicState = 'unknown' | 'supported' | 'refuted' | 'conflicted';
+export type LayerCoverage = 'unknown' | 'partial' | 'complete';
+export type LayerMonetaryBasis =
+  | 'none'
+  | 'list'
+  | 'estimated'
+  | 'provider_observed'
+  | 'billed'
+  | 'effective'
+  | 'allocated'
+  | 'full_cost'
+  | 'mixed';
+
+/**
+ * Why the value slot shows what it shows. This is a SEPARATE question from
+ * whether the claim holds, and collapsing the two is the specific defect this
+ * type exists to prevent: forty matured, shipped units with no labour rate set
+ * is a supported claim with no priced figure, and it used to render exactly
+ * like no outcome evidence at all.
+ */
+export type LayerFigure =
+  /** A figure is available and shown. */
+  | 'shown'
+  /** No figure because the claim itself is not supported. */
+  | 'withheld_unsupported'
+  /** The claim IS supported; an input needed to price it is missing. */
+  | 'withheld_uncosted'
+  /** This layer never carries a dollar on the band — it is evidence or showback. */
+  | 'not_a_money_claim';
+
+/**
+ * What the evidence for one layer actually reaches.
+ *
+ * This replaces a single `established: boolean`, which stood for three
+ * different questions at once — is the claim supported, is there a figure, and
+ * should the operator be shown a next step — and answered all three with one
+ * bit. `src/epistemic/profile.ts` opens by saying a claim is never reduced to
+ * `established: boolean`; the spine was doing it anyway.
+ *
+ * There is deliberately no score here. Replacing one boolean with a number
+ * between 0 and 1 is the same collapse with a decimal point.
+ */
+export interface LayerSupport {
+  /** Four-valued. `unknown` is an absence of evidence, never a measured no. */
+  readonly epistemic: LayerEpistemicState;
+  /** How much of what the claim covers the evidence actually reaches. */
+  readonly coverage: LayerCoverage;
+  /** What kind of money the figure is, when this layer carries one. */
+  readonly monetaryBasis: LayerMonetaryBasis;
+  readonly figure: LayerFigure;
+}
+
+/**
+ * Does evidence support this claim? A specific predicate over one named axis —
+ * not a revival of the collapsed boolean, which also decided figure rendering
+ * and next-step display.
+ */
+export function claimIsSupported(layer: Layer): boolean {
+  return layer.support.epistemic === 'supported';
+}
+
+/** Is the operator being shown a number? A different question from the above. */
+export function claimShowsFigure(layer: Layer): boolean {
+  return layer.support.figure === 'shown';
+}
+
+/**
+ * Supported, but no figure because something needed to price it is missing.
+ * The case the old boolean reported as "not established", which reads to an
+ * operator as "your work produced nothing".
+ */
+export function claimIsSupportedButUncosted(layer: Layer): boolean {
+  return layer.support.epistemic === 'supported' && layer.support.figure === 'withheld_uncosted';
+}
+
 export interface ClaimInspection {
   /** Where the underlying evidence physically came from. */
   provenance: string;
@@ -54,13 +138,13 @@ export interface Layer {
   label: string;
   /** The claim itself, in one line, in the operator's words. */
   claim: string;
-  /** The figure, when the layer is established. */
+  /** The figure, when there is one. See `support.figure` for why there is not. */
   valueUsd: number | null;
-  /** Whether the evidence substantiates this claim at all. */
-  established: boolean;
+  /** What the evidence reaches, on the axes that decide it. Never one boolean. */
+  support: LayerSupport;
   /** What the figure rests on, or what is missing when it does not exist. */
   basis: string;
-  /** What the operator would have to do to establish it. Only when unestablished. */
+  /** What the operator would have to do to establish or price it. */
   nextStep?: string;
   /** The auditable long form of `basis`. Required — see the module comment. */
   inspection: ClaimInspection;

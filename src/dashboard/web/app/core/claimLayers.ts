@@ -42,7 +42,16 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
     label: 'Metered',
     claim: 'what we observed',
     valueUsd: o?.summary.costUsd ?? null,
-    established: o !== null,
+    // Metered is the one layer whose figure IS the claim: if the ledger read,
+    // there is a priced count. Coverage is partial whenever any row was priced
+    // from an estimate rather than a matched rate card — the figure exists, but
+    // it does not wholly reach what it claims to measure.
+    support: {
+      epistemic: o === null ? 'unknown' : 'supported',
+      coverage: o === null ? 'unknown' : (estimatedShare === null || estimatedShare > 0 ? 'partial' : 'complete'),
+      monetaryBasis: o === null ? 'none' : (estimatedShare !== null && estimatedShare > 0 ? 'mixed' : 'list'),
+      figure: o === null ? 'withheld_unsupported' : 'shown',
+    },
     basis: o === null
       ? 'could not read the ledger'
       : 'counted from requests, priced from a rate card',
@@ -81,7 +90,19 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
     label: 'Billed',
     claim: 'what the provider charged',
     valueUsd: null,
-    established: runs > 0,
+    // Holding provider records and having reconciled them are different states,
+    // and the old boolean reported both as false. `unknown` covers no evidence
+    // at all; records held but never compared is still `unknown` about the
+    // BILLED claim while being visibly non-empty in coverage — which is what
+    // the operator needs to see in order to know the next step is theirs.
+    support: {
+      epistemic: runs > 0 ? 'supported' : 'unknown',
+      coverage: runs > 0 ? 'complete' : (b && b.summary.recordCount > 0 ? 'partial' : 'unknown'),
+      monetaryBasis: runs > 0 ? 'billed' : 'none',
+      // The band deliberately carries no dollar: this is an evidence claim
+      // about whether a comparison happened, not a second cost figure.
+      figure: 'not_a_money_claim',
+    },
     basis: runs > 0
       ? 'reconciled against a provider report, with a residual'
       : b && b.summary.recordCount > 0
@@ -115,7 +136,16 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
     label: 'Allocated',
     claim: 'whose cost it is',
     valueUsd: null,
-    established: allocRuns > 0,
+    // Cost centres defined with no run recorded is partial coverage of a claim
+    // that is still unknown, not a refuted one: nothing has been apportioned,
+    // and nothing says it cannot be.
+    support: {
+      epistemic: allocRuns > 0 ? 'supported' : 'unknown',
+      coverage: allocRuns > 0 ? 'complete' : (centres > 0 ? 'partial' : 'unknown'),
+      monetaryBasis: allocRuns > 0 ? 'allocated' : 'none',
+      // Showback: the claim is whose cost it is, not how much.
+      figure: 'not_a_money_claim',
+    },
     basis: allocRuns > 0
       ? 'apportioned by recorded rules — showback only'
       : centres > 0
@@ -181,7 +211,26 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
     label: 'Realized',
     claim: 'what it produced',
     valueUsd: valued ? (ret?.manualEquivalentValueUsd ?? null) : null,
-    established: realizedUnits > 0 && valued,
+    // THE CASE THE OLD BOOLEAN COLLAPSED (AII-014). `realizedUnits > 0 && valued`
+    // returned false for two unrelated situations:
+    //
+    //   no matured units          there is no outcome evidence; the claim is
+    //                             genuinely unsupported.
+    //   matured but unpriced      forty units shipped and survived, and no
+    //                             labour rate is set. The claim is SUPPORTED.
+    //                             Only the dollar figure is missing.
+    //
+    // Both rendered as "not established", which an operator reads as "your work
+    // produced nothing" — an inference from a missing input, in the band whose
+    // entire job is to keep realized value distinct from the three cost claims.
+    support: {
+      epistemic: realizedUnits > 0 ? 'supported' : 'unknown',
+      coverage: typeof v?.roi?.coverage !== 'number'
+        ? 'unknown'
+        : v.roi.coverage >= 1 ? 'complete' : 'partial',
+      monetaryBasis: valued ? 'estimated' : 'none',
+      figure: realizedUnits === 0 ? 'withheld_unsupported' : valued ? 'shown' : 'withheld_uncosted',
+    },
     basis: realizedUnits === 0
       ? 'no work units have matured into verified outcomes'
       : valued
