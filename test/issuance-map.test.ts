@@ -12,8 +12,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { ISSUANCE_MAP, CANONICAL_BOUNDARIES, UNMIGRATED_BOUNDARIES } from '../src/epistemic/issuance-map.ts';
+import { dirname, join, relative as relativePath, resolve, sep } from 'node:path';
+import {
+  ISSUANCE_MAP,
+  CANONICAL_BOUNDARIES,
+  LIVE_BOUNDARIES,
+  UNMIGRATED_BOUNDARIES,
+  UNREACHED_BOUNDARIES,
+} from '../src/epistemic/issuance-map.ts';
 
 const ROOT = join(import.meta.dirname, '..');
 const read = (relative: string) => readFileSync(join(ROOT, relative), 'utf8');
@@ -32,6 +38,44 @@ function sourceFiles(dir = 'src'): string[] {
   }
   return found;
 }
+
+/**
+ * Everything under `src/` that a product entry point actually imports.
+ *
+ * `bin/fiscus.mjs` runs `dist/cli.js`, compiled from `src/cli.ts`, so that is
+ * the entry. `team-server/` is a separate npm project that imports root source
+ * directly, so its server is a second one — leaving it out would make the answer
+ * depend on the accident that everything it pulls in is reachable from the CLI
+ * too.
+ *
+ * A regex over relative specifiers is enough here and would not be in general:
+ * this repository has no dynamic import with a computed specifier, which the
+ * vacuity test below re-checks rather than assumes.
+ */
+function productClosure(entries: string[]): Set<string> {
+  const seen = new Set<string>();
+  const visit = (file: string): void => {
+    const abs = resolve(file);
+    if (seen.has(abs) || !existsSync(abs)) return;
+    seen.add(abs);
+    const source = readFileSync(abs, 'utf8');
+    const specifiers = /from\s+['"](\.[^'"]+)['"]|import\(\s*['"](\.[^'"]+)['"]/g;
+    let match: RegExpExecArray | null;
+    while ((match = specifiers.exec(source)) !== null) {
+      const specifier = match[1] ?? match[2] ?? '';
+      // Emitted specifiers are rewritten to `.js`; the source tree is `.ts`.
+      visit(join(dirname(abs), specifier.replace(/\.js$/, '.ts')));
+    }
+  };
+  for (const entry of entries) visit(join(ROOT, entry));
+  return new Set(
+    [...seen]
+      .map((file) => relativePath(ROOT, file).split(sep).join('/'))
+      .filter((file) => file.startsWith('src/')),
+  );
+}
+
+const PRODUCT_ENTRIES = ['src/cli.ts', 'team-server/src/server.ts'];
 
 test('every mapped boundary names a module that exists', () => {
   for (const boundary of ISSUANCE_MAP) {
@@ -139,4 +183,48 @@ test('the sweep is not vacuous', () => {
   assert.ok(files.length > 150, `expected a full source sweep, walked ${files.length} files`);
   const issuers = files.filter((f) => !f.startsWith('src/epistemic/') && ISSUES_CLAIM.test(read(f)));
   assert.ok(issuers.length >= 4, `expected the canonical issuers to be found by the sweep, found ${issuers.length}`);
+});
+
+test('the declared reach of every boundary matches the import graph', () => {
+  // Authority class says what a boundary does when it runs; reach says whether
+  // anything runs it. An `unmigrated_authority` the CLI reaches can put an
+  // unbacked conclusion in front of an operator today. One nothing imports
+  // cannot, however wrong it would be if wired — and it is the one most likely
+  // to be wired by someone who never opened the map. Both belong here; calling
+  // them the same risk misdirects the work.
+  const reached = productClosure(PRODUCT_ENTRIES);
+
+  for (const boundary of ISSUANCE_MAP) {
+    const actual = reached.has(boundary.module) ? 'product' : 'unreached';
+    assert.equal(
+      boundary.reach,
+      actual,
+      `${boundary.id} (${boundary.module}) is ${actual} but declared ${boundary.reach}`
+        + ' — a boundary that gained or lost a consumer is a queue-position change, not a field to update quietly',
+    );
+  }
+
+  assert.equal(LIVE_BOUNDARIES.length + UNREACHED_BOUNDARIES.length, ISSUANCE_MAP.length);
+  assert.ok(LIVE_BOUNDARIES.length > 0, 'the map cannot claim every boundary is latent');
+});
+
+test('the reachability walk is not vacuous', () => {
+  const reached = productClosure(PRODUCT_ENTRIES);
+
+  // A walk that silently returned everything, or nothing, would make the test
+  // above pass for the wrong reason in either direction.
+  assert.ok(reached.size > 100, `the closure found only ${reached.size} files`);
+  assert.ok(reached.has('src/cli.ts'), 'the entry point itself must be in its own closure');
+  assert.ok(reached.has('src/epistemic/claim.ts'), 'the kernel must be reachable from the CLI');
+  const all = sourceFiles();
+  assert.ok(reached.size < all.length, 'the closure reached every source file, so it distinguishes nothing');
+
+  // The regex walk is exact only because nothing here imports a computed
+  // specifier. If that changes, the closure silently under-approximates and
+  // every `unreached` verdict becomes unsound.
+  for (const file of all) {
+    const source = read(file);
+    const dynamic = /import\(\s*[^'")\s]/.exec(source);
+    assert.equal(dynamic, null, `${file}: dynamic import with a computed specifier defeats the reachability walk`);
+  }
 });

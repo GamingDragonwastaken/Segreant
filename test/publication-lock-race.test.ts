@@ -26,6 +26,13 @@
  * belongs to someone else — the cleanup took a fresh lock away from another
  * process inside ITS owner-write window and propagated the same ENOENT to it.
  *
+ * ENUMERATING ERRNOS WAS THE WRONG SHAPE OF FIX. The first repair listed the
+ * three codes Windows produces. Run `33505785655` then failed on macOS with a
+ * fourth, EINVAL from writing into an unlinked directory — because the list is a
+ * property of the kernel it happens to run on. What does not vary is where the
+ * failure happened: the owner record is what makes the lock ours, so a creator
+ * that failed to publish one holds nothing, whatever the failure was called.
+ *
  * WHAT THESE TESTS ESTABLISH, AND WHAT THEY DO NOT. They manufacture the
  * condition directly: a second process deletes the canonical lock in a tight
  * loop while a contender acquires and releases. That is the state the CI log
@@ -38,7 +45,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -166,4 +173,26 @@ test('the lost-race branch is not a blanket ENOENT catch', async () => {
   } finally {
     rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 25 });
   }
+});
+
+test('the publish branch decides by position, not by error code', () => {
+  // The property that broke twice. `EEXIST` is a real distinction — someone
+  // holds the lock, and that wait is unbounded — but once THIS process has
+  // created the directory, no error in the owner-publish position means it
+  // holds the lock. Branching on the code there is what made the repair
+  // platform-specific, and what let macOS produce a fourth face of one
+  // condition after Windows produced three.
+  const source = readFileSync(join(ROOT, 'bin', 'publication-lock.mjs'), 'utf8');
+  const branch = new RegExp('\\n      if \\(created\\) \\{([\\s\\S]*?)\\n      \\} else if').exec(source);
+  assert.ok(branch, 'the created branch was not found — this test is pinned to its shape');
+
+  assert.doesNotMatch(
+    branch[1]!,
+    /error\??\.code|code ===|code !==|includes\(code\)/,
+    'the created branch must not inspect the error code: the list is platform-specific and the position is not',
+  );
+  // It must still be bounded, or a genuine permanent failure inside our own
+  // directory spins until the 300s wait and reports the wrong problem.
+  assert.match(branch[1]!, /PATH_CONTENTION_MS/, 'the retry must be bounded');
+  assert.match(branch[1]!, /throw error/, 'a persistent failure must be reported as itself');
 });

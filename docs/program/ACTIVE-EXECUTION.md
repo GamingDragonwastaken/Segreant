@@ -151,6 +151,22 @@ card, `/app/main.js` 404'd. Reproduced locally before any fix, then repaired.
   observation run recorded" while describing one. See D-070.
 
 
+- **The lock decides by position, not by errno (D-071, corrected by D-072).**
+  D-071 listed the three codes Windows produces; CI then went green on Windows
+  and red on macOS with a fourth, `EINVAL`. The list was a property of the
+  kernel the job ran on. Once the directory is created, ANY failure to publish
+  the owner record means the lock is not held — there is no error in that
+  position that means otherwise — so the branch no longer inspects the code at
+  all, bounded so a real permanent fault is still reported as itself. Two
+  incomplete repairs in two commits, both reasoning from the error a log
+  happened to show rather than from the invariant.
+- **Reach is the issuance map's second axis (D-073).** Reading
+  `src/decision/engine.ts` for a countermodel packet turned up that nothing
+  imports it. So one of the three `unmigrated_authority` boundaries cannot reach
+  an operator at all, which reorders the queue: the two causal boundaries are
+  live and this one is latent. `reach` is declared on the map and checked
+  against the import closure, so a boundary that gains a consumer fails until
+  the map is corrected.
 - **A lost lock is not a failed lock (D-071).** CI at `afca277` went red on
   Windows: `ENOENT` on `.fiscus-build.lock\.owner-<uuid>.tmp` thrown out of
   `acquirePublicationLock` and out of `bin/fiscus.mjs`, so `fiscus --help` died
@@ -165,7 +181,7 @@ card, `/app/main.js` 404'd. Reproduced locally before any fix, then repaired.
 
 ## Last verified commands
 
-Run against the D-071 tree:
+Run against the D-073 tree:
 
 - `node ./node_modules/typescript/bin/tsc --noEmit -p tsconfig.json` -> pass
 - `node ./node_modules/typescript/bin/tsc --noEmit -p src/dashboard/web/app/tsconfig.json` -> pass
@@ -174,7 +190,7 @@ Run against the D-071 tree:
   `src/team/`** — CI found two red heads this program because the root gates
   cannot see it.
 - `node scripts/build.mjs` -> pass
-- full `node --test test/*.test.ts` -> 1,210 tests / 1,206 pass / 0 fail / 4 skipped
+- full `node --test test/*.test.ts` -> 1,213 tests / 1,209 pass / 0 fail / 4 skipped
 
 ## Known residuals
 
@@ -201,18 +217,26 @@ Run against the D-071 tree:
 
 ## Next exact action
 
+- Migrate `causal.qualification`, then `causal.estimate`. They are the two
+  `unmigrated_authority` boundaries the product actually reaches (D-073), and
+  the first is the observational-to-causal boundary — the largest claim
+  strengthening in the product. Closing it means the qualification issues a
+  canonical Claim whose Derivation legality refuses causal strengthening
+  without a committed protocol and an assignment witness, so that revoking the
+  assignment evidence invalidates the result.
+- WP-B04 (countermodels) should target a domain the product reaches. The
+  decision engine does not qualify — nothing imports it. The live candidates
+  are completeness gaps (`assessCompleteness` says an absence inference is
+  unqualified without saying which period or scope is unwitnessed) and
+  economic basis compatibility (`sourceBases` names the bases present but not
+  which events carry them, and `unresolvedRequests` is a count with no list).
+- WP-B05 needs a scoping decision first. The kernel is already per-axis:
+  `assessDerivationLegality` requires a witness per axis and `mergeClaimProfiles`
+  refuses to rank monetary bases. What is missing is a way to say two profiles
+  are INCOMPARABLE and a claim-relative requirement predicate — neither of
+  which has a consumer yet, so building them first would be motion.
 - The wire carries FOUR of `ClaimProfile`'s nine axes, chosen because the GUI
-  reads four. Integrity, authenticity, measurement, causality and finality
-  still reach no consumer, and the first four are exactly the ones that decide
-  whether a provider report can be trusted. Decide whether the wire carries the
-  full profile or whether four is the honest surface, and write the reason
-  down either way.
-- Persisted records still carry collapsed status fields. A stored realization
-  snapshot or reconciliation row is not re-read through the axes and no
-  migration exists, which is the remainder of AII-014 after D-070.
-- Migrate the three `unmigrated_authority` boundaries named in
-  `docs/program/ISSUANCE-MAP.md`, starting with `causal.qualification`: it is
-  the observational-to-causal boundary and the largest claim strengthening in
-  the product, and `causal.estimate` inherits its position.
-- Dossier III WP-B04 (countermodel and assumption-fragility engine) and WP-B05
-  (claim-relative evidence ordering) are not started.
+  reads four. Decide whether it carries the full profile or whether four is
+  the honest surface, and write the reason down either way.
+- Persisted records still carry collapsed status fields, which is the
+  remainder of AII-014 after D-070.

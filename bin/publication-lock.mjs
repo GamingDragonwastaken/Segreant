@@ -23,11 +23,15 @@ export const LOCK_STALE_MS = 10 * 60_000;
 export const LOCK_POLL_MS = 25;
 export const RENAME_RETRY_MS = 5_000;
 /**
- * How long a canonical-path filesystem error is treated as contention before it
- * is reported as itself. A directory in pending-delete clears in milliseconds; a
- * read-only parent never does, and must not be reported as a wait timeout.
+ * How long a canonical-path filesystem error is tolerated before it is reported
+ * as itself.
+ *
+ * Contention clears in milliseconds; a full disk or a read-only tree never does,
+ * and must be reported as what it is rather than as a wait timeout naming the
+ * wrong problem. The budget only has to exceed a plausible run of interference
+ * while staying far below `LOCK_WAIT_MS`, so it is generous on purpose.
  */
-export const PATH_CONTENTION_MS = 5_000;
+export const PATH_CONTENTION_MS = 10_000;
 export const OWNER_FILE = 'owner.json';
 export const OWNER_QUARANTINE_FILE = '.owner-quarantine.json';
 export const LOCK_QUARANTINE_PREFIX = '.fiscus-build.lock.quarantine-';
@@ -322,55 +326,59 @@ export function acquirePublicationLock(root) {
       // CONTENTION ON THE CANONICAL PATH IS NOT ACQUISITION FAILING. IT IS
       // ACQUISITION NOT HAVING HAPPENED YET.
       //
-      // `EEXIST` was the only contention this loop recognised, and on Windows
-      // it is one of three faces of the same moment. A directory another
-      // process has deleted, or is deleting, answers differently depending on
-      // exactly where in its lifetime a call lands:
+      // `EEXIST` was the only contention this loop recognised, and it is one
+      // face of the condition among several. The lock is made in two steps —
+      // `mkdir` the directory, then write an owner record into it — and between
+      // them it carries no owner, which is indistinguishable from one an
+      // interrupted process abandoned. A contender that removes it there leaves
+      // the creator's write failing, and what that failure is CALLED depends on
+      // the platform and on exactly when the call lands:
       //
-      //   mkdir      EEXIST while it is there; EPERM while it sits in
-      //              pending-delete with a handle still open. `existsSync`
-      //              cannot tell that state from absence — `stat` fails for it
-      //              too — so it is recognised by persistence, not by a probe.
-      //   write      ENOENT once it is gone.
-      //   rename     EPERM when it goes during the owner publish.
+      //   Windows   EEXIST from mkdir while it is there, EPERM from mkdir while
+      //             it sits in pending-delete, ENOENT from the write once it is
+      //             gone, EPERM from the rename if it goes mid-publish.
+      //   macOS     EINVAL from the write into an unlinked directory.
       //
-      // CI run `33502986214` showed the second; hammering the window locally
-      // produced the other two. All three mean the same thing — this process
-      // does not hold the lock — and all three used to be thrown straight out
-      // of `bin/fiscus.mjs`, killing `fiscus --help` while two builds were
-      // publishing. The launcher is right that a lock FAILURE is fatal. None of
-      // these is one.
+      // CI showed ENOENT (run `33502986214`), then EINVAL on a different runner
+      // (run `33505785655`) once the first three were handled. Enumerating
+      // errnos is the wrong shape of fix: the list is a property of the kernel
+      // this happens to run on, and the next platform adds another entry.
+      //
+      // The structural fact does not vary. THE OWNER RECORD IS WHAT MAKES THE
+      // LOCK OURS, so if we created the directory and failed to publish that
+      // record, we hold nothing — whatever the failure was called. There is no
+      // error in that position that means "you hold the lock". So the branch
+      // asks where it failed, not what the error was, and a persistent failure
+      // is separated from a transient one by whether it clears.
       const code = error?.code;
-      const transient = ['EPERM', 'EACCES', 'EBUSY'].includes(code);
 
       if (created) {
-        // The directory was made and the owner record never landed — and the
-        // owner record is what makes the lock ours. This process holds nothing.
-        //
-        // Deliberately NO cleanup here. The old catch quarantined `buildLock`
-        // by pathname to tidy up after itself, which is unsound precisely at
-        // this point: nothing proves the directory now at that path is still
-        // the one we made. Removing it takes a fresh lock away from another
-        // process inside ITS own owner-write window and propagates the failure
-        // onward — one lost race cascading through every contender. A directory
-        // we really did abandon carries no owner, and the stale path exists for
-        // exactly that.
-        if (code !== 'ENOENT' && !transient) throw error;
-        unusableSince = null;
+        // Deliberately NO cleanup here. The old catch quarantined `buildLock` by
+        // pathname to tidy up after itself, which is unsound at exactly this
+        // point: our record never landed, so nothing proves the directory now at
+        // that path is still the one we made. Removing it takes a fresh lock
+        // away from another process inside ITS own owner-write window and
+        // propagates the failure onward — one lost race cascading through every
+        // contender. A directory we really did abandon carries no owner, and the
+        // stale path exists for that.
+        unusableSince ??= Date.now();
+        if (Date.now() - unusableSince > PATH_CONTENTION_MS) throw error;
       } else if (code === 'EEXIST') {
+        // Someone holds it, or is publishing it. This is the ordinary wait and
+        // must not be bounded by the contention budget: a legitimately held lock
+        // can outlast it by minutes, and `LOCK_WAIT_MS` is its bound.
         unusableSince = null;
         const snapshot = inspectLock(buildLock);
         if (lockIsStale(buildLock, snapshot) && quarantineStaleLock(root, buildLock, snapshot)) continue;
-      } else if (transient) {
-        // Absorb it briefly. A pending delete clears in milliseconds; a
-        // read-only parent never will, and deserves its own error rather than a
-        // wait-timeout message that names the wrong problem.
+      } else if (code === 'ENOENT') {
+        // `mkdir` cannot answer ENOENT because of anything happening at the lock
+        // path itself; the parent directory is missing. Nothing to wait for.
+        throw error;
+      } else {
+        // The path is momentarily unusable — most often a directory another
+        // process is deleting. Absorb it while it clears.
         unusableSince ??= Date.now();
         if (Date.now() - unusableSince > PATH_CONTENTION_MS) throw error;
-      } else {
-        // ENOENT here means the parent directory does not exist. That is not
-        // contention with anything.
-        throw error;
       }
 
       if (Date.now() - waitStarted >= LOCK_WAIT_MS) {
