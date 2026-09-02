@@ -39,7 +39,7 @@ walks the import graph and compares it against the declaration, so a boundary
 that gains or loses a consumer fails until the map is corrected: the moment to
 reconsider its queue position, rather than a field to update quietly.
 
-Fourteen of the fifteen boundaries are `product`. `decision.certificate` is not
+Fifteen of the sixteen boundaries are `product`. `decision.certificate` is not
 — nothing imports `src/decision/engine.ts`, and the two modules that name it
 (`src/budget/recommend.ts`, `src/value/instrumentationSensitivity.ts`) do so in
 comments describing where it is intended to go. That is not dead code to delete
@@ -74,6 +74,7 @@ the reading of the three open boundaries below, and it changes their order.
 | `causal.qualification` | `src/causal/qualification.ts` | kernel_primitive | product | A local randomized study qualifies as causal evidence |
 | `causal.estimate` | `src/causal/estimate.ts` | kernel_primitive | product | An assigned-arm difference with a finite-range interval |
 | `causal.issuance` | `src/causal/epistemic.ts` | canonical | product | A randomized study supports a causal effect, bound by derivation to the randomization |
+| `billing.countermodels` | `src/billing/countermodels.ts` | kernel_primitive | product | What the reconciliation residual degrades to if one of its stated conditions is false, and whether anything Fiscus has could tell |
 | `decision.certificate` | `src/decision/engine.ts` | **unmigrated_authority** | unreached | One action robustly dominates the alternatives under the declared utility intervals |
 
 Each module states its own class in its own docblock, so a reader opening the
@@ -107,6 +108,19 @@ Evidence alone, which is what puts the effect claim in that evidence's revocatio
 closure — the property that did not exist before and is what "unchecked is not
 the same as fine" was pointing at. Both modules are now `kernel_primitive`: they
 decide whether an effect is supported, and issue nothing. See D-081.
+
+**`billing.countermodels` is on this map for the opposite reason to the rest.**
+Every other entry is here because it could make a claim stronger than its
+evidence. This one weakens: it states what the residual degrades to if a stated
+condition is false, and for four of the five conditions it states that nothing
+Fiscus has could tell. It earns a place because one of its outputs is not a
+weakening at all — `realized` is a positive assertion that a condition has
+BROKEN, and a negative residual raises it, because `R < 0` means `L > P >= T`
+and refutes `L <= T` outright. That assertion reaches an operator through
+`fiscus billing reconcile` with no kernel record behind it. It is tolerable
+because it is arithmetic on the run rather than judgement, and it is the first
+thing to migrate if these worlds ever acquire a source other than the run
+itself. See D-084.
 
 **`decision.certificate`** produces a dominance certificate, which is a
 decision-fitness claim. It is also `unreached`: nothing in the product imports

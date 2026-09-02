@@ -197,6 +197,14 @@ export const ISSUANCE_MAP: readonly IssuanceBoundary[] = Object.freeze([
     note: 'Issues the observed arm difference as an OBSERVATIONAL claim and the effect as a RANDOMIZED one, with a Derivation between them. The kernel only checks strengthening, so a single claim asserting `randomized` would have been legal and would have rebuilt the defect in kernel types; the axis gap is what forces a `causal_identification` witness to exist and `appendDerivation` to refuse without it. The witness is grounded in the assignment Evidence alone, which is what puts the effect claim in that evidence’s revocation closure.',
   },
   {
+    id: 'billing.countermodels',
+    module: 'src/billing/countermodels.ts',
+    asserts: 'What the reconciliation residual degrades to if one of its stated conditions is false, and whether anything Fiscus has could tell.',
+    issuanceClass: 'kernel_primitive',
+    reach: 'product',
+    note: 'It weakens rather than strengthens, which is why it is not canonical, but it belongs on this map for the opposite reason to most entries: the `realized` status is a positive assertion about the world — a negative residual establishes that the rate card over-prices on-path traffic — and it reaches an operator through `fiscus billing reconcile` without a kernel record behind it. That is tolerable only because it is derived from arithmetic on the run itself rather than from judgement, and it is the thing to migrate first if these worlds ever acquire a source other than the run.',
+  },
+  {
     id: 'decision.certificate',
     module: 'src/decision/engine.ts',
     asserts: 'One action robustly dominates the alternatives under the declared utility intervals, or the comparison is undetermined.',

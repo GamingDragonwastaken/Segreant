@@ -23,12 +23,14 @@ Before it the branch had been red on ubuntu for four consecutive heads.
 
 ## Active packet
 
-**WP-B02 — complete.** The wire carries the full `ClaimProfilePayload` and the
-spine reads a stated projection of it (D-082).
+**WP-B04 — PARTIAL.** The countermodel engine exists and the reconciliation
+residual uses it: `fiscus billing reconcile` now says that four of its five
+conditions can be closed by nothing Fiscus has, and reports a negative residual
+as an ESTABLISHED broken condition rather than a small number (D-084). It
+reaches no other claim.
 
-Next in the frontier order: **WP-B04** (countermodels / assumption fragility),
-then **WP-B05** (claim-relative evidence ordering), then mechanically select C01
-from `docs/program/PACKET-INVENTORY.md`.
+Next in the frontier order: **WP-B05** (claim-relative evidence ordering), then
+mechanically select C01 from `docs/program/PACKET-INVENTORY.md`.
 
 ## Verification commands, and what each one does NOT cover
 
@@ -68,12 +70,11 @@ two red heads that way, and both times the local check had stopped at the root.
 
 ## Next exact actions
 
-1. **WP-B04 — countermodels.** Target a domain the product reaches. The decision
-   engine does not qualify (nothing imports it). Live candidates:
-   `assessCompleteness` says an absence inference is unqualified without saying
-   which period or scope is unwitnessed; `sourceBases` names the bases present
-   but not which events carry them, and `unresolvedRequests` is a count with no
-   list.
+1. **WP-B04 remainder, if it is taken further.** `assessAssumptionFragility`
+   reaches one claim. The candidates identified and not taken: `assessCompleteness`
+   says an absence inference is unqualified without saying which period or scope
+   is unwitnessed; `sourceBases` names the bases present but not which events
+   carry them, and `unresolvedRequests` is a count with no list.
 2. **WP-B05 — claim-relative ordering.** Needs a scoping decision first. The
    kernel is already per-axis: `assessDerivationLegality` requires a witness per
    axis and `mergeClaimProfiles` refuses to rank monetary bases. Missing: a way

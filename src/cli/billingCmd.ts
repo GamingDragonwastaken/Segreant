@@ -13,6 +13,8 @@ import {
   type OpenAiCostsPreview,
 } from '../billing/openaiCosts.ts';
 import { newOpenAiScopeDeclaration } from '../billing/scope.ts';
+import { assessAssumptionFragility } from '../epistemic/countermodel.ts';
+import { reconciliationCountermodels } from '../billing/countermodels.ts';
 import { describeOffPathBound, displayUsd, signedUsd, type ReconciliationReadiness, type ReconciliationRun } from '../billing/reconcile.ts';
 import { reconciliationReadiness } from '../billing/readiness.ts';
 import { formatUsdMicros } from '../billing/types.ts';
@@ -117,6 +119,54 @@ function printReadiness(readiness: ReconciliationReadiness): void {
   console.log('  request a provider credential on your behalf. See docs/PROVIDER-RECONCILIATION.md.');
 }
 
+/**
+ * What each condition means if it does NOT hold (WP-B04).
+ *
+ * The conditions line above names five limits and stops there, which leaves the
+ * reader to work out for themselves what the world looks like when one fails and
+ * whether anything they have could tell them apart. Both answers exist and
+ * neither is obvious: four of them cannot be ruled out by any observation Fiscus
+ * can make, so the residual is PERMANENTLY conditional rather than pending a
+ * check someone could go and do — and one of them stops being hypothetical
+ * entirely when the residual goes negative.
+ *
+ * Deliberately compact. The full worlds are in `src/billing/countermodels.ts`
+ * and travel in `--json`; what an operator needs at the terminal is which
+ * conditions are closable, which are not, and whether one has already broken.
+ */
+function printFragility(result: ReconciliationRun): void {
+  const assessment = assessAssumptionFragility([...result.conditions], reconciliationCountermodels(result));
+  console.log('');
+  console.log('  If a condition does not hold');
+  // Broken first. A condition the evidence has already refuted is not one of
+  // several things that might be true, and an operator who reads no further
+  // than the first line of this block must still see it.
+  for (const model of assessment.realized) {
+    for (const line of wrapText(`${model.violates} is ESTABLISHED, not merely possible. ${model.claimBecomes}`, 70)) {
+      console.log(`    ! ${line}`);
+    }
+  }
+  if (assessment.unexcludable.length > 0) {
+    // Counts the established ones too, and should: a world the evidence has
+    // settled against the claim is by definition one nothing excluded.
+    const text = `${assessment.unexcludable.length} of ${assessment.assumptions.length} cannot be ruled out by anything `
+      + 'Fiscus can observe, so this residual is permanently conditional rather than pending a check.';
+    for (const line of wrapText(text, 72)) console.log(`    ${line}`);
+  }
+  for (const model of assessment.live) {
+    if (model.excludedBy === null) continue;
+    for (const line of wrapText(`${model.violates} can be closed by ${model.excludedBy}`, 70)) {
+      console.log(`    > ${line}`);
+    }
+  }
+  if (!assessment.robustnessAssessed) {
+    // Cannot happen while the worlds cover every permanent condition, and it is
+    // printed rather than asserted because the alternative is silence about a
+    // condition nobody examined.
+    console.log(`    ? no world recorded for: ${assessment.uncoveredAssumptions.join(', ')}`);
+  }
+}
+
 function printReconciliation(result: ReconciliationRun, applied: boolean): void {
   const day = (ms: number) => new Date(ms).toISOString().slice(0, 10);
   console.log('');
@@ -160,6 +210,7 @@ function printReconciliation(result: ReconciliationRun, applied: boolean): void 
   }
   console.log(`  Provider side ${result.providerSourceKind.replaceAll('_', ' ')}`);
   console.log(`  Conditions    ${result.conditions.join(', ')}`);
+  printFragility(result);
   console.log(`  Excluded from ${result.excludedFrom.join(', ')}`);
   console.log(applied ? '  Recorded as an immutable derived run.' : '  Not recorded. Persist it with: fiscus billing reconcile --apply');
 }
@@ -201,7 +252,17 @@ function cmdReconcile(flags: Flags): void {
     const kernel = applied && reconciliationRunId !== null && result.coverage.providerDays > 0
       ? store.issueOpenAiReconciliationToKernel(reconciliationRunId)
       : null;
-    if (flags.json) printJson({ applied, reconciliationRunId, result, kernel });
+    if (flags.json) {
+      printJson({
+        applied,
+        reconciliationRunId,
+        result,
+        kernel,
+        // The worlds in full, so a consumer parsing this does not have to
+        // reconstruct from the conditions list what the human output states.
+        fragility: assessAssumptionFragility([...result.conditions], reconciliationCountermodels(result)),
+      });
+    }
     else {
       printReconciliation(result, applied);
       if (kernel) console.log(`  Canonical kernel: ${kernel.reconciliationClaim.result} mixed-basis Claim ${kernel.reconciliationClaim.id}.`);
