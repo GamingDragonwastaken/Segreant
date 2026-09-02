@@ -14,7 +14,7 @@ elsewhere.
 | Branch | `gpt56/magnum-opus-reconstruction` |
 | Last verified head | `fb16a75193e83c228fef6c97fcabd9055f6cb3bf` |
 | Its CI | run `33576780336` — **success, all eight jobs**, read 2026-09-02 |
-| Newer head | `d917c337ea787b63bcc34521392cbb2a05e75a10` — run `33636548911` **success, all eight jobs**, read 2026-09-02 |
+| Newer head | `e787a35c1050f803432ac1f05593cdea9f52255a` — run `33637998412` **success, all eight jobs**, read 2026-09-02 |
 | Working tree | see `git status`; a head newer than the row above has not been CI-verified |
 | Executor | Claude Opus 5, lead implementation engineer/verifier |
 
@@ -33,11 +33,18 @@ been failing.
 
 ## Active packet
 
-**WP-B05 — PARTIAL, and the newest work; not yet CI-verified.** `admissibility.ts`
-and `claim-uses.ts` give bars per-axis predicates and a partial order that
-returns `incomparable` rather than inventing a rank, and one vocabulary replaces
-three that disagreed (D-086). Three of the five uses have no stated bar and are
-recorded as unexamined.
+**WP-C01 — PARTIAL, audit only, no code change (D-087).** Exact Money is a
+PARALLEL authority rather than the authority: `/api/economic` and
+`fiscus economic` are exact, while thirteen `SUM(cost_usd)` read paths answer the
+default surfaces and only three have exact siblings. Each migrated path
+re-implements the exact-vs-float preference locally and differently — the D-078
+class again. `team-server/`, export and FX were NOT audited and must not be
+assumed clean.
+
+**WP-B05 — PARTIAL.** `admissibility.ts` and `claim-uses.ts` give bars per-axis
+predicates and a partial order that returns `incomparable` rather than inventing
+a rank, and one vocabulary replaces three that disagreed (D-086). Three of the
+five uses have no stated bar and are recorded as unexamined.
 
 **WP-B04 — PARTIAL.** The countermodel engine exists and the reconciliation
 residual uses it: `fiscus billing reconcile` now says that four of its five
@@ -86,9 +93,10 @@ two red heads that way, and both times the local check had stopped at the root.
 
 ## Next exact actions
 
-1. **C01** — select mechanically from `PACKET-INVENTORY.md`, not by memory. This
-   is the next packet, and the B frontier is closed to the extent it can be
-   without owner input on the three unstated bars.
+1. **C01 remainder.** Audit `team-server/`, the export path and FX — the three
+   areas D-087 did not reach. Then the structural fix: one shared exact-preferring
+   read, so the guard, realization and the receipt stop answering the same
+   question three ways.
 2. **WP-B05 remainder.** Three of the five uses have no stated requirement, and
    stating them is product policy rather than a derivation — `outcome_attribution`,
    `roi` and `model_recommendations` need an owner decision, not a guess. The
