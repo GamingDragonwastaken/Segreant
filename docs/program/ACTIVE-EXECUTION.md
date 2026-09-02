@@ -14,6 +14,7 @@ elsewhere.
 | Branch | `gpt56/magnum-opus-reconstruction` |
 | Last verified head | `fb16a75193e83c228fef6c97fcabd9055f6cb3bf` |
 | Its CI | run `33576780336` — **success, all eight jobs**, read 2026-09-02 |
+| Newer head | `acd2d3274e4daa7714b4f15e0c44233509bda4ad` — run `33630894290` **failure** on ubuntu/macOS/candidate-head, one test, repaired at D-085 |
 | Working tree | see `git status`; a head newer than the row above has not been CI-verified |
 | Executor | Claude Opus 5, lead implementation engineer/verifier |
 
@@ -21,7 +22,18 @@ elsewhere.
 and Windows tests, three team-server jobs, package-smoke and candidate-head.
 Before it the branch had been red on ubuntu for four consecutive heads.
 
+`acd2d32` then failed on one test — `ordinary contention leaves no lock residue`,
+killed at the harness's 180s window on three jobs. Same lock code as the green
+run, so it was an intermittent liveness race rather than a regression from what
+that commit changed. D-085 made it deterministic and closed it: the acquire
+loop's own-orphan guard was token-scoped, and the token is minted per call, so a
+process could wait five minutes for a lock it had left behind itself.
+
 ## Active packet
+
+**D-085 — the lock repair is the newest work and has not been CI-verified.**
+Local: the lock file is 9/9 and `ordinary contention` fell from ~17-22s to 4.4s.
+Watch the exact head; do not record a row before reading the run's `conclusion`.
 
 **WP-B04 — PARTIAL.** The countermodel engine exists and the reconciliation
 residual uses it: `fiscus billing reconcile` now says that four of its five

@@ -180,9 +180,41 @@ function inspectLock(buildLock) {
   return { lockStat, owner: null, ownerPath: null };
 }
 
+/**
+ * Tokens this process is holding RIGHT NOW, as opposed to has ever minted.
+ *
+ * `ownedByToken` proves a generation is ours. This proves we are still standing
+ * in it, and the difference is the whole of D-085: a record naming our PID
+ * under a token that is not in here was written by a call that has already
+ * returned, so it is an orphan we may reclaim; one under a token that IS in
+ * here is a lock we hold, and reclaiming it would hand the same lock to two
+ * holders at once.
+ */
+const heldTokens = new Set();
+
+/**
+ * Can whoever owns this generation still do anything with it?
+ *
+ * ONE QUESTION, ONE ANSWER, ASKED FROM TWO PLACES. The acquire path and the
+ * quarantine reaper both need it, and answering it as `processIsAlive` alone
+ * gets our own released generations wrong in both: a token this process has
+ * already handed back names nobody who will ever come back for it, however
+ * alive the PID is. Leaving the reaper on the older answer would repeat D-078
+ * exactly — a rule corrected in one place and left standing in the helper next
+ * door.
+ *
+ * For another process, liveness is all we can observe. For ourselves we know
+ * something stronger and cheaper: whether we are still standing in it.
+ */
+function ownerCanStillAct(snapshot) {
+  if (!snapshot?.owner) return false;
+  if (snapshot.owner.pid === process.pid) return heldTokens.has(snapshot.owner.token);
+  return processIsAlive(snapshot.owner.pid);
+}
+
 function lockIsStale(buildLock, snapshot = inspectLock(buildLock)) {
   if (!snapshot) return true;
-  if (snapshot.owner) return !processIsAlive(snapshot.owner.pid);
+  if (snapshot.owner) return !ownerCanStillAct(snapshot);
 
   // The timer governs ONE case: a directory carrying no token at all, in any
   // form — no owner.json, no `.owner-<token>.tmp`, no quarantined record.
@@ -206,6 +238,23 @@ function lockIsStale(buildLock, snapshot = inspectLock(buildLock)) {
  */
 function ownedByToken(snapshot, token) {
   return snapshot?.owner?.token === token;
+}
+
+/**
+ * Is this lock owned by the process asking?
+ *
+ * PID rather than token, deliberately. `lockIsStale` judges an owner by whether
+ * its process is alive, which for our own PID is permanently true — so a lock
+ * naming us is the one lock in the world this process must never wait for,
+ * whatever generation it belongs to.
+ *
+ * A record naming our PID was written either by this process or by a dead one
+ * whose PID we inherited, and reclaiming is correct under both readings: in the
+ * first it is our own orphan, in the second its owner is demonstrably gone.
+ * `heldTokens` separates out the only case where it is not.
+ */
+function ownedByThisProcess(snapshot) {
+  return snapshot?.owner?.pid === process.pid && Boolean(snapshot.ownerPath);
 }
 
 function reapOrphanQuarantines(root) {
@@ -384,6 +433,13 @@ function quarantineStaleLock(root, buildLock, snapshot) {
  * — and losing speed is not a reason to keep a lock forever.
  */
 function releasePublicationLock(root, buildLock, token) {
+  // Dropped FIRST, and on every exit below by virtue of being dropped here: a
+  // token left in the set after release would make a later acquisition treat a
+  // genuine orphan of ours as a lock we are standing in, and refuse instead of
+  // reclaiming. Release is the moment we stop standing in it, whatever the
+  // filesystem then does.
+  heldTokens.delete(token);
+
   const deadline = Date.now() + RELEASE_BUDGET_MS;
   while (true) {
     const snapshot = inspectLock(buildLock);
@@ -399,6 +455,29 @@ function releasePublicationLock(root, buildLock, token) {
     }
     sleep(LOCK_POLL_MS);
   }
+}
+
+/**
+ * Take back a canonical lock that names this process, at any cost.
+ *
+ * The acquire-side twin of `releasePublicationLock`, and it exists for the same
+ * reason: waiting is not one of the outcomes. `abandonOwnedGeneration` is the
+ * same terminal step, licensed by the same proof — the owner record names our
+ * PID, and while we are alive no contender can have taken this generation,
+ * because a contender only touches a live lock it does not own after judging
+ * the owner dead.
+ *
+ * The atomic route is tried first and given the same budget release gets, so a
+ * rename losing to momentary contention is retried rather than escalated. Past
+ * it, the directory goes. Degrading the canonical path to owner-less — which
+ * `OWNERLESS_LOCK_STALE_MS` clears in ten seconds — is a real outcome. Waiting
+ * five minutes for ourselves is not an outcome at all.
+ */
+function reclaimOwnGeneration(root, buildLock, snapshot, ownedSince) {
+  if (quarantineKnownLock(root, buildLock, snapshot)) return true;
+  if (Date.now() - ownedSince < RELEASE_BUDGET_MS) return false;
+  abandonOwnedGeneration(buildLock, snapshot.owner.token);
+  return true;
 }
 
 /**
@@ -488,6 +567,10 @@ export function acquirePublicationLock(root) {
   const buildLock = join(root, '.fiscus-build.lock');
   const waitStarted = Date.now();
   const token = randomUUID();
+  // First moment the canonical lock was seen carrying THIS process's PID under
+  // a token we are not holding. Reset whenever it is not, so the budget bounds
+  // a consecutive run rather than a total.
+  let ownedSince = null;
   // First moment the canonical path answered with a filesystem error that is
   // not EEXIST. Reset on any other outcome, so the budget below bounds a
   // CONSECUTIVE run of them rather than their total over a long wait.
@@ -505,6 +588,7 @@ export function acquirePublicationLock(root) {
       writeFileSync(ownerTemp, JSON.stringify({ pid: process.pid, token }), 'utf8');
       renameSync(ownerTemp, join(buildLock, OWNER_FILE));
 
+      heldTokens.add(token);
       return () => releasePublicationLock(root, buildLock, token);
     } catch (error) {
       // CONTENTION ON THE CANONICAL PATH IS NOT ACQUISITION FAILING. IT IS
@@ -562,13 +646,32 @@ export function acquirePublicationLock(root) {
         // can outlast it by minutes, and `LOCK_WAIT_MS` is its bound.
         unusableSince = null;
         const snapshot = inspectLock(buildLock);
-        // Our own orphan from an earlier lap. Waiting on it is waiting on this
-        // process, which never ends: `lockIsStale` asks whether the owner's PID
-        // is alive, and for our own token the answer is always yes.
-        if (ownedByToken(snapshot, token)) {
-          if (quarantineKnownLock(root, buildLock, snapshot)) continue;
-        } else if (lockIsStale(buildLock, snapshot) && quarantineStaleLock(root, buildLock, snapshot)) {
-          continue;
+        // A LOCK NAMING THIS PROCESS IS NEVER SOMETHING TO WAIT FOR.
+        //
+        // This test used to be `ownedByToken`, and the token is minted per CALL
+        // — so a generation left behind by an EARLIER call of this same process
+        // carried a token this call had never heard of. Different token, live
+        // PID: not ours to reclaim by that test, not stale by `lockIsStale`,
+        // and therefore waited on until `LOCK_WAIT_MS`. CI run `33630894290`
+        // killed a contender at the harness window with every other worker long
+        // since exited, which leaves exactly one process alive to have owned it.
+        //
+        // The actor is the right granularity, not the generation. What made
+        // waiting futile was never the token — it was that the PID we are
+        // waiting on is our own, and `processIsAlive` will keep saying yes for
+        // as long as we are the one asking.
+        if (ownedByThisProcess(snapshot)) {
+          if (heldTokens.has(snapshot.owner.token)) {
+            // Not an orphan: we are standing in this lock. Reclaiming would
+            // hand one lock to two holders, and waiting is a deadlock with a
+            // five-minute fuse that then blames another build for it.
+            throw new Error('publication lock is already held by this process; release it before acquiring again');
+          }
+          ownedSince ??= Date.now();
+          if (reclaimOwnGeneration(root, buildLock, snapshot, ownedSince)) continue;
+        } else {
+          ownedSince = null;
+          if (lockIsStale(buildLock, snapshot) && quarantineStaleLock(root, buildLock, snapshot)) continue;
         }
       } else if (code === 'ENOENT') {
         // `mkdir` cannot answer ENOENT because of anything happening at the lock

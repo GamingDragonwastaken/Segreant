@@ -499,3 +499,88 @@ test('an owner-less lock cannot outlast the wait that queues behind it', () => {
     + `${wait}ms, so one such directory parks every one of them`,
   );
 });
+
+test('a lock this process left under an earlier token is reclaimed, not waited for', async () => {
+  // CI run `33630894290` killed one of four contenders at the 180s harness
+  // window on ubuntu, macOS and candidate-head. `LOCK_WAIT_MS` is 300s, so the
+  // worker was still waiting; every other worker had exited seconds earlier, so
+  // the only process left alive to own anything was the worker itself.
+  //
+  // THE GUARD WAS ONE CALL WIDE. The acquire loop already knows that waiting on
+  // its own orphan never ends — `lockIsStale` asks whether the owner's PID is
+  // alive, and for this process the answer is permanently yes — and it guards
+  // that with `ownedByToken`. But the token is minted per `acquirePublicationLock`
+  // CALL, so a generation left behind by an earlier call of the same process
+  // carries a token this call has never heard of. Different token, same live
+  // PID: not ours to reclaim, not stale, wait five minutes for ourselves.
+  //
+  // The state is planted directly rather than raced for. What matters is not
+  // how the orphan came to exist — the release path is bounded and terminal, so
+  // the routes are narrow — but that a process which meets one can make
+  // progress. A record naming OUR pid was written either by us or by a dead
+  // process whose pid we inherited, and reclaiming is right in both readings.
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-lock-self-'));
+  const script = join(dir, 'self-orphan.mjs');
+  writeFileSync(script, [
+    `import { acquirePublicationLock } from ${JSON.stringify(LOCK_MODULE)};`,
+    "import { mkdirSync, writeFileSync } from 'node:fs';",
+    "import { join } from 'node:path';",
+    'const root = process.argv[2];',
+    "const lock = join(root, '.fiscus-build.lock');",
+    'mkdirSync(lock);',
+    // A well-formed owner record naming this very process under a token this
+    // process is not holding: exactly what an earlier call would have left.
+    "writeFileSync(join(lock, 'owner.json'), JSON.stringify({ pid: process.pid, token: 'an-earlier-generation' }), 'utf8');",
+    'const started = Date.now();',
+    'acquirePublicationLock(root)();',
+    'process.stdout.write(String(Date.now() - started));',
+  ].join('\n'), 'utf8');
+
+  try {
+    // Well below `LOCK_WAIT_MS`, so a wait that ends only at its own bound is a
+    // kill rather than a slow pass. Well above the reclamation's own budget.
+    const result = await run(script, [dir], 60_000);
+    assert.equal(result.code, 0, result.stderr || 'the process never stopped waiting for itself');
+    const residue = readdirSync(dir).filter((name) => name.startsWith('.fiscus-build.lock'));
+    assert.deepEqual(residue, [], `reclaiming left lock residue: ${residue.join(', ')}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 25 });
+  }
+});
+
+test('re-entering a lock this process genuinely holds fails fast rather than waiting for itself', async () => {
+  // The other half of the same rule, and the reason it cannot simply be "a
+  // record naming our PID is ours to remove". A process that acquires twice
+  // without releasing is not looking at an orphan — it holds that lock, and
+  // reclaiming it would hand the same lock to two holders at once.
+  //
+  // Waiting is not the answer either: it is a deadlock with a five-minute
+  // fuse that then reports `timed out waiting for another Fiscus build` about
+  // itself. Nothing in this repository acquires re-entrantly; if something
+  // starts to, it should find out at the call rather than in CI.
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-lock-reentrant-'));
+  const script = join(dir, 'reentrant.mjs');
+  writeFileSync(script, [
+    `import { acquirePublicationLock } from ${JSON.stringify(LOCK_MODULE)};`,
+    'const release = acquirePublicationLock(process.argv[2]);',
+    'try {',
+    '  acquirePublicationLock(process.argv[2])();',
+    "  process.stdout.write('acquired-twice');",
+    '} catch (error) {',
+    '  process.stdout.write(`threw:${error.message}`);',
+    '} finally {',
+    '  release();',
+    '}',
+  ].join('\n'), 'utf8');
+
+  try {
+    const result = await run(script, [dir], 60_000);
+    assert.equal(result.code, 0, result.stderr || 'the re-entrant acquisition never returned');
+    assert.match(result.stdout, /^threw:/, 'a second acquisition must not succeed while the first is held');
+    assert.match(result.stdout, /already held by this process/);
+    const residue = readdirSync(dir).filter((name) => name.startsWith('.fiscus-build.lock'));
+    assert.deepEqual(residue, [], `the held lock was not released: ${residue.join(', ')}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 25 });
+  }
+});

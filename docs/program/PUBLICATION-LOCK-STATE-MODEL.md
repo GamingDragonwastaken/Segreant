@@ -58,14 +58,22 @@ temp therefore reads as `null`, so a directory mid-write is observably
 *proved*, which is why there is no torn-record case to reason about.
 
 **`ORPHANED` is not a state; it is a predicate over states.** `lockIsStale`
-layers a liveness judgement on top of `CREATED_OWNERLESS`, `TEMP_OWNER_WRITTEN`,
-`OWNED`, `OWNER_QUARANTINED` and `DIRECTORY_QUARANTINED`, by two rules:
+layers a judgement about the OWNER on top of `CREATED_OWNERLESS`,
+`TEMP_OWNER_WRITTEN`, `OWNED`, `OWNER_QUARANTINED` and `DIRECTORY_QUARANTINED`.
+The question it asks is not "is that process alive" but `ownerCanStillAct` —
+*can whoever owns this still do anything with it* — and the two differ in
+exactly one case:
 
-- carries a token → orphaned iff `!processIsAlive(pid)`
-- carries no token → orphaned iff older than `OWNERLESS_LOCK_STALE_MS`
+- owner PID is another process → can act iff `processIsAlive(pid)`
+- owner PID is **this** process → can act iff its token is in `heldTokens`,
+  which is to say iff we are still standing in that generation. A token we have
+  already handed back names nobody who will ever come back for it, however alive
+  the PID is.
+- carries no token at all → orphaned iff older than `OWNERLESS_LOCK_STALE_MS`
 
-Writing `ORPHANED` as a peer of the others hides the thing that matters, which
-is the next section.
+That middle rule is D-085 and it did not exist in the first version of this
+model. Writing `ORPHANED` as a peer of the other states hides the thing that
+matters, which is the next section.
 
 ## The unreachable state, which is the whole defect class
 
@@ -81,12 +89,54 @@ about a build that finished minutes earlier — which is precisely the message C
 run `33507233437` produced (**failure**, ubuntu/macOS/candidate-head), and
 precisely why it named the wrong problem.
 
-This state cannot be fixed by recovery, because there is nothing for a recoverer
-to key on. It can only be made **unreachable at the source**: the process that
+This state cannot be fixed by recovery **from outside**, because a contender has
+nothing to key on. It has to be made unreachable at the source: the process that
 would abandon it must not be permitted to return while it is still theirs. That
 is the entire justification for the loop in `releasePublicationLock` and the
 terminal fallback in `abandonOwnedGeneration` — not a patch on a bad line, but
 the transition that deletes a state from the machine.
+
+### The second route in, and the sentence above that was too strong
+
+That analysis closed the release route and stopped there, and the state came
+back through the door next to it. CI run `33630894290` (**failure**,
+ubuntu/macOS/candidate-head) killed one of four contenders at the harness's 180s
+window with every other worker long since exited — which leaves exactly one
+process alive that could have owned what it was waiting for. Itself.
+
+The acquire loop already knew that waiting on its own generation never ends, and
+guarded it with `ownedByToken`. **But the token is minted per CALL.** A
+generation left by an earlier `acquirePublicationLock` in the same process
+carries a token this call has never heard of, so the guard does not fire; and
+`lockIsStale` clears the owner as live, because the PID it names is ours. Not
+ours by that test, not stale by this one, and therefore waited on for
+`LOCK_WAIT_MS` — `HELD_BY_ABANDONER` again, reached from acquire instead of
+release.
+
+**The generation was the wrong granularity. The actor is the right one.** What
+made waiting futile was never which token the record carried; it was that the
+PID being waited on is the PID doing the waiting, and `processIsAlive` keeps
+saying yes for as long as we are the one asking. So the acquire path now tests
+`ownedByThisProcess` — PID, not token — and splits on `heldTokens`:
+
+- token **not** held → our own orphan. Reclaim it: `quarantineKnownLock` first,
+  and past `RELEASE_BUDGET_MS` the same terminal `abandonOwnedGeneration` the
+  release path uses, licensed by the same proof.
+- token **is** held → we are standing in this lock, and this is a re-entrant
+  acquisition. Reclaiming would hand one lock to two holders; waiting is a
+  deadlock with a five-minute fuse that then blames another build for it. It
+  throws, at the call.
+
+And the claim that there is "nothing for a recoverer to key on" was too strong.
+It is true for a contender, which can observe only liveness. It is false for the
+abandoner, which knows something a contender cannot: whether it is still
+standing in that generation. `ownerCanStillAct` is that knowledge, stated once
+and used by both the acquire path and `reapOrphanQuarantines` — the reaper asks
+the identical question, and answering it two different ways in two places is
+exactly the shape of D-078.
+
+Measured effect: `ordinary contention leaves no lock residue` fell from ~17-22s
+to **4.4s** locally. The wait it used to spend was real, and it was self-inflicted.
 
 ## Transitions
 
