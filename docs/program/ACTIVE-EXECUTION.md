@@ -14,7 +14,7 @@ elsewhere.
 | Branch | `gpt56/magnum-opus-reconstruction` |
 | Last verified head | `fb16a75193e83c228fef6c97fcabd9055f6cb3bf` |
 | Its CI | run `33576780336` — **success, all eight jobs**, read 2026-09-02 |
-| Newer head | `acd2d3274e4daa7714b4f15e0c44233509bda4ad` — run `33630894290` **failure** on ubuntu/macOS/candidate-head, one test, repaired at D-085 |
+| Newer head | `d917c337ea787b63bcc34521392cbb2a05e75a10` — run `33636548911` **success, all eight jobs**, read 2026-09-02 |
 | Working tree | see `git status`; a head newer than the row above has not been CI-verified |
 | Executor | Claude Opus 5, lead implementation engineer/verifier |
 
@@ -22,18 +22,22 @@ elsewhere.
 and Windows tests, three team-server jobs, package-smoke and candidate-head.
 Before it the branch had been red on ubuntu for four consecutive heads.
 
-`acd2d32` then failed on one test — `ordinary contention leaves no lock residue`,
-killed at the harness's 180s window on three jobs. Same lock code as the green
-run, so it was an intermittent liveness race rather than a regression from what
-that commit changed. D-085 made it deterministic and closed it: the acquire
-loop's own-orphan guard was token-scoped, and the token is minted per call, so a
-process could wait five minutes for a lock it had left behind itself.
+`acd2d32` and `fb1a1ab` then failed on one test — `ordinary contention leaves no
+lock residue`, killed at the harness's 180s window, on three jobs then two. Same
+lock code as the green run, so it was an intermittent liveness race rather than a
+regression from what either commit changed. D-085 made it deterministic and
+closed it: the acquire loop's own-orphan guard was token-scoped, and the token is
+minted per call, so a process could wait five minutes for a lock it had left
+behind itself. `d917c33` is green on all eight jobs, including the two that had
+been failing.
 
 ## Active packet
 
-**D-085 — the lock repair is the newest work and has not been CI-verified.**
-Local: the lock file is 9/9 and `ordinary contention` fell from ~17-22s to 4.4s.
-Watch the exact head; do not record a row before reading the run's `conclusion`.
+**WP-B05 — PARTIAL, and the newest work; not yet CI-verified.** `admissibility.ts`
+and `claim-uses.ts` give bars per-axis predicates and a partial order that
+returns `incomparable` rather than inventing a rank, and one vocabulary replaces
+three that disagreed (D-086). Three of the five uses have no stated bar and are
+recorded as unexamined.
 
 **WP-B04 — PARTIAL.** The countermodel engine exists and the reconciliation
 residual uses it: `fiscus billing reconcile` now says that four of its five
@@ -82,14 +86,17 @@ two red heads that way, and both times the local check had stopped at the root.
 
 ## Next exact actions
 
-1. **WP-B04 remainder, if it is taken further.** `assessAssumptionFragility`
-   reaches one claim. The candidates identified and not taken: `assessCompleteness`
+1. **C01** — select mechanically from `PACKET-INVENTORY.md`, not by memory. This
+   is the next packet, and the B frontier is closed to the extent it can be
+   without owner input on the three unstated bars.
+2. **WP-B05 remainder.** Three of the five uses have no stated requirement, and
+   stating them is product policy rather than a derivation — `outcome_attribution`,
+   `roi` and `model_recommendations` need an owner decision, not a guess. The
+   persisted `excludedFrom` tuples are unmigrated (`src/alloc/exact.ts` validates
+   an exact four on read), and `compareForUse` has no product consumer: surfacing
+   it needs a `ClaimProfile` plumbed to a CLI that does not have one today.
+3. **WP-B04 remainder, if it is taken further.** `assessAssumptionFragility`
+   reaches one claim. Candidates identified and not taken: `assessCompleteness`
    says an absence inference is unqualified without saying which period or scope
    is unwitnessed; `sourceBases` names the bases present but not which events
    carry them, and `unresolvedRequests` is a count with no list.
-2. **WP-B05 — claim-relative ordering.** Needs a scoping decision first. The
-   kernel is already per-axis: `assessDerivationLegality` requires a witness per
-   axis and `mergeClaimProfiles` refuses to rank monetary bases. Missing: a way
-   to say two profiles are INCOMPARABLE, and a claim-relative requirement
-   predicate. Neither has a consumer yet, so building them first would be motion.
-3. **C01** — select mechanically from `PACKET-INVENTORY.md`, not by memory.

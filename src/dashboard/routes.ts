@@ -17,6 +17,7 @@
 
 import type http from 'node:http';
 import { reconciliationReadiness } from '../billing/readiness.ts';
+import { CLAIM_USES } from '../epistemic/claim-uses.ts';
 import { existsSync, statSync } from 'node:fs';
 import type { Store } from '../store/db.ts';
 import {
@@ -492,13 +493,17 @@ export function handleBilling({ res, store }: RouteContext): void {
         kind: 'scope_conditional_reconciliation',
         grain: 'provider_project_day_total',
         runs,
-        excludedFrom: [
-          'request_metered_spend',
-          'budget_enforcement',
-          'outcome_attribution',
-          'roi',
-          'model_recommendations',
-        ],
+        // READ, NOT RESTATED. The comment above says this route serves recorded
+        // runs rather than computing them, so the page cannot disagree with the
+        // evidence — and the exclusion list beside them was hand-written, and
+        // disagreed: five names here against the four each record carries, with
+        // `outcome_attribution` appearing nowhere else under `src/` (WP-B05).
+        // The record is the evidence for its own exclusions too.
+        //
+        // With no runs there is no record to read, so the declared vocabulary
+        // stands in — every use, which is the conservative answer when there is
+        // nothing to be conservative about yet.
+        excludedFrom: runs.length > 0 ? [...runs[0]!.result.excludedFrom] : [...CLAIM_USES],
       },
     });
   } catch (err) {
