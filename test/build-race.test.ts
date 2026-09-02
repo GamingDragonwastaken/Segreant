@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createBuildWorkspace } from './support/buildWorkspace.ts';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const BUILD = join(ROOT, 'scripts', 'build.mjs');
@@ -41,24 +42,52 @@ function spawnNode(script: string, args: string[], cwd = ROOT) {
   return { child, result };
 }
 
-function runNode(script: string, args: string[]): Promise<ProcessResult> {
-  return spawnNode(script, args).result;
+function runNode(script: string, args: string[], cwd = ROOT): Promise<ProcessResult> {
+  return spawnNode(script, args, cwd).result;
 }
 
-test('concurrent builds keep the compiled CLI runnable throughout publication', async () => {
+test('concurrent builds keep the compiled CLI runnable throughout publication', async (t) => {
   // The old lifecycle deleted dist/ synchronously before each tsc pass. Start
   // enough overlapping builders and readers to keep that window deterministic
   // on both Windows and POSIX; a reader must continue to see either the prior
   // complete tree or the newly published one, never an absent dist/cli.js.
-  const builders = [runNode(BUILD, []), runNode(BUILD, [])];
+  //
+  // IN A COPY OF THE REPOSITORY, NOT THE REPOSITORY. A real build holds the
+  // root publication lock for tens of seconds, and every other file that spawns
+  // `bin/fiscus.mjs` takes that lock as a reader and queues behind it — which is
+  // how `test/fiscus-home-cli.test.ts` came to fail a full local run with
+  // `fiscus demo should succeed` after sitting in the queue for its own 180s
+  // timeout. The claim here is about the BUILD's publication protocol, which is
+  // a property of the protocol and not of this checkout, so it holds identically
+  // against a copy. Same two builders, same eight readers, same real `tsc`; only
+  // the address changes. See `test/support/buildWorkspace.ts`.
+  const workspace = createBuildWorkspace();
+  t.after(() => { workspace.dispose(); });
+
+  // The precondition, made explicit rather than inherited: a reader sees the
+  // PRIOR complete tree or the new one, so there must BE a prior tree. At the
+  // root that came from `pretest`; here it comes across with the copy, and if
+  // the repository has not been built there is nothing to copy and we build one.
+  // A reader arriving before any build has ever finished is a different state
+  // with a different correct answer — the launcher's snapshot ENOENTs — and
+  // testing it here would be testing something else.
+  if (!workspace.seeded) {
+    const seed = await runNode(workspace.build, [], workspace.root);
+    assert.equal(seed.code, 0, seed.stderr || 'the workspace seed build failed');
+  }
+
+  const builders = [runNode(workspace.build, [], workspace.root), runNode(workspace.build, [], workspace.root)];
   await new Promise((resolve) => setTimeout(resolve, 25));
-  const readers = Array.from({ length: 8 }, () => runNode(CLI, ['--help']));
+  const readers = Array.from({ length: 8 }, () => runNode(workspace.cli, ['--help'], workspace.root));
   const results = await Promise.all([...builders, ...readers]);
 
   for (const result of results) {
     assert.equal(result.code, 0, result.stderr || 'concurrent build/CLI process failed');
   }
-  assert.equal(existsSync(join(ROOT, 'dist', 'cli.js')), true, 'successful builds must leave the CLI artifact present');
+  assert.equal(existsSync(join(workspace.root, 'dist', 'cli.js')), true, 'successful builds must leave the CLI artifact present');
+  // And the repository's own lock was never involved: a residue here would mean
+  // the workspace did not actually isolate the build.
+  assert.equal(existsSync(join(ROOT, '.fiscus-build.lock')), false, 'an isolated build must not touch the repository lock');
 });
 
 test('the supported CLI launcher waits for publication and leaves no lock residue', async () => {

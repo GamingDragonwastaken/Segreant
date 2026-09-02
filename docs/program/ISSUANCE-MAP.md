@@ -39,7 +39,7 @@ walks the import graph and compares it against the declaration, so a boundary
 that gains or loses a consumer fails until the map is corrected: the moment to
 reconsider its queue position, rather than a field to update quietly.
 
-Thirteen of the fourteen boundaries are `product`. `decision.certificate` is not
+Fourteen of the fifteen boundaries are `product`. `decision.certificate` is not
 — nothing imports `src/decision/engine.ts`, and the two modules that name it
 (`src/budget/recommend.ts`, `src/value/instrumentationSensitivity.ts`) do so in
 comments describing where it is intended to go. That is not dead code to delete
@@ -71,8 +71,9 @@ the reading of the three open boundaries below, and it changes their order.
 | `team.rollup` | `src/team/rollup.ts` | integrity_only | product | A project-level aggregate of locally computed values, signed for transport |
 | `dashboard.claimSupport` | `src/dashboard/claim-support.ts` | display_only | product | What each of the four product claims’ evidence reaches, on named axes, as sent to any consumer of `/api/*` |
 | `judge.session` | `src/judge/orchestrate.ts` | display_only | product | A model-graded quality judgment for a session |
-| `causal.qualification` | `src/causal/qualification.ts` | **unmigrated_authority** | product | A local randomized study qualifies as causal evidence |
-| `causal.estimate` | `src/causal/estimate.ts` | **unmigrated_authority** | product | An assigned-arm difference with a finite-range interval |
+| `causal.qualification` | `src/causal/qualification.ts` | kernel_primitive | product | A local randomized study qualifies as causal evidence |
+| `causal.estimate` | `src/causal/estimate.ts` | kernel_primitive | product | An assigned-arm difference with a finite-range interval |
+| `causal.issuance` | `src/causal/epistemic.ts` | canonical | product | A randomized study supports a causal effect, bound by derivation to the randomization |
 | `decision.certificate` | `src/decision/engine.ts` | **unmigrated_authority** | unreached | One action robustly dominates the alternatives under the declared utility intervals |
 
 Each module states its own class in its own docblock, so a reader opening the
@@ -86,26 +87,26 @@ Derivation to the evidence underneath them — so **revoking a source cannot
 invalidate anything downstream of them**, which is the property the kernel
 exists to provide and the reason "unchecked" is not the same as "fine".
 
-Two of the three are `product` and one is not, and that is the migration order.
-`causal.qualification` and `causal.estimate` are on paths the CLI reaches, so an
-unbacked strengthening there can reach an operator today. `decision.certificate`
-cannot reach anyone, because nothing imports it — which lowers its urgency
-without lowering its priority: an unwired boundary is precisely the one that
-gets wired by someone who never read this page.
+Two of the three have been closed. `causal.qualification` and `causal.estimate`
+were the `product`-reaching pair — the paths on which an unbacked strengthening
+could reach an operator today — and `causal.issuance` now carries their output
+into the kernel. `decision.certificate` remains, and it cannot reach anyone
+because nothing imports it, which lowers its urgency without lowering its
+priority: an unwired boundary is precisely the one that gets wired by someone who
+never read this page.
 
-**`causal.qualification`** is the observational-to-causal boundary: the single
-largest claim strengthening in the product. The gates refuse to derive causality
-from Lift, from a baseline, or from a historic model comparison, and prefer
-`collecting` / `inconclusive` / `invalid` to a flattering conclusion. Closing it
-requires qualification to issue a canonical Claim whose Derivation legality
-refuses causal strengthening without a committed protocol and an assignment
-witness. Then revoking the assignment evidence invalidates the result, which
-today it cannot.
-
-**`causal.estimate`** depends on the above and inherits its position. Its
-interval bounds are declared before outcome collection and it does not adapt.
-What is missing is that the interval is not carried as kernel uncertainty on an
-issued Claim.
+**`causal.qualification` and `causal.estimate` — CLOSED by `causal.issuance`.**
+The gates were never wrong; they refuse to derive causality from Lift, from a
+baseline, or from a historic model comparison, and prefer `collecting` /
+`inconclusive` / `invalid` to a flattering conclusion. What was missing was the
+binding. The adapter issues the observed arm difference as an OBSERVATIONAL
+claim and the effect as a RANDOMIZED one, with a Derivation between them, so
+`assessDerivationLegality` demands a `causal_identification` witness and
+`appendDerivation` refuses without it. The witness is grounded in the assignment
+Evidence alone, which is what puts the effect claim in that evidence's revocation
+closure — the property that did not exist before and is what "unchecked is not
+the same as fine" was pointing at. Both modules are now `kernel_primitive`: they
+decide whether an effect is supported, and issue nothing. See D-081.
 
 **`decision.certificate`** produces a dominance certificate, which is a
 decision-fitness claim. It is also `unreached`: nothing in the product imports
@@ -119,9 +120,16 @@ It does not establish that the canonical boundaries are correct — only that th
 route through the kernel, where correctness is enforced by other tests. It does
 not establish that the `display_only` and `integrity_only` classifications are
 the right *design*, only that those files hold the authority they say they hold.
-And it does not close AII-036: three boundaries are openly outside the kernel,
-and the test asserts that the unmigrated list is non-empty, so that emptying it
-requires closing the finding rather than editing a list.
+And it does not close AII-036: one boundary — `decision.certificate` — is still
+openly outside the kernel, and the test asserts that the unmigrated list is
+non-empty, so that emptying it requires closing the finding rather than editing
+a list.
+
+Nor does closing the causal pair make any causal estimate more true. Issuance
+adds revocability and an auditable binding; the interval, the joint decision rule
+and the qualification gates are unchanged and remain the only things deciding
+whether an effect is supported. A study that earned no claim language before
+earns none now — it issues its observed difference and no causal claim at all.
 
 Reach is a claim about the import graph and nothing more. That a boundary is
 `unreached` does not mean it is harmless, and that one is `product` does not

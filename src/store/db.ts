@@ -49,6 +49,8 @@ import * as allocation from './allocation.ts';
 import type { ExactAllocationRunRecord } from './allocation.ts';
 import * as exactAllocation from '../alloc/exact.ts';
 import * as billing from './billing.ts';
+import { buildCausalStudyKernelIssuance, type CausalStudyKernelIssuance } from '../causal/epistemic.ts';
+import { estimateCausalStudy } from '../causal/estimate.ts';
 import * as causal from './causal.ts';
 import * as causalLineage from './causalLineage.ts';
 import * as causalProducer from './causalProducer.ts';
@@ -2557,6 +2559,43 @@ export class Store {
     computedAtMs = Date.now(),
   ): causal.CausalAnalysisSnapshot {
     return causal.saveCausalAnalysis(this.db, studyId, analysisId, computedAtMs);
+  }
+
+  /**
+   * Issue one analysed study into the Trusted Epistemic Kernel.
+   *
+   * This is the boundary AII-036 named. The estimate itself is unchanged: this
+   * appends the records that BIND it — the randomization Evidence, the observed
+   * arm difference as an observational Claim, and, only when the pre-registered
+   * rule already authorised claim language, the identification Witness, the
+   * randomized Claim and the Derivation between them.
+   *
+   * All five append on ONE transaction, which is why the kernel grew
+   * `appendWitnessWithinTransaction` / `appendDerivationWithinTransaction`. The
+   * derivation is both the last record and the one the kernel can refuse; if it
+   * failed after the causal claim had been committed by its own transaction, the
+   * kernel would hold a causal conclusion with nothing binding it to the
+   * randomization — precisely the state the legality check exists to prevent,
+   * reached through the mechanism meant to prevent it.
+   *
+   * Returns null for a study this build cannot analyse, rather than throwing:
+   * version-2 projection is deferred, and a caller asking to issue a study that
+   * has no v1 analysis path has not made an error.
+   */
+  issueCausalStudyToKernel(studyId: string, issuedAtMs = Date.now()): CausalStudyKernelIssuance | null {
+    const data = causal.causalStudyData(this.db, studyId);
+    if (data === null) return null;
+    const issuance = buildCausalStudyKernelIssuance(data, estimateCausalStudy(data), issuedAtMs);
+    this.epistemicLedger.runInTransaction(() => {
+      this.epistemicLedger.appendEvidenceWithinTransaction(issuance.assignmentEvidence);
+      this.epistemicLedger.appendEvidenceWithinTransaction(issuance.outcomeEvidence);
+      this.epistemicLedger.appendClaimWithinTransaction(issuance.armDifference);
+      if (issuance.identification === null || issuance.effect === null || issuance.derivation === null) return;
+      this.epistemicLedger.appendWitnessWithinTransaction(issuance.identification);
+      this.epistemicLedger.appendClaimWithinTransaction(issuance.effect);
+      this.epistemicLedger.appendDerivationWithinTransaction(issuance.derivation);
+    });
+    return issuance;
   }
 
   causalAnalysisSnapshots(studyId: string): causal.CausalAnalysisSnapshot[] {

@@ -8,6 +8,7 @@ node_modules/
 .fiscus-home/
 .fiscus-build.lock/
 .fiscus-build-*/
+.fiscus-ws-*/
 dist/
 .DS_Store
 .env

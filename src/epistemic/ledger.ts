@@ -339,101 +339,118 @@ export class EpistemicLedger {
   }
 
   appendWitness(value: Witness): AppendResult {
+    return this.transaction(() => this.appendWitnessWithinTransaction(value));
+  }
+
+  /**
+   * Append a witness on a transaction the CALLER already opened.
+   *
+   * Evidence and claims have had this split since the coding-realization
+   * adapter needed to issue a pair atomically. Witnesses and derivations did
+   * not, so a boundary issuing all four had to append them as four separate
+   * transactions — and the derivation, which is the last and the most likely to
+   * be refused, would then fail with the claim it was supposed to legalise
+   * already persisted. That leaves a causal claim in the kernel with nothing
+   * binding it to its evidence, which is the exact state the legality check
+   * exists to prevent.
+   */
+  appendWitnessWithinTransaction(value: Witness): AppendResult {
     const item = witness(value);
     const encoded = json(item, 'witness');
-    return this.transaction(() => {
-      this.ensureKinds(item.evidenceIds, 'evidence');
-      const current = this.graph();
-      const normalized = normalizeNodeForLedger({
-        id: item.id, kind: 'witness', availableAt: item.issuedAt, epistemic: item.epistemic,
-      });
-      const existing = current.nodes.find((node) => node.id === item.id);
-      let nodeResult: AppendResult;
-      if (existing !== undefined) {
-        if (!sameNodeIdentity(existing, normalized)) throw new Error(`different DAG node already exists for ${item.id}`);
-        if (existing.kind !== 'witness') throw new Error(`${item.id} is not a witness node`);
-        nodeResult = 'duplicate';
-      } else {
-        createEpistemicDag([...current.nodes, normalized], current.edges);
-        nodeResult = this.insertNode(normalized);
-      }
-      const stored = this.nodePayload(item.id, 'epistemic_witnesses', 'witness_id', 'witness');
-      if (stored !== null) {
-        if (!sameStoredPayload(stored, encoded)) throw new Error(`different witness already exists for ${item.id}`);
-        return 'duplicate';
-      }
-      this.db.prepare('INSERT INTO epistemic_witnesses (witness_id, witness_json, witness_digest) VALUES (?, ?, ?)').run(item.id, encoded, digest(encoded));
-      for (const evidenceId of item.evidenceIds) this.insertEdge({ from: evidenceId, to: item.id, relation: 'supports' });
-      return nodeResult === 'duplicate' ? 'inserted' : nodeResult;
+    this.ensureKinds(item.evidenceIds, 'evidence');
+    const current = this.graph();
+    const normalized = normalizeNodeForLedger({
+      id: item.id, kind: 'witness', availableAt: item.issuedAt, epistemic: item.epistemic,
     });
+    const existing = current.nodes.find((node) => node.id === item.id);
+    let nodeResult: AppendResult;
+    if (existing !== undefined) {
+      if (!sameNodeIdentity(existing, normalized)) throw new Error(`different DAG node already exists for ${item.id}`);
+      if (existing.kind !== 'witness') throw new Error(`${item.id} is not a witness node`);
+      nodeResult = 'duplicate';
+    } else {
+      createEpistemicDag([...current.nodes, normalized], current.edges);
+      nodeResult = this.insertNode(normalized);
+    }
+    const stored = this.nodePayload(item.id, 'epistemic_witnesses', 'witness_id', 'witness');
+    if (stored !== null) {
+      if (!sameStoredPayload(stored, encoded)) throw new Error(`different witness already exists for ${item.id}`);
+      return 'duplicate';
+    }
+    this.db.prepare('INSERT INTO epistemic_witnesses (witness_id, witness_json, witness_digest) VALUES (?, ?, ?)').run(item.id, encoded, digest(encoded));
+    for (const evidenceId of item.evidenceIds) this.insertEdge({ from: evidenceId, to: item.id, relation: 'supports' });
+    return nodeResult === 'duplicate' ? 'inserted' : nodeResult;
   }
 
   appendDerivation(value: Derivation): AppendResult {
+    return this.transaction(() => this.appendDerivationWithinTransaction(value));
+  }
+
+  /** Append a derivation on a transaction the caller already opened. */
+  appendDerivationWithinTransaction(value: Derivation): AppendResult {
     const item = derivation(value);
     const encoded = json(item, 'derivation');
-    return this.transaction(() => {
-      this.ensureKinds(item.inputEvidenceIds, 'evidence');
-      this.ensureKinds(item.inputClaimIds, 'claim');
-      this.ensureKinds(item.witnesses.map((candidate) => candidate.id), 'witness');
-      for (const reference of item.witnesses) {
-        const registered = this.readWitness(reference.id);
-        if (registered === null) throw new Error(`unknown witness: ${reference.id}`);
-        if (!sameWitnessReference(reference, registered)) {
-          throw new Error(`derivation witness ${reference.id} does not match the registered witness`);
-        }
+    this.ensureKinds(item.inputEvidenceIds, 'evidence');
+    this.ensureKinds(item.inputClaimIds, 'claim');
+    this.ensureKinds(item.witnesses.map((candidate) => candidate.id), 'witness');
+    for (const reference of item.witnesses) {
+      const registered = this.readWitness(reference.id);
+      if (registered === null) throw new Error(`unknown witness: ${reference.id}`);
+      if (!sameWitnessReference(reference, registered)) {
+        throw new Error(`derivation witness ${reference.id} does not match the registered witness`);
       }
-      const output = this.readClaim(item.outputClaimId);
-      if (output === null) throw new Error(`unknown output claim: ${item.outputClaimId}`);
-      if (JSON.stringify(output.proposition) !== JSON.stringify(item.outputProposition)) throw new Error(`derivation output proposition does not match ${item.outputClaimId}`);
+    }
+    const output = this.readClaim(item.outputClaimId);
+    if (output === null) throw new Error(`unknown output claim: ${item.outputClaimId}`);
+    if (JSON.stringify(output.proposition) !== JSON.stringify(item.outputProposition)) throw new Error(`derivation output proposition does not match ${item.outputClaimId}`);
 
-      // LEGALITY IS CHECKED HERE OR NOWHERE. `assessDerivationLegality` decides
-      // whether a derivation may strengthen a claim on any profile axis without
-      // the matching witness — the refusal that separates a claim bound to its
-      // evidence from one asserted beside it. It was correct, tested, and had no
-      // caller in `src/` at all: this ledger is the only place a Derivation can
-      // be persisted, and it did not consult it. So a derivation could take an
-      // observational input claim and emit a randomized-causal output, and the
-      // kernel would store it.
-      //
-      // Every input claim is assessed, not just the first. A derivation declares
-      // ONE `coordinateChange`, so its inputs share coordinates by construction;
-      // an input that does not match is a malformed record, and the assessment
-      // throws for it rather than returning a refusal, which is the right
-      // distinction — a mismatch is a broken derivation, an unwitnessed
-      // strengthening is a refused one.
-      for (const sourceId of item.inputClaimIds) {
-        const source = this.readClaim(sourceId);
-        if (source === null) throw new Error(`unknown input claim: ${sourceId}`);
-        const legality = assessDerivationLegality(source, output, item);
-        if (!legality.allowed) {
-          throw new Error(
-            `derivation ${item.id} strengthens ${sourceId} into ${output.id} without `
-            + `${legality.missingWitnesses.join(', ')}`,
-          );
-        }
+    // LEGALITY IS CHECKED HERE OR NOWHERE. `assessDerivationLegality` decides
+    // whether a derivation may strengthen a claim on any profile axis without
+    // the matching witness — the refusal that separates a claim bound to its
+    // evidence from one asserted beside it. It was correct, tested, and had no
+    // caller in `src/` at all: this ledger is the only place a Derivation can
+    // be persisted, and it did not consult it. So a derivation could take an
+    // observational input claim and emit a randomized-causal output, and the
+    // kernel would store it.
+    //
+    // Every input claim is assessed, not just the first. A derivation declares
+    // ONE `coordinateChange`, so its inputs share coordinates by construction;
+    // an input that does not match is a malformed record, and the assessment
+    // throws for it rather than returning a refusal, which is the right
+    // distinction — a mismatch is a broken derivation, an unwitnessed
+    // strengthening is a refused one.
+    for (const sourceId of item.inputClaimIds) {
+      const source = this.readClaim(sourceId);
+      if (source === null) throw new Error(`unknown input claim: ${sourceId}`);
+      const legality = assessDerivationLegality(source, output, item);
+      if (!legality.allowed) {
+        throw new Error(
+          `derivation ${item.id} strengthens ${sourceId} into ${output.id} without `
+          + `${legality.missingWitnesses.join(', ')}`,
+        );
       }
+    }
 
-      const graph = this.graph();
-      const extraEdges: DagEdgeInput[] = [
-        ...item.inputEvidenceIds.map((from) => ({ from, to: item.outputClaimId, relation: 'depends_on' as const })),
-        ...item.inputClaimIds.map((from) => ({ from, to: item.outputClaimId, relation: 'derives' as const })),
-        ...item.witnesses.map((from) => ({ from: from.id, to: item.outputClaimId, relation: 'witnesses' as const })),
-      ];
-      const stored = this.nodePayload(item.id, 'epistemic_derivations', 'derivation_id', 'derivation');
-      if (stored !== null) {
-        if (!sameStoredPayload(stored, encoded)) throw new Error(`different derivation already exists for ${item.id}`);
-        for (const edge of extraEdges) {
-          if (!graph.edges.some((existing) => existing.from === edge.from && existing.to === edge.to && existing.relation === edge.relation)) {
-            throw new Error(`stored derivation ${item.id} is missing dependency edge ${edge.from} -> ${edge.to}`);
-          }
+    const graph = this.graph();
+    const extraEdges: DagEdgeInput[] = [
+      ...item.inputEvidenceIds.map((from) => ({ from, to: item.outputClaimId, relation: 'depends_on' as const })),
+      ...item.inputClaimIds.map((from) => ({ from, to: item.outputClaimId, relation: 'derives' as const })),
+      ...item.witnesses.map((from) => ({ from: from.id, to: item.outputClaimId, relation: 'witnesses' as const })),
+    ];
+    const stored = this.nodePayload(item.id, 'epistemic_derivations', 'derivation_id', 'derivation');
+    if (stored !== null) {
+      if (!sameStoredPayload(stored, encoded)) throw new Error(`different derivation already exists for ${item.id}`);
+      for (const edge of extraEdges) {
+        if (!graph.edges.some((existing) => existing.from === edge.from && existing.to === edge.to && existing.relation === edge.relation)) {
+          throw new Error(`stored derivation ${item.id} is missing dependency edge ${edge.from} -> ${edge.to}`);
         }
-        return 'duplicate';
       }
-      createEpistemicDag(graph.nodes, [...graph.edges, ...extraEdges]);
-      this.db.prepare('INSERT INTO epistemic_derivations (derivation_id, derivation_json, derivation_digest) VALUES (?, ?, ?)').run(item.id, encoded, digest(encoded));
-      for (const edge of extraEdges) this.insertEdge(edge);
-      return 'inserted';
-    });
+      return 'duplicate';
+    }
+    createEpistemicDag(graph.nodes, [...graph.edges, ...extraEdges]);
+    this.db.prepare('INSERT INTO epistemic_derivations (derivation_id, derivation_json, derivation_digest) VALUES (?, ?, ?)').run(item.id, encoded, digest(encoded));
+    for (const edge of extraEdges) this.insertEdge(edge);
+    return 'inserted';
   }
 
   appendDependency(edge: DagEdgeInput): AppendResult {

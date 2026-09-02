@@ -16,6 +16,7 @@ import {
   verifyDeterministicCausalAssignmentV2 as verifyBlockedAssignmentPlanV2,
 } from './support/causalDeterministicRng.ts';
 import { createRetainedCausalV1AssignmentFixture } from './support/causalV1Fixture.ts';
+import { completedData, modelDraft, repeatedCostQualityData } from './support/causalStudyFixture.ts';
 import { estimateCausalStudy } from '../src/causal/estimate.ts';
 import {
   canonicalJson,
@@ -48,26 +49,6 @@ import {
 
 const H = (char: string): string => char.repeat(64);
 
-function modelDraft(overrides: Partial<CausalStudyProtocolDraft> = {}): CausalStudyProtocolDraft {
-  return {
-    type: CAUSAL_PROTOCOL_TYPE,
-    version: CAUSAL_PROTOCOL_VERSION,
-    studyId: 'study-model',
-    createdAtMs: 1_700_000_000_000,
-    question: 'model_cost_quality',
-    eligibility: { cohortId: 'cohort-a', unitOfAssignment: 'task', contextSchemaId: 'task-v1' },
-    arms: [
-      { armId: 'candidate', role: 'candidate', executionPlanHash: H('a'), providerId: 'provider-a', modelId: 'model-new' },
-      { armId: 'control', role: 'control', executionPlanHash: H('b'), providerId: 'provider-a', modelId: 'model-old' },
-    ],
-    allocation: { method: 'blocked_randomized_equal_allocation', probabilityPerArm: 0.5, blockSize: 4 },
-    costOutcome: { metricId: 'direct_cost_usd', boundsUsd: { low: 0, high: 100 }, acceptedSourceClasses: ['actual_observed'] },
-    qualityOutcome: { metricId: 'verified_quality', bounds: { low: 0, high: 1 }, evidenceClass: 'deterministic', nonInferiorityMargin: 0.05 },
-    economicOutcome: null,
-    analysis: { estimand: 'intention_to_treat', confidenceLevel: 0.95, minCompletedPerArm: 2, maxMissingFractionPerArm: 0.25 },
-    ...overrides,
-  };
-}
 
 const D = (char: string): string => 'sha256:' + H(char);
 
@@ -169,9 +150,6 @@ function aiV2Draft(overrides: Partial<CausalStudyProtocolDraftV2> = {}): CausalS
   });
 }
 
-function event<T extends Record<string, unknown>>(input: T): T & { eventHash: string } {
-  return { ...input, eventHash: causalEventHash(input) };
-}
 
 const V2_ASSIGNMENT_ENTROPY = Buffer.from(
   '000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f',
@@ -206,104 +184,6 @@ function v2DecisionEventHashForTamper(decision: CausalDecisionRecordV2): string 
     .digest('hex');
 }
 
-function completedData(protocolDraft: CausalStudyProtocolDraft = modelDraft()): CausalStudyData {
-  const protocol = commitCausalProtocol(protocolDraft, 1_700_000_000_100);
-  const plan = createRetainedCausalV1AssignmentFixture(protocol, {
-    blockId: 'block-1',
-    createdAtMs: 1_700_000_000_200,
-    unitIdHashes: [H('1'), H('2'), H('3'), H('4')],
-    randomizationMaterial: Buffer.from('0123456789abcdef0123456789abcdef', 'hex'),
-  });
-  const executions: CausalExecutionRecord[] = [];
-  const outcomes: CausalOutcomeRecord[] = [];
-  for (const decision of plan.decisions) {
-    const arm = protocol.arms.find((candidate) => candidate.armId === decision.assignedArmId)!;
-    const execution = event({
-      executionId: 'exec:' + decision.decisionId,
-      decisionId: decision.decisionId,
-      studyId: protocol.studyId,
-      protocolHash: protocol.protocolHash,
-      startedAtMs: decision.assignedAtMs + 1,
-      completedAtMs: decision.assignedAtMs + 2,
-      assignedExecutionPlanHash: arm.executionPlanHash,
-      actualExecutionPlanHash: arm.executionPlanHash,
-      adherence: 'confirmed' as const,
-      requestIds: ['request:' + decision.decisionId],
-      directAiCostUsd: decision.assignedArmId === 'candidate' ? 5 : 12,
-      directCostSourceClass: 'actual_observed' as const,
-      priceLineageHashes: [H('c')],
-      fullArmCostUsd: null,
-      fullCostSourceClass: 'incomplete_or_unknown' as const,
-      previousEventHash: decision.eventHash,
-    });
-    executions.push(execution);
-    outcomes.push(event({
-      outcomeId: 'outcome:' + decision.decisionId,
-      decisionId: decision.decisionId,
-      studyId: protocol.studyId,
-      protocolHash: protocol.protocolHash,
-      observedAtMs: execution.completedAtMs + 1,
-      maturity: 'matured' as const,
-      qualityValue: 0.9,
-      qualityEvidenceClass: 'deterministic' as const,
-      economicValueUsd: null,
-      economicEvidenceClass: null,
-      outcomeEvidenceRefs: ['evidence:' + decision.decisionId],
-      missingReason: null,
-      previousEventHash: execution.eventHash,
-    }));
-  }
-  return { protocol, decisions: plan.decisions, executions, outcomes };
-}
-
-/** Expand the small fixture into independent-looking blocked observations for
- * interval-boundary tests without changing the registered protocol. */
-function repeatedCostQualityData(qualityCandidate: number, qualityControl: number, candidateCost = 1, controlCost = 99): CausalStudyData {
-  const base = completedData();
-  const decisions: CausalDecisionRecord[] = [];
-  const executions: CausalExecutionRecord[] = [];
-  const outcomes: CausalOutcomeRecord[] = [];
-  for (let repeat = 0; repeat < 250; repeat += 1) {
-    for (let index = 0; index < base.decisions.length; index += 1) {
-      const sourceDecision = base.decisions[index]!;
-      const decisionCore = {
-        ...sourceDecision,
-        decisionId: `${sourceDecision.decisionId}:r${repeat}`,
-        randomizationBlockId: `block:${repeat}`,
-        unitIdHash: H(((repeat * base.decisions.length + index) % 16).toString(16)),
-        assignedAtMs: sourceDecision.assignedAtMs + repeat * 10_000,
-        previousEventHash: base.protocol.protocolHash,
-      };
-      const decision = { ...decisionCore, eventHash: causalEventHash({ ...decisionCore, eventHash: undefined }) };
-      decisions.push(decision);
-
-      const sourceExecution = base.executions[index]!;
-      const executionCore = {
-        ...sourceExecution,
-        executionId: `${sourceExecution.executionId}:r${repeat}`,
-        decisionId: decision.decisionId,
-        startedAtMs: decision.assignedAtMs + 1,
-        completedAtMs: decision.assignedAtMs + 2,
-        directAiCostUsd: decision.assignedArmId === 'candidate' ? candidateCost : controlCost,
-        previousEventHash: decision.eventHash,
-      };
-      const execution = { ...executionCore, eventHash: causalEventHash({ ...executionCore, eventHash: undefined }) };
-      executions.push(execution);
-
-      const sourceOutcome = base.outcomes[index]!;
-      const outcomeCore = {
-        ...sourceOutcome,
-        outcomeId: `${sourceOutcome.outcomeId}:r${repeat}`,
-        decisionId: decision.decisionId,
-        observedAtMs: execution.completedAtMs + 1,
-        qualityValue: decision.assignedArmId === 'candidate' ? qualityCandidate : qualityControl,
-        previousEventHash: execution.eventHash,
-      };
-      outcomes.push({ ...outcomeCore, eventHash: causalEventHash({ ...outcomeCore, eventHash: undefined }) });
-    }
-  }
-  return { protocol: base.protocol, decisions, executions, outcomes };
-}
 
 test('causal protocol commits a deterministic structural hash and rejects raw/free-text identifiers', () => {
   const draft = modelDraft();

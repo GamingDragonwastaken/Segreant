@@ -170,12 +170,38 @@ export function cmdCausal(flags: Flags): void {
         }, flags);
         return;
       }
-      const analysisId = flags.id === undefined
-        ? 'analysis:' + studyId + ':' + String(Date.now())
-        : requireStringFlag(flags, 'id');
+      // `--apply` ISSUES INTO THE KERNEL. It used to call
+      // `saveCausalAnalysis`, which cannot succeed for any input: it refuses a
+      // version-1 protocol as inspect-only and then asks `causalStudyData` for a
+      // version-2 study, which that function returns null for by design — so the
+      // operator got `causal study was not found` about a study they had just
+      // inspected. Writing a snapshot row was never the point anyway. The point
+      // is that the conclusion becomes revocable: the records below bind the
+      // causal claim to the randomization that identifies it, so revoking the
+      // assignment evidence carries the claim with it (AII-036, D-081).
+      const issuance = store.issueCausalStudyToKernel(studyId);
+      if (issuance === null) {
+        throw new Error(
+          'causal study ' + studyId + ' has no version-1 analysis path; version-2 projection is deferred',
+        );
+      }
       emit({
-        operation: 'analysis_saved',
-        snapshot: store.saveCausalAnalysis(studyId, analysisId),
+        operation: 'causal_claim_issued',
+        studyId,
+        issued: {
+          assignmentEvidenceId: issuance.assignmentEvidence.id,
+          outcomeEvidenceId: issuance.outcomeEvidence.id,
+          armDifferenceClaimId: issuance.armDifference.id,
+          identificationWitnessId: issuance.identification?.id ?? null,
+          causalClaimId: issuance.effect?.id ?? null,
+          derivationId: issuance.derivation?.id ?? null,
+        },
+        // Stated at the result, not in a footnote: an absent causal claim is the
+        // ordinary outcome for a study that has not earned claim language, and a
+        // caller who sees only the ids has no way to tell that from an error.
+        causalClaim: issuance.effect === null
+          ? 'No causal claim was issued. The observed arm difference is recorded as OBSERVATIONAL evidence; the pre-registered decision rule did not authorise causal language for this study.'
+          : 'A causal claim was issued, bound by derivation to the randomization evidence. Revoking that evidence revokes this claim.',
       }, flags);
       return;
     }

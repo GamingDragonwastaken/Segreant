@@ -1,9 +1,11 @@
 /**
- * ISSUANCE CLASS: unmigrated_authority — see `src/epistemic/issuance-map.ts`.
+ * ISSUANCE CLASS: kernel_primitive — see `src/epistemic/issuance-map.ts`.
  * Depends on `qualification.ts` and inherits its position. The estimator
- * pre-declares its bounds and does not adapt, but the interval is not carried
- * as kernel uncertainty on an issued Claim, so nothing downstream can be
- * invalidated when the study it rests on is revoked.
+ * pre-declares its bounds and does not adapt; `src/causal/epistemic.ts` carries
+ * the interval and the joint decision rule onto an issued Claim, so revoking the
+ * study evidence invalidates what was derived from it. This file still decides
+ * whether an effect is supported — issuance refuses to mint a causal claim it
+ * did not already authorise, and adds revocability rather than strength.
  *
  * Conservative, transparent estimators for the initial randomized-study lane.
  *

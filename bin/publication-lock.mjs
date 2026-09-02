@@ -39,6 +39,15 @@ export const LOCK_STALE_MS = 10 * 60_000;
  * contender until each one timed out.
  */
 export const OWNERLESS_LOCK_STALE_MS = 10_000;
+/**
+ * How long release keeps trying the atomic hand-back before removing the lock
+ * in place.
+ *
+ * It only has to outlast transient interference — an open handle, a competing
+ * reader mid-scan. It must stay far below `LOCK_WAIT_MS`, because everything
+ * queued behind this lock is waiting for exactly this budget to expire.
+ */
+export const RELEASE_BUDGET_MS = 15_000;
 export const LOCK_POLL_MS = 25;
 export const RENAME_RETRY_MS = 5_000;
 /**
@@ -103,6 +112,25 @@ function readOwnerFile(path) {
   }
 }
 
+/**
+ * The token-bearing temp names a creator may have left behind.
+ *
+ * Shared by `inspectLock`, which reads them as a recoverable identity, and by
+ * the release abandon path, which removes them. Those two must agree on what
+ * counts as a record: a name one of them recognises and the other does not is
+ * exactly how a lock becomes unrecoverable while looking clean.
+ */
+function ownerTempNames(lockPath) {
+  try {
+    return readdirSync(lockPath, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && /^\.owner-[0-9a-f-]+\.tmp$/i.test(entry.name))
+      .map((entry) => entry.name)
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
 function ownerQuarantineNames(lockPath) {
   try {
     return readdirSync(lockPath, { withFileTypes: true })
@@ -134,16 +162,7 @@ function inspectLock(buildLock) {
   // run the normal PID-aware quarantine flow. Treating it as an unknown,
   // owner-less lock would impose the full stale age even when its process is
   // already dead, which can wedge every queued build/reader for minutes.
-  let ownerTemps = [];
-  try {
-    ownerTemps = readdirSync(buildLock, { withFileTypes: true })
-      .filter((entry) => entry.isFile() && /^\.owner-[0-9a-f-]+\.tmp$/i.test(entry.name))
-      .map((entry) => entry.name)
-      .sort();
-  } catch {
-    ownerTemps = [];
-  }
-  for (const name of ownerTemps) {
+  for (const name of ownerTempNames(buildLock)) {
     const temporaryOwner = readOwnerFile(join(buildLock, name));
     if (temporaryOwner) return { lockStat, owner: temporaryOwner, ownerPath: join(buildLock, name) };
   }
@@ -332,59 +351,128 @@ function quarantineStaleLock(root, buildLock, snapshot) {
     : quarantineUnknownLock(root, buildLock);
 }
 
+/**
+ * Hand back a lock this process proved it owns.
+ *
+ * THE INVARIANT, WHICH THE OLD SHAPE VIOLATED FOUR WAYS.
+ *
+ *   A process that cannot prove it owns the lock must never act as though it
+ *   does, and a process that HAS proved ownership must not return while
+ *   leaving that lock permanently held.
+ *
+ * Release used to be a straight line of atomic steps, each of which returned on
+ * failure. Three of those returns left the canonical directory in place still
+ * carrying OUR token — and `inspectLock` reads that record as an owner while
+ * `lockIsStale` clears it as live, because the PID it names is this process and
+ * this process is still running. No contender can ever recover such a lock:
+ * they wait out `LOCK_WAIT_MS` and report `timed out waiting for another Fiscus
+ * build` about a build that moved on minutes earlier.
+ *
+ * D-077 fixed ONE of those four returns — the directory move — and did not ask
+ * about its siblings. That is the same mistake D-078 found in the acquire path
+ * (an errno list removed in one place and left in the helper next door), which
+ * makes it the defect CLASS rather than an unlucky line. So the give-up
+ * decision is no longer per-step at all: the loop below re-establishes whether
+ * the lock is still ours and keeps trying, and the only way out is that the
+ * lock is gone, or demonstrably not ours, or removed by us.
+ *
+ * THE TERMINAL FALLBACK IS SOUND ONLY BECAUSE OF THE TOKEN. Removing the
+ * directory by pathname is exactly what the atomic dance exists to avoid, and
+ * it is safe here for one reason: `ownedByToken` has just re-read the lock and
+ * found OUR token in it. That is the same proof every other step relies on. The
+ * quarantine rename only ever bought speed — freeing the canonical path sooner
+ * — and losing speed is not a reason to keep a lock forever.
+ */
 function releasePublicationLock(root, buildLock, token) {
-  const snapshot = inspectLock(buildLock);
-  if (!snapshot?.owner || snapshot.owner.token !== token || !snapshot.ownerPath) return;
+  const deadline = Date.now() + RELEASE_BUDGET_MS;
+  while (true) {
+    const snapshot = inspectLock(buildLock);
+    // Gone, or a newer generation someone else owns. We hold nothing, and
+    // touching it would be the pathname-based cleanup D-072 removed.
+    if (!ownedByToken(snapshot, token) || !snapshot.ownerPath) return;
 
-  // Release uses the same atomic owner-record quarantine as stale recovery. A
-  // pathname read followed by recursive deletion would otherwise have the same
-  // replacement race if a lock were externally changed during cleanup.
+    if (releaseOwnedGeneration(root, buildLock, token, snapshot)) return;
+
+    if (Date.now() >= deadline) {
+      abandonOwnedGeneration(buildLock, token);
+      return;
+    }
+    sleep(LOCK_POLL_MS);
+  }
+}
+
+/**
+ * Last resort: make this generation recoverable by someone else, at any cost
+ * short of touching a generation that is not ours.
+ *
+ * Reached only after `ownedByToken` has just re-read the lock and found OUR
+ * token in it. That proof is what licenses acting by pathname here: the token
+ * is a UUID minted in this process, so the directory is demonstrably our
+ * generation, and while this process is alive no other can have taken it — a
+ * contender only touches a live lock it does not own by first judging the owner
+ * dead, and `processIsAlive` says otherwise about us.
+ *
+ * Two attempts, because the first one can be swallowed:
+ *
+ *   1. Remove the directory. Best outcome — the canonical path is free at once.
+ *   2. If it is still ours, unlink every token-bearing record inside it. What
+ *      makes a lock look HELD is the record, not the directory: without one,
+ *      `inspectLock` reports an owner-less lock and `lockIsStale` clears it on
+ *      the `OWNERLESS_LOCK_STALE_MS` timer.
+ *
+ * Step 2 is the reason this is a function rather than one call. `rmSync` is not
+ * atomic and `removeQuarantine` swallows its failures by design, so a partial
+ * removal that leaves the owner record behind would put us straight back into
+ * the permanently-held state this whole path exists to prevent. Degrading to
+ * "recoverable in ten seconds" is a real outcome; returning while holding it
+ * forever is not an outcome at all.
+ */
+function abandonOwnedGeneration(buildLock, token) {
+  removeQuarantine(buildLock);
+  if (!ownedByToken(inspectLock(buildLock), token)) return;
+
+  for (const name of [OWNER_FILE, ...ownerQuarantineNames(buildLock), ...ownerTempNames(buildLock)]) {
+    try {
+      rmSync(join(buildLock, name), { force: true, maxRetries: 20, retryDelay: LOCK_POLL_MS });
+    } catch {
+      // Nothing further is available. The next acquisition inspects it again.
+    }
+  }
+}
+
+/**
+ * One attempt at the atomic hand-back. Answers whether the lock is now gone.
+ *
+ * Every `false` here means "could not finish this time", never "give up" — the
+ * caller decides that, against the invariant, and it is the caller that owns
+ * the fallback. Keeping the steps atomic still matters: a pathname read
+ * followed by recursive deletion would race a lock that changed underneath us,
+ * and the fallback is only reached after that race has been re-checked.
+ */
+function releaseOwnedGeneration(root, buildLock, token, snapshot) {
   const ownerName = OWNER_QUARANTINE_FILE;
   const ownerQuarantine = join(buildLock, ownerName);
-  if (snapshot.ownerPath !== ownerQuarantine && !renameForQuarantine(snapshot.ownerPath, ownerQuarantine)) return;
+  if (snapshot.ownerPath !== ownerQuarantine && !renameForQuarantine(snapshot.ownerPath, ownerQuarantine)) {
+    return false;
+  }
   const movedOwner = readOwnerFile(ownerQuarantine);
   if (!movedOwner || movedOwner.token !== token) {
-    try { renameSync(ownerQuarantine, snapshot.ownerPath); } catch { /* preserve an uncertain lock */ }
-    return;
+    // The record changed under us, so this generation may not be ours after
+    // all. Put it back and let the caller re-establish ownership from scratch.
+    try { renameSync(ownerQuarantine, snapshot.ownerPath); } catch { /* the next lap re-reads it */ }
+    return false;
   }
 
   const quarantine = join(root, `${LOCK_QUARANTINE_PREFIX}release-${process.pid}-${randomUUID()}`);
-  if (!renameForQuarantine(buildLock, quarantine)) {
-    // A RELEASE THAT GIVES UP DOES NOT LEAVE THE LOCK ALONE. IT LEAVES IT HELD.
-    //
-    // This was `return`, and that is the most expensive line in the file. By
-    // here the owner record has ALREADY been renamed to `.owner-quarantine.json`
-    // — so returning leaves the canonical directory in place, carrying a
-    // token-bearing record that `inspectLock` reads as an owner and
-    // `lockIsStale` then clears as live, because the process it names is this
-    // one and this one is still running. The lock is abandoned and permanently
-    // un-recoverable: every contender waits out `LOCK_WAIT_MS` and reports
-    // `timed out waiting for another Fiscus build`, naming a build that has
-    // long since moved on. Observed directly — the repository root held
-    // `.owner-quarantine.json` for a live PID across a full minute while
-    // `build-race` timed out behind it.
-    //
-    // The directory rename fails for a reason that has nothing to do with
-    // ownership: on Windows a single open handle anywhere inside the directory
-    // — another contender mid-`readdirSync`, an indexer, a virus scanner — is
-    // enough, and `RENAME_RETRY_MS` is five seconds.
-    //
-    // Removing it in place is sound HERE and nowhere else. The whole point of
-    // claiming the owner record first is that the claim is exclusive: the
-    // rename of `owner.json` succeeded and the moved record still carries our
-    // token, so this generation is ours and no other process can be inside it.
-    // That is the same proof the move itself relies on — the move only buys
-    // speed, getting the canonical path free sooner. Losing the speed is not a
-    // reason to keep the lock.
-    removeQuarantine(buildLock);
-    return;
-  }
+  if (!renameForQuarantine(buildLock, quarantine)) return false;
+
   const quarantinedOwner = readOwnerFile(join(quarantine, ownerName));
   if (!quarantinedOwner || quarantinedOwner.token !== token) {
     restoreQuarantinedLock(buildLock, quarantine);
-    return;
+    return false;
   }
   removeQuarantine(quarantine);
+  return true;
 }
 
 /**

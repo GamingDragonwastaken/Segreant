@@ -395,42 +395,80 @@ test('the publish branch decides by position, not by error code', () => {
   );
 });
 
-test('a release that cannot move the lock removes it instead of abandoning it held', () => {
+test('a release that cannot hand the lock back never returns still holding it', async () => {
   // THE MOST EXPENSIVE LINE IN THE FILE WAS A BARE `return`.
   //
-  // `releasePublicationLock` renames `owner.json` to `.owner-quarantine.json`
-  // to claim the generation, then renames the whole directory aside. If that
-  // second rename failed it returned — leaving the canonical directory in place
-  // carrying a token-bearing record. `inspectLock` reads that record as an
-  // owner and `lockIsStale` clears it as live, because the PID it names is the
-  // releasing process, which is still running. Nothing can ever recover it, so
-  // every contender waits out `LOCK_WAIT_MS` and reports `timed out waiting for
-  // another Fiscus build` about a build that finished minutes ago.
+  // Release claims its generation by renaming `owner.json` to
+  // `.owner-quarantine.json`, then renames the whole directory aside. Each step
+  // used to `return` on failure, and three of those returns left the canonical
+  // directory in place still carrying a token-bearing record. `inspectLock`
+  // reads that record as an owner; `lockIsStale` clears it as live, because the
+  // PID it names is the releasing process and that process is still running.
+  // Nothing can recover such a lock. Every contender waits out `LOCK_WAIT_MS`
+  // and then reports `timed out waiting for another Fiscus build` about a build
+  // that finished minutes earlier.
   //
   // Observed, not theorised: the repository root sat holding
   // `.owner-quarantine.json` for a live PID across a full minute of polling
   // while `test/build-race.test.ts` timed out behind it at 300s.
   //
-  // WHY THIS IS A SOURCE-LEVEL TEST. Reaching the branch needs the directory
-  // rename to fail while the removal that follows can still succeed, and the
-  // real cause — a momentary open handle from an indexer or another
-  // contender's `readdirSync` — is Windows-only and cannot be held to a
-  // schedule. Holding a handle open deliberately blocks the removal too, so it
-  // manufactures a different state than the one that occurs. The end-to-end
-  // guard for this defect is `ordinary contention leaves no lock residue`,
-  // which is what caught it; this pins the specific line so it cannot quietly
-  // return to `return`.
-  const source = readFileSync(join(ROOT, 'bin', 'publication-lock.mjs'), 'utf8');
-  const release = /function releasePublicationLock\([\s\S]*?\n\}/.exec(source);
-  assert.ok(release, 'releasePublicationLock was not found — this test is pinned to its shape');
+  // HOW THE STATE IS MANUFACTURED. A DIRECTORY planted at
+  // `.owner-quarantine.json` makes the first rename fail on every platform and
+  // keep failing — `rename` cannot put a file where a directory is. That is a
+  // stand-in for the real cause (a momentary open handle from an indexer or
+  // another contender's scan), chosen because it is permanent and therefore
+  // deterministic, where the real one cannot be held to a schedule.
+  //
+  // WHAT IT ASSERTS is not a shape but the invariant: whatever release could
+  // not do, the lock must be acquirable afterwards. So the worker releases and
+  // then acquires again in the same process, which is the strictest form of the
+  // question — its own PID is alive, so nothing can rescue it by staleness.
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-lock-release-'));
 
-  const failedMove = /if \(!renameForQuarantine\(buildLock, quarantine\)\) \{([\s\S]*?)\n  \}/.exec(release[0]);
-  assert.ok(failedMove, 'the failed-directory-move branch is no longer a block — check it still removes the lock');
-  assert.match(
-    failedMove[1]!,
-    /removeQuarantine\(buildLock\)/,
-    'a release that cannot move the lock must remove it in place, never leave it holding a live token',
-  );
+  const worker = join(dir, 'worker.mjs');
+  writeFileSync(worker, [
+    `import { acquirePublicationLock } from ${JSON.stringify(LOCK_MODULE)};`,
+    "import { mkdirSync, writeFileSync } from 'node:fs';",
+    "import { join } from 'node:path';",
+    'const root = process.argv[2];',
+    'const release = acquirePublicationLock(root);',
+    '',
+    "const lock = join(root, '.fiscus-build.lock');",
+    '// Block the owner-record claim permanently, and make the obstruction',
+    '// non-empty so no platform can quietly replace it.',
+    "const blocker = join(lock, '.owner-quarantine.json');",
+    'mkdirSync(blocker);',
+    "writeFileSync(join(blocker, 'occupied'), 'x', 'utf8');",
+    '',
+    'release();',
+    'const releasedAt = Date.now();',
+    'acquirePublicationLock(root)();',
+    'process.stdout.write(JSON.stringify({ reacquiredInMs: Date.now() - releasedAt }));',
+  ].join('\n'), 'utf8');
+
+  try {
+    // Well under `LOCK_WAIT_MS`: a worker that has to be killed here is one that
+    // went into the five-minute wait, which is the defect itself.
+    const result = await run(worker, [dir], 120_000);
+
+    assert.equal(result.code, 0, result.stderr || 'the release worker exited non-zero');
+    const { reacquiredInMs } = JSON.parse(result.stdout) as { reacquiredInMs: number };
+    // The abandon path removes the directory outright, or — if that removal is
+    // swallowed — strips the owner record so the lock ages out on
+    // `OWNERLESS_LOCK_STALE_MS`. Both clear well inside this bound; being held
+    // by a live PID clears never.
+    assert.ok(
+      reacquiredInMs < 60_000,
+      `the lock was still held after release: reacquiring took ${reacquiredInMs}ms`,
+    );
+
+    // And nothing was left behind at the root. A quarantine here would mean the
+    // generation was moved aside but never collected.
+    const residue = readdirSync(dir).filter((name) => name.startsWith('.fiscus-build.lock'));
+    assert.deepEqual(residue, [], `release left lock residue: ${residue.join(', ')}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 25 });
+  }
 });
 
 test('an owner-less lock cannot outlast the wait that queues behind it', () => {
