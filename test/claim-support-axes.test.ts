@@ -45,11 +45,33 @@ test('the wire axis vocabularies are exactly the kernel’s', () => {
   const profile = read('src', 'epistemic', 'profile.ts');
   const wire = read('src', 'dashboard', 'shared-types.ts');
 
+  // EVERY axis, not the three that vary. The wire carried three because those
+  // were the three the spine rendered, and the seven constant ones were dropped
+  // — which is exactly how an operator came to have no way of learning that no
+  // figure on the page is causal or final. They are on the wire now, so they are
+  // mirrors, so they can drift, so they are checked here with the rest.
   const pairs: Array<[string, string[], string[]]> = [
     ['epistemic state', kernelMembers(state, 'EPISTEMIC_STATES'), wireMembers(wire, 'ClaimEpistemicState')],
+    ['integrity', kernelMembers(profile, 'INTEGRITY'), wireMembers(wire, 'ClaimIntegrityStatus')],
+    ['authenticity', kernelMembers(profile, 'AUTHENTICITY'), wireMembers(wire, 'ClaimAuthenticityStatus')],
+    ['scope', kernelMembers(profile, 'SCOPE_STATUS'), wireMembers(wire, 'ClaimScopeStatus')],
     ['coverage', kernelMembers(profile, 'COVERAGE'), wireMembers(wire, 'ClaimCoverageStatus')],
+    ['measurement', kernelMembers(profile, 'MEASUREMENT'), wireMembers(wire, 'ClaimMeasurementStatus')],
+    ['causality', kernelMembers(profile, 'CAUSALITY'), wireMembers(wire, 'ClaimCausalityStatus')],
     ['monetary basis', kernelMembers(profile, 'MONETARY_BASIS'), wireMembers(wire, 'ClaimMonetaryBasis')],
+    ['finality', kernelMembers(profile, 'FINALITY'), wireMembers(wire, 'ClaimFinalityStatus')],
+    ['decision fitness', kernelMembers(profile, 'DECISION_FITNESS'), wireMembers(wire, 'ClaimDecisionFitness')],
   ];
+
+  // The kernel names ten axes and the wire must mirror all ten. A pair silently
+  // dropped from the list above would make this file pass while covering less.
+  const kernelAxes = [...read('src', 'epistemic', 'profile.ts')
+    .matchAll(/^\s{2}readonly (\w+):/gm)].map((m) => m[1]!);
+  assert.equal(
+    pairs.length,
+    kernelAxes.length,
+    `the kernel profile names ${kernelAxes.length} axes and this test checks ${pairs.length}`,
+  );
 
   for (const [label, kernel, mirrored] of pairs) {
     assert.ok(kernel.length > 0, `${label}: the kernel extraction is vacuous`);
@@ -59,6 +81,48 @@ test('the wire axis vocabularies are exactly the kernel’s', () => {
       `${label}: the wire mirror has drifted from src/epistemic/ — same members, same order`,
     );
   }
+});
+
+test('the payload the spine reads is a projection of the claim profile, not a second opinion', async () => {
+  // WP-B02's remainder. The server used to state four axes and call that the
+  // claim's support; there was no canonical profile behind them, so nothing
+  // could be inconsistent with anything and nothing could be checked. Now the
+  // profile IS the support and the three rendered fields are copied from it.
+  //
+  // The identity is the contract. An edit that lets the spine's `coverage`
+  // differ from the claim's `coverage` reintroduces the collapse WP-B02 removed,
+  // one axis at a time, and would otherwise be invisible.
+  const support = await import('../src/dashboard/claim-support.ts');
+
+  const samples = [
+    support.meteredClaimSupport({ totalCostUsd: 10, estimatedCostUsd: 0 }),
+    support.meteredClaimSupport({ totalCostUsd: 0, estimatedCostUsd: 0 }),
+    support.billedClaimSupport({ recordCount: 0, runCount: 0, latest: null }),
+    support.billedClaimSupport({ recordCount: 3, runCount: 1, latest: { snapshotStability: 'changed_across_observations', unstableDayStartMs: [1, 2] } }),
+    support.allocatedClaimSupport({ costCentreCount: 0, runCount: 0 }),
+    support.allocatedClaimSupport({ costCentreCount: 2, runCount: 1 }),
+    support.realizedClaimSupport({ maturedUnits: 0, realizedUnits: 0, gateConflicts: null, roiCoverage: null, valued: false }),
+    support.realizedClaimSupport({ maturedUnits: 4, realizedUnits: 4, gateConflicts: null, roiCoverage: 1, valued: true }),
+  ];
+
+  for (const sample of samples) {
+    assert.equal(sample.epistemic, sample.profile.epistemic, 'the rendered epistemic axis must be the profile\u2019s');
+    assert.equal(sample.coverage, sample.profile.coverage, 'the rendered coverage axis must be the profile\u2019s');
+    assert.equal(sample.monetaryBasis, sample.profile.monetaryBasis, 'the rendered basis must be the profile\u2019s');
+
+    // No product figure is causal, final, or assessed for decision fitness, and
+    // the wire has to keep saying so. When one of these does change it will be
+    // because a real boundary changed, and that belongs in a commit rather than
+    // in a payload nobody was watching.
+    assert.equal(sample.profile.causality, 'none', 'no dashboard claim is causal');
+    assert.notEqual(sample.profile.finality, 'final', 'no dashboard claim is final');
+    assert.equal(sample.profile.decisionFitness, 'not_assessed', 'no dashboard claim is assessed for decision fitness');
+  }
+
+  // And the projection is not vacuous: these samples really do span the axes.
+  assert.ok(new Set(samples.map((s) => s.profile.epistemic)).size > 1, 'the samples must exercise more than one epistemic state');
+  assert.ok(new Set(samples.map((s) => s.profile.coverage)).size > 1, 'the samples must exercise more than one coverage value');
+  assert.ok(new Set(samples.map((s) => s.profile.integrity)).size > 1, 'the samples must exercise more than one integrity value');
 });
 
 test('the browser holds no second mirror of the axes', () => {

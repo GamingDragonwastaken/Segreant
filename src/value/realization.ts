@@ -222,6 +222,16 @@ export interface RealizationReport {
   // money numbers and the request ledger's totals are answering with different
   // prices — surfaced here so no surface has to imply agreement it does not have.
   costStaleUnits: number;
+  /**
+   * Units whose surviving-line count was NOT measured because the survival scan
+   * budget ran out (see `survivalBudgetMs`). Their `survived` gate is `unknown`,
+   * never a ratio — an unmeasured commit has not been shown to have churned.
+   *
+   * Non-zero means the survival and churn figures in this report describe fewer
+   * commits than the report covers, which is the kind of thing that has to be
+   * stated beside the number rather than discovered later.
+   */
+  survivalUnmeasuredUnits: number;
   matured: {
     units: number;
     realizedUnits: number;
@@ -266,6 +276,14 @@ export interface RealizationEconomicRollup {
 
 export interface RealizationOptions {
   limit?: number;
+  /**
+   * Wall-clock ceiling on the per-unit git work, in milliseconds. `Infinity`
+   * removes the bound; zero exhausts it immediately. The default keeps a
+   * dashboard route answering instead of hanging. Commits the budget does not
+   * reach report `survived: unknown` rather than a ratio, so a smaller budget
+   * withholds evidence and never fabricates it.
+   */
+  gitScanBudgetMs?: number;
   windowDays?: number;
   acceptanceThreshold?: number;
   survivalThreshold?: number;
@@ -331,6 +349,33 @@ export async function computeRealization(
 ): Promise<RealizationReport> {
   const limit = opts.limit ?? 30;
   const windowDays = opts.windowDays ?? 14;
+  // ONE budget across every commit's git work, not one per commit.
+  //
+  // THE MEASUREMENT, BECAUSE GUESSING WHICH CALL IS SLOW IS HOW THIS GOES
+  // WRONG. At `limit: 40` on this repository: `attributeCommits` 2.3s,
+  // `revertScan` 1.2s, the store reads 1.1s, `git show` for the per-file added
+  // lines 42s across the forty, and `git blame --line-porcelain HEAD` **20.3s
+  // for a SINGLE commit** — which extrapolates to the 416 seconds `/api/value`
+  // was measured taking end to end. A dashboard route with no timeout of its
+  // own spending seven minutes in git is a hang, not a slow answer.
+  //
+  // Bounding blame alone still left 126s, because the per-commit `git show`
+  // that follows it is a full diff and this repository's commits are large. So
+  // the deadline covers every per-unit git call, and the unit's git-derived
+  // gates go UNKNOWN past it rather than reporting a number gathered from
+  // nothing. A commit the scan did not reach has not been shown to have churned
+  // or to have shipped no proposal; reading its absence as a verdict is the
+  // exact collapse the epistemic standard exists to refuse, and it would make
+  // the aggregate worse the slower the machine is.
+  const gitBudgetMs = opts.gitScanBudgetMs ?? 20_000;
+  // `Infinity` removes the bound; ZERO exhausts it immediately, which is how a
+  // test reaches the unmeasured branch without owning a repository slow enough
+  // to reach it by waiting. A budget expressed as "greater than zero means
+  // bounded" would have made zero mean unbounded, which is the opposite of what
+  // anyone passing it intends.
+  let gitDeadlineMs: number | undefined;
+  const gitBudgetSpent = (): boolean => gitDeadlineMs !== undefined && Date.now() >= gitDeadlineMs;
+  let unmeasuredSurvival = 0;
   const acceptanceThreshold = opts.acceptanceThreshold ?? 0.6;
   const survivalThreshold = opts.survivalThreshold ?? 0.5;
   const now = Date.now();
@@ -359,19 +404,39 @@ export async function computeRealization(
   const witnesses = opts.completenessWitnesses
     ?? (gitWitness === null ? [] : [gitWitness]);
 
+  // The clock starts HERE, not at the top. `attributeCommits` and `revertScan`
+  // above are fixed setup that runs once regardless of how many units there are,
+  // and letting them consume a per-unit budget would mean a slow machine spent
+  // the whole allowance before measuring anything — turning a scheduling
+  // accident into forty unknown gates.
+  gitDeadlineMs = Number.isFinite(gitBudgetMs) ? Date.now() + gitBudgetMs : undefined;
+
   const units: WorkUnit[] = [];
   for (const a of attributions) {
     const ageDays = (now - a.tsEpochMs) / (24 * 60 * 60 * 1000);
     const maturing = now - a.tsEpochMs < windowMs;
-    const { added, surviving } = await survivingLines(repoPath, a.hash);
+    // Checked ONCE per unit and reused, so a unit is measured or unmeasured as a
+    // whole. Re-reading the clock between the two calls below would let a unit
+    // report a survival ratio with no proposal comparison, or the reverse, and
+    // an operator comparing two units would have no way to know which halves
+    // were gathered.
+    const scanned = !gitBudgetSpent();
+    const survival = scanned
+      ? await survivingLines(repoPath, a.hash, gitDeadlineMs)
+      : { added: 0, surviving: 0, measured: false };
+    const { added, surviving } = survival;
     const survivalRatio = added > 0 ? Math.min(1, surviving / added) : 0;
+    if (!survival.measured) unmeasuredSurvival += 1;
     const isReverted = reverted.has(a.hash) || reverted.has(a.hash.slice(0, 7));
 
     // proxy gates: proposals captured in this commit's attribution window
-    const addedByFile = await addedLinesByFile(repoPath, a.hash);
+    const addedByFile = scanned ? await addedLinesByFile(repoPath, a.hash) : new Map<string, string[]>();
     const committedPaths = [...addedByFile.keys()];
     const winProposals = store.proposalsInWindow(project, a.windowStartMs, a.windowEndMs);
-    const proposalCaptureCoverage: ProposalCaptureCoverage = winProposals.length === 0
+    const proposalCaptureCoverage: ProposalCaptureCoverage = !scanned || winProposals.length === 0
+      // Without this unit's committed paths there is nothing to match a proposal
+      // against, so capture coverage is unknown for the same reason an empty
+      // window is: nothing was compared.
       ? 'unknown'
       : winProposals.some((proposal) => proposal.captureCoverage === 'truncated')
         ? 'truncated'
@@ -413,14 +478,33 @@ export async function computeRealization(
         acceptance === null ? 'unknown' : decided(acceptance >= acceptanceThreshold),
         acceptance === null ? 'no proposal to compare' : `${Math.round(acceptance * 100)}% of proposal shipped`,
       ),
-      committed: gate('committed', 'supported', `${added} lines in ${committedPaths.length || a.filesChanged} files`),
+      // `committed` stays SUPPORTED past the budget: the commit exists in the
+      // history the attribution read, which is evidence gathered before any of
+      // this. Only the line and file counts come from the skipped calls, so the
+      // reason falls back to what the attribution already knew.
+      committed: gate(
+        'committed',
+        'supported',
+        scanned
+          ? `${added} lines in ${committedPaths.length || a.filesChanged} files`
+          : `${a.filesChanged} files; line counts unmeasured (scan budget exhausted)`,
+      ),
       tested: gate('tested', signalPolarity(signals, 'tested'), 'CI/test signal'),
       merged: gate('merged', signalPolarity(signals, 'merged'), 'merge signal'),
       shipped: gate('shipped', signalPolarity(signals, 'shipped'), 'deploy signal'),
       survived: gate(
         'survived',
-        maturing ? 'unknown' : decided(survivalRatio >= survivalThreshold),
-        maturing ? 'maturing' : `${Math.round(survivalRatio * 100)}% of lines survive`,
+        // UNMEASURED IS NOT ZERO. A commit whose blame did not run inside the
+        // scan budget has not been shown to have churned; reading its partial
+        // count as a ratio would turn "we ran out of time" into a quality
+        // verdict against it. Unknown is the same answer `maturing` gives, for
+        // the same reason: the evidence has not been gathered yet.
+        maturing || !survival.measured ? 'unknown' : decided(survivalRatio >= survivalThreshold),
+        maturing
+          ? 'maturing'
+          : survival.measured
+            ? `${Math.round(survivalRatio * 100)}% of lines survive`
+            : 'survival unmeasured: the blame budget was exhausted before this commit was covered',
       ),
       clean: gate(
         'clean',
@@ -531,7 +615,14 @@ export async function computeRealization(
     );
   }
 
-  return rollupRealization(units, { generatedAt: now, windowDays, acceptanceThreshold, survivalThreshold, projectScoped });
+  return rollupRealization(units, {
+    generatedAt: now,
+    windowDays,
+    acceptanceThreshold,
+    survivalThreshold,
+    projectScoped,
+    survivalUnmeasuredUnits: unmeasuredSurvival,
+  });
 }
 
 /**
@@ -793,7 +884,15 @@ export async function realizeDiscoveredProjects(
  */
 export function rollupRealization(
   units: WorkUnit[],
-  opts: { generatedAt?: number; windowDays: number; acceptanceThreshold: number; survivalThreshold: number; projectScoped?: boolean },
+  opts: {
+    generatedAt?: number;
+    windowDays: number;
+    acceptanceThreshold: number;
+    survivalThreshold: number;
+    projectScoped?: boolean;
+    /** Units the survival scan could not reach; see `RealizationReport`. */
+    survivalUnmeasuredUnits?: number;
+  },
 ): RealizationReport {
   const generatedMs = opts.generatedAt ?? Date.now();
 
@@ -862,6 +961,7 @@ export function rollupRealization(
     firstPassAcceptance,
     proposalCoverage: units.length > 0 ? withProposal.length / units.length : 0,
     costStaleUnits: units.filter((u) => u.costStale).length,
+    survivalUnmeasuredUnits: opts.survivalUnmeasuredUnits ?? 0,
     matured: {
       units: mature.length,
       realizedUnits: realizedUnits.length,

@@ -53,7 +53,62 @@
  * inconsistency.
  */
 
-import type { ClaimSupportPayload } from './shared-types.ts';
+import type { ClaimProfilePayload, ClaimSupportPayload } from './shared-types.ts';
+
+/**
+ * The seven axes that do not vary, and why stating them is the point.
+ *
+ * Every canonical boundary under `src/` declares the same values on these axes
+ * for every claim it issues: locally verified arithmetic and lineage, a Fiscus
+ * assertion rather than a provider-authenticated one, a scope conditional on
+ * this ledger, a measurement model never validated against a provider
+ * statement, no causal identification, nothing final, and no decision-fitness
+ * assessment. The dashboard's claims are those same claims, so they carry the
+ * same values.
+ *
+ * Constancy is the reason to SEND them, not a reason to omit them. An operator
+ * reading a cost spine has no way to discover from four varying axes that no
+ * figure on the page is causal or final, and those are the two things a FinOps
+ * reader most reliably assumes. The moment one of them does vary -- the causal
+ * lane already issues `randomized` through `src/causal/epistemic.ts` -- the
+ * difference has somewhere to appear instead of being flattened on the wire.
+ */
+const PRODUCT_CLAIM_AXES = {
+  authenticity: 'self_asserted',
+  scope: 'conditional',
+  measurement: 'proxy_unvalidated',
+  causality: 'none',
+  finality: 'provisional',
+  decisionFitness: 'not_assessed',
+} as const;
+
+/**
+ * Build the payload from the profile.
+ *
+ * The three shared axes are copied, and that identity is the whole contract: the
+ * spine reads a projection OF the claim's profile, never a second statement
+ * beside it. `test/claim-support-axes.test.ts` asserts it, so an edit that lets
+ * the spine's coverage differ from the claim's coverage fails rather than
+ * quietly reintroducing the collapse WP-B02 removed.
+ *
+ * `figure` is passed separately because it is a rendering decision -- whether
+ * the band shows a number -- and the kernel has no axis for that. Folding it
+ * into the profile would be a display concern claiming epistemic authority.
+ */
+function projectClaimSupport(
+  profile: ClaimProfilePayload,
+  figure: ClaimSupportPayload['figure'],
+  note?: string,
+): ClaimSupportPayload {
+  return {
+    profile,
+    epistemic: profile.epistemic,
+    coverage: profile.coverage,
+    monetaryBasis: profile.monetaryBasis,
+    figure,
+    ...(note === undefined ? {} : { note }),
+  };
+}
 
 export interface MeteredSupportInput {
   /** Cost priced from a rate card the matcher actually matched, plus estimates. */
@@ -71,17 +126,23 @@ export interface MeteredSupportInput {
 export function meteredClaimSupport(input: MeteredSupportInput): ClaimSupportPayload {
   const priced = input.totalCostUsd > 0;
   const estimatedShare = priced ? input.estimatedCostUsd / input.totalCostUsd : null;
-  return {
-    epistemic: 'supported',
-    // No priced spend means no pricing evidence, not complete pricing. The
-    // share-based test this replaces answered `complete` for an empty window.
-    coverage: estimatedShare === null ? 'unknown' : estimatedShare > 0 ? 'partial' : 'complete',
-    monetaryBasis: estimatedShare === null ? 'none' : estimatedShare > 0 ? 'mixed' : 'list',
-    figure: 'shown',
-    ...(priced
-      ? {}
-      : { note: 'no priced spend in this window, so pricing coverage is unevidenced rather than complete' }),
-  };
+  return projectClaimSupport(
+    {
+      ...PRODUCT_CLAIM_AXES,
+      epistemic: 'supported',
+      // Alone among the four, metered has no canonical kernel boundary behind
+      // it: it is a read of the request ledger, and nothing digests those rows
+      // or re-reads them to confirm they are unaltered. `verified` here would be
+      // borrowed from the boundaries that earned it.
+      integrity: 'unknown',
+      // No priced spend means no pricing evidence, not complete pricing. The
+      // share-based test this replaces answered `complete` for an empty window.
+      coverage: estimatedShare === null ? 'unknown' : estimatedShare > 0 ? 'partial' : 'complete',
+      monetaryBasis: estimatedShare === null ? 'none' : estimatedShare > 0 ? 'mixed' : 'list',
+    },
+    'shown',
+    priced ? undefined : 'no priced spend in this window, so pricing coverage is unevidenced rather than complete',
+  );
 }
 
 export interface BilledSupportInput {
@@ -108,15 +169,20 @@ export interface BilledSupportInput {
  */
 export function billedClaimSupport(input: BilledSupportInput): ClaimSupportPayload {
   if (input.runCount <= 0) {
-    return {
-      epistemic: 'unknown',
-      // Records held but never compared is visible non-emptiness about a claim
-      // that is still unknown — which is what tells an operator the next step is
-      // theirs, rather than that there is nothing to work with.
-      coverage: input.recordCount > 0 ? 'partial' : 'unknown',
-      monetaryBasis: 'none',
-      figure: 'not_a_money_claim',
-    };
+    return projectClaimSupport(
+      {
+        ...PRODUCT_CLAIM_AXES,
+        epistemic: 'unknown',
+        // No run means no immutable, digest-identified record to verify.
+        integrity: 'unknown',
+        // Records held but never compared is visible non-emptiness about a claim
+        // that is still unknown — which is what tells an operator the next step
+        // is theirs, rather than that there is nothing to work with.
+        coverage: input.recordCount > 0 ? 'partial' : 'unknown',
+        monetaryBasis: 'none',
+      },
+      'not_a_money_claim',
+    );
   }
 
   const unstable = input.latest?.snapshotStability === 'changed_across_observations';
@@ -126,19 +192,26 @@ export function billedClaimSupport(input: BilledSupportInput): ClaimSupportPaylo
   // what the provider charged.
   const boundsNothing = input.latest?.offPathBound === 'none_local_estimate_exceeds_provider';
 
-  return {
-    epistemic: unstable ? 'conflicted' : 'supported',
-    coverage: boundsNothing ? 'partial' : 'complete',
-    monetaryBasis: 'billed',
+  return projectClaimSupport(
+    {
+      ...PRODUCT_CLAIM_AXES,
+      epistemic: unstable ? 'conflicted' : 'supported',
+      // Matches the canonical billing reconciliation boundary: the run is
+      // immutable and identified by the digest of the result it describes, so it
+      // cannot outlive a change to that result.
+      integrity: 'verified',
+      coverage: boundsNothing ? 'partial' : 'complete',
+      monetaryBasis: 'billed',
+    },
     // An evidence claim about whether a comparison happened, not a second cost
     // figure. The band carries no dollar in any branch.
-    figure: 'not_a_money_claim',
-    ...(unstable
-      ? { note: `provider snapshots disagreed on ${days.length} day(s) of this scope` }
+    'not_a_money_claim',
+    unstable
+      ? `provider snapshots disagreed on ${days.length} day(s) of this scope`
       : boundsNothing
-        ? { note: 'the local estimate exceeds the provider total, so the residual bounds no off-path spend' }
-        : {}),
-  };
+        ? 'the local estimate exceeds the provider total, so the residual bounds no off-path spend'
+        : undefined,
+  );
 }
 
 export interface AllocatedSupportInput {
@@ -154,12 +227,19 @@ export interface AllocatedSupportInput {
  */
 export function allocatedClaimSupport(input: AllocatedSupportInput): ClaimSupportPayload {
   const run = input.runCount > 0;
-  return {
-    epistemic: run ? 'supported' : 'unknown',
-    coverage: run ? 'complete' : input.costCentreCount > 0 ? 'partial' : 'unknown',
-    monetaryBasis: run ? 'allocated' : 'none',
-    figure: 'not_a_money_claim',
-  };
+  return projectClaimSupport(
+    {
+      ...PRODUCT_CLAIM_AXES,
+      epistemic: run ? 'supported' : 'unknown',
+      // Matches the canonical exact-allocation boundary, whose run identity is
+      // digest-derived -- but only once a run exists. Cost centres verify
+      // nothing on their own.
+      integrity: run ? 'verified' : 'unknown',
+      coverage: run ? 'complete' : input.costCentreCount > 0 ? 'partial' : 'unknown',
+      monetaryBasis: run ? 'allocated' : 'none',
+    },
+    'not_a_money_claim',
+  );
 }
 
 export interface RealizedSupportInput {
@@ -191,24 +271,29 @@ export function realizedClaimSupport(input: RealizedSupportInput): ClaimSupportP
   const conflictedUnits = conflicted.reduce((sum, [, n]) => sum + n, 0);
   const supported = input.realizedUnits > 0;
 
-  return {
-    epistemic: supported ? 'supported' : 'unknown',
-    coverage:
-      conflicted.length > 0
-        ? 'partial'
-        : typeof input.roiCoverage !== 'number'
-          ? 'unknown'
-          : input.roiCoverage >= 1
-            ? 'complete'
-            : 'partial',
-    monetaryBasis: input.valued ? 'estimated' : 'none',
-    figure: !supported ? 'withheld_unsupported' : input.valued ? 'shown' : 'withheld_uncosted',
-    ...(conflicted.length > 0
-      ? {
-          note: `${conflictedUnits} mature unit(s) hold contradicted gate evidence at ${conflicted
-            .map(([gate]) => gate)
-            .join(', ')} and are unadjudicated rather than refuted`,
-        }
-      : {}),
-  };
+  return projectClaimSupport(
+    {
+      ...PRODUCT_CLAIM_AXES,
+      epistemic: supported ? 'supported' : 'unknown',
+      // Matches the canonical coding-realization boundary once a unit has
+      // realized; with none, there is no issued record whose lineage was
+      // verified.
+      integrity: supported ? 'verified' : 'unknown',
+      coverage:
+        conflicted.length > 0
+          ? 'partial'
+          : typeof input.roiCoverage !== 'number'
+            ? 'unknown'
+            : input.roiCoverage >= 1
+              ? 'complete'
+              : 'partial',
+      monetaryBasis: input.valued ? 'estimated' : 'none',
+    },
+    !supported ? 'withheld_unsupported' : input.valued ? 'shown' : 'withheld_uncosted',
+    conflicted.length > 0
+      ? `${conflictedUnits} mature unit(s) hold contradicted gate evidence at ${conflicted
+        .map(([gate]) => gate)
+        .join(', ')} and are unadjudicated rather than refuted`
+      : undefined,
+  );
 }

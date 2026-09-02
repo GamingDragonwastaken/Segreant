@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "22b1222d20b95f9b61b0702021bd1c71cf815baf58f5b99211d3356e400c5f78";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "774237a77b7f3045cf9fc8c77d6e5eadfa837f7266f210189f950251e30ce37d";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -223,7 +223,64 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "type": "string | null"
     }
   ],
+  "ClaimProfilePayload": [
+    {
+      "name": "epistemic",
+      "optional": false,
+      "type": "ClaimEpistemicState"
+    },
+    {
+      "name": "integrity",
+      "optional": false,
+      "type": "ClaimIntegrityStatus"
+    },
+    {
+      "name": "authenticity",
+      "optional": false,
+      "type": "ClaimAuthenticityStatus"
+    },
+    {
+      "name": "scope",
+      "optional": false,
+      "type": "ClaimScopeStatus"
+    },
+    {
+      "name": "coverage",
+      "optional": false,
+      "type": "ClaimCoverageStatus"
+    },
+    {
+      "name": "measurement",
+      "optional": false,
+      "type": "ClaimMeasurementStatus"
+    },
+    {
+      "name": "causality",
+      "optional": false,
+      "type": "ClaimCausalityStatus"
+    },
+    {
+      "name": "monetaryBasis",
+      "optional": false,
+      "type": "ClaimMonetaryBasis"
+    },
+    {
+      "name": "finality",
+      "optional": false,
+      "type": "ClaimFinalityStatus"
+    },
+    {
+      "name": "decisionFitness",
+      "optional": false,
+      "type": "ClaimDecisionFitness"
+    }
+  ],
   "ClaimSupportPayload": [
+    {
+      "name": "profile",
+      "optional": false,
+      "type": "ClaimProfilePayload"
+    },
     {
       "name": "epistemic",
       "optional": false,

@@ -140,9 +140,15 @@ test('holding a provider bill is visible non-emptiness, not a billed claim', () 
 // ---------------------------------------------------------------------------
 
 test('cost centres without a run are partial coverage of an unknown claim, never a refuted one', () => {
-  assert.deepEqual(allocatedClaimSupport({ costCentreCount: 0, runCount: 0 }), {
-    epistemic: 'unknown', coverage: 'unknown', monetaryBasis: 'none', figure: 'not_a_money_claim',
-  });
+  const empty = allocatedClaimSupport({ costCentreCount: 0, runCount: 0 });
+  assert.deepEqual(
+    { epistemic: empty.epistemic, coverage: empty.coverage, monetaryBasis: empty.monetaryBasis, figure: empty.figure },
+    { epistemic: 'unknown', coverage: 'unknown', monetaryBasis: 'none', figure: 'not_a_money_claim' },
+  );
+  // The full profile travels beside the projection now; the axes it adds are
+  // checked as a set in `test/claim-support-axes.test.ts`, so naming them again
+  // here would pin the same fact in two places and break both on one change.
+  assert.equal(empty.profile.integrity, 'unknown', 'nothing has been apportioned, so nothing has been verified');
   const defined = allocatedClaimSupport({ costCentreCount: 4, runCount: 0 });
   assert.equal(defined.epistemic, 'unknown', 'nothing has been apportioned');
   assert.notEqual(defined.epistemic, 'refuted', 'and nothing says it cannot be');

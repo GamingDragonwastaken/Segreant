@@ -71,7 +71,30 @@ export type LayerSupport = ClaimSupportPayload;
  * than of whether the fetch succeeded.
  */
 export function unreachableSupport(figure: ClaimFigureStatus): LayerSupport {
-  return { epistemic: 'unknown', coverage: 'unknown', monetaryBasis: 'none', figure };
+  // Every axis at its weakest value, including the seven that are constant when
+  // the server DOES answer. That constancy is a fact about the claims Fiscus
+  // issues, and a browser that has heard nothing has no standing to repeat it —
+  // restating it here would be the reconstruction WP-B02 removed.
+  //
+  // Three unions have no `unknown` member at all: measurement, causality and
+  // decisionFitness bottom out at `proxy_unvalidated`, `none` and
+  // `not_assessed`. Those values are the floor of the union rather than a
+  // statement about this claim, and the distinction matters: `causality: none`
+  // here means nothing was heard, not that a causal question was asked and
+  // answered negatively.
+  const profile: ClaimSupportPayload['profile'] = {
+    epistemic: 'unknown',
+    integrity: 'unknown',
+    authenticity: 'unknown',
+    scope: 'unknown',
+    coverage: 'unknown',
+    measurement: 'proxy_unvalidated',
+    causality: 'none',
+    monetaryBasis: 'none',
+    finality: 'unknown',
+    decisionFitness: 'not_assessed',
+  };
+  return { profile, epistemic: 'unknown', coverage: 'unknown', monetaryBasis: 'none', figure };
 }
 
 /**

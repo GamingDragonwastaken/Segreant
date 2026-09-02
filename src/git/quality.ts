@@ -74,15 +74,61 @@ async function survivingLinesInFile(repoPath: string, hash: string, path: string
   return count;
 }
 
-export async function survivingLines(repoPath: string, hash: string): Promise<{ added: number; surviving: number }> {
+/**
+ * What a survival measurement cost, and whether it finished.
+ *
+ * `measured` is the field that matters. A survival scan is one `git blame
+ * --line-porcelain` per touched file per commit, serialized, and on a repository
+ * with long files and forty commits that is minutes of work — measured at
+ * **416 seconds** on this repository through `/api/value`, which is a route
+ * hanging rather than a route answering slowly.
+ *
+ * Bounding it introduces a worse hazard than the delay, and this type exists to
+ * refuse it: a commit whose blame did not run has NOT been shown to have zero
+ * surviving lines. Returning `surviving: 0` for it would move that commit from
+ * unmeasured to churned, deflate the survival ratio, and report a quality
+ * signal that no evidence supports. So the caller is handed `measured: false`
+ * and must say unknown.
+ */
+export interface SurvivingLines {
+  readonly added: number;
+  readonly surviving: number;
+  /**
+   * True when every file with added lines was blamed. False means the budget
+   * ran out first, and `surviving` is a floor over an unknown remainder rather
+   * than a count.
+   */
+  readonly measured: boolean;
+}
+
+/**
+ * Count a commit's added lines still attributed to it at HEAD.
+ *
+ * `deadlineMs` is a wall-clock instant, not a duration, so a caller measuring
+ * many commits can spend ONE budget across all of them rather than handing each
+ * commit a budget that multiplies by the commit count. The deadline is checked
+ * between files: a single `git blame` already running is allowed to finish,
+ * because killing it would cost the work without producing an answer.
+ */
+export async function survivingLines(
+  repoPath: string,
+  hash: string,
+  deadlineMs?: number,
+): Promise<SurvivingLines> {
   const files = await commitFiles(repoPath, hash);
   let added = 0;
   let surviving = 0;
+  let measured = true;
   for (const f of files) {
     added += f.added;
-    if (f.added > 0) surviving += await survivingLinesInFile(repoPath, hash, f.path);
+    if (f.added === 0) continue;
+    if (deadlineMs !== undefined && Date.now() >= deadlineMs) {
+      measured = false;
+      continue;
+    }
+    surviving += await survivingLinesInFile(repoPath, hash, f.path);
   }
-  return { added, surviving };
+  return { added, surviving, measured };
 }
 
 /** Set of commit hashes that were later reverted (git's default revert message). */

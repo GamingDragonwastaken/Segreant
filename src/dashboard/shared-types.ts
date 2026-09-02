@@ -125,13 +125,58 @@ export type ClaimFigureStatus =
   | 'withheld_uncosted'
   | 'not_a_money_claim';
 
+/**
+ * Every axis the kernel's `ClaimProfile` names, for one product claim.
+ *
+ * The wire used to carry three of these — the three that happen to vary between
+ * claims — and the GUI showed exactly those. The seven it dropped are constant
+ * across every canonical issuance boundary under `src/`, and being constant is
+ * precisely why omitting them was the wrong call: an operator reading the spine
+ * could not tell that NO product figure is causal, that nothing is final, and
+ * that nothing has been assessed for decision fitness. Those are the assumptions
+ * a FinOps reader is most likely to make and least likely to have checked.
+ *
+ * The unions mirror `src/epistemic/profile.ts` exactly, and
+ * `test/claim-support-axes.test.ts` fails on drift.
+ */
+export type ClaimIntegrityStatus = 'unknown' | 'unverifiable' | 'verified';
+export type ClaimAuthenticityStatus = 'unknown' | 'self_asserted' | 'pinned' | 'provider_authenticated';
+export type ClaimScopeStatus = 'unknown' | 'incomplete' | 'conditional' | 'established';
+export type ClaimMeasurementStatus = 'proxy_unvalidated' | 'proxy_validated' | 'validated';
+export type ClaimCausalityStatus = 'none' | 'observational' | 'quasi_experimental' | 'randomized';
+export type ClaimFinalityStatus = 'unknown' | 'provisional' | 'final';
+export type ClaimDecisionFitness = 'not_assessed' | 'insufficient' | 'sufficient';
+
+export interface ClaimProfilePayload {
+  epistemic: ClaimEpistemicState;
+  integrity: ClaimIntegrityStatus;
+  authenticity: ClaimAuthenticityStatus;
+  scope: ClaimScopeStatus;
+  coverage: ClaimCoverageStatus;
+  measurement: ClaimMeasurementStatus;
+  causality: ClaimCausalityStatus;
+  monetaryBasis: ClaimMonetaryBasis;
+  finality: ClaimFinalityStatus;
+  decisionFitness: ClaimDecisionFitness;
+}
+
 export interface ClaimSupportPayload {
+  /**
+   * The canonical profile. This is the claim's support; the three axes below are
+   * a stated projection of it, not a second opinion about it.
+   */
+  profile: ClaimProfilePayload;
   /** Four-valued. `unknown` is an absence of evidence, never a measured no. */
   epistemic: ClaimEpistemicState;
   /** How much of what the claim covers the evidence actually reaches. */
   coverage: ClaimCoverageStatus;
   /** What kind of money the figure is, when this claim carries one. */
   monetaryBasis: ClaimMonetaryBasis;
+  /**
+   * Whether the band shows a number, and why not when it does not. NOT a profile
+   * axis: the kernel has no opinion about rendering, and a display decision that
+   * pretended to be one would be exactly the escalation this module refuses.
+   */
   figure: ClaimFigureStatus;
   /**
    * The server's own reason for the axes above, in one line, when the reason is
