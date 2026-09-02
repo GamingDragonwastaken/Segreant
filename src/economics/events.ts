@@ -160,8 +160,40 @@ function eventKind(value: unknown): EconomicEventKind {
   return value as EconomicEventKind;
 }
 
+/**
+ * Bases a CHARGE may carry, read off the per-kind rules below rather than
+ * restated: `charge_estimated` allows list/estimated, `provider_charge_observed`
+ * provider_observed, `bill_observed` billed. `effective`, `allocated` and
+ * `full_cost` are computed or downstream bases that no charge kind may hold.
+ */
+const CHARGE_BASES: readonly Money['basis'][] = ['list', 'estimated', 'provider_observed', 'billed'];
+
 function validateEventBasis(kind: EconomicEventKind, amount: Money | null, id: string): void {
   if (amount === null) return;
+
+  // AN ADJUSTMENT MUST BE ABLE TO NET AGAINST WHAT IT ADJUSTS (WP-C02).
+  //
+  // `closeBalances` groups by currency + basis + role and sums only inside a
+  // group, which is the correct refusal — bases name different economic
+  // semantics and adding across them would be the collapse this product exists
+  // to prevent. The consequence is that an adjustment carrying a basis no charge
+  // can hold nets against nothing: it does not error and it does not vanish, it
+  // becomes its own balance row while the charge it was meant to reduce still
+  // reads at full amount. Two individually true numbers that together mislead.
+  //
+  // Issuance is the only place this can be stopped, because by projection time
+  // the refusal to add across bases is right and the damage is already recorded.
+  // All six adjustment kinds fell through the `: true` default below, and none
+  // of them has a production constructor yet — which is precisely when a rule is
+  // cheap to add and precisely the kind of gap that gets wired by someone who
+  // never read this function.
+  if (EVENT_ROLE_BY_KIND[kind] === 'adjustment' && !CHARGE_BASES.includes(amount.basis)) {
+    throw new Error(
+      `economic event ${id} kind ${kind} adjusts a charge and must carry a basis a charge can hold `
+      + `(${CHARGE_BASES.join(', ')}); received ${amount.basis}`,
+    );
+  }
+
   const valid = kind === 'charge_estimated'
     ? amount.basis === 'list' || amount.basis === 'estimated'
     : kind === 'provider_charge_observed'
