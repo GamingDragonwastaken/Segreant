@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createBuildWorkspace } from './support/buildWorkspace.ts';
@@ -76,18 +76,63 @@ test('concurrent builds keep the compiled CLI runnable throughout publication', 
     assert.equal(seed.code, 0, seed.stderr || 'the workspace seed build failed');
   }
 
-  const builders = [runNode(workspace.build, [], workspace.root), runNode(workspace.build, [], workspace.root)];
+  // The repository's published artifact, as it stood before any of this ran. An
+  // isolated build publishes into the workspace, so this must not move.
+  const rootArtifact = join(ROOT, 'dist', 'cli.js');
+  const publishedBefore = existsSync(rootArtifact) ? statSync(rootArtifact).mtimeMs : null;
+
+  const builders = [spawnNode(workspace.build, [], workspace.root), spawnNode(workspace.build, [], workspace.root)];
   await new Promise((resolve) => setTimeout(resolve, 25));
-  const readers = Array.from({ length: 8 }, () => runNode(workspace.cli, ['--help'], workspace.root));
-  const results = await Promise.all([...builders, ...readers]);
+  const readers = Array.from({ length: 8 }, () => spawnNode(workspace.cli, ['--help'], workspace.root));
+  const spawned = [...builders, ...readers];
+  // Captured while they are alive; by assertion time every one of them has
+  // exited, which is what makes the ownership check below decidable.
+  const ours = new Set(spawned.map((entry) => entry.child.pid).filter((pid): pid is number => typeof pid === 'number'));
+  const results = await Promise.all(spawned.map((entry) => entry.result));
 
   for (const result of results) {
     assert.equal(result.code, 0, result.stderr || 'concurrent build/CLI process failed');
   }
   assert.equal(existsSync(join(workspace.root, 'dist', 'cli.js')), true, 'successful builds must leave the CLI artifact present');
-  // And the repository's own lock was never involved: a residue here would mean
-  // the workspace did not actually isolate the build.
-  assert.equal(existsSync(join(ROOT, '.fiscus-build.lock')), false, 'an isolated build must not touch the repository lock');
+
+  // ISOLATION IS "NONE OF OURS TOUCHED IT", NOT "THE PATH IS ABSENT" (WP-C04).
+  //
+  // This assertion used to read `existsSync(ROOT/.fiscus-build.lock) === false`,
+  // and it was not a statement about this test at all. As the comment at the top
+  // of this file records, EVERY test file that spawns `bin/fiscus.mjs` takes the
+  // repository lock as a reader — and `node --test` runs files in parallel. So
+  // the old line asked "is any other test file holding the repository lock right
+  // now", and answered a question about the harness schedule. It passed in
+  // isolation (6s) and failed inside a full local run (45s) for that reason
+  // alone: a real reader was legitimately holding a real lock.
+  //
+  // Deleting it would have removed a behavioural claim to make a run green. The
+  // claim is kept and made decidable instead, in two halves that a concurrent
+  // reader cannot forge:
+  //
+  //   1. The repository's own published artifact did not move. A build that
+  //      escaped into the checkout would have republished dist/cli.js here.
+  //      Nothing else in the suite builds at ROOT — `pretest` finishes before
+  //      any test starts — so this is stable under parallelism.
+  //   2. No lock at ROOT is owned by a process THIS test spawned. All of ours
+  //      have exited, so a lock naming one of their pids is our residue; a lock
+  //      naming anything else belongs to somebody else's live reader and says
+  //      nothing about our isolation.
+  if (publishedBefore !== null) {
+    assert.equal(statSync(rootArtifact).mtimeMs, publishedBefore, 'an isolated build must not republish the repository artifact');
+  }
+  const rootOwner = join(ROOT, '.fiscus-build.lock', 'owner.json');
+  let residueOwner: number | null = null;
+  if (existsSync(rootOwner)) {
+    try {
+      const owner = JSON.parse(readFileSync(rootOwner, 'utf8')) as { pid?: unknown };
+      if (typeof owner.pid === 'number' && ours.has(owner.pid)) residueOwner = owner.pid;
+    } catch {
+      // A lock caught mid-write belongs to whoever is writing it, and that is
+      // not us — every process this test spawned has already exited.
+    }
+  }
+  assert.equal(residueOwner, null, `an isolated build must not leave the repository lock held (pid ${residueOwner})`);
 });
 
 test('the supported CLI launcher waits for publication and leaves no lock residue', async () => {

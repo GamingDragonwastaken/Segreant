@@ -325,6 +325,49 @@ export class EconomicLedger {
         if (compareMoney(negateMoney(value.amount), target.amount) > 0) {
           throw new Error(`economic event ${value.id} allocation reversal exceeds its source amount`);
         }
+
+        // CONSERVATION IS A PROPERTY OF THE SET, NOT OF ONE EVENT (WP-C04).
+        //
+        // The bound directly above is per event, so it is defeated by
+        // splitting: two reversals of $8.00 against a $10.00 allocation are
+        // each under it and jointly $6.00 over. The period then closed at
+        // `allocation USD allocated -6` — more taken back than was ever
+        // allocated, which is not a quantity that can exist.
+        //
+        // Same shape as the FX defect at D-090. A constructor is handed one
+        // event and its source; only the STORE can see what else already
+        // points at that source, so the closure check is the only place the
+        // aggregate can be bounded — and being here rather than in `append`
+        // means a database that already holds the split pair fails closed on
+        // read instead of projecting the negative.
+        //
+        // Keyed on the TARGET, not on the ledger: reversing one allocation
+        // must not constrain another. And placed after the single-event check
+        // so a lone oversized reversal still fails for its own, more precise
+        // reason.
+        const priorReversals = this.db.prepare(
+          `SELECT s.event_id AS eventId
+           FROM economic_event_sources AS s
+           JOIN economic_events AS e ON e.event_id = s.event_id
+           WHERE s.source_event_id = ? AND s.event_id <> ? AND e.event_kind = 'allocation_reversed'
+           ORDER BY s.event_id ASC`,
+        ).all(target.id, value.id) as unknown as { eventId?: unknown }[];
+        let reversed = negateMoney(value.amount);
+        const reversalIds = [value.id];
+        for (const prior of priorReversals) {
+          if (typeof prior.eventId !== 'string') continue;
+          const recorded = this.readStored(prior.eventId);
+          if (recorded === null || recorded.amount === null || recorded.reversalOf !== target.id) continue;
+          reversed = addMoney(reversed, negateMoney(recorded.amount));
+          reversalIds.push(recorded.id);
+        }
+        if (compareMoney(reversed, target.amount) > 0) {
+          throw new Error(
+            `economic event ${value.id} allocation reversals total ${formatMoneyAmount(reversed)} `
+            + `${target.amount.currency}, which exceeds the ${formatMoneyAmount(target.amount)} allocated by `
+            + `${target.id} (${reversalIds.sort().join(', ')})`,
+          );
+        }
       }
     }
     if (value.kind === 'price_corrected') {
@@ -443,6 +486,47 @@ export class EconomicLedger {
         throw new Error(`economic event ${value.id} FX translation cannot be reproduced exactly: ${error instanceof Error ? error.message : String(error)}`);
       }
       if (compareMoney(expected, value.amount) !== 0) throw new Error(`economic event ${value.id} FX translation amount does not match its historical rate`);
+
+      // ONE TRANSLATION PER SOURCE AND TARGET CURRENCY (WP-C03).
+      //
+      // A translation is a DERIVATIVE: it restates one charge in a second
+      // currency without the charge ceasing to be true. `closeBalances` groups
+      // by currency + basis + role and sums within a group, so two translations
+      // of one charge into one currency land in the same group and are added —
+      // a $10.00 bill translated at 0.9 and again at 0.8 closed at EUR 17,
+      // which is neither answer and no rate produces it.
+      //
+      // `fxTranslationEvent` cannot catch this: it sees its own source and
+      // nothing else. Uniqueness of a derivative is a property of the STORE, so
+      // the closure check is the only place that can refuse it — and being here
+      // rather than in `append` alone means a database that already holds the
+      // pair fails closed on read instead of projecting their sum.
+      //
+      // `price_corrected`, the other single-source derivative, has carried
+      // exactly this guard from the start (see `priorCorrections` above). This
+      // is the missing half of a pair, not a new rule.
+      //
+      // Keyed on the PAIR, not the source: translating one charge into EUR and
+      // into GBP is not double counting, because those are separate balance
+      // groups that are never summed. And placed last in this block on purpose,
+      // so a malformed second translation still fails for its own reason.
+      const priorTranslations = this.db.prepare(
+        `SELECT s.event_id AS eventId
+         FROM economic_event_sources AS s
+         JOIN economic_events AS e ON e.event_id = s.event_id
+         WHERE s.source_event_id = ? AND s.event_id <> ? AND e.event_kind = 'fx_translated'
+         ORDER BY s.event_id ASC`,
+      ).all(source.id, value.id) as unknown as { eventId?: unknown }[];
+      for (const prior of priorTranslations) {
+        if (typeof prior.eventId !== 'string') continue;
+        const recorded = this.readStored(prior.eventId);
+        if (recorded === null || recorded.amount === null) continue;
+        if (recorded.amount.currency !== value.amount.currency) continue;
+        throw new Error(
+          `economic event ${value.id} FX translation source ${source.id} is already translated into `
+          + `${value.amount.currency} by ${recorded.id}`,
+        );
+      }
     }
     this.validateCloseEvent(value, sources);
     visiting.delete(value.id);
