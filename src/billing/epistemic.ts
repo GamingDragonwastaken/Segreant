@@ -653,7 +653,16 @@ export function billingReconciliationClaim(input: BillingReconciliationClaimInpu
     },
     subject: `provider-project:${input.run.providerProjectRef}`,
     scope: scope({ provider: 'openai', declaredScopeId: input.run.declaredScopeId, providerProjectRef: input.run.providerProjectRef }),
-    grain: grain(['billing_period']),
+    // NOT `billing_period`, which this used to declare. `billing_period` is the
+    // partition of the IMPORTED BILLING DOCUMENT path, whose evidence is
+    // `billing_record`. This claim compares one provider project's period
+    // against the local capture for that same provider project — its subject and
+    // scope both say so, and both of its cited evidences sit at
+    // `provider_project_period` or roll up into it. Declaring the coarser,
+    // different partition labelled the figure as covering the whole billing
+    // period when it covers one project inside it. Nothing noticed while the
+    // persistence boundary did not check grain (D-108).
+    grain: grain(['provider_project_period']),
     time: { validTime, asOf: issuedAt },
     epistemic: 'supported',
     profile: claimProfile({

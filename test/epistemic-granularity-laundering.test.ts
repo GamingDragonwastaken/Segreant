@@ -26,29 +26,22 @@
  * it, and it is what nearly every claim does to its evidence. Refusing every
  * grain change would make the kernel unusable.
  *
- * THE RULE IS NARROWER THAN THE OBVIOUS ONE, AND THE PRODUCT IS WHY. "Equal or
- * coarser than EVERY cited evidence" was implemented first and eleven tests
- * across four real issuance paths refuted it. Two reasons, both about
- * information the model does not carry:
+ * `incomparable` WAS THE WHOLE DIFFICULTY. A `Grain` is a flat dimension SET,
+ * so `[billing_record]` → `[billing_period]`, an honest roll-up the product
+ * performs, lands on the same `incomparable` verdict as `[day]` → `[model]`,
+ * which invents an axis. Refusing the verdict refused eleven tests across four
+ * real issuance paths; allowing it left the invention standing. An inline
+ * `explicitAggregate` exception was tried between the two and covered one of
+ * the product's two roll-ups. The resolution is in
+ * `test/epistemic-grain-rollup.test.ts`: `DIMENSION_ROLLUPS` declares the
+ * containment `grainRelation` says it cannot infer, so both verdicts become
+ * decidable and neither the product nor the refusal is sacrificed (D-108).
  *
- *   - `[billing_record]` → `[billing_period]` and
- *     `[provider_project_day_line_item]` → `[provider_project_period]` are
- *     honest roll-ups that `grainRelation` calls `incomparable`, because a
- *     `Grain` is a flat dimension SET with no hierarchy: nothing declares that a
- *     record sits inside a period. So `incomparable` cannot be refused without
- *     refusing the honest case with it.
- *   - A decision-fitness claim at `[decision, action]` cites the interval
- *     evidence supplying the action detail AND caller evidence at `[decision]`
- *     supplying context. Citations carry no ROLES here, so "every citation must
- *     independently support the full resolution" describes a different graph.
- *
- * WHAT SURVIVES, AND IT IS THE OPPOSITE QUANTIFIER FROM D-104. A claim is
- * refused when some citation is strictly `finer` — positive evidence that the
- * claim added dimensions — and NO citation is `equal` or `coarser`, so nothing
- * cited supplies them. Trust takes the WEAKEST citation because weakness
- * propagates: withdrawing any cited evidence withdraws the claim. Resolution is
- * SUPPLIED rather than propagated, and citing a daily total beside a per-request
- * log does not erase the log's detail.
+ * THE QUANTIFIER IS THE OPPOSITE OF D-104's, DELIBERATELY. A claim is refused
+ * when NO citation supplies a dimension it names. Trust takes the WEAKEST
+ * citation because weakness propagates: withdrawing any cited evidence
+ * withdraws the claim. Resolution is SUPPLIED rather than propagated, and
+ * citing a daily total beside a per-request log does not erase the log's detail.
  *
  * AND THE CEILING HAS NO HOLE UNDER IT. D-104 recorded the evidence-free claim
  * as an unbounded case for its own ceiling. It is not: `claim()` refuses an
@@ -150,20 +143,14 @@ test('a claim cannot report per-request detail that its daily-total evidence nev
 });
 
 test('an incomparable grain is refused when no cited evidence supplies its dimensions', () => {
-  // WHAT THIS RULE CANNOT SEE, ASSERTED SO IT CANNOT BE MISTAKEN FOR SAFETY.
-  // `[model]` against `[day]` shares no dimension, and by the letter of the
-  // model that is an invented axis. But `Grain` is a flat dimension SET with no
-  // hierarchy, so `grainRelation` returns the identical `incomparable` verdict
-  // for `[billing_record]` -> `[billing_period]`, an honest roll-up that real
-  // issuance performs. Refusing `incomparable` broke eleven tests across four
-  // product paths, and the first attempt to keep the refusal — a hardcoded
-  // exception for `billing.` derivation rules naming those two dimensions —
-  // covered neither the OpenAI Costs roll-up nor, as it turned out, the billing
-  // path it was written for. A kernel rule that needs a list of product
-  // exceptions to be true is not the rule; it is a description of the
-  // exceptions.
-  //
-  // Product-specific rollups need their own explicit typed bridge.
+  // `[model]` against `[day]` shares no dimension: an axis the evidence never
+  // had. This verdict was unreachable for two rounds because plain set
+  // containment reports it identically to the product's honest roll-ups, and no
+  // repair could separate them until `DIMENSION_ROLLUPS` declared the
+  // containment. It is refused here BECAUSE no such declaration covers it — the
+  // roll-up cases are asserted next door in
+  // `test/epistemic-grain-rollup.test.ts`, and this refusal is only sound while
+  // that file keeps passing.
   const kernel = ledger();
   kernel.appendEvidence(evidence(evidenceInput('evidence:daily:1', ['day'])));
   assert.throws(

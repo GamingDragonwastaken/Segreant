@@ -28,7 +28,7 @@ import {
 } from './dag.ts';
 import { EPISTEMIC_STATES } from './state.ts';
 import { AUTHENTICITY, COVERAGE, INTEGRITY } from './profile.ts';
-import { grainRelation } from './grain.ts';
+import { grainIsSupportedBy } from './grain.ts';
 import {
   assessDerivationLegality,
   derivation,
@@ -748,39 +748,37 @@ export class EpistemicLedger {
    * persisted, and every claim reaching here has something to be measured
    * against. The limitation was overstated and is withdrawn at D-106.
    *
-   * AND THE SAME PASS ENFORCES GRAIN (WP-R03, D-106). `grainRelation` answers
-   * how two grains compare, with an explicit `incomparable` when neither
-   * dimension set contains the other, and it had exactly one caller in `src/`:
-   * `requiredCoordinateWitnesses` in `derivation.ts`. The direct path never
-   * asked, so evidence at grain `[day]` supported a stored claim at
+   * AND THE SAME PASS ENFORCES GRAIN (WP-R03, D-106, D-108). `grainRelation`
+   * answers how two grains compare, with an explicit `incomparable` when
+   * neither dimension set contains the other, and it had exactly one caller in
+   * `src/`: `requiredCoordinateWitnesses` in `derivation.ts`. The direct path
+   * never asked, so evidence at grain `[day]` supported a stored claim at
    * `[day, project, request]` — per-request resolution invented from a daily
    * total, and carried as observed.
    *
-   * THE RULE IS NARROWER THAN THE OBVIOUS ONE, BECAUSE THE OBVIOUS ONE ASSUMES
-   * INFORMATION THIS MODEL DOES NOT CARRY. "Equal or coarser than EVERY cited
-   * evidence" was tried first and three real issuance paths are counterexamples
-   * to it, which is why it is not the rule:
+   * `incomparable` WAS THE WHOLE DIFFICULTY, AND THE ANSWER WAS TO REMOVE IT
+   * RATHER THAN CHOOSE A SIDE. A `Grain` is a flat dimension SET, so
+   * `[billing_record]` → `[billing_period]` — an honest roll-up the product
+   * performs — lands on the identical `incomparable` verdict as `[day]` →
+   * `[model]`, which invents an axis outright. Refusing `incomparable` refused
+   * the product; allowing it left the invention. Two repairs were tried and
+   * neither was a rule: an inline `explicitAggregate` exception, which named one
+   * of the two roll-ups and left the suite red, and blanket permission, which
+   * was a declared blind spot. `grain.ts` already said what was missing —
+   * "incomparable grains cannot be ordered without a domain witness" — so the
+   * witness is now declared as data in `DIMENSION_ROLLUPS`, and the check is
+   * `grainIsSupportedBy`: every dimension the claim names is present in the
+   * evidence or is a declared coarsening of one that is.
    *
-   *   - `[billing_record]` → `[billing_period]` and
-   *     `[provider_project_day_line_item]` → `[provider_project_period]` are
-   *     genuine roll-ups, and `grainRelation` calls both `incomparable` because
-   *     a `Grain` is a flat dimension SET with no hierarchy — nothing declares
-   *     that a record sits inside a period. So `incomparable` conflates an
-   *     honest aggregation across differently-named axes with an invented axis,
-   *     and refusing it refuses the honest case too.
-   *   - A decision-fitness claim at `[decision, action]` cites the interval
-   *     evidence that supplies the action detail AND caller evidence at
-   *     `[decision]` that supplies context. Citations have no ROLES here, so
-   *     "every citation must independently support the full resolution" is a
-   *     rule about a graph this is not.
-   *
-   * SO: refused only when some citation is strictly `finer` — positive evidence
-   * that the claim added dimensions — and NO citation is `equal` or `coarser`,
-   * meaning nothing cited supplies them. That is the largest refusal the model
-   * can justify. Note this is the opposite quantifier from the trust ceilings
-   * above, and deliberately: weakness PROPAGATES, because withdrawing any
-   * citation withdraws the claim, while resolution is SUPPLIED, and citing a
-   * daily total beside a per-request log does not erase the log's detail.
+   * THE QUANTIFIER IS THE OPPOSITE OF THE TRUST CEILINGS ABOVE, DELIBERATELY.
+   * Trust takes the WEAKEST citation because weakness PROPAGATES: withdrawing
+   * any cited evidence withdraws the claim, so one verified invoice cannot
+   * launder an unverified note. Resolution is SUPPLIED rather than propagated,
+   * so ONE citation carrying the dimensions is enough — citing a daily total
+   * beside a per-request log does not erase the log's detail. A decision-fitness
+   * claim at `[decision, action]` relies on exactly that: it draws action detail
+   * from interval evidence and context from caller evidence at `[decision]`,
+   * and citations carry no roles that could tell them apart.
    *
    * BOTH RULES SHARE ONE PASS BECAUSE `readEvidence` RE-VALIDATES. It reparses
    * and re-checks the whole canonical payload on every call, so a second loop
@@ -800,11 +798,13 @@ export class EpistemicLedger {
       integrityCeiling = Math.min(integrityCeiling, INTEGRITY.indexOf(source.integrity));
       authenticityCeiling = Math.min(authenticityCeiling, AUTHENTICITY.indexOf(source.authenticity));
       coverageCeiling = Math.min(coverageCeiling, COVERAGE.indexOf(source.completeness.status));
-      const relation = grainRelation(item.grain, source.grain);
-      const explicitAggregate = item.grain.dimensions.includes('billing_period')
-        && source.grain.dimensions.includes('billing_record');
-      if (relation === 'equal' || relation === 'coarser' || explicitAggregate) grainSupplied = true;
-      else if (relation === 'finer' || relation === 'incomparable') refinedOver.push(source);
+      // `grainIsSupportedBy` subsumes `equal` and `coarser` — both mean every
+      // claimed dimension is present in the evidence — and additionally accepts a
+      // DECLARED roll-up, which set containment reports as `incomparable`
+      // indistinguishably from an invented axis. Anything else is a dimension
+      // the evidence could not have made, whether `finer` or undeclared.
+      if (grainIsSupportedBy(item.grain, source.grain)) grainSupplied = true;
+      else refinedOver.push(source);
     }
     if (!grainSupplied && refinedOver.length > 0) {
       const cited = refinedOver[0]!;

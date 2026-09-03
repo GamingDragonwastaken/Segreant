@@ -5,6 +5,41 @@ import { buildBillingKernelIssuance, billingReconciliationClaim } from '../src/b
 import type { BillingEvidenceRecord, BillingImportRun } from '../src/store/billing.ts';
 import { Store } from '../src/store/db.ts';
 import type { ReconciliationRun } from '../src/billing/reconcile.ts';
+import { evidence } from '../src/epistemic/evidence.ts';
+import { grain } from '../src/epistemic/grain.ts';
+import { scope } from '../src/epistemic/scope.ts';
+import { interval } from '../src/epistemic/time.ts';
+
+const PROVIDER_PERIOD_EVIDENCE_ID = 'evidence:kernel:provider-project-period';
+
+/** One provider-project period observation, which is what a reconciliation claim is about. */
+function providerPeriodEvidence() {
+  return evidence({
+    id: PROVIDER_PERIOD_EVIDENCE_ID,
+    evidenceType: 'provider.costs',
+    sourceIdentity: 'provider:openai:project-a',
+    sourceClass: 'provider_api',
+    payload: { amountMicros: 1_334_567 },
+    scope: scope({ provider: 'openai', declaredScopeId: 'scope:kernel', providerProjectRef: 'project-a' }),
+    grain: grain(['provider_project_period']),
+    occurredAt: '2026-08-01T00:00:00.000Z',
+    validTime: interval('2026-08-01T00:00:00.000Z', '2026-08-03T00:00:00.000Z'),
+    observedAt: '2026-08-10T11:30:00.000Z',
+    recordedAt: '2026-08-10T11:30:01.000Z',
+    integrity: 'verified',
+    authenticity: 'provider_authenticated',
+    completeness: { status: 'partial', method: 'provider_api' },
+    measurementModelRef: null,
+    monetaryBasis: 'billed',
+    assumptions: [],
+    supersedes: [],
+    supersededBy: null,
+    revocation: null,
+    schemaVersion: 1,
+    sensitivity: 'internal',
+    redaction: 'none',
+  });
+}
 
 const run: BillingImportRun = {
   importId: 'import:kernel:1', importedAtMs: Date.parse('2026-08-10T12:00:00.000Z'), format: 'json', schemaVersion: 1,
@@ -154,7 +189,18 @@ test('Store persists a mixed-basis reconciliation Claim only from existing Evide
       conditions: ['local_route_scope_is_not_provider_verified', 'off_path_provider_usage_is_not_observable', 'provider_line_items_do_not_join_to_requests_or_models', 'local_request_amounts_are_rate_card_estimates', 'provider_report_is_operator_supplied_and_unverified'],
       trust: 'scope_conditional_reconciliation', excludedFrom: ['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations'],
     };
-    const evidenceIds = store.epistemic().graph().nodes.filter((node) => node.kind === 'evidence').map((node) => node.id);
+    // The reconciliation is about ONE provider project's period — its subject and
+    // scope both say `project-a` — so it is issued at `provider_project_period`
+    // and must cite evidence carrying that partition. This used to sweep up every
+    // evidence node in the graph, which meant the operator-export
+    // `billing_record` rows: a provider-project figure resting on billing-document
+    // records. The kernel now refuses that, and the fixture cites evidence the
+    // claim is actually about (D-108).
+    store.epistemic().appendEvidence(providerPeriodEvidence());
+    const evidenceIds = store.epistemic().graph().nodes
+      .filter((node) => node.kind === 'evidence' && node.id === PROVIDER_PERIOD_EVIDENCE_ID)
+      .map((node) => node.id);
+    assert.deepEqual(evidenceIds, [PROVIDER_PERIOD_EVIDENCE_ID], 'the cited evidence must be in the kernel already');
     const first = store.issueBillingReconciliationClaim({ id: 'claim:reconciliation:stored', run: reconciliation, evidenceIds, issuedAt: '2026-08-10T12:01:00.000Z' });
     assert.deepEqual(first, { claimId: 'claim:reconciliation:stored', result: 'inserted' });
     const replay = store.issueBillingReconciliationClaim({ id: 'claim:reconciliation:stored', run: reconciliation, evidenceIds, issuedAt: '2026-08-10T12:01:00.000Z' });
