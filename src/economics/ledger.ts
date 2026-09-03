@@ -667,6 +667,43 @@ export class EconomicLedger {
     });
   }
 
+  /**
+   * May this event be recorded, given every close this ledger has ever recorded?
+   *
+   * TWO RULES, NOT ONE, AND THE SECOND WAS MISSING. The first is the period's
+   * current state: while a period is `finalized` or `conflicted`, an in-period
+   * event is refused until somebody reopens it. That guards the CURRENT state.
+   *
+   * `validateCloseEvent` guards something wider. It re-derives what a stored
+   * `close_finalized` should have bound — every in-period event whose
+   * `recordedAt` is at or before the close's own — and requires that to equal
+   * what it did bind, which is how a deleted or forged in-period row is caught.
+   * That check applies to every close event EVER recorded, so the guard's domain
+   * was narrower than the check's, and a reopened period was the gap: finalize,
+   * reopen, then append an in-period event recorded BEFORE the close, and the
+   * close's binding becomes false. `events()` re-validates every stored event
+   * and every economic projection is built on `events()`, so `events()`,
+   * `periodCloseStatus`, `finalizePeriod` and `reopenPeriod` all threw
+   * permanently. The ledger is append-only: nothing removes the event, nothing
+   * supersedes the close, and the state is terminal. Under this project's own
+   * rule that budget enforcement fails closed on an unreadable ledger, it also
+   * stopped provider forwarding for good.
+   *
+   * WHY THE REFUSAL IS HERE AND NOT IN THE CHECK. Comparing a stored close
+   * against its own recorded snapshot would make the symptom disappear and
+   * delete the tamper detection with it: a close is precisely the claim that
+   * these were all the in-period events, and asking only whether it agrees with
+   * itself cannot notice that one of them is gone. The invariant to keep is that
+   * a recorded close stays verifiable, so what must be refused is the append
+   * that would retroactively falsify one.
+   *
+   * WHAT REMAINS PERMITTED, which is the whole legitimate use. A reopen happens
+   * after the close, and evidence recorded after that carries a later
+   * `recordedAt`. `occurredAt` is untouched and may sit anywhere inside the
+   * period — that is what a reopen is for. It is `recordedAt`, the time Fiscus
+   * recorded the event, that may not be backdated across a close. Recorded at
+   * D-100.
+   */
   private assertPeriodOpenForEvent(value: EconomicEvent): void {
     if (isCloseKind(value.kind)) return;
     const eventTimes = [Date.parse(value.occurredAt)];
@@ -675,11 +712,19 @@ export class EconomicLedger {
       if (source !== null) eventTimes.push(Date.parse(source.occurredAt));
     }
     const periods = new Map<string, EconomicPeriod>();
+    // The latest `recordedAt` among the closes recorded for each period. Every
+    // one of them carries its own binding, so the floor is the latest rather
+    // than the active one: a rule written against `activeFinalizationId` would
+    // leave an earlier close falsifiable.
+    const closedThrough = new Map<string, number>();
     for (const control of this.events()) {
       if (control.kind === 'close_finalized') {
         const metadata = closeFinalizationMetadata(control.metadata);
         const period = canonicalPeriod(metadata.periodStartMs, metadata.periodEndMs);
         periods.set(period.subject, period);
+        const recorded = Date.parse(control.recordedAt);
+        const previous = closedThrough.get(period.subject);
+        if (previous === undefined || recorded > previous) closedThrough.set(period.subject, recorded);
       } else if (control.kind === 'close_reopened') {
         const metadata = closeReopenMetadata(control.metadata);
         const period = canonicalPeriod(metadata.periodStartMs, metadata.periodEndMs);
@@ -687,10 +732,23 @@ export class EconomicLedger {
       }
     }
     for (const period of periods.values()) {
+      const inPeriod = eventTimes.some((time) => time >= period.startMs && time < period.endMs);
       const state = this.periodCloseStatus(period.startMs, period.endMs);
-      if (state.status !== 'finalized' && state.status !== 'conflicted') continue;
-      if (eventTimes.some((time) => time >= period.startMs && time < period.endMs)) {
-        throw new Error('economic period ' + period.startMs + '/' + period.endMs + ' is finalized; reopen it before recording an in-period event');
+      if (state.status === 'finalized' || state.status === 'conflicted') {
+        if (inPeriod) {
+          throw new Error('economic period ' + period.startMs + '/' + period.endMs + ' is finalized; reopen it before recording an in-period event');
+        }
+        continue;
+      }
+      const floor = closedThrough.get(period.subject);
+      if (!inPeriod || floor === undefined) continue;
+      if (Date.parse(value.recordedAt) <= floor) {
+        throw new Error(
+          'economic period ' + period.startMs + '/' + period.endMs + ' was closed through '
+          + new Date(floor).toISOString() + '; an in-period event recorded at or before that instant would '
+          + 'falsify a recorded close. Record it at the time Fiscus observed it — occurredAt still carries '
+          + 'when it happened.',
+        );
       }
     }
   }

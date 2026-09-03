@@ -380,6 +380,39 @@ function teamPushTransportError(rawUrl: string): string | null {
 }
 
 /**
+ * A rollup scoped to one project is not a snapshot, and the server reads it as
+ * one.
+ *
+ * `aggregateProjects` keeps only `latest_rollup_per_dev` — `SELECT DISTINCT ON
+ * (r.key_id) ... ORDER BY r.key_id, r.received_at DESC` — and treats that one
+ * rollup as the developer's complete window. So a `--project` push silently
+ * erases every OTHER project this machine contributed to from every team total.
+ * It is worse than a missing row: `developerCount` falls with it, and
+ * `buildProjectReport` suppresses any project under `minCohort` contributors, so
+ * a colleague's project can disappear behind a k-anonymity notice that has
+ * nothing to do with them. The totals that remain are wrong in the direction
+ * that looks fine — a smaller, cheaper team.
+ *
+ * WHY THE CLIENT REFUSES RATHER THAN THE SERVER REJECTING. Nothing on the wire
+ * distinguishes a scoped rollup from a complete one, so the server cannot tell.
+ * Putting the coverage in the signed body is the honest repair — a rollup
+ * carrying the basis of its own completeness, which is rule one of this project
+ * applied to a shared figure — and it is a signed-protocol change with a
+ * compatibility story rather than a defect fix. Until it exists, the only sound
+ * position is that a rollup no receiver can consume correctly must not be sent.
+ *
+ * `--dry-run` keeps the flag's inspection use: it prints the scoped rollup and
+ * sends nothing, so it corrupts nothing. Recorded at D-101.
+ */
+function scopedPushRefusal(projectFilter: string | null): string | null {
+  if (projectFilter === null) return null;
+  return `refusing to push a rollup scoped with --project "${projectFilter}" — the team server keeps only your `
+    + 'latest rollup and reads it as your complete window, so this push would erase every other project on this '
+    + 'machine from the shared totals. Push the complete snapshot (drop --project), or use --project with '
+    + '--dry-run to preview one project without sending anything.';
+}
+
+/**
  * Sign and (unless dryRun) push a rollup of the given projects. Pure: no
  * printing, no process.exitCode — callers decide how to present each
  * PushResult. Shared by the one-shot and --watch paths (cmdTeamPush,
@@ -395,6 +428,12 @@ async function signAndPushRollup(
       : `no realized units found in the last ${opts.windowDays}d — nothing to push`;
     return { status: 'empty', message };
   }
+
+  // After the empty check, deliberately: a window with nothing in it has no
+  // rollup to corrupt a total with, and "nothing to push" is the truer answer.
+  // Before signing, so a rollup that may not be sent is never minted.
+  const scopeRefusal = scopedPushRefusal(opts.dryRun ? null : opts.projectFilter);
+  if (scopeRefusal !== null) return { status: 'error', message: scopeRefusal };
 
   const to = new Date();
   const from = new Date(to.getTime() - opts.windowDays * 86_400_000);
@@ -459,7 +498,9 @@ export async function cmdTeamPush(flags: Flags): Promise<void> {
     console.log(color(tty, C.gray, '  Usage:  fiscus team push --url <url>          send this window\'s per-project value/RoI'));
     console.log(color(tty, C.gray, '          fiscus team push --dry-run             preview without sending'));
     console.log(color(tty, C.gray, '          fiscus team push --pubkey              print this machine\'s rollup signing identity'));
-    console.log(color(tty, C.gray, '          fiscus team push --url <url> --window 7 --project <name>'));
+    console.log(color(tty, C.gray, '          fiscus team push --url <url> --window 7'));
+    console.log(color(tty, C.gray, '          fiscus team push --dry-run --project <name>   preview ONE project; a'));
+    console.log(color(tty, C.gray, '                                                        scoped rollup is never sent'));
     console.log(color(tty, C.gray, '          fiscus team push --url <url> --watch --every 3600   background interval (seconds)'));
     console.log('');
     return;
@@ -511,6 +552,17 @@ export async function cmdTeamPush(flags: Flags): Promise<void> {
   const projectFilter = typeof flags['project'] === 'string' ? flags['project'] : null;
 
   if (flags.watch) {
+    // The loop would otherwise reprint the same refusal on every tick.
+    const scopeRefusal = scopedPushRefusal(projectFilter);
+    if (scopeRefusal !== null) {
+      if (flags.json) {
+        console.log(JSON.stringify({ ok: false, error: scopeRefusal }, null, 2));
+      } else {
+        console.error(`  ${color(tty, C.red, '✗')} ${scopeRefusal}`);
+      }
+      process.exitCode = 1;
+      return;
+    }
     if (!url) {
       const msg = 'no team server URL given — --watch needs somewhere to push: fiscus team push --url <url> --watch';
       if (flags.json) {

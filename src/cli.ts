@@ -109,8 +109,10 @@ function cmdHelp(): void {
                           value/RoI to a team server YOU run (Fiscus hosts
                           nothing). --dry-run to preview, --pubkey to publish
                           this machine's rollup identity, --watch to keep
-                          pushing on an interval (--window D, --project
-                          <name>, --every N, --json)
+                          pushing on an interval (--window D, --every N,
+                          --json). --project <name> previews one project with
+                          --dry-run; a scoped rollup is never sent, because the
+                          server reads your latest push as your whole window
     report --kind K       Wire an outcome: code --commit <hash>, non-code --session <id>
                           kinds: tested|merged|shipped|incident|used|resolved|published|…
     evidence github       Signed, offline CI evidence. 'emit' runs in a protected
