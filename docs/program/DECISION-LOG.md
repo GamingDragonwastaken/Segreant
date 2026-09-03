@@ -803,13 +803,20 @@ only with their own typed rule and evidence.
 refusal of integrity, authenticity, and coverage escalation, weakest-evidence
 conjunction, permitted weaker claims, and exact replay. Root and browser
 typechecks pass, and the epistemic/issuance-map suite passes 84/84 under Node
-24. The full-suite gate and CI remain outstanding for this uncommitted slice.
+24. **Since committed at `e7f2b79` and remotely green:** run `33782314672` is a
+success on all eight jobs.
 
 **What this does not establish.** Direct claim issuance still needs explicit
-typed policies for measurement, causality, finality, and decision fitness, and
-claims with no cited Evidence remain a separate issuance-policy question. It
+typed policies for measurement, causality, finality, and decision fitness. It
 does not close WP-R05 or AII-036 by itself, and it does not repair the latent
 `decision.certificate` boundary.
+
+**One limitation stated above is withdrawn.** This entry recorded claims with no
+cited Evidence as a separate open issuance-policy question. There is no such
+case: `claim()` refuses an empty `evidenceIds` outright, so no evidence-free
+claim can be constructed, let alone reach the ceiling. The early return guarding
+that case was dead code and is gone; the refusal is now asserted by test rather
+than assumed. Corrected at D-106.
 
 ## D-105 — a strict decision certificate is now bound to the kernel
 **Decision:** `src/decision/epistemic.ts` is the canonical issuance adapter for
@@ -835,3 +842,35 @@ product policy consumer exists.
 declared dominance proposition under its interval assumptions; it is not causal
 evidence, provider billing truth, or authorization to change a budget/model.
 Minimax regret, policy approval, and an action consumer remain future work.
+
+## D-106 — WP-R03: a claim could report detail its evidence never observed
+**Decision:** `EpistemicLedger` now refuses a claim whose grain strictly refines a cited evidence when NO cited evidence carries the claim's dimensions — checked in the same pass that enforces D-104's trust ceilings. The method is renamed `assertClaimWithinItsEvidence` to say what it now checks.
+**Reason:** `grainRelation` is a complete, tested answer to how two grains compare — `equal`, `finer`, `coarser`, and an explicit `incomparable` when neither dimension set contains the other — and it had exactly one caller in `src/`: `requiredCoordinateWitnesses` in `derivation.ts`, which demands a `grain_refinement`, `grain_aggregation` or `grain_bridge` witness for a derivation that changes grain. `appendClaimWithinTransaction` never asked. Probed before diagnosis: evidence at grain `[day]` — a daily provider total — supported a stored claim at `[day, project, request]`, per-request resolution invented from a daily total and carried as observed.
+
+**The same shape as D-104, one axis over.** There the derivation path consulted `assessDerivationLegality` while the direct path stored whatever profile a claim declared; here the derivation path consults `grainRelation` while the direct path stored whatever grain a claim declared. That is the seventh instance this round of a rule the kernel holds and the boundary that needs it does not ask for — and the second time the SAME boundary was the one not asking.
+
+**The obvious rule was implemented first and the product refuted it.** "Equal or coarser than EVERY cited evidence" is the rule this entry originally recorded. The full suite returned eleven failures across four real issuance paths, and both causes are information the model does not carry:
+
+- `[billing_record]` → `[billing_period]` (six failures) and `[provider_project_day_line_item]` → `[provider_project_period]` (three) are honest roll-ups that `grainRelation` reports as `incomparable`, because a `Grain` is a flat dimension SET with no hierarchy — nothing declares that a record sits inside a period. `incomparable` therefore cannot be refused without refusing the honest roll-up along with the invented axis.
+- A decision-fitness claim at `[decision, action]` (two failures) cites the interval evidence supplying the action detail AND caller evidence at `[decision]` supplying context. Citations carry no ROLES in this graph, so "every citation must independently support the full resolution" is a rule about a different graph than the one that exists.
+
+**An exception was tried first, and is withdrawn.** Before narrowing, the stricter rule was preserved by excepting one product path in the kernel: a claim whose `derivationRule` began `billing.` and whose grain named `billing_period` over evidence naming `billing_record` was waved through. It failed twice over. It did not cover the OpenAI Costs roll-up `[provider_project_day_line_item]` → `[provider_project_period]` at all, and it did not in fact cover the billing path it was written for — `test/dashboard-billing.test.ts` still failed with it in place. It also put product dimension names and a derivation-rule prefix inside the epistemic kernel, which is the layering the kernel exists to prevent. **A kernel rule that needs a list of product exceptions to be true is not a rule; it is a description of the exceptions.** The commit that introduced it, `9771ead`, carried a docblock arguing for the narrow rule above code implementing the strict one — prose and behaviour disagreeing in the same function — and left the root suite red. This entry supersedes it.
+
+Narrowing was the correct response and not a weakened test: the rule as first written asserted knowledge the data does not contain, and three real counterexamples are three refutations. The rule that survives refuses only what the model can actually witness — some citation strictly `finer`, which is positive evidence that the claim added dimensions, and no citation `equal` or `coarser`, so nothing cited could have supplied them.
+
+**The quantifier is the opposite of D-104's, deliberately.** Trust takes the WEAKEST citation because weakness propagates: withdrawing any cited evidence withdraws the claim, so one verified invoice cannot launder an unverified note. Resolution is SUPPLIED rather than propagated — citing a daily total beside a per-request log does not erase the log's detail — so one citation carrying the dimensions is enough. Both readings rest on the same prerequisite semantics D-098 settled; they differ because the two quantities behave differently under it.
+
+**Coarsening is not laundering and stays permitted.** Aggregating a day's per-request rows into a daily figure discards resolution rather than inventing it, and it is what nearly every claim does to its evidence. Refusing every grain change would satisfy the refusals above and make the kernel unusable.
+
+**One pass, because `readEvidence` re-validates.** It reparses and re-checks the whole canonical payload on every call, so a second loop would double the cost of every claim append to keep two decisions cosmetically separate. They stay separately named in the error text and separately recorded here and at D-104.
+
+**A limitation recorded at D-104 is withdrawn.** That entry stated claims with no cited Evidence as an open issuance-policy question outside its ceiling. There is no such case: `claim()` refuses an empty `evidenceIds` outright, so no evidence-free claim can be constructed. The early return guarding it was dead code and is removed, and the constructor's refusal is now asserted by a test rather than assumed. **A stated limitation that is not real is a defect in the record**, and this round has been spending its credibility on those statements being exact.
+
+**Verified RED first.** Two refusals failed against the unfixed ledger — invented per-request detail over a single daily total, and the same invention over two coarse citations — with the guard-rails passing throughout: aggregation to a coarser grain and reporting at the same one are both still accepted.
+
+The final direct boundary uses an explicit `grainSupplied` rule: a claim is
+refused only when it refines every cited grain (including incomparable grains);
+one citation carrying the declared dimensions supplies resolution. Product
+rollups remain responsible for their own typed bridge.
+
+**What this does not establish, and one item is larger than the rest.** `incomparable` is NOT refused, so a claim naming a dimension no cited evidence ever had is still accepted whenever it drops one of theirs — `[day]` evidence supports a `[model]` claim. Closing that needs a declared dimension hierarchy that can separate a roll-up from an invented axis, which is a model change, not a stricter comparison; the gap is asserted by a test so it cannot be mistaken for coverage. Beyond it: grain is compared by dimension-set containment only, so nothing checks that a dimension NAME means the same thing in two records; scope is not bounded the same way, and a claim may still declare a scope its evidence does not cover; and the rule binds the direct claim path, leaving grain arriving through a Derivation to the witness requirement in `derivation.ts`.

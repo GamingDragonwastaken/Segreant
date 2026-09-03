@@ -347,6 +347,12 @@ export function codingRealizationKernelEligible(input: CodingRealizationKernelIn
   }
   const unit = parseUnit(input.unitJson);
   if (unit.economic === undefined) return false;
+  // Modern exact snapshots must retain the completeness evidence that licenses
+  // their negative clean predicate. Older snapshots lack polarity and remain
+  // compatibility records rather than being reinterpreted here.
+  if (unit.cleanCompleteness === undefined && unit.funnel.results.some((result) => result.polarity !== null)) {
+    throw new Error('coding realization kernel issuance requires qualifying completeness witnesses for the clean gate');
+  }
   if (!hasQualifyingCleanCompleteness(unit, text(input.project, 'coding realization project'), safeMs(input.computedAtMs, 'coding realization computedAtMs'))) return false;
   const economic = canonicalEconomicAttribution(unit.economic);
   return economic.complete && economic.unresolvedRequests === 0;
