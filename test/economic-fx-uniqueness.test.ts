@@ -202,3 +202,71 @@ test('both kinds that derive one event from one source refuse a second derivativ
     db.close();
   }
 });
+
+test('a translation chain cannot reach a currency its root charge already reached', () => {
+  // THE FIRST GUARD KEYED ON THE IMMEDIATE SOURCE, WHICH IS A LABEL, NOT THE ACT.
+  // Refusing a second translation of the same SOURCE stops `bill -> GBP` twice.
+  // It does not stop `bill -> GBP` alongside `bill -> EUR -> GBP`, because the
+  // second chain's immediate source is the EUR translation and no rule connected
+  // it back to the bill. Both land in the same `GBP + list + translation` group
+  // and are summed: a USD 10.00 charge projected as GBP 12.50, which is neither
+  // the direct rate's 8.00 nor the chained rate's 4.50.
+  //
+  // The key has to be the ROOT of the translation ancestry — the underlying
+  // non-translation event — because that is the charge being restated, however
+  // many hops away.
+  const db = new DatabaseSync(':memory:');
+  try {
+    const ledger = new EconomicLedger(db);
+    ledger.append(bill());
+    const eur = translation('economic:fx:eur', 90n, 'EUR', '2026-08-04T00:00:00.000Z');
+    ledger.append(eur);
+    ledger.append(translation('economic:fx:gbp-direct', 80n, 'GBP', '2026-08-04T00:00:00.000Z'));
+
+    const chained = fxTranslationEvent({
+      id: 'economic:fx:gbp-via-eur',
+      source: eur,
+      rate: exactRate({ numerator: 50n, denominator: 100n, sourceUnit: 'EUR', targetUnit: 'GBP' }),
+      rateSource: 'fixture:historical-fx',
+      effectiveAt: '2026-08-01T00:00:00.000Z',
+      recordedAt: '2026-08-05T00:00:00.000Z',
+    });
+    assert.throws(() => ledger.append(chained), /is already translated into GBP/);
+
+    const gbp = ledger.project().balances.filter((balance) => balance.currency === 'GBP');
+    assert.equal(gbp.length, 1);
+    assert.equal(formatMoneyAmount(gbp[0]!.amount), '8');
+  } finally {
+    db.close();
+  }
+});
+
+test('a chain into a currency the root has NOT reached is still permitted', () => {
+  // Triangulation is a real capability: with no direct USD->GBP rate to hand,
+  // restating the EUR translation in GBP is the honest way to reach it. A guard
+  // that refused every chained translation would pass the test above while
+  // deleting that, so the rule is "one live translation per root and target",
+  // not "translations may not chain".
+  const db = new DatabaseSync(':memory:');
+  try {
+    const ledger = new EconomicLedger(db);
+    ledger.append(bill());
+    const eur = translation('economic:fx:eur', 90n, 'EUR', '2026-08-04T00:00:00.000Z');
+    ledger.append(eur);
+
+    const chained = fxTranslationEvent({
+      id: 'economic:fx:gbp-via-eur',
+      source: eur,
+      rate: exactRate({ numerator: 50n, denominator: 100n, sourceUnit: 'EUR', targetUnit: 'GBP' }),
+      rateSource: 'fixture:historical-fx',
+      effectiveAt: '2026-08-01T00:00:00.000Z',
+      recordedAt: '2026-08-05T00:00:00.000Z',
+    });
+    assert.equal(ledger.append(chained), 'inserted');
+    const gbp = ledger.project().balances.filter((balance) => balance.currency === 'GBP');
+    assert.equal(gbp.length, 1);
+    assert.equal(formatMoneyAmount(gbp[0]!.amount), '4.5');
+  } finally {
+    db.close();
+  }
+});

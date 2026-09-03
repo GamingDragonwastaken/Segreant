@@ -584,3 +584,38 @@ Error: ENOTEMPTY: directory not empty, rename
 It CANNOT go RED on Windows, where the occupied-target rename answers `EPERM` or `EEXIST`, both of which the old list already tolerated. The defect is visible only where the kernel answers with a code nobody enumerated. The reproduction is therefore the CI stack trace above rather than a local failure, and Ubuntu CI is the authoritative gate for this repair.
 
 **What this does not establish.** It does not prove the interleaving that produced the state in CI; only that the response to it is no longer fatal. It says nothing about whether `quarantineUnknownLock` should be reachable as often as it is. And it leaves one asymmetry found while reading and NOT repaired here: `inspectLock` treats a `.owner-<token>.tmp` record as a lock identity, while the post-rename re-read inside `quarantineUnknownLock` checks only `owner.json` and the owner-quarantine names. A generation whose only identity is a temp record could therefore be judged unknown after the rename and deleted, where the inspection that led there would have called it recoverable. Reaching that requires the same kind of race and was not observed; it is recorded here rather than repaired blind.
+
+## D-093 — both C03/C04 guards were keyed on a label, and both were reachable around
+**Decision:** FX translation uniqueness is now keyed on the ROOT charge of the translation ancestry rather than the immediate source, and any event that points `reversalOf` at a `cost_allocated` target must be recorded as `allocation_reversed`.
+**Reason:** A parallel read-only audit of six frontiers, with every finding required to carry a probe-reproduced counterexample, found that both guards committed one commit earlier could be walked around by relabelling. Both were independently reproduced here before being acted on; an agent's report is a lead, not a fact.
+
+**FX: the immediate source is not the thing being restated.** D-090 refused a second translation of the same SOURCE event, which stops `bill -> GBP` twice. It does nothing about `bill -> GBP` recorded alongside `bill -> EUR -> GBP`, because the chain's immediate source is the EUR translation and no rule connected it back to the bill. Both land in the same `GBP + list + translation` group and `closeBalances` sums them:
+
+```
+BALANCE translation GBP list 12.5 ["economic:fx:gbp-direct","economic:fx:gbp-via-eur"]
+BALANCE charge      USD list 10   ["economic:fx:bill"]
+```
+
+GBP 12.50 for a USD 10.00 charge — neither the direct rate's 8.00 nor the chained rate's 4.50, and hashed into the `close_finalized` projection digest. A translation restates the underlying CHARGE however many hops away, so the charge is what the key has to be. `translationRoot` walks `sourceEventIds` up through `fx_translated` links to the first non-translation event.
+
+**Chaining itself stays legal, and that is a decision.** With no direct USD->GBP rate to hand, restating the EUR translation in GBP is the honest way to reach GBP. A guard that refused every translation-of-a-translation would have passed the refusal test while deleting triangulation, so the permitted path is asserted separately: a chain into a currency the root has NOT reached is accepted and projects 4.50.
+
+**Allocation: the bound was keyed on the kind string.** Every conservation check from D-091 sits inside `if (value.kind === 'allocation_reversed')`. An event that does exactly what a reversal does — `reversalOf` pointing at a `cost_allocated` event, negative `allocated` amount — but labelled `cost_allocated` walked past all of them:
+
+```
+A cost_allocated +10:        inserted
+B allocation_reversed -8:    inserted
+second allocation_reversed:  REFUSED (reversals total 16 exceeds the 10 allocated)
+C cost_allocated -8 reversalOf A: inserted
+BALANCE allocation USD allocated -6
+```
+
+`allocated -6` is bit for bit the state D-091 called "not a quantity that can exist", reached by changing one string. A single disguised event of -100.00 against a +10.00 allocation projected -90.
+
+**Refused at the boundary rather than bounded in more places.** Adding the same checks to a second kind would leave a third. Reversing an allocation is spelled `allocation_reversed`; every other kind pointing `reversalOf` at one is refused, so the bounds cannot be reached around instead of merely being harder to reach around. The cumulative query also stopped filtering on `event_kind` and now sums every event whose `reversalOf` names the target, which is correct independently of the refusal above.
+
+**The meta-lesson, which is the reusable part.** Both defects are the same error one level up from the defect class D-090 and D-091 named. Those two fixed guards that checked a member instead of a set; these two fixed guards that identified the thing being guarded by its LABEL — the kind string, the nearest link — rather than by what it does or what it is derived from. A guard keyed on a name is bypassed by choosing a different name.
+
+**Verified RED first.** Three new tests failed against the just-committed implementation — two allocation, one FX — while the twelve existing ones and the new triangulation guard-rail passed, which is what shows refusals were added rather than capability removed. 41 economics tests green, root typecheck clean, and the original probe now reports GBP 8 and allocated +2.
+
+**What this does not establish.** The FX root walk assumes each translation has exactly one source, which `validateReferenceClosure` already enforces for `fx_translated`; it says nothing about a future multi-source derivative. Nothing still ties allocation totals to the charges they allocate, and adjustments remain unbounded against the charge they adjust. The audit that found these also reported seven further probe-reproduced findings — team-server rollup containment, scoped-push snapshot replacement, unequal observation windows, EUR accepted into a `cost_usd` column, kernel claims ignoring the revocation projection, `minimalCutSets` contradicting `revocationClosure`, and a revocation envelope the ledger stores but never projects — none of which are addressed here and none of which had their adversarial verifier complete.

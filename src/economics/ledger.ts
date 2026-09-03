@@ -288,6 +288,33 @@ export class EconomicLedger {
    * persisted row must not become trusted merely because its own digest is
    * valid. The path set also makes a corrupt reference cycle fail closed.
    */
+  /**
+   * The underlying non-translation event a translation ultimately restates.
+   *
+   * `fx_translated` may take another translation as its source, so "which
+   * charge is this a restatement of" is a question about the whole ancestry
+   * rather than one link. Walking to the root is what lets uniqueness be keyed
+   * on the charge instead of on whichever hop happens to be nearest.
+   *
+   * The `seen` guard is belt and braces: `validateReferenceClosure` already
+   * refuses a cycle, so reaching one here would mean a database that cannot be
+   * read at all. Returning the current id rather than looping forever keeps a
+   * corrupt store diagnosable instead of hanging.
+   */
+  private translationRoot(eventId: string): string {
+    const seen = new Set<string>();
+    let current = eventId;
+    while (!seen.has(current)) {
+      seen.add(current);
+      const event = this.readStored(current);
+      if (event === null || event.kind !== 'fx_translated') return current;
+      const next = event.sourceEventIds[0];
+      if (next === undefined) return current;
+      current = next;
+    }
+    return current;
+  }
+
   private validateReferenceClosure(
     value: EconomicEvent,
     visiting: Set<string> = new Set<string>(),
@@ -316,6 +343,25 @@ export class EconomicLedger {
       if (target.amount === null || value.amount === null) throw new Error(`economic event ${value.id} reversal requires monetary source and amount`);
       if (target.amount.currency !== value.amount.currency || target.amount.basis !== value.amount.basis) {
         throw new Error(`economic event ${value.id} reversal must use the source currency and basis`);
+      }
+      // A REVERSAL IS AN ACT, NOT A LABEL (WP-C04 remainder).
+      //
+      // Every conservation bound below sits inside the `allocation_reversed`
+      // branch, so an event that DOES what a reversal does — points `reversalOf`
+      // at a `cost_allocated` event and carries a negative allocated amount —
+      // but is labelled `cost_allocated` walked past all of them. That produced
+      // `allocation USD allocated -6` from a $10.00 allocation: bit for bit the
+      // state the cumulative bound exists to make impossible, reached by
+      // changing one string. A single disguised event of -100.00 projected -90.
+      //
+      // Reversing an allocation is spelled `allocation_reversed`. Refusing every
+      // other kind at the boundary means the bounds cannot be reached around
+      // rather than merely being harder to reach around.
+      if (target.kind === 'cost_allocated' && value.kind !== 'allocation_reversed') {
+        throw new Error(
+          `economic event ${value.id} reverses allocation ${target.id} and must be recorded as `
+          + `allocation_reversed, not ${value.kind}`,
+        );
       }
       if (value.kind === 'allocation_reversed') {
         if (target.kind !== 'cost_allocated') throw new Error(`economic event ${value.id} allocation reversal must target cost_allocated`);
@@ -349,7 +395,7 @@ export class EconomicLedger {
           `SELECT s.event_id AS eventId
            FROM economic_event_sources AS s
            JOIN economic_events AS e ON e.event_id = s.event_id
-           WHERE s.source_event_id = ? AND s.event_id <> ? AND e.event_kind = 'allocation_reversed'
+           WHERE s.source_event_id = ? AND s.event_id <> ?
            ORDER BY s.event_id ASC`,
         ).all(target.id, value.id) as unknown as { eventId?: unknown }[];
         let reversed = negateMoney(value.amount);
@@ -510,20 +556,32 @@ export class EconomicLedger {
       // into GBP is not double counting, because those are separate balance
       // groups that are never summed. And placed last in this block on purpose,
       // so a malformed second translation still fails for its own reason.
+      // KEYED ON THE ROOT CHARGE, NOT THE IMMEDIATE SOURCE. The first form of
+      // this guard compared immediate sources, which stops `bill -> GBP` twice
+      // and does nothing about `bill -> GBP` alongside `bill -> EUR -> GBP`:
+      // the chain's immediate source is the EUR translation, so nothing
+      // connected it back to the bill. Both land in the same
+      // `GBP + list + translation` group and are summed — a USD 10.00 charge
+      // projected as GBP 12.50, which is neither the direct rate's 8.00 nor the
+      // chained rate's 4.50. The thing being restated is the underlying charge,
+      // however many hops away, so that is what the key has to be.
+      //
+      // Chaining ITSELF stays legal. With no direct USD->GBP rate to hand,
+      // restating the EUR translation in GBP is the honest way to reach GBP.
+      // The rule is one live translation per root and target currency, not a
+      // ban on translations of translations.
+      const root = this.translationRoot(source.id);
       const priorTranslations = this.db.prepare(
-        `SELECT s.event_id AS eventId
-         FROM economic_event_sources AS s
-         JOIN economic_events AS e ON e.event_id = s.event_id
-         WHERE s.source_event_id = ? AND s.event_id <> ? AND e.event_kind = 'fx_translated'
-         ORDER BY s.event_id ASC`,
-      ).all(source.id, value.id) as unknown as { eventId?: unknown }[];
+        "SELECT event_id AS eventId FROM economic_events WHERE event_kind = 'fx_translated' AND event_id <> ? ORDER BY event_id ASC",
+      ).all(value.id) as unknown as { eventId?: unknown }[];
       for (const prior of priorTranslations) {
         if (typeof prior.eventId !== 'string') continue;
         const recorded = this.readStored(prior.eventId);
         if (recorded === null || recorded.amount === null) continue;
         if (recorded.amount.currency !== value.amount.currency) continue;
+        if (this.translationRoot(recorded.id) !== root) continue;
         throw new Error(
-          `economic event ${value.id} FX translation source ${source.id} is already translated into `
+          `economic event ${value.id} FX translation source ${root} is already translated into `
           + `${value.amount.currency} by ${recorded.id}`,
         );
       }

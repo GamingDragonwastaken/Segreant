@@ -199,3 +199,73 @@ test('a stored over-reversal fails closed on read rather than projecting a negat
     db.close();
   }
 });
+
+test('an allocation may not be spelled as a reversal of another allocation', () => {
+  // THE BOUND WAS KEYED ON THE KIND LABEL, NOT ON THE ACT.
+  // Every conservation check above sits inside `if (value.kind ===
+  // 'allocation_reversed')`. An event that does exactly what a reversal does —
+  // points `reversalOf` at a `cost_allocated` event and carries a negative
+  // allocated amount — but is labelled `cost_allocated` walks past all of them.
+  // The result is `allocated -6` from the same $10.00 allocation: bit for bit
+  // the state the cumulative bound was added to make impossible.
+  //
+  // Reversing an allocation is spelled `allocation_reversed`. Anything else
+  // pointing `reversalOf` at an allocation is refused at the boundary, so the
+  // bounds cannot be reached around.
+  const db = new DatabaseSync(':memory:');
+  try {
+    const ledger = new EconomicLedger(db);
+    const target = allocation('event:allocation:1', '10');
+    ledger.append(target);
+    ledger.append(reversal('event:reversal:1', target, '-8', '2026-08-03T00:00:00.000Z'));
+
+    const disguised = economicEvent({
+      id: 'event:allocation:disguised',
+      kind: 'cost_allocated',
+      subject: target.subject,
+      occurredAt: '2026-08-01T00:00:00.000Z',
+      recordedAt: '2026-08-04T00:00:00.000Z',
+      amount: money('-8', 'USD', 'allocated'),
+      sourceEventIds: [target.id],
+      reversalOf: target.id,
+      metadata: { rule: 'fixture' },
+      schemaVersion: 1,
+    });
+    assert.throws(() => ledger.append(disguised), /must be recorded as allocation_reversed/);
+
+    const allocated = ledger.project().balances.filter((balance) => balance.role === 'allocation');
+    assert.equal(allocated.length, 1);
+    assert.equal(formatMoneyAmount(allocated[0]!.amount), '2');
+    assert.ok(allocated[0]!.amount.coefficient >= 0n);
+  } finally {
+    db.close();
+  }
+});
+
+test('a single disguised over-reversal cannot mint a negative allocation either', () => {
+  // The starker form, which needs no prior reversal at all: one `cost_allocated`
+  // of -100.00 against a +10.00 allocation projected `allocated -90`.
+  const db = new DatabaseSync(':memory:');
+  try {
+    const ledger = new EconomicLedger(db);
+    const target = allocation('event:allocation:1', '10');
+    ledger.append(target);
+    assert.throws(
+      () => ledger.append(economicEvent({
+        id: 'event:allocation:huge',
+        kind: 'cost_allocated',
+        subject: target.subject,
+        occurredAt: '2026-08-01T00:00:00.000Z',
+        recordedAt: '2026-08-04T00:00:00.000Z',
+        amount: money('-100', 'USD', 'allocated'),
+        sourceEventIds: [target.id],
+        reversalOf: target.id,
+        metadata: { rule: 'fixture' },
+        schemaVersion: 1,
+      })),
+      /must be recorded as allocation_reversed/,
+    );
+  } finally {
+    db.close();
+  }
+});
