@@ -328,16 +328,41 @@ function renameForQuarantine(source, target) {
   }
 }
 
+/**
+ * Put a quarantined generation back, if the canonical path is still free.
+ *
+ * THE ERRNO LIST WAS STILL HERE, AND LINUX SUPPLIED THE NEXT ENTRY. The comment
+ * on `renameForQuarantine` above records D-072 removing an enumeration of
+ * platform error codes "on the grounds that the list is a property of whichever
+ * kernel the job runs on, and the next platform adds an entry", and notes that
+ * it did not remove this one. This function kept
+ * `['ENOENT','EACCES','EBUSY','EPERM','EEXIST']` and rethrew everything else.
+ * Renaming a directory onto an existing NON-EMPTY directory answers `EEXIST` on
+ * Windows and `ENOTEMPTY` on Linux — POSIX permits either — so the list was
+ * complete on the platform it was written on and wrong on the one CI runs.
+ * Exact-head run `33730517441` killed a worker inside `acquirePublicationLock`
+ * with a raw `ENOTEMPTY` for losing a race it is designed to lose.
+ *
+ * THE POSITION, NOT THE ENTRY. Adding `ENOTEMPTY` would repeat the mistake with
+ * one more name. The reason no failure here may be fatal is structural: once
+ * `renameForQuarantine` moved the lock aside, THE CANONICAL PATH IS ABSENT and
+ * any contender may claim it immediately. So restoration is best-effort by
+ * construction — a failure means somebody else got there first, which is the
+ * ordinary outcome of a lost race and never a reason to kill a build. Both
+ * callers already ignore the answer and return `false` regardless; there is no
+ * failure here that means "you restored it".
+ *
+ * WHAT IS PRESERVED. A failed restore still never deletes the quarantine to make
+ * the error disappear. The generation is left intact for `reapOrphanQuarantines`,
+ * which collects it once its owner is demonstrably dead — by owner token, never
+ * by pathname.
+ */
 function restoreQuarantinedLock(buildLock, quarantine) {
   try {
     renameSync(quarantine, buildLock);
     return true;
-  } catch (error) {
-    // If another process acquired the canonical path during a recovery of an
-    // unknown/malformed lock, leave both generations untouched. In particular,
-    // never recursively delete the quarantine to make the error disappear.
-    if (['ENOENT', 'EACCES', 'EBUSY', 'EPERM', 'EEXIST'].includes(error?.code)) return false;
-    throw error;
+  } catch {
+    return false;
   }
 }
 

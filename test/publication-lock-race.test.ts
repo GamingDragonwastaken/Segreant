@@ -584,3 +584,129 @@ test('re-entering a lock this process genuinely holds fails fast rather than wai
     rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 25 });
   }
 });
+
+test('a restore that loses the canonical path is a lost race, not a fatal errno', async () => {
+  // THE ERRNO LIST OUTLIVED THE LESSON THIS FILE OPENS WITH.
+  //
+  // The header above records D-072 removing an enumeration of platform error
+  // codes because "the list is a property of the kernel it happens to run on".
+  // `restoreQuarantinedLock` kept one — ENOENT, EACCES, EBUSY, EPERM, EEXIST —
+  // and rethrew anything else. Renaming a directory onto an existing NON-EMPTY
+  // directory answers EEXIST on Windows and ENOTEMPTY on Linux, and POSIX
+  // permits either, so the list was complete on the platform it was written on
+  // and wrong on the one CI runs. Exact-head run `33730517441` killed a worker
+  // with a raw ENOTEMPTY out of `acquirePublicationLock`:
+  //
+  //     Error: ENOTEMPTY: directory not empty, rename
+  //       '.../.fiscus-build.lock.quarantine-7086-63ed67ff' -> '.../.fiscus-build.lock'
+  //         at restoreQuarantinedLock (bin/publication-lock.mjs:333)
+  //         at quarantineUnknownLock (bin/publication-lock.mjs:353)
+  //         at acquirePublicationLock (bin/publication-lock.mjs:674)
+  //
+  // WHY NO FAILURE THERE MAY BE FATAL, WHICH IS THE POSITION RATHER THAN THE
+  // ENTRY. Once the lock has been renamed aside the canonical path is ABSENT and
+  // any contender may claim it at once, so restoration is best-effort by
+  // construction. A failure means somebody else got there first — the ordinary
+  // outcome of a race this protocol is designed to lose. Both callers already
+  // discard the answer and return false regardless.
+  //
+  // MANUFACTURING THE PRECONDITION. Both call sites are reachable only through a
+  // genuine interleaving — an owner record appearing between the inspection that
+  // said "unknown" and the re-read after the rename — so this cannot be driven
+  // by planting a single state. What it CAN do is make the window common: a
+  // thief re-creates the canonical path as a NON-EMPTY directory (a valid owner
+  // record naming a process that has already exited) every time it observes the
+  // path go absent, which is exactly the moment a quarantine is outstanding. The
+  // dead owner keeps it immediately reclaimable, so workers still make progress
+  // instead of serving the ten-second ownerless age.
+  //
+  // WHAT THIS DOES NOT ESTABLISH. It cannot go RED on Windows, where the
+  // occupied-target rename answers EPERM or EEXIST — both of which the old list
+  // already tolerated. The defect and its repair are visible only where the
+  // kernel answers with a code nobody enumerated, which is why the authoritative
+  // gate for this one is Ubuntu CI rather than a local run.
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-lock-restore-'));
+  try {
+    // A pid that is certainly gone: this process ran, reported itself, exited.
+    const corpse = join(dir, 'corpse.mjs');
+    writeFileSync(corpse, 'process.stdout.write(String(process.pid));\n', 'utf8');
+    const dead = await run(corpse, []);
+    assert.equal(dead.code, 0, dead.stderr || 'the corpse process failed to report a pid');
+    const deadPid = Number(dead.stdout);
+    assert.ok(Number.isInteger(deadPid) && deadPid > 0, `expected a pid, read ${JSON.stringify(dead.stdout)}`);
+
+    const thief = join(dir, 'thief.mjs');
+    writeFileSync(thief, [
+      "import { mkdirSync, writeFileSync } from 'node:fs';",
+      "import { join } from 'node:path';",
+      'const [root, forMs, deadPid] = [process.argv[2], Number(process.argv[3]), Number(process.argv[4])];',
+      'const until = Date.now() + forMs;',
+      'let steals = 0;',
+      'while (Date.now() < until) {',
+      "  const lock = join(root, '.fiscus-build.lock');",
+      '  try {',
+      // mkdir is the claim. Only the process that wins it writes the record, so
+      // the thief never overwrites a real builder's owner file.
+      '    mkdirSync(lock);',
+      "    writeFileSync(join(lock, 'owner.json'), JSON.stringify({ pid: deadPid, token: 'thief-' + steals }), 'utf8');",
+      '    steals += 1;',
+      '  } catch { /* the path is claimed by a real contender; that is the normal case */ }',
+      '}',
+      'process.stdout.write(String(steals));',
+    ].join('\n'), 'utf8');
+
+    const worker = join(dir, 'worker.mjs');
+    writeFileSync(worker, [
+      `import { acquirePublicationLock } from ${JSON.stringify(LOCK_MODULE)};`,
+      'const [root, forMs] = [process.argv[2], Number(process.argv[3])];',
+      'const until = Date.now() + forMs;',
+      'let laps = 0;',
+      'while (Date.now() < until) {',
+      '  acquirePublicationLock(root)();',
+      '  laps += 1;',
+      '}',
+      'process.stdout.write(String(laps));',
+    ].join('\n'), 'utf8');
+
+    const results = await Promise.all([
+      ...Array.from({ length: 3 }, () => run(worker, [dir, '2500'])),
+      run(thief, [dir, '2500', String(deadPid)]),
+    ]);
+    const workers = results.slice(0, 3);
+
+    // THE ASSERTION THE DEFECT VIOLATED. A lost race must not reach the caller
+    // as a filesystem error. Checked as a class rather than as this run's code,
+    // because naming the code would rebuild the list this test exists to delete.
+    for (const result of workers) {
+      assert.doesNotMatch(
+        result.stderr,
+        /\b(?:ENOTEMPTY|ENOTDIR|EEXIST|EPERM|EACCES|EBUSY|EINVAL|ENOENT)\b/,
+        `a raw filesystem errno escaped acquisition: ${result.stderr}`,
+      );
+      assert.equal(result.code, 0, result.stderr || 'a worker died contending with a lock thief');
+    }
+
+    // Non-vacuity. A worker that never acquired would satisfy every assertion
+    // above while proving nothing about the restore path.
+    const laps = workers.map((result) => Number(result.stdout) || 0);
+    assert.ok(
+      laps.reduce((total, count) => total + count, 0) >= 1,
+      `no worker completed an acquire/release, so the contention never happened; got ${JSON.stringify(laps)}`,
+    );
+
+    // And the generations the thief abandoned are collected by owner liveness,
+    // exactly as an ordinary quarantine is — its pid was dead from the start.
+    const reaper = join(dir, 'reaper.mjs');
+    writeFileSync(reaper, [
+      `import { acquirePublicationLock } from ${JSON.stringify(LOCK_MODULE)};`,
+      'acquirePublicationLock(process.argv[2])();',
+    ].join('\n'), 'utf8');
+    const swept = await run(reaper, [dir]);
+    assert.equal(swept.code, 0, swept.stderr || 'the sweeping acquisition failed');
+
+    const residue = readdirSync(dir).filter((name) => name.startsWith('.fiscus-build.lock'));
+    assert.deepEqual(residue, [], `lock residue survived a sweeping acquisition: ${residue.join(', ')}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 25 });
+  }
+});

@@ -14,7 +14,7 @@ elsewhere.
 | Branch | `gpt56/magnum-opus-reconstruction` |
 | Last verified head | `fb16a75193e83c228fef6c97fcabd9055f6cb3bf` |
 | Its CI | run `33576780336` — **success, all eight jobs**, read 2026-09-02 |
-| Newer head | `e787a35c1050f803432ac1f05593cdea9f52255a` — run `33637998412` **success, all eight jobs**, read 2026-09-02 |
+| Newer head | `e32e94a530e41fcb6f4fc27c17997334c632cd6a` — run `33730517441` **failure**: seven jobs green, `candidate-head` red on `ordinary contention leaves no lock residue`, repaired at D-092 and not yet re-verified |
 | Working tree | see `git status`; a head newer than the row above has not been CI-verified |
 | Executor | Claude Opus 5, lead implementation engineer/verifier |
 
@@ -33,27 +33,31 @@ been failing.
 
 ## Active packet
 
-**WP-C01 — PARTIAL, audit only, no code change (D-087).** Exact Money is a
-PARALLEL authority rather than the authority: `/api/economic` and
-`fiscus economic` are exact, while thirteen `SUM(cost_usd)` read paths answer the
-default surfaces and only three have exact siblings. Each migrated path
-re-implements the exact-vs-float preference locally and differently — the D-078
-class again. `team-server/`, export and FX were NOT audited and must not be
-assumed clean.
+**WP-C03 and WP-C04 — PARTIAL, and the newest work (D-090, D-091).** One defect
+class in three places: a property of a SET checked against a single member. Two
+`fx_translated` events for one charge and target currency were summed by
+`closeBalances` (EUR 17 for a USD 10.00 bill); `allocation_reversed` was bounded
+per event so two $8.00 reversals of a $10.00 allocation closed at `allocated -6`;
+and `test/build-race.test.ts` asserted the repository lock was absent, which
+measured which other test file happened to hold it. All three repaired, the third
+by strengthening the assertion rather than deleting it.
 
-**WP-B05 — PARTIAL.** `admissibility.ts` and `claim-uses.ts` give bars per-axis
-predicates and a partial order that returns `incomparable` rather than inventing
-a rank, and one vocabulary replaces three that disagreed (D-086). Three of the
-five uses have no stated bar and are recorded as unexamined.
+**WP-C02 — PARTIAL (D-089).** Adjustment kinds may no longer carry a basis no
+charge can hold, so a credit cannot be recorded in a state where it nets against
+nothing while the bill still reads full.
 
-**WP-B04 — PARTIAL.** The countermodel engine exists and the reconciliation
-residual uses it: `fiscus billing reconcile` now says that four of its five
-conditions can be closed by nothing Fiscus has, and reports a negative residual
-as an ESTABLISHED broken condition rather than a small number (D-084). It
-reaches no other claim.
+**WP-C01 — PARTIAL, audit only, no code change (D-087, corrected by D-088).**
+Exact Money is a PARALLEL authority rather than the authority: thirteen
+`SUM(cost_usd)` read paths answer the default surfaces and only three have exact
+siblings. FX has since been audited under C03; `team-server/` and the export path
+still have not been.
 
-Next in the frontier order: **WP-B05** (claim-relative evidence ordering), then
-mechanically select C01 from `docs/program/PACKET-INVENTORY.md`.
+**WP-B05 — PARTIAL (D-086).** `admissibility.ts` and `claim-uses.ts` state bars as
+per-axis predicates and return `incomparable` rather than inventing a rank. Three
+of the five uses have no stated bar and are recorded as unexamined.
+
+**WP-B04 — PARTIAL (D-084).** The countermodel engine reaches one claim: the
+reconciliation residual. It reaches no other.
 
 ## Verification commands, and what each one does NOT cover
 
@@ -93,18 +97,25 @@ two red heads that way, and both times the local check had stopped at the root.
 
 ## Next exact actions
 
-1. **C01 remainder.** Audit `team-server/`, the export path and FX — the three
-   areas D-087 did not reach. Then the structural fix: one shared exact-preferring
-   read, so the guard, realization and the receipt stop answering the same
-   question three ways.
-2. **WP-B05 remainder.** Three of the five uses have no stated requirement, and
+1. **Re-verify the lock repair on Ubuntu.** Run `33730517441` was read job by
+   job: `test` on all three platforms, all three `team-server-test` jobs and
+   `package-smoke` were green; `candidate-head` failed `ordinary contention
+   leaves no lock residue` with a raw `ENOTEMPTY` out of `restoreQuarantinedLock`
+   (D-092). The repair CANNOT go red on Windows — that kernel answers the same
+   rename with a code the old list already tolerated — so Ubuntu CI is the
+   authoritative gate for it, not a local run.
+2. **Continue the C/R frontier.** `WP-C05` (billing/FOCUS interoperability) and
+   `WP-C06` (receipts and team rollups: integrity is not truth) are the next
+   unstarted C packets. The R frontier (`WP-R03` granularity, `WP-R04`
+   negative-claim soundness, `WP-R05` trust non-escalation, `WP-R06` monetary
+   conservation, `WP-R07` revocation closure) states soundness properties that are
+   directly falsifiable against code that already exists, which makes them
+   cheaper to establish than the D/E/F frontiers that need new subsystems.
+3. **C03/C04 remainders.** Neither `fx_translated` nor `price_corrected` has a
+   supersession path, so a corrected rate cannot supersede a recorded translation.
+   Nothing ties allocation totals to the charges they allocate. Adjustments are
+   unbounded against the charge they adjust. Whether an FX translation of an
+   already-corrected charge picks up the `price_corrected` delta is unexamined.
+4. **WP-B05 remainder.** Three of the five uses have no stated requirement, and
    stating them is product policy rather than a derivation — `outcome_attribution`,
-   `roi` and `model_recommendations` need an owner decision, not a guess. The
-   persisted `excludedFrom` tuples are unmigrated (`src/alloc/exact.ts` validates
-   an exact four on read), and `compareForUse` has no product consumer: surfacing
-   it needs a `ClaimProfile` plumbed to a CLI that does not have one today.
-3. **WP-B04 remainder, if it is taken further.** `assessAssumptionFragility`
-   reaches one claim. Candidates identified and not taken: `assessCompleteness`
-   says an absence inference is unqualified without saying which period or scope
-   is unwitnessed; `sourceBases` names the bases present but not which events
-   carry them, and `unresolvedRequests` is a count with no list.
+   `roi` and `model_recommendations` need an owner decision, not a guess.
