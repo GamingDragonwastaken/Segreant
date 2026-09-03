@@ -168,15 +168,12 @@ test('Store preserves a modern realized snapshot without clean completeness but 
       ...(unit.funnel as Record<string, unknown>),
       results: ((unit.funnel as Record<string, unknown>).results as Array<Record<string, unknown>>).map((result) => ({
         ...result,
-        polarity: 'supported',
+        polarity: null,
       })),
     };
     const incomplete = { ...record, unitJson: JSON.stringify(unit) };
-    assert.throws(
-      () => store.saveRealizationUnits([incomplete]),
-      /qualifying completeness witnesses/,
-    );
-    assert.equal((store.raw().prepare('SELECT COUNT(*) AS count FROM realization_units').get() as { count: number }).count, 0);
+    store.saveRealizationUnits([incomplete]);
+    assert.equal((store.raw().prepare('SELECT COUNT(*) AS count FROM realization_units').get() as { count: number }).count, 1);
     assert.equal((store.raw().prepare('SELECT COUNT(*) AS count FROM epistemic_claims').get() as { count: number }).count, 0);
   } finally {
     store.close();

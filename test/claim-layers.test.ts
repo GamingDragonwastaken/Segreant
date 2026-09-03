@@ -35,7 +35,7 @@ const anOverview = (costUsd: number, requests: number): Overview => ({
   generatedAt: '2026-08-01T00:00:00.000Z',
   summary: { requests, costUsd },
   pricing: { status: { fresh: true }, autoRefresh: false, estimatedCostUsd: 0, estimatedSpendShare: 0, provenance: [] },
-  budget: { dailyUsd: null, dailySoftUsd: null, todaySpendUsd: 0, todayImportedUsd: 0, capExcludesImported: true, remainingDailyUsd: null },
+  budget: { dailyUsd: null, dailySoftUsd: null, todaySpendUsd: 0, todayImportedUsd: 0, capExcludesImported: true, remainingDailyUsd: null, todaySpendBasis: { enforcedAgainst: 'rate_card_float', exactResolvedUsd: null, floatUsd: 0, unresolvedRequests: null, requestCount: null, sourceBases: [], complete: false } },
   byModel: [], byProject: [], attributionEvidence: [], bySource: [], byUser: [],
   characterization: { byProject: [], byModel: [], bySource: [], byUser: [] }, dimensions: [], series: [], recent: [],
 });

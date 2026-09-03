@@ -26,7 +26,7 @@ import { randomUUID } from 'node:crypto';
 import type { Store, RequestRow } from '../store/db.ts';
 import type { AttributionBasis } from '../value/characterization.ts';
 import type { FiscusConfig } from '../config.ts';
-import { BudgetGuard, type GuardDecision } from '../budget/guard.ts';
+import { BudgetGuard, unverifiedBasis, type GuardDecision } from '../budget/guard.ts';
 import { computeCost, unpricedPricingEvidence, type NormalizedUsage, type Provider } from '../cost/pricing.ts';
 import {
   StreamUsageAccumulator,
@@ -460,6 +460,12 @@ async function handle(
       sessionSpendUsd: null,
       softTripped: false,
       runaway: { tripped: false, windowCostUsd: 0, windowSec: config.budget.runawayWindowSec },
+      // Nothing was read, so nothing is claimed about the basis. `unverifiedBasis`
+      // is the honest shape for a figure that is zero because the ledger could
+      // not be consulted, not because no spend occurred.
+      dayBasis: unverifiedBasis(0),
+      sessionBasis: null,
+      windowBasis: unverifiedBasis(0),
     };
   }
 

@@ -149,7 +149,7 @@ test('a claim cannot report per-request detail that its daily-total evidence nev
   );
 });
 
-test('an incomparable grain is NOT refused, and the reason is a limit of the model', () => {
+test('an incomparable grain is refused when no cited evidence supplies its dimensions', () => {
   // WHAT THIS RULE CANNOT SEE, ASSERTED SO IT CANNOT BE MISTAKEN FOR SAFETY.
   // `[model]` against `[day]` shares no dimension, and by the letter of the
   // model that is an invented axis. But `Grain` is a flat dimension SET with no
@@ -163,13 +163,12 @@ test('an incomparable grain is NOT refused, and the reason is a limit of the mod
   // exceptions to be true is not the rule; it is a description of the
   // exceptions.
   //
-  // Closing this needs a declared dimension hierarchy, not a stricter
-  // comparison and not a longer list.
+  // Product-specific rollups need their own explicit typed bridge.
   const kernel = ledger();
   kernel.appendEvidence(evidence(evidenceInput('evidence:daily:1', ['day'])));
-  assert.equal(
-    kernel.appendClaim(claim(claimInput('claim:bridged:1', ['evidence:daily:1'], ['model']))),
-    'inserted',
+  assert.throws(
+    () => kernel.appendClaim(claim(claimInput('claim:bridged:1', ['evidence:daily:1'], ['model']))),
+    /grain/,
   );
 });
 

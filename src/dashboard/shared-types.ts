@@ -218,6 +218,21 @@ export interface Overview {
     todayImportedUsd: number;
     capExcludesImported: boolean;
     remainingDailyUsd: number | null;
+    /**
+     * Where `todaySpendUsd` came from. Structurally the guard's own `SpendBasis`,
+     * and `routes.ts` assigns the guard's value straight into this field, so the
+     * two cannot drift without a type error — the declaration-versus-wire failure
+     * this app is most prone to.
+     */
+    todaySpendBasis: {
+      enforcedAgainst: 'exact_effective' | 'rate_card_float';
+      exactResolvedUsd: number | null;
+      floatUsd: number;
+      unresolvedRequests: number | null;
+      requestCount: number | null;
+      sourceBases: readonly string[];
+      complete: boolean;
+    };
   };
   byModel: GroupRow[];
   byProject: GroupRow[];

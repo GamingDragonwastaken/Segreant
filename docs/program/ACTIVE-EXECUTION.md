@@ -17,7 +17,7 @@ elsewhere.
 | Also verified green | `4eb5135` — run `33774300308` **success, all eight jobs**, which restored the base after `5e7d96b` |
 | Preceding red head | `5e7d96b` — run `33760552077` **failure** on `candidate-head` and `test (windows-latest)`, six jobs green; diagnosed and repaired at D-097 |
 | Next head | not yet pushed; record its run only after reading every job's `conclusion` |
-| Working tree | WP-R03 grain ceiling (D-106) plus one uncommitted correction: WP-R03 inventory now records its direct persistence guard and remaining scope/partition limitations |
+| Working tree | WP-R03 grain ceiling (D-106), WP-R04 negative-claim withholding (D-108), and WP-B01 budget-basis fail-closed slice (D-107) are implemented locally; exact CI for the next checkpoint remains pending |
 | Executor | Claude Opus 5, lead implementation engineer/verifier |
 
 `fb16a75` is the first fully green exact-head run on this branch: ubuntu, macOS
@@ -145,7 +145,10 @@ two red heads that way, and both times the local check had stopped at the root.
 3. **Continue the C/R frontier.** `WP-C05` (billing/FOCUS interoperability) is
    the next unstarted C packet; `WP-C06` is now PARTIAL (D-095). On the R
    frontier `WP-R06` and `WP-R07` are PARTIAL (D-096, D-094) and `WP-R03`
-   granularity and `WP-R04` negative-claim soundness are unstarted. `WP-R05`
+   granularity and `WP-R04` negative-claim soundness are partial: the reachable
+   coding-realization `clean` claim now refuses kernel persistence without typed
+   completeness coverage for both negative channels. Other negative-claim paths
+   remain un-audited. `WP-R05`
    is now partial. All three state soundness properties that are
    directly falsifiable against code that already exists, which makes them
    cheaper to establish than the D/E/F frontiers that need new subsystems.

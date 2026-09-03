@@ -30,7 +30,7 @@ import { isDemo, type FiscusConfig } from '../config.ts';
 import { probeProxyState } from '../egress/proxyHealth.ts';
 import { buildSettingsSnapshot, applySettingsPatch, SettingsValidationError, type SettingsPatch } from './settings.ts';
 import { serveHtml } from './static.ts';
-import { startOfLocalDay } from '../budget/guard.ts';
+import { resolveEnforcedSpend, startOfLocalDay } from '../budget/guard.ts';
 import { loadRealization, realizeDiscoveredProjects } from '../value/realization.ts';
 // The one composition of the value primitives, shared with the CLI — see the
 // '/api/value' handler below and src/value/report.ts for why it is not inline.
@@ -172,9 +172,21 @@ export function buildOverview(store: Store, config: FiscusConfig, range: RangeKe
   const dayStart = startOfLocalDay(now);
   // The budget panel reads the same basis the guard ENFORCES on (live proxy spend
   // unless capIncludesImported) — a bar that disagrees with the blocker is a lie.
+  // ...which means resolving it the same WAY, not merely over the same rows. The
+  // guard enforces on the exact effective projection whenever one is available;
+  // reading the raw float here made the bar disagree with the blocker by exactly
+  // the corrections the economic ledger had recorded (D-107).
   const liveOnly = !config.budget.capIncludesImported;
-  const todaySpend = store.spendBetween(dayStart, now + 1000, liveOnly);
-  const todayTotal = liveOnly ? store.spendBetween(dayStart, now + 1000) : todaySpend;
+  const exactDay = (from: number, to: number, live: boolean) =>
+    (typeof store.exactSpendBetween === 'function' ? store.exactSpendBetween(from, to, live) : null);
+  const todayResolved = resolveEnforcedSpend(
+    exactDay(dayStart, now + 1000, liveOnly),
+    store.spendBetween(dayStart, now + 1000, liveOnly),
+  );
+  const todaySpend = todayResolved.usd;
+  const todayTotal = liveOnly
+    ? resolveEnforcedSpend(exactDay(dayStart, now + 1000, false), store.spendBetween(dayStart, now + 1000)).usd
+    : todaySpend;
   const summary = store.summary(startMs, endMs);
   const pricingWindow = store.healthStats(startMs, endMs);
 
@@ -196,6 +208,7 @@ export function buildOverview(store: Store, config: FiscusConfig, range: RangeKe
       todayImportedUsd: Math.max(0, todayTotal - todaySpend),
       capExcludesImported: liveOnly,
       remainingDailyUsd: config.budget.dailyUsd === null ? null : Math.max(0, config.budget.dailyUsd - todaySpend),
+      todaySpendBasis: todayResolved.basis,
     },
     summary,
     // Rate-card freshness and estimate share are local evidence about the
