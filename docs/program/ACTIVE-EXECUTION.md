@@ -12,8 +12,8 @@ elsewhere.
 | | |
 | --- | --- |
 | Branch | `gpt56/magnum-opus-reconstruction` |
-| Last verified green head | `422bcd0` — run `33759829279` **success, all eight jobs**, read 2026-09-03 |
-| Last head pushed | `5e7d96b` — run `33760552077` **failure** on `candidate-head` and `test (windows-latest)`, six jobs green; diagnosed and repaired at D-097 |
+| Last verified green head | `4eb5135` — run `33774300308` **success, all eight jobs**, every `conclusion` read 2026-09-03 |
+| Preceding red head | `5e7d96b` — run `33760552077` **failure** on `candidate-head` and `test (windows-latest)`, six jobs green; diagnosed and repaired at D-097 |
 | Next head | not yet pushed; record its run only after reading every job's `conclusion` |
 | Working tree | see `git status`; a head newer than the row above has not been CI-verified |
 | Executor | Claude Opus 5, lead implementation engineer/verifier |
@@ -111,16 +111,15 @@ two red heads that way, and both times the local check had stopped at the root.
 1. **Work the audit backlog, reproducing each finding before acting on it.** A
    parallel read-only audit produced ten probe-reproduced findings across six
    frontiers; its adversarial verifiers all died on a session limit, so NONE of
-   them is independently confirmed. Five have since been reproduced here and
-   repaired (D-093 twice, D-094, D-095, D-096). Still open, in rough severity
-   order: a `--project`-scoped push replaces a developer's complete snapshot and
-   silently erases their other projects from every team total; member rollups
-   with self-chosen, unequal observation windows are summed into one figure that
-   states no window; a reopen followed by a late in-period append makes every
-   projection read throw permanently, with no API path back; `minimalCutSets`
-   contradicts `revocationClosure` on a two-evidence claim; and the ledger stores
-   an Evidence `revocation` envelope it never projects. Each needs its own
-   reproduction first — an agent's report is a lead, not a fact.
+   them is independently confirmed. Seven have since been reproduced here and
+   repaired (D-093 twice, D-094, D-095, D-096, D-098, D-099). Still open, in
+   rough severity order: a `--project`-scoped push replaces a developer's
+   complete snapshot and silently erases their other projects from every team
+   total; member rollups with self-chosen, unequal observation windows are summed
+   into one figure that states no window; and a reopen followed by a late
+   in-period append makes every projection read throw permanently, with no API
+   path back. Each needs its own reproduction first — an agent's report is a
+   lead, not a fact.
 2. **Continue the C/R frontier.** `WP-C05` (billing/FOCUS interoperability) is
    the next unstarted C packet; `WP-C06` is now PARTIAL (D-095). On the R
    frontier `WP-R06` and `WP-R07` are PARTIAL (D-096, D-094) and `WP-R03`

@@ -628,14 +628,72 @@ export class EpistemicLedger {
     return this.replayAsOf(asOf).revocation;
   }
 
+  /**
+   * Every revocation this ledger knows about, from both places it records one.
+   *
+   * THE TABLE WAS ONLY HALF OF WHAT IS STORED. `Evidence` and `Claim` each carry
+   * an optional `revocation` envelope — `{ eventId, effectiveAt, reason }`,
+   * validated by their canonical constructors and persisted verbatim in the
+   * payload — and nothing read it. So a provider statement that said on its face
+   * "this was withdrawn, effective 2026-08-05, because the provider withdrew it"
+   * was appended, stored, read back with the envelope intact, and reported by
+   * `revocationProjection()` as live, along with every claim derived from it.
+   *
+   * THE SAME SHAPE AS `assessDerivationLegality`, whose comment is still in
+   * `appendDerivationWithinTransaction`: correct, tested, and with no caller at
+   * all until the ledger consulted it. And the same shape as D-094, where the
+   * projection knew a claim was revoked and the read boundary served it as
+   * supported. In each case the kernel held the information and the layer that
+   * needed it did not ask.
+   *
+   * WHY HERE RATHER THAN AT APPEND. Refusing an envelope would delete a real
+   * capability: a withdrawn provider statement is a fact worth recording.
+   * Requiring the envelope to name an existing revocation event deadlocks —
+   * `appendRevocation` refuses an unknown target, so the event cannot precede
+   * its own node and the envelope cannot follow it. The projection is therefore
+   * what changes, and it now reflects everything the ledger stores.
+   *
+   * THE ENVELOPE'S KNOWLEDGE TIME IS ITS NODE'S AVAILABILITY, AND ITS
+   * `effectiveAt` IS NOT CONSULTED. `replayAsOf` filters by the time a
+   * revocation was RECORDED. An envelope carries no recorded time and needs
+   * none: it is part of its node's immutable payload, so the ledger learns it
+   * exactly when the node becomes available. `effectiveAt` is an EFFECTIVE time,
+   * and `RevocationProjection` has no effective-time dimension at all; using one
+   * as the other would be precisely the collapse this codebase refuses. The
+   * consequence is declared rather than hidden: a node carrying a future-dated
+   * revocation reads as revoked from the moment it exists, which errs toward
+   * withholding. Recorded at D-099.
+   */
   private revocationEvents(): StoredEventRow[] {
     const rows = this.db.prepare('SELECT event_id, target_id, recorded_at, reason FROM epistemic_revocations ORDER BY event_id').all() as unknown as StoredEventRow[];
-    return rows.map((event) => ({
+    const recorded = rows.map((event) => ({
       event_id: nonEmpty(event.event_id, 'stored revocation eventId'),
       target_id: nonEmpty(event.target_id, 'stored revocation targetId'),
       recorded_at: canonicalInstant(event.recorded_at, `stored revocation ${event.event_id} recordedAt`),
       reason: nonEmpty(event.reason, `stored revocation ${event.event_id} reason`),
     }));
+    return [...recorded, ...this.envelopeRevocations()]
+      .sort((left, right) => left.event_id.localeCompare(right.event_id) || left.target_id.localeCompare(right.target_id));
+  }
+
+  /** Revocations declared by a stored record about itself. */
+  private envelopeRevocations(): StoredEventRow[] {
+    const nodes = this.db.prepare(
+      "SELECT node_id, node_kind, available_at FROM epistemic_nodes WHERE node_kind IN ('evidence', 'claim') ORDER BY node_id",
+    ).all() as unknown as Array<{ node_id: string; node_kind: string; available_at: string }>;
+    const declared: StoredEventRow[] = [];
+    for (const node of nodes) {
+      const item = node.node_kind === 'evidence' ? this.readEvidence(node.node_id) : this.readClaim(node.node_id);
+      const envelope = item?.revocation ?? null;
+      if (envelope === null) continue;
+      declared.push({
+        event_id: nonEmpty(envelope.eventId, `stored ${node.node_kind} ${node.node_id} revocation eventId`),
+        target_id: node.node_id,
+        recorded_at: canonicalInstant(node.available_at, `stored node ${node.node_id} availableAt`),
+        reason: nonEmpty(envelope.reason, `stored ${node.node_kind} ${node.node_id} revocation reason`),
+      });
+    }
+    return declared;
   }
 
   private ensureKinds(ids: readonly string[], kind: DagNode['kind']): void {

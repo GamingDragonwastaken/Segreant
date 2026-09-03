@@ -346,22 +346,53 @@ function supportRoots(dag: EpistemicDag, target: string): string[] {
 }
 
 /**
- * Return inclusion-minimal alternative root sets. Each set represents one
- * dependency path; conjunction semantics can be added by a future relation
- * registry without changing the immutable graph contract.
+ * Return inclusion-minimal supporting root sets for `target`.
+ *
+ * ONE READING OF AN EDGE, NOT TWO. This function used to build one singleton
+ * set per dependency root, which asserts that the roots are ALTERNATIVES: each
+ * one suffices on its own. `revocationClosure` propagates revocation along
+ * every dependency edge, which asserts the opposite — that each root is a
+ * PREREQUISITE. Both cannot be true of the same edge, and on the two-root graph
+ * they openly disagreed: supporting sets `[['e1'],['e2']]` and cut sets
+ * `[['e1','e2']]` against a closure that revokes the claim on `e1` alone.
+ *
+ * The module header settles which reading the graph means — "Dependency edges
+ * point from a prerequisite to its dependent" — and the closure is the reading
+ * the product consults, through `Store.epistemic().revocationProjection()`. So
+ * support is CONJUNCTIVE: the dependency roots of a target are jointly
+ * necessary, there is exactly one inclusion-minimal supporting set — all of
+ * them — and `minimalCutSets` then answers singletons, which is what the
+ * closure does.
+ *
+ * WHICH DIRECTION THE OLD READING ERRED IN, and why this is soundness rather
+ * than taste. It made the claim look HARDER to refute than it is: cut sets said
+ * an auditor must revoke both invoices to cut the billed claim, when revoking
+ * either one already cuts it. Overstating a figure's own robustness is the
+ * failure this codebase exists to refuse.
+ *
+ * WHAT IS NOT BEING CLAIMED. Alternative (disjunctive) support is a real thing
+ * that this graph cannot express: `DAG_EDGE_RELATIONS` has no disjunction, so
+ * assuming it was assuming information the data does not carry. When a relation
+ * registry adds it, this function, `minimalCutSets` and the closure change
+ * together, and `test/epistemic-support-cut-agreement.test.ts` is what holds
+ * them together. Recorded at D-098.
  */
 export function minimalSupportingSets(dag: EpistemicDag, target: string): string[][] {
   if (!dag.nodes.some((node) => node.id === target)) throw new Error(`unknown DAG node: ${target}`);
-  const sets: string[][] = [];
-  for (const root of supportRoots(dag, target)) {
-    if (root === target) continue;
-    if (pathsBetween(dag, root, target).length > 0) sets.push([root]);
-  }
-  const unique = new Map(sets.map((set) => [set.join('\u0000'), set]));
-  return [...unique.values()].sort((a, b) => a.join('\u0000').localeCompare(b.join('\u0000')));
+  const roots = supportRoots(dag, target)
+    .filter((root) => root !== target && pathsBetween(dag, root, target).length > 0)
+    .sort((a, b) => a.localeCompare(b));
+  return roots.length === 0 ? [] : [roots];
 }
 
-/** Compute inclusion-minimal hitting sets over the alternative support sets. */
+/**
+ * Compute inclusion-minimal hitting sets over the supporting sets.
+ *
+ * Unchanged, and correct under either reading: it answers "what is the smallest
+ * set whose removal breaks every supporting set?" Given one conjunctive set of
+ * jointly necessary roots it answers each root alone, which is exactly what
+ * `revocationClosure` does. The disagreement was never here.
+ */
 export function minimalCutSets(dag: EpistemicDag, target: string): string[][] {
   const supportSets = minimalSupportingSets(dag, target);
   if (supportSets.length === 0) return [];

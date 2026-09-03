@@ -77,7 +77,15 @@ test('revocation projection is additive, transitive, and explains each descendan
   assert.equal(projection.revokedIds.includes('evidence:experiment'), false);
 });
 
-test('supporting sets and minimal cut sets are deterministic for alternative evidence paths', () => {
+test('supporting sets and minimal cut sets are deterministic, and read edges as prerequisites', () => {
+  // The determinism this test was written for is unchanged: same graph, same
+  // order, every time. The VALUES changed at D-098. They used to read the two
+  // roots as alternatives — supporting sets `[['e1'],['e2']]`, cut sets
+  // `[['e1','e2']]` — while `projectRevocation` cut `c` on `e1` alone. Two
+  // readings of one edge relation, and the module header names the one the graph
+  // means: a dependency edge points from a PREREQUISITE to its dependent.
+  // `test/epistemic-support-cut-agreement.test.ts` states that agreement as
+  // properties over the closure the product actually consults.
   const dag = createEpistemicDag([
     { id: 'e1', kind: 'evidence', availableAt: '2026-08-01T00:00:00.000Z' },
     { id: 'e2', kind: 'evidence', availableAt: '2026-08-01T00:00:00.000Z' },
@@ -86,8 +94,8 @@ test('supporting sets and minimal cut sets are deterministic for alternative evi
     { from: 'e1', to: 'c', relation: 'supports' },
     { from: 'e2', to: 'c', relation: 'supports' },
   ]);
-  assert.deepEqual(minimalSupportingSets(dag, 'c'), [['e1'], ['e2']]);
-  assert.deepEqual(minimalCutSets(dag, 'c'), [['e1', 'e2']]);
+  assert.deepEqual(minimalSupportingSets(dag, 'c'), [['e1', 'e2']]);
+  assert.deepEqual(minimalCutSets(dag, 'c'), [['e1'], ['e2']]);
 });
 
 test('supersession is a lifecycle link, not a dependency that revocation can erase', () => {
