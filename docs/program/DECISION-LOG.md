@@ -776,31 +776,6 @@ Finally, this addresses one of the ten findings a parallel audit produced. Still
 
 **What this does not establish.** Timing tests remain probabilistic: this bounds the work, it does not prove the scenario cannot starve on a slower machine. The test still cannot go RED on Windows, for the reason D-092 records. And the interleaving it drives is still incidental rather than forced — the deterministic statement of that rule is the three planted-state tests added at D-097.
 
-## D-105 — a strict decision certificate is now bound to the kernel
-**Decision:** `src/decision/epistemic.ts` is the canonical issuance adapter for
-strict interval dominance. It recomputes the certificate from the supplied
-intervals, persists an interval Evidence record and observational Claim, then
-issues a `decision_fitness` Witness and Derivation-backed decision Claim only
-for `proven_dominant`. An undetermined comparison issues the observation only.
-
-**Reason:** `certifyDecision` was conservative but returned a plain object with
-no evidence lineage, so revoking the evidence used to construct its intervals
-could not affect a downstream decision record. The adapter accepts explicit
-Evidence bindings, rejects certificate/action or binding mismatches, and writes
-all records in one ledger transaction. The direct Claim trust ceiling from D-104
-also prevents the adapter from bypassing assurance limits.
-
-**Verified:** five focused decision-issuance tests pass: atomic issuance,
-undetermined refusal, mismatch/missing-binding refusal, exact replay plus
-transitive revocation, and explicit ID/record consistency. The issuance map now
-classifies the adapter as canonical while retaining `unreached` until a reviewed
-product policy consumer exists.
-
-**What this does not establish.** A strict interval certificate proves only the
-declared dominance proposition under its interval assumptions; it is not causal
-evidence, provider billing truth, or authorization to change a budget/model.
-Minimax regret, policy approval, and an action consumer remain future work.
-
 ## D-104 — direct claims cannot strengthen assurance beyond their cited evidence
 **Decision:** `EpistemicLedger.appendClaimWithinTransaction` now enforces a
 weakest-cited-evidence ceiling for integrity, authenticity, and completeness.
@@ -835,3 +810,28 @@ typed policies for measurement, causality, finality, and decision fitness, and
 claims with no cited Evidence remain a separate issuance-policy question. It
 does not close WP-R05 or AII-036 by itself, and it does not repair the latent
 `decision.certificate` boundary.
+
+## D-105 — a strict decision certificate is now bound to the kernel
+**Decision:** `src/decision/epistemic.ts` is the canonical issuance adapter for
+strict interval dominance. It recomputes the certificate from the supplied
+intervals, persists an interval Evidence record and observational Claim, then
+issues a `decision_fitness` Witness and Derivation-backed decision Claim only
+for `proven_dominant`. An undetermined comparison issues the observation only.
+
+**Reason:** `certifyDecision` was conservative but returned a plain object with
+no evidence lineage, so revoking the evidence used to construct its intervals
+could not affect a downstream decision record. The adapter accepts explicit
+Evidence bindings, rejects certificate/action or binding mismatches, and writes
+all records in one ledger transaction. The direct Claim trust ceiling from D-104
+also prevents the adapter from bypassing assurance limits.
+
+**Verified:** five focused decision-issuance tests pass: atomic issuance,
+undetermined refusal, mismatch/missing-binding refusal, exact replay plus
+transitive revocation, and explicit ID/record consistency. The issuance map now
+classifies the adapter as canonical while retaining `unreached` until a reviewed
+product policy consumer exists.
+
+**What this does not establish.** A strict interval certificate proves only the
+declared dominance proposition under its interval assumptions; it is not causal
+evidence, provider billing truth, or authorization to change a budget/model.
+Minimax regret, policy approval, and an action consumer remain future work.
