@@ -23,7 +23,7 @@ test('economic team rollup v2 carries exact project lineage and verifies', () =>
     });
     const project: EconomicProjectValue = {
       project: 'fiscus', units: 1, costUsd: 1.234567, realizationRate: 1,
-      spendOnRealizedUnitsUsd: 2, acceptanceWeightedSpendUsd: 2, roiIndex: 2,
+      spendOnRealizedUnitsUsd: 1, acceptanceWeightedSpendUsd: 1, roiIndex: 2,
       sources: ['codex'],
       economic: { coverage: 'exact', total: exact, realized: exact },
     };

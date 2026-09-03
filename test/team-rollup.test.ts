@@ -13,7 +13,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadOrCreateKeyPair, keyIdForPem } from '../src/value/receipt.ts';
-import { buildRollupBody, signRollup, verifyRollup } from '../src/team/rollup.ts';
+import { buildRollupBody, signRollup, validateRollupBody, verifyRollup } from '../src/team/rollup.ts';
 import type { ProjectValue } from '../src/value/realization.ts';
 
 function projects(): ProjectValue[] {
@@ -23,8 +23,8 @@ function projects(): ProjectValue[] {
       units: 12,
       costUsd: 41.5,
       realizationRate: 0.8,
-      spendOnRealizedUnitsUsd: 300,
-      acceptanceWeightedSpendUsd: 258.5,
+      spendOnRealizedUnitsUsd: 33.2,
+      acceptanceWeightedSpendUsd: 30.1,
       roiIndex: 3.2,
       sources: ['claude-code'],
     },
@@ -33,6 +33,27 @@ function projects(): ProjectValue[] {
 
 const period = { from: '2026-06-01T00:00:00.000Z', to: '2026-07-01T00:00:00.000Z' };
 
+test('team-rollup: validateRollupBody applies realized-spend containment to direct v1 validation', () => {
+  const candidate = buildRollupBody({ keyId: 'test-key' } as never, [{
+    ...projects()[0]!,
+    costUsd: 10,
+    spendOnRealizedUnitsUsd: 11,
+    acceptanceWeightedSpendUsd: 10,
+  }], period);
+  const error = validateRollupBody(candidate);
+  assert.ok(error !== null);
+  assert.match(error, /spendOnRealizedUnitsUsd.*costUsd/);
+});
+
+test('team-rollup: validateRollupBody preserves partial coverage values within containment', () => {
+  const candidate = buildRollupBody({ keyId: 'test-key' } as never, [{
+    ...projects()[0]!,
+    costUsd: 10,
+    spendOnRealizedUnitsUsd: 4,
+    acceptanceWeightedSpendUsd: 3,
+  }], period);
+  assert.equal(validateRollupBody(candidate), null);
+});
 test('team-rollup: buildRollupBody stamps the signer\'s own keyId and carries period/projects through unchanged', () => {
   const dir = mkdtempSync(join(tmpdir(), 'fiscus-rollup-build-'));
   try {

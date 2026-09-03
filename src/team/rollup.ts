@@ -133,15 +133,33 @@ export function buildEconomicRollupBody(
   return Object.freeze(body);
 }
 
-/** Validate v2 exact project lineage after a signature has established bytes. */
+function exceedsBound(value: number, bound: number): boolean {
+  return value - bound > Math.max(Math.abs(bound), 1) * 1e-9;
+}
+
+function validateProjectContainment(project: ProjectValue, label: string): string | null {
+  const cost = project.costUsd;
+  const realizedSpend = project.spendOnRealizedUnitsUsd;
+  const acceptanceSpend = project.acceptanceWeightedSpendUsd;
+  if (exceedsBound(realizedSpend, cost)) return `${label}.spendOnRealizedUnitsUsd must not exceed ${label}.costUsd`;
+  if (exceedsBound(acceptanceSpend, realizedSpend)) return `${label}.acceptanceWeightedSpendUsd must not exceed ${label}.spendOnRealizedUnitsUsd`;
+  return null;
+}
+
+/** Validate v1/v2 project containment and v2 exact project lineage. */
 export function validateRollupBody(body: RollupBody): string | null {
-  if (body.v === 1) return null;
-  if (body.v !== 2 || !Array.isArray(body.projects)) return 'economic team rollup body version is invalid';
-  for (const project of body.projects) {
-    try {
-      canonicalEconomicProject(project as EconomicProjectValue);
-    } catch (error) {
-      return error instanceof Error ? error.message : String(error);
+  if (body.v !== 1 && body.v !== 2) return 'economic team rollup body version is invalid';
+  if (!Array.isArray(body.projects)) return 'economic team rollup projects must be an array';
+  for (let index = 0; index < body.projects.length; index += 1) {
+    const project = body.projects[index]!;
+    const containmentError = validateProjectContainment(project, `body.projects[${index}]`);
+    if (containmentError !== null) return containmentError;
+    if (body.v === 2) {
+      try {
+        canonicalEconomicProject(project as EconomicProjectValue);
+      } catch (error) {
+        return error instanceof Error ? error.message : String(error);
+      }
     }
   }
   return null;
