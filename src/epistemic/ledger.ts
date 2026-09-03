@@ -789,15 +789,14 @@ export class EpistemicLedger {
       integrityCeiling = Math.min(integrityCeiling, INTEGRITY.indexOf(source.integrity));
       authenticityCeiling = Math.min(authenticityCeiling, AUTHENTICITY.indexOf(source.authenticity));
       coverageCeiling = Math.min(coverageCeiling, COVERAGE.indexOf(source.completeness.status));
+      // `incomparable` is deliberately NOT collected here. See the docblock: a
+      // `Grain` is a flat dimension set, so an honest [billing_record] ->
+      // [billing_period] roll-up and an invented axis are the same verdict, and
+      // refusing it refuses the product's real issuance paths along with the
+      // defect. Only strict refinement is positive evidence of invention.
       const relation = grainRelation(item.grain, source.grain);
-      const billingAggregate = item.derivationRule.startsWith('billing.')
-        && item.grain.dimensions.includes('billing_period')
-        && source.grain.dimensions.includes('billing_record');
-      if (relation === 'equal' || relation === 'coarser' || billingAggregate) grainSupplied = true;
+      if (relation === 'equal' || relation === 'coarser') grainSupplied = true;
       else if (relation === 'finer') refinedOver.push(source);
-      else if (relation === 'incomparable') {
-        refinedOver.push(source);
-      }
     }
     if (!grainSupplied && refinedOver.length > 0) {
       const cited = refinedOver[0]!;

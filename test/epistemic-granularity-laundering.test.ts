@@ -149,16 +149,27 @@ test('a claim cannot report per-request detail that its daily-total evidence nev
   );
 });
 
-test('an incomparable grain is refused at the direct claim boundary', () => {
-  // A flat dimension set cannot establish a relationship between unrelated
-  // axes. Product-specific rollups such as billing_record -> billing_period
-  // must use their explicit adapter exception; a generic caller cannot invent
-  // a bridge by populating a different grain.
+test('an incomparable grain is NOT refused, and the reason is a limit of the model', () => {
+  // WHAT THIS RULE CANNOT SEE, ASSERTED SO IT CANNOT BE MISTAKEN FOR SAFETY.
+  // `[model]` against `[day]` shares no dimension, and by the letter of the
+  // model that is an invented axis. But `Grain` is a flat dimension SET with no
+  // hierarchy, so `grainRelation` returns the identical `incomparable` verdict
+  // for `[billing_record]` -> `[billing_period]`, an honest roll-up that real
+  // issuance performs. Refusing `incomparable` broke eleven tests across four
+  // product paths, and the first attempt to keep the refusal — a hardcoded
+  // exception for `billing.` derivation rules naming those two dimensions —
+  // covered neither the OpenAI Costs roll-up nor, as it turned out, the billing
+  // path it was written for. A kernel rule that needs a list of product
+  // exceptions to be true is not the rule; it is a description of the
+  // exceptions.
+  //
+  // Closing this needs a declared dimension hierarchy, not a stricter
+  // comparison and not a longer list.
   const kernel = ledger();
   kernel.appendEvidence(evidence(evidenceInput('evidence:daily:1', ['day'])));
-  assert.throws(
-    () => kernel.appendClaim(claim(claimInput('claim:bridged:1', ['evidence:daily:1'], ['model']))),
-    /grain/,
+  assert.equal(
+    kernel.appendClaim(claim(claimInput('claim:bridged:1', ['evidence:daily:1'], ['model']))),
+    'inserted',
   );
 });
 
