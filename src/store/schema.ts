@@ -752,6 +752,51 @@ export function configureDatabaseConnection(db: DatabaseSync): void {
   db.prepare('PRAGMA recursive_triggers = ON').run();
 }
 
+/** Reject tampered append-only metadata before idempotent DDL can repair it. */
+function validateAppendOnlyTriggerAuthority(db: DatabaseSync): void {
+  const expected: ReadonlyArray<{ name: string; table: string; sql: string }> = [
+    {
+      name: 'economic_events_append_only_update',
+      table: 'economic_events',
+      sql: "CREATE TRIGGER economic_events_append_only_update BEFORE UPDATE ON economic_events BEGIN SELECT RAISE(ABORT, 'economic event ledger is append-only'); END",
+    },
+    {
+      name: 'economic_events_append_only_delete',
+      table: 'economic_events',
+      sql: "CREATE TRIGGER economic_events_append_only_delete BEFORE DELETE ON economic_events BEGIN SELECT RAISE(ABORT, 'economic event ledger is append-only'); END",
+    },
+    {
+      name: 'economic_events_append_only_insert',
+      table: 'economic_events',
+      sql: "CREATE TRIGGER economic_events_append_only_insert BEFORE INSERT ON economic_events WHEN EXISTS (SELECT 1 FROM economic_events WHERE event_id = NEW.event_id) BEGIN SELECT RAISE(ABORT, 'economic event ledger is append-only'); END",
+    },
+    {
+      name: 'billing_mapping_no_update',
+      table: 'billing_record_mapping_versions',
+      sql: "CREATE TRIGGER billing_mapping_no_update BEFORE UPDATE ON billing_record_mapping_versions BEGIN SELECT RAISE(ABORT, 'billing mapping evidence is append-only'); END",
+    },
+    {
+      name: 'billing_mapping_no_delete',
+      table: 'billing_record_mapping_versions',
+      sql: "CREATE TRIGGER billing_mapping_no_delete BEFORE DELETE ON billing_record_mapping_versions BEGIN SELECT RAISE(ABORT, 'billing mapping evidence is append-only'); END",
+    },
+  ];
+  const existingTables = new Set((db.prepare(
+    "SELECT name FROM sqlite_master WHERE type = 'table'",
+  ).all() as Array<{ name: string }>).map((row) => row.name));
+  const defects = expected.filter((item) => {
+    if (!existingTables.has(item.table)) return false;
+    const actual = db.prepare(
+      "SELECT tbl_name, sql FROM sqlite_master WHERE type = 'trigger' AND name = ?",
+    ).get(item.name) as { tbl_name: string; sql: string | null } | undefined;
+    return !actual || actual.tbl_name !== item.table
+      || normalizeAuthoritySql(actual.sql) !== normalizeAuthoritySql(item.sql);
+  });
+  if (defects.length > 0) {
+    throw new Error('database integrity validation failed: append-only trigger authority mismatch');
+  }
+}
+
 /** Idempotent schema migrations for DBs created before a column existed. */
 function migrate(db: DatabaseSync): void {
   const cols = db.prepare('PRAGMA table_info(requests)').all() as Array<{ name: string }>;
@@ -1876,6 +1921,7 @@ export function initializeSchema(
     if (lockedState === 'incomplete' && !exactSlice3AssignmentSchema(db)) {
       throw new Error('causal v2 schema validation failed: CAUSAL_V2_UNRECOGNIZED_PREDECESSOR');
     }
+    validateAppendOnlyTriggerAuthority(db);
     runScript(db, SCHEMA);
     initializeEpistemicSchema(db);
     initializeEconomicSchema(db);
