@@ -243,6 +243,22 @@ function validateSources(value: unknown, label: string): string | null {
  * does not by itself make NaN-like values, duplicate project rows, or an
  * impossible time interval safe to aggregate later.
  */
+/**
+ * Is `value` above `bound` by more than float summation could explain?
+ *
+ * The three project dollar figures are nested sums over ONE unit set, computed
+ * by the producer as `reduce` over `mature`, over `realizedUnits` (a subset),
+ * and over that subset again weighted by a per-unit factor in [0,1]. In real
+ * arithmetic the containment is exact. In IEEE-754 a subset sum can land a few
+ * ulps above its superset purely from ordering, so a strict `>` would reject
+ * honest rollups. The tolerance is relative to the bound and never below one
+ * part in a billion of a dollar, which is far under any amount a person would
+ * notice and far over any rounding a sum of this size can produce.
+ */
+function exceedsBound(value: number, bound: number): boolean {
+  return value - bound > Math.max(Math.abs(bound), 1) * 1e-9;
+}
+
 function validateRollupSemantics(signed: SignedRollup): string | null {
   const body = signed.body as unknown as Record<string, unknown>;
   if (body['keyId'] !== signed.keyId) return 'body.keyId must equal the envelope keyId';
@@ -269,6 +285,36 @@ function validateRollupSemantics(signed: SignedRollup): string | null {
       return `${label} dollar values must be finite and non-negative`;
     }
     if (!finiteNonNegative(project['realizationRate']) || (project['realizationRate'] as number) > 1) return `${label}.realizationRate must be between 0 and 1`;
+
+    // CONTAINMENT — THE RULE THE STRATA BLOCK BELOW ALREADY APPLIES (WP-C06).
+    //
+    // A stratum's `realizedUnits > units` is refused a few lines down. The
+    // project dollar figures are nested in exactly the same way and were not
+    // compared at all: each was merely required to be finite and non-negative.
+    // A correctly signed, self-consistent rollup could therefore declare
+    // costUsd 10 with spendOnRealizedUnitsUsd 1000, and /dashboard/projects
+    // published realizedSpendShare 100 — 10000% of spend reaching a kept
+    // outcome, and $1000 of realized spend inside $10 of total spend.
+    //
+    // The invariant is the producer's, not an opinion imposed on it:
+    // `costUsd` sums matured units, `spendOnRealizedUnitsUsd` sums the realized
+    // SUBSET of those, and `acceptanceWeightedSpendUsd` sums that subset again
+    // weighted per unit by an acceptance value the kernel bounds to [0,1]
+    // (`src/value/epistemic.ts` refuses anything else). So
+    // 0 <= acceptanceWeighted <= spendOnRealized <= cost, always.
+    //
+    // Checked HERE because this is untrusted input. A signature proves the
+    // numbers were not altered in transit; it says nothing about whether they
+    // could have been produced at all.
+    const cost = project['costUsd'] as number;
+    const realizedSpend = project['spendOnRealizedUnitsUsd'] as number;
+    const acceptanceSpend = project['acceptanceWeightedSpendUsd'] as number;
+    if (exceedsBound(realizedSpend, cost)) {
+      return `${label}.spendOnRealizedUnitsUsd must not exceed ${label}.costUsd`;
+    }
+    if (exceedsBound(acceptanceSpend, realizedSpend)) {
+      return `${label}.acceptanceWeightedSpendUsd must not exceed ${label}.spendOnRealizedUnitsUsd`;
+    }
     if (project['roiIndex'] !== null && (!finiteNonNegative(project['roiIndex']) || (project['roiIndex'] as number) > 100)) return `${label}.roiIndex must be null or between 0 and 100`;
     const sourceError = validateSources(project['sources'], label);
     if (sourceError) return sourceError;

@@ -27,7 +27,14 @@ function projects(): ProjectValue[] {
     {
       project: 'fiscus',
       units: 12,
-      costUsd: 41.5,
+      // CONTAINED, BECAUSE THE PRODUCER CANNOT EMIT ANYTHING ELSE. These three
+      // are nested sums over one unit set: realized units are a subset of
+      // matured units, and the acceptance weighting is a per-unit factor in
+      // [0,1]. This fixture used to read costUsd 41.5 against
+      // spendOnRealizedUnitsUsd 300 — a project where seven times the money
+      // spent reached a kept outcome. Correcting it makes the fixture possible;
+      // it was never a case the server was entitled to accept.
+      costUsd: 415,
       realizationRate: 0.8,
       spendOnRealizedUnitsUsd: 300,
       acceptanceWeightedSpendUsd: 258.5,
@@ -218,8 +225,13 @@ test('team-server: POST /rollups accepts exact economic v2 and retains its proje
       unresolvedRequests: 0,
     });
     const project: EconomicProjectValue = {
+      // realizationRate 1 means every matured unit realized, so realized spend
+      // IS the total spend. The row previously read spendOnRealizedUnitsUsd 2
+      // against costUsd 1.234567 — more money reaching a kept outcome than the
+      // project spent — which the producer cannot emit and the server now
+      // refuses.
       project: 'fiscus', units: 1, costUsd: 1.234567, realizationRate: 1,
-      spendOnRealizedUnitsUsd: 2, acceptanceWeightedSpendUsd: 2, roiIndex: 2, sources: ['codex'],
+      spendOnRealizedUnitsUsd: 1.234567, acceptanceWeightedSpendUsd: 1.234567, roiIndex: 2, sources: ['codex'],
       economic: { coverage: 'exact', total: exact, realized: exact },
     };
     const signed = signRollup(buildEconomicRollupBody(dev, [project], period), dev);
@@ -298,7 +310,21 @@ test('team-server: POST /rollups rejects self-consistently signed payloads with 
       const invalidStrata = buildRollupBody(dev, projects(), period, [
         { project: 'fiscus', taskType: 'bugfix', units: 1, realizedUnits: 2, costUsd: 1 },
       ]);
-      for (const candidate of [badKeyBody, badUnits, backwardsPeriod, duplicateProjects, duplicateSources, invalidStrata]) {
+      // THE SAME CONTAINMENT THE STRATA ROW ABOVE ALREADY ENFORCES, ONE FIELD
+      // OVER. `realizedUnits > units` is refused; the project dollar figures are
+      // nested in exactly the same way and were not checked at all, so a
+      // correctly signed rollup could claim more money reached a kept outcome
+      // than was ever spent.
+      const realizedSpendExceedsCost = buildRollupBody(dev, [
+        { ...projects()[0]!, costUsd: 10, spendOnRealizedUnitsUsd: 1000, acceptanceWeightedSpendUsd: 1000 },
+      ], period);
+      const acceptanceExceedsRealizedSpend = buildRollupBody(dev, [
+        { ...projects()[0]!, costUsd: 100, spendOnRealizedUnitsUsd: 10, acceptanceWeightedSpendUsd: 50 },
+      ], period);
+      for (const candidate of [
+        badKeyBody, badUnits, backwardsPeriod, duplicateProjects, duplicateSources, invalidStrata,
+        realizedSpendExceedsCost, acceptanceExceedsRealizedSpend,
+      ]) {
         const res = await fetch(`${srv.url}/rollups`, {
           method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(signRollup(candidate, dev)),
         });
