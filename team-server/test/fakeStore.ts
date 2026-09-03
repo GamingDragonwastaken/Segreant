@@ -4,7 +4,7 @@
  * header comment for why the interface exists.
  */
 
-import type { RollupStore, RegisteredDeveloper, StoredRollup, InsertRollupResult, PeriodFilter, ProjectTotals, DeveloperTotals } from '../src/store.ts';
+import type { RollupStore, RegisteredDeveloper, StoredRollup, InsertRollupResult, PeriodFilter, ProjectTotals, DeveloperTotals, ObservationWindow } from '../src/store.ts';
 import type { SignedRollup } from '../../src/team/rollup.ts';
 
 /** True if [rollup's period_from, period_to) overlaps the requested [periodFrom, periodTo) window (open bounds = unbounded). */
@@ -49,6 +49,35 @@ export class FakeRollupStore implements RollupStore {
   async listRollups(opts: { keyId?: string; limit?: number } = {}): Promise<StoredRollup[]> {
     const rows = opts.keyId ? this.rollups.filter((r) => r.keyId === opts.keyId) : this.rollups;
     return rows.slice(0, opts.limit ?? 50);
+  }
+
+  /** Mirrors PgRollupStore.observationWindows: the same latest-per-developer population, grouped by declared window. */
+  async observationWindows(filter: PeriodFilter = {}): Promise<ObservationWindow[]> {
+    const latest = this.latestPerDeveloper(filter);
+    const byWindow = new Map<string, { periodFrom: string; periodTo: string; developers: Set<string> }>();
+    for (const r of latest) {
+      const key = `${r.periodFrom}\u0000${r.periodTo}`;
+      let entry = byWindow.get(key);
+      if (!entry) {
+        entry = { periodFrom: r.periodFrom, periodTo: r.periodTo, developers: new Set() };
+        byWindow.set(key, entry);
+      }
+      entry.developers.add(r.keyId);
+    }
+    return [...byWindow.values()]
+      .map((entry) => ({ periodFrom: entry.periodFrom, periodTo: entry.periodTo, developerCount: entry.developers.size }))
+      .sort((a, b) => a.periodFrom.localeCompare(b.periodFrom) || a.periodTo.localeCompare(b.periodTo));
+  }
+
+  /** One developer, one rollup: the latest received among those overlapping the filter. */
+  private latestPerDeveloper(filter: PeriodFilter): StoredRollup[] {
+    const inWindow = this.rollups.filter((r) => overlapsWindow(r.periodFrom, r.periodTo, filter));
+    const latestPerDev = new Map<string, StoredRollup>();
+    for (const r of inWindow) {
+      const existing = latestPerDev.get(r.keyId);
+      if (!existing || r.receivedAt >= existing.receivedAt) latestPerDev.set(r.keyId, r);
+    }
+    return [...latestPerDev.values()];
   }
 
   /** Mirrors PgRollupStore.aggregateProjects's weighting exactly — see store.ts's header comment on why realizationRate/avgRoiIndex can't be naive averages. */

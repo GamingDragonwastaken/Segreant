@@ -25,7 +25,7 @@
  * breakdown it needs no separate opt-in — only the per-row floor.
  */
 
-import type { ProjectTotals, DeveloperTotals } from './store.ts';
+import type { ProjectTotals, DeveloperTotals, ObservationWindow } from './store.ts';
 import { standardizedScore, type StandardizedScore } from '../../src/team/standardize.ts';
 
 export type ProjectAggregateRow =
@@ -66,6 +66,93 @@ export interface TeamAggregateConfig {
   minCohort: number;
   /** Opt-in: without this, the developer breakdown reports itself disabled (fails closed, like adminToken/oidc). */
   exposeDeveloperBreakdown: boolean;
+}
+
+export interface WindowCoverage {
+  /** How many DIFFERENT observation windows the summed rollups declared. */
+  distinctWindows: number;
+  contributingDevelopers: number;
+  /** True only when every contributing rollup declared the same window. */
+  uniform: boolean;
+  earliestFrom: string | null;
+  latestTo: string | null;
+  shortestWindowDays: number | null;
+  longestWindowDays: number | null;
+  /** What the totals beside this do, and do not, describe. */
+  note: string;
+}
+
+function windowDays(window: ObservationWindow): number {
+  const span = new Date(window.periodTo).getTime() - new Date(window.periodFrom).getTime();
+  return Math.round((span / 86_400_000) * 100) / 100;
+}
+
+/**
+ * State the coverage of a team total, because the rollups it sums need not
+ * cover the same period.
+ *
+ * THE FIGURE HAD NO PERIOD AT ALL. Each rollup declares its own observation
+ * window, chosen by whoever pushed it — `fiscus team push --window D` defaults
+ * to 30 and accepts anything — and `aggregateProjects` sums one rollup per
+ * developer whatever length each window is. A seven-day machine and a
+ * ninety-day machine added up to one `totalCostUsd` and the response said
+ * nothing about which period, if any, it described.
+ *
+ * THE ARGUMENT WAS ALREADY MADE ONE FUNCTION OVER. `parsePeriodFilter` refuses
+ * `periodFrom`/`periodTo` outright and states why: filtering a snapshot by an
+ * overlapping window "would present its *whole* total as though it belonged to
+ * that partial window". That is the same error in the other direction — there
+ * the query's window misdescribes the data, here the data's own windows
+ * misdescribe each other — and only one of the two was guarded.
+ *
+ * NEITHER REFUSED NOR REWEIGHTED, DELIBERATELY. Normalising unequal windows to a
+ * common period would invent a rate the rollups do not carry, and refusing the
+ * sum would delete the core FinOps view over a difference that is often
+ * harmless. What is added is the basis: how many distinct windows fed the total,
+ * their span, and their shortest and longest length. Recorded at D-102.
+ */
+export function buildWindowCoverage(windows: ObservationWindow[]): WindowCoverage {
+  if (windows.length === 0) {
+    return {
+      distinctWindows: 0,
+      contributingDevelopers: 0,
+      // Nothing is not uniform; it is nothing. Reporting `true` here would let a
+      // reader take an empty team for an agreeing one.
+      uniform: false,
+      earliestFrom: null,
+      latestTo: null,
+      shortestWindowDays: null,
+      longestWindowDays: null,
+      note: 'no rollups contributed to these totals, so there is no observation window to state',
+    };
+  }
+
+  const lengths = windows.map(windowDays);
+  const shortest = Math.min(...lengths);
+  const longest = Math.max(...lengths);
+  const earliestFrom = windows.map((w) => w.periodFrom).sort()[0]!;
+  const latestTo = windows.map((w) => w.periodTo).sort().at(-1)!;
+  const contributingDevelopers = windows.reduce((total, w) => total + w.developerCount, 0);
+  const uniform = windows.length === 1;
+
+  const note = uniform
+    ? `every contributing rollup declares the same ${shortest}-day window, ${earliestFrom} to ${latestTo}; `
+      + 'the totals cover that period'
+    : `contributing rollups declare ${windows.length} different observation windows, the shortest ${shortest} `
+      + `days and the longest ${longest} days, spanning ${earliestFrom} to ${latestTo}. These totals are a sum `
+      + 'across periods of unequal length and do not describe any single window'
+      + '; a machine that observed for longer contributes more of it for that reason alone';
+
+  return {
+    distinctWindows: windows.length,
+    contributingDevelopers,
+    uniform,
+    earliestFrom,
+    latestTo,
+    shortestWindowDays: shortest,
+    longestWindowDays: longest,
+    note,
+  };
 }
 
 /** Suppresses any project row with fewer than `minCohort` distinct contributing developers. */

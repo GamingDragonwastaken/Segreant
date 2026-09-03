@@ -56,6 +56,25 @@ export interface PeriodFilter {
  * comment for why naive averaging would silently redefine what these numbers
  * mean relative to the single-machine dashboard.
  */
+/**
+ * One distinct observation window among the rollups that fed an aggregate.
+ *
+ * WHY THIS EXISTS SEPARATELY FROM THE TOTALS. A rollup's window is chosen by
+ * whoever pushed it — `fiscus team push --window D` defaults to 30 and takes
+ * anything — so the snapshots summed into one team total need not cover the
+ * same period at all. The server already refuses to filter a snapshot by a
+ * partial window, on the stated grounds that it "would present its whole total
+ * as though it belonged to that partial window", and then summed windows that
+ * disagree with each other into a figure that named no period. This is the
+ * evidence a reader needs to see that the sum is not one period. Recorded at
+ * D-102.
+ */
+export interface ObservationWindow {
+  periodFrom: string;
+  periodTo: string;
+  developerCount: number;
+}
+
 export interface ProjectTotals {
   project: string;
   developerCount: number;
@@ -90,6 +109,8 @@ export interface RollupStore {
   listRollups(opts?: { keyId?: string; limit?: number }): Promise<StoredRollup[]>;
   aggregateProjects(filter?: PeriodFilter): Promise<ProjectTotals[]>;
   aggregateDevelopers(filter?: PeriodFilter): Promise<DeveloperTotals[]>;
+  /** The distinct windows of the rollups that `aggregateProjects` would sum. */
+  observationWindows(filter?: PeriodFilter): Promise<ObservationWindow[]>;
   close(): Promise<void>;
 }
 
@@ -261,6 +282,36 @@ export class PgRollupStore implements RollupStore {
    * every aggregate to float8 sidesteps that uniformly; realistic rollup/unit
    * counts are nowhere near double's exact-integer range (2^53).
    */
+  /**
+   * The same `latest_rollup_per_dev` population the aggregates use, grouped by
+   * the window each of those rollups declared. Deliberately a separate query
+   * rather than another column on the totals: the totals are per project and a
+   * window is per developer, so folding one into the other would either
+   * duplicate windows per project row or silently pick one of them.
+   */
+  async observationWindows(filter: PeriodFilter = {}): Promise<ObservationWindow[]> {
+    const res = await this.pool.query<{ period_from: Date; period_to: Date; developer_count: string | number }>(
+      `WITH latest_rollup_per_dev AS (
+         SELECT DISTINCT ON (r.key_id) r.id, r.key_id, r.period_from, r.period_to
+         FROM rollups r
+         WHERE ($1::timestamptz IS NULL OR r.period_to > $1::timestamptz)
+           AND ($2::timestamptz IS NULL OR r.period_from < $2::timestamptz)
+         ORDER BY r.key_id, r.received_at DESC, r.id DESC
+       )
+       SELECT lr.period_from AS period_from, lr.period_to AS period_to,
+              COUNT(DISTINCT lr.key_id)::float8 AS developer_count
+       FROM latest_rollup_per_dev lr
+       GROUP BY lr.period_from, lr.period_to
+       ORDER BY lr.period_from ASC, lr.period_to ASC`,
+      [filter.periodFrom ?? null, filter.periodTo ?? null],
+    );
+    return res.rows.map((row) => ({
+      periodFrom: row.period_from.toISOString(),
+      periodTo: row.period_to.toISOString(),
+      developerCount: Number(row.developer_count),
+    }));
+  }
+
   async aggregateProjects(filter: PeriodFilter = {}): Promise<ProjectTotals[]> {
     const res = await this.pool.query<ProjectTotalsRow>(
       `WITH latest_rollup_per_dev AS (

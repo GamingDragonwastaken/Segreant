@@ -37,7 +37,7 @@ import { validateRollupBody, verifyRollup, type SignedRollup } from '../../src/t
 import { keyIdForPem } from '../../src/value/receipt.ts';
 import type { RollupStore, PeriodFilter } from './store.ts';
 import { verifyIdToken, type OidcConfig } from './oidc.ts';
-import { buildProjectReport, buildDeveloperReport, type TeamAggregateConfig } from './aggregate.ts';
+import { buildProjectReport, buildDeveloperReport, buildWindowCoverage, type TeamAggregateConfig } from './aggregate.ts';
 
 function json(res: http.ServerResponse, status: number, payload: unknown): void {
   res.writeHead(status, {
@@ -493,7 +493,11 @@ export function createTeamServer(deps: TeamServerDeps): http.Server {
           return json(res, 400, { ok: false, error: 'periodFrom/periodTo are unavailable: cumulative rollup snapshots cannot support partial historical windows' });
         }
         const totals = await store.aggregateProjects(filter);
-        return json(res, 200, { ok: true, projects: buildProjectReport(totals, aggregate.minCohort) });
+        // The totals and the windows they were summed from travel together: a
+        // team figure that names no period is the same collapse this endpoint
+        // already refuses in `parsePeriodFilter`, one direction over. D-102.
+        const coverage = buildWindowCoverage(await store.observationWindows(filter));
+        return json(res, 200, { ok: true, projects: buildProjectReport(totals, aggregate.minCohort), coverage });
       });
       return;
     }
@@ -513,10 +517,15 @@ export function createTeamServer(deps: TeamServerDeps): http.Server {
         }
         if (!aggregate.exposeDeveloperBreakdown) {
           // Skip the query entirely — the report would be suppressed anyway; no point paying for it.
+          // No coverage here, deliberately: the empty coverage says "no rollups
+          // contributed", and on this path rollups may well exist — the report
+          // is disabled, not empty. Reporting the wrong reason would be the
+          // defect D-102 repaired, in miniature.
           return json(res, 200, { ok: true, report: buildDeveloperReport([], aggregate) });
         }
         const totals = await store.aggregateDevelopers(filter);
-        return json(res, 200, { ok: true, report: buildDeveloperReport(totals, aggregate) });
+        const coverage = buildWindowCoverage(await store.observationWindows(filter));
+        return json(res, 200, { ok: true, report: buildDeveloperReport(totals, aggregate), coverage });
       });
       return;
     }

@@ -620,6 +620,20 @@ test('a restore that loses the canonical path is a lost race, not a fatal errno'
   // dead owner keeps it immediately reclaimable, so workers still make progress
   // instead of serving the ten-second ownerless age.
   //
+  // BOUNDED WORK RATHER THAN A WALL CLOCK, after this test hung its own CI job.
+  // It first drove both sides with `while (Date.now() < until)` loops, which
+  // made the thief a busy spin on a failing `mkdir`; four of those on a two-core
+  // runner starve one another, and a worker that enters one more acquisition
+  // just before its deadline then waits inside it against a five-minute
+  // `LOCK_WAIT_MS`. Run `33776671068` killed a worker at the harness's
+  // three-minute window with nothing to read: the job failed for want of a
+  // scheduler, not for a defect. Both sides are now counted — five laps each,
+  // four hundred thief attempts with a two-millisecond yield between them — so
+  // the whole scenario is finite, and the assertions say so: every worker must
+  // complete all five laps, and the thief must have claimed the path at least
+  // once, which is what proves the canonical path went absent underneath a
+  // contender at all.
+  //
   // WHAT THIS DOES NOT ESTABLISH. It cannot go RED on Windows, where the
   // occupied-target rename answers EPERM or EEXIST — both of which the old list
   // already tolerated. The defect and its repair are visible only where the
@@ -639,10 +653,16 @@ test('a restore that loses the canonical path is a lost race, not a fatal errno'
     writeFileSync(thief, [
       "import { mkdirSync, writeFileSync } from 'node:fs';",
       "import { join } from 'node:path';",
-      'const [root, forMs, deadPid] = [process.argv[2], Number(process.argv[3]), Number(process.argv[4])];',
-      'const until = Date.now() + forMs;',
+      'const [root, attempts, deadPid] = [process.argv[2], Number(process.argv[3]), Number(process.argv[4])];',
+      // A YIELD, NOT A SPIN. A wall-clock `while` around a failing mkdir is a
+      // busy loop, and four of those on a two-core runner starve each other:
+      // run `33776671068` killed a worker at the harness's 180s window with the
+      // thief holding a core. Two milliseconds between attempts keeps the path
+      // under continuous attack without monopolising the scheduler, and a fixed
+      // attempt count bounds the whole scenario instead of trusting a clock.
+      'const cell = new Int32Array(new SharedArrayBuffer(4));',
       'let steals = 0;',
-      'while (Date.now() < until) {',
+      'for (let attempt = 0; attempt < attempts; attempt += 1) {',
       "  const lock = join(root, '.fiscus-build.lock');",
       '  try {',
       // mkdir is the claim. Only the process that wins it writes the record, so
@@ -651,6 +671,7 @@ test('a restore that loses the canonical path is a lost race, not a fatal errno'
       "    writeFileSync(join(lock, 'owner.json'), JSON.stringify({ pid: deadPid, token: 'thief-' + steals }), 'utf8');",
       '    steals += 1;',
       '  } catch { /* the path is claimed by a real contender; that is the normal case */ }',
+      '  Atomics.wait(cell, 0, 0, 2);',
       '}',
       'process.stdout.write(String(steals));',
     ].join('\n'), 'utf8');
@@ -658,21 +679,26 @@ test('a restore that loses the canonical path is a lost race, not a fatal errno'
     const worker = join(dir, 'worker.mjs');
     writeFileSync(worker, [
       `import { acquirePublicationLock } from ${JSON.stringify(LOCK_MODULE)};`,
-      'const [root, forMs] = [process.argv[2], Number(process.argv[3])];',
-      'const until = Date.now() + forMs;',
-      'let laps = 0;',
-      'while (Date.now() < until) {',
+      'const [root, laps] = [process.argv[2], Number(process.argv[3])];',
+      // BOUNDED WORK, NOT A DEADLINE. A worker looping until a wall clock can
+      // enter one more acquisition just before the deadline and then wait
+      // inside it; `LOCK_WAIT_MS` is five minutes and the harness kills at
+      // three, so that reads as a hang with no information in it. A fixed lap
+      // count makes the total work finite and the failure legible.
+      'let done = 0;',
+      'for (let lap = 0; lap < laps; lap += 1) {',
       '  acquirePublicationLock(root)();',
-      '  laps += 1;',
+      '  done += 1;',
       '}',
-      'process.stdout.write(String(laps));',
+      'process.stdout.write(String(done));',
     ].join('\n'), 'utf8');
 
     const results = await Promise.all([
-      ...Array.from({ length: 3 }, () => run(worker, [dir, '2500'])),
-      run(thief, [dir, '2500', String(deadPid)]),
+      ...Array.from({ length: 3 }, () => run(worker, [dir, '5'])),
+      run(thief, [dir, '400', String(deadPid)]),
     ]);
     const workers = results.slice(0, 3);
+    const steals = Number(results[3]!.stdout) || 0;
 
     // THE ASSERTION THE DEFECT VIOLATED. A lost race must not reach the caller
     // as a filesystem error. Checked as a class rather than as this run's code,
@@ -686,13 +712,14 @@ test('a restore that loses the canonical path is a lost race, not a fatal errno'
       assert.equal(result.code, 0, result.stderr || 'a worker died contending with a lock thief');
     }
 
-    // Non-vacuity. A worker that never acquired would satisfy every assertion
-    // above while proving nothing about the restore path.
+    // NON-VACUITY, IN BOTH DIRECTIONS. Workers that never acquired, or a thief
+    // that never got the path, would satisfy every assertion above while
+    // proving nothing. A steal is the stronger half: it means the canonical
+    // path was observed ABSENT and re-created underneath the workers, which is
+    // the interleaving this test exists to drive.
     const laps = workers.map((result) => Number(result.stdout) || 0);
-    assert.ok(
-      laps.reduce((total, count) => total + count, 0) >= 1,
-      `no worker completed an acquire/release, so the contention never happened; got ${JSON.stringify(laps)}`,
-    );
+    assert.deepEqual(laps, [5, 5, 5], 'every worker must complete its laps rather than stall');
+    assert.ok(steals >= 1, 'the thief never claimed the canonical path, so no race was manufactured');
 
     // And the generations the thief abandoned are collected by owner liveness,
     // exactly as an ordinary quarantine is — its pid was dead from the start.
