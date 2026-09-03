@@ -73,6 +73,17 @@ and open-ended free-text payloads in the protocol's structural context. The
 protocol stores declared identifiers and hashes, not a hidden copy of sensitive
 input material.
 
+### Canonical estimand registry (WP-E01)
+
+The bounded `src/causal/estimand.ts` registry currently defines one canonical
+estimand: `randomized_itt`. It records the registered eligible population,
+assigned-arm intervention and comparator, pre-registered primary outcome,
+registered study window, difference-in-means contrast, and explicit missingness
+treatment. The registry is immutable and descriptive; it does not replace
+protocol validation, qualification, estimation, persistence, or claim issuance.
+Additional estimands and integration into protocol decoding remain outside this
+slice.
+
 ### Additive protocol version 2
 
 Protocol v2 is a new canonical document; it does not reinterpret or silently

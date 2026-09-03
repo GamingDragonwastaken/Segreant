@@ -128,8 +128,9 @@ two red heads that way, and both times the local check had stopped at the root.
 
 1. **Wire the decision adapter only through a reviewed policy boundary.** The
    adapter exists and is tested, but remains unreached. Do not expose an
-   action-grade decision without a persisted certificate and derivation. Then
-   continue to WP-C05 unless an approved control consumer is required.
+   action-grade decision without a persisted certificate and derivation. The
+   bounded WP-C05 FOCUS compatibility projection is complete; continue to the
+   next unstarted dossier packet after the current R/C verification tranche.
 2. **Work the audit backlog, reproducing each finding before acting on it.** A
    parallel read-only audit produced ten probe-reproduced findings across six
    frontiers; its adversarial verifiers all died on a session limit, so NONE of
@@ -143,7 +144,7 @@ two red heads that way, and both times the local check had stopped at the root.
    overstating how hard a claim is to refute (D-098). The backlog from that audit
    is closed; new work needs new reproduction.
 3. **Continue the C/R frontier.** `WP-C05` (billing/FOCUS interoperability) is
-   the next unstarted C packet; `WP-C06` is now PARTIAL (D-095). On the R
+   complete; `WP-C06` is now PARTIAL (D-095). On the R
    frontier `WP-R06` and `WP-R07` are PARTIAL (D-096, D-094) and `WP-R03`
    granularity and `WP-R04` negative-claim soundness are partial: the reachable
    coding-realization `clean` claim now refuses kernel persistence without typed
