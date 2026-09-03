@@ -17,7 +17,7 @@ elsewhere.
 | Also verified green | `4eb5135` — run `33774300308` **success, all eight jobs**, which restored the base after `5e7d96b` |
 | Preceding red head | `5e7d96b` — run `33760552077` **failure** on `candidate-head` and `test (windows-latest)`, six jobs green; diagnosed and repaired at D-097 |
 | Next head | not yet pushed; record its run only after reading every job's `conclusion` |
-| Working tree | WP-E01/F01/G01/H01 bounded slices and WP-R04 negative-claim contract are implemented locally; exact CI for the next checkpoint remains pending |
+| Working tree | WP-R03 scope non-escalation slice is implemented locally; exact CI for the next checkpoint remains pending |
 | Executor | Claude Opus 5, lead implementation engineer/verifier |
 
 `fb16a75` is the first fully green exact-head run on this branch: ubuntu, macOS

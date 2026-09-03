@@ -12,14 +12,14 @@ import { interval } from '../src/epistemic/time.ts';
 import { scope } from '../src/epistemic/scope.ts';
 import { witness } from '../src/epistemic/witness.ts';
 
-function evidenceInput(id = 'evidence:invoice'): EvidenceInput {
+function evidenceInput(id = 'evidence:invoice', evidenceScope = scope({ account: 'acct-1' })): EvidenceInput {
   return {
     id,
     evidenceType: 'provider.invoice',
     sourceIdentity: 'provider:openai:account-1',
     sourceClass: 'provider_statement',
     payload: { amount: '12.34', currency: 'USD' },
-    scope: scope({ account: 'acct-1' }),
+    scope: evidenceScope,
     grain: grain(['day', 'project']),
     occurredAt: '2026-08-01T00:00:00.000Z',
     observedAt: '2026-08-02T00:00:00.000Z',
@@ -33,12 +33,12 @@ function evidenceInput(id = 'evidence:invoice'): EvidenceInput {
   };
 }
 
-function claimInput(id: string, evidenceId: string): ClaimInput {
+function claimInput(id: string, evidenceId: string, claimScope = scope({ account: 'acct-1' })): ClaimInput {
   return {
     id,
     proposition: { predicate: 'cost.reconciled', value: { amount: '12.34' } },
     subject: 'project:api',
-    scope: scope({ account: 'acct-1' }),
+    scope: claimScope,
     grain: grain(['day', 'project']),
     time: { validTime: interval('2026-08-01T00:00:00.000Z', '2026-08-02T00:00:00.000Z'), asOf: '2026-08-02T00:00:01.000Z' },
     epistemic: 'supported',
@@ -79,6 +79,33 @@ function ledger(): { db: DatabaseSync; value: EpistemicLedger } {
   const db = new DatabaseSync(':memory:');
   return { db, value: new EpistemicLedger(db) };
 }
+
+test('ledger refuses a claim that narrows or changes every cited evidence scope', () => {
+  const { db, value } = ledger();
+  const e = evidence(evidenceInput('evidence:scope', scope({ organization: 'acme' })));
+  value.appendEvidence(e);
+
+  const narrower = claim(claimInput('claim:narrow-scope', e.id, scope({ organization: 'acme', project: 'atlas' })));
+  assert.throws(() => value.appendClaim(narrower), /scope.*evidence|evidence.*scope/i);
+
+  const different = claim(claimInput('claim:different-scope', e.id, scope({ organization: 'other' })));
+  assert.throws(() => value.appendClaim(different), /scope.*evidence|evidence.*scope/i);
+  assert.equal(value.readClaim(narrower.id), null);
+  assert.equal(value.readClaim(different.id), null);
+  db.close();
+});
+
+test('ledger permits equal and broader claim scopes when evidence supports the aggregation', () => {
+  const { db, value } = ledger();
+  const e = evidence(evidenceInput('evidence:scoped', scope({ organization: 'acme', project: 'atlas' })));
+  value.appendEvidence(e);
+
+  const equal = claim(claimInput('claim:equal-scope', e.id, scope({ organization: 'acme', project: 'atlas' })));
+  assert.equal(value.appendClaim(equal), 'inserted');
+  const broader = claim(claimInput('claim:broader-scope', e.id, scope({ organization: 'acme' })));
+  assert.equal(value.appendClaim(broader), 'inserted');
+  db.close();
+});
 
 test('the ledger refuses a derivation that strengthens a claim without the witness for it', () => {
   // `assessDerivationLegality` was correct, tested as a pure function, and had

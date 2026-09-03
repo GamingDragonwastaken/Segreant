@@ -69,3 +69,13 @@ export function scopeRelation(a: Scope, b: Scope): ScopeRelation {
   if (extendsScope(b, a)) return 'broader';
   return 'overlapping';
 }
+
+/**
+ * A claim may discard scope constraints (aggregate), but may not add or alter
+ * them from one cited evidence record. A cross-scope derivation needs a typed
+ * bridge instead.
+ */
+export function scopeIsSupportedBy(claimed: Scope, observed: Scope): boolean {
+  const relation = scopeRelation(claimed, observed);
+  return relation === 'equal' || relation === 'broader';
+}

@@ -29,6 +29,7 @@ import {
 import { EPISTEMIC_STATES } from './state.ts';
 import { AUTHENTICITY, COVERAGE, INTEGRITY } from './profile.ts';
 import { grainIsSupportedBy } from './grain.ts';
+import { scopeIsSupportedBy } from './scope.ts';
 import {
   assessDerivationLegality,
   derivation,
@@ -791,7 +792,9 @@ export class EpistemicLedger {
     let authenticityCeiling = AUTHENTICITY.length - 1;
     let coverageCeiling = COVERAGE.length - 1;
     let grainSupplied = false;
+    let scopeSupplied = false;
     const refinedOver: Evidence[] = [];
+    const narrowedOrChanged: Evidence[] = [];
     for (const evidenceId of item.evidenceIds) {
       const source = this.readEvidence(evidenceId);
       if (source === null) throw new Error(`unknown evidence: ${evidenceId}`);
@@ -805,6 +808,8 @@ export class EpistemicLedger {
       // the evidence could not have made, whether `finer` or undeclared.
       if (grainIsSupportedBy(item.grain, source.grain)) grainSupplied = true;
       else refinedOver.push(source);
+      if (scopeIsSupportedBy(item.scope, source.scope)) scopeSupplied = true;
+      else narrowedOrChanged.push(source);
     }
     if (!grainSupplied && refinedOver.length > 0) {
       const cited = refinedOver[0]!;
@@ -812,6 +817,13 @@ export class EpistemicLedger {
         `claim ${item.id} declares grain [${item.grain.dimensions.join(', ')}], which refines the `
         + `[${cited.grain.dimensions.join(', ')}] of evidence ${cited.id} it cites, and no cited evidence `
         + 'carries those dimensions',
+      );
+    }
+    if (!scopeSupplied && narrowedOrChanged.length > 0) {
+      const cited = narrowedOrChanged[0]!;
+      throw new Error(
+        `claim ${item.id} declares scope that narrows or changes the scope of evidence ${cited.id}, `
+        + 'and no cited evidence carries or covers that scope',
       );
     }
     if (INTEGRITY.indexOf(item.profile.integrity) > integrityCeiling) {
