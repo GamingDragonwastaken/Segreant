@@ -12,12 +12,12 @@ elsewhere.
 | | |
 | --- | --- |
 | Branch | `gpt56/magnum-opus-reconstruction` |
-| Last verified green head | `66ecebaa` — run `33775452465` **success, all eight jobs**, every `conclusion` read 2026-09-03 |
-| Newer head | `89fd501` — run `33776671068` **failure** on `candidate-head` only, seven jobs green; a worker in the adversarial lock test was killed at the harness's 180s window, repaired at D-103 |
+| Last verified green head | `e7f2b79b` — run `33782314672` **success, all eight jobs**, every job conclusion read 2026-09-03 |
+| Newer head | none; local and remote exact match |
 | Also verified green | `4eb5135` — run `33774300308` **success, all eight jobs**, which restored the base after `5e7d96b` |
 | Preceding red head | `5e7d96b` — run `33760552077` **failure** on `candidate-head` and `test (windows-latest)`, six jobs green; diagnosed and repaired at D-097 |
 | Next head | not yet pushed; record its run only after reading every job's `conclusion` |
-| Working tree | `57d9e40` plus uncommitted WP-R05 direct-claim trust ceiling and six-test adversarial guard; not CI-verified |
+| Working tree | clean at `e7f2b79b`; WP-R05 direct-claim trust ceiling and six-test adversarial guard are remotely verified |
 | Executor | Claude Opus 5, lead implementation engineer/verifier |
 
 `fb16a75` is the first fully green exact-head run on this branch: ubuntu, macOS
@@ -46,7 +46,7 @@ to another; the protocol's states are worth reading before touching it again.
 
 ## Active packet
 
-**WP-R05 — PARTIAL, newest uncommitted work.** Direct Claim persistence now
+**WP-R05 — PARTIAL, latest verified work.** Direct Claim persistence now
 checks integrity, authenticity, and coverage against the weakest cited Evidence
 at the unavoidable ledger boundary. Six adversarial tests cover refusal, weakest
 evidence, permitted weaker claims, and idempotent replay. This is deliberately
