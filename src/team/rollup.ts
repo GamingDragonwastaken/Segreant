@@ -31,7 +31,7 @@
 import { sign as cryptoSign, verify as cryptoVerify, createHash, createPublicKey, type KeyObject } from 'node:crypto';
 import { canonical, keyIdForPem, type KeyPair } from '../value/receipt.ts';
 import type { ProjectValue, ProjectTaskStratum } from '../value/realization.ts';
-import { canonicalEconomicAttribution, type EconomicAttribution } from '../economics/attribution.ts';
+import { assertAgreesWithUsdCompatibility, canonicalEconomicAttribution, type EconomicAttribution } from '../economics/attribution.ts';
 
 export interface RollupBodyV1 {
   v: 1;
@@ -105,10 +105,7 @@ function canonicalEconomicProject(project: EconomicProjectValue): EconomicProjec
     throw new Error(`economic team rollup project ${project.project} requires complete exact coverage`);
   }
   if (total !== null) {
-    const projected = Number(total.amountText);
-    if (!Number.isFinite(projected) || !Number.isFinite(project.costUsd) || Math.abs(project.costUsd - projected) > Math.max(1e-12, Math.abs(projected) * 1e-12)) {
-      throw new Error(`economic team rollup project ${project.project} compatibility cost disagrees with exact amount`);
-    }
+    assertAgreesWithUsdCompatibility(total, project.costUsd, `economic team rollup project ${project.project}`);
   }
   return Object.freeze({
     ...project,

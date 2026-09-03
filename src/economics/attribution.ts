@@ -86,6 +86,51 @@ export function canonicalEconomicAttribution(value: unknown): EconomicAttributio
   return canonical;
 }
 
+/**
+ * Reconcile an exact attribution against the USD-named float beside it.
+ *
+ * FOUR PLACES DID THIS AND ONLY ONE CHECKED THE CURRENCY (WP-C06 / WP-R06).
+ * `src/team/rollup.ts`, `buildEconomicReceiptBody` and `receiptSemanticError`
+ * each compared `Math.abs(costUsd - Number(amountText))` against a tolerance and
+ * stopped there. `canonicalEconomicAttribution` validates that the basis is
+ * `effective` and never looks at the unit, and `moneyFromJson` accepts any
+ * three-letter code — so an exact EUR 100.00 "agreed with" `costUsd: 100`, the
+ * receipt verified, the rollup was accepted, and the team server summed it into
+ * a column its own schema names `total_cost_usd`.
+ *
+ * The magnitude comparison LOOKS like a conservation check, and against a float
+ * projection of the same amount it is one. What it cannot see is that a number
+ * is not a quantity: 100 EUR and 100 USD have equal magnitude and are not the
+ * same money. `src/value/epistemic.ts` already refused this for coding
+ * realization ("supports USD effective spend only"); this is the same rule
+ * reaching the three siblings that were written without it.
+ *
+ * THE RULE IS NOT "AMOUNTS MUST BE USD". An exact amount in another currency is
+ * a legitimate object and `canonicalEconomicAttribution` still accepts one. What
+ * is refused is RECONCILING it against a field whose name asserts a unit it does
+ * not carry. The honest repair for that field is to carry its unit on the wire
+ * rather than in its name, which this does not attempt.
+ */
+export function assertAgreesWithUsdCompatibility(
+  attribution: EconomicAttribution,
+  costUsd: number,
+  subject: string,
+): void {
+  if (!Number.isFinite(costUsd) || costUsd < 0) {
+    throw new Error(`${subject} compatibility cost must be finite and non-negative`);
+  }
+  if (attribution.amount.currency !== 'USD') {
+    throw new Error(
+      `${subject} compatibility cost is named in USD and cannot agree with an exact `
+      + `${attribution.amount.currency} amount`,
+    );
+  }
+  const projected = Number(attribution.amountText);
+  if (!Number.isFinite(projected) || Math.abs(costUsd - projected) > Math.max(1e-12, Math.abs(projected) * 1e-12)) {
+    throw new Error(`${subject} compatibility cost disagrees with exact amount`);
+  }
+}
+
 /** Aggregate exact request rows without converting the effective basis to a float. */
 export function economicAttributionFromRows(rows: ReadonlyArray<{
   effectiveAmount: Money | null;

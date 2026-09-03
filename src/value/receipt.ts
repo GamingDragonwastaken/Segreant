@@ -31,7 +31,7 @@ import {
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Gate, Verdict, FunnelOutcome } from './gates.ts';
-import { canonicalEconomicAttribution, type EconomicAttribution } from '../economics/attribution.ts';
+import { assertAgreesWithUsdCompatibility, canonicalEconomicAttribution, type EconomicAttribution } from '../economics/attribution.ts';
 import { RESOURCE_LIMITS } from '../util/resource-limits.ts';
 
 export interface ReceiptBodyV1 {
@@ -182,11 +182,7 @@ export function buildEconomicReceiptBody(
 ): ReceiptBodyV2 {
   const canonical = canonicalEconomic(economic);
   if (!canonical.complete || canonical.unresolvedRequests !== 0) throw new Error('economic receipt requires complete exact coverage');
-  if (!Number.isFinite(costUsd) || costUsd < 0) throw new Error('economic receipt compatibility cost must be finite and non-negative');
-  const projected = Number(canonical.amountText);
-  if (!Number.isFinite(projected) || Math.abs(costUsd - projected) > Math.max(1e-12, Math.abs(projected) * 1e-12)) {
-    throw new Error('economic receipt compatibility cost disagrees with exact amount');
-  }
+  assertAgreesWithUsdCompatibility(canonical, costUsd, 'economic receipt');
   const legacy = buildReceiptBody(unit, project, costUsd, acceptance, funnel);
   return Object.freeze({ ...legacy, v: 2, economic: canonical });
 }
@@ -196,10 +192,12 @@ function receiptSemanticError(body: ReceiptBody): string | null {
   try {
     const economic = canonicalEconomic(body.economic);
     if (!economic.complete || economic.unresolvedRequests !== 0) return 'economic receipt requires complete exact coverage';
-    const projected = Number(economic.amountText);
-    if (!Number.isFinite(body.costUsd) || body.costUsd < 0 || !Number.isFinite(projected)
-        || Math.abs(body.costUsd - projected) > Math.max(1e-12, Math.abs(projected) * 1e-12)) {
-      return 'economic receipt compatibility cost disagrees with exact amount';
+    // Its own try, so the precise reconciliation message survives instead of
+    // being wrapped as a generic "economic receipt invalid" by the outer catch.
+    try {
+      assertAgreesWithUsdCompatibility(economic, body.costUsd, 'economic receipt');
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
     }
     return null;
   } catch (error) {
