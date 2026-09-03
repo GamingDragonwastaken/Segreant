@@ -22,6 +22,20 @@ export interface ActionUtilityInterval {
   readonly high: number;
 }
 
+export interface PointUtilityInput {
+  readonly action: string;
+  readonly utility: number;
+  /** Explicit half-width of the uncertainty interval. */
+  readonly uncertaintyBound?: number;
+}
+
+export type UtilityProblemInput = ActionUtilityInterval | PointUtilityInput;
+
+export interface UtilityIntervalProblem {
+  readonly intervals: readonly ActionUtilityInterval[];
+  readonly uncertainty: 'explicit_intervals' | 'explicit_point_bounds';
+}
+
 export type DecisionCertificateStatus = 'proven_dominant' | 'undetermined';
 
 export interface DominanceComparison {
@@ -141,6 +155,40 @@ function validateIntervals(actions: ReadonlyArray<ActionUtilityInterval>): reado
     if (low > high) throw new Error(`${action} low must be <= high`);
     return Object.freeze({ action, low, high });
   }));
+}
+
+/**
+ * Normalize utility inputs into a bounded problem. A point estimate is not an
+ * interval: it is accepted only when its uncertainty half-width is declared.
+ */
+export function buildUtilityIntervalProblem(
+  inputs: ReadonlyArray<UtilityProblemInput>,
+): UtilityIntervalProblem {
+  if (!Array.isArray(inputs) || inputs.length === 0) {
+    throw new Error('at least one utility input is required');
+  }
+
+  const hasPoint = inputs.some((input) => input !== null && typeof input === 'object' && 'utility' in input);
+  const hasInterval = inputs.some((input) => input !== null && typeof input === 'object' && 'low' in input);
+  if (hasPoint && hasInterval) throw new Error('utility inputs must use one representation');
+
+  if (hasPoint) {
+    const intervals = inputs.map((input, index) => {
+      if (input === null || typeof input !== 'object' || !('utility' in input)) {
+        throw new Error(`utility input ${index} must be a point utility`);
+      }
+      const utility = finiteNumber(input.utility, `utility input ${index} utility`);
+      if (input.uncertaintyBound === undefined) {
+        throw new Error('point utilities require an explicit uncertainty bound');
+      }
+      const bound = finiteNumber(input.uncertaintyBound, `utility input ${index} uncertaintyBound`);
+      if (bound < 0) throw new Error(`utility input ${index} uncertaintyBound must be >= 0`);
+      return { action: input.action, low: utility - bound, high: utility + bound };
+    });
+    return Object.freeze({ intervals: validateIntervals(intervals), uncertainty: 'explicit_point_bounds' });
+  }
+
+  return Object.freeze({ intervals: validateIntervals(inputs as ReadonlyArray<ActionUtilityInterval>), uncertainty: 'explicit_intervals' });
 }
 
 function sortedActionNames(values: Readonly<Record<string, number>>): string[] {

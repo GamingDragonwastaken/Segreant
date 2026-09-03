@@ -285,6 +285,17 @@ export class EpistemicLedger {
   appendClaimWithinTransaction(value: Claim): AppendResult {
     const item = claim(value);
     const encoded = json(item, 'claim');
+    if (item.negativeClaim !== undefined) {
+      // The generic claim envelope does not persist a second witness table. A
+      // negative contract therefore names completeness records among the
+      // claim's ordinary evidence dependencies; the append boundary verifies
+      // those IDs exist and are evidence nodes before accepting the claim.
+      for (const witnessId of item.negativeClaim.completenessWitnessIds) {
+        if (!item.evidenceIds.includes(witnessId)) {
+          throw new Error(`negative claim completeness witness must be cited in evidenceIds: ${witnessId}`);
+        }
+      }
+    }
     this.ensureKinds(item.evidenceIds, 'evidence');
     this.ensureKinds(item.assumptionIds, 'assumption');
     this.assertClaimWithinItsEvidence(item);

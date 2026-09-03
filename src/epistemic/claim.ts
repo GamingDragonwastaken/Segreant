@@ -39,6 +39,21 @@ export interface TypedProposition {
   readonly value: JsonValue;
 }
 
+/**
+ * Opt-in contract for propositions whose meaning includes an absence claim.
+ * Completeness witnesses are explicit IDs so an issuer cannot turn an empty
+ * observation into a negative conclusion by omission.
+ */
+export interface NegativeClaimInput {
+  readonly eventType: string;
+  readonly completenessWitnessIds: readonly string[];
+}
+
+export interface NegativeClaim extends NegativeClaimInput {
+  readonly eventType: string;
+  readonly completenessWitnessIds: readonly string[];
+}
+
 export interface ClaimTimeInput {
   readonly validTime?: TimeInterval | null;
   readonly asOf?: Instant | null;
@@ -68,6 +83,8 @@ export interface Uncertainty {
 export interface ClaimInput {
   readonly id: string;
   readonly proposition: TypedPropositionInput;
+  /** Present only for negative propositions; positive claims remain unchanged. */
+  readonly negativeClaim?: NegativeClaimInput | null;
   readonly subject: string;
   readonly scope: Scope;
   readonly grain: Grain;
@@ -97,6 +114,7 @@ export interface ClaimInput {
 export interface Claim {
   readonly id: string;
   readonly proposition: TypedProposition;
+  readonly negativeClaim?: NegativeClaim;
   readonly subject: string;
   readonly scope: Scope;
   readonly grain: Grain;
@@ -123,7 +141,7 @@ export interface Claim {
 }
 
 const CLAIM_KEYS = new Set([
-  'id', 'proposition', 'subject', 'scope', 'grain', 'time', 'epistemic', 'profile',
+  'id', 'proposition', 'negativeClaim', 'subject', 'scope', 'grain', 'time', 'epistemic', 'profile',
   'measurementModelRef', 'evidenceIds', 'derivationRule', 'derivationVersion', 'assumptions',
   'uncertainty', 'causalStatus', 'issuedAt', 'supersedes', 'supersededBy', 'revocation', 'assumptionIds',
   'decisionCertificateIds', 'schemaVersion', 'monetaryBasis', 'finality',
@@ -185,6 +203,16 @@ function stringList(value: unknown, label: string, required = false): readonly s
   });
   if (required && normalized.length === 0) throw new Error(`${label} must contain at least one entry`);
   return Object.freeze(normalized);
+}
+
+function negativeClaim(value: unknown): NegativeClaim | undefined {
+  if (value === undefined || value === null) return undefined;
+  assertKnownKeys(value, new Set(['eventType', 'completenessWitnessIds']), 'negativeClaim');
+  const input = value as NegativeClaimInput;
+  return Object.freeze({
+    eventType: nonEmpty(input.eventType, 'negativeClaim eventType'),
+    completenessWitnessIds: stringList(input.completenessWitnessIds, 'negativeClaim completenessWitnessIds', true),
+  });
 }
 
 function canonicalScope(value: unknown): Scope {
@@ -273,6 +301,7 @@ export function claim(input: ClaimInput): Claim {
     value: immutableJson(propositionInput.value, 'proposition value'),
   });
   const subject = nonEmpty(value.subject, 'claim subject');
+  const normalizedNegativeClaim = negativeClaim(value.negativeClaim);
   const normalizedScope = canonicalScope(value.scope);
   const normalizedGrain = canonicalGrain(value.grain);
 
@@ -319,6 +348,7 @@ export function claim(input: ClaimInput): Claim {
   return Object.freeze({
     id,
     proposition,
+    ...(normalizedNegativeClaim === undefined ? {} : { negativeClaim: normalizedNegativeClaim }),
     subject,
     scope: normalizedScope,
     grain: normalizedGrain,

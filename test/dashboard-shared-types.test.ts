@@ -23,6 +23,14 @@ test('dashboard payload types have one canonical source and a hash-bound browser
   assert.match(api, /generated-types\.ts/, 'api.ts must consume the generated browser type copy');
 });
 
+test('generated interface contract covers every canonical interface exactly once', () => {
+  const source = readFileSync(SHARED_TYPES, 'utf8');
+  const generatedContract = readFileSync(join(ROOT, 'src', 'dashboard', 'web', 'app', 'core', 'generated-payload-contract.ts'), 'utf8');
+  const canonicalNames = [...source.matchAll(/^export interface (\w+)/gm)].map((match) => match[1]);
+  const generatedNames = [...generatedContract.matchAll(/^  "(\w+)": \[/gm)].map((match) => match[1]);
+  assert.deepEqual(generatedNames, canonicalNames, 'generated interface contract must preserve canonical interface coverage and order');
+});
+
 test('named dashboard response contracts contain no remaining inline JSON response descriptions', () => {
   const inline = [...DASHBOARD_API_CONTRACTS, ...DASHBOARD_PAYLOAD_CONTRACTS]
     .map((contract) => contract.responseType)

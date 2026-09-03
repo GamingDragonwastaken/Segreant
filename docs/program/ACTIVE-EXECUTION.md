@@ -17,7 +17,7 @@ elsewhere.
 | Also verified green | `4eb5135` — run `33774300308` **success, all eight jobs**, which restored the base after `5e7d96b` |
 | Preceding red head | `5e7d96b` — run `33760552077` **failure** on `candidate-head` and `test (windows-latest)`, six jobs green; diagnosed and repaired at D-097 |
 | Next head | not yet pushed; record its run only after reading every job's `conclusion` |
-| Working tree | WP-R03 grain ceiling (D-106), WP-R04 negative-claim withholding (D-108), and WP-B01 budget-basis fail-closed slice (D-107) are implemented locally; exact CI for the next checkpoint remains pending |
+| Working tree | WP-E01/F01/G01/H01 bounded slices and WP-R04 negative-claim contract are implemented locally; exact CI for the next checkpoint remains pending |
 | Executor | Claude Opus 5, lead implementation engineer/verifier |
 
 `fb16a75` is the first fully green exact-head run on this branch: ubuntu, macOS
@@ -129,8 +129,8 @@ two red heads that way, and both times the local check had stopped at the root.
 1. **Wire the decision adapter only through a reviewed policy boundary.** The
    adapter exists and is tested, but remains unreached. Do not expose an
    action-grade decision without a persisted certificate and derivation. The
-   bounded WP-C05 FOCUS compatibility projection is complete; continue to the
-   next unstarted dossier packet after the current R/C verification tranche.
+   bounded WP-C05 FOCUS compatibility projection is complete; current local
+   work advances WP-E01, WP-F01, WP-G01, WP-H01 and generic WP-R04.
 2. **Work the audit backlog, reproducing each finding before acting on it.** A
    parallel read-only audit produced ten probe-reproduced findings across six
    frontiers; its adversarial verifiers all died on a session limit, so NONE of

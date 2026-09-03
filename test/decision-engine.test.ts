@@ -4,6 +4,7 @@ import {
   certifyDecision,
   minimaxRegret,
   valueOfInformation,
+  buildUtilityIntervalProblem,
   type ActionUtilityInterval,
 } from '../src/decision/engine.ts';
 
@@ -146,4 +147,11 @@ test('value of information validates probabilities and identical action sets', (
 test('decision inputs reject inverted/non-finite utility intervals', () => {
   assert.throws(() => certifyDecision([{ action: 'a', low: 2, high: 1 }]), /low must be <= high/);
   assert.throws(() => minimaxRegret([{ action: 'a', low: Number.NaN, high: 1 }]), /finite/);
+});
+
+test('interval problems refuse unjustified point utilities', () => {
+  assert.throws(() => buildUtilityIntervalProblem([
+    { action: 'keep', utility: 10 },
+    { action: 'switch', utility: 8 },
+  ]), /point utilities require an explicit uncertainty bound/i);
 });
