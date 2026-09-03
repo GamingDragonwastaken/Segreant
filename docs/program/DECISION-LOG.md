@@ -771,3 +771,38 @@ Finally, this addresses one of the ten findings a parallel audit produced. Still
 **Verified by repetition, since a liveness failure has no single RED.** The bounded form ran five consecutive times at 6.5s each, against a three-minute kill window; the previous form had run 2.5s of wall clock per side and taken 180s on a loaded runner. The full lock file is 13/13.
 
 **What this does not establish.** Timing tests remain probabilistic: this bounds the work, it does not prove the scenario cannot starve on a slower machine. The test still cannot go RED on Windows, for the reason D-092 records. And the interleaving it drives is still incidental rather than forced — the deterministic statement of that rule is the three planted-state tests added at D-097.
+
+## D-104 — direct claims cannot strengthen assurance beyond their cited evidence
+**Decision:** `EpistemicLedger.appendClaimWithinTransaction` now enforces a
+weakest-cited-evidence ceiling for integrity, authenticity, and completeness.
+The check is at the persistence boundary, not an optional helper, so a caller
+cannot bypass it by constructing a Claim directly. A claim may remain weaker
+than its evidence, and exact replays remain idempotent.
+
+**Reason:** Derivations already required explicit witnesses for profile-axis
+strengthening, but direct claim persistence checked only that evidence IDs
+existed and were Evidence nodes. That allowed an `unknown`/self-asserted/
+partial source to be stored as a verified, provider-authenticated, complete
+claim. The weakest citation is the correct ceiling because every cited
+Evidence is a prerequisite; taking the strongest citation would launder a weak
+prerequisite through a strong one.
+
+**Boundary:** Integrity and authenticity are shared ordered ladders. Evidence
+completeness is mapped to Claim coverage because both are coverage assertions;
+this is conservative and does not infer scope, construct validity, causality,
+finality, or decision fitness from unrelated fields. Monetary basis is excluded
+deliberately: `billed`, `allocated`, and other bases are economic semantics,
+not rungs of one trust ladder, and derivations may legitimately change basis
+only with their own typed rule and evidence.
+
+**Verified RED/GREEN:** six focused adversarial tests now pass, including
+refusal of integrity, authenticity, and coverage escalation, weakest-evidence
+conjunction, permitted weaker claims, and exact replay. Root and browser
+typechecks pass, and the epistemic/issuance-map suite passes 84/84 under Node
+24. The full-suite gate and CI remain outstanding for this uncommitted slice.
+
+**What this does not establish.** Direct claim issuance still needs explicit
+typed policies for measurement, causality, finality, and decision fitness, and
+claims with no cited Evidence remain a separate issuance-policy question. It
+does not close WP-R05 or AII-036 by itself, and it does not repair the latent
+`decision.certificate` boundary.

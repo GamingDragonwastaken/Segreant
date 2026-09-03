@@ -17,7 +17,7 @@ elsewhere.
 | Also verified green | `4eb5135` — run `33774300308` **success, all eight jobs**, which restored the base after `5e7d96b` |
 | Preceding red head | `5e7d96b` — run `33760552077` **failure** on `candidate-head` and `test (windows-latest)`, six jobs green; diagnosed and repaired at D-097 |
 | Next head | not yet pushed; record its run only after reading every job's `conclusion` |
-| Working tree | see `git status`; a head newer than the row above has not been CI-verified |
+| Working tree | `57d9e40` plus uncommitted WP-R05 direct-claim trust ceiling and six-test adversarial guard; not CI-verified |
 | Executor | Claude Opus 5, lead implementation engineer/verifier |
 
 `fb16a75` is the first fully green exact-head run on this branch: ubuntu, macOS
@@ -46,7 +46,15 @@ to another; the protocol's states are worth reading before touching it again.
 
 ## Active packet
 
-**WP-C03 and WP-C04 — PARTIAL, and the newest work (D-090, D-091).** One defect
+**WP-R05 — PARTIAL, newest uncommitted work.** Direct Claim persistence now
+checks integrity, authenticity, and coverage against the weakest cited Evidence
+at the unavoidable ledger boundary. Six adversarial tests cover refusal, weakest
+evidence, permitted weaker claims, and idempotent replay. This is deliberately
+not marked complete: completeness, construct/measurement, causality, finality,
+and decision-fitness direct-claim ceilings still need a typed policy rather than
+being inferred from unrelated Evidence fields.
+
+**WP-C03 and WP-C04 — PARTIAL, and the preceding work (D-090, D-091).** One defect
 class in three places: a property of a SET checked against a single member. Two
 `fx_translated` events for one charge and target currency were summed by
 `closeBalances` (EUR 17 for a USD 10.00 bill); `allocation_reversed` was bounded
@@ -110,7 +118,13 @@ two red heads that way, and both times the local check had stopped at the root.
 
 ## Next exact actions
 
-1. **Work the audit backlog, reproducing each finding before acting on it.** A
+1. **Finish WP-R05 from the current RED/GREEN slice.** Extend the direct-claim
+   boundary only where the evidence and claim axes have a defensible typed
+   relationship; do not treat monetary basis as a total-order ladder. Add RED
+   tests before implementation, then run the full epistemic suite and record
+   the exact result. After that, continue the C/R frontier at WP-C05 or the
+   next dossier dependency, not another inventory exercise.
+2. **Work the audit backlog, reproducing each finding before acting on it.** A
    parallel read-only audit produced ten probe-reproduced findings across six
    frontiers; its adversarial verifiers all died on a session limit, so NONE of
    them is independently confirmed. **All ten have now been reproduced here and
@@ -122,18 +136,18 @@ two red heads that way, and both times the local check had stopped at the root.
    k-anonymity notice (D-101), and the cut-set contradiction errs toward
    overstating how hard a claim is to refute (D-098). The backlog from that audit
    is closed; new work needs new reproduction.
-2. **Continue the C/R frontier.** `WP-C05` (billing/FOCUS interoperability) is
+3. **Continue the C/R frontier.** `WP-C05` (billing/FOCUS interoperability) is
    the next unstarted C packet; `WP-C06` is now PARTIAL (D-095). On the R
    frontier `WP-R06` and `WP-R07` are PARTIAL (D-096, D-094) and `WP-R03`
-   granularity, `WP-R04` negative-claim soundness and `WP-R05` trust
-   non-escalation are unstarted. All three state soundness properties that are
+   granularity and `WP-R04` negative-claim soundness are unstarted. `WP-R05`
+   is now partial. All three state soundness properties that are
    directly falsifiable against code that already exists, which makes them
    cheaper to establish than the D/E/F frontiers that need new subsystems.
-3. **C03/C04 remainders.** Neither `fx_translated` nor `price_corrected` has a
+4. **C03/C04 remainders.** Neither `fx_translated` nor `price_corrected` has a
    supersession path, so a corrected rate cannot supersede a recorded translation.
    Nothing ties allocation totals to the charges they allocate. Adjustments are
    unbounded against the charge they adjust. Whether an FX translation of an
    already-corrected charge picks up the `price_corrected` delta is unexamined.
-4. **WP-B05 remainder.** Three of the five uses have no stated requirement, and
+5. **WP-B05 remainder.** Three of the five uses have no stated requirement, and
    stating them is product policy rather than a derivation — `outcome_attribution`,
    `roi` and `model_recommendations` need an owner decision, not a guess.

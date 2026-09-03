@@ -27,6 +27,7 @@ import {
   type RevocationProjection,
 } from './dag.ts';
 import { EPISTEMIC_STATES } from './state.ts';
+import { AUTHENTICITY, COVERAGE, INTEGRITY } from './profile.ts';
 import {
   assessDerivationLegality,
   derivation,
@@ -285,6 +286,7 @@ export class EpistemicLedger {
     const encoded = json(item, 'claim');
     this.ensureKinds(item.evidenceIds, 'evidence');
     this.ensureKinds(item.assumptionIds, 'assumption');
+    this.assertTrustNonEscalation(item);
     const current = this.graph();
     const normalized = normalizeNodeForLedger({
       id: item.id, kind: 'claim', availableAt: item.issuedAt, epistemic: item.epistemic, supersedes: item.supersedes,
@@ -694,6 +696,75 @@ export class EpistemicLedger {
       });
     }
     return declared;
+  }
+
+  /**
+   * A claim may not be more verified than the evidence it cites.
+   *
+   * THE DERIVATION PATH HAD THIS AND THE DIRECT PATH DID NOT.
+   * `appendDerivationWithinTransaction` consults `assessDerivationLegality`,
+   * which refuses a derivation that strengthens a claim on any profile axis
+   * without the matching witness. `appendClaim` checked that each cited
+   * evidence id exists and is an evidence node, and then stored whatever
+   * profile the claim declared. So one piece of evidence with
+   * `integrity: unknown` and `authenticity: self_asserted` supported a stored
+   * claim reading `verified` and `provider_authenticated`: nothing verified
+   * anything, and the record said verified.
+   *
+   * THE CEILING IS THE WEAKEST CITED EVIDENCE, NOT THE STRONGEST. Every cited
+   * evidence is a PREREQUISITE — what the dependency edge means, settled for
+   * `minimalSupportingSets` at D-098 after the same question had two answers in
+   * one file — so a claim resting on a verified invoice and an unverified note
+   * is only as verified as the note, because withdrawing the note withdraws the
+   * claim. A maximum would let one strong citation launder any number of weak
+   * ones.
+   *
+   * THREE CONSERVATIVE AXES, AND DELIBERATELY NOT A FOURTH. `INTEGRITY`,
+   * `AUTHENTICITY`, and `COVERAGE` are declared ladders in `profile.ts`, with
+   * Evidence completeness mapped only to Claim coverage. `monetaryBasis` is
+   * not a ladder: `mergeClaimProfiles` refuses to rank `billed` against
+   * `allocated` because they are different economic semantics rather than two
+   * rungs of one quantity, and `admissibility.ts` rejects an `atLeast`
+   * requirement on it at construction. A claim whose basis differs from its
+   * evidence is often a legitimate derivation — allocation is exactly that —
+   * and refusing it here would need the derivation registry rather than a
+   * comparison.
+   *
+   * A CLAIM CITING NO EVIDENCE IS NOT BOUNDED HERE, and that is a stated gap
+   * rather than an oversight: there is no cited ceiling to compare against, and
+   * whether an evidence-free claim may exist at all is a question about
+   * issuance, not about escalation. Recorded at D-104.
+   */
+  private assertTrustNonEscalation(item: Claim): void {
+    if (item.evidenceIds.length === 0) return;
+    let integrityCeiling = INTEGRITY.length - 1;
+    let authenticityCeiling = AUTHENTICITY.length - 1;
+    let coverageCeiling = COVERAGE.length - 1;
+    for (const evidenceId of item.evidenceIds) {
+      const source = this.readEvidence(evidenceId);
+      if (source === null) throw new Error(`unknown evidence: ${evidenceId}`);
+      integrityCeiling = Math.min(integrityCeiling, INTEGRITY.indexOf(source.integrity));
+      authenticityCeiling = Math.min(authenticityCeiling, AUTHENTICITY.indexOf(source.authenticity));
+      coverageCeiling = Math.min(coverageCeiling, COVERAGE.indexOf(source.completeness.status));
+    }
+    if (INTEGRITY.indexOf(item.profile.integrity) > integrityCeiling) {
+      throw new Error(
+        `claim ${item.id} declares integrity ${item.profile.integrity}, above the `
+        + `${INTEGRITY[integrityCeiling]} of the weakest evidence it cites`,
+      );
+    }
+    if (AUTHENTICITY.indexOf(item.profile.authenticity) > authenticityCeiling) {
+      throw new Error(
+        `claim ${item.id} declares authenticity ${item.profile.authenticity}, above the `
+        + `${AUTHENTICITY[authenticityCeiling]} of the weakest evidence it cites`,
+      );
+    }
+    if (COVERAGE.indexOf(item.profile.coverage) > coverageCeiling) {
+      throw new Error(
+        `claim ${item.id} declares coverage ${item.profile.coverage}, above the `
+        + `${COVERAGE[coverageCeiling]} of the weakest evidence it cites`,
+      );
+    }
   }
 
   private ensureKinds(ids: readonly string[], kind: DagNode['kind']): void {
