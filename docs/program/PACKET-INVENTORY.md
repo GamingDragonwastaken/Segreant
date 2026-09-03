@@ -86,7 +86,7 @@ States: `NOT_STARTED` `IN_PROGRESS` `PARTIAL` `COMPLETED` `BLOCKED_EXTERNAL`
 | `WP-R04` | Negative-Claim Soundness | `NOT_STARTED` |  |
 | `WP-R05` | Trust Non-Escalation | `NOT_STARTED` |  |
 | `WP-R06` | Monetary Conservation | `NOT_STARTED` |  |
-| `WP-R07` | Revocation Closure | `NOT_STARTED` |  |
+| `WP-R07` | Revocation Closure | `PARTIAL` | The closure itself was already correct; the three kernel-claim readers that serve `/api/billing` ignored it and returned revoked claims as `supported`/`verified` (D-094). They now apply the projection through one shared helper: the claim is still served, carries `revoked`, and its `epistemic` axis reads `unknown` while `integrity` is deliberately untouched. Remaining: only one of the three readers is exercised end to end; these readers take no as-of boundary, so a revocation recorded today rewrites how every past read renders; `minimalCutSets` still contradicts `revocationClosure` on a two-evidence claim; and the ledger stores an Evidence `revocation` envelope it never projects. |
 | `WP-R08` | Decision-Certificate Soundness | `NOT_STARTED` |  |
 | `WP-R09` | Minimal evidence acquisition | `NOT_STARTED` |  |
 | `WP-R10` | Model pluralism | `NOT_STARTED` |  |

@@ -12,9 +12,9 @@ elsewhere.
 | | |
 | --- | --- |
 | Branch | `gpt56/magnum-opus-reconstruction` |
-| Last verified head | `fb16a75193e83c228fef6c97fcabd9055f6cb3bf` |
-| Its CI | run `33576780336` — **success, all eight jobs**, read 2026-09-02 |
-| Newer head | `e32e94a530e41fcb6f4fc27c17997334c632cd6a` — run `33730517441` **failure**: seven jobs green, `candidate-head` red on `ordinary contention leaves no lock residue`, repaired at D-092 and not yet re-verified |
+| Last verified head | `849ff910a14456ab73a5696735375380585423ed` |
+| Its CI | run `33757917634` — **success, all eight jobs** including `candidate-head`, read 2026-09-03 |
+| Newer head | `d86519d32200c4ba8b4c607b7092d08861d1586a` — run `33758622504` **PENDING**; read every job's `conclusion` before recording it |
 | Working tree | see `git status`; a head newer than the row above has not been CI-verified |
 | Executor | Claude Opus 5, lead implementation engineer/verifier |
 
@@ -97,13 +97,22 @@ two red heads that way, and both times the local check had stopped at the root.
 
 ## Next exact actions
 
-1. **Re-verify the lock repair on Ubuntu.** Run `33730517441` was read job by
-   job: `test` on all three platforms, all three `team-server-test` jobs and
-   `package-smoke` were green; `candidate-head` failed `ordinary contention
-   leaves no lock residue` with a raw `ENOTEMPTY` out of `restoreQuarantinedLock`
-   (D-092). The repair CANNOT go red on Windows — that kernel answers the same
-   rename with a code the old list already tolerated — so Ubuntu CI is the
-   authoritative gate for it, not a local run.
+1. **Work the audit backlog, reproducing each finding before acting on it.** A
+   parallel read-only audit produced ten probe-reproduced findings across six
+   frontiers; its adversarial verifiers all died on a session limit, so NONE of
+   them is independently confirmed. Three have since been reproduced here and
+   repaired (D-093 twice, D-094 once). Still open, in rough severity order:
+   team-server accepts a rollup whose realized-spend sub-total exceeds the total
+   it is part of and publishes a 10000% share; a `--project`-scoped push replaces
+   a developer's complete snapshot and silently erases their other projects from
+   every team total; an exact EUR amount is accepted as agreeing with a field
+   named `costUsd` and summed into `total_cost_usd`; member rollups with
+   self-chosen, unequal observation windows are summed into one figure that
+   states no window; a reopen followed by a late in-period append makes every
+   projection read throw permanently, with no API path back; `minimalCutSets`
+   contradicts `revocationClosure` on a two-evidence claim; and the ledger stores
+   an Evidence `revocation` envelope it never projects. Each needs its own
+   reproduction first — an agent's report is a lead, not a fact.
 2. **Continue the C/R frontier.** `WP-C05` (billing/FOCUS interoperability) and
    `WP-C06` (receipts and team rollups: integrity is not truth) are the next
    unstarted C packets. The R frontier (`WP-R03` granularity, `WP-R04`

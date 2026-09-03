@@ -397,6 +397,51 @@ function scopeCaptureForInsert(row: RequestRow): { status: ScopeCaptureStatus; d
   return { status: row.via === 'import' ? 'not_observed' : 'unscoped', declarationId: null };
 }
 
+
+/**
+ * A kernel claim as a reader may present it, with the revocation projection applied.
+ *
+ * WHY THE READERS CANNOT JUST RETURN THE STORED PROFILE (WP-R07). Revocation
+ * closure is how withdrawn evidence stops supporting what was derived from it,
+ * and `revocationClosure` computes it correctly — the kernel knows. But the
+ * three kernel-claim readers are the ONLY product surface for these claims
+ * (`/api/billing` serves all three) and each returned `readClaim`'s profile
+ * verbatim. After the evidence under a claim was revoked, the projection listed
+ * the claim as revoked while the payload still said `epistemic: 'supported'`,
+ * `integrity: 'verified'`, with nothing in the response saying otherwise. Every
+ * consumer downstream then inherited a strength the evidence no longer licenses.
+ *
+ * WITHDRAWN, NOT DISAPPEARED. Omitting revoked claims would trade one dishonesty
+ * for another — the reader would assert an absence it has not established, and a
+ * page showing four claims where five exist says nothing about the fifth. The
+ * claim stays; what changes is that it can no longer read as supported.
+ *
+ * ONLY THE SUPPORT AXIS MOVES, AND THAT IS THE POINT. `epistemic` drops to
+ * `unknown`: revocation withdraws support, leaving neither support nor
+ * refutation, which is exactly what `unknown` means here. `integrity` is
+ * deliberately untouched — it says the RECORD was not tampered with, and that is
+ * still true of a record whose evidence was withdrawn. Collapsing the two would
+ * be the same conflation this product exists to prevent.
+ */
+export interface KernelClaimView extends Pick<Claim, 'id' | 'proposition' | 'profile' | 'evidenceIds' | 'issuedAt' | 'monetaryBasis' | 'finality'> {
+  /** True when the revocation projection reaches this claim. */
+  readonly revoked: boolean;
+}
+
+function presentKernelClaim(item: Claim, revokedIds: ReadonlySet<string>): KernelClaimView {
+  const revoked = revokedIds.has(item.id);
+  return Object.freeze({
+    id: item.id,
+    proposition: item.proposition,
+    profile: revoked ? Object.freeze({ ...item.profile, epistemic: 'unknown' as const }) : item.profile,
+    evidenceIds: item.evidenceIds,
+    issuedAt: item.issuedAt,
+    monetaryBasis: item.monetaryBasis,
+    finality: item.finality,
+    revoked,
+  });
+}
+
 export class Store {
   private db: DatabaseSync;
   private readonly databasePath: string;
@@ -2117,63 +2162,48 @@ export class Store {
   }
 
   /** Read canonical billed-period claims without exposing confidential raw payloads. */
-  billingKernelClaims(limit = 25): readonly Pick<Claim, 'id' | 'proposition' | 'profile' | 'evidenceIds' | 'issuedAt' | 'monetaryBasis' | 'finality'>[] {
+  billingKernelClaims(limit = 25): readonly KernelClaimView[] {
     const safeLimit = Math.max(1, Math.min(100, Math.floor(limit)));
-    const claims: Array<Pick<Claim, 'id' | 'proposition' | 'profile' | 'evidenceIds' | 'issuedAt' | 'monetaryBasis' | 'finality'>> = [];
+    // Projected once per call, not per claim: the closure is over the whole
+    // graph, so asking it repeatedly would answer the same question N times.
+    const revokedIds = new Set(this.epistemic().revocationProjection().revokedIds);
+    const claims: KernelClaimView[] = [];
     for (const run of this.billingImportRuns(safeLimit)) {
       const item = this.epistemic().readClaim(`claim:billing:billed-total:${run.importId}`);
       if (item === null) continue;
-      claims.push({
-        id: item.id,
-        proposition: item.proposition,
-        profile: item.profile,
-        evidenceIds: item.evidenceIds,
-        issuedAt: item.issuedAt,
-        monetaryBasis: item.monetaryBasis,
-        finality: item.finality,
-      });
+      claims.push(presentKernelClaim(item, revokedIds));
     }
-    return Object.freeze(claims.map((item) => Object.freeze(item)));
+    return Object.freeze(claims);
   }
 
   /** Read canonical provider-observed Claims issued from complete Costs snapshots. */
-  openAiCostsKernelClaims(limit = 25): readonly Pick<Claim, 'id' | 'proposition' | 'profile' | 'evidenceIds' | 'issuedAt' | 'monetaryBasis' | 'finality'>[] {
+  openAiCostsKernelClaims(limit = 25): readonly KernelClaimView[] {
     const safeLimit = Math.max(1, Math.min(100, Math.floor(limit)));
-    const claims: Array<Pick<Claim, 'id' | 'proposition' | 'profile' | 'evidenceIds' | 'issuedAt' | 'monetaryBasis' | 'finality'>> = [];
+    // Projected once per call, not per claim: the closure is over the whole
+    // graph, so asking it repeatedly would answer the same question N times.
+    const revokedIds = new Set(this.epistemic().revocationProjection().revokedIds);
+    const claims: KernelClaimView[] = [];
     for (const run of this.openAiCostsObservationRuns(safeLimit)) {
       const item = this.epistemic().readClaim(`claim:billing:provider-observed-total:${run.observationRunId}`);
       if (item === null) continue;
-      claims.push({
-        id: item.id,
-        proposition: item.proposition,
-        profile: item.profile,
-        evidenceIds: item.evidenceIds,
-        issuedAt: item.issuedAt,
-        monetaryBasis: item.monetaryBasis,
-        finality: item.finality,
-      });
+      claims.push(presentKernelClaim(item, revokedIds));
     }
-    return Object.freeze(claims.map((item) => Object.freeze(item)));
+    return Object.freeze(claims);
   }
 
   /** Read canonical mixed-basis Claims issued for recorded reconciliations. */
-  billingReconciliationKernelClaims(limit = 25): readonly Pick<Claim, 'id' | 'proposition' | 'profile' | 'evidenceIds' | 'issuedAt' | 'monetaryBasis' | 'finality'>[] {
+  billingReconciliationKernelClaims(limit = 25): readonly KernelClaimView[] {
     const safeLimit = Math.max(1, Math.min(100, Math.floor(limit)));
-    const claims: Array<Pick<Claim, 'id' | 'proposition' | 'profile' | 'evidenceIds' | 'issuedAt' | 'monetaryBasis' | 'finality'>> = [];
+    // Projected once per call, not per claim: the closure is over the whole
+    // graph, so asking it repeatedly would answer the same question N times.
+    const revokedIds = new Set(this.epistemic().revocationProjection().revokedIds);
+    const claims: KernelClaimView[] = [];
     for (const run of this.reconciliationRuns(safeLimit)) {
       const item = this.epistemic().readClaim(`claim:billing:reconciliation:${run.reconciliationRunId}`);
       if (item === null) continue;
-      claims.push({
-        id: item.id,
-        proposition: item.proposition,
-        profile: item.profile,
-        evidenceIds: item.evidenceIds,
-        issuedAt: item.issuedAt,
-        monetaryBasis: item.monetaryBasis,
-        finality: item.finality,
-      });
+      claims.push(presentKernelClaim(item, revokedIds));
     }
-    return Object.freeze(claims.map((item) => Object.freeze(item)));
+    return Object.freeze(claims);
   }
 
   /** Newest first, including empty/replay-only evidence runs for auditability. */
