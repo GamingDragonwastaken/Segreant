@@ -257,6 +257,49 @@ function ownedByThisProcess(snapshot) {
   return snapshot?.owner?.pid === process.pid && Boolean(snapshot.ownerPath);
 }
 
+/**
+ * May this quarantined generation be collected?
+ *
+ * NOT `lockIsStale`, WHICH ANSWERS A DIFFERENT QUESTION. That one answers "may
+ * I take this canonical lock?", and only half of its answer transfers here. The
+ * owner half does: an owner who cannot still act is gone wherever its directory
+ * sits, and `ownerCanStillAct` stays the single answer to that so the reaper
+ * and the acquire path cannot drift apart — the D-078 lesson.
+ *
+ * The owner-LESS half does not transfer. `lockIsStale` gives an owner-less
+ * directory `OWNERLESS_LOCK_STALE_MS` for the reason its own comment states:
+ * the creator may have died "between `mkdir` and its first write", so the timer
+ * protects a live process about to write its record into a directory it has
+ * just made. No such process can exist at a quarantine pathname. A quarantine
+ * is only ever created by RENAMING an existing directory aside; nothing is ever
+ * `mkdir`ed there, and no creator will ever come back for a name it does not
+ * know. An owner-less quarantine is therefore garbage the instant it exists,
+ * and the timer protected nobody while delaying its collection.
+ *
+ * That delay was a real failure, not a tidiness point. `quarantineKnownLock`
+ * renames whatever is at the canonical path at the instant it acts, which need
+ * not be the generation it inspected — a contender can quarantine and remove
+ * that generation while a third process `mkdir`s a fresh empty one. The
+ * mismatch is detected and restoration attempted; when the canonical path has
+ * already been re-claimed, restoration loses the race D-092 recorded, and an
+ * EMPTY quarantine is left behind. Run `33760552077` failed on Ubuntu and
+ * Windows both because a sweeping acquisition could not collect it for ten
+ * seconds.
+ *
+ * Racing a quarantine still in progress is safe under this rule. The two paths
+ * that create one from an owner-bearing directory (`quarantineKnownLock`,
+ * `releaseOwnedGeneration`) move the token-bearing record INTO the directory
+ * first, so what they are working on always carries a record and is judged by
+ * liveness. The one path that quarantines an owner-less directory
+ * (`quarantineUnknownLock`) is itself about to delete it, and `removeQuarantine`
+ * swallows the loss.
+ */
+function quarantineIsCollectable(snapshot) {
+  if (!snapshot) return true;
+  if (snapshot.owner) return !ownerCanStillAct(snapshot);
+  return true;
+}
+
 function reapOrphanQuarantines(root) {
   let entries;
   try {
@@ -267,20 +310,7 @@ function reapOrphanQuarantines(root) {
   for (const entry of entries) {
     if (!entry.isDirectory() || !entry.name.startsWith(LOCK_QUARANTINE_PREFIX)) continue;
     const path = join(root, entry.name);
-    const snapshot = inspectLock(path);
-    // A quarantine is no longer on the acquisition path. It is safe to reap
-    // only when its owner is demonstrably dead (or its owner-less generation
-    // has aged past `OWNERLESS_LOCK_STALE_MS`); a live/uncertain generation is
-    // preserved for a later acquisition rather than deleted by pathname.
-    //
-    // Shortening that timer does not endanger an in-progress quarantine:
-    // `quarantineKnownLock` moves the token-bearing record INTO the directory
-    // before renaming the directory aside, so a quarantine it is still working
-    // on always carries a token and is judged by whether that process is alive.
-    // Reaching the timer here means a `quarantineUnknownLock` died partway and
-    // left a directory that never had an owner — garbage, and the sooner the
-    // better.
-    if (lockIsStale(path, snapshot)) removeQuarantine(path);
+    if (quarantineIsCollectable(inspectLock(path))) removeQuarantine(path);
   }
 }
 

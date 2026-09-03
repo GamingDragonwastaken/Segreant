@@ -12,9 +12,9 @@ elsewhere.
 | | |
 | --- | --- |
 | Branch | `gpt56/magnum-opus-reconstruction` |
-| Last verified head | `849ff910a14456ab73a5696735375380585423ed` |
-| Its CI | run `33757917634` — **success, all eight jobs** including `candidate-head`, read 2026-09-03 |
-| Newer head | `d86519d32200c4ba8b4c607b7092d08861d1586a` — run `33758622504` **PENDING**; read every job's `conclusion` before recording it |
+| Last verified green head | `422bcd0` — run `33759829279` **success, all eight jobs**, read 2026-09-03 |
+| Last head pushed | `5e7d96b` — run `33760552077` **failure** on `candidate-head` and `test (windows-latest)`, six jobs green; diagnosed and repaired at D-097 |
+| Next head | not yet pushed; record its run only after reading every job's `conclusion` |
 | Working tree | see `git status`; a head newer than the row above has not been CI-verified |
 | Executor | Claude Opus 5, lead implementation engineer/verifier |
 
@@ -30,6 +30,17 @@ closed it: the acquire loop's own-orphan guard was token-scoped, and the token i
 minted per call, so a process could wait five minutes for a lock it had left
 behind itself. `d917c33` is green on all eight jobs, including the two that had
 been failing.
+
+Four heads — `849ff91` (run `33757917634`), `d86519d` (run `33758622504`),
+`a5384e2` (run `33759351886`) and `422bcd0` (run `33759829279`) — are each a
+**success on all eight jobs**. `5e7d96b` then failed two of them, and on a test
+this round added rather than on anything the commit changed: an empty quarantine
+directory survived a sweeping acquisition because `reapOrphanQuarantines`
+borrowed `lockIsStale`, whose ten-second grace for an owner-less directory
+protects a creator that cannot exist at a quarantine pathname. D-097 gives the
+reaper its own rule. The lock work has now cost three separate rounds — D-085,
+D-092, D-097 — and all three were a rule that was correct for one state applied
+to another; the protocol's states are worth reading before touching it again.
 
 ## Active packet
 
@@ -100,24 +111,21 @@ two red heads that way, and both times the local check had stopped at the root.
 1. **Work the audit backlog, reproducing each finding before acting on it.** A
    parallel read-only audit produced ten probe-reproduced findings across six
    frontiers; its adversarial verifiers all died on a session limit, so NONE of
-   them is independently confirmed. Three have since been reproduced here and
-   repaired (D-093 twice, D-094 once). Still open, in rough severity order:
-   team-server accepts a rollup whose realized-spend sub-total exceeds the total
-   it is part of and publishes a 10000% share; a `--project`-scoped push replaces
-   a developer's complete snapshot and silently erases their other projects from
-   every team total; an exact EUR amount is accepted as agreeing with a field
-   named `costUsd` and summed into `total_cost_usd`; member rollups with
-   self-chosen, unequal observation windows are summed into one figure that
+   them is independently confirmed. Five have since been reproduced here and
+   repaired (D-093 twice, D-094, D-095, D-096). Still open, in rough severity
+   order: a `--project`-scoped push replaces a developer's complete snapshot and
+   silently erases their other projects from every team total; member rollups
+   with self-chosen, unequal observation windows are summed into one figure that
    states no window; a reopen followed by a late in-period append makes every
    projection read throw permanently, with no API path back; `minimalCutSets`
    contradicts `revocationClosure` on a two-evidence claim; and the ledger stores
    an Evidence `revocation` envelope it never projects. Each needs its own
    reproduction first — an agent's report is a lead, not a fact.
-2. **Continue the C/R frontier.** `WP-C05` (billing/FOCUS interoperability) and
-   `WP-C06` (receipts and team rollups: integrity is not truth) are the next
-   unstarted C packets. The R frontier (`WP-R03` granularity, `WP-R04`
-   negative-claim soundness, `WP-R05` trust non-escalation, `WP-R06` monetary
-   conservation, `WP-R07` revocation closure) states soundness properties that are
+2. **Continue the C/R frontier.** `WP-C05` (billing/FOCUS interoperability) is
+   the next unstarted C packet; `WP-C06` is now PARTIAL (D-095). On the R
+   frontier `WP-R06` and `WP-R07` are PARTIAL (D-096, D-094) and `WP-R03`
+   granularity, `WP-R04` negative-claim soundness and `WP-R05` trust
+   non-escalation are unstarted. All three state soundness properties that are
    directly falsifiable against code that already exists, which makes them
    cheaper to establish than the D/E/F frontiers that need new subsystems.
 3. **C03/C04 remainders.** Neither `fx_translated` nor `price_corrected` has a

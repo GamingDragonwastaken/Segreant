@@ -45,7 +45,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -706,6 +706,129 @@ test('a restore that loses the canonical path is a lost race, not a fatal errno'
 
     const residue = readdirSync(dir).filter((name) => name.startsWith('.fiscus-build.lock'));
     assert.deepEqual(residue, [], `lock residue survived a sweeping acquisition: ${residue.join(', ')}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 25 });
+  }
+});
+
+/**
+ * THE GRACE PERIOD BELONGS TO THE CANONICAL PATH, NOT TO A QUARANTINE.
+ *
+ * `reapOrphanQuarantines` asks `lockIsStale`, which answers a DIFFERENT
+ * question: may I take this canonical lock? Half of that answer transfers — an
+ * owner who cannot still act is gone, wherever the directory sits — and half
+ * does not. For an owner-LESS directory `lockIsStale` waits
+ * `OWNERLESS_LOCK_STALE_MS`, and the reason is stated in its own comment: the
+ * creator died "between `mkdir` and its first write", so the ten seconds
+ * protect a live process that is about to write its record into a directory it
+ * has just made.
+ *
+ * No such process can exist at a quarantine pathname. A quarantine is only ever
+ * created by RENAMING an existing directory aside; nothing is ever `mkdir`ed
+ * there, and no creator will ever come back to a name it does not know. So the
+ * ten seconds protect nobody and delay collection of a directory that is
+ * already garbage.
+ *
+ * HOW THE WINDOW IS REACHED IN PRACTICE, which is what run `33760552077` found
+ * on Ubuntu and Windows both. `quarantineKnownLock` renames whatever is at the
+ * canonical path at the instant it acts, which need not be the generation it
+ * inspected: a contender can quarantine and remove that generation and a third
+ * process can `mkdir` a fresh empty one in between. The mismatch is then
+ * detected — that is what the re-read of the owner record is for — restoration
+ * is attempted, and when the canonical path has been claimed again it fails,
+ * which is the ordinary lost race D-092 recorded. What is left behind is an
+ * EMPTY quarantine: a directory whose creator can no longer find it and whose
+ * record was never written. The reaper then preserved it for ten seconds, and
+ * an immediate sweeping acquisition reported residue.
+ *
+ * These three tests state the transition rule directly rather than reproducing
+ * the interleaving, which is the whole of the directive's preference for a
+ * state-machine test: a planted state is deterministic on every platform, where
+ * the race that produces it is not.
+ */
+test('an ownerless quarantine is collected at once, not after the canonical grace period', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-lock-reap-ownerless-'));
+  try {
+    // Exactly what the mismatch path leaves: a directory with no record at all,
+    // at a pathname no creator knows.
+    const orphan = join(dir, '.fiscus-build.lock.quarantine-1-00000000-0000-4000-8000-000000000001');
+    mkdirSync(orphan);
+
+    const sweeper = join(dir, 'sweeper.mjs');
+    writeFileSync(sweeper, [
+      `import { acquirePublicationLock } from ${JSON.stringify(LOCK_MODULE)};`,
+      'acquirePublicationLock(process.argv[2])();',
+    ].join('\n'), 'utf8');
+    const swept = await run(sweeper, [dir], 60_000);
+    assert.equal(swept.code, 0, swept.stderr || 'the sweeping acquisition failed');
+
+    const residue = readdirSync(dir).filter((name) => name.startsWith('.fiscus-build.lock'));
+    assert.deepEqual(residue, [], `an ownerless quarantine survived its reaper: ${residue.join(', ')}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 25 });
+  }
+});
+
+test('a quarantine whose owner can still act is preserved, not deleted by pathname', async () => {
+  // THE GUARD-RAIL. Collecting every quarantine on sight would satisfy the test
+  // above and reintroduce the pathname-based deletion D-072 removed. The owner
+  // half of the rule is unchanged: a live owner keeps its generation.
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-lock-reap-live-'));
+  try {
+    const held = join(dir, '.fiscus-build.lock.quarantine-1-00000000-0000-4000-8000-000000000002');
+    mkdirSync(held);
+    // This process is alive for as long as the child sweeps.
+    writeFileSync(
+      join(held, '.owner-quarantine.json'),
+      JSON.stringify({ pid: process.pid, token: 'live-owner' }),
+      'utf8',
+    );
+
+    const sweeper = join(dir, 'sweeper.mjs');
+    writeFileSync(sweeper, [
+      `import { acquirePublicationLock } from ${JSON.stringify(LOCK_MODULE)};`,
+      'acquirePublicationLock(process.argv[2])();',
+    ].join('\n'), 'utf8');
+    const swept = await run(sweeper, [dir], 60_000);
+    assert.equal(swept.code, 0, swept.stderr || 'the sweeping acquisition failed');
+
+    const residue = readdirSync(dir).filter((name) => name.startsWith('.fiscus-build.lock'));
+    assert.deepEqual(residue, [held.slice(dir.length + 1)], 'a live owner lost its quarantined generation');
+  } finally {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 25 });
+  }
+});
+
+test('a quarantine whose owner is demonstrably gone is still collected by liveness', async () => {
+  // The half of `lockIsStale` that does transfer, kept visible so a later change
+  // cannot quietly narrow the reaper to the ownerless case.
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-lock-reap-dead-'));
+  try {
+    const corpse = join(dir, 'corpse.mjs');
+    writeFileSync(corpse, 'process.stdout.write(String(process.pid));\n', 'utf8');
+    const dead = await run(corpse, [], 60_000);
+    assert.equal(dead.code, 0, dead.stderr || 'the corpse process failed to report a pid');
+    const deadPid = Number(dead.stdout);
+    assert.ok(Number.isInteger(deadPid) && deadPid > 0, `expected a pid, read ${JSON.stringify(dead.stdout)}`);
+
+    const abandoned = join(dir, '.fiscus-build.lock.quarantine-1-00000000-0000-4000-8000-000000000003');
+    mkdirSync(abandoned);
+    writeFileSync(
+      join(abandoned, '.owner-quarantine.json'),
+      JSON.stringify({ pid: deadPid, token: 'dead-owner' }),
+      'utf8',
+    );
+
+    const sweeper = join(dir, 'sweeper.mjs');
+    writeFileSync(sweeper, [
+      `import { acquirePublicationLock } from ${JSON.stringify(LOCK_MODULE)};`,
+      'acquirePublicationLock(process.argv[2])();',
+    ].join('\n'), 'utf8');
+    const swept = await run(sweeper, [dir], 60_000);
+    assert.equal(swept.code, 0, swept.stderr || 'the sweeping acquisition failed');
+
+    const residue = readdirSync(dir).filter((name) => name.startsWith('.fiscus-build.lock'));
+    assert.deepEqual(residue, [], `a dead owner's quarantine survived: ${residue.join(', ')}`);
   } finally {
     rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 25 });
   }
