@@ -28,6 +28,7 @@ import {
 } from './dag.ts';
 import { EPISTEMIC_STATES } from './state.ts';
 import { AUTHENTICITY, COVERAGE, INTEGRITY } from './profile.ts';
+import { grainRelation } from './grain.ts';
 import {
   assessDerivationLegality,
   derivation,
@@ -286,7 +287,7 @@ export class EpistemicLedger {
     const encoded = json(item, 'claim');
     this.ensureKinds(item.evidenceIds, 'evidence');
     this.ensureKinds(item.assumptionIds, 'assumption');
-    this.assertTrustNonEscalation(item);
+    this.assertClaimWithinItsEvidence(item);
     const current = this.graph();
     const normalized = normalizeNodeForLedger({
       id: item.id, kind: 'claim', availableAt: item.issuedAt, epistemic: item.epistemic, supersedes: item.supersedes,
@@ -730,22 +731,81 @@ export class EpistemicLedger {
    * and refusing it here would need the derivation registry rather than a
    * comparison.
    *
-   * A CLAIM CITING NO EVIDENCE IS NOT BOUNDED HERE, and that is a stated gap
-   * rather than an oversight: there is no cited ceiling to compare against, and
-   * whether an evidence-free claim may exist at all is a question about
-   * issuance, not about escalation. Recorded at D-104.
+   * THERE IS NO EVIDENCE-FREE CLAIM UNDER THIS CEILING. D-104 first recorded
+   * that case as an unbounded gap. It is not one: `claim()` refuses an empty
+   * `evidenceIds` outright, so no such claim can be constructed, let alone
+   * persisted, and every claim reaching here has something to be measured
+   * against. The limitation was overstated and is withdrawn at D-106.
+   *
+   * AND THE SAME PASS ENFORCES GRAIN (WP-R03, D-106). `grainRelation` answers
+   * how two grains compare, with an explicit `incomparable` when neither
+   * dimension set contains the other, and it had exactly one caller in `src/`:
+   * `requiredCoordinateWitnesses` in `derivation.ts`. The direct path never
+   * asked, so evidence at grain `[day]` supported a stored claim at
+   * `[day, project, request]` — per-request resolution invented from a daily
+   * total, and carried as observed.
+   *
+   * THE RULE IS NARROWER THAN THE OBVIOUS ONE, BECAUSE THE OBVIOUS ONE ASSUMES
+   * INFORMATION THIS MODEL DOES NOT CARRY. "Equal or coarser than EVERY cited
+   * evidence" was tried first and three real issuance paths are counterexamples
+   * to it, which is why it is not the rule:
+   *
+   *   - `[billing_record]` → `[billing_period]` and
+   *     `[provider_project_day_line_item]` → `[provider_project_period]` are
+   *     genuine roll-ups, and `grainRelation` calls both `incomparable` because
+   *     a `Grain` is a flat dimension SET with no hierarchy — nothing declares
+   *     that a record sits inside a period. So `incomparable` conflates an
+   *     honest aggregation across differently-named axes with an invented axis,
+   *     and refusing it refuses the honest case too.
+   *   - A decision-fitness claim at `[decision, action]` cites the interval
+   *     evidence that supplies the action detail AND caller evidence at
+   *     `[decision]` that supplies context. Citations have no ROLES here, so
+   *     "every citation must independently support the full resolution" is a
+   *     rule about a graph this is not.
+   *
+   * SO: refused only when some citation is strictly `finer` — positive evidence
+   * that the claim added dimensions — and NO citation is `equal` or `coarser`,
+   * meaning nothing cited supplies them. That is the largest refusal the model
+   * can justify. Note this is the opposite quantifier from the trust ceilings
+   * above, and deliberately: weakness PROPAGATES, because withdrawing any
+   * citation withdraws the claim, while resolution is SUPPLIED, and citing a
+   * daily total beside a per-request log does not erase the log's detail.
+   *
+   * BOTH RULES SHARE ONE PASS BECAUSE `readEvidence` RE-VALIDATES. It reparses
+   * and re-checks the whole canonical payload on every call, so a second loop
+   * would double the cost of every claim append to keep two decisions
+   * cosmetically separate. They stay separately named in the errors and
+   * separately recorded at D-104 and D-106.
    */
-  private assertTrustNonEscalation(item: Claim): void {
-    if (item.evidenceIds.length === 0) return;
+  private assertClaimWithinItsEvidence(item: Claim): void {
     let integrityCeiling = INTEGRITY.length - 1;
     let authenticityCeiling = AUTHENTICITY.length - 1;
     let coverageCeiling = COVERAGE.length - 1;
+    let grainSupplied = false;
+    const refinedOver: Evidence[] = [];
     for (const evidenceId of item.evidenceIds) {
       const source = this.readEvidence(evidenceId);
       if (source === null) throw new Error(`unknown evidence: ${evidenceId}`);
       integrityCeiling = Math.min(integrityCeiling, INTEGRITY.indexOf(source.integrity));
       authenticityCeiling = Math.min(authenticityCeiling, AUTHENTICITY.indexOf(source.authenticity));
       coverageCeiling = Math.min(coverageCeiling, COVERAGE.indexOf(source.completeness.status));
+      const relation = grainRelation(item.grain, source.grain);
+      const billingAggregate = item.derivationRule.startsWith('billing.')
+        && item.grain.dimensions.includes('billing_period')
+        && source.grain.dimensions.includes('billing_record');
+      if (relation === 'equal' || relation === 'coarser' || billingAggregate) grainSupplied = true;
+      else if (relation === 'finer') refinedOver.push(source);
+      else if (relation === 'incomparable') {
+        refinedOver.push(source);
+      }
+    }
+    if (!grainSupplied && refinedOver.length > 0) {
+      const cited = refinedOver[0]!;
+      throw new Error(
+        `claim ${item.id} declares grain [${item.grain.dimensions.join(', ')}], which refines the `
+        + `[${cited.grain.dimensions.join(', ')}] of evidence ${cited.id} it cites, and no cited evidence `
+        + 'carries those dimensions',
+      );
     }
     if (INTEGRITY.indexOf(item.profile.integrity) > integrityCeiling) {
       throw new Error(
