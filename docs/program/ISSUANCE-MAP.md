@@ -76,25 +76,23 @@ the reading of the three open boundaries below, and it changes their order.
 | `causal.issuance` | `src/causal/epistemic.ts` | canonical | product | A randomized study supports a causal effect, bound by derivation to the randomization |
 | `billing.countermodels` | `src/billing/countermodels.ts` | kernel_primitive | product | What the reconciliation residual degrades to if one of its stated conditions is false, and whether anything Fiscus has could tell |
 | `decision.certificate` | `src/decision/engine.ts` | **unmigrated_authority** | unreached | One action robustly dominates the alternatives under the declared utility intervals |
+| `decision.certificate.issuance` | `src/decision/epistemic.ts` | **canonical** | unreached | One action robustly dominates the alternatives under the declared utility intervals, bound to interval Evidence and a decision-fitness Derivation |
 
 Each module states its own class in its own docblock, so a reader opening the
 file learns what authority it holds without having to find this page first.
 
-## The three that are open, and what closing each requires
+## The remaining open boundary, and what closing it requires
 
-None of the three is currently producing a false result. Each is conservative in
-isolation. What they lack is that their conclusions are not bound by a
-Derivation to the evidence underneath them — so **revoking a source cannot
-invalidate anything downstream of them**, which is the property the kernel
-exists to provide and the reason "unchecked" is not the same as "fine".
+The remaining decision boundary is not currently producing a false result. Its
+pure engine is conservative in isolation, but its old output was not bound by a
+Derivation to the evidence underneath it — so **revoking a source could not
+invalidate anything downstream of it**, which is the property the kernel exists
+to provide and the reason "unchecked" is not the same as "fine".
 
-Two of the three have been closed. `causal.qualification` and `causal.estimate`
-were the `product`-reaching pair — the paths on which an unbacked strengthening
-could reach an operator today — and `causal.issuance` now carries their output
-into the kernel. `decision.certificate` remains, and it cannot reach anyone
-because nothing imports it, which lowers its urgency without lowering its
-priority: an unwired boundary is precisely the one that gets wired by someone who
-never read this page.
+The causal pair is closed. `causal.qualification` and `causal.estimate` were
+the `product`-reaching pair, and `causal.issuance` carries their output into the
+kernel. The decision adapter is now canonical but remains unreached by a product
+consumer, which lowers urgency without lowering priority.
 
 **`causal.qualification` and `causal.estimate` — CLOSED by `causal.issuance`.**
 The gates were never wrong; they refuse to derive causality from Lift, from a
@@ -123,10 +121,12 @@ thing to migrate if these worlds ever acquire a source other than the run
 itself. See D-084.
 
 **`decision.certificate`** produces a dominance certificate, which is a
-decision-fitness claim. It is also `unreached`: nothing in the product imports
-`src/decision/engine.ts`, so today it decides nothing for anyone. `src/epistemic/derivation.ts` already refuses
-unsupported decision-fitness strengthening — but only for claims routed through
-it. Closing this requires issuance at the point the certificate is produced.
+decision-fitness claim. The pure engine remains an unmigrated primitive, while
+`src/decision/epistemic.ts` is now the canonical adapter: it recomputes the
+certificate, issues the interval observation, and for strict dominance binds a
+`decision_fitness` Witness and Derivation to the source Evidence. Undetermined
+certificates issue no decision-fitness claim. A reviewed product consumer still
+needs to call this adapter before any action-grade policy can be applied.
 
 ## What this map does not establish
 
@@ -134,10 +134,9 @@ It does not establish that the canonical boundaries are correct — only that th
 route through the kernel, where correctness is enforced by other tests. It does
 not establish that the `display_only` and `integrity_only` classifications are
 the right *design*, only that those files hold the authority they say they hold.
-And it does not close AII-036: one boundary — `decision.certificate` — is still
-openly outside the kernel, and the test asserts that the unmigrated list is
-non-empty, so that emptying it requires closing the finding rather than editing
-a list.
+And it does not close AII-036: the pure engine remains an unmigrated authority
+until every consequential certificate construction route is forced through the
+adapter. The adapter itself is not yet reachable from a product action surface.
 
 Nor does closing the causal pair make any causal estimate more true. Issuance
 adds revocability and an auditable binding; the interval, the joint decision rule

@@ -46,6 +46,13 @@ to another; the protocol's states are worth reading before touching it again.
 
 ## Active packet
 
+**WP-B01 / WP-R08 — PARTIAL, newest implementation.** The decision adapter now
+binds recomputed strict interval dominance to Evidence, an observational Claim,
+a decision-fitness Witness, and a Derivation; undetermined intervals produce no
+decision-fitness Claim. Five focused tests pass. The adapter remains unreached
+by a product consumer, and minimax-regret/approved-policy integration remains
+unimplemented.
+
 **WP-R05 — PARTIAL, latest verified work.** Direct Claim persistence now
 checks integrity, authenticity, and coverage against the weakest cited Evidence
 at the unavoidable ledger boundary. Six adversarial tests cover refusal, weakest
@@ -105,8 +112,9 @@ two red heads that way, and both times the local check had stopped at the root.
   dashboard was started in.
 - **CI cannot see repository-scale defects.** `actions/checkout` is shallow, so
   a git-history cost that appears on a full clone never appears on a runner.
-- **AII-036 is PARTIAL.** `decision.certificate` is still `unmigrated_authority`
-  and still `unreached`; the causal pair closed at D-081.
+- **AII-036 is PARTIAL.** `decision.certificate` now has a canonical, tested
+  adapter but remains unreached; the pure engine remains an unmigrated
+  authority until all certificate construction routes use the adapter.
 - **AII-014 is PARTIAL.** Persisted records still carry collapsed status fields
   and no migration exists.
 - The launcher copies ~2.8 MB of `dist/` per CLI invocation — the cost of the
@@ -118,12 +126,10 @@ two red heads that way, and both times the local check had stopped at the root.
 
 ## Next exact actions
 
-1. **Finish WP-R05 from the current RED/GREEN slice.** Extend the direct-claim
-   boundary only where the evidence and claim axes have a defensible typed
-   relationship; do not treat monetary basis as a total-order ladder. Add RED
-   tests before implementation, then run the full epistemic suite and record
-   the exact result. After that, continue the C/R frontier at WP-C05 or the
-   next dossier dependency, not another inventory exercise.
+1. **Wire the decision adapter only through a reviewed policy boundary.** The
+   adapter exists and is tested, but remains unreached. Do not expose an
+   action-grade decision without a persisted certificate and derivation. Then
+   continue to WP-C05 unless an approved control consumer is required.
 2. **Work the audit backlog, reproducing each finding before acting on it.** A
    parallel read-only audit produced ten probe-reproduced findings across six
    frontiers; its adversarial verifiers all died on a session limit, so NONE of

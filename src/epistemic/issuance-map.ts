@@ -210,7 +210,15 @@ export const ISSUANCE_MAP: readonly IssuanceBoundary[] = Object.freeze([
     asserts: 'One action robustly dominates the alternatives under the declared utility intervals, or the comparison is undetermined.',
     issuanceClass: 'unmigrated_authority',
     reach: 'unreached',
-    note: 'A dominance certificate is a decision-fitness claim, and `src/epistemic/derivation.ts` already refuses unsupported decision-fitness strengthening — but only for claims that go through it, and this one does not. The engine is honest in isolation (`undetermined` is a real outcome and a rule-selected action is labelled as such); the gap is that no Derivation binds the certificate to the evidence its intervals came from. Closing it requires issuance at the point the certificate is produced.',
+    note: 'The pure engine computes a plain certificate but issues no kernel record. Closing it requires every consequential certificate path to use the canonical adapter when a decision certificate becomes a durable claim.',
+  },
+  {
+    id: 'decision.certificate.issuance',
+    module: 'src/decision/epistemic.ts',
+    asserts: 'One action robustly dominates the alternatives under the declared utility intervals, or the comparison is undetermined.',
+    issuanceClass: 'canonical',
+    reach: 'unreached',
+    note: 'The engine remains a pure decision primitive. This adapter binds a recomputed proven certificate to an observational interval Claim, a decision_fitness Witness, and a Derivation; undetermined certificates issue only the observation. The adapter is currently tested but unreached, so the next product step is a reviewed consumer that persists it before action.',
   },
 ]);
 

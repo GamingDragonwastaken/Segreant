@@ -176,6 +176,10 @@
 **Decision:** Keep a no-node `DASHBOARD_API_CONTRACTS` descriptor as the canonical source for every dashboard API path, served method set, historical `Allow` header, CSRF-gated method, response binding and declared browser-surface binding. The server route table derives its API rows from that descriptor; the build copies the exact bytes into the browser app under the publication lock; conformance checks compare the canonical source, generated copy, route table and modern/classic/action references. This closes route/method/guard drift without claiming that payload-field schemas or CapabilitySpec documentation are generated yet.
 **Reason:** Hand-maintained route literals had three independent opportunities to diverge: a server path/method change, a browser client reference, or a generated artifact. A shared no-runtime-dependency descriptor plus locked generation makes the highest-risk routing/security metadata one auditable object, while the explicit remaining schema/CapabilitySpec boundary prevents a route contract from being mistaken for full payload truth.
 
+## D-046 — FOCUS interoperability is a bounded compatibility projection
+**Decision:** Add a pure, read-only `billingEvidenceToFocus()` adapter shaped to the FOCUS v1.4 Cost and Usage vocabulary. Map only provider-declared billing fields to `BillingAccountId`, periods, `ChargeCategory`, service/SKU, currency and `BilledCost`; keep `EffectiveCost` and `AllocatedCost` null and explicitly marked `unmapped`, and preserve exact source lineage. Refuse unsupported monetary bases and charge types. Do not claim FOCUS conformance, invoice validation, reconciliation, allocation, or provider authority beyond the source record.
+**Reason:** FOCUS distinguishes billed, effective and allocated cost semantics. A compatibility handoff is useful only if it carries the provider-billed distinction without converting local estimates, allocations, epistemic status or causal/decision semantics into FOCUS fields.
+
 ## D-045 — Dashboard payload envelopes fail closed at the shared client boundary
 **Decision:** Define a versioned top-level `DASHBOARD_PAYLOAD_CONTRACTS` descriptor for every dashboard API method, including method-specific setup responses and the CSV content type. Each JSON contract names required envelope fields and primitive/container kinds. Seeded conformance validates every JSON response, and the modern browser request helper validates its decoded payload before returning the typed generic; a mismatch is surfaced as a typed 502 boundary error. Nested field contracts remain in the browser interface checker until they can be generated from one canonical source.
 **Reason:** TypeScript interfaces are erased and cannot stop a server from returning a string where the browser expects a number or omitting a required envelope. A top-level shared contract catches the failure in tests and in the running client without coercing data or replacing the existing detailed interface checks with a weaker assertion.
@@ -771,6 +775,31 @@ Finally, this addresses one of the ten findings a parallel audit produced. Still
 **Verified by repetition, since a liveness failure has no single RED.** The bounded form ran five consecutive times at 6.5s each, against a three-minute kill window; the previous form had run 2.5s of wall clock per side and taken 180s on a loaded runner. The full lock file is 13/13.
 
 **What this does not establish.** Timing tests remain probabilistic: this bounds the work, it does not prove the scenario cannot starve on a slower machine. The test still cannot go RED on Windows, for the reason D-092 records. And the interleaving it drives is still incidental rather than forced — the deterministic statement of that rule is the three planted-state tests added at D-097.
+
+## D-105 — a strict decision certificate is now bound to the kernel
+**Decision:** `src/decision/epistemic.ts` is the canonical issuance adapter for
+strict interval dominance. It recomputes the certificate from the supplied
+intervals, persists an interval Evidence record and observational Claim, then
+issues a `decision_fitness` Witness and Derivation-backed decision Claim only
+for `proven_dominant`. An undetermined comparison issues the observation only.
+
+**Reason:** `certifyDecision` was conservative but returned a plain object with
+no evidence lineage, so revoking the evidence used to construct its intervals
+could not affect a downstream decision record. The adapter accepts explicit
+Evidence bindings, rejects certificate/action or binding mismatches, and writes
+all records in one ledger transaction. The direct Claim trust ceiling from D-104
+also prevents the adapter from bypassing assurance limits.
+
+**Verified:** five focused decision-issuance tests pass: atomic issuance,
+undetermined refusal, mismatch/missing-binding refusal, exact replay plus
+transitive revocation, and explicit ID/record consistency. The issuance map now
+classifies the adapter as canonical while retaining `unreached` until a reviewed
+product policy consumer exists.
+
+**What this does not establish.** A strict interval certificate proves only the
+declared dominance proposition under its interval assumptions; it is not causal
+evidence, provider billing truth, or authorization to change a budget/model.
+Minimax regret, policy approval, and an action consumer remain future work.
 
 ## D-104 — direct claims cannot strengthen assurance beyond their cited evidence
 **Decision:** `EpistemicLedger.appendClaimWithinTransaction` now enforces a

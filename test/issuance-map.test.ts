@@ -171,7 +171,7 @@ test('the program record lists exactly the boundaries the map declares', () => {
 
   // And nothing the code does not declare: a boundary removed from the code but
   // left in the document is a claim of coverage that no longer exists.
-  const documented = [...document.matchAll(/^\| `([a-z]+\.[A-Za-z]+)` \|/gm)].map((m) => m[1]!);
+  const documented = [...document.matchAll(/^\| `([a-z]+(?:\.[A-Za-z_]+)+)` \|/gm)].map((m) => m[1]!);
   const known = new Set(ISSUANCE_MAP.map((boundary) => boundary.id));
   const stale = documented.filter((id) => !known.has(id));
   assert.deepEqual(stale, [], 'the published map lists a boundary the code no longer declares');
