@@ -112,6 +112,9 @@ export function priceCorrectionEvent(input: PriceCorrectionEventInput): Economic
     },
     schemaVersion: 1,
   });
+  if (correction.occurredAt !== source.occurredAt) {
+    throw new Error('price correction occurredAt must match its source occurrence');
+  }
   if (Date.parse(correction.recordedAt) < Date.parse(source.recordedAt)) {
     throw new Error('price correction recordedAt cannot precede its source recordedAt');
   }

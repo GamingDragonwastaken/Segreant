@@ -557,6 +557,7 @@ export class EconomicLedger {
         predecessorAmount = predecessorNext;
       }
       if (source.subject !== value.subject) throw new Error(`economic event ${value.id} price correction subject must match its source`);
+      if (value.occurredAt !== source.occurredAt) throw new Error(`economic event ${value.id} price correction occurredAt must match its source occurrence`);
       if (value.amount === null) throw new Error(`economic event ${value.id} price correction requires a monetary delta`);
       if (predecessorAmount.coefficient < 0n) throw new Error(`economic event ${value.id} price correction predecessor amount must be non-negative`);
       if (value.amount.currency !== predecessorAmount.currency || value.amount.basis !== predecessorAmount.basis) {

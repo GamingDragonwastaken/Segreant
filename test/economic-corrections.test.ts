@@ -45,6 +45,47 @@ test('price correction is an exact signed delta with typed previous/new metadata
   });
 });
 
+test('price correction stays in the source occurrence domain even when recorded later', () => {
+  const original = source();
+  assert.throws(
+    () => priceCorrectionEvent({
+      id: 'economic:price-correction:wrong-occurrence:factory',
+      source: original,
+      previousAmount: original.amount!,
+      nextAmount: money('1.25', 'USD', 'list'),
+      occurredAt: '2026-08-03T00:00:00.000Z',
+      recordedAt: '2026-08-02T00:00:00.000Z',
+    }),
+    /occurredAt|occurrence|source/i,
+  );
+
+  const db = new DatabaseSync(':memory:');
+  try {
+    const ledger = new EconomicLedger(db);
+    ledger.append(original);
+    const tampered = economicEvent({
+      id: 'economic:price-correction:wrong-occurrence:raw',
+      kind: 'price_corrected',
+      subject: original.subject,
+      occurredAt: '2026-08-03T00:00:00.000Z',
+      recordedAt: '2026-08-02T00:00:00.000Z',
+      amount: money('0.25', 'USD', 'list'),
+      sourceEventIds: [original.id],
+      reversalOf: null,
+      metadata: {
+        correction: 'reprice',
+        previousAmount: { coefficient: '1', scale: 0, currency: 'USD', basis: 'list' },
+        nextAmount: { coefficient: '125', scale: 2, currency: 'USD', basis: 'list' },
+      },
+      schemaVersion: 1,
+    });
+    assert.throws(() => ledger.append(tampered), /occurredAt|occurrence|source/i);
+    assert.deepEqual(ledger.events().map((event) => event.id), [original.id]);
+  } finally {
+    db.close();
+  }
+});
+
 test('economic ledger persists a correction separately and rejects cross-basis or malformed correction lineage', () => {
   const db = new DatabaseSync(':memory:');
   const ledger = new EconomicLedger(db);
