@@ -337,6 +337,18 @@ export class EconomicLedger {
       sources.set(sourceId, source);
       this.validateReferenceClosure(source, visiting, validated);
     }
+    if (economicEventRole(value.kind) === 'adjustment' && value.amount !== null && value.sourceEventIds.length > 0) {
+      const chargeSources = [...sources.values()].filter((source) => economicEventRole(source.kind) === 'charge');
+      if (chargeSources.length !== value.sourceEventIds.length) {
+        throw new Error(`economic event ${value.id} adjustment sources must all be charge events`);
+      }
+      for (const source of chargeSources) {
+        if (source.amount === null) throw new Error(`economic event ${value.id} adjustment source ${source.id} has no monetary amount`);
+        if (source.amount.currency !== value.amount.currency || source.amount.basis !== value.amount.basis) {
+          throw new Error(`economic event ${value.id} adjustment must use the currency and basis of every referenced charge`);
+        }
+      }
+    }
     if (value.reversalOf !== null) {
       const target = sources.get(value.reversalOf);
       if (target === undefined) throw new Error(`economic event ${value.id} reversalOf must appear in sourceEventIds`);

@@ -81,3 +81,85 @@ test('a negative adjustment that exactly offsets a charge remains permitted', ()
     db.close();
   }
 });
+
+test('an adjustment source link must name a compatible charge, even without reversalOf', () => {
+  const db = new DatabaseSync(':memory:');
+  try {
+    const ledger = new EconomicLedger(db);
+    const source = bill();
+    ledger.append(source);
+
+    const wrongBasis = economicEvent({
+      id: 'event:adjustment:wrong-basis-without-reversal',
+      kind: 'credit_applied',
+      subject: source.subject,
+      occurredAt: source.occurredAt,
+      recordedAt: '2026-08-03T00:00:00.000Z',
+      amount: money('-1', 'USD', 'estimated'),
+      sourceEventIds: [source.id],
+      reversalOf: null,
+      metadata: { invoiceRef: 'invoice-adjustment' },
+      schemaVersion: 1,
+    });
+    assert.throws(
+      () => ledger.append(wrongBasis),
+      /adjustment.*(basis|charge)|source.*(basis|charge)/i,
+    );
+
+    const usage = economicEvent({
+      id: 'event:usage:adjustment-source',
+      kind: 'usage_observed',
+      subject: source.subject,
+      occurredAt: source.occurredAt,
+      recordedAt: '2026-08-03T00:00:00.000Z',
+      amount: money('1', 'USD', 'billed'),
+      sourceEventIds: [],
+      reversalOf: null,
+      metadata: { invoiceRef: 'invoice-adjustment' },
+      schemaVersion: 1,
+    });
+    ledger.append(usage);
+    const wrongRole = economicEvent({
+      id: 'event:adjustment:wrong-role-without-reversal',
+      kind: 'credit_applied',
+      subject: source.subject,
+      occurredAt: source.occurredAt,
+      recordedAt: '2026-08-04T00:00:00.000Z',
+      amount: money('-1', 'USD', 'billed'),
+      sourceEventIds: [usage.id],
+      reversalOf: null,
+      metadata: { invoiceRef: 'invoice-adjustment' },
+      schemaVersion: 1,
+    });
+    assert.throws(
+      () => ledger.append(wrongRole),
+      /adjustment.*charge|source.*charge|role/i,
+    );
+  } finally {
+    db.close();
+  }
+});
+
+test('a compatible source-linked positive adjustment may omit reversalOf', () => {
+  const db = new DatabaseSync(':memory:');
+  try {
+    const ledger = new EconomicLedger(db);
+    const source = bill('event:bill:tax');
+    ledger.append(source);
+    const tax = economicEvent({
+      id: 'event:tax:source-linked',
+      kind: 'tax_recognized',
+      subject: source.subject,
+      occurredAt: source.occurredAt,
+      recordedAt: '2026-08-03T00:00:00.000Z',
+      amount: money('1', 'USD', 'billed'),
+      sourceEventIds: [source.id],
+      reversalOf: null,
+      metadata: { invoiceRef: 'invoice-adjustment' },
+      schemaVersion: 1,
+    });
+    assert.equal(ledger.append(tax), 'inserted');
+  } finally {
+    db.close();
+  }
+});
