@@ -7,10 +7,10 @@
 | | |
 | --- | --- |
 | Branch | `gpt56/magnum-opus-reconstruction` |
-| Current code checkpoint | `cba15357c42b0c83a836d147b37a01ede4945d92` — exact remote match; documentation reconciliation is the follow-up on this code head |
-| Latest exact-code CI | Run `33876114608` — **success** across all eight jobs, head `cba15357c42b0c83a836d147b37a01ede4945d92`, observed 2026-09-04 |
-| Latest code tranche | Economic replay-order property: direct correction-before-close and late correction after close/reopen/reclose preserve final close identity while keeping as-of/effective projections distinct; economic glob **76/76**, root/browser TypeScript, build, and diff check passed |
-| Working tree | The replay test is checkpointed and pushed; this program-record reconciliation is the only pending follow-up |
+| Current code checkpoint | `320bf0649853013b8ace03f2fdddc69d16489916` — exact remote match; the preceding implementation head `c023e913` exposed a cross-platform stale fixture and was corrected without history rewrite |
+| Latest exact-code CI | Run `33879081745` — **success** across all configured jobs, head `320bf0649853013b8ace03f2fdddc69d16489916`, observed 2026-09-04 |
+| Latest code tranche | Economic usage-role legality: `usage_observed` cannot carry Money and cannot serve as an exact allocation charge source; focused economic **16/16**, full economic glob **78/78**, root lifecycle **1,426 total / 1,422 pass / 0 fail / 4 skips**, team-server **67/67**, root/browser TypeScript, build, and diff check passed |
+| Working tree | The corrective code checkpoint is pushed and remotely green; this program-record reconciliation is the only pending follow-up |
 | Operating policy | One bounded slice → focused verification → compiler/build gate → one accounting update → one checkpoint. Reuse green evidence; do not repeat full suites, cleanup, or unchanged reads without a new hypothesis. |
 
 ## Completed and reusable evidence
@@ -21,7 +21,7 @@
 
 ## Active frontier
 
-**WP-C02/C04/R06 — next economic slice.** Exact allocation persistence now has source conservation and finalized-close binding, and replay ordering is pinned for the existing additive one-correction model. Remaining economic gaps are adjustment source/basis legality, adjustment-to-charge conservation beyond the covered negative cases, correction/FX supersession and rate provenance, broader historical/as-of selection, and receipt/team reconciliation.
+**WP-C02/C04/R06 — next economic slice.** Exact allocation persistence now has source conservation and finalized-close binding, replay ordering is pinned for the existing additive one-correction model, and `usage_observed` is refused as a monetary event/allocation source. Remaining economic gaps are per-link basis agreement, role auditing, adjustment-to-charge conservation beyond the covered negative cases, correction/FX supersession and rate provenance, broader historical/as-of selection, receipt/team reconciliation, and recovery from the bricked ledger state.
 
 **WP-B01/R04/R05 — parallel kernel frontier.** Generic negative claims now require complete cited Evidence over event type, target scope, and the entire interval. Direct Claim persistence has trust ceilings for integrity/authenticity/coverage. Remaining typed witness production and other negative-claim paths require new reproduction.
 
@@ -29,11 +29,11 @@
 
 ## Next exact action
 
-Investigate and reproduce adjustment-to-charge conservation or correction/FX supersession at the ledger boundary. Write one RED test, verify the intended failure, implement the smallest boundary guard, rerun only the affected economic tranche and compiler domains, then checkpoint and update these records once.
+Investigate and reproduce correction/FX supersession or per-link basis agreement at the ledger boundary. Write one RED test, verify the intended failure, implement the smallest boundary guard, rerun only the affected economic tranche and compiler domains, then checkpoint and update these records once.
 
 ## Known blockers
 
-- Exact root CI for the current documentation-only follow-up is not needed; the code head is already exactly CI-verified.
+- The initial usage-role implementation head `c023e913` failed cross-platform CI because of a stale fixture; corrective head `320bf064` is the exact remotely green code checkpoint.
 - Live Postgres execution and trust-anchor governance remain external for team rollups.
 - No credentials are retained; any credentials encountered are `[REDACTED]`.
 - The dossier is not complete: remaining packets and external gates stay explicitly open.
