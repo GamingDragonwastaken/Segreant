@@ -142,6 +142,17 @@ function sameNodeIdentity(a: DagNode, b: DagNode): boolean {
     && JSON.stringify(a.supersedes) === JSON.stringify(b.supersedes);
 }
 
+function claimCoordinateKey(value: Claim): string {
+  return canonicalJson({
+    predicate: value.proposition.predicate,
+    negativeEventType: value.negativeClaim?.eventType ?? null,
+    subject: value.subject,
+    scope: value.scope,
+    grain: value.grain,
+    validTime: value.time.validTime,
+  });
+}
+
 function sameWitnessReference(reference: DerivationWitness, registered: Witness): boolean {
   return reference.id === registered.id
     && reference.kind === registered.kind
@@ -278,6 +289,26 @@ export class EpistemicLedger {
     return nodeResult === 'duplicate' ? 'inserted' : nodeResult;
   }
 
+  private assertClaimSupersession(item: Claim, currentNodes: readonly DagNode[]): void {
+    for (const supersededId of item.supersedes) {
+      const targetNode = currentNodes.find((node) => node.id === supersededId);
+      if (targetNode === undefined) throw new Error(`unknown supersession target: ${supersededId}`);
+      if (targetNode.kind !== 'claim') throw new Error(`supersession target must be a claim: ${supersededId}`);
+      const target = this.readClaim(supersededId);
+      if (target === null) throw new Error(`supersession target has no claim payload: ${supersededId}`);
+      if (claimCoordinateKey(target) !== claimCoordinateKey(item)) {
+        throw new Error(`superseded claim coordinates do not match: ${supersededId}`);
+      }
+      if (Date.parse(item.issuedAt) <= Date.parse(target.issuedAt)) {
+        throw new Error(`superseding claim must be issued later than ${supersededId}`);
+      }
+      const successor = currentNodes.find((node) => node.kind === 'claim' && node.supersedes.includes(supersededId));
+      if (successor !== undefined) {
+        throw new Error(`claim ${supersededId} already has a successor: ${successor.id}`);
+      }
+    }
+  }
+
   appendClaim(value: Claim): AppendResult {
     return this.transaction(() => this.appendClaimWithinTransaction(value));
   }
@@ -310,6 +341,7 @@ export class EpistemicLedger {
       if (!sameNodeIdentity(existing, normalized)) throw new Error(`different DAG node already exists for ${item.id}`);
       nodeResult = 'duplicate';
     } else {
+      this.assertClaimSupersession(item, current.nodes);
       createEpistemicDag([...current.nodes, normalized], current.edges);
       nodeResult = this.insertNode(normalized);
     }
@@ -319,6 +351,7 @@ export class EpistemicLedger {
       return 'duplicate';
     }
     this.db.prepare('INSERT INTO epistemic_claims (claim_id, claim_json, claim_digest) VALUES (?, ?, ?)').run(item.id, encoded, digest(encoded));
+    for (const supersededId of item.supersedes) this.insertEdge({ from: item.id, to: supersededId, relation: 'supersedes' });
     for (const evidenceId of item.evidenceIds) this.insertEdge({ from: evidenceId, to: item.id, relation: 'supports' });
     for (const assumptionId of item.assumptionIds) this.insertEdge({ from: assumptionId, to: item.id, relation: 'assumes' });
     return nodeResult === 'duplicate' ? 'inserted' : nodeResult;
@@ -611,6 +644,31 @@ export class EpistemicLedger {
 
   asOf(asOf: Instant): EpistemicDag {
     return this.replayAsOf(asOf).graph;
+  }
+
+  /**
+   * Return the visible tip of every claim supersession chain.
+   *
+   * The optional boundary is applied before successor selection: a claim that
+   * was not available at the boundary cannot hide the older claim. Branching
+   * is refused at append time, so this projection never chooses a winner by
+   * identifier, insertion order, or wall-clock timing.
+   */
+  latestClaims(asOf?: Instant): readonly Claim[] {
+    const graph = asOf === undefined ? this.graph() : this.asOf(asOf);
+    const supersededIds = new Set<string>();
+    for (const node of graph.nodes) {
+      if (node.kind !== 'claim') continue;
+      for (const supersededId of node.supersedes) supersededIds.add(supersededId);
+    }
+    const latest = graph.nodes
+      .filter((node) => node.kind === 'claim' && !supersededIds.has(node.id))
+      .map((node) => {
+        const item = this.readClaim(node.id);
+        if (item === null) throw new Error(`stored claim node ${node.id} has no payload`);
+        return item;
+      });
+    return Object.freeze(latest);
   }
 
   /**
