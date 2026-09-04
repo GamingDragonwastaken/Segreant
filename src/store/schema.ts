@@ -740,6 +740,23 @@ CREATE TABLE IF NOT EXISTS economic_allocation_lineage (
 );
 
 CREATE INDEX IF NOT EXISTS idx_economic_allocation_lineage_source ON economic_allocation_lineage(source_event_id, allocation_run_id);
+
+-- A close authorization is separate from the canonical allocation result so
+-- the result digest remains compatible while new runs carry an immutable,
+-- explicitly validated period-close witness. Older runs without this row are
+-- intentionally unreadable rather than backfilled by inference.
+CREATE TABLE IF NOT EXISTS economic_allocation_close_bindings (
+  allocation_run_id  TEXT PRIMARY KEY NOT NULL,
+  period_start_ms    INTEGER NOT NULL,
+  period_end_ms      INTEGER NOT NULL,
+  finalization_id    TEXT NOT NULL,
+  projection_digest  TEXT NOT NULL,
+  event_count        INTEGER NOT NULL CHECK (event_count >= 0),
+  FOREIGN KEY (allocation_run_id) REFERENCES economic_allocation_runs(allocation_run_id),
+  FOREIGN KEY (finalization_id) REFERENCES economic_events(event_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_economic_allocation_close_finalization ON economic_allocation_close_bindings(finalization_id);
 `;
 
 /**
@@ -779,6 +796,21 @@ function validateAppendOnlyTriggerAuthority(db: DatabaseSync): void {
       name: 'billing_mapping_no_delete',
       table: 'billing_record_mapping_versions',
       sql: "CREATE TRIGGER billing_mapping_no_delete BEFORE DELETE ON billing_record_mapping_versions BEGIN SELECT RAISE(ABORT, 'billing mapping evidence is append-only'); END",
+    },
+    {
+      name: 'economic_allocation_close_bindings_append_only_update',
+      table: 'economic_allocation_close_bindings',
+      sql: "CREATE TRIGGER economic_allocation_close_bindings_append_only_update BEFORE UPDATE ON economic_allocation_close_bindings BEGIN SELECT RAISE(ABORT, 'exact economic allocation close bindings are append-only'); END",
+    },
+    {
+      name: 'economic_allocation_close_bindings_append_only_delete',
+      table: 'economic_allocation_close_bindings',
+      sql: "CREATE TRIGGER economic_allocation_close_bindings_append_only_delete BEFORE DELETE ON economic_allocation_close_bindings BEGIN SELECT RAISE(ABORT, 'exact economic allocation close bindings are append-only'); END",
+    },
+    {
+      name: 'economic_allocation_close_bindings_append_only_insert',
+      table: 'economic_allocation_close_bindings',
+      sql: "CREATE TRIGGER economic_allocation_close_bindings_append_only_insert BEFORE INSERT ON economic_allocation_close_bindings WHEN EXISTS (SELECT 1 FROM economic_allocation_close_bindings WHERE allocation_run_id = NEW.allocation_run_id) BEGIN SELECT RAISE(ABORT, 'exact economic allocation close bindings are append-only'); END",
     },
   ];
   const existingTables = new Set((db.prepare(
@@ -1064,6 +1096,22 @@ export function initializeEconomicSchema(db: DatabaseSync): void {
     ' BEFORE INSERT ON economic_allocation_lineage' +
     ' WHEN EXISTS (SELECT 1 FROM economic_allocation_lineage WHERE allocation_run_id = NEW.allocation_run_id AND item_kind = NEW.item_kind AND item_index = NEW.item_index AND source_event_id = NEW.source_event_id)' +
     ' BEGIN SELECT RAISE(ABORT, \'exact economic allocation lineage is append-only\'); END',
+  ).run();
+  db.prepare(
+    'CREATE TRIGGER IF NOT EXISTS economic_allocation_close_bindings_append_only_update' +
+    ' BEFORE UPDATE ON economic_allocation_close_bindings' +
+    ' BEGIN SELECT RAISE(ABORT, \'exact economic allocation close bindings are append-only\'); END',
+  ).run();
+  db.prepare(
+    'CREATE TRIGGER IF NOT EXISTS economic_allocation_close_bindings_append_only_delete' +
+    ' BEFORE DELETE ON economic_allocation_close_bindings' +
+    ' BEGIN SELECT RAISE(ABORT, \'exact economic allocation close bindings are append-only\'); END',
+  ).run();
+  db.prepare(
+    'CREATE TRIGGER IF NOT EXISTS economic_allocation_close_bindings_append_only_insert' +
+    ' BEFORE INSERT ON economic_allocation_close_bindings' +
+    ' WHEN EXISTS (SELECT 1 FROM economic_allocation_close_bindings WHERE allocation_run_id = NEW.allocation_run_id)' +
+    ' BEGIN SELECT RAISE(ABORT, \'exact economic allocation close bindings are append-only\'); END',
   ).run();
 }
 

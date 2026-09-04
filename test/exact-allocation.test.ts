@@ -188,6 +188,7 @@ test('Store exact allocation uses effective charges and discloses unresolved leg
     assert.deepEqual(result.totalByIdentity.map((item) => formatMoneyAmount(item.amount)), ['0.0000004']);
     assert.deepEqual(result.lines[0]!.sourceEventIds, ['economic:request:request:exact-allocation:charge']);
     assert.equal(result.conserves, true);
+    store.finalizeEconomicPeriod({ periodStartMs: 0, periodEndMs: 1 });
     const runId = store.saveExactAllocationRun(result, 2);
     assert.match(runId, /^economic:allocation:/);
     assert.deepEqual(store.exactAllocationRun(runId)?.result, result);

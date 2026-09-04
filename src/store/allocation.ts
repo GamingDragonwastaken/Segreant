@@ -21,10 +21,11 @@ import {
   type CostCentre,
 } from '../alloc/rules.ts';
 import { applyAllocation, type AllocationRunResult } from '../alloc/apply.ts';
-import { deserializeExactAllocationRun, serializeExactAllocationRun, type ExactAllocationRunResult, type SerializedExactAllocationRun } from '../alloc/exact.ts';
+import { deserializeExactAllocationRun, serializeExactAllocationRun, validateExactAllocationCloseBinding, type ExactAllocationCloseBinding, type ExactAllocationRunResult, type SerializedExactAllocationRun } from '../alloc/exact.ts';
 import { EconomicLedger } from '../economics/ledger.ts';
 import { addMoney, compareMoney, formatMoneyAmount, money, type Money } from '../economics/money.ts';
 import { economicEventRole } from '../economics/events.ts';
+import { closeFinalizationMetadata } from '../economics/close.ts';
 import type { RequestRow } from './db.ts';
 
 export function upsertCostCentre(
@@ -251,6 +252,7 @@ export interface ExactAllocationRunRecord {
   allocationRunId: string;
   computedAtMs: number;
   result: ExactAllocationRunResult;
+  closeBinding: ExactAllocationCloseBinding;
 }
 
 function exactRunId(serialized: SerializedExactAllocationRun): string {
@@ -300,6 +302,79 @@ function sameIds(left: readonly string[], right: readonly string[]): boolean {
   const a = [...left].sort();
   const b = [...right].sort();
   return a.length === b.length && a.every((id, index) => id === b[index]);
+}
+
+function allocationSourceIds(result: ExactAllocationRunResult): readonly string[] {
+  const ids = new Set<string>();
+  for (const bucket of result.totalByIdentity) {
+    for (const sourceEventId of bucket.sourceEventIds) ids.add(sourceEventId);
+  }
+  return [...ids].sort();
+}
+
+function closeBindingRow(db: DatabaseSync, allocationRunId: string): ExactAllocationCloseBinding {
+  const row = db.prepare(
+    `SELECT period_start_ms AS periodStartMs, period_end_ms AS periodEndMs,
+            finalization_id AS finalizationId, projection_digest AS projectionDigest,
+            event_count AS eventCount
+       FROM economic_allocation_close_bindings
+      WHERE allocation_run_id = ?`,
+  ).get(allocationRunId) as Record<string, unknown> | undefined;
+  if (row === undefined) {
+    throw new Error(`exact allocation run ${allocationRunId} has no immutable economic close binding`);
+  }
+  const binding = Object.freeze({
+    periodStartMs: Number(row.periodStartMs),
+    periodEndMs: Number(row.periodEndMs),
+    finalizationId: String(row.finalizationId),
+    projectionDigest: String(row.projectionDigest),
+    eventCount: Number(row.eventCount),
+  });
+  validateExactAllocationCloseBinding(binding, binding.periodStartMs, binding.periodEndMs);
+  return binding;
+}
+
+function validateCloseBinding(
+  ledger: EconomicLedger,
+  result: ExactAllocationRunResult,
+  binding: ExactAllocationCloseBinding,
+): ExactAllocationCloseBinding {
+  validateExactAllocationCloseBinding(binding, result.periodStartMs, result.periodEndMs);
+  const finalization = ledger.read(binding.finalizationId);
+  if (finalization === null || finalization.kind !== 'close_finalized') {
+    throw new Error(`exact allocation close binding ${binding.finalizationId} is not a finalized economic close`);
+  }
+  const metadata = closeFinalizationMetadata(finalization.metadata);
+  if (metadata.periodStartMs !== binding.periodStartMs || metadata.periodEndMs !== binding.periodEndMs
+      || metadata.projectionDigest !== binding.projectionDigest || metadata.eventCount !== binding.eventCount) {
+    throw new Error(`exact allocation close binding ${binding.finalizationId} does not match its immutable close metadata`);
+  }
+  const closeSources = new Set(finalization.sourceEventIds);
+  const missing = allocationSourceIds(result).filter((sourceEventId) => !closeSources.has(sourceEventId));
+  if (missing.length > 0) {
+    throw new Error(`exact allocation sources were not included in close ${binding.finalizationId}: ${missing.join(', ')}`);
+  }
+  return binding;
+}
+
+function activeCloseBinding(ledger: EconomicLedger, result: ExactAllocationRunResult): ExactAllocationCloseBinding {
+  const status = ledger.periodCloseStatus(result.periodStartMs, result.periodEndMs);
+  if (status.status !== 'finalized' || status.activeFinalizationId === null) {
+    throw new Error('exact allocation requires an active finalized economic close for its period');
+  }
+  const finalization = ledger.read(status.activeFinalizationId);
+  if (finalization === null || finalization.kind !== 'close_finalized') {
+    throw new Error('exact allocation active economic close is missing or invalid');
+  }
+  const metadata = closeFinalizationMetadata(finalization.metadata);
+  const binding: ExactAllocationCloseBinding = Object.freeze({
+    periodStartMs: metadata.periodStartMs,
+    periodEndMs: metadata.periodEndMs,
+    finalizationId: finalization.id,
+    projectionDigest: metadata.projectionDigest,
+    eventCount: metadata.eventCount,
+  });
+  return validateCloseBinding(ledger, result, binding);
 }
 
 /**
@@ -466,11 +541,14 @@ export function saveExactAllocationRun(db: DatabaseSync, result: ExactAllocation
         throw new Error(`different exact allocation result already exists for ${allocationRunId}`);
       }
       const existingResult = deserializeExactAllocationRun({ kind: 'exact_allocation_run', schemaVersion: 1, body: String(existing.resultJson), digest: String(existing.resultDigest) });
+      const existingBinding = closeBindingRow(db, allocationRunId);
+      validateCloseBinding(economicLedger, existingResult, existingBinding);
       validateExactAllocationSourceConservationWithLedger(economicLedger, existingResult);
       verifyExactAllocationLineage(db, allocationRunId, existingResult);
       runScript(db, 'COMMIT');
       return allocationRunId;
     }
+    const binding = activeCloseBinding(economicLedger, canonical);
     db.prepare(
       `INSERT INTO economic_allocation_runs
           (allocation_run_id, period_start_ms, period_end_ms, run_at_ms, computed_at_ms, complete, conserves, result_json, result_digest)
@@ -479,6 +557,11 @@ export function saveExactAllocationRun(db: DatabaseSync, result: ExactAllocation
     insertExactAllocationLineage(db, allocationRunId, canonical);
     validateExactAllocationSourceConservationWithLedger(economicLedger, canonical);
     verifyExactAllocationLineage(db, allocationRunId, canonical);
+    db.prepare(
+      `INSERT INTO economic_allocation_close_bindings
+          (allocation_run_id, period_start_ms, period_end_ms, finalization_id, projection_digest, event_count)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run(allocationRunId, binding.periodStartMs, binding.periodEndMs, binding.finalizationId, binding.projectionDigest, binding.eventCount);
     runScript(db, 'COMMIT');
     return allocationRunId;
   } catch (error) {
@@ -499,9 +582,12 @@ export function exactAllocationRun(db: DatabaseSync, allocationRunId: string): E
   const result = deserializeExactAllocationRun({ kind: 'exact_allocation_run', schemaVersion: 1, body: String(row.resultJson), digest: String(row.resultDigest) });
   if (String(row.allocationRunId) !== allocationRunId || Number(row.periodStartMs) !== result.periodStartMs || Number(row.periodEndMs) !== result.periodEndMs || Number(row.runAtMs) !== result.runAtMs || Boolean(row.complete) !== result.complete || Boolean(row.conserves) !== result.conserves) throw new Error(`exact allocation run ${allocationRunId} failed physical identity verification`);
   if (!Number.isSafeInteger(Number(row.computedAtMs))) throw new Error(`exact allocation run ${allocationRunId} has an invalid computedAt timestamp`);
-  validateExactAllocationSourceConservationWithLedger(new EconomicLedger(db), result);
+  const binding = closeBindingRow(db, allocationRunId);
+  const economicLedger = new EconomicLedger(db);
+  validateCloseBinding(economicLedger, result, binding);
+  validateExactAllocationSourceConservationWithLedger(economicLedger, result);
   verifyExactAllocationLineage(db, allocationRunId, result);
-  return { allocationRunId, computedAtMs: Number(row.computedAtMs), result };
+  return { allocationRunId, computedAtMs: Number(row.computedAtMs), result, closeBinding: binding };
 }
 
 /** Read bounded exact allocation history, newest computation first. */

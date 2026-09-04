@@ -74,6 +74,38 @@ export interface ExactAllocationRunResult {
   readonly excludedFrom: readonly ['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations'];
 }
 
+/** Immutable economic-period finalization that authorized one exact run. */
+export interface ExactAllocationCloseBinding {
+  readonly periodStartMs: number;
+  readonly periodEndMs: number;
+  readonly finalizationId: string;
+  readonly projectionDigest: string;
+  readonly eventCount: number;
+}
+
+/** Validate the shape of the immutable close authorization carried by a run. */
+export function validateExactAllocationCloseBinding(
+  value: ExactAllocationCloseBinding,
+  periodStartMs: number,
+  periodEndMs: number,
+): void {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('exact allocation close binding must be an object');
+  }
+  if (value.periodStartMs !== periodStartMs || value.periodEndMs !== periodEndMs) {
+    throw new Error('exact allocation close binding period does not match its result');
+  }
+  if (typeof value.finalizationId !== 'string' || value.finalizationId.trim().length === 0) {
+    throw new Error('exact allocation close binding finalizationId must be non-empty');
+  }
+  if (typeof value.projectionDigest !== 'string' || !/^[a-f0-9]{64}$/.test(value.projectionDigest)) {
+    throw new Error('exact allocation close binding projectionDigest must be a lowercase SHA-256 digest');
+  }
+  if (!Number.isSafeInteger(value.eventCount) || value.eventCount < 0) {
+    throw new Error('exact allocation close binding eventCount must be a non-negative safe integer');
+  }
+}
+
 const EXACT_EXCLUDED_FROM = ['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations'] as const;
 
 export interface SerializedExactAllocationRun {

@@ -13,6 +13,10 @@ const RULE: AllocationRule = {
   effectiveFromMs: 0, effectiveToMs: null, revokedAtMs: null, owner: null, note: null, createdAtMs: 0,
 };
 
+function closeAllocationPeriod(store: Store): void {
+  store.finalizeEconomicPeriod({ periodStartMs: 0, periodEndMs: 100, recordedAt: '1970-01-01T00:00:00.200Z' });
+}
+
 test('exact allocation persistence issues an idempotent allocated showback Claim', () => {
   const store = new Store(':memory:');
   try {
@@ -33,6 +37,7 @@ test('exact allocation persistence issues an idempotent allocated showback Claim
       sourceEventIds: [sourceId], amount: money('1.25', 'USD', 'list'), project: 'api', provider: 'anthropic', model: 'claude-opus-4-8', source: null, user: null, tsEpochMs: 10,
     }];
     const result = applyExactAllocation({ rows, rules: [RULE], costCentres: [CENTRE], periodStartMs: 0, periodEndMs: 100, runAtMs: 100 });
+    closeAllocationPeriod(store);
     const runId = store.saveExactAllocationRun(result, 200);
     const claimId = `claim:economic:allocation:${runId}`;
     const evidenceId = `evidence:economic:allocation:${runId}`;
@@ -73,6 +78,7 @@ test('incomplete exact allocation remains a partial kernel claim, not an exact c
       rows: [{ sourceEventIds: [sourceId], amount: money('2', 'USD', 'list'), project: 'other', provider: 'anthropic', model: 'claude-opus-4-8', source: null, user: null, tsEpochMs: 10 }],
       rules: [], costCentres: [], periodStartMs: 0, periodEndMs: 100, runAtMs: 100,
     });
+    closeAllocationPeriod(store);
     const runId = store.saveExactAllocationRun({ ...result, complete: false, unresolvedRequestIds: ['legacy-request'] }, 200);
     const claim = store.epistemic().readClaim(`claim:economic:allocation:${runId}`)!;
     assert.equal(claim.profile.coverage, 'partial');
@@ -103,6 +109,7 @@ test('exact allocation persistence refuses a result whose source charge total do
       rules: [RULE], costCentres: [CENTRE], periodStartMs: 0, periodEndMs: 100, runAtMs: 100,
     });
 
+    closeAllocationPeriod(store);
     assert.throws(
       () => store.saveExactAllocationRun(result, 200),
       /allocation.*source|source.*allocation|charge.*match|lineage/i,
@@ -134,6 +141,7 @@ test('exact allocation persistence refuses a non-charge source role', () => {
       rules: [RULE], costCentres: [CENTRE], periodStartMs: 0, periodEndMs: 100, runAtMs: 100,
     });
 
+    closeAllocationPeriod(store);
     assert.throws(
       () => store.saveExactAllocationRun(result, 200),
       /charge.*source|source.*charge|role/i,
@@ -174,6 +182,7 @@ test('exact allocation accepts a source charge plus its validated local correcti
       rules: [RULE], costCentres: [CENTRE], periodStartMs: 0, periodEndMs: 100, runAtMs: 100,
     });
 
+    closeAllocationPeriod(store);
     const runId = store.saveExactAllocationRun(result, 200);
     assert.ok(store.exactAllocationRun(runId));
   } finally {
