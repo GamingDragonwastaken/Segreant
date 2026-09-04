@@ -349,44 +349,50 @@ export class EconomicLedger {
         }
       }
     }
+    if (economicEventRole(value.kind) === 'adjustment' && value.amount !== null && value.amount.coefficient < 0n && value.sourceEventIds.length > 0) {
+      if (value.reversalOf === null && value.sourceEventIds.length !== 1) {
+        throw new Error(`economic event ${value.id} negative adjustments with multiple charge sources require an explicit reversalOf target`);
+      }
+      const targetId = value.reversalOf ?? value.sourceEventIds[0];
+      if (targetId !== undefined) {
+        const target = sources.get(targetId);
+        if (target !== undefined && economicEventRole(target.kind) === 'charge' && target.amount !== null) {
+          const priorAdjustments = this.db.prepare(
+            `SELECT s.event_id AS eventId
+             FROM economic_event_sources AS s
+             JOIN economic_events AS e ON e.event_id = s.event_id
+             WHERE s.source_event_id = ? AND s.event_id <> ?
+             ORDER BY s.event_id ASC`,
+          ).all(target.id, value.id) as unknown as { eventId?: unknown }[];
+          let adjusted = negateMoney(value.amount);
+          const adjustmentIds = [value.id];
+          for (const prior of priorAdjustments) {
+            if (typeof prior.eventId !== 'string') continue;
+            const recorded = this.readStored(prior.eventId);
+            if (recorded === null || recorded.amount === null) continue;
+            if (economicEventRole(recorded.kind) !== 'adjustment' || recorded.amount.coefficient >= 0n) continue;
+            const recordedTarget = recorded.reversalOf
+              ?? (recorded.sourceEventIds.length === 1 ? recorded.sourceEventIds[0] : null);
+            if (recordedTarget !== target.id) continue;
+            adjusted = addMoney(adjusted, negateMoney(recorded.amount));
+            adjustmentIds.push(recorded.id);
+          }
+          if (compareMoney(adjusted, target.amount) > 0) {
+            throw new Error(
+              `economic event ${value.id} adjustments total ${formatMoneyAmount(adjusted)} `
+              + `${target.amount.currency}, which exceeds the ${formatMoneyAmount(target.amount)} charge `
+              + `${target.id} (${adjustmentIds.sort().join(', ')})`,
+            );
+          }
+        }
+      }
+    }
     if (value.reversalOf !== null) {
       const target = sources.get(value.reversalOf);
       if (target === undefined) throw new Error(`economic event ${value.id} reversalOf must appear in sourceEventIds`);
       if (target.amount === null || value.amount === null) throw new Error(`economic event ${value.id} reversal requires monetary source and amount`);
       if (target.amount.currency !== value.amount.currency || target.amount.basis !== value.amount.basis) {
         throw new Error(`economic event ${value.id} reversal must use the source currency and basis`);
-      }
-
-      // ADJUSTMENTS CONSERVE AGAINST THEIR REFERENCED CHARGE (WP-C03/C04).
-      // A per-event bound is defeated by splitting a credit or discount across
-      // multiple events, so sum every adjustment already linked to this charge.
-      // This is intentionally limited to negative adjustments: positive tax,
-      // commitment, and true-up events are not credits against the charge.
-      if (economicEventRole(value.kind) === 'adjustment' && economicEventRole(target.kind) === 'charge' && value.amount.coefficient < 0n) {
-        const priorAdjustments = this.db.prepare(
-          `SELECT s.event_id AS eventId
-           FROM economic_event_sources AS s
-           JOIN economic_events AS e ON e.event_id = s.event_id
-           WHERE s.source_event_id = ? AND s.event_id <> ?
-           ORDER BY s.event_id ASC`,
-        ).all(target.id, value.id) as unknown as { eventId?: unknown }[];
-        let adjusted = negateMoney(value.amount);
-        const adjustmentIds = [value.id];
-        for (const prior of priorAdjustments) {
-          if (typeof prior.eventId !== 'string') continue;
-          const recorded = this.readStored(prior.eventId);
-          if (recorded === null || recorded.amount === null || recorded.reversalOf !== target.id) continue;
-          if (economicEventRole(recorded.kind) !== 'adjustment' || recorded.amount.coefficient >= 0n) continue;
-          adjusted = addMoney(adjusted, negateMoney(recorded.amount));
-          adjustmentIds.push(recorded.id);
-        }
-        if (compareMoney(adjusted, target.amount) > 0) {
-          throw new Error(
-            `economic event ${value.id} adjustments total ${formatMoneyAmount(adjusted)} `
-            + `${target.amount.currency}, which exceeds the ${formatMoneyAmount(target.amount)} charge `
-            + `${target.id} (${adjustmentIds.sort().join(', ')})`,
-          );
-        }
       }
 
       // A REVERSAL IS AN ACT, NOT A LABEL (WP-C04).

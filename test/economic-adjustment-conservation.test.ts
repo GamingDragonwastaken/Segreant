@@ -163,3 +163,60 @@ test('a compatible source-linked positive adjustment may omit reversalOf', () =>
     db.close();
   }
 });
+
+test('negative source-linked adjustments without reversalOf share the charge bound', () => {
+  const db = new DatabaseSync(':memory:');
+  try {
+    const ledger = new EconomicLedger(db);
+    const source = bill('event:bill:source-linked-credit');
+    ledger.append(source);
+    const makeCredit = (id: string, amount: string) => economicEvent({
+      id,
+      kind: 'credit_applied',
+      subject: source.subject,
+      occurredAt: source.occurredAt,
+      recordedAt: id.endsWith('2') ? '2026-08-04T00:00:00.000Z' : '2026-08-03T00:00:00.000Z',
+      amount: money(amount, 'USD', 'billed'),
+      sourceEventIds: [source.id],
+      reversalOf: null,
+      metadata: { invoiceRef: 'invoice-adjustment' },
+      schemaVersion: 1,
+    });
+    assert.equal(ledger.append(makeCredit('event:credit:source-linked:1', '-6')), 'inserted');
+    assert.throws(
+      () => ledger.append(makeCredit('event:credit:source-linked:2', '-5')),
+      /adjustments.*exceed|exceed.*charge/i,
+    );
+  } finally {
+    db.close();
+  }
+});
+
+test('negative adjustments with multiple charge sources require an explicit target', () => {
+  const db = new DatabaseSync(':memory:');
+  try {
+    const ledger = new EconomicLedger(db);
+    const first = bill('event:bill:multi-source:1');
+    const second = bill('event:bill:multi-source:2');
+    ledger.append(first);
+    ledger.append(second);
+    const ambiguous = economicEvent({
+      id: 'event:credit:multi-source:ambiguous',
+      kind: 'credit_applied',
+      subject: first.subject,
+      occurredAt: first.occurredAt,
+      recordedAt: '2026-08-03T00:00:00.000Z',
+      amount: money('-1', 'USD', 'billed'),
+      sourceEventIds: [first.id, second.id],
+      reversalOf: null,
+      metadata: { invoiceRef: 'invoice-adjustment' },
+      schemaVersion: 1,
+    });
+    assert.throws(
+      () => ledger.append(ambiguous),
+      /multiple.*charge|explicit.*target|reversalOf/i,
+    );
+  } finally {
+    db.close();
+  }
+});
