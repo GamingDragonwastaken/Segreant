@@ -331,18 +331,19 @@ Expand cost basis semantics to distinguish list, contracted, metered-estimated, 
 Implement an immutable economic event subledger for usage, estimated/provider charges, bills, prices/corrections, credits, discounts, commitments, tax, FX, allocations/reversals, true-ups and write-offs. Current balances are deterministic projections, never history rewritten in place.
 
 The current correction slice is intentionally bounded: `price_corrected` may
-target exactly one locally estimated/list-price charge, records typed previous
-and replacement Money, is additive and recorded after its source, and rejects a
-second correction for the same source. Provider/billed restatements and a
-multi-correction chain remain separate future semantics rather than being
-silently conflated with local repricing.
+target a locally estimated/list-price charge or the immediately preceding
+typed correction, records typed previous and replacement Money, is additive and
+recorded after its predecessor, and rejects a branching successor. Provider/
+billed restatements remain separate future semantics rather than being silently
+conflated with local repricing.
 
 The historical FX slice is likewise bounded: `fx_translated` retains one exact
-monetary source, an exact positive rational source-to-target rate, rate
-provenance, effective time and explicit `none` rounding. It preserves the
-source basis, refuses same-currency or non-terminating conversions, and cannot
-be recorded before or occur separately from its source. Provider FX policies,
-quantized conversions and consumer integration remain open.
+monetary source, an exact positive rational source-to-target rate, optional
+canonical rate validity interval, rate provenance, effective time and explicit
+`none` rounding. It preserves the source basis, refuses same-currency or
+non-terminating conversions, and cannot be recorded before or occur separately
+from its source. Provider FX policies, rate supersession/selection, quantized
+conversions and consumer integration remain open.
 
 The effective request projection is now also explicit: a validated local price
 correction is applied only to the `effective` control basis, retains source and

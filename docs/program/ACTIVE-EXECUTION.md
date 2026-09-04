@@ -7,9 +7,9 @@
 | | |
 | --- | --- |
 | Branch | `gpt56/magnum-opus-reconstruction` |
-| Current code checkpoint | `7cb630d8cc97d1de286147594aeca1aead629efb` — exact remote match; the preceding usage-role correction and its stale-fixture repair remain preserved in history |
-| Latest exact-code CI | Run `33890709112` — **success** across all configured jobs, head `7cb630d8cc97d1de286147594aeca1aead629efb`, observed 2026-09-04 |
-| Latest code tranche | Economic price-correction chains: typed linear predecessor links, exact per-link deltas, append/read closure validation, as-of effective-chain projection, and raw-event tamper refusal; chain **2/2**, full economic glob **80/80**, root lifecycle **1,428 total / 1,424 pass / 0 fail / 4 skips**, team-server **67/67**, root/browser TypeScript, build, and diff check passed |
+| Current code checkpoint | `560f3927bf4962a6ffad6ee6a16b95287aa9bf53` — exact remote match; the preceding price-chain and usage-role corrections remain preserved in history |
+| Latest exact-code CI | Run `33893736748` — **success** across all configured jobs, head `560f3927bf4962a6ffad6ee6a16b95287aa9bf53`, observed 2026-09-04 |
+| Latest code tranche | FX rate-validity provenance: optional canonical `[from,to)` interval survives exact-rate construction, FX metadata, ledger persistence and replay; malformed intervals fail closed; focused FX **5/5**, full economic glob **82/82**, root lifecycle **1,430 total / 1,426 pass / 0 fail / 4 skips**, team-server **67/67**, root/browser TypeScript, build, and diff check passed |
 | Working tree | The chain checkpoint is pushed and remotely green; this program-record reconciliation is the only pending follow-up |
 | Operating policy | One bounded slice → focused verification → compiler/build gate → one accounting update → one checkpoint. Reuse green evidence; do not repeat full suites, cleanup, or unchanged reads without a new hypothesis. |
 
@@ -21,7 +21,7 @@
 
 ## Active frontier
 
-**WP-C02/C04/R06 — next economic slice.** Exact allocation persistence now has source conservation and finalized-close binding, replay ordering is pinned, `usage_observed` is refused as a monetary event/allocation source, and local price corrections form a typed append-only chain. Remaining economic gaps are per-link basis agreement, role auditing, adjustment-to-charge conservation beyond the covered negative cases, FX-rate supersession and provenance, corrected-charge-to-FX composition, broader historical/as-of selection, finalized-close policy for later corrections, receipt/team reconciliation, and recovery from the bricked ledger state.
+**WP-C02/C04/R06 — next economic slice.** Exact allocation persistence now has source conservation and finalized-close binding, replay ordering is pinned, `usage_observed` is refused as a monetary event/allocation source, local price corrections form a typed append-only chain, and optional FX rate-validity intervals survive construction/persistence/replay. Remaining economic gaps are per-link basis agreement, role auditing, adjustment-to-charge conservation beyond the covered negative cases, FX-rate supersession/selection, corrected-charge-to-FX composition, broader historical/as-of selection, finalized-close policy for later corrections, receipt/team reconciliation, and recovery from the bricked ledger state.
 
 **WP-B01/R04/R05 — parallel kernel frontier.** Generic negative claims now require complete cited Evidence over event type, target scope, and the entire interval. Direct Claim persistence has trust ceilings for integrity/authenticity/coverage. Remaining typed witness production and other negative-claim paths require new reproduction.
 
@@ -29,7 +29,7 @@
 
 ## Next exact action
 
-Investigate and reproduce FX-rate provenance/as-of selection or per-link basis agreement at the ledger boundary. Write one RED test, verify the intended failure, implement the smallest boundary guard, rerun only the affected economic tranche and compiler domains, then checkpoint and update these records once.
+Investigate and reproduce corrected-charge-to-FX composition or FX-rate supersession/selection at the ledger boundary. Write one RED test, verify the intended failure, implement the smallest boundary guard, rerun only the affected economic tranche and compiler domains, then checkpoint and update these records once.
 
 ## Known blockers
 
