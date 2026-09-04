@@ -13,7 +13,8 @@ import { instant, intervalContains, type Instant } from '../epistemic/time.ts';
 import { addMoney, compareMoney, formatMoneyAmount, money, moneyFromJson, negateMoney, subtractMoney, type Money } from './money.ts';
 import { economicEvent, economicEventRole, type EconomicEvent, type EconomicEventInput, type EconomicEventRole } from './events.ts';
 import { deserializeEconomicEvent, serializeEconomicEvent } from './serialization.ts';
-import { applyExactRate, rateFromJson } from './rate.ts';
+import { applyExactRate, rateFromJson, type HistoricalRateBook } from './rate.ts';
+import { translateEffectiveChargeFromRateBook, type EffectiveFxChargeProjection } from './fx.ts';
 import { canonicalPeriod, closeFinalizationMetadata, closeProjectionDigest, closeReopenMetadata, isCloseKind, type CloseFinalizationMetadata, type CloseProjectionBalance, type CloseReopenMetadata, type EconomicPeriod } from './close.ts';
 
 export type EconomicAppendResult = 'inserted' | 'duplicate';
@@ -1089,6 +1090,35 @@ export class EconomicLedger {
   effectiveChargeFor(sourceEventId: string, asOf?: Instant): EffectiveEconomicCharge | null {
     if (typeof sourceEventId !== 'string' || sourceEventId.trim().length === 0) throw new Error('economic source event id is required');
     return this.effectiveChargesFor([sourceEventId], asOf).get(sourceEventId) ?? null;
+  }
+
+  /**
+   * Translate the effective correction projection at one replay boundary.
+   * This is deliberately a read model rather than an `fx_translated` event:
+   * the latter has one raw monetary source and cannot truthfully claim to
+   * contain a later price correction in that source amount.
+   */
+  effectiveFxChargeFor(
+    sourceEventId: string,
+    targetUnit: string,
+    rateBook: HistoricalRateBook,
+    effectiveAt?: Instant,
+    asOf?: Instant,
+  ): EffectiveFxChargeProjection | null {
+    const source = this.read(sourceEventId);
+    if (source === null) return null;
+    const effective = this.effectiveChargeFor(sourceEventId, asOf);
+    if (effective === null) return null;
+    return translateEffectiveChargeFromRateBook({
+      source,
+      effectiveAmount: effective.amount,
+      eventIds: effective.eventIds,
+      sourceBases: effective.sourceBases,
+      targetUnit,
+      rateBook,
+      effectiveAt: effectiveAt ?? source.occurredAt,
+      ...(asOf === undefined ? {} : { rateAsOf: asOf }),
+    });
   }
 
   project(asOf?: Instant): EconomicProjection {
