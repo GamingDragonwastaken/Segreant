@@ -136,6 +136,11 @@ function canonicalHistoricalObservation(value: HistoricalRateObservationInput): 
   return Object.freeze({ id, rate, rateSource, recordedAt, supersedes });
 }
 
+/** Canonicalize one persisted historical observation without resolving its edge. */
+export function historicalRateObservation(value: HistoricalRateObservationInput): HistoricalRateObservation {
+  return canonicalHistoricalObservation(value);
+}
+
 function sameValidity(a: TimeInterval, b: TimeInterval): boolean {
   return a.from === b.from && a.to === b.to;
 }
@@ -148,7 +153,7 @@ function sameValidity(a: TimeInterval, b: TimeInterval): boolean {
  */
 export function historicalRateBook(observations: readonly HistoricalRateObservationInput[]): HistoricalRateBook {
   if (!Array.isArray(observations)) throw new Error('historical rate observations must be an array');
-  const canonical = observations.map(canonicalHistoricalObservation);
+  const canonical = observations.map(historicalRateObservation);
   const byId = new Map<string, HistoricalRateObservation>();
   for (const observation of canonical) {
     if (byId.has(observation.id)) throw new Error(`duplicate historical rate observation: ${observation.id}`);

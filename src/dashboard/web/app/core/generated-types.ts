@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: 08d4bdd8ad0d2d59d612d788ee9c5b28a1ef54012f421206ca8b40fb42701605 */
+/** Source SHA-256: dcf93378f08bb3529641a0baa7729adc54b7138ba0e74aa03503b7c42682b169 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -374,6 +374,18 @@ export interface EconomicCoverage extends EconomicMoney {
   complete: boolean;
 }
 
+export interface EconomicTranslationCoverage extends EconomicMoney {
+  targetUnit: string;
+  asOf: string | null;
+  effectiveAt: string | null;
+  eventIds: string[];
+  sourceBases: string[];
+  requestCount: number;
+  unresolvedRequests: number;
+  complete: boolean;
+  rateSources: string[];
+}
+
 export interface EconomicBalance extends EconomicMoney {
   role: string;
   eventIds: string[];
@@ -418,6 +430,7 @@ export interface EconomicPayload {
     endMs: number;
     requestCoverage: EconomicCoverage;
   };
+  translation: EconomicTranslationCoverage | null;
   projection: {
     asOf: string | null;
     eventIds: string[];

@@ -37,6 +37,7 @@ import type {
   BillingPayload,
   EconomicMoney,
   EconomicCoverage,
+  EconomicTranslationCoverage,
   EconomicBalance,
   EconomicMoneyJson,
   EconomicAttributionPayload,
@@ -88,6 +89,7 @@ export type {
   BillingPayload,
   EconomicMoney,
   EconomicCoverage,
+  EconomicTranslationCoverage,
   EconomicBalance,
   EconomicMoneyJson,
   EconomicAttributionPayload,
@@ -192,6 +194,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return payload as T;
 }
 
+type EconomicQueryOptions = {
+  targetCurrency?: string;
+  asOf?: string;
+  effectiveAt?: string;
+};
+
 export const api = {
   health: () => request<HealthPayload>(routePath('health')),
   overview: (range: string, signal?: AbortSignal) => request<Overview>(
@@ -200,9 +208,13 @@ export const api = {
   ),
   billing: () => request<BillingPayload>(routePath('billing')),
   allocation: () => request<AllocationPayload>(routePath('allocation')),
-  economic: (range: '30d' | 'all' = '30d') => request<EconomicPayload>(
-    range === 'all' ? `${routePath('economic')}?all=1` : `${routePath('economic')}?days=30`,
-  ),
+  economic: (range: '30d' | 'all' = '30d', options: EconomicQueryOptions = {}) => {
+    const params = new URLSearchParams(range === 'all' ? { all: '1' } : { days: '30' });
+    if (options.targetCurrency !== undefined) params.set('targetCurrency', options.targetCurrency);
+    if (options.asOf !== undefined) params.set('asOf', options.asOf);
+    if (options.effectiveAt !== undefined) params.set('effectiveAt', options.effectiveAt);
+    return request<EconomicPayload>(`${routePath('economic')}?${params.toString()}`);
+  },
   causal: (studyId?: string) => request<CausalPayload>(
     studyId ? routePath('causal') + '?study=' + encodeURIComponent(studyId) : routePath('causal'),
   ),

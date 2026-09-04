@@ -10,6 +10,8 @@
 
 import type { RequestRow } from './db.ts';
 import type { EconomicLedger } from '../economics/ledger.ts';
+import type { EffectiveFxChargeProjection } from '../economics/fx.ts';
+import type { Instant } from '../epistemic/time.ts';
 import { compareMoney, moneyFromJson, type EconomicBasis, type Money } from '../economics/money.ts';
 import { economicAttributionFromRows, economicAttributionNumber, type EconomicAttribution } from '../economics/attribution.ts';
 import { economicEventRole, type EconomicEventKind } from '../economics/events.ts';
@@ -32,9 +34,20 @@ export interface EffectiveRequestRow {
   compatibilityCostUsd: number;
   /** Effective exact charge, or null when this legacy row has no event. */
   effectiveAmount: Money | null;
+  /** Explicit target-currency projection; null when no FX policy was requested. */
+  fxTranslation: EffectiveFxChargeProjection | null;
   sourceBases: readonly EconomicBasis[];
   sourceEventIds: readonly string[];
   unresolvedReason: EconomicRequestUnresolvedReason | null;
+}
+
+export interface EffectiveRequestOptions {
+  /** Recorded-time knowledge boundary for both corrections and FX evidence. */
+  readonly asOf?: Instant;
+  /** Explicit target currency; omitted means no FX translation is performed. */
+  readonly targetUnit?: string;
+  /** Optional modeled effective instant; defaults to the source occurrence. */
+  readonly effectiveAt?: Instant;
 }
 
 export interface EconomicSessionUnit {
@@ -124,7 +137,11 @@ function assertMatches(request: RequestRow, event: {
 }
 
 /** Join one request row to its exact effective charge, failing closed on drift. */
-export function effectiveRequestRow(request: RequestRow, ledger: EconomicLedger): EffectiveRequestRow {
+export function effectiveRequestRow(
+  request: RequestRow,
+  ledger: EconomicLedger,
+  options: EffectiveRequestOptions = {},
+): EffectiveRequestRow {
   const sourceId = requestEconomicEventId(request.requestId);
   const source = ledger.read(sourceId);
   const base = {
@@ -144,17 +161,35 @@ export function effectiveRequestRow(request: RequestRow, ledger: EconomicLedger)
     return Object.freeze({
       ...base,
       effectiveAmount: null,
+      fxTranslation: null,
       sourceBases: Object.freeze([]),
       sourceEventIds: Object.freeze([]),
       unresolvedReason: 'no_exact_economic_event',
     });
   }
   assertMatches(request, source);
-  const effective = ledger.effectiveChargeFor(sourceId);
-  if (effective === null) throw new Error(`economic request event ${sourceId} has no effective charge projection`);
+  const effectiveAsOf = options.targetUnit === undefined ? options.asOf : (options.asOf ?? source.recordedAt);
+  const effective = ledger.effectiveChargeFor(sourceId, effectiveAsOf);
+  if (effective === null) {
+    if (options.asOf !== undefined && Date.parse(source.recordedAt) > Date.parse(options.asOf)) {
+      return Object.freeze({
+        ...base,
+        effectiveAmount: null,
+        fxTranslation: null,
+        sourceBases: Object.freeze([]),
+        sourceEventIds: Object.freeze([]),
+        unresolvedReason: 'no_exact_economic_event',
+      });
+    }
+    throw new Error(`economic request event ${sourceId} has no effective charge projection`);
+  }
+  const fxTranslation = options.targetUnit === undefined
+    ? null
+    : ledger.effectiveFxChargeFromHistoricalRates(sourceId, options.targetUnit, options.effectiveAt, effectiveAsOf);
   return Object.freeze({
     ...base,
     effectiveAmount: effective.amount,
+    fxTranslation,
     sourceBases: Object.freeze([...effective.sourceBases]),
     sourceEventIds: Object.freeze([...effective.eventIds]),
     unresolvedReason: null,
@@ -162,9 +197,13 @@ export function effectiveRequestRow(request: RequestRow, ledger: EconomicLedger)
 }
 
 /** Build the exact request read model without changing legacy request rows. */
-export function effectiveRequestRows(rows: readonly RequestRow[], ledger: EconomicLedger): EffectiveRequestRow[] {
+export function effectiveRequestRows(
+  rows: readonly RequestRow[],
+  ledger: EconomicLedger,
+  options: EffectiveRequestOptions = {},
+): EffectiveRequestRow[] {
   if (!Array.isArray(rows)) throw new Error('economic request rows must be an array');
-  return rows.map((row) => effectiveRequestRow(row, ledger));
+  return rows.map((row) => effectiveRequestRow(row, ledger, options));
 }
 
 /** Group exact request rows by session while preserving compatibility totals. */

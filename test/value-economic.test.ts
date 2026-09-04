@@ -312,6 +312,7 @@ function modelRow(
     via: 'proxy',
     compatibilityCostUsd,
     effectiveAmount: exactAmount === null ? null : money(exactAmount, 'USD', 'effective'),
+    fxTranslation: null,
     sourceBases: exactAmount === null ? [] : ['list'],
     sourceEventIds: exactAmount === null ? [] : [`economic:request:${id}:charge`],
     unresolvedReason: exactAmount === null ? 'no_exact_economic_event' : null,

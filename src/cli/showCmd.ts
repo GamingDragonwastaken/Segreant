@@ -16,6 +16,7 @@ import { isDeclaredAttribution } from '../value/characterization.ts';
 import { C, color, usd, num, pct, printJson } from './ui.ts';
 import { stringifyJson } from '../util/json.ts';
 import { rangeFor, type Flags } from './flags.ts';
+import { instant, type Instant } from '../epistemic/time.ts';
 
 export function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void {
   const cfg = loadConfig();
@@ -173,14 +174,46 @@ export function cmdSources(flags: Flags): void {
 }
 
 export function cmdExport(flags: Flags): void {
+  const rawTargetUnit = flags['target-currency'];
+  const targetUnit = rawTargetUnit === undefined
+    ? undefined
+    : (typeof rawTargetUnit === 'string' && rawTargetUnit.trim().length > 0
+      ? rawTargetUnit.trim()
+      : (() => { throw new Error('--target-currency must be a non-empty currency/unit'); })());
+  const rawAsOf = flags['as-of'];
+  const asOf = rawAsOf === undefined
+    ? undefined
+    : (typeof rawAsOf === 'string'
+      ? instant(rawAsOf)
+      : (() => { throw new Error('--as-of must be a canonical UTC ISO-8601 instant'); })());
+  const rawEffectiveAt = flags['effective-at'];
+  const effectiveAt: Instant | undefined = rawEffectiveAt === undefined
+    ? undefined
+    : (typeof rawEffectiveAt === 'string'
+      ? instant(rawEffectiveAt)
+      : (() => { throw new Error('--effective-at must be a canonical UTC ISO-8601 instant'); })());
+  if (effectiveAt !== undefined && targetUnit === undefined) {
+    throw new Error('--effective-at requires --target-currency');
+  }
+  const all = flags.all === true;
+  const rawDays = flags.days;
+  const days = rawDays === undefined
+    ? 30
+    : (typeof rawDays === 'string' && rawDays.trim().length > 0 ? Number(rawDays) : NaN);
+  if (!all && (!Number.isFinite(days) || days <= 0 || days > 3650)) {
+    throw new Error('--days must be a finite number between 0 and 3650 (or pass --all)');
+  }
   const store = new Store(dbPath());
   const now = Date.now();
   const dayMs = 24 * 60 * 60 * 1000;
-  const days = flags.days ? Number(flags.days) : 30;
-  const startMs = flags.all ? 0 : now - days * dayMs;
-  const economic = flags.economic === true || flags['exact-money'] === true;
+  const startMs = all ? 0 : now - days * dayMs;
+  const economic = flags.economic === true || flags['exact-money'] === true || targetUnit !== undefined || asOf !== undefined;
   const rows = store.requestsInRange(startMs, now + 1000);
-  const economicRows = economic ? store.economicRequestsInRange(startMs, now + 1000) : null;
+  const economicRows = economic ? store.economicRequestsInRange(startMs, now + 1000, {
+    ...(targetUnit === undefined ? {} : { targetUnit }),
+    ...(asOf === undefined ? {} : { asOf }),
+    ...(effectiveAt === undefined ? {} : { effectiveAt }),
+  }) : null;
   const asJson = flags.json === true || flags.format === 'json';
   const out = economic
     ? (asJson ? economicRequestsToJson(economicRows!) : economicRequestsToCsv(economicRows!))

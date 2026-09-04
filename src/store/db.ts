@@ -63,12 +63,13 @@ import {
   groupEconomicModels,
   groupEconomicSeries,
   type EffectiveRequestRow,
+  type EffectiveRequestOptions,
   type EconomicSessionUnit,
   type EconomicSessionUserUnit,
   type EconomicModelUnit,
   type EconomicSeriesPoint,
 } from './economicReadModel.ts';
-import { buildEconomicRequestExportRows, type EconomicRequestExportRow } from '../export/economic.ts';
+import { buildEconomicRequestExportRows, type EconomicRequestExportOptions, type EconomicRequestExportRow } from '../export/economic.ts';
 import { billingReconciliationClaim, buildBillingKernelIssuance, buildOpenAiCostsKernelIssuance, buildOpenAiReconciliationKernelIssuance, type BillingKernelPersistenceResult, type BillingReconciliationClaimInput, type OpenAiCostsKernelPersistenceResult, type OpenAiReconciliationKernelPersistenceResult } from '../billing/epistemic.ts';
 import type {
   RealizationCostSync,
@@ -87,6 +88,7 @@ export type {
 export type { CodingRealizationKernelPersistenceResult } from '../value/epistemic.ts';
 export type {
   EffectiveRequestRow,
+  EffectiveRequestOptions,
   EconomicRequestUnresolvedReason,
   EconomicSessionUnit,
   EconomicSessionUserUnit,
@@ -1580,8 +1582,12 @@ export class Store {
   }
 
   /** Exact-safe request export rows with original/effective Money and lineage. */
-  economicRequestsInRange(startMs: number, endMs: number): EconomicRequestExportRow[] {
-    return buildEconomicRequestExportRows(this.requestsInRange(startMs, endMs), this.economicLedger);
+  economicRequestsInRange(
+    startMs: number,
+    endMs: number,
+    options: EconomicRequestExportOptions = {},
+  ): EconomicRequestExportRow[] {
+    return buildEconomicRequestExportRows(this.requestsInRange(startMs, endMs), this.economicLedger, options);
   }
 
   /**
@@ -1592,14 +1598,14 @@ export class Store {
   economicRequestRowsInRange(
     startMs: number,
     endMs: number,
-    options: { project?: string; liveOnly?: boolean } = {},
+    options: EffectiveRequestOptions & { project?: string; liveOnly?: boolean } = {},
   ): EffectiveRequestRow[] {
     const rows = this.requestsInRange(startMs, endMs).filter((row) => {
       if (options.project !== undefined && row.projectCanonical !== this.canonicalProject(options.project)) return false;
       if (options.liveOnly === true && (row.via ?? 'proxy') !== 'proxy') return false;
       return true;
     });
-    return effectiveRequestRows(rows, this.economicLedger);
+    return effectiveRequestRows(rows, this.economicLedger, options);
   }
 
   insertCommit(c: {

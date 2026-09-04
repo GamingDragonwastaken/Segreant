@@ -41,6 +41,8 @@ import { describeSourceDepth } from '../value/sourceDepth.ts';
 import { buildGuide } from '../guide.ts';
 import { computeAlerts } from '../alerts/detect.ts';
 import { requestsToCsv } from '../export/csv.ts';
+import { economicRequestsToCsv } from '../export/economic.ts';
+import { instant, type Instant } from '../epistemic/time.ts';
 import { DIMENSIONS } from '../value/characterization.ts';
 import { IMPORTERS, emptyImportSummary, type ImportSummary } from '../connect/importShared.ts';
 import { importClaudeCode, defaultClaudeCodeRoot } from '../connect/claudeCode.ts';
@@ -598,11 +600,40 @@ export function handleEconomic({ res, url, store }: RouteContext): void {
     if (!all && (!Number.isFinite(days) || days <= 0 || days > 3650)) {
       return json(res, 400, { error: 'days must be a finite number between 0 and 3650 (or pass all=1)' });
     }
+    const targetCurrency = url.searchParams.get('targetCurrency');
+    if (targetCurrency !== null && targetCurrency.trim().length === 0) {
+      return json(res, 400, { error: 'targetCurrency must be non-empty when supplied' });
+    }
+    let asOf: Instant | undefined;
+    const rawAsOf = url.searchParams.get('asOf');
+    if (rawAsOf !== null) {
+      try {
+        asOf = instant(rawAsOf);
+      } catch (error) {
+        return json(res, 400, { error: `asOf must be a canonical UTC ISO-8601 instant: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    }
+    let effectiveAt: Instant | undefined;
+    const rawEffectiveAt = url.searchParams.get('effectiveAt');
+    if (rawEffectiveAt !== null) {
+      try {
+        effectiveAt = instant(rawEffectiveAt);
+      } catch (error) {
+        return json(res, 400, { error: `effectiveAt must be a canonical UTC ISO-8601 instant: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    }
     const now = Date.now();
     const dayMs = 24 * 60 * 60 * 1000;
     const startMs = all ? 0 : now - days * dayMs;
     const endMs = now + 1000;
-    return json(res, 200, buildEconomicReport(store, { startMs, endMs, demo: isDemo() }));
+    return json(res, 200, buildEconomicReport(store, {
+      startMs,
+      endMs,
+      demo: isDemo(),
+      ...(targetCurrency === null ? {} : { targetUnit: targetCurrency.trim() }),
+      ...(asOf === undefined ? {} : { asOf }),
+      ...(effectiveAt === undefined ? {} : { effectiveAt }),
+    }));
   } catch (err) {
     return json(res, 500, { error: String(err) });
   }
@@ -649,7 +680,26 @@ export function handleExportCsv({ res, url, store }: RouteContext): void {
   const safe = valid.includes(range) ? range : '30d';
   try {
     const { startMs, endMs } = resolveRange(safe, Date.now());
-    const csv = requestsToCsv(store.requestsInRange(startMs, endMs));
+    const economic = url.searchParams.get('economic') === '1' || url.searchParams.get('economic') === 'true';
+    const targetUnit = url.searchParams.get('targetCurrency');
+    const rawAsOf = url.searchParams.get('asOf');
+    if (targetUnit !== null && targetUnit.trim().length === 0) {
+      return json(res, 400, { error: 'targetCurrency must be non-empty when supplied' });
+    }
+    let asOf: string | undefined;
+    if (rawAsOf !== null) {
+      try {
+        asOf = instant(rawAsOf);
+      } catch (error) {
+        return json(res, 400, { error: `asOf must be a canonical UTC ISO-8601 instant: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    }
+    const csv = economic
+      ? economicRequestsToCsv(store.economicRequestsInRange(startMs, endMs, {
+        ...(targetUnit === null ? {} : { targetUnit }),
+        ...(asOf === undefined ? {} : { asOf }),
+      }))
+      : requestsToCsv(store.requestsInRange(startMs, endMs));
     res.writeHead(200, {
       'content-type': 'text/csv; charset=utf-8',
       'content-disposition': `attachment; filename="fiscus-${safe}.csv"`,

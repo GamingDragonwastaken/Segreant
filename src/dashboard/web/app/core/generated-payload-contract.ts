@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "08d4bdd8ad0d2d59d612d788ee9c5b28a1ef54012f421206ca8b40fb42701605";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "dcf93378f08bb3529641a0baa7729adc54b7138ba0e74aa03503b7c42682b169";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -683,6 +683,78 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "type": "boolean"
     }
   ],
+  "EconomicTranslationCoverage": [
+    {
+      "name": "amount",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "coefficient",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "scale",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "currency",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "basis",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "targetUnit",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "asOf",
+      "optional": false,
+      "type": "string | null"
+    },
+    {
+      "name": "effectiveAt",
+      "optional": false,
+      "type": "string | null"
+    },
+    {
+      "name": "eventIds",
+      "optional": false,
+      "type": "string[]"
+    },
+    {
+      "name": "sourceBases",
+      "optional": false,
+      "type": "string[]"
+    },
+    {
+      "name": "requestCount",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "unresolvedRequests",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "complete",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "rateSources",
+      "optional": false,
+      "type": "string[]"
+    }
+  ],
   "EconomicBalance": [
     {
       "name": "amount",
@@ -846,6 +918,11 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "window",
       "optional": false,
       "type": "{"
+    },
+    {
+      "name": "translation",
+      "optional": false,
+      "type": "EconomicTranslationCoverage | null"
     },
     {
       "name": "projection",

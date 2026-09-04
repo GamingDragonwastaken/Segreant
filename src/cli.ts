@@ -54,7 +54,8 @@ function cmdHelp(): void {
                           causal claims; this command never changes provider routing.
     today | week | month  Show spend for a window      (--json)
     economic              Inspect exact economic events, roles, bases, and legacy coverage
-                          (--days N | --all, --json). Period controls use canonical
+                          (--days N | --all, --target-currency UNIT, --as-of <ISO>,
+                          --effective-at <ISO>, --json). Period controls use canonical
                           UTC instants: --close-status|--finalize|--reopen
                           --from <ISO> --to <ISO> [--recorded-at <ISO>]
                           [--reason <text>] [--as-of <ISO>] [--json]
@@ -141,6 +142,7 @@ function cmdHelp(): void {
                           (cron it; sends ONLY alert metadata — never prompts/code/keys)
     export                Export the request ledger for BI/finance (--csv default | --json,
                           --economic for exact Money/lineage, --days N | --all,
+                          --target-currency UNIT, --as-of <ISO>, --effective-at <ISO>,
                           --out <file>; otherwise stdout)
     init                  Write default config + print setup steps
     doctor                First-run health check: config, DB, proxy, caps, data quality

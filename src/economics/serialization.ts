@@ -3,10 +3,25 @@
 import { createHash } from 'node:crypto';
 import { canonicalJson } from '../epistemic/serialization.ts';
 import { economicEvent, economicEventFromJson, economicEventToJson, type EconomicEvent } from './events.ts';
+import {
+  historicalRateObservation,
+  historicalRateObservationFromJson,
+  historicalRateObservationToJson,
+  type HistoricalRateObservation,
+  type HistoricalRateObservationInput,
+} from './rate.ts';
 
 export interface SerializedEconomicEvent {
   readonly kind: 'economic_event';
   readonly schemaVersion: number;
+  readonly id: string;
+  readonly body: string;
+  readonly digest: string;
+}
+
+export interface SerializedHistoricalRateObservation {
+  readonly kind: 'historical_fx_rate_observation';
+  readonly schemaVersion: 1;
   readonly id: string;
   readonly body: string;
   readonly digest: string;
@@ -45,5 +60,41 @@ export function deserializeEconomicEvent(record: SerializedEconomicEvent): Econo
   const item = economicEventFromJson(parsed);
   if (item.id !== record.id || item.schemaVersion !== record.schemaVersion) throw new Error('serialized economic event identity/schemaVersion mismatch');
   if (serializeEconomicEvent(item).body !== record.body) throw new Error('serialized economic event body is not canonical for its semantic value');
+  return item;
+}
+
+/** Serialize one canonical historical FX observation for an immutable row. */
+export function serializeHistoricalRateObservation(
+  value: HistoricalRateObservation | HistoricalRateObservationInput,
+): SerializedHistoricalRateObservation {
+  const item = historicalRateObservation(value);
+  const body = canonicalJson(historicalRateObservationToJson(item));
+  return Object.freeze({
+    kind: 'historical_fx_rate_observation' as const,
+    schemaVersion: 1 as const,
+    id: item.id,
+    body,
+    digest: digest(body),
+  });
+}
+
+/** Verify and deserialize one stored historical FX observation envelope. */
+export function deserializeHistoricalRateObservation(
+  record: SerializedHistoricalRateObservation,
+): HistoricalRateObservation {
+  if (record === null || typeof record !== 'object' || Array.isArray(record)) throw new Error('serialized historical FX rate observation must be an object');
+  for (const key of Object.keys(record)) if (!ENVELOPE_KEYS.has(key)) throw new Error(`serialized historical FX rate observation contains unknown field: ${key}`);
+  requireEnvelopeFields(record as object);
+  if (record.kind !== 'historical_fx_rate_observation') throw new Error('serialized historical FX rate observation kind is invalid');
+  if (record.schemaVersion !== 1) throw new Error('serialized historical FX rate observation schemaVersion must be 1');
+  if (typeof record.id !== 'string' || record.id.trim().length === 0) throw new Error('serialized historical FX rate observation id must be non-empty');
+  if (typeof record.body !== 'string' || record.body.length === 0) throw new Error('serialized historical FX rate observation body must be non-empty');
+  if (typeof record.digest !== 'string' || record.digest !== digest(record.body)) throw new Error('serialized historical FX rate observation digest verification failed');
+  let parsed: unknown;
+  try { parsed = JSON.parse(record.body); } catch { throw new Error('serialized historical FX rate observation body is invalid JSON'); }
+  if (canonicalJson(parsed) !== record.body) throw new Error('serialized historical FX rate observation body is not canonical JSON');
+  const item = historicalRateObservationFromJson(parsed);
+  if (item.id !== record.id) throw new Error('serialized historical FX rate observation identity mismatch');
+  if (serializeHistoricalRateObservation(item).body !== record.body) throw new Error('serialized historical FX rate observation body is not canonical for its semantic value');
   return item;
 }

@@ -717,6 +717,22 @@ CREATE INDEX IF NOT EXISTS idx_economic_events_subject ON economic_events(subjec
 CREATE INDEX IF NOT EXISTS idx_economic_events_occurred ON economic_events(occurred_at, event_id);
 CREATE INDEX IF NOT EXISTS idx_economic_event_sources_source ON economic_event_sources(source_event_id, event_id);
 
+-- Historical FX knowledge is evidence, not mutable configuration. The
+-- canonical observation and digest are retained together, while recorded_at and the
+-- explicit predecessor edge are queryable side columns whose values are
+-- revalidated against the canonical JSON at every read boundary.
+CREATE TABLE IF NOT EXISTS economic_fx_rate_observations (
+  observation_id     TEXT PRIMARY KEY NOT NULL,
+  recorded_at        TEXT NOT NULL,
+  supersedes_id      TEXT,
+  observation_json   TEXT NOT NULL,
+  observation_digest TEXT NOT NULL,
+  FOREIGN KEY (supersedes_id) REFERENCES economic_fx_rate_observations(observation_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_economic_fx_rate_observations_recorded
+  ON economic_fx_rate_observations(recorded_at, observation_id);
+
 CREATE TABLE IF NOT EXISTS economic_allocation_runs (
   allocation_run_id TEXT PRIMARY KEY NOT NULL,
   period_start_ms INTEGER NOT NULL,
@@ -767,6 +783,7 @@ CREATE INDEX IF NOT EXISTS idx_economic_allocation_close_finalization ON economi
  */
 export function configureDatabaseConnection(db: DatabaseSync): void {
   db.prepare('PRAGMA recursive_triggers = ON').run();
+  db.prepare('PRAGMA foreign_keys = ON').run();
 }
 
 /** Reject tampered append-only metadata before idempotent DDL can repair it. */
@@ -786,6 +803,21 @@ function validateAppendOnlyTriggerAuthority(db: DatabaseSync): void {
       name: 'economic_events_append_only_insert',
       table: 'economic_events',
       sql: "CREATE TRIGGER economic_events_append_only_insert BEFORE INSERT ON economic_events WHEN EXISTS (SELECT 1 FROM economic_events WHERE event_id = NEW.event_id) BEGIN SELECT RAISE(ABORT, 'economic event ledger is append-only'); END",
+    },
+    {
+      name: 'economic_fx_rate_observations_append_only_update',
+      table: 'economic_fx_rate_observations',
+      sql: "CREATE TRIGGER economic_fx_rate_observations_append_only_update BEFORE UPDATE ON economic_fx_rate_observations BEGIN SELECT RAISE(ABORT, 'historical FX rate observations are append-only'); END",
+    },
+    {
+      name: 'economic_fx_rate_observations_append_only_delete',
+      table: 'economic_fx_rate_observations',
+      sql: "CREATE TRIGGER economic_fx_rate_observations_append_only_delete BEFORE DELETE ON economic_fx_rate_observations BEGIN SELECT RAISE(ABORT, 'historical FX rate observations are append-only'); END",
+    },
+    {
+      name: 'economic_fx_rate_observations_append_only_insert',
+      table: 'economic_fx_rate_observations',
+      sql: "CREATE TRIGGER economic_fx_rate_observations_append_only_insert BEFORE INSERT ON economic_fx_rate_observations WHEN EXISTS (SELECT 1 FROM economic_fx_rate_observations WHERE observation_id = NEW.observation_id) BEGIN SELECT RAISE(ABORT, 'historical FX rate observations are append-only'); END",
     },
     {
       name: 'billing_mapping_no_update',
@@ -1030,6 +1062,7 @@ export function initializeEpistemicSchema(db: DatabaseSync): void {
  * in this schema module; `src/economics/ledger.ts` performs validated DML only.
  */
 export function initializeEconomicSchema(db: DatabaseSync): void {
+  db.prepare('PRAGMA foreign_keys = ON').run();
   runScript(db, ECONOMIC_SCHEMA);
   const updateTrigger = 'economic_events_append_only_update';
   const deleteTrigger = 'economic_events_append_only_delete';
@@ -1048,6 +1081,22 @@ export function initializeEconomicSchema(db: DatabaseSync): void {
     ' BEFORE INSERT ON economic_events' +
     ' WHEN EXISTS (SELECT 1 FROM economic_events WHERE event_id = NEW.event_id)' +
     ' BEGIN SELECT RAISE(ABORT, \'economic event ledger is append-only\'); END',
+  ).run();
+  db.prepare(
+    'CREATE TRIGGER IF NOT EXISTS economic_fx_rate_observations_append_only_update' +
+    ' BEFORE UPDATE ON economic_fx_rate_observations' +
+    ' BEGIN SELECT RAISE(ABORT, \'historical FX rate observations are append-only\'); END',
+  ).run();
+  db.prepare(
+    'CREATE TRIGGER IF NOT EXISTS economic_fx_rate_observations_append_only_delete' +
+    ' BEFORE DELETE ON economic_fx_rate_observations' +
+    ' BEGIN SELECT RAISE(ABORT, \'historical FX rate observations are append-only\'); END',
+  ).run();
+  db.prepare(
+    'CREATE TRIGGER IF NOT EXISTS economic_fx_rate_observations_append_only_insert' +
+    ' BEFORE INSERT ON economic_fx_rate_observations' +
+    ' WHEN EXISTS (SELECT 1 FROM economic_fx_rate_observations WHERE observation_id = NEW.observation_id)' +
+    ' BEGIN SELECT RAISE(ABORT, \'historical FX rate observations are append-only\'); END',
   ).run();
   db.prepare(
     'CREATE TRIGGER IF NOT EXISTS economic_event_sources_append_only_update' +

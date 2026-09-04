@@ -8,6 +8,8 @@ import { Store, type RequestRow } from '../src/store/db.ts';
 import { buildEconomicReport } from '../src/cli/economicCmd.ts';
 import { economicEvent } from '../src/economics/events.ts';
 import { money } from '../src/economics/money.ts';
+import { exactRate } from '../src/economics/rate.ts';
+import { interval } from '../src/epistemic/time.ts';
 
 const CLI = join(import.meta.dirname, '..', 'src', 'cli.ts');
 
@@ -94,6 +96,134 @@ test('economic report carries period-close state without collapsing the exact ba
     assert.doesNotThrow(() => JSON.stringify(report));
   } finally {
     store.close();
+  }
+});
+
+test('economic report keeps source and translated coverage on one historical as-of boundary', () => {
+  const store = new Store(':memory:');
+  try {
+    const startMs = Date.parse('2026-08-01T00:00:00.000Z');
+    const endMs = Date.parse('2026-08-02T00:00:00.000Z');
+    const asOf = '2026-12-31T00:00:00.000Z';
+    store.economic().appendHistoricalRateObservation({
+      id: 'fx-rate:economic-cli:original',
+      rate: exactRate({
+        numerator: 9n,
+        denominator: 10n,
+        sourceUnit: 'USD',
+        targetUnit: 'EUR',
+        validTime: interval('2026-01-01T00:00:00.000Z', '2027-01-01T00:00:00.000Z'),
+      }),
+      rateSource: 'fixture:economic-cli:historical',
+      recordedAt: '2026-01-02T00:00:00.000Z',
+      supersedes: null,
+    });
+    store.insertRequest(request());
+
+    const report = buildEconomicReport(store, {
+      startMs,
+      endMs,
+      demo: false,
+      targetUnit: 'EUR',
+      asOf,
+    });
+
+    assert.equal(report.window.requestCoverage.currency, 'USD');
+    assert.equal(report.window.requestCoverage.amount, '1.25');
+    assert.ok(report.translation);
+    assert.equal(report.translation.currency, 'EUR');
+    assert.equal(report.translation.amount, '1.125');
+    assert.equal(report.translation.complete, true);
+    assert.equal(report.translation.asOf, asOf);
+    assert.deepEqual(report.translation.rateSources, ['fixture:economic-cli:historical']);
+    assert.equal(report.projection.asOf, asOf);
+    assert.equal(report.periodClose.asOf, asOf);
+    assert.doesNotThrow(() => JSON.stringify(report));
+  } finally {
+    store.close();
+  }
+});
+
+test('economic CLI emits historical translation coverage and provenance', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-economic-report-cli-'));
+  const db = join(dir, 'fiscus.db');
+  const asOf = '2026-12-31T00:00:00.000Z';
+  try {
+    const seed = new Store(db);
+    seed.economic().appendHistoricalRateObservation({
+      id: 'fx-rate:economic-cli:command',
+      rate: exactRate({
+        numerator: 9n,
+        denominator: 10n,
+        sourceUnit: 'USD',
+        targetUnit: 'EUR',
+        validTime: interval('2026-01-01T00:00:00.000Z', '2027-01-01T00:00:00.000Z'),
+      }),
+      rateSource: 'fixture:economic-cli:command',
+      recordedAt: '2026-01-02T00:00:00.000Z',
+      supersedes: null,
+    });
+    seed.insertRequest(request());
+    seed.close();
+
+    const result = await runCli(['economic', '--all', '--target-currency', 'EUR', '--as-of', asOf, '--json'], db);
+    assert.equal(result.code, 0, result.stderr);
+    const payload = JSON.parse(result.stdout) as {
+      window: { requestCoverage: { amount: string; currency: string } };
+      translation: { amount: string; currency: string; asOf: string | null; rateSources: string[]; complete: boolean } | null;
+    };
+    assert.equal(payload.window.requestCoverage.amount, '1.25');
+    assert.equal(payload.window.requestCoverage.currency, 'USD');
+    assert.equal(payload.translation?.amount, '1.125');
+    assert.equal(payload.translation?.currency, 'EUR');
+    assert.equal(payload.translation?.asOf, asOf);
+    assert.deepEqual(payload.translation?.rateSources, ['fixture:economic-cli:command']);
+    assert.equal(payload.translation?.complete, true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('economic CLI export preserves effective-at context and requires a target for translation', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-economic-export-cli-'));
+  const db = join(dir, 'fiscus.db');
+  const asOf = '2026-12-31T00:00:00.000Z';
+  try {
+    const seed = new Store(db);
+    seed.economic().appendHistoricalRateObservation({
+      id: 'fx-rate:economic-export:command',
+      rate: exactRate({
+        numerator: 4n,
+        denominator: 5n,
+        sourceUnit: 'USD',
+        targetUnit: 'EUR',
+        validTime: interval('2026-01-01T00:00:00.000Z', '2027-01-01T00:00:00.000Z'),
+      }),
+      rateSource: 'fixture:economic-export:command',
+      recordedAt: '2026-01-02T00:00:00.000Z',
+      supersedes: null,
+    });
+    seed.insertRequest(request());
+    seed.close();
+
+    const exported = await runCli([
+      'export', '--economic', '--all', '--target-currency', 'EUR', '--as-of', asOf,
+      '--effective-at', '2026-08-01T00:00:00.000Z', '--json',
+    ], db);
+    assert.equal(exported.code, 0, exported.stderr);
+    const rows = JSON.parse(exported.stdout) as Array<{ translatedAmount: string | null; translatedCurrency: string | null; fxRateSource: string | null; fxEffectiveAt: string | null; fxRateAsOf: string | null }>;
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]?.translatedAmount, '1');
+    assert.equal(rows[0]?.translatedCurrency, 'EUR');
+    assert.equal(rows[0]?.fxRateSource, 'fixture:economic-export:command');
+    assert.equal(rows[0]?.fxEffectiveAt, '2026-08-01T00:00:00.000Z');
+    assert.equal(rows[0]?.fxRateAsOf, asOf);
+
+    const missingTarget = await runCli(['export', '--economic', '--all', '--effective-at', '2026-08-01T00:00:00.000Z', '--json'], db);
+    assert.equal(missingTarget.code, 1);
+    assert.match(missingTarget.stderr, /--effective-at requires --target-currency/i);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });
 

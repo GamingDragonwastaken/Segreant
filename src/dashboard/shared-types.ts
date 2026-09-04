@@ -372,6 +372,18 @@ export interface EconomicCoverage extends EconomicMoney {
   complete: boolean;
 }
 
+export interface EconomicTranslationCoverage extends EconomicMoney {
+  targetUnit: string;
+  asOf: string | null;
+  effectiveAt: string | null;
+  eventIds: string[];
+  sourceBases: string[];
+  requestCount: number;
+  unresolvedRequests: number;
+  complete: boolean;
+  rateSources: string[];
+}
+
 export interface EconomicBalance extends EconomicMoney {
   role: string;
   eventIds: string[];
@@ -416,6 +428,7 @@ export interface EconomicPayload {
     endMs: number;
     requestCoverage: EconomicCoverage;
   };
+  translation: EconomicTranslationCoverage | null;
   projection: {
     asOf: string | null;
     eventIds: string[];

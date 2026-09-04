@@ -12,8 +12,8 @@ import { initializeEconomicSchema } from '../store/schema.ts';
 import { instant, intervalContains, type Instant } from '../epistemic/time.ts';
 import { addMoney, compareMoney, formatMoneyAmount, money, moneyFromJson, negateMoney, subtractMoney, type Money } from './money.ts';
 import { economicEvent, economicEventRole, type EconomicEvent, type EconomicEventInput, type EconomicEventRole } from './events.ts';
-import { deserializeEconomicEvent, serializeEconomicEvent } from './serialization.ts';
-import { applyExactRate, rateFromJson, type HistoricalRateBook } from './rate.ts';
+import { deserializeEconomicEvent, deserializeHistoricalRateObservation, serializeEconomicEvent, serializeHistoricalRateObservation, type SerializedHistoricalRateObservation } from './serialization.ts';
+import { applyExactRate, historicalRateBook as buildHistoricalRateBook, historicalRateObservation, rateFromJson, type HistoricalRateBook, type HistoricalRateObservation, type HistoricalRateObservationInput } from './rate.ts';
 import { translateEffectiveChargeFromRateBook, type EffectiveFxChargeProjection } from './fx.ts';
 import { canonicalPeriod, closeFinalizationMetadata, closeProjectionDigest, closeReopenMetadata, isCloseKind, type CloseFinalizationMetadata, type CloseProjectionBalance, type CloseReopenMetadata, type EconomicPeriod } from './close.ts';
 
@@ -27,6 +27,14 @@ interface StoredEconomicRow {
   recorded_at: string;
   event_json: string;
   event_digest: string;
+}
+
+interface StoredHistoricalRateRow {
+  observation_id: string;
+  recorded_at: string;
+  supersedes_id: string | null;
+  observation_json: string;
+  observation_digest: string;
 }
 
 export interface EconomicBalance {
@@ -136,6 +144,29 @@ function storedRecord(rowValue: StoredEconomicRow): EconomicEvent {
   return item;
 }
 
+function storedHistoricalRateObservation(rowValue: StoredHistoricalRateRow): HistoricalRateObservation {
+  if (typeof rowValue.observation_id !== 'string'
+      || typeof rowValue.recorded_at !== 'string'
+      || (rowValue.supersedes_id !== null && typeof rowValue.supersedes_id !== 'string')
+      || typeof rowValue.observation_json !== 'string'
+      || typeof rowValue.observation_digest !== 'string') {
+    throw new Error(`stored historical FX rate observation ${String(rowValue.observation_id)} is malformed`);
+  }
+  const item = deserializeHistoricalRateObservation({
+    kind: 'historical_fx_rate_observation',
+    schemaVersion: 1,
+    id: rowValue.observation_id,
+    body: rowValue.observation_json,
+    digest: rowValue.observation_digest,
+  } satisfies SerializedHistoricalRateObservation);
+  if (item.id !== rowValue.observation_id
+      || item.recordedAt !== rowValue.recorded_at
+      || item.supersedes !== rowValue.supersedes_id) {
+    throw new Error(`stored historical FX rate observation ${rowValue.observation_id} failed physical identity verification`);
+  }
+  return item;
+}
+
 function closeBalances(events: readonly EconomicEvent[]): CloseProjectionBalance[] {
   const groups = new Map<string, { role: EconomicEventRole; currency: string; basis: Money['basis']; amount: Money; eventIds: string[] }>();
   for (const item of events) {
@@ -235,6 +266,17 @@ export class EconomicLedger {
       throw new Error(`stored economic event ${id} source links diverge from its canonical record`);
     }
     return value;
+  }
+
+  private readHistoricalRateRows(asOf?: Instant): readonly HistoricalRateObservation[] {
+    const boundary = asOf === undefined ? null : canonicalBoundary(asOf);
+    const query = boundary === null
+      ? 'SELECT observation_id, recorded_at, supersedes_id, observation_json, observation_digest FROM economic_fx_rate_observations ORDER BY recorded_at ASC, observation_id ASC'
+      : 'SELECT observation_id, recorded_at, supersedes_id, observation_json, observation_digest FROM economic_fx_rate_observations WHERE recorded_at <= ? ORDER BY recorded_at ASC, observation_id ASC';
+    const rows = (boundary === null
+      ? this.db.prepare(query).all()
+      : this.db.prepare(query).all(boundary)) as unknown as StoredHistoricalRateRow[];
+    return Object.freeze(rows.map(storedHistoricalRateObservation));
   }
 
   private validateCloseEvent(value: EconomicEvent, sources: ReadonlyMap<string, EconomicEvent>): void {
@@ -974,6 +1016,46 @@ export class EconomicLedger {
     return this.appendCanonical(item, serializeEconomicEvent(item));
   }
 
+  /**
+   * Append one historical FX observation through the Store-owned evidence
+   * boundary. The rate book validates the explicit predecessor edge before the
+   * row is written; a same-ID different observation is never replaced.
+   */
+  appendHistoricalRateObservation(
+    value: HistoricalRateObservation | HistoricalRateObservationInput,
+  ): EconomicAppendResult {
+    const candidate = historicalRateObservation(value);
+    const encoded = serializeHistoricalRateObservation(candidate);
+    return this.transaction(() => {
+      const existing = row<StoredHistoricalRateRow>(this.db.prepare(
+        'SELECT observation_id, recorded_at, supersedes_id, observation_json, observation_digest FROM economic_fx_rate_observations WHERE observation_id = ?',
+      ).get(candidate.id));
+      if (existing !== null) {
+        const persisted = storedHistoricalRateObservation(existing);
+        // Validate the complete persisted graph before acknowledging a
+        // duplicate. A corrupted unrelated row must not be hidden by an
+        // idempotent retry.
+        this.historicalRateBook();
+        const persistedEncoded = serializeHistoricalRateObservation(persisted);
+        if (persistedEncoded.body === encoded.body && persistedEncoded.digest === encoded.digest) return 'duplicate';
+        throw new Error(`different historical rate observation already exists: ${candidate.id}`);
+      }
+      const existingObservations = this.readHistoricalRateRows();
+      buildHistoricalRateBook([...existingObservations, candidate]);
+      this.db.prepare(
+        `INSERT INTO economic_fx_rate_observations
+          (observation_id, recorded_at, supersedes_id, observation_json, observation_digest)
+         VALUES (?, ?, ?, ?, ?)`,
+      ).run(candidate.id, candidate.recordedAt, candidate.supersedes, encoded.body, encoded.digest);
+      return 'inserted';
+    });
+  }
+
+  /** Read the authenticated historical FX evidence visible at a recording boundary. */
+  historicalRateBook(asOf?: Instant): HistoricalRateBook {
+    return buildHistoricalRateBook(this.readHistoricalRateRows(asOf));
+  }
+
   read(id: string): EconomicEvent | null {
     if (typeof id !== 'string' || id.trim().length === 0) throw new Error('economic event id is required');
     const value = this.readStored(id);
@@ -1119,6 +1201,25 @@ export class EconomicLedger {
       effectiveAt: effectiveAt ?? source.occurredAt,
       ...(asOf === undefined ? {} : { rateAsOf: asOf }),
     });
+  }
+
+  /**
+   * Translate one effective charge using the persisted historical rate book.
+   * Without an explicit boundary, knowledge stops at the source event's own
+   * recording instant; this prevents a later rate correction from silently
+   * rewriting an ordinary historical read.
+   */
+  effectiveFxChargeFromHistoricalRates(
+    sourceEventId: string,
+    targetUnit: string,
+    effectiveAt?: Instant,
+    asOf?: Instant,
+  ): EffectiveFxChargeProjection | null {
+    const source = this.read(sourceEventId);
+    if (source === null) return null;
+    const rateAsOf = asOf === undefined ? source.recordedAt : canonicalBoundary(asOf);
+    const rateBook = this.historicalRateBook(rateAsOf);
+    return this.effectiveFxChargeFor(sourceEventId, targetUnit, rateBook, effectiveAt, rateAsOf);
   }
 
   project(asOf?: Instant): EconomicProjection {

@@ -1,18 +1,24 @@
 /** Exact economic-ledger inspection — no BigInt or legacy-number leakage. */
 
-import { Store, type ExactSpendProjection } from '../store/db.ts';
+import { Store, type EffectiveRequestRow, type ExactSpendProjection } from '../store/db.ts';
 import { dbPath, isDemo } from '../config.ts';
-import { formatMoneyAmount, moneyToJson } from '../economics/money.ts';
+import { addMoney, formatMoneyAmount, money, moneyToJson, type EconomicBasis } from '../economics/money.ts';
 import { canonicalPeriod } from '../economics/close.ts';
 import { instant, type Instant } from '../epistemic/time.ts';
 import type { EconomicPeriodCloseStatus, PeriodFinalizationResult, PeriodReopenResult } from '../economics/ledger.ts';
 import { printJson, C, color, num } from './ui.ts';
 import type { Flags } from './flags.ts';
 
-interface EconomicReportOptions {
+export interface EconomicReportOptions {
   readonly startMs: number;
   readonly endMs: number;
   readonly demo: boolean;
+  /** Optional target currency for a historical, read-only translation. */
+  readonly targetUnit?: string;
+  /** Recorded-time knowledge boundary for all exact report sections. */
+  readonly asOf?: Instant;
+  /** Optional modeled instant for the translated request coverage. */
+  readonly effectiveAt?: Instant;
 }
 
 interface EconomicMoneyView {
@@ -21,6 +27,18 @@ interface EconomicMoneyView {
   readonly scale: number;
   readonly currency: string;
   readonly basis: string;
+}
+
+export interface EconomicTranslationCoverage extends EconomicMoneyView {
+  readonly targetUnit: string;
+  readonly asOf: Instant | null;
+  readonly effectiveAt: Instant | null;
+  readonly eventIds: readonly string[];
+  readonly sourceBases: readonly string[];
+  readonly requestCount: number;
+  readonly unresolvedRequests: number;
+  readonly complete: boolean;
+  readonly rateSources: readonly string[];
 }
 
 function moneyView(value: Parameters<typeof moneyToJson>[0]): EconomicMoneyView {
@@ -36,6 +54,73 @@ function coverageView(value: ExactSpendProjection) {
     requestCount: value.requestCount,
     unresolvedRequests: value.unresolvedRequests,
     complete: value.unresolvedRequests === 0,
+  });
+}
+
+function exactCoverageFromRows(rows: readonly EffectiveRequestRow[]): ExactSpendProjection {
+  let amount = money('0', 'USD', 'effective');
+  const eventIds: string[] = [];
+  const sourceBases = new Set<EconomicBasis>();
+  let unresolvedRequests = 0;
+  for (const row of rows) {
+    if (row.effectiveAmount === null) {
+      unresolvedRequests += 1;
+      continue;
+    }
+    if (row.effectiveAmount.currency !== 'USD') {
+      throw new Error(`economic report request ${row.requestId} is not a USD charge`);
+    }
+    amount = addMoney(amount, row.effectiveAmount);
+    eventIds.push(...row.sourceEventIds);
+    for (const basis of row.sourceBases) sourceBases.add(basis);
+  }
+  return Object.freeze({
+    amount,
+    eventIds: Object.freeze([...new Set(eventIds)].sort()),
+    sourceBases: Object.freeze([...sourceBases].sort()),
+    requestCount: rows.length,
+    unresolvedRequests,
+  });
+}
+
+function translationCoverageFromRows(
+  rows: readonly EffectiveRequestRow[],
+  targetUnit: string,
+  asOf: Instant | undefined,
+  effectiveAt: Instant | undefined,
+): EconomicTranslationCoverage {
+  const normalizedTarget = targetUnit.trim();
+  if (normalizedTarget.length === 0) throw new Error('economic report target currency/unit must be non-empty');
+  let amount = money('0', normalizedTarget, 'effective');
+  const eventIds: string[] = [];
+  const sourceBases = new Set<EconomicBasis>();
+  const rateSources = new Set<string>();
+  let unresolvedRequests = 0;
+  for (const row of rows) {
+    const translation = row.fxTranslation;
+    if (translation === null) {
+      unresolvedRequests += 1;
+      continue;
+    }
+    if (translation.translatedAmount.currency !== normalizedTarget) {
+      throw new Error(`economic report request ${row.requestId} translated to an unexpected currency`);
+    }
+    amount = addMoney(amount, translation.translatedAmount);
+    eventIds.push(...translation.eventIds);
+    for (const basis of row.sourceBases) sourceBases.add(basis);
+    rateSources.add(translation.rateSource);
+  }
+  return Object.freeze({
+    ...moneyView(amount),
+    targetUnit: normalizedTarget,
+    asOf: asOf ?? null,
+    effectiveAt: effectiveAt ?? null,
+    eventIds: Object.freeze([...new Set(eventIds)].sort()),
+    sourceBases: Object.freeze([...sourceBases].sort()),
+    requestCount: rows.length,
+    unresolvedRequests,
+    complete: unresolvedRequests === 0,
+    rateSources: Object.freeze([...rateSources].sort()),
   });
 }
 
@@ -192,9 +277,25 @@ export function buildEconomicReport(store: Store, options: EconomicReportOptions
   if (!Number.isFinite(options.startMs) || !Number.isFinite(options.endMs) || options.startMs >= options.endMs) {
     throw new Error('economic report window must contain ordered finite timestamps');
   }
-  const projection = store.economic().project();
-  const coverage = store.exactSpendBetween(options.startMs, options.endMs, false);
-  const periodClose = store.economic().periodCloseStatus(options.startMs, options.endMs);
+  const targetUnit = options.targetUnit === undefined
+    ? undefined
+    : (typeof options.targetUnit === 'string' && options.targetUnit.trim().length > 0
+      ? options.targetUnit.trim()
+      : (() => { throw new Error('economic report target currency/unit must be non-empty'); })());
+  if (targetUnit === undefined && options.effectiveAt !== undefined) {
+    throw new Error('economic report effectiveAt requires an explicit target currency/unit');
+  }
+  const requestRows = store.economicRequestRowsInRange(options.startMs, options.endMs, {
+    ...(options.asOf === undefined ? {} : { asOf: options.asOf }),
+    ...(targetUnit === undefined ? {} : { targetUnit }),
+    ...(options.effectiveAt === undefined ? {} : { effectiveAt: options.effectiveAt }),
+  });
+  const coverage = exactCoverageFromRows(requestRows);
+  const translation = targetUnit === undefined
+    ? null
+    : translationCoverageFromRows(requestRows, targetUnit, options.asOf, options.effectiveAt);
+  const projection = store.economic().project(options.asOf);
+  const periodClose = store.economic().periodCloseStatus(options.startMs, options.endMs, options.asOf);
   return Object.freeze({
     kind: 'economic_projection' as const,
     schemaVersion: 1,
@@ -204,6 +305,7 @@ export function buildEconomicReport(store: Store, options: EconomicReportOptions
       endMs: options.endMs,
       requestCoverage: coverageView(coverage),
     }),
+    translation,
     projection: Object.freeze({
       asOf: projection.asOf,
       eventIds: projection.eventIds,
@@ -252,9 +354,28 @@ export function cmdEconomic(flags: Flags): void {
   }
   const startMs = all ? 0 : now - days * dayMs;
   const endMs = now + 1000;
+  let targetUnit: string | null;
+  let asOf: Instant | null;
+  let effectiveAt: Instant | null;
+  try {
+    targetUnit = flagText(flags, 'target-currency');
+    asOf = canonicalFlag(flags, 'as-of');
+    effectiveAt = canonicalFlag(flags, 'effective-at');
+  } catch (error) {
+    console.error(`  Fiscus error: ${error instanceof Error ? error.message : String(error)}`);
+    process.exitCode = 1;
+    return;
+  }
   const store = new Store(dbPath());
   try {
-    const report = buildEconomicReport(store, { startMs, endMs, demo: isDemo() });
+    const report = buildEconomicReport(store, {
+      startMs,
+      endMs,
+      demo: isDemo(),
+      ...(targetUnit === null ? {} : { targetUnit }),
+      ...(asOf === null ? {} : { asOf }),
+      ...(effectiveAt === null ? {} : { effectiveAt }),
+    });
     if (flags.json) {
       printJson(report);
       return;
@@ -271,6 +392,16 @@ export function cmdEconomic(flags: Flags): void {
     console.log(`  ${coverage.complete ? color(tty, C.green, '✓ complete') : color(tty, C.yellow, '! incomplete')}  ${coverage.amount} ${coverage.currency} effective-policy amount`);
     console.log(color(tty, C.gray, `      ${num(coverage.requestCount)} requests · ${num(coverage.eventIds.length)} exact charge events · ${num(coverage.unresolvedRequests)} unresolved legacy rows`));
     if (coverage.sourceBases.length) console.log(color(tty, C.gray, `      source bases: ${coverage.sourceBases.join(', ')}`));
+    if (report.translation !== null) {
+      const translation = report.translation;
+      console.log('');
+      console.log(color(tty, C.bold, `  Historical translation coverage (${translation.targetUnit})`));
+      console.log(`  ${translation.complete ? color(tty, C.green, '✓ complete') : color(tty, C.yellow, '! incomplete')}  ${translation.amount} ${translation.currency} effective-policy amount`);
+      console.log(color(tty, C.gray, `      ${num(translation.requestCount)} requests · ${num(translation.eventIds.length)} translated events · ${num(translation.unresolvedRequests)} unresolved requests`));
+      if (translation.rateSources.length) console.log(color(tty, C.gray, `      rate sources: ${translation.rateSources.join(', ')}`));
+      if (translation.asOf !== null) console.log(color(tty, C.gray, `      knowledge as-of: ${translation.asOf}`));
+      if (translation.effectiveAt !== null) console.log(color(tty, C.gray, `      modeled effective-at: ${translation.effectiveAt}`));
+    }
     console.log('');
     console.log(color(tty, C.bold, `  Ledger projection (${num(report.projection.eventIds.length)} events)`));
     if (report.projection.balances.length === 0) {
