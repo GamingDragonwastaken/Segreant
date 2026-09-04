@@ -7,10 +7,10 @@
 | | |
 | --- | --- |
 | Branch | `gpt56/magnum-opus-reconstruction` |
-| Current code checkpoint | `320bf0649853013b8ace03f2fdddc69d16489916` — exact remote match; the preceding implementation head `c023e913` exposed a cross-platform stale fixture and was corrected without history rewrite |
-| Latest exact-code CI | Run `33879081745` — **success** across all configured jobs, head `320bf0649853013b8ace03f2fdddc69d16489916`, observed 2026-09-04 |
-| Latest code tranche | Economic usage-role legality: `usage_observed` cannot carry Money and cannot serve as an exact allocation charge source; focused economic **16/16**, full economic glob **78/78**, root lifecycle **1,426 total / 1,422 pass / 0 fail / 4 skips**, team-server **67/67**, root/browser TypeScript, build, and diff check passed |
-| Working tree | The corrective code checkpoint is pushed and remotely green; this program-record reconciliation is the only pending follow-up |
+| Current code checkpoint | `7cb630d8cc97d1de286147594aeca1aead629efb` — exact remote match; the preceding usage-role correction and its stale-fixture repair remain preserved in history |
+| Latest exact-code CI | Run `33890709112` — **success** across all configured jobs, head `7cb630d8cc97d1de286147594aeca1aead629efb`, observed 2026-09-04 |
+| Latest code tranche | Economic price-correction chains: typed linear predecessor links, exact per-link deltas, append/read closure validation, as-of effective-chain projection, and raw-event tamper refusal; chain **2/2**, full economic glob **80/80**, root lifecycle **1,428 total / 1,424 pass / 0 fail / 4 skips**, team-server **67/67**, root/browser TypeScript, build, and diff check passed |
+| Working tree | The chain checkpoint is pushed and remotely green; this program-record reconciliation is the only pending follow-up |
 | Operating policy | One bounded slice → focused verification → compiler/build gate → one accounting update → one checkpoint. Reuse green evidence; do not repeat full suites, cleanup, or unchanged reads without a new hypothesis. |
 
 ## Completed and reusable evidence
@@ -21,7 +21,7 @@
 
 ## Active frontier
 
-**WP-C02/C04/R06 — next economic slice.** Exact allocation persistence now has source conservation and finalized-close binding, replay ordering is pinned for the existing additive one-correction model, and `usage_observed` is refused as a monetary event/allocation source. Remaining economic gaps are per-link basis agreement, role auditing, adjustment-to-charge conservation beyond the covered negative cases, correction/FX supersession and rate provenance, broader historical/as-of selection, receipt/team reconciliation, and recovery from the bricked ledger state.
+**WP-C02/C04/R06 — next economic slice.** Exact allocation persistence now has source conservation and finalized-close binding, replay ordering is pinned, `usage_observed` is refused as a monetary event/allocation source, and local price corrections form a typed append-only chain. Remaining economic gaps are per-link basis agreement, role auditing, adjustment-to-charge conservation beyond the covered negative cases, FX-rate supersession and provenance, corrected-charge-to-FX composition, broader historical/as-of selection, finalized-close policy for later corrections, receipt/team reconciliation, and recovery from the bricked ledger state.
 
 **WP-B01/R04/R05 — parallel kernel frontier.** Generic negative claims now require complete cited Evidence over event type, target scope, and the entire interval. Direct Claim persistence has trust ceilings for integrity/authenticity/coverage. Remaining typed witness production and other negative-claim paths require new reproduction.
 
@@ -29,7 +29,7 @@
 
 ## Next exact action
 
-Investigate and reproduce correction/FX supersession or per-link basis agreement at the ledger boundary. Write one RED test, verify the intended failure, implement the smallest boundary guard, rerun only the affected economic tranche and compiler domains, then checkpoint and update these records once.
+Investigate and reproduce FX-rate provenance/as-of selection or per-link basis agreement at the ledger boundary. Write one RED test, verify the intended failure, implement the smallest boundary guard, rerun only the affected economic tranche and compiler domains, then checkpoint and update these records once.
 
 ## Known blockers
 
