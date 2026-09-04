@@ -4,6 +4,7 @@ import {
   certifyDecision,
   minimaxRegret,
   valueOfInformation,
+  preferenceRobustness,
   buildUtilityIntervalProblem,
   type ActionUtilityInterval,
 } from '../src/decision/engine.ts';
@@ -154,4 +155,50 @@ test('interval problems refuse unjustified point utilities', () => {
     { action: 'keep', utility: 10 },
     { action: 'switch', utility: 8 },
   ]), /point utilities require an explicit uncertainty bound/i);
+});
+
+test('preference robustness returns an action stable across every admissible preference', () => {
+  const result = preferenceRobustness([
+    { preferenceId: 'risk-averse', utilities: { ship: 8, wait: 4 } },
+    { preferenceId: 'growth-oriented', utilities: { ship: 10, wait: 6 } },
+  ]);
+  assert.equal(result.status, 'stable');
+  assert.deepEqual(result.robustOptimalActions, ['ship']);
+  assert.deepEqual(result.optimalActionsByPreference, {
+    'growth-oriented': ['ship'],
+    'risk-averse': ['ship'],
+  });
+});
+
+test('preference robustness refuses to force an action when admissible preferences disagree', () => {
+  const result = preferenceRobustness([
+    { preferenceId: 'cost-first', utilities: { ship: 6, wait: 9 } },
+    { preferenceId: 'quality-first', utilities: { ship: 10, wait: 7 } },
+  ]);
+  assert.equal(result.status, 'preference_sensitive');
+  assert.deepEqual(result.robustOptimalActions, []);
+  assert.deepEqual(result.optimalActionsByPreference, {
+    'cost-first': ['wait'],
+    'quality-first': ['ship'],
+  });
+});
+
+test('preference robustness preserves ties and rejects incomplete preference sets', () => {
+  const tied = preferenceRobustness([
+    { preferenceId: 'declared', utilities: { ship: 5, wait: 5 } },
+  ]);
+  assert.equal(tied.status, 'stable');
+  assert.deepEqual(tied.robustOptimalActions, ['ship', 'wait']);
+
+  assert.throws(() => preferenceRobustness([
+    { preferenceId: 'same', utilities: { ship: 1 } },
+    { preferenceId: 'same', utilities: { ship: 2 } },
+  ]), /duplicate preferenceId/);
+  assert.throws(() => preferenceRobustness([
+    { preferenceId: 'one', utilities: { ship: 1, wait: 2 } },
+    { preferenceId: 'two', utilities: { ship: 1 } },
+  ]), /same action set/);
+  assert.throws(() => preferenceRobustness([
+    { preferenceId: '__proto__', utilities: { ship: 1 } },
+  ]), /forbidden object key/);
 });

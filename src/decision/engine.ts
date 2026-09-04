@@ -99,6 +99,26 @@ export interface ValueOfInformationResult {
   readonly assumptions: readonly string[];
 }
 
+export interface PreferenceScenario {
+  readonly preferenceId: string;
+  /** Utilities under one admissible preference; all scenarios share one action set. */
+  readonly utilities: Readonly<Record<string, number>>;
+}
+
+export type PreferenceRobustnessStatus = 'stable' | 'preference_sensitive';
+
+export interface PreferenceRobustnessResult {
+  readonly rule: 'admissible_preference_set';
+  readonly status: PreferenceRobustnessStatus;
+  readonly actionSet: readonly string[];
+  readonly preferenceIds: readonly string[];
+  /** Actions optimal under every admissible preference; never a forced choice. */
+  readonly robustOptimalActions: readonly string[];
+  /** Ties are retained per preference rather than hidden by a tie-breaker. */
+  readonly optimalActionsByPreference: Readonly<Record<string, readonly string[]>>;
+  readonly assumptions: readonly string[];
+}
+
 const DOMINANCE_ASSUMPTIONS = Object.freeze([
   'Each utility interval bounds the action utility in every admissible world.',
   'The interval uncertainty set is rectangular for regret calculations.',
@@ -119,6 +139,14 @@ const VOI_ASSUMPTIONS = Object.freeze([
   'Measurement cost is expressed in the same utility units and is paid once.',
 ]);
 
+const PREFERENCE_ASSUMPTIONS = Object.freeze([
+  'The supplied preference scenarios are the complete admissible set for this decision.',
+  'Every preference scenario uses the same finite action set and utility units.',
+  'Utilities are preference-relative inputs; no objective preference is inferred.',
+  'Ties remain explicit and no arbitrary tie-breaker is applied.',
+  'An empty robust action set means the decision is preference-sensitive, not that one action is preferred.',
+]);
+
 const VOI_CONSISTENCY_TOLERANCE = 1e-9;
 const VOI_MAX_SAFE_UTILITY = Number.MAX_SAFE_INTEGER;
 
@@ -126,6 +154,9 @@ function nonEmptyAction(value: unknown, label: string): string {
   if (typeof value !== 'string') throw new Error(`${label} must be a non-empty string`);
   const normalized = value.trim();
   if (normalized.length === 0) throw new Error(`${label} must be non-empty`);
+  if (normalized === '__proto__' || normalized === 'constructor' || normalized === 'prototype') {
+    throw new Error(`${label} uses a forbidden object key`);
+  }
   return normalized;
 }
 
@@ -288,6 +319,54 @@ export function minimaxRegret(actions: ReadonlyArray<ActionUtilityInterval>): Mi
     actions: Object.freeze(selected),
     minimaxRegret: minimax,
     assumptions: REGRET_ASSUMPTIONS,
+  });
+}
+
+/**
+ * Report actions that remain optimal across an explicitly supplied admissible
+ * preference set. This is a robustness diagnostic, not a recommendation.
+ */
+export function preferenceRobustness(
+  preferences: ReadonlyArray<PreferenceScenario>,
+): PreferenceRobustnessResult {
+  if (!Array.isArray(preferences) || preferences.length === 0) {
+    throw new Error('at least one admissible preference scenario is required');
+  }
+  const seen = new Set<string>();
+  let actionSet: string[] | null = null;
+  const normalized = preferences.map((scenario, index) => {
+    if (scenario === null || typeof scenario !== 'object') {
+      throw new Error(`admissible preference scenario ${index} must be an object`);
+    }
+    const preferenceId = nonEmptyAction(scenario.preferenceId, `admissible preference scenario ${index} preferenceId`);
+    if (seen.has(preferenceId)) throw new Error(`duplicate preferenceId: ${preferenceId}`);
+    seen.add(preferenceId);
+    const utilities = validateUtilityMap(
+      scenario.utilities,
+      `admissible preference scenario ${index} utilities`,
+    );
+    const scenarioActions = sortedActionNames(utilities);
+    if (actionSet === null) actionSet = scenarioActions;
+    else assertSameActionSet(actionSet, scenarioActions, `admissible preference scenario ${index} utilities`);
+    return Object.freeze({ preferenceId, optimalActions: maxActions(utilities).actions });
+  });
+
+  const ordered = [...normalized].sort((left, right) => left.preferenceId.localeCompare(right.preferenceId));
+  const commonActions = (actionSet ?? []).filter((action) =>
+    normalized.every((scenario) => scenario.optimalActions.includes(action)));
+  const optimalActionsByPreference: Record<string, readonly string[]> = {};
+  for (const scenario of ordered) {
+    optimalActionsByPreference[scenario.preferenceId] = Object.freeze([...scenario.optimalActions]);
+  }
+
+  return Object.freeze({
+    rule: 'admissible_preference_set',
+    status: commonActions.length > 0 ? 'stable' : 'preference_sensitive',
+    actionSet: Object.freeze([...(actionSet ?? [])]),
+    preferenceIds: Object.freeze(ordered.map((scenario) => scenario.preferenceId)),
+    robustOptimalActions: Object.freeze(commonActions),
+    optimalActionsByPreference: Object.freeze(optimalActionsByPreference),
+    assumptions: PREFERENCE_ASSUMPTIONS,
   });
 }
 
