@@ -74,7 +74,6 @@ export function economicEventRole(kind: EconomicEventKind): EconomicEventRole {
 }
 
 const MONETARY_EVENT_KINDS = new Set<EconomicEventKind>([
-  'usage_observed',
   'charge_estimated',
   'provider_charge_observed',
   'bill_observed',
@@ -251,6 +250,9 @@ export function economicEvent(input: EconomicEventInput): EconomicEvent {
   const occurredAt = canonicalInstant(value.occurredAt, `economic event ${id} occurredAt`);
   const recordedAt = canonicalInstant(value.recordedAt, `economic event ${id} recordedAt`);
   const amount = canonicalAmount(value.amount, `economic event ${id} amount`);
+  if (kind === 'usage_observed' && amount !== null) {
+    throw new Error(`economic event ${id} usage_observed must not carry a monetary amount; record usage quantity and unit in metadata`);
+  }
   if (MONETARY_EVENT_KINDS.has(kind) && amount === null) throw new Error(`economic event ${id} of kind ${kind} requires an amount`);
   validateEventBasis(kind, amount, id);
   const sourceEventIds = eventIds(value.sourceEventIds);

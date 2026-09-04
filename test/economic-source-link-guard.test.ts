@@ -71,7 +71,6 @@ test('an FX translation refuses non-charge and non-translation monetary source r
   const cases: ReadonlyArray<{ kind: EconomicEventInput['kind']; amount: ReturnType<typeof money> }> = [
     { kind: 'credit_applied', amount: money('-1', 'USD', 'list') },
     { kind: 'cost_allocated', amount: money('1', 'USD', 'allocated') },
-    { kind: 'usage_observed', amount: money('1', 'USD', 'list') },
   ];
   const db = new DatabaseSync(':memory:');
   try {
@@ -92,6 +91,45 @@ test('an FX translation refuses non-charge and non-translation monetary source r
       );
       assert.equal(ledger.read(invalid.id), null);
     }
+  } finally {
+    db.close();
+  }
+});
+
+test('an FX translation refuses a non-monetary usage observation as its source', () => {
+  const db = new DatabaseSync(':memory:');
+  try {
+    const ledger = new EconomicLedger(db);
+    const usage = economicEvent({
+      id: 'economic:source:guard:usage',
+      kind: 'usage_observed',
+      subject: 'source-link-guard:usage',
+      occurredAt: OCCURRED_AT,
+      recordedAt: SOURCE_RECORDED_AT,
+      amount: null,
+      sourceEventIds: [],
+      reversalOf: null,
+      metadata: { unit: 'tokens', quantity: '100' },
+      schemaVersion: 1,
+    });
+    ledger.append(usage);
+    const invalid = economicEvent({
+      id: 'economic:source:guard:usage:translation',
+      kind: 'fx_translated',
+      subject: usage.subject,
+      occurredAt: usage.occurredAt,
+      recordedAt: DERIVATIVE_RECORDED_AT,
+      amount: money('9', 'EUR', 'list'),
+      sourceEventIds: [usage.id],
+      reversalOf: null,
+      metadata: {},
+      schemaVersion: 1,
+    });
+    assert.throws(
+      () => ledger.append(invalid),
+      /FX translation.*(monetary source|charge|role|semantic)|incompatible.*source/i,
+    );
+    assert.equal(ledger.read(invalid.id), null);
   } finally {
     db.close();
   }

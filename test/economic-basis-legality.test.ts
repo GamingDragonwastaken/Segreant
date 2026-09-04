@@ -97,6 +97,20 @@ test('an adjustment may carry any basis a charge can hold', () => {
   }
 });
 
+test('a usage observation cannot carry a monetary amount', () => {
+  // Usage is an observation of a non-monetary quantity.  The economic event
+  // model has no unit-bearing usage amount, so placing Money here would make a
+  // usage observation look like spend in a later role-aware projection.
+  assert.throws(
+    () => economicEvent(event({
+      id: 'event:usage:money',
+      kind: 'usage_observed',
+      amount: money('1.00', 'USD', 'billed'),
+    })),
+    /usage_observed.*(must not|cannot).*amount|usage.*monetary/i,
+  );
+});
+
 test('a credit that cannot net leaves the bill reading at full amount, which is why the rule exists', () => {
   // The consequence, demonstrated rather than asserted in prose. A credit whose
   // basis matches nets into the billed group; one that does not would sit alone.

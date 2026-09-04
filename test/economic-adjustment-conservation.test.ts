@@ -112,7 +112,7 @@ test('an adjustment source link must name a compatible charge, even without reve
       subject: source.subject,
       occurredAt: source.occurredAt,
       recordedAt: '2026-08-03T00:00:00.000Z',
-      amount: money('1', 'USD', 'billed'),
+      amount: null,
       sourceEventIds: [],
       reversalOf: null,
       metadata: { invoiceRef: 'invoice-adjustment' },
