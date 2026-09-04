@@ -22,6 +22,9 @@ import {
 } from '../alloc/rules.ts';
 import { applyAllocation, type AllocationRunResult } from '../alloc/apply.ts';
 import { deserializeExactAllocationRun, serializeExactAllocationRun, type ExactAllocationRunResult, type SerializedExactAllocationRun } from '../alloc/exact.ts';
+import { EconomicLedger } from '../economics/ledger.ts';
+import { addMoney, compareMoney, formatMoneyAmount, money, type Money } from '../economics/money.ts';
+import { economicEventRole } from '../economics/events.ts';
 import type { RequestRow } from './db.ts';
 
 export function upsertCostCentre(
@@ -289,6 +292,160 @@ function insertExactAllocationLineage(db: DatabaseSync, allocationRunId: string,
   }
 }
 
+function identityKey(amount: Money): string {
+  return `${amount.currency}\u0000${amount.basis}`;
+}
+
+function sameIds(left: readonly string[], right: readonly string[]): boolean {
+  const a = [...left].sort();
+  const b = [...right].sort();
+  return a.length === b.length && a.every((id, index) => id === b[index]);
+}
+
+/**
+ * Prove that an exact allocation result is grounded in the economic charge
+ * events it names. The allocation result's own conservation check only proves
+ * that its declared total equals its declared lines; without this second check
+ * a caller could fabricate a larger total and cite an unrelated or non-charge
+ * event as its source.
+ *
+ * Every source charge is compared using the exact source-event set named by the
+ * allocation. An uncorrected source may retain its original basis or the
+ * compatibility `effective` basis. A corrected source must name its root charge
+ * and each cited local correction, and its effective amount is recomputed from
+ * those cited events only; later corrections do not rewrite an older run.
+ * Provider/billed charges remain
+ * charge sources; translations, usage, allocations, and adjustments do not.
+ */
+function validateExactAllocationSourceConservationWithLedger(
+  ledger: EconomicLedger,
+  result: ExactAllocationRunResult,
+): void {
+  const periodStart = new Date(result.periodStartMs);
+  const periodEnd = new Date(result.periodEndMs);
+  if (!Number.isFinite(periodStart.getTime()) || !Number.isFinite(periodEnd.getTime())) {
+    throw new Error('exact allocation period is outside the supported timestamp range');
+  }
+
+  const actualByIdentity = new Map<string, { amount: Money; sourceEventIds: readonly string[] }>();
+  const sourceOwner = new Map<string, string>();
+  for (const bucket of result.totalByIdentity) {
+    const key = identityKey(bucket.amount);
+    if (actualByIdentity.has(key)) throw new Error(`exact allocation source totals contain duplicate identity: ${key}`);
+    for (const sourceEventId of bucket.sourceEventIds) {
+      const prior = sourceOwner.get(sourceEventId);
+      if (prior !== undefined) {
+        throw new Error(`exact allocation source event ${sourceEventId} is assigned to multiple identities (${prior}, ${key})`);
+      }
+      sourceOwner.set(sourceEventId, key);
+    }
+    actualByIdentity.set(key, { amount: bucket.amount, sourceEventIds: bucket.sourceEventIds });
+  }
+
+  const roots = new Map<string, Set<string>>();
+  for (const sourceEventId of sourceOwner.keys()) {
+    const source = ledger.read(sourceEventId);
+    if (source === null) throw new Error(`exact allocation source event is missing: ${sourceEventId}`);
+    const role = economicEventRole(source.kind);
+    if (role === 'charge') {
+      const ids = roots.get(source.id) ?? new Set<string>();
+      ids.add(source.id);
+      roots.set(source.id, ids);
+      const occurredAt = Date.parse(source.occurredAt);
+      if (occurredAt < result.periodStartMs || occurredAt >= result.periodEndMs) {
+        throw new Error(`exact allocation source charge ${source.id} occurred outside the allocation period`);
+      }
+      continue;
+    }
+    if (source.kind !== 'price_corrected') {
+      throw new Error(`exact allocation source ${source.id} must be a charge or local price correction (received ${source.kind})`);
+    }
+    if (source.sourceEventIds.length !== 1) {
+      throw new Error(`exact allocation price correction ${source.id} must reference exactly one charge source`);
+    }
+    const rootId = source.sourceEventIds[0];
+    if (rootId === undefined || !sourceOwner.has(rootId)) {
+      throw new Error(`exact allocation price correction ${source.id} must be accompanied by its root charge`);
+    }
+    const root = ledger.read(rootId);
+    if (root === null || economicEventRole(root.kind) !== 'charge') {
+      throw new Error(`exact allocation price correction ${source.id} does not resolve to a charge root`);
+    }
+    const ids = roots.get(rootId) ?? new Set<string>();
+    ids.add(source.id);
+    roots.set(rootId, ids);
+  }
+
+  const expectedByIdentity = new Map<string, { amount: Money; sourceEventIds: Set<string> }>();
+  for (const [rootId, providedIds] of roots) {
+    const root = ledger.read(rootId);
+    if (root === null || root.amount === null) throw new Error(`exact allocation charge source ${rootId} has no monetary amount`);
+    const effective = ledger.effectiveChargeFor(rootId);
+    if (effective === null) throw new Error(`exact allocation charge source ${rootId} has no effective charge projection`);
+    const declaredIdentity = sourceOwner.get(rootId);
+    if (declaredIdentity === undefined) throw new Error(`exact allocation charge source ${rootId} has no declared identity`);
+    const originalIdentity = identityKey(root.amount);
+    const effectiveIdentity = identityKey(effective.amount);
+    const citedCorrections = [...providedIds]
+      .filter((sourceEventId) => sourceEventId !== rootId)
+      .map((sourceEventId) => ledger.read(sourceEventId))
+      .filter((source): source is NonNullable<ReturnType<EconomicLedger['read']>> => source !== null);
+    let expectedAmount = root.amount;
+    const expectedIds = [rootId, ...citedCorrections.map((correction) => correction.id)];
+    if (citedCorrections.length > 0) {
+      if (declaredIdentity !== `${root.amount.currency}\u0000effective`) {
+        throw new Error(`exact allocation corrected charge ${rootId} must use its effective economic identity`);
+      }
+      for (const correction of citedCorrections) {
+        if (correction.kind !== 'price_corrected') {
+          throw new Error(`exact allocation source ${correction.id} must be a local price correction`);
+        }
+        if (correction.amount === null) throw new Error(`exact allocation price correction ${correction.id} has no amount`);
+        expectedAmount = addMoney(expectedAmount, correction.amount);
+      }
+      expectedAmount = money(formatMoneyAmount(expectedAmount), expectedAmount.currency, 'effective');
+    } else if (declaredIdentity === originalIdentity) {
+      // An allocation computed directly from an uncorrected charge may retain
+      // that charge's original basis; this is the compatibility form used by
+      // the exact allocation adapter's standalone callers.
+      expectedAmount = root.amount;
+    } else if (declaredIdentity === effectiveIdentity) {
+      // Store.allocatePeriodExact consumes the same uncorrected charge through
+      // effectiveChargesFor, so its canonical result legitimately names the
+      // effective basis even though no correction event exists.
+      expectedAmount = money(formatMoneyAmount(root.amount), root.amount.currency, 'effective');
+    } else {
+      throw new Error(`exact allocation declared identity for ${rootId} does not match its economic charge`);
+    }
+    const key = identityKey(expectedAmount);
+    const prior = expectedByIdentity.get(key);
+    if (prior === undefined) {
+      expectedByIdentity.set(key, { amount: expectedAmount, sourceEventIds: new Set(expectedIds) });
+    } else {
+      prior.amount = addMoney(prior.amount, expectedAmount);
+      for (const sourceEventId of expectedIds) prior.sourceEventIds.add(sourceEventId);
+    }
+  }
+
+  if (expectedByIdentity.size !== actualByIdentity.size) {
+    throw new Error('exact allocation declared source totals do not match economic charge identities');
+  }
+  for (const [key, expected] of expectedByIdentity) {
+    const actual = actualByIdentity.get(key);
+    if (actual === undefined || compareMoney(actual.amount, expected.amount) !== 0 || !sameIds(actual.sourceEventIds, [...expected.sourceEventIds])) {
+      throw new Error(`exact allocation declared total for ${key} does not match its economic charge sources`);
+    }
+  }
+}
+
+/** Validate one exact allocation against the economic ledger on a database handle. */
+export function validateExactAllocationSourceConservation(
+  db: DatabaseSync,
+  result: ExactAllocationRunResult,
+): void {
+  validateExactAllocationSourceConservationWithLedger(new EconomicLedger(db), result);
+}
+
 /** Persist one canonical exact allocation result without mutating an earlier run. */
 export function saveExactAllocationRun(db: DatabaseSync, result: ExactAllocationRunResult, computedAtMs = Date.now()): string {
   if (!result.conserves) throw new Error('refusing to record an exact allocation run that does not conserve its input');
@@ -296,6 +453,7 @@ export function saveExactAllocationRun(db: DatabaseSync, result: ExactAllocation
   const serialized = serializeExactAllocationRun(result);
   const canonical = deserializeExactAllocationRun(serialized);
   const allocationRunId = exactRunId(serialized);
+  const economicLedger = new EconomicLedger(db);
   runScript(db, 'BEGIN IMMEDIATE');
   try {
     const existing = db.prepare(
@@ -308,6 +466,7 @@ export function saveExactAllocationRun(db: DatabaseSync, result: ExactAllocation
         throw new Error(`different exact allocation result already exists for ${allocationRunId}`);
       }
       const existingResult = deserializeExactAllocationRun({ kind: 'exact_allocation_run', schemaVersion: 1, body: String(existing.resultJson), digest: String(existing.resultDigest) });
+      validateExactAllocationSourceConservationWithLedger(economicLedger, existingResult);
       verifyExactAllocationLineage(db, allocationRunId, existingResult);
       runScript(db, 'COMMIT');
       return allocationRunId;
@@ -318,6 +477,7 @@ export function saveExactAllocationRun(db: DatabaseSync, result: ExactAllocation
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(allocationRunId, canonical.periodStartMs, canonical.periodEndMs, canonical.runAtMs, computedAtMs, canonical.complete ? 1 : 0, canonical.conserves ? 1 : 0, serialized.body, serialized.digest);
     insertExactAllocationLineage(db, allocationRunId, canonical);
+    validateExactAllocationSourceConservationWithLedger(economicLedger, canonical);
     verifyExactAllocationLineage(db, allocationRunId, canonical);
     runScript(db, 'COMMIT');
     return allocationRunId;
@@ -339,6 +499,7 @@ export function exactAllocationRun(db: DatabaseSync, allocationRunId: string): E
   const result = deserializeExactAllocationRun({ kind: 'exact_allocation_run', schemaVersion: 1, body: String(row.resultJson), digest: String(row.resultDigest) });
   if (String(row.allocationRunId) !== allocationRunId || Number(row.periodStartMs) !== result.periodStartMs || Number(row.periodEndMs) !== result.periodEndMs || Number(row.runAtMs) !== result.runAtMs || Boolean(row.complete) !== result.complete || Boolean(row.conserves) !== result.conserves) throw new Error(`exact allocation run ${allocationRunId} failed physical identity verification`);
   if (!Number.isSafeInteger(Number(row.computedAtMs))) throw new Error(`exact allocation run ${allocationRunId} has an invalid computedAt timestamp`);
+  validateExactAllocationSourceConservationWithLedger(new EconomicLedger(db), result);
   verifyExactAllocationLineage(db, allocationRunId, result);
   return { allocationRunId, computedAtMs: Number(row.computedAtMs), result };
 }
