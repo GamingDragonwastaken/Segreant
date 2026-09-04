@@ -820,6 +820,21 @@ function validateAppendOnlyTriggerAuthority(db: DatabaseSync): void {
       sql: "CREATE TRIGGER economic_fx_rate_observations_append_only_insert BEFORE INSERT ON economic_fx_rate_observations WHEN EXISTS (SELECT 1 FROM economic_fx_rate_observations WHERE observation_id = NEW.observation_id) BEGIN SELECT RAISE(ABORT, 'historical FX rate observations are append-only'); END",
     },
     {
+      name: 'economic_event_sources_append_only_update',
+      table: 'economic_event_sources',
+      sql: "CREATE TRIGGER economic_event_sources_append_only_update BEFORE UPDATE ON economic_event_sources BEGIN SELECT RAISE(ABORT, 'economic event source links are append-only'); END",
+    },
+    {
+      name: 'economic_event_sources_append_only_delete',
+      table: 'economic_event_sources',
+      sql: "CREATE TRIGGER economic_event_sources_append_only_delete BEFORE DELETE ON economic_event_sources BEGIN SELECT RAISE(ABORT, 'economic event source links are append-only'); END",
+    },
+    {
+      name: 'economic_event_sources_append_only_insert',
+      table: 'economic_event_sources',
+      sql: "CREATE TRIGGER economic_event_sources_append_only_insert BEFORE INSERT ON economic_event_sources WHEN EXISTS (SELECT 1 FROM economic_event_sources WHERE event_id = NEW.event_id AND source_event_id = NEW.source_event_id) BEGIN SELECT RAISE(ABORT, 'economic event source links are append-only'); END",
+    },
+    {
       name: 'billing_mapping_no_update',
       table: 'billing_record_mapping_versions',
       sql: "CREATE TRIGGER billing_mapping_no_update BEFORE UPDATE ON billing_record_mapping_versions BEGIN SELECT RAISE(ABORT, 'billing mapping evidence is append-only'); END",

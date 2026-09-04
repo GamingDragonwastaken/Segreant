@@ -35,6 +35,7 @@
  */
 
 import { usdMicros, formatUsdMicros } from './types.ts';
+import { formatMoneyAmount } from '../economics/money.ts';
 import type { OpenAiCostsObservationLine, OpenAiCostsObservationRun, RequestRow } from '../store/db.ts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -54,7 +55,9 @@ export type ReconciliationRefusal =
   | 'no_provider_observation'
   | 'observation_period_may_still_accrue'
   | 'provider_currency_is_not_usd'
-  | 'provider_reported_multiple_currencies';
+  | 'provider_reported_multiple_currencies'
+  | 'local_exact_amount_is_not_usd'
+  | 'local_exact_amount_requires_explicit_quantization';
 
 /**
  * Why one day's two numbers differ. Structural only — this says what SHAPE the
@@ -319,10 +322,31 @@ export function reconcileOpenAiCosts(input: {
     if (row.tsEpochMs < input.run.periodStartMs || row.tsEpochMs >= input.run.periodEndMs) continue;
     const key = utcDayStart(row.tsEpochMs);
     const bucket = localByDay.get(key) ?? { micros: 0, requests: 0 };
-    // Round per row, then sum as integers: accumulating floats and rounding
-    // once at the end drifts, and a reconciliation is the last place that is
-    // acceptable.
-    bucket.micros += Math.round(row.costUsd * 1_000_000);
+    let capturedMicros: number;
+    if (row.economicAmount !== undefined) {
+      if (row.economicAmount.currency !== 'USD') {
+        return refuse(
+          'local_exact_amount_is_not_usd',
+          `request ${row.requestId} has an exact local amount in ${row.economicAmount.currency}; this reconciliation has no FX policy`,
+        );
+      }
+      try {
+        // Preserve the canonical exact amount until the fixed-point boundary.
+        // If it cannot be represented in provider microdollars, refusing is safer
+        // than inventing a rounding mode for a consequential comparison.
+        capturedMicros = usdMicros(formatMoneyAmount(row.economicAmount), `request ${row.requestId} exact amount`);
+      } catch (error) {
+        return refuse(
+          'local_exact_amount_requires_explicit_quantization',
+          `request ${row.requestId} exact local amount cannot be represented in microdollars without an explicit quantization policy: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    } else {
+      // Legacy rows have no exact economic event. Retain their compatibility
+      // projection explicitly as the rate-card estimate documented by the result.
+      capturedMicros = Math.round(row.costUsd * 1_000_000);
+    }
+    bucket.micros += capturedMicros;
     bucket.requests += 1;
     localByDay.set(key, bucket);
   }

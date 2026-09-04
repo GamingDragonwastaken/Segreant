@@ -26,6 +26,7 @@ import {
   type ReconciliationRun,
 } from '../src/billing/reconcile.ts';
 import { Store, type OpenAiCostsObservationLine, type OpenAiCostsObservationRun, type RequestRow } from '../src/store/db.ts';
+import { money } from '../src/economics/money.ts';
 
 const DAY = 24 * 60 * 60 * 1000;
 // A fixed, long-past UTC day so the settlement-lag guard never depends on when
@@ -123,6 +124,29 @@ test('reconcile: compares project-day totals and states the residual rather than
   // Never plain "reconciled".
   assert.equal(result.status, 'reconciled_with_residual');
   assert.equal(result.trust, 'scope_conditional_reconciliation');
+});
+
+test('reconcile: uses exact local Money and refuses implicit sub-microdollar quantization', () => {
+  const exact = reconcileOpenAiCosts({
+    run: run(),
+    observations: [line(0, '2')],
+    // Deliberately disagreeing compatibility projection: exact economic data is
+    // authoritative when it is present on the row.
+    requests: [req(0, 999, { economicAmount: money('2', 'USD', 'estimated') })],
+    now: NOW,
+  });
+  assert.equal(exact?.status, 'reconciled_with_residual');
+  assert.equal(exact?.status === 'reconciled_with_residual' && exact.localCapturedMicros, 2_000_000);
+  assert.equal(exact?.status === 'reconciled_with_residual' && exact.unexplainedVarianceMicros, 0);
+
+  const subMicro = reconcileOpenAiCosts({
+    run: run(),
+    observations: [line(0, '0')],
+    requests: [req(0, 0, { economicAmount: money('0.0000001', 'USD', 'estimated') })],
+    now: NOW,
+  });
+  assert.equal(subMicro?.status, 'refused');
+  assert.equal(subMicro?.status === 'refused' && subMicro.refusal, 'local_exact_amount_requires_explicit_quantization');
 });
 
 test('reconcile: a day the provider reports and Fiscus never saw is named, not averaged away', () => {
@@ -344,6 +368,42 @@ test('reconcile: the store path picks the newest snapshot and finds the independ
   // The earlier snapshot said $8 for day one; that day is named as unstable.
   assert.equal(result.snapshotStability, 'changed_across_observations');
   assert.deepEqual(result.unstableDayStartMs, [D0]);
+  store.close();
+});
+
+test('reconcile: the store path preserves exact local amounts before the microdollar boundary', () => {
+  const store = new Store(':memory:');
+  const scope = store.setOpenAiScope({
+    billingAccountRef: 'org_exact',
+    providerProjectRef: 'proj_exact',
+    upstreamBase: 'https://api.openai.com',
+  });
+  store.recordOpenAiCostsObservation({
+    declaredScopeId: scope.declarationId,
+    providerProjectRef: 'proj_exact',
+    periodStartMs: D0,
+    periodEndMs: D0 + DAY,
+    fetchedAtMs: D0 + 2 * DAY,
+    paginationComplete: true,
+    pageCount: 1,
+    pageDigestChainSha256: 'c'.repeat(64),
+    resultState: 'succeeded',
+    failureCode: null,
+    observations: [
+      { providerProjectRef: 'proj_exact', bucketStartMs: D0, bucketEndMs: D0 + DAY, lineItem: 'gpt-4o', currency: 'USD', amountDecimal: '2' },
+    ],
+  });
+  store.insertRequest(req(0, 2.0000001, {
+    economicAmount: money('2.0000001', 'USD', 'estimated'),
+    providerScopeDeclarationId: scope.declarationId,
+  }));
+
+  const result = store.reconcileOpenAiCosts({ now: NOW });
+  assert.equal(result?.status, 'refused');
+  assert.equal(
+    result?.status === 'refused' && result.refusal,
+    'local_exact_amount_requires_explicit_quantization',
+  );
   store.close();
 });
 

@@ -202,6 +202,89 @@ test('Store canonical realization persistence issues the value Claim once and re
   }
 });
 
+test('revised persisted realization claims form one typed latest chain without erasing historical replay', () => {
+  const store = new Store(':memory:');
+  try {
+    const firstRecord = input();
+    store.insertRequest({
+      requestId: 'value-kernel', sessionId: null, tsEpochMs: 1_000, provider: 'anthropic', model: 'claude-opus-4-8',
+      project: 'fiscus', taskWeight: 1, inputTokens: 10, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0,
+      reasoningTokens: 0, costUsd: 1.25, economicAmount: money('1.25', 'USD', 'list'), estimated: false, streamed: false,
+      statusCode: 200, durationMs: 1, via: 'import',
+    });
+    store.saveRealizationUnits([firstRecord]);
+    const first = buildCodingRealizationKernelIssuance(firstRecord);
+
+    // Recomputing the same mature unit later changes its observed/as-of claim
+    // identity while retaining the same value coordinate. The old claim must
+    // remain replayable, but it cannot remain an unlinked latest tip.
+    const revisedRecord = { ...firstRecord, computedAtMs: 4_000 };
+    store.saveRealizationUnits([revisedRecord]);
+    const revised = buildCodingRealizationKernelIssuance(revisedRecord);
+    const storedRevised = store.epistemic().readClaim(revised.claim.id);
+
+    assert.notEqual(first.claim.id, revised.claim.id);
+    assert.deepEqual(storedRevised?.supersedes, [first.claim.id]);
+    assert.deepEqual(
+      store.epistemic().latestClaims().map((item) => item.id),
+      [revised.claim.id],
+    );
+    assert.deepEqual(
+      store.epistemic().latestClaims(
+        store.epistemic().graph().nodes.find((node) => node.id === first.claim.id)!.availableAt,
+      ).map((item) => item.id),
+      [first.claim.id],
+    );
+    assert.deepEqual(store.epistemic().graph().edges.filter((edge) => edge.relation === 'supersedes'), [
+      { from: revised.claim.id, to: first.claim.id, relation: 'supersedes' },
+    ]);
+
+    // Exact replay of the revised snapshot must retain the same lifecycle edge,
+    // not try to append a second payload with different supersession metadata.
+    store.saveRealizationUnits([revisedRecord]);
+  } finally {
+    store.close();
+  }
+});
+
+test('value realization persistence refuses a legacy ambiguous latest coordinate instead of choosing a predecessor', () => {
+  const store = new Store(':memory:');
+  try {
+    const firstRecord = input();
+    const secondRecord = { ...firstRecord, computedAtMs: 4_000 };
+    store.insertRequest({
+      requestId: 'value-kernel', sessionId: null, tsEpochMs: 1_000, provider: 'anthropic', model: 'claude-opus-4-8',
+      project: 'fiscus', taskWeight: 1, inputTokens: 10, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0,
+      reasoningTokens: 0, costUsd: 1.25, economicAmount: money('1.25', 'USD', 'list'), estimated: false, streamed: false,
+      statusCode: 200, durationMs: 1, via: 'import',
+    });
+    // Simulate rows issued before the value boundary carried an explicit
+    // successor rule: the generic ledger retains both, so the value path must
+    // refuse to guess which one a new revision should supersede.
+    for (const record of [firstRecord, secondRecord]) {
+      const issuance = buildCodingRealizationKernelIssuance(record);
+      store.epistemic().appendEvidence(issuance.evidence);
+      store.epistemic().appendClaim(issuance.claim);
+    }
+
+    const thirdRecord = { ...firstRecord, computedAtMs: 5_000 };
+    assert.throws(
+      () => store.saveRealizationUnits([thirdRecord]),
+      /ambiguous.*latest|latest.*ambiguous/i,
+    );
+    assert.equal((store.raw().prepare('SELECT COUNT(*) AS count FROM realization_units').get() as { count: number }).count, 0);
+    assert.deepEqual(
+      store.epistemic().latestClaims().map((item) => item.id).sort(),
+      [
+        buildCodingRealizationKernelIssuance(firstRecord).claim.id,
+        buildCodingRealizationKernelIssuance(secondRecord).claim.id,
+      ].sort(),
+    );
+  } finally {
+    store.close();
+  }
+});
+
 test('Store re-derives exact attribution from its ledger and refuses fabricated lineage', () => {
   const store = new Store(':memory:');
   try {

@@ -511,13 +511,20 @@ function evidenceOutput(value: unknown, plugin: PluginManifest | undefined, limi
   });
 }
 
-function requestMessage(value: unknown, limits: PluginMessageLimits): PluginRequestMessage {
+function requestMessage(
+  value: unknown,
+  limits: PluginMessageLimits,
+  plugin?: PluginManifest,
+): PluginRequestMessage {
   if (!hasAllowedKeys(value, REQUEST_KEYS)) throw new Error('plugin request fields must be exact');
   const record = value as Record<string, unknown>;
   if (record.protocolVersion !== PLUGIN_CONTRACT_VERSION) throw new Error('plugin request protocolVersion must be 1');
   if (record.kind !== 'request') throw new Error('plugin message kind must be request or evidence');
   const requestId = safeIdentifier(record.requestId, 'plugin request requestId', limits);
   const pluginId = safePluginId(record.pluginId, 'plugin request pluginId');
+  if (plugin !== undefined && plugin.pluginId !== pluginId) {
+    throw new Error('plugin request pluginId does not match manifest');
+  }
   const operation = safeIdentifier(record.operation, 'plugin request operation', limits);
   return Object.freeze({
     protocolVersion: PLUGIN_CONTRACT_VERSION,
@@ -531,7 +538,7 @@ function requestMessage(value: unknown, limits: PluginMessageLimits): PluginRequ
 
 function normalizedMessage(value: unknown, plugin: PluginManifest | undefined, limits: PluginMessageLimits): PluginMessage {
   if (!isPlainRecord(value)) throw new Error('plugin message must be a plain JSON object');
-  if (value.kind === 'request') return requestMessage(value, limits);
+  if (value.kind === 'request') return requestMessage(value, limits, plugin);
   if (value.kind === 'evidence') return evidenceOutput(value, plugin, limits);
   throw new Error('plugin message kind must be request or evidence');
 }

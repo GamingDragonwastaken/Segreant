@@ -44,7 +44,7 @@ import type { AllocationRule, CostCentre } from '../alloc/rules.ts';
 import type { AllocationRunResult } from '../alloc/apply.ts';
 import type { ExactAllocationRunResult } from '../alloc/exact.ts';
 import { buildExactAllocationKernelIssuance, type ExactAllocationKernelPersistenceResult } from '../alloc/epistemic.ts';
-import { buildCodingRealizationKernelIssuance, codingRealizationKernelEligible, type CodingRealizationKernelPersistenceResult } from '../value/epistemic.ts';
+import { bindCodingRealizationSuccessor, buildCodingRealizationKernelIssuance, codingRealizationKernelEligible, type CodingRealizationKernelPersistenceResult } from '../value/epistemic.ts';
 import * as allocation from './allocation.ts';
 import type { ExactAllocationRunRecord } from './allocation.ts';
 import * as exactAllocation from '../alloc/exact.ts';
@@ -173,6 +173,7 @@ export type {
   IndependentCausalProducerReasonCodeV2,
 } from './causalProducer.ts';
 export type { BackupInspection, BackupManifest, BackupResult } from './backup.ts';
+
 
 export interface RequestRow {
   requestId: string;
@@ -1608,6 +1609,25 @@ export class Store {
     return effectiveRequestRows(rows, this.economicLedger, options);
   }
 
+  /**
+   * Reconciliation keeps the billing route and dimensions from the compatibility
+   * request index, but overlays the effective exact amount when the economic
+   * ledger has one. Missing exact coverage remains a legacy estimate and is
+   * disclosed by the reconciliation conditions rather than manufactured here.
+   */
+  private reconciliationRequestsInRange(startMs: number, endMs: number): RequestRow[] {
+    const rows = this.requestsInRange(startMs, endMs);
+    const effectiveByRequestId = new Map(
+      this.economicRequestRowsInRange(startMs, endMs)
+        .filter((row) => row.effectiveAmount !== null)
+        .map((row) => [row.requestId, row.effectiveAmount!] as const),
+    );
+    return rows.map((row) => {
+      const amount = effectiveByRequestId.get(row.requestId);
+      return amount === undefined ? row : { ...row, economicAmount: amount };
+    });
+  }
+
   insertCommit(c: {
     commitHash: string;
     project: string;
@@ -1922,7 +1942,7 @@ export class Store {
         // request/economic ledger after preflight but before publication.
         this.assertRealizationEconomicLineage(record, issuance);
         this.assertPersistedRealizationRow(record);
-        this.appendCodingRealizationKernel(issuance);
+        this.appendCodingRealizationKernel(bindCodingRealizationSuccessor(issuance, this.epistemicLedger));
       }
     });
   }
@@ -1937,6 +1957,7 @@ export class Store {
       return this.appendCodingRealizationKernel(issuance);
     });
   }
+
 
   private appendCodingRealizationKernel(issuance: ReturnType<typeof buildCodingRealizationKernelIssuance>): CodingRealizationKernelPersistenceResult {
     const evidenceResult = this.epistemicLedger.appendEvidenceWithinTransaction(issuance.evidence);
@@ -2321,7 +2342,12 @@ export class Store {
    * is a separate, explicit step.
    */
   reconcileOpenAiCosts(opts: { materialityUsd?: number; now?: number } = {}): ReconciliationResult | null {
-    return billing.reconcileOpenAiCosts(this.db, (startMs, endMs) => this.requestsInRange(startMs, endMs), opts);
+    return billing.reconcileOpenAiCosts(
+      this.db,
+      (startMs, endMs) => this.requestsInRange(startMs, endMs),
+      opts,
+      (startMs, endMs) => this.reconciliationRequestsInRange(startMs, endMs),
+    );
   }
 
   /** Persist a computed reconciliation as an immutable derived record. */

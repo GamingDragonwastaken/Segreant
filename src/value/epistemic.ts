@@ -5,6 +5,7 @@
  */
 
 import { createHash } from 'node:crypto';
+import type { EpistemicLedger } from '../epistemic/ledger.ts';
 import { claim, type Claim } from '../epistemic/claim.ts';
 import { evidence, type Evidence } from '../epistemic/evidence.ts';
 import { claimProfile, type MonetaryBasisStatus } from '../epistemic/profile.ts';
@@ -457,4 +458,41 @@ export function buildCodingRealizationKernelIssuance(input: CodingRealizationKer
     schemaVersion: 1,
   });
   return Object.freeze({ evidence: evidenceValue, claim: claimValueRecord });
+}
+
+function claimBodyWithoutSupersedes(value: Claim): string {
+  return canonicalJson({ ...value, supersedes: [] });
+}
+
+/**
+ * Bind a newly computed coding-realization Claim to the latest Claim at its
+ * exact semantic coordinate. Store owns the transaction; this module owns the
+ * canonical value issuance semantics.
+ */
+export function bindCodingRealizationSuccessor(
+  issuance: CodingRealizationKernelIssuance,
+  ledger: EpistemicLedger,
+): CodingRealizationKernelIssuance {
+  const candidate = issuance.claim;
+  const existing = ledger.readClaim(candidate.id);
+  const latest = ledger.latestClaimAtCoordinate(candidate);
+
+  if (existing !== null) {
+    if (latest !== null && latest.id !== candidate.id) {
+      throw new Error(`coding realization claim ${candidate.id} is already superseded by ${latest.id}`);
+    }
+    if (claimBodyWithoutSupersedes(existing) !== claimBodyWithoutSupersedes(candidate)) {
+      throw new Error(`different coding realization claim already exists for ${candidate.id}`);
+    }
+    return Object.freeze({ ...issuance, claim: existing });
+  }
+
+  if (latest === null) return issuance;
+  if (Date.parse(candidate.issuedAt) <= Date.parse(latest.issuedAt)) {
+    throw new Error(`coding realization claim ${candidate.id} is not later than ${latest.id}`);
+  }
+  return Object.freeze({
+    ...issuance,
+    claim: claim({ ...candidate, supersedes: [latest.id] }),
+  });
 }

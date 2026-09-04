@@ -672,6 +672,23 @@ export class EpistemicLedger {
   }
 
   /**
+   * Return the visible latest Claim at one exact semantic coordinate.
+   *
+   * Coordinate equality deliberately excludes `asOf`: a later-issued Claim may
+   * revise the same valid-time proposition. The optional boundary is applied by
+   * `latestClaims` before this method compares coordinates, so historical reads
+   * cannot select a successor that was not yet available. More than one visible
+   * tip is legacy ambiguity, not a tie to resolve by identifier or insertion
+   * order, and therefore fails closed.
+   */
+  latestClaimAtCoordinate(value: Claim, asOf?: Instant): Claim | null {
+    const coordinate = claimCoordinateKey(value);
+    const matches = this.latestClaims(asOf).filter((candidate) => claimCoordinateKey(candidate) === coordinate);
+    if (matches.length > 1) throw new Error(`ambiguous latest claims at coordinate for ${value.id}`);
+    return matches[0] ?? null;
+  }
+
+  /**
    * Reconstruct every currently modeled kernel projection at one boundary.
    * Node availability and revocation event time are filtered independently;
    * later observations or corrections cannot leak into the historical view.
