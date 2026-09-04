@@ -454,3 +454,32 @@ Remaining after A09: Frontier B (universal issuance legality, removal of
 gate. The register's `PARTIAL` rows each carry an explicit residual requirement
 in `docs/program/AUDIT-REGISTER.md`; a `PARTIAL` is not a nearly-finished
 `COMPLETED`.
+
+## Continuation addendum — economic reconstruction frontier (2026-09-04)
+
+The historical sections above preserve their original checkpoint context. The
+current branch subsequently published the following bounded economic slices:
+
+- [x] `81e0041f833752a3489d2a553bba7bc70f5e8881` persists canonical historical
+  FX observations append-only with digest identity and revalidated
+  serialization/read integration; explicit target-currency, rate-book,
+  effective-time and recorded-time context now propagates through bounded
+  Store/read-model/export/dashboard/CLI consumers. GitHub Actions run
+  `33907284590` concluded successfully across all eight jobs.
+- [x] `1a4e406b8aef09876220da84da584897a833c2fc` makes exact-allocation
+  persistence resolve every cited multi-hop `price_corrected` predecessor
+  through the validated economic ledger to its charge root, refusing an
+  incomplete chain while retaining the existing exact conservation and
+  finalized-close checks. GitHub Actions run `33909224912` concluded
+  successfully across all eight jobs.
+
+The latest code checkpoint is `1a4e406b8aef09876220da84da584897a833c2fc` on
+`origin/gpt56/magnum-opus-reconstruction`. Local verification at that head is
+1,446 root tests total, 1,442 pass, 0 fail and 4 platform skips; team-server is
+67/67, root/browser TypeScript and build pass, and `git diff --check` passes.
+The packet inventory remains **11 COMPLETED / 28 PARTIAL / 37 NOT_STARTED**.
+These are bounded foundations, not final dossier completion: provider-authoritative
+FX, universal consumer migration, per-link basis agreement across all adjustment
+kinds, complete correction/close/supersession semantics, receipt/team
+reconciliation, remaining kernel issuance boundaries and external gates remain
+open.
