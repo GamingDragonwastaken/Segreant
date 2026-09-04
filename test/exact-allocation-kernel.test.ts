@@ -152,7 +152,7 @@ test('exact allocation persistence refuses a non-charge source role', () => {
   }
 });
 
-test('exact allocation accepts a source charge plus its validated local correction as one effective total', () => {
+test('exact allocation accepts a source charge plus its validated correction chain as one effective total', () => {
   const store = new Store(':memory:');
   try {
     const source = economicEvent({
@@ -176,7 +176,17 @@ test('exact allocation accepts a source charge plus its validated local correcti
       recordedAt: '1970-01-01T00:00:00.030Z',
     });
     store.economic().append(correction);
+    const secondCorrection = priceCorrectionEvent({
+      id: 'economic:allocation-kernel:second-correction',
+      source: correction,
+      previousAmount: money('1.50', 'USD', 'list'),
+      nextAmount: money('1.75', 'USD', 'list'),
+      recordedAt: '1970-01-01T00:00:00.040Z',
+    });
+    store.economic().append(secondCorrection);
     const effective = store.economic().effectiveChargeFor(source.id)!;
+    assert.equal(effective.amount.coefficient, 175n);
+    assert.deepEqual(effective.eventIds, [source.id, correction.id, secondCorrection.id]);
     const result = applyExactAllocation({
       rows: [{ sourceEventIds: effective.eventIds, amount: effective.amount, project: 'api', provider: 'anthropic', model: 'claude-opus-4-8', source: null, user: null, tsEpochMs: 10 }],
       rules: [RULE], costCentres: [CENTRE], periodStartMs: 0, periodEndMs: 100, runAtMs: 100,

@@ -438,12 +438,27 @@ function validateExactAllocationSourceConservationWithLedger(
     if (source.sourceEventIds.length !== 1) {
       throw new Error(`exact allocation price correction ${source.id} must reference exactly one charge source`);
     }
-    const rootId = source.sourceEventIds[0];
-    if (rootId === undefined || !sourceOwner.has(rootId)) {
-      throw new Error(`exact allocation price correction ${source.id} must be accompanied by its root charge`);
+    const visited = new Set<string>([source.id]);
+    let rootId = source.sourceEventIds[0];
+    while (rootId !== undefined) {
+      if (!sourceOwner.has(rootId)) {
+        throw new Error(`exact allocation price correction ${source.id} must be accompanied by its complete correction chain and root charge`);
+      }
+      if (visited.has(rootId)) {
+        throw new Error(`exact allocation price correction chain cycles at ${rootId}`);
+      }
+      visited.add(rootId);
+      const predecessor = ledger.read(rootId);
+      if (predecessor === null) {
+        throw new Error(`exact allocation price correction ${source.id} has a missing predecessor: ${rootId}`);
+      }
+      if (economicEventRole(predecessor.kind) === 'charge') break;
+      if (predecessor.kind !== 'price_corrected' || predecessor.sourceEventIds.length !== 1) {
+        throw new Error(`exact allocation price correction ${source.id} does not resolve to a charge root`);
+      }
+      rootId = predecessor.sourceEventIds[0];
     }
-    const root = ledger.read(rootId);
-    if (root === null || economicEventRole(root.kind) !== 'charge') {
+    if (rootId === undefined) {
       throw new Error(`exact allocation price correction ${source.id} does not resolve to a charge root`);
     }
     const ids = roots.get(rootId) ?? new Set<string>();
