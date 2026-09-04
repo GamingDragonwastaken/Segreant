@@ -1106,13 +1106,14 @@ export function reconcileOpenAiCosts(
   db: DatabaseSync,
   requestsInRange: RequestsInRange,
   opts: { materialityUsd?: number; now?: number },
+  exactRequestsInRange: RequestsInRange = requestsInRange,
 ): ReconciliationResult | null {
   const latest = latestCompleteOpenAiCostsObservation(db);
   if (!latest) return null;
   return computeOpenAiReconciliation({
     run: latest.run,
     observations: latest.observations,
-    requests: requestsInRange(latest.run.periodStartMs, latest.run.periodEndMs),
+    requests: exactRequestsInRange(latest.run.periodStartMs, latest.run.periodEndMs),
     priorDayTotals: priorOpenAiCostsDayTotals(
       db,
       latest.run.observationRunId,
