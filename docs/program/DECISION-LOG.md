@@ -977,3 +977,12 @@ rollups remain responsible for their own typed bridge.
 **Verified:** RED-first tests cover a valid revision, idempotent replay, typed target refusal, coordinate mismatch, non-later issuance, branch refusal, persisted supersedes edge, and latest selection before/at the revision boundary. The supersession file passed 2/2 and the epistemic family passed 96/96; root/browser TypeScript, `npm run build`, and `git diff --check` exited 0. Code checkpoint `e2b1fa0bb0b30c49e969c7fe89eae8fb642f579a` matches the remote branch; CI run `33873403151` concluded `success` across all eight jobs, read 2026-09-04.
 
 **What this does not establish.** Economic `price_corrected`/`fx_translated` supersession, rate provenance, adjustment-to-charge conservation, receipt/team reconciliation, or full WP-C04 completion. The selector is a generic Claim projection and does not convert a later value into provider-billed truth.
+
+## D-118 — Coding realization consumes the domain-neutral OutcomeAdapter
+**Decision:** The coding realization path constructs its existing eight-gate evidence and evaluates it through the versioned `coding-gate-lifecycle-v1` `OutcomeAdapter`; the adapter's generic `OutcomeEvaluation` is authoritative for terminal status, while the legacy ordered `FunnelOutcome` remains a compatibility projection. The existing non-coding session path continues to use its own versioned adapter rather than borrowing coding gates.
+
+**Reason:** A generic WorkUnit/OutcomeAdapter contract has no architectural value if the principal coding path continues to call the Git-specific funnel directly. Routing the path through the adapter removes that bypass without pretending a coding lifecycle is universal, and preserves existing ordered-gate detail, conflict visibility, and downstream report compatibility.
+
+**Verified:** The adapter integration and affected value surface passed 98/98, including supported, refuted, unresolved and conflicted states; root/browser TypeScript, `npm run build`, and `git diff --check` exited 0. Code checkpoint `0d5236525e09243bd0e9d32fa60a31ea4bbd117b` matches the remote branch; CI run `33874869158` concluded `success` across all eight jobs, read 2026-09-04.
+
+**What this does not establish.** A durable adapter registry, serialized/plugin adapter loading, full CLI/API/GUI migration, or the closure of WP-D01; the packet remains `PARTIAL` until those broader integration surfaces are addressed.

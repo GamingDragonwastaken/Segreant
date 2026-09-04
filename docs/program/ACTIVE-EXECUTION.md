@@ -7,17 +7,17 @@
 | | |
 | --- | --- |
 | Branch | `gpt56/magnum-opus-reconstruction` |
-| Current remote head | `e2b1fa0bb0b30c49e969c7fe89eae8fb642f579a` — exact remote match |
-| Latest exact-head CI | Run `33873403151` — **success**, head `e2b1fa0bb0b30c49e969c7fe89eae8fb642f579a`, observed 2026-09-04 |
-| Latest code tranche | Claim supersession/latest selection; local RED-first supersession tests **2/2**, epistemic family **96/96**, root/browser TypeScript, build, and diff check passed |
-| Working tree | Documentation reconciliation for `e2b1fa0` is in progress; source-code checkpoints `c3e0034` and `e2b1fa0` are clean |
+| Current remote head | `0d5236525e09243bd0e9d32fa60a31ea4bbd117b` — exact remote match |
+| Latest exact-head CI | Run `33874869158` — **success**, head `0d5236525e09243bd0e9d32fa60a31ea4bbd117b`, observed 2026-09-04 |
+| Latest code tranche | Coding realization routed through the versioned OutcomeAdapter; adapter/value surface **98/98**, root/browser TypeScript, build, and diff check passed |
+| Working tree | D01 program-record reconciliation for `0d52365` is in progress; source-code checkpoints `c3e0034`, `e2b1fa0`, and `0d52365` are clean |
 | Operating policy | One bounded slice → focused verification → compiler/build gate → one accounting update → one checkpoint. Reuse green evidence; do not repeat full suites, cleanup, or unchanged reads without a new hypothesis. |
 
 ## Completed and reusable evidence
 
 - Published safeguard tranche `72986ad`: root lifecycle **1,406 total / 1,402 pass / 0 fail / 4 skips**; CI run `33850043162` success across all eight jobs.
 - Published exact-allocation checkpoint `110b3dc`: affected economic/allocation **84/84**; all three TypeScript domains, `npm run build`, and `git diff --check` passed; CI run `33854265175` success across all eight jobs.
-- Packet accounting now records bounded PARTIAL states for D02/D03/E01/F02/G02/G03/G05/H03/R02 and the C04/R06 allocation-lineage and finalized-close advances. Do not inflate any of these to COMPLETED.
+- Packet accounting now records bounded PARTIAL states for D01/D02/D03/E01/F02/G02/G03/G05/H03/R02 and the C04/R06 allocation-lineage and finalized-close advances. Do not inflate any of these to COMPLETED.
 
 ## Active frontier
 
