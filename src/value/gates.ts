@@ -26,6 +26,8 @@
  */
 
 import type { EpistemicState } from '../epistemic/state.ts';
+import { adaptOutcome, createWorkUnit, type OutcomeAdapter, type WorkUnit } from '../outcomes/work-unit.ts';
+import type { OutcomeContract, OutcomeEvaluation } from '../outcomes/contract.ts';
 
 export const GATE_LADDER = [
   'proposed',
@@ -150,6 +152,39 @@ export interface FunnelOutcome {
   unknowns: number;
   instrumented: number; // passes + fails
   realizationScore: number; // passes / instrumented, 0 when nothing instrumented
+}
+
+const CODING_OUTCOME_CONTRACT: OutcomeContract = Object.freeze({
+  id: 'coding-gate-lifecycle',
+  requiredPredicates: GATE_LADDER,
+});
+
+/** Canonical adapter for coding's legacy gate contract. */
+export const CODING_OUTCOME_ADAPTER: OutcomeAdapter = Object.freeze({
+  id: 'coding-gate-lifecycle-v1',
+  contract: CODING_OUTCOME_CONTRACT,
+  resolve: (_predicate: string, unit: WorkUnit): EpistemicState => {
+    const states = unit.context.gateStates;
+    if (states === null || typeof states !== 'object' || Array.isArray(states)) return 'unknown';
+    const state = (states as Record<string, unknown>)[_predicate];
+    return state === 'supported' || state === 'refuted' || state === 'conflicted' || state === 'unknown'
+      ? state
+      : 'unknown';
+  },
+});
+
+/** Evaluate coding gates through the domain-neutral OutcomeAdapter contract. */
+export function evaluateCodingOutcome(verdicts: Readonly<Record<Gate, GateResult>>): OutcomeEvaluation {
+  const unit = createWorkUnit({
+    id: 'coding-outcome-evaluation',
+    kind: 'coding_commit',
+    startedAtMs: 0,
+    endedAtMs: 0,
+    context: {
+      gateStates: Object.fromEntries(GATE_LADDER.map((gateName) => [gateName, verdicts[gateName].polarity])),
+    },
+  });
+  return adaptOutcome(unit, CODING_OUTCOME_ADAPTER).evaluation;
 }
 
 /**
@@ -293,13 +328,11 @@ export function scoreFunnel(verdicts: Record<Gate, GateResult>): FunnelOutcome {
     if (results[i]!.verdict === 'pass') reachedIndex = i;
   }
 
-  // A conflicted gate already projects to `fail`, so this is false when any
-  // gate disagreed with itself. Stating the conflict condition separately keeps
-  // that from becoming an accident of the projection: terminal realization must
-  // not be reachable through a contradiction even if the projection changes.
+  // The canonical coding adapter is the terminal-status authority. It consumes
+  // the four-valued gate states, so unknown and conflicted evidence cannot become
+  // confirmation through the legacy three-valued projection.
   const conflicts = GATE_LADDER.filter((gateName) => verdicts[gateName].polarity === 'conflicted');
-  const realized =
-    conflicts.length === 0 && GATE_LADDER.every((gateName) => verdicts[gateName].verdict === 'pass');
+  const realized = evaluateCodingOutcome(verdicts).status === 'confirmed';
   const instrumented = passes + fails;
 
   // Realization score is MONOTONE along the necessary-condition chain: a unit

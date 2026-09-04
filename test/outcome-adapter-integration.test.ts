@@ -44,3 +44,48 @@ test('the canonical non-coding adapter preserves conflict instead of flattening 
     { kind: 'incident', verdict: 'fail' },
   ]).state, 'conflicted');
 });
+
+test('coding realization exposes a versioned OutcomeAdapter without flattening unknown or conflict', async () => {
+  const { CODING_OUTCOME_ADAPTER, evaluateCodingOutcome } = await import('../src/value/gates.ts');
+  const unit = createWorkUnit({
+    id: 'commit-adapter-1',
+    kind: 'coding_commit',
+    startedAtMs: 100,
+    endedAtMs: 200,
+    context: {
+      gateStates: {
+        proposed: 'supported',
+        accepted: 'supported',
+        committed: 'supported',
+        tested: 'supported',
+        merged: 'supported',
+        shipped: 'supported',
+        survived: 'supported',
+        clean: 'supported',
+      },
+    },
+  });
+
+  assert.equal(CODING_OUTCOME_ADAPTER.id, 'coding-gate-lifecycle-v1');
+  assert.equal(adaptOutcome(unit, CODING_OUTCOME_ADAPTER).evaluation.status, 'confirmed');
+  assert.equal(evaluateCodingOutcome({
+    proposed: { gate: 'proposed', polarity: 'supported', verdict: 'pass', detail: '' },
+    accepted: { gate: 'accepted', polarity: 'supported', verdict: 'pass', detail: '' },
+    committed: { gate: 'committed', polarity: 'supported', verdict: 'pass', detail: '' },
+    tested: { gate: 'tested', polarity: 'supported', verdict: 'pass', detail: '' },
+    merged: { gate: 'merged', polarity: 'supported', verdict: 'pass', detail: '' },
+    shipped: { gate: 'shipped', polarity: 'supported', verdict: 'pass', detail: '' },
+    survived: { gate: 'survived', polarity: 'unknown', verdict: 'unknown', detail: '' },
+    clean: { gate: 'clean', polarity: 'supported', verdict: 'pass', detail: '' },
+  }).status, 'unresolved');
+  assert.equal(evaluateCodingOutcome({
+    proposed: { gate: 'proposed', polarity: 'supported', verdict: 'pass', detail: '' },
+    accepted: { gate: 'accepted', polarity: 'supported', verdict: 'pass', detail: '' },
+    committed: { gate: 'committed', polarity: 'supported', verdict: 'pass', detail: '' },
+    tested: { gate: 'tested', polarity: 'conflicted', verdict: 'fail', detail: '' },
+    merged: { gate: 'merged', polarity: 'supported', verdict: 'pass', detail: '' },
+    shipped: { gate: 'shipped', polarity: 'supported', verdict: 'pass', detail: '' },
+    survived: { gate: 'survived', polarity: 'supported', verdict: 'pass', detail: '' },
+    clean: { gate: 'clean', polarity: 'supported', verdict: 'pass', detail: '' },
+  }).status, 'conflicted');
+});
