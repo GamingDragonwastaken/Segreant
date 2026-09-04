@@ -34,6 +34,35 @@ export interface PriceCorrectionEventInput {
   readonly occurredAt?: Instant;
 }
 
+function predecessorNextAmount(source: EconomicEvent): Money {
+  const metadata = source.metadata;
+  if (metadata === null || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    throw new Error('price correction predecessor metadata must contain typed previousAmount and nextAmount');
+  }
+  const keys = Object.keys(metadata).sort();
+  if (keys.join('\u0000') !== ['correction', 'nextAmount', 'previousAmount'].join('\u0000')) {
+    throw new Error('price correction predecessor metadata must contain exactly correction, previousAmount, and nextAmount');
+  }
+  const record = metadata as { correction?: unknown; previousAmount?: unknown; nextAmount?: unknown };
+  if (record.correction !== 'reprice') throw new Error('price correction predecessor metadata correction must be reprice');
+  let previousAmount: Money;
+  let nextAmount: Money;
+  try {
+    previousAmount = moneyFromJson(record.previousAmount as Parameters<typeof moneyFromJson>[0]);
+    nextAmount = moneyFromJson(record.nextAmount as Parameters<typeof moneyFromJson>[0]);
+  } catch (error) {
+    throw new Error(`price correction predecessor metadata has invalid typed amounts: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (source.amount === null) throw new Error('price correction predecessor must have a monetary delta');
+  if (previousAmount.currency !== source.amount.currency || previousAmount.basis !== source.amount.basis || nextAmount.currency !== source.amount.currency || nextAmount.basis !== source.amount.basis) {
+    throw new Error('price correction predecessor metadata must use its delta currency and basis');
+  }
+  if (nextAmount.coefficient < 0n || compareMoney(subtractMoney(nextAmount, previousAmount), source.amount) !== 0) {
+    throw new Error('price correction predecessor metadata does not reproduce its delta');
+  }
+  return nextAmount;
+}
+
 /**
  * Build an additive price correction for a previously recorded charge.
  *
@@ -46,13 +75,21 @@ export function priceCorrectionEvent(input: PriceCorrectionEventInput): Economic
   const source = economicEvent(input.source);
   const previousAmount = canonicalMoney(input.previousAmount, 'price correction previousAmount');
   const nextAmount = canonicalMoney(input.nextAmount, 'price correction nextAmount');
-  if (source.kind !== 'charge_estimated' || (source.amount !== null && source.amount.basis !== 'list' && source.amount.basis !== 'estimated')) {
-    throw new Error(`price correction source must be a local charge_estimated event (received ${source.kind})`);
+  let predecessorAmount: Money;
+  if (source.kind === 'charge_estimated') {
+    if (source.amount === null) throw new Error('price correction source must have a monetary amount');
+    if (source.amount.basis !== 'list' && source.amount.basis !== 'estimated') {
+      throw new Error(`price correction source must be a local charge_estimated event (received ${source.kind})`);
+    }
+    predecessorAmount = source.amount;
+  } else if (source.kind === 'price_corrected') {
+    predecessorAmount = predecessorNextAmount(source);
+  } else {
+    throw new Error(`price correction source must be a local charge_estimated or prior price_corrected event (received ${source.kind})`);
   }
-  if (source.amount === null) throw new Error('price correction source must have a monetary amount');
-  if (source.amount.coefficient < 0n) throw new Error('price correction source amount must be non-negative');
-  if (compareMoney(previousAmount, source.amount) !== 0) {
-    throw new Error('price correction previousAmount must equal the source amount');
+  if (predecessorAmount.coefficient < 0n) throw new Error('price correction predecessor amount must be non-negative');
+  if (compareMoney(previousAmount, predecessorAmount) !== 0) {
+    throw new Error('price correction previousAmount must equal the predecessor next amount');
   }
   if (previousAmount.currency !== nextAmount.currency || previousAmount.basis !== nextAmount.basis) {
     throw new Error('price correction previousAmount and nextAmount must use the same currency and basis');

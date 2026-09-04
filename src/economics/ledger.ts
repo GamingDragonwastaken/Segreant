@@ -475,20 +475,49 @@ export class EconomicLedger {
       const source = sources.get(sourceId);
       if (source === undefined) throw new Error(`economic event ${value.id} price correction source is missing`);
       const sourceRole = economicEventRole(source.kind);
-      if (sourceRole !== 'charge') {
+      if (sourceRole !== 'charge' && sourceRole !== 'price') {
         throw new Error(
-          `economic event ${value.id} price correction source must be a charge `
+          `economic event ${value.id} price correction source must be a charge or prior correction `
           + `(received ${source.kind})`,
         );
       }
-      if (source.kind !== 'charge_estimated' || source.amount === null || (source.amount.basis !== 'list' && source.amount.basis !== 'estimated')) {
+      if (source.kind !== 'charge_estimated' && source.kind !== 'price_corrected') {
+        throw new Error(`economic event ${value.id} price correction must target a local charge_estimated or prior price_corrected event`);
+      }
+      if (source.amount === null) throw new Error(`economic event ${value.id} price correction predecessor must have a monetary amount`);
+      let predecessorAmount = source.amount;
+      if (source.kind === 'charge_estimated' && source.amount.basis !== 'list' && source.amount.basis !== 'estimated') {
         throw new Error(`economic event ${value.id} price correction must target a local charge_estimated event`);
+      }
+      if (source.kind === 'price_corrected') {
+        const predecessorMetadata = source.metadata;
+        if (predecessorMetadata === null || typeof predecessorMetadata !== 'object' || Array.isArray(predecessorMetadata)) {
+          throw new Error(`economic event ${value.id} price correction predecessor metadata is missing typed amounts`);
+        }
+        const predecessorKeys = Object.keys(predecessorMetadata).sort();
+        if (predecessorKeys.join('\u0000') !== ['correction', 'nextAmount', 'previousAmount'].join('\u0000')) {
+          throw new Error(`economic event ${value.id} price correction predecessor metadata has unknown or missing fields`);
+        }
+        const predecessorRecord = predecessorMetadata as { correction?: unknown; previousAmount?: unknown; nextAmount?: unknown };
+        if (predecessorRecord.correction !== 'reprice') throw new Error(`economic event ${value.id} price correction predecessor metadata correction must be reprice`);
+        let predecessorPrevious: Money;
+        let predecessorNext: Money;
+        try {
+          predecessorPrevious = moneyFromJson(predecessorRecord.previousAmount as Parameters<typeof moneyFromJson>[0]);
+          predecessorNext = moneyFromJson(predecessorRecord.nextAmount as Parameters<typeof moneyFromJson>[0]);
+        } catch (error) {
+          throw new Error(`economic event ${value.id} price correction predecessor metadata has invalid typed amounts: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        if (predecessorNext.coefficient < 0n || predecessorPrevious.currency !== source.amount.currency || predecessorPrevious.basis !== source.amount.basis || predecessorNext.currency !== source.amount.currency || predecessorNext.basis !== source.amount.basis || compareMoney(subtractMoney(predecessorNext, predecessorPrevious), source.amount) !== 0) {
+          throw new Error(`economic event ${value.id} price correction predecessor metadata does not reproduce its delta`);
+        }
+        predecessorAmount = predecessorNext;
       }
       if (source.subject !== value.subject) throw new Error(`economic event ${value.id} price correction subject must match its source`);
       if (value.amount === null) throw new Error(`economic event ${value.id} price correction requires a monetary delta`);
-      if (source.amount.coefficient < 0n) throw new Error(`economic event ${value.id} price correction source amount must be non-negative`);
-      if (value.amount.currency !== source.amount.currency || value.amount.basis !== source.amount.basis) {
-        throw new Error(`economic event ${value.id} price correction must use the source currency and basis`);
+      if (predecessorAmount.coefficient < 0n) throw new Error(`economic event ${value.id} price correction predecessor amount must be non-negative`);
+      if (value.amount.currency !== predecessorAmount.currency || value.amount.basis !== predecessorAmount.basis) {
+        throw new Error(`economic event ${value.id} price correction must use the predecessor currency and basis`);
       }
       const metadata = value.metadata;
       if (metadata === null || typeof metadata !== 'object' || Array.isArray(metadata)) {
@@ -508,9 +537,9 @@ export class EconomicLedger {
       } catch (error) {
         throw new Error(`economic event ${value.id} price correction metadata has invalid typed amounts: ${error instanceof Error ? error.message : String(error)}`);
       }
-      if (compareMoney(previous, source.amount) !== 0) throw new Error(`economic event ${value.id} price correction previousAmount must equal its source amount`);
-      if (next.currency !== source.amount.currency || next.basis !== source.amount.basis) {
-        throw new Error(`economic event ${value.id} price correction nextAmount must use the source currency and basis`);
+      if (compareMoney(previous, predecessorAmount) !== 0) throw new Error(`economic event ${value.id} price correction previousAmount must equal its predecessor next amount`);
+      if (next.currency !== predecessorAmount.currency || next.basis !== predecessorAmount.basis) {
+        throw new Error(`economic event ${value.id} price correction nextAmount must use the predecessor currency and basis`);
       }
       if (next.coefficient < 0n) throw new Error(`economic event ${value.id} price correction nextAmount must be non-negative`);
       if (compareMoney(subtractMoney(next, previous), value.amount) !== 0) {
@@ -997,25 +1026,35 @@ export class EconomicLedger {
       if (economicEventRole(source.kind) === 'charge' && source.amount !== null) sources.set(source.id, source);
     }
     if (sources.size > 0) {
-      const ids = [...sources.keys()];
-      const placeholders = ids.map(() => '?').join(', ');
       const recordedClause = boundary === undefined ? '' : ' AND e.recorded_at <= ?';
       const correctionRows = this.db.prepare(
         `SELECT e.event_id, e.event_kind, e.subject, e.occurred_at, e.recorded_at, e.event_json, e.event_digest
            FROM economic_events AS e
-           JOIN economic_event_sources AS s ON s.event_id = e.event_id
-          WHERE e.event_kind = 'price_corrected' AND s.source_event_id IN (${placeholders})${recordedClause}
+          WHERE e.event_kind = 'price_corrected'${recordedClause}
           ORDER BY e.recorded_at ASC, e.event_id ASC`,
-      ).all(...ids, ...(boundary === undefined ? [] : [boundary])) as unknown as StoredEconomicRow[];
+      ).all(...(boundary === undefined ? [] : [boundary])) as unknown as StoredEconomicRow[];
+      const correctionBySource = new Map<string, EconomicEvent>();
       for (const rowValue of correctionRows) {
         const correction = this.read(rowValue.event_id);
         if (correction === null) continue;
-        for (const sourceId of correction.sourceEventIds) {
-          if (!sources.has(sourceId)) continue;
-          const list = corrections.get(sourceId);
-          if (list === undefined) corrections.set(sourceId, [correction]);
-          else list.push(correction);
+        const sourceId = correction.sourceEventIds[0];
+        if (sourceId !== undefined) correctionBySource.set(sourceId, correction);
+      }
+      for (const sourceId of sources.keys()) {
+        const chain: EconomicEvent[] = [];
+        const visited = new Set<string>();
+        let predecessorId = sourceId;
+        while (!visited.has(predecessorId)) {
+          visited.add(predecessorId);
+          const correction = correctionBySource.get(predecessorId);
+          if (correction === undefined) break;
+          chain.push(correction);
+          predecessorId = correction.id;
         }
+        if (visited.has(predecessorId) && correctionBySource.has(predecessorId)) {
+          throw new Error(`economic price correction chain cycles at ${predecessorId}`);
+        }
+        if (chain.length > 0) corrections.set(sourceId, chain);
       }
     }
     const result = new Map<string, EffectiveEconomicCharge>();
