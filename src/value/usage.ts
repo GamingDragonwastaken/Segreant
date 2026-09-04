@@ -20,7 +20,7 @@
 
 import type { Store } from '../store/db.ts';
 import type { EpistemicState } from '../epistemic/state.ts';
-import { evaluateOutcomeContract } from '../outcomes/contract.ts';
+import { adaptOutcome, createWorkUnit, type OutcomeAdapter, type WorkUnit } from '../outcomes/work-unit.ts';
 import { computeReturnOnIntelligence, type RoIResult } from './lenses.ts';
 import { timeWithAiMinutes } from './lift.ts';
 import type { Gate } from './gates.ts';
@@ -29,6 +29,36 @@ import { economicAttributionFromAttributions, economicAttributionNumber, type Ec
 const POSITIVE_OUTCOMES = new Set(['used', 'resolved', 'published', 'shipped', 'accepted']);
 const NEGATIVE_OUTCOMES = new Set(['incident', 'redone', 'discarded']);
 const NON_CODING_OUTCOME_CONTRACT = Object.freeze({ id: 'non_coding_reported_outcome', requiredPredicates: ['reported_outcome'] as const });
+
+export interface SessionSignal {
+  readonly kind: string;
+  readonly verdict: string;
+}
+
+function sessionSignalsFromUnit(unit: WorkUnit): SessionSignal[] {
+  const raw = unit.context.signals;
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((value) => {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return [];
+    const signal = value as { kind?: unknown; verdict?: unknown };
+    return typeof signal.kind === 'string' && typeof signal.verdict === 'string'
+      ? [{ kind: signal.kind, verdict: signal.verdict }]
+      : [];
+  });
+}
+
+function sessionState(signals: readonly SessionSignal[]): EpistemicState {
+  const positive = signals.some((signal) => POSITIVE_OUTCOMES.has(signal.kind) && signal.verdict !== 'fail');
+  const negative = signals.some((signal) => NEGATIVE_OUTCOMES.has(signal.kind) || signal.verdict === 'fail');
+  return positive ? (negative ? 'conflicted' : 'supported') : negative ? 'refuted' : 'unknown';
+}
+
+/** Canonical adapter for explicit non-coding reported-outcome evidence. */
+export const NON_CODING_OUTCOME_ADAPTER: OutcomeAdapter = Object.freeze({
+  id: 'non-coding-reported-outcome-v1',
+  contract: NON_CODING_OUTCOME_CONTRACT,
+  resolve: (_predicate: string, unit: WorkUnit) => sessionState(sessionSignalsFromUnit(unit)),
+});
 
 /** How far a reported non-coding outcome reached — the Impact ladder, non-coding side. */
 export type Reach = 'shipped' | 'merged' | 'kept';
@@ -55,14 +85,27 @@ export interface SessionOutcome {
  * last-write-wins boolean. A purely negative report refutes the outcome; no
  * report is unknown.
  */
-export function classifySession(signals: Array<{ kind: string; verdict: string }>): SessionOutcome {
+export function classifySession(signals: readonly SessionSignal[]): SessionOutcome {
   const posKinds = new Set(signals.filter((x) => POSITIVE_OUTCOMES.has(x.kind) && x.verdict !== 'fail').map((x) => x.kind));
   const reach = strongestReach(posKinds);
   const positive = reach !== null;
   const negative = signals.some((x) => NEGATIVE_OUTCOMES.has(x.kind) || x.verdict === 'fail');
-  const state: EpistemicState = positive ? (negative ? 'conflicted' : 'supported') : negative ? 'refuted' : 'unknown';
-  const evaluation = evaluateOutcomeContract(NON_CODING_OUTCOME_CONTRACT, () => state);
-  return { reach, positive, negative, state, realized: evaluation.status === 'confirmed' };
+  const unit = createWorkUnit({
+    id: 'non-coding-session-classification',
+    kind: 'non_coding_session',
+    startedAtMs: 0,
+    endedAtMs: 0,
+    context: { signals: signals.map((signal) => ({ kind: signal.kind, verdict: signal.verdict })) },
+  });
+  const adapted = adaptOutcome(unit, NON_CODING_OUTCOME_ADAPTER);
+  const state: EpistemicState = adapted.evaluation.status === 'confirmed'
+    ? 'supported'
+    : adapted.evaluation.status === 'failed'
+      ? 'refuted'
+      : adapted.evaluation.status === 'conflicted'
+        ? 'conflicted'
+        : 'unknown';
+  return { reach, positive, negative, state, realized: adapted.evaluation.status === 'confirmed' };
 }
 
 export interface UsageUnit {
