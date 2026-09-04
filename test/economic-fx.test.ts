@@ -6,6 +6,7 @@ import { economicEvent } from '../src/economics/events.ts';
 import { exactRate } from '../src/economics/rate.ts';
 import { fxTranslationEvent } from '../src/economics/fx.ts';
 import { formatMoneyAmount, money } from '../src/economics/money.ts';
+import { interval } from '../src/epistemic/time.ts';
 
 function source() {
   return economicEvent({
@@ -48,6 +49,64 @@ test('FX translation is an exact historical derivative with typed lineage', () =
     rounding: 'none',
     sourceAmount: { coefficient: '10', scale: 0, currency: 'USD', basis: 'list' },
   });
+});
+
+test('FX translation preserves the exact rate validity interval in historical lineage', () => {
+  const original = source();
+  const db = new DatabaseSync(':memory:');
+  try {
+    const translated = fxTranslationEvent({
+      id: 'economic:fx:valid-time',
+      source: original,
+      rate: exactRate({
+        numerator: 91n,
+        denominator: 100n,
+        sourceUnit: 'USD',
+        targetUnit: 'EUR',
+        validTime: interval('2026-07-31T00:00:00.000Z', '2026-08-02T00:00:00.000Z'),
+      }),
+      rateSource: 'fixture:historical-fx',
+      effectiveAt: '2026-08-01T00:00:00.000Z',
+      recordedAt: '2026-08-04T00:00:00.000Z',
+    });
+    assert.deepEqual((translated.metadata as { rate?: unknown }).rate, {
+      denominator: '100',
+      numerator: '91',
+      sourceUnit: 'USD',
+      targetUnit: 'EUR',
+      validTime: {
+        from: '2026-07-31T00:00:00.000Z',
+        to: '2026-08-02T00:00:00.000Z',
+      },
+    });
+    const ledger = new EconomicLedger(db);
+    ledger.append(original);
+    ledger.append(translated);
+    assert.deepEqual((ledger.read(translated.id)!.metadata as { rate?: unknown }).rate, (translated.metadata as { rate?: unknown }).rate);
+  } finally {
+    db.close();
+  }
+});
+
+test('FX translation refuses malformed rate validity intervals', () => {
+  assert.throws(() => fxTranslationEvent({
+    id: 'economic:fx:invalid-valid-time',
+    source: source(),
+    rate: {
+      numerator: 91n,
+      denominator: 100n,
+      sourceUnit: 'USD',
+      targetUnit: 'EUR',
+      validTime: {
+        from: '2026-08-02T00:00:00.000Z',
+        to: '2026-08-01T00:00:00.000Z',
+        unexpected: true,
+      },
+    } as ReturnType<typeof exactRate>,
+    rateSource: 'fixture:historical-fx',
+    effectiveAt: '2026-08-01T00:00:00.000Z',
+    recordedAt: '2026-08-04T00:00:00.000Z',
+  }), /validTime/);
 });
 
 test('economic ledger requires FX source/rate lineage and keeps translation out of earlier as-of views', () => {

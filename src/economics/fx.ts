@@ -20,13 +20,20 @@ function nonEmpty(value: unknown, label: string): string {
 
 function canonicalRate(value: unknown): ExactRate {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error('FX translation rate must be an exact rational rate');
-  const record = value as { numerator?: unknown; denominator?: unknown; sourceUnit?: unknown; targetUnit?: unknown };
+  const record = value as { numerator?: unknown; denominator?: unknown; sourceUnit?: unknown; targetUnit?: unknown; validTime?: unknown };
   const keys = Object.keys(value).sort();
-  if (keys.join('\u0000') !== RATE_KEYS.join('\u0000')) throw new Error('FX translation rate contains unknown or missing fields');
+  const expectedKeys = record.validTime === undefined ? RATE_KEYS : [...RATE_KEYS, 'validTime'].sort();
+  if (keys.join('\u0000') !== expectedKeys.join('\u0000')) throw new Error('FX translation rate contains unknown or missing fields');
   if (typeof record.numerator !== 'bigint' || typeof record.denominator !== 'bigint') throw new Error('FX translation rate numerator and denominator must be bigint values');
   const sourceUnit = nonEmpty(record.sourceUnit, 'FX translation rate sourceUnit');
   const targetUnit = nonEmpty(record.targetUnit, 'FX translation rate targetUnit');
-  const rate = exactRate({ numerator: record.numerator, denominator: record.denominator, sourceUnit, targetUnit });
+  const rate = exactRate({
+    numerator: record.numerator,
+    denominator: record.denominator,
+    sourceUnit,
+    targetUnit,
+    ...(record.validTime === undefined ? {} : { validTime: record.validTime as NonNullable<ExactRate['validTime']> }),
+  });
   if (rate.numerator <= 0n || rate.denominator <= 0n) throw new Error('FX translation rate must be positive');
   return rate;
 }
@@ -80,6 +87,7 @@ export function fxTranslationEvent(input: FxTranslationEventInput): EconomicEven
         denominator: rateJson.denominator,
         sourceUnit: rateJson.sourceUnit,
         targetUnit: rateJson.targetUnit,
+        ...(rateJson.validTime === undefined ? {} : { validTime: { ...rateJson.validTime } }),
       },
       rateSource,
       effectiveAt,

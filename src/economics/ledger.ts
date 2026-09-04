@@ -595,7 +595,10 @@ export class EconomicLedger {
       if (record.rate === null || typeof record.rate !== 'object' || Array.isArray(record.rate)) throw new Error(`economic event ${value.id} FX translation rate is missing`);
       const rateRecord = record.rate as Record<string, unknown>;
       const rateKeys = Object.keys(rateRecord).sort();
-      if (rateKeys.join('\u0000') !== ['denominator', 'numerator', 'sourceUnit', 'targetUnit'].join('\u0000')) {
+      const expectedRateKeys = ['denominator', 'numerator', 'sourceUnit', 'targetUnit'];
+      if (Object.prototype.hasOwnProperty.call(rateRecord, 'validTime')) expectedRateKeys.push('validTime');
+      expectedRateKeys.sort();
+      if (rateKeys.join('\u0000') !== expectedRateKeys.join('\u0000')) {
         throw new Error(`economic event ${value.id} FX translation rate contains unknown or missing fields`);
       }
       let rate;

@@ -1,7 +1,7 @@
 /** Exact rational rates with explicit source/target units and optional validity. */
 
 import { formatMoneyAmount, money, type EconomicBasis, type Money } from './money.ts';
-import type { TimeInterval } from '../epistemic/time.ts';
+import { interval, type TimeInterval } from '../epistemic/time.ts';
 
 export interface ExactRateInput {
   readonly numerator: bigint;
@@ -29,6 +29,25 @@ function nonEmpty(value: string, label: string): string {
   return normalized;
 }
 
+function canonicalValidTime(value: unknown): TimeInterval {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('rate validTime must be a half-open interval');
+  }
+  const keys = Object.keys(value).sort();
+  if (keys.join('\u0000') !== ['from', 'to'].join('\u0000')) {
+    throw new Error('rate validTime contains unknown or missing fields');
+  }
+  const record = value as { from?: unknown; to?: unknown };
+  if (typeof record.from !== 'string' || typeof record.to !== 'string') {
+    throw new Error('rate validTime bounds must be canonical timestamps');
+  }
+  try {
+    return interval(record.from, record.to);
+  } catch (error) {
+    throw new Error(`rate validTime is invalid: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 function abs(value: bigint): bigint { return value < 0n ? -value : value; }
 function gcd(a: bigint, b: bigint): bigint {
   let x = abs(a);
@@ -49,7 +68,8 @@ export function exactRate(input: ExactRateInput): ExactRate {
     numerator /= common;
     denominator /= common;
   }
-  return Object.freeze({ numerator, denominator, sourceUnit, targetUnit, ...(input.validTime ? { validTime: input.validTime } : {}) });
+  const validTime = input.validTime === undefined ? undefined : canonicalValidTime(input.validTime);
+  return Object.freeze({ numerator, denominator, sourceUnit, targetUnit, ...(validTime === undefined ? {} : { validTime }) });
 }
 
 function terminatingDecimal(numerator: bigint, denominator: bigint): string | null {
@@ -111,7 +131,7 @@ export function rateFromJson(value: ExactRateJson): ExactRate {
     denominator: BigInt(value.denominator),
     sourceUnit: value.sourceUnit,
     targetUnit: value.targetUnit,
-    ...(value.validTime ? { validTime: value.validTime } : {}),
+    ...(value.validTime === undefined ? {} : { validTime: value.validTime }),
   });
 }
 
