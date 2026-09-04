@@ -7,10 +7,10 @@
 | | |
 | --- | --- |
 | Branch | `gpt56/magnum-opus-reconstruction` |
-| Current code checkpoint | `ef9cf00a6cca32779a14cc31f9ab60f69b449c45` — exact remote match; the preceding price-chain and usage-role corrections remain preserved in history |
-| Latest exact-code CI | Run `33896326633` — **success** across all configured jobs, head `ef9cf00a6cca32779a14cc31f9ab60f69b449c45`, observed 2026-09-04 |
-| Latest code tranche | FX rate-validity provenance now requires the translation `effectiveAt` to lie in the optional canonical half-open `[from,to)` interval; malformed/out-of-interval lineage fails closed; focused FX **7/7**, full economic glob **84/84**, root lifecycle **1,432 total / 1,428 pass / 0 fail / 4 skips**, team-server **67/67**, root/browser TypeScript, build, and diff check passed |
-| Working tree | The chain checkpoint is pushed and remotely green; this program-record reconciliation is the only pending follow-up |
+| Current code checkpoint | `657140f8dea01b3cbc0f12b2e0e039eb8a1c6141` — exact remote match; historical-rate selection and corrected-charge FX read-model integration are preserved in this checkpoint |
+| Latest exact-code CI | Run `33899895572` — **success** across all configured jobs, head `657140f8dea01b3cbc0f12b2e0e039eb8a1c6141`, observed 2026-09-04 |
+| Latest code tranche | Historical rate books now validate interval-covered observations, explicit supersession and deterministic as-of selection; corrected effective charges can be translated through a caller-supplied rate book without rewriting raw events or close digests; focused rate-selection/correction-FX-close **5/5**, full economic glob **89/89**, root lifecycle **1,437 total / 1,433 pass / 0 fail / 4 skips**, team-server **67/67**, root/browser TypeScript, build, and diff check passed |
+| Working tree | The code checkpoint is pushed and remotely green; this program-record reconciliation is the only pending follow-up |
 | Operating policy | One bounded slice → focused verification → compiler/build gate → one accounting update → one checkpoint. Reuse green evidence; do not repeat full suites, cleanup, or unchanged reads without a new hypothesis. |
 
 ## Completed and reusable evidence
@@ -21,7 +21,7 @@
 
 ## Active frontier
 
-**WP-C02/C04/R06 — next economic slice.** Exact allocation persistence now has source conservation and finalized-close binding, replay ordering is pinned, `usage_observed` is refused as a monetary event/allocation source, local price corrections form a typed append-only chain, and optional FX rate-validity intervals survive construction/persistence/replay with `effectiveAt` containment. Remaining economic gaps are per-link basis agreement, role auditing, adjustment-to-charge conservation beyond the covered negative cases, FX-rate supersession/selection, corrected-charge-to-FX composition, broader historical/as-of selection, finalized-close policy for later corrections, receipt/team reconciliation, and recovery from the bricked ledger state.
+**WP-C02/C04/R06 — next economic slice.** Exact allocation persistence now has source conservation and finalized-close binding, replay ordering is pinned, `usage_observed` is refused as a monetary event/allocation source, local price corrections form a typed append-only chain, and historical FX selection can be composed with corrected effective charges without changing raw close history. Remaining economic gaps are per-link basis agreement, role auditing, adjustment-to-charge conservation beyond the covered negative cases, persisted rate-registry/read-model integration, provider FX authority, finalized-close policy for later corrections, receipt/team reconciliation, and recovery from the bricked ledger state.
 
 **WP-B01/R04/R05 — parallel kernel frontier.** Generic negative claims now require complete cited Evidence over event type, target scope, and the entire interval. Direct Claim persistence has trust ceilings for integrity/authenticity/coverage. Remaining typed witness production and other negative-claim paths require new reproduction.
 
@@ -29,7 +29,7 @@
 
 ## Next exact action
 
-Investigate and reproduce corrected-charge-to-FX composition or FX-rate supersession/selection at the ledger boundary. Write one RED test, verify the intended failure, implement the smallest boundary guard, rerun only the affected economic tranche and compiler domains, then checkpoint and update these records once.
+Investigate persisted historical-rate ownership and downstream export/read-model consumers. Write one RED test for a rate-book persistence or export invariant that is genuinely absent, implement the smallest boundary integration, rerun only the affected economic and compiler domains, then checkpoint and update these records once.
 
 ## Known blockers
 

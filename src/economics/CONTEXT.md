@@ -24,6 +24,10 @@
   source, an exact rational rate, optional canonical validity interval,
   explicit rate provenance/effective time, source-to-target convention and an
   explicit no-rounding policy;
+- historical rate books canonicalize immutable interval-covered observations
+  with explicit typed supersession; selection filters by source/target,
+  effective-time coverage and recorded-time `asOf`, refuses overlapping
+  ambiguity, and is deterministic under insertion reordering;
 - projections are deterministic and can be replayed at a recorded-time boundary;
 - accounting-facing request charges can be issued as one exact Money event on the
   same Store transaction as the compatibility request row;
@@ -31,6 +35,10 @@
   through an explicit `effective` basis; the immutable source and correction
   event IDs remain inspectable while the legacy request row stays a compatibility
   projection;
+- an explicit effective FX read model can translate that corrected charge with
+  a caller-supplied historical rate book while retaining the raw source amount,
+  correction lineage, rate identity, rate source and replay boundary; it does
+  not rewrite or replace the raw economic event or finalized-close digest;
 - a period can be finalized as an immutable, half-open snapshot whose digest
   binds every in-period event known at the recording boundary, its exact
   basis-separated balances, and its source-event set; status is replayable at
@@ -62,6 +70,11 @@
   rate and basis; any retained rate validity interval is canonical and
   preserved through serialization/replay; non-terminating conversions are
   refused until a quantization policy is explicitly specified;
+- historical rate observations require a canonical validity interval and
+  explicit rate source; supersession must retain units/interval, be strictly
+  later and have one successor; selection never infers a winner among
+  overlapping independent observations and never uses observations recorded
+  after its `asOf` boundary;
 - allocation reversals must target a compatible, non-negative allocation and
   cannot exceed it;
 - source-event IDs must already exist before a new event is appended;
