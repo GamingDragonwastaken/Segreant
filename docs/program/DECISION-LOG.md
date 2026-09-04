@@ -896,3 +896,66 @@ rollups remain responsible for their own typed bridge.
 **Verified RED first.** Two assertions failed against the previous rule: the two-roll-up acceptance and the `[billing_period, model]` refusal. Five guard-rails passed throughout — the undeclared incomparable refusal, the reverse-direction refusal, aggregating a dimension away, and the equal/coarser/finer verdicts set containment already answered, which the declaration must not disturb.
 
 **What this does not establish.** The table is hand-maintained and the kernel cannot check that an entry is true; an untrue entry makes every aggregation it licenses unsound with nothing to catch it. Nothing checks that a dimension NAME denotes the same partition across two records. Roll-up is not transitive — only declared pairs are consulted — because no product path needs a chain yet. Scope is still not bounded the same way, so a claim may declare a scope its evidence does not cover. And grain arriving through a Derivation remains governed by the separate witness requirement in `derivation.ts`.
+
+## D-109 — Negative claims require complete cited Evidence at the persistence boundary
+**Decision:** A negative Claim must cite at least one complete Evidence record whose event type, target scope, and entire claim interval cover the negative proposition. As-of-only, incomplete, wrong-event, wrong-scope, and partial-interval Evidence are refused at construction and again by `EpistemicLedger.appendClaimWithinTransaction`; broader complete Evidence remains admissible and exact replay remains idempotent.
+
+**Reason:** A witness ID or a successful query is not proof that the absence proposition was observed over the required coordinates. A negative result over an as-of point cannot support a claim over an interval, and Evidence for another event type or scope cannot be silently repurposed. The check belongs at persistence so direct record construction cannot bypass it.
+
+**Verified:** `test/negative-claim-contract.test.ts` covers complete acceptance, broader complete coverage, as-of-only refusal, incomplete refusal, wrong-event refusal, wrong-scope refusal, interval under-coverage, and replay. The focused epistemic tranche passed 47/47.
+
+**What this does not establish.** This is a cited-Evidence completeness boundary, not universal completeness-witness production. Other negative product paths still need explicit audits and typed witnesses; absence remains unknown when no qualifying complete Evidence exists.
+
+## D-110 — Economic derivative sources are typed and role-constrained
+**Decision:** `price_corrected` may derive only from a local estimated/list charge, and `fx_translated` may derive only from a charge or prior FX translation. Cross-chaining, correction-of-translation, translation-of-correction, allocation/usage/adjustment sources, and unrelated monetary roles are refused at the economic ledger boundary; source lineage remains explicit and exact.
+
+**Reason:** A monetary amount is not made a valid source merely by having a currency and coefficient. Treating a correction delta as a charge or translating an allocation would create an unsupported economic authority and permit double counting. The role relation is typed rather than inferred from coincidental fields.
+
+**Verified:** `test/economic-source-link-guard.test.ts` covers correction/translation cross-use, non-charge translation sources, and correction-of-translation refusal; the affected economic suite passed 84/84 in the later allocation tranche, with the earlier source-link checks included.
+
+**What this does not establish.** Per-link basis agreement for every adjustment kind and complete economic consumer migration remain open. This decision does not provide rate supersession or a universal monetary-conservation proof.
+
+## D-111 — One canonical randomized ITT estimand identity
+**Decision:** Supported randomized ITT causal outputs and kernel issuance carry an immutable registry reference containing population, assignment, treatment/control contrast, outcome, horizon, and missing-data policy. Unsupported estimands and non-v1 protocol shapes carry no registry reference and are refused for causal issuance rather than mapped by guesswork; legacy estimand/hash fields remain compatible.
+
+**Reason:** A display label such as “ITT” is not enough to identify what population, treatment version, outcome horizon, or missing-data rule was estimated. One canonical identity prevents protocol, estimator, and issued-claim paths from silently describing different effects while preserving old fields until migration is complete.
+
+**Verified:** causal core and issuance tests cover registered output identity, unsupported/null registry references, issuance refusal, and legacy hash compatibility; the focused causal tranche passed 72/72.
+
+**What this does not establish.** This is not a universal estimator/design registry and does not complete CACE/LATE, noncompliance, missingness, interference, transportability, or all causal migration.
+
+## D-112 — Git artifact persistence and contribution evidence do not overclaim quality
+**Decision:** Artifact survival is represented as literal persistence evidence with explicit observed inputs, retention/churn quantities, and coverage; contribution records preserve method, provenance, confidence, and unresolved state. Neither is treated as proof of code quality, maintainability, impact, business value, or causal contribution.
+
+**Reason:** A line that remains in a repository can be evidence of persistence without being evidence that the line is good or valuable. Temporal association and similarity can support attribution hypotheses but cannot establish authorship or outcome success by themselves. Separating the observable from the construct prevents proxy laundering.
+
+**Verified:** artifact-persistence and contribution tests pass in the published `72986ad` tranche; the implementation and focused coverage are bounded and additive.
+
+**What this does not establish.** Full MeasurementModel migration, adversarial attribution benchmarks, generated-code handling, and product-wide contribution integration remain open.
+
+## D-113 — SQLite append-only integrity is protected by schema-owned triggers
+**Decision:** Append-only economic/kernel persistence retains schema-owned trigger protections against update, delete, and replacement bypasses; the H03 mutation harness includes a deterministic trigger-removal mutation and fails when the invariant disappears.
+
+**Reason:** Application-level discipline is not a database integrity boundary. Direct SQLite writes and `INSERT OR REPLACE` must not rewrite immutable evidence or lineage. The mutation test makes the protection non-vacuous without claiming full corruption or recovery assurance.
+
+**Verified:** focused interoperability/preservation/H03 tranche passed 23/23, including the trigger mutation oracle.
+
+**What this does not establish.** Full pragma, migration, corruption, backup/recovery, and supply-chain review remain open; the mutation set is intentionally bounded.
+
+## D-114 — Team observations expose windows and coverage instead of implying completeness
+**Decision:** Team/economic rollup payloads carry observation-window and coverage state, and unequal or incomplete source observations are not presented as one complete period total. Exact currency/basis mismatches remain refused; signed transport authenticates bytes but does not add truth.
+
+**Reason:** Summing self-chosen or unequal windows without naming them creates a number whose period cannot be reconstructed. A signature cannot repair missing coverage or make a partial observation complete. Coverage must travel with the aggregate so consumers can withhold stronger interpretations.
+
+**Verified:** root/team affected tests and team-server observation-window tests passed in the published tranche; team-server TypeScript and the broader affected root tranche passed.
+
+**What this does not establish.** Live Postgres execution, overlap identity, full rollup-to-ledger reconciliation, and universal completeness claims remain open.
+
+## D-115 — Exact allocation source conservation is enforced before persistence and on read
+**Decision:** Exact allocation persistence proves that each cited source event is a charge root or a cited local price-correction event, rejects non-charge and fabricated lineage, recomputes exact currency/basis totals from the recorded source set, and applies the same check to idempotent replay and re-read. Historical runs are validated against their own cited correction set; later corrections do not rewrite them.
+
+**Reason:** Internal allocation conservation only proves that a result agrees with its own declared lines. Without a source-side check, a caller could declare a larger total and cite an unrelated event, or allocate a correction delta as if it were a charge. The validator is attached to the Store boundary so callers cannot bypass it by constructing a result directly.
+
+**Verified:** RED-first exact-allocation persistence tests cover fabricated totals, non-charge sources, valid corrected-charge lineage, rollback, and compatibility forms. The affected economic/allocation tranche passed 84/84; root/browser/team-server TypeScript and `npm run build` exited 0. Code checkpoint `110b3dc` matches the remote branch; CI run `33854265175` concluded `success` across all eight jobs, read 2026-09-04.
+
+**What this does not establish.** Adjustment-to-charge conservation, supersession/latest-as-of semantics, allocation-specific close binding, and receipt/team reconciliation remain open. The `110b3dc` CI result is deliberately not predicted here.
