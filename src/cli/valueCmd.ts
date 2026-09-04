@@ -10,7 +10,7 @@ import { spawn } from 'node:child_process';
 import { Store } from '../store/db.ts';
 import { loadConfig, saveConfig, dbPath, isDemo } from '../config.ts';
 import { isGitRepo, projectName, resolveCommit } from '../git/correlate.ts';
-import { computeQuality } from '../git/quality.ts';
+import { computeArtifactPersistence } from '../git/quality.ts';
 import { loadRealization } from '../value/realization.ts';
 import { WORK_WEEK_MINUTES } from '../value/timeReclaimed.ts';
 import { computeFrontier } from '../value/frontier.ts';
@@ -33,7 +33,7 @@ export async function cmdYield(flags: Flags): Promise<void> {
     return;
   }
   const store = new Store(dbPath());
-  const report = await computeQuality(store, repo, { limit, windowDays, persist: true });
+  const report = await computeArtifactPersistence(store, repo, { limit, windowDays, persist: true });
 
   if (flags.json) {
     printJson(report);
@@ -44,31 +44,31 @@ export async function cmdYield(flags: Flags): Promise<void> {
   const tty = process.stdout.isTTY ?? false;
   const m = report.matured;
   console.log('');
-  console.log(color(tty, C.bold, '  AI Yield — durable output per dollar of AI spend'));
-  console.log(color(tty, C.gray, `  Survival measured to date · ${m.commits} matured commits (older than ${windowDays}d)`));
+  console.log(color(tty, C.bold, '  Artifact persistence — retained introduced lines by AI spend'));
+  console.log(color(tty, C.gray, `  Retention measured to date · ${m.commits} matured commits (older than ${windowDays}d)`));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
   if (m.commits === 0) {
-    console.log(color(tty, C.gray, `  No commits older than ${windowDays}d yet — yield needs time to mature.`));
-    console.log(color(tty, C.gray, '  Recent commits below are provisional (survival still settling).'));
+    console.log(color(tty, C.gray, `  No commits older than ${windowDays}d yet — retention needs time to mature.`));
+    console.log(color(tty, C.gray, '  Recent commits below are provisional (retention still settling).'));
   } else {
-    const yieldStr = m.aiYield === null ? 'n/a (no AI cost attributed)' : `${m.aiYield.toFixed(1)} surviving lines / $`;
-    console.log(`  ${color(tty, C.bold, 'AI Yield')}            ${color(tty, C.green, yieldStr)}`);
-    console.log(`  Effective spend     ${m.effectiveSpendRatio === null ? '—' : color(tty, m.effectiveSpendRatio > 0.5 ? C.green : C.yellow, pct(m.effectiveSpendRatio))}   ${color(tty, C.gray, 'of $ landed in durable code')}`);
-    console.log(`  Code survival       ${color(tty, m.survivalRatio > 0.7 ? C.green : C.yellow, pct(m.survivalRatio))}   ${color(tty, C.gray, `churn ${pct(m.churnRatio)}`)}`);
+    const yieldStr = m.aiYield === null ? 'n/a (no AI cost attributed)' : `${m.aiYield.toFixed(1)} retained lines / $`;
+    console.log(`  Retained lines / $  ${color(tty, C.green, yieldStr)}`);
+    console.log(`  Effective spend     ${m.effectiveSpendRatio === null ? '—' : color(tty, m.effectiveSpendRatio > 0.5 ? C.green : C.yellow, pct(m.effectiveSpendRatio))}   ${color(tty, C.gray, 'of $ associated with retained artifacts')}`);
+    console.log(`  Artifact retention   ${color(tty, m.survivalRatio > 0.7 ? C.green : C.yellow, pct(m.survivalRatio))}   ${color(tty, C.gray, `non-retained ${pct(m.churnRatio)}`)}`);
     console.log(`  Revert rate         ${color(tty, m.revertRate < 0.05 ? C.green : C.red, pct(m.revertRate))}`);
-    console.log(`  AI cost (matured)   ${usd(m.totalCostUsd)}   ${color(tty, C.gray, `${num(m.survivingLines)} surviving lines`)}`);
+    console.log(`  AI cost (matured)   ${usd(m.totalCostUsd)}   ${color(tty, C.gray, `${num(m.survivingLines)} retained lines`)}`);
     if (m.costPerSurvivingLine !== null) {
-      console.log(`  Cost / durable line ${usd(m.costPerSurvivingLine)}`);
+      console.log(`  Cost / retained line ${usd(m.costPerSurvivingLine)}`);
     }
   }
 
   console.log('');
   console.log(color(tty, C.bold, '  Per commit'));
-  console.log(color(tty, C.gray, '  commit    age    cost       +lines  survived   churn   yield   status'));
+  console.log(color(tty, C.gray, '  commit    age    cost       +lines  retained   churn   lines/$ status'));
   for (const c of report.commits.slice(0, 18)) {
     const short = c.hash.slice(0, 7);
     const age = c.ageDays < 1 ? `${Math.round(c.ageDays * 24)}h` : `${Math.round(c.ageDays)}d`;
-    const surv = `${c.survivingLines}/${c.linesAdded}`;
+    const surv = `${c.artifactPersistence.retainedLines}/${c.artifactPersistence.introducedLines}`;
     const churn = pct(c.churnRatio);
     const yld = c.aiYield === null ? '—' : c.aiYield.toFixed(0);
     const status = c.reverted
@@ -81,8 +81,8 @@ export async function cmdYield(flags: Flags): Promise<void> {
     );
   }
   console.log('');
-  console.log(color(tty, C.gray, '  Yield = surviving lines ÷ AI cost. A coaching signal, not a leaderboard —'));
-  console.log(color(tty, C.gray, '  read it as a team trend, never a per-developer ranking. (docs/RESEARCH-REVIEW.md)'));
+  console.log(color(tty, C.gray, '  Retained lines ÷ AI cost is an artifact-persistence lens, not code quality —'));
+  console.log(color(tty, C.gray, '  it does not establish correctness, maintainability, value, or contribution.'));
   console.log('');
   store.close();
 }

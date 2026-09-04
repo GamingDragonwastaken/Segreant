@@ -761,7 +761,10 @@ function headerStr(req: http.IncomingMessage, name: string): string | undefined 
 }
 
 function sanitizeHeader(value: string): string {
-  return value.replace(/[\r\n]+/g, ' ').slice(0, 400);
+  // Header values are a byte-oriented diagnostic boundary. Replace control
+  // characters and non-ASCII prose rather than letting Node turn a valid
+  // budget decision into a 502 while serializing the response.
+  return value.replace(/[^\t\x20-\x7e]/g, ' ').slice(0, 400);
 }
 
 function persistProposals(

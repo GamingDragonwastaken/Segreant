@@ -26,6 +26,10 @@ import {
   causalClaimIsEarned,
 } from '../src/causal/epistemic.ts';
 import { estimateCausalStudy } from '../src/causal/estimate.ts';
+import {
+  getEstimandDefinition,
+  RANDOMIZED_ITT_ESTIMAND_ID,
+} from '../src/causal/estimand.ts';
 import { EpistemicLedger } from '../src/epistemic/ledger.ts';
 import { instant } from '../src/epistemic/time.ts';
 import { ISSUANCE_MAP } from '../src/epistemic/issuance-map.ts';
@@ -100,6 +104,36 @@ test('a supported causal effect is issued as a derivation from the observed arm 
   const store = ledger();
   persist(store, issuance);
   assert.equal(store.readClaim(issuance.effect!.id)?.id, issuance.effect!.id, 'the kernel must hold the causal claim');
+});
+
+test('kernel issuance carries the registered estimand id and definition without changing the legacy analysis label', () => {
+  const data = supportedStudy();
+  const issuance = buildCausalStudyKernelIssuance(data, estimateCausalStudy(data), ISSUED_AT_MS);
+
+  assert.equal(issuance.estimandId, RANDOMIZED_ITT_ESTIMAND_ID);
+  assert.strictEqual(issuance.estimandDefinition, getEstimandDefinition(RANDOMIZED_ITT_ESTIMAND_ID));
+
+  for (const claim of [issuance.armDifference, issuance.effect]) {
+    assert.ok(claim);
+    const value = claim.proposition.value as Record<string, unknown>;
+    assert.equal(value.estimand, 'intention_to_treat');
+    assert.equal(value.estimandId, RANDOMIZED_ITT_ESTIMAND_ID);
+    assert.deepEqual(value.estimandDefinition, getEstimandDefinition(RANDOMIZED_ITT_ESTIMAND_ID));
+  }
+});
+
+test('kernel issuance rejects an unsupported estimand before emitting any record', () => {
+  const data = supportedStudy();
+  const unsupported = structuredClone(data) as CausalStudyData;
+  (unsupported.protocol.analysis as unknown as Record<string, unknown>).estimand = 'per_protocol';
+  const estimate = estimateCausalStudy(unsupported);
+
+  assert.equal(estimate.estimandId, null);
+  assert.equal(estimate.estimandDefinition, null);
+  assert.throws(
+    () => buildCausalStudyKernelIssuance(unsupported, estimate, ISSUED_AT_MS),
+    /registered.*estimand|unsupported.*estimand/i,
+  );
 });
 
 test('the kernel refuses the same derivation once its identification witness is removed', () => {

@@ -61,3 +61,12 @@ export function isEstimandId(value: string): value is typeof RANDOMIZED_ITT_ESTI
 export function getEstimandDefinition(id: string): EstimandDefinition | undefined {
   return definitions.get(id);
 }
+
+/**
+ * Resolve the retained protocol vocabulary to a canonical registry entry.
+ * Unknown analysis labels stay unresolved; this helper never creates IDs.
+ */
+export function resolveEstimandDefinition(analysis: unknown): EstimandDefinition | undefined {
+  if (analysis !== 'intention_to_treat') return undefined;
+  return getEstimandDefinition(RANDOMIZED_ITT_ESTIMAND_ID);
+}

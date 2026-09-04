@@ -19,6 +19,10 @@ import { createRetainedCausalV1AssignmentFixture } from './support/causalV1Fixtu
 import { completedData, modelDraft, repeatedCostQualityData } from './support/causalStudyFixture.ts';
 import { estimateCausalStudy } from '../src/causal/estimate.ts';
 import {
+  getEstimandDefinition,
+  RANDOMIZED_ITT_ESTIMAND_ID,
+} from '../src/causal/estimand.ts';
+import {
   canonicalJson,
   causalEventHash,
   commitCausalProtocol,
@@ -772,6 +776,38 @@ test('complete randomized evidence qualifies as a study but interval gates still
   assert.equal(estimate.qualification.state, 'qualified');
   assert.equal(estimate.allowedClaim, 'not_established', 'four units cannot earn a low-cost claim from a wide predeclared range');
   assert.equal(estimate.qualityNonInferiorityPassed, false, 'the conservative interval also governs quality language');
+});
+
+test('causal study estimates carry the registered estimand id and exact definition', () => {
+  const estimate = estimateCausalStudy(completedData());
+  assert.equal(estimate.estimandId, RANDOMIZED_ITT_ESTIMAND_ID);
+  assert.strictEqual(estimate.estimandDefinition, getEstimandDefinition(RANDOMIZED_ITT_ESTIMAND_ID));
+  assert.equal(estimate.estimandDefinition?.analysis, 'intention_to_treat');
+});
+
+test('an unsupported runtime estimand is marked unknown rather than assigned a made-up registry id', () => {
+  const data = completedData();
+  const unsupported = structuredClone(data) as CausalStudyData;
+  (unsupported.protocol.analysis as unknown as Record<string, unknown>).estimand = 'per_protocol';
+
+  const estimate = estimateCausalStudy(unsupported);
+
+  assert.equal(estimate.qualification.state, 'invalid');
+  assert.equal(estimate.estimandId, null);
+  assert.equal(estimate.estimandDefinition, null);
+  assert.match(estimate.limitations.join(' '), /estimand.*registered|registered.*estimand/i);
+});
+
+test('a non-v1 protocol shape cannot inherit the v1 estimand identity', () => {
+  const data = completedData();
+  const unsupported = structuredClone(data) as CausalStudyData;
+  (unsupported.protocol as unknown as Record<string, unknown>).version = 2;
+
+  const estimate = estimateCausalStudy(unsupported);
+
+  assert.equal(estimate.qualification.state, 'invalid');
+  assert.equal(estimate.estimandId, null);
+  assert.equal(estimate.estimandDefinition, null);
 });
 
 test('joint causal inference reports an immutable Bonferroni rule and endpoint confidence', () => {

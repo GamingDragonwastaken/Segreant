@@ -25,6 +25,7 @@
  * breakdown it needs no separate opt-in — only the per-row floor.
  */
 
+import { combineRollupCoverage, type RollupCoverage } from '../../src/team/rollup.ts';
 import type { ProjectTotals, DeveloperTotals, ObservationWindow } from './store.ts';
 import { standardizedScore, type StandardizedScore } from '../../src/team/standardize.ts';
 
@@ -78,6 +79,8 @@ export interface WindowCoverage {
   latestTo: string | null;
   shortestWindowDays: number | null;
   longestWindowDays: number | null;
+  /** Conservative combination of the signer-declared coverage states. */
+  status: RollupCoverage;
   /** What the totals beside this do, and do not, describe. */
   note: string;
 }
@@ -123,6 +126,7 @@ export function buildWindowCoverage(windows: ObservationWindow[]): WindowCoverag
       latestTo: null,
       shortestWindowDays: null,
       longestWindowDays: null,
+      status: 'unknown',
       note: 'no rollups contributed to these totals, so there is no observation window to state',
     };
   }
@@ -134,6 +138,7 @@ export function buildWindowCoverage(windows: ObservationWindow[]): WindowCoverag
   const latestTo = windows.map((w) => w.periodTo).sort().at(-1)!;
   const contributingDevelopers = windows.reduce((total, w) => total + w.developerCount, 0);
   const uniform = windows.length === 1;
+  const status = combineRollupCoverage(windows.map((window) => window.coverage));
 
   const note = uniform
     ? `every contributing rollup declares the same ${shortest}-day window, ${earliestFrom} to ${latestTo}; `
@@ -151,6 +156,7 @@ export function buildWindowCoverage(windows: ObservationWindow[]): WindowCoverag
     latestTo,
     shortestWindowDays: shortest,
     longestWindowDays: longest,
+    status,
     note,
   };
 }

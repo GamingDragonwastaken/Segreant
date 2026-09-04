@@ -126,8 +126,9 @@ function cmdHelp(): void {
     receipt --repo <path> Emit signed, verifiable value receipts (--unit <hash>, --json)
                           Publish identity:  receipt --pubkey
                           Verify + pin signer: receipt --verify <file> --key-id <id>
-    yield --repo <path>   AI Yield (survival lens): durable lines per $ — survival, churn
-                          (--window DAYS, --limit N, --json)
+    yield --repo <path>   Artifact persistence (legacy yield lens): retained introduced
+                          lines per $ — retention and non-retention (--window DAYS,
+                          --limit N, --json)
     budget                Set caps: --daily N --soft N --session N --runaway N --window S
                           --include-imported on|off: whether imported subscription
                           spend counts toward cap ENFORCEMENT (default off — the

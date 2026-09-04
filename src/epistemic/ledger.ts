@@ -29,7 +29,7 @@ import {
 import { EPISTEMIC_STATES } from './state.ts';
 import { AUTHENTICITY, COVERAGE, INTEGRITY } from './profile.ts';
 import { grainIsSupportedBy } from './grain.ts';
-import { scopeIsSupportedBy } from './scope.ts';
+import { scopeIsSupportedBy, scopeRelation } from './scope.ts';
 import {
   assessDerivationLegality,
   derivation,
@@ -38,7 +38,7 @@ import {
   type DerivationWitness,
 } from './derivation.ts';
 import { canonicalJson } from './serialization.ts';
-import { instant, type Instant } from './time.ts';
+import { instant, intervalRelation, type Instant } from './time.ts';
 import { witness, type Witness } from './witness.ts';
 
 export type AppendResult = 'inserted' | 'duplicate';
@@ -795,9 +795,13 @@ export class EpistemicLedger {
     let scopeSupplied = false;
     const refinedOver: Evidence[] = [];
     const narrowedOrChanged: Evidence[] = [];
+    const negativeSources = new Map<string, Evidence>();
     for (const evidenceId of item.evidenceIds) {
       const source = this.readEvidence(evidenceId);
       if (source === null) throw new Error(`unknown evidence: ${evidenceId}`);
+      if (item.negativeClaim?.completenessWitnessIds.includes(source.id) === true) {
+        negativeSources.set(source.id, source);
+      }
       integrityCeiling = Math.min(integrityCeiling, INTEGRITY.indexOf(source.integrity));
       authenticityCeiling = Math.min(authenticityCeiling, AUTHENTICITY.indexOf(source.authenticity));
       coverageCeiling = Math.min(coverageCeiling, COVERAGE.indexOf(source.completeness.status));
@@ -825,6 +829,37 @@ export class EpistemicLedger {
         `claim ${item.id} declares scope that narrows or changes the scope of evidence ${cited.id}, `
         + 'and no cited evidence carries or covers that scope',
       );
+    }
+    if (item.negativeClaim !== undefined) {
+      if (item.time.validTime === null) {
+        throw new Error(`negative claim ${item.id} requires validTime to define its absence period`);
+      }
+      for (const witnessId of item.negativeClaim.completenessWitnessIds) {
+        const source = negativeSources.get(witnessId);
+        if (source === undefined) {
+          throw new Error(`negative claim completeness witness must resolve to cited evidence: ${witnessId}`);
+        }
+        if (source.completeness.status !== 'complete') {
+          throw new Error(`negative claim completeness witness ${source.id} must declare complete coverage`);
+        }
+        if (!source.completeness.coveredEventTypes.includes(item.negativeClaim.eventType)) {
+          throw new Error(
+            `negative claim completeness witness ${source.id} does not cover event type ${item.negativeClaim.eventType}`,
+          );
+        }
+        const coveredScope = source.completeness.coveredScope;
+        if (coveredScope === null || (scopeRelation(coveredScope, item.scope) !== 'equal' && scopeRelation(coveredScope, item.scope) !== 'broader')) {
+          throw new Error(`negative claim completeness witness ${source.id} does not cover the claim scope`);
+        }
+        const coveredTime = source.completeness.coveredTime;
+        if (coveredTime === null) {
+          throw new Error(`negative claim completeness witness ${source.id} does not declare a covered period`);
+        }
+        const timeRelation = intervalRelation(coveredTime, item.time.validTime);
+        if (timeRelation !== 'equal' && timeRelation !== 'contains') {
+          throw new Error(`negative claim completeness witness ${source.id} does not cover the claim period`);
+        }
+      }
     }
     if (INTEGRITY.indexOf(item.profile.integrity) > integrityCeiling) {
       throw new Error(

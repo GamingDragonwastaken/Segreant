@@ -11,7 +11,7 @@
 
 import pg from 'pg';
 const { Pool } = pg;
-import type { SignedRollup, RollupBody } from '../../src/team/rollup.ts';
+import { combineRollupCoverage, normalizeRollupCoverage, type RollupCoverage, type SignedRollup, type RollupBody } from '../../src/team/rollup.ts';
 
 export interface RegisteredDeveloper {
   keyId: string;
@@ -73,6 +73,7 @@ export interface ObservationWindow {
   periodFrom: string;
   periodTo: string;
   developerCount: number;
+  coverage: RollupCoverage;
 }
 
 export interface ProjectTotals {
@@ -290,16 +291,23 @@ export class PgRollupStore implements RollupStore {
    * duplicate windows per project row or silently pick one of them.
    */
   async observationWindows(filter: PeriodFilter = {}): Promise<ObservationWindow[]> {
-    const res = await this.pool.query<{ period_from: Date; period_to: Date; developer_count: string | number }>(
+    const res = await this.pool.query<{
+      period_from: Date;
+      period_to: Date;
+      developer_count: string | number;
+      coverages: string[];
+    }>(
       `WITH latest_rollup_per_dev AS (
-         SELECT DISTINCT ON (r.key_id) r.id, r.key_id, r.period_from, r.period_to
+         SELECT DISTINCT ON (r.key_id) r.id, r.key_id, r.period_from, r.period_to,
+                COALESCE(r.body->>'coverage', 'unknown') AS coverage
          FROM rollups r
          WHERE ($1::timestamptz IS NULL OR r.period_to > $1::timestamptz)
            AND ($2::timestamptz IS NULL OR r.period_from < $2::timestamptz)
          ORDER BY r.key_id, r.received_at DESC, r.id DESC
        )
        SELECT lr.period_from AS period_from, lr.period_to AS period_to,
-              COUNT(DISTINCT lr.key_id)::float8 AS developer_count
+              COUNT(DISTINCT lr.key_id)::float8 AS developer_count,
+              ARRAY_AGG(DISTINCT lr.coverage) AS coverages
        FROM latest_rollup_per_dev lr
        GROUP BY lr.period_from, lr.period_to
        ORDER BY lr.period_from ASC, lr.period_to ASC`,
@@ -309,6 +317,14 @@ export class PgRollupStore implements RollupStore {
       periodFrom: row.period_from.toISOString(),
       periodTo: row.period_to.toISOString(),
       developerCount: Number(row.developer_count),
+      coverage: combineRollupCoverage(row.coverages.map((value) => normalizeRollupCoverage({
+        v: 1,
+        keyId: 'coverage-only',
+        generatedAt: '1970-01-01T00:00:00.000Z',
+        period: { from: '1970-01-01T00:00:00.000Z', to: '1970-01-02T00:00:00.000Z' },
+        projects: [],
+        coverage: value as RollupCoverage,
+      }))),
     }));
   }
 

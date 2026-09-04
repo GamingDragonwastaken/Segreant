@@ -1,3 +1,5 @@
+import type { EstimandDefinition } from './estimand.ts';
+
 /**
  * Canonical local evidence records for Fiscus's randomized causal-study lane.
  *
@@ -610,6 +612,9 @@ export interface CausalEffectInterval {
 export interface CausalStudyEstimate {
   qualification: CausalQualification;
   protocolHash: string;
+  /** Canonical registry reference; null means the protocol estimand is unknown. */
+  estimandId: EstimandDefinition['id'] | null;
+  estimandDefinition: EstimandDefinition | null;
   costEffectUsd: CausalEffectInterval | null;
   qualityEffect: CausalEffectInterval | null;
   netBenefitEffectUsd: CausalEffectInterval | null;

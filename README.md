@@ -221,7 +221,7 @@ fiscus exec -- <command>     AMBIENT outcome capture — wrap a command once (e.
                                 `npm test`); every run reports its own exit code
 fiscus receipt --repo <path> Emit signed value receipts (--pubkey to publish your
                                 identity; --verify <file> --key-id <id> to verify + pin)
-fiscus yield --repo <path>   AI Yield (survival lens) — durable lines per $
+fiscus yield --repo <path>   Artifact persistence (legacy yield lens) — retained introduced lines per $
 fiscus budget ...            Set caps (see below)
 fiscus audit --repo <path>   Cost per commit from git history (--limit N, --json)
 ```
@@ -446,10 +446,12 @@ fiscus receipt --repo .            # emit signed value receipts
 ```
 
 The full model is in **[docs/THE-STANDARD.md](docs/THE-STANDARD.md)**. The older
-**AI Yield** (`fiscus yield`) survives as one *lens* — durable lines per
-dollar — but the Standard, not Yield, is the headline. The honest account of why
-the research's "AI Efficiency Score" and our own first Yield-only attempt were
-both rebuilt is in [docs/RESEARCH-REVIEW.md §3](docs/RESEARCH-REVIEW.md).
+**AI Yield** (`fiscus yield`) remains as a compatibility command for one
+*artifact-persistence lens* — retained introduced lines per dollar. It is not a
+quality grade and does not establish correctness, maintainability, business
+value, or AI/human contribution. The Standard, not this lens, is the headline.
+The historical account of why the research's "AI Efficiency Score" and our own
+first Yield-only attempt were rebuilt is in [docs/RESEARCH-REVIEW.md §3](docs/RESEARCH-REVIEW.md).
 
 ## Budget controls and model trials
 

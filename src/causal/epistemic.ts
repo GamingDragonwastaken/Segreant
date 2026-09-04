@@ -47,7 +47,9 @@ import { claimProfile } from '../epistemic/profile.ts';
 import { scope } from '../epistemic/scope.ts';
 import { instant, interval } from '../epistemic/time.ts';
 import { witness, type Witness } from '../epistemic/witness.ts';
-import { canonicalJson, sha256 } from './protocol.ts';
+import { canonicalJson, sha256, verifyCommittedCausalProtocol } from './protocol.ts';
+import { resolveEstimandDefinition } from './estimand.ts';
+import type { EstimandDefinition } from './estimand.ts';
 import type { CausalStudyData, CausalStudyEstimate } from './types.ts';
 
 /**
@@ -60,6 +62,9 @@ import type { CausalStudyData, CausalStudyEstimate } from './types.ts';
  * the measurement rather than the conclusion.
  */
 export interface CausalStudyKernelIssuance {
+  /** The canonical estimand used by every record in this issuance. */
+  readonly estimandId: EstimandDefinition['id'];
+  readonly estimandDefinition: EstimandDefinition;
   readonly assignmentEvidence: Evidence;
   readonly outcomeEvidence: Evidence;
   readonly armDifference: Claim;
@@ -108,6 +113,17 @@ function includedDigest(data: CausalStudyData, estimate: CausalStudyEstimate): s
   }));
 }
 
+function sameRegisteredEstimand(
+  value: unknown,
+  expected: EstimandDefinition,
+): boolean {
+  try {
+    return canonicalJson(value) === canonicalJson(expected);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Whether this estimate is entitled to a causal claim at all.
  *
@@ -137,6 +153,16 @@ export function buildCausalStudyKernelIssuance(
 ): CausalStudyKernelIssuance {
   if (estimate.protocolHash !== data.protocol.protocolHash) {
     throw new Error('causal estimate does not belong to this study protocol');
+  }
+  const declaredEstimand = (data.protocol.analysis as unknown as { estimand?: unknown }).estimand;
+  const estimandDefinition = data.protocol.version === 1
+    && verifyCommittedCausalProtocol(data.protocol).length === 0
+    ? resolveEstimandDefinition(declaredEstimand)
+    : undefined;
+  if (estimandDefinition === undefined
+      || estimate.estimandId !== estimandDefinition.id
+      || !sameRegisteredEstimand(estimate.estimandDefinition, estimandDefinition)) {
+    throw new Error('causal kernel issuance requires a registered estimand definition');
   }
   const issued = timestamp(issuedAtMs, 'issuance timestamp');
   const validTime = studyInterval(data);
@@ -258,6 +284,8 @@ export function buildCausalStudyKernelIssuance(
     protocolHash: data.protocol.protocolHash,
     question: data.protocol.question,
     estimand: data.protocol.analysis.estimand,
+    estimandId: estimandDefinition.id,
+    estimandDefinition,
     countsByArm: estimate.qualification.countsByArm,
     costEffectUsd: estimate.costEffectUsd,
     qualityEffect: estimate.qualityEffect,
@@ -317,6 +345,8 @@ export function buildCausalStudyKernelIssuance(
     // constructed from these records by anyone — which is the refusal, stated
     // as an absent record rather than as a flag a caller could ignore.
     return Object.freeze({
+      estimandId: estimandDefinition.id,
+      estimandDefinition,
       assignmentEvidence,
       outcomeEvidence,
       armDifference,
@@ -414,6 +444,8 @@ export function buildCausalStudyKernelIssuance(
   });
 
   return Object.freeze({
+    estimandId: estimandDefinition.id,
+    estimandDefinition,
     assignmentEvidence,
     outcomeEvidence,
     armDifference,

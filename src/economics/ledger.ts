@@ -456,6 +456,13 @@ export class EconomicLedger {
       if (sourceId === undefined) throw new Error(`economic event ${value.id} price correction source is missing`);
       const source = sources.get(sourceId);
       if (source === undefined) throw new Error(`economic event ${value.id} price correction source is missing`);
+      const sourceRole = economicEventRole(source.kind);
+      if (sourceRole !== 'charge') {
+        throw new Error(
+          `economic event ${value.id} price correction source must be a charge `
+          + `(received ${source.kind})`,
+        );
+      }
       if (source.kind !== 'charge_estimated' || source.amount === null || (source.amount.basis !== 'list' && source.amount.basis !== 'estimated')) {
         throw new Error(`economic event ${value.id} price correction must target a local charge_estimated event`);
       }
@@ -509,6 +516,13 @@ export class EconomicLedger {
       if (sourceId === undefined) throw new Error(`economic event ${value.id} FX translation source is missing`);
       const source = sources.get(sourceId);
       if (source === undefined || source.amount === null) throw new Error(`economic event ${value.id} FX translation must target a monetary source`);
+      const sourceRole = economicEventRole(source.kind);
+      if (sourceRole !== 'charge' && sourceRole !== 'translation') {
+        throw new Error(
+          `economic event ${value.id} FX translation source must be a charge or prior FX translation `
+          + `(received ${source.kind})`,
+        );
+      }
       if (source.subject !== value.subject) throw new Error(`economic event ${value.id} FX translation subject must match its source`);
       if (value.occurredAt !== source.occurredAt) throw new Error(`economic event ${value.id} FX translation occurrence must match its source`);
       if (value.amount === null) throw new Error(`economic event ${value.id} FX translation requires a monetary amount`);

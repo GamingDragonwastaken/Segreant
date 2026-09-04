@@ -62,24 +62,26 @@ Plausible analyst-style figures I can't independently confirm. Left out of the p
 
 ## 3. Metrics design — the positive measurement standard
 
-This is the heart of the product: a *real* replacement for "tokens per developer" that measures whether AI spend produced good work, without recreating the metric it replaces.
+This is the heart of the product's local observability: a bounded artifact-persistence
+observation alongside spend, without presenting line retention as a judgment about
+the work's quality.
 
 ### 🔧 The research's AES formula — right goal, wrong construction
 The brief defines AES = (Δdiff × Q × U) / tokens, where **U is a "structural reusability factor graded between 0.1 and 2.0."** Two problems: (a) `U` is hand-graded — subjective and unauditable; and (b) a per-developer score on a leaderboard tied to incentives is itself a target, so it gets gamed exactly like tokens were. My first pass over-corrected and *deferred the whole idea* — which was also wrong, because "don't measure" is not a solution. The whole point is to give teams a trustworthy way to know they're using AI well.
 
 **The resolution — and what's built.** Goodhart's Law doesn't forbid measurement; it forbids turning a fakeable activity-proxy into a high-stakes target. So the metric is rebuilt on three rules the AES formula violated:
 
-1. **Anchor on durable outcomes, not activity or subjective grades.** The core signal is **code survival**: of the lines a commit added, how many are still in the codebase later (via `git blame`). Churn = rewritten/deleted code = low-quality output. Plus objective revert detection. All local, nothing to hand-grade.
-2. **A basket with built-in tension.** Cost, survival, and revert move against each other — inflate line count and survival doesn't follow; write fast and sloppy and churn/revert rise. You can't win by gaming one axis.
+1. **Name the observable literally.** The core signal is **artifact persistence**: of the lines a commit introduced, how many are still attributed to it later (via `git blame`). Rewritten or deleted lines are non-retained lines. This does not establish semantic correctness, maintainability, business value, code quality, or AI/human contribution. Revert detection is reported separately, with its own evidence boundary.
+2. **Keep adjacent measurements separate.** Spend, persistence, reverts, tests, incidents, and business outcomes answer different questions. Their co-location does not turn line retention into a quality score.
 3. **Coaching, not stack-rank.** Team trends and aggregates, never a per-developer ranking tied to comp.
 
-The replacement standard that results (built in `src/git/quality.ts`, surfaced as `fiscus yield`):
+The compatibility lens built in `src/git/quality.ts` and surfaced by `fiscus yield` now names that boundary:
 
-- **AI Yield = surviving lines ÷ AI cost** — durable output per dollar. Where tokenmaxxing rewarded *spending more*, Yield rewards *shipping work that sticks, per dollar*.
-- **Effective Spend Ratio** — the honest version of the brief's TER: % of AI spend that landed in code that survived. The brief's TER counted "tokens that preceded committed changes"; survival raises the bar from *committed* to *survived*, which is far harder to fake.
-- **Honesty about time.** Survival needs time to elapse, so commits younger than the maturity window are flagged `maturing` and excluded from the headline aggregate. We never claim 10-minute-old code is durable.
+- **Retained introduced lines per AI dollar** — a cost-normalized artifact-persistence lens. It describes retained repository content per attributed dollar; it is not a quality, correctness, value, or contribution measure.
+- **Effective Spend Ratio** — the compatibility projection of the share of attributed AI spend associated with commits meeting the configured retention threshold and revert check. It remains a spend/persistence association, not a quality claim.
+- **Honesty about time.** Retention needs time to observe, so commits younger than the maturity window are flagged `maturing` and excluded from the headline aggregate. We do not claim that a recent commit has settled retention evidence.
 
-Covered by tests (survival drops correctly when lines are rewritten; Yield = surviving ÷ cost). Test/CI pass-rate and incident-linkage are the natural next quality dimensions — they plug into the same basket but need a CI hook, so they're additive, not blocking. This is the single most important part of the product, and it now exists rather than being deferred.
+Covered by tests (retention drops when introduced lines are rewritten; retained-lines-per-dollar uses attributed spend). Test/CI pass-rate, incident linkage, semantic checks, and business outcomes are separate measurements; none is inferred from artifact persistence.
 
 ### ✅ "Not a surveillance tool" governance rule + priority order
 Genuinely good and kept verbatim as a design principle: security/privacy → latency → budget → UI/overrides, higher tier always wins. It's reflected in the fail-open behavior and the local-only model.

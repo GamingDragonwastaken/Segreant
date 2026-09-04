@@ -35,7 +35,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadOrCreateKeyPair, type KeyPair } from '../../src/value/receipt.ts';
-import { buildRollupBody, signRollup, type SignedRollup } from '../../src/team/rollup.ts';
+import { buildRollupBody, signRollup, type RollupCoverage, type SignedRollup } from '../../src/team/rollup.ts';
 import type { ProjectValue } from '../../src/value/realization.ts';
 import { createTeamServer, type TeamServerDeps } from '../src/server.ts';
 import { FakeRollupStore } from './fakeStore.ts';
@@ -75,9 +75,13 @@ async function push(
   store: FakeRollupStore,
   keys: KeyPair,
   window: { from: string; to: string },
+  coverage: RollupCoverage | 'legacy' = 'complete',
 ): Promise<void> {
   await store.registerDeveloper(keys.keyId, keys.publicPem, null);
-  const signed: SignedRollup = signRollup(buildRollupBody(keys, project('shared'), window), keys);
+  const body = buildRollupBody(keys, project('shared'), window);
+  if (coverage === 'legacy') delete (body as { coverage?: unknown }).coverage;
+  else body.coverage = coverage;
+  const signed: SignedRollup = signRollup(body, keys);
   const res = await fetch(`${srv.url}/rollups`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -97,12 +101,14 @@ interface CoverageResponse {
     latestTo: string | null;
     shortestWindowDays: number | null;
     longestWindowDays: number | null;
+    status: RollupCoverage;
     note: string;
   };
 }
 
 async function dashboardProjects(
   windows: { from: string; to: string }[],
+  coverages: (RollupCoverage | 'legacy')[] = [],
 ): Promise<CoverageResponse> {
   const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-window-'));
   const idp = await startFakeIdp();
@@ -117,7 +123,7 @@ async function dashboardProjects(
     try {
       for (const [index, window] of windows.entries()) {
         const keys: KeyPair = loadOrCreateKeyPair(join(dir, `dev-${index}.json`));
-        await push(srv, store, keys, window);
+        await push(srv, store, keys, window, coverages[index] ?? 'complete');
       }
       const now = Math.floor(Date.now() / 1000);
       const token = idp.sign({ iss: idp.issuer, aud: 'team-dashboard', sub: 'lead@example.com', iat: now, exp: now + 3600 });
@@ -177,7 +183,28 @@ test('a total summed across one shared window says that too, rather than staying
   assert.equal(coverage.longestWindowDays, 30);
   assert.equal(coverage.earliestFrom, '2026-06-01T00:00:00.000Z');
   assert.equal(coverage.latestTo, '2026-07-01T00:00:00.000Z');
+  assert.equal(coverage.status, 'complete');
   assert.doesNotMatch(coverage.note, /unequal|different lengths/i);
+});
+
+test('a partial signed rollup keeps the team aggregate partial instead of becoming a complete snapshot', async () => {
+  const payload = await dashboardProjects([
+    { from: '2026-06-01T00:00:00.000Z', to: '2026-07-01T00:00:00.000Z' },
+  ], ['partial']);
+
+  assert.equal(payload.projects.length, 1);
+  assert.equal(payload.coverage?.status, 'partial');
+  assert.notEqual(payload.coverage?.status, 'complete');
+});
+
+test('a legacy rollup with no coverage stays unknown, even beside an explicit complete rollup', async () => {
+  const payload = await dashboardProjects([
+    { from: '2026-06-01T00:00:00.000Z', to: '2026-07-01T00:00:00.000Z' },
+    { from: '2026-06-01T00:00:00.000Z', to: '2026-07-01T00:00:00.000Z' },
+  ], ['complete', 'legacy']);
+
+  assert.equal(payload.coverage?.status, 'unknown');
+  assert.notEqual(payload.coverage?.status, 'complete');
 });
 
 test('an empty team states that there is no window rather than inventing one', async () => {

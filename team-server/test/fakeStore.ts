@@ -5,7 +5,7 @@
  */
 
 import type { RollupStore, RegisteredDeveloper, StoredRollup, InsertRollupResult, PeriodFilter, ProjectTotals, DeveloperTotals, ObservationWindow } from '../src/store.ts';
-import type { SignedRollup } from '../../src/team/rollup.ts';
+import { combineRollupCoverage, normalizeRollupCoverage, type SignedRollup } from '../../src/team/rollup.ts';
 
 /** True if [rollup's period_from, period_to) overlaps the requested [periodFrom, periodTo) window (open bounds = unbounded). */
 function overlapsWindow(periodFrom: string, periodTo: string, filter: PeriodFilter): boolean {
@@ -54,18 +54,24 @@ export class FakeRollupStore implements RollupStore {
   /** Mirrors PgRollupStore.observationWindows: the same latest-per-developer population, grouped by declared window. */
   async observationWindows(filter: PeriodFilter = {}): Promise<ObservationWindow[]> {
     const latest = this.latestPerDeveloper(filter);
-    const byWindow = new Map<string, { periodFrom: string; periodTo: string; developers: Set<string> }>();
+    const byWindow = new Map<string, { periodFrom: string; periodTo: string; developers: Set<string>; coverages: Set<ReturnType<typeof normalizeRollupCoverage>> }>();
     for (const r of latest) {
       const key = `${r.periodFrom}\u0000${r.periodTo}`;
       let entry = byWindow.get(key);
       if (!entry) {
-        entry = { periodFrom: r.periodFrom, periodTo: r.periodTo, developers: new Set() };
+        entry = { periodFrom: r.periodFrom, periodTo: r.periodTo, developers: new Set(), coverages: new Set() };
         byWindow.set(key, entry);
       }
       entry.developers.add(r.keyId);
+      entry.coverages.add(normalizeRollupCoverage(r.body));
     }
     return [...byWindow.values()]
-      .map((entry) => ({ periodFrom: entry.periodFrom, periodTo: entry.periodTo, developerCount: entry.developers.size }))
+      .map((entry) => ({
+        periodFrom: entry.periodFrom,
+        periodTo: entry.periodTo,
+        developerCount: entry.developers.size,
+        coverage: combineRollupCoverage([...entry.coverages]),
+      }))
       .sort((a, b) => a.periodFrom.localeCompare(b.periodFrom) || a.periodTo.localeCompare(b.periodTo));
   }
 

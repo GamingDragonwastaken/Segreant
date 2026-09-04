@@ -147,7 +147,7 @@ egress, credentials, reversibility, assurance, and surface bindings.
 | Alerts | `src/alerts/detect.ts` | Detect governance conditions (budget, spike, runaway, throttling, value crater, est. pricing); pure detector + store-backed wrapper |
 | Export | `src/export/csv.ts` | Serialize the request ledger to CSV (RFC-4180 quoting) / JSON for BI; CLI `export` + dashboard `/api/export.csv` |
 | Git correlation | `src/git/correlate.ts` | Read commits via `git`, attribute spend in the window before each |
-| Quality / Yield | `src/git/quality.ts` | Survival lens: code survival (blame at HEAD), revert detection, AI Yield, churn |
+| Artifact persistence / Yield | `src/git/quality.ts` | Artifact-retention observation (blame at HEAD), revert detection, and compatibility yield/churn projections; not code quality |
 | Realization | `src/value/realization.ts`, `src/value/epistemic.ts` | Assembles each commit's gate funnel; Realization Rate, Realized Value, acceptance; automatically issues exact mature lifecycle Evidence/Claims on persistence |
 | Gate ladder | `src/value/gates.ts` | The eight gates + pass/fail/unknown funnel scoring |
 | Proposals | `src/value/proposals.ts` | Extract proposed edits from responses; edit-distance acceptance |
@@ -225,7 +225,7 @@ Cost = `input·R_in + output·R_out + cacheWrite·R_cw + cacheRead·R_cr`. The r
 You can't know a request's cost before it runs (output is unknown). So the guard blocks on *already-crossed* daily/session caps and on spend velocity inside a sliding window (the runaway-loop signature). This is what's actually enforceable, framed honestly.
 
 ### D5 — The Realization Standard: production measured as verified outcome, with the dollar as one lens
-The product's positive thesis is a real *unit of account* for AI-assisted work — defined in full in **[THE-STANDARD.md](THE-STANDARD.md)**. It supersedes two earlier attempts that were both rebuilt, not shipped: the research's subjective "AI Efficiency Score", and our own first pass (**AI Yield = surviving lines ÷ cost**, which was lines-of-code with a price tag — it rewards verbosity, ignores correctness, and stapled two existing tools together).
+The product's positive thesis is a real *unit of account* for AI-assisted work — defined in full in **[THE-STANDARD.md](THE-STANDARD.md)**. It supersedes two earlier attempts that were both rebuilt, not shipped: the research's subjective "AI Efficiency Score", and our own first pass (a retained-lines-per-dollar lens that was too easy to read as a quality measure because it put a price on lines without measuring correctness).
 
 The Standard instead scores each commit through a **funnel of eight objective gates** (`src/value/`): Proposed → Accepted → Committed → Tested → Merged → Shipped → Survived → Clean. Three headline numbers fall out:
 

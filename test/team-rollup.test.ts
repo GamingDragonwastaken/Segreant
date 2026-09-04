@@ -54,6 +54,50 @@ test('team-rollup: validateRollupBody preserves partial coverage values within c
   }], period);
   assert.equal(validateRollupBody(candidate), null);
 });
+
+test('team-rollup: newly built bodies carry an explicit complete coverage claim', () => {
+  const body = buildRollupBody({ keyId: 'test-key' } as never, projects(), period);
+  assert.equal(body.coverage, 'complete');
+});
+
+test('team-rollup: direct validation rejects an unrecognized coverage claim', () => {
+  const candidate = buildRollupBody({ keyId: 'test-key' } as never, projects(), period);
+  (candidate as unknown as { coverage: unknown }).coverage = 'complete-ish';
+  const error = validateRollupBody(candidate);
+  assert.ok(error !== null);
+  assert.match(error, /coverage/);
+});
+
+test('team-rollup: legacy v1 bodies without coverage remain signable without changing their bytes', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-rollup-legacy-coverage-'));
+  try {
+    const keys = loadOrCreateKeyPair(join(dir, 'key.json'));
+    const legacy = buildRollupBody(keys, projects(), period);
+    delete (legacy as unknown as { coverage?: unknown }).coverage;
+    const signed = signRollup(legacy, keys);
+    assert.equal(Object.prototype.hasOwnProperty.call(signed.body, 'coverage'), false);
+    assert.equal(verifyRollup(signed).valid, true);
+    assert.equal(verifyRollup(signed).coverage, 'unknown', 'legacy absence must not be promoted to complete');
+    assert.equal(Object.prototype.hasOwnProperty.call(signed.body, 'coverage'), false, 'verification must not mutate signed legacy bytes');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('team-rollup: a signed partial coverage claim remains partial after verification', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-rollup-partial-coverage-'));
+  try {
+    const keys = loadOrCreateKeyPair(join(dir, 'key.json'));
+    const body = buildRollupBody(keys, projects(), period);
+    (body as unknown as { coverage: unknown }).coverage = 'partial';
+    const result = verifyRollup(signRollup(body, keys));
+    assert.equal(result.valid, true);
+    assert.equal(result.coverage, 'partial');
+    assert.notEqual(result.coverage, 'complete', 'a valid signature must not strengthen the signer\'s coverage claim');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 test('team-rollup: buildRollupBody stamps the signer\'s own keyId and carries period/projects through unchanged', () => {
   const dir = mkdtempSync(join(tmpdir(), 'fiscus-rollup-build-'));
   try {
