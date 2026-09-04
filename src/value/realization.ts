@@ -25,7 +25,6 @@ import { acceptanceForCommit, type ProposedFile } from './proposals.ts';
 import type { EpistemicState } from '../epistemic/state.ts';
 import {
   GATE_LADDER,
-  scoreFunnel,
   terminalRealizationBounds,
   serialRealization,
   type Gate,
@@ -37,6 +36,7 @@ import {
   aggregatePolarity,
   polarityFromVerdict,
   verdictFromPolarity,
+  evaluateCodingOutcome,
 } from './gates.ts';
 import { classifyTaskType, type TaskType } from './taskType.ts';
 import { computeReturnOnIntelligence, type RoIOptions } from './lenses.ts';
@@ -588,7 +588,7 @@ export async function computeRealization(
       dominantModelCostBasis,
       dominantModelRateCard,
       costStale: false, // priced from the ledger as it stands right now
-      funnel: scoreFunnel(verdicts),
+      funnel: evaluateCodingOutcome(verdicts).funnel,
       cleanCompleteness: completeness,
       proposalCaptureCoverage,
     });

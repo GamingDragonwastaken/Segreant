@@ -78,6 +78,20 @@ test('coding realization exposes a versioned OutcomeAdapter without flattening u
     survived: { gate: 'survived', polarity: 'unknown', verdict: 'unknown', detail: '' },
     clean: { gate: 'clean', polarity: 'supported', verdict: 'pass', detail: '' },
   }).status, 'unresolved');
+  const adaptedFunnel = evaluateCodingOutcome({
+    proposed: { gate: 'proposed', polarity: 'supported', verdict: 'pass', detail: 'proposal' },
+    accepted: { gate: 'accepted', polarity: 'supported', verdict: 'pass', detail: 'acceptance' },
+    committed: { gate: 'committed', polarity: 'supported', verdict: 'pass', detail: 'commit' },
+    tested: { gate: 'tested', polarity: 'supported', verdict: 'pass', detail: 'tests' },
+    merged: { gate: 'merged', polarity: 'supported', verdict: 'pass', detail: 'merge' },
+    shipped: { gate: 'shipped', polarity: 'supported', verdict: 'pass', detail: 'ship' },
+    survived: { gate: 'survived', polarity: 'supported', verdict: 'pass', detail: 'survive' },
+    clean: { gate: 'clean', polarity: 'supported', verdict: 'pass', detail: 'clean' },
+  });
+  assert.equal(adaptedFunnel.funnel.realized, true);
+  assert.deepEqual(adaptedFunnel.funnel.results.map((result) => result.detail), [
+    'proposal', 'acceptance', 'commit', 'tests', 'merge', 'ship', 'survive', 'clean',
+  ]);
   assert.equal(evaluateCodingOutcome({
     proposed: { gate: 'proposed', polarity: 'supported', verdict: 'pass', detail: '' },
     accepted: { gate: 'accepted', polarity: 'supported', verdict: 'pass', detail: '' },

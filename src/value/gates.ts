@@ -174,7 +174,12 @@ export const CODING_OUTCOME_ADAPTER: OutcomeAdapter = Object.freeze({
 });
 
 /** Evaluate coding gates through the domain-neutral OutcomeAdapter contract. */
-export function evaluateCodingOutcome(verdicts: Readonly<Record<Gate, GateResult>>): OutcomeEvaluation {
+export interface CodingOutcomeEvaluation extends OutcomeEvaluation {
+  /** Compatibility projection retaining the coding funnel's ordered gate detail. */
+  readonly funnel: FunnelOutcome;
+}
+
+export function evaluateCodingOutcome(verdicts: Readonly<Record<Gate, GateResult>>): CodingOutcomeEvaluation {
   const unit = createWorkUnit({
     id: 'coding-outcome-evaluation',
     kind: 'coding_commit',
@@ -184,7 +189,11 @@ export function evaluateCodingOutcome(verdicts: Readonly<Record<Gate, GateResult
       gateStates: Object.fromEntries(GATE_LADDER.map((gateName) => [gateName, verdicts[gateName].polarity])),
     },
   });
-  return adaptOutcome(unit, CODING_OUTCOME_ADAPTER).evaluation;
+  const adapted = adaptOutcome(unit, CODING_OUTCOME_ADAPTER);
+  return Object.freeze({
+    ...adapted.evaluation,
+    funnel: scoreFunnelProjection(verdicts, adapted.evaluation.status === 'confirmed'),
+  });
 }
 
 /**
@@ -301,6 +310,10 @@ export function serialRealization(outcomes: ReadonlyArray<FunnelOutcome>): Seria
  *    necessary is confirmed pass. An unknown gate is unresolved, not success.
  */
 export function scoreFunnel(verdicts: Record<Gate, GateResult>): FunnelOutcome {
+  return evaluateCodingOutcome(verdicts).funnel;
+}
+
+function scoreFunnelProjection(verdicts: Record<Gate, GateResult>, realized: boolean): FunnelOutcome {
   const results = GATE_LADDER.map((g) => verdicts[g]);
 
   let passes = 0;
@@ -332,7 +345,6 @@ export function scoreFunnel(verdicts: Record<Gate, GateResult>): FunnelOutcome {
   // the four-valued gate states, so unknown and conflicted evidence cannot become
   // confirmation through the legacy three-valued projection.
   const conflicts = GATE_LADDER.filter((gateName) => verdicts[gateName].polarity === 'conflicted');
-  const realized = evaluateCodingOutcome(verdicts).status === 'confirmed';
   const instrumented = passes + fails;
 
   // Realization score is MONOTONE along the necessary-condition chain: a unit
