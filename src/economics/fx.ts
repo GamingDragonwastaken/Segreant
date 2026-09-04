@@ -1,6 +1,6 @@
 /** Historical, exact foreign-exchange translation events. */
 
-import { instant, type Instant } from '../epistemic/time.ts';
+import { instant, intervalContains, type Instant } from '../epistemic/time.ts';
 import { economicEvent, type EconomicEvent } from './events.ts';
 import { applyExactRate, exactRate, rateToJson, type ExactRate } from './rate.ts';
 import { moneyToJson } from './money.ts';
@@ -65,6 +65,9 @@ export function fxTranslationEvent(input: FxTranslationEventInput): EconomicEven
   if (rate.targetUnit === source.amount.currency) throw new Error('FX translation target currency must differ from the source currency');
   const rateSource = nonEmpty(input.rateSource, 'FX translation rateSource');
   const effectiveAt = instant(input.effectiveAt);
+  if (rate.validTime !== undefined && !intervalContains(rate.validTime, effectiveAt)) {
+    throw new Error('FX translation effectiveAt must fall within the rate validTime interval');
+  }
   if (input.rounding !== undefined && input.rounding !== 'none') throw new Error('FX translation rounding must be none until an explicit quantization policy exists');
   if (Date.parse(effectiveAt) > Date.parse(source.occurredAt)) {
     throw new Error('FX translation effectiveAt cannot be after the source occurrence');

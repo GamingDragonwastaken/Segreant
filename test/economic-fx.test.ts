@@ -109,6 +109,64 @@ test('FX translation refuses malformed rate validity intervals', () => {
   }), /validTime/);
 });
 
+test('FX translation refuses a rate whose validity interval does not cover effectiveAt', () => {
+  assert.throws(() => fxTranslationEvent({
+    id: 'economic:fx:outside-valid-time',
+    source: source(),
+    rate: exactRate({
+      numerator: 91n,
+      denominator: 100n,
+      sourceUnit: 'USD',
+      targetUnit: 'EUR',
+      validTime: interval('2026-08-02T00:00:00.000Z', '2026-08-03T00:00:00.000Z'),
+    }),
+    rateSource: 'fixture:historical-fx',
+    effectiveAt: '2026-08-01T00:00:00.000Z',
+    recordedAt: '2026-08-04T00:00:00.000Z',
+  }), /effectiveAt.*valid|valid.*effectiveAt/i);
+});
+
+test('economic ledger refuses persisted FX lineage whose validity interval excludes effectiveAt', () => {
+  const db = new DatabaseSync(':memory:');
+  try {
+    const ledger = new EconomicLedger(db);
+    const original = source();
+    ledger.append(original);
+    const outside = economicEvent({
+      id: 'economic:fx:persisted-outside-valid-time',
+      kind: 'fx_translated',
+      subject: original.subject,
+      occurredAt: original.occurredAt,
+      recordedAt: '2026-08-05T00:00:00.000Z',
+      amount: money('9.1', 'EUR', 'list'),
+      sourceEventIds: [original.id],
+      reversalOf: null,
+      metadata: {
+        sourceAmount: { coefficient: '10', scale: 0, currency: 'USD', basis: 'list' },
+        rate: {
+          denominator: '100',
+          numerator: '91',
+          sourceUnit: 'USD',
+          targetUnit: 'EUR',
+          validTime: {
+            from: '2026-08-02T00:00:00.000Z',
+            to: '2026-08-03T00:00:00.000Z',
+          },
+        },
+        rateSource: 'fixture:historical-fx',
+        effectiveAt: '2026-08-01T00:00:00.000Z',
+        convention: 'source-to-target',
+        rounding: 'none',
+      },
+      schemaVersion: 1,
+    });
+    assert.throws(() => ledger.append(outside), /effectiveAt.*valid|valid.*effectiveAt/i);
+    assert.equal(ledger.read(outside.id), null);
+  } finally {
+    db.close();
+  }
+});
+
 test('economic ledger requires FX source/rate lineage and keeps translation out of earlier as-of views', () => {
   const db = new DatabaseSync(':memory:');
   const ledger = new EconomicLedger(db);

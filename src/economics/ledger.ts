@@ -9,7 +9,7 @@
 
 import type { DatabaseSync } from 'node:sqlite';
 import { initializeEconomicSchema } from '../store/schema.ts';
-import { instant, type Instant } from '../epistemic/time.ts';
+import { instant, intervalContains, type Instant } from '../epistemic/time.ts';
 import { addMoney, compareMoney, formatMoneyAmount, money, moneyFromJson, negateMoney, subtractMoney, type Money } from './money.ts';
 import { economicEvent, economicEventRole, type EconomicEvent, type EconomicEventInput, type EconomicEventRole } from './events.ts';
 import { deserializeEconomicEvent, serializeEconomicEvent } from './serialization.ts';
@@ -618,6 +618,9 @@ export class EconomicLedger {
         effectiveAt = instant(record.effectiveAt as string);
       } catch (error) {
         throw new Error(`economic event ${value.id} FX translation effectiveAt is invalid: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      if (rate.validTime !== undefined && !intervalContains(rate.validTime, effectiveAt)) {
+        throw new Error(`economic event ${value.id} FX translation effectiveAt must fall within the rate validTime interval`);
       }
       if (record.convention !== 'source-to-target') throw new Error(`economic event ${value.id} FX translation convention must be source-to-target`);
       if (record.rounding !== 'none') throw new Error(`economic event ${value.id} FX translation rounding must be none`);
