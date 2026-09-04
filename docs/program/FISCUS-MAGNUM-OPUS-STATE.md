@@ -473,11 +473,12 @@ current branch subsequently published the following bounded economic slices:
   finalized-close checks. GitHub Actions run `33909224912` concluded
   successfully across all eight jobs.
 
-The latest code checkpoint is `1a4e406b8aef09876220da84da584897a833c2fc` on
-`origin/gpt56/magnum-opus-reconstruction`. Local verification at that head is
-1,446 root tests total, 1,442 pass, 0 fail and 4 platform skips; team-server is
+The latest code checkpoint is `5478e964b7ee510d922eb67feee758475d1204f7` on
+`origin/gpt56/magnum-opus-reconstruction`, with CI run `33922742649` concluding
+successfully across all eight jobs. Local verification at that head is
+1,468 root tests total, 1,464 pass, 0 fail and 4 platform skips; team-server is
 67/67, root/browser TypeScript and build pass, and `git diff --check` passes.
-The packet inventory remains **11 COMPLETED / 28 PARTIAL / 37 NOT_STARTED**.
+The packet inventory remains **11 COMPLETED / 29 PARTIAL / 36 NOT_STARTED**.
 These are bounded foundations, not final dossier completion: provider-authoritative
 FX, universal consumer migration, per-link basis agreement across all adjustment
 kinds, complete correction/close/supersession semantics, receipt/team

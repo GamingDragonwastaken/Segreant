@@ -50,7 +50,7 @@ States: `NOT_STARTED` `IN_PROGRESS` `PARTIAL` `COMPLETED` `BLOCKED_EXTERNAL`
 | `WP-E07` | Sequential/adaptive inference lane | `NOT_STARTED` |  |
 | `WP-F01` | Robust utility and preference representation | `PARTIAL` | `buildUtilityIntervalProblem` normalizes explicit intervals and point utilities only when an uncertainty bound is declared; unjustified point utilities are refused. Preference ranges, constraints, reversibility, and policy consumers remain. |
 | `WP-F02` | DecisionCertificate integration | `PARTIAL` | Strict interval-dominance certificates now persist through an Evidence-bound adapter with a decision-fitness Witness and Derivation; undetermined comparisons issue observation only. Minimax-regret, approved-policy, and action integration remain. |
-| `WP-F03` | Preference robustness and value of waiting | `NOT_STARTED` |  |
+| `WP-F03` | Preference robustness and value of waiting | `PARTIAL` | `preferenceRobustness()` now evaluates a finite explicitly declared admissible preference set, preserves per-preference ties, and returns only the intersection of optimal actions; disagreement is `preference_sensitive` with no forced action (D-130). Value-of-waiting/option value and product decision integration remain. |
 | `WP-F04` | True VoI -> evidence-debt planner | `NOT_STARTED` |  |
 | `WP-F05` | Decision Assurance Levels | `NOT_STARTED` |  |
 | `WP-F06` | Recommendation -> policy proposal -> approval -> action | `NOT_STARTED` |  |
