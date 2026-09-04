@@ -130,7 +130,7 @@ test('exact allocation persistence refuses a non-charge source role', () => {
       subject: 'request:allocation-kernel-non-charge',
       occurredAt: '1970-01-01T00:00:00.010Z',
       recordedAt: '1970-01-01T00:00:00.020Z',
-      amount: money('1.25', 'USD', 'list'),
+      amount: null,
       sourceEventIds: [],
       reversalOf: null,
       metadata: null,
