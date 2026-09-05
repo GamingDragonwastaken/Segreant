@@ -485,3 +485,18 @@ kinds, complete correction/close/supersession semantics, receipt/team
 reconciliation, remaining kernel issuance boundaries and external gates remain
 open. WP-F07 is partial: its new control module is observation-only and in-memory;
 persistence, authorization, and real target integration remain open.
+
+## Continuation addendum — signed `.fiscuspack` verification (2026-09-05)
+
+- [x] `34033843aefa305dcaffe65deff59a4916191b3b` adds canonical Ed25519
+  manifest signing and verification, attachment digest/completeness reporting,
+  key-identity checks, and separate integrity/authenticity/truth outcomes.
+  Embedded-key verification does not establish authenticity; that requires an
+  explicitly supplied matching trust anchor, and truth remains
+  `not_evaluated`. RED-first production/adversarial coverage passes 12/12.
+  GitHub Actions run `33955176173` concluded success across all eight jobs.
+
+WP-G05 remains `PARTIAL`: independent verification, executable cross-runtime or
+hosted production-bundle interoperability, CLI/API integration, producer-key
+authorization, and final packet completion remain open. The packet inventory is
+still **11 COMPLETED / 30 PARTIAL / 35 NOT_STARTED**.

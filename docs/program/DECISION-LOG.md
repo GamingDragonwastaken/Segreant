@@ -1112,3 +1112,12 @@ rollups remain responsible for their own typed bridge.
 **What this does not establish.** Durable persistence, Decision Assurance Levels, recommendation/proposal/approval/action workflow, real ControlTarget execution, authorization, provider action, or final WP-F07 completion.
 
 **What this does not establish.** Complete C02 period-close, allocation, correction/supersession, receipts/team reconciliation, provider billing, or final packet completion.
+
+## D-133 — Signed bundle integrity must remain separate from authenticity and truth
+**Decision:** Represent a production `.fiscuspack` signature as canonical Ed25519 metadata over the unsigned manifest digest. Validate the manifest and attachment digests before accepting a pack; verify an embedded public key when present, but treat that result as cryptographic integrity only. Establish `authenticity: verified` only when the caller supplies a matching trusted public key. Keep unsigned/metadata-only signatures and incomplete attachment sets explicit, and leave semantic truth `not_evaluated`.
+
+**Reason:** A public key carried inside an artifact proves at most that the artifact is internally consistent with that key; it does not prove that the key belongs to Fiscus or to an authorized producer. Likewise, a valid signature cannot turn incomplete attachments or unexamined claims into truth. Separating integrity, authenticity, completeness and truth prevents a portable bundle from becoming an accidental authority boundary.
+
+**Verified:** `signFiscusPack()`/`verifyFiscusPack()` and the public pack export pass RED-first production, tamper, wrong-trust-anchor, key-identity and partial-attachment coverage 12/12. The root lifecycle passes 1,486 total (1,482 pass / 0 fail / 4 skips); root TypeScript, `npm run build`, and `git diff --check` pass. Code commit `34033843aefa305dcaffe65deff59a4916191b3b` matches the remote branch; GitHub Actions run `33955176173` concluded `success` across all eight jobs, read 2026-09-05.
+
+**What this does not establish.** An independent verifier implementation, executable cross-runtime interoperability, hosted production-bundle execution, CLI/API integration, authorization of a producer key, semantic truth of bundle claims, or final WP-G05 completion.
