@@ -17,6 +17,7 @@ precision.
 ## Guarantees
 
 - strict robust dominance is certified only when one action's lower bound clears every rival's upper bound;
+- `decisionCountermodels` emits one explicit, actionable witness for each declared interval-certificate assumption; live witnesses withhold certification rather than becoming a recommendation;
 - overlapping intervals remain `undetermined`;
 - minimax regret and value of information identify their rule and assumptions;
 - `buildDecisionKernelIssuance` is a side-effect-free preview; `issueDecisionToKernel` persists an explicit certificate bundle as immutable kernel Evidence with the decision-problem identity/version, action set, dependency IDs, rule, assumptions, dominance result, and validity/revalidation metadata;

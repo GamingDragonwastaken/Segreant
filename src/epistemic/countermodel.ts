@@ -127,6 +127,14 @@ export interface FragilityAssessment {
    * false, `fragileAssumptions` being empty means nothing at all.
    */
   readonly robustnessAssessed: boolean;
+  /**
+   * True only when the assessment covered at least one stated assumption and
+   * every recorded countermodel was excluded. Pending, live, realized and
+   * unexcludable worlds all withhold certification. This is deliberately
+   * separate from `claimHoldsAsStated`: an unknown world does not refute a
+   * claim, but it cannot certify one either.
+   */
+  readonly certified: boolean;
 }
 
 function nonEmpty(value: unknown, label: string): string {
@@ -211,6 +219,12 @@ export function assessAssumptionFragility(
   const covered = new Set(validated.map((item) => item.violates));
   const breaking = new Set([...live, ...realized].map((item) => item.violates));
 
+  const robustnessAssessed = stated.every((value) => covered.has(value));
+  const certified = stated.length > 0
+    && validated.length > 0
+    && robustnessAssessed
+    && validated.every((item) => item.status === 'excluded');
+
   return Object.freeze({
     assumptions: Object.freeze([...stated]),
     fragileAssumptions: Object.freeze(stated.filter((value) => breaking.has(value))),
@@ -224,6 +238,7 @@ export function assessAssumptionFragility(
     excluded: Object.freeze(excluded),
     pending: Object.freeze(pending),
     claimHoldsAsStated: realized.length === 0,
-    robustnessAssessed: stated.every((value) => covered.has(value)),
+    robustnessAssessed,
+    certified,
   });
 }
