@@ -500,3 +500,18 @@ WP-G05 remains `PARTIAL`: independent verification, executable cross-runtime or
 hosted production-bundle interoperability, CLI/API integration, producer-key
 authorization, and final packet completion remain open. The packet inventory is
 still **11 COMPLETED / 30 PARTIAL / 35 NOT_STARTED**.
+
+## Continuation addendum — countermodel decision-domain coverage (2026-09-05)
+
+- [x] `571e5fa53b3935b9ecff9dbd283f49e69e1751bd` adds an explicit
+  `FragilityAssessment.certified` outcome and a decision-domain
+  `decisionCountermodels()` adapter. Certification requires non-empty complete
+  assumption coverage with every recorded world explicitly excluded; live,
+  pending, realized and uncovered states remain non-certifying. The decision
+  adapter emits named actionable witnesses without selecting an action.
+  RED-first domain coverage passes 29/29. GitHub Actions run `33956325591`
+  concluded success across all eight jobs.
+
+WP-B04 remains `PARTIAL`: value-gate, allocation, profile, minimal
+cut/support-set, generalized-search and formal-completeness requirements remain
+open. The packet inventory is still **11 COMPLETED / 30 PARTIAL / 35 NOT_STARTED**.
