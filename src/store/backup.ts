@@ -22,7 +22,12 @@ import {
 } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { deserializeEconomicEvent, deserializeHistoricalRateObservation } from '../economics/serialization.ts';
-import { CURRENT_SCHEMA_VERSION, readSchemaVersion } from './schema.ts';
+import {
+  assertDatabaseIntegrity,
+  configureDatabaseConnection,
+  CURRENT_SCHEMA_VERSION,
+  readSchemaVersion,
+} from './schema.ts';
 
 const MANIFEST_VERSION = 1;
 // These tables are created by the original on-disk schema and remain the
@@ -188,6 +193,7 @@ function inspectOpenDatabase(path: string): OpenInspection | BackupFailure {
   try {
     const stat = statSync(path);
     db = new DatabaseSync(path, { readOnly: true });
+    configureDatabaseConnection(db);
     const schemaVersion = readSchemaVersion(db);
     if (schemaVersion > CURRENT_SCHEMA_VERSION) {
       return failure(path, `backup schema version ${schemaVersion} is newer than supported version ${CURRENT_SCHEMA_VERSION}`, {
@@ -195,10 +201,7 @@ function inspectOpenDatabase(path: string): OpenInspection | BackupFailure {
         schemaVersion,
       });
     }
-    const quick = db.prepare('PRAGMA quick_check').get() as { quick_check?: unknown } | undefined;
-    if (quick?.quick_check !== 'ok') return failure(path, 'SQLite quick_check did not return ok', { bytes: stat.size });
-    const foreign = db.prepare('PRAGMA foreign_key_check').all();
-    if (foreign.length > 0) return failure(path, 'SQLite foreign_key_check reported violations', { bytes: stat.size });
+    assertDatabaseIntegrity(db, { appendOnlyTriggers: true });
     const payloadError = storedPayloadIntegrity(db);
     if (payloadError) return failure(path, payloadError, { bytes: stat.size, schemaVersion });
     const fingerprint = schemaFingerprint(db);
@@ -314,8 +317,8 @@ export function backupDatabase(db: DatabaseSync, sourcePath: string, destination
   if (pathEntryExists(destination)) return failure(destination, 'backup destination already exists; refusing to overwrite it');
   if (pathEntryExists(manifestPath(destination))) return failure(destination, 'backup manifest destination already exists; refusing to overwrite it');
   try {
+    assertDatabaseIntegrity(db, { appendOnlyTriggers: true });
     mkdirSync(dirname(destination), { recursive: true });
-    db.prepare('PRAGMA quick_check').get();
     db.prepare('VACUUM INTO ?').run(destination);
     chmodSync(destination, 0o600);
     const inspected = inspectOpenDatabase(destination);

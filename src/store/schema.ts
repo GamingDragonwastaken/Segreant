@@ -798,11 +798,78 @@ CREATE INDEX IF NOT EXISTS idx_economic_allocation_close_finalization ON economi
 export function configureDatabaseConnection(db: DatabaseSync): void {
   db.prepare('PRAGMA recursive_triggers = ON').run();
   db.prepare('PRAGMA foreign_keys = ON').run();
+  db.prepare('PRAGMA busy_timeout = 5000').run();
+}
+
+export interface DatabasePragmaState {
+  foreignKeys: number;
+  recursiveTriggers: number;
+  busyTimeout: number;
+  journalMode: string;
+  synchronous: number;
+}
+
+/** Read the connection settings that govern SQLite durability and enforcement. */
+export function databasePragmas(db: DatabaseSync): DatabasePragmaState {
+  const foreignKeys = db.prepare('PRAGMA foreign_keys').get() as { foreign_keys?: unknown } | undefined;
+  const recursiveTriggers = db.prepare('PRAGMA recursive_triggers').get() as { recursive_triggers?: unknown } | undefined;
+  const busyTimeout = db.prepare('PRAGMA busy_timeout').get() as { timeout?: unknown } | undefined;
+  const journalMode = db.prepare('PRAGMA journal_mode').get() as { journal_mode?: unknown } | undefined;
+  const synchronous = db.prepare('PRAGMA synchronous').get() as { synchronous?: unknown } | undefined;
+  return {
+    foreignKeys: Number(foreignKeys?.foreign_keys),
+    recursiveTriggers: Number(recursiveTriggers?.recursive_triggers),
+    busyTimeout: Number(busyTimeout?.timeout),
+    journalMode: typeof journalMode?.journal_mode === 'string' ? journalMode.journal_mode.toLowerCase() : '',
+    synchronous: Number(synchronous?.synchronous),
+  };
+}
+
+/**
+ * Refuse a handle whose connection-local safeguards were not applied.  The
+ * in-memory SQLite journal is necessarily `memory`; file-backed Store handles
+ * are required to use WAL after initializeSchema has selected it.
+ */
+export function assertDatabasePragmas(
+  db: DatabaseSync,
+  expectedJournalModes: readonly string[] = ['wal', 'memory'],
+): void {
+  const state = databasePragmas(db);
+  if (state.foreignKeys !== 1) throw new Error('database integrity validation failed: PRAGMA foreign_keys is not ON');
+  if (state.recursiveTriggers !== 1) throw new Error('database integrity validation failed: PRAGMA recursive_triggers is not ON');
+  if (state.busyTimeout !== 5_000) throw new Error('database integrity validation failed: PRAGMA busy_timeout is not 5000ms');
+  if (!expectedJournalModes.includes(state.journalMode)) {
+    throw new Error('database integrity validation failed: unsupported SQLite journal mode');
+  }
+  if (state.synchronous !== 1) throw new Error('database integrity validation failed: PRAGMA synchronous is not NORMAL');
+}
+
+/**
+ * Run SQLite's structural and relational integrity checks.  `quick_check` is
+ * cheap and catches most b-tree damage; `integrity_check` additionally checks
+ * every table/index constraint.  Both are retained because recovery must fail
+ * closed even when one check is accidentally weakened later.
+ */
+export function assertDatabaseIntegrity(
+  db: DatabaseSync,
+  options: { appendOnlyTriggers?: boolean } = {},
+): void {
+  const quickRows = db.prepare('PRAGMA quick_check').all() as Array<{ quick_check?: unknown }>;
+  if (quickRows.length === 0 || quickRows.some((row) => row.quick_check !== 'ok')) {
+    throw new Error('SQLite quick_check reported corruption');
+  }
+  const integrityRows = db.prepare('PRAGMA integrity_check').all() as Array<{ integrity_check?: unknown }>;
+  if (integrityRows.length === 0 || integrityRows.some((row) => row.integrity_check !== 'ok')) {
+    throw new Error('SQLite integrity_check reported corruption');
+  }
+  const foreignKeyRows = db.prepare('PRAGMA foreign_key_check').all();
+  if (foreignKeyRows.length > 0) throw new Error('SQLite foreign_key_check reported violations');
+  if (options.appendOnlyTriggers) validateAppendOnlyTriggerAuthority(db);
 }
 
 /** Reject tampered append-only metadata before idempotent DDL can repair it. */
 function validateAppendOnlyTriggerAuthority(db: DatabaseSync): void {
-  const expected: ReadonlyArray<{ name: string; table: string; sql: string }> = [
+  const expected: Array<{ name: string; table: string; sql: string }> = [
     {
       name: 'economic_events_append_only_update',
       table: 'economic_events',
@@ -874,6 +941,34 @@ function validateAppendOnlyTriggerAuthority(db: DatabaseSync): void {
       sql: "CREATE TRIGGER economic_allocation_close_bindings_append_only_insert BEFORE INSERT ON economic_allocation_close_bindings WHEN EXISTS (SELECT 1 FROM economic_allocation_close_bindings WHERE allocation_run_id = NEW.allocation_run_id) BEGIN SELECT RAISE(ABORT, 'exact economic allocation close bindings are append-only'); END",
     },
   ];
+  const generatedAuthorities: ReadonlyArray<{ table: string; key: string; message: string }> = [
+    { table: 'epistemic_nodes', key: 'node_id = NEW.node_id', message: 'epistemic ledger is append-only' },
+    { table: 'epistemic_evidence', key: 'evidence_id = NEW.evidence_id', message: 'epistemic ledger is append-only' },
+    { table: 'epistemic_claims', key: 'claim_id = NEW.claim_id', message: 'epistemic ledger is append-only' },
+    { table: 'epistemic_assumptions', key: 'assumption_id = NEW.assumption_id', message: 'epistemic ledger is append-only' },
+    { table: 'epistemic_witnesses', key: 'witness_id = NEW.witness_id', message: 'epistemic ledger is append-only' },
+    { table: 'epistemic_derivations', key: 'derivation_id = NEW.derivation_id', message: 'epistemic ledger is append-only' },
+    { table: 'epistemic_edges', key: 'from_id = NEW.from_id AND to_id = NEW.to_id AND relation = NEW.relation', message: 'epistemic ledger is append-only' },
+    { table: 'epistemic_revocations', key: 'event_id = NEW.event_id', message: 'epistemic ledger is append-only' },
+    { table: 'economic_allocation_runs', key: 'allocation_run_id = NEW.allocation_run_id', message: 'exact economic allocation runs are append-only' },
+    { table: 'economic_allocation_lineage', key: 'allocation_run_id = NEW.allocation_run_id AND item_kind = NEW.item_kind AND item_index = NEW.item_index AND source_event_id = NEW.source_event_id', message: 'exact economic allocation lineage is append-only' },
+  ];
+  for (const authority of generatedAuthorities) {
+    for (const operation of ['UPDATE', 'DELETE'] as const) {
+      const name = `${authority.table}_append_only_${operation.toLowerCase()}`;
+      expected.push({
+        name,
+        table: authority.table,
+        sql: `CREATE TRIGGER ${name} BEFORE ${operation} ON ${authority.table} BEGIN SELECT RAISE(ABORT, '${authority.message}'); END`,
+      });
+    }
+    const name = `${authority.table}_append_only_insert`;
+    expected.push({
+      name,
+      table: authority.table,
+      sql: `CREATE TRIGGER ${name} BEFORE INSERT ON ${authority.table} WHEN EXISTS (SELECT 1 FROM ${authority.table} WHERE ${authority.key}) BEGIN SELECT RAISE(ABORT, '${authority.message}'); END`,
+    });
+  }
   const existingTables = new Set((db.prepare(
     "SELECT name FROM sqlite_master WHERE type = 'table'",
   ).all() as Array<{ name: string }>).map((row) => row.name));
@@ -2032,6 +2127,7 @@ export function initializeSchema(
   configureDatabaseConnection(db);
   runScript(db, 'PRAGMA journal_mode = WAL');
   runScript(db, 'PRAGMA synchronous = NORMAL');
+  assertDatabasePragmas(db);
   const preflightState = options.expectedCausalV2State ?? causalV2SchemaAttestation(db).state;
   db.prepare('BEGIN IMMEDIATE').run();
   try {
@@ -2047,7 +2143,10 @@ export function initializeSchema(
     if (lockedState === 'incomplete' && !exactSlice3AssignmentSchema(db)) {
       throw new Error('causal v2 schema validation failed: CAUSAL_V2_UNRECOGNIZED_PREDECESSOR');
     }
-    validateAppendOnlyTriggerAuthority(db);
+    // Inspect the retained database while the migration lock is held.  This
+    // must precede idempotent DDL, which would otherwise recreate a deleted
+    // trigger and erase the evidence of tampering.
+    assertDatabaseIntegrity(db, { appendOnlyTriggers: true });
     runScript(db, SCHEMA);
     initializeEpistemicSchema(db);
     initializeEconomicSchema(db);
@@ -2062,6 +2161,7 @@ export function initializeSchema(
         (finalAttestation.defectIds.join(',') || 'CAUSAL_V2_SCHEMA_INCOMPLETE'),
       );
     }
+    assertDatabaseIntegrity(db, { appendOnlyTriggers: true });
     const schemaVersion = readSchemaVersion(db);
     if (schemaVersion > CURRENT_SCHEMA_VERSION) {
       throw new Error(`schema version ${schemaVersion} is newer than supported version ${CURRENT_SCHEMA_VERSION}`);
