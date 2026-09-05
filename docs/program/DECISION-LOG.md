@@ -1102,4 +1102,13 @@ rollups remain responsible for their own typed bridge.
 
 **Verified:** RED-first tests cover sequential phase progression, unsafe jumps, stale evidence, TTL expiry, unknown/revoked/harmful observations, stale proposal revisions, terminal rollback, and bounded policy construction. `test/decision-control.test.ts` passes 6/6; root lifecycle passes 1,474 total (1,470 pass / 0 fail / 4 skips); root TypeScript, `npm run build`, and `git diff --check` pass. Commit `5c8c21778f731e7409dea33936a958ec49fff170` matches the remote branch; GitHub Actions run `33951767030` concluded `success` across all eight jobs, read 2026-09-05.
 
+## D-132 — Bricked close recovery must be append-only and independently revalidated
+**Decision:** Represent recovery of a historical close whose population binding is no longer verifiable as a typed `close_invalidated` control event. Issue it only through `EconomicLedger.recoverBrickedPeriod()`, retain the original close unchanged, and revalidate the complete event graph in the same transaction. Direct append, recovery of a still-verifiable close, wrong-period recovery, and forged invalidation laundering must fail closed.
+
+**Reason:** Rewriting a finalized close would destroy the evidence needed to explain how the ledger became unreadable. An explicit recovery event preserves the original bytes and makes the exceptional state inspectable, while independent rebinding checks prevent a forged row from turning a valid close into an apparently recovered one.
+
+**Verified:** RED-first role/recovery coverage passes 6/6; the full economic test glob passes 103/103; the root lifecycle passes 1,480 total (1,476 pass / 0 fail / 4 skips); root TypeScript, build and diff check pass; team-server checks are green in CI run `33953350770` (**success**, all eight jobs), read 2026-09-05. Commit `b7716f129766040a103ae81add9c46fc4f82494e` matches the remote branch.
+
 **What this does not establish.** Durable persistence, Decision Assurance Levels, recommendation/proposal/approval/action workflow, real ControlTarget execution, authorization, provider action, or final WP-F07 completion.
+
+**What this does not establish.** Complete C02 period-close, allocation, correction/supersession, receipts/team reconciliation, provider billing, or final packet completion.
