@@ -541,3 +541,15 @@ remain open. The packet inventory is **11 COMPLETED / 31 PARTIAL / 34 NOT_STARTE
 WP-G03 remains `PARTIAL`: the process boundary is not an OS sandbox, and
 durable Store/CLI/dashboard integration and hard OS resource enforcement remain
 open. The packet inventory remains **11 COMPLETED / 31 PARTIAL / 34 NOT_STARTED**.
+
+## Continuation addendum — contribution attribution (2026-09-05)
+
+- [x] `34c82d0a0b50b0d32bcb8ff97a7d964667f733e9` adds graded contribution
+  association, generated-lineage and hunk/AST precedence, confounder/candidate
+  refusal, and an additive realization payload that does not feed outcome or
+  value gates. RED-first contribution engine/consumer coverage passes 15/15.
+  GitHub Actions run `33960160991` concluded success across all eight jobs.
+
+WP-D03 remains `PARTIAL`: broader language/AST coverage, independent attribution
+validation, benchmark completeness, and packet-level completion remain open.
+The packet inventory remains **11 COMPLETED / 31 PARTIAL / 34 NOT_STARTED**.

@@ -1148,3 +1148,12 @@ rollups remain responsible for their own typed bridge.
 **Verified:** RED-first plugin contract/invocation/isolation/host coverage passes 24/24, including real child execution, output/timeout bounds, environment scrubbing, unsupported-capability refusal, and stale request-ID refusal. Root lifecycle passes 1,506 total (1,502 pass / 0 fail / 4 skips); root TypeScript, `npm run build`, and `git diff --check` pass. Code commit `74c53bb47ee876381158f821000e7ff7018fd4c2` matches the remote branch; GitHub Actions run `33958662348` concluded `success` across all eight jobs, read 2026-09-05.
 
 **What this does not establish.** OS-level sandboxing or hard filesystem/network/credential/CPU/memory/descriptor enforcement; durable Store/CLI/dashboard plugin execution; external effects; independent security review; or final WP-G03 completion.
+
+## D-137 — Contribution association must remain weaker than outcome and value
+**Decision:** Add a bounded contribution-evidence layer with explicit precedence: exact patch identity or generated lineage, collector-provided hunk/AST identity, unique normalized text/path overlap, then declared temporal association. Preserve confounders, pathless/generated uncertainty, and competing source candidates as unresolved; expose the result additively on `WorkUnit` without feeding outcome, quality, or value gates.
+
+**Reason:** Similarity and temporal ordering can associate artifacts without proving authorship, correctness, success, survival, or realized value. A candidate set cannot be resolved by selecting the strongest-looking row, and generated output cannot be text-compared without lineage. The bridge therefore retains evidence and limitations while withholding stronger claims.
+
+**Verified:** RED-first contribution engine/consumer coverage passes 15/15, including generated lineage, hunk/AST precedence, pathless/bounded inputs, confounders, competing-source refusal, and realization-path non-laundering. Root lifecycle passes 1,514 total (1,510 pass / 0 fail / 4 skips); root TypeScript, `npm run build`, and `git diff --check` pass. Code commit `34c82d0a0b50b0d32bcb8ff97a7d964667f733e9` matches the remote branch; GitHub Actions run `33960160991` concluded `success` across all eight jobs, read 2026-09-05.
+
+**What this does not establish.** Universal language/AST coverage, independent attribution validation, complete benchmark performance, authorship, outcome success, code quality, realized value, or final WP-D03 completion.
