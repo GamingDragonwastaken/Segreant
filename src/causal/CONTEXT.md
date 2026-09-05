@@ -22,6 +22,7 @@
 - protocol changes to an explicit joint rule change the committed hash and are
   refused after commitment; old protocols retain byte-compatible hashes while
   receiving the disclosed version default.
+- the sequential lane commits an explicit registered look schedule, hashes its protocol/observations/results, and returns an anytime-valid interval only for accumulated independent Bernoulli observations; unregistered stopping, clustering, sliding data, adaptive assignment, and post-hoc selection remain refused.
 
 ## Invariants
 
@@ -29,9 +30,11 @@
 - One passing endpoint cannot authorize a conjunction when the other fails.
 - Unknown, collecting, invalid and inconclusive evidence cannot produce a causal
   claim or a decision-grade recommendation.
+- A sequential result is not trusted after rehydration until its nested validity domain, interval calculation, stopping record, and provenance cross-fields validate; a digest alone is not semantic evidence.
 
 ## Verify
 
 ```bash
 node --test --experimental-strip-types test/causal-core.test.ts
+node --test --experimental-strip-types test/sequential-inference.test.ts
 ```

@@ -29,6 +29,10 @@
   regardless of the statistics, and are surfaced in the CLI and the GUI.
 - Multiple comparisons are Bonferroni-split across eligible model **pairs**, with
   the applied level and count on the payload.
+- `anytimeRateInterval` carries an explicit accumulated independent-Bernoulli
+  validity domain; its confidence sequence is not a universal guarantee for
+  sliding windows, clusters, changing outcomes, adaptive assignment, or
+  post-selection.
 - Snapshots predating a pricing basis keep their amounts, are marked stale, and
   are reported as excluded rather than silently repriced.
 - Every surface that reports value composes it through `report.ts`
