@@ -64,7 +64,7 @@ States: `NOT_STARTED` `IN_PROGRESS` `PARTIAL` `COMPLETED` `BLOCKED_EXTERNAL`
 | `WP-H01` | Database integrity review | `PARTIAL` | Added an adversarial append-only schema integrity regression covering tampered trigger protection (D-113). Full SQLite pragma, migration, corruption, and recovery review remains. |
 | `WP-H02` | OIDC/JOSE production-grade decision | `NOT_STARTED` |  |
 | `WP-H03` | Fuzzing, mutation, and fault injection | `PARTIAL` | Deterministic high-consequence mutation support now removes selected safeguards and checks that the mutation oracle detects each removal; focused H03 tests pass. This is a bounded mutation harness, not broad fuzzing, fault injection, or coverage of every control. |
-| `WP-H04` | Backup/recovery and migration assurance | `NOT_STARTED` |  |
+| `WP-H04` | Backup/recovery and migration assurance | `PARTIAL` | Backup manifests now expose the authoritative SQLite schema generation, reject unsupported newer generations, preserve legacy manifests that omit the field, and revalidate retained economic/historical-FX payload digests before restore. Old-schema restore/migration and no-overwrite/refusal paths are covered; epistemic payload replay and full migration-interruption coverage remain. |
 | `WP-H05` | Supply-chain assurance | `NOT_STARTED` |  |
 | `WP-H06` | Performance and scale | `NOT_STARTED` |  |
 | `WP-I01` | Claim Inspector as a real kernel viewer | `NOT_STARTED` |  |

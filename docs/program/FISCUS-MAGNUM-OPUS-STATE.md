@@ -553,3 +553,15 @@ open. The packet inventory remains **11 COMPLETED / 31 PARTIAL / 34 NOT_STARTED*
 WP-D03 remains `PARTIAL`: broader language/AST coverage, independent attribution
 validation, benchmark completeness, and packet-level completion remain open.
 The packet inventory remains **11 COMPLETED / 31 PARTIAL / 34 NOT_STARTED**.
+
+## Continuation addendum — backup and migration assurance (2026-09-05)
+
+- [x] `2e594ab8f6ace83b8d069406aa9a75911724b7a6` binds backup schema generation,
+  rejects future versions, preserves legacy manifests, and verifies retained
+  economic/FX envelopes before restore. RED-first backup coverage passes 10/10
+  executable cases with two documented Windows skips. GitHub Actions run
+  `33961629681` concluded success across all eight jobs.
+
+WP-H04 remains `PARTIAL`: epistemic payload replay, full crash/interruption
+fault injection, and external disaster-recovery guarantees remain open. The
+packet inventory is **11 COMPLETED / 32 PARTIAL / 33 NOT_STARTED**.
