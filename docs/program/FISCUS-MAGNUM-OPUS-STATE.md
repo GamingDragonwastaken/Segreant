@@ -565,3 +565,24 @@ The packet inventory remains **11 COMPLETED / 31 PARTIAL / 34 NOT_STARTED**.
 WP-H04 remains `PARTIAL`: epistemic payload replay, full crash/interruption
 fault injection, and external disaster-recovery guarantees remain open. The
 packet inventory is **11 COMPLETED / 32 PARTIAL / 33 NOT_STARTED**.
+
+## Continuation addendum — database integrity startup and backup gates (2026-09-05)
+
+- [x] `fd6a336c4a98d1aa1144fb5b4f16191fc74904de` exposes the configured SQLite
+  safeguards and a reusable integrity assertion. Store startup checks pragmas
+  and validates SQLite integrity, foreign-key violations and supported
+  append-only trigger authority before idempotent schema repair and after
+  initialization; backup source and copied-artifact inspection use the same
+  structural boundary. Deleted epistemic/economic authorities are refused
+  rather than silently repaired or published. RED-first H01 coverage passes
+  7/7; the parent integrity/backup focus passes 19 total (17 pass / 0 fail / 2
+  platform skips); root lifecycle passes 1,522 total (1,518 pass / 0 fail / 4
+  skips); root TypeScript, build and diff check pass. GitHub Actions is
+  **PENDING** until the exact pushed commit is observed.
+
+WP-H01 remains `PARTIAL`: the current schema does not declare an
+`epistemic_derivations` foreign key, and no orphan-derivation raw-insert
+rejection is claimed. Full migration-interruption/corruption/fault-injection
+recovery, epistemic payload replay, backup confidentiality, external
+disaster-recovery guarantees, and packet completion remain open. The packet
+inventory remains **11 COMPLETED / 32 PARTIAL / 33 NOT_STARTED**.
