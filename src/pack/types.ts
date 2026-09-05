@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { RESOURCE_LIMITS } from '../util/resource-limits.ts';
 
 export const FISCUS_PACK_SCHEMA = 'fiscuspack' as const;
@@ -44,12 +45,24 @@ export interface FiscusPackAttachment {
   readonly digest: FiscusPackDigest;
 }
 
+/**
+ * The bytes carried by a portable pack. `data` is canonical base64 so the
+ * envelope stays JSON and the manifest can bind the bytes by digest without
+ * asking verification to read a path from the host filesystem.
+ */
+export interface FiscusPackAttachmentData {
+  readonly path: string;
+  readonly data: string;
+}
+
 export interface FiscusPackSignatureMetadata {
   readonly algorithm: string;
   readonly keyId: string;
   readonly signature: string;
   /** Digest of the manifest content excluding this metadata object. */
   readonly signedDigest: FiscusPackDigest;
+  /** Base64-encoded SubjectPublicKeyInfo DER; absent means metadata-only. */
+  readonly publicKey?: string;
 }
 
 export interface FiscusPackManifestInput {
@@ -73,6 +86,8 @@ export interface FiscusPackEnvelope {
   readonly version: typeof FISCUS_PACK_VERSION;
   readonly manifest: FiscusPackManifest;
   readonly manifestDigest: FiscusPackDigest;
+  /** Optional inline attachment bytes. Omission is an explicit partial pack. */
+  readonly attachments?: readonly FiscusPackAttachmentData[];
 }
 
 /**
@@ -127,7 +142,7 @@ export const DEFAULT_FISCUS_PACK_LIMITS: FiscusPackLimits = Object.freeze({
 const DIGEST_RE = /^sha256:[a-f0-9]{64}$/;
 const IDENTIFIER_RE = /^[A-Za-z0-9._:-]+$/;
 const KIND_RE = /^[A-Za-z][A-Za-z0-9._:-]*$/;
-const TOP_LEVEL_KEYS = ['schema', 'version', 'manifest', 'manifestDigest'] as const;
+const TOP_LEVEL_KEYS = ['schema', 'version', 'manifest', 'manifestDigest', 'attachments'] as const;
 const MANIFEST_KEYS = [
   'schema',
   'version',
@@ -368,6 +383,63 @@ function validateAttachments(value: unknown, limits: FiscusPackLimits, errors: s
   }
 }
 
+function decodeBase64(value: unknown): Buffer | null {
+  if (typeof value !== 'string' || value.length % 4 !== 0 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) return null;
+  const decoded = Buffer.from(value, 'base64');
+  return decoded.toString('base64') === value ? decoded : null;
+}
+
+function validateAttachmentData(value: unknown, manifestAttachments: unknown, limits: FiscusPackLimits, errors: string[]): void {
+  if (value === undefined) return;
+  if (!validArray(value, limits.maxAttachments, 'pack.attachments', errors)) return;
+  const declared = new Map<string, { sizeBytes: number; digest: string }>();
+  if (Array.isArray(manifestAttachments)) {
+    for (const item of manifestAttachments) {
+      if (isRecord(item) && typeof item.path === 'string' && typeof item.sizeBytes === 'number' && typeof item.digest === 'string') {
+        declared.set(item.path, { sizeBytes: item.sizeBytes, digest: item.digest });
+      }
+    }
+  }
+  const seen = new Set<string>();
+  let totalBytes = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const item = value[index];
+    const label = `pack.attachments[${index}]`;
+    if (!isRecord(item)) {
+      errors.push(`${label} must be an object`);
+      continue;
+    }
+    rejectUnexpectedKeys(item, ['path', 'data'], label, errors);
+    requireKeys(item, ['path', 'data'], label, errors);
+    if (!isSafeRelativeAttachmentPath(item.path) || item.path.length > limits.maxAttachmentPathChars) {
+      errors.push(`${label}.path is not a safe relative attachment path`);
+    }
+    if (typeof item.path === 'string') {
+      if (seen.has(item.path)) errors.push(`${label} duplicates an attachment path`);
+      seen.add(item.path);
+      if (!declared.has(item.path)) errors.push(`${label}.path is not declared by the manifest`);
+    }
+    const decoded = decodeBase64(item.data);
+    if (decoded === null) {
+      errors.push(`${label}.data must be canonical base64`);
+      continue;
+    }
+    if (decoded.byteLength > limits.maxAttachmentSizeBytes) {
+      errors.push(`${label}.data exceeds resource limit (${limits.maxAttachmentSizeBytes})`);
+    } else if (totalBytes <= limits.maxAttachmentBytes - decoded.byteLength) {
+      totalBytes += decoded.byteLength;
+    } else {
+      errors.push(`pack.attachments decoded bytes exceed resource limit (${limits.maxAttachmentBytes})`);
+    }
+    const declaration = typeof item.path === 'string' ? declared.get(item.path) : undefined;
+    if (declaration !== undefined) {
+      const digest = `sha256:${createHash('sha256').update(decoded).digest('hex')}`;
+      if (declaration.sizeBytes !== decoded.byteLength) errors.push(`${label}.data size does not match manifest`);
+      if (declaration.digest !== digest) errors.push(`${label}.data digest does not match manifest`);
+    }
+  }
+}
+
 function validateSignature(value: unknown, limits: FiscusPackLimits, errors: string[]): void {
   if (value === undefined) return;
   const label = 'manifest.signature';
@@ -375,12 +447,19 @@ function validateSignature(value: unknown, limits: FiscusPackLimits, errors: str
     errors.push(`${label} must be an object`);
     return;
   }
-  rejectUnexpectedKeys(value, ['algorithm', 'keyId', 'signature', 'signedDigest'], label, errors);
+  rejectUnexpectedKeys(value, ['algorithm', 'keyId', 'signature', 'signedDigest', 'publicKey'], label, errors);
   requireKeys(value, ['algorithm', 'keyId', 'signature', 'signedDigest'], label, errors);
   if (!validBoundedString(value.algorithm, limits.maxIdentifierChars)) errors.push(`${label}.algorithm is invalid`);
   if (!validIdentifier(value.keyId, limits.maxIdentifierChars)) errors.push(`${label}.keyId is invalid`);
   if (!validBoundedString(value.signature, limits.maxSignatureChars)) errors.push(`${label}.signature is invalid`);
   if (!validDigest(value.signedDigest)) errors.push(`${label}.signedDigest is invalid`);
+  if (value.publicKey !== undefined) {
+    if (value.algorithm !== 'ed25519') errors.push(`${label}.algorithm must be ed25519 for a cryptographic signature`);
+    const publicKey = decodeBase64(value.publicKey);
+    if (publicKey === null || publicKey.byteLength === 0) errors.push(`${label}.publicKey must be canonical base64`);
+    const signature = decodeBase64(value.signature);
+    if (signature === null || signature.byteLength !== 64) errors.push(`${label}.signature must be a 64-byte Ed25519 signature`);
+  }
 }
 
 export function validateFiscusPackLimits(value: FiscusPackLimits): string[] {
@@ -449,11 +528,12 @@ export function validateFiscusPackEnvelope(value: unknown, limits: FiscusPackLim
   const errors: string[] = [];
   if (!isRecord(value)) return ['pack envelope must be an object'];
   rejectUnexpectedKeys(value, TOP_LEVEL_KEYS, 'pack envelope', errors);
-  requireKeys(value, TOP_LEVEL_KEYS, 'pack envelope', errors);
+  requireKeys(value, ['schema', 'version', 'manifest', 'manifestDigest'], 'pack envelope', errors);
   if (value.schema !== FISCUS_PACK_SCHEMA) errors.push(`pack envelope.schema must be ${FISCUS_PACK_SCHEMA}`);
   if (value.version !== FISCUS_PACK_VERSION) errors.push(`pack envelope.version must be ${FISCUS_PACK_VERSION}`);
   if (!validDigest(value.manifestDigest)) errors.push('pack envelope.manifestDigest is invalid');
   errors.push(...validateFiscusPackManifest(value.manifest, limits));
+  if (isRecord(value.manifest)) validateAttachmentData(value.attachments, value.manifest.attachments, limits, errors);
   return errors;
 }
 

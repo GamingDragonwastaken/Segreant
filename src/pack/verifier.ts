@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, createPublicKey, verify as cryptoVerify, type KeyObject } from 'node:crypto';
 import {
   DEFAULT_FISCUS_PACK_LIMITS,
   isSafeRelativeAttachmentPath,
@@ -12,12 +12,20 @@ import {
   type FiscusPackSignatureMetadata,
 } from './types.ts';
 import { manifestDigest, serializeFiscusPack } from './manifest.ts';
+import { asPublicKey, keyIdForPublicKey, type FiscusPackKeyInput } from './signature.ts';
 
 export interface FiscusPackSignatureVerification {
-  readonly status: 'absent' | 'metadata_only';
-  readonly cryptographicVerification: 'not_performed';
+  readonly status: 'absent' | 'metadata_only' | 'valid' | 'invalid';
+  readonly cryptographicVerification: 'not_performed' | 'verified' | 'failed';
+  readonly pinned: boolean;
   readonly keyId: string | null;
   readonly signedDigest: string | null;
+}
+
+export interface FiscusPackAttachmentVerification {
+  readonly status: 'none' | 'partial' | 'complete';
+  readonly declared: number;
+  readonly present: number;
 }
 
 export interface FiscusPackVerificationResult {
@@ -25,12 +33,18 @@ export interface FiscusPackVerificationResult {
   readonly errors: readonly string[];
   readonly manifestDigest: string | null;
   readonly canonical: 'verified' | 'not_verified';
+  readonly integrity: 'verified' | 'not_verified';
+  readonly authenticity: 'verified' | 'not_established';
+  readonly truth: 'not_evaluated';
   readonly signature: FiscusPackSignatureVerification;
+  readonly attachments: FiscusPackAttachmentVerification;
   readonly limits: FiscusPackLimits;
 }
 
 export interface VerifyFiscusPackOptions {
   readonly limits?: FiscusPackLimitsOverride;
+  /** An out-of-band trust anchor; embedded keys alone never establish authenticity. */
+  readonly trustedPublicKey?: FiscusPackKeyInput;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -111,10 +125,100 @@ function digest(value: string): string {
   return `sha256:${createHash('sha256').update(value, 'utf8').digest('hex')}`;
 }
 
-function signatureResult(signature: FiscusPackSignatureMetadata | undefined): FiscusPackSignatureVerification {
-  return signature === undefined
-    ? { status: 'absent', cryptographicVerification: 'not_performed', keyId: null, signedDigest: null }
-    : { status: 'metadata_only', cryptographicVerification: 'not_performed', keyId: signature.keyId, signedDigest: signature.signedDigest };
+function emptySignature(): FiscusPackSignatureVerification {
+  return { status: 'absent', cryptographicVerification: 'not_performed', pinned: false, keyId: null, signedDigest: null };
+}
+
+function emptyAttachments(): FiscusPackAttachmentVerification {
+  return { status: 'none', declared: 0, present: 0 };
+}
+
+function invalidResult(errors: string[], limits: FiscusPackLimits): FiscusPackVerificationResult {
+  return {
+    ok: false,
+    errors,
+    manifestDigest: null,
+    canonical: 'not_verified',
+    integrity: 'not_verified',
+    authenticity: 'not_established',
+    truth: 'not_evaluated',
+    signature: emptySignature(),
+    attachments: emptyAttachments(),
+    limits,
+  };
+}
+
+function decodeCanonicalBase64(value: string): Buffer | null {
+  if (value.length % 4 !== 0 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) return null;
+  const decoded = Buffer.from(value, 'base64');
+  return decoded.toString('base64') === value ? decoded : null;
+}
+
+function cryptographicSignature(
+  signature: FiscusPackSignatureMetadata | undefined,
+  signedDigest: string | null,
+  trustedPublicKey: FiscusPackKeyInput | undefined,
+  errors: string[],
+): FiscusPackSignatureVerification {
+  if (signature === undefined) return emptySignature();
+  const metadataOnly: FiscusPackSignatureVerification = {
+    status: 'metadata_only',
+    cryptographicVerification: 'not_performed',
+    pinned: false,
+    keyId: signature.keyId,
+    signedDigest: signature.signedDigest,
+  };
+  if (signature.publicKey === undefined || signedDigest === null) return metadataOnly;
+
+  const publicKeyBytes = decodeCanonicalBase64(signature.publicKey);
+  const signatureBytes = decodeCanonicalBase64(signature.signature);
+  if (publicKeyBytes === null || signatureBytes === null) {
+    errors.push('signature cryptographic material is not valid canonical base64');
+    return { ...metadataOnly, status: 'invalid', cryptographicVerification: 'failed' };
+  }
+
+  let embeddedKey: KeyObject;
+  try {
+    embeddedKey = createPublicKey({ key: publicKeyBytes, format: 'der', type: 'spki' });
+    if (embeddedKey.asymmetricKeyType !== 'ed25519') throw new Error('not an Ed25519 public key');
+  } catch {
+    errors.push('signature public key is not a valid Ed25519 SPKI key');
+    return { ...metadataOnly, status: 'invalid', cryptographicVerification: 'failed' };
+  }
+
+  const embeddedKeyId = keyIdForPublicKey(embeddedKey);
+  if (embeddedKeyId !== signature.keyId) {
+    errors.push('signature key id does not match public key');
+    return { ...metadataOnly, status: 'invalid', cryptographicVerification: 'failed' };
+  }
+  let valid = false;
+  try {
+    valid = cryptoVerify(null, Buffer.from(signature.signedDigest, 'utf8'), embeddedKey, signatureBytes);
+  } catch {
+    valid = false;
+  }
+  if (!valid) {
+    errors.push('signature verification failed');
+    return { ...metadataOnly, status: 'invalid', cryptographicVerification: 'failed' };
+  }
+
+  let pinned = false;
+  if (trustedPublicKey !== undefined) {
+    try {
+      pinned = keyIdForPublicKey(asPublicKey(trustedPublicKey)) === embeddedKeyId;
+    } catch {
+      errors.push('trusted public key is invalid');
+      return { ...metadataOnly, status: 'valid', cryptographicVerification: 'verified' };
+    }
+    if (!pinned) errors.push('signature public key is not trusted by supplied key');
+  }
+  return {
+    status: 'valid',
+    cryptographicVerification: 'verified',
+    pinned,
+    keyId: signature.keyId,
+    signedDigest: signature.signedDigest,
+  };
 }
 
 /**
@@ -127,26 +231,12 @@ export function verifyFiscusPack(input: unknown, options: VerifyFiscusPackOption
   const limits = resolveFiscusPackLimits(options.limits);
   const limitErrors = validateFiscusPackLimits(limits);
   if (limitErrors.length > 0) {
-    return {
-      ok: false,
-      errors: limitErrors,
-      manifestDigest: null,
-      canonical: 'not_verified',
-      signature: { status: 'absent', cryptographicVerification: 'not_performed', keyId: null, signedDigest: null },
-      limits,
-    };
+    return invalidResult(limitErrors, limits);
   }
 
   const parsed = parseInput(input, limits);
   if (parsed.errors.length > 0) {
-    return {
-      ok: false,
-      errors: parsed.errors,
-      manifestDigest: null,
-      canonical: 'not_verified',
-      signature: { status: 'absent', cryptographicVerification: 'not_performed', keyId: null, signedDigest: null },
-      limits,
-    };
+    return invalidResult(parsed.errors, limits);
   }
 
   const errors = validateFiscusPackEnvelope(parsed.value, limits);
@@ -176,9 +266,6 @@ export function verifyFiscusPack(input: unknown, options: VerifyFiscusPackOption
     }
   }
 
-  const signature = isRecord(value) && isRecord(value.manifest) && isRecord(value.manifest.signature)
-    ? signatureResult(value.manifest.signature as unknown as FiscusPackSignatureMetadata)
-    : { status: 'absent' as const, cryptographicVerification: 'not_performed' as const, keyId: null, signedDigest: null };
   const computedDigest = isRecord(value) && isRecord(value.manifest) && typeof value.manifestDigest === 'string'
     ? (() => {
         try {
@@ -199,12 +286,34 @@ export function verifyFiscusPack(input: unknown, options: VerifyFiscusPackOption
         }
       })()
     : null;
+  const signature = isRecord(value) && isRecord(value.manifest) && isRecord(value.manifest.signature)
+    ? cryptographicSignature(
+        value.manifest.signature as unknown as FiscusPackSignatureMetadata,
+        computedDigest,
+        options.trustedPublicKey,
+        errors,
+      )
+    : emptySignature();
+  const declaredAttachments = isRecord(value) && isRecord(value.manifest) && Array.isArray(value.manifest.attachments)
+    ? value.manifest.attachments.length
+    : 0;
+  const presentAttachments = isRecord(value) && Array.isArray(value.attachments) ? value.attachments.length : 0;
+  const attachments: FiscusPackAttachmentVerification = {
+    status: declaredAttachments === 0 ? 'none' : presentAttachments === declaredAttachments ? 'complete' : 'partial',
+    declared: declaredAttachments,
+    present: presentAttachments,
+  };
+  const ok = errors.length === 0;
   return {
-    ok: errors.length === 0,
+    ok,
     errors,
     manifestDigest: computedDigest,
-    canonical: errors.length === 0 ? 'verified' : 'not_verified',
+    canonical: ok ? 'verified' : 'not_verified',
+    integrity: ok ? 'verified' : 'not_verified',
+    authenticity: signature.pinned && signature.cryptographicVerification === 'verified' ? 'verified' : 'not_established',
+    truth: 'not_evaluated',
     signature,
+    attachments,
     limits,
   };
 }

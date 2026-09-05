@@ -12,6 +12,7 @@ import {
   validateFiscusPackLimits,
   validateFiscusPackManifest,
   type FiscusPackEnvelope,
+  type FiscusPackAttachmentData,
   type FiscusPackLimitsOverride,
   type FiscusPackManifest,
   type FiscusPackManifestInput,
@@ -66,14 +67,20 @@ export function createFiscusPackManifest(input: FiscusPackManifestInput): Fiscus
   return freezeDeep(manifest);
 }
 
-export function createFiscusPackEnvelope(manifest: FiscusPackManifest): FiscusPackEnvelope {
+export function createFiscusPackEnvelope(
+  manifest: FiscusPackManifest,
+  attachments: readonly FiscusPackAttachmentData[] = [],
+): FiscusPackEnvelope {
   assertManifest(manifest);
   const pack: FiscusPackEnvelope = {
     schema: FISCUS_PACK_SCHEMA,
     version: FISCUS_PACK_VERSION,
     manifest,
     manifestDigest: manifestDigest(manifest),
+    ...(attachments.length > 0 ? { attachments: clone(attachments) } : {}),
   };
+  const errors = validateFiscusPackEnvelope(pack);
+  if (errors.length > 0) throw new Error(errors.join('; '));
   return freezeDeep(pack);
 }
 
