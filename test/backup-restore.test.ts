@@ -1,8 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { money } from '../src/economics/money.ts';
+import { backupDatabase } from '../src/store/backup.ts';
 import { Store, type RequestRow } from '../src/store/db.ts';
 
 function request(): RequestRow {
@@ -202,6 +206,165 @@ test('backup and restore reject symlinked source and destination paths when supp
     assert.equal(destinationResult.ok, false);
     assert.match(destinationResult.reason ?? '', /exist|overwrite/i);
     assert.equal(String(readFileSync(target)), 'sentinel');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+function rewriteManifestForArtifact(path: string, updates: Record<string, unknown> = {}): void {
+  const manifestPath = `${path}.manifest.json`;
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, unknown>;
+  const bytes = readFileSync(path);
+  try {
+    writeFileSync(manifestPath, JSON.stringify({
+      ...manifest,
+      bytes: statSync(path).size,
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+      ...updates,
+    }) + '\n');
+  } finally {
+    bytes.fill(0);
+  }
+}
+
+test('restore refuses a manifest-consistent backup with a corrupted economic payload before publishing', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-backup-economic-corrupt-'));
+  const source = join(dir, 'source.sqlite');
+  const backup = join(dir, 'backup.sqlite');
+  const restored = join(dir, 'restored.sqlite');
+  const store = new Store(source);
+  store.insertRequest({ ...request(), economicAmount: money('0.00125', 'USD', 'list') });
+  assert.equal(store.backupTo(backup).ok, true);
+  store.close();
+  try {
+    const corrupted = new DatabaseSync(backup);
+    try {
+      const row = corrupted.prepare('SELECT event_id, event_json FROM economic_events LIMIT 1').get() as { event_id: string; event_json: string } | undefined;
+      assert.ok(row);
+      const eventJson = row.event_json.replace('backup-fixture', 'corrupted-project');
+      assert.notEqual(eventJson, row.event_json);
+      corrupted.prepare('DROP TRIGGER economic_events_append_only_update').run();
+      corrupted.prepare('UPDATE economic_events SET event_json = ? WHERE event_id = ?').run(eventJson, row.event_id);
+      corrupted.prepare(
+        "CREATE TRIGGER economic_events_append_only_update BEFORE UPDATE ON economic_events BEGIN SELECT RAISE(ABORT, 'economic event ledger is append-only'); END",
+      ).run();
+    } finally {
+      corrupted.close();
+    }
+    // Model a writer that emitted an internally matching artifact hash while
+    // leaving the append-only payload digest stale. The backup must still refuse.
+    rewriteManifestForArtifact(backup);
+    const result = Store.restoreBackup(backup, restored);
+    assert.equal(result.ok, false);
+    assert.match(result.reason ?? '', /digest|payload|integrity|corrupt/i);
+    assert.equal(existsSync(restored), false, 'corrupt history must not publish a destination');
+    assert.equal(existsSync(backup), true, 'the source evidence must remain available for recovery');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('restore rejects an incompatible newer schema version without writing a destination', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-backup-newer-schema-'));
+  const source = join(dir, 'source.sqlite');
+  const backup = join(dir, 'backup.sqlite');
+  const restored = join(dir, 'restored.sqlite');
+  const store = new Store(source);
+  store.insertRequest(request());
+  assert.equal(store.backupTo(backup).ok, true);
+  store.close();
+  try {
+    const future = new DatabaseSync(backup);
+    try {
+      future.prepare('PRAGMA user_version = 999').run();
+    } finally {
+      future.close();
+    }
+    rewriteManifestForArtifact(backup, { schemaVersion: 999 });
+    const result = Store.restoreBackup(backup, restored);
+    assert.equal(result.ok, false);
+    assert.match(result.reason ?? '', /newer|schema|unsupported/i);
+    assert.equal(existsSync(restored), false);
+    assert.equal(existsSync(backup), true, 'an incompatible source must remain untouched');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a verified old-schema backup restores and migrates append-only data without losing the legacy row', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-backup-old-schema-'));
+  const legacyPath = join(dir, 'legacy.sqlite');
+  const backup = join(dir, 'backup.sqlite');
+  const restored = join(dir, 'restored.sqlite');
+  const legacy = new DatabaseSync(legacyPath);
+  legacy.prepare(`CREATE TABLE sessions (
+    session_id TEXT PRIMARY KEY NOT NULL, project TEXT NOT NULL DEFAULT 'default', tool TEXT NOT NULL DEFAULT 'unknown',
+    start_ms INTEGER NOT NULL, end_ms INTEGER, status TEXT NOT NULL DEFAULT 'active'
+  )`).run();
+  legacy.prepare(`CREATE TABLE requests (
+    request_id TEXT PRIMARY KEY NOT NULL, session_id TEXT, ts_iso TEXT NOT NULL, ts_epoch_ms INTEGER NOT NULL,
+    provider TEXT NOT NULL, model TEXT NOT NULL, project TEXT NOT NULL DEFAULT 'default', task_weight REAL NOT NULL DEFAULT 1.0,
+    input_tokens INTEGER NOT NULL DEFAULT 0, output_tokens INTEGER NOT NULL DEFAULT 0, cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+    cache_read_tokens INTEGER NOT NULL DEFAULT 0, reasoning_tokens INTEGER NOT NULL DEFAULT 0, cost_usd REAL NOT NULL DEFAULT 0,
+    estimated INTEGER NOT NULL DEFAULT 0, streamed INTEGER NOT NULL DEFAULT 0, status_code INTEGER, duration_ms INTEGER
+  )`).run();
+  legacy.prepare('INSERT INTO sessions (session_id, start_ms) VALUES (?, ?)').run('legacy-session', 1_700_000_000_000);
+  legacy.prepare(`INSERT INTO requests (
+    request_id, session_id, ts_iso, ts_epoch_ms, provider, model, project, task_weight, input_tokens, output_tokens,
+    cache_write_tokens, cache_read_tokens, reasoning_tokens, cost_usd, estimated, streamed, status_code, duration_ms
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    'legacy-request', 'legacy-session', '2023-11-14T22:13:20.000Z', 1_700_000_000_000,
+    'openai', 'gpt-4o', 'legacy-project', 1, 10, 5, 0, 0, 0, 0.00125, 0, 0, 200, 12,
+  );
+  legacy.close();
+  try {
+    const sourceHandle = new DatabaseSync(legacyPath);
+    try {
+      const result = backupDatabase(sourceHandle, legacyPath, backup);
+      assert.equal(result.ok, true);
+      if (result.ok) assert.equal((result as unknown as { schemaVersion?: number }).schemaVersion, 0);
+    } finally {
+      sourceHandle.close();
+    }
+    assert.equal(Store.restoreBackup(backup, restored).ok, true);
+    const migrated = new Store(restored);
+    try {
+      const retained = migrated.raw().prepare(
+        'SELECT request_id, project, via, attribution_basis, capture_coverage FROM requests WHERE request_id = ?',
+      ).get('legacy-request') as { request_id: string; project: string; via: string; attribution_basis: string; capture_coverage: string } | undefined;
+      assert.deepEqual({ ...retained }, {
+        request_id: 'legacy-request',
+        project: 'legacy-project',
+        via: 'proxy',
+        attribution_basis: 'legacy_unknown',
+        capture_coverage: 'legacy_unknown',
+      });
+      const version = migrated.raw().prepare('PRAGMA user_version').get() as { user_version: number };
+      assert.equal(version.user_version, 1);
+    } finally {
+      migrated.close();
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a legacy manifest without schemaVersion remains inspectable using the database version', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-backup-legacy-manifest-'));
+  const source = join(dir, 'source.sqlite');
+  const backup = join(dir, 'backup.sqlite');
+  const store = new Store(source);
+  store.insertRequest(request());
+  assert.equal(store.backupTo(backup).ok, true);
+  store.close();
+  try {
+    const manifestPath = `${backup}.manifest.json`;
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, unknown>;
+    delete manifest.schemaVersion;
+    writeFileSync(manifestPath, JSON.stringify(manifest) + '\n');
+    const inspected = Store.inspectBackup(backup);
+    assert.equal(inspected.ok, true);
+    if (inspected.ok) assert.equal(inspected.schemaVersion, 1);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

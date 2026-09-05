@@ -8,6 +8,20 @@
 
 import type { DatabaseSync } from 'node:sqlite';
 
+/** On-disk schema generation understood by this build. */
+export const CURRENT_SCHEMA_VERSION = 1;
+
+/** Read and validate SQLite's monotonic application schema version. */
+export function readSchemaVersion(db: DatabaseSync): number {
+  const row = db.prepare('PRAGMA user_version').get() as { user_version?: unknown } | undefined;
+  if (typeof row?.user_version !== 'number'
+      || !Number.isSafeInteger(row.user_version)
+      || row.user_version < 0) {
+    throw new Error('schema version is invalid');
+  }
+  return row.user_version;
+}
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS sessions (
   session_id TEXT PRIMARY KEY NOT NULL,
@@ -2047,6 +2061,13 @@ export function initializeSchema(
         'causal v2 schema validation failed: ' +
         (finalAttestation.defectIds.join(',') || 'CAUSAL_V2_SCHEMA_INCOMPLETE'),
       );
+    }
+    const schemaVersion = readSchemaVersion(db);
+    if (schemaVersion > CURRENT_SCHEMA_VERSION) {
+      throw new Error(`schema version ${schemaVersion} is newer than supported version ${CURRENT_SCHEMA_VERSION}`);
+    }
+    if (schemaVersion < CURRENT_SCHEMA_VERSION) {
+      db.prepare(`PRAGMA user_version = ${CURRENT_SCHEMA_VERSION}`).run();
     }
     db.prepare('COMMIT').run();
   } catch (error) {

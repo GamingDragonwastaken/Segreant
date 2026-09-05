@@ -21,6 +21,8 @@ import {
   writeSync,
 } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { deserializeEconomicEvent, deserializeHistoricalRateObservation } from '../economics/serialization.ts';
+import { CURRENT_SCHEMA_VERSION, readSchemaVersion } from './schema.ts';
 
 const MANIFEST_VERSION = 1;
 // These tables are created by the original on-disk schema and remain the
@@ -34,6 +36,7 @@ export interface BackupManifest {
   createdAt: string;
   bytes: number;
   sha256: string;
+  schemaVersion: number;
   schemaFingerprint: string;
   requiredTables: readonly string[];
   restoredFromSha256?: string;
@@ -43,6 +46,7 @@ interface BackupInspectionFields {
   path: string;
   bytes: number;
   sha256: string | null;
+  schemaVersion: number | null;
   schemaFingerprint: string | null;
   requiredTables: string[];
   manifestPath: string;
@@ -64,7 +68,7 @@ export interface BackupFailure extends BackupInspectionFields {
 export type BackupInspection = BackupSuccess | BackupFailure;
 export type BackupResult = BackupSuccess | BackupFailure;
 
-type OpenInspection = { bytes: number; sha256: string; schemaFingerprint: string; tables: string[] };
+type OpenInspection = { bytes: number; sha256: string; schemaVersion: number; schemaFingerprint: string; tables: string[] };
 
 function isFailure(value: OpenInspection | BackupFailure): value is BackupFailure {
   return 'ok' in value && value.ok === false;
@@ -90,6 +94,7 @@ function failure(path: string, reason: string, extra: Partial<BackupInspection> 
     path,
     bytes: extra.bytes ?? 0,
     sha256: extra.sha256 ?? null,
+    schemaVersion: extra.schemaVersion ?? null,
     schemaFingerprint: extra.schemaFingerprint ?? null,
     requiredTables: extra.requiredTables ?? [],
     manifestPath: manifestPath(path),
@@ -123,16 +128,79 @@ function schemaFingerprint(db: DatabaseSync): { fingerprint: string; tables: str
   return { fingerprint: `sha256:${createHash('sha256').update(canonical, 'utf8').digest('hex')}`, tables };
 }
 
+function tableExists(db: DatabaseSync, table: string): boolean {
+  const row = db.prepare("SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = ?").get(table) as { present?: unknown } | undefined;
+  return row?.present === 1;
+}
+
+/** Verify canonical payload digests that a whole-file hash cannot validate. */
+function storedPayloadIntegrity(db: DatabaseSync): string | null {
+  if (tableExists(db, 'economic_events')) {
+    const rows = db.prepare(
+      'SELECT event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest FROM economic_events ORDER BY event_id ASC',
+    ).all() as Array<{ event_id: string; event_kind: string; subject: string; occurred_at: string; recorded_at: string; event_json: string; event_digest: string }>;
+    for (const row of rows) {
+      try {
+        const parsed = JSON.parse(row.event_json) as { schemaVersion?: unknown; id?: unknown };
+        const item = deserializeEconomicEvent({
+          kind: 'economic_event',
+          schemaVersion: parsed.schemaVersion as number,
+          id: parsed.id as string,
+          body: row.event_json,
+          digest: row.event_digest,
+        });
+        if (item.id !== row.event_id || item.kind !== row.event_kind || item.subject !== row.subject
+            || item.occurredAt !== row.occurred_at || item.recordedAt !== row.recorded_at) {
+          return `stored economic event ${row.event_id} failed physical identity verification`;
+        }
+      } catch (error) {
+        return `stored economic event ${row.event_id} failed integrity verification: ${error instanceof Error ? error.message : String(error)}`;
+      }
+    }
+  }
+  if (tableExists(db, 'economic_fx_rate_observations')) {
+    const rows = db.prepare(
+      'SELECT observation_id, recorded_at, supersedes_id, observation_json, observation_digest FROM economic_fx_rate_observations ORDER BY recorded_at ASC, observation_id ASC',
+    ).all() as Array<{ observation_id: string; recorded_at: string; supersedes_id: string | null; observation_json: string; observation_digest: string }>;
+    for (const row of rows) {
+      try {
+        const item = deserializeHistoricalRateObservation({
+          kind: 'historical_fx_rate_observation',
+          schemaVersion: 1,
+          id: row.observation_id,
+          body: row.observation_json,
+          digest: row.observation_digest,
+        });
+        if (item.id !== row.observation_id || item.recordedAt !== row.recorded_at || item.supersedes !== row.supersedes_id) {
+          return `stored historical FX observation ${row.observation_id} failed physical identity verification`;
+        }
+      } catch (error) {
+        return `stored historical FX observation ${row.observation_id} failed integrity verification: ${error instanceof Error ? error.message : String(error)}`;
+      }
+    }
+  }
+  return null;
+}
+
 function inspectOpenDatabase(path: string): OpenInspection | BackupFailure {
   if (!regularFile(path)) return failure(path, 'backup path is missing or is not a regular file');
   let db: DatabaseSync | null = null;
   try {
     const stat = statSync(path);
     db = new DatabaseSync(path, { readOnly: true });
+    const schemaVersion = readSchemaVersion(db);
+    if (schemaVersion > CURRENT_SCHEMA_VERSION) {
+      return failure(path, `backup schema version ${schemaVersion} is newer than supported version ${CURRENT_SCHEMA_VERSION}`, {
+        bytes: stat.size,
+        schemaVersion,
+      });
+    }
     const quick = db.prepare('PRAGMA quick_check').get() as { quick_check?: unknown } | undefined;
     if (quick?.quick_check !== 'ok') return failure(path, 'SQLite quick_check did not return ok', { bytes: stat.size });
     const foreign = db.prepare('PRAGMA foreign_key_check').all();
     if (foreign.length > 0) return failure(path, 'SQLite foreign_key_check reported violations', { bytes: stat.size });
+    const payloadError = storedPayloadIntegrity(db);
+    if (payloadError) return failure(path, payloadError, { bytes: stat.size, schemaVersion });
     const fingerprint = schemaFingerprint(db);
     const missing = REQUIRED_TABLES.filter((table) => !fingerprint.tables.includes(table));
     if (missing.length > 0) return failure(path, `backup is missing required table(s): ${missing.join(', ')}`, {
@@ -141,7 +209,7 @@ function inspectOpenDatabase(path: string): OpenInspection | BackupFailure {
       schemaFingerprint: fingerprint.fingerprint,
       requiredTables: [...REQUIRED_TABLES],
     });
-    return { bytes: stat.size, sha256: sha256File(path), schemaFingerprint: fingerprint.fingerprint, tables: fingerprint.tables };
+    return { bytes: stat.size, sha256: sha256File(path), schemaVersion, schemaFingerprint: fingerprint.fingerprint, tables: fingerprint.tables };
   } catch (error) {
     return failure(path, `backup integrity check failed: ${error instanceof Error ? error.message : String(error)}`);
   } finally {
@@ -149,7 +217,7 @@ function inspectOpenDatabase(path: string): OpenInspection | BackupFailure {
   }
 }
 
-function writeManifest(path: string, inspected: { bytes: number; sha256: string; schemaFingerprint: string; tables: string[] }, restoredFromSha256?: string): string {
+function writeManifest(path: string, inspected: { bytes: number; sha256: string; schemaVersion: number; schemaFingerprint: string; tables: string[] }, restoredFromSha256?: string): string {
   const target = manifestPath(path);
   const manifest: BackupManifest = {
     version: MANIFEST_VERSION,
@@ -157,6 +225,7 @@ function writeManifest(path: string, inspected: { bytes: number; sha256: string;
     createdAt: new Date().toISOString(),
     bytes: inspected.bytes,
     sha256: inspected.sha256,
+    schemaVersion: inspected.schemaVersion,
     schemaFingerprint: inspected.schemaFingerprint,
     requiredTables: [...REQUIRED_TABLES],
     ...(restoredFromSha256 ? { restoredFromSha256 } : {}),
@@ -190,14 +259,16 @@ function writeManifest(path: string, inspected: { bytes: number; sha256: string;
   }
 }
 
-function verifyManifest(path: string, inspected: { bytes: number; sha256: string; schemaFingerprint: string }): string | null {
+function verifyManifest(path: string, inspected: { bytes: number; sha256: string; schemaVersion: number; schemaFingerprint: string }): string | null {
   const target = manifestPath(path);
   if (!pathEntryExists(target)) return null;
   try {
     if (!regularFile(target)) return 'backup manifest is not a regular file';
     const raw = JSON.parse(readFileSync(target, 'utf8')) as Partial<BackupManifest>;
     if (raw.version !== 1 || raw.kind !== 'fiscus-ledger-backup') return 'backup manifest has an unsupported version or kind';
-    if (raw.bytes !== inspected.bytes || raw.sha256 !== inspected.sha256 || raw.schemaFingerprint !== inspected.schemaFingerprint) {
+    if (raw.bytes !== inspected.bytes || raw.sha256 !== inspected.sha256
+        || (raw.schemaVersion !== undefined && raw.schemaVersion !== inspected.schemaVersion)
+        || raw.schemaFingerprint !== inspected.schemaFingerprint) {
       return 'backup manifest does not match the SQLite artifact';
     }
     if (!Array.isArray(raw.requiredTables) || raw.requiredTables.length !== REQUIRED_TABLES.length || !REQUIRED_TABLES.every((table) => raw.requiredTables?.includes(table))) {
@@ -217,6 +288,7 @@ export function inspectBackup(databasePath: string): BackupResult {
   if (manifestError) return failure(path, manifestError, {
     bytes: inspected.bytes,
     sha256: inspected.sha256,
+    schemaVersion: inspected.schemaVersion,
     schemaFingerprint: inspected.schemaFingerprint,
     requiredTables: [...REQUIRED_TABLES],
   });
@@ -225,6 +297,7 @@ export function inspectBackup(databasePath: string): BackupResult {
     path,
     bytes: inspected.bytes,
     sha256: inspected.sha256,
+    schemaVersion: inspected.schemaVersion,
     schemaFingerprint: inspected.schemaFingerprint,
     requiredTables: [...REQUIRED_TABLES],
     manifestPath: manifestPath(path),
@@ -251,7 +324,7 @@ export function backupDatabase(db: DatabaseSync, sourcePath: string, destination
       return inspected;
     }
     writeManifest(destination, inspected);
-    return { ok: true, path: destination, bytes: inspected.bytes, sha256: inspected.sha256, schemaFingerprint: inspected.schemaFingerprint, requiredTables: [...REQUIRED_TABLES], manifestPath: manifestPath(destination), manifestPresent: true, integrity: 'ok' };
+    return { ok: true, path: destination, bytes: inspected.bytes, sha256: inspected.sha256, schemaVersion: inspected.schemaVersion, schemaFingerprint: inspected.schemaFingerprint, requiredTables: [...REQUIRED_TABLES], manifestPath: manifestPath(destination), manifestPresent: true, integrity: 'ok' };
   } catch (error) {
     try { rmSync(destination, { force: true }); } catch { /* no residue is best effort */ }
     return failure(destination, `backup failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -278,7 +351,7 @@ export function restoreDatabase(sourcePath: string, destinationPath: string): Ba
       return inspected;
     }
     writeManifest(destination, inspected, inspectedSource.sha256);
-    return { ok: true, path: destination, bytes: inspected.bytes, sha256: inspected.sha256, schemaFingerprint: inspected.schemaFingerprint, requiredTables: [...REQUIRED_TABLES], manifestPath: manifestPath(destination), manifestPresent: true, integrity: 'ok' };
+    return { ok: true, path: destination, bytes: inspected.bytes, sha256: inspected.sha256, schemaVersion: inspected.schemaVersion, schemaFingerprint: inspected.schemaFingerprint, requiredTables: [...REQUIRED_TABLES], manifestPath: manifestPath(destination), manifestPresent: true, integrity: 'ok' };
   } catch (error) {
     try { rmSync(destination, { force: true }); } catch { /* no residue is best effort */ }
     return failure(destination, `restore failed: ${error instanceof Error ? error.message : String(error)}`);

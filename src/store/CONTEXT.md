@@ -52,7 +52,11 @@ two domain callers goes in `rows.ts`.
   rollup total identically without either mutating a row.
 - **Backups are additive and integrity-checked.** `Store.backupTo()` uses
   `VACUUM INTO`, quick/foreign-key checks, a schema fingerprint, and a redacted
-  manifest. `Store.restoreBackup()` refuses existing destinations and never
+  manifest bound to the SQLite application schema version when present. It also
+  revalidates retained economic and historical-FX payload digests, so a matching
+  outer file hash cannot launder an internally corrupted ledger. Legacy manifests
+  without the new version field remain readable from the authoritative database
+  value. `Store.restoreBackup()` refuses existing destinations and never
   overwrites the active database path.
 - **The epistemic ledger shares this connection.** `Store.epistemic()` exposes
   canonical Evidence/Claim/Derivation persistence on the same SQLite handle;
