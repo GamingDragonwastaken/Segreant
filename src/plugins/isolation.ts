@@ -1,9 +1,10 @@
 /**
- * Declarative isolation policy for a future plugin host.
+ * Declarative policy shared by the plugin contract and process host.
  *
- * This file intentionally contains no process, stdio, socket, filesystem, or
- * resource-limit implementation. It records the boundary a loader would have
- * to enforce; no untrusted code is executed by this foundation.
+ * This policy is not an OS sandbox. The process host enforces the stdio,
+ * message, timeout, and environment rules it can enforce with Node's standard
+ * library, while this module records the controls that still require a
+ * platform-specific helper.
  */
 
 import { DEFAULT_PLUGIN_MESSAGE_LIMITS } from './contract.ts';
@@ -57,6 +58,8 @@ export interface PluginIsolationPolicy {
   readonly schemaVersion: typeof PLUGIN_ISOLATION_POLICY_VERSION;
   readonly process: 'separate_process';
   readonly inProcessExecution: 'forbidden';
+  /** Node's standard library does not provide a portable OS sandbox here. */
+  readonly osBoundary: 'unsupported';
   readonly transports: readonly PluginTransport[];
   readonly defaultTransport: PluginTransport;
   readonly stdio: PluginStdioPolicy;
@@ -64,7 +67,8 @@ export interface PluginIsolationPolicy {
   readonly egress: PluginEgressIsolationPolicy;
   readonly timeouts: PluginTimeoutPolicy;
   readonly resources: PluginResourcePolicy;
-  readonly untrustedCode: 'not_executed_by_contract';
+  /** This is an execution boundary, not a claim of sandboxing. */
+  readonly untrustedCode: 'process_boundary_only';
 }
 
 const DEFAULT_TIMEOUTS: PluginTimeoutPolicy = Object.freeze({
@@ -87,11 +91,12 @@ const DEFAULT_RESOURCES: PluginResourcePolicy = Object.freeze({
   maxStderrBytes: 64 * 1024,
 });
 
-/** Conservative host policy; exporting data does not enforce it. */
+/** Conservative process-host policy; exporting data does not enforce it. */
 export const DEFAULT_PLUGIN_ISOLATION_POLICY: PluginIsolationPolicy = Object.freeze({
   schemaVersion: PLUGIN_ISOLATION_POLICY_VERSION,
   process: 'separate_process',
   inProcessExecution: 'forbidden',
+  osBoundary: 'unsupported',
   transports: Object.freeze([...PLUGIN_TRANSPORTS]),
   defaultTransport: 'stdio',
   stdio: Object.freeze({
@@ -113,11 +118,11 @@ export const DEFAULT_PLUGIN_ISOLATION_POLICY: PluginIsolationPolicy = Object.fre
   }),
   timeouts: DEFAULT_TIMEOUTS,
   resources: DEFAULT_RESOURCES,
-  untrustedCode: 'not_executed_by_contract',
+  untrustedCode: 'process_boundary_only',
 });
 
 const TOP_LEVEL_KEYS = [
-  'schemaVersion', 'process', 'inProcessExecution', 'transports', 'defaultTransport',
+  'schemaVersion', 'process', 'inProcessExecution', 'osBoundary', 'transports', 'defaultTransport',
   'stdio', 'localSocket', 'egress', 'timeouts', 'resources', 'untrustedCode',
 ] as const;
 const STDIO_KEYS = ['framing', 'stdin', 'stdout', 'stderr'] as const;
@@ -175,6 +180,7 @@ export function validatePluginIsolationPolicy(value: unknown): string[] {
   if (policy.schemaVersion !== PLUGIN_ISOLATION_POLICY_VERSION) errors.push('schemaVersion must be 1');
   if (policy.process !== 'separate_process') errors.push('plugin isolation requires separate_process');
   if (policy.inProcessExecution !== 'forbidden') errors.push('in-process plugin execution is forbidden');
+  if (policy.osBoundary !== 'unsupported') errors.push('OS-level plugin isolation is unsupported');
   if (!Array.isArray(policy.transports)
       || policy.transports.length !== PLUGIN_TRANSPORTS.length
       || policy.transports.some((item) => !PLUGIN_TRANSPORTS.includes(item as PluginTransport))
@@ -229,7 +235,7 @@ export function validatePluginIsolationPolicy(value: unknown): string[] {
       errors.push('resources.maxInputBytes cannot exceed maxMessageBytes');
     }
   }
-  if (policy.untrustedCode !== 'not_executed_by_contract') errors.push('untrustedCode must remain not_executed_by_contract');
+  if (policy.untrustedCode !== 'process_boundary_only') errors.push('untrustedCode must remain process_boundary_only');
   return errors;
 }
 

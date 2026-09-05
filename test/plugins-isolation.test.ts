@@ -10,6 +10,7 @@ test('default plugin isolation policy is separate-process and host-mediated', ()
   const policy = DEFAULT_PLUGIN_ISOLATION_POLICY;
   assert.equal(policy.process, 'separate_process');
   assert.equal(policy.inProcessExecution, 'forbidden');
+  assert.equal(policy.osBoundary, 'unsupported');
   assert.deepEqual(policy.transports, ['stdio', 'local_socket']);
   assert.equal(policy.defaultTransport, 'stdio');
   assert.equal(policy.localSocket.loopbackOnly, true);
@@ -66,5 +67,5 @@ test('isolation policy describes bounded time and resource controls without exec
     'maxOutputBytes',
     'maxStderrBytes',
   ]);
-  assert.equal(policy.untrustedCode, 'not_executed_by_contract');
+  assert.equal(policy.untrustedCode, 'process_boundary_only');
 });
