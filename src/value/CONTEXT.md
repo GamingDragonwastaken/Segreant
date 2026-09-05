@@ -97,6 +97,11 @@
   text, file count, line count, fragment count and aggregate retained bytes use
   the shared resource policy. A `truncated` extraction returns no files and
   cannot feed the acceptance gate; storage preserves the coverage state.
+- `WorkUnit.contributionEvidence` is an additive association record built from
+  retained proposal/commit artifacts. It never feeds outcome, quality, or value
+  gates; competing sources, incomplete captures, generated content without
+  lineage, and weak temporal evidence remain explicit rather than becoming
+  authorship or success claims.
 - Dominant provider/model attribution comes from `canonicalModelAttribution()`
   over effective request rows. Exact Money chooses the winner and share before
   numeric projection; partial windows have no winner, and wholly legacy windows
@@ -131,4 +136,5 @@
 
 ```bash
 npm test -- --test-name-pattern="value|trial|frontier|realization|lift"
+npm test -- --test-name-pattern="contribution"
 ```

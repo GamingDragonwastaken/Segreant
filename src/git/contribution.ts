@@ -8,12 +8,14 @@
  *
  * Evidence precedence is deliberately narrow:
  *
- *   exact patch identity -> unique structural text/path overlap
- *   -> declared temporal window -> unresolved
+ *   exact patch identity / generated lineage -> hunk identity / AST fingerprint
+ *   -> unique structural text/path overlap -> declared temporal window
+ *   -> unresolved
  *
- * The structural comparison is bounded and refuses partial/opaque content. A
- * cap exhaustion, ambiguous candidate, missing path relationship, or invalid
- * time window cannot become a negative attribution claim.
+ * Structural and temporal observations are deliberately conservative: explicit
+ * confounders, generated content without lineage, and competing candidates keep
+ * the result unresolved rather than laundering an association into authorship,
+ * quality, outcome, or value.
  */
 
 const contributionEvidenceBrand: unique symbol = Symbol('contribution-evidence');
@@ -23,6 +25,9 @@ export type ContributionEvidenceStatus = (typeof CONTRIBUTION_EVIDENCE_STATUSES)
 
 export const CONTRIBUTION_EVIDENCE_METHODS = [
   'exact_patch_identity',
+  'generated_lineage',
+  'hunk_similarity',
+  'structural_ast_similarity',
   'normalized_text_overlap',
   'temporal_association',
   'unresolved',
@@ -32,13 +37,32 @@ export type ContributionEvidenceMethod = (typeof CONTRIBUTION_EVIDENCE_METHODS)[
 export const CONTRIBUTION_FILE_KINDS = ['text', 'generated', 'binary', 'unsupported'] as const;
 export type ContributionFileKind = (typeof CONTRIBUTION_FILE_KINDS)[number];
 
-export type ContributionNonClaim = 'outcome_success' | 'code_quality' | 'realized_value';
+export const CONTRIBUTION_CONFOUNDERS = [
+  'copied_boilerplate',
+  'formatting_only',
+  'semantic_rewrite',
+  'generated_without_lineage',
+  'concurrent_human_edit',
+  'multiple_ai_sources',
+  'revert_reapply',
+  'partial_capture',
+] as const;
+export type ContributionConfounder = (typeof CONTRIBUTION_CONFOUNDERS)[number];
+
+export type ContributionNonClaim = 'outcome_success' | 'code_quality' | 'realized_value' | 'ai_authorship';
 
 export interface ContributionTextFile {
-  readonly path: string;
+  /** Null means the collector retained content but could not resolve its path. */
+  readonly path: string | null;
   readonly kind: 'text';
   readonly addedLines: readonly string[];
   readonly previousPath?: string | null;
+  /** Collector-declared language for an optional structural fingerprint. */
+  readonly language?: string | null;
+  /** Collector-provided hunk identity; never derived from text in this module. */
+  readonly hunkIdentity?: string | null;
+  /** Collector-provided AST/structure identity for a supported language. */
+  readonly structuralFingerprint?: string | null;
 }
 
 export interface ContributionOpaqueFile {
@@ -58,6 +82,10 @@ export interface ContributionArtifact {
   readonly files: readonly ContributionFile[];
   /** Exact identity of the complete patch, when the collector has one. */
   readonly patchIdentity: string | null;
+  /** Explicit generator/output lineage for generated artifacts, when available. */
+  readonly generationIdentity?: string | null;
+  /** Declared reasons why content similarity or ordering may be confounded. */
+  readonly confounders?: readonly ContributionConfounder[];
 }
 
 /** Explicit temporal evidence. A time value is never inferred from artifact order. */
@@ -66,14 +94,19 @@ export interface ContributionTemporalContext {
   readonly targetObservedAtMs: number;
   readonly windowStartMs: number;
   readonly windowEndMs: number;
+  /** Other sources observed in the same attribution window. */
+  readonly competingSourceIds?: readonly string[];
 }
 
-export type ContributionPathRelation = 'same_path' | 'renamed_or_moved';
+export type ContributionPathRelation = 'same_path' | 'renamed_or_moved' | 'pathless';
+
+export type ContributionSimilarityEvidenceKind = 'hunk_similarity' | 'ast_similarity' | 'normalized_text_overlap';
 
 export interface ContributionPathMapping {
-  readonly sourcePath: string;
+  readonly sourcePath: string | null;
   readonly targetPath: string;
   readonly relation: ContributionPathRelation;
+  readonly evidenceKind: ContributionSimilarityEvidenceKind;
   readonly score: number;
   readonly matchedLines: number;
   readonly sourceLines: number;
@@ -89,13 +122,13 @@ export interface ContributionExcludedFile {
 
 /** Similarity evidence only; `score` is not a quality or success score. */
 export interface ContributionSimilarity {
-  readonly kind: 'patch_identity' | 'normalized_text_overlap' | 'not_available';
+  readonly kind: 'patch_identity' | 'generated_lineage' | 'hunk_similarity' | 'ast_similarity' | 'normalized_text_overlap' | 'not_available';
   readonly score: number | null;
   readonly compared: boolean;
   readonly pathMappings: readonly ContributionPathMapping[];
-  readonly ambiguousPaths: readonly string[];
+  readonly ambiguousPaths: readonly (string | null)[];
   readonly excludedFiles: readonly ContributionExcludedFile[];
-  readonly unmatchedSourcePaths: readonly string[];
+  readonly unmatchedSourcePaths: readonly (string | null)[];
   readonly unmatchedTargetPaths: readonly string[];
 }
 
@@ -128,12 +161,24 @@ export interface ContributionEvidenceResult {
   readonly limitations: readonly string[];
   /** Claims this result can never establish on its own. */
   readonly nonClaims: readonly ContributionNonClaim[];
+  /** Declared confounders retained on the result rather than hidden. */
+  readonly confounders: readonly ContributionConfounder[];
 }
 
 export interface ContributionAssessmentInput {
   readonly source: ContributionArtifact;
   readonly target: ContributionArtifact;
   readonly temporal?: ContributionTemporalContext;
+}
+
+export interface ContributionCandidate {
+  readonly source: ContributionArtifact;
+  readonly temporal?: ContributionTemporalContext;
+}
+
+export interface ContributionCandidatesInput {
+  readonly target: ContributionArtifact;
+  readonly candidates: readonly ContributionCandidate[];
 }
 
 /** Fixed ceilings keep hostile or accidental input from turning comparison into an unbounded scan. */
@@ -163,11 +208,22 @@ function stableIds(values: readonly string[]): readonly string[] {
   return freezeArray([...new Set(values)].sort());
 }
 
+function stableConfounders(values: readonly ContributionConfounder[]): readonly ContributionConfounder[] {
+  return freezeArray([...new Set(values)].sort() as ContributionConfounder[]);
+}
+
+function hasPath(file: ContributionTextFile): file is ContributionTextFile & { readonly path: string } {
+  return file.path !== null && file.path.length > 0;
+}
+
 function normalizedPath(path: string): string {
   return path.replaceAll('\\', '/').replace(/^\.\//, '');
 }
 
-function pathRelation(source: ContributionFile, target: ContributionFile): ContributionPathRelation | null {
+function pathRelation(
+  source: ContributionTextFile & { readonly path: string },
+  target: ContributionTextFile & { readonly path: string },
+): ContributionPathRelation | null {
   const sourcePath = normalizedPath(source.path);
   const targetPath = normalizedPath(target.path);
   if (sourcePath === targetPath) return 'same_path';
@@ -255,6 +311,11 @@ function result(
   association: ContributionAssociation,
   limitations: readonly string[],
 ): ContributionEvidenceResult {
+  const confounders = [
+    ...(input.source.confounders ?? []),
+    ...(input.target.confounders ?? []),
+    ...(input.temporal?.competingSourceIds?.length ? ['multiple_ai_sources' as const] : []),
+  ];
   return freezeObject({
     [contributionEvidenceBrand]: 'contribution_evidence' as const,
     status,
@@ -271,7 +332,8 @@ function result(
     }),
     association: freezeObject({ ...association }),
     limitations: freezeArray([...limitations, ...commonLimitations()]),
-    nonClaims: freezeArray(['outcome_success', 'code_quality', 'realized_value'] as const),
+    nonClaims: freezeArray(['outcome_success', 'code_quality', 'realized_value', 'ai_authorship'] as const),
+    confounders: stableConfounders(confounders),
   });
 }
 
@@ -296,6 +358,7 @@ function temporalAssociation(
   }
   const sourceObservedAtMs = context!.sourceObservedAtMs;
   const targetObservedAtMs = context!.targetObservedAtMs;
+  const competingSources = (context!.competingSourceIds ?? []).filter(hasText);
   const withinWindow = sourceObservedAtMs >= context!.windowStartMs
     && sourceObservedAtMs < context!.windowEndMs
     && targetObservedAtMs >= context!.windowStartMs
@@ -303,15 +366,17 @@ function temporalAssociation(
   const sourcePrecedesTarget = sourceObservedAtMs < targetObservedAtMs;
   return {
     association: {
-      mode: withinWindow && sourcePrecedesTarget ? 'temporal_window' : 'none',
+      mode: withinWindow && sourcePrecedesTarget && competingSources.length === 0 ? 'temporal_window' : 'none',
       withinWindow,
       sourcePrecedesTarget,
       distanceMs: Math.abs(targetObservedAtMs - sourceObservedAtMs),
       windowStartMs: context!.windowStartMs,
       windowEndMs: context!.windowEndMs,
     },
-    valid: withinWindow && sourcePrecedesTarget,
-    limitation: !withinWindow
+    valid: withinWindow && sourcePrecedesTarget && competingSources.length === 0,
+    limitation: competingSources.length > 0
+      ? 'Competing source identifiers were supplied for the same window, so temporal attribution remains unresolved.'
+      : !withinWindow
       ? 'The source and target observations fall outside the supplied half-open temporal window.'
       : !sourcePrecedesTarget
         ? 'The source observation does not strictly precede the target, so temporal attribution is unresolved.'
@@ -323,7 +388,7 @@ function exceedsBounds(artifact: ContributionArtifact): boolean {
   if (artifact.files.length > CONTRIBUTION_LIMITS.maxFilesPerArtifact) return true;
   let totalLines = 0;
   for (const file of artifact.files) {
-    if (file.path.length > CONTRIBUTION_LIMITS.maxPathCharacters) return true;
+    if (file.path !== null && file.path.length > CONTRIBUTION_LIMITS.maxPathCharacters) return true;
     if (file.previousPath !== undefined && file.previousPath !== null
         && file.previousPath.length > CONTRIBUTION_LIMITS.maxPathCharacters) return true;
     if (file.kind !== 'text') continue;
@@ -340,25 +405,48 @@ function unsupportedReason(kind: Exclude<ContributionFileKind, 'text'>): Contrib
   return 'unsupported_content';
 }
 
+function pairSimilarity(
+  source: ContributionTextFile,
+  target: ContributionTextFile,
+  sourceLines: readonly string[],
+  targetLines: readonly string[],
+): { score: number; matchedLines: number; evidenceKind: ContributionSimilarityEvidenceKind } | null {
+  if (hasText(source.hunkIdentity) && source.hunkIdentity === target.hunkIdentity) {
+    return { score: 1, matchedLines: Math.min(sourceLines.length, targetLines.length), evidenceKind: 'hunk_similarity' };
+  }
+  if (hasText(source.structuralFingerprint)
+      && source.structuralFingerprint === target.structuralFingerprint
+      && hasText(source.language)
+      && source.language === target.language) {
+    return { score: 1, matchedLines: Math.min(sourceLines.length, targetLines.length), evidenceKind: 'ast_similarity' };
+  }
+  const normalized = similarityScore(sourceLines, targetLines);
+  return normalized === null ? null : { ...normalized, evidenceKind: 'normalized_text_overlap' };
+}
+
 function structuralSimilarity(
   source: ContributionArtifact,
   target: ContributionArtifact,
 ): ContributionSimilarity {
   const excludedFiles: ContributionExcludedFile[] = [];
-  const sourceText = source.files.filter((file): file is ContributionTextFile => {
-    if (file.kind === 'text') return true;
+  const sourceText = source.files.filter((file): file is ContributionTextFile & { readonly path: string } => {
+    if (file.kind === 'text' && hasPath(file)) return true;
+    if (file.kind === 'text') return false;
     excludedFiles.push({ side: 'source', path: file.path, kind: file.kind, reason: unsupportedReason(file.kind) });
     return false;
   });
-  const targetText = target.files.filter((file): file is ContributionTextFile => {
-    if (file.kind === 'text') return true;
+  const targetText = target.files.filter((file): file is ContributionTextFile & { readonly path: string } => {
+    if (file.kind === 'text' && hasPath(file)) return true;
+    if (file.kind === 'text') return false;
     excludedFiles.push({ side: 'target', path: file.path, kind: file.kind, reason: unsupportedReason(file.kind) });
     return false;
   });
 
-  const normalizedSource = new Map<ContributionTextFile, string[]>();
-  const normalizedTarget = new Map<ContributionTextFile, string[]>();
-  const unmatchedSourcePaths: string[] = [];
+  const normalizedSource = new Map<ContributionTextFile & { readonly path: string }, string[]>();
+  const normalizedTarget = new Map<ContributionTextFile & { readonly path: string }, string[]>();
+  const unmatchedSourcePaths: (string | null)[] = source.files
+    .filter((file): file is ContributionTextFile => file.kind === 'text' && file.path === null)
+    .map((file) => file.path);
   const unmatchedTargetPaths: string[] = [];
   for (const file of sourceText) {
     const lines = normalizedLines(file.addedLines);
@@ -378,15 +466,16 @@ function structuralSimilarity(
   }
 
   type Candidate = {
-    source: ContributionTextFile;
-    target: ContributionTextFile;
+    source: ContributionTextFile & { readonly path: string };
+    target: ContributionTextFile & { readonly path: string };
     relation: ContributionPathRelation;
     score: number;
     matchedLines: number;
     sourceLines: number;
     targetLines: number;
+    evidenceKind: ContributionSimilarityEvidenceKind;
   };
-  const candidatesBySource = new Map<ContributionTextFile, Candidate[]>();
+  const candidatesBySource = new Map<ContributionTextFile & { readonly path: string }, Candidate[]>();
   for (const sourceFile of sourceText) {
     const sourceLines = normalizedSource.get(sourceFile);
     if (sourceLines === undefined) continue;
@@ -396,7 +485,7 @@ function structuralSimilarity(
       if (targetLines === undefined) continue;
       const relation = pathRelation(sourceFile, targetFile);
       if (relation === null) continue;
-      const score = similarityScore(sourceLines, targetLines);
+      const score = pairSimilarity(sourceFile, targetFile, sourceLines, targetLines);
       if (score === null || score.score < STRUCTURAL_MIN_SCORE) continue;
       candidates.push({
         source: sourceFile,
@@ -406,6 +495,7 @@ function structuralSimilarity(
         matchedLines: score.matchedLines,
         sourceLines: sourceLines.length,
         targetLines: targetLines.length,
+        evidenceKind: score.evidenceKind,
       });
     }
     candidates.sort((a, b) => b.score - a.score || a.target.path.localeCompare(b.target.path));
@@ -428,7 +518,7 @@ function structuralSimilarity(
     selected.push(best);
   }
 
-  const targetUsers = new Map<ContributionTextFile, Candidate[]>();
+  const targetUsers = new Map<ContributionTextFile & { readonly path: string }, Candidate[]>();
   for (const candidate of selected) {
     const users = targetUsers.get(candidate.target) ?? [];
     users.push(candidate);
@@ -455,12 +545,17 @@ function structuralSimilarity(
       matchedLines: candidate.matchedLines,
       sourceLines: candidate.sourceLines,
       targetLines: candidate.targetLines,
+      evidenceKind: candidate.evidenceKind,
     }));
   const scores = pathMappings.map((mapping) => mapping.score);
   const score = scores.length === 0 ? null : scores.reduce((sum, value) => sum + value, 0) / scores.length;
 
   return {
-    kind: pathMappings.length > 0 ? 'normalized_text_overlap' : 'not_available',
+    kind: pathMappings.some((mapping) => mapping.evidenceKind === 'hunk_similarity')
+      ? 'hunk_similarity'
+      : pathMappings.some((mapping) => mapping.evidenceKind === 'ast_similarity')
+        ? 'ast_similarity'
+        : pathMappings.length > 0 ? 'normalized_text_overlap' : 'not_available',
     score,
     compared: normalizedSource.size > 0 && normalizedTarget.size > 0,
     pathMappings,
@@ -504,6 +599,24 @@ function excludedFilesForArtifact(
 export function assessContributionEvidence(input: ContributionAssessmentInput): ContributionEvidenceResult {
   const { source, target } = input;
 
+  const sourceGenerated = source.files.some((file) => file.kind === 'generated');
+  const targetGenerated = target.files.some((file) => file.kind === 'generated');
+  if (sourceGenerated && targetGenerated && hasText(source.generationIdentity)
+      && source.generationIdentity === target.generationIdentity) {
+    const excludedFiles = [
+      ...excludedFilesForArtifact(source, 'source'),
+      ...excludedFilesForArtifact(target, 'target'),
+    ];
+    return result(
+      input,
+      'exact',
+      'generated_lineage',
+      { ...baseSimilarity(), kind: 'generated_lineage', score: 1, compared: false, excludedFiles },
+      baseAssociation(),
+      ['Explicit generated-output lineage matched; generated bytes were not interpreted.'],
+    );
+  }
+
   if (hasText(source.patchIdentity) && source.patchIdentity === target.patchIdentity) {
     const excludedFiles = [
       ...excludedFilesForArtifact(source, 'source'),
@@ -534,6 +647,9 @@ export function assessContributionEvidence(input: ContributionAssessmentInput): 
         : []),
       ...(temporal.limitation === null ? [] : [temporal.limitation]),
     ];
+    if (sourceGenerated || targetGenerated) {
+      return result(input, 'unresolved', 'unresolved', baseSimilarity(), { ...temporal.association, mode: 'none' }, limitations);
+    }
     if (temporal.valid) {
       return result(input, 'temporal', 'temporal_association', baseSimilarity(), temporal.association, limitations);
     }
@@ -542,9 +658,23 @@ export function assessContributionEvidence(input: ContributionAssessmentInput): 
 
   const similarity = structuralSimilarity(source, target);
   const identityMismatch = source.patchIdentity !== null || target.patchIdentity !== null;
-  if (similarity.pathMappings.length > 0 && similarity.ambiguousPaths.length === 0) {
+  const declaredConfounders = [
+    ...(source.confounders ?? []),
+    ...(target.confounders ?? []),
+  ];
+  const confounded = declaredConfounders.length > 0;
+  if (similarity.pathMappings.length > 0 && similarity.ambiguousPaths.length === 0 && !confounded) {
+    const structuralMethod = similarity.kind === 'hunk_similarity'
+      ? 'hunk_similarity'
+      : similarity.kind === 'ast_similarity'
+        ? 'structural_ast_similarity'
+        : 'normalized_text_overlap';
     const limitations = [
-      'Structural evidence is limited to unique normalized text overlap on the declared path relationship.',
+      similarity.kind === 'hunk_similarity'
+        ? 'Structural evidence uses matching collector-provided hunk identity on the declared path relationship.'
+        : similarity.kind === 'ast_similarity'
+          ? 'Structural evidence uses matching collector-provided AST fingerprints for the same language.'
+          : 'Structural evidence is limited to unique normalized text overlap on the declared path relationship.',
       ...(similarity.unmatchedSourcePaths.length > 0 || similarity.unmatchedTargetPaths.length > 0
         ? ['Some source or target files had no qualifying structural match.']
         : []),
@@ -553,7 +683,7 @@ export function assessContributionEvidence(input: ContributionAssessmentInput): 
     return result(
       input,
       'structural',
-      'normalized_text_overlap',
+      structuralMethod,
       { ...similarity, compared: true },
       baseAssociation(),
       limitations,
@@ -566,10 +696,66 @@ export function assessContributionEvidence(input: ContributionAssessmentInput): 
       : 'No unique structural text/path match met the minimum similarity threshold.',
     ...(similarity.excludedFiles.length > 0 ? ['Generated, binary, or unsupported files were excluded from text comparison.'] : []),
     ...(identityMismatch ? ['The supplied patch identities did not match exactly.'] : []),
+    ...(confounded ? ['Declared confounders prevent a structural match from being treated as contribution evidence.'] : []),
+    ...(sourceGenerated || targetGenerated
+      ? ['Generated content without matching explicit lineage remains unresolved and is not text-compared.']
+      : []),
     ...(temporal.limitation === null ? [] : [temporal.limitation]),
   ];
+  if (sourceGenerated || targetGenerated) {
+    return result(input, 'unresolved', 'unresolved', similarity, { ...temporal.association, mode: 'none' }, limitations);
+  }
   if (temporal.valid) {
     return result(input, 'temporal', 'temporal_association', similarity, temporal.association, limitations);
   }
   return result(input, 'unresolved', 'unresolved', similarity, temporal.association, limitations);
+}
+
+/**
+ * Assess a target against multiple possible sources. A candidate set is an
+ * attribution conflict, not permission to select the strongest-looking row.
+ */
+export function assessContributionEvidenceForCandidates(
+  input: ContributionCandidatesInput,
+): ContributionEvidenceResult {
+  const assessments = input.candidates.map((candidate) => assessContributionEvidence({
+    source: candidate.source,
+    target: input.target,
+    temporal: candidate.temporal,
+  }));
+  const first = input.candidates[0]?.source ?? input.target;
+  const base = result(
+    { source: first, target: input.target, temporal: input.candidates[0]?.temporal },
+    'unresolved',
+    'unresolved',
+    {
+      ...baseSimilarity(),
+      compared: assessments.some((assessment) => assessment.similarity.compared),
+      ambiguousPaths: assessments.flatMap((assessment) => assessment.similarity.ambiguousPaths),
+      excludedFiles: assessments.flatMap((assessment) => assessment.similarity.excludedFiles),
+    },
+    baseAssociation(),
+    [
+      input.candidates.length === 0
+        ? 'No source candidate was supplied.'
+        : 'Multiple source candidates were supplied; no candidate was selected.',
+      ...assessments.flatMap((assessment) => assessment.limitations.slice(0, 2)),
+    ],
+  );
+  return freezeObject({
+    ...base,
+    sourceIds: stableIds([
+      input.target.sourceId,
+      ...input.candidates.map((candidate) => candidate.source.sourceId),
+    ]),
+    artifactIds: stableIds([
+      input.target.id,
+      ...input.candidates.map((candidate) => candidate.source.id),
+    ]),
+    confounders: stableConfounders([
+      ...base.confounders,
+      ...assessments.flatMap((assessment) => assessment.confounders),
+      ...(input.candidates.length > 1 ? ['multiple_ai_sources' as const] : []),
+    ]),
+  });
 }

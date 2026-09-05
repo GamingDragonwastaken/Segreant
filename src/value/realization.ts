@@ -50,6 +50,12 @@ import {
 import { scope } from '../epistemic/scope.ts';
 import { interval } from '../epistemic/time.ts';
 import { canonicalModelAttribution } from '../store/economicReadModel.ts';
+import {
+  assessContributionEvidence,
+  assessContributionEvidenceForCandidates,
+  type ContributionArtifact,
+  type ContributionEvidenceResult,
+} from '../git/contribution.ts';
 
 const run = promisify(execFile);
 
@@ -176,6 +182,8 @@ export interface WorkUnit extends CommitAttribution {
   cleanCompleteness?: CleanCompleteness;
   /** Coverage of the retained proposal capture used by the accepted gate. */
   proposalCaptureCoverage?: ProposalCaptureCoverage;
+  /** Contribution association evidence; never an outcome, quality, or value verdict. */
+  contributionEvidence?: ContributionEvidenceResult;
 }
 
 export const CLEAN_COMPLETENESS_EVENT_TYPES = CODING_CLEAN_COMPLETENESS_EVENT_TYPES;
@@ -452,6 +460,49 @@ export async function computeRealization(
     }
     const acceptance = proposalCaptureCoverage === 'complete' ? acceptanceForCommit(matched, addedByFile) : null;
     const hadProposal = acceptance !== null;
+    const contributionEvidence: ContributionEvidenceResult | undefined = scanned && winProposals.length > 0
+      ? (() => {
+        const candidates = winProposals.map((proposal): { source: ContributionArtifact; temporal: {
+          sourceObservedAtMs: number;
+          targetObservedAtMs: number;
+          windowStartMs: number;
+          windowEndMs: number;
+        } } => ({
+          source: {
+            id: proposal.proposalId,
+            sourceId: `proxy:${proposal.provider}:${proposal.model}`,
+            files: proposal.files.map((file) => ({
+              path: file.path,
+              kind: 'text' as const,
+              addedLines: [...file.addedLines],
+            })),
+            patchIdentity: null,
+            ...(proposal.captureCoverage !== undefined && proposal.captureCoverage !== 'complete'
+              ? { confounders: ['partial_capture' as const] }
+              : {}),
+          },
+          temporal: {
+            sourceObservedAtMs: proposal.tsEpochMs,
+            targetObservedAtMs: a.tsEpochMs,
+            windowStartMs: a.windowStartMs,
+            windowEndMs: a.windowEndMs,
+          },
+        }));
+        const target: ContributionArtifact = {
+          id: a.hash,
+          sourceId: `git:${a.hash}`,
+          files: [...addedByFile.entries()].map(([path, addedLines]) => ({
+            path,
+            kind: 'text' as const,
+            addedLines: [...addedLines],
+          })),
+          patchIdentity: null,
+        };
+        return candidates.length === 1
+          ? assessContributionEvidence({ source: candidates[0]!.source, target, temporal: candidates[0]!.temporal })
+          : assessContributionEvidenceForCandidates({ target, candidates });
+      })()
+      : undefined;
 
     // signal gates
     // A coding lifecycle gate is evidence about one immutable commit. Legacy
@@ -591,6 +642,7 @@ export async function computeRealization(
       funnel: evaluateCodingOutcome(verdicts).funnel,
       cleanCompleteness: completeness,
       proposalCaptureCoverage,
+      ...(contributionEvidence === undefined ? {} : { contributionEvidence }),
     });
   }
 
