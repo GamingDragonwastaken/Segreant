@@ -54,7 +54,7 @@ States: `NOT_STARTED` `IN_PROGRESS` `PARTIAL` `COMPLETED` `BLOCKED_EXTERNAL`
 | `WP-F04` | True VoI -> evidence-debt planner | `NOT_STARTED` |  |
 | `WP-F05` | Decision Assurance Levels | `NOT_STARTED` |  |
 | `WP-F06` | Recommendation -> policy proposal -> approval -> action | `NOT_STARTED` |  |
-| `WP-F07` | Shadow, canary, TTL, and epistemic circuit breaker | `NOT_STARTED` |  |
+| `WP-F07` | Shadow, canary, TTL, and epistemic circuit breaker | `PARTIAL` | `src/decision/control.ts` adds an immutable preview-then-commit lifecycle for shadow → simulated effect → canary → monitored expansion → full rollout and terminal rollback, with revision checks and fail-closed stale/revoked/conflicted/incomplete evidence, regime-change, measurement, harmful/unobservable outcome, completeness, and TTL guards (D-131). No persistence, authorization, or external target execution is implemented. |
 | `WP-G01` | Finish CapabilitySpec and generated contracts | `PARTIAL` | Generated dashboard interface contracts now test exact canonical-interface coverage and hash-bound browser copies (D-112). Full request/response schema generation and server/browser validation parity remain. |
 | `WP-G02` | Plugin contracts | `PARTIAL` | Additive plugin contracts define categories, capabilities, request/message boundaries, egress, credential handling, reversibility, and assurance metadata. No executable plugin host or universal generated contract exists yet. |
 | `WP-G03` | Plugin isolation | `PARTIAL` | Additive isolation metadata and boundary validation make declared permissions and transport constraints inspectable. This is not runtime sandboxing, process isolation, or a security boundary until an executable host and enforcement path exist. |

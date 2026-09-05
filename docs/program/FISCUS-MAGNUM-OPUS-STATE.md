@@ -473,14 +473,15 @@ current branch subsequently published the following bounded economic slices:
   finalized-close checks. GitHub Actions run `33909224912` concluded
   successfully across all eight jobs.
 
-The latest code checkpoint is `5478e964b7ee510d922eb67feee758475d1204f7` on
-`origin/gpt56/magnum-opus-reconstruction`, with CI run `33922742649` concluding
-successfully across all eight jobs. Local verification at that head is
-1,468 root tests total, 1,464 pass, 0 fail and 4 platform skips; team-server is
-67/67, root/browser TypeScript and build pass, and `git diff --check` passes.
-The packet inventory remains **11 COMPLETED / 29 PARTIAL / 36 NOT_STARTED**.
+The latest code checkpoint is `5c8c21778f731e7409dea33936a958ec49fff170` on
+`origin/gpt56/magnum-opus-reconstruction`, with CI run `33951767030` concluding
+successfully across all eight jobs. Local verification at this head is
+1,474 root tests total, 1,470 pass, 0 fail and 4 platform skips; root TypeScript,
+build, and `git diff --check` pass. The packet inventory is **11 COMPLETED /
+30 PARTIAL / 35 NOT_STARTED**.
 These are bounded foundations, not final dossier completion: provider-authoritative
 FX, universal consumer migration, per-link basis agreement across all adjustment
 kinds, complete correction/close/supersession semantics, receipt/team
 reconciliation, remaining kernel issuance boundaries and external gates remain
-open.
+open. WP-F07 is partial: its new control module is observation-only and in-memory;
+persistence, authorization, and real target integration remain open.
