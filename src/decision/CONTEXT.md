@@ -26,6 +26,7 @@ precision.
   mixture; measurement cost is applied only afterward;
 - invalid, duplicate, non-finite, or mismatched inputs fail closed;
 - ties are returned in deterministic action-identifier order.
+- `control.ts` models shadow → simulated effect → canary → monitored expansion → full rollout and rollback as an immutable, preview-then-commit, revision-checked state machine; it never executes, authorizes, or persists an external action.
 
 ## Invariants
 
@@ -35,9 +36,11 @@ precision.
 - regret assumes a rectangular interval uncertainty set;
 - VOI scenarios are finite, exhaustive, mutually exclusive, and use one utility basis;
 - measurement cost is subtracted from gross decision-loss reduction exactly once.
+- control transitions fail closed on stale/revoked/conflicted/incomplete evidence, changed treatment/model/pricing/environment regime, degraded completeness, broken measurement, harmful or unobservable outcomes, and expired policy TTL; a rollback is terminal and idempotent.
 
 ## Verify
 
 ```bash
 node --test --experimental-strip-types test/decision-engine.test.ts
+node --test --experimental-strip-types test/decision-control.test.ts
 ```
