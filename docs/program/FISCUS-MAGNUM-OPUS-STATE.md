@@ -515,3 +515,16 @@ still **11 COMPLETED / 30 PARTIAL / 35 NOT_STARTED**.
 WP-B04 remains `PARTIAL`: value-gate, allocation, profile, minimal
 cut/support-set, generalized-search and formal-completeness requirements remain
 open. The packet inventory is still **11 COMPLETED / 30 PARTIAL / 35 NOT_STARTED**.
+
+## Continuation addendum — sequential inference lane (2026-09-05)
+
+- [x] `7562671685ce401224296f7e1836556a51dc1f77` adds a standalone sequential
+  Bernoulli protocol/result lane with registered looks, explicit unsupported-domain
+  refusals, canonical protocol/observation/result provenance, and semantic result
+  verification that recalculates the anytime interval before use. RED-first
+  anytime/sequential/causal/drift coverage passes 71/71. GitHub Actions run
+  `33957557346` concluded success across all eight jobs.
+
+WP-E07 remains `PARTIAL`: Store/CLI/dashboard integration and durable result
+persistence, cluster-aware/adaptive methods, and universal causal/product claims
+remain open. The packet inventory is **11 COMPLETED / 31 PARTIAL / 34 NOT_STARTED**.

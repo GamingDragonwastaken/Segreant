@@ -1130,3 +1130,12 @@ rollups remain responsible for their own typed bridge.
 **Verified:** RED-first countermodel-domain coverage passes 29/29, including uncovered/live/excluded/realized certification, complete billing witnesses, negative-residual realization, and interval-decision witnesses. Root lifecycle passes 1,489 total (1,485 pass / 0 fail / 4 skips); root TypeScript, `npm run build`, and `git diff --check` pass. Code commit `571e5fa53b3935b9ecff9dbd283f49e69e1751bd` matches the remote branch; GitHub Actions run `33956325591` concluded `success` across all eight jobs, read 2026-09-05.
 
 **What this does not establish.** Value-gate, allocation, profile, minimal cut/support-set, or generalized countermodel search coverage; formal theorem-prover completeness; decision authorization/execution; or final WP-B04 completion.
+
+## D-135 — Sequential validity must be bound to a registered analysis lane
+**Decision:** Add a standalone sequential-inference lane for accumulated independent Bernoulli observations. A committed protocol must declare its outcome definition, look schedule, stopping rule, multiplicity, assumptions, adaptation boundary and provenance; analysis is allowed only at a registered look with the exact retained observation count. Rehydrated results must validate their nested validity domain, stopping/provenance cross-fields and recalculated anytime interval before an interval is used.
+
+**Reason:** An anytime-valid primitive does not make sliding windows, clusters, adaptive assignment, changing outcomes or post-hoc model selection valid. A digest proves retained bytes, not that the bytes are a coherent statistical result. The lane therefore refuses unsupported designs and separates statistical validity from causal truth, persistence, and product authorization.
+
+**Verified:** RED-first anytime/sequential/causal/drift coverage passes 71/71, including rehashed semantic tampering, forged interval bounds and unsupported nested provenance values. Root lifecycle passes 1,497 total (1,493 pass / 0 fail / 4 skips); root TypeScript, `npm run build`, and `git diff --check` pass. Code commit `7562671685ce401224296f7e1836556a51dc1f77` matches the remote branch; GitHub Actions run `33957557346` concluded `success` across all eight jobs, read 2026-09-05.
+
+**What this does not establish.** Store/CLI/dashboard integration or durable sequential-result persistence; cluster-aware or adaptive methods; an independent causal design; universal truth, provider billing, or final WP-E07 completion.
