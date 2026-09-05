@@ -528,3 +528,16 @@ open. The packet inventory is still **11 COMPLETED / 30 PARTIAL / 35 NOT_STARTED
 WP-E07 remains `PARTIAL`: Store/CLI/dashboard integration and durable result
 persistence, cluster-aware/adaptive methods, and universal causal/product claims
 remain open. The packet inventory is **11 COMPLETED / 31 PARTIAL / 34 NOT_STARTED**.
+
+## Continuation addendum — plugin process host (2026-09-05)
+
+- [x] `74c53bb47ee876381158f821000e7ff7018fd4c2` adds a host-mediated plugin
+  process path with a scrubbed environment, bounded stdio and output, request
+  timeout, evidence-only parsing, and active request-ID binding. Unsupported
+  OS-level isolation, direct egress, credentials, and unmediated capabilities
+  are refused. RED-first plugin coverage passes 24/24. GitHub Actions run
+  `33958662348` concluded success across all eight jobs.
+
+WP-G03 remains `PARTIAL`: the process boundary is not an OS sandbox, and
+durable Store/CLI/dashboard integration and hard OS resource enforcement remain
+open. The packet inventory remains **11 COMPLETED / 31 PARTIAL / 34 NOT_STARTED**.

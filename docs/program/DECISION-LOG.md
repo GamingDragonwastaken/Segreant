@@ -1139,3 +1139,12 @@ rollups remain responsible for their own typed bridge.
 **Verified:** RED-first anytime/sequential/causal/drift coverage passes 71/71, including rehashed semantic tampering, forged interval bounds and unsupported nested provenance values. Root lifecycle passes 1,497 total (1,493 pass / 0 fail / 4 skips); root TypeScript, `npm run build`, and `git diff --check` pass. Code commit `7562671685ce401224296f7e1836556a51dc1f77` matches the remote branch; GitHub Actions run `33957557346` concluded `success` across all eight jobs, read 2026-09-05.
 
 **What this does not establish.** Store/CLI/dashboard integration or durable sequential-result persistence; cluster-aware or adaptive methods; an independent causal design; universal truth, provider billing, or final WP-E07 completion.
+
+## D-136 — A plugin process boundary must not be called a sandbox
+**Decision:** Add a real host-mediated plugin execution path that launches one explicitly authorized absolute executable with `shell: false`, scrubbed environment, bounded newline-delimited stdio, request/output/stderr limits, timeout termination, evidence-only response parsing, and active request-ID binding. Refuse OS-level isolation requirements, direct egress, credential forwarding, and capabilities whose controls this standard-library host cannot enforce.
+
+**Reason:** A declared isolation policy is not enforcement, but pretending that a separate process blocks filesystem, network, credentials, CPU, memory, or descriptor access would create a security boundary Fiscus cannot provide. The host therefore enforces only its actual transport/resource/identity controls and reports the unsupported controls explicitly.
+
+**Verified:** RED-first plugin contract/invocation/isolation/host coverage passes 24/24, including real child execution, output/timeout bounds, environment scrubbing, unsupported-capability refusal, and stale request-ID refusal. Root lifecycle passes 1,506 total (1,502 pass / 0 fail / 4 skips); root TypeScript, `npm run build`, and `git diff --check` pass. Code commit `74c53bb47ee876381158f821000e7ff7018fd4c2` matches the remote branch; GitHub Actions run `33958662348` concluded `success` across all eight jobs, read 2026-09-05.
+
+**What this does not establish.** OS-level sandboxing or hard filesystem/network/credential/CPU/memory/descriptor enforcement; durable Store/CLI/dashboard plugin execution; external effects; independent security review; or final WP-G03 completion.
