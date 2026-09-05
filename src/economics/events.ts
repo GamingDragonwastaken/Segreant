@@ -11,7 +11,7 @@
 import { immutableJson, type JsonValue } from '../epistemic/evidence.ts';
 import { instant, type Instant } from '../epistemic/time.ts';
 import { moneyFromJson, moneyToJson, type EconomicBasis, type Money, type MoneyJson } from './money.ts';
-import { closeFinalizationMetadata, closeReopenMetadata } from './close.ts';
+import { closeFinalizationMetadata, closeInvalidationMetadata, closeReopenMetadata } from './close.ts';
 
 export const ECONOMIC_EVENT_KINDS = [
   'usage_observed',
@@ -31,6 +31,7 @@ export const ECONOMIC_EVENT_KINDS = [
   'write_off',
   'close_finalized',
   'close_reopened',
+  'close_invalidated',
 ] as const;
 export type EconomicEventKind = (typeof ECONOMIC_EVENT_KINDS)[number];
 
@@ -63,6 +64,7 @@ const EVENT_ROLE_BY_KIND: Record<EconomicEventKind, EconomicEventRole> = {
   write_off: 'adjustment',
   close_finalized: 'control',
   close_reopened: 'control',
+  close_invalidated: 'control',
 };
 
 /** Classify event semantics before a projection combines any amounts. */
@@ -266,6 +268,9 @@ export function economicEvent(input: EconomicEventInput): EconomicEvent {
   } else if (kind === 'close_reopened') {
     if (amount !== null) throw new Error('economic event ' + id + ' close_reopened must not have an amount');
     closeReopenMetadata(metadata);
+  } else if (kind === 'close_invalidated') {
+    if (amount !== null) throw new Error('economic event ' + id + ' close_invalidated must not have an amount');
+    closeInvalidationMetadata(metadata);
   }
   if (!Number.isSafeInteger(value.schemaVersion) || value.schemaVersion < 1) throw new Error('economic event schemaVersion must be a positive safe integer');
   return Object.freeze({ id, kind, subject, occurredAt, recordedAt, amount, sourceEventIds, reversalOf, metadata, schemaVersion: value.schemaVersion });

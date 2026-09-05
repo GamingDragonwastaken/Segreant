@@ -15,7 +15,7 @@ import { economicEvent, economicEventRole, type EconomicEvent, type EconomicEven
 import { deserializeEconomicEvent, deserializeHistoricalRateObservation, serializeEconomicEvent, serializeHistoricalRateObservation, type SerializedHistoricalRateObservation } from './serialization.ts';
 import { applyExactRate, historicalRateBook as buildHistoricalRateBook, historicalRateObservation, rateFromJson, type HistoricalRateBook, type HistoricalRateObservation, type HistoricalRateObservationInput } from './rate.ts';
 import { translateEffectiveChargeFromRateBook, type EffectiveFxChargeProjection } from './fx.ts';
-import { canonicalPeriod, closeFinalizationMetadata, closeProjectionDigest, closeReopenMetadata, isCloseKind, type CloseFinalizationMetadata, type CloseProjectionBalance, type CloseReopenMetadata, type EconomicPeriod } from './close.ts';
+import { canonicalPeriod, closeFinalizationMetadata, closeInvalidationMetadata, closeProjectionDigest, closeReopenMetadata, isCloseKind, type CloseFinalizationMetadata, type CloseInvalidationMetadata, type CloseProjectionBalance, type CloseReopenMetadata, type EconomicPeriod } from './close.ts';
 
 export type EconomicAppendResult = 'inserted' | 'duplicate';
 
@@ -100,6 +100,25 @@ export interface PeriodReopenInput {
   readonly recordedAt?: Instant;
   readonly reason: string;
   readonly id?: string;
+}
+
+export interface PeriodRecoveryInput {
+  readonly periodStartMs: number;
+  readonly periodEndMs: number;
+  readonly closeEventId: string;
+  readonly recordedAt: Instant;
+  readonly reason: string;
+  readonly id?: string;
+}
+
+export interface PeriodRecoveryResult {
+  readonly status: 'recovered';
+  readonly eventId: string;
+  readonly periodStartMs: number;
+  readonly periodEndMs: number;
+  readonly recordedAt: Instant;
+  readonly reason: string;
+  readonly invalidatedFinalizationId: string;
 }
 
 /** One charge after any visible, validated local price correction. */
@@ -279,11 +298,34 @@ export class EconomicLedger {
     return Object.freeze(rows.map(storedHistoricalRateObservation));
   }
 
+  private hasCloseInvalidation(closeEventId: string): boolean {
+    const rowValue = this.db.prepare(
+      `SELECT 1 AS present
+         FROM economic_event_sources AS s
+         JOIN economic_events AS e ON e.event_id = s.event_id
+        WHERE e.event_kind = 'close_invalidated' AND s.source_event_id = ?
+        LIMIT 1`,
+    ).get(closeEventId);
+    return rowValue !== undefined && rowValue !== null;
+  }
+
+  private closeBindingMatches(value: EconomicEvent, period: EconomicPeriod, metadata: CloseFinalizationMetadata): boolean {
+    const allEvents = this.rawEventsInOccurrenceRange(period.startMs, period.endMs)
+      .filter((event) => Date.parse(event.recordedAt) <= Date.parse(value.recordedAt));
+    const allIds = allEvents.map((event) => event.id).sort();
+    const sourceIds = [...value.sourceEventIds].sort();
+    if (sourceIds.length !== allIds.length || sourceIds.some((id, index) => id !== allIds[index])) return false;
+    if (metadata.eventCount !== allIds.length) return false;
+    return metadata.projectionDigest === closeProjectionDigest(period, allIds, closeBalances(allEvents));
+  }
+
   private validateCloseEvent(value: EconomicEvent, sources: ReadonlyMap<string, EconomicEvent>): void {
     if (!isCloseKind(value.kind)) return;
     const metadata = value.kind === 'close_finalized'
       ? closeFinalizationMetadata(value.metadata)
-      : closeReopenMetadata(value.metadata);
+      : value.kind === 'close_reopened'
+        ? closeReopenMetadata(value.metadata)
+        : closeInvalidationMetadata(value.metadata);
     const period = canonicalPeriod(metadata.periodStartMs, metadata.periodEndMs);
     if (value.subject !== period.subject) throw new Error('economic close event subject does not match its period');
     if (value.occurredAt !== period.end) throw new Error('economic close event occurrence must equal the exclusive period end');
@@ -295,33 +337,33 @@ export class EconomicLedger {
       if (sourceIds.some((id, index) => id !== value.sourceEventIds[index])) {
         throw new Error('economic close finalization sourceEventIds must be sorted');
       }
-      const allEvents = this.eventsInOccurrenceRange(period.startMs, period.endMs)
-        .filter((event) => Date.parse(event.recordedAt) <= Date.parse(value.recordedAt));
-      const allIds = allEvents.map((event) => event.id).sort();
-      if (allIds.length !== sourceIds.length || allIds.some((id, index) => id !== sourceIds[index])) {
-        throw new Error('economic close finalization must bind every in-period event exactly once');
+      // A recovery record is itself the append-only proof that this historical
+      // snapshot is no longer the active close. Keep the original bytes and
+      // metadata authenticated, but do not demand that its old population
+      // still match the live ledger.
+      const bindingMatches = this.closeBindingMatches(value, period, finalMetadata);
+      if (this.hasCloseInvalidation(value.id)) {
+        if (bindingMatches) throw new Error('economic close invalidation targets a verifiable close');
+        return;
       }
-      if (finalMetadata.eventCount !== allIds.length) throw new Error('economic close finalization eventCount does not match its source events');
+      if (!bindingMatches) throw new Error('economic close finalization must bind every in-period event exactly once');
       if ([...sources.values()].some((event) => isCloseKind(event.kind))) {
         throw new Error('economic close finalization cannot include another close control event');
       }
-      const balances = closeBalances(allEvents);
-      const expectedDigest = closeProjectionDigest(period, allIds, balances);
-      if (finalMetadata.projectionDigest !== expectedDigest) throw new Error('economic close finalization projection digest mismatch');
       return;
     }
 
-    const reopenMetadata = metadata as CloseReopenMetadata;
-    if (value.sourceEventIds.length !== 1 || value.sourceEventIds[0] !== reopenMetadata.closeEventId) {
-      throw new Error('economic close reopen must reference exactly its finalized close event');
+    const controlMetadata = metadata as CloseReopenMetadata | CloseInvalidationMetadata;
+    if (value.sourceEventIds.length !== 1 || value.sourceEventIds[0] !== controlMetadata.closeEventId) {
+      throw new Error(`economic ${value.kind} must reference exactly its finalized close event`);
     }
-    const source = sources.get(reopenMetadata.closeEventId);
+    const source = sources.get(controlMetadata.closeEventId);
     if (source === undefined || source.kind !== 'close_finalized') {
-      throw new Error('economic close reopen must reference a close_finalized event');
+      throw new Error(`economic ${value.kind} must reference a close_finalized event`);
     }
     const sourceMetadata = closeFinalizationMetadata(source.metadata);
     if (sourceMetadata.periodStartMs !== period.startMs || sourceMetadata.periodEndMs !== period.endMs) {
-      throw new Error('economic close reopen period does not match its finalized close');
+      throw new Error(`economic ${value.kind} period does not match its finalized close`);
     }
   }
 
@@ -795,6 +837,15 @@ export class EconomicLedger {
           status = 'reopened';
           activeFinalizationId = null;
         }
+      } else if (value.kind === 'close_invalidated') {
+        const metadata = closeInvalidationMetadata(value.metadata);
+        if (metadata.periodStartMs !== period.startMs || metadata.periodEndMs !== period.endMs) continue;
+        if (latestFinalizationId !== metadata.closeEventId) {
+          status = 'conflicted';
+        } else {
+          status = 'reopened';
+          activeFinalizationId = null;
+        }
       }
     }
 
@@ -992,8 +1043,126 @@ export class EconomicLedger {
     });
   }
 
+  /**
+   * Append an explicit recovery record for a close whose historical population
+   * can no longer be verified. The original close is never rewritten; the
+   * recovery event makes the exceptional state part of the append-only history.
+   */
+  recoverBrickedPeriod(input: PeriodRecoveryInput): PeriodRecoveryResult {
+    const period = canonicalPeriod(input.periodStartMs, input.periodEndMs);
+    const recordedAt = canonicalBoundary(input.recordedAt);
+    if (Date.parse(recordedAt) < period.endMs) throw new Error('economic period recovery recordedAt cannot precede the period end');
+    if (typeof input.closeEventId !== 'string' || input.closeEventId.trim().length === 0) throw new Error('economic period recovery closeEventId must be non-empty');
+    if (typeof input.reason !== 'string' || input.reason.trim().length === 0) throw new Error('economic period recovery reason must be non-empty');
+    if (input.id !== undefined && (typeof input.id !== 'string' || input.id.trim().length === 0)) throw new Error('economic period recovery id must be non-empty');
+    const reason = input.reason.trim();
+
+    return this.transaction(() => {
+      const close = this.readStored(input.closeEventId);
+      if (close === null) throw new Error(`economic period recovery close does not exist: ${input.closeEventId}`);
+      if (close.kind !== 'close_finalized') throw new Error('economic period recovery target must be a close_finalized event');
+      const closeMetadata = closeFinalizationMetadata(close.metadata);
+      if (closeMetadata.periodStartMs !== period.startMs || closeMetadata.periodEndMs !== period.endMs) {
+        throw new Error('economic period recovery period does not match its finalized close');
+      }
+      if (Date.parse(recordedAt) < Date.parse(close.recordedAt)) {
+        throw new Error('economic period recovery recordedAt cannot precede its finalized close');
+      }
+
+      const existingRow = row<StoredEconomicRow>(this.db.prepare(
+        `SELECT e.event_id, e.event_kind, e.subject, e.occurred_at, e.recorded_at, e.event_json, e.event_digest
+           FROM economic_event_sources AS s
+           JOIN economic_events AS e ON e.event_id = s.event_id
+          WHERE e.event_kind = 'close_invalidated' AND s.source_event_id = ?
+          ORDER BY e.recorded_at ASC, e.event_id ASC
+          LIMIT 1`,
+      ).get(input.closeEventId));
+      if (existingRow !== null) {
+        const existing = storedRecord(existingRow);
+        const existingMetadata = closeInvalidationMetadata(existing.metadata);
+        if (existingMetadata.closeEventId !== input.closeEventId
+            || existingMetadata.periodStartMs !== period.startMs
+            || existingMetadata.periodEndMs !== period.endMs) {
+          throw new Error('economic period recovery found a mismatched close invalidation');
+        }
+        this.events();
+        return Object.freeze({
+          status: 'recovered' as const,
+          eventId: existing.id,
+          periodStartMs: period.startMs,
+          periodEndMs: period.endMs,
+          recordedAt: existing.recordedAt,
+          reason: existingMetadata.reason,
+          invalidatedFinalizationId: input.closeEventId,
+        });
+      }
+
+      const visibleEvents = this.rawEventsInOccurrenceRange(period.startMs, period.endMs)
+        .filter((event) => Date.parse(event.recordedAt) <= Date.parse(close.recordedAt));
+      const visibleIds = visibleEvents.map((event) => event.id).sort();
+      const boundIds = [...close.sourceEventIds].sort();
+      const expectedDigest = closeProjectionDigest(period, visibleIds, closeBalances(visibleEvents));
+      const bindingMatches = boundIds.length === visibleIds.length && boundIds.every((id, index) => id === visibleIds[index]);
+      if (bindingMatches && closeMetadata.eventCount === visibleIds.length && closeMetadata.projectionDigest === expectedDigest) {
+        throw new Error('economic period recovery target close is not bricked');
+      }
+
+      const id = input.id ?? `economic:close-invalidation:${input.closeEventId}`;
+      const invalidated = economicEvent({
+        id,
+        kind: 'close_invalidated',
+        subject: period.subject,
+        occurredAt: period.end,
+        recordedAt,
+        amount: null,
+        sourceEventIds: [input.closeEventId],
+        reversalOf: null,
+        metadata: {
+          closeSchemaVersion: 1,
+          periodStartMs: period.startMs,
+          periodEndMs: period.endMs,
+          closeEventId: input.closeEventId,
+          reason,
+        },
+        schemaVersion: 1,
+      });
+      const encoded = serializeEconomicEvent(invalidated);
+      const sameId = row<StoredEconomicRow>(this.db.prepare(
+        'SELECT event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest FROM economic_events WHERE event_id = ?',
+      ).get(invalidated.id));
+      if (sameId !== null) {
+        const replay = storedRecord(sameId);
+        const replayEncoded = serializeEconomicEvent(replay);
+        if (replayEncoded.body !== encoded.body || replayEncoded.digest !== encoded.digest) {
+          throw new Error(`different economic event already exists for ${invalidated.id}`);
+        }
+      } else {
+        this.db.prepare(
+          'INSERT INTO economic_events (event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        ).run(invalidated.id, invalidated.kind, invalidated.subject, invalidated.occurredAt, invalidated.recordedAt, encoded.body, encoded.digest);
+        this.db.prepare(
+          'INSERT INTO economic_event_sources (event_id, source_event_id) VALUES (?, ?)',
+        ).run(invalidated.id, input.closeEventId);
+      }
+
+      // The normal reader is the commit gate. It validates the recovery link,
+      // the old close metadata, every source, and the complete append-only set.
+      this.events();
+      return Object.freeze({
+        status: 'recovered' as const,
+        eventId: invalidated.id,
+        periodStartMs: period.startMs,
+        periodEndMs: period.endMs,
+        recordedAt,
+        reason,
+        invalidatedFinalizationId: input.closeEventId,
+      });
+    });
+  }
+
   append(value: EconomicEvent | EconomicEventInput): EconomicAppendResult {
     const item = economicEvent(value);
+    if (item.kind === 'close_invalidated') throw new Error('close_invalidated may only be issued by recoverBrickedPeriod');
     const encoded = serializeEconomicEvent(item);
     return this.transaction(() => {
       const existing = this.db.prepare('SELECT event_id FROM economic_events WHERE event_id = ?').get(item.id);
@@ -1011,6 +1180,7 @@ export class EconomicLedger {
    */
   appendWithinTransaction(value: EconomicEvent | EconomicEventInput): EconomicAppendResult {
     const item = economicEvent(value);
+    if (item.kind === 'close_invalidated') throw new Error('close_invalidated may only be issued by recoverBrickedPeriod');
     const existing = this.db.prepare('SELECT event_id FROM economic_events WHERE event_id = ?').get(item.id);
     if (existing !== undefined) return this.appendCanonical(item, serializeEconomicEvent(item));
     this.assertPeriodOpenForEvent(item);
@@ -1077,7 +1247,15 @@ export class EconomicLedger {
     return Object.freeze(values);
   }
 
-  /** Load events whose modeled occurrence lies in [startMs, endMs). */
+  /** Load authenticated event rows without reference-closure validation. */
+  private rawEventsInOccurrenceRange(startMs: number, endMs: number): readonly EconomicEvent[] {
+    const rows = this.db.prepare(
+      'SELECT event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest FROM economic_events WHERE occurred_at >= ? AND occurred_at < ? ORDER BY occurred_at ASC, event_id ASC',
+    ).all(new Date(startMs).toISOString(), new Date(endMs).toISOString()) as unknown as StoredEconomicRow[];
+    return Object.freeze(rows.map(storedRecord));
+  }
+
+  /** Read events whose modeled occurrence lies in [startMs, endMs). */
   eventsInOccurrenceRange(startMs: number, endMs: number): readonly EconomicEvent[] {
     if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || startMs >= endMs) {
       throw new Error('economic occurrence range must contain ordered finite timestamps');

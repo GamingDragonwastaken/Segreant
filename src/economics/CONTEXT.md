@@ -47,6 +47,10 @@
   the prior close and permits late evidence only after the lifecycle records
   that reopening; a competing close is surfaced as `conflicted`, never chosen
   silently.
+- a bricked historical close can be recovered only by appending a typed
+  `close_invalidated` control event through `recoverBrickedPeriod`; the original
+  close remains immutable and readers re-prove that its population binding is
+  actually broken before honoring the recovery.
 - the supported Store/CLI finalization path can issue a kernel Evidence/Claim
   pair with the exact close digest, source-event set, and basis-separated
   balances; the claim stays provisional and self-authenticated because a local
@@ -86,6 +90,10 @@
   than allowing the compatibility row and economic history to diverge;
 - close controls have no monetary amount, occur exactly at the exclusive period
   end, and are recorded no earlier than that end;
+- `close_invalidated` is not accepted through the ordinary append boundary; it
+  names exactly one finalized close in the same period, records a non-empty
+  reason, and is valid only when the close's historical population binding is
+  no longer verifiable;
 - a finalization's source IDs are sorted, unique and exactly equal to every
   non-control event in the period visible at its recording boundary; its
   event count, digest and basis-separated balances are recomputed on replay;
@@ -98,5 +106,5 @@
 ## Verify
 
 ```bash
-node --test --experimental-strip-types test/economic-events.test.ts test/economic-close.test.ts
+node --test --experimental-strip-types test/economic-events.test.ts test/economic-close.test.ts test/economic-close-recovery.test.ts
 ```

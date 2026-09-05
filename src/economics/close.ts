@@ -31,6 +31,14 @@ export interface CloseReopenMetadata {
   readonly reason: string;
 }
 
+export interface CloseInvalidationMetadata {
+  readonly closeSchemaVersion: typeof CLOSE_SCHEMA_VERSION;
+  readonly periodStartMs: number;
+  readonly periodEndMs: number;
+  readonly closeEventId: string;
+  readonly reason: string;
+}
+
 export interface CloseProjectionBalance {
   readonly role: string;
   readonly currency: string;
@@ -125,8 +133,28 @@ export function closeReopenMetadata(value: unknown): CloseReopenMetadata {
   });
 }
 
+/** Validate and normalize an append-only close-invalidation record. */
+export function closeInvalidationMetadata(value: unknown): CloseInvalidationMetadata {
+  const record = exactKeys(value, ['closeSchemaVersion', 'periodStartMs', 'periodEndMs', 'closeEventId', 'reason'], 'close invalidation metadata');
+  closeVersion(record['closeSchemaVersion'], 'close invalidation metadata closeSchemaVersion');
+  const period = canonicalPeriod(record['periodStartMs'], record['periodEndMs']);
+  if (typeof record['closeEventId'] !== 'string' || record['closeEventId'].trim().length === 0) {
+    throw new Error('close invalidation metadata closeEventId must be non-empty');
+  }
+  if (typeof record['reason'] !== 'string' || record['reason'].trim().length === 0) {
+    throw new Error('close invalidation metadata reason must be non-empty');
+  }
+  return Object.freeze({
+    closeSchemaVersion: CLOSE_SCHEMA_VERSION,
+    periodStartMs: period.startMs,
+    periodEndMs: period.endMs,
+    closeEventId: record['closeEventId'],
+    reason: record['reason'],
+  });
+}
+
 export function isCloseKind(kind: string): boolean {
-  return kind === 'close_finalized' || kind === 'close_reopened';
+  return kind === 'close_finalized' || kind === 'close_reopened' || kind === 'close_invalidated';
 }
 
 /** Hash the exact in-period event set and basis-separated projection. */
