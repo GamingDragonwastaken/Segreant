@@ -17,6 +17,7 @@ import {
   INTEGRITY,
   AUTHENTICITY,
   MEASUREMENT,
+  type MonetaryBasisStatus,
 } from './profile.ts';
 import { EPISTEMIC_STATES } from './state.ts';
 import { immutableJson } from './evidence.ts';
@@ -120,6 +121,14 @@ export const DERIVATION_WITNESS_KINDS = [
   'measurement_validation',
   'causal_identification',
   'monetary_finality',
+  /**
+   * A declared re-basing on the money axis, which is NOT the same claim as
+   * `monetary_finality`. That one guards `finality` — provisional to final.
+   * This one guards `monetaryBasis`, and the axis had no guard at all until
+   * D-152: a derivation from `estimated` to `billed` was `allowed: true` with
+   * zero required witnesses, and the ledger stored it.
+   */
+  'monetary_rebasing',
   'integrity_attestation',
   'authenticity_attestation',
   'decision_fitness',
@@ -217,6 +226,36 @@ export const PROFILE_STRENGTH_AXES: ReadonlyArray<{
   { key: 'authenticity_attestation', source: 'authenticity', order: AUTHENTICITY },
   { key: 'decision_fitness', source: 'decisionFitness', order: DECISION_FITNESS },
 ];
+
+/**
+ * Is this a re-basing, as opposed to keeping or dropping the money basis?
+ *
+ * THE AXIS THAT HAD NO RULE. `PROFILE_STRENGTH_AXES` guards eight axes by
+ * comparing rungs, and `monetaryBasis` cannot appear there because it is not a
+ * ladder — `mixed` is the honest label for disagreement, not a rung above
+ * `billed`. The consequence, measured before this existed, was that the axis had
+ * no rule of any kind: a derivation whose input claim carried
+ * `monetaryBasis: 'estimated'` and whose output carried `'billed'` returned
+ * `allowed: true` with an EMPTY required-witness list, and
+ * `appendDerivationWithinTransaction` stored it. `metered usage !=
+ * provider-billed cost` is the first line of this repository's contract, and it
+ * was being collapsed inside the component that exists to prevent it.
+ *
+ * TWO MOVES STAY FREE, AND BOTH ARE WEAKENINGS. Keeping the basis asserts
+ * nothing new. Dropping to `none` discards the economic quantity, and a claim
+ * that no longer names one cannot misreport it. `mixed` is the same shape: it is
+ * what `mergeClaimProfiles` produces from disagreement, so a derivation
+ * declaring its output mixed is withholding rather than asserting.
+ *
+ * EVERYTHING ELSE NEEDS A WITNESS, INCLUDING `mixed` -> anything. Resolving a
+ * mixture into one basis is a claim that the disagreement was settled, which is
+ * exactly the kind of assertion a witness exists to carry.
+ */
+function monetaryRebasing(from: MonetaryBasisStatus, to: MonetaryBasisStatus): boolean {
+  if (from === to) return false;
+  if (to === 'none' || to === 'mixed') return false;
+  return true;
+}
 
 function assertKnownKeys(value: unknown, allowed: ReadonlySet<string>, label: string): void {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object`);
@@ -404,6 +443,7 @@ export function assessDerivationLegality(
   const required: DerivationWitnessKind[] = [...coordinate.requiredWitnesses];
 
   if (source.epistemic !== output.epistemic) required.push('epistemic_resolution');
+  if (monetaryRebasing(source.profile.monetaryBasis, output.profile.monetaryBasis)) required.push('monetary_rebasing');
   for (const axis of PROFILE_STRENGTH_AXES) {
     const sourceValue = source.profile[axis.source];
     const outputValue = output.profile[axis.source];

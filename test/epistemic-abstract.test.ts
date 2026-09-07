@@ -15,8 +15,13 @@
  *   missingWitnesses     : []
  *
  * Zero required witnesses. And `EpistemicLedger.appendDerivationWithinTransaction`
- * checks every input claim — its own comment says so — against a rule that never
- * looks at the money axis, so the kernel stores it.
+ * checked every input claim — its own comment says so — against a rule that never
+ * looked at the money axis, so the kernel stored it.
+ *
+ * THAT HALF IS NOW CLOSED AT THE PER-STEP RULE. D-152 added a `monetary_rebasing`
+ * witness kind, so the same derivation is refused at the boundary that persists.
+ * The first test below is inverted rather than deleted, and it now checks that
+ * the per-step rule and this abstraction agree about the same derivation.
  *
  * THAT IS THE DISTINCTION THE WHOLE PRODUCT RESTS ON. `metered usage !=
  * provider-billed cost`. A local rate-card estimate re-declared as a
@@ -125,17 +130,27 @@ function step(id: string, inputs: readonly Claim[], output: Claim, witnesses: De
 // THE COUNTEREXAMPLE.
 // ---------------------------------------------------------------------------
 
-test('the per-step rule places no constraint on the money axis, and this pins that', () => {
-  // Not a regression guard on the abstraction — a record of the hole it exists
-  // to cover. If `assessDerivationLegality` ever DOES require a witness here,
-  // this assertion fails and the reason for `abstract.ts` has changed.
+test('the per-step rule now guards the money axis too, and the two rules agree', () => {
+  // THIS ASSERTION USED TO SAY THE OPPOSITE, AND IT DID ITS JOB. It was written
+  // to record the hole: `allowed: true` with an empty required-witness list on
+  // an `estimated` -> `billed` derivation, and a comment saying that if
+  // `assessDerivationLegality` ever DID require a witness here, the assertion
+  // would fail and the reason for `abstract.ts` would have changed. D-152 added
+  // `monetary_rebasing` and the assertion failed, exactly as written. It is
+  // inverted rather than deleted, because what matters now is that the per-step
+  // rule and the chain abstraction agree about the same derivation instead of
+  // one refusing what the other allows.
   const estimated = mk('claim:estimated', { monetaryBasis: 'estimated' });
   const billed = mk('claim:billed', { monetaryBasis: 'billed' });
   const rebase = step('derivation:rebase', [estimated], billed);
 
   const legality = assessDerivationLegality(estimated, billed, rebase);
-  assert.equal(legality.allowed, true, 'measured: estimated -> billed is allowed today');
-  assert.deepEqual(legality.requiredWitnesses, [], 'and requires no witness at all');
+  assert.equal(legality.allowed, false);
+  assert.deepEqual(legality.missingWitnesses, ['monetary_rebasing']);
+
+  // And the abstraction, reached by a different route, refuses the same thing.
+  const bound = derivedBound([claimBound(estimated.profile)], []);
+  assert.ok(boundViolations(billed.profile, bound).some((item) => item.axis === 'monetaryBasis'));
 });
 
 test('the abstraction refuses the re-basing the per-step rule allows', () => {
