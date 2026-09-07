@@ -15,6 +15,32 @@
 - directed prerequisite-to-dependent edges;
 - revocation events supplied by an append-only store or protocol layer;
 - a declared map of every repository boundary that creates or strengthens a claim, with the class of authority each holds (`issuance-map.ts`).
+- whole derivation CHAINS, as a set of claims plus the derivations between them, for abstract interpretation over the axis lattice (`abstract.ts`).
+
+## Does not establish
+
+`abstract.ts` never says a proposition is TRUE, in the same sense as
+`PreservationAssessment.isProofOfTruth: false`; a bound is about what the
+evidence structure licenses.
+
+It also does not close the hole it was built to cover. `assessDerivationLegality`
+iterates `PROFILE_STRENGTH_AXES`, which cannot include `monetaryBasis` because
+that axis has no ladder — measured, a derivation whose input carries
+`monetaryBasis: 'estimated'` and whose output carries `'billed'` is
+`allowed: true` with ZERO required witnesses, and the ledger stores it, because
+the ledger checks every input claim against a rule that never looks at the money
+axis. `abstract.ts` refuses that re-basing, and **nothing calls `abstract.ts`**:
+no ledger path, no product path. `BASIS_DERIVATIONS` is deliberately empty, which
+means "nobody has declared a legitimate re-basing", not "none exist" — allocation
+is the obvious candidate and inventing it here to make a bound look useful would
+be the inflation the module refuses.
+
+The analysis takes each leaf at face value: it bounds what a CHAIN adds, and what
+a root may say about its own cited evidence is `assertClaimWithinItsEvidence` and
+`assessPreservation`, which it neither repeats nor replaces. A witness lifts its
+axis to that axis's top, exactly as the kernel's own rule does, so the
+abstraction is only as tight as the witness discipline it inherits: a witness
+that overstates its reach overstates this bound too.
 
 ## Guarantees
 
@@ -28,6 +54,10 @@
 - Witnesses are first-class persisted nodes; every witness used by a stored derivation must match the registered kind, coordinates, detail and evidence IDs.
 - Derivation legality refuses unsupported strengthening of coordinates, epistemic state, coverage, measurement, causality, monetary finality, trust or decision fitness.
 - Every product path that issues a kernel Claim is declared in `issuance-map.ts`, and a path that issues without appearing there fails a test rather than becoming a second authority.
+- `abstract.ts` bounds what a whole chain licenses, which no per-step check does: `assessDerivationLegality` compares one step against one input claim and `assessPreservation` compares one claim against its cited evidence, so a conclusion several merges downstream of its leaves was compared with its neighbours and nothing else.
+- The abstract domain reuses the split `admissibility.ts` already declares: ordered axes are bounded by a CEILING, and the two unordered axes — `monetaryBasis` and `epistemic` — by an ADMISSIBLE SET. `monetaryBasis` acquires no ordering here, and refusing to give it one is the point.
+- `PROFILE_STRENGTH_AXES` is exported from `derivation.ts` and read rather than restated, so the per-step rule and its abstraction cannot drift apart.
+- Every choice in the abstraction NARROWS rather than widens: an unresolved input is BOTTOM and not "ignore it"; no inputs at all is BOTTOM and not "unconstrained"; disagreeing monetary bases become `mixed` rather than the stronger of the two; a conflicted epistemic join admits only `conflicted`. A bound that is too tight costs a caller an explicit witness; a bound that is too loose says a chain can establish something it cannot.
 
 ## Invariants
 

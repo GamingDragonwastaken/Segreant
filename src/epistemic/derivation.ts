@@ -188,7 +188,22 @@ const DERIVATION_PROPOSITION_KEYS = new Set(['predicate', 'value']);
 const COORDINATE_CHANGE_KEYS = new Set(['from', 'to']);
 const DERIVATION_WITNESS_KEYS = new Set(['id', 'kind', 'from', 'to', 'evidenceIds', 'detail']);
 
-const PROFILE_STRENGTH_AXES: ReadonlyArray<{
+/**
+ * The ordered profile axes this rule guards, each with the witness kind that
+ * licenses strengthening it. Exported for `abstract.ts`, which abstracts this
+ * same rule over a whole chain: a second hand-written copy of the mapping would
+ * be a second authority, and the two would drift the first time an axis moved.
+ *
+ * `monetaryBasis` is ABSENT HERE ON PURPOSE AND THAT ABSENCE IS THE FINDING.
+ * It is not an oversight of this list -- the axis has no ladder, so there is no
+ * `stronger()` comparison to make -- but the consequence is that this rule
+ * places no constraint on it at all. Measured: a derivation whose input claim
+ * carries `monetaryBasis: 'estimated'` and whose output carries `'billed'` is
+ * `allowed: true` with ZERO required witnesses, and the ledger stores it,
+ * because the ledger checks every input claim against a rule that never looks
+ * at the money axis. See `MONETARY_BASIS_IS_UNGUARDED_HERE` in `abstract.ts`.
+ */
+export const PROFILE_STRENGTH_AXES: ReadonlyArray<{
   readonly key: DerivationWitnessKind;
   readonly source: keyof Claim['profile'];
   readonly order: readonly string[];
