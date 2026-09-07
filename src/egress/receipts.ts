@@ -474,9 +474,42 @@ function receiptHistoryStat(path: string): Stats | null {
   }
 }
 
+export const RECEIPT_DISCONTINUITY_ERROR = 'egress receipt history is absent while its checkpoint sidecar survives; audit receipts were removed rather than archived, so this home cannot claim genesis. Restore the history, or archive egress-receipts.checkpoint.json alongside it before starting a chain that declares it extends nothing.';
+
+function checkpointPathPresent(): boolean {
+  try {
+    lstatSync(receiptCheckpointPath());
+    return true;
+  } catch (error) {
+    if (errorCode(error) === 'ENOENT') return false;
+    throw asReceiptError(error, 'persistence', 'egress receipt checkpoint path could not be inspected');
+  }
+}
+
+/**
+ * Deleting evidence has to change what can be claimed. A checkpoint is only
+ * ever published after a receipt was appended, so a surviving checkpoint beside
+ * an absent history is local proof that audit records were removed — and
+ * genesis is precisely the claim that nothing preceded this chain. Previously
+ * the absence alone decided, so an operator (or anything running as them) could
+ * delete the history and have `fiscus egress verify` report a valid chain and
+ * a receipt count, with no surviving trace that a longer history had existed.
+ *
+ * Reading the checkpoint to REFUSE is not the same as trusting it to
+ * AUTHORIZE, which the rest of this file deliberately never does: a forged
+ * sidecar can only cost an operator an egress refusal it can repair, never buy
+ * an attacker a chosen predecessor hash.
+ */
+function absentHistoryInspection(): ReceiptHistoryInspection {
+  if (!checkpointPathPresent()) {
+    return { ok: true, receiptCount: 0, validThroughHash: null, errors: [], present: false, records: [] };
+  }
+  return { ok: false, receiptCount: 0, validThroughHash: null, errors: [RECEIPT_DISCONTINUITY_ERROR], present: false, records: [] };
+}
+
 function inspectReceiptHistory(path: string): ReceiptHistoryInspection {
   const before = receiptHistoryStat(path);
-  if (before === null) return { ok: true, receiptCount: 0, validThroughHash: null, errors: [], present: false, records: [] };
+  if (before === null) return absentHistoryInspection();
   const identity = receiptFileIdentity(before);
   let fd: number | null = null;
   try {
@@ -614,7 +647,7 @@ function inspectReceiptHistoryForAppend(path: string): ReceiptHistoryInspection 
   const stat = receiptHistoryStat(path);
   if (stat === null) {
     trustedReceiptState = null;
-    return { ok: true, receiptCount: 0, validThroughHash: null, errors: [], present: false, records: [] };
+    return absentHistoryInspection();
   }
   const identity = receiptFileIdentity(stat);
   if (trustedReceiptState && trustedReceiptState.path === path && sameReceiptFile(identity, trustedReceiptState.identity)) {

@@ -35,6 +35,26 @@ pre-lineage historical rows are separately labelled. These are local pricing
 evidence labels, not provider invoice, discount, credit, tax, or reconciliation
 data. The ledger does not intentionally store provider API keys.
 
+"Labels" is too comfortable a word for five of those columns, so they are named
+individually. Each holds material a person produced rather than a metering
+figure, and each stays on the machine under the Fiscus home:
+
+- `requests.cwd` — the full working-directory path a request was made from,
+  when the calling tool sends one. Directory names routinely carry client,
+  employer, or project names, and the path itself discloses account and
+  directory layout. It is stored to attribute spend to a project and to build
+  the project/path mapping the GUI shows.
+- `requests.user` — the operator label a calling tool reported, unmodified.
+- `git_commits.subject` — the first line of each correlated commit message, as
+  written. Fiscus reads it from the local repository; it never sends it.
+- `proposals.files_json` — captured proposed code lines with their file paths,
+  which is the case `metadataOnly: true` exists to switch off entirely.
+- `scan_snapshots.repos_json` — repository locations discovered by a local
+  scan, so the same disclosure applies as for `requests.cwd`.
+
+Everything above is local. Only the declared egress paths below leave the
+Fiscus process, and none of them carries these columns.
+
 When an operator explicitly runs `fiscus billing import --file ... --apply`,
 Fiscus also stores an immutable, provider-declared billing-evidence ledger. V1
 accepts only a strict local OpenAI evidence JSON contract. It retains the file
@@ -112,6 +132,32 @@ When the proxy receives an upstream redirect, it preserves the status/body for
 diagnosis but strips `Location` before returning the response. A downstream
 client therefore cannot silently follow a provider redirect to a destination
 outside the configured Fiscus-process egress policy.
+
+## Declared egress paths
+
+A rule authorizes an exact purpose and data class, so these two tokens are the
+whole authorization vocabulary an operator writes into `egress.rules` and reads
+back from `fiscus egress status`. This table is the complete list: the code
+refuses any purpose or data class not named here, and a test pins the table
+against the constants in both directions, so a new outbound path cannot be
+added without appearing on this page.
+
+| Purpose | Data class | What may cross | Reached by |
+| --- | --- | --- | --- |
+| `provider_inference` | `provider_request` | prompts, source snippets, tool payloads, and the caller's provider credential, exactly as the provider API requires | any tool pointed at the Fiscus proxy |
+| `pricing_refresh` | `pricing_manifest` | nothing about you — a plain GET for a public pricing manifest | `fiscus pricing --refresh`, or `pricing.autoRefresh` |
+| `baseline_refresh` | `baseline_manifest` | nothing about you — a plain GET for the manifest at an operator-supplied URL | `fiscus baseline --refresh --url ...` |
+| `alert_delivery` | `alert_metadata` | configured alert summaries; never prompts, source, or credentials | `fiscus alerts --set-webhook ...` |
+| `provider_cost_observation` | `provider_cost_aggregate` | a read-only day-range query, plus `OPENAI_ADMIN_API_KEY` read from the process environment for that one request | `fiscus billing openai-costs pull ... --apply` |
+| `team_rollup` | `team_rollup` | a signed numeric rollup to an operator-run team server | `fiscus team push --url ...` |
+| `hosted_judge` | `judge_structural_summary`, `judge_transcript_excerpt` | the bounded session excerpt the selected judge tier describes, to the configured judge provider | an explicitly configured hosted judge |
+| `local_judge` | `judge_structural_summary`, `judge_transcript_excerpt` | the same payload shapes, to a literal loopback target that does not leave the machine | the local judge tier |
+| `local_healthcheck` | `healthcheck` | nothing beyond the request itself, to literal IPv4 loopback | the proxy status checks in the CLI and dashboard |
+
+Two of these purposes are loopback-only in normal operation. `local_judge` and
+`local_healthcheck` still travel the same policy, DNS-pinning, and receipt path
+as the rest; naming them here is not a claim that they contact a network
+service.
 
 With the default `metadataOnly: false`, Fiscus may also retain parsed proposed
 code lines locally to measure whether an AI proposal later appeared in a Git
