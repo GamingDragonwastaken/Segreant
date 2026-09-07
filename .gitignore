@@ -30,3 +30,6 @@ docs/planning/
 # Local Codex orchestration control plane. Promote selected records deliberately;
 # do not publish task history or internal decision notes by accident.
 .codex/
+
+# Local agent-lane worktree copies. Orchestration scratch, never a release input.
+.agent-worktrees/

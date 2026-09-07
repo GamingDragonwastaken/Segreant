@@ -1,39 +1,47 @@
 # Active Execution
 
-**Resumption state, not history.** Historical decisions and commit-bound evidence live in `docs/program/DECISION-LOG.md` and `docs/program/EVIDENCE-INDEX.md`. This file keeps the next agent from repeating settled work.
+**Resumption state, not history.** Historical decisions and commit-bound evidence live in `docs/program/DECISION-LOG.md` and `docs/program/EVIDENCE-INDEX.md`. This file exists to keep the next executor from repeating settled work, and it is rewritten rather than appended to.
 
 ## Where
 
 | | |
 | --- | --- |
-| Branch | `gpt56/magnum-opus-reconstruction` |
-| Current code checkpoint | `1698ed24102197a37cc89a30147b06c7cec6c783` — exact remote match; correction occurrence, value-claim, plugin, database-integrity and exact-reconciliation safeguards are included |
-| Latest exact-code CI | Run `33919980843` — **success** across all eight configured jobs, head `1698ed24102197a37cc89a30147b06c7cec6c783`, observed 2026-09-04 |
-| Latest code tranche | Correction chains now enforce occurrence-domain identity; value claims use typed persisted supersession; OutcomeAdapters have an allowlisted digest-checked registry and explicit invocation refusals; critical append-only triggers are checked; exact Money reaches Store billing reconciliation. Root lifecycle **1,464 total / 1,460 pass / 0 fail / 4 skips**, team-server **67/67**, root/browser TypeScript, build, and diff check passed |
-| Working tree | The code checkpoint is pushed and remotely green; the program records below are the only pending follow-up |
-| Operating policy | One bounded slice → focused verification → compiler/build gate → one accounting update → one checkpoint. Reuse green evidence; do not repeat full suites, cleanup, or unchanged reads without a new hypothesis. |
+| Branch | `gpt56/magnum-opus-reconstruction` — never `main`, never force-pushed |
+| Last CI-verified exact head | `866ca465c3e1e973e6070ad7893c5781ef052eef` — run `34087143458`, **success on all eight configured jobs** (`test` ×3, `team-server-test` ×3, `package-smoke`, `candidate-head`), inspected job by job, not by trusting the first green row |
+| Code ahead of that head | `e3a27b9` (WP-D05 measurement backing) and `17fdadd` (WP-I05 boundary declaration and retention consequence), plus this records commit. Their CI must be read on the exact pushed SHA before either is called verified. |
+| Local gates on the current tree | Root suite **1,599 total / 1,595 pass / 0 fail / 4 skipped**; team-server **67/67**; all three TypeScript domains clean (root `tsconfig.json`, `src/dashboard/web/app/tsconfig.json`, `team-server/`) |
+| Dossier source | `FISCUS_EXECUTION_DOSSIER_III.md` is **not in this checkout and not in git history** — it was an owner-supplied input. `docs/program/PACKET-INVENTORY.md` is the surviving mechanical enumeration of all 76 packets and is authoritative here. Do not re-derive a packet count from anything else. |
 
-## Completed and reusable evidence
+## Packet accounting
 
-- Published safeguard tranche `72986ad`: root lifecycle **1,406 total / 1,402 pass / 0 fail / 4 skips**; CI run `33850043162` success across all eight jobs.
-- Published exact-allocation checkpoint `110b3dc`: affected economic/allocation **84/84**; all three TypeScript domains, `npm run build`, and `git diff --check` passed; CI run `33854265175` success across all eight jobs.
-- Packet accounting now records bounded PARTIAL states for D01/D02/D03/E01/F02/G02/G03/G05/H03/R02 and the C04/R06 allocation-lineage, finalized-close, and replay-order advances. Do not inflate any of these to COMPLETED.
+76 packets. **11 COMPLETED, 38 PARTIAL, 27 NOT_STARTED, 0 IN_PROGRESS, 0 BLOCKED_EXTERNAL, 0 SUPERSEDED.** Regenerate rather than trust this line:
 
-## Active frontier
+```bash
+grep -oE '\| `(NOT_STARTED|IN_PROGRESS|PARTIAL|COMPLETED|BLOCKED_EXTERNAL|SUPERSEDED_WITH_REASON)` \|' docs/program/PACKET-INVENTORY.md | sort | uniq -c
+```
 
-**WP-C02/C04/R06 — next economic slice.** Exact allocation persistence now has source conservation, finalized-close binding, and validated multi-hop correction-chain root resolution, replay ordering is pinned, `usage_observed` is refused as a monetary event/allocation source, local price corrections enforce source occurrence identity, and historical FX selection can be composed with corrected effective charges without changing raw close history. Remaining economic gaps are per-link basis agreement, role auditing, adjustment-to-charge conservation beyond the covered negative cases, provider FX authority, finalized-close policy for later corrections, receipt/team reconciliation, and recovery from the bricked ledger state.
+`PARTIAL` is not a nearly-finished `COMPLETED`. Every PARTIAL row names its own remainder; read the row before assuming a packet is nearly done.
 
-**WP-B01/R04/R05 — parallel kernel frontier.** Generic negative claims now require complete cited Evidence over event type, target scope, and the entire interval. Direct Claim persistence has trust ceilings for integrity/authenticity/coverage. Remaining typed witness production and other negative-claim paths require new reproduction.
+## Recently closed, do not redo
 
-**WP-D/E/F/G/H — bounded foundations.** Artifact/contribution, randomized ITT registry, decision certificate, allowlisted OutcomeAdapter/plugin invocation, database trigger mutation, and preservation foundations are real but additive. Universal migration, executable hosts, runtime isolation, and external gates remain open.
+`WP-D06` both halves (drift silence and alert coverage, CLI and browser), `WP-H05` supply-chain audit script, `WP-I04` four accessibility defects, `WP-E06` inference ledger and precision planning, `WP-D05` measurement backing registry, `WP-I05` boundary declaration and retention consequence. D-140 through D-147 in the decision log carry the counterexample, the fix, and — in every case — what the fix does not establish.
 
-## Next exact action
+One defect class ran through four of those: **absence of a result reported as a result.** A quiet drift e-process, six structurally dark alert channels, a validation field that passed by not matching one string, and a deleted receipt history all reported "nothing found" where the honest answer was "nothing could have been found." Expect more instances; search for the class, not the case.
 
-Investigate one remaining executable frontier: provider-authoritative FX/receipt dependency binding, signed `.fiscuspack` execution, or causal/decision-control migration. Write one RED test for the highest-value unsatisfied boundary, implement the smallest fail-closed change, rerun only the affected domains, then checkpoint and update these records once.
+## Next executable frontier
 
-## Known blockers
+Highest value first, each stated as the boundary that is missing rather than as an area to look at:
 
-- The initial usage-role implementation head `c023e913` failed cross-platform CI because of a stale fixture; corrective head `320bf064` is the exact remotely green code checkpoint.
+1. **Enforce what WP-D05 only made possible.** `claim()` still accepts any non-null `measurementModelRef`; no production call site resolves one through `measurementRegistry`, and no registry of Fiscus's own models is assembled anywhere. The mechanism exists and nothing uses it.
+2. **WP-E06's same gap.** The CLI, dashboard and store call `estimateCausalStudy` directly, so every multiplicity count is a lower bound and the ledger is an available discipline rather than an enforced one.
+3. **AII-036's three `unmigrated_authority` boundaries** — `causal.qualification`, `causal.estimate`, `decision.certificate`. The first two are in the product import closure and can reach an operator today, which sets the order.
+4. **AII-025's missing gate.** The observational frontier's label is honest; no surface yet refuses to accept an observational separation as an input to an action that changes spend.
+5. **The remaining AII-002 negative claims** — no provider charge, no duplicate, no policy violation — still carry no completeness requirement, and nothing yet emits a refuting witness.
+
+## Known blockers and standing constraints
+
+- Publishing to a registry, deploying, tagging a release, merging to `main`, and any paid or public commitment are **owner-reserved**. A verification-only PR is never merged merely because it exists to trigger CI.
 - Live Postgres execution and trust-anchor governance remain external for team rollups.
-- No credentials are retained; any credentials encountered are `[REDACTED]`.
-- The dossier is not complete: remaining packets and external gates stay explicitly open.
+- `.codex/` and `.agent-worktrees/` are gitignored on purpose. Never publish either; neither is a release input.
+- No credentials are retained; any encountered are `[REDACTED]`.
+- `scripts/generate-plugin-contract.mjs` is untracked work in progress left by an earlier executor and has deliberately not been touched.
