@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "dcf93378f08bb3529641a0baa7729adc54b7138ba0e74aa03503b7c42682b169";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "e9e79eb1b2e22fd2e7042e53e85cbf2bbf0f67ea7b270a3a3ba4bd460dd246d0";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -392,6 +392,11 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "alerts",
       "optional": true,
       "type": "AlertRow[] | null"
+    },
+    {
+      "name": "alertCoverage",
+      "optional": true,
+      "type": "{"
     }
   ],
   "ReconciliationCoverage": [
@@ -1324,7 +1329,7 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
     {
       "name": "drift",
       "optional": true,
-      "type": "{ n: number; alarm: boolean; recentRate?: number; overallRate?: number } | null"
+      "type": "{"
     },
     {
       "name": "reclaimed",

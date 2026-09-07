@@ -31,6 +31,7 @@ import { probeProxyState } from '../egress/proxyHealth.ts';
 import { buildSettingsSnapshot, applySettingsPatch, SettingsValidationError, type SettingsPatch } from './settings.ts';
 import { serveHtml } from './static.ts';
 import { resolveEnforcedSpend, startOfLocalDay } from '../budget/guard.ts';
+import { driftDetectability } from '../value/drift.ts';
 import { loadRealization, realizeDiscoveredProjects } from '../value/realization.ts';
 // The one composition of the value primitives, shared with the CLI — see the
 // '/api/value' handler below and src/value/report.ts for why it is not inline.
@@ -39,7 +40,7 @@ import { projectName } from '../git/correlate.ts';
 import { scanWithDiff, saveScan } from '../scan/scan.ts';
 import { describeSourceDepth } from '../value/sourceDepth.ts';
 import { buildGuide } from '../guide.ts';
-import { computeAlerts } from '../alerts/detect.ts';
+import { computeAlertCoverage, computeAlerts } from '../alerts/detect.ts';
 import { requestsToCsv } from '../export/csv.ts';
 import { economicRequestsToCsv } from '../export/economic.ts';
 import { instant, type Instant } from '../epistemic/time.ts';
@@ -249,6 +250,10 @@ export function buildOverview(store: Store, config: FiscusConfig, range: RangeKe
     // Governance alerts refresh on the live poll. Realized-value alerts (git-gated)
     // are surfaced in /api/value; here we pass null so they're simply omitted.
     alerts: computeAlerts(store, config, { now }),
+    // Beside the alerts, not instead of them: an empty list is a finding only
+    // when the detectors could have produced an entry, and on a default install
+    // none of the six can (D-144).
+    alertCoverage: computeAlertCoverage(store, config, { now }),
   };
 }
 
@@ -886,7 +891,9 @@ export function handleValue({ res, url, store, config }: RouteContext): void {
         projectAllocation,
         usage: value.usage,
         team: value.team,
-        drift: spine?.drift ?? null,
+        drift: spine?.drift === null || spine?.drift === undefined
+          ? null
+          : { ...spine.drift, ...driftDetectability(spine.drift) },
         reclaimed: spine?.reclaimed ?? null,
       });
     } catch (err) {

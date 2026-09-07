@@ -205,6 +205,46 @@ export function driftReading(report: DriftReport): DriftReading {
   });
 }
 
+/**
+ * WHETHER A CROSSING WAS REACHABLE AT ALL, AT THIS LENGTH.
+ *
+ * D-140 declined to offer a power number, because the analytic bound available
+ * here — `log E ≤ n(log((w+0.5)/(w+1)) + log 2)` — admits a crossing at n=20
+ * that measurement shows is unreachable, and a bound that overstates
+ * detectability restores the same false comfort with a number attached.
+ *
+ * This is the measurement instead of the bound. It runs the SAME e-process over
+ * a reference stream of the same length and window — rate 0 for the first half,
+ * rate 1 for the second, the most extreme regime change a binary stream can
+ * carry — and reports whether that would have crossed. It is exact, it is
+ * reproducible, and it is stated as what it is: if a total flip of this length
+ * does not fire the watch, nothing about this stream's silence is informative.
+ *
+ * IT IS A NECESSARY CONDITION AND NOT A SUFFICIENT ONE, which is why the field
+ * is named for the reference rather than for power. `referenceDriftWouldFire`
+ * being false establishes that the watch is blind at this length. Its being
+ * true does not establish that the watch would catch any particular smaller
+ * movement, and nothing here claims a total flip maximises this predictor's
+ * evidence over all streams of that length.
+ */
+export interface DriftDetectability {
+  readonly referenceDriftWouldFire: boolean;
+  readonly peakEvidenceFraction: number;
+}
+
+export function driftDetectability(report: DriftReport): DriftDetectability {
+  const half = Math.floor(report.n / 2);
+  const reference: (0 | 1)[] = [
+    ...Array<0 | 1>(half).fill(0),
+    ...Array<0 | 1>(report.n - half).fill(1),
+  ];
+  const probe = driftEProcess(reference, { alpha: report.alpha, window: report.window });
+  return Object.freeze({
+    referenceDriftWouldFire: probe.alarm,
+    peakEvidenceFraction: driftReading(report).peakEvidenceFraction,
+  });
+}
+
 /** One sentence stating what happened, which in the silent case is that nothing did. */
 export function describeDriftReading(reading: DriftReading): string {
   const rate = (value: number | null) => (value === null ? 'n/a' : `${Math.round(value * 100)}%`);

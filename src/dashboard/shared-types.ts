@@ -249,6 +249,20 @@ export interface Overview {
   series: SeriesPoint[];
   recent: unknown[];
   alerts?: AlertRow[] | null;
+  /**
+   * How many alert detectors could have produced an entry. An empty `alerts`
+   * means something only when every channel was watching; on a default install
+   * all six are dark, because caps are opt-in, there is no spike baseline and
+   * value is uninstrumented. Structurally `AlertCoverage` from
+   * `src/alerts/detect.ts`, and `routes.ts` assigns that value straight in, so
+   * the two cannot drift apart without a type error (D-144).
+   */
+  alertCoverage?: {
+    channels: ReadonlyArray<{ channel: string; live: boolean; darkBecause: string | null }>;
+    liveChannels: number;
+    complete: boolean;
+    summary: string;
+  } | null;
 }
 
 /**
@@ -641,8 +655,30 @@ export interface ValuePayload {
     effortTaxUsd?: number;
     notes?: string[];
   } | null;
-  /** Rate-drift alarm — an e-process over mature units. Needs ten to exist. */
-  drift?: { n: number; alarm: boolean; recentRate?: number; overallRate?: number } | null;
+  /**
+   * Rate-drift alarm — an e-process over mature units. Needs ten to exist.
+   *
+   * `alarmCouldHaveFired` is what the browser was missing. The e-process bounds
+   * FALSE alarms and says nothing about missed ones, and a total regime change
+   * does not fire it at n=10 or n=20 — the range where the watch first speaks.
+   * Without this the payload could not distinguish a quiet watch from a blind
+   * one, so no wording on the client could have been honest (D-144).
+   */
+  drift?: {
+    n: number;
+    alarm: boolean;
+    recentRate?: number;
+    overallRate?: number;
+    /**
+     * Whether the SAME e-process fires on a reference stream of this length and
+     * window — rate 0 for the first half, rate 1 for the second. False means the
+     * watch is blind at this length and its silence carries no information. True
+     * does not establish that any smaller movement would be caught.
+     */
+    referenceDriftWouldFire?: boolean;
+    /** Peak evidence as a fraction of the alarm threshold, floored at zero. */
+    peakEvidenceFraction?: number;
+  } | null;
   reclaimed?: {
     savedMinutes?: number | null;
     savedRange?: { low: number; high: number } | null;

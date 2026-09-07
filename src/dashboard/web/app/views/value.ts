@@ -290,8 +290,14 @@ export function valueView(): Node {
                       ? `Drift alarm: the recent realization rate (${pct(drift.recentRate, 0)}) has departed from the overall rate (${pct(drift.overallRate, 0)}) beyond chance.`
                       : `Warning: work has recently been sticking much less often than it used to (${pct(drift.recentRate, 0)} against ${pct(drift.overallRate, 0)} overall).`)
                   : (isPrecise()
-                      ? `No drift detected over n=${count(drift.n)} mature units.`
-                      : 'The rate is holding steady — no sign it is drifting.')),              })
+                      ? `The drift alarm did not fire over n=${count(drift.n)} mature units.`
+                        + (drift.referenceDriftWouldFire === false
+                          ? ' At this length the same test does not fire even on a total regime change, so its silence carries no information.'
+                          : ' An e-process bounds false alarms and not missed ones, so this is not evidence that the rate held.')
+                      : `Nothing has tripped the drift watch over ${count(drift.n)} pieces of work`
+                        + (drift.referenceDriftWouldFire === false
+                          ? ', but that is too few for this check to notice a change at all yet.'
+                          : ' — which is not the same as knowing the rate held steady.'))),              })
             : null),
 
         // The actionable part: where units die and what that costs.
