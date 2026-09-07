@@ -212,11 +212,39 @@ function panel(spec: ActionSpec): Node {
     h(
       'footer',
       { class: 'drawer-foot' },
-      () => {
-        const r = result();
-        if (r) return h('p', { class: r.ok ? 'drawer-done' : 'drawer-error', text: r.message });
-        return null;
+
+      // The outcome region is mounted with the drawer, not with the outcome.
+      //
+      // Committing sets `result`, and that same signal disables the commit
+      // button — `result() === null` is part of `ready` — so at the exact
+      // moment the only report of what happened appeared, the operator's focus
+      // was dropped from a control that had just become disabled. The report
+      // was a bare `<p>`: nothing announced it, and a live region built in the
+      // same tick as its first message is not reliably spoken either, which is
+      // why the region has to exist before there is anything to say.
+      //
+      // The negative margin is layout compensation, not styling: `.drawer-foot`
+      // is a flex column with a gap, so a permanently present child introduces
+      // one gap the old on-demand paragraph never did. The message re-adds it.
+      // Spacing is therefore identical to before in both states.
+      h('div', {
+        class: 'drawer-result',
+        role: 'status',
+        'aria-live': 'polite',
+        'aria-atomic': 'true',
+        style: 'margin-bottom: calc(var(--s3) * -1)',
       },
+        () => {
+          const r = result();
+          if (r) {
+            return h('p', {
+              class: r.ok ? 'drawer-done' : 'drawer-error',
+              style: 'margin-bottom: var(--s3)',
+              text: r.message,
+            });
+          }
+          return null;
+        }),
       h('div', { class: 'drawer-actions' },
         h('button', { class: 'btn-ghost', text: 'Close', onclick: () => closeAction() }),
         spec.download

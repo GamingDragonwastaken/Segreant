@@ -152,9 +152,17 @@ const BUILDERS: Record<string, Builder> = {
           inputmode: 'decimal',
           autocomplete: 'off',
           placeholder: 'for example 5.00',
+          // Empty and `0` mean opposite things in this field — one changes
+          // nothing, the other blocks all spend — and the sentence saying so
+          // was a loose sibling paragraph. An operator who tabbed to the input
+          // heard the label alone ("New daily limit, in dollars") and never the
+          // half that carries the consequence. This is the only free-text field
+          // in the GUI and the only one whose empty value is not a no-op by
+          // accident, so the instruction has to reach the control it governs.
+          'aria-describedby': 'budget-cap-note',
           oninput: (event: Event) => entered.set((event.target as HTMLInputElement).value),
         }),
-        h('p', { class: 'drawer-note', text: 'Leave this empty to change nothing. Enter 0 to block all spend.' })),
+        h('p', { id: 'budget-cap-note', class: 'drawer-note', text: 'Leave this empty to change nothing. Enter 0 to block all spend.' })),
 
       preview: async (): Promise<PreviewResult> => {
         const [settings, value] = await Promise.all([api.settings(), api.value()]);

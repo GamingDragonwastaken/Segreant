@@ -197,7 +197,23 @@ function boot(): void {
     }
 
     render(root,
-      h('a', { class: 'skip', href: '#main', text: 'Skip to content' }),
+      // The skip link moves focus itself rather than letting the browser apply
+      // its own href. This shell routes on the hash, and `#main` is not a route:
+      // following the link wrote `#main` into `location.hash`, `hashchange` ran
+      // `readRoute()`, the whitelist rejected `main`, and the fallback sent the
+      // operator to Metered. So the one control that exists purely for keyboard
+      // and screen-reader use was the one control that could lose them the
+      // screen they were on. The href stays — it is what makes this a link, and
+      // what a browser shows in the status bar — but it is never applied.
+      h('a', {
+        class: 'skip',
+        href: '#main',
+        text: 'Skip to content',
+        onclick: (event: Event) => {
+          event.preventDefault();
+          document.getElementById('main')?.focus();
+        },
+      }),
       topbar(),
       h('div', { class: 'sheet' },
         () => {

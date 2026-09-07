@@ -127,9 +127,26 @@ export function dataView(): Node {
             }),
             h('code', { class: 'cmd', text: 'fiscus scan' })),
 
-          () => {
-            const e = scanError();
-            if (e) return h('p', { class: 'drawer-error', role: 'alert', 'aria-live': 'assertive', text: e });
+          // Detection is the one deliberate, operator-triggered read on this
+          // screen, and it reported nothing to anyone who was not watching the
+          // pixels. Only the failure path said anything; success landed four
+          // counts in a card the reactive region built from nothing, and a live
+          // region created in the same tick as its first message is not
+          // reliably spoken. This region is mounted with the screen, before the
+          // button can be pressed, so the wait and the result are both status
+          // messages. `aria-busy` holds the announcement until the walk is
+          // finished rather than reading a half-updated card.
+          //
+          // Failure stays a sibling `role="alert"`: an inserted alert node IS
+          // announced on insertion, and nesting one inside a status region gets
+          // it announced twice.
+          h('div', {
+            class: 'scan-result',
+            role: 'status',
+            'aria-live': 'polite',
+            'aria-busy': () => (scanning() ? 'true' : false),
+          }, () => {
+            if (scanError()) return null;
             const sc = scan();
             if (!sc) return null;
 
@@ -160,6 +177,11 @@ export function dataView(): Node {
                     ? `${count(sc.unreadableDirs)} directory/directories could not be read (permissions).`
                     : `${count(sc.unreadableDirs)} folders could not be opened, so anything inside them was missed.`) })
                 : null);
+          }),
+
+          () => {
+            const e = scanError();
+            return e ? h('p', { class: 'drawer-error', role: 'alert', 'aria-live': 'assertive', text: e }) : null;
           }),
 
         o && !empty
