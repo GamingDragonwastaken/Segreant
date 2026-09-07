@@ -22,11 +22,24 @@ import type {
   CausalStudyData,
   CausalStudyEstimate,
   CausalJointInferenceResult,
+  CommittedCausalStudyProtocol,
   NumericBounds,
 } from './types.ts';
 
 function mean(values: number[]): number {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+/**
+ * One arm's half-width under the union-bound Hoeffding construction. This was
+ * inline arithmetic in `boundedDifference` until `precision.ts` needed to tell a
+ * caller what a given sample size would buy BEFORE the money was spent
+ * acquiring it. A planner that reimplements the estimator's formula is a
+ * planner that will one day quietly disagree with it, so both callers share
+ * this expression and a test pins the projection against a realized interval.
+ */
+export function hoeffdingArmRadius(outcomeRange: number, sampleSize: number, alpha: number): number {
+  return outcomeRange * Math.sqrt(Math.log(4 / alpha) / (2 * sampleSize));
 }
 
 /**
@@ -43,9 +56,8 @@ function boundedDifference(
   const estimate = mean(treatment) - mean(control);
   const alpha = 1 - confidenceLevel;
   const width = bounds.high - bounds.low;
-  const treatmentRadius = width * Math.sqrt(Math.log(4 / alpha) / (2 * treatment.length));
-  const controlRadius = width * Math.sqrt(Math.log(4 / alpha) / (2 * control.length));
-  const radius = treatmentRadius + controlRadius;
+  const radius = hoeffdingArmRadius(width, treatment.length, alpha)
+    + hoeffdingArmRadius(width, control.length, alpha);
   return {
     estimate,
     lower: Math.max(-width, estimate - radius),
@@ -61,11 +73,19 @@ function standardLimitations(): string[] {
   ];
 }
 
-function jointInferenceRule(data: CausalStudyData): CausalJointInferenceResult {
-  const declared = data.protocol.analysis.jointInference;
-  const defaultFamily = data.protocol.question === 'model_cost_quality' ? 'cost_quality' : 'net_benefit';
+/**
+ * The rule the estimator will apply, resolved from the protocol alone. It takes
+ * the protocol rather than the study data because precision planning has to ask
+ * the same question before any outcome exists — the endpoint alpha a caller must
+ * plan against is a property of what was registered, not of what was collected.
+ */
+export function resolveCausalJointInference(
+  protocol: CommittedCausalStudyProtocol,
+): CausalJointInferenceResult {
+  const declared = protocol.analysis.jointInference;
+  const defaultFamily = protocol.question === 'model_cost_quality' ? 'cost_quality' : 'net_benefit';
   const defaultCount = defaultFamily === 'cost_quality' ? 2 : 1;
-  const declaredMargin = data.protocol.qualityOutcome?.nonInferiorityMargin;
+  const declaredMargin = protocol.qualityOutcome?.nonInferiorityMargin;
   const defaultMargin = Number.isFinite(declaredMargin) && declaredMargin >= 0 ? declaredMargin : 0;
   const declaredIsValid = declared !== undefined
     && declared.method === 'bonferroni'
@@ -79,7 +99,7 @@ function jointInferenceRule(data: CausalStudyData): CausalJointInferenceResult {
     && (declared.secondaryEndpointPolicy === 'none' || declared.secondaryEndpointPolicy === 'descriptive_only');
   const endpointFamily = declaredIsValid ? declared.endpointFamily : defaultFamily;
   const endpointCount = declaredIsValid ? declared.endpointCount : defaultCount;
-  const rawConfidence = data.protocol.analysis.confidenceLevel;
+  const rawConfidence = protocol.analysis.confidenceLevel;
   const overallConfidenceLevel = Number.isFinite(rawConfidence) && rawConfidence > 0 && rawConfidence < 1 ? rawConfidence : 0.95;
   const endpointAlpha = (1 - overallConfidenceLevel) / endpointCount;
   return Object.freeze({
@@ -104,7 +124,7 @@ function jointInferenceRule(data: CausalStudyData): CausalJointInferenceResult {
  */
 export function estimateCausalStudy(data: CausalStudyData): CausalStudyEstimate {
   const qualification = qualifyCausalStudy(data);
-  const jointInference = jointInferenceRule(data);
+  const jointInference = resolveCausalJointInference(data.protocol);
   const estimandDefinition = data.protocol.version === 1
     && verifyCommittedCausalProtocol(data.protocol).length === 0
     ? resolveEstimandDefinition((data.protocol.analysis as unknown as { estimand?: unknown }).estimand) ?? null
