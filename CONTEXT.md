@@ -17,6 +17,7 @@ whole tree loaded.
 | Importing tool logs | `src/connect/`, `src/cli/importCmd.ts` | `docs/INTEGRATIONS.md` |
 | Robust decisions, regret, and VoI | `src/decision/` | `docs/ECONOMIC-CONTROL-FOUNDATION.md`, `docs/program/FISCUS-REMAINING-WORK-AUDIT.md` |
 | Epistemic state, derivation, and revocation | `src/epistemic/` | `docs/THE-STANDARD.md`, `docs/program/FISCUS-REMAINING-WORK-AUDIT.md` |
+| What a figure is a measurement OF; surrogates and construct laundering | `src/measurement/CONTEXT.md` | `docs/METHODOLOGY.md`, `src/epistemic/CONTEXT.md` |
 | Provider billing, reconciliation | `src/billing/CONTEXT.md` | `docs/PROVIDER-RECONCILIATION.md` |
 | Cost centres, allocation rules | `src/alloc/CONTEXT.md` | `docs/ALLOCATION.md` |
 | RoI, realized value, model trials | `src/value/CONTEXT.md` | `docs/RETURN-ON-INTELLIGENCE.md`, `docs/METHODOLOGY.md` |
