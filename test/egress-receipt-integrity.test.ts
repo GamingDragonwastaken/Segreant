@@ -147,12 +147,30 @@ test('an absent receipt history establishes exactly one genesis predecessor', ()
     assert.equal(existsSync(egressReceiptPath()), false);
     const receipt = appendEgressReceipt(INPUT);
     assert.equal(receipt.previousHash, null);
-    assert.deepEqual(verifyEgressReceipts(), {
+    // Still an exact whole-object comparison, deliberately: the point of this
+    // assertion is that genesis produces one specific verification and nothing
+    // else, so a field added to that verification must be stated here rather
+    // than allowed to slip past a subset check. D-148 added the coverage half.
+    const verified = verifyEgressReceipts();
+    assert.deepEqual(verified, {
       ok: true,
       receiptCount: 1,
       validThroughHash: receipt.hash,
       errors: [],
+      state: 'supported',
+      basis: 'chain_intact',
+      coveredFrom: receipt.at,
+      coveredThrough: receipt.at,
+      establishes: verified.establishes,
+      doesNotEstablish: verified.doesNotEstablish,
     });
+    // The two prose fields are compared for CONTENT rather than for an exact
+    // string, because pinning their wording here would duplicate
+    // `test/egress-receipt-coverage.test.ts` and make every rewording a
+    // two-file edit. What must hold is that a single-receipt genesis chain
+    // still declines to claim coverage of calls it never saw.
+    assert.match(verified.establishes, /chain unbroken from genesis/);
+    assert.match(verified.doesNotEstablish, /appended no receipt leaves no trace/);
   } finally {
     state.restore();
   }

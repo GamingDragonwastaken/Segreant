@@ -7,7 +7,7 @@
  */
 import { loadConfig, saveConfig, type EgressConfig, type EgressRule } from '../config.ts';
 import { validateEgressRule } from '../egress/policy.ts';
-import { egressReceiptPath, verifyEgressReceipts } from '../egress/receipts.ts';
+import { egressReceiptPath, verifyEgressReceipts, type ReceiptVerification } from '../egress/receipts.ts';
 import type { Flags } from './flags.ts';
 import { C, color, printJson } from './ui.ts';
 
@@ -55,6 +55,49 @@ function statusPayload(): Record<string, unknown> {
   };
 }
 
+/**
+ * A chain verification is not a verdict on outbound traffic, and it was being
+ * printed as one.
+ *
+ * `fiscus egress verify` said "Receipt chain valid" in GREEN, over "Receipts:
+ * 0", and exited 0 on a home that had never recorded anything. That is the
+ * single question this command exists to answer, answered with the wrong claim:
+ * a hash chain over an empty set verifies vacuously, so the reassuring line was
+ * printed exactly when Fiscus knew least. Green is now reserved for the one
+ * basis that earns it, and every basis states its own window and its own limit
+ * on the same screen as the result. Recorded at D-148.
+ */
+function chainHeadline(verification: ReceiptVerification): string {
+  switch (verification.basis) {
+    case 'no_record': return 'No receipt recorded — this establishes nothing about what left this machine';
+    case 'chain_intact': return 'Receipt chain intact over the recorded window';
+    case 'discontinuity': return 'Receipt history removed — the chain is discontinuous';
+    case 'chain_broken': return 'Receipt chain invalid';
+  }
+}
+
+function chainTone(verification: ReceiptVerification): string {
+  if (verification.state === 'supported') return C.green;
+  // `unknown` is deliberately not red. Nothing is wrong; nothing is known, and
+  // dressing an absence of evidence as a fault is the same collapse in the
+  // other direction.
+  return verification.state === 'unknown' ? C.yellow : C.red;
+}
+
+function coveredSuffix(verification: ReceiptVerification): string {
+  if (verification.coveredFrom === null) return '';
+  return ' (' + verification.coveredFrom + ' through ' + String(verification.coveredThrough) + ')';
+}
+
+function chainLine(verification: ReceiptVerification): string {
+  switch (verification.basis) {
+    case 'no_record': return 'no chain recorded';
+    case 'chain_intact': return 'chain intact' + coveredSuffix(verification);
+    case 'discontinuity': return 'chain DISCONTINUOUS';
+    case 'chain_broken': return 'chain INVALID';
+  }
+}
+
 const RECEIPT_REPAIR_ACTION = 'preserve and repair/restore the present receipt history before retrying; if the lock is stale, confirm no Fiscus writer is active, then remove only that lock and rerun verify; Fiscus will not restart history as genesis.';
 
 function printReceiptAction(ok: boolean): void {
@@ -75,7 +118,8 @@ export function cmdEgress(flags: Flags): void {
       const rules = payload.rules as EgressRule[];
       console.log('  Rules: ' + (rules.length ? rules.map((rule) => rule.id + ' (' + (rule.enabled ? 'enabled' : 'disabled') + ')').join(', ') : 'none'));
       const receipts = payload.receipts as ReturnType<typeof verifyEgressReceipts> & { path: string };
-      console.log('  Receipts: ' + receipts.receiptCount + ' local receipt(s), chain ' + (receipts.ok ? 'valid' : 'INVALID'));
+      console.log('  Receipts: ' + receipts.receiptCount + ' local receipt(s), ' + chainLine(receipts));
+      console.log(color(tty, C.gray, '  Does not establish: ' + receipts.doesNotEstablish));
       if (!receipts.ok) {
         for (const failure of receipts.errors) console.error(color(tty, C.red, '  ' + failure));
         printReceiptAction(false);
@@ -96,9 +140,11 @@ export function cmdEgress(flags: Flags): void {
     if (flags.json) printJson(payload);
     else {
       console.log('');
-      console.log(color(tty, payload.ok ? C.green : C.red, '  Receipt chain ' + (payload.ok ? 'valid' : 'invalid')));
-      console.log('  Receipts: ' + payload.receiptCount);
+      console.log(color(tty, chainTone(payload), '  ' + chainHeadline(payload)));
+      console.log('  Receipts: ' + payload.receiptCount + coveredSuffix(payload));
       console.log('  Path: ' + payload.path);
+      console.log('  Establishes: ' + payload.establishes);
+      console.log(color(tty, C.gray, '  Does not establish: ' + payload.doesNotEstablish));
       for (const failure of payload.errors) console.error(color(tty, C.red, '  ' + failure));
       printReceiptAction(payload.ok);
       console.log('');

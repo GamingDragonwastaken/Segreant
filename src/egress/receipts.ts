@@ -60,11 +60,44 @@ export interface ReceiptInput {
   at?: Date;
 }
 
+/**
+ * What a chain verification is a verification OF.
+ *
+ * `ok` answers one narrow question -- do the recorded hashes chain -- and that
+ * answer was being read as a much wider one. Over an empty file it is vacuously
+ * true, so a home that has never written a receipt reported the same `ok: true`
+ * as an audited one. These four bases say which case a caller is holding.
+ */
+export type ReceiptChainBasis =
+  /** No history file, and no checkpoint contradicting that. Nothing is recorded. */
+  | 'no_record'
+  /** Every recorded hash chains from the previous one, over a non-empty window. */
+  | 'chain_intact'
+  /** A retained record was altered, lost, or reordered. */
+  | 'chain_broken'
+  /** The history is gone while its checkpoint survives: records were removed. */
+  | 'discontinuity';
+
 export interface ReceiptVerification {
   ok: boolean;
   receiptCount: number;
   validThroughHash: string | null;
   errors: string[];
+  /**
+   * Belnap-style, matching `src/epistemic/state.ts`. An empty chain is
+   * `unknown` and never `supported`: the absence of a record is not a finding
+   * about what happened.
+   */
+  state: 'unknown' | 'supported' | 'refuted';
+  basis: ReceiptChainBasis;
+  /** Timestamp of the earliest retained receipt, or `null` when none is retained. */
+  coveredFrom: string | null;
+  /** Timestamp of the latest retained receipt, or `null` when none is retained. */
+  coveredThrough: string | null;
+  /** What this result licenses a reader to conclude. */
+  establishes: string;
+  /** What it does not -- carried beside the result, not left to a document. */
+  doesNotEstablish: string;
 }
 
 export type EgressReceiptFailureCode = 'integrity' | 'persistence' | 'lock';
@@ -336,9 +369,29 @@ function schemaErrors(value: unknown, line: number): string[] {
   return failures;
 }
 
-interface ReceiptHistoryInspection extends ReceiptVerification {
+/**
+ * The internal reading, deliberately NOT `extends ReceiptVerification` any more.
+ * The verification is the published answer and now carries a coverage statement
+ * the append path has no business constructing; an inspection is the raw read.
+ */
+interface ReceiptHistoryInspection {
+  ok: boolean;
+  receiptCount: number;
+  validThroughHash: string | null;
+  errors: string[];
   present: boolean;
-  records: Array<EgressReceipt | null>;
+  /**
+   * Bounds of the window the scan actually read, carried as two strings rather
+   * than as the retained records they came from. The predecessor field here was
+   * `records: Array<EgressReceipt | null>`, which every construction site set to
+   * `[]` -- a field that could only ever answer "nothing", which is the shape of
+   * defect this whole change is about. The streaming reader is deliberately
+   * bounded (AII-031), so retaining the receipts to recover a first and last
+   * timestamp would have traded a real memory bound for a reporting
+   * convenience; these two are O(1) and are filled during the same pass.
+   */
+  firstAt: string | null;
+  lastAt: string | null;
   identity?: ReceiptFileIdentity;
 }
 
@@ -502,9 +555,9 @@ function checkpointPathPresent(): boolean {
  */
 function absentHistoryInspection(): ReceiptHistoryInspection {
   if (!checkpointPathPresent()) {
-    return { ok: true, receiptCount: 0, validThroughHash: null, errors: [], present: false, records: [] };
+    return { ok: true, receiptCount: 0, validThroughHash: null, errors: [], present: false, firstAt: null, lastAt: null };
   }
-  return { ok: false, receiptCount: 0, validThroughHash: null, errors: [RECEIPT_DISCONTINUITY_ERROR], present: false, records: [] };
+  return { ok: false, receiptCount: 0, validThroughHash: null, errors: [RECEIPT_DISCONTINUITY_ERROR], present: false, firstAt: null, lastAt: null };
 }
 
 function inspectReceiptHistory(path: string): ReceiptHistoryInspection {
@@ -544,6 +597,8 @@ function inspectReceiptHistory(path: string): ReceiptHistoryInspection {
     let expectedPrevious: string | null = null;
     let validThroughHash: string | null = null;
     let receiptCount = 0;
+    let firstAt: string | null = null;
+    let lastAt: string | null = null;
     let sawLine = false;
 
     const inspectLine = (rawLine: string): void => {
@@ -568,6 +623,12 @@ function inspectReceiptHistory(path: string): ReceiptHistoryInspection {
       }
       const receipt = parsed as EgressReceipt;
       receiptCount++;
+      // The window is what makes a verified chain a COVERAGE claim rather than
+      // only an integrity one, so it is recorded on every well-formed receipt --
+      // including one whose link does not check, because the file still covered
+      // that instant even when it no longer says so honestly.
+      if (firstAt === null) firstAt = receipt.at;
+      lastAt = receipt.at;
       const { hash, ...base } = receipt;
       const previousMatches = receipt.previousHash === expectedPrevious;
       const hashMatches = hash === receiptHash(expectedPrevious, base);
@@ -604,7 +665,8 @@ function inspectReceiptHistory(path: string): ReceiptHistoryInspection {
         validThroughHash: null,
         errors: ['empty receipt history is present; remove or repair it before retrying'],
         present: true,
-        records: [],
+        firstAt: null,
+      lastAt: null,
         identity,
       };
     }
@@ -622,7 +684,8 @@ function inspectReceiptHistory(path: string): ReceiptHistoryInspection {
       validThroughHash,
       errors: reportedErrors,
       present: true,
-      records: [],
+      firstAt,
+      lastAt,
       identity,
     };
   } catch (error) {
@@ -657,7 +720,8 @@ function inspectReceiptHistoryForAppend(path: string): ReceiptHistoryInspection 
       validThroughHash: trustedReceiptState.validThroughHash,
       errors: [],
       present: true,
-      records: [],
+      firstAt: null,
+      lastAt: null,
       identity,
     };
   }
@@ -771,6 +835,67 @@ export function appendEgressReceipt(input: ReceiptInput): EgressReceipt {
   });
 }
 
+/**
+ * The sentence that used to be missing.
+ *
+ * `fiscus egress verify` printed a green "Receipt chain valid" beside
+ * "Receipts: 0" on a home that had never sent anything, and exited 0. The check
+ * was correct; the reading it invited was not. A hash chain over an empty set
+ * verifies vacuously, and the absence of a record is not a finding about what
+ * happened.
+ *
+ * THE POSITIVE HALF IS REAL, AND IS WHY THIS IS A REPAIR AND NOT A DELETION.
+ * Every declared egress path in this repository goes through one chokepoint,
+ * `egressFetch`, which appends a receipt BEFORE forwarding and refuses the
+ * request if the append fails. That is what lets a non-empty chain carry a
+ * coverage claim over its window rather than only an integrity claim. The
+ * premise is not assumed: `test/egress-receipt-coverage.test.ts` walks `src/`
+ * and fails if any module outside `src/egress/` reaches the network directly.
+ */
+function coverageOf(
+  inspection: ReceiptHistoryInspection,
+): Omit<ReceiptVerification, 'ok' | 'receiptCount' | 'validThroughHash' | 'errors'> {
+  const coveredFrom = inspection.firstAt;
+  const coveredThrough = inspection.lastAt;
+
+  if (!inspection.ok) {
+    const discontinuity = !inspection.present && inspection.errors.includes(RECEIPT_DISCONTINUITY_ERROR);
+    return {
+      state: 'refuted',
+      basis: discontinuity ? 'discontinuity' : 'chain_broken',
+      coveredFrom: discontinuity ? null : coveredFrom,
+      coveredThrough: discontinuity ? null : coveredThrough,
+      establishes: discontinuity
+        ? 'That receipts existed and were removed: the history is absent while its checkpoint survives, and a checkpoint is only ever published after a receipt was appended.'
+        : 'That this history is not the one that was written: a retained record has been altered, lost, or reordered.',
+      doesNotEstablish: discontinuity
+        ? 'How many receipts were removed, what they recorded, or what happened after the last surviving one. This home cannot claim genesis.'
+        : 'Which record diverged first, or whether the traffic itself was authorized. A broken chain withdraws the coverage claim; it does not replace it with a smaller one.',
+    };
+  }
+
+  if (inspection.receiptCount === 0) {
+    return {
+      state: 'unknown',
+      basis: 'no_record',
+      coveredFrom: null,
+      coveredThrough: null,
+      establishes: 'Nothing. No receipt has been recorded on this machine, and no period is covered.',
+      doesNotEstablish: 'That nothing left this machine. An empty history is the absence of a record, not a record of absence: it reads identically whether Fiscus never forwarded anything or was never the thing that forwarded it.',
+    };
+  }
+
+  const window = coveredFrom === null ? '' : ', covering ' + coveredFrom + ' through ' + String(coveredThrough);
+  return {
+    state: 'supported',
+    basis: 'chain_intact',
+    coveredFrom,
+    coveredThrough,
+    establishes: 'That the ' + inspection.receiptCount + ' retained receipt(s) chain unbroken from genesis' + window + ', and that each was written by the single chokepoint every declared egress path passes through.',
+    doesNotEstablish: 'That every outbound call is in it. A call that appended no receipt leaves no trace here, so this bounds what Fiscus recorded and not what the machine sent. It says nothing about what a provider retained, and a valid chain is not a judgement that the traffic it records was authorized.',
+  };
+}
+
 export function verifyEgressReceipts(path = egressReceiptPath()): ReceiptVerification {
   try {
     return withReceiptLock(() => {
@@ -780,10 +905,26 @@ export function verifyEgressReceipts(path = egressReceiptPath()): ReceiptVerific
         receiptCount: inspection.receiptCount,
         validThroughHash: inspection.validThroughHash,
         errors: inspection.errors,
+        ...coverageOf(inspection),
       };
     });
   } catch (error) {
     const failure = asReceiptError(error, 'persistence', 'egress receipt verification failed');
-    return { ok: false, receiptCount: 0, validThroughHash: null, errors: failure.errors };
+    return {
+      ok: false,
+      receiptCount: 0,
+      validThroughHash: null,
+      errors: failure.errors,
+      // A verification that could not RUN establishes nothing and refutes
+      // nothing. Reporting `refuted` here would turn a local filesystem fault
+      // into a finding about the chain, which is the same collapse in the other
+      // direction.
+      state: 'unknown',
+      basis: 'no_record',
+      coveredFrom: null,
+      coveredThrough: null,
+      establishes: 'Nothing. The receipt history could not be read, so no verification was performed.',
+      doesNotEstablish: 'Anything at all about the chain, or about what left this machine. This is a local fault, not a finding.',
+    };
   }
 }

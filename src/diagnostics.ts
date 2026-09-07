@@ -26,7 +26,7 @@ import {
   type FiscusConfig,
 } from './config.ts';
 import { pricingStatus, type PricingStatus } from './cost/pricing.ts';
-import { egressReceiptPath, verifyEgressReceipts, type ReceiptVerification } from './egress/receipts.ts';
+import { egressReceiptPath, verifyEgressReceipts, type ReceiptChainBasis, type ReceiptVerification } from './egress/receipts.ts';
 import { Store, type BackupResult } from './store/db.ts';
 import { packageVersion } from './version.ts';
 
@@ -69,8 +69,17 @@ export interface RedactedDiagnosticBundle {
   };
   egress: {
     path: string;
+    /**
+     * Retained because existing readers key on it, and deliberately no longer
+     * the whole answer: `ok` covers both "the chain verified over real
+     * receipts" and "there are no receipts", which are not the same finding.
+     * `basis` separates them. See D-148.
+     */
     status: 'ok' | 'error';
+    basis: ReceiptChainBasis;
     receiptCount: number;
+    coveredFrom: string | null;
+    coveredThrough: string | null;
     validThroughHash: string | null;
     errors: string[];
   };
@@ -212,9 +221,29 @@ function egressObservation(observations: DiagnosticObservation[]): RedactedDiagn
   const verified = observe<ReceiptVerification>(observations, 'egress.verify', () => verifyEgressReceipts(path));
   if (verified === null) {
     const last = observations.at(-1);
-    return { path: redactDiagnosticPath(path), status: 'error', receiptCount: 0, validThroughHash: null, errors: [last?.errorClass ?? 'Error'] };
+    return {
+      path: redactDiagnosticPath(path),
+      status: 'error',
+      // A verification that could not RUN has no basis to report; `no_record`
+      // is the honest floor, not a claim that the chain is broken.
+      basis: 'no_record',
+      receiptCount: 0,
+      coveredFrom: null,
+      coveredThrough: null,
+      validThroughHash: null,
+      errors: [last?.errorClass ?? 'Error'],
+    };
   }
-  return { path: redactDiagnosticPath(path), status: verified.ok ? 'ok' : 'error', receiptCount: verified.receiptCount, validThroughHash: verified.validThroughHash, errors: verified.errors };
+  return {
+    path: redactDiagnosticPath(path),
+    status: verified.ok ? 'ok' : 'error',
+    basis: verified.basis,
+    receiptCount: verified.receiptCount,
+    coveredFrom: verified.coveredFrom,
+    coveredThrough: verified.coveredThrough,
+    validThroughHash: verified.validThroughHash,
+    errors: verified.errors,
+  };
 }
 
 function redactPricingStatus(status: PricingStatus): RedactedPricingStatus {

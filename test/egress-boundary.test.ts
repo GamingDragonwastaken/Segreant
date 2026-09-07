@@ -302,12 +302,28 @@ test('a loopback request succeeds through the sole transport and writes redacted
     assert.equal(response.status, 201);
     assert.equal(await response.text(), '{"ok":true}');
     assert.equal(received, body);
-    assert.deepEqual(verifyEgressReceipts(), {
+    // Three receipts for one request -- preflight, dial, response -- and the
+    // whole verification is compared, not a subset, so a field added to it must
+    // be stated here rather than slip past. D-148 added the coverage half; the
+    // two prose fields are matched for content instead of pinned verbatim,
+    // because their wording belongs to `test/egress-receipt-coverage.test.ts`.
+    const verified = verifyEgressReceipts();
+    assert.deepEqual(verified, {
       ok: true,
       receiptCount: 3,
-      validThroughHash: verifyEgressReceipts().validThroughHash,
+      validThroughHash: verified.validThroughHash,
       errors: [],
+      state: 'supported',
+      basis: 'chain_intact',
+      coveredFrom: verified.coveredFrom,
+      coveredThrough: verified.coveredThrough,
+      establishes: verified.establishes,
+      doesNotEstablish: verified.doesNotEstablish,
     });
+    // The window is the transport's own three receipts, in order.
+    assert.match(String(verified.coveredFrom), /^\d{4}-\d{2}-\d{2}T/);
+    assert.ok(String(verified.coveredThrough) >= String(verified.coveredFrom));
+    assert.match(verified.doesNotEstablish, /appended no receipt leaves no trace/);
     const ledger = readFileSync(egressReceiptPath(), 'utf8');
     assert.doesNotMatch(ledger, /must-not-appear|also-secret|\/private\/path|127\.0\.0\.1/);
     assert.match(ledger, /preflight_allowed/);
