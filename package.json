@@ -20,6 +20,7 @@
     "pretest": "node scripts/build.mjs",
     "test": "node --disable-warning=ExperimentalWarning --test test/*.test.ts",
     "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit",
+    "verify:supply-chain": "node scripts/check-supply-chain.mjs",
     "build": "node scripts/build.mjs",
     "benchmark": "node --disable-warning=ExperimentalWarning scripts/benchmark.mjs",
     "prepare": "npm run build",
