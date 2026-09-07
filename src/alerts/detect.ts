@@ -39,6 +39,14 @@ export interface AlertInputs {
   baselineActiveDaySpends: number[]; // trailing per-active-day spend, excluding today
   blocked24h: number; // count of budget-blocked (429) requests in the last 24h
   estimatedShare: number; // 0..1 share of recent spend priced with estimated rates
+  /**
+   * Total spend the `estimatedShare` window was computed over. The share arrives
+   * already divided, so zero is ambiguous between "none of the spend was
+   * estimated" and "there was no spend to price"; coverage needs the
+   * denominator to tell those apart. Omitting it leaves the pricing channel
+   * reported DARK, which is the conservative direction.
+   */
+  pricedWindowSpendUsd?: number;
   runaway: { tripped: boolean; windowCostUsd: number; windowSec: number } | null;
   realizedSpendShare: number | null; // share of spend that reached a kept outcome; null = uninstrumented (no git / no matured units)
 }
@@ -56,6 +64,106 @@ function percentile(sorted: number[], p: number): number {
 
 function fmt(n: number): string {
   return n >= 1 ? n.toFixed(2) : n.toFixed(4);
+}
+
+/**
+ * WHICH DETECTORS COULD HAVE FIRED (WP-D06, D-141).
+ *
+ * `detectAlerts` returns an array, and an empty one used to be read as a
+ * finding: `fiscus ops` printed a green "all clear". Two different situations
+ * produce that empty array. In one, six detectors examined real traffic and none
+ * tripped. In the other, the detectors were structurally unable to fire, and the
+ * empty array records that nothing was looked at.
+ *
+ * The default install is the second case, which makes it the common one. Caps
+ * are opt-in, so every threshold starts null; a fresh ledger has no prior active
+ * day, so the spike baseline is zero and its detector requires `base > 0`; value
+ * is uninstrumented until units mature. On that install not one of the six
+ * channels can produce an alert, and the operator was shown a green tick.
+ *
+ * This is `assessCompleteness` one module over: absence is a negative claim only
+ * where there is positive evidence the source could have seen the thing. So the
+ * surface states coverage, and a dark channel names the setting that would light
+ * it rather than merely reporting itself unavailable.
+ */
+export type AlertChannel =
+  | 'budget-cap'
+  | 'runaway-loop'
+  | 'throttling'
+  | 'spend-spike'
+  | 'value-crater'
+  | 'pricing-trust';
+
+export interface AlertChannelCoverage {
+  readonly channel: AlertChannel;
+  readonly live: boolean;
+  /** Why it could not fire, and what would change that. Null exactly when live. */
+  readonly darkBecause: string | null;
+}
+
+export interface AlertCoverage {
+  readonly channels: readonly AlertChannelCoverage[];
+  readonly liveChannels: number;
+  /** True only when every channel could have fired. An empty alert list means something only then. */
+  readonly complete: boolean;
+  /** One sentence a surface prints INSTEAD of a verdict it cannot support. */
+  readonly summary: string;
+}
+
+export function alertCoverage(inp: AlertInputs): AlertCoverage {
+  const capConfigured = inp.dailyCapUsd !== null || inp.dailySoftUsd !== null;
+  // A request can only be blocked by something that blocks. A soft threshold
+  // warns and does not, so it does not light this channel.
+  const blockingConfigured = inp.dailyCapUsd !== null || inp.runaway !== null;
+  const baseline = percentile([...inp.baselineActiveDaySpends].sort((a, b) => a - b), 0.9);
+
+  const channels: AlertChannelCoverage[] = [
+    {
+      channel: 'budget-cap',
+      live: capConfigured,
+      darkBecause: capConfigured ? null : 'no daily cap or soft threshold is set, so no budget alert can fire',
+    },
+    {
+      channel: 'runaway-loop',
+      live: inp.runaway !== null,
+      darkBecause: inp.runaway !== null ? null : 'no runaway velocity threshold is set, so no burst can trip it',
+    },
+    {
+      channel: 'throttling',
+      live: blockingConfigured,
+      darkBecause: blockingConfigured ? null : 'nothing is configured that would block a request, so none can be observed blocked',
+    },
+    {
+      channel: 'spend-spike',
+      live: baseline > 0,
+      darkBecause: baseline > 0 ? null : 'no prior active day exists yet, so there is no baseline to exceed',
+    },
+    {
+      channel: 'value-crater',
+      live: inp.realizedSpendShare !== null,
+      darkBecause: inp.realizedSpendShare !== null ? null : 'realized value is uninstrumented, so no realization share exists to fall',
+    },
+    {
+      channel: 'pricing-trust',
+      live: (inp.pricedWindowSpendUsd ?? 0) > 0,
+      darkBecause: (inp.pricedWindowSpendUsd ?? 0) > 0
+        ? null
+        : 'no priced spend in the window, so an estimated share of zero reflects absent spend rather than verified pricing',
+    },
+  ];
+
+  const liveChannels = channels.filter((channel) => channel.live).length;
+  const total = channels.length;
+  const summary = liveChannels === total
+    ? `${liveChannels} of ${total} alert channels are watching`
+    : `${liveChannels} of ${total} alert channels are watching; the rest cannot fire as configured`;
+
+  return Object.freeze({
+    channels: Object.freeze(channels),
+    liveChannels,
+    complete: liveChannels === total,
+    summary,
+  });
 }
 
 export function detectAlerts(inp: AlertInputs): Alert[] {
@@ -142,12 +250,12 @@ export function detectAlerts(inp: AlertInputs): Alert[] {
   return out.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
 }
 
-/** Gather alert inputs from the store + config and detect. `realizedSpendShare` is passed in (git-gated). */
-export function computeAlerts(
+/** Gather the inputs once, so alerts and their coverage are read from the same observation. */
+function gatherAlertInputs(
   store: Store,
   config: FiscusConfig,
-  opts: { now?: number; realizedSpendShare?: number | null } = {},
-): Alert[] {
+  opts: { now?: number; realizedSpendShare?: number | null },
+): AlertInputs {
   const now = opts.now ?? Date.now();
   const day = 24 * 60 * 60 * 1000;
   const dayStart = startOfLocalDay(now);
@@ -164,6 +272,9 @@ export function computeAlerts(
   const blocked24h = store.healthStats(now - day, now + 1000).blocked;
   const week = store.healthStats(now - 7 * day, now + 1000);
   const estimatedShare = week.totalCostUsd > 0 ? week.estimatedCostUsd / week.totalCostUsd : 0;
+  // Carried alongside the share so coverage can tell an unestimated window from
+  // an empty one; the share alone cannot (D-141).
+  const pricedWindowSpendUsd = week.totalCostUsd;
 
   let runaway: AlertInputs['runaway'] = null;
   if (config.budget.runawayMaxUsd !== null) {
@@ -175,7 +286,7 @@ export function computeAlerts(
     };
   }
 
-  return detectAlerts({
+  return Object.freeze({
     todaySpendUsd,
     todayTotalSpendUsd: liveOnly ? store.spendBetween(dayStart, now + 1000) : todaySpendUsd,
     capExcludesImported: liveOnly,
@@ -184,7 +295,26 @@ export function computeAlerts(
     baselineActiveDaySpends,
     blocked24h,
     estimatedShare,
+    pricedWindowSpendUsd,
     runaway,
     realizedSpendShare: opts.realizedSpendShare ?? null,
   });
+}
+
+/** Gather alert inputs from the store + config and detect. `realizedSpendShare` is passed in (git-gated). */
+export function computeAlerts(
+  store: Store,
+  config: FiscusConfig,
+  opts: { now?: number; realizedSpendShare?: number | null } = {},
+): Alert[] {
+  return detectAlerts(gatherAlertInputs(store, config, opts));
+}
+
+/** The same inputs `computeAlerts` gathers, read for coverage rather than for alerts. */
+export function computeAlertCoverage(
+  store: Store,
+  config: FiscusConfig,
+  opts: { now?: number; realizedSpendShare?: number | null } = {},
+): AlertCoverage {
+  return alertCoverage(gatherAlertInputs(store, config, opts));
 }

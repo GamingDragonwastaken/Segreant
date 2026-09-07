@@ -57,6 +57,7 @@
  */
 
 import type { FunnelOutcome, Gate } from './gates.ts';
+import type { EpistemicState } from '../epistemic/state.ts';
 
 export interface DriftReport {
   n: number;
@@ -135,6 +136,89 @@ export function driftEProcess(
     overallRate: finalPHat,
     window,
   };
+}
+
+// ---- Reading a report, including the silent case ---------------------------
+//
+// AN E-PROCESS GUARANTEE RUNS IN ONE DIRECTION. If the rate really is constant,
+// the probability that E ever reaches 1/α is at most α. That bounds FALSE
+// alarms. It says nothing about missed ones, because an e-process carries no
+// power guarantee — so a silent alarm is the absence of a result, not a result.
+//
+// `fiscus value` used to print the silence as a finding, in green, beside
+// `DRIFT DETECTED` in red, as though the two were symmetric verdicts of one
+// test. They are not, and the gap is not academic. `rateDriftStreams` emits a
+// stream at `minN`, which defaults to 10, and the most extreme drift a binary
+// stream can hold — rate 0 for the first half, rate 1 for the second — does not
+// fire at n=10 or n=20; its peak log E is -0.693 against a threshold of 2.996.
+// So across the whole range where the watch first speaks, a TOTAL regime change
+// is invisible to it, and the operator was being told "stable".
+//
+// THIS IS THE COMPLETENESS RULE, ONE MODULE OVER. `assessCompleteness` exists so
+// that "no incident was observed" may not become "no incident occurred" without
+// positive evidence that the source could have seen one. The coding `clean` gate
+// honours it; this surface made the same inference from the same kind of absence
+// and asked for nothing. So the silent case reads `unknown` — the value the
+// kernel already carries for evidence that has run out.
+//
+// NO POWER NUMBER IS OFFERED, DELIBERATELY. The obvious repair is to report the
+// n at which detection becomes possible. The analytic bound available here
+// (log E ≤ n(log((w+0.5)/(w+1)) + log 2)) admits a crossing at n=20, which the
+// measurement above shows is unreachable in practice. A bound that overstates
+// detectability would restore the same false comfort with a number attached to
+// it. What travels instead is what was actually observed.
+
+export interface DriftReading {
+  /** Whether the e-process ever crossed. The only positive finding available here. */
+  readonly alarmed: boolean;
+  /**
+   * `supported` for the proposition THE RATE MOVED, once the alarm has fired.
+   * `unknown` otherwise — never `refuted`, because nothing here can support the
+   * negative claim that the rate held.
+   */
+  readonly state: EpistemicState;
+  readonly n: number;
+  readonly alpha: number;
+  readonly window: number;
+  /**
+   * Peak evidence as a fraction of the alarm threshold, floored at zero. A
+   * negative log E means the adaptive model did WORSE than the constant-rate
+   * one, which is not a small amount of drift; reporting it as a negative
+   * fraction would invite reading it as one.
+   */
+  readonly peakEvidenceFraction: number;
+  readonly recentRate: number | null;
+  readonly overallRate: number | null;
+}
+
+export function driftReading(report: DriftReport): DriftReading {
+  const threshold = Math.log(1 / report.alpha);
+  return Object.freeze({
+    alarmed: report.alarm,
+    state: report.alarm ? 'supported' : 'unknown',
+    n: report.n,
+    alpha: report.alpha,
+    window: report.window,
+    peakEvidenceFraction: threshold > 0 ? Math.max(0, report.maxLogE) / threshold : 0,
+    recentRate: report.recentRate,
+    overallRate: report.overallRate,
+  });
+}
+
+/** One sentence stating what happened, which in the silent case is that nothing did. */
+export function describeDriftReading(reading: DriftReading): string {
+  const rate = (value: number | null) => (value === null ? 'n/a' : `${Math.round(value * 100)}%`);
+  if (reading.alarmed) {
+    return `the rate moved ${rate(reading.overallRate)} → ${rate(reading.recentRate)} recently `
+      + `over ${reading.n} observations (anytime-valid, α=${reading.alpha})`;
+  }
+  if (reading.n === 0) {
+    return 'no observations yet, so the drift watch has nothing to report';
+  }
+  return `the alarm did not fire over ${reading.n} observations `
+    + `(α=${reading.alpha}, trailing window ${reading.window}); peak evidence reached `
+    + `${Math.round(reading.peakEvidenceFraction * 100)}% of the threshold. An e-process bounds false `
+    + 'alarms and not missed ones, so this is not evidence that the rate held';
 }
 
 // ---- The multi-stream drift watch ------------------------------------------

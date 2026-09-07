@@ -20,6 +20,7 @@ import { computeFrontier } from '../value/frontier.ts';
 import { valueSpine, usageValue, budgetAdvice } from '../value/report.ts';
 import { instrumentationPriority } from '../value/instrumentationSensitivity.ts';
 import { GATE_LADDER, GATE_META } from '../value/gates.ts';
+import { describeDriftReading, driftReading } from '../value/drift.ts';
 import { C, color, usd, num, pct, gateGlyph, noteSource, printNotAGitRepo, printJson } from './ui.ts';
 import { type Flags } from './flags.ts';
 
@@ -427,8 +428,15 @@ export async function cmdRoi(flags: Flags): Promise<void> {
         console.log(color(tty, C.gray, `                       ${s.reading}`));
       }
     } else {
+      // NOT `stable`, and not green. An e-process bounds false alarms and not
+      // missed ones, so a silent watch is the absence of a result rather than a
+      // result: the most extreme drift a binary stream can hold does not fire it
+      // at n=20. Printing it as a verdict beside DRIFT DETECTED told the operator
+      // something no evidence here supports (D-140).
       const watched = driftStreams.map((s) => s.stream).join(', ');
-      console.log(`  ${color(tty, C.bold, 'Stability')}            ${color(tty, C.green, 'stable')}   ${color(tty, C.gray, `no drift across ${driftStreams.length} watched stream(s): ${watched} (anytime-valid)`)}`);
+      const quietest = driftStreams.reduce((fewest, s) => (s.report.n < fewest.report.n ? s : fewest), driftStreams[0]!);
+      console.log(`  ${color(tty, C.bold, 'Stability')}            ${color(tty, C.yellow, 'no alarm')}   ${color(tty, C.gray, `${driftStreams.length} watched stream(s): ${watched}`)}`);
+      console.log(color(tty, C.gray, `                       ${describeDriftReading(driftReading(quietest.report))}`));
     }
   }
 

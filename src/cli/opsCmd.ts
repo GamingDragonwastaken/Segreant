@@ -9,7 +9,7 @@ import { loadConfig, saveConfig, dbPath, configPath, isDemo } from '../config.ts
 import { attributeCommits, isGitRepo } from '../git/correlate.ts';
 import { loadRealization } from '../value/realization.ts';
 import { buildGuide, type GuideFacts } from '../guide.ts';
-import { computeAlerts } from '../alerts/detect.ts';
+import { computeAlertCoverage, computeAlerts } from '../alerts/detect.ts';
 import { notifyWebhook } from '../alerts/notify.ts';
 import { pricingStatus } from '../cost/pricing.ts';
 import { baselineManifestStatus } from '../value/liftBaseline.ts';
@@ -150,7 +150,22 @@ export async function cmdDoctor(): Promise<void> {
         : `${base.source === 'cache' ? 'refreshed' : 'bundled'}${baseAge} · ${base.taskTypeCount} task-types`
     }`,
   );
-  console.log(`  ${mark(criticals === 0)} Alerts      ${alerts.length ? `${num(alerts.length)} active (${criticals} critical) — see "fiscus alerts"` : color(tty, C.green, 'all clear')}`);
+  // NOT `all clear`. Caps are opt-in and a fresh ledger has no baseline, so on a
+  // default install not one of the six detectors can fire — and this line was
+  // printing a green tick over an empty array that recorded nothing being looked
+  // at. It now states coverage, which is what the evidence supports (D-141).
+  const coverage = computeAlertCoverage(store, cfg);
+  console.log(
+    `  ${mark(criticals === 0 && coverage.complete)} Alerts      ${
+      alerts.length
+        ? `${num(alerts.length)} active (${criticals} critical) — see "fiscus alerts"`
+        : color(tty, coverage.complete ? C.green : C.yellow, `no alerts · ${coverage.summary}`)
+    }`,
+  );
+  for (const channel of coverage.channels) {
+    if (channel.live) continue;
+    console.log(color(tty, C.gray, `              ${channel.channel}: ${channel.darkBecause}`));
+  }
   console.log('');
   console.log(color(tty, C.gray, '  Point your AI tools at the proxy:'));
   console.log(color(tty, C.gray, `    ANTHROPIC_BASE_URL=http://localhost:${cfg.port}   OPENAI_BASE_URL=http://localhost:${cfg.port}/v1`));
