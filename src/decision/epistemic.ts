@@ -10,6 +10,7 @@
  */
 import { createHash } from 'node:crypto';
 import { certifyDecision, type ActionUtilityInterval, type DecisionCertificate } from './engine.ts';
+import { gateDecisionForConsequence, type DecisionAssuranceGate } from './assurance.ts';
 import { claim, type Claim } from '../epistemic/claim.ts';
 import { derivation, type Derivation, type DerivationWitness } from '../epistemic/derivation.ts';
 import { evidence, type Evidence } from '../epistemic/evidence.ts';
@@ -88,9 +89,29 @@ export interface DecisionKernelIssuanceInput {
   readonly evidence: ReadonlyArray<DecisionEvidenceBinding>;
   readonly issuedAt: string;
   readonly validity?: DecisionCertificateValidityInput;
+  /**
+   * What this decision would do if acted on, and the kernel claims it rests on.
+   *
+   * OPT-IN, AND THAT IS THE HONEST DESCRIPTION OF ITS REACH. When present, the
+   * assurance gate is applied and a shortfall refuses the issuance outright.
+   * When absent, no gate runs and this boundary behaves exactly as it did — so
+   * WP-F05 delivers a discipline a caller can adopt, not one the product
+   * enforces. Making it mandatory means migrating every existing decision
+   * caller and is deliberately not smuggled in under a packet that did not
+   * test that migration.
+   */
+  readonly assurance?: {
+    readonly consequence: unknown;
+    readonly inputs: unknown;
+  };
 }
 
 export interface DecisionKernelIssuance {
+  /**
+   * The assurance gate that was applied, or `null` when the caller declared no
+   * consequence. `null` means NOT ASSESSED and never "assessed and fine".
+   */
+  readonly assurance: DecisionAssuranceGate | null;
   /** The interval observation Evidence retained for the existing adapter contract. */
   readonly evidence: Evidence;
   /** The explicit persisted certificate bundle Evidence. */
@@ -256,6 +277,25 @@ export function buildDecisionKernelIssuance(input: DecisionKernelIssuanceInput):
   const at = issuedTime(input.issuedAt);
   const problem = decisionProblem(input.decisionProblem, decisionId);
   const checked = validatedCertificate(input.certificate, input.intervals);
+  // AII-025 AND AII-026, AT THE ONLY POINT THAT PERSISTS ANYTHING. The
+  // observational frontier's label was already honest — `observational_separation`,
+  // "models were not assigned" — and nothing refused to accept it as the basis for
+  // an action that changes spend. Certification proves strict interval dominance
+  // over bare numbers and is silent about where the numbers came from; that
+  // silence was load-bearing. The gate is derived from the kernel profiles of the
+  // declared inputs and from the certificate's own result, never asserted by a
+  // caller, and meeting it is an evidence requirement rather than permission to
+  // act.
+  const assurance = input.assurance === undefined
+    ? null
+    : gateDecisionForConsequence({
+      certificate: checked.certificate,
+      inputs: input.assurance.inputs,
+      consequence: input.assurance.consequence,
+    });
+  if (assurance !== null && assurance.refusal !== null) {
+    throw new Error(assurance.refusal.message);
+  }
   const source = bindings(input.evidence);
   const coordinate = coordinates(decisionId);
   const validityRecord = validity(input.validity, at);
@@ -374,7 +414,7 @@ export function buildDecisionKernelIssuance(input: DecisionKernelIssuanceInput):
     schemaVersion: 1,
   });
   if (checked.certificate.status !== 'proven_dominant') {
-    return Object.freeze({ evidence: observationEvidence, certificateEvidence, certificateBundle, observation, witness: null, decision: null, derivation: null });
+    return Object.freeze({ assurance, evidence: observationEvidence, certificateEvidence, certificateBundle, observation, witness: null, decision: null, derivation: null });
   }
   const decision = claim({
     id: decisionClaimId,
@@ -426,7 +466,7 @@ export function buildDecisionKernelIssuance(input: DecisionKernelIssuanceInput):
     version: 1,
     reproducibilityHash: hash({ decisionProblem: problem, intervals: intervalValue, certificate: checked.certificate, validity: validityRecord }),
   });
-  return Object.freeze({ evidence: observationEvidence, certificateEvidence, certificateBundle, observation, witness: proof, decision, derivation: derived });
+  return Object.freeze({ assurance, evidence: observationEvidence, certificateEvidence, certificateBundle, observation, witness: proof, decision, derivation: derived });
 }
 
 /** Persist the complete issuance in one ledger transaction; replay is idempotent. */

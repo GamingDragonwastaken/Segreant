@@ -28,6 +28,7 @@ precision.
 - invalid, duplicate, non-finite, or mismatched inputs fail closed;
 - ties are returned in deterministic action-identifier order.
 - `control.ts` models shadow → simulated effect → canary → monitored expansion → full rollout and rollback as an immutable, preview-then-commit, revision-checked state machine; it never executes, authorizes, or persists an external action.
+- `assurance.ts` DERIVES a Decision Assurance Level from the ten-axis `ClaimProfile` of every declared input claim and from the dominance certificate's own result. A caller cannot assert a level; there is no field to assert one with. `buildDecisionKernelIssuance` refuses to issue when a declared consequence class requires more than the declared inputs reach, and `issueDecisionToKernel` therefore cannot persist past a refusal.
 
 ## Invariants
 
@@ -38,10 +39,29 @@ precision.
 - VOI scenarios are finite, exhaustive, mutually exclusive, and use one utility basis;
 - measurement cost is subtracted from gross decision-loss reduction exactly once.
 - control transitions fail closed on stale/revoked/conflicted/incomplete evidence, changed treatment/model/pricing/environment regime, degraded completeness, broken measurement, harmful or unobservable outcomes, and expired policy TTL; a rollback is terminal and idempotent.
+- an assurance level classifies evidential support for acting and is never authorization to act: `authorizesAction` is permanently `false`, and execution stays outside this module.
+- `decisionFitness` is excluded from the assurance ladder, because it is the axis being assessed; including it would let a claim assert its own decision fitness and have that assertion raise the level governing it.
+- every assurance cap is the WEAKEST declared input on an axis, never an average, and no axis compensates for another: a randomized estimand does not buy back missing coverage.
+- no declared inputs is `DAL-0`, not "nothing contrary was found"; an undeclared consequence is held to the strictest requirement, not the loosest; an issuance that declares no consequence reports `assurance: null`, which means NOT ASSESSED and never assessed-and-fine.
 
 ## Verify
 
 ```bash
 node --test --experimental-strip-types test/decision-engine.test.ts
 node --test --experimental-strip-types test/decision-control.test.ts
+node --test --experimental-strip-types test/decision-assurance.test.ts
 ```
+
+## Does not establish
+
+Nothing here is reached from a product path. A grep for `issueDecisionToKernel`
+and `buildDecisionKernelIssuance` across `src/` finds no caller — the boundary
+`decision.certificate` is classified `unreached` in
+`src/epistemic/issuance-map.ts`, and that is still true with the assurance gate
+in place. The gate exists and is checked at the only point that persists a
+decision certificate; **no surface passes through it**, so an observational
+separation still reaches an operator through `recommendBudget`, the frontier and
+every other advisory surface without being refused anywhere. The assurance
+ladder is a Fiscus policy choice, not a derived threshold, and it assumes the
+declared input set is complete — an undeclared input cannot lower the level it
+was left out of.
