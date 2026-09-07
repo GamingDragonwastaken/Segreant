@@ -1328,3 +1328,54 @@ The tenth look crosses the pre-registered decision rule the ninth refused, its d
 **Verified RED first** — nine tests across `test/data-inventory-boundary-declaration.test.ts` (6) and `test/retention-evidence-consequence.test.ts` (3), re-verified in the integrating tree by restoring `docs/DATA-BOUNDARIES.md` and `src/egress/receipts.ts` to their `0d56566` content: five boundary assertions and the discontinuity assertion fail, and all nine pass with the change restored. The two remaining retention tests — that a genuinely fresh home still establishes genesis, and that archiving history together with checkpoint is the documented repair — pass before and after by design, since they pin what must NOT change.
 
 **What this does not establish.** The table is a declaration checked against the tokens the code accepts, not against observed network traffic; it establishes that no undeclared purpose or data class can be authorized, not that a provider retains nothing, and `docs/DATA-BOUNDARIES.md` remains explicit that this is not a machine-wide firewall. The column list is hand-maintained against the schema — the test pins the five that are named, so it cannot catch a sixth sensitive column added later without also being updated. And the discontinuity check detects deletion of the history while the checkpoint survives; deleting both is still indistinguishable from a fresh home, which is the case that needs an off-machine anchor this packet does not have.
+
+## D-148 — WP-I05/WP-D06: a chain that verified over nothing, printed in green
+**Decision:** `verifyEgressReceipts` returns an epistemic state, a basis, the window it covers, and both halves of what it is worth; `fiscus egress verify`, `fiscus egress status` and `fiscus diagnostics` render that instead of a boolean.
+
+**The counterexample was measured, not argued.** On a home that had never sent anything:
+
+```
+  Receipt chain valid
+  Receipts: 0
+```
+
+in green, exit 0. `fiscus diagnostics` said `Egress OK (0 receipt(s))`. The check was correct and the reading it invited was not: a hash chain over an empty set verifies vacuously, so the most reassuring output this command can produce was printed exactly when Fiscus knew least. An operator asking the one question the command exists to answer — did anything leave this machine, and is there a record of it — reads green and stops.
+
+**Same class as D-140, D-141 and D-144, one subsystem over,** and the exact shape AII-002 names: a negative claim inferred from missing observations with no positive evidence that the source could have seen the thing. Four instances now — a quiet drift e-process, six structurally dark alert channels, an unrecognized validation string, and an empty receipt file — which is why the search was for the class and not the case, and why the diagnostics line was repaired in the same commit rather than left to reappear as a fifth.
+
+**Here the honest answer is more than nothing, which is why this is a repair and not a deletion.** Every declared egress path goes through one chokepoint, `egressFetch`, which appends a receipt BEFORE forwarding and refuses the request if the append fails. That premise is what upgrades a non-empty chain from an integrity claim to a coverage claim over its window — so the premise is asserted rather than assumed: the test walks `src/` and fails if any module outside `src/egress/` reaches the network directly. It passes today, and it is the only test in the new file that was green before the change, which is the correct result for an assertion whose job is to pin an existing property rather than to drive a repair.
+
+**Four bases, and `unknown` is deliberately not red.** `no_record` is yellow: nothing is wrong, nothing is known, and dressing an absence of evidence as a fault is the same collapse in the other direction. `chain_intact` is the only green. `chain_broken` and `discontinuity` — the latter being D-147's case — are red and say different things, because "a record was altered" and "records were removed" are not the same finding.
+
+**A verification that could not RUN reports `unknown`, not `refuted`.** A local filesystem fault is not a finding about the chain.
+
+**One dead field went with it.** `ReceiptHistoryInspection.records` was `Array<EgressReceipt | null>` and every construction site set it to `[]` — a field that could only ever answer "nothing", which is the same shape as the defect being fixed. The streaming reader is deliberately bounded (AII-031), so retaining receipts to recover a first and last timestamp would have traded a real memory bound for a reporting convenience; two O(1) strings filled during the same pass replace it, and the inspection type no longer extends the published verification.
+
+**Verified RED first** — nine tests, eight of which fail against the unfixed tree (verified by restoring all four changed source files to their committed content and re-running), the ninth being the premise check described above.
+
+**What this does not establish.** The coverage claim is bounded by what Fiscus recorded, not by what the machine sent: a call that appended no receipt leaves no trace here, and nothing outside this process is observed at all. It says nothing about what a provider retained. A valid chain is not a judgement that the traffic it records was authorized — only that the record of it is intact. The window is the span of retained receipts, so a retention policy that pruned older ones would narrow it silently; no such policy exists yet, and that absence is itself unrecorded. The chokepoint premise is checked by a source walk for `fetch(` and `http.request(`, which a sufficiently indirect call could evade. And the three CLI assertions read source rather than executing the command, so they establish the wording, not what an operator saw.
+
+## D-149 — WP-D07: `proxy_validated` said a relationship had been checked, and nothing recorded the check
+**Decision:** `src/measurement/surrogate.ts` adds the surrogate bridge — a declared record of what licenses reading a surrogate as its target — and `assessBridgedMeasurementBacking` treats it as a ceiling on that reading. `src/measurement/CONTEXT.md` gives the module the contract it had been operating without, and the routing table names it.
+
+**The counterexample.** `proxy_validated` is the middle rung of the measurement ladder and reads, in words, as *this surrogate's relationship to the construct has been checked*. Measured against the tree before this module existed, a `proxy_validated` model cited for its target construct was admissible with **zero reasons**, and no field anywhere held what had been checked, against what, in which direction, or how strongly. The rung was granted because the string was written.
+
+**Third instance of one shape, and the last in this subsystem.** D-146 closed a reference that pointed nowhere and a validation string nobody recognised. This closes a relationship nobody stated. All three are the same defect: a measurement strength granted because a field was populated rather than because it was checked.
+
+**Four judgements carry the epistemics, and the second is the load-bearing one.**
+
+*A bridge is a ceiling, never a promotion.* `assessBridgedMeasurementBacking` can only lower the rung a model's own author declared. The worst it can do to an honest caller is withhold; the best it can do to a dishonest one is refuse.
+
+*Pre-registration is not validation.* Fixing a metric before collection defends against choosing it after seeing the data; it says nothing about whether the metric measures the construct. `src/causal/epistemic.ts` offers exactly that basis for its two `proxy_validated` claims, so calling it validation would have laundered this repository's own strongest surrogate claims through the module on the day it was written. Only `empirical_association` can license `proxy_validated`, and only when its reference measurement resolves, is itself `validated`, and targets the same construct — a surrogate validated against another surrogate is still unvalidated.
+
+*No bridge ever reaches `validated`.* That rung means the construct itself was measured, and a surrogate that became the construct would no longer be a surrogate. A test enumerates all twenty-seven combinations of basis, status and direction and asserts none reaches it.
+
+*A bridge with no stated failure modes has not been examined.* Every real surrogate has a regime where it stops tracking, and an author who cannot name one has not looked. A non-`supported` status must say what contests it, and a `supported` one may not carry a contest at all.
+
+**`unknown_direction` is capped rather than refused**, deliberately: refusing it would push an author toward guessing a direction, and a stated ignorance about direction is worth more than a fabricated arrow.
+
+**Verified RED first** — twenty-seven tests, twenty-four of which fail against the declaration-only baseline that delegates to the pre-fix rule; the whole measurement suite is 41/41 with the implementation in place. The three that passed against the baseline are the ones asserting behaviour that was already correct, which is the right result for assertions whose job is to pin rather than to drive.
+
+**Provenance note.** The test file and the delegating baseline were produced by a delegated lane that was cut off before implementing; the implementation, the RED verification against that baseline, the module contract and the routing entry are the integrator's. Nothing here rests on a lane's report — the RED was re-run in this tree.
+
+**What this does not establish.** That a bridge's argument is true. An `empirical_association` bridge is checked for the SHAPE of its evidence and never for the strength, sign, or reproducibility of the association it asserts: a registered bridge whose sample is three observations and whose association is noise passes every gate here. Nothing is enforced at a product boundary — `claim()` still accepts any non-null `measurementModelRef`, no production call site resolves one through either registry, no bridge is declared for Fiscus's own two `proxy_validated` claims, and no registry of Fiscus's own models is assembled anywhere. `validTime` is carried on a bridge and never consulted, so a bridge whose validity window has closed is treated as current. And the module cannot see a surrogate reported as its target by a path that never asks it.
