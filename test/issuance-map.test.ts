@@ -228,3 +228,46 @@ test('the reachability walk is not vacuous', () => {
     assert.equal(dynamic, null, `${file}: dynamic import with a computed specifier defeats the reachability walk`);
   }
 });
+
+/**
+ * A measurement rung above the bottom asserts that a validation happened. The
+ * only honest way to reach one is to compute it from a record of that
+ * validation, which is what `src/causal/measurement.ts` does and what
+ * `src/causal/epistemic.ts` used to do by writing the word instead.
+ *
+ * D-153 removed the last literal. This keeps it removed: `claim()` requires a
+ * non-null `measurementModelRef` above `proxy_unvalidated` and never resolves
+ * it, so any non-empty string satisfies the kernel — which is exactly how a
+ * synthesized reference that resolved to nothing sat behind two
+ * `proxy_validated` claims for as long as it did. A literal rung at an issuance
+ * boundary is the shape of that defect, and it is the shape this refuses.
+ */
+test('no issuance boundary writes a measurement rung above the bottom as a literal', () => {
+  const LITERAL_RUNG = /measurement:\s*'(proxy_validated|validated)'/;
+  const offenders: string[] = [];
+
+  for (const relative of sourceFiles()) {
+    if (relative.startsWith('src/epistemic/')) continue;
+    const source = read(relative);
+    if (!ISSUES_CLAIM.test(source)) continue;
+    if (LITERAL_RUNG.test(source)) offenders.push(relative);
+  }
+
+  assert.deepEqual(
+    offenders,
+    [],
+    `these files issue Claims with a hard-coded measurement rung above proxy_unvalidated, `
+    + `which asserts a validation nothing records: ${offenders.join(', ')}. `
+    + `Compute the rung from a measurement model and surrogate bridge instead, as src/causal/measurement.ts does.`,
+  );
+});
+
+test('the literal-rung sweep would actually catch one', () => {
+  // Without this the test above passes on an empty sweep, which is the failure
+  // mode it exists to prevent elsewhere in this file.
+  const LITERAL_RUNG = /measurement:\s*'(proxy_validated|validated)'/;
+  assert.ok(LITERAL_RUNG.test("      measurement: 'proxy_validated',"));
+  assert.ok(LITERAL_RUNG.test("measurement: 'validated',"));
+  assert.equal(LITERAL_RUNG.test("      measurement: measurementValidation,"), false);
+  assert.ok(sourceFiles().some((file) => ISSUES_CLAIM.test(read(file))), 'the sweep found no claim-issuing file at all');
+});
