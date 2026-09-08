@@ -543,7 +543,7 @@ body.claim-open { overflow: hidden; }
 /* ---------- Empty / not-yet states -------------------------------------- */
 
 .notyet { border: 1px dashed var(--line); border-radius: var(--r); padding: var(--s6); background: var(--panel-2); }
-.notyet h3 { font-family: var(--serif); font-size: 17px; font-weight: 500; margin-bottom: var(--s2); }
+.notyet h2 { font-family: var(--serif); font-size: 17px; font-weight: 500; margin-bottom: var(--s2); }
 .notyet p { color: var(--muted); max-width: 66ch; }
 .notyet .cmd-row { margin-top: var(--s4); }
 

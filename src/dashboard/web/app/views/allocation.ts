@@ -120,7 +120,7 @@ export function allocationView(): Node {
                       ? 'Rules and centres exist, but no allocation run has been recorded.'
                       : 'You have set the rules up, but never run the split.') })))
           : h('div', { class: 'notyet', style: 'margin-top: var(--s5)' },
-              h('h3', { text: () => (isPrecise() ? 'No allocation model defined' : 'Nothing is being split yet') }),
+              h('h2', { text: () => (isPrecise() ? 'No allocation model defined' : 'Nothing is being split yet') }),
               h('p', { text: () => (isPrecise()
                 ? `${centres.length} cost centre${centres.length === 1 ? '' : 's'} and ${rules.length} rule${rules.length === 1 ? '' : 's'} recorded. Both are required before a run can produce a split.`
                 : 'To split spend across teams or projects, Fiscus needs at least one cost centre to attribute to, and one rule that decides what goes where.') })),

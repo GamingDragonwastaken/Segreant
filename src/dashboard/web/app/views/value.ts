@@ -142,7 +142,7 @@ export function valueView(): Node {
       if (!established) {
         return h('div', null,
           h('div', { class: 'notyet' },
-            h('h3', { text: () => (isPrecise() ? 'Realized value is not established' : 'We cannot tell you this yet') }),
+            h('h2', { text: () => (isPrecise() ? 'Realized value is not established' : 'We cannot tell you this yet') }),
             h('p', { text: () => (isPrecise()
               ? 'No work units have matured into verified outcomes on this machine. This is an absence of evidence, not a realized value of zero — the two must not be reported alike.'
               : 'Nothing has been observed all the way through to a shipped, surviving outcome yet. That is missing evidence, not an answer of nothing.') }),
@@ -250,7 +250,7 @@ export function valueView(): Node {
                     ? 'the AI spend plus your own measured time, priced at your labour rate'
                     : 'the AI spend plus an estimate of the time it took you') })))
           : h('div', { class: 'notyet', style: 'margin-top: var(--s4)' },
-              h('h3', { text: () => (isPrecise() ? 'Realized value is not priced' : 'We cannot put a figure on this') }),
+              h('h2', { text: () => (isPrecise() ? 'Realized value is not priced' : 'We cannot put a figure on this') }),
               h('p', { text: () => (isPrecise()
                 ? 'Work matured, but no labour rate is configured, so the value it produced cannot be expressed in dollars. The rate below is still computable; the money figure is not.'
                 : 'Work did get finished, but Fiscus has no hourly rate to value it against — so it can tell you how much stuck, but not what it was worth.') })),

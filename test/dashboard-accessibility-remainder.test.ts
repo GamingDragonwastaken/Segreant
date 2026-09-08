@@ -89,3 +89,28 @@ test('defect 2: the value (Realized) ledger carries the same table semantics as 
   const cellMatches = value.match(/role: 'cell'/g) ?? [];
   assert.ok(cellMatches.length >= 3, 'the Realized waste ledger data cells must declare role="cell"');
 });
+
+/**
+ * Defect 3: two `notyet` blocks in the Realized view jump straight from the
+ * view's single `h1` to an `h3`, skipping `h2` — a heading-order violation
+ * (WCAG 1.3.1 / 2.4.6). A third instance of the identical pattern (same
+ * `.notyet` component, same missing `h2`) exists in the Allocated view; it is
+ * not named in the WP-I04 inventory row (which counts "two"), but it is the
+ * same defect and leaving it would mean the heading-skip defect is not
+ * actually closed, so it is fixed alongside the two named ones.
+ */
+test('defect 3: notyet blocks do not skip from h1 to h3', () => {
+  const value = readFileSync(join(APP, 'views', 'value.ts'), 'utf8');
+  const valueBlocks = value.match(/class: 'notyet'[\s\S]{0,160}?h\('h(\d)'/g) ?? [];
+  assert.equal(valueBlocks.length, 2, 'expected exactly the two named notyet blocks in the Realized view');
+  for (const block of valueBlocks) {
+    assert.match(block, /h\('h2'/, `notyet block must open with h2, not skip to h3/h4: ${block}`);
+  }
+
+  const allocation = readFileSync(join(APP, 'views', 'allocation.ts'), 'utf8');
+  const allocationBlocks = allocation.match(/class: 'notyet'[\s\S]{0,160}?h\('h(\d)'/g) ?? [];
+  assert.ok(allocationBlocks.length > 0, 'expected a notyet block in the Allocated view');
+  for (const block of allocationBlocks) {
+    assert.match(block, /h\('h2'/, `notyet block must open with h2, not skip to h3/h4: ${block}`);
+  }
+});
