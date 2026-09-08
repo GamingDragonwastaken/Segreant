@@ -9,7 +9,11 @@
  * table, so a gap is visible to the operator instead of discovered by them.
  *
  * Adding a CLI verb without adding its row is the one change this file exists to
- * make awkward.
+ * make awkward -- and until D-167 it was not awkward at all, because nothing
+ * compared this list with `src/cli.ts`'s dispatch. Six commands had no row and
+ * the parity denominator did not count them.
+ * `test/dashboard-parity-population.test.ts` enforces the rule this paragraph
+ * has always stated.
  */
 
 /** Where an operator would look for this, thinking about their job rather than the command name. */
@@ -23,8 +27,18 @@ export type Territory = 'spend' | 'control' | 'allocation' | 'evidence' | 'value
  */
 export type Consequence = 'read' | 'local' | 'credential' | 'egress' | 'destructive';
 
-/** Honest state of the GUI surface for this capability. */
-export type Coverage = 'full' | 'partial' | 'planned';
+/**
+ * Honest state of the GUI surface for this capability.
+ *
+ * `not_applicable` is a claim about the world rather than about a backlog: the
+ * GUI structurally cannot offer this, and no amount of work is going to change
+ * that. `fiscus start` is the case that forced it -- that command is what
+ * serves the GUI, so by the time there is a page to click it has already run.
+ * Filing it as `planned` would assert a surface that is not coming. A row in
+ * this state must carry `coverageNote`, so the state cannot become the place
+ * anything awkward gets put.
+ */
+export type Coverage = 'full' | 'partial' | 'planned' | 'not_applicable';
 
 export interface Capability {
   /** Stable id, used for routing and for the parity table. */
@@ -40,6 +54,12 @@ export interface Capability {
   command: string;
   /** Stated only where a consequence needs naming out loud before it happens. */
   warning?: string;
+  /**
+   * Why the GUI cannot offer this. Required when `coverage` is
+   * `not_applicable` and refused otherwise -- a state that asserts an
+   * impossibility has to say what makes it impossible.
+   */
+  coverageNote?: string;
 }
 
 /** Machine-readable contract for a capability and every surface that binds it. */
@@ -171,6 +191,42 @@ export const CAPABILITIES: readonly Capability[] = [
     territory: 'system', consequence: 'destructive', coverage: 'full', command: 'fiscus config --clear-proposals',
     warning: 'Permanently deletes captured proposals. Acceptance rates computed from them cannot be recomputed afterwards.',
   },
+  // ADDED AT D-167, and the reason each was missing is the same: nothing
+  // compared this list with `src/cli.ts`'s dispatch, so a verb could be added
+  // without a row and the parity denominator would simply not count it.
+  {
+    id: 'start', label: 'Start Fiscus', plain: 'Run the metering proxy and open this dashboard.',
+    territory: 'system', consequence: 'local', coverage: 'not_applicable', command: 'fiscus start',
+    coverageNote: 'this command is what serves the GUI, so there is no page to click until it has already run; '
+      + 'a GUI surface for it is not planned because it cannot exist',
+  },
+  {
+    // `local` rather than `read` because `cmdInit` calls `saveConfig` and the
+    // file is on disk afterwards. Worth stating plainly: it persists with no
+    // preview and no `--apply`, which is the one command in this list that does
+    // -- the tier recorded here is what any future GUI surface must honour, not
+    // a description of today's CLI. See D-167.
+    id: 'init', label: 'First-time setup', plain: 'Write a starting configuration and print what to do next.',
+    territory: 'system', consequence: 'local', coverage: 'planned', command: 'fiscus init',
+  },
+  {
+    id: 'economic', label: 'Exact economic ledger', plain: 'The exact-money ledger behind the rounded figures, by period.',
+    territory: 'evidence', consequence: 'read', coverage: 'partial', command: 'fiscus economic',
+  },
+  {
+    id: 'backup', label: 'Back up the ledger', plain: 'Copy the local ledger somewhere safe, with a manifest that proves the copy.',
+    territory: 'data', consequence: 'local', coverage: 'planned', command: 'fiscus backup --out <file>',
+  },
+  {
+    id: 'restore', label: 'Restore a ledger', plain: 'Read a backup back out into a new file. The ledger you are using is never overwritten.',
+    territory: 'data', consequence: 'local', coverage: 'planned', command: 'fiscus restore --from <backup> --out <file>',
+  },
+  {
+    // `read` matches `export`, which also writes a file only when asked for
+    // one: printing is the default and `--out` is the deliberate act.
+    id: 'diagnostics', label: 'Diagnostics bundle', plain: 'A redacted snapshot of how this install is wired, for a bug report.',
+    territory: 'system', consequence: 'read', coverage: 'planned', command: 'fiscus diagnostics',
+  },
 ];
 
 type CapabilityMetadata = Omit<CapabilitySpec, keyof Capability>;
@@ -193,6 +249,7 @@ const API_BINDINGS: Readonly<Record<string, readonly string[]>> = Object.freeze(
   'billing-readiness': ['/api/billing'], 'billing-adopt': ['/api/billing'], 'billing-pull': ['/api/billing'], 'billing-reconcile': ['/api/billing'], receipt: ['/api/value'], evidence: ['/api/billing'], audit: ['/api/billing'],
   roi: ['/api/value'], causal: ['/api/causal'], realize: ['/api/value'], frontier: ['/api/value'], saved: ['/api/value'], yield: ['/api/value'], judge: ['/api/judge'], team: ['/api/value'],
   sources: ['/api/overview'], discover: ['/api/importers'], connect: ['/api/importers'], import: ['/api/import'], scan: ['/api/scan'], baseline: ['/api/value'], demo: ['/api/overview'],
+  economic: ['/api/economic'],
   egress: ['/api/settings'], settings: ['/api/settings', '/api/settings/update'], pricing: ['/api/overview'], reprice: ['/api/value'], doctor: ['/api/guide'], guide: ['/api/guide'], 'team-push': [], prune: ['/api/settings'], 'clear-proposals': ['/api/settings/clear-proposals'],
 });
 
@@ -218,6 +275,11 @@ const CAPABILITY_METADATA_OVERRIDES: Readonly<Record<string, CapabilityMetadataO
   'clear-proposals': { reversibility: 'destructive', assurance: 'destructive_confirmation' },
 });
 
+/** No GUI surface exists -- because none is built yet, or because none can be. */
+function noGuiSurface(coverage: Coverage): boolean {
+  return coverage === 'planned' || coverage === 'not_applicable';
+}
+
 function capabilityMetadata(capability: Capability): CapabilityMetadata {
   const inputSchema = capability.id === 'exec'
     ? schema('command', ['command'], ['kind', 'commit', 'session'])
@@ -230,7 +292,9 @@ function capabilityMetadata(capability: Capability): CapabilityMetadata {
     schemaVersion: 1,
     inputSchema,
     previewSchema: schema('json', ['applicable', 'summary'], ['blockedReason', 'rows', 'notes']),
-    outputSchema: schema(capability.coverage === 'planned' ? 'none' : 'json'),
+    // `not_applicable` alongside `planned`: neither has a GUI surface, so
+    // neither has a GUI output shape. They differ in why, not in what exists.
+    outputSchema: schema(noGuiSurface(capability.coverage) ? 'none' : 'json'),
     authority: capability.consequence === 'read' ? 'fiscus_local' : 'operator',
     egress: 'none',
     credentials: 'none',
@@ -253,7 +317,7 @@ function capabilityMetadata(capability: Capability): CapabilityMetadata {
     bindings: {
       cli: capability.command,
       api: Object.freeze([...(API_BINDINGS[capability.id] ?? [])]),
-      gui: Object.freeze(capability.coverage === 'planned' ? [] : ['modern']),
+      gui: Object.freeze(noGuiSurface(capability.coverage) ? [] : ['modern']),
       docs: Object.freeze([...(DOC_BINDINGS[capability.territory] ?? [])]),
     },
   };
@@ -287,6 +351,8 @@ export interface ParitySummary {
   full: number;
   partial: number;
   planned: number;
+  /** Counted separately, because "the GUI cannot do this" is not a gap in the GUI. */
+  notApplicable: number;
 }
 
 export function paritySummary(): ParitySummary {
@@ -295,5 +361,6 @@ export function paritySummary(): ParitySummary {
     full: CAPABILITY_SPECS.filter((c) => c.coverage === 'full').length,
     partial: CAPABILITY_SPECS.filter((c) => c.coverage === 'partial').length,
     planned: CAPABILITY_SPECS.filter((c) => c.coverage === 'planned').length,
+    notApplicable: CAPABILITY_SPECS.filter((c) => c.coverage === 'not_applicable').length,
   };
 }
