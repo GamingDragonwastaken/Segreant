@@ -144,3 +144,26 @@ test('defect 4: the drawer commit button exposes its blocked reason through aria
     'the commit button must reference the blocked-reason element via aria-describedby',
   );
 });
+
+/**
+ * Defect 5: the System view's parity table — the one place Fiscus proves "the
+ * GUI can do everything the CLI can" from live data rather than a README —
+ * has no accessible name (no `aria-label`/`aria-labelledby`, no `<caption>`)
+ * and its `<th>` header cells have no `scope`, so a screen reader reading a
+ * data cell cannot say which column it belongs to.
+ */
+test('defect 5: the parity table has an accessible name and header scope', () => {
+  const system = readFileSync(join(APP, 'views', 'system.ts'), 'utf8');
+
+  assert.match(
+    system,
+    /h\('table',\s*\{[^)]*(?:aria-label|aria-labelledby)/,
+    'the parity table must carry an accessible name (aria-label or aria-labelledby)',
+  );
+
+  const thMatches = system.match(/h\('th',\s*\{[^}]*\}/g) ?? [];
+  assert.ok(thMatches.length >= 5, 'expected the five parity-table column headers');
+  for (const th of thMatches) {
+    assert.match(th, /scope: 'col'/, `every <th> in the parity table must declare scope="col": ${th}`);
+  }
+});
