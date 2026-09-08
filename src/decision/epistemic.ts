@@ -135,6 +135,22 @@ export interface DecisionCertificateBundleRead {
   readonly status: DecisionCertificateReadStatus;
   /** Direct bundle/dependency IDs in the as-of revocation projection. */
   readonly invalidatedBy: readonly string[];
+  /**
+   * Direct bundle/dependency IDs whose withdrawal is already ON RECORD but whose
+   * declared effective instant has not arrived at `asOf`.
+   *
+   * Distinct from `invalidatedBy`, and never a subset of it: these have NOT been
+   * withdrawn yet, and `status` stays whatever it would otherwise be, because at
+   * the instant asked the certificate really does hold. What this field refuses
+   * is the silence -- without it, a certificate with a withdrawal booked against
+   * it reads exactly like one with none, and the reader cannot tell an absence
+   * that was established from one that was never examined.
+   *
+   * Empty for every operator revocation: `appendRevocation` has no effective
+   * time and is effective when recorded, so only a node carrying a revocation
+   * envelope with its own `effectiveAt` can appear here.
+   */
+  readonly pendingInvalidationBy: readonly string[];
   /** Always false: reading a certificate never performs or authorizes action. */
   readonly canAutoAct: false;
 }
@@ -618,6 +634,11 @@ export function readDecisionCertificateBundle(
 
   const projection = ledger.revocationProjectionAsOf(boundary);
   const revoked = new Set(projection.revokedIds);
+  // `pendingIds` was computed by the projection and read by nobody. Left
+  // unread, the effective-time split silently converted "this certificate rests
+  // on evidence already booked for withdrawal" into a read indistinguishable
+  // from one with nothing booked at all.
+  const pending = new Set(projection.pendingIds);
   const trackedIds = [
     bundle.id,
     ...bundle.dependencies.evidenceIds,
@@ -626,6 +647,10 @@ export function readDecisionCertificateBundle(
     ...bundle.dependencies.derivationIds,
   ];
   const invalidatedBy = [...new Set(trackedIds.filter((candidate) => revoked.has(candidate)))].sort((a, b) => a.localeCompare(b));
+  // `revoked` wins where both hold: a node already withdrawn is not also
+  // awaiting withdrawal, and listing it twice would overstate what is pending.
+  const pendingInvalidationBy = [...new Set(trackedIds.filter((candidate) => pending.has(candidate) && !revoked.has(candidate)))]
+    .sort((a, b) => a.localeCompare(b));
   const boundaryMs = Date.parse(boundary);
   const issuedMs = Date.parse(bundle.validity.issuedAt);
   let status: DecisionCertificateReadStatus;
@@ -638,6 +663,7 @@ export function readDecisionCertificateBundle(
     bundle,
     status,
     invalidatedBy: Object.freeze(invalidatedBy),
+    pendingInvalidationBy: Object.freeze(pendingInvalidationBy),
     canAutoAct: false as const,
   });
 }
