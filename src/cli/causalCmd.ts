@@ -107,7 +107,14 @@ function summaryFor(store: Store, studyId: string): Record<string, unknown> {
     claimAfterMultiplicityReason: report.claimAfterMultiplicityReason,
     multiplicity: report.multiplicity,
     jointInference: report.estimate.jointInference,
-    latestSnapshots: store.causalAnalysisSnapshots(studyId).slice(0, 5),
+    // THE LIST WITH THE REASON IT IS EMPTY. `latestSnapshots: []` read as "no
+    // analysis has been saved"; the truth for every study this build can hold
+    // is "no analysis CAN be saved" — version-1 evidence is inspect-only and
+    // the version-2 projection is deferred — and those are different claims.
+    analysisSnapshots: (() => {
+      const basis = store.causalAnalysisSnapshotBasis(studyId);
+      return { available: basis.available, reason: basis.reason, latest: basis.records.slice(0, 5) };
+    })(),
     boundary: 'Local randomized-study evidence only; no automatic provider routing or budget change.',
   };
 }

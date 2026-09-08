@@ -2675,6 +2675,15 @@ export class Store {
     return causal.reportCausalStudy(this.db, studyId, reportedAtMs);
   }
 
+  /**
+   * The snapshot list with the reason it is the length it is. Prefer this over
+   * `causalAnalysisSnapshots` on any surface an operator reads: an empty list
+   * alone says "none has been saved" when the truth is "none can be".
+   */
+  causalAnalysisSnapshotBasis(studyId: string): causal.CausalAnalysisSnapshotBasis {
+    return causal.causalAnalysisSnapshotBasis(this.db, studyId);
+  }
+
   causalAnalysisSnapshots(studyId: string): causal.CausalAnalysisSnapshot[] {
     return causal.causalAnalysisSnapshots(this.db, studyId);
   }

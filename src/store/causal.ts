@@ -85,6 +85,27 @@ class CausalLegacyInspectOnlyError extends Error {
   }
 }
 
+/**
+ * A registered version-2 study that this build has no analysis path for.
+ *
+ * NOT THE SAME ANSWER AS "not found", and the difference was costing the
+ * operator the wrong investigation. `saveCausalAnalysis` refuses version 1 as
+ * inspect-only and then asks `causalStudyData`, which returns null for anything
+ * that is not version 1 — so a registered, inspectable, summarised version-2
+ * study came back as `causal study was not found`. The study is there. The
+ * PROJECTION is deferred, and a refusal has to name the reason it refuses.
+ */
+class CausalV2AnalysisDeferredError extends Error {
+  readonly code = 'CAUSAL_V2_ANALYSIS_DEFERRED';
+
+  constructor(studyId: string) {
+    super('CAUSAL_V2_ANALYSIS_DEFERRED: causal study ' + studyId
+      + ' is registered at protocol version 2 and this build has no version-1 analysis path for it; '
+      + 'the study exists and the analysis projection is deferred');
+    this.name = 'CausalV2AnalysisDeferredError';
+  }
+}
+
 function rejectLegacyMutation(protocol: AnyCommittedCausalStudyProtocol, operation: string): void {
   if (protocol.version === 1) throw new CausalLegacyInspectOnlyError(operation);
 }
@@ -1613,6 +1634,10 @@ export function saveCausalAnalysis(
   const protocol = loadProtocol(db, studyId);
   if (protocol) rejectLegacyMutation(protocol, 'save a version-1 analysis snapshot');
   const data = causalStudyData(db, studyId);
+  // Order matters: a registered study whose projection is deferred is a
+  // different answer from a study that is not there, and reporting the second
+  // for the first sends the operator looking for a missing row.
+  if (!data && protocol) throw new CausalV2AnalysisDeferredError(studyId);
   if (!data) throw new Error('causal study was not found');
   const estimate = estimateCausalStudy(data);
   const snapshot: CausalAnalysisSnapshot = { analysisId, computedAtMs, estimate };
@@ -1726,6 +1751,53 @@ export function reportCausalStudy(
     throw error;
   }
   return report;
+}
+
+/**
+ * The snapshot list, WITH the reason it is the length it is.
+ *
+ * An empty list reads as "no analysis has been saved". For every study this
+ * build can hold, the truth is "no analysis CAN be saved" — version-1 evidence
+ * is inspect-only and the version-2 analysis projection is deferred — and those
+ * are different claims. Returning the list alone made the second look like the
+ * first, which is the absence-as-result defect this repository exists to
+ * refuse.
+ *
+ * `available` is about writing a NEW snapshot, not about reading stored ones:
+ * a study can hold records and still not accept another.
+ */
+export interface CausalAnalysisSnapshotBasis {
+  readonly available: boolean;
+  readonly reason: string;
+  readonly records: CausalAnalysisSnapshot[];
+}
+
+export function causalAnalysisSnapshotBasis(
+  db: DatabaseSync,
+  studyId: string,
+): CausalAnalysisSnapshotBasis {
+  const records = causalAnalysisSnapshots(db, studyId);
+  const protocol = loadProtocol(db, studyId);
+  if (protocol === null) {
+    return Object.freeze({
+      available: false,
+      reason: 'causal study ' + studyId + ' is not registered in this local Store',
+      records,
+    });
+  }
+  if (protocol.version === 1) {
+    return Object.freeze({
+      available: false,
+      reason: 'retained version-1 causal evidence is inspect-only, so no new analysis snapshot can be written for this study',
+      records,
+    });
+  }
+  return Object.freeze({
+    available: false,
+    reason: 'version-2 analysis projection is deferred, so no analysis snapshot can be written for this study by this build; '
+      + 'an empty list here means none CAN be written, not that none has been',
+    records,
+  });
 }
 
 export function causalAnalysisSnapshots(db: DatabaseSync, studyId: string): CausalAnalysisSnapshot[] {
