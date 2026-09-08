@@ -283,10 +283,13 @@ can affect the other tier's behavior.
 - ~~**Real transcript-capture and full-content judging.**~~ BUILT 2026-07-16
   (Claude Code) and 2026-07-18 (opencode + Codex) without a capture decision:
   ephemeral read-at-judge-time from each tool's own on-disk log.
-- **A dashboard trigger / automatic invocation from `fiscus lift`.** The
+- **A dashboard trigger, or automatic invocation from a Lift command.** The
   `fiscus judge` subcommand exists (it judges real sessions looked up from the
   store; `--session <id>` to pick one), but nothing invokes judging
-  automatically. Still an open question, not decided here.
+  automatically. Note that there is no fiscus lift command either -- an
+  earlier version of this line set that name in code formatting, as though
+  it were a command waiting to be hooked into.
+  Still an open question, not decided here.
 
 ## Revisit condition
 

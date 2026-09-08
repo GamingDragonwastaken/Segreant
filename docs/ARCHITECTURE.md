@@ -428,8 +428,12 @@ genuinely open:
    the store still never stores prompt/response text), and `fiscus judge`
    judges real sessions looked up from the store (`--session <id>` to pick).
    See [docs/LIFT-AI-SIDE-JUDGE-DESIGN.md](LIFT-AI-SIDE-JUDGE-DESIGN.md) §2's
-   boxed note. Genuinely still open: a real controlled A/B and automatic
-   invocation from `fiscus lift`.
+   boxed note. Genuinely still open: a real controlled A/B, and automatic
+   invocation from the Lift surface. There is no fiscus lift command to
+   invoke it from -- named here without code formatting on purpose, since
+   formatting it as a command is what would imply it can be typed -- and
+   inventing the trigger before the command would be deciding the surface
+   by accident.
 4. **Rust core** — only if Fiscus becomes a shared gateway under real concurrency.
    Until then it's premature.
 
