@@ -32,16 +32,25 @@
  * now reflects everything the ledger knows about revocation, from both the
  * event table and the stored envelopes.
  *
- * WHAT THE ENVELOPE'S `effectiveAt` IS NOT USED FOR. `RevocationProjection` is
- * a set of revoked ids with no effective-time dimension, and `replayAsOf`
- * filters events by the time they were RECORDED. An envelope carries no
- * recorded time, but it needs none: it is part of its node's immutable payload,
- * so the ledger learns it exactly when the node becomes available, and that is
- * the knowledge time used here. `effectiveAt` is preserved in the payload and
- * deliberately not consulted — treating an effective time as a knowledge time
- * is the collapse this codebase exists to refuse. The consequence is stated
- * rather than hidden: a node carrying a future-dated revocation reads as revoked
- * from the moment it exists, which errs toward withholding. Recorded at D-099.
+ * KNOWLEDGE TIME VERSUS EFFECTIVE TIME. `replayAsOf` filters events by the
+ * time they were RECORDED — an envelope carries no recorded time, but needs
+ * none, since it is part of its node's immutable payload and is learned
+ * exactly when the node becomes available. That knowledge-time filtering is
+ * unchanged and is not what `effectiveAt` is for.
+ *
+ * `effectiveAt` WAS NOT CONSULTED AT ALL (D-099), AND NOW IS (GAP 3,
+ * `test/epistemic-revocation-pending.test.ts`). `RevocationProjection` used
+ * to carry no effective-time dimension whatsoever, so a node carrying a
+ * future-dated revocation read as fully revoked from the moment it became
+ * known — treating knowledge time as effective time, which is exactly the
+ * collapse this codebase exists to refuse elsewhere. `RevocationProjection`
+ * now carries a `pendingIds` set, computed by comparing each known
+ * revocation's effective time against the caller's reference instant (the
+ * `asOf` boundary, or the actual current instant for a live
+ * `revocationProjection()`): known-but-not-yet-effective lands in
+ * `pendingIds`, not `revokedIds`. The "an as-of replay before the withdrawn
+ * record existed does not know it was withdrawn" test below carries the
+ * inverted assertion that used to pin this as intended behaviour.
  */
 
 import { test } from 'node:test';
@@ -208,12 +217,34 @@ test('a record carrying no envelope is not revoked, and the projection stays emp
 test('an as-of replay before the withdrawn record existed does not know it was withdrawn', () => {
   // The envelope's knowledge time is its node's availability, so the boundary
   // behaves the way an event's `recordedAt` does: before the record exists
-  // there is nothing to know, and afterwards the revocation is known at once.
-  // `effectiveAt` — 2026-08-05 — is deliberately not the boundary, and the
-  // second assertion is where that shows: the node is revoked at 2026-08-03.
+  // there is nothing to know, and afterwards the revocation is KNOWN at once.
   const kernel = ledger();
   kernel.appendEvidence(evidence(evidenceInput('evidence:withdrawn:1', WITHDRAWN)));
 
   assert.deepEqual(kernel.revocationProjectionAsOf('2026-08-01T00:00:00.000Z').revokedIds, []);
-  assert.deepEqual(kernel.revocationProjectionAsOf('2026-08-03T00:00:00.000Z').revokedIds, ['evidence:withdrawn:1']);
+
+  // INVERTED (WP-R07, GAP 3). This assertion used to read
+  // `revokedIds: ['evidence:withdrawn:1']` here, and the comment above it
+  // said so explicitly: "`effectiveAt` — 2026-08-05 — is deliberately not
+  // the boundary... the node is revoked at 2026-08-03." That pinned the
+  // exact hole GAP 3 names: `RevocationProjection` had no effective-time
+  // dimension, so a revocation KNOWN at 2026-08-03 but not EFFECTIVE until
+  // 2026-08-05 was already read as fully revoked, two days early.
+  //
+  // `RevocationProjection` now distinguishes known-but-not-yet-effective
+  // from revoked: at 2026-08-03 the node is known (available since
+  // 2026-08-02) but WITHDRAWN.effectiveAt (2026-08-05) has not arrived, so
+  // it is `pendingIds`, not `revokedIds`. `test/epistemic-revocation-pending
+  // .test.ts` covers this split directly with RED-first coverage; this
+  // assertion is inverted here so the same pinned scenario in this file
+  // stops recording the closed hole as current behaviour.
+  const known = kernel.revocationProjectionAsOf('2026-08-03T00:00:00.000Z');
+  assert.deepEqual(known.revokedIds, []);
+  assert.deepEqual(known.pendingIds, ['evidence:withdrawn:1']);
+
+  // The guard-rail half of the same fact: once `effectiveAt` has passed, the
+  // node reads as revoked, exactly as before.
+  const effective = kernel.revocationProjectionAsOf('2026-08-05T00:00:00.000Z');
+  assert.deepEqual(effective.revokedIds, ['evidence:withdrawn:1']);
+  assert.deepEqual(effective.pendingIds, []);
 });

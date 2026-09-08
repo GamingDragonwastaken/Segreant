@@ -49,6 +49,8 @@ that overstates its reach overstates this bound too.
 - duplicate revocations are idempotent and cycles are traversed safely;
 - malformed and duplicate dependency edges fail closed;
 - closure computation never deletes or mutates historical nodes.
+- An Evidence/Claim `revocation` envelope's `eventId` and the `epistemic_revocations` table (`appendRevocation`'s own PRIMARY KEY namespace) are checked against each other in both directions: `appendRevocation` refuses an `eventId` a different node's envelope already claims, and appending an Evidence/Claim refuses a `revocation.eventId` the table already records against a different target. Neither direction requires the other side to exist first — only a target MISMATCH when the id is on record on either side is refused.
+- `RevocationProjection` carries an effective-time dimension: `revokedIds`/`trace` cover only revocations already in effect as of the caller's reference instant (the `asOf` boundary, or the real current instant for a live read), and `pendingIds` covers ones known but not yet effective — an envelope's `effectiveAt`, distinct from its node's availability. A table-recorded event has no separate effective time and is always immediately effective.
 - Evidence payloads are cloned/frozen and may be replaced by a hash/reference when raw content should not be retained.
 - Claims retain evidence IDs and derivation identity; a profile mismatch or absent evidence dependency fails closed.
 - Witnesses are first-class persisted nodes; every witness used by a stored derivation must match the registered kind, coordinates, detail and evidence IDs.
@@ -90,4 +92,6 @@ node --test --experimental-strip-types test/epistemic-witness.test.ts
 node --test --experimental-strip-types test/epistemic-replay-conformance.test.ts
 node --test --experimental-strip-types test/epistemic-serialization.test.ts
 node --test --experimental-strip-types test/issuance-map.test.ts
+node --test --experimental-strip-types test/epistemic-trust-non-escalation.test.ts
+node --test --experimental-strip-types test/epistemic-revocation-envelope.test.ts test/epistemic-revocation-event-linkage.test.ts test/epistemic-revocation-pending.test.ts
 ```

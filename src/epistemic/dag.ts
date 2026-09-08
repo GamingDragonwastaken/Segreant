@@ -58,6 +58,19 @@ export interface RevocationTraceEntry {
 export interface RevocationProjection {
   readonly revokedIds: readonly string[];
   readonly trace: readonly RevocationTraceEntry[];
+  /**
+   * Known revocation roots — and their transitive dependents — whose
+   * effective time has not yet arrived relative to the caller's reference
+   * instant. A node here is NOT in `revokedIds`: pending is a distinct state
+   * from revoked, not a subset of it.
+   *
+   * `projectRevocation` carries no time concept of its own and always
+   * returns this empty; `EpistemicLedger` is what has effective-time
+   * information (an envelope's `effectiveAt`, distinct from its node's
+   * availability), so it is what splits known roots into revoked/pending
+   * before calling this function twice and combining the results.
+   */
+  readonly pendingIds: readonly string[];
 }
 
 const NODE_KEYS = new Set(['id', 'kind', 'availableAt', 'epistemic', 'supersedes']);
@@ -335,7 +348,7 @@ export function projectRevocation(dag: EpistemicDag, revokedNodes: ReadonlyArray
     path.reverse();
     return Object.freeze({ nodeId, causedBy: entry.causedBy, path: Object.freeze(path) });
   });
-  return Object.freeze({ revokedIds: Object.freeze(revokedIds), trace: Object.freeze(trace) });
+  return Object.freeze({ revokedIds: Object.freeze(revokedIds), trace: Object.freeze(trace), pendingIds: Object.freeze([]) });
 }
 
 function supportRoots(dag: EpistemicDag, target: string): string[] {

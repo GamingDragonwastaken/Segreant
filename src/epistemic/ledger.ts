@@ -70,11 +70,29 @@ interface StoredPayloadRow {
   digest: string;
 }
 
-interface StoredEventRow {
+/** The four columns `epistemic_revocations` actually stores. No effective-time column exists. */
+interface RawEventRow {
   event_id: string;
   target_id: string;
   recorded_at: string;
   reason: string;
+}
+
+/**
+ * A revocation the ledger knows about, enriched with an effective time.
+ *
+ * `effective_at` is NOT a stored column of `epistemic_revocations` — that
+ * table has no effective-time concept, because an operator-recorded
+ * revocation is effective the instant it is recorded. For a table row,
+ * `effective_at` is set equal to `recorded_at`. For an envelope-declared
+ * revocation (`Evidence`/`Claim`'s own `revocation.effectiveAt`), the two can
+ * legitimately differ, and that difference is the whole point of GAP 3
+ * (WP-R07): `recorded_at` is when the ledger LEARNED of the revocation,
+ * `effective_at` is when it TAKES EFFECT, and collapsing the two is exactly
+ * what let a future-dated envelope read as revoked from the moment it existed.
+ */
+interface StoredEventRow extends RawEventRow {
+  effective_at: string;
 }
 
 interface StoredEdgeRow {
@@ -276,7 +294,7 @@ export class EpistemicLedger {
    */
   private assertRevocationEnvelopeLinksConsistently(id: string, envelope: RevocationMetadata | null): void {
     if (envelope === null) return;
-    const existing = row<StoredEventRow>(this.db.prepare(
+    const existing = row<RawEventRow>(this.db.prepare(
       'SELECT event_id, target_id, recorded_at, reason FROM epistemic_revocations WHERE event_id = ?',
     ).get(envelope.eventId));
     if (existing !== null && existing.target_id !== id) {
@@ -553,7 +571,7 @@ export class EpistemicLedger {
     const reason = nonEmpty(input.reason, 'revocation reason');
     return this.transaction(() => {
       if (this.node(targetId) === null) throw new Error(`unknown target for revocation: ${targetId}`);
-      const existing = row<StoredEventRow>(this.db.prepare('SELECT event_id, target_id, recorded_at, reason FROM epistemic_revocations WHERE event_id = ?').get(eventId));
+      const existing = row<RawEventRow>(this.db.prepare('SELECT event_id, target_id, recorded_at, reason FROM epistemic_revocations WHERE event_id = ?').get(eventId));
       if (existing !== null) {
         if (existing.target_id !== targetId || existing.recorded_at !== recordedAt || existing.reason !== reason) throw new Error(`different revocation already exists for ${eventId}`);
         return 'duplicate';
@@ -748,17 +766,29 @@ export class EpistemicLedger {
     const events = this.revocationEvents().filter((event) =>
       Date.parse(event.recorded_at) <= Date.parse(boundary) && visible.has(event.target_id),
     );
+    // `recorded_at`/knowledge-time filtering above is unchanged from D-099:
+    // an event this boundary has not yet learned about cannot appear at all.
+    // Splitting the KNOWN events by `effective_at` against the same boundary
+    // is GAP 3's fix (WP-R07): a known-but-not-yet-effective envelope
+    // revocation is pending as of this boundary, not revoked by it.
+    const { effective, pending } = this.splitByEffectiveness(events, boundary);
     return Object.freeze({
       asOf: boundary,
       graph,
-      revocation: projectRevocation(graph, events.map((event) => event.target_id)),
+      revocation: this.projectRevocationWithPending(graph, effective, pending),
     });
   }
 
   revocationProjection(): RevocationProjection {
     const graph = this.graph();
     const events = this.revocationEvents();
-    return projectRevocation(graph, events.map((event) => event.target_id));
+    // A live (non-as-of) read uses the actual current instant as the
+    // effective-time boundary: the same envelope becomes revoked, not
+    // pending, the moment real time reaches its declared `effectiveAt`,
+    // with no new append required.
+    const now = instant(new Date().toISOString());
+    const { effective, pending } = this.splitByEffectiveness(events, now);
+    return this.projectRevocationWithPending(graph, effective, pending);
   }
 
   /** Reconstruct revocation state using only events recorded by the boundary. */
@@ -791,25 +821,43 @@ export class EpistemicLedger {
    * its own node and the envelope cannot follow it. The projection is therefore
    * what changes, and it now reflects everything the ledger stores.
    *
-   * THE ENVELOPE'S KNOWLEDGE TIME IS ITS NODE'S AVAILABILITY, AND ITS
-   * `effectiveAt` IS NOT CONSULTED. `replayAsOf` filters by the time a
-   * revocation was RECORDED. An envelope carries no recorded time and needs
-   * none: it is part of its node's immutable payload, so the ledger learns it
-   * exactly when the node becomes available. `effectiveAt` is an EFFECTIVE time,
-   * and `RevocationProjection` has no effective-time dimension at all; using one
-   * as the other would be precisely the collapse this codebase refuses. The
-   * consequence is declared rather than hidden: a node carrying a future-dated
-   * revocation reads as revoked from the moment it exists, which errs toward
-   * withholding. Recorded at D-099.
+   * THE ENVELOPE'S KNOWLEDGE TIME IS ITS NODE'S AVAILABILITY, WHICH IS STILL
+   * NOT ITS `effectiveAt`. `replayAsOf` filters by the time a revocation was
+   * RECORDED — an envelope carries no recorded time and needs none, since it
+   * is part of its node's immutable payload and is learned exactly when the
+   * node becomes available. That knowledge-time filtering is unchanged.
+   * Recorded at D-099.
+   *
+   * `effectiveAt` ITSELF IS NOW CONSULTED, SEPARATELY. D-099 originally
+   * recorded that `RevocationProjection` had no effective-time dimension at
+   * all, so a future-dated envelope read as revoked the instant it became
+   * known — collapsing "the ledger knows about this revocation" into "this
+   * revocation is in effect." That is now split: `splitByEffectiveness`
+   * compares each known event's `effective_at` against the caller's
+   * reference instant (the `asOf` boundary, or the real current instant for
+   * a live `revocationProjection()`), and `projectRevocationWithPending`
+   * keeps a not-yet-effective root and its closure out of `revokedIds`,
+   * surfacing them in `RevocationProjection.pendingIds` instead. A
+   * table-recorded event is untouched by this: `revocationEvents` sets its
+   * `effective_at` equal to `recorded_at`, since `appendRevocation` carries
+   * no separate effective time and an operator-recorded revocation is
+   * effective the moment it is recorded. GAP 3 closed; withdrawn from
+   * D-099's stated limitation.
    */
   private revocationEvents(): StoredEventRow[] {
-    const rows = this.db.prepare('SELECT event_id, target_id, recorded_at, reason FROM epistemic_revocations ORDER BY event_id').all() as unknown as StoredEventRow[];
-    const recorded = rows.map((event) => ({
-      event_id: nonEmpty(event.event_id, 'stored revocation eventId'),
-      target_id: nonEmpty(event.target_id, 'stored revocation targetId'),
-      recorded_at: canonicalInstant(event.recorded_at, `stored revocation ${event.event_id} recordedAt`),
-      reason: nonEmpty(event.reason, `stored revocation ${event.event_id} reason`),
-    }));
+    const rows = this.db.prepare('SELECT event_id, target_id, recorded_at, reason FROM epistemic_revocations ORDER BY event_id').all() as unknown as RawEventRow[];
+    const recorded = rows.map((event) => {
+      const recordedAt = canonicalInstant(event.recorded_at, `stored revocation ${event.event_id} recordedAt`);
+      return {
+        event_id: nonEmpty(event.event_id, 'stored revocation eventId'),
+        target_id: nonEmpty(event.target_id, 'stored revocation targetId'),
+        recorded_at: recordedAt,
+        // The table has no effective-time column: an operator-recorded
+        // revocation is effective the instant it is recorded.
+        effective_at: recordedAt,
+        reason: nonEmpty(event.reason, `stored revocation ${event.event_id} reason`),
+      };
+    });
     return [...recorded, ...this.envelopeRevocations()]
       .sort((left, right) => left.event_id.localeCompare(right.event_id) || left.target_id.localeCompare(right.target_id));
   }
@@ -828,10 +876,52 @@ export class EpistemicLedger {
         event_id: nonEmpty(envelope.eventId, `stored ${node.node_kind} ${node.node_id} revocation eventId`),
         target_id: node.node_id,
         recorded_at: canonicalInstant(node.available_at, `stored node ${node.node_id} availableAt`),
+        effective_at: canonicalInstant(envelope.effectiveAt, `stored ${node.node_kind} ${node.node_id} revocation effectiveAt`),
         reason: nonEmpty(envelope.reason, `stored ${node.node_kind} ${node.node_id} revocation reason`),
       });
     }
     return declared;
+  }
+
+  /**
+   * Split known revocation events into ones already in effect and ones known
+   * but not yet effective, relative to `referenceInstant`.
+   *
+   * A table-recorded event always lands in `effective` here, because
+   * `revocationEvents` sets its `effective_at` equal to `recorded_at` — this
+   * split only ever moves an envelope-declared revocation into `pending`.
+   */
+  private splitByEffectiveness(
+    events: readonly StoredEventRow[],
+    referenceInstant: Instant,
+  ): { effective: string[]; pending: string[] } {
+    const boundary = Date.parse(referenceInstant);
+    const effective: string[] = [];
+    const pending: string[] = [];
+    for (const event of events) {
+      if (Date.parse(event.effective_at) <= boundary) effective.push(event.target_id);
+      else pending.push(event.target_id);
+    }
+    return { effective, pending };
+  }
+
+  /**
+   * Combine the revoked-now and known-but-pending closures into one
+   * projection. A node reachable from BOTH an effective root and a pending
+   * root is revoked, not pending — pending never demotes an already-revoked
+   * node, it only adds nodes reachable from NO effective root.
+   */
+  private projectRevocationWithPending(
+    graph: EpistemicDag,
+    effectiveTargets: readonly string[],
+    pendingTargets: readonly string[],
+  ): RevocationProjection {
+    const revoked = projectRevocation(graph, effectiveTargets);
+    if (pendingTargets.length === 0) return revoked;
+    const combined = projectRevocation(graph, [...new Set([...effectiveTargets, ...pendingTargets])]);
+    const revokedSet = new Set(revoked.revokedIds);
+    const pendingIds = combined.revokedIds.filter((id) => !revokedSet.has(id)).sort((a, b) => a.localeCompare(b));
+    return Object.freeze({ revokedIds: revoked.revokedIds, trace: revoked.trace, pendingIds: Object.freeze(pendingIds) });
   }
 
   /**
