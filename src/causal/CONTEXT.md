@@ -30,6 +30,9 @@
 - precision planning derives its half-width from the estimator's own
   `hoeffdingArmRadius`, so a projection cannot drift away from the interval the
   estimator will actually produce for the same range, per-arm n and alpha.
+- the measurement rung on an issued causal claim is COMPUTED from a declared
+  measurement model and surrogate bridge, both reconstructible from the protocol
+  alone, so the reference a stored claim carries resolves without a service.
 
 ## Invariants
 
@@ -55,6 +58,15 @@
 - Unknown, collecting, invalid and inconclusive evidence cannot produce a causal
   claim or a decision-grade recommendation.
 - A sequential result is not trusted after rehydration until its nested validity domain, interval calculation, stopping record, and provenance cross-fields validate; a digest alone is not semantic evidence.
+- A pre-registered quality metric is never reported as a VALIDATED proxy for
+  quality. Pre-registration rules out choosing the metric after seeing the data
+  and rules nothing in, so the bridge ceilings at `proxy_unvalidated`; reaching
+  `proxy_validated` requires an empirical association against an independent
+  measurement of the construct, which nothing here has.
+- The quality evidence class is recorded and moves no rung. The four admitted
+  classes differ in how the observed value was produced, not in whether the
+  metric measures the construct, and a ladder across them would assert construct
+  validity that none of them establishes.
 
 ## Verify
 
@@ -63,4 +75,5 @@ node --test --experimental-strip-types test/causal-core.test.ts
 node --test --experimental-strip-types test/sequential-inference.test.ts
 node --test --experimental-strip-types test/causal-inference-ledger.test.ts
 node --test --experimental-strip-types test/causal-precision.test.ts
+node --test --experimental-strip-types test/causal-measurement-backing.test.ts
 ```

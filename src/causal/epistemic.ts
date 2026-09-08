@@ -45,6 +45,10 @@ import { evidence, type Evidence } from '../epistemic/evidence.ts';
 import { grain } from '../epistemic/grain.ts';
 import { claimProfile } from '../epistemic/profile.ts';
 import { scope } from '../epistemic/scope.ts';
+import {
+  causalQualityMeasurementBacking,
+  causalQualityMeasurementModelRef,
+} from './measurement.ts';
 import { instant, interval } from '../epistemic/time.ts';
 import { witness, type Witness } from '../epistemic/witness.ts';
 import { canonicalJson, sha256, verifyCommittedCausalProtocol } from './protocol.ts';
@@ -176,14 +180,18 @@ export function buildCausalStudyKernelIssuance(
   const committedAt = timestamp(data.protocol.committedAtMs, 'protocol commitment');
   const digest = includedDigest(data, estimate);
 
-  // The kernel refuses `proxy_validated` without a model reference, and it is
-  // right to: a measurement is validated AGAINST something, and a claim that
-  // cannot name it is asserting the validation rather than carrying it. The
-  // protocol is that something — it fixes the metric, its finite range and the
-  // evidence class before collection, and `qualifyCausalStudy` rejects any
-  // outcome whose observed class differs. The reference is pinned to the
-  // protocol hash so it cannot survive a change to the thing it names.
-  const measurementModelRef = `causal:quality-metric:${data.protocol.qualityOutcome.metricId}@${data.protocol.protocolHash}`;
+  // THE MEASUREMENT RUNG IS COMPUTED, NOT DECLARED. Both claims used to carry a
+  // hard-coded `proxy_validated` and a reference synthesized here that resolved
+  // to nothing, so the validation the rung asserted had no record to check and
+  // the same rung was issued for all four quality evidence classes. The
+  // reference is now a registered `MeasurementModel` — still pinned to the
+  // protocol hash, for the reason it always was: a reference that survives a
+  // change to the protocol names something that no longer exists — and the rung
+  // is whatever the declared surrogate bridge earns. Pre-registration ceilings
+  // that at `proxy_unvalidated`; see `measurement.ts` for why that is the
+  // answer rather than a limitation of this adapter.
+  const measurementModelRef = causalQualityMeasurementModelRef(data.protocol);
+  const measurementValidation = causalQualityMeasurementBacking(data.protocol).earnedValidation;
 
   const assignmentEvidence = evidence({
     id: `evidence:causal:assignment:${studyId}`,
@@ -313,7 +321,7 @@ export function buildCausalStudyKernelIssuance(
       authenticity: 'self_asserted',
       scope: 'conditional',
       coverage: estimate.qualification.state === 'qualified' ? 'complete' : 'partial',
-      measurement: 'proxy_validated',
+      measurement: measurementValidation,
       causality: 'observational',
       monetaryBasis: 'none',
       finality: 'provisional',
@@ -389,7 +397,7 @@ export function buildCausalStudyKernelIssuance(
       authenticity: 'self_asserted',
       scope: 'conditional',
       coverage: 'complete',
-      measurement: 'proxy_validated',
+      measurement: measurementValidation,
       // The ONLY axis that differs from the source claim. Anything else moving
       // here would demand its own witness, and would mean this module had
       // quietly strengthened something it has no evidence for.
