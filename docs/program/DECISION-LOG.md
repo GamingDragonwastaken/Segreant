@@ -1543,3 +1543,101 @@ Zero required witnesses. And `appendDerivationWithinTransaction` checks every in
 **Evidence.** Five tests, RED 2/5 against the committed tree — the version-2 naming and the basis — while the two controls that must keep working passed before and after, which is the correct split. One drives the packaged CLI rather than the Store method.
 
 **What this does not establish.** `available` is false for every study this build can hold, so nothing yet exercises a true branch; that arrives with the version-2 analysis projection and not before. `latestAnalysis` on the dashboard study rows is still a bare null with no basis beside it — the same defect on the other surface, recorded rather than fixed, because that payload contract change belongs with the projection work.
+
+
+## D-159 — a surrogate bridge carried a validity window that nothing read
+**Decision:** `BridgedMeasurementRequest` takes an optional `asOf`, and `assessBridgedMeasurementBacking` reads the declared `validTime` of the measurement model, the bridge, and the bridge's empirical reference measurement against it. `interval()` canonicalises a window at construction, so one that ends before it begins is refused.
+
+**The counterexample, measured against the committed tree.** `MeasurementModelInput` and `SurrogateBridgeInput` both declare an optional `validTime`. `measurementModel()` copied it onto the frozen model, `surrogateBridge()` carried it through a spread, and `grep validTime` found no other occurrence in the module. Nothing read it. A bridge whose declared validity window closed in 2020 resolved today, passed every check, and licensed exactly the same rung as one declared valid now. The field was a comment with a type.
+
+**Why a missing `asOf` withholds rather than ignores.** A bridge that declares a window and is then asked "does this still hold?" with no instant supplied has been asked a question it cannot answer. The permissive reading — treat the absent time as "now, presumably fine" — is how the field came to be decorative in the first place, and it is the same absence-as-result move this repository refuses everywhere else. So a time-bounded citation with no `asOf` ceilings at `proxy_unvalidated` and says why.
+
+**Declaring no window is a different claim from having an unknown one.** A model or bridge with no `validTime` is unbounded in time BY DECLARATION, and is unaffected with or without `asOf`. That is why nothing existing churns: `causalQualitySurrogateBridge` declares no window, and the control test asserts the unwindowed case reads identically before and after.
+
+**Three windows, not one.** The bridge can expire; the surrogate model can expire independently of it, and a model whose calibration window has closed is not made current by a bridge that is still open; and the empirical reference measurement can expire, which is the same failure as a reference that was never `validated` with a clock on it. Each lowers on its own and names itself in the reason.
+
+**Evidence.** Seven tests, RED 5/7 against the committed tree. The two that passed are the controls — the unwindowed case and the in-window case — which is the correct split. Full suite 1,690/1,686/0 fail.
+
+**What this does not establish.** No caller passes `asOf` yet, so the withholding branch is reachable by any consumer that supplies one and is currently exercised only by tests. Nothing decides what instant a given surface should ask about; that is a per-surface judgement and is not made here.
+
+
+## D-160 — the plan stopped bounding the family for the right reason and said the wrong one
+**Decision:** `summarizeInferenceMultiplicity` emits a distinct limitation per condition, the retained plan line no longer opens with `Basis:` when the plan no longer applies, and `recordInferentialActs` refuses an act with no slice identity.
+
+**What I expected to find, and did not.** `plannedInferenceActs` sizes the whole error budget from the plan's registered `sliceIds`, so reporting on an unregistered slice would spend budget from a denominator computed without it. I went looking for a family-wise guarantee surviving that. It is not there: `actsExceedPlan` already includes the unregistered-slice test, and the basis correctly falls to `recorded_acts_only`. The arithmetic was sound, and the test file records that it is — a test that goes looking for a hole and finds none has still established something worth keeping. The framing I started with was wrong and the commit says so.
+
+**What was actually wrong.** `actsExceedPlan` is the union of three distinct conditions — too many budgeted acts, too many looks, and an act on an unregistered slice — and exactly one message was emitted for all three: "The recorded acts exceeded the pre-registered plan". On a plan of four looks by two endpoints by one slice, with ONE act recorded on an unregistered slice, that is what the operator was told. Nothing was exceeded. One act against a plan of eight, and the reader was sent looking for extra looks that do not exist while the real reason was named nowhere. Same class as D-158: a correct refusal that names the wrong reason.
+
+**And the two basis lines contradicted each other.** The limitations carried "Basis: recorded acts only" and "Basis: a pre-registered plan of 4 look(s) x ..." one after the other, with nothing marking the second as the plan that no longer applies, and the stronger-sounding one came second.
+
+**The slice id was unvalidated at the reporting boundary.** `validatePlan` refuses an empty slice id inside a plan; `recordInferentialActs` accepted one. Since `actKey` includes the slice, a blank one is not a harmless default — it is an identity two unrelated acts can share.
+
+**Evidence.** Nine tests, RED 4/9. The five that passed are the control, the already-correct basis fall, the act still being recorded, the plan-less case, and the genuine-overrun case — which is what makes the four failures the defect rather than the fixture. Full suite 1,699/1,695/0 fail.
+
+**What this does not establish.** Still no surface registers a plan, so `pre_registered_plan` remains a basis only tests reach. The messages are now condition-specific; nothing checks that an operator reading them takes the right action.
+
+
+## D-161 — closing the effective-time hole opened a quieter one
+**Decision:** `DecisionCertificateBundleRead` gains `pendingInvalidationBy`, computed from the projection's `pendingIds`, alongside `invalidatedBy` and in the same object.
+
+**What changed upstream.** WP-R07 gave `RevocationProjection` an effective-time dimension. Before it, a revocation envelope declaring `effectiveAt: 2026-09-09` made its node read as fully revoked from the instant the node became known — treating knowledge time as effective time, the collapse this codebase exists to refuse. Known-but-not-yet-effective nodes now land in a separate `pendingIds` set.
+
+**What that cost, measured.** `readDecisionCertificateBundle` is one of only two consumers of a revocation projection in `src/`, and it read `revokedIds` alone. So a certificate resting on evidence with a withdrawal already booked moved from `status: 'invalidated', invalidatedBy: [source]` to `status: 'valid', invalidatedBy: []`, with the booked withdrawal appearing nowhere in the read. The old reading was wrong about WHEN; the new one was silent about WHETHER, and a reader could no longer tell a certificate with nothing against it from one already scheduled for withdrawal. Ninth instance of the absence-reported-as-a-result class, arriving by way of a mechanism built and left unwired — which is the other recurring class, so this is one defect standing in both.
+
+**The repair is disclosure, not re-breaking.** `status` stays `valid`, because at the instant asked it is valid and changing that would restore the error just fixed. `revoked` wins where both hold, so a node already withdrawn is not also listed as awaiting withdrawal.
+
+**Why the three kernel claim readers are untouched.** `Store.billingKernelClaims` and its two siblings are the other consumer, and `pendingIds` is unreachable from them: every node they serve is issued by Fiscus's own issuance path, which never attaches a revocation envelope, and an operator revocation goes through `appendRevocation`, which has no effective time and is effective when recorded. A test measures that rather than asserting it. A permanently-empty field there would repeat the unwired-mechanism defect in a new place.
+
+**Evidence.** Six tests, RED 4/6. The two that passed are the premise (the projection already held the fact) and the measured basis for the omission above. The containment test asserts the pending list against the invalidated list at the effective instant rather than against a list typed out by hand, so it cannot be wider or narrower than the withdrawal will actually reach. Full suite 1,721/1,717/0 fail.
+
+**What this does not establish.** Nothing renders `pendingInvalidationBy` yet — no CLI or dashboard surface reads a certificate bundle at all — so this closes the API-level silence and not a user-visible one. Whether an operator should be warned earlier than the effective instant is a product question this does not answer.
+
+
+## D-162 — the builder minted and signed rollups the receiver would refuse
+**Decision:** `buildRollupBody` and `buildEconomicRollupBody` run `validateRollupBody` before returning, and throw rather than return a body that fails it.
+
+**The disagreement, measured.** `validateRollupBody` refuses a project whose `spendOnRealizedUnitsUsd` exceeds its `costUsd`, and `team-server/src/server.ts` calls it on every arriving rollup and answers HTTP 400. The builders called it on nothing. So the sequence build, sign, POST minted a signed artifact carrying a contradiction, sent it across the network, and learned it was malformed from a remote 400 — with the developer's own key already committed to it.
+
+**At minting and not at sending.** The obvious repair is a check in the CLI push path just before `signRollup`. That leaves the builder still able to return a body no receiver will accept, so every future caller re-inherits the hole and the guard has to be remembered at each new call site. Refusing at construction means the malformed body never exists to be signed. A signature is a commitment; committing to a self-contradiction and retracting it on a 400 is worse than never committing.
+
+**Two tests changed construction route, and neither assertion moved.** `test/team-rollup.test.ts` used `buildRollupBody` as a convenient constructor for the very body it now refuses; it builds the candidate as a literal instead. `team-server/test/server.test.ts` did the same for its hostile-shape cases; it now mutates the projects after building and signs the result — which is a more faithful model of a client that never ran our builder at all, and is the only thing that test was ever about.
+
+**Not reachable from the CLI today, stated rather than implied.** `fiscus team push` derives its projects from `src/value/realization.ts`, where realized spend is a subset of total spend, so no user input reaches the violating state through that path. The guard is against an internal inconsistency — which is exactly the failure a signature would otherwise launder into an authenticated one. That is why it is asserted at the builder rather than through the CLI harness: a CLI test would have had to fabricate the state it claims to catch.
+
+**Evidence.** Six tests, RED 3/6. The three that passed are the premise (the receiver really does refuse this body) and two controls (a sound rollup and an explicitly partial one are minted unchanged). Root suite 1,727/1,723/0 fail, team-server 67/67.
+
+**What this does not establish.** It is an internal-consistency floor, not a claim the numbers are right. `coverage` remains the signer's own non-authoritative claim, combined conservatively by `combineRollupCoverage`.
+
+
+## D-163 — the publish gate checked one compilation domain of three, and CI ran dependency install hooks
+**Decision:** `prepublishOnly` runs `typecheck:all` plus team-server's own suite; every workflow install passes `--ignore-scripts`, enforced by `scripts/check-supply-chain.mjs`; both jobs that run `npm test` build explicitly.
+
+**The gate.** `prepublishOnly` was `npm run typecheck && npm test && npm run build`, and `npm run typecheck` is `tsc --noEmit` with no `-p`: it resolves the root tsconfig alone, whose own `exclude` carves out the browser app and which never mentions `team-server/`. The last gate before `npm publish` checked one domain of three. Not hypothetical: `team-server/` imports root source directly, and a rename in `src/team/` or `src/value/` has already reached CI twice with every root gate green — TS1294 at `31911cb`, sixteen TS2339/TS2353 errors at `c1f7ac5`.
+
+**The install.** Every `npm ci` ran without `--ignore-scripts`, so a dependency's `preinstall`/`install`/`postinstall` would execute unattended in CI with the job's token in the environment. Neither lockfile carries one today; the gap is the absence of a barrier against a future one.
+
+**Where the flag rule went, and why not into a workflow-shaped test.** `scripts/check-supply-chain.mjs` already owns where a workflow's bytes come from. What an install may execute is that question's other half, it reads every workflow file rather than one filename, and a second sweep in a test would have been two mechanisms answering one question and drifting apart the day a third workflow appears. The rule covers `npm install` too, including the packed-tarball install the lockfile rule deliberately exempts: that exemption is about provenance, and this rule is about execution — and those hooks would belong to the very artifact CI is examining.
+
+**The consequence needed its own coverage.** Removing the automatic `prepare` build means each job that runs `npm test` must produce `dist/` itself, in that order. Explicit even though `pretest` currently runs the full build anyway: it has been silently narrowed to `--web` once already, and a job that depends on whichever definition it currently carries is one edit away from testing a stale tree. The build count is unchanged — `prepare` built at install, `pretest` built again.
+
+**A test caught its own vacuity.** The lockfile rule's counterexample replaced the literal `- run: npm ci`, which stopped matching once the flag was part of that line, so the audit saw an unmutated file and the assertion failed rather than passing on nothing. That is the counterexample discipline in `test/supply-chain-assurance.test.ts` working exactly as designed, and it is why that file was the right home for the new rule.
+
+**Evidence.** RED verified in this tree rather than taken from a lane report: 4 of 12 failing across the two gate files, with the eight passing ones being controls and vacuity checks; then 1 of 13 for the auditor rule. Root suite 1,738/1,734/0 fail, team-server 67/67, `npm run typecheck:all` clean across all three domains, `npm run verify:supply-chain` reports no violations.
+
+**What this does not establish.** `prepublishOnly` is pinned by composition, not by execution: the test reads `package.json` as data and expands `npm run` indirection, because a functional run would make the root suite depend on a `team-server/node_modules` that root `npm ci` does not install. And `--ignore-scripts` protects CI; it says nothing about a developer's own machine, where `npm ci` still runs whatever the tree carries.
+
+
+## D-164 — length is not position: equal-length windows can describe different months
+**Decision:** `WindowCoverage` gains `overlap`, `overlapFrom` and `overlapTo` — the intersection of every contributing observation window — and the note states it.
+
+**What D-102 left.** That entry gave a team total its windows: how many, their shortest and longest length, and the span they fall inside. Every one of those fields is about LENGTH. `uniform` answers only whether there is one window. Nothing asked whether the windows intersect.
+
+**The counterexample.** Two rollups both declaring thirty days, one in January and one in June, produced: "2 different observation windows, the shortest 30 days and the longest 30 days, spanning 2026-01-01 to 2026-06-30". The length comparison finds nothing to report because both are 30, and "spanning" names six months of which sixty days were observed — the four in the middle appear as span and were seen by nobody. The reader is told the totals "do not describe any single window", which is true and far weaker than the fact: no instant exists at which both machines were being observed at all. `totalCostUsd` sums two separate observations of the world, and the cost-weighted `avgRoiIndex` beside it weights January against June as one population.
+
+**An intersection, not a pairwise check.** A total is summed across every contributor at once, so two of three windows agreeing is not an agreement; a report saying `overlap: true` because some pair agreed would name an agreement that does not exist. Half-open, so windows that merely touch at an endpoint share nothing — a zero-length overlap is an artefact of the boundary, not a period anybody observed. The empty set reports `false` for the same reason it already reports `uniform: false`: nothing is not disjoint, it is nothing.
+
+**The span fields are untouched.** `earliestFrom` and `latestTo` were never wrong. The union is a real fact that was being asked to carry a meaning it does not have, and the repair is to put the intersection beside it, not to delete it.
+
+**Evidence.** Seven tests, RED 6/7; the one that passed is the control asserting the span fields still read as they did. team-server suite 74/74, team-server typecheck clean.
+
+**What this does not establish.** `buildWindowCoverage` is pure and takes the windows it is given, so this exercises the reporting and not the SQL that collects them; `PgRollupStore` remains untested here for the reason recorded throughout this file — there is no live Postgres in this environment, and faking one would be inventing the coverage. And it does not decide whether summing across disjoint windows is ever the right thing to look at. It makes the reader able to see that it happened.
