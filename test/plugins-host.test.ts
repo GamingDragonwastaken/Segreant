@@ -47,13 +47,38 @@ function invocation(overrides: Record<string, unknown> = {}): Record<string, unk
   };
 }
 
+/**
+ * THE DEADLINE IS DELIBERATELY GENEROUS, AND THAT IS NOT A WEAKENING.
+ *
+ * These tests spawn a real `node` child. The deadline used to be 250ms of
+ * startup and 500ms of request, which is comfortable on an idle machine and not
+ * comfortable on a loaded one: under twelve concurrent CPU-bound processes,
+ * `process host executes the plugin as a real child and returns bounded
+ * evidence` failed reproducibly with `status: 'timed_out'` where it asserts
+ * `'completed'`. Every one of the intermittent full-suite failures observed in
+ * this program has been this file, and this is why — a full run compiles and
+ * runs many files at once, so the suite was competing with itself for the
+ * margin these numbers left.
+ *
+ * The assertions those tests make are about the HAPPY PATH: that a well-formed
+ * request reaches a real child and comes back with bounded evidence. The
+ * deadline is incidental to that claim and moving it changes nothing the tests
+ * check. Timeout behaviour has its own test below, which sets its own 100ms
+ * budget against a child that deliberately never answers — that one is about
+ * the deadline, and it is untouched.
+ *
+ * A generous number rather than a merely larger one, because a tight-but-larger
+ * budget is the same defect with a longer fuse. A genuinely hung child now
+ * surfaces as a test-runner timeout with a clear message instead of as a
+ * plausible-looking `timed_out` status.
+ */
 function policy(overrides: Partial<PluginIsolationPolicy> = {}): PluginIsolationPolicy {
   return createPluginIsolationPolicy({
     ...DEFAULT_PLUGIN_ISOLATION_POLICY,
     timeouts: {
       ...DEFAULT_PLUGIN_ISOLATION_POLICY.timeouts,
-      startupMs: 250,
-      requestMs: 500,
+      startupMs: 15_000,
+      requestMs: 15_000,
     },
     ...overrides,
   });
