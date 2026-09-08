@@ -114,3 +114,33 @@ test('defect 3: notyet blocks do not skip from h1 to h3', () => {
     assert.match(block, /h\('h2'/, `notyet block must open with h2, not skip to h3/h4: ${block}`);
   }
 });
+
+/**
+ * Defect 4: the drawer's disabled commit button carried its blocking reason
+ * (why "Apply" cannot be pressed) only in a `title` attribute. Browsers do
+ * not run hover/focus tooltip logic for `disabled` form controls, and a
+ * disabled element also never receives focus, so neither a mouse user
+ * hovering nor a keyboard/screen-reader user tabbing to it could ever surface
+ * that text. The fix renders the reason as a visible sibling and reaches it
+ * from the button with `aria-describedby`, matching the pattern the daily-cap
+ * fix already established in this same packet (`actions.ts`,
+ * `aria-describedby: 'budget-cap-note'`).
+ */
+test('defect 4: the drawer commit button exposes its blocked reason through aria-describedby, not a title', () => {
+  const drawer = readFileSync(join(APP, 'components', 'drawer.ts'), 'utf8');
+
+  // The counterexample: a `title` was the ONLY carrier of `blockedReason` on
+  // the disabled commit button.
+  assert.doesNotMatch(
+    drawer,
+    /class: `btn-commit[\s\S]{0,300}title:\s*p && !p\.applicable/,
+    'the disabled commit button must not rely on `title` to expose its blocked reason — disabled controls do not expose title to keyboard or screen-reader users',
+  );
+
+  assert.match(drawer, /id: 'drawer-blocked-reason'/, 'a visible element must carry the blocked reason so it can be referenced');
+  assert.match(
+    drawer,
+    /class: `btn-commit[\s\S]{0,400}'aria-describedby':[\s\S]{0,120}drawer-blocked-reason/,
+    'the commit button must reference the blocked-reason element via aria-describedby',
+  );
+});

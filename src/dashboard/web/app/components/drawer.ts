@@ -254,20 +254,33 @@ function panel(spec: ActionSpec): Node {
           if (!spec.commit) return null;
           const p = preview();
           const ready = !busy() && p !== null && p.applicable && confirmed() && !committing() && result() === null;
-          return h('button', {
-            class: `btn-commit tone-${consequence.tone}`,
-            disabled: !ready,
-            title: p && !p.applicable ? (p.blockedReason ?? 'Nothing to apply') : undefined,
-            text: () => (committing() ? 'Working…' : commitLabel(cap.consequence)),
-            onclick: () => {
-              if (!ready || !spec.commit) return;
-              committing.set(true);
-              void spec.commit()
-                .then((r) => result.set(r))
-                .catch((e: unknown) => result.set({ ok: false, message: e instanceof Error ? e.message : String(e) }))
-                .finally(() => committing.set(false));
-            },
-          });
+          // `title` is not exposed to keyboard or screen-reader users on a
+          // `disabled` control — browsers do not run hover/focus tooltip
+          // logic for it, and a disabled element cannot receive focus at
+          // all — so it was the ONLY carrier of why the button could not be
+          // pressed. The reason is now a visible sibling, reached from the
+          // button with `aria-describedby`, the same pattern the daily-cap
+          // field uses for its own consequence text (`actions.ts`).
+          const blocked = p && !p.applicable ? (p.blockedReason ?? 'Nothing to apply') : null;
+          return [
+            blocked
+              ? h('p', { id: 'drawer-blocked-reason', class: 'drawer-note', text: blocked })
+              : null,
+            h('button', {
+              class: `btn-commit tone-${consequence.tone}`,
+              disabled: !ready,
+              'aria-describedby': blocked ? 'drawer-blocked-reason' : undefined,
+              text: () => (committing() ? 'Working…' : commitLabel(cap.consequence)),
+              onclick: () => {
+                if (!ready || !spec.commit) return;
+                committing.set(true);
+                void spec.commit()
+                  .then((r) => result.set(r))
+                  .catch((e: unknown) => result.set({ ok: false, message: e instanceof Error ? e.message : String(e) }))
+                  .finally(() => committing.set(false));
+              },
+            }),
+          ];
         },
       ),
     ),
