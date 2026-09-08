@@ -47,7 +47,7 @@
 
 import { MEASUREMENT_VALIDATIONS, type MeasurementModel, type MeasurementValidation } from './model.ts';
 import { assessMeasurementBacking, type MeasurementRegistry } from './registry.ts';
-import type { TimeInterval } from '../epistemic/time.ts';
+import { intervalContains, interval, type Instant, type TimeInterval } from '../epistemic/time.ts';
 
 /**
  * Which way the surrogate is claimed to move with the target. `unknown_direction`
@@ -118,6 +118,20 @@ export interface BridgedMeasurementRequest {
   readonly surrogateBridgeRef: string | null;
   readonly requiredConstruct: string;
   readonly assertedValidation: MeasurementValidation;
+  /**
+   * The instant the citation is made about.
+   *
+   * Optional, and its ABSENCE is not the same as "now". A model or bridge that
+   * declares a `validTime` and is asked without one has been asked a question
+   * it cannot answer, so it cannot license anything above `proxy_unvalidated`.
+   * Reading a missing instant permissively is how `validTime` came to be a
+   * field that was carried by three declarations and read by none.
+   *
+   * A model or bridge that declares NO window is unbounded in time BY
+   * DECLARATION -- a different claim from one whose window is unknown -- and is
+   * unaffected either way.
+   */
+  readonly asOf?: Instant;
 }
 
 export interface BridgedMeasurementBacking {
@@ -209,6 +223,10 @@ export function surrogateBridge(input: SurrogateBridgeInput): SurrogateBridge {
     surrogateConstruct,
     failureModes: Object.freeze([...input.failureModes]),
     basis: Object.freeze({ ...input.basis }) as SurrogateBridgeBasis,
+    // Canonicalised rather than spread through. `interval()` refuses a window
+    // that ends before it begins; the spread accepted one, so a bridge could
+    // declare a window containing no instant at all and register cleanly.
+    ...(input.validTime ? { validTime: interval(input.validTime.from, input.validTime.to) } : {}),
   });
 }
 
@@ -260,10 +278,44 @@ interface BridgeSupport {
   readonly reasons: readonly string[];
 }
 
-function bridgeSupport(models: MeasurementRegistry, bridge: SurrogateBridge): BridgeSupport {
+/**
+ * Does this declared validity window cover the instant the citation is about?
+ *
+ * Three answers, and the middle one is the point. No window declared means
+ * unbounded in time by declaration, so there is nothing to check. A window with
+ * no instant to check it against is a question that was not asked, and the rung
+ * that depends on the answer is withheld. A window that does not contain the
+ * instant is an expired citation.
+ */
+function windowReason(
+  validTime: TimeInterval | undefined,
+  asOf: Instant | undefined,
+  subject: string,
+): string | null {
+  if (validTime === undefined) return null;
+  if (asOf === undefined) {
+    return `${subject} declares a validity window (${validTime.from} to ${validTime.to}) and the citation names no instant to check it against, so whether it still holds is unknown`;
+  }
+  if (!intervalContains(validTime, asOf)) {
+    return `${subject} is valid from ${validTime.from} to ${validTime.to} and does not cover ${asOf}`;
+  }
+  return null;
+}
+
+function bridgeSupport(
+  models: MeasurementRegistry,
+  bridge: SurrogateBridge,
+  asOf: Instant | undefined,
+): BridgeSupport {
   const reasons: string[] = [];
   let ceiling: MeasurementValidation = 'proxy_validated';
   const lower = (): void => { ceiling = 'proxy_unvalidated'; };
+
+  const expired = windowReason(bridge.validTime, asOf, `surrogate bridge ${bridge.id}`);
+  if (expired !== null) {
+    reasons.push(expired);
+    lower();
+  }
 
   if (bridge.status !== 'supported') {
     reasons.push(`surrogate bridge is ${bridge.status}: ${String(bridge.contest)}`);
@@ -293,6 +345,14 @@ function bridgeSupport(models: MeasurementRegistry, bridge: SurrogateBridge): Br
     } else if (reference.validation !== 'validated') {
       reasons.push(`surrogate bridge reference measurement ${referenceRef} is itself ${reference.validation}, so validating a surrogate against it establishes nothing about the construct`);
       lower();
+    } else {
+      // A reference whose own validity window has closed is the same failure as
+      // one that was never `validated`, with a clock on it.
+      const stale = windowReason(reference.validTime, asOf, `surrogate bridge reference measurement ${referenceRef}`);
+      if (stale !== null) {
+        reasons.push(stale);
+        lower();
+      }
     }
   }
 
@@ -323,6 +383,17 @@ export function assessBridgedMeasurementBacking(
   let earned: MeasurementValidation = model === null ? 'proxy_unvalidated' : model.validation;
   let bridge: SurrogateBridge | null = null;
 
+  // The model can expire independently of the bridge. A surrogate whose own
+  // calibration window has closed is not made current by a bridge that is
+  // still open, so this is checked before the bridge and lowers on its own.
+  if (model !== null) {
+    const stale = windowReason(model.validTime, request.asOf, `measurement model ${model.id}`);
+    if (stale !== null) {
+      reasons.push(stale);
+      earned = 'proxy_unvalidated';
+    }
+  }
+
   if (request.surrogateBridgeRef !== null) {
     bridge = bridges.resolve(request.surrogateBridgeRef);
     if (bridge === null) {
@@ -346,7 +417,7 @@ export function assessBridgedMeasurementBacking(
       // launder a direct claim rather than bound a surrogate one.
       reasons.push(`measurement model ${model.id} is declared validated and does not stand on a surrogate bridge`);
     } else {
-      const support = bridgeSupport(models, bridge);
+      const support = bridgeSupport(models, bridge, request.asOf);
       reasons.push(...support.reasons);
       earned = weaker(earned, support.ceiling);
     }

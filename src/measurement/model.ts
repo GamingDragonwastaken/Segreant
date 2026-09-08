@@ -5,7 +5,7 @@
  */
 
 import type { Scope } from '../epistemic/scope.ts';
-import type { TimeInterval } from '../epistemic/time.ts';
+import { interval, type TimeInterval } from '../epistemic/time.ts';
 
 /**
  * Ordered weakest-first, and the order is load-bearing rather than cosmetic:
@@ -94,7 +94,11 @@ export function measurementModel(input: MeasurementModelInput): MeasurementModel
     validation: input.validation,
     calibration: input.calibration,
     uncertainty: Object.freeze({ ...input.uncertainty }),
-    ...(input.validTime ? { validTime: input.validTime } : {}),
+    // Canonicalised through `interval()`, which refuses a window that ends
+    // before it begins. It used to be copied through unchecked, so a model
+    // could declare a window no instant can fall inside and still register --
+    // and since nothing read the field, nothing would ever have noticed.
+    ...(input.validTime ? { validTime: interval(input.validTime.from, input.validTime.to) } : {}),
   });
 }
 
