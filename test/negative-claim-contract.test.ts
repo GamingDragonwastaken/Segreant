@@ -53,7 +53,13 @@ function completenessEvidence(overrides: Partial<Evidence> = {}): Evidence {
       coveredScope: scope({ organization: 'acme' }),
       coveredTime: interval('2026-07-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z'),
     },
-    measurementModelRef: null,
+    // The claim under test asserts `measurement: 'validated'` and therefore has
+    // to name a model. Since D-168 the append boundary requires that reference
+    // to be one a cited evidence declared, so the incident feed -- which is
+    // what `model:ops-v1` measures -- declares it. Nothing about the negative
+    // contract this file tests depends on the field; leaving it `null` would
+    // only mean every assertion below was reached through a different refusal.
+    measurementModelRef: 'model:ops-v1',
     monetaryBasis: null,
     assumptions: [],
     supersedes: [],

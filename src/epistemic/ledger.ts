@@ -1009,6 +1009,9 @@ export class EpistemicLedger {
     const refinedOver: Evidence[] = [];
     const narrowedOrChanged: Evidence[] = [];
     const negativeSources = new Map<string, Evidence>();
+    // Every measurement model the cited evidence declares. A claim may name one
+    // of these and no others: see the check after the loop.
+    const declaredMeasurementModels: string[] = [];
     for (const evidenceId of item.evidenceIds) {
       const source = this.readEvidence(evidenceId);
       if (source === null) throw new Error(`unknown evidence: ${evidenceId}`);
@@ -1027,6 +1030,33 @@ export class EpistemicLedger {
       else refinedOver.push(source);
       if (scopeIsSupportedBy(item.scope, source.scope)) scopeSupplied = true;
       else narrowedOrChanged.push(source);
+      if (source.measurementModelRef !== null) declaredMeasurementModels.push(source.measurementModelRef);
+    }
+    // A MEASUREMENT CITATION CANNOT APPEAR AT THE CLAIM LAYER.
+    //
+    // `claim()` refuses a null ref once `profile.measurement` rises above
+    // `proxy_unvalidated`, which checks that a reference was WRITTEN. Nothing
+    // checked it was one any evidence had made, so a claim could name a model
+    // that no record of the measurement declared and every reader would see
+    // provenance. This is the same bound the three ceilings below apply, on the
+    // one field of the same kind that was not bounded.
+    //
+    // AT LEAST ONE, not all: a claim cites the assignment record and the
+    // outcome record, and only the outcome record observed the metric.
+    // Requiring every cited evidence to carry the reference would force a
+    // record that measured something else to declare a model it has nothing to
+    // do with, which is the same laundering pointed the other way.
+    //
+    // This does NOT establish that the reference resolves to a registered
+    // model. The evidence can name nothing just as the claim could; what is
+    // closed is the claim inventing a backing its evidence never made.
+    if (item.measurementModelRef !== null && !declaredMeasurementModels.includes(item.measurementModelRef)) {
+      const declared = declaredMeasurementModels.length === 0
+        ? 'no cited evidence declares a measurement model'
+        : `cited evidence declares ${[...new Set(declaredMeasurementModels)].sort().join(', ')}`;
+      throw new Error(
+        `claim ${item.id} cites measurement model ${item.measurementModelRef}, and ${declared}`,
+      );
     }
     if (!grainSupplied && refinedOver.length > 0) {
       const cited = refinedOver[0]!;

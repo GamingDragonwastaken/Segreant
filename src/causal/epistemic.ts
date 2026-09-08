@@ -276,7 +276,16 @@ export function buildCausalStudyKernelIssuance(
       coveredScope: studyScope,
       coveredTime: validTime,
     },
-    measurementModelRef: null,
+    // THE RECORD THAT WAS ACTUALLY MEASURED UNDER THE MODEL SAYS SO (D-168).
+    // Both claims below cite this model, and while this field was `null` that
+    // citation appeared at the claim layer out of nothing -- the reference was
+    // written by the adapter rather than declared by any record of the
+    // measurement. The outcome record IS the observation of the pre-registered
+    // quality metric, so it is the record that can honestly carry it. The
+    // assignment record above keeps `null`: assignment is not a measurement of
+    // quality, and making it claim one to satisfy a rule would be the
+    // laundering the rule exists to stop.
+    measurementModelRef,
     monetaryBasis: null,
     assumptions: CAUSAL_ASSUMPTIONS,
     supersedes: [],
