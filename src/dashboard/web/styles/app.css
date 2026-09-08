@@ -758,7 +758,21 @@ body.claim-open { overflow: hidden; }
      as a quiet second line. Addressed by explicit class, not nth-of-type --
      every cell here is a <span>, so type-indexing silently counted the label
      as the first `.num` and pushed each cell one column out of place. */
-  .ledger-head { display: none; }
+  /* Hidden on screen, not from assistive tech: `display: none` would remove
+     the row from the accessibility tree, taking its role="columnheader"
+     cells with it and leaving the role="table" body rows with no headers.
+     Clipping to 1px keeps the row (and its roles) in the tree while
+     collapsing it visually, the same trade-off as a conventional
+     `.sr-only` utility. */
+  .ledger-head {
+    position: absolute;
+    width: 1px; height: 1px;
+    margin: -1px; padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
   .ledger-row {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas: 'key cost' 'meta meta';
