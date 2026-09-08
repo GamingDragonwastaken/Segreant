@@ -203,3 +203,33 @@ test('replaying an identical claim stays idempotent rather than failing the seco
   assert.equal(kernel.appendClaim(item), 'inserted');
   assert.equal(kernel.appendClaim(item), 'duplicate');
 });
+
+test('a claim citing no evidence has no ceiling to compare against, so it is refused rather than left unbounded', () => {
+  // WP-R05's own tracking note (`docs/program/PACKET-INVENTORY.md`) still lists
+  // this as open: "a claim citing NO evidence has no ceiling to compare with and
+  // is unbounded here." Measured directly: `claim()` (claim.ts:333) calls
+  // `stringList(value.evidenceIds, 'evidenceIds', true)`, and `stringList`
+  // throws when `required` is true and the array is empty. That requirement has
+  // been in place since the Claim envelope was first introduced (`fa36cc3`), so
+  // `assertClaimWithinItsEvidence` in ledger.ts — which computes the ceiling by
+  // walking `item.evidenceIds` — can never be reached with an empty array: no
+  // Claim with empty evidenceIds can be constructed, let alone appended.
+  //
+  // Concretely reproduced against a hypothetical unfixed build (evidenceIds
+  // required temporarily relaxed, `assertClaimWithinItsEvidence`'s ceiling loop
+  // unchanged): the same claim below constructs, `appendClaim` returns
+  // 'inserted', and the stored profile reads back integrity: 'verified',
+  // authenticity: 'provider_authenticated', coverage: 'complete',
+  // monetaryBasis: 'billed', finality: 'final' — the maximum on every axis,
+  // asserted against nothing. On the current code this throws before
+  // `EpistemicLedger` is ever reached.
+  //
+  // This test does not newly close anything; `claim()`'s requirement already
+  // does. It exists so the PACKET-INVENTORY line above stops describing a real
+  // hole and starts describing a stale tracking note, and so a future change
+  // that loosens `evidenceIds` back to optional fails here first.
+  assert.throws(
+    () => claim(claimInput('claim:no-evidence:1', [], 'verified', 'provider_authenticated')),
+    /evidenceIds must contain at least one entry/,
+  );
+});
