@@ -7,9 +7,9 @@
 | | |
 | --- | --- |
 | Branch | `gpt56/magnum-opus-reconstruction` — never `main`, never force-pushed |
-| Last CI-verified exact head | `6b913183ed1d95e9c440a076ffbddcfd378d8942` — run `34169977899`, **success on all eight configured jobs** (`test` ×3, `team-server-test` ×3, `package-smoke`, `candidate-head`), inspected job by job, not by trusting the first green row |
-| Code ahead of that head | `f7c3a66` (WP-I05 receipt-chain coverage), `631558a` (WP-D07 surrogate bridges), `b8d0620` (WP-F05 decision assurance levels), `fb259f5` (WP-R01 evidence abstract interpretation), `ed9d97c` (WP-R01 money-axis wiring), plus records commits. None is verified remotely until its own exact SHA has a completed green run. |
-| Local gates on the current tree | Root suite **1,660 total / 1,656 pass / 0 fail / 4 skipped**; team-server **67/67**; all three TypeScript domains clean (root `tsconfig.json`, `src/dashboard/web/app/tsconfig.json`, `team-server/`) |
+| Last CI-verified exact head | `dfcfc879fd6f9ec51428f0e5efcf91f9d7539e2e` — run `34171128690`, **success on all eight configured jobs** (`test` ×3, `team-server-test` ×3, `package-smoke`, `candidate-head`), inspected job by job, not by trusting the first green row. `ac98395` (run `34170679364`) and `6b91318` (run `34169977899`) were verified the same way before it. |
+| Code ahead of that head | The WP-D07 causal measurement wiring and its records commit. Not verified remotely until its own exact SHA has a completed green run. |
+| Local gates on the current tree | Root suite **1,666 total / 1,662 pass / 0 fail / 4 skipped**, and that run was made UNDER SIX CONCURRENT CPU-BOUND PROCESSES rather than on an idle machine, which is the standard this program now holds itself to; team-server **67/67**; all three TypeScript domains clean (root `tsconfig.json`, `src/dashboard/web/app/tsconfig.json`, `team-server/`) |
 | Dossier source | `FISCUS_EXECUTION_DOSSIER_III.md` is **not in this checkout and not in git history** — it was an owner-supplied input. `docs/program/PACKET-INVENTORY.md` is the surviving mechanical enumeration of all 76 packets and is authoritative here. Do not re-derive a packet count from anything else. |
 
 ## Packet accounting
@@ -22,6 +22,15 @@ grep -oE '\| `(NOT_STARTED|IN_PROGRESS|PARTIAL|COMPLETED|BLOCKED_EXTERNAL|SUPERS
 
 `PARTIAL` is not a nearly-finished `COMPLETED`. Every PARTIAL row names its own remainder; read the row before assuming a packet is nearly done.
 
+## The local suite is now a deterministic gate, and it was not before
+
+Directive item 4. Two separate defects made a full local run non-deterministic, and both were found by reproducing rather than by reasoning:
+
+- **`test/plugins-host.test.ts` had a load-sensitive deadline** (D-154). Its shared fixture allowed 250ms of child startup for tests that spawn a real `node` child. Under twelve concurrent CPU-bound processes it failed on demand — three runs at 2, 4 and 2 failures. Every intermittent full-suite failure previously observed in this program was this file, and each time it had been set aside as "local contention", which was a description and not a diagnosis.
+- **Two tests contradicted each other about the repository artifact** (D-155). `test/build-race.test.ts` asserts that an isolated build does not republish this checkout's `dist/cli.js`, defended by a comment claiming nothing else in the suite builds at ROOT. `test/egress-guidance-launcher.test.ts` ran `npm run fiscus`, whose `prefiscus` hook is `npm run build`. Running those two files together failed EVERY time with no artificial load.
+
+Neither fix weakened an assertion; in both cases the behavioural claim was kept and the incidental dependence on the harness schedule was removed. **A full run under six CPU-bound processes is now 1,666 / 1,662 / 0 fail / 4 skipped.** If a future run is red, treat it as a finding rather than as noise — that reflex is what let both of these survive.
+
 ## Recently closed, do not redo
 
 `WP-D06` both halves (drift silence and alert coverage, CLI and browser), `WP-H05` supply-chain audit script, `WP-I04` four accessibility defects, `WP-E06` inference ledger and precision planning, `WP-D05` measurement backing registry, `WP-I05` boundary declaration, retention consequence and receipt-chain coverage, `WP-D07` surrogate bridges, `WP-F05` decision assurance levels, `WP-R01` evidence abstract interpretation. D-140 through D-151 in the decision log carry the counterexample, the fix, and — in every case — what the fix does not establish.
@@ -30,19 +39,20 @@ One defect class now runs through six of those: **absence of a result reported a
 
 The second recurring class is narrower, just as reliable, and is the dominant one: **a mechanism built and never wired.** `assessMeasurementFitness` had no caller before D-146. `measurementRegistry`, `surrogateBridgeRegistry`, the WP-E06 inference ledger and the WP-F05 assurance gate still have none — and for the assurance gate the reason is sharper than oversight: `decision.certificate` has no production caller at all, so there is no surface to wire it to. A gate that no product path passes through is an available discipline, not an enforced one, and every record here says so explicitly rather than letting PARTIAL imply otherwise.
 
-**This is the highest-value work in the program, and D-152 is the first instance of doing it.** The money-axis half of `abstract.ts` was moved into `assessDerivationLegality`, which is what `appendDerivationWithinTransaction` actually runs, so the one collapse this repository's first line forbids is now refused at the boundary that persists. `analyzeDerivationChain` is still called by nothing, so the chain half of the same module remains unwired — one axis moved, not the module. Wire, do not build.
+**This is the highest-value work in the program, and two rounds of it have now been done.** D-152 moved the money-axis half of `abstract.ts` into `assessDerivationLegality`, which is what `appendDerivationWithinTransaction` actually runs, so the one collapse this repository's first line forbids is refused at the boundary that persists. D-153 gave WP-D07 its first product boundary: `src/causal/epistemic.ts` now cites a resolvable measurement model through a declared surrogate bridge and takes its rung from what they earn, which moved Fiscus's own causal claims down from `proxy_validated` to `proxy_unvalidated`. Both were downward moves in what the product asserts, which is what wiring an honest rule to a real caller looks like. Wire, do not build.
 
 ## Next executable frontier
 
 Highest value first, each stated as the boundary that is missing rather than as an area to look at:
 
-1. **Enforce what WP-D05 and WP-D07 only made possible.** `claim()` still accepts any non-null `measurementModelRef`; no production call site resolves one through `measurementRegistry` or `surrogateBridgeRegistry`; no registry of Fiscus's own models is assembled anywhere; and no surrogate bridge is declared for the two `proxy_validated` claims `src/causal/epistemic.ts` actually issues. Those two claims are the concrete first target, because they are the repository's own strongest surrogate claims and the module was written with them in view.
+1. **Enforce what WP-D05 and WP-D07 only made possible — one boundary is done, the general rule is not.** The causal claims now resolve their own model and bridge (D-153), but `claim()` still accepts ANY non-null `measurementModelRef` without resolving it, so the kernel's own gate is still the honour system and any other issuance boundary can repeat exactly the defect D-153 fixed. That is the next target and it belongs in `claim()` or in the ledger append path, not in another adapter. No repository-wide registry of Fiscus's models is assembled anywhere.
 2. **WP-E06's same gap.** The CLI, dashboard and store call `estimateCausalStudy` directly, so every multiplicity count is a lower bound and the ledger is an available discipline rather than an enforced one.
 3. **AII-036's three `unmigrated_authority` boundaries** — `causal.qualification`, `causal.estimate`, `decision.certificate`. The first two are in the product import closure and can reach an operator today, which sets the order.
 4. **AII-025's missing gate.** The observational frontier's label is honest; no surface yet refuses to accept an observational separation as an input to an action that changes spend.
 5. **The remaining AII-002 negative claims** — no provider charge, no duplicate, no policy violation — still carry no completeness requirement, and nothing yet emits a refuting witness.
 6. **The chain half of `abstract.ts` is still unwired.** The money axis is done — D-152 added a `monetary_rebasing` witness kind and `assessDerivationLegality` now requires it, so the estimated-to-billed re-basing is refused where derivations persist. `analyzeDerivationChain` is still called by nothing, so a conclusion several merges downstream of its leaves is still bounded by nothing, and `BASIS_DERIVATIONS` is still empty, so neither rule knows which re-basings are sound. The next step is a caller that bounds a whole chain, not another rule.
-7. **The new witness is a declaration, not a proof.** Nothing checks that a `monetary_rebasing` witness's evidence actually supports the re-basing it licenses, only that someone recorded one — the same gap the witness registry closes for other kinds, and the same one `surrogateBridgeRegistry` was built for and nothing calls.
+7. **DAL2 is unreachable for quality-based claims, and that is a finding rather than a bug.** `src/decision/assurance.ts` requires at least `proxy_validated`; after D-153 no Fiscus claim about quality earns it, because nothing in this repository records an empirical association between a quality metric and the quality construct. Registering one — an independent measurement of the construct, against which a metric can be compared — is the work that would change it. Lowering the bar is not.
+8. **The new witness is a declaration, not a proof.** Nothing checks that a `monetary_rebasing` witness's evidence actually supports the re-basing it licenses, only that someone recorded one — the same gap the witness registry closes for other kinds, and the same one `surrogateBridgeRegistry` was built for and nothing calls.
 
 ## Known blockers and standing constraints
 
