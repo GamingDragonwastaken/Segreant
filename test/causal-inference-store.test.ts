@@ -28,7 +28,7 @@
  * IS the act. Declining to record it would not leave the count unchanged; it
  * would leave it wrong.
  *
- * Recorded at D-156.
+ * Recorded at D-157.
  */
 
 import { test } from 'node:test';
