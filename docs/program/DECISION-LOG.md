@@ -1641,3 +1641,21 @@ Zero required witnesses. And `appendDerivationWithinTransaction` checks every in
 **Evidence.** Seven tests, RED 6/7; the one that passed is the control asserting the span fields still read as they did. team-server suite 74/74, team-server typecheck clean.
 
 **What this does not establish.** `buildWindowCoverage` is pure and takes the windows it is given, so this exercises the reporting and not the SQL that collects them; `PgRollupStore` remains untested here for the reason recorded throughout this file — there is no live Postgres in this environment, and faking one would be inventing the coverage. And it does not decide whether summing across disjoint windows is ever the right thing to look at. It makes the reader able to see that it happened.
+
+
+## D-165 — the causal study list dropped studies silently and gave every row a null that meant something else
+**Decision:** `CausalStudySummary` carries `analysisBasis`, `CausalPayload` carries `studiesOmitted`, and both branches of `/api/causal` emit it.
+
+**Two silences on one payload, and the class D-158 already closed on the CLI.**
+
+**The list drops rows.** `causalStudySummaries()` filters version-2 protocols out of its result, deliberately — their public projection is deferred, and inventing one would be the worse error — and it did so silently. With ONLY version-2 studies registered, the response says the projection is deferred in as many words. Add one version-1 study and that sentence is replaced by "Local randomized-study evidence only", `studies` has a single row, and the registered version-2 studies are reported nowhere at all. A list of one is then indistinguishable from a store that holds exactly one study. `studiesOmitted` gives the count and the reason, and is present on the no-study branch too: a field a consumer sees only when a study exists is a field it cannot read, and that branch is exactly where a version-2-only Store lands — the case with the most to omit.
+
+**Every row's `latestAnalysis: null` meant something it did not say.** For every row this build can produce, the list holds a retained version-1 study, and retained version-1 evidence is inspect-only, so no analysis snapshot CAN be written. Null reads as "none has been saved"; the truth is "none can be". D-158 separated those on `fiscus causal inspect` and recorded this surface as open. `analysisBasis` closes it.
+
+**On the row, not on the response.** The reason is per study — not registered, version-1 inspect-only, and version-2 deferred are three different sentences — and this repository's first rule is that a figure carries its basis, not that a basis exists somewhere else in the same document. Putting it on the summary also means `causal status` gets it without a second mechanism.
+
+**The field is not a restatement of `latestAnalysis === null`.** `test/causal-store.test.ts` holds the case that shows it: a retained snapshot EXISTS on that study and no new one can be written, so the value is present and the basis is still `available: false`.
+
+**Evidence.** Five tests, RED 5/5 verified by stashing the source and re-running. The first RED attempt was wrong and is worth recording: three of its failures were fixture errors, because `registerCausalProtocol` refuses a version-1 protocol outright and a version-1 row can only exist as retained legacy data — which is the same fact `analysisBasis` exists to state. A RED that fails for the wrong reason proves nothing, and this one had to be redone. Root suite 1,743/1,739/0 fail, both typecheck domains clean, payload contract regenerated.
+
+**What this does not establish.** Version-2 studies are still not inspectable; the projection is still deferred and the rows are still omitted. What changed is that the omission is now stated with its size. And `analysisBasis.available` is false for every study this build can hold, so nothing yet exercises a true branch — that arrives with the version-2 analysis projection, exactly as D-158 recorded.
