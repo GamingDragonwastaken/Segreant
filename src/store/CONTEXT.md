@@ -58,6 +58,14 @@ two domain callers goes in `rows.ts`.
   without the new version field remain readable from the authoritative database
   value. `Store.restoreBackup()` refuses existing destinations and never
   overwrites the active database path.
+- **A reported causal look is recorded.** `Store.reportCausalStudy()` is the
+  reporting boundary for every operator-facing surface: it rebuilds the study's
+  inference-act chain from `causal_inference_acts`, records this look, and
+  returns the conclusion after multiplicity beside the single-look one. A caller
+  that reaches past it to `estimateCausalStudy` produces a look that, as the
+  ledger's own assumptions say, is not counted and cannot be. A chain that does
+  not verify is never extended — the claim is withheld instead, because
+  appending would make a smaller look count look intact.
 - **The epistemic ledger shares this connection.** `Store.epistemic()` exposes
   canonical Evidence/Claim/Derivation persistence on the same SQLite handle;
   its schema and append-only triggers are still owned by `schema.ts`.

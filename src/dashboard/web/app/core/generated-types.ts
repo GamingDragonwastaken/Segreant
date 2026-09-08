@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: e9e79eb1b2e22fd2e7042e53e85cbf2bbf0f67ea7b270a3a3ba4bd460dd246d0 */
+/** Source SHA-256: 8a2f4159ac35619790bb3acdae104f0ca42e1bcbeee6eaa1e859f29acf68487e */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -773,6 +773,32 @@ export interface CausalPayload {
       ruleSource: 'protocol' | 'version_default';
     };
     assignmentReplay: Array<{ blockId: string; allocationHash: string; errors: string[] }>;
+    /**
+     * The conclusion AFTER the number of times this study has been looked at,
+     * beside the single-look one. `allowedClaim` above is the single-look
+     * decision and is reported unchanged; this is what survives multiplicity.
+     * Written against the server's own `CausalStudyInferenceReport`, not from
+     * memory -- the shape of `multiplicity` is `CausalInferenceMultiplicity`.
+     */
+    claimAfterMultiplicity: 'not_established' | 'comparative_cost_quality_supported' | 'causal_net_benefit_supported';
+    claimAfterMultiplicityReason: string | null;
+    multiplicity: {
+      looks: number;
+      intervalReportingActs: number;
+      identicalRepeatActs: number;
+      nonEstimatingReads: number;
+      actsInErrorBudget: number;
+      endpoints: number;
+      slices: number;
+      actAlpha: number | null;
+      actConfidenceLevel: number | null;
+      familywiseErrorUpperBound: number | null;
+      simultaneousConfidenceLowerBound: number | null;
+      basis: 'pre_registered_plan' | 'recorded_acts_only';
+      chainIntact: boolean;
+      assumptions: string[];
+      limitations: string[];
+    };
   } | null;
   causalEvidence: string;
   boundary: string;

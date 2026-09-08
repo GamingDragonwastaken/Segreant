@@ -509,6 +509,29 @@ CREATE TABLE IF NOT EXISTS causal_analysis_snapshots (
   analysis_json   TEXT NOT NULL
 );
 
+-- Every reported look at a causal study, one row per inferential act.
+--
+-- WITHOUT THIS TABLE THE LOOK COUNT HAD NOWHERE TO LIVE, and the two surfaces
+-- that reach an operator -- fiscus causal summary and GET /api/causal -- each
+-- reported a single-look conclusion as if it were the only one. The act chain
+-- in src/causal/inference-ledger.ts is what makes the count mean something:
+-- sequence and previous_act_digest are stored so a deleted row is detectable
+-- rather than absorbed, and a broken chain withholds the claim instead of
+-- reporting a smaller number.
+CREATE TABLE IF NOT EXISTS causal_inference_acts (
+  study_id            TEXT NOT NULL,
+  sequence            INTEGER NOT NULL,
+  protocol_hash       TEXT NOT NULL,
+  reported_at_ms      INTEGER NOT NULL,
+  previous_act_digest TEXT NOT NULL,
+  act_digest          TEXT NOT NULL,
+  act_json            TEXT NOT NULL,
+  PRIMARY KEY (study_id, sequence)
+);
+
+CREATE INDEX IF NOT EXISTS idx_causal_inference_acts_study
+  ON causal_inference_acts(study_id, sequence);
+
 CREATE INDEX IF NOT EXISTS idx_causal_analysis_latest
   ON causal_analysis_snapshots(study_id, computed_at_ms DESC, analysis_id DESC);
 

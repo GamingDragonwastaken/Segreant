@@ -56,7 +56,6 @@ import { pricingCoverage } from '../cost/coverage.ts';
 import { RESOURCE_LIMITS } from '../util/resource-limits.ts';
 import { buildEconomicReport } from '../cli/economicCmd.ts';
 import { verifyBlockedAssignmentPlan } from '../causal/assignment.ts';
-import { estimateCausalStudy } from '../causal/estimate.ts';
 import { stringifyJson } from '../util/json.ts';
 import { dashboardApiContract, type DashboardApiContractId } from './contracts.ts';
 import type { DashboardResponseFor } from './shared-types.ts';
@@ -930,7 +929,15 @@ export function handleCausal({ res, url, store }: RouteContext): void {
     }
     const data = store.causalStudyData(selected.studyId);
     if (!data) throw new Error('causal summary exists without its local protocol');
-    const estimate = estimateCausalStudy(data);
+    // SERVING A STUDY IS A LOOK. This used to call `estimateCausalStudy`
+    // directly, so every refresh of this endpoint presented itself as the first
+    // reading of the study. Recording the act does not breach the read-only
+    // boundary this response declares: it changes no routing, no budget and no
+    // provider configuration, and it is an audit record of a report that has
+    // already been made rather than a change to the operator's data.
+    const report = store.reportCausalStudy(selected.studyId);
+    if (report === null) throw new Error('causal summary exists without its local protocol');
+    const estimate = report.estimate;
     const assignmentReplay = store.causalAssignmentPlans(selected.studyId).map((plan) => ({
       blockId: plan.blockId,
       allocationHash: plan.allocationHash,
@@ -954,6 +961,9 @@ export function handleCausal({ res, url, store }: RouteContext): void {
         allowedClaim: estimate.allowedClaim,
         jointInference: estimate.jointInference,
         assignmentReplay,
+        claimAfterMultiplicity: report.claimAfterMultiplicity,
+        claimAfterMultiplicityReason: report.claimAfterMultiplicityReason,
+        multiplicity: report.multiplicity,
       },
       causalEvidence: 'Local randomized-study evidence only. Ordinary Lift, pricing, and value scenarios cannot create a causal claim.',
       boundary: 'Read-only local status. This endpoint cannot change routing, budgets, or provider configuration.',

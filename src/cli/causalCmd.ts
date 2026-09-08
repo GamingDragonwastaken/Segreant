@@ -8,7 +8,6 @@
 
 import { dbPath } from '../config.ts';
 import { verifyBlockedAssignmentPlan } from '../causal/assignment.ts';
-import { estimateCausalStudy } from '../causal/estimate.ts';
 import { commitCausalProtocol } from '../causal/protocol.ts';
 import { Store } from '../store/db.ts';
 import type { Flags } from './flags.ts';
@@ -76,10 +75,22 @@ function studyIdFrom(flags: Flags): string {
   return typeof positional === 'string' ? positional : requireStringFlag(flags, 'study');
 }
 
+/**
+ * READING A STUDY IS A LOOK, AND THE LOOK IS RECORDED. This used to call
+ * `estimateCausalStudy` directly, so an operator could ask the same question
+ * twenty times and every answer presented itself as the first — the inference
+ * ledger's own assumptions had already named that hazard, and nothing in the
+ * product was routed through it. `store.reportCausalStudy` records the act and
+ * returns the conclusion AFTER multiplicity beside the single-look one. The
+ * single-look decision is reported unchanged and is never re-derived at an
+ * adjusted level; what the operator now also sees is whether it survives the
+ * number of times it has been asked.
+ */
 function summaryFor(store: Store, studyId: string): Record<string, unknown> {
   const data = store.causalStudyData(studyId);
   if (!data) throw new Error('causal study not found: ' + studyId);
-  const estimate = estimateCausalStudy(data);
+  const report = store.reportCausalStudy(studyId);
+  if (report === null) throw new Error('causal study not found: ' + studyId);
   return {
     studyId,
     protocolHash: data.protocol.protocolHash,
@@ -90,9 +101,12 @@ function summaryFor(store: Store, studyId: string): Record<string, unknown> {
       executions: data.executions.length,
       outcomes: data.outcomes.length,
     },
-    qualification: estimate.qualification,
-    allowedClaim: estimate.allowedClaim,
-    jointInference: estimate.jointInference,
+    qualification: report.estimate.qualification,
+    allowedClaim: report.estimate.allowedClaim,
+    claimAfterMultiplicity: report.claimAfterMultiplicity,
+    claimAfterMultiplicityReason: report.claimAfterMultiplicityReason,
+    multiplicity: report.multiplicity,
+    jointInference: report.estimate.jointInference,
     latestSnapshots: store.causalAnalysisSnapshots(studyId).slice(0, 5),
     boundary: 'Local randomized-study evidence only; no automatic provider routing or budget change.',
   };
@@ -160,12 +174,21 @@ export function cmdCausal(flags: Flags): void {
       const studyId = requireStringFlag(flags, 'study');
       const data = store.causalStudyData(studyId);
       if (!data) throw new Error('causal study not found: ' + studyId);
-      const preview = estimateCausalStudy(data);
+      // A PREVIEW IS STILL A LOOK. Nothing about the read-only contract makes
+      // an interval reported to an operator not have been reported; the record
+      // of the act is what keeps the next preview from presenting itself as the
+      // first. No snapshot is written and nothing is applied.
+      const report = store.reportCausalStudy(studyId);
+      if (report === null) throw new Error('causal study not found: ' + studyId);
+      const preview = report.estimate;
       if (!flags.apply) {
         emit({
           operation: 'analysis_preview',
           studyId,
           estimate: preview,
+          claimAfterMultiplicity: report.claimAfterMultiplicity,
+          claimAfterMultiplicityReason: report.claimAfterMultiplicityReason,
+          multiplicity: report.multiplicity,
           warning: 'No analysis snapshot was written. Re-run with --apply to append one immutable snapshot.',
         }, flags);
         return;

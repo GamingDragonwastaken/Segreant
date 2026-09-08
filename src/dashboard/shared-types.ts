@@ -771,6 +771,32 @@ export interface CausalPayload {
       ruleSource: 'protocol' | 'version_default';
     };
     assignmentReplay: Array<{ blockId: string; allocationHash: string; errors: string[] }>;
+    /**
+     * The conclusion AFTER the number of times this study has been looked at,
+     * beside the single-look one. `allowedClaim` above is the single-look
+     * decision and is reported unchanged; this is what survives multiplicity.
+     * Written against the server's own `CausalStudyInferenceReport`, not from
+     * memory -- the shape of `multiplicity` is `CausalInferenceMultiplicity`.
+     */
+    claimAfterMultiplicity: 'not_established' | 'comparative_cost_quality_supported' | 'causal_net_benefit_supported';
+    claimAfterMultiplicityReason: string | null;
+    multiplicity: {
+      looks: number;
+      intervalReportingActs: number;
+      identicalRepeatActs: number;
+      nonEstimatingReads: number;
+      actsInErrorBudget: number;
+      endpoints: number;
+      slices: number;
+      actAlpha: number | null;
+      actConfidenceLevel: number | null;
+      familywiseErrorUpperBound: number | null;
+      simultaneousConfidenceLowerBound: number | null;
+      basis: 'pre_registered_plan' | 'recorded_acts_only';
+      chainIntact: boolean;
+      assumptions: string[];
+      limitations: string[];
+    };
   } | null;
   causalEvidence: string;
   boundary: string;

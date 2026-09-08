@@ -33,6 +33,10 @@
 - the measurement rung on an issued causal claim is COMPUTED from a declared
   measurement model and surrogate bridge, both reconstructible from the protocol
   alone, so the reference a stored claim carries resolves without a service.
+- the inference ledger is the reporting boundary and not an available discipline:
+  the CLI and the dashboard both report through `Store.reportCausalStudy()`, so
+  the look count, the union-bound family-wise error and the conclusion AFTER
+  multiplicity reach the operator rather than existing in a module nothing calls.
 
 ## Invariants
 

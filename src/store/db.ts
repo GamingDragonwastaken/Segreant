@@ -51,6 +51,7 @@ import * as exactAllocation from '../alloc/exact.ts';
 import * as billing from './billing.ts';
 import { buildCausalStudyKernelIssuance, type CausalStudyKernelIssuance } from '../causal/epistemic.ts';
 import { estimateCausalStudy } from '../causal/estimate.ts';
+import type { CausalStudyInferenceReport } from '../causal/inference-ledger.ts';
 import * as causal from './causal.ts';
 import * as causalLineage from './causalLineage.ts';
 import * as causalProducer from './causalProducer.ts';
@@ -2658,6 +2659,20 @@ export class Store {
       this.epistemicLedger.appendDerivationWithinTransaction(issuance.derivation);
     });
     return issuance;
+  }
+
+  /**
+   * Report one causal study, recording the look.
+   *
+   * The reporting boundary for every operator-facing surface. `estimateCausalStudy`
+   * is a pure function and cannot count its own invocations; this can, and the
+   * returned report carries the look count, the union-bound family-wise error
+   * and the conclusion AFTER multiplicity beside the single-look one. A caller
+   * that reaches past this to the estimator produces a look that, as the
+   * ledger's own assumptions say, is not counted and cannot be.
+   */
+  reportCausalStudy(studyId: string, reportedAtMs = Date.now()): CausalStudyInferenceReport | null {
+    return causal.reportCausalStudy(this.db, studyId, reportedAtMs);
   }
 
   causalAnalysisSnapshots(studyId: string): causal.CausalAnalysisSnapshot[] {

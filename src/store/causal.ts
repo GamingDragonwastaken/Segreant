@@ -9,6 +9,14 @@
 import { createHash, randomFillSync } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { estimateCausalStudy } from '../causal/estimate.ts';
+import {
+  openCausalInferenceLedger,
+  reportCausalStudyEstimate,
+  summarizeInferenceMultiplicity,
+  type CausalInferenceLedger,
+  type CausalStudyInferenceReport,
+  type RecordedInferentialAct,
+} from '../causal/inference-ledger.ts';
 import { CAUSAL_PROTOCOL_VERSION } from '../causal/types.ts';
 import {
   decodeCausalExecutionV2,
@@ -1619,6 +1627,105 @@ export function saveCausalAnalysis(
     'INSERT INTO causal_analysis_snapshots (analysis_id, study_id, protocol_hash, computed_at_ms, state, analysis_json) VALUES (?, ?, ?, ?, ?, ?)',
   ).run(analysisId, studyId, data.protocol.protocolHash, computedAtMs, estimate.qualification.state, encoded);
   return snapshot;
+}
+
+/**
+ * Rebuild the study's inference ledger from the acts on disk.
+ *
+ * The genesis digest is recomputed by `openCausalInferenceLedger` from the
+ * study and protocol rather than stored, so a row that claims to belong to a
+ * different protocol cannot graft itself onto this chain. Nothing here VERIFIES
+ * the chain — that is `summarizeInferenceMultiplicity`'s job and it must stay
+ * there, because a loader that quietly dropped a bad row would turn a detected
+ * break into a smaller look count, which is the failure this whole mechanism
+ * exists to prevent.
+ *
+ * No plan is loaded because no surface registers one. That is not a gap being
+ * hidden: a plan must be declared before the first act or it is not a plan, so
+ * the honest basis today is `recorded_acts_only`, and the report says so.
+ */
+export function causalInferenceLedger(
+  db: DatabaseSync,
+  studyId: string,
+  protocolHash: string,
+): CausalInferenceLedger {
+  const empty = openCausalInferenceLedger({ studyId, protocolHash, plan: null });
+  const rows = db.prepare(
+    'SELECT act_json FROM causal_inference_acts WHERE study_id = ? ORDER BY sequence',
+  ).all(studyId) as Array<{ act_json: string }>;
+  if (rows.length === 0) return empty;
+  const acts = rows.map((row) => parseJson<RecordedInferentialAct>(row.act_json, 'inference act'));
+  return Object.freeze({
+    ...empty,
+    acts: Object.freeze(acts),
+    ledgerDigest: acts[acts.length - 1]!.actDigest,
+  });
+}
+
+/**
+ * Report the study, recording the look.
+ *
+ * WHY A READ PATH WRITES. Fiscus is read-only by default and `--apply`
+ * persists, and this does not breach that. An inferential act is not a change
+ * to the operator's data, to provider routing, or to budgets — it is an audit
+ * record of something that already happened, in the same category as an egress
+ * receipt, which is appended before the request it describes and whose failure
+ * stops the request. `reportCausalStudyEstimate` says in as many words that
+ * reporting IS the act. Declining to record it would not leave the count
+ * unchanged; it would leave it wrong, which is exactly the state every surface
+ * was in before this existed.
+ *
+ * The acts and the report are written under one transaction so a report can
+ * never be returned on the strength of a look that was not recorded.
+ *
+ * Returns null for a study with no version-1 analysis path, matching
+ * `causalStudyData`: a caller asking about a study this build cannot analyse
+ * has not made an error, and inventing an empty report for it would be the
+ * absence-as-result defect in a new place.
+ */
+export function reportCausalStudy(
+  db: DatabaseSync,
+  studyId: string,
+  reportedAtMs: number,
+): CausalStudyInferenceReport | null {
+  if (!Number.isInteger(reportedAtMs) || reportedAtMs <= 0) {
+    throw new Error('reportedAtMs must be a positive integer millisecond timestamp');
+  }
+  const data = causalStudyData(db, studyId);
+  if (data === null) return null;
+
+  const before = causalInferenceLedger(db, studyId, data.protocol.protocolHash);
+  const { ledger, report } = reportCausalStudyEstimate(before, data, { reportedAtMs });
+
+  // A BROKEN CHAIN IS NOT EXTENDED. If the stored acts no longer verify, the
+  // sequence a new act would take is already occupied or already wrong, and
+  // appending would produce a chain that verifies forward from a forged start
+  // -- a smaller look count wearing the appearance of an intact one. The report
+  // is still returned, and it already carries the right answer: the break
+  // propagates through `verifyActChain`, so `chainIntact` is false and the
+  // claim is withheld as `not_established` because the number of looks behind
+  // it is unknown. Withholding is the point; repairing would be the defect.
+  if (before.acts.length > 0 && !summarizeInferenceMultiplicity(before).chainIntact) return report;
+
+  const insert = db.prepare(
+    'INSERT INTO causal_inference_acts '
+    + '(study_id, sequence, protocol_hash, reported_at_ms, previous_act_digest, act_digest, act_json) '
+    + 'VALUES (?, ?, ?, ?, ?, ?, ?)',
+  );
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    for (const act of ledger.acts.slice(before.acts.length)) {
+      insert.run(
+        act.studyId, act.sequence, act.protocolHash, act.reportedAtMs,
+        act.previousActDigest, act.actDigest, canonicalJson(act),
+      );
+    }
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+  return report;
 }
 
 export function causalAnalysisSnapshots(db: DatabaseSync, studyId: string): CausalAnalysisSnapshot[] {
