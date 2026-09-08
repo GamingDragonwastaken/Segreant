@@ -738,7 +738,11 @@ export interface CausalPayload {
     executions: number;
     outcomes: number;
     latestAnalysis: { analysisId: string; computedAtMs: number; state: string } | null;
+    /** Why `latestAnalysis` is what it is: absent because none was saved, or because none can be. */
+    analysisBasis: { available: boolean; reason: string };
   }>;
+  /** How many registered studies `studies` could not include, and why. */
+  studiesOmitted: { count: number; reason: string };
   study: {
     studyId: string;
     protocolHash: string;

@@ -74,6 +74,34 @@ export interface CausalStudySummary {
   executions: number;
   outcomes: number;
   latestAnalysis: { analysisId: string; computedAtMs: number; state: string } | null;
+  /**
+   * Why `latestAnalysis` is what it is.
+   *
+   * A bare `null` reads as "no analysis has been saved". For every study this
+   * list can hold the truth is "no analysis CAN be saved": the list is
+   * version-1 only, and retained version-1 evidence is inspect-only. Those are
+   * different claims, and D-158 already separated them on the CLI's inspect
+   * surface -- this is the same separation on the row itself, so every consumer
+   * of a summary gets the reason beside the value rather than from a second
+   * mechanism.
+   */
+  analysisBasis: { available: boolean; reason: string };
+}
+
+/**
+ * The studies this list could not include, and why.
+ *
+ * `causalStudySummaries` drops version-2 protocols, deliberately -- their
+ * public projection is deferred and inventing one would be worse -- and until
+ * now it dropped them silently. With only version-2 studies registered the
+ * dashboard's prose said the projection was deferred; with one version-1 study
+ * beside them that sentence was replaced, the list showed one row, and the
+ * omitted studies were reported nowhere. A list that cannot say what it left
+ * out cannot be told from a list that left out nothing.
+ */
+export interface CausalStudyListBasis {
+  studies: CausalStudySummary[];
+  omitted: { count: number; reason: string };
 }
 
 class CausalLegacyInspectOnlyError extends Error {
@@ -1807,6 +1835,10 @@ export function causalAnalysisSnapshots(db: DatabaseSync, studyId: string): Caus
 }
 
 export function causalStudySummaries(db: DatabaseSync): CausalStudySummary[] {
+  return causalStudyListBasis(db).studies;
+}
+
+export function causalStudyListBasis(db: DatabaseSync): CausalStudyListBasis {
   const rows = db.prepare(
     'SELECT p.study_id, p.protocol_hash, typeof(p.committed_at_ms) AS committed_at_ms_type, ' +
     'CAST(p.committed_at_ms AS TEXT) AS committed_at_ms_text, p.protocol_json, ' +
@@ -1839,9 +1871,15 @@ export function causalStudySummaries(db: DatabaseSync): CausalStudySummary[] {
     analysis_at_text: unknown;
     analysis_state: string | null;
   }>;
-  return rows.flatMap((row) => {
+  let omittedCount = 0;
+  const studies = rows.flatMap((row) => {
     const decoded = decodeStoredProtocolRow(row);
-    if (decoded.version === 2) return [];
+    // Counted, not included. The omission stands; what changes is that it is
+    // now reported rather than performed in silence.
+    if (decoded.version === 2) {
+      omittedCount += 1;
+      return [];
+    }
     const protocol = decoded.protocol;
     const analysisAtMs = decodeStoredAnalysisAtMs(row);
     return [{
@@ -1854,8 +1892,27 @@ export function causalStudySummaries(db: DatabaseSync): CausalStudySummary[] {
       latestAnalysis: row.analysis_id !== null && analysisAtMs !== null && row.analysis_state
         ? { analysisId: row.analysis_id, computedAtMs: analysisAtMs, state: row.analysis_state }
         : null,
+      // Every row here is a retained version-1 study by construction, so the
+      // reason is the version-1 one. It is stated per row rather than once per
+      // response because the reason is per study -- not registered, version-1
+      // inspect-only and version-2 deferred are three different sentences --
+      // and a figure carries its own basis.
+      analysisBasis: {
+        available: false,
+        reason: 'retained version-1 causal evidence is inspect-only, so no new analysis snapshot can be written for this study',
+      },
     }];
   });
+  return {
+    studies,
+    omitted: {
+      count: omittedCount,
+      reason: omittedCount === 0
+        ? 'no registered study was omitted from this list'
+        : 'version-2 public projection is deferred, so registered version-2 studies are not listed here; '
+          + 'this count is how many, not an assertion that they are absent',
+    },
+  };
 }
 
 // Version-2 assignment persistence is intentionally private to this module.

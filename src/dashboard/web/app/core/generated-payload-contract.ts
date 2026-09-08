@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "8a2f4159ac35619790bb3acdae104f0ca42e1bcbeee6eaa1e859f29acf68487e";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "4df93d25a37a6bd4d3ba5f8b648e3cdffd5897b30cd25052118976362276a98d";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -1434,6 +1434,11 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "studies",
       "optional": false,
       "type": "Array<{"
+    },
+    {
+      "name": "studiesOmitted",
+      "optional": false,
+      "type": "{ count: number; reason: string }"
     },
     {
       "name": "study",

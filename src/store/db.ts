@@ -2692,6 +2692,11 @@ export class Store {
     return causal.causalStudySummaries(this.db);
   }
 
+  /** The study list plus what it could not include; see `CausalStudyListBasis`. */
+  causalStudyListBasis(): causal.CausalStudyListBasis {
+    return causal.causalStudyListBasis(this.db);
+  }
+
   /** Maintenance: prune old requests and compact. Returns rows removed. */
   prune(beforeMs: number): number {
     const info = this.db.prepare(`DELETE FROM requests WHERE ts_epoch_ms < ?`).run(beforeMs);

@@ -174,6 +174,13 @@ test('retained version-1 causal evidence remains readable and append-only after 
         computedAtMs: 1_700_000_000_500,
         state: 'qualified',
       },
+      // Added at D-165, and this row is the useful case for it: a retained
+      // snapshot EXISTS and no new one can be written, so the basis is not
+      // merely a restatement of `latestAnalysis === null`.
+      analysisBasis: {
+        available: false,
+        reason: 'retained version-1 causal evidence is inspect-only, so no new analysis snapshot can be written for this study',
+      },
     }]);
 
     assert.throws(

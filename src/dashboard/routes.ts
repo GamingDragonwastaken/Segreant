@@ -909,7 +909,8 @@ export function handleValue({ res, url, store, config }: RouteContext): void {
  */
 export function handleCausal({ res, url, store }: RouteContext): void {
   try {
-    const summaries = store.causalStudySummaries();
+    const listBasis = store.causalStudyListBasis();
+    const summaries = listBasis.studies;
     const requested = url.searchParams.get('study');
     const selected = requested
       ? summaries.find((summary) => summary.studyId === requested) ?? null
@@ -922,6 +923,10 @@ export function handleCausal({ res, url, store }: RouteContext): void {
         demo: isDemo(),
         generatedAt: new Date().toISOString(),
         studies: [],
+        // Present on BOTH branches. A field a consumer sees only when a study
+        // exists is a field it cannot read, and this branch is exactly where a
+        // version-2-only Store lands -- the case with the most to omit.
+        studiesOmitted: listBasis.omitted,
         study: null,
         causalEvidence: 'No publicly inspectable retained version-1 causal study. Version-2 public projection is deferred. Value output remains an observed/manual-equivalent scenario.',
         boundary: 'Read-only local status. This endpoint cannot change routing, budgets, or provider configuration.',
@@ -947,6 +952,7 @@ export function handleCausal({ res, url, store }: RouteContext): void {
       demo: isDemo(),
       generatedAt: new Date().toISOString(),
       studies: summaries,
+      studiesOmitted: listBasis.omitted,
       study: {
         studyId: selected.studyId,
         protocolHash: data.protocol.protocolHash,

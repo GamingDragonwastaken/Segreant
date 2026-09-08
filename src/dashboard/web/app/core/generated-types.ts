@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: 8a2f4159ac35619790bb3acdae104f0ca42e1bcbeee6eaa1e859f29acf68487e */
+/** Source SHA-256: 4df93d25a37a6bd4d3ba5f8b648e3cdffd5897b30cd25052118976362276a98d */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -740,7 +740,11 @@ export interface CausalPayload {
     executions: number;
     outcomes: number;
     latestAnalysis: { analysisId: string; computedAtMs: number; state: string } | null;
+    /** Why `latestAnalysis` is what it is: absent because none was saved, or because none can be. */
+    analysisBasis: { available: boolean; reason: string };
   }>;
+  /** How many registered studies `studies` could not include, and why. */
+  studiesOmitted: { count: number; reason: string };
   study: {
     studyId: string;
     protocolHash: string;
