@@ -250,10 +250,25 @@ test('classic dashboard guide renders structured recovery notice separately from
 test('the npm launcher smoke command remains local and bounded', async () => {
   const home = mkdtempSync(join(tmpdir(), 'fiscus-launcher-smoke-'));
   try {
+    // `--ignore-scripts`, AND IT IS LOAD-BEARING RATHER THAN A SPEED-UP.
+    //
+    // `prefiscus` is `npm run build`, which is asserted directly a few tests
+    // above. Running it HERE rebuilds the repository's own `dist/` in the middle
+    // of a suite run, which republishes `dist/cli.js` — and
+    // `test/build-race.test.ts` asserts, as the isolation half of its claim,
+    // that the repository artifact does not move while it runs. The two tests
+    // contradicted each other, and the only reason it was not a permanent
+    // failure is that `node --test` usually happens not to overlap them. Run the
+    // two files together and it fails every time.
+    //
+    // Nothing is lost. This test's claim is about the COMMAND — that the npm
+    // launcher path stays local and bounded — and `dist/` is already built by
+    // `pretest` before any test runs. The hook's existence is a separate claim
+    // with its own separate assertion.
     const command = process.platform === 'win32' ? (process.env.ComSpec ?? 'cmd.exe') : 'npm';
     const args = process.platform === 'win32'
-      ? ['/d', '/s', '/c', 'npm.cmd run fiscus -- egress status --json']
-      : ['run', 'fiscus', '--', 'egress', 'status', '--json'];
+      ? ['/d', '/s', '/c', 'npm.cmd --ignore-scripts run fiscus -- egress status --json']
+      : ['--ignore-scripts', 'run', 'fiscus', '--', 'egress', 'status', '--json'];
     const result = await execFileAsync(command, args, {
       cwd: join(import.meta.dirname, '..'),
       timeout: 180_000,

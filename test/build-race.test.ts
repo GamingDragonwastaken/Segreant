@@ -112,8 +112,19 @@ test('concurrent builds keep the compiled CLI runnable throughout publication', 
   //
   //   1. The repository's own published artifact did not move. A build that
   //      escaped into the checkout would have republished dist/cli.js here.
-  //      Nothing else in the suite builds at ROOT — `pretest` finishes before
-  //      any test starts — so this is stable under parallelism.
+  //
+  //      THIS LINE ONCE CLAIMED "nothing else in the suite builds at ROOT --
+  //      `pretest` finishes before any test starts -- so this is stable under
+  //      parallelism", AND THAT WAS FALSE. `test/egress-guidance-launcher.test.ts`
+  //      ran `npm run fiscus`, whose `prefiscus` hook is `npm run build`, so it
+  //      rebuilt this checkout's `dist/` in the middle of the suite and moved
+  //      the mtime this assertion reads. The two tests contradicted each other
+  //      and the only reason it was not a permanent failure is that
+  //      `node --test` usually happens not to overlap them; running the two
+  //      files together failed every time, and a loaded full run failed too.
+  //      That test now passes `--ignore-scripts`, which costs it nothing --
+  //      `pretest` has already built `dist/` and the hook has its own separate
+  //      assertion -- so the premise is now true rather than merely asserted.
   //   2. No lock at ROOT is owned by a process THIS test spawned. All of ours
   //      have exited, so a lock naming one of their pids is our residue; a lock
   //      naming anything else belongs to somebody else's live reader and says
