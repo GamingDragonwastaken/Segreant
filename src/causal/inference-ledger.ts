@@ -286,6 +286,17 @@ export function recordInferentialActs(
     reportedAtMs: number;
   }>,
 ): CausalInferenceLedger {
+  // `validatePlan` refuses an empty slice id inside a plan, and this path
+  // accepted one -- so an act could be keyed on no slice identity at all while
+  // the plan describing it could not. `actKey` includes the slice, so a blank
+  // one is not a harmless default: it is an identity two unrelated acts can
+  // share.
+  for (const act of acts) {
+    if (typeof act.sliceId !== 'string' || act.sliceId.trim().length === 0) {
+      throw new Error('inferential act must name a non-empty slice id; a slice is part of the act identity, not a label');
+    }
+  }
+
   const seenKeys = new Set(ledger.acts.map(actKey));
   const lookSequence = (ledger.acts[ledger.acts.length - 1]?.lookSequence ?? 0) + 1;
   const recorded: RecordedInferentialAct[] = [];
@@ -366,6 +377,15 @@ export function summarizeInferenceMultiplicity(
     : Math.min(1, budgeted.reduce((sum, act) => sum + act.actAlpha, 0));
 
   let plan: CausalInferencePlanDisclosure | null = null;
+  // WHICH CONDITION FIRED, NOT MERELY THAT ONE DID. `actsExceedPlan` is the
+  // union of three distinct facts, and one message was emitted for all three:
+  // "The recorded acts exceeded the pre-registered plan". On a plan of eight
+  // acts with ONE act recorded on an unregistered slice, nothing was exceeded,
+  // and the reader was sent looking for extra looks that do not exist while the
+  // real reason was named nowhere.
+  const unregisteredSlices: string[] = [];
+  let overranActs = false;
+  let overranLooks = false;
   if (ledger.plan !== null) {
     const registeredSlices = new Set(ledger.plan.sliceIds);
     const requiredActAlpha = requiredActAlphaForPlan(ledger.plan);
@@ -382,6 +402,9 @@ export function summarizeInferenceMultiplicity(
         || looks > ledger.plan.maxLooks
         || [...slices].some((sliceId) => !registeredSlices.has(sliceId)),
     });
+    overranActs = budgeted.length > plannedActs;
+    overranLooks = looks > ledger.plan.maxLooks;
+    unregisteredSlices.push(...[...slices].filter((sliceId) => !registeredSlices.has(sliceId)).sort());
   }
   const basis: CausalInferenceMultiplicity['basis'] = plan !== null && !plan.actsExceedPlan
     ? 'pre_registered_plan'
@@ -405,9 +428,22 @@ export function summarizeInferenceMultiplicity(
     limitations.push('Basis: recorded acts only. The number of looks was not fixed in advance, so this bounds exactly the acts this ledger holds and is not a family-wise error guarantee.');
   }
   if (plan !== null) {
-    limitations.push(`Basis: a pre-registered plan of ${plan.maxLooks} look(s) x ${plan.endpointsPerLook} endpoint(s) x ${plan.sliceIds.length} slice(s) = ${plan.plannedActs} act(s) at family-wise ${percent(plan.targetFamilywiseErrorRate)}, which requires ${percent(plan.requiredActConfidenceLevel)} per act.${plan.actAlphaMeetsPlan ? '' : actAlpha === null ? '' : ` The reported act used ${percent(1 - actAlpha)} and does not meet it; Fiscus reports the shortfall rather than restating the interval at the level the plan wanted.`}`);
-    if (plan.actsExceedPlan) {
-      limitations.push('The recorded acts exceeded the pre-registered plan; the plan no longer bounds this family and is retained as history rather than as error control.');
+    // The prefix is load-bearing. A plan that no longer bounds the family was
+    // being printed as `Basis: a pre-registered plan of ...` directly after
+    // `Basis: recorded acts only`, so two contradictory basis lines sat side by
+    // side and the stronger-sounding one came second.
+    const planPrefix = plan.actsExceedPlan
+      ? 'The registered plan, which no longer bounds this family, was'
+      : 'Basis:';
+    limitations.push(`${planPrefix} a pre-registered plan of ${plan.maxLooks} look(s) x ${plan.endpointsPerLook} endpoint(s) x ${plan.sliceIds.length} slice(s) = ${plan.plannedActs} act(s) at family-wise ${percent(plan.targetFamilywiseErrorRate)}, which requires ${percent(plan.requiredActConfidenceLevel)} per act.${plan.actAlphaMeetsPlan ? '' : actAlpha === null ? '' : ` The reported act used ${percent(1 - actAlpha)} and does not meet it; Fiscus reports the shortfall rather than restating the interval at the level the plan wanted.`}`);
+    if (overranActs) {
+      limitations.push(`The recorded acts exceeded the pre-registered plan: ${budgeted.length} act(s) spend error budget against a planned ${plan.plannedActs}. The plan no longer bounds this family and is retained as history rather than as error control.`);
+    }
+    if (overranLooks) {
+      limitations.push(`The recorded looks exceeded the pre-registered plan: ${looks} look(s) against a planned ${plan.maxLooks}. The plan no longer bounds this family and is retained as history rather than as error control.`);
+    }
+    if (unregisteredSlices.length > 0) {
+      limitations.push(`Acts were recorded on slice(s) the plan never registered: ${unregisteredSlices.join(', ')}. The planned act count was computed from ${plan.sliceIds.length} registered slice(s), so its denominator does not describe what was actually looked at; the plan no longer bounds this family and is retained as history rather than as error control.`);
     }
   }
   if (!chainIntact) {
