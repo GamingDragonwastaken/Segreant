@@ -79,6 +79,22 @@ export interface WindowCoverage {
   latestTo: string | null;
   shortestWindowDays: number | null;
   longestWindowDays: number | null;
+  /**
+   * Whether one instant exists that EVERY contributing window contains.
+   *
+   * Separate from `uniform`, which only asks whether there is one window, and
+   * from the length fields, which say nothing about position: two rollups can
+   * both declare thirty days and describe January and June. `earliestFrom`
+   * and `latestTo` are the union, and a union was being read as coverage.
+   *
+   * An empty set of windows reports `false` for the same reason it reports
+   * `uniform: false` -- nothing is not disjoint, it is nothing, and a reader
+   * must not take an empty team for an agreeing one in either direction.
+   */
+  overlap: boolean;
+  /** The intersection of every contributing window, or null when there is none. */
+  overlapFrom: string | null;
+  overlapTo: string | null;
   /** Conservative combination of the signer-declared coverage states. */
   status: RollupCoverage;
   /** What the totals beside this do, and do not, describe. */
@@ -108,6 +124,14 @@ function windowDays(window: ObservationWindow): number {
  * the query's window misdescribes the data, here the data's own windows
  * misdescribe each other — and only one of the two was guarded.
  *
+ * LENGTH IS NOT POSITION (D-164). Everything above is about how LONG each
+ * window is, and two rollups can both declare thirty days while describing
+ * January and June. `earliestFrom`/`latestTo` are the union of the windows,
+ * and on disjoint ones that union names months nobody observed while the
+ * length comparison finds nothing to report. `overlap` states the
+ * intersection instead: whether one instant exists that every contributing
+ * window contains, and which instants those are.
+ *
  * NEITHER REFUSED NOR REWEIGHTED, DELIBERATELY. Normalising unequal windows to a
  * common period would invent a rate the rollups do not carry, and refusing the
  * sum would delete the core FinOps view over a difference that is often
@@ -126,6 +150,9 @@ export function buildWindowCoverage(windows: ObservationWindow[]): WindowCoverag
       latestTo: null,
       shortestWindowDays: null,
       longestWindowDays: null,
+      overlap: false,
+      overlapFrom: null,
+      overlapTo: null,
       status: 'unknown',
       note: 'no rollups contributed to these totals, so there is no observation window to state',
     };
@@ -140,13 +167,33 @@ export function buildWindowCoverage(windows: ObservationWindow[]): WindowCoverag
   const uniform = windows.length === 1;
   const status = combineRollupCoverage(windows.map((window) => window.coverage));
 
+  // THE INTERSECTION, NOT A PAIRWISE CHECK. Two of three windows agreeing is
+  // not an agreement; a total is summed across all of them at once, so the
+  // question is whether ONE instant exists that every contributor was
+  // observing. Half-open, so windows that merely touch at an endpoint share
+  // nothing: reporting a zero-length overlap would be reporting an artefact of
+  // the boundary rather than a period anybody observed.
+  const overlapFromCandidate = windows.map((w) => w.periodFrom).sort().at(-1)!;
+  const overlapToCandidate = windows.map((w) => w.periodTo).sort()[0]!;
+  const overlap = Date.parse(overlapFromCandidate) < Date.parse(overlapToCandidate);
+  const overlapFrom = overlap ? overlapFromCandidate : null;
+  const overlapTo = overlap ? overlapToCandidate : null;
+
+  // The span sentence needed the overlap beside it. `spanning ${earliestFrom}
+  // to ${latestTo}` is the union, and on disjoint windows it names months
+  // nobody observed -- which reads as coverage unless the intersection is
+  // stated in the same breath.
+  const spread = overlap
+    ? `They do share a period: every contributing window covers ${overlapFrom} to ${overlapTo}.`
+    : 'They share no instant at all: no moment exists that every contributing window covers, so the span '
+      + 'above is a union and not a period anybody observed.';
   const note = uniform
     ? `every contributing rollup declares the same ${shortest}-day window, ${earliestFrom} to ${latestTo}; `
       + 'the totals cover that period'
     : `contributing rollups declare ${windows.length} different observation windows, the shortest ${shortest} `
       + `days and the longest ${longest} days, spanning ${earliestFrom} to ${latestTo}. These totals are a sum `
       + 'across periods of unequal length and do not describe any single window'
-      + '; a machine that observed for longer contributes more of it for that reason alone';
+      + `; a machine that observed for longer contributes more of it for that reason alone. ${spread}`;
 
   return {
     distinctWindows: windows.length,
@@ -156,6 +203,9 @@ export function buildWindowCoverage(windows: ObservationWindow[]): WindowCoverag
     latestTo,
     shortestWindowDays: shortest,
     longestWindowDays: longest,
+    overlap,
+    overlapFrom,
+    overlapTo,
     status,
     note,
   };
