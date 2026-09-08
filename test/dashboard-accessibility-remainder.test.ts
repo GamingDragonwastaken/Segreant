@@ -17,6 +17,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const ROOT = join(import.meta.dirname, '..');
+const APP = join(ROOT, 'src', 'dashboard', 'web', 'app');
 const CSS = join(ROOT, 'src', 'dashboard', 'web', 'styles', 'app.css');
 
 /**
@@ -63,4 +64,28 @@ test('defect 1: the narrow-width ledger header stays in the accessibility tree w
   // It must instead use a clip-based hide, which keeps the row (and its
   // ARIA roles) in the tree while collapsing it visually.
   assert.match(headRule, /clip:\s*rect\(0,?\s*0,?\s*0,?\s*0\)/, '.ledger-head should hide via clipping, not display/visibility, to stay screen-reader-accessible at narrow widths');
+});
+
+/**
+ * Defect 2: the Metered ledger (`spend.ts`) already carries `role="table"` /
+ * `"row"` / `"columnheader"` / `"cell"` from an earlier tranche of this
+ * packet. The Realized view's waste-by-stage ledger (`value.ts`) is built
+ * from the identical `.ledger` / `.ledger-row` markup pattern but never
+ * received any of it — no roles, and no header row at all.
+ */
+test('defect 2: the value (Realized) ledger carries the same table semantics as the Metered ledger', () => {
+  const value = readFileSync(join(APP, 'views', 'value.ts'), 'utf8');
+  const spend = readFileSync(join(APP, 'views', 'spend.ts'), 'utf8');
+
+  // The Metered ledger is the reference implementation; assert it still has
+  // what it should, so a regression there doesn't make this test meaningless.
+  assert.match(spend, /class: 'ledger', role: 'table'/, 'reference: the Metered ledger names role table');
+
+  assert.match(value, /class: 'ledger',[^)]*role: 'table'/, 'the Realized waste ledger must declare role="table"');
+  assert.match(value, /class: 'ledger-head', role: 'row'/, 'the Realized waste ledger must have a header row (it currently has none at all)');
+  assert.match(value, /role: 'columnheader'/, 'the Realized waste ledger header cells must be columnheaders');
+  const rowMatches = value.match(/class: 'ledger-row', role: 'row'/g) ?? [];
+  assert.ok(rowMatches.length > 0, 'the Realized waste ledger data rows must declare role="row"');
+  const cellMatches = value.match(/role: 'cell'/g) ?? [];
+  assert.ok(cellMatches.length >= 3, 'the Realized waste ledger data cells must declare role="cell"');
 });

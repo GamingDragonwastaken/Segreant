@@ -307,15 +307,20 @@ export function valueView(): Node {
               h('p', { class: 'view-plain', text: () => (isPrecise()
                 ? `Of ${usd(matured?.totalCostUsd)} attributed to matured units, ${usd(matured?.spendOnRealizedUnitsUsd)} reached a kept outcome and ${usd(wasteCost)} did not. These are spend figures, not value.`
                 : `Of the ${usd(matured?.totalCostUsd)} spent on this work, ${usd(matured?.spendOnRealizedUnitsUsd)} went on work that stuck and ${usd(wasteCost)} went on work that did not.`) }),
-              h('div', { class: 'ledger' },
+              h('div', { class: 'ledger', role: 'table', 'aria-label': 'Where value was lost, by stopping stage' },
+                h('div', { class: 'ledger-head', role: 'row' },
+                  h('span', { role: 'columnheader', text: () => (isPrecise() ? 'Stopped at' : 'Where it stopped') }),
+                  h('span', { class: 'num cell-calls', role: 'columnheader', text: 'Units' }),
+                  h('span', { class: 'num cell-cost', role: 'columnheader', text: 'Cost' }),
+                  h('span', { class: 'num cell-share', role: 'columnheader', text: 'Share' })),
                 ...waste
                   .slice()
                   .sort((a, b) => b.costUsd - a.costUsd)
-                  .map((w) => h('div', { class: 'ledger-row' },
-                    h('span', { class: 'ledger-key', text: () => (isPrecise() ? w.stage : `stopped after ${STOPPED_AFTER[w.stage] ?? w.stage}`) }),
-                    h('span', { class: 'num cell-calls', text: `${count(w.units)} ${plural(w.units, 'unit', 'units')}` }),
-                    h('span', { class: 'num cell-cost ledger-cost', text: usd(w.costUsd) }),
-                    h('span', { class: 'num cell-share', text: wasteCost > 0 ? pct(w.costUsd / wasteCost, 0) : '—' }),
+                  .map((w) => h('div', { class: 'ledger-row', role: 'row' },
+                    h('span', { class: 'ledger-key', role: 'cell', text: () => (isPrecise() ? w.stage : `stopped after ${STOPPED_AFTER[w.stage] ?? w.stage}`) }),
+                    h('span', { class: 'num cell-calls', role: 'cell', text: `${count(w.units)} ${plural(w.units, 'unit', 'units')}` }),
+                    h('span', { class: 'num cell-cost ledger-cost', role: 'cell', text: usd(w.costUsd) }),
+                    h('span', { class: 'num cell-share', role: 'cell', text: wasteCost > 0 ? pct(w.costUsd / wasteCost, 0) : '—' }),
                     h('span', {
                       class: 'ledger-bar',
                       'aria-hidden': 'true',
