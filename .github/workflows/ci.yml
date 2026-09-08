@@ -34,7 +34,20 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-      - run: npm ci
+      # --ignore-scripts: the install itself must not execute a lifecycle script
+      # belonging to any dependency (preinstall/install/postinstall), nor this
+      # package's own `prepare`, which is how `npm ci` otherwise triggers a full
+      # build as an install side effect. Nothing in either lockfile carries an
+      # install script today; the gap was CI having no barrier against a future
+      # one. `npm run build` below is that same build, invoked explicitly -- a
+      # script this repository owns and reviews, never a dependency's.
+      - run: npm ci --ignore-scripts
+      # Explicit, even though `pretest` currently runs the full build too:
+      # `pretest` has been silently narrowed to `--web` once already, and a job
+      # whose dist/ depends on whichever definition it currently carries is one
+      # edit away from testing a stale tree. The build count is unchanged --
+      # before this, `prepare` built at install and `pretest` built again.
+      - run: npm run build
       - run: npm run typecheck
       - run: npm test
 
@@ -61,7 +74,11 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-      - run: npm ci
+      # No explicit build step here even with --ignore-scripts: the tarball is
+      # produced by `npm pack` below, which runs this package's `prepack`
+      # (`npm run build`) as part of that separate command, unaffected by
+      # --ignore-scripts on this install.
+      - run: npm ci --ignore-scripts
       - run: mkdir -p ../fiscus-pack ../fiscus-install
       - run: npm pack --pack-destination ../fiscus-pack
       - working-directory: ../fiscus-install
@@ -152,7 +169,10 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: team-server/package-lock.json
-      - run: npm ci
+      # team-server has no prepare/prepack of its own -- start/test/typecheck run
+      # straight against source -- so there is nothing load-bearing here for
+      # --ignore-scripts to skip past.
+      - run: npm ci --ignore-scripts
       - run: npm run typecheck
       - run: npm test
 
@@ -182,11 +202,15 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-      - run: npm ci
+      - run: npm ci --ignore-scripts
+      # Same reason as the `test` job: this is the run that speaks for the
+      # candidate head rather than the synthetic merge ref, so it must not be
+      # the one testing a stale or absent dist/.
+      - run: npm run build
       - run: npm run typecheck
       - run: node ./node_modules/typescript/bin/tsc --noEmit -p src/dashboard/web/app/tsconfig.json
       - run: npm test
-      - run: npm ci
+      - run: npm ci --ignore-scripts
         working-directory: team-server
       - run: npm run typecheck
         working-directory: team-server

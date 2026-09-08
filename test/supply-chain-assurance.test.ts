@@ -205,7 +205,10 @@ test('supply chain: every workflow action is pinned to an immutable commit, not 
 
 test('supply chain: workflows install the repository from its lockfile, never resolve fresh', () => {
   const loose = violationsFor((inputs) => {
-    inputs.workflows[0].text = inputs.workflows[0].text.replace('      - run: npm ci\n', '      - run: npm install\n');
+    // The flag is part of the literal now (D-163). Without it this mutation
+    // matched nothing, the audit saw an unmutated file, and the assertion
+    // below failed -- correctly reporting its own vacuity rather than passing.
+    inputs.workflows[0].text = inputs.workflows[0].text.replace('      - run: npm ci --ignore-scripts\n', '      - run: npm install\n');
   });
   assert.ok(
     loose.some((line) => /installs without a lockfile/.test(line)),
@@ -220,6 +223,52 @@ test('supply chain: workflows install the repository from its lockfile, never re
     auditSupplyChain(realInputs()).filter((line) => /installs without a lockfile/.test(line)),
     [],
     'installing the packed tarball by path is not a lockfile bypass',
+  );
+});
+
+test('supply chain: a workflow install must not run dependency lifecycle scripts', () => {
+  // An install without `--ignore-scripts` executes every `preinstall`,
+  // `install` and `postinstall` in the resolved tree, unattended, with the
+  // job's token in the environment. Nothing in either lockfile carries one
+  // today -- and that is the point: the gap is CI having no barrier against a
+  // future one, which no rule in this file previously stated.
+  const bare = violationsFor((inputs) => {
+    inputs.workflows[0].text = inputs.workflows[0].text.replaceAll('npm ci --ignore-scripts', 'npm ci');
+  });
+  assert.ok(
+    bare.some((line) => /runs dependency lifecycle scripts/.test(line)),
+    `expected a lifecycle-script violation, got ${JSON.stringify(bare)}`,
+  );
+
+  // The rule covers `npm install` too, not only `npm ci`. package-smoke
+  // installs the packed tarball by path, which is exempt from the lockfile
+  // rule above and emphatically NOT exempt from this one: that tarball is the
+  // artifact under test, and running its install hooks would be executing the
+  // very thing CI is supposed to be examining.
+  const packed = violationsFor((inputs) => {
+    inputs.workflows[0].text = inputs.workflows[0].text.replace(
+      'npm install --ignore-scripts --no-package-lock',
+      'npm install --no-package-lock',
+    );
+  });
+  assert.ok(
+    packed.some((line) => /runs dependency lifecycle scripts/.test(line)),
+    `expected the packed-tarball install to be held to the same rule, got ${JSON.stringify(packed)}`,
+  );
+
+  // Not vacuous in the other direction: the flag named in a comment is not the
+  // flag passed to the command. The real checkout passing is asserted by the
+  // whole-file test at the top, so this only has to show the rule can tell the
+  // two apart.
+  const spelled = violationsFor((inputs) => {
+    inputs.workflows[0].text = inputs.workflows[0].text.replace(
+      '- run: npm ci --ignore-scripts',
+      '- run: npm ci # --ignore-scripts would be nice',
+    );
+  });
+  assert.ok(
+    spelled.some((line) => /runs dependency lifecycle scripts/.test(line)),
+    'a flag mentioned in a comment is not a flag passed to the command',
   );
 });
 

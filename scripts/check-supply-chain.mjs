@@ -158,6 +158,9 @@ function auditWorkflowPins(violations, name, text) {
 }
 
 /**
+ * Two separate questions about a workflow's installs: WHERE the bytes come
+ * from, and WHAT the install is allowed to execute.
+ *
  * `npm ci` installs exactly the lockfile. `npm install` re-resolves, so a
  * workflow using it runs code the lockfile never named and no reviewer saw.
  *
@@ -181,6 +184,22 @@ function auditWorkflowInstalls(violations, name, text) {
       if (positional.length === 0) {
         violations.push(`${where}: installs without a lockfile (\`npm install\` with no named package); use \`npm ci\``);
       }
+    }
+
+    // WHAT THE INSTALL IS ALLOWED TO EXECUTE, which is a different question
+    // from where its bytes came from. An install without `--ignore-scripts`
+    // runs every `preinstall`/`install`/`postinstall` in the resolved tree,
+    // unattended, with the job's token in the environment -- and for
+    // `npm install <tarball>` those hooks belong to the very artifact CI is
+    // examining. Nothing in either lockfile carries an install script today;
+    // the gap is that CI had no barrier against a future one.
+    //
+    // Applied to `npm ci` and `npm install` alike, including the tarball
+    // install the lockfile rule above deliberately exempts: that exemption is
+    // about provenance, and this rule is about execution.
+    const anyInstall = /(?:^|[\s;&|])npm\s+(?:ci|install|i|add)\b([^\n#]*)/.exec(line);
+    if (anyInstall && !/(?:^|\s)--ignore-scripts(?:\s|$)/.test((anyInstall[1] ?? '').trim())) {
+      violations.push(`${where}: runs dependency lifecycle scripts (npm install/ci without \`--ignore-scripts\`), so a dependency's install hook would execute unattended in CI`);
     }
 
     if (/\b(?:curl|wget|iwr|Invoke-WebRequest)\b[^\n#]*\|\s*(?:sudo\s+)?(?:ba)?sh\b/.test(line)) {
