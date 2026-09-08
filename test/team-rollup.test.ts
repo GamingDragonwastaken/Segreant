@@ -34,12 +34,25 @@ function projects(): ProjectValue[] {
 const period = { from: '2026-06-01T00:00:00.000Z', to: '2026-07-01T00:00:00.000Z' };
 
 test('team-rollup: validateRollupBody applies realized-spend containment to direct v1 validation', () => {
-  const candidate = buildRollupBody({ keyId: 'test-key' } as never, [{
-    ...projects()[0]!,
-    costUsd: 10,
-    spendOnRealizedUnitsUsd: 11,
-    acceptanceWeightedSpendUsd: 10,
-  }], period);
+  // Built as a literal, not through `buildRollupBody`. The builder now refuses
+  // to mint a body that fails this very check (D-162,
+  // test/team-rollup-minting-containment.test.ts), so using it as a convenient
+  // constructor here would test the builder's refusal instead of the
+  // validator's rule. The assertion below is unchanged: what a rollup arriving
+  // over the wire is held to is exactly what it was.
+  const candidate = {
+    v: 1 as const,
+    keyId: 'test-key',
+    generatedAt: period.to,
+    period,
+    coverage: 'complete' as const,
+    projects: [{
+      ...projects()[0]!,
+      costUsd: 10,
+      spendOnRealizedUnitsUsd: 11,
+      acceptanceWeightedSpendUsd: 10,
+    }],
+  };
   const error = validateRollupBody(candidate);
   assert.ok(error !== null);
   assert.match(error, /spendOnRealizedUnitsUsd.*costUsd/);

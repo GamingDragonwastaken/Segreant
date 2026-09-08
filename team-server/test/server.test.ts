@@ -315,12 +315,23 @@ test('team-server: POST /rollups rejects self-consistently signed payloads with 
       // nested in exactly the same way and were not checked at all, so a
       // correctly signed rollup could claim more money reached a kept outcome
       // than was ever spent.
-      const realizedSpendExceedsCost = buildRollupBody(dev, [
-        { ...projects()[0]!, costUsd: 10, spendOnRealizedUnitsUsd: 1000, acceptanceWeightedSpendUsd: 1000 },
-      ], period);
-      const acceptanceExceedsRealizedSpend = buildRollupBody(dev, [
-        { ...projects()[0]!, costUsd: 100, spendOnRealizedUnitsUsd: 10, acceptanceWeightedSpendUsd: 50 },
-      ], period);
+      //
+      // MUTATED AFTER BUILDING, DELIBERATELY. `buildRollupBody` now refuses to
+      // mint either of these (D-162), so constructing them through it would
+      // throw here and never reach the server. That refusal is a client-side
+      // floor and says nothing about what an arriving payload is held to --
+      // which is the entire point of this test, since a hostile client does not
+      // run our builder at all. Mutating the projects after the build and
+      // signing the result reproduces exactly what such a client sends: a
+      // correctly signed body whose numbers contradict themselves.
+      const realizedSpendExceedsCost = buildRollupBody(dev, projects(), period);
+      (realizedSpendExceedsCost.projects as ProjectValue[])[0] = {
+        ...projects()[0]!, costUsd: 10, spendOnRealizedUnitsUsd: 1000, acceptanceWeightedSpendUsd: 1000,
+      };
+      const acceptanceExceedsRealizedSpend = buildRollupBody(dev, projects(), period);
+      (acceptanceExceedsRealizedSpend.projects as ProjectValue[])[0] = {
+        ...projects()[0]!, costUsd: 100, spendOnRealizedUnitsUsd: 10, acceptanceWeightedSpendUsd: 50,
+      };
       for (const candidate of [
         badKeyBody, badUnits, backwardsPeriod, duplicateProjects, duplicateSources, invalidStrata,
         realizedSpendExceedsCost, acceptanceExceedsRealizedSpend,

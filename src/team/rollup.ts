@@ -106,6 +106,7 @@ export function buildRollupBody(
   // Only attach the key when there is something to say — an absent field and an
   // empty array canonicalize differently, and absent is the older-client shape.
   if (strata && strata.length > 0) body.strata = strata;
+  assertMintable(body);
   return body;
 }
 
@@ -148,6 +149,7 @@ export function buildEconomicRollupBody(
     projects: canonicalProjects,
   };
   if (strata && strata.length > 0) body.strata = strata;
+  assertMintable(body);
   return Object.freeze(body);
 }
 
@@ -210,6 +212,25 @@ export function validateRollupBody(body: RollupBody): string | null {
     }
   }
   return null;
+}
+
+/**
+ * Refuse to MINT what the receiver would refuse to accept.
+ *
+ * `team-server/src/server.ts` calls `validateRollupBody` on every arriving
+ * rollup and answers HTTP 400, and the builders called it on nothing, so a body
+ * carrying a containment violation was constructed, signed with the developer's
+ * own key, and only then bounced by a remote. A signature is a commitment:
+ * committing to a self-contradiction and retracting it on a 400 is worse than
+ * never committing. Checked here rather than at the push call site so a new
+ * caller cannot re-inherit the hole by forgetting the guard.
+ *
+ * An internal-consistency floor, not a claim the numbers are right. `coverage`
+ * remains the signer's own non-authoritative claim.
+ */
+function assertMintable(body: RollupBody): void {
+  const error = validateRollupBody(body);
+  if (error !== null) throw new Error(`refusing to mint a team rollup that no receiver will accept: ${error}`);
 }
 
 export function signRollup(body: RollupBody, keys: KeyPair): SignedRollup {
