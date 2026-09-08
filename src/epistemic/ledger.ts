@@ -13,7 +13,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { initializeEpistemicSchema } from '../store/schema.ts';
 import { claim, type Claim } from './claim.ts';
 import { assumption, type Assumption } from './assumption.ts';
-import { evidence, type Evidence } from './evidence.ts';
+import { evidence, type Evidence, type RevocationMetadata } from './evidence.ts';
 import {
   DAG_NODE_KINDS,
   asOfGraph,
@@ -257,6 +257,36 @@ export class EpistemicLedger {
     });
   }
 
+  /**
+   * The reverse half of the envelope/event linkage (WP-R07). `envelopeRevocations`
+   * has always read a node's own `revocation.eventId` and trusted it; nothing
+   * checked it against `epistemic_revocations`, the table `appendRevocation`
+   * writes and where `event_id` is the ledger's own `PRIMARY KEY` for "one
+   * event". So the same `eventId` string could mean two contradictory things:
+   * one node's envelope claims it, and the table separately and validly
+   * records that id revoking a DIFFERENT node — and nothing caught the
+   * collision.
+   *
+   * THIS DOES NOT REQUIRE THE EVENT TO EXIST. D-099 already refused that,
+   * because `appendRevocation` refuses an unknown target and an envelope can
+   * arrive on a node's very first append — requiring existence would deadlock
+   * exactly the case that comment describes. An envelope naming an id nobody
+   * has recorded yet still passes through unchanged. This only refuses the
+   * narrower case where the id IS already on record, for someone else.
+   */
+  private assertRevocationEnvelopeLinksConsistently(id: string, envelope: RevocationMetadata | null): void {
+    if (envelope === null) return;
+    const existing = row<StoredEventRow>(this.db.prepare(
+      'SELECT event_id, target_id, recorded_at, reason FROM epistemic_revocations WHERE event_id = ?',
+    ).get(envelope.eventId));
+    if (existing !== null && existing.target_id !== id) {
+      throw new Error(
+        `revocation envelope on ${id} names event ${envelope.eventId}, which the ledger's revocation table `
+        + `already records as revoking ${existing.target_id}`,
+      );
+    }
+  }
+
   appendEvidence(value: Evidence): AppendResult {
     return this.transaction(() => this.appendEvidenceWithinTransaction(value));
   }
@@ -264,6 +294,7 @@ export class EpistemicLedger {
   /** Append Evidence while the caller owns the surrounding SQLite transaction. */
   appendEvidenceWithinTransaction(value: Evidence): AppendResult {
     const item = evidence(value);
+    this.assertRevocationEnvelopeLinksConsistently(item.id, item.revocation);
     const availableAt = item.observedAt ?? item.recordedAt ?? item.assertedAt;
     if (availableAt === null) throw new Error(`evidence ${item.id} has no acquisition timestamp`);
     const encoded = json(item, 'evidence');
@@ -316,6 +347,7 @@ export class EpistemicLedger {
   /** Append Claim while the caller owns the surrounding SQLite transaction. */
   appendClaimWithinTransaction(value: Claim): AppendResult {
     const item = claim(value);
+    this.assertRevocationEnvelopeLinksConsistently(item.id, item.revocation);
     const encoded = json(item, 'claim');
     if (item.negativeClaim !== undefined) {
       // The generic claim envelope does not persist a second witness table. A
@@ -525,6 +557,22 @@ export class EpistemicLedger {
       if (existing !== null) {
         if (existing.target_id !== targetId || existing.recorded_at !== recordedAt || existing.reason !== reason) throw new Error(`different revocation already exists for ${eventId}`);
         return 'duplicate';
+      }
+      // THE FORWARD HALF OF THE SAME LINKAGE (WP-R07). A node's own envelope can
+      // claim this eventId before any `appendRevocation` call names it — that is
+      // the D-099 capability `assertRevocationEnvelopeLinksConsistently` must not
+      // break. But if some OTHER node's envelope already claims it, this event
+      // would silently reuse the ledger's own event identity for two different
+      // facts, which the reverse check on the append side cannot see because the
+      // envelope was persisted first.
+      const conflictingEnvelope = this.envelopeRevocations().find(
+        (declared) => declared.event_id === eventId && declared.target_id !== targetId,
+      );
+      if (conflictingEnvelope !== undefined) {
+        throw new Error(
+          `revocation event ${eventId} is already declared by ${conflictingEnvelope.target_id}'s own revocation `
+          + `envelope, and cannot also target ${targetId}`,
+        );
       }
       this.db.prepare('INSERT INTO epistemic_revocations (event_id, target_id, recorded_at, reason) VALUES (?, ?, ?, ?)').run(eventId, targetId, recordedAt, reason);
       return 'inserted';
