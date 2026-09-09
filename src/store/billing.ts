@@ -1106,7 +1106,16 @@ export function reconcileOpenAiCosts(
   db: DatabaseSync,
   requestsInRange: RequestsInRange,
   opts: { materialityUsd?: number; now?: number },
-  exactRequestsInRange: RequestsInRange = requestsInRange,
+  exactRequestsInRange: RequestsInRange,
+  /**
+   * The recorded retention boundary for `requests`, or null when no prune is on
+   * record. Passed in rather than read here because `retention_prunes` is the
+   * ledger's own record and `Store` owns it; the reconciliation needs it because
+   * rows deleted from inside the period silently understate the local total
+   * (D-173). Required, like the field it feeds: a default would let a caller
+   * reintroduce the defect by saying nothing.
+   */
+  requestsPrunedBeforeMs: number | null,
 ): ReconciliationResult | null {
   const latest = latestCompleteOpenAiCostsObservation(db);
   if (!latest) return null;
@@ -1114,6 +1123,7 @@ export function reconcileOpenAiCosts(
     run: latest.run,
     observations: latest.observations,
     requests: exactRequestsInRange(latest.run.periodStartMs, latest.run.periodEndMs),
+    requestsPrunedBeforeMs,
     priorDayTotals: priorOpenAiCostsDayTotals(
       db,
       latest.run.observationRunId,

@@ -2385,6 +2385,10 @@ export class Store {
       (startMs, endMs) => this.requestsInRange(startMs, endMs),
       opts,
       (startMs, endMs) => this.reconciliationRequestsInRange(startMs, endMs),
+      // What retention deleted. A reconciliation reads rows handed to it and
+      // cannot see the ones that are gone, so the boundary travels separately
+      // (D-173).
+      this.retentionFloor().requestsPrunedBeforeMs,
     );
   }
 

@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: 4df93d25a37a6bd4d3ba5f8b648e3cdffd5897b30cd25052118976362276a98d */
+/** Source SHA-256: d6bff409517dcacef3c3b2a46e517ac416b81e5cc6e6cb1582001e9711909b75 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -503,9 +503,13 @@ export interface ReconciliationRunRecord {
     /**
      * Whether the residual bounds off-path spend from above at all (D-068). A
      * residual below zero refutes the condition rather than reading as "nothing
-     * went off-path".
+     * went off-path", and a period whose request rows were partly deleted by
+     * retention classifies nothing at all (D-173).
      */
-    offPathBound?: 'upper_bound_conditional' | 'none_local_estimate_exceeds_provider';
+    offPathBound?:
+      | 'upper_bound_conditional'
+      | 'none_local_estimate_exceeds_provider'
+      | 'unknown_local_total_truncated_by_retention';
   };
 }
 

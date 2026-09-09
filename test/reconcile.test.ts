@@ -21,6 +21,7 @@ import {
   signedUsd,
   offPathBoundFromResidual,
   describeOffPathBound,
+  OFF_PATH_BOUNDS,
   SETTLEMENT_LAG_MS,
   DEFAULT_MATERIALITY_USD,
   type ReconciliationRun,
@@ -108,6 +109,7 @@ function ok(result: ReturnType<typeof reconcileOpenAiCosts> | null): Reconciliat
 
 test('reconcile: compares project-day totals and states the residual rather than hiding it', () => {
   const result = ok(reconcileOpenAiCosts({
+    requestsPrunedBeforeMs: null,
     run: run(),
     observations: [line(0, '10'), line(1, '20'), line(2, '5')],
     requests: [req(0, 9), req(1, 20), req(2, 4)],
@@ -128,6 +130,7 @@ test('reconcile: compares project-day totals and states the residual rather than
 
 test('reconcile: uses exact local Money and refuses implicit sub-microdollar quantization', () => {
   const exact = reconcileOpenAiCosts({
+    requestsPrunedBeforeMs: null,
     run: run(),
     observations: [line(0, '2')],
     // Deliberately disagreeing compatibility projection: exact economic data is
@@ -140,6 +143,7 @@ test('reconcile: uses exact local Money and refuses implicit sub-microdollar qua
   assert.equal(exact?.status === 'reconciled_with_residual' && exact.unexplainedVarianceMicros, 0);
 
   const subMicro = reconcileOpenAiCosts({
+    requestsPrunedBeforeMs: null,
     run: run(),
     observations: [line(0, '0')],
     requests: [req(0, 0, { economicAmount: money('0.0000001', 'USD', 'estimated') })],
@@ -151,6 +155,7 @@ test('reconcile: uses exact local Money and refuses implicit sub-microdollar qua
 
 test('reconcile: a day the provider reports and Fiscus never saw is named, not averaged away', () => {
   const result = ok(reconcileOpenAiCosts({
+    requestsPrunedBeforeMs: null,
     run: run(),
     observations: [line(0, '10'), line(1, '7.5'), line(2, '3')],
     requests: [req(0, 10)], // days 1 and 2 never reached the proxy
@@ -168,6 +173,7 @@ test('reconcile: local spend on a day the provider did not report is equally vis
   // The direction that suggests the ROUTE DECLARATION is wrong — this traffic
   // was metered as belonging to a project the provider says had no cost.
   const result = ok(reconcileOpenAiCosts({
+    requestsPrunedBeforeMs: null,
     run: run(),
     observations: [line(0, '10')],
     requests: [req(0, 10), req(2, 4)],
@@ -181,6 +187,7 @@ test('reconcile: local spend on a day the provider did not report is equally vis
 test('reconcile: refuses a period that may still be accruing rather than reporting lag as variance', () => {
   const justEnded = Date.now() - 1 * 60 * 60 * 1000;
   const result = reconcileOpenAiCosts({
+    requestsPrunedBeforeMs: null,
     run: run({ periodStartMs: justEnded - DAY, periodEndMs: justEnded }),
     observations: [],
     requests: [],
@@ -189,6 +196,7 @@ test('reconcile: refuses a period that may still be accruing rather than reporti
   assert.equal(result.status === 'refused' && result.refusal, 'observation_period_may_still_accrue');
   // …and the boundary is the documented one, not an accident of the fixture.
   const settled = reconcileOpenAiCosts({
+    requestsPrunedBeforeMs: null,
     run: run({ periodStartMs: Date.now() - SETTLEMENT_LAG_MS - 2 * DAY, periodEndMs: Date.now() - SETTLEMENT_LAG_MS - DAY }),
     observations: [],
     requests: [],
@@ -198,6 +206,7 @@ test('reconcile: refuses a period that may still be accruing rather than reporti
 
 test('reconcile: refuses a non-USD or mixed-currency snapshot instead of applying a rate', () => {
   const eur = reconcileOpenAiCosts({
+    requestsPrunedBeforeMs: null,
     run: run(),
     observations: [line(0, '10', { currency: 'EUR' })],
     requests: [req(0, 10)],
@@ -206,6 +215,7 @@ test('reconcile: refuses a non-USD or mixed-currency snapshot instead of applyin
   assert.equal(eur.status === 'refused' && eur.refusal, 'provider_currency_is_not_usd');
 
   const mixed = reconcileOpenAiCosts({
+    requestsPrunedBeforeMs: null,
     run: run(),
     observations: [line(0, '10'), line(0, '5', { currency: 'EUR', lineItem: 'other' })],
     requests: [req(0, 10)],
@@ -216,13 +226,14 @@ test('reconcile: refuses a non-USD or mixed-currency snapshot instead of applyin
 
 test('reconcile: refuses an incomplete or failed observation', () => {
   for (const over of [{ resultState: 'failed' as const, paginationComplete: false }, { paginationComplete: false }]) {
-    const result = reconcileOpenAiCosts({ run: run(over), observations: [], requests: [], now: NOW });
+    const result = reconcileOpenAiCosts({ run: run(over), observations: [], requests: [], requestsPrunedBeforeMs: null, now: NOW });
     assert.equal(result.status === 'refused' && result.refusal, 'no_provider_observation');
   }
 });
 
 test('reconcile: only rows on the exact declared route are compared', () => {
   const result = ok(reconcileOpenAiCosts({
+    requestsPrunedBeforeMs: null,
     run: run(),
     observations: [line(0, '10')],
     requests: [
@@ -243,6 +254,7 @@ test('reconcile: only rows on the exact declared route are compared', () => {
 
 test('reconcile: rows outside the observed period never leak in', () => {
   const result = ok(reconcileOpenAiCosts({
+    requestsPrunedBeforeMs: null,
     run: run(),
     observations: [line(0, '10')],
     requests: [req(0, 10), req(-1, 50), req(3, 50)],
@@ -254,6 +266,7 @@ test('reconcile: rows outside the observed period never leak in', () => {
 
 test('reconcile: materiality flags days without pretending small ones agree', () => {
   const result = ok(reconcileOpenAiCosts({
+    requestsPrunedBeforeMs: null,
     run: run(),
     observations: [line(0, '10'), line(1, '10')],
     requests: [req(0, 9.99), req(1, 5)],
@@ -268,7 +281,7 @@ test('reconcile: materiality flags days without pretending small ones agree', ()
 });
 
 test('reconcile: an independent snapshot of the same period is what makes finality observable', () => {
-  const base = { run: run(), observations: [line(0, '10'), line(1, '20')], requests: [req(0, 10), req(1, 20)], now: NOW };
+  const base = { run: run(), observations: [line(0, '10'), line(1, '20')], requests: [req(0, 10), req(1, 20)], requestsPrunedBeforeMs: null, now: NOW };
 
   const single = ok(reconcileOpenAiCosts(base));
   assert.equal(single.snapshotStability, 'single_observation', 'one snapshot proves nothing about finality');
@@ -291,6 +304,7 @@ test('reconcile: an independent snapshot of the same period is what makes finali
 
 test('reconcile: every result carries the conditions it can never discharge', () => {
   const result = ok(reconcileOpenAiCosts({
+    requestsPrunedBeforeMs: null,
     run: run(), observations: [line(0, '10')], requests: [req(0, 10)], now: NOW,
   }));
   // These are properties of the method, not of this data — an exactly matching
@@ -307,6 +321,7 @@ test('reconcile: every result carries the conditions it can never discharge', ()
 test('reconcile: provider amounts are summed exactly, never through a float', () => {
   // Three amounts that lose a cent through naive float addition.
   const result = ok(reconcileOpenAiCosts({
+    requestsPrunedBeforeMs: null,
     run: run(),
     observations: [line(0, '0.1', { lineItem: 'a' }), line(0, '0.2', { lineItem: 'b' }), line(0, '0.3', { lineItem: 'c' })],
     requests: [],
@@ -413,6 +428,7 @@ test('reconcile: the store round-trips a run immutably and reports no reconcilia
   assert.equal(store.reconcileOpenAiCosts({ now: NOW }), null);
 
   const result = ok(reconcileOpenAiCosts({
+    requestsPrunedBeforeMs: null,
     run: run(), observations: [line(0, '10')], requests: [req(0, 9)], now: NOW,
   }));
   const id = store.saveReconciliationRun(result, NOW);
@@ -436,36 +452,49 @@ test('a residual bounds off-path spend only while the local estimate stays under
   // Write P for the provider total, L for what Fiscus metered, T for the true
   // billed cost of on-path traffic and O for off-path. P = T + O, so the
   // residual R = P - L = O + (T - L), and `O <= R` holds exactly when L <= T.
-  assert.equal(offPathBoundFromResidual(1_334_567, 1_000_000), 'upper_bound_conditional');
-  assert.equal(offPathBoundFromResidual(1_000_000, 1_000_000), 'upper_bound_conditional');
+  assert.equal(offPathBoundFromResidual(1_334_567, 1_000_000, false), 'upper_bound_conditional');
+  assert.equal(offPathBoundFromResidual(1_000_000, 1_000_000, false), 'upper_bound_conditional');
 
   // R < 0 says L > P = T + O >= T, which refutes L <= T outright. No upper
   // bound survives: local over-estimation has absorbed an unknown amount of
   // off-path spend — and a small or negative number invites exactly the
   // opposite conclusion.
-  assert.equal(offPathBoundFromResidual(900_000, 1_000_000), 'none_local_estimate_exceeds_provider');
+  assert.equal(offPathBoundFromResidual(900_000, 1_000_000, false), 'none_local_estimate_exceeds_provider');
 });
 
-test('each bound state says what it licenses, and neither claims off-path spend was measured', () => {
-  const bounded = describeOffPathBound('upper_bound_conditional');
-  const unbounded = describeOffPathBound('none_local_estimate_exceeds_provider');
+test('every bound state says what it licenses, in words no other state uses', () => {
+  // Swept over the vocabulary rather than over the two states this test knew
+  // about when it was written: a third arrived at D-173, and a test naming its
+  // subjects one by one would have gone on passing while saying nothing about
+  // it. The corpus size is asserted for the same reason a sweep always must be.
+  assert.ok(OFF_PATH_BOUNDS.length >= 3, 'the sweep must have something to sweep');
+  const sentences = OFF_PATH_BOUNDS.map((bound) => describeOffPathBound(bound));
+  assert.equal(new Set(sentences).size, OFF_PATH_BOUNDS.length, 'a reader shown the wrong one draws the wrong conclusion');
+  for (const sentence of sentences) {
+    assert.ok(sentence.length > 80, 'a bound state that fits on a chip is not stating its condition');
+    assert.doesNotMatch(sentence, /\bmeasurement of off-path spend\b(?!\.)/, 'no state may present the residual as a measurement');
+  }
 
+  const bounded = describeOffPathBound('upper_bound_conditional');
   assert.match(bounded, /upper bound/i);
   assert.match(bounded, /conditional/i);
   assert.match(bounded, /not a measurement/i);
 
+  const unbounded = describeOffPathBound('none_local_estimate_exceeds_provider');
   assert.match(unbounded, /no upper bound/i);
   assert.match(unbounded, /not evidence that nothing went off-path/i);
-  // A reader shown the wrong one draws exactly the wrong conclusion.
-  assert.notEqual(bounded, unbounded);
+
+  const truncated = describeOffPathBound('unknown_local_total_truncated_by_retention');
+  assert.match(truncated, /retention/i);
+  assert.match(truncated, /bounds nothing/i);
 });
 
 test('a real reconciliation carries the bound state, and it tracks the totals', () => {
   // Non-vacuous: the field must come from the run rather than being a constant.
   assert.equal(
-    offPathBoundFromResidual(0, 1),
+    offPathBoundFromResidual(0, 1, false),
     'none_local_estimate_exceeds_provider',
     'one micro of over-estimate is already enough to lose the bound',
   );
-  assert.equal(offPathBoundFromResidual(1, 0), 'upper_bound_conditional');
+  assert.equal(offPathBoundFromResidual(1, 0, false), 'upper_bound_conditional');
 });

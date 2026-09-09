@@ -28,6 +28,12 @@
   `operator_supplied_export` / `legacy_unknown`) and its conditions. The
   operator-supplied route adds a fifth condition and is never presented as
   equivalent evidence to a pull.
+- A residual whose period lost request rows to retention **classifies nothing**.
+  Deletion understates the local total by an unknown amount, so an upper bound
+  on off-path spend is not established — while a NEGATIVE residual keeps its
+  refutation, because truncation can only hide one and never invent one. The
+  boundary travels into the reconciliation separately from the rows, because a
+  reader of rows cannot see the ones that are gone.
 - Refuses rather than softens: a period ending within 48h, non-USD or mixed
   currency, non-whole-UTC-day input, and out-of-project records are refused with
   the excluded money reported.

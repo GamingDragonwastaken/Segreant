@@ -94,15 +94,29 @@ const WORLDS: Readonly<Record<ReconciliationCondition, {
     excludedBy:
       'Fiscus fetching the report from the provider itself, which is recorded on the run as its provider source kind.',
   },
+  local_ledger_truncated_by_retention: {
+    world:
+      'Retention deleted request rows from inside this period, so L is computed over a strict subset of what Fiscus metered: the surviving ledger yields L - D for a deleted on-path amount D >= 0 that no surviving row records.',
+    claimBecomes:
+      'The residual is R + D rather than R, so part of what is displayed as spend the provider charged for and Fiscus never saw is in fact traffic Fiscus metered and then deleted. `O <= R` is not established, because a non-negative computed residual is consistent with a negative real one.',
+    // Nothing can undo a deletion, and no surviving row records what was
+    // removed. Reconciling a period that begins at or after the boundary avoids
+    // the condition; it does not exclude it for this period.
+    excludedBy: null,
+  },
 });
 
 /**
  * Build the countermodels for one reconciliation run.
  *
- * Status comes from evidence on the run, never from judgement, and exactly one
- * of these is evidence-driven: the rate-card world is `realized` when the
- * residual is negative, because `R < 0` establishes `L > T` rather than leaving
- * it open. The rest are `live` — nothing on the run decides them.
+ * Status comes from evidence on the run, never from judgement, and two of these
+ * are evidence-driven. The rate-card world is `realized` when the residual is
+ * negative, because `R < 0` establishes `L > T` rather than leaving it open.
+ * The retention world is `realized` WHENEVER IT APPEARS, and for a different
+ * reason: the condition is only on the run because Fiscus recorded performing
+ * the deletion itself, so it is a fact rather than an unexcluded possibility.
+ * Reporting it as `live` would understate what is known (D-173). The rest are
+ * `live` — nothing on the run decides them.
  *
  * A condition absent from the run yields no countermodel. The fifth condition
  * appears only when the report WAS operator-supplied, so on a fetched run there
@@ -116,7 +130,8 @@ export function reconciliationCountermodels(run: ReconciliationRun): readonly Co
   const overEstimated = run.offPathBound === 'none_local_estimate_exceeds_provider';
   return Object.freeze(run.conditions.map((condition) => {
     const shape = WORLDS[condition];
-    const realized = condition === 'local_request_amounts_are_rate_card_estimates' && overEstimated;
+    const realized = (condition === 'local_request_amounts_are_rate_card_estimates' && overEstimated)
+      || condition === 'local_ledger_truncated_by_retention';
     return countermodel({
       id: `countermodel:billing:${condition}`,
       violates: condition,

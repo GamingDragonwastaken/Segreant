@@ -501,9 +501,13 @@ export interface ReconciliationRunRecord {
     /**
      * Whether the residual bounds off-path spend from above at all (D-068). A
      * residual below zero refutes the condition rather than reading as "nothing
-     * went off-path".
+     * went off-path", and a period whose request rows were partly deleted by
+     * retention classifies nothing at all (D-173).
      */
-    offPathBound?: 'upper_bound_conditional' | 'none_local_estimate_exceeds_provider';
+    offPathBound?:
+      | 'upper_bound_conditional'
+      | 'none_local_estimate_exceeds_provider'
+      | 'unknown_local_total_truncated_by_retention';
   };
 }
 

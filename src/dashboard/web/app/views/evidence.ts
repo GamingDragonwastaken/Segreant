@@ -63,20 +63,49 @@ const CLAIM_WORDS: Record<string, { plain: string; precise: string; pill: string
  * assume the favourable branch: it says the condition was never recorded, which
  * is the whole reason the field exists.
  */
+type ResidualBound = NonNullable<
+  NonNullable<NonNullable<BillingPayload['reconciliation']>['runs']>[number]['result']['offPathBound']
+>;
+
+/**
+ * A `Record` rather than an if-chain, keyed by the wire's own union.
+ *
+ * That is the gate: adding a state to `offPathBound` in `shared-types.ts`
+ * without a rendering here fails the BROWSER typecheck. With an if-chain the
+ * new state fell through to the "older than the check" sentence below, which
+ * would have said a fresh run predates a field it carries — an unrecognised
+ * value rendered as an absent one, which is the defect class this screen keeps
+ * finding.
+ */
+const RESIDUAL_BOUND_WORDS: Readonly<Record<ResidualBound, { precise: string; plain: string }>> = {
+  none_local_estimate_exceeds_provider: {
+    precise: 'residual bounds nothing — the local estimate exceeds the provider total, so no upper bound on off-path spend survives',
+    plain: 'This remainder cannot tell you how much went outside Fiscus: our own estimate already came out higher than the provider’s bill.',
+  },
+  upper_bound_conditional: {
+    precise: 'residual is an upper bound on off-path spend while the local estimate does not exceed true on-path billed cost',
+    plain: 'At most this much could have gone outside Fiscus — assuming our own pricing did not overshoot what you were really charged.',
+  },
+  unknown_local_total_truncated_by_retention: {
+    precise: 'residual bounds nothing — retention deleted request rows from inside this period, so the local total is a known undercount by an unknown amount',
+    plain: 'This remainder cannot tell you how much went outside Fiscus: some of your own metered requests in this period were deleted by your retention setting, so part of the difference is traffic we did see.',
+  },
+};
+
+/** Whether the run's own bound state is bad news rather than a caveat. */
+function residualBoundIsError(bound: string | undefined): boolean {
+  return bound === 'none_local_estimate_exceeds_provider'
+    || bound === 'unknown_local_total_truncated_by_retention';
+}
+
 function residualBoundWords(bound: string | undefined, precise: boolean): string {
-  if (bound === 'none_local_estimate_exceeds_provider') {
+  const words = bound === undefined ? undefined : RESIDUAL_BOUND_WORDS[bound as ResidualBound];
+  if (words === undefined) {
     return precise
-      ? 'residual bounds nothing — the local estimate exceeds the provider total, so no upper bound on off-path spend survives'
-      : 'This remainder cannot tell you how much went outside Fiscus: our own estimate already came out higher than the provider’s bill.'
+      ? 'this run predates the recorded bound condition, so what the residual bounds is not established'
+      : 'This run is older than the check that says what the remainder means, so we cannot tell you.'
   }
-  if (bound === 'upper_bound_conditional') {
-    return precise
-      ? 'residual is an upper bound on off-path spend while the local estimate does not exceed true on-path billed cost'
-      : 'At most this much could have gone outside Fiscus — assuming our own pricing did not overshoot what you were really charged.'
-  }
-  return precise
-    ? 'this run predates the recorded bound condition, so what the residual bounds is not established'
-    : 'This run is older than the check that says what the remainder means, so we cannot tell you.'
+  return precise ? words.precise : words.plain;
 }
 
 /**
@@ -223,7 +252,7 @@ export function evidenceView(): Node {
             ? h('div', null,
                 // What the residual bounds is a property of THIS run, not of the
                 // status word, and it is the sentence an operator acts on.
-                h('p', { class: latest.result.offPathBound === 'none_local_estimate_exceeds_provider' ? 'drawer-error' : 'basis',
+                h('p', { class: residualBoundIsError(latest.result.offPathBound) ? 'drawer-error' : 'basis',
                   text: () => residualBoundWords(latest.result.offPathBound, isPrecise()) }),
                 h('span', { class: 'basis', text: () => `provider side: ${basisWords(latest.result.providerSourceKind)}` }),
                 latest.result.snapshotStability === 'changed_across_observations'

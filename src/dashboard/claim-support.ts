@@ -189,8 +189,12 @@ export function billedClaimSupport(input: BilledSupportInput): ClaimSupportPaylo
   const days = input.latest?.unstableDayStartMs ?? [];
   // D-068: a residual below zero refutes the condition under which it bounds
   // off-path spend at all, so the reconciled scope is not established to reach
-  // what the provider charged.
-  const boundsNothing = input.latest?.offPathBound === 'none_local_estimate_exceeds_provider';
+  // what the provider charged. D-173: a period whose request rows were partly
+  // deleted by retention bounds nothing either, for a different reason -- the
+  // local total is a known undercount by an unknown amount. Both are "this
+  // residual establishes no bound", which is what this variable feeds.
+  const boundsNothing = input.latest?.offPathBound === 'none_local_estimate_exceeds_provider'
+    || input.latest?.offPathBound === 'unknown_local_total_truncated_by_retention';
 
   return projectClaimSupport(
     {
