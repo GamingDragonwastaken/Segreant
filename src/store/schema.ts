@@ -228,6 +228,32 @@ CREATE TABLE IF NOT EXISTS project_aliases (
   at_ms     INTEGER NOT NULL
 );
 
+-- What retention deleted, so an absence can be told from a deletion.
+--
+-- prune used to run one DELETE, print a count, and leave nothing behind. A
+-- period Fiscus never observed and a period Fiscus observed and then deleted
+-- then read identically -- and fiscus guide read an empty ledger as "no
+-- traffic yet" and marked metering NOT DONE (D-170).
+--
+-- One row per prune rather than one row per stream: a boundary applied twice is
+-- two facts about the policy in force, and a run that deleted nothing still
+-- applied its boundary. The retention floor is MAX(before_ms) per kind, so an
+-- older boundary applied later cannot move the floor backwards -- the newer
+-- deletion has already happened.
+--
+-- ABSENCE OF A ROW MEANS NO PRUNE IS ON RECORD, never "nothing was pruned".
+-- Every ledger pruned before this table existed is in that state, and deriving
+-- a boundary from the oldest surviving row would be inventing provenance.
+CREATE TABLE IF NOT EXISTS retention_prunes (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind         TEXT NOT NULL,
+  before_ms    INTEGER NOT NULL,
+  rows_removed INTEGER NOT NULL,
+  pruned_at_ms INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_retention_prunes_kind ON retention_prunes(kind, before_ms);
+
 -- Provider cost evidence has a deliberately separate grain and provenance from
 -- request rows: it must never be double-counted as metered agent traffic.
 CREATE TABLE IF NOT EXISTS billing_import_runs (

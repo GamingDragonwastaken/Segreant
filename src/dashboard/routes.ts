@@ -743,6 +743,7 @@ export function handleGuide({ res, store, config }: RouteContext): void {
         proxyUp: proxyStatus.kind === 'up',
         proxyStatus,
         requestsAllTime: store.summary(0, now + 1000).requests,
+        requestsRetention: store.retentionFloor(),
         spend30dUsd: store.summary(now - 30 * day, now + 1000).costUsd,
         dailyCapUsd: config.budget.dailyUsd,
         outcomeSignals: store.countSignals(),

@@ -326,6 +326,26 @@ export interface ProviderConnection {
   requestCount: number;
 }
 
+/**
+ * What retention has deleted, per stream, as recorded by `Store.prune`.
+ *
+ * `requestsPrunedBeforeMs === null` is a THIRD STATE: no prune is on record.
+ * It is not "nothing was pruned" -- a ledger pruned before `retention_prunes`
+ * existed reports null, and deriving a boundary from the oldest surviving row
+ * would invent the provenance this project refuses to infer.
+ */
+export interface RetentionFloor {
+  /** Newest boundary ever applied to `requests`, or null when none is recorded. */
+  requestsPrunedBeforeMs: number | null;
+  requestsRowsRemoved: number;
+  requestsPrunes: number;
+  requestsLastPrunedAtMs: number | null;
+  /** Proposals are pruned on their own, much shorter policy. */
+  proposalsPrunedBeforeMs: number | null;
+  proposalsRowsRemoved: number;
+  proposalsPrunes: number;
+}
+
 export interface GateSignalRow {
   signalId: string;
   kind: string; // 'tested' | 'merged' | 'shipped' | 'incident'
@@ -2697,11 +2717,63 @@ export class Store {
     return causal.causalStudyListBasis(this.db);
   }
 
-  /** Maintenance: prune old requests and compact. Returns rows removed. */
+  /**
+   * Maintenance: prune old requests and compact. Returns rows removed.
+   *
+   * The boundary is RECORDED before the vacuum, whether or not it removed
+   * anything. Without that record a deleted history and a history that never
+   * happened are the same thing to every later reader -- see `retentionFloor`
+   * and `retention_prunes` in the schema (D-170).
+   */
   prune(beforeMs: number): number {
     const info = this.db.prepare(`DELETE FROM requests WHERE ts_epoch_ms < ?`).run(beforeMs);
+    const removed = Number(info.changes ?? 0);
+    this.recordPrune('requests', beforeMs, removed);
     this.db.prepare('VACUUM').run();
-    return Number(info.changes ?? 0);
+    return removed;
+  }
+
+  private recordPrune(kind: 'requests' | 'proposals', beforeMs: number, rowsRemoved: number): void {
+    this.db
+      .prepare('INSERT INTO retention_prunes (kind, before_ms, rows_removed, pruned_at_ms) VALUES (?, ?, ?, ?)')
+      .run(kind, beforeMs, rowsRemoved, Date.now());
+  }
+
+  /**
+   * What retention has deleted, per stream.
+   *
+   * `prunedBeforeMs === null` means NO PRUNE IS ON RECORD. It does not mean
+   * nothing was pruned: every ledger pruned before this table existed reports
+   * null, and inferring a boundary from the oldest surviving row would be
+   * inventing the provenance this project refuses to infer. Callers that turn a
+   * count into a statement about whether something ever happened must read this
+   * and say which of the three states they are in.
+   */
+  retentionFloor(): RetentionFloor {
+    const read = (kind: 'requests' | 'proposals') => this.db
+      .prepare(
+        `SELECT MAX(before_ms) AS beforeMs, SUM(rows_removed) AS removed,
+                COUNT(*) AS prunes, MAX(pruned_at_ms) AS atMs
+         FROM retention_prunes WHERE kind = ?`,
+      )
+      .get(kind) as { beforeMs?: unknown; removed?: unknown; prunes?: unknown; atMs?: unknown } | undefined;
+
+    const requests = read('requests');
+    const proposals = read('proposals');
+    const int = (value: unknown): number => (typeof value === 'number' || typeof value === 'bigint' ? Number(value) : 0);
+    const maybe = (value: unknown): number | null => (
+      typeof value === 'number' || typeof value === 'bigint' ? Number(value) : null
+    );
+
+    return {
+      requestsPrunedBeforeMs: maybe(requests?.beforeMs),
+      requestsRowsRemoved: int(requests?.removed),
+      requestsPrunes: int(requests?.prunes),
+      requestsLastPrunedAtMs: maybe(requests?.atMs),
+      proposalsPrunedBeforeMs: maybe(proposals?.beforeMs),
+      proposalsRowsRemoved: int(proposals?.removed),
+      proposalsPrunes: int(proposals?.prunes),
+    };
   }
 
   /**
@@ -2711,8 +2783,13 @@ export class Store {
    */
   pruneProposals(beforeMs: number): number {
     const info = this.db.prepare(`DELETE FROM proposals WHERE ts_epoch_ms < ?`).run(beforeMs);
+    const removed = Number(info.changes ?? 0);
+    // Recorded under its own kind. Proposal retention is a much shorter policy
+    // and says nothing about request coverage; folding the two together would
+    // make a proposal prune look like a gap in the spend ledger.
+    this.recordPrune('proposals', beforeMs, removed);
     this.db.prepare('VACUUM').run();
-    return Number(info.changes ?? 0);
+    return removed;
   }
 
   /** Privacy control: delete every stored proposal immediately, regardless of age. */

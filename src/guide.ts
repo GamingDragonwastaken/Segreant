@@ -27,7 +27,26 @@ export interface GuideFacts {
   proxyUp: boolean;
   /** Structured health result; proxyUp remains for compatibility with older callers. */
   proxyStatus?: ProxyStatus;
+  /**
+   * Requests currently in the ledger.
+   *
+   * NOT a count of requests ever metered once `requestsRetention` records a
+   * boundary: prune deletes rows, and this number counts what survived. The
+   * field keeps its name because every existing caller passes it, and the
+   * correction is `requestsRetention` rather than a rename that would quietly
+   * change what old callers mean.
+   */
   requestsAllTime: number;
+  /**
+   * What retention has deleted from the request stream, when it is known.
+   *
+   * Optional and three-valued on purpose. Absent, or present with
+   * `requestsPrunedBeforeMs: null`, means NO PRUNE IS ON RECORD -- which is not
+   * "nothing was pruned". A caller that has a store should always pass this;
+   * one that cannot is in the unknown state and the guide says so by saying
+   * nothing extra, rather than by asserting completeness it has not got.
+   */
+  requestsRetention?: RetentionCoverage;
   spend30dUsd: number;
   dailyCapUsd: number | null;
   /** Outcome signals ever recorded — `report` and `exec` both write these. */
@@ -35,6 +54,19 @@ export interface GuideFacts {
   /** Scored realization units — proof `roi`/`realize` ran against real work. */
   realizationUnits: number;
   laborRateSet: boolean;
+}
+
+/**
+ * The retention facts this module reads, structurally matching
+ * `RetentionFloor` in `src/store/db.ts`.
+ *
+ * Declared here rather than imported so this module stays pure and free of a
+ * dependency on the store; the store's wider shape is a superset and satisfies
+ * it structurally.
+ */
+export interface RetentionCoverage {
+  readonly requestsPrunedBeforeMs: number | null;
+  readonly requestsRowsRemoved: number;
 }
 
 export type GuideStepId = 'meter' | 'cap' | 'outcome' | 'value' | 'price' | 'steward';
@@ -78,18 +110,40 @@ export function buildGuide(f: GuideFacts): GuideReport {
   const proxyUp = proxyStatus.kind === 'up';
   const proxyBlocked = proxyStatus.kind === 'blocked_by_egress';
 
+  // RETENTION IS READ BEFORE THE COUNT IS INTERPRETED (D-170).
+  //
+  // `requestsAllTime` counts rows that SURVIVED. With a recorded prune boundary
+  // an empty ledger no longer means "no traffic yet": it means the evidence was
+  // deleted by policy, and telling an operator who metered for months to go and
+  // configure a proxy is the absence-as-result failure this program keeps
+  // finding. `done` follows: metering demonstrably happened if rows were
+  // removed, whether or not any survived.
+  //
+  // The three states are kept apart. No boundary on record is NOT a statement
+  // that nothing was pruned -- it is the unknown case, and it is left reading
+  // exactly as it did before, because softening an honest "no traffic yet" into
+  // a hedge would trade one wrong answer for another.
+  const pruned = f.requestsRetention ?? null;
+  const prunedBoundaryKnown = pruned !== null && pruned.requestsPrunedBeforeMs !== null;
+  const removedByRetention = prunedBoundaryKnown ? pruned.requestsRowsRemoved : 0;
+  const retentionNote = prunedBoundaryKnown
+    ? ` — ${fmtInt(removedByRetention)} older ${removedByRetention === 1 ? 'row' : 'rows'} deleted by retention on ${new Date(pruned.requestsPrunedBeforeMs!).toISOString().slice(0, 10)}, so this is not a count of everything metered`
+    : '';
+
   const meter: GuideStep = {
     id: 'meter',
     title: 'Meter the spend',
-    done: f.requestsAllTime > 0,
+    done: f.requestsAllTime > 0 || removedByRetention > 0,
     state:
       f.requestsAllTime > 0
-        ? `${fmtInt(f.requestsAllTime)} requests metered`
-        : proxyUp
-          ? `proxy running on :${f.port} — no traffic through it yet`
-          : proxyBlocked
-            ? `proxy health check blocked by local egress (${proxyStatus.code})`
-          : 'no traffic yet',
+        ? `${fmtInt(f.requestsAllTime)} requests metered${retentionNote}`
+        : removedByRetention > 0
+          ? `no requests in the ledger — ${fmtInt(removedByRetention)} were metered and then deleted by retention. Metering happened; the record of it did not survive.`
+          : proxyUp
+            ? `proxy running on :${f.port} — no traffic through it yet`
+            : proxyBlocked
+              ? `proxy health check blocked by local egress (${proxyStatus.code})`
+            : 'no traffic yet',
     why: 'Nothing can be governed or valued until the spend is captured — imported from what your tools already log, or routed through the proxy.',
     notice: proxyBlocked
       ? proxyStatus.code + ': ' + proxyStatus.message + ' ' + proxyStatus.action

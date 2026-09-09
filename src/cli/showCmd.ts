@@ -284,6 +284,9 @@ export function cmdPrune(): void {
   console.log(`  Pruned ${requestsRemoved} request rows older than ${cfg.retentionDays} days.`);
   console.log(`  Pruned ${proposalsRemoved} stored proposal rows older than ${cfg.proposalRetentionDays} days.`);
   console.log('  Database compacted.');
+  // The boundary is now on the record, which is what stops a later reader from
+  // mistaking the deletion for an absence (D-170).
+  console.log(`  Retention boundary recorded: requests before ${new Date(requestsBefore).toISOString()} are deleted and will not appear in any total.`);
   store.close();
 }
 

@@ -210,6 +210,9 @@ export async function gatherGuideFacts(): Promise<GuideFacts> {
   const sum30 = store.summary(now - 30 * day, now + 1000);
   const outcomeSignals = store.countSignals();
   const realizationUnits = store.countRealizationUnits();
+  // Read before the store closes: without it `requestsAllTime` is a count of
+  // survivors presented as a count of everything (D-170).
+  const requestsRetention = store.retentionFloor();
   store.close();
 
   const proxyStatus = await probeProxyState(cfg);
@@ -221,6 +224,7 @@ export async function gatherGuideFacts(): Promise<GuideFacts> {
     proxyUp: proxyStatus.kind === 'up',
     proxyStatus,
     requestsAllTime: all.requests,
+    requestsRetention,
     spend30dUsd: sum30.costUsd,
     dailyCapUsd: cfg.budget.dailyUsd,
     outcomeSignals,
