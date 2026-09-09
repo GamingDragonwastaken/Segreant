@@ -18,7 +18,7 @@
  * No prompt text is read or stored, so Fiscus never classifies the content.
  */
 
-import type { Store } from '../store/db.ts';
+import type { Store, WindowRetentionCoverage } from '../store/db.ts';
 import type { EpistemicState } from '../epistemic/state.ts';
 import { adaptOutcome, createWorkUnit, type OutcomeAdapter, type WorkUnit } from '../outcomes/work-unit.ts';
 import { computeReturnOnIntelligence, type RoIResult } from './lenses.ts';
@@ -129,6 +129,16 @@ export interface UsageReport {
   roi: RoIResult;
   /** Exact effective usage coverage, separate from the legacy numeric ROI input. */
   economic?: UsageEconomicRollup;
+  /**
+   * Whether this window reaches behind what retention deleted (D-174).
+   *
+   * Required, not optional. An empty `units` list means two different things --
+   * no session was tagged, or the tagged sessions were deleted -- and the
+   * surface that renders the list has to be able to tell them apart. An
+   * optional field would let a consumer be built that cannot, which is how the
+   * CLI came to instruct an operator to tag sessions they had already tagged.
+   */
+  retention: WindowRetentionCoverage;
 }
 
 export interface UsageEconomicRollup {
@@ -283,5 +293,16 @@ export function computeUsageRoI(
     },
   );
 
-  return { units, realizedUnits: realized.length, totalCostUsd, outcomeMix, money, roi, economic };
+  return {
+    units,
+    realizedUnits: realized.length,
+    totalCostUsd,
+    outcomeMix,
+    money,
+    roi,
+    economic,
+    // Read from the ledger's own record rather than inferred from the rows: an
+    // absence of rows is exactly what cannot distinguish these states.
+    retention: store.windowCoverage(opts.startMs),
+  };
 }

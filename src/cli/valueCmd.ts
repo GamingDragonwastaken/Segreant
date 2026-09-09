@@ -23,6 +23,7 @@ import { GATE_LADDER, GATE_META } from '../value/gates.ts';
 import { describeDriftReading, driftReading } from '../value/drift.ts';
 import { C, color, usd, num, pct, gateGlyph, noteSource, printNotAGitRepo, printJson } from './ui.ts';
 import { type Flags } from './flags.ts';
+import { retentionNotice } from './retention.ts';
 
 export async function cmdYield(flags: Flags): Promise<void> {
   const repo = (flags.repo as string) ?? process.cwd();
@@ -276,8 +277,18 @@ export async function cmdUsage(flags: Flags): Promise<void> {
   console.log(color(tty, C.gray, '  Scores sessions with no captured code proposals. A CODING session lands here too'));
   console.log(color(tty, C.gray, '  when its tool never reports diffs — route it through the proxy to move it to git RoI.'));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
+  const truncation = retentionNotice(rep.retention);
+  if (truncation !== null) console.log(color(tty, C.yellow, `  ● ${truncation}`));
   if (rep.units.length === 0) {
-    console.log(color(tty, C.gray, '  No sessions without code signals in range. Tag sessions with X-Fiscus-Session-Id to measure them.'));
+    // THE ERRAND IS ONLY HONEST WHEN THE EMPTINESS IS NOT A DELETION (D-174).
+    // Telling an operator to tag sessions they tagged, and whose measurements
+    // retention removed on their own policy, is worse than saying nothing: it
+    // sends them to do work already done and reads as evidence they never did
+    // it. The line above already states what happened; this one stops
+    // contradicting it.
+    console.log(color(tty, C.gray, rep.retention.truncated
+      ? '  No sessions without code signals SURVIVE in range — whether any were tagged before the deletion cannot be read from here.'
+      : '  No sessions without code signals in range. Tag sessions with X-Fiscus-Session-Id to measure them.'));
     console.log('');
     store.close();
     return;
