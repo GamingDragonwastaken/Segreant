@@ -20,13 +20,35 @@ export interface EconomicAttribution {
 }
 
 /**
- * Project an exact decimal into a legacy numeric field only when the exact
- * window is complete and the projection is finite. Incomplete or oversized
- * windows keep their caller-supplied compatibility value and remain disclosed
- * through the exact coverage object.
+ * The one place an exact attribution becomes a bare JavaScript number, and
+ * every field it lands in is named `costUsd`.
+ *
+ * THE FOURTH SIBLING (WP-C03 / D-200). `assertAgreesWithUsdCompatibility` below
+ * exists because three call sites compared an exact amount against a USD-named
+ * float without looking at its unit. This function is the fourth, and it is the
+ * worse one: the other three RECONCILE, so a wrong unit at least had a second
+ * figure to disagree with. This one PROJECTS — `Number("100")` from an exact
+ * EUR 100.00 is the number 100, it is assigned to `costUsd`, and nothing
+ * downstream can recover the fact that it was never dollars.
+ *
+ * `canonicalEconomicAttribution` accepts a non-USD attribution on purpose (an
+ * exact amount in another currency is a legitimate object), so a receipt or a
+ * rollup body can carry one into this function. It therefore refuses rather
+ * than falling back to the compatibility value: a silent fallback would turn a
+ * unit conflict into a plausible number from a different source, which is the
+ * same collapse one step further away from the evidence.
+ *
+ * Incomplete or oversized windows still keep their caller-supplied
+ * compatibility value and remain disclosed through the exact coverage object.
  */
 export function economicAttributionNumber(value: EconomicAttribution | undefined, compatibilityValue: number): number {
   if (value === undefined || !value.complete) return compatibilityValue;
+  if (value.amount.currency !== 'USD') {
+    throw new Error(
+      `economic attribution is USD-anchored and cannot be projected into a USD-named field from an exact `
+      + `${value.amount.currency} amount; translate it through the effective-FX read model first`,
+    );
+  }
   const projected = Number(value.amountText);
   return Number.isFinite(projected) ? projected : compatibilityValue;
 }
@@ -131,6 +153,25 @@ export function assertAgreesWithUsdCompatibility(
   }
 }
 
+/**
+ * Both aggregates below are USD-anchored: they seed a USD zero and add into it.
+ * That is a real policy — an attribution window has no `asOf` and no target
+ * currency, so it has nothing to select a historical rate with and must not
+ * invent one. Until D-200 the anchor was enforced only as a side effect of
+ * `addMoney`, which reported `money currency mismatch: USD != EUR` and named
+ * neither the aggregate that was anchored nor the route out of it. State the
+ * limit where the result would have been.
+ */
+function assertUsdAnchored(amount: Money, subject: string): void {
+  if (amount.currency !== 'USD') {
+    throw new Error(
+      `economic attribution is USD-anchored and has no as-of boundary to select a historical rate with, `
+      + `so an exact ${amount.currency} amount in ${subject} is not comparable with it; `
+      + `translate it through the effective-FX read model first`,
+    );
+  }
+}
+
 /** Aggregate exact request rows without converting the effective basis to a float. */
 export function economicAttributionFromRows(rows: ReadonlyArray<{
   effectiveAmount: Money | null;
@@ -143,12 +184,13 @@ export function economicAttributionFromRows(rows: ReadonlyArray<{
   const eventIds: string[] = [];
   const sourceBases = new Set<EconomicBasis>();
   let unresolvedRequests = 0;
-  for (const row of rows) {
+  for (const [index, row] of rows.entries()) {
     if (row.effectiveAmount === null || row.unresolvedReason !== null) {
       unresolvedRequests += 1;
       continue;
     }
     if (row.effectiveAmount.basis !== 'effective') throw new Error('economic attribution amount must use the effective basis');
+    assertUsdAnchored(row.effectiveAmount, `request row ${index}`);
     amount = addMoney(amount, row.effectiveAmount);
     eventIds.push(...row.sourceEventIds);
     for (const basis of row.sourceBases) sourceBases.add(basis);
@@ -170,8 +212,10 @@ export function economicAttributionFromAttributions(values: ReadonlyArray<Econom
   const sourceBases = new Set<EconomicBasis>();
   let requestCount = 0;
   let unresolvedRequests = 0;
-  for (const value of values) {
-    amount = addMoney(amount, moneyFromJson(value.amount));
+  for (const [index, value] of values.entries()) {
+    const parsed = moneyFromJson(value.amount);
+    assertUsdAnchored(parsed, `attribution ${index}`);
+    amount = addMoney(amount, parsed);
     eventIds.push(...value.eventIds);
     for (const basis of value.sourceBases) sourceBases.add(basis);
     requestCount += value.requestCount;

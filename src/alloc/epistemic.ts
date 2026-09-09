@@ -40,8 +40,28 @@ function computedAt(value: number): ReturnType<typeof instant> {
   return instant(iso);
 }
 
+/**
+ * A MONETARY BASIS THAT OMITS ITS UNIT IS NOT A BASIS (WP-C03 / D-200).
+ *
+ * `sourceBases` is a basis-only summary, so a run holding USD 10.00 and
+ * EUR 90.00 — both at the `effective` basis — collapses to exactly one entry
+ * and this declared `monetaryBasis: 'effective'` for a kernel Evidence record
+ * spanning two currencies. The allocation figures underneath were never wrong:
+ * `applyExactAllocation` partitions every bucket and line by currency+basis
+ * identity and never sums across them. What was wrong is the one field a reader
+ * consults to learn what unit the claim is in.
+ *
+ * The honest answer for a multi-currency run is that there is no single
+ * monetary basis, which is what `null` already means here for a multi-basis
+ * run. Normalizing instead would require a target currency and an as-of
+ * boundary that an allocation run does not have — and choosing a rate without
+ * one is the failure the effective-FX read model exists to prevent. The
+ * per-identity totals remain in the payload, so nothing is withheld except the
+ * false summary.
+ */
 function sourceBasis(result: ExactAllocationRunResult): EconomicBasis | null {
   if (result.sourceBases.length !== 1) return null;
+  if (new Set(result.totalByIdentity.map((bucket) => bucket.currency)).size > 1) return null;
   const basis = result.sourceBases[0];
   if (basis === undefined || !ECONOMIC_BASES.includes(basis)) throw new Error(`exact allocation source basis is invalid: ${String(basis)}`);
   return basis;
