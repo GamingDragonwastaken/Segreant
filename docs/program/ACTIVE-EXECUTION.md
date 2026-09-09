@@ -7,9 +7,9 @@
 | | |
 | --- | --- |
 | Branch | `gpt56/magnum-opus-reconstruction` — never `main`, never force-pushed |
-| Last CI-verified exact head | `36aab1940f18295368cbec71e85e6e9b966076e1` — run `34342008121`, **success on all eight configured jobs**, inspected job by job. Verified the same way in order before it: `983eca0` (run `34339948316`, success), `ef68b89` (run `34338870049`, success), `a77a4e1` (run `34338149908`, success), `40041b8` (run `34337221806`, success), `abe50be` (run `34336243081`, success), `baa617a` (run `34335494594`, success), `4e0eaba` (run `34334467204`, success), `fae969d` (run `34333844248`, success), `030cfd9` (run `34332465354`, success), `9d84d5c` (run `34317025313`, success), `eb32b41` (run `34316568367`, success), `b7028d2` (run `34315518166`, success), `2d655c9` (run `34314680129`, success), `07c68eb` (run `34314090355`, success). Verified the same way immediately before: `ab59f30` (run `34312731008`, success), which is where D-172's build-race fix was actually established -- the failure it repairs occurred on `test (windows-latest)` alone, at `cc8ef35` (run `34311975381`, failure), and only that job going green at the exact fixed head settles it. Before that, `a86b922` (run `34311206030`, success). Earlier in the chain, `707581b` — run `34175216032`, **success on all eight configured jobs** (`test` ×3, `team-server-test` ×3, `package-smoke`, `candidate-head`), inspected job by job, not by trusting the first green row. Verified the same way before it, each all-eight green: `aa5ec22` (run `34174439515`, success), `2aa7cac` (run `34174382288`, success), `51f3ec6` (run `34174019795`, success), `0f0811d` (run `34173907843`, success), `0ebb966` (run `34173069140`, success), `e0cd80f` (run `34172882201`, success), `dfcfc87` (run `34171128690`, success), `ac98395` (run `34170679364`, success), `6b91318` (run `34169977899`, success). |
+| Last CI-verified exact head | `e1fd90dbafb5e210b8ea629d592b3e477dbf66a7` — run `34365568408`, **success on all eight configured jobs**, inspected job by job. Verified the same way in order before it: `f717dd7` (run `34361675202`, success), `7032e4c` (run `34354659971`, success), `6c56d5f` (run `34343340349`, success), `36aab19` (run `34342008121`, success), `983eca0` (run `34339948316`, success), `ef68b89` (run `34338870049`, success), `a77a4e1` (run `34338149908`, success), `40041b8` (run `34337221806`, success), `abe50be` (run `34336243081`, success), `baa617a` (run `34335494594`, success), `4e0eaba` (run `34334467204`, success), `fae969d` (run `34333844248`, success), `030cfd9` (run `34332465354`, success), `9d84d5c` (run `34317025313`, success), `eb32b41` (run `34316568367`, success), `b7028d2` (run `34315518166`, success), `2d655c9` (run `34314680129`, success), `07c68eb` (run `34314090355`, success). Verified the same way immediately before: `ab59f30` (run `34312731008`, success), which is where D-172's build-race fix was actually established -- the failure it repairs occurred on `test (windows-latest)` alone, at `cc8ef35` (run `34311975381`, failure), and only that job going green at the exact fixed head settles it. Before that, `a86b922` (run `34311206030`, success). Earlier in the chain, `707581b` — run `34175216032`, **success on all eight configured jobs** (`test` ×3, `team-server-test` ×3, `package-smoke`, `candidate-head`), inspected job by job, not by trusting the first green row. Verified the same way before it, each all-eight green: `aa5ec22` (run `34174439515`, success), `2aa7cac` (run `34174382288`, success), `51f3ec6` (run `34174019795`, success), `0f0811d` (run `34173907843`, success), `0ebb966` (run `34173069140`, success), `e0cd80f` (run `34172882201`, success), `dfcfc87` (run `34171128690`, success), `ac98395` (run `34170679364`, success), `6b91318` (run `34169977899`, success). |
 | Code ahead of that head | This records commit only, and its own run is **PENDING** — the fixed point every such record hits. `a0c9bc5` (run `34174827068`) is the one FAILURE in this chain and is left named rather than tidied away: it went red on four jobs because the row above listed eight run identifiers behind a single outcome word, and the record gate is right to refuse that. |
-| Local gates on the current tree | Root suite **1,853 total / 1,849 pass / 0 fail / 4 skipped**; the last suite run made deliberately under six concurrent CPU-bound processes was 1,666 / 1,662 / 0 fail, which is the standard this program now holds itself to; team-server **74/74**; all three TypeScript domains clean (root `tsconfig.json`, `src/dashboard/web/app/tsconfig.json`, `team-server/`) |
+| Local gates on the current tree | Root suite **1,888 total / 1,884 pass / 0 fail / 4 skipped**, measured on a QUIET TREE after every concurrent agent had finished. **A suite total taken while another agent is editing source is not evidence of anything** -- three separate agents each reported a transient failure in a file they had never touched during this round's parallel work, and each passed alone; the only number that counts is the integrator's, on a still tree. the last suite run made deliberately under six concurrent CPU-bound processes was 1,666 / 1,662 / 0 fail, which is the standard this program now holds itself to; team-server **74/74**; all three TypeScript domains clean (root `tsconfig.json`, `src/dashboard/web/app/tsconfig.json`, `team-server/`) |
 | Dossier source | `FISCUS_EXECUTION_DOSSIER_III.md` is **not in this checkout and not in git history** — it was an owner-supplied input. `docs/program/PACKET-INVENTORY.md` is the surviving mechanical enumeration of all 76 packets and is authoritative here. Do not re-derive a packet count from anything else. |
 
 ## Packet accounting
@@ -71,6 +71,46 @@ What that cost, concretely, and why integration could not be a merge:
 - **Lane E (WP-I04)** was accurate, and its five fixes were cherry-picked after re-verifying RED by reverting each source file in turn.
 
 **Every lane's RED was re-verified in this tree before its work was kept.** That is not ceremony: two of the six lanes' reports were materially wrong about the current tree while being internally honest about the tree they saw. Delegation bought real breadth here -- six packets' worth of counterexample-hunting in parallel -- and bought no integration. Budget for that: the integrator re-measures everything, and on a fast-moving branch that is most of the work.
+
+## This round: six packets, and what running three agents at once actually cost
+
+Six defect packets landed and are remote-green at `e1fd90d` (run `34365568408`, all eight jobs). Four came out of a
+six-lane read-only survey of the whole repository; the survey's own report is `MAGNUM-OPUS-ASSESSMENT.md`.
+
+`ab9ee1b` D-189 bound each deletion to the record that says it happened -- `prune`, `pruneProposals` and
+`clearProposals` were DELETE, then record, then VACUUM with nothing binding the first two, so a failure between them
+reconstructed the exact D-170 state that `retention_prunes` exists to prevent. `2076b37` D-190 stopped a witness whose
+own record read `refuted` from discharging the obligation it had been refuted about. `f717dd7` D-191 stopped
+`outcomeBounds([])` reporting an upper bound of zero percent from zero observations. `a24ed26` D-192 **closed the
+direct append path**: the kernel had two boundaries guarding disjoint axis sets, so `causality`, `decisionFitness` and
+`finality` fell between them and the derivation registry was effectively optional. `4adde63` D-193 stated two of the
+three unexamined claim-use bars and gave the third a real reason instead of boilerplate. `e1fd90d` D-194 removed the
+flat three-axis copy the browser believed from beside the canonical profile on the wire.
+
+**Two program-level findings from this round, both worth more than any single packet.**
+
+*A register column is a claim like any other.* The `AUDIT-REGISTER` AII-014 remainder text had been stale since D-082
+and stated that the wire carried four of ten axes. It did not. A packet was specced from that column and had to
+correct it mid-flight, and a survey lane had already repeated it as current. This is D-188's lesson arriving a second
+time from a different direction: **the cells nobody checks are where a corrected record goes to rot**, and the
+program's own registers are not exempt. The column is corrected and now says why it misled.
+
+*File-level disjointness is not isolation.* Three agents were run concurrently on disjoint file sets in one working
+tree. The file separation held and no content was lost -- staging by explicit path is why. Two other things did not
+hold. Verification stopped being trustworthy, because `npm test` builds first and each agent compiled the others'
+half-finished source. And one agent's `git commit --amend`, repairing its own mangled subject line (PowerShell
+here-string syntax leaking into the Bash tool), landed on **another agent's commit** and replaced its message, so for
+a while the dashboard packet's permanent record described the ledger packet. Repaired with `reset --soft` and two
+re-commits, verified by comparing the tree hash before and after: identical. The rules that follow are cheap and are
+now in the packet templates -- **own worktree per parallel agent; never `--amend` in a shared checkout; always
+`git commit -F <file>`, never an inline multi-line `-m`; stage by explicit path, never `git add -A`.**
+
+Two documents were added this round and are the durable half of it. `MAGNUM-OPUS-ASSESSMENT.md` is a whole-project
+assessment with per-section ladder scores, evidence, and a durability design for multi-year AI-driven work; its
+section 7 is the part addressed to whoever runs this program next. `METHOD-ABSENCE-AS-RESULT.md` extracts the
+twenty-one-instance defect class into a portable eight-step checklist stated in no Fiscus vocabulary at all, so it can
+be run against a codebase that has never heard of this one -- the class was expensive to find and existed only as
+prose addressed to a reader already fluent in this repository.
 
 ## Next executable frontier
 

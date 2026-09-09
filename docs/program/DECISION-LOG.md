@@ -2148,3 +2148,407 @@ Ten rows and $180.00 still in the ledger, and every bucket empty.
 **Evidence.** Five tests. **RED 2 of 5**: the empty case returned `upper: 0` where `1` was required, and the cross-module agreement failed at `0 !== 1`. Three guards passed before and after, and they are what make the widening safe: the four-evaluation example from `test/outcome-contract.test.ts` reproduced value for value, a single confirmed evaluation still pinning both bounds at exactly 1, and the all-refuted sample that shows what an upper bound of zero is entitled to mean. GREEN 5/5. Root suite **1,869 total / 1,865 pass / 0 fail / 4 skipped**; team-server 74/74; three typecheck domains clean.
 
 **What this does not establish.** That the non-empty bounds are calibrated for any other reason — they are exact counts over terminal status, which is what partial identification means here and all it means. That a small non-empty sample is adequate: `n: 3` still yields a narrow interval from three observations, and this function offers no anytime-valid coverage guarantee the way `anytimeRateInterval` does, so the two agree at zero and are not interchangeable above it. That other vacuous-boundary cases in `src/` are swept: only this one was measured, and the class — a degenerate input returning a confident-looking answer — is named here rather than counted as closed. And nothing about outcomes that were never evaluated, which is the same permanent limit every local measure has.
+
+## D-192 — A direct claim could assert what only a Derivation is allowed to conclude
+
+**Decision.** At the ledger's commit boundary, a claim appended without a
+Derivation producing it inside the same transaction may not exceed a stated
+floor on the ordered profile axes that Evidence cannot bound: `causality` at
+most `observational`, `decisionFitness` at most `insufficient`, `finality`
+`final` only when every cited evidence carries `finalizedAt`, and `measurement`
+above `proxy_unvalidated` only when some cited evidence declares a
+`measurementModelRef`. A claim that exceeds a floor and is not the output claim
+of a legal Derivation appended in the same transaction rolls the transaction
+back. `monetaryBasis` is deliberately not covered: it is not a ladder, so there
+is no "above" to refuse.
+
+**Counterexample.** One piece of Evidence with `integrity: 'unknown'`,
+`authenticity: 'self_asserted'`, `completeness: partial`, and one Claim citing
+it with `profile.causality: 'randomized'`. `appendClaim` returned `'inserted'`
+and `readClaim` returned the stored randomized causal claim. No assignment
+procedure, no witness and no derivation existed anywhere in that ledger. The
+same held for `decisionFitness: 'sufficient'` — a claim declaring itself fit to
+act on — and for `finality: 'final'` over evidence that carried no
+`finalizedAt`.
+
+**Root cause.** The kernel has two append boundaries and they guarded disjoint
+sets of axes. `appendDerivationWithinTransaction` consults
+`assessDerivationLegality`, which guards eight ordered axes via
+`PROFILE_STRENGTH_AXES` and demands the matching witness for each upward move.
+`appendClaimWithinTransaction` consults `assertClaimWithinItsEvidence`, which
+guards integrity, authenticity and coverage — the three axes `Evidence` carries
+a comparable field for — plus grain, scope and the measurement-model reference
+(D-104, D-106, D-108, D-168). Three ordered axes sat between the two lists and
+were guarded by neither. Because the direct path was unguarded, the entire
+derivation registry was optional: any conclusion a Derivation would have needed
+a witness for could be reached by declaring it on a claim instead. The registry
+refused the front door and there was no lock on the back one.
+
+**Fix.** `EpistemicLedger.directClaimObligation` states the floor and returns
+the phrase naming which one a claim exceeded; `appendClaimWithinTransaction`
+records that phrase against the claim id on the INSERT path only, so idempotent
+replay of an already-stored claim raises nothing.
+`appendDerivationWithinTransaction` marks its `outputClaimId` legalized once
+every input claim has been assessed and allowed — and only when the derivation
+names at least one input claim, since a derivation over evidence alone runs the
+legality loop zero times and would otherwise hand the bypass back by another
+door. `EpistemicLedger.transaction` opens a frame per transaction and calls
+`assertStrengtheningDischarged` immediately before `COMMIT`, so an outstanding
+obligation rolls the whole transaction back.
+
+The check is at COMMIT rather than at the append because
+`appendDerivationWithinTransaction` reads its output claim back out of the
+ledger: the claim a derivation legalizes is necessarily persisted before the
+derivation is offered. Refusing at append time would refuse the only ordering
+the kernel permits, which is the ordering `issueCausalStudyToKernel` and
+`issueDecisionToKernel` both already write.
+
+**Two calibrations, both made against measured behaviour rather than by
+analogy.**
+
+`decisionFitness` is floored at `insufficient`, not at `not_assessed`. The
+`DECISION_FITNESS` ladder orders INFORMATION, not permission: `sufficient` is
+the only rung that licenses acting, and a claim declaring a decision unfit to
+act on cannot inflate anything by saying so. Flooring at `not_assessed` was
+implemented and measured first: it refused
+`claim:decision:utility:decision-1`, the observation claim
+`buildDecisionKernelIssuance` issues directly at `insufficient` beside the
+`sufficient` claim its derivation produces, and took two tests in
+`test/decision-issuance.test.ts` with it. Making withholding the expensive path
+— a boundary having to mint a derivation in order to say "do not act on this" —
+is the opposite of hard rule 3.
+
+A derivation with no input claims legalizes nothing, because
+`assessDerivationLegality` runs once per input claim and such a derivation runs
+it zero times.
+
+**Evidence.**
+
+RED, against the unfixed tree, `test/ledger-strengthening-obligation.test.ts`:
+four failures, all `Missing expected exception`:
+
+- `a direct claim cannot assert a causal reading no derivation identified`
+- `a direct claim cannot assert decision fitness no derivation established`
+- `a direct claim cannot declare final while cited evidence is not finalized`
+- `every cited evidence must be finalized, not merely one of them`
+
+Both guards passed RED unchanged, which is what makes the four failures a
+finding rather than a broken fixture:
+
+- `GUARD: the same strengthened claim is accepted when a legal derivation legalizes it in the transaction`
+- `GUARD: an ordinary claim within its evidence still needs no derivation at all`
+
+GREEN: 8/8 in that file, including the two calibration cases added after the
+measurement above — `a direct claim may still declare a decision UNFIT to act
+on` and `a derivation over evidence alone legalizes nothing`.
+
+Full suite: 1,881 tests, 1,876 pass, 4 skipped.
+
+**What this does not establish.**
+
+- That a derivation's witness is TRUE. D-190 settled that a witness discharges
+  only while its own record reads `supported`; nothing here checks that a
+  `causal_identification` witness describes an identification strategy, or that
+  the strategy fits the claims either side of it. `detail` is still a free
+  string.
+- That the measurement RUNG is bounded by anything. `Evidence` records which
+  model a record was collected under and never how well validated that model
+  is, so the measurement floor only refuses a rung with no model reference
+  behind it at all. That case is in fact already unreachable — `claim()`
+  refuses a null ref above `proxy_unvalidated` and D-168 refuses a ref no cited
+  evidence declares — and the floor is stated anyway so the rule is one
+  readable statement rather than a consequence of two others that could move
+  independently.
+- Anything about `monetaryBasis` on the direct path. It has no ladder and no
+  floor here; the derivation path guards it with `monetary_rebasing` (D-152)
+  and the direct path does not guard it at all.
+- That a strengthened claim stays legal AFTER commit. The obligation is
+  discharged once, at the transaction that stores the claim. A derivation
+  revoked later leaves the claim behind, which is what `revocationProjection`
+  reports rather than what this rule prevents.
+
+## D-193 — State the bars on two of the three unexamined claim uses, and say why the third has none
+
+**Decision.** `outcome_attribution` and `model_recommendations` now carry stated,
+per-axis bars in `src/epistemic/claim-uses.ts`. `roi` stays unstated, and its
+placeholder reason is replaced by a specific one naming the structural obstacle.
+`outcome_attribution` is admissible at `causality: 'none'`, deliberately and in
+writing.
+
+## The counterexample
+
+`USE_REQUIREMENTS` declared five doors. Three of them —
+`outcome_attribution`, `roi`, `model_recommendations` — carried `requires: []`
+and the *same* sentence of prose:
+
+```
+No bar has been stated for this use. The surfaces that bar figures from it do
+so by hand-written list, and until the requirement is written here that list is
+the authority — an unstated requirement is not a satisfied one.
+```
+
+`admits` reported all three as `stated: false`, which was honest. What nothing
+checked was whether anyone had ever looked. One sentence serving three doors is
+the tell: a reason that is genuinely about `roi` cannot also be the reason about
+`model_recommendations`, so identical prose across two entries is prose about
+neither. The registry could have sat at three-of-five unexamined indefinitely
+with every test green, because no test could distinguish "examined and found to
+have no expressible bar" from "never opened".
+
+## Root cause
+
+Two different things were being recorded with one representation. `requires: []`
+means "no bar applies here as far as anyone has said", and it is the correct
+value in both of the above cases — but the *reason* field was the only place the
+difference could live, and it was filled with boilerplate. WP-B05 built the
+machinery for stating bars and stopped before stating them, and the placeholder
+made stopping indistinguishable from finishing.
+
+## The fix
+
+Three entries rewritten, each from what its consumer does with the claim.
+
+**`outcome_attribution`** — `epistemic: oneOf ['supported']`,
+`scope: atLeast 'conditional'`, `coverage: atLeast 'complete'`.
+
+- *epistemic.* `src/outcomes/CONTEXT.md` already states the invariant: unknown
+  evidence never becomes confirmation, conflict never becomes confirmation.
+  Attribution is the step that turns an outcome into credit, so it inherits that
+  rather than restating it.
+- *scope.* Attribution is a claim over a named population. At `scope: 'unknown'`
+  it attributes to nothing in particular; at `'incomplete'` the outcome may
+  belong to a member the recorded scope does not contain.
+- *coverage.* Half of "this work realized" is a negative claim — not reverted,
+  no linked incident. `src/measurement/completeness.ts` states that absence in an
+  observation stream is not evidence of absence without positive evidence of
+  completeness, and `REALIZATION_ASSUMPTIONS[3]` says the same in the issuing
+  boundary's own words. On partial coverage "no revert was observed" silently
+  becomes "no revert occurred", and the attributed outcome may already have been
+  undone. This is the inflating direction, which is the direction a bar is for.
+- *causality is deliberately absent, and that is the finding.* Attribution is a
+  scope claim; causation is a claim about what produced the outcome. The
+  repository's only outcome attribution, `claim:value:realization:*` in
+  `src/value/epistemic.ts`, is issued at `causality: 'none'` carrying an
+  assumption that says in words it is not a causal claim. A causality rung would
+  bar the realization ledger from the use it exists for and would redefine
+  attribution as causation in the one place nobody would look.
+- *measurement is deliberately absent too*, for the opposite conclusion from the
+  next entry: the realization funnel is `proxy_unvalidated` and ships as this
+  product's attribution surface, so a bridged-surrogate requirement would bar the
+  thing the door is for.
+
+**`model_recommendations`** — `measurement: atLeast 'proxy_validated'`,
+`decisionFitness: atLeast 'sufficient'`.
+
+- The consequence that sets the bar: a model recommendation is *acted on*. It
+  moves future work, and therefore future spend, to a different model. That is
+  the one use in this vocabulary where being wrong costs money going forward
+  rather than misdescribing money already spent.
+- *decisionFitness.* `sufficient` is issued in exactly one place —
+  `src/decision/epistemic.ts`, on a certificate proving strict interval dominance
+  over every rival action. `insufficient` means the intervals were checked and
+  overlapped; `not_assessed` means nobody asked. Recommending on either is
+  recommending noise.
+- *measurement.* Dominance **on a surrogate** is dominance on the surrogate.
+  `src/measurement/surrogate.ts` exists precisely to say when a surrogate may be
+  read as its target and tops out at `proxy_validated`, so this rung is the
+  strongest a surrogate can reach, not an unreachable one. Without it, "model B
+  leads on realization rate" becomes "use model B" — Goodhart with a routing
+  change attached.
+- The two do not substitute for one another, which is `admissibility.ts`'s
+  founding rule: `decision/epistemic.ts` issues `sufficient` at
+  `proxy_unvalidated`, and `causal/epistemic.ts` issues `proxy_validated` at
+  `not_assessed`. Each real claim in the tree clears one half and not the other.
+- *No monetary bar, and that is a finding.* The only claim reaching
+  `decisionFitness: 'sufficient'` carries `monetaryBasis: 'none'` — its dominance
+  is over declared utility intervals, not a dollar figure — so a membership bar
+  on that axis would refuse the only claim shape capable of clearing the door.
+  The four hand-written lists barring allocated, billed and provider-observed
+  figures remain the authority there.
+- This is why `src/value/frontier.ts`'s model comparison is review-only and never
+  changes provider routing. The bar makes that comment a checkable property.
+
+**`roi`** — still `requires: []`, with a specific reason.
+
+RoI divides a realized-value claim by a cost claim, and the two are deliberately
+different quantities: `realizedClaimSupport` issues the value side at
+`monetaryBasis: 'estimated'`, and the cost side is `list`, `estimated` or
+`effective`. A `UseRequirement` bars **one** profile, and merging the two sides
+collapses `monetaryBasis` to `mixed` — the same sentinel a metered figure carries
+when some requests were estimated, and the same one it would carry if a billed
+total had been folded in. So a membership bar admitting `mixed` admits the
+contamination it exists to catch, and one refusing `mixed` refuses the ordinary
+case. `atLeast` cannot help: it is rejected at construction on `monetaryBasis`
+for the reason `mergeClaimProfiles` gives.
+
+Stating the axes that *do* fit — coverage, finality — was considered and refused.
+It would set `stated: true` for a door whose deciding axis is untested, and it
+would make `compareForUse` start ordering billed against metered *for RoI* on
+axes the use does not turn on. That is the collapse the module exists to prevent,
+one level up.
+
+**What would have to be true to state it:** either a `UseRequirement` would have
+to range over a numerator and a denominator by name, or a `ClaimProfile` would
+have to carry its constituent monetary bases instead of collapsing disagreement
+to `mixed`.
+
+## Evidence
+
+New file `test/claim-use-bars.test.ts`, eight tests.
+
+RED, against the unfixed tree — the gate names exactly the three doors:
+
+```
+✖ no door is left with a bar nobody stated AND a reason nobody wrote
+  AssertionError: these uses state no bar and give no reason of their own:
+  model_recommendations, outcome_attribution, roi
+  + [ 'model_recommendations', 'outcome_attribution', 'roi' ]
+  - []
+ℹ tests 8   ℹ pass 0   ℹ fail 8
+```
+
+The gate reads "generic" two independent ways, because either alone is
+escapable: a reason held by more than one use is not a reason about either of
+them, and the original placeholder's own signature phrase must not appear under a
+new name.
+
+GREEN, per-test:
+
+- `no door is left with a bar nobody stated AND a reason nobody wrote`
+- `a door left unstated says what would have to be true to state it`
+- `outcome attribution is admissible with no causal identification at all`
+- `outcome attribution refuses an absence nobody established`
+- `outcome attribution refuses a contradicted outcome and an unnamed population`
+- `a model recommendation needs a proven decision AND a surrogate that was bridged`
+- `a model recommendation states no monetary basis, and that is the finding`
+- `roi is still unexamined, and reports itself as unexamined rather than passed`
+
+`ℹ tests 8  ℹ pass 8  ℹ fail 0`. The fixtures are the profiles this repository
+actually issues — `claim:value:realization:*`, `decision.fitness_sufficient`,
+`claim:causal:effect:*` — not profiles invented to clear the bar.
+
+Root typecheck clean. Full suite `1888 tests, 1884 pass, 0 fail, 4 skipped`.
+
+## What this does not establish
+
+- **That anything currently clears `model_recommendations`.** Nothing does: no
+  claim in the tree carries both `proxy_validated` and `decisionFitness:
+  'sufficient'`. The bar states what would have to be true, and matches what
+  `src/value/frontier.ts` already says about itself. It is not a claim that the
+  shipped model comparison is wrong, only that it is review-only.
+- **That the bars are wired into any surface.** `admits` is still consulted by
+  nothing outside the tests. The hand-written `excludedFrom` literals in
+  `src/alloc/exact.ts`, `src/billing/reconcile.ts`, `src/billing/openaiCosts.ts`,
+  `src/billing/mapping.ts` and `src/dashboard/routes.ts` remain the operative
+  authority on every surface. This packet states bars; it does not enforce them.
+- **That `coverage: 'complete'` distinguishes the three ways attribution coverage
+  can be partial.** The axis conflates unseen outcomes (which under-attributes,
+  conservatively), unseen work (which over-attributes), and unseen
+  revert/incident channels (which over-attributes). The bar is set for the
+  inflating cases and is stricter than necessary for the conservative one.
+- **That `roi` has no bar.** Only that none is expressible in the vocabulary
+  `UseRequirement` currently offers, and that the obstacle is named rather than
+  papered over.
+- **That the two stated bars are complete.** They are the axes that follow from
+  what each consumer does. An axis nobody could tie to a consequence was left
+  out rather than added for symmetry.
+
+## D-194 — The wire carries the claim; the view is a named function of it (AII-014 / WP-B02 remainder)
+
+**Decision.** `ClaimSupportPayload` transports the canonical ten-axis
+`ClaimProfilePayload` and nothing that restates it. The three axes the spine
+renders are produced in the browser by `projectRenderedAxes`, applied to the
+transported profile at the point of render, next to a named list of the seven
+axes it drops and a statement that dropping them is a rendering choice rather
+than a claim about the claim.
+
+**The counterexample.** D-082 put all ten kernel axes on the wire and kept the
+three-field flat copy the GUI had been reading, with a comment calling the
+copy "a stated projection of it, not a second opinion". The wire therefore
+carried a view of the claim beside the claim, and the browser believed the
+view: every spine predicate, the Evidence headline, and the Billed next-step
+read `claimSupport.epistemic`, never `claimSupport.profile.epistemic`. A server
+that projected wrongly — copied `profile.coverage` into the flat `epistemic`,
+say — would have rendered a wrong claim while the canonical profile sat correct
+one field away, and nothing downstream was in a position to notice. The
+identity was asserted only over eight hand-built samples in
+`test/claim-support-axes.test.ts`; the four live routes were checked with
+`typeof support[axis] === 'string'` over four field names, which is the exact
+shape of assertion CLAUDE.md records as insufficient (`reconciliation.runs` was
+present, and a number, and wrong).
+
+Two of the three copied axes reached no renderer at all. `coverage` and
+`monetaryBasis` were transported flat, declared in the browser, and read by
+nothing: the inspector's "Coverage" row is prose assembled in `claimLayers.ts`
+from `roi.coverage` and the server's `note`. So the payload was shaped by what
+a reader was believed to read, and the belief was already out of date.
+
+**Root cause.** A projection whose narrowing happens on the far side of the
+boundary cannot be checked against the thing it narrows. Once the profile and
+the view travel together, "which one is the claim" is a convention rather than
+a structure, and conventions in this repo have consistently been the thing that
+drifts. The fix is not a better assertion over the two copies; it is removing
+the second copy, so that there is exactly one statement of the judgement and
+exactly one function that narrows it.
+
+**The fix.**
+- `src/dashboard/shared-types.ts`: `ClaimSupportPayload` is `{ profile, figure,
+  note? }`. `figure` stays — whether a band shows a number is a display
+  decision with no kernel axis behind it, which is why it is not projected from
+  one.
+- `src/dashboard/claim-support.ts`: `projectClaimSupport` becomes
+  `claimSupportPayload` and copies nothing. The server states the profile.
+- `src/dashboard/web/app/core/claimTypes.ts`: `RENDERED_PROFILE_AXES`,
+  `DROPPED_PROFILE_AXES` and `projectRenderedAxes`. The two lists are declared
+  by name so that a new kernel axis fails a test rather than being omitted by
+  the same reflex a second time. Every spine predicate goes through the
+  projection.
+- `claimLayers.ts` and `views/evidence.ts` read the transported profile through
+  the projection instead of the flat copy.
+- `src/dashboard/web/app/core/generated-types.ts` and
+  `generated-payload-contract.ts` are regenerated by
+  `scripts/generate-dashboard-payload-contract.mjs`, which the build runs; they
+  are not hand-edited.
+
+**Evidence.**
+RED, against the unfixed tree, in `test/claim-profile-projection.test.ts`:
+- `the rendered view is a named projection that drops exactly the axes it
+  declares` — *the browser declares no RENDERED_PROFILE_AXES: the projection is
+  unnamed*.
+- `the payload transports the profile once, not a view-shaped flattening beside
+  it` — *the payload flattens 3 profile axis/axes beside the profile:
+  epistemic, coverage, monetaryBasis*.
+- `every claim route transports every kernel axis, and every value is a member
+  of that axis's ladder` passed on the unfixed tree. That is the honest
+  result and it is reported as one: the ten axes had already reached the wire
+  at D-082, and this test is the regression guard that was missing — it reads
+  every axis of `claimSupport.profile` on all four claim routes, `value`
+  included, back against `EPISTEMIC_STATES` and the nine ladders imported from
+  `src/epistemic/profile.ts` at runtime rather than against the wire's own
+  mirror of them.
+
+GREEN: those three, plus the five updated tests in
+`test/claim-support-axes.test.ts` (notably `the payload the spine reads is a
+projection of the claim profile, not a second opinion`, whose identity check now
+runs through `projectRenderedAxes` and therefore over the real render path, and
+`the Evidence headline is keyed on the claim, not on a records-level constant`),
+`test/claim-support.test.ts`, `test/claim-layers.test.ts` and
+`test/metered-coverage-retention.test.ts` — 39/39 on those five files. Root
+typecheck clean; browser typecheck clean (the domain this packet is about, and
+the one `npm run typecheck` does not see); team-server typecheck clean and 74/74,
+though it imports nothing from `src/dashboard/` and was never at risk. Full
+suite 1888 tests, 1884 pass, 0 fail, 4 skipped.
+
+**What this does not establish.** The rest of AII-014 stands: PERSISTED records
+still carry collapsed status fields, a stored realization snapshot or
+reconciliation row is not re-read through the axes, and no migration exists.
+The seven dropped axes are still constant across every dashboard claim, and
+nothing here checks that any boundary's declaration of them is CORRECT — only
+that the dashboard repeats them and that a reader can now obtain them. No
+screen renders them yet, so this makes the axes reachable rather than read: an
+operator still cannot see from the GUI that no figure on the page is causal or
+final. `projectRenderedAxes` is a rendering decision recorded in one place, not
+an argument that three axes are the right three. And the browser's
+unreachable-endpoint profile still fills `measurement`, `causality` and
+`decisionFitness` with the floor of each union because those unions have no
+`unknown` member — a limitation of the vocabulary, unchanged by this packet.
