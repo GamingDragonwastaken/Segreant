@@ -88,6 +88,17 @@ export function evaluateOutcomeContract(contract: OutcomeContract, resolve: Pred
  * Lower bound counts only confirmed outcomes. Upper bound excludes only outcomes
  * that are refuted without ambiguity; unresolved/conflicted outcomes remain
  * possible until evidence resolves them.
+ *
+ * ZERO EVALUATIONS BOUND THE SHARE AT [0, 1] (D-191). An upper bound of 0 is
+ * the strongest negative claim this function can make -- no more than zero
+ * percent realized, and no evidence could raise it -- which is what an
+ * all-refuted sample looks like. From no observations nothing has been
+ * excluded, so the whole interval stands. `n: 0` travels beside the bounds and
+ * is not a substitute for them: a figure whose meaning depends on a second
+ * field the reader has to know to check is a figure that will be read wrong.
+ * This matches `anytimeRateInterval` in `src/value/anytime.ts`, which answers
+ * the same question about the same quantity and has always returned the whole
+ * interval for n <= 0.
  */
 export function outcomeBounds(evaluations: ReadonlyArray<OutcomeEvaluation>): OutcomeBounds {
   const n = evaluations.length;
@@ -101,7 +112,7 @@ export function outcomeBounds(evaluations: ReadonlyArray<OutcomeEvaluation>): Ou
     else if (evaluation.status === 'conflicted') conflicted += 1;
     else unresolved += 1;
   }
-  if (n === 0) return Object.freeze({ lower: 0, upper: 0, n: 0, confirmed, failed, unresolved, conflicted });
+  if (n === 0) return Object.freeze({ lower: 0, upper: 1, n: 0, confirmed, failed, unresolved, conflicted });
   return Object.freeze({
     lower: confirmed / n,
     upper: (confirmed + unresolved + conflicted) / n,
