@@ -139,6 +139,19 @@ Twelve of forty-seven kernel files — 5,441 lines, 34.6% — are imported by no
 
 `guard.ts:156` converts exact Money to `Number`; every threshold comparison is float-against-float against a float cap from config. `SpendBasis` honestly describes the *source* of the figure; the *comparison* is not exact. This is the only place in the money path with no Money-typed counterpart, and it is the one with a consequence. WP-C01's remainder, and a one-packet fix: parse caps as `Money` at config load, compare with `compareMoney`.
 
+
+**Corrected by measurement (D-196).** This finding was directionally right and its risk was mis-stated here. A
+packet built the exact comparison and, in doing so, proved that **the float path could never fail open**:
+`Number()` rounds to nearest, rounding to nearest is monotone, and the cap is read through its own shortest
+round-trip decimal, so an exact spend at or above a cap can never project onto a double below the cap's double.
+The float comparison could only ever *over-block*. The real defects were therefore three, and only one of them is
+a fail-open: a developer under their limit being stopped anyway; `enforcedAgainst` naming the wrong side as having
+bound the decision; and — the genuine fail-open — **a cap that could not be read as exact money silently becoming
+"no limit"**, which now blocks. The three cases that already passed were kept as preservation pins, because a
+future conversion that truncated instead of rounding would open the direction monotonicity currently closes. Worth
+stating plainly: an assessment that names a risk should be tested, not trusted, and this one was wrong about which
+way the danger ran.
+
 ### 4.7 The product story contradicts itself where a newcomer first reads it
 
 PRODUCT.md names a persona who "will never open a terminal" and says the GUI "must be sufficient on its own"; GETTING-STARTED.md is 100% CLI and, in its first sixty seconds, tells the reader not to trust `npx fiscus` and then leads with `npx fiscus demo`. README narrows the scope to "AI coding-agent spend"; PRODUCT.md widens it to "all AI spend". The registry is honest — 16 of 53 capability rows are `full` — against a product claim of "full parity". A plugin host of 1,453 lines has zero consumers outside its own tests. None of these is a lie; all of them are the kind of drift the program refuses in numbers and tolerates in prose.

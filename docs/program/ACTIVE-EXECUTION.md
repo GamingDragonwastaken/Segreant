@@ -112,6 +112,29 @@ twenty-one-instance defect class into a portable eight-step checklist stated in 
 be run against a codebase that has never heard of this one -- the class was expensive to find and existed only as
 prose addressed to a reader already fluent in this repository.
 
+## Follow-ups this round created, named so they are not lost
+
+Each was found by a packet that correctly declined to widen its own scope, which is the behaviour the program wants
+and the reason these need a home.
+
+- **`cfg.runawayWindowSec` is unvalidated on the guard's path** (D-196). A NaN window reaches
+  `store.spendInWindow(now, NaN)` unexamined. It is a duration rather than a cap, and `validateBudgetConfig` covers
+  the load and persistence boundaries, but it is the last unvalidated budget input the guard consumes.
+- **Two CONTEXT.md contracts do not mention exports that now exist** (D-195). `src/epistemic/CONTEXT.md` and
+  `src/decision/CONTEXT.md` were outside that packet's allowed scope and say nothing about `minimalHittingSets`,
+  `minimalInvalidatingAssumptionSets`, or `decisionInvalidatingAssumptionSets`. This is the CONTEXT.md staleness
+  class that already has three known instances (`src/epistemic/`, `src/measurement/`, `src/store/`), and it is the
+  clearest candidate for a mechanical check: a module contract is a projection of its module exactly as
+  `ISSUANCE-MAP.md` is a projection of the map, and D-188 showed what happens to a projection nobody checks.
+- **`src/decision/` is an island** (D-195, verified by grep across `src/ test/ bin/ scripts/ team-server/`). Nothing
+  outside the directory imports it; `decisionCountermodels` has no call site in `src/`. Only the reconciliation
+  domain can show a user a "why not certified?" witness; **the value domain emits no countermodels at all.** Whether
+  to wire it or move it is an owner decision under §17 and is recorded in `MAGNUM-OPUS-ASSESSMENT.md` §12.
+- **A second flake shape, distinct from the amaro worker deaths.** `test/egress-guidance-launcher.test.ts` failed once
+  under parallel load on a loopback health probe (`'down' !== 'up'`) and passes 12/12 alone; `test/build-race.test.ts`
+  and `test/dashboard-parity-population.test.ts` each failed once under concurrent-agent contention and pass alone.
+  None was changed. The tell for all three is that the failing file is one the change never touched.
+
 ## Next executable frontier
 
 Highest value first, each stated as the boundary that is missing rather than as an area to look at:

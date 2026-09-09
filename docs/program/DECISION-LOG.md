@@ -2552,3 +2552,255 @@ an argument that three axes are the right three. And the browser's
 unreachable-endpoint profile still fills `measurement`, `causality` and
 `decisionFitness` with the floor of each union because those unions have no
 `unknown` member — a limitation of the vocabulary, unchanged by this packet.
+
+## D-195 — Name the assumption sets that would remove a certification, and say where the search stopped
+
+## Decision
+
+`minimalInvalidatingAssumptionSets` is implemented in `src/epistemic/countermodel.ts`
+as a **bounded** search over an explicitly declared support structure, computed by
+the single hitting-set fold now exported from `src/epistemic/dag.ts` as
+`minimalHittingSets`. `minimalCutSets` was rewritten to call that same fold, so
+the two questions that have already disagreed once in this repository cannot
+disagree again by drifting apart. The decision domain gets an adapter,
+`decisionCertificationStructure` / `decisionInvalidatingAssumptionSets`, and
+nothing else. The decision engine is **not** wired into any product surface here.
+
+## The counterexample
+
+A `Claim` and a `DecisionCertificate` both carry `assumptions` as a flat list of
+prose. `assessAssumptionFragility` can say which of them have live countermodels,
+but nothing could answer the question an operator actually asks of a certificate:
+*what would have to be false for this to stop being certified?* The list is flat,
+so every assumption reads as equally load-bearing.
+
+For the strict-interval-dominance certificate that reading is wrong in a
+checkable way. `certifyDecision` compares one action's `low` against the largest
+rival `high`. Assumption [0] (the intervals bound the utility in every admissible
+world) and assumption [2] (strict dominance requires a positive lower-bound
+margin) are what carry it. Assumption [1] — *the interval uncertainty set is
+rectangular for regret calculations* — does no work at all: strict interval
+dominance never requires the actions to vary independently. Rectangularity is a
+`minimaxRegret` assumption. The flat list presented an inert assumption and two
+load-bearing ones as three of a kind.
+
+## Root cause
+
+Two gaps, one structural and one about honesty of scale.
+
+The structural gap: a certificate declared *that* it had assumptions but never
+declared *how* they carry it. Without a support structure there is no difference
+between an assumption whose failure alone decertifies, a pair that only
+decertifies jointly, and an assumption whose failure changes nothing — so a
+reader who wants that difference has to reconstruct it from source each time,
+and will sometimes reconstruct it differently.
+
+The scale gap: the number of minimal invalidating sets is exponential in the
+number of alternative supports (a family of `k` disjoint pairs has `2^k`), and
+nothing about the input announces that in advance. A function that enumerated
+them and returned an array would, on a large structure, silently return a prefix.
+A capped answer reported as a complete one is this program's most-recorded defect
+class, and it would have been rebuilt here in a new place.
+
+## The fix
+
+`CertificationStructure` — `{ assumptions, certified, supports }` — is where a
+domain records its judgement about what carries a certification, in one place
+that can be read and disputed. A `support` is a set of assumptions that carries
+the certification on its own; certification survives exactly while one support
+survives intact. That is the same edge reading `dag.ts` settled at D-098:
+conjunctive within a support, alternative across supports.
+
+`minimalInvalidatingAssumptionSets(structure, { limit })` returns
+`MinimalInvalidatingSets`:
+
+- `sets` — inclusion-minimal sets of assumption names whose joint failure removes
+  the certification, smallest first. Names, never a score: a ranked fragility
+  number would be unsourceable in the way `profile.ts` refuses, and it would not
+  tell an operator what to go and check.
+- `inertAssumptions` — assumptions appearing in no minimal set. **`null` means
+  NOT DETERMINED**, and the other fields say why: either the search was capped,
+  or `emptyBecause` is set. A capped search cannot tell "in no minimal set" from
+  "in a set the search never reached", so it refuses to name inert assumptions
+  rather than report a prefix as the whole answer.
+- `truncated` / `limit` — the bound is part of the return value, not a comment.
+  Default `DEFAULT_INVALIDATING_SET_LIMIT = 256`, applied to the candidate
+  frontier carried between folds and therefore to both the work and the result.
+- `emptyBecause` — `'certification_not_in_force'` and `'no_supports_declared'`
+  are different reasons for an empty `sets`, and an empty array alone would let a
+  caller read either as robustness.
+
+Refusals, rather than quiet shrinkage: a support naming an assumption the
+certificate does not state, a support naming nothing at all (which would make the
+certification unfalsifiable by assumption failure), and a non-positive limit.
+
+`decisionCertificationStructure` declares the one support `[[bound, criterion]]`
+and reports rectangularity as inert, with the reasoning in the docblock beside it
+and a note on why this does not contradict `decisionCountermodels`' second world
+(which says the decision is not certified *by rectangular interval reasoning* —
+a route becoming unavailable, not this certificate falling).
+
+## Evidence
+
+New file `test/countermodel-invalidating-sets.test.ts`, 7 tests.
+
+RED, against the unfixed tree, at commit `e1fd90d`:
+
+```
+SyntaxError: The requested module '../src/decision/countermodels.ts' does not
+provide an export named 'decisionCertificationStructure'
+ℹ tests 1  ℹ pass 0  ℹ fail 1
+```
+
+GREEN test names:
+
+- `a minimal invalidating set is a singleton, a joint pair, or nothing at all` —
+  one structure carries all three cases: `A` alone decertifies; `B` and `C` only
+  jointly; `D` appears in no set.
+- `the enumeration bound is reported by the return value, never applied silently`
+  — 16 sets under `limit: 64`, 4 sets and `truncated: true` and
+  `inertAssumptions: null` under `limit: 4`.
+- `an unstated or empty support is refused rather than quietly shrinking the answer`
+- `no certification and no declared support are distinct emptinesses`
+- `the proven dominance certificate rests on two assumptions and not on the third`
+- `an undetermined certificate has no certification to invalidate`
+- `invalidating sets and minimal cut sets are one hitting-set algorithm, not two`
+
+Existing `minimalCutSets` behaviour held by `test/epistemic-dag.test.ts` and
+`test/epistemic-support-cut-agreement.test.ts` (28 pass) after the refactor.
+
+## What this does not establish
+
+- **No completeness.** This is a bounded search over the supports it was handed,
+  not a theorem prover. An assumption a domain failed to declare as load-bearing
+  comes back inert, and that is a statement about the declaration, not the world.
+  The support structure is a judgement recorded in source; it can be wrong, and
+  the point of putting it in one named place is that a wrong one is arguable.
+- **No reach.** Nothing outside `src/decision/` imports `engine.ts` or
+  `countermodels.ts`. `decision.certificate` and `decision.certificate.issuance`
+  are `unreached` in `src/epistemic/issuance-map.ts`, and this commit verified
+  that classification is correct rather than changing it. This is a mechanism
+  built and not wired, and it stays that way here: wiring it is an architecture
+  and product-behaviour change reserved for the owner.
+- **Only one domain can currently show an operator a "why not certified?"
+  witness**, and it is the reconciliation domain, through
+  `src/billing/countermodels.ts` into `fiscus billing reconcile`. The value domain
+  emits no countermodels at all — `src/value/` does not import `countermodel.ts` —
+  so it cannot produce one, and no `CertificationStructure` exists for it.
+- **No ranking and no score.** There is deliberately no ordering of countermodels
+  by severity and no fragility number. Sets are ordered by size only, which is a
+  fact about the sets and not a claim about likelihood.
+- **A truncated result is not a minimal one.** When `truncated` is true the
+  returned sets are invalidating sets but are not certified inclusion-minimal: a
+  smaller set may have been dropped from the frontier before it could subsume
+  them. The flag says so; a caller that ignores it is making the claim the flag
+  exists to block.
+
+## D-196 — Budget enforcement compares in Money, and an unreadable cap blocks
+
+**Decision.** `BudgetGuard` decides on exact `Money`. The four caps
+(`dailyUsd`, `dailySoftUsd`, `sessionUsd`, `runawayMaxUsd`) are parsed once per
+configuration into `Money` through their shortest round-trip decimal string, the
+rate-card float column is read the same way, and every threshold test and the
+incomplete-coverage maximum are exact comparisons. A cap that cannot be read as
+exact money is a configuration failure that BLOCKS; it never falls back to a
+float comparison and never becomes "no limit". `exactNumber()` survives, demoted
+in its docblock to reporting only.
+
+## The counterexample
+
+Three requests in a day, each charged one third of a $25 batch at the ledger's
+scale — $8.333333333333333. Their exact sum is $24.999999999999999, one part in
+10^15 under a $25 daily cap. Adjacent binary doubles near 25 are 2^-48 apart
+(~3.55e-15), so that sum is nearer to 25.0 than to the double below it and
+`Number('24.999999999999999')` is exactly 25. The old guard projected the exact
+ledger sum onto that double, compared `25 >= 25`, and stopped the developer's
+work on a day its own ledger said was under the cap.
+
+The same collapse corrupted the guard's account of itself. With $0.29999999999999999
+of resolved effective charges, one request still unpriced, and a rate-card float
+of $0.30, the exact floor is strictly smaller than the float floor — so the float
+is what bounds the window. Both project onto the same double, the old code took
+its equality branch, and `SpendBasis.enforcedAgainst` reported `exact_effective`:
+the guard told the operator the economic ledger stopped their work when the
+ledger's own figure was lower than the number enforced.
+
+And the cap side failed open outright. `BudgetGuard` accepts a `BudgetConfig`
+handed to it directly, so a configuration that reached it unvalidated could carry
+`dailyUsd: NaN`. `daySpend >= NaN` is `false`. A broken cap was not an error; it
+was an unmetered path, with $1,000 of spend answered `allow`.
+
+## Root cause
+
+`SpendBasis` described the SOURCE of the figure honestly while the COMPARISON was
+not exact. The guard's record of what it enforced against was more precise than
+the act of enforcing. This was the only place left in the money path holding
+exact `Money` with no `Money`-typed counterpart to compare it to — and the one
+place where the comparison is a control action rather than a report.
+
+## The fix
+
+- `src/config.ts` gains `decimalStringFromNumber` — the one total, lossless
+  conversion from a JS number to a plain decimal string, expanding the exponent
+  form `String` emits outside its middle band so that a legitimate `1e-7` cap
+  stays readable — and `exactBudgetCaps`, which parses the four caps into `Money`
+  once per configuration (cached on the config object, re-validated against the
+  four cap numbers so both a settings save and an in-place CLI edit invalidate
+  it). A cap that will not parse throws `ConfigValidationError`; it is never
+  cached, so it throws again on every request.
+- `src/budget/guard.ts` compares through `compareEnforcedUsd`, which re-labels
+  the right-hand side to the left-hand basis for the ordering only and defers to
+  `compareMoney`. Enforcement has two deliberate cross-basis orderings — the
+  max-of-two-floors and every cap test, since a cap is a policy threshold with no
+  economic basis of its own — and in both the winning value keeps the basis it
+  arrived with, which `enforcedAgainst` reports. `resolveEnforcedSpend` now also
+  returns the enforced `Money`; `remainingDailyUsd` is subtracted exactly and
+  projected afterwards.
+- Fail-closed is unchanged in shape: the throw propagates out of
+  `guard.evaluate()`, `handle()` in `src/proxy/server.ts` latches
+  `state.accountingFailure`, and the answer is 503
+  `budget_enforcement_unavailable` with nothing forwarded.
+
+## Evidence
+
+RED at `e1fd90d`, `test/budget-exact-comparison.test.ts`, 3 of 6 failing:
+
+- `exact comparison: the ledger sum, not its float projection, decides a day below the cap`
+  — `'block' !== 'allow'`
+- `exact comparison: a cap that cannot be read as exact money BLOCKS, it does not become "no limit"`
+  — `'allow' !== 'threw'` (daily cap NaN)
+- `exact comparison: enforcedAgainst names the side that actually bound the decision`
+  — `'exact_effective'` where `'rate_card_float'` was owed
+
+Three passed on the unfixed tree and are recorded as preservation pins rather
+than defects: `the same day one thousandth of a cent over the cap still blocks`,
+`a spend exactly equal to the cap trips every one of the four thresholds`, and
+`the incomplete-coverage maximum of two floors is unchanged`.
+
+GREEN: 6/6 in that file. `tsc --noEmit` clean on all three compilation domains
+(root, browser app, team-server). Full suite 1,901 tests / 1,897 pass / 0 fail /
+4 skipped, against a 1,888 / 1,884 / 0 / 4 baseline plus this packet's 6 and 7
+from work another agent landed concurrently. team-server 74/74.
+
+## What this does not establish
+
+- **The float comparison could not fail OPEN, and never did.** Rounding to
+  nearest is monotone and the cap is read through its own shortest round-trip
+  decimal, so an exact spend at or above the cap could never project onto a
+  double below the cap's. The demonstrated defect is over-blocking — a developer
+  stopped on a figure the ledger says is under the limit — plus a false
+  `enforcedAgainst`. The reverse direction is pinned by test, not repaired,
+  because it was never open. The one genuine fail-open here was the unreadable
+  cap, which is a different mechanism.
+- **It does not make an unvalidated configuration safe.** It makes an unreadable
+  cap stop traffic. `validateBudgetConfig` remains the boundary that keeps a
+  nonsense cap off disk and out of a load.
+- **It says nothing about `runawayWindowSec`.** That is a duration, not a cap; a
+  nonsense window still reaches the store unexamined. Out of scope here and
+  unaddressed.
+- **It does not make the wire payload exact.** `GuardDecision.daySpendUsd`,
+  `sessionSpendUsd`, `runaway.windowCostUsd` and `remainingDailyUsd` are still
+  doubles, and the 429 text is still `toFixed(2)`. Nothing decides on them, but
+  a consumer that re-derives a decision from the payload is back on floats.
+- **It does not audit the other consumers of `resolveEnforcedSpend`.**
+  `src/dashboard/routes.ts` reads `.usd` and was deliberately left alone.
