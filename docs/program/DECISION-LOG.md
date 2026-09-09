@@ -2804,3 +2804,190 @@ from work another agent landed concurrently. team-server 74/74.
   a consumer that re-derives a decision from the payload is back on floats.
 - **It does not audit the other consumers of `resolveEnforcedSpend`.**
   `src/dashboard/routes.ts` reads `.usd` and was deliberately left alone.
+
+## D-197 findings note — packet I (WP-C02 remainder, law-level property tests)
+
+**No defect found. This is a findings note, not a decision record.** Every law
+implemented passed. A passing sweep is worth its enumeration and nothing more,
+so the enumeration is the substance of this note.
+
+## Step 0 enumeration
+
+`ECONOMIC_BASES` (`src/economics/money.ts`) — seven, in declared order:
+`list`, `estimated`, `provider_observed`, `billed`, `effective`, `allocated`,
+`full_cost`. 42 ordered distinct pairs, all now swept, derived from the exported
+array rather than hand-listed.
+
+`ECONOMIC_EVENT_ROLES` (`src/economics/events.ts`) — seven: `usage`, `charge`,
+`price`, `adjustment`, `translation`, `allocation`, `control`, over 18 kinds.
+Two roles never carry money and therefore never reach a balance: `usage`
+(`economicEvent` refuses an amount on `usage_observed`) and `control` (all three
+close kinds refuse an amount). The five that can reach a balance are `charge`,
+`price`, `adjustment`, `translation`, `allocation`. Asserted, not assumed.
+
+Dossier transformation → representation:
+
+| transformation | representation | distinct kind? |
+| --- | --- | --- |
+| correction | `price_corrected`, role `price`, constructor `priceCorrectionEvent`; carries a signed DELTA plus typed `previousAmount`/`nextAmount` metadata | yes |
+| reversal | the `reversalOf` FIELD plus a signed negative amount — a structural property, not a kind — except for allocations, which must be `allocation_reversed` | field, plus one kind |
+| credit | `credit_applied`, role `adjustment` | yes |
+| discount | `discount_applied`, role `adjustment` | yes |
+| tax | `tax_recognized`, role `adjustment` | yes |
+| allocation | `cost_allocated`, role `allocation` | yes |
+| reallocation | **no distinct kind** — a reversal followed by a fresh `cost_allocated` | no |
+| true-up | `true_up`, role `adjustment` | yes |
+| close / reopen | `close_finalized`, `close_reopened` (plus `close_invalidated`), role `control` | yes |
+| FX translation | `fx_translated`, role `translation`, constructor `fxTranslationEvent` | yes |
+
+Also present and not on the dossier list: `write_off` and
+`commitment_recognized` (both `adjustment`), `price_asserted` (`price`),
+`charge_estimated` / `provider_charge_observed` / `bill_observed` (`charge`).
+
+**The one absence is `reallocation`, and it looks deliberate.** It is a
+composition, not a primitive, and the ledger already forces the composition to be
+spelled correctly: `validateReferenceClosure` refuses any event that points
+`reversalOf` at a `cost_allocated` unless its kind is `allocation_reversed`
+("A REVERSAL IS AN ACT, NOT A LABEL"). A `reallocation` kind would add a second
+way to say the same thing and a second place for the conservation bounds to be
+walked around. Consistent with the dossier's instruction not to grow a giant enum
+for a long vocabulary.
+
+Invariants the existing tests already assert (so these are laws, not duplicates):
+
+- `economic-adjustment-conservation.test.ts` — negative adjustments against ONE
+  fixed $10 bill cannot exceed it when split; adjustment sources must be charges;
+  multi-source negatives need an explicit target. All example-based.
+- `economic-allocation-conservation.test.ts` — reversals against ONE fixed $10
+  allocation cannot exceed it when split; a stored over-reversal fails closed on
+  read; a disguised reversal is refused. All example-based.
+- `economic-basis-legality.test.ts` — adjustment kinds may not carry a basis no
+  charge can hold. Already derives `ADJUSTMENT_KINDS` from the kernel; it does
+  NOT sweep basis pairs through the arithmetic.
+- `economic-replay-property.test.ts` — one hand-built pair of histories (direct
+  vs. reopened) with equal close digests. One case, not a sweep.
+- `exact-money.test.ts` — examples: `0.1 + 0.2`, beyond-safe-integer, currency and
+  basis refusal, hostile sizes. No algebraic law.
+
+Nothing already asserts associativity, commutativity, total order, translation
+invariance, round-trip identity, per-group conservation over generated sets, or
+insertion-order independence of the close digest.
+
+## What was added
+
+- `test/support/deterministicGenerator.ts` — mulberry32 PRNG, per-law seed
+  derivation, amount generators over seven named families, greedy shrinker. No
+  `Math.random()`. No dependency.
+- `test/economic-money-laws.test.ts` — 11 tests.
+- `test/economic-conservation-laws.test.ts` — 7 tests.
+
+Base seed `253516802` (`0x0f1c5c02`), printed on every failure alongside the
+per-law derived seed and the case index.
+
+## Laws, seeds, case counts — all GREEN
+
+Money (`test/economic-money-laws.test.ts`), 500 generated cases each unless noted:
+
+| law | derived seed | cases |
+| --- | --- | --- |
+| `addMoney(a,b) === addMoney(b,a)` | 325128419 | 500 |
+| `addMoney(addMoney(a,b),c) === addMoney(a,addMoney(b,c))` | 3043120074 | 500 |
+| zero is the two-sided additive identity, at every basis | 978862305 | 500 |
+| `subtractMoney(a,a)` and `addMoney(a,negateMoney(a))` are exactly zero (coefficient `0n` AND scale `0`); `negateMoney` is an involution | 2294915865 | 500 |
+| `compareMoney` is reflexive, antisymmetric, transitive, sign-consistent with `subtractMoney`, and translation-invariant under `addMoney` | 3147807042 | 500 (6 checks each) |
+| `money()` returns a frozen, fully normalized value | 1588006078 | 500 |
+| `money(formatMoneyAmount(a), …) === a` | 1496013349 | 500 |
+| `moneyFromJson(moneyToJson(a)) === a`, directly and through JSON text, preserving scale, basis and currency | 2637946692 | 500 |
+| adding/subtracting/comparing across any two distinct bases is refused | 1818204865 | 42 ordered pairs × 3 operations |
+| adding/comparing across two distinct currencies is refused at every basis | 3540614266 | 7 bases × 12 ordered pairs × 2 operations |
+| the coefficient ceiling is a real boundary | — | 1 explicit, not generated |
+
+4,000 generated money cases plus 126 basis-pair and 168 currency-pair refusals.
+Exactness is string equality of the full normal form — coefficient, scale,
+currency, basis — everywhere. No float tolerance anywhere.
+
+Conservation (`test/economic-conservation-laws.test.ts`):
+
+| law | derived seed | cases |
+| --- | --- | --- |
+| the role vocabulary swept is the kernel vocabulary | — | enumeration assertion |
+| every projected balance is the exact sum of its own group and of nothing else | 890434876 | 40 scenarios |
+| insertion order changes neither the projection nor the close projection digest | 3521987009 | 40 scenarios × 2 topological orders = 80 ledgers |
+| the projection is a function of recorded time, not of insertion order | 3362569651 | 40 scenarios × every distinct `recordedAt` boundary |
+| negative adjustments never total more than the charge, in any arrival order | 377790701 | 60 cases × 3 arrival orders = 180 ledgers |
+| allocation reversals never total more than the allocation, in any arrival order | 1141615740 | 60 cases × 3 arrival orders = 180 ledgers |
+| a close fixes what was visible, so an event cannot be inserted behind it | 2638621406 | 12 scenarios |
+
+Each generated scenario is 12–17 events and touches every money-bearing role:
+`bill_observed`, `provider_charge_observed`, `charge_estimated`, a
+`priceCorrectionEvent` correction, 1–4 negative adjustments drawn from the six
+adjustment kinds, a positive `tax_recognized`, `cost_allocated`, 1–3
+`allocation_reversed` reversals, an `fx_translated` USD→EUR translation, and a
+`usage_observed` that must never become money.
+
+## Where ordering does and does not matter (asserted, not assumed)
+
+- **Insertion order is free.** Same event set, any topological insertion order →
+  byte-identical projection and identical close projection digest.
+- **Recorded time is load-bearing and supposed to be.** `project(asOf)` is a
+  function of `recordedAt`; two boundaries give two both-true answers.
+- **Admission order matters when a set over-credits.** The bound is enforced
+  greedily against what is already recorded, so which events survive depends on
+  arrival order. The law is therefore stated over the invariant that holds in
+  every order — the ledger never records more credit than the charge — and not
+  over the surviving subset. Acceptance of a CONSERVING set *is* order-
+  independent, and that is asserted: a set of negative adjustments whose
+  aggregate fits is admitted in full in every order, because a running total of
+  negative amounts only grows and the bound is checked against the whole set.
+- **A close pins the instant it speaks for.** An in-period event recorded at or
+  before a recorded close is refused, before and after a reopen. That refusal is
+  the reason insertion order can be free elsewhere.
+
+## No law was deleted or relaxed
+
+One law was *stated* rather than generated, and it is worth naming because the
+easy alternative would have been to hide it. `addMoney` aligns scales by
+multiplying a coefficient by a power of ten, and `normalize` refuses a
+coefficient wider than `MAX_MONEY_COEFFICIENT_DIGITS`. So addition is **partial**
+near the ceiling and associativity is not a theorem there: an intermediate sum
+can exceed the limit while a differently-associated one does not. That is a real
+property of a resource-limited exact type. It is asserted directly as a boundary
+test (`addMoney` of a 16,384-digit coefficient and `0.01` is refused, not
+truncated), and the generators stay inside a declared alignment budget which
+`deterministicGenerator.ts` fails loudly if it is ever exceeded. The laws are not
+weakened; the domain on which they are total is stated.
+
+## The sweep has teeth — mutation evidence
+
+A passing sweep proves nothing unless it can fail, so three mutants were run
+against copies outside the tracked tree (all deleted; working tree verified
+clean):
+
+1. `compareMoney` comparing raw coefficients without scale alignment →
+   *`compareMoney` is a total order* failed at case index 0, minimizing
+   `"1688842316936", "128210.2945416199818275124", "-175013.55"` down to
+   `"1", "1.2", "-175"` with `compare(a, b) = -1 but sign(a - b) = 1`.
+2. `normalize` not stripping trailing zeros → *canonical normal form* failed,
+   minimizing a 1,206-digit generated value to `"7.195690"` with
+   `scale carries a representation-only trailing zero`.
+3. the cumulative adjustment bound in `validateReferenceClosure` dropped (the
+   exact WP-C02/C04 splitting defect) → *negative adjustments never total more
+   than the charge* failed at case index 1: charge `596.0376`, adjustments
+   `-349.9739, -121.6461, -89.6127, -11.386, -30.7847`,
+   `net billed position went negative at -7.3658`.
+
+## Verification
+
+- `node ./node_modules/typescript/bin/tsc --noEmit -p tsconfig.json` — clean.
+- `test/economic-money-laws.test.ts` alone — 11/11 pass, 0.60s.
+- `test/economic-conservation-laws.test.ts` alone — 7/7 pass, 10.8s.
+- Full `npm test` baseline with the three new files moved out of the tree:
+  **1901 tests, 1897 pass, 0 fail, 4 skipped** (working tree at `1b34083`; the
+  packet's stated starting commit `43ed28f` had since been advanced by two other
+  agents' commits, `daf867c` and `1b34083`).
+- Full `npm test` with them in: **1919 tests, 1915 pass, 0 fail, 4 skipped**.
+  Delta +18 = 11 + 7, exactly the tests added. No pre-existing test changed
+  state.
+
+`src/team/` and `src/value/` were not touched, so the team-server pass is not
+implicated by this packet.
