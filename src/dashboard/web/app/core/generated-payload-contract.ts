@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "aa7e95fbc35967b34e8de341d79cb21c267ab3a053559ece97354b33f6afa828";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "b9904c0cca5839ee170ebdaf33f2ddabe6fd4c3f294326aae917785800691ba0";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -1199,6 +1199,16 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
     },
     {
       "name": "realizedSpendShare",
+      "optional": true,
+      "type": "number"
+    },
+    {
+      "name": "spendWindowTruncatedUnits",
+      "optional": true,
+      "type": "number"
+    },
+    {
+      "name": "spendWindowUnknownUnits",
       "optional": true,
       "type": "number"
     },

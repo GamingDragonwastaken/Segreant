@@ -199,6 +199,25 @@ export function valueView(): Node {
             ? h('span', { class: 'basis', text: () => (isPrecise()
                 ? `${count(d.realization?.costStaleUnits)} unit(s) carry stale cost attribution.`
                 : `${count(d.realization?.costStaleUnits)} of these have out-of-date cost information.`) })
+            : null,
+          // THE DENOMINATOR THE PARAGRAPH ABOVE IS ABOUT (D-176, D-178). A unit
+          // whose attribution window retention emptied contributes $0.00 and
+          // still counts, so the return above it is flattering by an unknown
+          // amount. `fiscus roi` has said this since D-176; until the fields
+          // were declared the browser could not read what the server was
+          // already sending.
+          (matured?.spendWindowTruncatedUnits ?? 0) > 0
+            ? h('span', { class: 'drawer-error', role: 'status', text: () => (isPrecise()
+                ? `${count(matured?.spendWindowTruncatedUnits)} unit(s) had spend deleted by retention inside their attribution window, so the cost denominator is understated and this return reads high.`
+                : `${count(matured?.spendWindowTruncatedUnits)} of these lost some of their cost records to your retention setting, so this looks like a better return than we can actually show.`) })
+            : null,
+          // Distinct from zero on purpose: a snapshot written before the
+          // coverage was recorded cannot say, and reading that as intact is the
+          // inference this pair of counts exists to refuse.
+          (matured?.spendWindowUnknownUnits ?? 0) > 0
+            ? h('span', { class: 'basis', text: () => (isPrecise()
+                ? `${count(matured?.spendWindowUnknownUnits)} unit(s) predate the retention-coverage record, so whether their spend window lost rows is unknown.`
+                : `For ${count(matured?.spendWindowUnknownUnits)} of these we cannot tell whether any cost records were deleted.`) })
             : null),
           economic
             ? h('p', { class: 'basis', role: 'status', text: () => {

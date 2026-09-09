@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: aa7e95fbc35967b34e8de341d79cb21c267ab3a053559ece97354b33f6afa828 */
+/** Source SHA-256: b9904c0cca5839ee170ebdaf33f2ddabe6fd4c3f294326aae917785800691ba0 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -605,6 +605,23 @@ export interface Matured {
   spendOnRealizedUnitsUsd: number;
   acceptanceWeightedSpendUsd?: number;
   realizedSpendShare?: number;
+  /**
+   * Mature units whose spend window lost rows to retention (D-176).
+   *
+   * `totalCostUsd`, `spendOnRealizedUnitsUsd` and `realizedSpendShare` above are
+   * DENOMINATORS. A unit whose attribution window retention emptied contributes
+   * $0.00 and still counts, so every ratio built on them reads high by an
+   * unknown amount. The server has sent this since D-176; it was undeclared
+   * until D-178, and an undeclared field is one a screen cannot read.
+   */
+  spendWindowTruncatedUnits?: number;
+  /**
+   * Mature units whose spend-window coverage is UNKNOWN -- snapshots persisted
+   * before it was recorded. Distinct from zero truncated units, and carried
+   * beside it so a screen cannot read "none affected" off a report that could
+   * not tell.
+   */
+  spendWindowUnknownUnits?: number;
   /** Where units died, in stage order. The stage that costs most is the one to fix. */
   wasteByStage?: Array<{ stage: string; units: number; costUsd: number }>;
   instrumentation?: Record<string, number>;
