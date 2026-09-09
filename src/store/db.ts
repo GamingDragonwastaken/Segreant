@@ -2830,11 +2830,27 @@ export class Store {
     return removed;
   }
 
-  /** Privacy control: delete every stored proposal immediately, regardless of age. */
+  /**
+   * Privacy control: delete every stored proposal immediately, regardless of age.
+   *
+   * RECORDED, like every other deletion (D-179). This is the most total erasure
+   * Fiscus offers, and until it was recorded it was the one erasure no consumer
+   * could see: `retentionFloor()` reported "no prune on record" for a ledger
+   * whose proposals had all been deleted, so the Acceptance lens told operators
+   * their proposals were never captured after Fiscus captured and deleted them.
+   *
+   * The boundary written is NOW, because that is what was deleted -- everything
+   * up to this moment. It is written ONLY when a row actually went: the boundary
+   * marks every past window truncated, so writing it for a no-op clear would
+   * manufacture a deletion claim over the whole ledger. Hiding a refutation is
+   * survivable; inventing one is not.
+   */
   clearProposals(): number {
     const info = this.db.prepare(`DELETE FROM proposals`).run();
+    const removed = Number(info.changes ?? 0);
+    if (removed > 0) this.recordPrune('proposals', Date.now(), removed);
     this.db.prepare('VACUUM').run();
-    return Number(info.changes ?? 0);
+    return removed;
   }
 
   /**

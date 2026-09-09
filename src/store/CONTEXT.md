@@ -47,10 +47,14 @@ two domain callers goes in `rows.ts`.
   module — inside this directory or outside it — issues DDL.
 - **Derived records are immutable.** `reconciliation runs`, `allocation_runs`,
   and `realization_units` are written once. Recompute by writing a new record.
-- **Deletion is recorded, and its absence is not read as coverage.** `prune()`
-  and `pruneProposals()` write the boundary they applied, the rows removed and
-  the time into `retention_prunes` -- including a run that removed nothing,
-  because it still applied a boundary. `retentionFloor()` and
+- **Deletion is recorded, and its absence is not read as coverage.** `prune()`,
+  `pruneProposals()` and `clearProposals()` write the boundary they applied, the
+  rows removed and the time into `retention_prunes` -- including a run that
+  removed nothing, because it still applied a boundary. `clearProposals()` is
+  the one exception and it runs the other way: its boundary is NOW, which marks
+  every past window truncated, so it records only when a row actually went
+  (D-179). Hiding a refutation is survivable; inventing one is not.
+  `retentionFloor()` and
   `windowCoverage(startMs)` report it three-valued: a null boundary means NO
   PRUNE IS ON RECORD, never "nothing was pruned", and is never inferred from
   the oldest surviving row. `truncated` is a comparison against the window and

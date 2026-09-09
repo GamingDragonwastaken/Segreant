@@ -164,6 +164,35 @@ export interface RoIOptions {
   grossRealizedValueUsd?: number | null; // Σ over realized units of baseline manual $ × acceptance (the numerator)
   supervisionMinutes?: number | null; // measured human time-with-AI; priced into the honest denominator
   riskAversion?: number; // γ ∈ [0,1] for the Index certainty-equivalent (0 = the point estimate)
+  /**
+   * What proposal retention deleted under this report's window (D-179).
+   *
+   * The Acceptance lens goes dark when no proposal could be matched, and its
+   * note used to give a CAUSE -- "no proposals captured (e.g. streaming-only)".
+   * That sentence is false on a ledger whose proposals Fiscus captured and then
+   * deleted on the operator's own retention policy, and it sends them to
+   * instrument what they had already instrumented.
+   *
+   * `truncated` is "a proposal prune boundary is known to cover this window".
+   * Absent or false is NOT "the window is intact": a ledger pruned before the
+   * retention record existed reports no boundary, and `prunedBeforeMs` carries
+   * that third state for a caller that needs it. The note only changes on a
+   * known deletion, because a caveat printed on every clean ledger stops being
+   * read.
+   */
+  proposalRetention?: { truncated: boolean; prunedBeforeMs: number | null };
+  /**
+   * Set when this report's POPULATION excludes proposal-bearing work by
+   * construction, so Acceptance is not applicable rather than unmeasured (D-179).
+   *
+   * `computeUsageRoI` filters to sessions with no captured proposals -- non-code
+   * work, which has no diff to compare -- and then printed "no proposals
+   * captured (e.g. streaming-only)" on every run. That is an absence reported as
+   * an instrumentation gap, followed by an instruction the reader cannot act on:
+   * capturing more proposals cannot change this number, because proposal-bearing
+   * sessions are excluded from this report on purpose.
+   */
+  acceptanceOutOfScope?: boolean;
 }
 
 /**
@@ -242,7 +271,18 @@ export function computeReturnOnIntelligence(report: RealizationLike, opts: RoIOp
     instrumented: report.firstPassAcceptance !== null,
     how: 'edit-distance between AI proposal and what shipped',
   };
-  if (!acceptance.instrumented) notes.push('Acceptance uninstrumented: no proposals captured (e.g. streaming-only).');
+  if (!acceptance.instrumented) {
+    // Three reasons the lens can be dark, and only one of them is an
+    // instrumentation gap the reader can close. Naming the wrong one sends an
+    // operator to do work that cannot change the number.
+    const deleted = opts.proposalRetention?.truncated === true;
+    const boundary = opts.proposalRetention?.prunedBeforeMs ?? null;
+    notes.push(opts.acceptanceOutOfScope === true
+      ? 'Acceptance n/a: this report covers sessions with no captured proposals by construction, so there is no diff to compare — capturing more proposals cannot move it.'
+      : deleted && boundary !== null
+        ? `Acceptance uninstrumented: proposals covering this window were deleted by retention (before ${new Date(boundary).toISOString().slice(0, 10)}). Whether any were captured cannot be read from here.`
+        : 'Acceptance uninstrumented: no proposals captured (e.g. streaming-only).');
+  }
 
   // --- Lens 3: Lift (counterfactual — worth it vs. not / vs. cheaper?) ---
   const lift: LensValue = {

@@ -52,6 +52,7 @@ import {
   liftOptionsFromStore,
   moneyInputsFromStore,
   projectValueBreakdown,
+  proposalRetentionForUnits,
   type LoadedRealization,
   type ProjectValue,
 } from './realization.ts';
@@ -243,6 +244,8 @@ export async function valueSpine(
     grossRealizedValueUsd: money.grossRealizedValueUsd,
     supervisionMinutes: money.supervisionMinutes,
     riskAversion: opts.riskAversion ?? 0,
+    // Why the Acceptance lens went dark, when the store can say (D-179).
+    proposalRetention: proposalRetentionForUnits(store, report.units),
   });
   roi.notes.unshift(...liftNotes);
 

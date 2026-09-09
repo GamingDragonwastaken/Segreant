@@ -275,6 +275,9 @@ export function computeUsageRoI(
 
   const roi = computeReturnOnIntelligence(
     {
+      // Null by construction, not by absence of instrumentation: the population
+      // above is filtered to `!hasProposals`. `acceptanceOutOfScope` below is
+      // what stops that from being reported as a gap the reader could close.
       firstPassAcceptance: null,
       units: lensUnits,
       matured: {
@@ -284,6 +287,7 @@ export function computeUsageRoI(
       },
     },
     {
+      acceptanceOutOfScope: true,
       ...(money.priced
         ? { laborRatePerHour: rate, grossRealizedValueUsd: money.grossRealizedValueUsd, supervisionMinutes: money.supervisionMinutes }
         : {}),

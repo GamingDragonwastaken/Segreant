@@ -834,6 +834,29 @@ export interface ProjectValue {
  * project is joined to the TOOLS that produced its spend, so the view answers not
  * just "did this project pay off" but "which tool coded it".
  */
+/**
+ * What proposal retention deleted under a set of work units (D-179).
+ *
+ * The same predicate D-176 uses for the spend window, one stream over: a window
+ * is truncated when its START lies strictly before a recorded prune boundary,
+ * because `pruneProposals` deletes rows strictly older than that boundary.
+ *
+ * `prunedBeforeMs === null` is NO PRUNE ON RECORD -- never "nothing was
+ * pruned". It is returned alongside rather than folded into `truncated` so a
+ * caller that must distinguish the third state can, and one that only needs to
+ * know whether to change a sentence does not have to.
+ */
+export function proposalRetentionForUnits(
+  store: Store,
+  units: ReadonlyArray<{ windowStartMs: number }>,
+): { truncated: boolean; prunedBeforeMs: number | null } {
+  const prunedBeforeMs = store.retentionFloor().proposalsPrunedBeforeMs;
+  return {
+    prunedBeforeMs,
+    truncated: prunedBeforeMs !== null && units.some((u) => u.windowStartMs < prunedBeforeMs),
+  };
+}
+
 export function projectValueBreakdown(
   store: Store,
   opts: { windowDays?: number; roiOptions?: RoIOptions } = {},
@@ -843,7 +866,13 @@ export function projectValueBreakdown(
   for (const project of store.realizationProjects()) {
     const rep = realizationFromStore(store, { project, windowDays: opts.windowDays });
     if (rep.matured.units === 0) continue;
-    const roi = computeReturnOnIntelligence(rep, opts.roiOptions ?? {});
+    // Per project, because a prune boundary can cover one project's window and
+    // not another's -- and because a note nothing computes is the second
+    // recurring class of this program (D-179).
+    const roi = computeReturnOnIntelligence(rep, {
+      ...(opts.roiOptions ?? {}),
+      proposalRetention: proposalRetentionForUnits(store, rep.units),
+    });
     out.push({
       project,
       units: rep.matured.units,
