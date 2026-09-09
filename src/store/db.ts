@@ -2767,11 +2767,24 @@ export class Store {
    * anything. Without that record a deleted history and a history that never
    * happened are the same thing to every later reader -- see `retentionFloor`
    * and `retention_prunes` in the schema (D-170).
+   *
+   * ATOMIC WITH THE RECORD (D-189). The delete and the record commit together
+   * or neither happens. Three unprotected statements could leave rows deleted
+   * with no boundary on record -- the exact D-170 state, reconstructed by a
+   * failure path instead of by a missing table. When the record cannot be
+   * written the DELETION is what gives way: an operator whose prune failed
+   * still has their data and an error to read, while one whose record failed
+   * silently has a ledger that can no longer say what it lost. VACUUM stays
+   * outside because SQLite refuses to run it inside a transaction, and a failed
+   * compaction leaves a larger file rather than a missing record.
    */
   prune(beforeMs: number): number {
-    const info = this.db.prepare(`DELETE FROM requests WHERE ts_epoch_ms < ?`).run(beforeMs);
-    const removed = Number(info.changes ?? 0);
-    this.recordPrune('requests', beforeMs, removed);
+    const removed = this.transaction(() => {
+      const info = this.db.prepare(`DELETE FROM requests WHERE ts_epoch_ms < ?`).run(beforeMs);
+      const rowsRemoved = Number(info.changes ?? 0);
+      this.recordPrune('requests', beforeMs, rowsRemoved);
+      return rowsRemoved;
+    });
     this.db.prepare('VACUUM').run();
     return removed;
   }
@@ -2825,12 +2838,16 @@ export class Store {
    * retention need (the git-correlation window) than request/cost history.
    */
   pruneProposals(beforeMs: number): number {
-    const info = this.db.prepare(`DELETE FROM proposals WHERE ts_epoch_ms < ?`).run(beforeMs);
-    const removed = Number(info.changes ?? 0);
-    // Recorded under its own kind. Proposal retention is a much shorter policy
-    // and says nothing about request coverage; folding the two together would
-    // make a proposal prune look like a gap in the spend ledger.
-    this.recordPrune('proposals', beforeMs, removed);
+    // Atomic with its record, for the reason stated on `prune` (D-189).
+    const removed = this.transaction(() => {
+      const info = this.db.prepare(`DELETE FROM proposals WHERE ts_epoch_ms < ?`).run(beforeMs);
+      const rowsRemoved = Number(info.changes ?? 0);
+      // Recorded under its own kind. Proposal retention is a much shorter policy
+      // and says nothing about request coverage; folding the two together would
+      // make a proposal prune look like a gap in the spend ledger.
+      this.recordPrune('proposals', beforeMs, rowsRemoved);
+      return rowsRemoved;
+    });
     this.db.prepare('VACUUM').run();
     return removed;
   }
@@ -2849,11 +2866,18 @@ export class Store {
    * marks every past window truncated, so writing it for a no-op clear would
    * manufacture a deletion claim over the whole ledger. Hiding a refutation is
    * survivable; inventing one is not.
+   *
+   * ATOMIC WITH THAT RECORD (D-189), and this is the path where it matters
+   * most: an erasure that took every proposal and wrote no boundary is exactly
+   * the state D-179 was written to end.
    */
   clearProposals(): number {
-    const info = this.db.prepare(`DELETE FROM proposals`).run();
-    const removed = Number(info.changes ?? 0);
-    if (removed > 0) this.recordPrune('proposals', Date.now(), removed);
+    const removed = this.transaction(() => {
+      const info = this.db.prepare(`DELETE FROM proposals`).run();
+      const rowsRemoved = Number(info.changes ?? 0);
+      if (rowsRemoved > 0) this.recordPrune('proposals', Date.now(), rowsRemoved);
+      return rowsRemoved;
+    });
     this.db.prepare('VACUUM').run();
     return removed;
   }
