@@ -398,6 +398,77 @@ export function minimalSupportingSets(dag: EpistemicDag, target: string): string
   return roots.length === 0 ? [] : [roots];
 }
 
+export interface HittingSetEnumeration {
+  /** Inclusion-minimal hitting sets, smallest first then lexicographic. */
+  readonly sets: readonly (readonly string[])[];
+  /**
+   * True when `limit` stopped the enumeration. `sets` is then a PREFIX of the
+   * answer, and its members are hitting sets but not certified minimal: a
+   * smaller set may have been dropped from the frontier before it could
+   * subsume them. Reading a truncated enumeration as the complete one is
+   * exactly the claim this flag exists to block.
+   */
+  readonly truncated: boolean;
+}
+
+function bySetOrder(a: readonly string[], b: readonly string[]): number {
+  return a.length - b.length || a.join('\u0000').localeCompare(b.join('\u0000'));
+}
+
+/**
+ * Inclusion-minimal hitting sets over a family of sets, with an optional cap.
+ *
+ * ONE ALGORITHM, TWO CALLERS. `minimalCutSets` below and
+ * `minimalInvalidatingAssumptionSets` in `countermodel.ts` ask the same
+ * question of different families — "what is the smallest set of things whose
+ * joint removal breaks every one of these?" — and the lesson recorded at D-098
+ * is that two implementations of one question in this repository eventually
+ * give two answers. So the fold lives here once and both callers enter it.
+ *
+ * THE CAP IS NOT BOOKKEEPING. The number of minimal hitting sets over a family
+ * of `k` disjoint pairs is `2^k`, and nothing about the input announces that in
+ * advance. `limit` bounds the candidate frontier carried between folds, and so
+ * bounds both the work and the result. `minimalCutSets` passes no limit — its
+ * family is the single conjunctive supporting set, whose minimal hitting sets
+ * are just its members — so its signature and behaviour are unchanged.
+ */
+export function minimalHittingSets(
+  family: ReadonlyArray<readonly string[]>,
+  limit?: number,
+): HittingSetEnumeration {
+  if (!Array.isArray(family)) throw new Error('hitting set family must be an array');
+  if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) {
+    throw new Error('hitting set limit must be a positive integer');
+  }
+  if (family.length === 0) return Object.freeze({ sets: Object.freeze([]), truncated: false });
+
+  let cuts: string[][] = [[]];
+  let truncated = false;
+  for (const support of family) {
+    const candidates: string[][] = [];
+    for (const cut of cuts) {
+      for (const id of support) {
+        const candidate = [...new Set([...cut, id])].sort((a, b) => a.localeCompare(b));
+        if (!candidates.some((existing) => existing.every((item) => candidate.includes(item)))) candidates.push(candidate);
+      }
+    }
+    let minimal = candidates.filter((candidate, index) => !candidates.some((other, otherIndex) =>
+      index !== otherIndex && other.length < candidate.length && other.every((item) => candidate.includes(item)),
+    ));
+    if (limit !== undefined && minimal.length > limit) {
+      // Smallest first: a frontier biased toward small sets is the least
+      // misleading prefix available, but it is still a prefix.
+      minimal = minimal.sort(bySetOrder).slice(0, limit);
+      truncated = true;
+    }
+    cuts = minimal;
+  }
+  return Object.freeze({
+    sets: Object.freeze(cuts.sort(bySetOrder).map((set) => Object.freeze([...set]))),
+    truncated,
+  });
+}
+
 /**
  * Compute inclusion-minimal hitting sets over the supporting sets.
  *
@@ -409,20 +480,7 @@ export function minimalSupportingSets(dag: EpistemicDag, target: string): string
 export function minimalCutSets(dag: EpistemicDag, target: string): string[][] {
   const supportSets = minimalSupportingSets(dag, target);
   if (supportSets.length === 0) return [];
-  let cuts: string[][] = [[]];
-  for (const support of supportSets) {
-    const candidates: string[][] = [];
-    for (const cut of cuts) {
-      for (const id of support) {
-        const candidate = [...new Set([...cut, id])].sort((a, b) => a.localeCompare(b));
-        if (!candidates.some((existing) => existing.every((item) => candidate.includes(item)))) candidates.push(candidate);
-      }
-    }
-    cuts = candidates.filter((candidate, index) => !candidates.some((other, otherIndex) =>
-      index !== otherIndex && other.length < candidate.length && other.every((item) => candidate.includes(item)),
-    ));
-  }
-  return cuts.sort((a, b) => a.length - b.length || a.join('\u0000').localeCompare(b.join('\u0000')));
+  return minimalHittingSets(supportSets).sets.map((set) => [...set]);
 }
 
 export function supersededBy(dag: EpistemicDag, nodeId: string): string[] {

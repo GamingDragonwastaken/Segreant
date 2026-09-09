@@ -1,3 +1,5 @@
+import { minimalHittingSets } from './dag.ts';
+
 /**
  * Countermodels and assumption fragility (WP-B04).
  *
@@ -240,5 +242,184 @@ export function assessAssumptionFragility(
     claimHoldsAsStated: realized.length === 0,
     robustnessAssessed,
     certified,
+  });
+}
+
+/**
+ * Alternative supports for a certification, and the assumptions each rests on.
+ *
+ * A support is a set of assumptions that carries the certification ON ITS OWN
+ * when every member of it holds. Certification therefore survives exactly while
+ * one support survives intact, and it is removed only when every support has at
+ * least one failed member. That is the same edge reading `dag.ts` settled at
+ * D-098 — within a support the members are jointly necessary prerequisites,
+ * across supports they are alternatives — so the two modules cannot drift into
+ * describing one relation two ways.
+ *
+ * `assumptions` is the certificate's own list, verbatim and complete. A support
+ * naming an assumption the certificate does not state is rejected rather than
+ * ignored, for the same reason `assessAssumptionFragility` rejects a
+ * countermodel that violates an unstated assumption: it is either about a
+ * different certificate or about an assumption the certificate failed to
+ * declare, and both should stop the caller.
+ */
+export interface CertificationStructure {
+  readonly assumptions: readonly string[];
+  /** False when the certificate never certified anything to begin with. */
+  readonly certified: boolean;
+  readonly supports: readonly (readonly string[])[];
+}
+
+/**
+ * Why a result carries no invalidating sets. Never `null` alongside an empty
+ * `sets`, because "there was no certification" and "nobody declared what
+ * carries it" are different statements, and collapsing either into a bare empty
+ * array is how a caller comes to read absence as strength.
+ */
+export type InvalidationEmptiness =
+  | 'certification_not_in_force'
+  | 'no_supports_declared';
+
+export interface MinimalInvalidatingSets {
+  /** The certificate's assumptions, in the order it states them. */
+  readonly assumptions: readonly string[];
+  /**
+   * Inclusion-minimal sets of assumptions whose JOINT failure removes the
+   * certification, smallest first then lexicographic. A singleton means that
+   * assumption alone is load-bearing; a pair means neither member alone is.
+   */
+  readonly sets: readonly (readonly string[])[];
+  /**
+   * Assumptions appearing in no minimal set: their failure alone changes
+   * nothing about this certification.
+   *
+   * `null` means NOT DETERMINED, and the other fields say why — either
+   * `truncated` is true, or `emptyBecause` is set. A capped enumeration cannot
+   * tell "in no minimal set" from "in a set the search never reached", and an
+   * uncertified or unexamined structure has no certification for an assumption
+   * to be inert with respect to. Returning `[]` in either case would report a
+   * question nobody answered as an answer of "none".
+   */
+  readonly inertAssumptions: readonly string[] | null;
+  /** True when `limit` stopped the search; `sets` is then a prefix. */
+  readonly truncated: boolean;
+  /** The bound actually applied, whether or not it was reached. */
+  readonly limit: number;
+  readonly emptyBecause: InvalidationEmptiness | null;
+}
+
+/**
+ * The default enumeration bound.
+ *
+ * There is no principled maximum here, only an admission: the number of minimal
+ * invalidating sets is exponential in the number of alternative supports, so a
+ * function promising to enumerate them all is promising something it cannot cost
+ * in advance. 256 is large enough that no structure this codebase produces today
+ * comes near it — the decision certificate yields two sets — and small enough
+ * that a pathological structure stops rather than runs.
+ */
+export const DEFAULT_INVALIDATING_SET_LIMIT = 256;
+
+export interface InvalidatingSetOptions {
+  /** Maximum sets carried and returned. Positive integer. */
+  readonly limit?: number;
+}
+
+/** NUL, which no validated assumption string can contain. */
+const SUPPORT_KEY_SEPARATOR = String.fromCharCode(0);
+
+/**
+ * Minimal sets of named assumptions whose joint failure removes a certification.
+ *
+ * WHAT THIS IS AND IS NOT. It is a bounded search over an EXPLICITLY DECLARED
+ * support structure, computed by the one hitting-set fold in `dag.ts`. It is not
+ * a theorem prover and claims no completeness over anything but the supports it
+ * was handed: an assumption the structure failed to declare as load-bearing
+ * comes back inert, which is a statement about the declaration and not about the
+ * world. `CertificationStructure` is where a domain records that judgement, in
+ * one place, where it can be read and disputed.
+ *
+ * WHY THE ANSWER IS SETS OF NAMES AND NOT A SCORE. A ranked fragility number
+ * would be unsourceable in exactly the way `src/epistemic/profile.ts` refuses,
+ * and it would not tell an operator what to go and check. A named set does:
+ * every member is an assumption the certificate itself states, so "this
+ * certification falls if these two both fail" is a checkable proposition rather
+ * than a mood.
+ *
+ * THE BOUND IS PART OF THE ANSWER. `truncated` says the enumeration stopped
+ * early, and `inertAssumptions` goes `null` when it did, because a prefix that
+ * still reported which assumptions matter to nothing would be a capped answer
+ * wearing a complete one's clothes.
+ */
+export function minimalInvalidatingAssumptionSets(
+  structure: CertificationStructure,
+  options: InvalidatingSetOptions = {},
+): MinimalInvalidatingSets {
+  if (structure === null || typeof structure !== 'object' || Array.isArray(structure)) {
+    throw new Error('certification structure must be an object');
+  }
+  if (!Array.isArray(structure.assumptions)) throw new Error('assumptions must be an array');
+  if (typeof structure.certified !== 'boolean') {
+    throw new Error('certification structure must state whether it is certified');
+  }
+  if (!Array.isArray(structure.supports)) throw new Error('supports must be an array');
+
+  const stated = structure.assumptions.map((value, index) => nonEmpty(value, `assumption ${index}`));
+  const known = new Set(stated);
+  if (known.size !== stated.length) throw new Error('assumptions must be distinct');
+
+  const limit = options.limit === undefined ? DEFAULT_INVALIDATING_SET_LIMIT : options.limit;
+  if (!Number.isInteger(limit) || limit < 1) {
+    throw new Error('invalidating set limit must be a positive integer');
+  }
+
+  const seenSupports = new Set<string>();
+  const family: string[][] = [];
+  structure.supports.forEach((support, index) => {
+    if (!Array.isArray(support)) throw new Error(`support ${index} must be an array`);
+    const members = support.map((value, position) => nonEmpty(value, `support ${index}[${position}]`));
+    if (members.length === 0) {
+      // A support carried by nothing cannot be hit, so it would make the
+      // certification unfalsifiable by assumption failure. That is a claim
+      // nobody gets to make by leaving an array empty.
+      throw new Error(`support ${index} must name at least one assumption`);
+    }
+    const distinct = [...new Set(members)].sort((a, b) => a.localeCompare(b));
+    if (distinct.length !== members.length) throw new Error(`support ${index} repeats an assumption`);
+    for (const member of distinct) {
+      if (!known.has(member)) {
+        throw new Error(`support ${index} names an assumption this certificate does not state: ${member}`);
+      }
+    }
+    const key = distinct.join(SUPPORT_KEY_SEPARATOR);
+    if (seenSupports.has(key)) return;
+    seenSupports.add(key);
+    family.push(distinct);
+  });
+
+  const empty = (emptyBecause: InvalidationEmptiness): MinimalInvalidatingSets => Object.freeze({
+    assumptions: Object.freeze([...stated]),
+    sets: Object.freeze([]),
+    inertAssumptions: null,
+    truncated: false,
+    limit,
+    emptyBecause,
+  });
+
+  if (!structure.certified) return empty('certification_not_in_force');
+  if (family.length === 0) return empty('no_supports_declared');
+
+  const enumeration = minimalHittingSets(family, limit);
+  const covered = new Set(enumeration.sets.flatMap((set) => [...set]));
+
+  return Object.freeze({
+    assumptions: Object.freeze([...stated]),
+    sets: enumeration.sets,
+    inertAssumptions: enumeration.truncated
+      ? null
+      : Object.freeze(stated.filter((value) => !covered.has(value))),
+    truncated: enumeration.truncated,
+    limit,
+    emptyBecause: null,
   });
 }
