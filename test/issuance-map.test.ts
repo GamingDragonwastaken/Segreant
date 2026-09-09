@@ -11,8 +11,8 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { dirname, join, relative as relativePath, resolve, sep } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   ISSUANCE_MAP,
   CANONICAL_BOUNDARIES,
@@ -21,62 +21,17 @@ import {
   UNMIGRATED_BOUNDARIES,
   UNREACHED_BOUNDARIES,
 } from '../src/epistemic/issuance-map.ts';
+// The walker below used to live in this file. It moved to `test/support/` when
+// `test/module-contracts.test.ts` needed to ask the same reachability question
+// of contract prose; two walkers answering it differently is the defect D-098
+// recorded. Its behaviour is unchanged.
+import { PRODUCT_ENTRIES, ROOT, productClosure, sourceFiles } from './support/importGraph.ts';
 
-const ROOT = join(import.meta.dirname, '..');
 const read = (relative: string) => readFileSync(join(ROOT, relative), 'utf8');
 
 /** A call to the kernel's Evidence/Claim constructors, not a mention of them. */
 const ISSUES_CLAIM = /(?<![A-Za-z.])claim\(\s*\{/;
 const ISSUES_EVIDENCE = /(?<![A-Za-z.])evidence\(\s*\{/;
-
-/** Every `.ts` file under `src/`, so the sweep cannot silently miss a directory. */
-function sourceFiles(dir = 'src'): string[] {
-  const found: string[] = [];
-  for (const entry of readdirSync(join(ROOT, dir), { withFileTypes: true })) {
-    const relative = `${dir}/${entry.name}`;
-    if (entry.isDirectory()) found.push(...sourceFiles(relative));
-    else if (entry.name.endsWith('.ts')) found.push(relative);
-  }
-  return found;
-}
-
-/**
- * Everything under `src/` that a product entry point actually imports.
- *
- * `bin/fiscus.mjs` runs `dist/cli.js`, compiled from `src/cli.ts`, so that is
- * the entry. `team-server/` is a separate npm project that imports root source
- * directly, so its server is a second one — leaving it out would make the answer
- * depend on the accident that everything it pulls in is reachable from the CLI
- * too.
- *
- * A regex over relative specifiers is enough here and would not be in general:
- * this repository has no dynamic import with a computed specifier, which the
- * vacuity test below re-checks rather than assumes.
- */
-function productClosure(entries: string[]): Set<string> {
-  const seen = new Set<string>();
-  const visit = (file: string): void => {
-    const abs = resolve(file);
-    if (seen.has(abs) || !existsSync(abs)) return;
-    seen.add(abs);
-    const source = readFileSync(abs, 'utf8');
-    const specifiers = /from\s+['"](\.[^'"]+)['"]|import\(\s*['"](\.[^'"]+)['"]/g;
-    let match: RegExpExecArray | null;
-    while ((match = specifiers.exec(source)) !== null) {
-      const specifier = match[1] ?? match[2] ?? '';
-      // Emitted specifiers are rewritten to `.js`; the source tree is `.ts`.
-      visit(join(dirname(abs), specifier.replace(/\.js$/, '.ts')));
-    }
-  };
-  for (const entry of entries) visit(join(ROOT, entry));
-  return new Set(
-    [...seen]
-      .map((file) => relativePath(ROOT, file).split(sep).join('/'))
-      .filter((file) => file.startsWith('src/')),
-  );
-}
-
-const PRODUCT_ENTRIES = ['src/cli.ts', 'team-server/src/server.ts'];
 
 test('every mapped boundary names a module that exists', () => {
   for (const boundary of ISSUANCE_MAP) {

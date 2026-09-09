@@ -77,8 +77,12 @@ reproducibility of the association. This module refuses to let a declaration be
 read as stronger than it is; it cannot make one true.
 
 **Nothing here is enforced at a product boundary yet.** `claim()` still accepts
-any non-null `measurementModelRef`, no production call site resolves one through
-`measurementRegistry`, no surrogate bridge is declared for Fiscus's own
+any non-null `measurementModelRef` at construction, though the ledger bounds a
+claim's reference against its cited evidence (D-168). **One production call site
+now resolves a model through `measurementRegistry`:** `src/causal/measurement.ts`
+builds a registry from the protocol's own quality model, and it is inside the
+product import closure. This paragraph said no site did, until D-198 checked.
+No surrogate bridge is declared for Fiscus's own
 `proxy_validated` claims, and no registry of Fiscus's own models is assembled
 anywhere. These are the mechanisms that make enforcement possible; the wiring is
 the open remainder of WP-D05 and WP-D07.

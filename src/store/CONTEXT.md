@@ -41,8 +41,13 @@ two domain callers goes in `rows.ts`.
 
 ## Guarantees
 
-- **Money is exact.** All amounts are integer microdollars. No float ever reaches
-  a column.
+- **Money is exact.** Exact amounts are arbitrary-precision decimals — a `bigint`
+  coefficient with a scale, tagged with the economic basis that gives the figure
+  its meaning — not integer microdollars, which is what this line claimed until
+  D-198. Nor is the store free of floats: `requests.cost_usd` is `REAL` and is a
+  deliberate compatibility projection of the exact charge event written beside it
+  in the same transaction, refused if the two disagree. The guarantee is that no
+  float is AUTHORITATIVE, not that none is stored.
 - **One writer.** Every table is created and migrated in `schema.ts`. No other
   module — inside this directory or outside it — issues DDL.
 - **Derived records are immutable.** `reconciliation runs`, `allocation_runs`,
