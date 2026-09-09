@@ -16,6 +16,7 @@ import { dirname, join, relative as relativePath, resolve, sep } from 'node:path
 import {
   ISSUANCE_MAP,
   CANONICAL_BOUNDARIES,
+  IMPORTED_UNINVOKED_BOUNDARIES,
   LIVE_BOUNDARIES,
   UNMIGRATED_BOUNDARIES,
   UNREACHED_BOUNDARIES,
@@ -195,16 +196,24 @@ test('the declared reach of every boundary matches the import graph', () => {
   const reached = productClosure(PRODUCT_ENTRIES);
 
   for (const boundary of ISSUANCE_MAP) {
-    const actual = reached.has(boundary.module) ? 'product' : 'unreached';
+    // This test owns the IMPORT axis and only that. `product` and
+    // `imported_uninvoked` are both import-reachable and are separated by the
+    // invocation test below, because a module can sit in the closure while no
+    // product path calls into it (D-184).
+    const imported = reached.has(boundary.module);
     assert.equal(
-      boundary.reach,
-      actual,
-      `${boundary.id} (${boundary.module}) is ${actual} but declared ${boundary.reach}`
+      boundary.reach !== 'unreached',
+      imported,
+      `${boundary.id} (${boundary.module}) is ${imported ? 'in' : 'not in'} the product import closure but declared ${boundary.reach}`
         + ' — a boundary that gained or lost a consumer is a queue-position change, not a field to update quietly',
     );
   }
 
-  assert.equal(LIVE_BOUNDARIES.length + UNREACHED_BOUNDARIES.length, ISSUANCE_MAP.length);
+  assert.equal(
+    LIVE_BOUNDARIES.length + IMPORTED_UNINVOKED_BOUNDARIES.length + UNREACHED_BOUNDARIES.length,
+    ISSUANCE_MAP.length,
+    'the three reach states must partition the map; a fourth state added without a list here would vanish from every count',
+  );
   assert.ok(LIVE_BOUNDARIES.length > 0, 'the map cannot claim every boundary is latent');
 });
 
@@ -270,4 +279,71 @@ test('the literal-rung sweep would actually catch one', () => {
   assert.ok(LITERAL_RUNG.test("measurement: 'validated',"));
   assert.equal(LITERAL_RUNG.test("      measurement: measurementValidation,"), false);
   assert.ok(sourceFiles().some((file) => ISSUES_CLAIM.test(read(file))), 'the sweep found no claim-issuing file at all');
+});
+
+/**
+ * `reach` measures IMPORT-reachability, and the file said it measured invocation.
+ *
+ * The map's own prose reads "Authority class says what a boundary does when it
+ * runs. It says nothing about whether anything RUNS it" and then declares
+ * `reach` as the field that answers the second question. The check underneath
+ * walks the import graph. Those are different questions, and a module can sit
+ * in the transitive import closure of `src/cli.ts` while no product path ever
+ * calls into it.
+ *
+ * MEASURED. `alloc.exactRun` is declared `reach: 'product'` and passes, because
+ * `src/store/db.ts` imports `src/alloc/epistemic.ts`. The only caller of
+ * `buildExactAllocationKernelIssuance` is `Store.saveExactAllocationRun`, and
+ * the only mentions of `saveExactAllocationRun` anywhere in `src/` are its own
+ * definition in `src/store/allocation.ts` and that forwarder in `db.ts`. No
+ * CLI command, no dashboard route and no other module calls it. So the exact
+ * allocation issuance boundary — the one on the Exact Money path AII-017 and
+ * AII-018 are migrating everything toward — is declared live in the product
+ * and is invoked by nothing.
+ *
+ * **`reach` decides queue position. A field that overstates what its check
+ * establishes misdirects exactly the work the map exists to direct** — and this
+ * is the file whose whole purpose is to be honest about authority, which makes
+ * it the sharpest instance of the class this program keeps finding.
+ *
+ * WHAT THIS CHECK CAN AND CANNOT DO. It looks for the declared symbol in the
+ * product closure outside the modules that define or forward it. A MENTION is
+ * not a call, so this can pass on a symbol that is only imported and never
+ * invoked — it proves absence of invocation, never presence. That asymmetry is
+ * the right way round: it fails only when nothing in the product so much as
+ * names the entry point, which cannot be a false alarm.
+ *
+ * The declared count below is the corpus-size assertion D-166 made a rule of.
+ * Without it, a sweep that covers four boundaries and a sweep that covers none
+ * are indistinguishable, and this one deliberately covers four of seventeen.
+ *
+ * Recorded at D-184.
+ */
+test('a boundary declaring an invocation entry point is actually invoked by the product', () => {
+  const reached = productClosure(PRODUCT_ENTRIES);
+  const declared = ISSUANCE_MAP.filter((b) => b.invocation !== undefined);
+
+  // Corpus size, stated rather than implied: raising this is a deliberate act,
+  // and the gap between it and ISSUANCE_MAP.length is the honest measure of how
+  // much of the map has had its invocation traced at all.
+  assert.equal(
+    declared.length,
+    4,
+    'the number of boundaries whose invocation entry point has been traced — change this only by tracing another',
+  );
+  assert.ok(declared.length < ISSUANCE_MAP.length, 'and the rest are untraced, which this count exists to keep visible');
+
+  for (const boundary of declared) {
+    const invocation = boundary.invocation!;
+    const callers = [...reached]
+      .filter((file) => !invocation.definedIn.includes(file))
+      .filter((file) => readFileSync(join(ROOT, file), 'utf8').includes(invocation.symbol));
+    const invoked = callers.length > 0;
+    assert.equal(
+      invoked,
+      boundary.reach === 'product',
+      `${boundary.id} declares reach '${boundary.reach}' but ${invoked ? `is named by ${callers.join(', ')}` : `no product file outside ${invocation.definedIn.join(', ')} names ${invocation.symbol}`}`
+        + ' — import-reachable and invoked are different facts, and only the second decides whether an operator can meet this boundary today',
+    );
+  }
 });

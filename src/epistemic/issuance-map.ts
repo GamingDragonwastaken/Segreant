@@ -39,6 +39,19 @@
  * that gains or loses a consumer therefore fails until the declaration is
  * corrected, which is the moment to reconsider its queue position.
  *
+ * IMPORTED AND INVOKED ARE DIFFERENT FACTS, AND THIS FILE USED TO CONFLATE
+ * THEM (D-184). The paragraph above says authority class "says nothing about
+ * whether anything RUNS it" and hands that question to `reach` -- but the check
+ * walks IMPORTS, and a module can sit in the closure while no product path ever
+ * calls into it. `alloc.exactRun` was exactly that: declared `product` because
+ * `src/store/db.ts` imports it, while the only mentions of the forwarder
+ * `Store.saveExactAllocationRun` anywhere in `src/` are its own definition and
+ * that forwarder. No CLI command and no route calls it. Since `reach` decides
+ * queue position, an overstated one misdirects the work this map exists to
+ * direct. There are now three values, and `invocation` below is how the third
+ * is checked -- for the boundaries that declare it, which is not yet all of
+ * them, and the test states that count out loud rather than implying it.
+ *
  * The map is not documentation about the code; `test/issuance-map.test.ts`
  * reads it and the source together. A `canonical` boundary that stops calling
  * the kernel fails. A non-canonical boundary that starts calling it fails. A
@@ -56,14 +69,24 @@ export type IssuanceClass =
   | 'unmigrated_authority';
 
 /**
- * Whether any product path reaches this boundary.
+ * Whether any product path reaches this boundary, on the two axes that differ.
  *
- * `product` means the module is in the transitive import closure of `src/cli.ts`
- * — the entry `bin/fiscus.mjs` runs through `dist/cli.js` — or of the
- * team-server entry, which imports root source directly. `unreached` means the
- * module compiles and is tested and nothing ships it.
+ * `unreached` — the module is not in the transitive import closure of
+ * `src/cli.ts` (the entry `bin/fiscus.mjs` runs through `dist/cli.js`) or of the
+ * team-server entry, which imports root source directly. It compiles, it is
+ * tested, and nothing ships it.
+ *
+ * `imported_uninvoked` — the module IS in that closure and no product file
+ * outside its own definition names the entry point that would run it. It ships,
+ * and an operator still cannot meet it. This is the state `alloc.exactRun` was
+ * in while declared `product` (D-184).
+ *
+ * `product` — imported AND named by a product file outside its own module.
+ * A mention is not a call, so this is the weaker half of the pair on purpose:
+ * the check can prove that nothing invokes a boundary, never that something
+ * does.
  */
-export type IssuanceReach = 'product' | 'unreached';
+export type IssuanceReach = 'product' | 'imported_uninvoked' | 'unreached';
 
 export interface IssuanceBoundary {
   /** Stable identifier, used by the program records and the test failure text. */
@@ -75,6 +98,21 @@ export interface IssuanceBoundary {
   readonly issuanceClass: IssuanceClass;
   /** Declared here, checked against the import graph by the test. */
   readonly reach: IssuanceReach;
+  /**
+   * The entry point a PRODUCT file must name for this boundary to actually run
+   * (D-184). Optional only because tracing seventeen call chains is work that
+   * has been done for four of them so far; the test asserts that count out
+   * loud, so the gap stays visible instead of reading as coverage.
+   *
+   * `definedIn` lists the modules that define or merely FORWARD the symbol. A
+   * mention there proves nothing — `Store.saveExactAllocationRun` forwards to
+   * the allocation issuance and is itself called by no product path, which is
+   * the whole case this field exists to catch.
+   */
+  readonly invocation?: {
+    readonly symbol: string;
+    readonly definedIn: readonly string[];
+  };
   /**
    * For `canonical`: what the kernel legality buys here. For everything else:
    * why this is not an escalation, or — for `unmigrated_authority` — exactly
@@ -105,8 +143,14 @@ export const ISSUANCE_MAP: readonly IssuanceBoundary[] = Object.freeze([
     module: 'src/alloc/epistemic.ts',
     asserts: 'An exact allocation run produced this distribution from these source events.',
     issuanceClass: 'canonical',
-    reach: 'product',
-    note: 'Run identity is digest-derived, so the Claim cannot outlive a change to the result it describes.',
+    // Imported by `src/store/db.ts` and invoked by nothing (D-184). The exact
+    // allocation path is the one AII-017/AII-018 are migrating everything
+    // toward, so this is a boundary on the authoritative money path that no
+    // operator can currently reach -- which lowers its urgency and raises the
+    // odds that it is wired one day by someone who never opened this file.
+    reach: 'imported_uninvoked',
+    invocation: { symbol: 'saveExactAllocationRun', definedIn: ['src/store/db.ts', 'src/store/allocation.ts'] },
+    note: 'Run identity is digest-derived, so the Claim cannot outlive a change to the result it describes. Nothing in the product calls `Store.saveExactAllocationRun`, so the run this describes is never produced outside tests.',
   },
   {
     id: 'value.codingRealization',
@@ -146,6 +190,7 @@ export const ISSUANCE_MAP: readonly IssuanceBoundary[] = Object.freeze([
     asserts: 'This exact record was produced by the holder of this key and has not been altered since.',
     issuanceClass: 'integrity_only',
     reach: 'product',
+    invocation: { symbol: 'signReceipt', definedIn: ['src/value/receipt.ts'] },
     note: 'A signature is not a truth claim (AII-020). It authenticates the emitter and fixes the bytes; whether the gate verdicts inside are correct rests entirely on the boundary that produced them. Semantic validation of exact coverage is separate from, and does not inherit strength from, the signature.',
   },
   {
@@ -154,6 +199,7 @@ export const ISSUANCE_MAP: readonly IssuanceBoundary[] = Object.freeze([
     asserts: 'A project-level aggregate of locally computed values, signed for transport.',
     issuanceClass: 'integrity_only',
     reach: 'product',
+    invocation: { symbol: 'signRollup', definedIn: ['src/team/rollup.ts'] },
     note: 'The transport authenticates the sender; it adds nothing to the strength of the values carried. An aggregate of compatibility-basis rows stays compatibility-basis after signing.',
   },
   {
@@ -162,6 +208,7 @@ export const ISSUANCE_MAP: readonly IssuanceBoundary[] = Object.freeze([
     asserts: 'What each of the four product claims\u2019 evidence reaches, on named axes, as sent to any consumer of /api/*.',
     issuanceClass: 'display_only',
     reach: 'product',
+    invocation: { symbol: 'meteredClaimSupport', definedIn: ['src/dashboard/claim-support.ts'] },
     note: 'It states what the payload-building code already knows and issues nothing. It is on this map because it is the first place a consumer meets a claim\u2019s strength as a value rather than as prose \u2014 which is exactly the position from which a stronger semantics gets minted beside the kernel without anyone noticing. Where it cannot tell, it must say unknown.',
   },
   {
@@ -243,6 +290,25 @@ export const LIVE_BOUNDARIES: readonly IssuanceBoundary[] = Object.freeze(
  */
 export const UNREACHED_BOUNDARIES: readonly IssuanceBoundary[] = Object.freeze(
   ISSUANCE_MAP.filter((boundary) => boundary.reach === 'unreached'),
+);
+
+/**
+ * Boundaries the product SHIPS and never calls (D-184).
+ *
+ * Between the two lists above, and the reason there are three: a module in the
+ * import closure that no product path invokes is shipped and unreachable at
+ * once. It cannot put a wrong conclusion in front of an operator today, so it
+ * is not `product`; it is not latent in the way an unimported module is either,
+ * because it is already inside everything that ships and one call site away
+ * from running. Reading it as `product` overstates the urgency; reading it as
+ * `unreached` understates the exposure.
+ *
+ * Only boundaries that DECLARE an `invocation` entry point can land here, so
+ * this list is a lower bound on the real one and the test says how many have
+ * been traced at all.
+ */
+export const IMPORTED_UNINVOKED_BOUNDARIES: readonly IssuanceBoundary[] = Object.freeze(
+  ISSUANCE_MAP.filter((boundary) => boundary.reach === 'imported_uninvoked'),
 );
 
 /**
