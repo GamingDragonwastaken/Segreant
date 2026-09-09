@@ -2448,6 +2448,7 @@ export class Store {
       periodStartMs,
       periodEndMs,
       runAtMs,
+      this.retentionFloor().requestsPrunedBeforeMs,
     );
   }
 
