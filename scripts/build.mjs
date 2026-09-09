@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   readdirSync,
   renameSync,
   rmSync,
@@ -40,7 +41,21 @@ function syncSharedDashboardContract() {
   // and the launcher; this is deliberately before source fingerprint capture.
   const release = acquirePublicationLock(root);
   try {
-    copyFileSync(sharedDashboardContract, generatedBrowserDashboardContract);
+    // Copy only when the bytes differ. The lock serializes this against the
+    // other builder's copy and NOT against its `tsc`, which reads this file
+    // with no lock; rewriting identical content is a window in which that
+    // compile reads a truncated file, and on Windows it is the
+    // `build failed: browser app` observed on CI at cc8ef35 (D-172).
+    const contractSource = readFileSync(sharedDashboardContract, 'utf8');
+    let contractCurrent = null;
+    try {
+      contractCurrent = readFileSync(generatedBrowserDashboardContract, 'utf8');
+    } catch {
+      // Absent or unreadable: fall through and copy it.
+    }
+    if (contractCurrent !== contractSource) {
+      copyFileSync(sharedDashboardContract, generatedBrowserDashboardContract);
+    }
     const generated = spawnSync(process.execPath, [dashboardPayloadContractGenerator], {
       cwd: root,
       stdio: 'inherit',

@@ -1,5 +1,27 @@
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
+
+/**
+ * Write only when the bytes would actually change.
+ *
+ * These targets live in `src/`, so every build writes into the tree a
+ * concurrent build is COMPILING. The publication lock serializes the writers
+ * against each other and not against the other builder's `tsc`, which reads
+ * with no lock by design -- so an unconditional rewrite with identical content
+ * is a window in which a compile can read a truncated file. On Windows that is
+ * `build failed: browser app`, observed on CI at cc8ef35 (D-172).
+ *
+ * The content is a pure function of the source, so "identical" is the normal
+ * case and skipping it costs nothing.
+ */
+function writeIfChanged(path, content) {
+  try {
+    if (readFileSync(path, 'utf8') === content) return;
+  } catch {
+    // Absent or unreadable: fall through and write it.
+  }
+  writeFileSync(path, content, 'utf8');
+}
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -99,7 +121,7 @@ const generated = [
   `export const DASHBOARD_INTERFACE_CONTRACTS = ${JSON.stringify(interfaces, null, 2)} as const;`,
   '',
 ].join('\n');
-writeFileSync(targetPath, generated, 'utf8');
+writeIfChanged(targetPath, generated);
 
 // The browser compiler intentionally has a rootDir of web/app and cannot import
 // the server-side shared source directly. Copy the canonical declarations into
@@ -111,4 +133,4 @@ const generatedTypes = [
   source.trim(),
   '',
 ].join('\n');
-writeFileSync(generatedTypesPath, generatedTypes, 'utf8');
+writeIfChanged(generatedTypesPath, generatedTypes);
