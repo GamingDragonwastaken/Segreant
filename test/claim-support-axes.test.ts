@@ -23,6 +23,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+/** No prune on record: this fixture's ledger has never been pruned, which is the
+ *  third state D-170 distinguishes from "nothing was pruned" (D-175). */
+const INTACT = { truncated: false, prunedBeforeMs: null, rowsRemoved: 0 } as const;
+
 const ROOT = join(import.meta.dirname, '..');
 const read = (...parts: string[]) => readFileSync(join(ROOT, ...parts), 'utf8');
 
@@ -95,8 +99,8 @@ test('the payload the spine reads is a projection of the claim profile, not a se
   const support = await import('../src/dashboard/claim-support.ts');
 
   const samples = [
-    support.meteredClaimSupport({ totalCostUsd: 10, estimatedCostUsd: 0 }),
-    support.meteredClaimSupport({ totalCostUsd: 0, estimatedCostUsd: 0 }),
+    support.meteredClaimSupport({ totalCostUsd: 10, estimatedCostUsd: 0, retention: INTACT }),
+    support.meteredClaimSupport({ totalCostUsd: 0, estimatedCostUsd: 0, retention: INTACT }),
     support.billedClaimSupport({ recordCount: 0, runCount: 0, latest: null }),
     support.billedClaimSupport({ recordCount: 3, runCount: 1, latest: { snapshotStability: 'changed_across_observations', unstableDayStartMs: [1, 2] } }),
     support.allocatedClaimSupport({ costCentreCount: 0, runCount: 0 }),

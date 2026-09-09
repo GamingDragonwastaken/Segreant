@@ -54,6 +54,7 @@
  */
 
 import type { ClaimProfilePayload, ClaimSupportPayload } from './shared-types.ts';
+import type { WindowRetentionCoverage } from '../store/db.ts';
 
 /**
  * The seven axes that do not vary, and why stating them is the point.
@@ -114,18 +115,54 @@ export interface MeteredSupportInput {
   /** Cost priced from a rate card the matcher actually matched, plus estimates. */
   readonly totalCostUsd: number;
   readonly estimatedCostUsd: number;
+  /**
+   * Whether retention deleted request rows from inside this window (D-175).
+   *
+   * Required, because the axis it feeds cannot be computed without it and an
+   * optional field would silently answer `complete` for a window that lost
+   * rows -- which is the defect, not a guard against it.
+   */
+  readonly retention: WindowRetentionCoverage;
 }
 
 /**
  * Metered is the one claim whose figure IS the claim: if the ledger read, there
- * is a priced count. Coverage asks a narrower question than an operator might
- * hope — how much of the SPEND IN THIS LEDGER was priced from a matched rate
- * card rather than an estimate. It says nothing about whether the ledger sees
- * every request the organisation made, which no local evidence can establish.
+ * is a priced count.
+ *
+ * COVERAGE ASKS HOW COMPLETELY THE EVIDENCE COVERS THE CLAIM'S OWN SCOPE, and
+ * the claim is metered spend OVER THIS WINDOW. Two different facts make that
+ * partial, and both are answers to the same question:
+ *
+ *   PRICING. How much of the surviving spend was priced from a rate card the
+ *   matcher actually matched, rather than estimated.
+ *
+ *   DELETION. Whether retention removed request rows from inside the window
+ *   (D-175). This used to be excluded by a sentence here saying coverage "says
+ *   nothing about whether the ledger sees every request the organisation made,
+ *   which no local evidence can establish". That is TRUE of traffic which never
+ *   reached Fiscus and FALSE of rows Fiscus deleted itself: since D-170 the
+ *   ledger records its own retention boundary, so this is the one case where
+ *   local evidence does establish it, and answering `complete` over a pruned
+ *   window states something the evidence contradicts.
+ *
+ * Deletion does NOT touch the monetary basis. How the surviving rows were
+ * priced is a separate question, and moving both axes on one fact would be the
+ * collapse this file exists to refuse.
  */
 export function meteredClaimSupport(input: MeteredSupportInput): ClaimSupportPayload {
   const priced = input.totalCostUsd > 0;
   const estimatedShare = priced ? input.estimatedCostUsd / input.totalCostUsd : null;
+  const truncated = input.retention.truncated;
+  const pricingCoverage = estimatedShare === null ? 'unknown' : estimatedShare > 0 ? 'partial' : 'complete';
+  const notes: string[] = [];
+  if (!priced) notes.push('no priced spend in this window, so pricing coverage is unevidenced rather than complete');
+  if (truncated) {
+    const removed = input.retention.rowsRemoved === 1 ? '1 request row' : `${input.retention.rowsRemoved} request rows`;
+    notes.push(
+      `retention deleted ${removed} from before ${new Date(input.retention.prunedBeforeMs ?? 0).toISOString()}, `
+      + 'so this window covers what survived rather than everything metered in it',
+    );
+  }
   return projectClaimSupport(
     {
       ...PRODUCT_CLAIM_AXES,
@@ -137,11 +174,14 @@ export function meteredClaimSupport(input: MeteredSupportInput): ClaimSupportPay
       integrity: 'unknown',
       // No priced spend means no pricing evidence, not complete pricing. The
       // share-based test this replaces answered `complete` for an empty window.
-      coverage: estimatedShare === null ? 'unknown' : estimatedShare > 0 ? 'partial' : 'complete',
+      // A truncated window is partial whatever the pricing says, including when
+      // pricing evidence is absent: an empty window known to have lost rows is
+      // not an unknown, it is a known gap.
+      coverage: truncated ? 'partial' : pricingCoverage,
       monetaryBasis: estimatedShare === null ? 'none' : estimatedShare > 0 ? 'mixed' : 'list',
     },
     'shown',
-    priced ? undefined : 'no priced spend in this window, so pricing coverage is unevidenced rather than complete',
+    notes.length === 0 ? undefined : notes.join('; '),
   );
 }
 

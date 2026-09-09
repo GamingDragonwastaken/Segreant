@@ -38,6 +38,10 @@ import {
 import { EPISTEMIC_STATES } from '../src/epistemic/state.ts';
 import { COVERAGE, MONETARY_BASIS } from '../src/epistemic/profile.ts';
 
+/** No prune on record: this fixture's ledger has never been pruned, which is the
+ *  third state D-170 distinguishes from "nothing was pruned" (D-175). */
+const INTACT = { truncated: false, prunedBeforeMs: null, rowsRemoved: 0 } as const;
+
 const FIGURES = ['shown', 'withheld_unsupported', 'withheld_uncosted', 'not_a_money_claim'];
 
 // ---------------------------------------------------------------------------
@@ -49,7 +53,7 @@ test('a window with nothing priced does not report complete pricing coverage', (
   // browser used — `share > 0 ? partial : complete` — answered `complete` for a
   // window with no evidence in it at all. A completeness claim with nothing
   // behind it is the defect D-067 and D-069 exist to refuse, one axis over.
-  const empty = meteredClaimSupport({ totalCostUsd: 0, estimatedCostUsd: 0 });
+  const empty = meteredClaimSupport({ totalCostUsd: 0, estimatedCostUsd: 0, retention: INTACT });
   assert.equal(empty.coverage, 'unknown', 'no priced spend is unevidenced coverage, not complete coverage');
   assert.equal(empty.monetaryBasis, 'none');
   assert.match(empty.note ?? '', /unevidenced rather than complete/);
@@ -61,12 +65,12 @@ test('a window with nothing priced does not report complete pricing coverage', (
 });
 
 test('metered coverage distinguishes a matched rate card from an estimate', () => {
-  const matched = meteredClaimSupport({ totalCostUsd: 12, estimatedCostUsd: 0 });
+  const matched = meteredClaimSupport({ totalCostUsd: 12, estimatedCostUsd: 0, retention: INTACT });
   assert.equal(matched.coverage, 'complete');
   assert.equal(matched.monetaryBasis, 'list');
   assert.equal(matched.note, undefined);
 
-  const partly = meteredClaimSupport({ totalCostUsd: 12, estimatedCostUsd: 3 });
+  const partly = meteredClaimSupport({ totalCostUsd: 12, estimatedCostUsd: 3, retention: INTACT });
   assert.equal(partly.coverage, 'partial', 'a figure exists but does not wholly reach what it claims to measure');
   assert.equal(partly.monetaryBasis, 'mixed');
 });
@@ -228,9 +232,9 @@ test('RoI lens coverage that cannot be computed is unknown, never complete', () 
 
 test('nothing invents an axis value the kernel does not declare', () => {
   const samples = [
-    meteredClaimSupport({ totalCostUsd: 0, estimatedCostUsd: 0 }),
-    meteredClaimSupport({ totalCostUsd: 10, estimatedCostUsd: 1 }),
-    meteredClaimSupport({ totalCostUsd: 10, estimatedCostUsd: 0 }),
+    meteredClaimSupport({ totalCostUsd: 0, estimatedCostUsd: 0, retention: INTACT }),
+    meteredClaimSupport({ totalCostUsd: 10, estimatedCostUsd: 1, retention: INTACT }),
+    meteredClaimSupport({ totalCostUsd: 10, estimatedCostUsd: 0, retention: INTACT }),
     billedClaimSupport({ recordCount: 0, runCount: 0, latest: null }),
     billedClaimSupport({ recordCount: 9, runCount: 0, latest: null }),
     billedClaimSupport({ recordCount: 9, runCount: 2, latest: { snapshotStability: 'changed_across_observations' } }),

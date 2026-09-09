@@ -16,6 +16,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildClaimLayers, type ClaimInputs } from '../src/dashboard/web/app/core/claimLayers.ts';
 import type { Overview, BillingPayload, AllocationPayload, ValuePayload, ReconciliationRunRecord } from '../src/dashboard/web/app/core/api.ts';
+
+/** No prune on record: this fixture's ledger has never been pruned, which is the
+ *  third state D-170 distinguishes from "nothing was pruned" (D-175). */
+const INTACT = { truncated: false, prunedBeforeMs: null, rowsRemoved: 0 } as const;
 // The fixtures state their support the way the server does, by calling the
 // server's own derivation. Hand-writing the axes here would make every
 // assertion below a tautology over a constant this file invented.
@@ -30,7 +34,8 @@ const NOTHING: ClaimInputs = { overview: null, billing: null, allocation: null, 
 
 const anOverview = (costUsd: number, requests: number): Overview => ({
   demo: false,
-  claimSupport: meteredClaimSupport({ totalCostUsd: costUsd, estimatedCostUsd: 0 }),
+  claimSupport: meteredClaimSupport({ totalCostUsd: costUsd, estimatedCostUsd: 0, retention: INTACT }),
+  retention: INTACT,
   range: '30d',
   generatedAt: '2026-08-01T00:00:00.000Z',
   summary: { requests, costUsd },

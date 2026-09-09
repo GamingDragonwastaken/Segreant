@@ -191,6 +191,10 @@ export function buildOverview(store: Store, config: FiscusConfig, range: RangeKe
     : todaySpend;
   const summary = store.summary(startMs, endMs);
   const pricingWindow = store.healthStats(startMs, endMs);
+  // What retention deleted from inside this window. Read from the ledger's own
+  // record, because an absence of rows is exactly what cannot distinguish a
+  // quiet window from a pruned one (D-175).
+  const retention = store.windowCoverage(startMs);
 
   return {
     range,
@@ -201,7 +205,9 @@ export function buildOverview(store: Store, config: FiscusConfig, range: RangeKe
     claimSupport: meteredClaimSupport({
       totalCostUsd: pricingWindow.totalCostUsd,
       estimatedCostUsd: pricingWindow.estimatedCostUsd,
+      retention,
     }),
+    retention,
     generatedAt: new Date(now).toISOString(),
     budget: {
       dailyUsd: config.budget.dailyUsd,

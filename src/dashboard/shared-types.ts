@@ -200,6 +200,19 @@ export interface Overview {
    */
   generatedAt: string;
   summary: Summary;
+  /**
+   * What retention deleted from inside this window (D-175).
+   *
+   * `truncated: false` alone is not coverage: read `prunedBeforeMs` with it,
+   * where null means no prune is ON RECORD rather than nothing pruned. A ledger
+   * pruned before the record existed reports exactly that, and inferring a
+   * boundary from the oldest surviving row would invent provenance.
+   */
+  retention: {
+    truncated: boolean;
+    prunedBeforeMs: number | null;
+    rowsRemoved: number;
+  };
   pricing: {
     status: {
       fresh?: boolean;

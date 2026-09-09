@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: d6bff409517dcacef3c3b2a46e517ac416b81e5cc6e6cb1582001e9711909b75 */
+/** Source SHA-256: aa7e95fbc35967b34e8de341d79cb21c267ab3a053559ece97354b33f6afa828 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -202,6 +202,19 @@ export interface Overview {
    */
   generatedAt: string;
   summary: Summary;
+  /**
+   * What retention deleted from inside this window (D-175).
+   *
+   * `truncated: false` alone is not coverage: read `prunedBeforeMs` with it,
+   * where null means no prune is ON RECORD rather than nothing pruned. A ledger
+   * pruned before the record existed reports exactly that, and inferring a
+   * boundary from the oldest surviving row would invent provenance.
+   */
+  retention: {
+    truncated: boolean;
+    prunedBeforeMs: number | null;
+    rowsRemoved: number;
+  };
   pricing: {
     status: {
       fresh?: boolean;

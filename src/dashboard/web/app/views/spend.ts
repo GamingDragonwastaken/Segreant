@@ -81,8 +81,24 @@ export function spendView(): Node {
       const rows = (axis() === 'project' ? d.byProject : axis() === 'model' ? d.byModel : d.bySource) ?? [];
       const meta = AXES.find((a) => a.id === axis());
 
+      // WHAT THE WINDOW LOST, BESIDE THE TOTAL IT LOST IT FROM (D-175). The
+      // server's claim support already reports coverage `partial` and carries
+      // the reason in its note, but that note lives in the Claim Inspector
+      // drawer, and the number a reader acts on is on this screen. The CLI puts
+      // the sentence under its header; parity means putting it here rather than
+      // one interaction away. Rendered only when a boundary is on record AND
+      // this window starts before it -- `truncated: false` with a null boundary
+      // is the unknown state and asserts nothing.
+      const lost = d.retention?.truncated === true ? d.retention : null;
+
       return h('div', null,
         d.demo ? demoBanner() : null,
+
+        lost
+          ? h('p', { class: 'drawer-error', role: 'status', text: () => (isPrecise()
+              ? `retention deleted ${lost.rowsRemoved} request row(s) from before ${new Date(lost.prunedBeforeMs ?? 0).toISOString()}; this window covers what survived, not everything metered in it`
+              : 'Some requests in this range were deleted by your retention setting, so these totals cover what is left rather than everything we measured.') })
+          : null,
 
         h('div', { class: 'axisbar', role: 'group', 'aria-label': 'Break down by' },
           h('span', { class: 'axisbar-label', text: 'Break down by' }),
