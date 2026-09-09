@@ -29,6 +29,7 @@ import {
 } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { validateEgressRule } from './egress/ruleValidation.ts';
+import { money, type EconomicBasis, type Money } from './economics/money.ts';
 
 export interface BudgetConfig {
   /** Hard daily cap in USD. Requests are blocked once exceeded. null = unlimited. */
@@ -90,6 +91,126 @@ export function validateBudgetConfig(value: unknown): asserts value is BudgetCon
   if (typeof value.capIncludesImported !== 'boolean') {
     throw new ConfigValidationError('budget.capIncludesImported must be boolean');
   }
+}
+
+/**
+ * The one place a JS number becomes an exact decimal string.
+ *
+ * A cap arrives from JSON as a binary double. The decimal it was WRITTEN to mean
+ * is its shortest round-trip representation — `String(0.1)` is `"0.1"`, the ten
+ * cents the operator typed, not the `0.1000000000000000055511151231257827` the
+ * double actually holds. That is the figure a cap states, so that is the figure
+ * enforcement must use.
+ *
+ * `String` emits exponent form outside a middle band (`1e-7`, `1e+21`), which is
+ * not a plain decimal, so it is expanded here digit-for-digit. The expansion is
+ * lossless and TOTAL over every finite number: a cap of `1e-7` is a legitimate
+ * configuration and must not become unreadable merely because of how JS prints
+ * it. Anything not finite has no decimal to state and throws — see
+ * `exactUsdCap`.
+ */
+export function decimalStringFromNumber(value: number, label: string): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new ConfigValidationError(`${label} must be a finite number, got ${String(value)}`);
+  }
+  const text = String(value);
+  const marker = text.indexOf('e');
+  if (marker === -1) return text;
+  const mantissa = text.slice(0, marker);
+  const exponent = Number(text.slice(marker + 1));
+  const negative = mantissa.startsWith('-');
+  const unsigned = negative ? mantissa.slice(1) : mantissa;
+  const [whole = '0', fraction = ''] = unsigned.split('.');
+  const digits = `${whole}${fraction}`;
+  const point = whole.length + exponent;
+  let plain: string;
+  if (point <= 0) plain = `0.${'0'.repeat(-point)}${digits}`;
+  else if (point >= digits.length) plain = `${digits}${'0'.repeat(point - digits.length)}`;
+  else plain = `${digits.slice(0, point)}.${digits.slice(point)}`;
+  return `${negative ? '-' : ''}${plain}`;
+}
+
+/**
+ * The economic basis stamped on a parsed cap.
+ *
+ * It is INERT. A cap is a policy threshold, not an economic observation — it has
+ * no basis of its own, and enforcement re-labels it to the basis of whichever
+ * figure it is compared against (see `compareEnforcedUsd` in
+ * src/budget/guard.ts), with `SpendBasis.enforcedAgainst` recording which basis
+ * actually bound the decision. `Money` requires the field, so caps carry the
+ * basis of the exact projection they most often bound.
+ */
+const CAP_BASIS: EconomicBasis = 'effective';
+
+/** Budget caps as exact `Money`, parsed once per configuration. `null` = that cap is off. */
+export interface ExactBudgetCaps {
+  readonly dailyUsd: Money | null;
+  readonly dailySoftUsd: Money | null;
+  readonly sessionUsd: Money | null;
+  readonly runawayMaxUsd: Money | null;
+}
+
+const CAP_KEYS = ['dailyUsd', 'dailySoftUsd', 'sessionUsd', 'runawayMaxUsd'] as const;
+
+/**
+ * Parse one cap, or refuse.
+ *
+ * There is deliberately no fallback. A cap that cannot be read as exact money is
+ * a CONFIGURATION FAILURE, and the only safe reading of a broken limit is that
+ * enforcement is unavailable — never that the limit is absent. Hard rule 5: an
+ * unparseable cap silently becoming "no limit" would turn the guard into an
+ * unmetered path, which is the failure the rule exists to prevent. The throw
+ * propagates out of `BudgetGuard.evaluate`, where the proxy latches its
+ * accounting-failure state and answers 503 `budget_enforcement_unavailable`
+ * without forwarding.
+ */
+function exactUsdCap(value: number | null, label: string): Money | null {
+  if (value === null) return null;
+  const decimal = decimalStringFromNumber(value, label);
+  let parsed: Money;
+  try {
+    parsed = money(decimal, 'USD', CAP_BASIS);
+  } catch (error) {
+    throw new ConfigValidationError(`${label} is not an exact USD amount: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (parsed.coefficient < 0n) throw new ConfigValidationError(`${label} must not be negative`);
+  return parsed;
+}
+
+/**
+ * Caps are parsed ONCE per configuration, not once per request.
+ *
+ * The proxy hands `BudgetGuard` a getter over the live config object so a saved
+ * cap takes effect without a restart, which means the guard re-reads the budget
+ * on every request. Re-deriving `Money` each time would put string and BigInt
+ * work on the hot path for a value that changes only when an operator changes
+ * it. The cache is keyed on the config object and re-validated against the four
+ * cap numbers, so both ways a cap can change — a settings save replacing the
+ * object, or a CLI writing into it in place — invalidate it. A cap that fails to
+ * parse is never cached; it throws again on every request, which is the point.
+ */
+interface CachedCaps {
+  readonly caps: ExactBudgetCaps;
+  readonly source: readonly (number | null)[];
+}
+
+const CAP_CACHE = new WeakMap<BudgetConfig, CachedCaps>();
+
+export function exactBudgetCaps(cfg: BudgetConfig): ExactBudgetCaps {
+  const source = CAP_KEYS.map((key) => cfg[key]);
+  const cached = CAP_CACHE.get(cfg);
+  if (cached && cached.source.length === source.length
+      && cached.source.every((value, index) => Object.is(value, source[index]))) {
+    return cached.caps;
+  }
+  const caps: ExactBudgetCaps = Object.freeze({
+    dailyUsd: exactUsdCap(cfg.dailyUsd, 'budget.dailyUsd'),
+    dailySoftUsd: exactUsdCap(cfg.dailySoftUsd, 'budget.dailySoftUsd'),
+    sessionUsd: exactUsdCap(cfg.sessionUsd, 'budget.sessionUsd'),
+    runawayMaxUsd: exactUsdCap(cfg.runawayMaxUsd, 'budget.runawayMaxUsd'),
+  });
+  CAP_CACHE.set(cfg, { caps, source });
+  return caps;
 }
 
 export interface AlertsConfig {

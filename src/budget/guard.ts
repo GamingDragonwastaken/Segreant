@@ -15,8 +15,15 @@
  */
 
 import type { ExactSpendProjection, Store } from '../store/db.ts';
-import type { BudgetConfig } from '../config.ts';
-import { formatMoneyAmount, type EconomicBasis, type Money } from '../economics/money.ts';
+import { decimalStringFromNumber, exactBudgetCaps, type BudgetConfig } from '../config.ts';
+import {
+  compareMoney,
+  formatMoneyAmount,
+  money,
+  subtractMoney,
+  type EconomicBasis,
+  type Money,
+} from '../economics/money.ts';
 
 export type GuardAction = 'allow' | 'warn' | 'block';
 
@@ -67,6 +74,60 @@ export interface GuardDecision {
   windowBasis: SpendBasis;
 }
 
+/**
+ * A spend figure resolved for enforcement.
+ *
+ * `enforced` is what the caps are compared against and is exact. `usd` is the
+ * same amount projected onto a double for the wire payload and the refusal text;
+ * it is REPORTING, and nothing decides on it.
+ */
+export interface EnforcedSpend {
+  readonly usd: number;
+  readonly enforced: Money;
+  readonly basis: SpendBasis;
+}
+
+/**
+ * The economic basis of the rate-card float column.
+ *
+ * `requests.cost_usd` is the estimate written when the request was logged and
+ * never revised, which is exactly what `estimated` denotes.
+ */
+const RATE_CARD_BASIS: EconomicBasis = 'estimated';
+
+/**
+ * The float column as exact `Money`.
+ *
+ * `cost_usd` is a binary double, so it is read as the decimal it was written to
+ * mean — its shortest round-trip representation — by the same total conversion
+ * the caps go through. A float column that cannot be read that way (NaN from a
+ * corrupt aggregate, say) throws, and the guard fails closed with it.
+ */
+function rateCardMoney(floatUsd: number): Money {
+  return money(decimalStringFromNumber(floatUsd, 'budget rate-card spend'), 'USD', RATE_CARD_BASIS);
+}
+
+/**
+ * Order two USD figures that may carry different economic bases.
+ *
+ * `compareMoney` refuses a cross-basis comparison, and rightly: billed dollars
+ * are not allocated dollars merely because both are USD. But enforcement has two
+ * deliberate cross-basis ORDERINGS, and both were policy before this function
+ * existed — the max-of-two-floors in `resolveEnforcedSpend`, and every cap
+ * comparison, since a cap is a policy threshold with no economic basis of its
+ * own. Ordering is not addition: nothing here produces a figure, and the value
+ * that wins keeps the basis it arrived with, which `SpendBasis.enforcedAgainst`
+ * then reports. So the right-hand side is re-labelled to the left-hand basis for
+ * the comparison only — a lossless decimal round-trip — and `compareMoney` does
+ * the arithmetic exactly.
+ */
+function compareEnforcedUsd(spend: Money, other: Money): -1 | 0 | 1 {
+  if (spend.currency !== 'USD' || other.currency !== 'USD') {
+    throw new Error(`budget enforcement compares USD only: ${spend.currency} vs ${other.currency}`);
+  }
+  return compareMoney(spend, money(formatMoneyAmount(other), 'USD', spend.basis));
+}
+
 /** The basis of a figure taken from the float column alone — no exact projection existed. */
 export function unverifiedBasis(floatUsd: number): SpendBasis {
   return {
@@ -106,8 +167,11 @@ export function unverifiedBasis(floatUsd: number): SpendBasis {
 export function resolveEnforcedSpend(
   exact: ExactSpendProjection | null,
   floatUsd: number,
-): { usd: number; basis: SpendBasis } {
-  if (exact === null) return { usd: floatUsd, basis: unverifiedBasis(floatUsd) };
+): EnforcedSpend {
+  const floatMoney = rateCardMoney(floatUsd);
+  if (exact === null) {
+    return { usd: floatUsd, enforced: floatMoney, basis: unverifiedBasis(floatUsd) };
+  }
   const exactUsd = exactNumber(exact.amount);
   const shared = {
     exactResolvedUsd: exactUsd,
@@ -117,17 +181,27 @@ export function resolveEnforcedSpend(
     sourceBases: exact.sourceBases,
   };
   if (exact.unresolvedRequests === 0) {
-    return { usd: exactUsd, basis: { ...shared, enforcedAgainst: 'exact_effective', complete: true } };
+    return {
+      usd: exactUsd,
+      enforced: exact.amount,
+      basis: { ...shared, enforcedAgainst: 'exact_effective', complete: true },
+    };
   }
-  const enforced = Math.max(exactUsd, floatUsd);
-  return {
-    usd: enforced,
-    basis: {
-      ...shared,
-      enforcedAgainst: enforced > floatUsd || exactUsd === floatUsd ? 'exact_effective' : 'rate_card_float',
-      complete: false,
-    },
-  };
+  // The larger of two floors, ordered exactly. Ties go to the exact projection:
+  // the two floors are then the same amount, and the ledger is the better thing
+  // to name as having bound the decision.
+  const exactIsAtLeastFloat = compareEnforcedUsd(exact.amount, floatMoney) >= 0;
+  return exactIsAtLeastFloat
+    ? {
+      usd: exactUsd,
+      enforced: exact.amount,
+      basis: { ...shared, enforcedAgainst: 'exact_effective', complete: false },
+    }
+    : {
+      usd: floatUsd,
+      enforced: floatMoney,
+      basis: { ...shared, enforcedAgainst: 'rate_card_float', complete: false },
+    };
 }
 
 /** One clause naming the basis, appended to whatever refusal or warning states the number. */
@@ -153,6 +227,16 @@ export function endOfLocalDay(now: number = Date.now()): number {
   return startOfLocalDay(now) + 24 * 60 * 60 * 1000;
 }
 
+/**
+ * Project an exact amount onto a double, for REPORTING ONLY.
+ *
+ * `GuardDecision` is a wire payload — the proxy puts these figures in a 429 body
+ * and the dashboard reads them — and its numeric fields are part of a contract
+ * this packet does not change. So the projection survives, but nothing decides
+ * on its result any more: every cap comparison and the max-of-two-floors run on
+ * `Money` through `compareEnforcedUsd`. It stays lossy by construction, which is
+ * why it must not move back onto the decision path.
+ */
 function exactNumber(value: Money): number {
   if (value.currency !== 'USD') throw new Error('budget exact projection must be USD');
   const number = Number(formatMoneyAmount(value));
@@ -176,6 +260,10 @@ export class BudgetGuard {
 
   evaluate(opts: { sessionId?: string | null; nowMs?: number } = {}): GuardDecision {
     const cfg = this.getConfig();
+    // Before anything is read: the caps must be readable as exact money. A cap
+    // that is not is a configuration failure, and it stops the request here
+    // rather than being quietly dropped from the comparison.
+    const caps = exactBudgetCaps(cfg);
     const now = opts.nowMs ?? Date.now();
     const dayStart = startOfLocalDay(now);
     const dayEnd = endOfLocalDay(now);
@@ -191,7 +279,17 @@ export class BudgetGuard {
     const daySpend = day.usd;
 
     const dailyLimit = cfg.dailyUsd;
-    const remainingDaily = dailyLimit === null ? null : Math.max(0, dailyLimit - daySpend);
+    // Headroom is subtracted exactly too, then projected for the payload. It is
+    // derived from the enforced figure, so computing it on floats would leave
+    // exact state for a float one step after the decision refused to.
+    const remainingDaily = caps.dailyUsd === null
+      ? null
+      : compareEnforcedUsd(day.enforced, caps.dailyUsd) >= 0
+        ? 0
+        : exactNumber(subtractMoney(
+          money(formatMoneyAmount(caps.dailyUsd), 'USD', day.enforced.basis),
+          day.enforced,
+        ));
 
     const exactSession = opts.sessionId && typeof this.store.exactSpendForSession === 'function'
       ? this.store.exactSpendForSession(opts.sessionId, liveOnly)
@@ -214,10 +312,10 @@ export class BudgetGuard {
         : floatWindow.requests,
     };
     const runawayTripped =
-      cfg.runawayMaxUsd !== null && window.costUsd >= cfg.runawayMaxUsd;
+      caps.runawayMaxUsd !== null && compareEnforcedUsd(windowSpend.enforced, caps.runawayMaxUsd) >= 0;
 
     const softTripped =
-      cfg.dailySoftUsd !== null && daySpend >= cfg.dailySoftUsd;
+      caps.dailySoftUsd !== null && compareEnforcedUsd(day.enforced, caps.dailySoftUsd) >= 0;
 
     const base = {
       daySpendUsd: daySpend,
@@ -231,23 +329,24 @@ export class BudgetGuard {
       windowBasis: windowSpend.basis,
     };
 
-    // Hard blocks first — precedence matters.
-    if (dailyLimit !== null && daySpend >= dailyLimit) {
+    // Hard blocks first — precedence matters. Each comparison is exact; the
+    // figures in the refusal text are the projections of the same amounts.
+    if (caps.dailyUsd !== null && compareEnforcedUsd(day.enforced, caps.dailyUsd) >= 0) {
       return {
         ...base,
         action: 'block',
         reason:
-          `Daily budget reached: $${daySpend.toFixed(2)} of $${dailyLimit.toFixed(2)} cap` +
+          `Daily budget reached: $${daySpend.toFixed(2)} of $${dailyLimit!.toFixed(2)} cap` +
           (liveOnly ? ' (live proxy spend; imported spend excluded). ' : ' (includes imported spend). ') +
           describeSpendBasis(day.basis),
       };
     }
-    if (cfg.sessionUsd !== null && sessionSpend !== null && sessionSpend >= cfg.sessionUsd) {
+    if (caps.sessionUsd !== null && session !== null && compareEnforcedUsd(session.enforced, caps.sessionUsd) >= 0) {
       return {
         ...base,
         action: 'block',
-        reason: `Session budget reached: $${sessionSpend.toFixed(2)} of $${cfg.sessionUsd.toFixed(2)} cap. `
-          + describeSpendBasis(session!.basis),
+        reason: `Session budget reached: $${session.usd.toFixed(2)} of $${cfg.sessionUsd!.toFixed(2)} cap. `
+          + describeSpendBasis(session.basis),
       };
     }
     if (runawayTripped) {
