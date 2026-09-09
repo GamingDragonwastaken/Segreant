@@ -2052,3 +2052,27 @@ One of the two concurrent builders exited 2 while compiling the browser app.
 **Evidence.** Four tests on the real `reconciliationReadiness`. RED 4/4 against the unfixed tree; GREEN 4/4. Root suite 1,848 total / 1,844 pass / 0 fail / 4 skipped, team-server 74/74, all three typecheck domains clean. The field is DECLARED in `src/dashboard/shared-types.ts` and the payload contract regenerated, per D-178's lesson that a server-side field the browser cannot see is half a fix.
 
 **What this does not establish.** That the reconciliation itself is affected (D-173) or that capture coverage is (D-185) — separate reports, separately closed. That an operator who sees the new disclosure acts on it. That the browser panel was verified in a running GUI: it is verified by typecheck and by the shared type, not by a rendered screen. And nothing about OpenAI spend that never reached Fiscus, which no local evidence can establish.
+
+
+## D-187 — $180.00 left the report through the gap between a predicate and its own negation
+**Decision:** the coverage query is NULL-safe and partitions every OpenAI row; `ReconciliationCoverage` carries `declaredScopeId` as the basis of the split; and both surfaces stop blaming the rows for a route the operator withdrew.
+
+**How it was found — by enumerating the DELETIONS rather than the surfaces.** The retention sweep had been run over `prune` and `clearProposals`. `grep "DELETE FROM" src/` returns **five** statements, and only three of them had ever been swept. Of the remaining two, `DELETE FROM project_aliases` was traced and is sound — aliases fix LABELS at query time, raw rows are never rewritten, and the module says so — and `DELETE FROM active_provider_scope_routes` is this packet. **A sweep is only as complete as the enumeration it was run over, and "retention" was the wrong enumeration: the class is DELETION, and retention is one caller of it.**
+
+**The counterexample, measured.** Ten proxy requests carrying the declaration, $180.00, reported as `on $180.00/10 req`. After `fiscus billing scope clear`:
+
+```
+on $0.00/0 req   imported $0.00   off-scope $0.00/0 req
+```
+
+Ten rows and $180.00 still in the ledger, and every bucket empty.
+
+**The mechanism is SQL three-valued logic, and it is a new defect class.** The third bucket is written as `NOT (<the first>)`, which reads as a partition. `provider_scope_declaration_id` is nullable and so is the bound parameter, and `x = NULL` is NULL, not false. So `TRUE AND NULL` is NULL, `NOT NULL` is NULL, and the row falls out of the ON arm and the OFF arm at once while `COUNT(*)` still counts it. **A predicate and its negation stop partitioning the moment either can be NULL, and SQL reports this as a smaller number rather than as an error.** Searched: `NOT (` appears in exactly two places in `src/store/`, both in this one query. The TypeScript-side split in `openaiCostsCoverage.ts` was CHECKED rather than assumed — it compares a non-null `declaredScopeId` from the observation run with `!==`, which is two-valued, and it is sound. `COALESCE(via, 'proxy')` now matches what every TypeScript reader of that column already does, closing the same door on a legacy NULL.
+
+**It silences the same guard D-186 restored, by the opposite route.** "READ THIS BEFORE GETTING A CREDENTIAL" fires when nothing is on the declared route AND uncountable spend exists. Here the uncountable spend was deleted from its own bucket, so the condition cannot hold. **D-186 turned the warning off by emptying the report; this turns it off while the report still looks populated, which is the harder one to notice** — and a cleared scope is precisely the state in which an operator should not go and mint an Admin key.
+
+**The second half: the basis was not on the figure.** Three numbers computed relative to one declaration id, and the type carried no trace of which. So "off-scope because these rows carry a different declaration" and "off-scope because there is no declaration to be on" were the same value, and both surfaces printed the first — which after a clear is false. The rows carry exactly the declaration that was made; it is the ROUTE that was withdrawn. **An epistemically correct verdict carried an epistemically false explanation, and the verdict being right is what stops the sentence being read** (D-182). `declaredScopeId` is hard rule 1 applied to a figure that had been exempt from it.
+
+**Evidence.** Four tests on the real `Store.openAiReconciliationCoverage` and `reconciliationReadiness`, including a stated partition invariant asserted in every state. RED 4/4 against the unfixed tree, and the second failed on the substantive assertion — the credential warning did not fire — rather than on the new field. GREEN 4/4. Root suite 1,852 total / 1,848 pass / 0 fail / 4 skipped; team-server 74/74; three typecheck domains clean.
+
+**What this does not establish.** That any row's attribution changed: the ledger is untouched and the declaration is still on record. That reconciliation can run after a clear — it cannot, which is what the off-scope bucket now says. That other nullable comparisons in the store are safe: only the negated-predicate form was swept exhaustively, and `= ?` against a nullable column is the general shape, of which this is one instance.

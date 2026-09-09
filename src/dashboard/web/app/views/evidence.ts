@@ -145,7 +145,14 @@ function readinessPanel(d: BillingPayload): Node | null {
       ? `${usd(c.importedUsd, { precise: true })} across ${count(c.importedRequests)} request(s) arrived by native import — model and cost recorded, no tie to a declared provider project`
       : `${usd(c.importedUsd)} came from reading your tools' own logs, which do not record which provider project the spend belongs to`) }));
   }
-  if (c.proxyOffScopeUsd > 0) {
+  if (c.proxyOffScopeUsd > 0 && c.declaredScopeId === null) {
+    // Right verdict, wrong reason if left unbranched: no scope is active, so
+    // nothing CAN be on a declared route, and that is not a fact about these
+    // rows (D-187).
+    lines.push(h('li', { text: () => (isPrecise()
+      ? `${usd(c.proxyOffScopeUsd, { precise: true })} across ${count(c.proxyOffScopeRequests)} proxy request(s) were metered while no scope is active — nothing can be on a declared route until one is`
+      : `${usd(c.proxyOffScopeUsd)} went through the proxy, but no project is declared right now, so there is nothing to match it against`) }));
+  } else if (c.proxyOffScopeUsd > 0) {
     lines.push(h('li', { text: () => (isPrecise()
       ? `${usd(c.proxyOffScopeUsd, { precise: true })} across ${count(c.proxyOffScopeRequests)} proxy request(s) predate the declaration or carry a different one`
       : `${usd(c.proxyOffScopeUsd)} went through the proxy before you declared the project, so it cannot be matched either`) }));

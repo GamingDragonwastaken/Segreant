@@ -561,6 +561,16 @@ export function signedUsd(micros: number): string {
  * them too late. This is reported BEFORE the credential step.
  */
 export interface ReconciliationCoverage {
+  /**
+   * The declaration these three buckets were split against, or null when no
+   * route was active at the time (D-187).
+   *
+   * Hard rule 1: every figure carries its basis. Without this a null-basis
+   * split — where nothing CAN be on the declared route — is indistinguishable
+   * from a split where the rows genuinely carry some other declaration, and the
+   * two want different explanations.
+   */
+  declaredScopeId: string | null;
   /** Rows that would count: live proxy traffic carrying the declaration. */
   onDeclaredRouteUsd: number;
   onDeclaredRouteRequests: number;

@@ -287,6 +287,8 @@ export interface Overview {
  * structurally cannot, and saying so is the point of the type.
  */
 export interface ReconciliationCoverage {
+  /** The declaration the three buckets were split against; null means none was active (D-187). */
+  declaredScopeId: string | null;
   onDeclaredRouteUsd: number;
   onDeclaredRouteRequests: number;
   /** Natively imported rows: model and cost, but nothing tying them to a provider project. */

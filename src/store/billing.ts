@@ -935,23 +935,48 @@ export function openAiReconciliationCoverage(
   db: DatabaseSync,
   declaredScopeId: string | null,
 ): ReconciliationCoverage | null {
+  // THE THIRD BUCKET IS WRITTEN AS `NOT (<the first>)`, AND THAT ONLY
+  // PARTITIONS WHILE THE PREDICATE IS TWO-VALUED (D-187).
+  //
+  // `provider_scope_declaration_id` is nullable and so is the bound parameter,
+  // and `x = NULL` is NULL rather than false. `TRUE AND NULL` is NULL, and
+  // `NOT NULL` is NULL, so a row whose declaration the query cannot compare
+  // falls out of the ON arm and out of the OFF arm at once while `COUNT(*)`
+  // still counts it. Measured on a cleared scope: ten proxy requests and
+  // $180.00 in the ledger, and all three buckets zero.
+  //
+  // `IS` is SQLite's NULL-safe equality and never yields NULL, and the explicit
+  // `IS NOT NULL` keeps a row that somehow carries `declared_unverified` with no
+  // declaration id from being counted as ON a route that does not exist.
+  // `COALESCE(via, 'proxy')` matches what every TypeScript reader of this column
+  // already does (`row.via ?? 'proxy'`), so a legacy NULL cannot escape the
+  // partition through the same door.
   const row = db.prepare(
     `SELECT
-         COALESCE(SUM(CASE WHEN via = 'proxy' AND scope_capture_status = 'declared_unverified'
-                            AND provider_scope_declaration_id = ? THEN cost_usd END), 0) AS onUsd,
-         COALESCE(SUM(CASE WHEN via = 'proxy' AND scope_capture_status = 'declared_unverified'
-                            AND provider_scope_declaration_id = ? THEN 1 END), 0) AS onReq,
-         COALESCE(SUM(CASE WHEN via = 'import' THEN cost_usd END), 0) AS importedUsd,
-         COALESCE(SUM(CASE WHEN via = 'import' THEN 1 END), 0) AS importedReq,
-         COALESCE(SUM(CASE WHEN via = 'proxy' AND NOT (scope_capture_status = 'declared_unverified'
-                            AND provider_scope_declaration_id = ?) THEN cost_usd END), 0) AS offUsd,
-         COALESCE(SUM(CASE WHEN via = 'proxy' AND NOT (scope_capture_status = 'declared_unverified'
-                            AND provider_scope_declaration_id = ?) THEN 1 END), 0) AS offReq,
+         COALESCE(SUM(CASE WHEN COALESCE(via, 'proxy') = 'proxy' AND scope_capture_status = 'declared_unverified'
+                            AND provider_scope_declaration_id IS NOT NULL
+                            AND provider_scope_declaration_id IS ? THEN cost_usd END), 0) AS onUsd,
+         COALESCE(SUM(CASE WHEN COALESCE(via, 'proxy') = 'proxy' AND scope_capture_status = 'declared_unverified'
+                            AND provider_scope_declaration_id IS NOT NULL
+                            AND provider_scope_declaration_id IS ? THEN 1 END), 0) AS onReq,
+         COALESCE(SUM(CASE WHEN COALESCE(via, 'proxy') = 'import' THEN cost_usd END), 0) AS importedUsd,
+         COALESCE(SUM(CASE WHEN COALESCE(via, 'proxy') = 'import' THEN 1 END), 0) AS importedReq,
+         COALESCE(SUM(CASE WHEN COALESCE(via, 'proxy') = 'proxy' AND NOT (scope_capture_status = 'declared_unverified'
+                            AND provider_scope_declaration_id IS NOT NULL
+                            AND provider_scope_declaration_id IS ?) THEN cost_usd END), 0) AS offUsd,
+         COALESCE(SUM(CASE WHEN COALESCE(via, 'proxy') = 'proxy' AND NOT (scope_capture_status = 'declared_unverified'
+                            AND provider_scope_declaration_id IS NOT NULL
+                            AND provider_scope_declaration_id IS ?) THEN 1 END), 0) AS offReq,
          COUNT(*) AS total
        FROM requests WHERE provider = 'openai'`,
   ).get(declaredScopeId, declaredScopeId, declaredScopeId, declaredScopeId) as Record<string, unknown>;
   if (Number(row.total) === 0) return null;
   return {
+    // The basis the split was made against. Without it a reader cannot tell
+    // "off-scope because these rows carry a different declaration" from
+    // "off-scope because no declaration is active", and those want different
+    // sentences -- the second is not the rows' fault.
+    declaredScopeId,
     onDeclaredRouteUsd: Number(row.onUsd),
     onDeclaredRouteRequests: Number(row.onReq),
     importedUsd: Number(row.importedUsd),

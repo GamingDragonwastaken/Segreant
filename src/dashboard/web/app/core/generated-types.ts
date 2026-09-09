@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: a798c0c18d622fecfce9af25a6f1b9cf912ed69d84489d5439d80cb26a09ad2f */
+/** Source SHA-256: 4ab8b02ba22684771571b35abe82c616103760704ef1384f8571b5a088e457d8 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -289,6 +289,8 @@ export interface Overview {
  * structurally cannot, and saying so is the point of the type.
  */
 export interface ReconciliationCoverage {
+  /** The declaration the three buckets were split against; null means none was active (D-187). */
+  declaredScopeId: string | null;
   onDeclaredRouteUsd: number;
   onDeclaredRouteRequests: number;
   /** Natively imported rows: model and cost, but nothing tying them to a provider project. */

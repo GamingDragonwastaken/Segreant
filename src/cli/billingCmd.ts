@@ -131,7 +131,17 @@ function printReadiness(readiness: ReconciliationReadiness): void {
       console.log('           attribution this layer exists to refuse. Reconciliation sees only');
       console.log('           traffic you route through the proxy.');
     }
-    if (c.proxyOffScopeUsd > 0) {
+    if (c.proxyOffScopeUsd > 0 && c.declaredScopeId === null) {
+      // The verdict above is right and its usual explanation would not be: these
+      // rows carry the declaration that was made, and it is the ROUTE that was
+      // withdrawn. Blaming the rows for a scope the operator cleared sends them
+      // to re-meter traffic that is already correctly attributed (D-187).
+      console.log(`    $${c.proxyOffScopeUsd.toFixed(2)} across ${c.proxyOffScopeRequests.toLocaleString()} proxy request(s) were metered, but NO SCOPE IS ACTIVE.`);
+      console.log('           Nothing can be on a declared route while there is no declared route, so');
+      console.log('           this is not a fact about those rows. Re-activate the scope first:');
+      console.log('           fiscus billing scope set --provider openai --base-url https://api.openai.com \\');
+      console.log('             --account-ref <org_…> --project-ref <proj_…> --apply');
+    } else if (c.proxyOffScopeUsd > 0) {
       console.log(`    $${c.proxyOffScopeUsd.toFixed(2)} across ${c.proxyOffScopeRequests.toLocaleString()} proxy request(s) predate your scope declaration`);
       console.log('           or carry a different one. Only rows metered AFTER the declaration count.');
     }

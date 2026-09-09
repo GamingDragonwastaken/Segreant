@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "a798c0c18d622fecfce9af25a6f1b9cf912ed69d84489d5439d80cb26a09ad2f";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "4ab8b02ba22684771571b35abe82c616103760704ef1384f8571b5a088e457d8";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -405,6 +405,11 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
     }
   ],
   "ReconciliationCoverage": [
+    {
+      "name": "declaredScopeId",
+      "optional": false,
+      "type": "string | null"
+    },
     {
       "name": "onDeclaredRouteUsd",
       "optional": false,
