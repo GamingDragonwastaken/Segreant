@@ -86,26 +86,27 @@ const PRODUCT_CLAIM_AXES = {
 /**
  * Build the payload from the profile.
  *
- * The three shared axes are copied, and that identity is the whole contract: the
- * spine reads a projection OF the claim's profile, never a second statement
- * beside it. `test/claim-support-axes.test.ts` asserts it, so an edit that lets
- * the spine's coverage differ from the claim's coverage fails rather than
- * quietly reintroducing the collapse WP-B02 removed.
+ * THE SERVER PROJECTS NOTHING. This function used to copy the three axes the
+ * spine rendered onto the payload beside the profile, and the identity between
+ * them was called the contract. It was the wrong contract: a payload that
+ * carries a view of the claim next to the claim has two places to state one
+ * judgement, and the browser read the flat copy — so the profile could have
+ * been right while the rendered claim was wrong, with nothing downstream in a
+ * position to notice. Which axes a screen shows is a rendering decision and now
+ * lives where the rendering does, in `projectRenderedAxes`. What crosses the
+ * boundary is the whole profile.
  *
  * `figure` is passed separately because it is a rendering decision -- whether
  * the band shows a number -- and the kernel has no axis for that. Folding it
  * into the profile would be a display concern claiming epistemic authority.
  */
-function projectClaimSupport(
+function claimSupportPayload(
   profile: ClaimProfilePayload,
   figure: ClaimSupportPayload['figure'],
   note?: string,
 ): ClaimSupportPayload {
   return {
     profile,
-    epistemic: profile.epistemic,
-    coverage: profile.coverage,
-    monetaryBasis: profile.monetaryBasis,
     figure,
     ...(note === undefined ? {} : { note }),
   };
@@ -163,7 +164,7 @@ export function meteredClaimSupport(input: MeteredSupportInput): ClaimSupportPay
       + 'so this window covers what survived rather than everything metered in it',
     );
   }
-  return projectClaimSupport(
+  return claimSupportPayload(
     {
       ...PRODUCT_CLAIM_AXES,
       epistemic: 'supported',
@@ -209,7 +210,7 @@ export interface BilledSupportInput {
  */
 export function billedClaimSupport(input: BilledSupportInput): ClaimSupportPayload {
   if (input.runCount <= 0) {
-    return projectClaimSupport(
+    return claimSupportPayload(
       {
         ...PRODUCT_CLAIM_AXES,
         epistemic: 'unknown',
@@ -236,7 +237,7 @@ export function billedClaimSupport(input: BilledSupportInput): ClaimSupportPaylo
   const boundsNothing = input.latest?.offPathBound === 'none_local_estimate_exceeds_provider'
     || input.latest?.offPathBound === 'unknown_local_total_truncated_by_retention';
 
-  return projectClaimSupport(
+  return claimSupportPayload(
     {
       ...PRODUCT_CLAIM_AXES,
       epistemic: unstable ? 'conflicted' : 'supported',
@@ -271,7 +272,7 @@ export interface AllocatedSupportInput {
  */
 export function allocatedClaimSupport(input: AllocatedSupportInput): ClaimSupportPayload {
   const run = input.runCount > 0;
-  return projectClaimSupport(
+  return claimSupportPayload(
     {
       ...PRODUCT_CLAIM_AXES,
       epistemic: run ? 'supported' : 'unknown',
@@ -315,7 +316,7 @@ export function realizedClaimSupport(input: RealizedSupportInput): ClaimSupportP
   const conflictedUnits = conflicted.reduce((sum, [, n]) => sum + n, 0);
   const supported = input.realizedUnits > 0;
 
-  return projectClaimSupport(
+  return claimSupportPayload(
     {
       ...PRODUCT_CLAIM_AXES,
       epistemic: supported ? 'supported' : 'unknown',

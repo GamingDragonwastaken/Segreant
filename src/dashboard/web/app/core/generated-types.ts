@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: 4ab8b02ba22684771571b35abe82c616103760704ef1384f8571b5a088e457d8 */
+/** Source SHA-256: efd1e52d2a8ca2d160735b17570363fe922cefda6b960e2e6d496ee1557dd456 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -162,27 +162,41 @@ export interface ClaimProfilePayload {
   decisionFitness: ClaimDecisionFitness;
 }
 
+/**
+ * One claim's support, as transported.
+ *
+ * THE PROFILE IS TRANSPORTED ONCE. This payload used to carry the profile AND a
+ * flat copy of the three axes the spine happened to render, described here as
+ * "a stated projection of it, not a second opinion". Two statements of one
+ * judgement is how they come apart, and the flat copy was the one the browser
+ * believed — so a server that projected wrongly could not have been caught
+ * downstream by anything, and nothing on the wire distinguished the claim from
+ * a view of it. The projection now happens in the browser, over this profile, at
+ * the point of render: `projectRenderedAxes` in
+ * `src/dashboard/web/app/core/claimTypes.ts` names the axes it keeps and the
+ * seven it drops. There is nothing here left for a second statement to
+ * disagree with.
+ *
+ * `test/claim-profile-projection.test.ts` fails if a profile axis reappears as a
+ * field beside the profile.
+ */
 export interface ClaimSupportPayload {
   /**
-   * The canonical profile. This is the claim's support; the three axes below are
-   * a stated projection of it, not a second opinion about it.
+   * The claim's support, on every axis the kernel's `ClaimProfile` names. This
+   * IS the claim's standing; what a given screen renders is a projection of it.
    */
   profile: ClaimProfilePayload;
-  /** Four-valued. `unknown` is an absence of evidence, never a measured no. */
-  epistemic: ClaimEpistemicState;
-  /** How much of what the claim covers the evidence actually reaches. */
-  coverage: ClaimCoverageStatus;
-  /** What kind of money the figure is, when this claim carries one. */
-  monetaryBasis: ClaimMonetaryBasis;
   /**
    * Whether the band shows a number, and why not when it does not. NOT a profile
    * axis: the kernel has no opinion about rendering, and a display decision that
    * pretended to be one would be exactly the escalation this module refuses.
+   * It stays on the payload for that reason — there is no axis to project it
+   * from.
    */
   figure: ClaimFigureStatus;
   /**
-   * The server's own reason for the axes above, in one line, when the reason is
-   * something the payload does not otherwise show. The browser writes the
+   * The server's own reason for the profile above, in one line, when the reason
+   * is something the payload does not otherwise show. The browser writes the
    * operator-facing prose; this is the part only the server knows.
    */
   note?: string;

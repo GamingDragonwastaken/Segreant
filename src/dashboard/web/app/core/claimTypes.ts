@@ -42,7 +42,69 @@ export type {
   ClaimFigureStatus as LayerFigure,
 } from './generated-types.ts';
 
-import type { ClaimSupportPayload, ClaimFigureStatus } from './generated-types.ts';
+import type { ClaimProfilePayload, ClaimSupportPayload, ClaimFigureStatus } from './generated-types.ts';
+
+/**
+ * THE PROJECTION. The axes this GUI renders, and the axes it drops.
+ *
+ * The wire carries every axis the kernel's `ClaimProfile` names, because a
+ * payload shaped by what today's reader happens to render is how a claim's real
+ * standing gets lost: an axis nobody transports reaches no consumer at all, and
+ * whichever screen is written next inherits the omission as a fact.
+ *
+ * This GUI renders three of them. That is A RENDERING CHOICE AND NOT A STATEMENT
+ * ABOUT THE CLAIM. Dropping `causality` here does not mean a claim is not
+ * causal; it means this spine has no place to say so, and the claim goes on
+ * carrying the answer for a reader that does. The seven dropped axes are listed
+ * by name below rather than left implicit, so that adding a kernel axis fails
+ * `test/claim-profile-projection.test.ts` — which asserts the two lists are
+ * together exactly the kernel's — instead of being silently omitted by the same
+ * reflex a second time.
+ *
+ * `figure` is deliberately not here. It is not a profile axis: whether a band
+ * shows a number is a display decision, and it stays on the payload beside the
+ * profile for exactly that reason.
+ */
+export const RENDERED_PROFILE_AXES = ['epistemic', 'coverage', 'monetaryBasis'] as const;
+
+/**
+ * The axes this GUI does not show. Constant across every claim Fiscus issues
+ * today — which is why they were dropped from the wire, and why that was the
+ * wrong call: an operator reading a cost spine has no way to discover from the
+ * varying axes that no figure on the page is causal, final, or assessed for
+ * decision fitness, and those are the assumptions a FinOps reader is most
+ * likely to make and least likely to have checked. They are one payload field
+ * away for any screen that decides to say so.
+ */
+export const DROPPED_PROFILE_AXES = [
+  'integrity',
+  'authenticity',
+  'scope',
+  'measurement',
+  'causality',
+  'finality',
+  'decisionFitness',
+] as const;
+
+/** The three axes the spine and the inspector actually read. */
+export type RenderedClaimAxes = Pick<ClaimProfilePayload, (typeof RENDERED_PROFILE_AXES)[number]>;
+
+/**
+ * Narrow a transported profile to what this GUI renders.
+ *
+ * Applied at the point of render, over the payload's own profile. The server
+ * used to send this narrowing alongside the profile and the browser used to
+ * believe the copy, which meant one judgement had two statements on the wire and
+ * nothing downstream could tell them apart. Here there is only the profile and a
+ * function of it.
+ */
+export function projectRenderedAxes(profile: ClaimProfilePayload): RenderedClaimAxes {
+  return {
+    epistemic: profile.epistemic,
+    coverage: profile.coverage,
+    monetaryBasis: profile.monetaryBasis,
+  };
+}
 
 /**
  * What the evidence for one layer actually reaches.
@@ -94,7 +156,7 @@ export function unreachableSupport(figure: ClaimFigureStatus): LayerSupport {
     finality: 'unknown',
     decisionFitness: 'not_assessed',
   };
-  return { profile, epistemic: 'unknown', coverage: 'unknown', monetaryBasis: 'none', figure };
+  return { profile, figure };
 }
 
 /**
@@ -103,7 +165,7 @@ export function unreachableSupport(figure: ClaimFigureStatus): LayerSupport {
  * and next-step display.
  */
 export function claimIsSupported(layer: Layer): boolean {
-  return layer.support.epistemic === 'supported';
+  return projectRenderedAxes(layer.support.profile).epistemic === 'supported';
 }
 
 /**
@@ -115,17 +177,17 @@ export function claimIsSupported(layer: Layer): boolean {
  * two-branch inference had no state that could say it.
  */
 export function claimIsConflicted(layer: Layer): boolean {
-  return layer.support.epistemic === 'conflicted';
+  return projectRenderedAxes(layer.support.profile).epistemic === 'conflicted';
 }
 
 /** Is the claim REFUTED — a measured no, rather than nothing measured? */
 export function claimIsRefuted(layer: Layer): boolean {
-  return layer.support.epistemic === 'refuted';
+  return projectRenderedAxes(layer.support.profile).epistemic === 'refuted';
 }
 
 /** Is the claim simply unevidenced? The only case that is an absence. */
 export function claimIsUnevidenced(layer: Layer): boolean {
-  return layer.support.epistemic === 'unknown';
+  return projectRenderedAxes(layer.support.profile).epistemic === 'unknown';
 }
 
 /** Is the operator being shown a number? A different question from the above. */
@@ -139,7 +201,7 @@ export function claimShowsFigure(layer: Layer): boolean {
  * operator as "your work produced nothing".
  */
 export function claimIsSupportedButUncosted(layer: Layer): boolean {
-  return layer.support.epistemic === 'supported' && layer.support.figure === 'withheld_uncosted';
+  return projectRenderedAxes(layer.support.profile).epistemic === 'supported' && layer.support.figure === 'withheld_uncosted';
 }
 
 export interface ClaimInspection {

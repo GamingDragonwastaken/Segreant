@@ -54,25 +54,25 @@ test('a window with nothing priced does not report complete pricing coverage', (
   // window with no evidence in it at all. A completeness claim with nothing
   // behind it is the defect D-067 and D-069 exist to refuse, one axis over.
   const empty = meteredClaimSupport({ totalCostUsd: 0, estimatedCostUsd: 0, retention: INTACT });
-  assert.equal(empty.coverage, 'unknown', 'no priced spend is unevidenced coverage, not complete coverage');
-  assert.equal(empty.monetaryBasis, 'none');
+  assert.equal(empty.profile.coverage, 'unknown', 'no priced spend is unevidenced coverage, not complete coverage');
+  assert.equal(empty.profile.monetaryBasis, 'none');
   assert.match(empty.note ?? '', /unevidenced rather than complete/);
 
   // And the claim itself still holds: the ledger read, and what it observed is
   // $0.00. Metering nothing is a supported observation, not a missing one.
-  assert.equal(empty.epistemic, 'supported');
+  assert.equal(empty.profile.epistemic, 'supported');
   assert.equal(empty.figure, 'shown');
 });
 
 test('metered coverage distinguishes a matched rate card from an estimate', () => {
   const matched = meteredClaimSupport({ totalCostUsd: 12, estimatedCostUsd: 0, retention: INTACT });
-  assert.equal(matched.coverage, 'complete');
-  assert.equal(matched.monetaryBasis, 'list');
+  assert.equal(matched.profile.coverage, 'complete');
+  assert.equal(matched.profile.monetaryBasis, 'list');
   assert.equal(matched.note, undefined);
 
   const partly = meteredClaimSupport({ totalCostUsd: 12, estimatedCostUsd: 3, retention: INTACT });
-  assert.equal(partly.coverage, 'partial', 'a figure exists but does not wholly reach what it claims to measure');
-  assert.equal(partly.monetaryBasis, 'mixed');
+  assert.equal(partly.profile.coverage, 'partial', 'a figure exists but does not wholly reach what it claims to measure');
+  assert.equal(partly.profile.monetaryBasis, 'mixed');
 });
 
 // ---------------------------------------------------------------------------
@@ -85,8 +85,8 @@ test('provider snapshots that disagree contradict the billed claim rather than e
     runCount: 1,
     latest: { snapshotStability: 'stable_across_observations', offPathBound: 'upper_bound_conditional' },
   });
-  assert.equal(stable.epistemic, 'supported');
-  assert.equal(stable.coverage, 'complete');
+  assert.equal(stable.profile.epistemic, 'supported');
+  assert.equal(stable.profile.coverage, 'complete');
 
   const contradicted = billedClaimSupport({
     recordCount: 3,
@@ -100,8 +100,8 @@ test('provider snapshots that disagree contradict the billed claim rather than e
   // Two observations of ONE proposition — what the provider billed on those
   // days — that disagree. `supported` would be the collapse WP-B03 removed from
   // the gate ladder, still standing on the billing claim.
-  assert.equal(contradicted.epistemic, 'conflicted');
-  assert.notEqual(contradicted.epistemic, 'refuted', 'a contradiction is not a disproof');
+  assert.equal(contradicted.profile.epistemic, 'conflicted');
+  assert.notEqual(contradicted.profile.epistemic, 'refuted', 'a contradiction is not a disproof');
   assert.match(contradicted.note ?? '', /disagreed on 2 day\(s\)/);
 });
 
@@ -113,26 +113,26 @@ test('a residual that bounds nothing is not a reconciliation with complete cover
     recordCount: 1, runCount: 1,
     latest: { snapshotStability: 'single_observation', offPathBound: 'upper_bound_conditional' },
   });
-  assert.equal(bounded.coverage, 'complete');
+  assert.equal(bounded.profile.coverage, 'complete');
 
   const unbounded = billedClaimSupport({
     recordCount: 1, runCount: 1,
     latest: { snapshotStability: 'single_observation', offPathBound: 'none_local_estimate_exceeds_provider' },
   });
-  assert.equal(unbounded.coverage, 'partial');
-  assert.equal(unbounded.epistemic, 'supported', 'the comparison still happened; what it reaches is the open question');
+  assert.equal(unbounded.profile.coverage, 'partial');
+  assert.equal(unbounded.profile.epistemic, 'supported', 'the comparison still happened; what it reaches is the open question');
   assert.match(unbounded.note ?? '', /bounds no off-path spend/);
 });
 
 test('holding a provider bill is visible non-emptiness, not a billed claim', () => {
   const none = billedClaimSupport({ recordCount: 0, runCount: 0, latest: null });
-  assert.equal(none.epistemic, 'unknown');
-  assert.equal(none.coverage, 'unknown');
+  assert.equal(none.profile.epistemic, 'unknown');
+  assert.equal(none.profile.coverage, 'unknown');
 
   const held = billedClaimSupport({ recordCount: 412, runCount: 0, latest: null });
-  assert.equal(held.epistemic, 'unknown', '412 imported records establish nothing on their own');
-  assert.equal(held.coverage, 'partial', 'but they are not nothing either — held, uncompared');
-  assert.equal(held.monetaryBasis, 'none');
+  assert.equal(held.profile.epistemic, 'unknown', '412 imported records establish nothing on their own');
+  assert.equal(held.profile.coverage, 'partial', 'but they are not nothing either — held, uncompared');
+  assert.equal(held.profile.monetaryBasis, 'none');
 
   // The band never carries a dollar in any branch: this is an evidence claim
   // about whether a comparison happened, not a second cost figure.
@@ -146,7 +146,7 @@ test('holding a provider bill is visible non-emptiness, not a billed claim', () 
 test('cost centres without a run are partial coverage of an unknown claim, never a refuted one', () => {
   const empty = allocatedClaimSupport({ costCentreCount: 0, runCount: 0 });
   assert.deepEqual(
-    { epistemic: empty.epistemic, coverage: empty.coverage, monetaryBasis: empty.monetaryBasis, figure: empty.figure },
+    { epistemic: empty.profile.epistemic, coverage: empty.profile.coverage, monetaryBasis: empty.profile.monetaryBasis, figure: empty.figure },
     { epistemic: 'unknown', coverage: 'unknown', monetaryBasis: 'none', figure: 'not_a_money_claim' },
   );
   // The full profile travels beside the projection now; the axes it adds are
@@ -154,13 +154,13 @@ test('cost centres without a run are partial coverage of an unknown claim, never
   // here would pin the same fact in two places and break both on one change.
   assert.equal(empty.profile.integrity, 'unknown', 'nothing has been apportioned, so nothing has been verified');
   const defined = allocatedClaimSupport({ costCentreCount: 4, runCount: 0 });
-  assert.equal(defined.epistemic, 'unknown', 'nothing has been apportioned');
-  assert.notEqual(defined.epistemic, 'refuted', 'and nothing says it cannot be');
-  assert.equal(defined.coverage, 'partial');
+  assert.equal(defined.profile.epistemic, 'unknown', 'nothing has been apportioned');
+  assert.notEqual(defined.profile.epistemic, 'refuted', 'and nothing says it cannot be');
+  assert.equal(defined.profile.coverage, 'partial');
 
   const run = allocatedClaimSupport({ costCentreCount: 4, runCount: 1 });
-  assert.equal(run.epistemic, 'supported');
-  assert.equal(run.monetaryBasis, 'allocated');
+  assert.equal(run.profile.epistemic, 'supported');
+  assert.equal(run.profile.monetaryBasis, 'allocated');
   assert.equal(run.figure, 'not_a_money_claim', 'showback: the claim is whose cost it is, not how much');
 });
 
@@ -172,14 +172,14 @@ test('matured units with no labour rate are a supported claim with no figure', (
   const unpriced = realizedClaimSupport({
     maturedUnits: 40, realizedUnits: 40, gateConflicts: null, roiCoverage: 1, valued: false,
   });
-  assert.equal(unpriced.epistemic, 'supported', 'the units did mature and ship');
+  assert.equal(unpriced.profile.epistemic, 'supported', 'the units did mature and ship');
   assert.equal(unpriced.figure, 'withheld_uncosted', 'only the input that would price them is missing');
-  assert.equal(unpriced.monetaryBasis, 'none');
+  assert.equal(unpriced.profile.monetaryBasis, 'none');
 
   const none = realizedClaimSupport({
     maturedUnits: 0, realizedUnits: 0, gateConflicts: null, roiCoverage: null, valued: false,
   });
-  assert.equal(none.epistemic, 'unknown');
+  assert.equal(none.profile.epistemic, 'unknown');
   assert.equal(none.figure, 'withheld_unsupported');
   // The two cases the old boolean reported identically, as "not established".
   assert.notEqual(unpriced.figure, none.figure);
@@ -197,9 +197,9 @@ test('contradicted gate evidence is a hole in coverage, not a contradiction in t
     gateConflicts: { clean: 9, survived: 3, shipped: 0 },
     roiCoverage: 1, valued: true,
   });
-  assert.equal(conflicted.epistemic, 'supported');
-  assert.notEqual(conflicted.epistemic, 'conflicted', 'a population of contradictions is not an aggregate contradiction');
-  assert.equal(conflicted.coverage, 'partial', 'the claim does not reach the units that never adjudicated');
+  assert.equal(conflicted.profile.epistemic, 'supported');
+  assert.notEqual(conflicted.profile.epistemic, 'conflicted', 'a population of contradictions is not an aggregate contradiction');
+  assert.equal(conflicted.profile.coverage, 'partial', 'the claim does not reach the units that never adjudicated');
   assert.equal(conflicted.figure, 'shown');
   assert.match(conflicted.note ?? '', /12 mature unit\(s\)/);
   assert.match(conflicted.note ?? '', /clean, survived/);
@@ -211,7 +211,7 @@ test('contradicted gate evidence is a hole in coverage, not a contradiction in t
   const clean = realizedClaimSupport({
     maturedUnits: 52, realizedUnits: 40, gateConflicts: { clean: 0 }, roiCoverage: 1, valued: true,
   });
-  assert.equal(clean.coverage, 'complete');
+  assert.equal(clean.profile.coverage, 'complete');
   assert.equal(clean.note, undefined);
 });
 
@@ -219,11 +219,11 @@ test('RoI lens coverage that cannot be computed is unknown, never complete', () 
   const unmeasured = realizedClaimSupport({
     maturedUnits: 5, realizedUnits: 5, gateConflicts: null, roiCoverage: null, valued: true,
   });
-  assert.equal(unmeasured.coverage, 'unknown');
+  assert.equal(unmeasured.profile.coverage, 'unknown');
   const partial = realizedClaimSupport({
     maturedUnits: 5, realizedUnits: 5, gateConflicts: null, roiCoverage: 0.5, valued: true,
   });
-  assert.equal(partial.coverage, 'partial');
+  assert.equal(partial.profile.coverage, 'partial');
 });
 
 // ---------------------------------------------------------------------------
@@ -248,16 +248,16 @@ test('nothing invents an axis value the kernel does not declare', () => {
   assert.ok(samples.length >= 12, 'the sweep must actually exercise every branch it claims to');
 
   for (const s of samples) {
-    assert.ok(EPISTEMIC_STATES.includes(s.epistemic), `epistemic: ${s.epistemic}`);
-    assert.ok((COVERAGE as readonly string[]).includes(s.coverage), `coverage: ${s.coverage}`);
-    assert.ok((MONETARY_BASIS as readonly string[]).includes(s.monetaryBasis), `monetaryBasis: ${s.monetaryBasis}`);
+    assert.ok(EPISTEMIC_STATES.includes(s.profile.epistemic), `epistemic: ${s.profile.epistemic}`);
+    assert.ok((COVERAGE as readonly string[]).includes(s.profile.coverage), `coverage: ${s.profile.coverage}`);
+    assert.ok((MONETARY_BASIS as readonly string[]).includes(s.profile.monetaryBasis), `monetaryBasis: ${s.profile.monetaryBasis}`);
     assert.ok(FIGURES.includes(s.figure), `figure: ${s.figure}`);
   }
 
   // Non-vacuity: at least one sample must reach each of the states the browser
   // inference structurally could not produce, or this file proves nothing.
-  assert.ok(samples.some((s) => s.epistemic === 'conflicted'), 'no sample reaches conflicted');
-  assert.ok(samples.some((s) => s.coverage === 'unknown'), 'no sample reaches unknown coverage');
+  assert.ok(samples.some((s) => s.profile.epistemic === 'conflicted'), 'no sample reaches conflicted');
+  assert.ok(samples.some((s) => s.profile.coverage === 'unknown'), 'no sample reaches unknown coverage');
 });
 
 // ---------------------------------------------------------------------------
@@ -290,26 +290,32 @@ test('every claim route actually sends its support on the wire', async () => {
   const store = new Store(':memory:');
   const { base, close } = await boot(store);
   try {
+    // Presence and type only, and deliberately so — this is the weak half.
+    // `test/claim-profile-projection.test.ts` is the one that reads every axis
+    // on every route back against the kernel's own ladders, which is what
+    // CLAUDE.md's `reconciliation.runs` lesson actually requires.
     for (const route of ['overview', 'billing', 'allocation']) {
       const payload = await getJson(`${base}/api/${route}`);
-      const support = payload.claimSupport as Record<string, unknown> | undefined;
+      const support = payload.claimSupport as { profile?: Record<string, unknown>; figure?: unknown } | undefined;
       assert.ok(support, `/api/${route} did not send claimSupport — a declared field that is not on the wire`);
-      for (const axis of ['epistemic', 'coverage', 'monetaryBasis', 'figure']) {
-        assert.equal(typeof support[axis], 'string', `/api/${route} claimSupport.${axis}`);
+      assert.ok(support.profile, `/api/${route} claimSupport carries no profile`);
+      for (const axis of ['epistemic', 'coverage', 'monetaryBasis']) {
+        assert.equal(typeof support.profile[axis], 'string', `/api/${route} claimSupport.profile.${axis}`);
       }
+      assert.equal(typeof support.figure, 'string', `/api/${route} claimSupport.figure`);
     }
 
     // An empty ledger: the point of probing rather than asserting the type is
     // that this is the exact state in which the old browser inference reported
     // complete pricing coverage.
     const overview = await getJson(`${base}/api/overview`);
-    const metered = overview.claimSupport as Record<string, unknown>;
-    assert.equal(metered.coverage, 'unknown');
-    assert.equal(metered.epistemic, 'supported');
+    const metered = overview.claimSupport as { profile: Record<string, unknown> };
+    assert.equal(metered.profile.coverage, 'unknown');
+    assert.equal(metered.profile.epistemic, 'supported');
 
     const billing = await getJson(`${base}/api/billing`);
-    const billed = billing.claimSupport as Record<string, unknown>;
-    assert.equal(billed.epistemic, 'unknown', 'no reconciliation has been recorded');
+    const billed = billing.claimSupport as { profile: Record<string, unknown>; figure: unknown };
+    assert.equal(billed.profile.epistemic, 'unknown', 'no reconciliation has been recorded');
     assert.equal(billed.figure, 'not_a_money_claim');
   } finally {
     await close();

@@ -109,10 +109,19 @@ test('the payload the spine reads is a projection of the claim profile, not a se
     support.realizedClaimSupport({ maturedUnits: 4, realizedUnits: 4, gateConflicts: null, roiCoverage: 1, valued: true }),
   ];
 
+  // The identity this loop used to assert \u2014 the payload's flat `epistemic`
+  // equals `profile.epistemic`, and so on \u2014 was between two fields of one
+  // payload, and the wire no longer has the second. What replaced it is
+  // stronger: the axes the spine reads are produced by the browser's own
+  // projection over the transported profile, so the assertion is against the
+  // real render path rather than against a copy the server made for it.
+  const { projectRenderedAxes } = await import('../src/dashboard/web/app/core/claimTypes.ts');
+
   for (const sample of samples) {
-    assert.equal(sample.epistemic, sample.profile.epistemic, 'the rendered epistemic axis must be the profile\u2019s');
-    assert.equal(sample.coverage, sample.profile.coverage, 'the rendered coverage axis must be the profile\u2019s');
-    assert.equal(sample.monetaryBasis, sample.profile.monetaryBasis, 'the rendered basis must be the profile\u2019s');
+    const rendered = projectRenderedAxes(sample.profile);
+    assert.equal(rendered.epistemic, sample.profile.epistemic, 'the rendered epistemic axis must be the profile\u2019s');
+    assert.equal(rendered.coverage, sample.profile.coverage, 'the rendered coverage axis must be the profile\u2019s');
+    assert.equal(rendered.monetaryBasis, sample.profile.monetaryBasis, 'the rendered basis must be the profile\u2019s');
 
     // No product figure is causal, final, or assessed for decision fitness, and
     // the wire has to keep saying so. When one of these does change it will be
@@ -167,10 +176,17 @@ test('a layer states its support on axes, and the collapsed boolean cannot retur
 
   const payload = /export interface ClaimSupportPayload \{([\s\S]*?)\n\}/.exec(wire);
   assert.ok(payload, 'ClaimSupportPayload not found on the wire');
-  assert.match(payload[1]!, /epistemic: ClaimEpistemicState/);
-  assert.match(payload[1]!, /coverage: ClaimCoverageStatus/);
-  assert.match(payload[1]!, /monetaryBasis: ClaimMonetaryBasis/);
+  // The axes are stated on the canonical profile, and only there. They used to
+  // be listed here as flat fields as well, which is what
+  // `test/claim-profile-projection.test.ts` now refuses.
+  assert.match(payload[1]!, /profile: ClaimProfilePayload/);
   assert.match(payload[1]!, /figure: ClaimFigureStatus/);
+
+  const profileBlock = /export interface ClaimProfilePayload \{([\s\S]*?)\n\}/.exec(wire);
+  assert.ok(profileBlock, 'ClaimProfilePayload not found on the wire');
+  assert.match(profileBlock[1]!, /epistemic: ClaimEpistemicState/);
+  assert.match(profileBlock[1]!, /coverage: ClaimCoverageStatus/);
+  assert.match(profileBlock[1]!, /monetaryBasis: ClaimMonetaryBasis/);
 
   // And not a score in its place: one number between 0 and 1 is the same
   // collapse with a decimal point.
@@ -227,7 +243,14 @@ test('the Evidence headline is keyed on the claim, not on a records-level consta
   // state, which is the defect the whole packet is about.
   const evidence = read('src', 'dashboard', 'web', 'app', 'views', 'evidence.ts');
 
-  assert.match(evidence, /claimSupport\?\.epistemic/, 'the headline must read the claim state from the wire');
+  // Through the named projection, over the transported profile. The payload no
+  // longer carries a flat `epistemic` for this screen to read, which is the
+  // point: there is one statement of the claim and one function that narrows it.
+  assert.match(
+    evidence,
+    /projectRenderedAxes\(d\.claimSupport\.profile\)\.epistemic/,
+    'the headline must read the claim state from the wire, through the projection',
+  );
   assert.doesNotMatch(
     evidence,
     /STATUS_WORDS\[d\.evidence\.reconciliationStatus\]/,

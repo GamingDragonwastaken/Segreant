@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "4ab8b02ba22684771571b35abe82c616103760704ef1384f8571b5a088e457d8";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "efd1e52d2a8ca2d160735b17570363fe922cefda6b960e2e6d496ee1557dd456";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -280,21 +280,6 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "profile",
       "optional": false,
       "type": "ClaimProfilePayload"
-    },
-    {
-      "name": "epistemic",
-      "optional": false,
-      "type": "ClaimEpistemicState"
-    },
-    {
-      "name": "coverage",
-      "optional": false,
-      "type": "ClaimCoverageStatus"
-    },
-    {
-      "name": "monetaryBasis",
-      "optional": false,
-      "type": "ClaimMonetaryBasis"
     },
     {
       "name": "figure",

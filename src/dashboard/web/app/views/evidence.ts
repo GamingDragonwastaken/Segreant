@@ -13,6 +13,7 @@ import { signal, scopedEffect } from '../core/signal.ts';
 import { api, type BillingPayload } from '../core/api.ts';
 import { isPrecise, relative, basisWords, usd, usdFromMicros, count } from '../core/fmt.ts';
 import { actionCard } from './spend.ts';
+import { projectRenderedAxes } from '../core/claimTypes.ts';
 
 /**
  * The headline of this card, keyed on the BILLED CLAIM's state.
@@ -246,7 +247,7 @@ export function evidenceView(): Node {
 
       // A payload with no stated support is a payload that said nothing, which
       // is `unknown` — not a licence to fall back to the records' label.
-      const claimState = d.claimSupport?.epistemic ?? 'unknown';
+      const claimState = d.claimSupport ? projectRenderedAxes(d.claimSupport.profile).epistemic : 'unknown';
       const status = CLAIM_WORDS[claimState] ?? CLAIM_WORDS.unknown!;
       // Newest recorded run, read from the immutable collection the server
       // sends. This used to read `reconciliation.latest`, a field that has

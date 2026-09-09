@@ -27,7 +27,7 @@
  */
 
 import type { Overview, BillingPayload, AllocationPayload, ValuePayload } from './api.ts';
-import { unreachableSupport, type Layer } from './claimTypes.ts';
+import { projectRenderedAxes, unreachableSupport, type Layer } from './claimTypes.ts';
 
 export interface ClaimInputs {
   overview: Overview | null;
@@ -120,7 +120,7 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
     // A contradiction with no next action leaves an operator looking at a
     // problem they are not told how to work on. Resolving a disagreement is a
     // different task from collecting more evidence, so it gets its own sentence.
-    nextStep: b?.claimSupport?.epistemic === 'conflicted'
+    nextStep: b?.claimSupport && projectRenderedAxes(b.claimSupport.profile).epistemic === 'conflicted'
       ? 'Re-observe the disagreeing days before relying on this reconciliation.'
       : runs > 0
         ? undefined

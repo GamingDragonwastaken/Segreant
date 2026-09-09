@@ -58,7 +58,7 @@ test('every claim answers all six evidence dimensions, and an unanswered one say
   assert.deepEqual(layers.map((l) => l.id), ['metered', 'billed', 'allocated', 'realized']);
 
   for (const layer of layers) {
-    assert.equal(layer.support.epistemic, 'unknown', `${layer.id} cannot be supported with no payload`);
+    assert.equal(layer.support.profile.epistemic, 'unknown', `${layer.id} cannot be supported with no payload`);
     assert.notEqual(layer.support.figure, 'shown', `${layer.id} cannot show a figure with no payload`);
     assert.equal(layer.valueUsd, null, `${layer.id} must be null, never 0 — an absence is not a measurement`);
     for (const dim of ['provenance', 'scope', 'freshness', 'coverage', 'enforceability', 'evidenceSource'] as const) {
@@ -89,17 +89,17 @@ test('metered evidence never promotes itself into billed evidence', () => {
     { ...NOTHING, overview: anOverview(1.25, 3), billing: aBilling(0) },
     '30d',
   );
-  assert.equal(metered!.support.epistemic, 'supported');
+  assert.equal(metered!.support.profile.epistemic, 'supported');
   assert.equal(metered!.valueUsd, 1.25);
-  assert.equal(billed!.support.epistemic, 'unknown');
+  assert.equal(billed!.support.profile.epistemic, 'unknown');
   assert.equal(billed!.valueUsd, null);
   assert.match(metered!.inspection.enforceability, /does not become billed cost/);
 });
 
 test('holding a provider bill is not the same claim as reconciling against it', () => {
   const [, billed] = buildClaimLayers({ ...NOTHING, billing: aBilling(412) }, '30d');
-  assert.equal(billed!.support.epistemic, 'unknown', '412 imported records establish nothing on their own');
-  assert.equal(billed!.support.coverage, 'partial', 'but they are not nothing either — held, uncompared');
+  assert.equal(billed!.support.profile.epistemic, 'unknown', '412 imported records establish nothing on their own');
+  assert.equal(billed!.support.profile.coverage, 'partial', 'but they are not nothing either — held, uncompared');
   assert.match(billed!.basis, /412 provider records held, none reconciled yet/);
   assert.match(billed!.inspection.provenance, /unreconciled/);
   assert.deepEqual(billed!.inspection.missingEvidence, [
@@ -121,8 +121,8 @@ test('a recorded run establishes Billed, and carries the provider report conditi
     }]),
   }, '30d');
 
-  assert.equal(billed!.support.epistemic, 'supported');
-  assert.equal(billed!.support.monetaryBasis, 'billed');
+  assert.equal(billed!.support.profile.epistemic, 'supported');
+  assert.equal(billed!.support.profile.monetaryBasis, 'billed');
   assert.equal(billed!.support.figure, 'not_a_money_claim', 'Billed carries no second cost figure on the band');
   assert.equal(billed!.inspection.freshness, '2026-08-01T00:00:00.000Z');
   assert.equal(billed!.inspection.scope, 'reconciliation run rec-1');
@@ -151,7 +151,7 @@ test('the realized figure is the VALUE produced, never the spend attributed to i
   } as unknown as ValuePayload;
 
   const realized = buildClaimLayers({ ...NOTHING, value }, '30d')[3]!;
-  assert.equal(realized.support.epistemic, 'supported');
+  assert.equal(realized.support.profile.epistemic, 'supported');
   assert.equal(realized.support.figure, 'shown');
   assert.equal(realized.valueUsd, 40, 'must be the value claim, not the 2 dollars of attributed spend');
   assert.equal(realized.inspection.coverage, '50% RoI lens coverage');
@@ -172,7 +172,7 @@ test('matured units with no labour rate are units, not dollars', () => {
   // AII-014: the units DID mature and ship. What is missing is the labour rate
   // that would price them. Reporting that as an unsupported claim told an
   // operator their work produced nothing, from an absent input.
-  assert.equal(realized.support.epistemic, 'supported', 'the outcome evidence exists');
+  assert.equal(realized.support.profile.epistemic, 'supported', 'the outcome evidence exists');
   assert.equal(realized.support.figure, 'withheld_uncosted', 'a ratio is not a dollar figure');
   assert.equal(realized.valueUsd, null);
   assert.deepEqual(realized.inspection.missingEvidence, ['a labour rate, so realized work can be priced']);
@@ -188,7 +188,7 @@ test('allocation and realized state the boundary of what they can enforce', () =
   };
   const layers = buildClaimLayers({ ...NOTHING, allocation }, '30d');
 
-  assert.equal(layers[2]!.support.epistemic, 'supported', 'one immutable run establishes the allocation claim');
+  assert.equal(layers[2]!.support.profile.epistemic, 'supported', 'one immutable run establishes the allocation claim');
   assert.match(layers[2]!.inspection.enforceability, /showback claim; an allocation moves no money/);
   assert.equal(layers[2]!.inspection.coverage, 'excluded from: provider_invoice');
   assert.equal(layers[2]!.inspection.freshness, '2026-08-02T00:00:00.000Z', 'dated by the allocation run itself');
@@ -212,7 +212,7 @@ test('the allocation claim is never dated by the billing reconciliation', () => 
   };
   const allocated = buildClaimLayers({ ...NOTHING, allocation }, '30d')[2]!;
 
-  assert.equal(allocated.support.epistemic, 'unknown', 'zero allocation runs establishes nothing');
+  assert.equal(allocated.support.profile.epistemic, 'unknown', 'zero allocation runs establishes nothing');
   assert.equal(allocated.inspection.freshness, 'not established');
   assert.equal(
     allocated.inspection.freshness.includes('2026-08-21'),
@@ -235,7 +235,7 @@ test('an unreconciled allocation says its inputs were never checked against a bi
     reconciliation: { everRun: false, latestComputedAtMs: null },
   };
   const allocated = buildClaimLayers({ ...NOTHING, allocation }, '30d')[2]!;
-  assert.equal(allocated.support.epistemic, 'supported');
+  assert.equal(allocated.support.profile.epistemic, 'supported');
   assert.equal(allocated.inspection.freshness, '2026-08-02T00:00:00.000Z');
   assert.ok(allocated.inspection.assumptions.some((s) => /residual against a provider bill has never been checked/.test(s)));
 });
@@ -243,7 +243,7 @@ test('an unreconciled allocation says its inputs were never checked against a bi
 test('a dead endpoint degrades its own layer, and reads as missing evidence rather than zero', () => {
   // What `chain.ts` hands over when one of the four reads rejects.
   const layers = buildClaimLayers({ ...NOTHING, overview: anOverview(5, 10) }, '30d');
-  assert.equal(layers[0]!.support.epistemic, 'supported');
+  assert.equal(layers[0]!.support.profile.epistemic, 'supported');
   assert.equal(layers[1]!.inspection.coverage, 'billing endpoint unavailable');
   assert.equal(layers[2]!.inspection.coverage, 'allocation endpoint unavailable');
   assert.equal(layers[3]!.inspection.provenance, 'no outcome source established');
@@ -267,13 +267,13 @@ test('a payload that answers without stating its support reads as unknown, and d
     '30d',
   );
 
-  assert.equal(layers[0]!.support.epistemic, 'unknown');
-  assert.equal(layers[0]!.support.coverage, 'unknown');
+  assert.equal(layers[0]!.support.profile.epistemic, 'unknown');
+  assert.equal(layers[0]!.support.profile.coverage, 'unknown');
   assert.equal(layers[0]!.support.figure, 'withheld_unsupported');
   // Billed never carries a dollar, and that stays true whether or not the server
   // said anything: it is a property of the claim, not of the fetch.
   assert.equal(layers[1]!.support.figure, 'not_a_money_claim');
-  assert.equal(layers[1]!.support.epistemic, 'unknown');
+  assert.equal(layers[1]!.support.profile.epistemic, 'unknown');
   // And the prose still renders, from the fields that ARE present.
   assert.match(layers[1]!.basis, /9 provider records held/);
   assert.equal(layers[0]!.inspection.coverage, '100% of spend priced from a matched rate card, not estimated');
