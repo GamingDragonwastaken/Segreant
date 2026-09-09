@@ -179,6 +179,58 @@ test('the program record lists exactly the boundaries the map declares', () => {
   assert.ok(documented.length >= ISSUANCE_MAP.length, 'every boundary needs a row, not just a mention');
 });
 
+/**
+ * MEMBERSHIP AGREEMENT IS NOT PROJECTION AGREEMENT, AND THE GAP HELD A FALSE
+ * CLAIM FOR A WHOLE PACKET.
+ *
+ * The document above says of itself: "this page is the readable projection of
+ * it, and the test fails if the two disagree in either direction". The test
+ * over it compares the SET OF IDS. Every row also carries a Class and a Reach,
+ * and nothing compared those — so D-184 moved `alloc.exactRun` to
+ * `imported_uninvoked` in the code and left the published row reading
+ * `product`, which is the exact field D-184 was written to stop overstating.
+ * The prose above the table went stale in the same act: "Fifteen of the sixteen
+ * boundaries are `product`" over a map of seventeen with fourteen.
+ *
+ * **A projection test that checks membership certifies the document's existence,
+ * not its content — and the columns nobody checks are where a corrected record
+ * goes to rot.** The check that would have caught it is this one, and it is
+ * cheap; the reason it did not exist is that the ids were the part that felt
+ * like it could drift.
+ *
+ * This is D-175's rule turned on the program's own documents: when you change a
+ * record, search for the sentences that were true only before the change. D-184
+ * changed a field and did not sweep its own projection.
+ *
+ * Recorded at D-188.
+ */
+test('every published row states the class and reach the code declares', () => {
+  const document = read('docs/program/ISSUANCE-MAP.md');
+  const rows = new Map<string, string>();
+  for (const match of document.matchAll(/^\| `([a-z]+(?:\.[A-Za-z_]+)+)` \|(.*)$/gm)) {
+    rows.set(match[1]!, match[2]!);
+  }
+  const disagreements: string[] = [];
+  for (const boundary of ISSUANCE_MAP) {
+    const row = rows.get(boundary.id);
+    if (row === undefined) {
+      disagreements.push(`${boundary.id}: no row`);
+      continue;
+    }
+    // Cells, not a substring search: `product` is a substring of nothing else
+    // here today, but `unreached` inside a note would satisfy a loose match and
+    // the point of this test is to stop a column drifting unnoticed.
+    const cells = row.split('|').map((cell) => cell.replaceAll('*', '').replaceAll('`', '').trim());
+    if (!cells.includes(boundary.issuanceClass)) {
+      disagreements.push(`${boundary.id}: document does not state class ${boundary.issuanceClass}`);
+    }
+    if (!cells.includes(boundary.reach)) {
+      disagreements.push(`${boundary.id}: document does not state reach ${boundary.reach}`);
+    }
+  }
+  assert.deepEqual(disagreements, [], 'the published projection disagrees with the map it projects');
+});
+
 test('the sweep is not vacuous', () => {
   const files = sourceFiles();
   assert.ok(files.length > 150, `expected a full source sweep, walked ${files.length} files`);
@@ -318,22 +370,41 @@ test('the literal-rung sweep would actually catch one', () => {
  * are indistinguishable, and this one deliberately covers four of seventeen.
  *
  * Recorded at D-184.
+ *
+ * D-188 CLOSED THE GAP THE COUNT EXISTED TO KEEP VISIBLE, AND FOUND NOTHING.
+ * The remaining thirteen boundaries were traced by hand — entry point by entry
+ * point, each one followed to a CLI command, a dashboard route or a product
+ * module — and every `product` declaration held. **A negative result, and it is
+ * the point of recording it: the reason to distrust `reach` was one measured
+ * instance, not a suspicion that the map was generally wrong, and the sweep
+ * that clears the other sixteen is what turns that instance into a closed
+ * question rather than an open doubt.**
+ *
+ * So the corpus assertion changes shape. `four of seventeen` was the honest
+ * statement of a partial sweep; **a partial sweep's count is a placeholder for
+ * a gate, and leaving it in place after the sweep completes would understate
+ * what is now known.** Every boundary must declare an entry point, which makes
+ * this a gate on the MAP rather than a report on the sweep: a boundary added
+ * without one fails here, and cannot inherit `reach: 'product'` from the
+ * import graph the way `alloc.exactRun` did.
  */
-test('a boundary declaring an invocation entry point is actually invoked by the product', () => {
+test('every boundary declares an invocation entry point, and it agrees with the declared reach', () => {
   const reached = productClosure(PRODUCT_ENTRIES);
-  const declared = ISSUANCE_MAP.filter((b) => b.invocation !== undefined);
+  const undeclared = ISSUANCE_MAP.filter((b) => b.invocation === undefined);
 
-  // Corpus size, stated rather than implied: raising this is a deliberate act,
-  // and the gap between it and ISSUANCE_MAP.length is the honest measure of how
-  // much of the map has had its invocation traced at all.
-  assert.equal(
-    declared.length,
-    4,
-    'the number of boundaries whose invocation entry point has been traced — change this only by tracing another',
+  // The gate, replacing the partial sweep's corpus count: every boundary names
+  // the symbol a product path would have to call to reach it. A new boundary
+  // cannot arrive with its reach inferred from the import graph alone, which is
+  // exactly how `alloc.exactRun` came to be declared live in the product while
+  // nothing invoked it.
+  assert.deepEqual(
+    undeclared.map((b) => b.id),
+    [],
+    'every issuance boundary must declare the entry point a product path calls to reach it',
   );
-  assert.ok(declared.length < ISSUANCE_MAP.length, 'and the rest are untraced, which this count exists to keep visible');
+  assert.ok(ISSUANCE_MAP.length >= 17, 'and the map must not have shrunk to make that easy');
 
-  for (const boundary of declared) {
+  for (const boundary of ISSUANCE_MAP) {
     const invocation = boundary.invocation!;
     const callers = [...reached]
       .filter((file) => !invocation.definedIn.includes(file))

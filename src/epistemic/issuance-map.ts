@@ -109,7 +109,7 @@ export interface IssuanceBoundary {
    * the allocation issuance and is itself called by no product path, which is
    * the whole case this field exists to catch.
    */
-  readonly invocation?: {
+  readonly invocation: {
     readonly symbol: string;
     readonly definedIn: readonly string[];
   };
@@ -128,6 +128,7 @@ export const ISSUANCE_MAP: readonly IssuanceBoundary[] = Object.freeze([
     asserts: 'Provider-billed cost for a period, and its reconciliation against metered usage.',
     issuanceClass: 'canonical',
     reach: 'product',
+    invocation: { symbol: 'issueOpenAiReconciliationToKernel', definedIn: ['src/store/db.ts'] },
     note: 'Provider and local Evidence are separate sources; a mixed-basis reconciliation Claim carries both and never collapses them into one settled figure.',
   },
   {
@@ -136,6 +137,7 @@ export const ISSUANCE_MAP: readonly IssuanceBoundary[] = Object.freeze([
     asserts: 'An economic period is closed, with a basis-separated event snapshot and projection digest.',
     issuanceClass: 'canonical',
     reach: 'product',
+    invocation: { symbol: 'issueEconomicPeriodCloseToKernel', definedIn: ['src/store/db.ts'] },
     note: 'Issuance is idempotent per finalized period and carries source-event IDs, so a reopened or forged close cannot re-issue.',
   },
   {
@@ -158,6 +160,7 @@ export const ISSUANCE_MAP: readonly IssuanceBoundary[] = Object.freeze([
     asserts: 'A unit of coding work reached a terminal lifecycle state under the declared gate ladder.',
     issuanceClass: 'canonical',
     reach: 'product',
+    invocation: { symbol: 'saveRealizationUnits', definedIn: ['src/store/db.ts', 'src/store/realization.ts'] },
     note: 'Lifecycle realization only. The retained amount is attributed SPEND, not realized value, and the negative `clean` predicate requires supported completeness witnesses on both event channels.',
   },
   {
@@ -166,6 +169,7 @@ export const ISSUANCE_MAP: readonly IssuanceBoundary[] = Object.freeze([
     asserts: 'A source completely covers a scope and interval, so absence within it is informative.',
     issuanceClass: 'kernel_primitive',
     reach: 'product',
+    invocation: { symbol: 'assessCompleteness', definedIn: ['src/measurement/completeness.ts'] },
     note: 'Produces the witness that lets a canonical boundary support a negative claim, and is the reason absence is never silently read as a negative. It issues nothing itself, so it cannot be the place a stronger claim first appears.',
   },
   {
@@ -174,6 +178,7 @@ export const ISSUANCE_MAP: readonly IssuanceBoundary[] = Object.freeze([
     asserts: 'This git history was completely read for revert evidence over this project and period.',
     issuanceClass: 'kernel_primitive',
     reach: 'product',
+    invocation: { symbol: 'revertCompletenessWitness', definedIn: ['src/git/completeness.ts'] },
     note: 'The first completeness witness the product emits from real evidence. It witnesses coverage, never the absence of a revert: a revert is necessarily newer than what it reverts, so a scan that reached a commit has seen every revert of it. Covers `commit_reverted` only, so the coding `clean` gate still cannot pass on git evidence alone.',
   },
   {
@@ -182,6 +187,7 @@ export const ISSUANCE_MAP: readonly IssuanceBoundary[] = Object.freeze([
     asserts: 'A domain-neutral outcome contract is confirmed, unresolved, or conflicted.',
     issuanceClass: 'kernel_primitive',
     reach: 'product',
+    invocation: { symbol: 'evaluateOutcomeContract', definedIn: ['src/outcomes/contract.ts'] },
     note: 'Conjunctive over required predicates in four-valued state. An unknown required fact stays unresolved and contradiction stays conflicted, so confirmation cannot be reached by omission. It evaluates a contract; issuing the result is the caller’s boundary.',
   },
   {
@@ -217,6 +223,7 @@ export const ISSUANCE_MAP: readonly IssuanceBoundary[] = Object.freeze([
     asserts: 'A model-graded quality judgment for a session.',
     issuanceClass: 'display_only',
     reach: 'product',
+    invocation: { symbol: 'judgeSessionFromStore', definedIn: ['src/judge/orchestrate.ts'] },
     note: 'A judge verdict is one model’s opinion, obtained under a declared trust tier, and a swallowed failure returns a visibly neutral result. It is never converted into a supported quality Claim, and no canonical boundary consumes it.',
   },
   {
@@ -225,6 +232,7 @@ export const ISSUANCE_MAP: readonly IssuanceBoundary[] = Object.freeze([
     asserts: 'A local randomized study qualifies as causal evidence, or is collecting, inconclusive, or invalid.',
     issuanceClass: 'kernel_primitive',
     reach: 'product',
+    invocation: { symbol: 'qualifyCausalStudy', definedIn: ['src/causal/qualification.ts'] },
     note: 'Decides whether a local randomized study is structurally sound, and issues nothing. `causal.issuance` is the boundary that converts a qualified study into kernel records, and it mints the `causal_identification` witness ONLY from a qualification this module returned as `qualified` — so an unsound study cannot produce a legal derivation. It was `unmigrated_authority` until that adapter existed (AII-036, AII-021): the gates were conservative and correct, and the conclusion was bound to nothing.',
   },
   {
@@ -233,6 +241,7 @@ export const ISSUANCE_MAP: readonly IssuanceBoundary[] = Object.freeze([
     asserts: 'An assigned-arm difference with a finite-range interval, for a qualified study.',
     issuanceClass: 'kernel_primitive',
     reach: 'product',
+    invocation: { symbol: 'estimateCausalStudy', definedIn: ['src/causal/estimate.ts'] },
     note: 'Depends on `causal.qualification` and inherits its position. The estimator is deliberately unadaptive and pre-declares its bounds; `causal.issuance` now carries the interval and the joint decision rule onto an issued Claim, so revoking the study evidence invalidates what was derived from it. The estimator still decides whether an effect is supported — issuance refuses to mint a causal claim it did not already authorise, and adds revocability rather than strength.',
   },
   {
@@ -241,6 +250,7 @@ export const ISSUANCE_MAP: readonly IssuanceBoundary[] = Object.freeze([
     asserts: 'A randomized local study supports a causal effect, bound by a Derivation to the randomization that identifies it.',
     issuanceClass: 'canonical',
     reach: 'product',
+    invocation: { symbol: 'issueCausalStudyToKernel', definedIn: ['src/store/db.ts'] },
     note: 'Issues the observed arm difference as an OBSERVATIONAL claim and the effect as a RANDOMIZED one, with a Derivation between them. The kernel only checks strengthening, so a single claim asserting `randomized` would have been legal and would have rebuilt the defect in kernel types; the axis gap is what forces a `causal_identification` witness to exist and `appendDerivation` to refuse without it. The witness is grounded in the assignment Evidence alone, which is what puts the effect claim in that evidence’s revocation closure.',
   },
   {
@@ -249,6 +259,7 @@ export const ISSUANCE_MAP: readonly IssuanceBoundary[] = Object.freeze([
     asserts: 'What the reconciliation residual degrades to if one of its stated conditions is false, and whether anything Fiscus has could tell.',
     issuanceClass: 'kernel_primitive',
     reach: 'product',
+    invocation: { symbol: 'reconciliationCountermodels', definedIn: ['src/billing/countermodels.ts'] },
     note: 'It weakens rather than strengthens, which is why it is not canonical, but it belongs on this map for the opposite reason to most entries: the `realized` status is a positive assertion about the world — a negative residual establishes that the rate card over-prices on-path traffic — and it reaches an operator through `fiscus billing reconcile` without a kernel record behind it. That is tolerable only because it is derived from arithmetic on the run itself rather than from judgement, and it is the thing to migrate first if these worlds ever acquire a source other than the run.',
   },
   {
@@ -257,6 +268,7 @@ export const ISSUANCE_MAP: readonly IssuanceBoundary[] = Object.freeze([
     asserts: 'One action robustly dominates the alternatives under the declared utility intervals, or the comparison is undetermined.',
     issuanceClass: 'unmigrated_authority',
     reach: 'unreached',
+    invocation: { symbol: 'certifyDecision', definedIn: ['src/decision/engine.ts'] },
     note: 'The pure engine computes a plain certificate but issues no kernel record. Closing it requires every consequential certificate path to use the canonical adapter when a decision certificate becomes a durable claim.',
   },
   {
@@ -265,6 +277,7 @@ export const ISSUANCE_MAP: readonly IssuanceBoundary[] = Object.freeze([
     asserts: 'One action robustly dominates the alternatives under the declared utility intervals, or the comparison is undetermined.',
     issuanceClass: 'canonical',
     reach: 'unreached',
+    invocation: { symbol: 'issueDecisionToKernel', definedIn: ['src/decision/epistemic.ts'] },
     note: 'The engine remains a pure decision primitive. This adapter binds a recomputed proven certificate to an observational interval Claim, a decision_fitness Witness, and a Derivation; undetermined certificates issue only the observation. The adapter is currently tested but unreached, so the next product step is a reviewed consumer that persists it before action.',
   },
 ]);

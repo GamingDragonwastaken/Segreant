@@ -5,9 +5,16 @@ class of authority it holds. WP-B01, against AII-036.
 
 This document is not the map. `src/epistemic/issuance-map.ts` is the map, and
 `test/issuance-map.test.ts` checks it against the source tree; this page is the
-readable projection of it, and the test fails if the two disagree in either
-direction — a boundary missing here, or a row here for a boundary the code no
-longer declares.
+readable projection of it, and the test fails if the two disagree — a boundary
+missing here, a row here for a boundary the code no longer declares, or a row
+whose Class or Reach cell does not say what the code says.
+
+That last check is newer than the others and it was added because it was needed
+(D-188). For a while the test compared the SET OF IDS only, so the columns could
+drift without anything noticing, and they did: `alloc.exactRun` was corrected to
+`imported_uninvoked` in the code and left reading `product` here, which is the
+very field that correction existed to stop overstating. **A projection test that
+checks membership certifies the document's existence, not its content.**
 
 ## Why a map and not a review
 
@@ -31,20 +38,51 @@ file anywhere in `src/` that calls `claim({...})` without appearing here fails.
 Authority class says what a boundary does when it runs. It says nothing about
 whether anything runs it, and the difference decides which defect to fix first.
 
-`reach` is the second axis. `product` means the module is in the transitive
-import closure of `src/cli.ts` — the entry `bin/fiscus.mjs` runs through
-`dist/cli.js` — or of the team-server entry, which imports root source directly.
-`unreached` means the module compiles, is tested, and nothing ships it. The test
-walks the import graph and compares it against the declaration, so a boundary
-that gains or loses a consumer fails until the map is corrected: the moment to
-reconsider its queue position, rather than a field to update quietly.
+`reach` is the second axis, and it has THREE states rather than two.
 
-Fifteen of the sixteen boundaries are `product`. `decision.certificate` is not
-— nothing imports `src/decision/engine.ts`, and the two modules that name it
-(`src/budget/recommend.ts`, `src/value/instrumentationSensitivity.ts`) do so in
-comments describing where it is intended to go. That is not dead code to delete
-on sight; it is a deliberate primitive without a consumer yet. But it changes
-the reading of the three open boundaries below, and it changes their order.
+`product` means the module is in the transitive import closure of `src/cli.ts`
+— the entry `bin/fiscus.mjs` runs through `dist/cli.js` — or of the team-server
+entry, which imports root source directly, AND something in that closure names
+the entry point the boundary declares. `imported_uninvoked` means the first half
+holds and the second does not: the module ships, and no product path calls into
+it. `unreached` means neither.
+
+The middle state exists because the two halves were once one field. Import
+reachability was measured and invocation was claimed, and `alloc.exactRun` sat
+on the authoritative money path declared live in the product while the only
+mentions of `Store.saveExactAllocationRun` anywhere were its own definition and
+one forwarder (D-184). **`reach` decides queue position, so a field that
+overstates what its check establishes misdirects exactly the work this map
+exists to direct.**
+
+So every boundary now declares the symbol a product path would have to call to
+reach it, and the test looks for that symbol in the closure outside the files
+that define or forward it. The check is deliberately one-directional: a mention
+is not a call, so it can prove that NOTHING invokes a boundary and never that
+something does. That asymmetry is the right way round for a gate — it fails only
+when nothing in the product so much as names the entry point, which cannot be a
+false alarm. All seventeen were traced by hand at D-188; the other sixteen held.
+
+The test also walks the import graph and compares it against the declaration, so
+a boundary that gains or loses a consumer fails until the map is corrected: the
+moment to reconsider its queue position, rather than a field to update quietly.
+
+Of the seventeen boundaries, fourteen are `product`, one is
+`imported_uninvoked`, and two are `unreached`. Neither decision boundary is
+imported at all — nothing imports `src/decision/engine.ts`, and the two modules
+that name it (`src/budget/recommend.ts`, `src/value/instrumentationSensitivity.ts`)
+do so in comments describing where it is intended to go. `alloc.exactRun` is the
+middle case: `src/store/db.ts` imports it, and no product path calls the store
+method that would run it. None of this is dead code to delete on sight; each is
+a deliberate primitive without a consumer yet. But it changes the reading of the
+open boundaries below, and it changes their order — the exact allocation path
+was ranked first on the strength of a `product` that did not hold.
+
+This paragraph had gone stale twice before D-188 — once when the second decision
+boundary was added and again when `alloc.exactRun` was reclassified — because
+nothing checked a count stated in prose. The per-row cells are now checked; a
+prose count still is not, which is why this one is written to be re-derivable
+from the table directly below it.
 
 ## Classes
 
@@ -62,7 +100,7 @@ the reading of the three open boundaries below, and it changes their order.
 |---|---|---|---|---|
 | `billing.reconciliation` | `src/billing/epistemic.ts` | canonical | product | Provider-billed cost for a period, and its reconciliation against metered usage |
 | `economics.periodClose` | `src/economics/epistemic.ts` | canonical | product | An economic period is closed, with a basis-separated snapshot and projection digest |
-| `alloc.exactRun` | `src/alloc/epistemic.ts` | canonical | product | An exact allocation run produced this distribution from these source events |
+| `alloc.exactRun` | `src/alloc/epistemic.ts` | canonical | **imported_uninvoked** | An exact allocation run produced this distribution from these source events |
 | `value.codingRealization` | `src/value/epistemic.ts` | canonical | product | A unit of coding work reached a terminal lifecycle state under the declared gate ladder |
 | `measurement.completeness` | `src/measurement/completeness.ts` | kernel_primitive | product | A source completely covers a scope and interval, so absence within it is informative |
 | `git.revertCompleteness` | `src/git/completeness.ts` | kernel_primitive | product | This git history was completely read for revert evidence over this project and period |
