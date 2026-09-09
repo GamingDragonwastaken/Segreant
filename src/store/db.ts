@@ -2361,7 +2361,11 @@ export class Store {
    * It deliberately returns no provider total and no variance.
    */
   openAiCostsCaptureCoverage(): OpenAiCostsCaptureCoverage | null {
-    return billing.openAiCostsCaptureCoverage(this.db, (startMs, endMs) => this.requestsInRange(startMs, endMs));
+    return billing.openAiCostsCaptureCoverage(
+      this.db,
+      (startMs, endMs) => this.requestsInRange(startMs, endMs),
+      this.retentionFloor().requestsPrunedBeforeMs,
+    );
   }
 
   /**

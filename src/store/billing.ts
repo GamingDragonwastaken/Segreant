@@ -1047,6 +1047,8 @@ export function openAiCostsObservationStatus(db: DatabaseSync): OpenAiCostsObser
 export function openAiCostsCaptureCoverage(
   db: DatabaseSync,
   requestsInRange: RequestsInRange,
+  /** Read by the caller, which owns the retention record (D-185). */
+  requestsPrunedBeforeMs: number | null = null,
 ): OpenAiCostsCaptureCoverage | null {
   const latest = latestCompleteOpenAiCostsObservation(db);
   if (!latest) return null;
@@ -1054,6 +1056,7 @@ export function openAiCostsCaptureCoverage(
     run: latest.run,
     observations: latest.observations,
     requests: requestsInRange(latest.run.periodStartMs, latest.run.periodEndMs),
+    requestsPrunedBeforeMs,
   });
 }
 

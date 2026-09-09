@@ -79,6 +79,15 @@ function printCostsCoverage(coverage: NonNullable<ReturnType<Store['openAiCostsC
   console.log(`  Period        ${new Date(coverage.observation.periodStartMs).toISOString().slice(0, 10)} → ${new Date(coverage.observation.periodEndMs).toISOString().slice(0, 10)} (UTC, exclusive end)`);
   console.log(`  Provider rows ${coverage.observation.providerLineCount} (${coverage.observation.currencies.join(', ') || 'none'}); values intentionally not summed here`);
   console.log(`  Declared route ${captured.requestCount} live proxy request(s), $${formatLocalEstimate(captured.costUsd)} local rate-card estimate (${captured.estimatedRequestCount} estimated)`);
+  // Directly under the number it falsifies, and not in `Blockers`, which lists
+  // the conditions that hold always (D-185). A zero here is what an operator
+  // uses to decide whether minting an Admin credential is worth it.
+  if (coverage.localLedgerRetention.truncated) {
+    const before = new Date(coverage.localLedgerRetention.prunedBeforeMs ?? 0).toISOString().slice(0, 10);
+    console.log(`  Local ledger  TRUNCATED — retention deleted rows before ${before}, inside the period above.`);
+    console.log('                Every local count on this screen is what SURVIVES, so an empty declared');
+    console.log('                route here is not evidence that the route captured nothing.');
+  }
   console.log(`  Excluded      ${excluded.importedOrNative.requestCount} imported/native; ${excluded.unscopedOrLegacyOpenAiProxy.requestCount} unscoped/legacy OpenAI proxy; ${excluded.differentDeclaredOpenAiScope.requestCount} different OpenAI scope; ${excluded.otherProvider.requestCount} other provider`);
   console.log('  Comparison    blocked_not_reconciled — no provider/request variance is calculated.');
   console.log(`  Blockers      ${coverage.blockers.join(', ')}`);

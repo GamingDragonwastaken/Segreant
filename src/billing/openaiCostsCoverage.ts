@@ -54,6 +54,23 @@ export interface OpenAiCostsCaptureCoverage {
   /** Conservation check: capturedOnDeclaredRoute plus every excluded bucket. */
   allLocalLedgerRowsInPeriod: CapturedUsageSummary;
   trust: 'operator_declared_unverified';
+  /**
+   * Whether retention deleted request rows from inside the OBSERVED period
+   * (D-185).
+   *
+   * Every local-side bucket above is a count over rows that survive. A prune
+   * whose boundary falls inside the provider's period empties them without
+   * emptying the provider snapshot, so the report reads "the declared route
+   * captured nothing" for a period on which it captured everything. Measured:
+   * ten requests and $180.00 on the declared route became 0 and $0.00, with the
+   * blocker list byte-for-byte identical.
+   *
+   * It is NOT in `blockers`, deliberately. That tuple's meaning is "these five
+   * conditions hold always"; this one holds sometimes, and a conditional fact
+   * in a permanent list either reads as permanent or makes the list's promise
+   * false. Same separation D-173 made for the reconciliation conditions.
+   */
+  localLedgerRetention: { truncated: boolean; prunedBeforeMs: number | null };
   blockers: readonly [
     'local_route_scope_is_not_provider_verified',
     'off_path_provider_usage_is_not_observable',
@@ -100,6 +117,8 @@ export function buildOpenAiCostsCaptureCoverage(input: {
   run: OpenAiCostsObservationRun;
   observations: readonly OpenAiCostsObservationLine[];
   requests: readonly RequestRow[];
+  /** The retention boundary in force; null is NO PRUNE ON RECORD (D-185). */
+  requestsPrunedBeforeMs?: number | null;
 }): OpenAiCostsCaptureCoverage {
   const capturedOnDeclaredRoute = emptyUsage();
   const importedOrNative = emptyUsage();
@@ -150,6 +169,15 @@ export function buildOpenAiCostsCaptureCoverage(input: {
     },
     allLocalLedgerRowsInPeriod,
     trust: 'operator_declared_unverified',
+    // Truncated when the OBSERVED period starts strictly before a recorded
+    // boundary, because `prune` deletes rows strictly older than it. The period
+    // compared here is the provider's, not a window the caller chose.
+    localLedgerRetention: {
+      truncated: input.requestsPrunedBeforeMs !== undefined
+        && input.requestsPrunedBeforeMs !== null
+        && input.run.periodStartMs < input.requestsPrunedBeforeMs,
+      prunedBeforeMs: input.requestsPrunedBeforeMs ?? null,
+    },
     blockers: [
       'local_route_scope_is_not_provider_verified',
       'off_path_provider_usage_is_not_observable',
