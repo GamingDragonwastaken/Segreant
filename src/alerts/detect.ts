@@ -37,6 +37,21 @@ export interface AlertInputs {
   dailyCapUsd: number | null;
   dailySoftUsd: number | null;
   baselineActiveDaySpends: number[]; // trailing per-active-day spend, excluding today
+  /**
+   * Whether retention deleted request rows from inside the baseline window
+   * (D-182). Optional so a caller constructing inputs by hand keeps working;
+   * absent reads as "not known truncated", which is the same convention D-176
+   * settled for the spend window and NOT a claim the window is intact.
+   *
+   * Two sentences depend on it. A baseline retention emptied is dark because
+   * the history was DELETED, not because it never accumulated -- and the
+   * coverage surface exists precisely to give that reason. A baseline retention
+   * merely narrowed is a p90 over the days that survive, which is not "your
+   * typical active day" and must not be printed as though it were.
+   */
+  baselineTruncated?: boolean;
+  /** Boundary those rows were deleted before; null is NO PRUNE ON RECORD. */
+  baselinePrunedBeforeMs?: number | null;
   blocked24h: number; // count of budget-blocked (429) requests in the last 24h
   estimatedShare: number; // 0..1 share of recent spend priced with estimated rates
   /**
@@ -136,7 +151,15 @@ export function alertCoverage(inp: AlertInputs): AlertCoverage {
     {
       channel: 'spend-spike',
       live: baseline > 0,
-      darkBecause: baseline > 0 ? null : 'no prior active day exists yet, so there is no baseline to exceed',
+      // "yet" is a claim about the operator's history, and it is false on a
+      // ledger whose prior days Fiscus deleted on their own retention policy
+      // (D-182). This is the surface whose whole job is to give the reason a
+      // channel is dark, so giving the wrong one here is worse than anywhere.
+      darkBecause: baseline > 0
+        ? null
+        : inp.baselineTruncated === true
+          ? 'the prior active days in this window were deleted by retention, so no baseline survives to compare against'
+          : 'no prior active day exists yet, so there is no baseline to exceed',
     },
     {
       channel: 'value-crater',
@@ -209,7 +232,17 @@ export function detectAlerts(inp: AlertInputs): Alert[] {
       id: 'spend-spike',
       severity: 'warn',
       title: 'Spend spike',
-      detail: 'Today is well above your typical active day — worth a look before it compounds.',
+      // The alert still FIRES on a narrowed baseline, deliberately (D-173's
+      // rule, D-182's application): withholding a live overspend signal because
+      // a privacy setting shortened its comparison would withdraw the whole
+      // claim to repair half of it. What deletion undermines is the baseline's
+      // claim to represent a typical month, not the observation that today is
+      // far above what survives -- so the alert fires and the comparison says
+      // what it was computed over. No direction is asserted: deleting the
+      // oldest days can move a p90 either way.
+      detail: inp.baselineTruncated === true
+        ? `Today is well above the days that survive in this window — but retention deleted part of the comparison period, so this is not a month's typical. Compared against ${inp.baselineActiveDaySpends.length} surviving active day(s).`
+        : 'Today is well above your typical active day — worth a look before it compounds.',
       metric: `${(todayTotal / base).toFixed(1)}× your p90 day ($${fmt(base)})`,
     });
   }
@@ -266,8 +299,14 @@ function gatherAlertInputs(
   const todaySpendUsd = store.spendBetween(dayStart, now + 1000, liveOnly);
 
   // Baseline = prior active days (exclude today), so a spike compares like-for-like.
-  const priorSeries = store.series(now - 30 * day, dayStart, day);
+  const baselineStartMs = now - 30 * day;
+  const priorSeries = store.series(baselineStartMs, dayStart, day);
   const baselineActiveDaySpends = priorSeries.map((s) => s.costUsd).filter((x) => x > 0);
+  // Same predicate as every other window in this sweep: truncated when the
+  // window STARTS strictly before a recorded boundary, because `prune` deletes
+  // rows strictly older than it. Null is no prune on record (D-170).
+  const baselinePrunedBeforeMs = store.retentionFloor().requestsPrunedBeforeMs;
+  const baselineTruncated = baselinePrunedBeforeMs !== null && baselineStartMs < baselinePrunedBeforeMs;
 
   const blocked24h = store.healthStats(now - day, now + 1000).blocked;
   const week = store.healthStats(now - 7 * day, now + 1000);
@@ -293,6 +332,8 @@ function gatherAlertInputs(
     dailyCapUsd: config.budget.dailyUsd,
     dailySoftUsd: config.budget.dailySoftUsd,
     baselineActiveDaySpends,
+    baselineTruncated,
+    baselinePrunedBeforeMs,
     blocked24h,
     estimatedShare,
     pricedWindowSpendUsd,
