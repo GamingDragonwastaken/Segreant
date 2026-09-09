@@ -16,6 +16,7 @@ import { isDeclaredAttribution } from '../value/characterization.ts';
 import { C, color, usd, num, pct, printJson } from './ui.ts';
 import { stringifyJson } from '../util/json.ts';
 import { rangeFor, type Flags } from './flags.ts';
+import { retentionNotice } from './retention.ts';
 import { instant, type Instant } from '../epistemic/time.ts';
 
 export function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void {
@@ -27,9 +28,12 @@ export function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void 
   const byProject = store.byProject(startMs, endMs);
   const byUser = store.byUser(startMs, endMs);
   const bySource = store.bySource(startMs, endMs);
+  // Read for every window, not only the long ones: retention is operator
+  // configurable and a seven-day policy reaches `month` (D-171).
+  const retention = store.windowCoverage(startMs);
 
   if (flags.json) {
-    printJson({ window, label, demo: isDemo(), summary, byModel, byProject, byUser, bySource });
+    printJson({ window, label, demo: isDemo(), retention, summary, byModel, byProject, byUser, bySource });
     store.close();
     return;
   }
@@ -40,6 +44,8 @@ export function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void 
   console.log(color(tty, C.bold, `  Fiscus — ${label}`));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(46)));
   if (isDemo()) console.log(color(tty, C.yellow, '  ● DEMO DATA — synthetic, isolated in demo.db'));
+  const truncation = retentionNotice(retention);
+  if (truncation !== null) console.log(color(tty, C.yellow, `  ● ${truncation}`));
   console.log(`  Spend       ${color(tty, C.green, usd(summary.costUsd))}   ${color(tty, C.gray, `(${num(summary.requests)} requests)`)}`);
   console.log(`  Input       ${num(summary.inputTokens)} tokens`);
   console.log(`  Output      ${num(summary.outputTokens)} tokens`);
@@ -133,9 +139,11 @@ export function cmdSources(flags: Flags): void {
     modelsBySource.set(m.source, list);
   }
 
+  const retention = store.windowCoverage(startMs);
+
   if (flags.json) {
     const enriched = bySource.map((s) => ({ ...s, models: modelsBySource.get(s.label) ?? [] }));
-    printJson({ window: all ? 'all' : '30d', demo: isDemo(), bySource: enriched });
+    printJson({ window: all ? 'all' : '30d', demo: isDemo(), retention, bySource: enriched });
     store.close();
     return;
   }
@@ -146,6 +154,11 @@ export function cmdSources(flags: Flags): void {
   console.log(color(tty, C.gray, '  ' + '─'.repeat(46)));
   if (isDemo()) console.log(color(tty, C.yellow, '  ● DEMO DATA — synthetic, isolated in demo.db'));
   console.log(color(tty, C.gray, `  ${all ? 'all time' : 'last 30 days'} · spend grouped by the tool each request was routed from`));
+  // "all time" is the ledger's, not the world's, once retention has deleted
+  // anything -- so the line above is corrected in place rather than left to be
+  // read as a claim about everything ever metered.
+  const sourcesTruncation = retentionNotice(retention);
+  if (sourcesTruncation !== null) console.log(color(tty, C.yellow, `  ● ${sourcesTruncation}`));
   console.log('');
 
   if (!bySource.length) {
@@ -214,6 +227,13 @@ export function cmdExport(flags: Flags): void {
     ...(asOf === undefined ? {} : { asOf }),
     ...(effectiveAt === undefined ? {} : { effectiveAt }),
   }) : null;
+  // STDERR, ALWAYS. `export` writes CSV or JSON to stdout for a pipe or a
+  // redirect; a disclosure line on stdout would corrupt every consumer of the
+  // export it exists to protect. It goes where `--out`'s own confirmation goes.
+  const exportTruncation = retentionNotice(store.windowCoverage(startMs));
+  if (exportTruncation !== null) {
+    console.error(color(process.stdout.isTTY ?? false, C.yellow, `  ● ${exportTruncation}`));
+  }
   const asJson = flags.json === true || flags.format === 'json';
   const out = economic
     ? (asJson ? economicRequestsToJson(economicRows!) : economicRequestsToCsv(economicRows!))

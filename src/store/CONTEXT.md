@@ -47,6 +47,14 @@ two domain callers goes in `rows.ts`.
   module — inside this directory or outside it — issues DDL.
 - **Derived records are immutable.** `reconciliation runs`, `allocation_runs`,
   and `realization_units` are written once. Recompute by writing a new record.
+- **Deletion is recorded, and its absence is not read as coverage.** `prune()`
+  and `pruneProposals()` write the boundary they applied, the rows removed and
+  the time into `retention_prunes` -- including a run that removed nothing,
+  because it still applied a boundary. `retentionFloor()` and
+  `windowCoverage(startMs)` report it three-valued: a null boundary means NO
+  PRUNE IS ON RECORD, never "nothing was pruned", and is never inferred from
+  the oldest surviving row. `truncated` is a comparison against the window and
+  is false at the boundary instant, which `prune` retains (D-170, D-171).
 - **Recorded labels are never rewritten.** Alias resolution happens at query
   time (`projectCanonical` beside the recorded `project`), so an export and a
   rollup total identically without either mutating a row.

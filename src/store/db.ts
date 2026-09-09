@@ -346,6 +346,23 @@ export interface RetentionFloor {
   proposalsPrunes: number;
 }
 
+/**
+ * Whether a particular window reaches behind what retention deleted.
+ *
+ * `truncated` is a COMPARISON between the window and the recorded boundary, not
+ * a flag on the ledger. `truncated: false` alone does not mean the window is
+ * complete: read `prunedBeforeMs` with it, where null means no prune is on
+ * record rather than nothing pruned.
+ */
+export interface WindowRetentionCoverage {
+  /** The window starts strictly before a recorded deletion boundary. */
+  truncated: boolean;
+  /** The boundary, or null when no prune is on record. */
+  prunedBeforeMs: number | null;
+  /** Rows retention removed from `requests`, across every recorded prune. */
+  rowsRemoved: number;
+}
+
 export interface GateSignalRow {
   signalId: string;
   kind: string; // 'tested' | 'merged' | 'shipped' | 'incident'
@@ -2710,6 +2727,23 @@ export class Store {
 
   causalStudySummaries(): causal.CausalStudySummary[] {
     return causal.causalStudySummaries(this.db);
+  }
+
+  /**
+   * Does a window starting at `startMs` reach behind what retention deleted?
+   *
+   * Strictly before, because `prune` removes rows with `ts_epoch_ms < before_ms`
+   * -- the boundary instant itself survived, so a window starting exactly there
+   * is intact. Erring the other way would put a warning on every report
+   * forever, which is how a disclosure becomes noise and stops being read.
+   */
+  windowCoverage(startMs: number): WindowRetentionCoverage {
+    const floor = this.retentionFloor();
+    return {
+      truncated: floor.requestsPrunedBeforeMs !== null && startMs < floor.requestsPrunedBeforeMs,
+      prunedBeforeMs: floor.requestsPrunedBeforeMs,
+      rowsRemoved: floor.requestsRowsRemoved,
+    };
   }
 
   /** The study list plus what it could not include; see `CausalStudyListBasis`. */
