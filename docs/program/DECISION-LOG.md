@@ -1781,3 +1781,28 @@ Zero required witnesses. And `appendDerivationWithinTransaction` checks every in
 **Evidence.** Six tests, three unit and three driving the real CLI through `bin/fiscus.mjs` against an isolated `FISCUS_DB`. RED re-verified against the unfixed tree: 5 of 6 fail; the one that passed is the untruncated case, which is in the file so the fix cannot be obtained by warning on everything. GREEN 6/6. All three typecheck domains clean.
 
 **What this does not establish.** That the dashboard discloses truncation: `/api/overview` and the browser views still read window summaries with no coverage field, which is a payload-contract change across three compilation domains and is not made here. `fiscus report`, `usage` and the value surfaces read their own windows and are not covered. Nor does any of this say anything about traffic that never reached Fiscus — that is the separate and permanent limit of a local meter, and a retained window is not thereby a complete one.
+
+
+## D-172 — the build-race failure is diagnosed and closed: a build rewrote source files a concurrent build was compiling
+**Decision:** `scripts/build.mjs` and `scripts/generate-dashboard-payload-contract.mjs` write their three generated files into `src/` only when the bytes would actually change.
+
+**The failure, captured at last.** `test/build-race.test.ts`'s "concurrent builds keep the compiled CLI runnable throughout publication" has failed intermittently since it was written. D-155 fixed two real defects around it; a third instance was observed, could not be reproduced, and was recorded as an OPEN finding with no diagnosis because the output scrolled away every time — three further full local runs this session did not reproduce it either. It then reproduced on CI at `cc8ef35`, on `test (windows-latest)` alone, with the message kept:
+
+```
+AssertionError: build failed: browser app
+2 !== 0    at test/build-race.test.ts:94
+```
+
+One of the two concurrent builders exited 2 while compiling the browser app.
+
+**The mechanism.** Each build compiles into its own private staging directory, so two builders never write the same OUTPUT. They share their INPUT, and three of those inputs are GENERATED INTO `src/`: `syncSharedDashboardContract()` copies `src/dashboard/contracts.ts` over `generated-contract.ts`, and `generate-dashboard-payload-contract.mjs` writes `generated-payload-contract.ts` and `generated-types.ts`. That runs under the publication lock, which serializes the two WRITES against each other — and not against the other builder's `tsc`, which reads the same files holding no lock at all, because compiling deliberately holds none. So builder B rewrites a source file while builder A's browser-app `tsc` has it open. On Windows that is a sharing violation or a truncated read; the identical window exists on POSIX and is far more forgiving, which is exactly why it failed on one runner out of three and stayed invisible locally.
+
+**The fix is that the write was never necessary.** Both builders derive byte-identical content from the same sources — that is what "generated" means. Writing bytes that are already present is a no-op semantically and is not a no-op on the filesystem. All three writers now compare first. The race closes for every case where the source has not moved, which is every concurrent build of one tree, and the build gets marginally faster as a side effect rather than as the point.
+
+**Why the lock was not simply extended over the compile instead.** A build holds the publication lock for tens of seconds, and every process that spawns `bin/fiscus.mjs` queues behind it as a reader — that is what made `test/fiscus-home-cli.test.ts` time out at its own 180-second budget and report the wrong thing entirely, recorded in `test/support/buildWorkspace.ts`. Serializing whole compiles would have re-created that at a larger scale to fix a window that can be removed outright.
+
+**What this does NOT fix, stated rather than implied.** A build running while somebody EDITS `src/dashboard/shared-types.ts` still rewrites the generated files, and a concurrent compile can still read one mid-write. That window is real and remains. `sourceFingerprint` already refuses to PUBLISH a mixed source generation, so the outcome there is a refusal rather than a corrupt artifact — but the build FAILURE it does not prevent is still possible. The claim is deliberately narrower than "the race is gone": **a build no longer perturbs the source tree when nothing has changed**, which is the case that was failing.
+
+**Evidence.** Three tests. RED re-verified against the unfixed tree: 2 of 3 fail, including one that runs the real `scripts/build.mjs --web` twice and reads the mtimes. The third — that a genuinely drifted generated file IS rewritten — passes before and after, and is in the file because the fix could otherwise have been "never write". GREEN 3/3, and `test/build-race.test.ts` 9/9 locally. Full suite and all three typecheck domains clean.
+
+**The reason it took this long is worth keeping.** Every earlier attempt reproduced it locally, on a machine where the forgiving filesystem hides it, and treated a red run as load. It was diagnosed the moment the failure landed somewhere the output was retained. `ACTIVE-EXECUTION.md`'s rule — a red run is a finding, and must also be READ — is what turned this from noise into a defect, and CI's retained logs are what made the reading possible.
