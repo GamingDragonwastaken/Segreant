@@ -245,6 +245,25 @@ export interface RealizationReport {
     realizedUnits: number;
     realizationRate: number;
     totalCostUsd: number;
+    /**
+     * Mature units whose spend window lost rows to retention (D-176).
+     *
+     * The cost sums above are DENOMINATORS -- `realizedSpendShare` divides by
+     * one, and the Return-on-Intelligence ratio divides value by another. A
+     * commit whose attribution window retention emptied contributes $0.00 and
+     * still counts as a unit, so every ratio built on these totals is inflated
+     * by an unknown amount. Counted rather than corrected: nothing surviving
+     * records what was deleted, so the honest report is how many units are
+     * affected, not a repaired total.
+     */
+    spendWindowTruncatedUnits: number;
+    /**
+     * Mature units whose spend-window coverage is UNKNOWN -- persisted before
+     * the field existed. Distinct from zero truncated units, and reported
+     * beside it so "none affected" cannot be read off a report that simply
+     * could not tell.
+     */
+    spendWindowUnknownUnits: number;
     spendOnRealizedUnitsUsd: number;
     acceptanceWeightedSpendUsd: number; // realized value discounted by first-pass acceptance (reworked output is worth less)
     realizedSpendShare: number | null;
@@ -726,6 +745,11 @@ export function realizationFromStore(
       dominantProvider: u.dominantProvider ?? null,
       dominantModelCostUsd: u.dominantModelCostUsd ?? null,
       dominantModelCostShare: u.dominantModelCostShare ?? null,
+      // Snapshots written before D-176 say nothing about whether their
+      // attribution window later lost rows to retention. `null` is that
+      // unknown; reading the absence as `false` would infer coverage from
+      // silence, which is the one inference this program keeps finding.
+      spendWindowTruncated: u.spendWindowTruncated ?? null,
       // Same normalization, same reason: a snapshot that predates pricing lineage
       // has genuinely unknown comparability, and `undefined` would read as "fine".
       dominantModelCostBasis: u.dominantModelCostBasis ?? null,
@@ -1019,6 +1043,8 @@ export function rollupRealization(
       realizedUnits: realizedUnits.length,
       realizationRate: mature.length > 0 ? realizedUnits.length / mature.length : 0,
       totalCostUsd,
+      spendWindowTruncatedUnits: mature.filter((u) => u.spendWindowTruncated === true).length,
+      spendWindowUnknownUnits: mature.filter((u) => u.spendWindowTruncated === null).length,
       spendOnRealizedUnitsUsd,
       acceptanceWeightedSpendUsd,
       realizedSpendShare: totalCostUsd > 0 ? spendOnRealizedUnitsUsd / totalCostUsd : null,

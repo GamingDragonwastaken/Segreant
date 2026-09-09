@@ -62,7 +62,32 @@ export function printNotAGitRepo(repo: string): void {
  * native imports or tagged traffic) or fell back to the project-blind window sum
  * (untagged proxy). Discloses the basis so the number is never silently mixed.
  */
-export function noteSource(tty: boolean, source: 'git' | 'store', projectScoped?: boolean, costStaleUnits = 0): void {
+export function noteSource(
+  tty: boolean,
+  source: 'git' | 'store',
+  projectScoped?: boolean,
+  costStaleUnits = 0,
+  /** Mature units whose spend window lost rows to retention (D-176). */
+  spendWindowTruncatedUnits = 0,
+  /** Mature units persisted before that coverage was recorded: unknown, not intact. */
+  spendWindowUnknownUnits = 0,
+): void {
+  if (spendWindowTruncatedUnits > 0) {
+    // The cost totals below are DENOMINATORS. A commit whose attribution
+    // window retention emptied contributes $0.00 and still counts as a
+    // unit, so every ratio built on them is inflated by an unknown amount.
+    // Reported rather than corrected: nothing surviving records what was
+    // deleted, so a repaired total would be invented.
+    console.log(color(tty, C.yellow,
+      `  ● ${spendWindowTruncatedUnits} unit(s) had spend deleted by retention inside their attribution window — their cost reads lower than it was, so ratios below are flattering by an unknown amount.`));
+  }
+  if (spendWindowUnknownUnits > 0) {
+    // Distinct from zero truncated units on purpose: a snapshot written
+    // before the coverage was recorded cannot say, and reading that as
+    // intact is the inference this line exists to refuse.
+    console.log(color(tty, C.gray,
+      `  ● ${spendWindowUnknownUnits} unit(s) predate the retention-coverage record, so whether their spend window lost rows is unknown. Recompute with: fiscus realize`));
+  }
   if (costStaleUnits > 0) {
     // A reprice re-costed the request ledger. These units predate the recorded
     // cost basis, so they could not be re-attributed without guessing which basis

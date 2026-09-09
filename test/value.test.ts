@@ -483,7 +483,7 @@ function wu(
     // both of which are separate confounders with their own tests. 7919 and 997
     // are coprime, so seq → day is injective and reproducible.
     hash: `wu${wuSeq}`, tsEpochMs: ((wuSeq * 7919) % 997) * 24 * 60 * 60 * 1000, subject: '', linesAdded: 10, linesDeleted: 0, filesChanged: 1,
-    windowStartMs: 0, windowEndMs: 0, attributedCostUsd: cost, attributedRequests: 1, attributedOutputTokens: 0, costPerHundredLines: null,
+    windowStartMs: 0, windowEndMs: 0, attributedCostUsd: cost, attributedRequests: 1, attributedOutputTokens: 0, costPerHundredLines: null, spendWindowTruncated: false, spendWindowPrunedBeforeMs: null,
     ageDays: 30, maturing: false, survivalRatio: 1, reverted: false, hadProposal: false, acceptance: null,
     taskType, dominantModel: model, dominantModelCostUsd: modelCost, dominantModelCostShare: share, costStale,
     // A comparably-priced baseline: one basis, one rate card on both sides. Tests

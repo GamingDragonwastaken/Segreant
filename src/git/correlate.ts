@@ -39,6 +39,33 @@ export interface CommitAttribution extends CommitInfo {
   attributedCostUsd: number;
   attributedRequests: number;
   attributedOutputTokens: number;
+  /**
+   * Whether retention deleted request rows from inside this attribution window
+   * (D-176).
+   *
+   * `attributedCostUsd` still reports the SURVIVING spend, which is what it
+   * honestly is. This field is what stops that number being read as the cost of
+   * the work: a commit whose window retention emptied reports $0.00, and zero
+   * spend on a commit that cost money is the same absence-as-evidence this
+   * repository keeps finding -- with the sharpest consequence yet, because the
+   * number is a DENOMINATOR.
+   *
+   * `null` is the third state and belongs to persisted snapshots written before
+   * this field existed: their window's coverage is genuinely unknown, and
+   * reading that as `false` would be inferring coverage from silence.
+   * `realizationFromStore` normalizes it, in the same way and for the same
+   * reason it normalizes legacy model attribution.
+   */
+  spendWindowTruncated: boolean | null;
+  /** The recorded boundary, or null when no prune is on record (a third state). */
+  spendWindowPrunedBeforeMs: number | null;
+  /**
+   * Cost per hundred lines, or null when it cannot be computed.
+   *
+   * Null for a commit with no line changes, and null over a truncated window:
+   * dividing by a denominator retention emptied produces a figure that says
+   * work got cheaper when what happened is that its evidence was deleted.
+   */
   costPerHundredLines: number | null;
 }
 
@@ -194,7 +221,13 @@ export async function attributeCommits(
     const economic = economicAttributionFromRows(economicRows);
     const totalLines = commit.linesAdded + commit.linesDeleted;
     const attributedCostUsd = economicAttributionNumber(economic, spend.costUsd);
-    const costPerHundredLines = totalLines > 0 ? (attributedCostUsd / totalLines) * 100 : null;
+    // Did retention delete rows from inside this window? Strictly before the
+    // boundary, because `prune` removes rows older than it; a null boundary is
+    // "no prune on record" and licenses nothing either way (D-170, D-176).
+    const coverage = store.windowCoverage(windowStartMs);
+    const costPerHundredLines = totalLines > 0 && !coverage.truncated
+      ? (attributedCostUsd / totalLines) * 100
+      : null;
     const attribution: CommitAttribution = {
       ...commit,
       windowStartMs,
@@ -203,6 +236,8 @@ export async function attributeCommits(
       attributedCostUsd,
       attributedRequests: spend.requests,
       attributedOutputTokens: spend.outputTokens,
+      spendWindowTruncated: coverage.truncated,
+      spendWindowPrunedBeforeMs: coverage.prunedBeforeMs,
       costPerHundredLines,
     };
     results.push(attribution);
