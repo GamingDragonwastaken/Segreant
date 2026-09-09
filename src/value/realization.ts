@@ -873,6 +873,53 @@ export function proposalRetentionForUnits(
   };
 }
 
+/**
+ * What a set of realization rollups can honestly claim about its spend coverage
+ * (D-181), in the three values `RollupCoverage` already carries.
+ *
+ * The mapping is total and needs no new vocabulary, because this sweep has been
+ * carrying the same three states since D-170. Any unit KNOWN truncated makes
+ * the whole set `partial`; otherwise any unit whose coverage is UNKNOWN makes
+ * it `unknown`; only a set every one of whose units is known intact may say
+ * `complete`.
+ *
+ * Truncated outranks unknown deliberately: "some of this is missing" is a
+ * stronger and more useful statement to a receiver than "I cannot tell". And an
+ * ABSENT count is a report written before the counts existed, which is
+ * `unknown` and never zero -- reading `undefined` as "none affected" is the
+ * inference this line of work exists to refuse.
+ *
+ * Pure, and takes the rollups rather than the store, so the ordering is
+ * testable without a ledger and so a caller decides which projects are in
+ * scope. `fiscus team push` filters by project AFTER building the breakdown,
+ * and the coverage must describe the body that is actually signed.
+ */
+export function rollupSpendCoverage(
+  matured: ReadonlyArray<{ spendWindowTruncatedUnits?: number; spendWindowUnknownUnits?: number }>,
+): 'complete' | 'partial' | 'unknown' {
+  if (matured.some((m) => (m.spendWindowTruncatedUnits ?? 0) > 0)) return 'partial';
+  if (matured.some((m) => m.spendWindowTruncatedUnits === undefined || (m.spendWindowUnknownUnits ?? 0) > 0)) return 'unknown';
+  return 'complete';
+}
+
+/**
+ * The spend coverage of the named projects, read from the persisted rollups.
+ *
+ * A second `realizationFromStore` pass over projects `projectValueBreakdown`
+ * has already walked. That is deliberate: `ProjectValue` is the SIGNED rollup
+ * shape, so putting the counts on it to avoid the pass would change the
+ * canonical body and turn a defect fix into a protocol change.
+ */
+export function spendCoverageForProjects(
+  store: Store,
+  projects: ReadonlyArray<{ project: string }>,
+  opts: { windowDays?: number } = {},
+): 'complete' | 'partial' | 'unknown' {
+  return rollupSpendCoverage(
+    projects.map((p) => realizationFromStore(store, { project: p.project, windowDays: opts.windowDays }).matured),
+  );
+}
+
 export function projectValueBreakdown(
   store: Store,
   opts: { windowDays?: number; roiOptions?: RoIOptions } = {},
