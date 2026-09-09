@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "b9904c0cca5839ee170ebdaf33f2ddabe6fd4c3f294326aae917785800691ba0";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "a798c0c18d622fecfce9af25a6f1b9cf912ed69d84489d5439d80cb26a09ad2f";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -451,6 +451,11 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "coverage",
       "optional": false,
       "type": "ReconciliationCoverage | null"
+    },
+    {
+      "name": "localLedgerRetention",
+      "optional": false,
+      "type": "{ truncated: boolean; prunedBeforeMs: number | null }"
     }
   ],
   "BillingMappingCoveragePayload": [

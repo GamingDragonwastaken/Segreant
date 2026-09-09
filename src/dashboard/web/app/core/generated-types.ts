@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: b9904c0cca5839ee170ebdaf33f2ddabe6fd4c3f294326aae917785800691ba0 */
+/** Source SHA-256: a798c0c18d622fecfce9af25a6f1b9cf912ed69d84489d5439d80cb26a09ad2f */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -302,8 +302,17 @@ export interface ReconciliationCoverage {
 export interface ReconciliationReadiness {
   ready: boolean;
   missing: Array<{ step: string; detail: string; ownerAction: boolean }>;
-  /** Null when the ledger holds no OpenAI spend at all — "no data", not "no coverage". */
+  /**
+   * Null when the query found no OpenAI rows. It used to be documented as "the
+   * ledger holds no OpenAI spend at all"; a prune makes that reading false, so
+   * it must be read together with `localLedgerRetention` (D-186). Three states:
+   * null with no prune is a machine that never metered OpenAI; null with a
+   * prune is a ledger nothing survives in; non-null with a prune is figures
+   * over survivors.
+   */
   coverage: ReconciliationCoverage | null;
+  /** Whether a request prune is on record — not a window test, see reconcile.ts (D-186). */
+  localLedgerRetention: { truncated: boolean; prunedBeforeMs: number | null };
 }
 
 /**

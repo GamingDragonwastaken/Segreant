@@ -300,8 +300,17 @@ export interface ReconciliationCoverage {
 export interface ReconciliationReadiness {
   ready: boolean;
   missing: Array<{ step: string; detail: string; ownerAction: boolean }>;
-  /** Null when the ledger holds no OpenAI spend at all — "no data", not "no coverage". */
+  /**
+   * Null when the query found no OpenAI rows. It used to be documented as "the
+   * ledger holds no OpenAI spend at all"; a prune makes that reading false, so
+   * it must be read together with `localLedgerRetention` (D-186). Three states:
+   * null with no prune is a machine that never metered OpenAI; null with a
+   * prune is a ledger nothing survives in; non-null with a prune is figures
+   * over survivors.
+   */
   coverage: ReconciliationCoverage | null;
+  /** Whether a request prune is on record — not a window test, see reconcile.ts (D-186). */
+  localLedgerRetention: { truncated: boolean; prunedBeforeMs: number | null };
 }
 
 /**

@@ -575,6 +575,27 @@ export interface ReconciliationCoverage {
 export interface ReconciliationReadiness {
   ready: boolean;
   missing: Array<{ step: string; detail: string; ownerAction: boolean }>;
-  /** Null when no OpenAI spend exists at all, so there is nothing to warn about. */
+  /**
+   * The local buckets, or null when the query behind them found no OpenAI rows.
+   *
+   * A null used to be documented here as "no OpenAI spend exists at all, so
+   * there is nothing to warn about". A prune makes that false, so read it with
+   * `localLedgerRetention` and treat the pair as three states:
+   *
+   *   null, no prune on record  — this machine never metered OpenAI spend.
+   *   null, prune on record     — none SURVIVES. Whether any existed cannot be
+   *                               read from here, and must not be asserted.
+   *   non-null, truncated       — the figures are over surviving rows only.
+   */
   coverage: ReconciliationCoverage | null;
+  /**
+   * Whether a request prune is on record for this ledger (D-186).
+   *
+   * The predicate is deliberately not a window comparison. The query behind
+   * `coverage` sums the entire ledger with no period bound, so the only honest
+   * condition is whether ANY deletion has happened — including one that removed
+   * nothing, since a boundary was still applied and completeness is no longer
+   * something Fiscus can vouch for.
+   */
+  localLedgerRetention: { truncated: boolean; prunedBeforeMs: number | null };
 }

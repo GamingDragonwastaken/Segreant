@@ -121,9 +121,21 @@ function readinessPanel(d: BillingPayload): Node | null {
   const r = d.readiness;
   if (!r) return null;
   const c = r.coverage;
-  // No OpenAI spend at all: nothing to warn about, and saying "0 would count"
-  // would read as a defect rather than as an empty ledger.
-  if (!c) return null;
+  // A deletion reaches this screen as `coverage === null`, exactly like a
+  // machine that never metered OpenAI -- and the null used to be rendered as
+  // silence on the strength of a comment that read "no OpenAI spend at all:
+  // nothing to warn about". That silence is the whole panel, so a prune turned
+  // the credential warning OFF (D-186). An emptied ledger says so instead.
+  const truncated = r.localLedgerRetention?.truncated === true;
+  if (!c) {
+    if (!truncated) return null;
+    const before = r.localLedgerRetention.prunedBeforeMs;
+    return h('div', { class: 'drawer-warning', style: 'margin-top: var(--s4)' },
+      h('strong', { text: 'This ledger was emptied by retention' }),
+      h('p', { text: () => (isPrecise()
+        ? `No OpenAI rows survive, and retention deleted rows before ${before === null ? 'an unrecorded boundary' : new Date(before).toISOString().slice(0, 10)}. Whether any OpenAI spend was metered here cannot be read from the ledger, so nothing about what a reconciliation would match is stated.`
+        : `Your older records were deleted, so there is no OpenAI spend left here to check. We cannot tell you whether there ever was any — only that it is gone.`) }));
+  }
   const uncountable = c.importedUsd + c.proxyOffScopeUsd;
   if (c.onDeclaredRouteUsd > 0 || uncountable <= 0) return null;
 

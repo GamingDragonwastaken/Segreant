@@ -101,6 +101,23 @@ function printReadiness(readiness: ReconciliationReadiness): void {
     console.log(`           ${item.detail}`);
   }
   const c = readiness.coverage;
+  // Said before the warning below, because on a pruned ledger the warning
+  // cannot fire: every branch here is gated on `c`, and a deletion sets it to
+  // null. A guard that goes quiet leaves nothing on the screen to be wrong,
+  // which is why the silence itself has to be reported (D-186).
+  if (readiness.localLedgerRetention.truncated) {
+    const before = new Date(readiness.localLedgerRetention.prunedBeforeMs ?? 0).toISOString().slice(0, 10);
+    console.log('');
+    if (c === null) {
+      console.log(`  NO OPENAI SPEND SURVIVES HERE, and retention deleted rows before ${before}.`);
+      console.log('  Whether this machine ever metered OpenAI spend cannot be read from the ledger');
+      console.log('  any more, so this screen will not tell you either way — and it cannot tell you');
+      console.log('  what a reconciliation would have matched over the deleted period.');
+    } else {
+      console.log(`  Retention deleted rows before ${before}. The three figures below are what`);
+      console.log('  SURVIVES, not what this machine spent.');
+    }
+  }
   if (c && c.onDeclaredRouteUsd === 0 && (c.importedUsd > 0 || c.proxyOffScopeUsd > 0)) {
     // The expensive mistake this exists to prevent: minting an Admin key, pulling
     // a real bill, and getting a local side of zero.
