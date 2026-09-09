@@ -59,14 +59,29 @@ function supportedStudy(): CausalStudyData {
   return repeatedCostQualityData(0.95, 0.8);
 }
 
+/**
+ * ONE TRANSACTION, BECAUSE THAT IS WHAT PRODUCTION DOES.
+ *
+ * `Store.issueCausalStudyToKernel` writes all five records inside a single
+ * `runInTransaction`; this helper used the one-shot `appendX` methods instead,
+ * so each record committed on its own. That divergence was invisible until
+ * D-192 gave the kernel a rule about it: a claim that exceeds the direct floor
+ * -- `causality: 'randomized'` is exactly that -- must be the output of a legal
+ * derivation BY THE END OF THE TRANSACTION THAT STORES IT, or the transaction
+ * rolls back. Committing the effect claim alone and offering its derivation
+ * afterwards leaves the kernel holding, however briefly, the unbound causal
+ * conclusion this whole file exists to refuse.
+ */
 function persist(store: EpistemicLedger, issuance: ReturnType<typeof buildCausalStudyKernelIssuance>): void {
-  store.appendEvidence(issuance.assignmentEvidence);
-  store.appendEvidence(issuance.outcomeEvidence);
-  store.appendClaim(issuance.armDifference);
-  if (issuance.identification === null || issuance.effect === null || issuance.derivation === null) return;
-  store.appendWitness(issuance.identification);
-  store.appendClaim(issuance.effect);
-  store.appendDerivation(issuance.derivation);
+  store.runInTransaction(() => {
+    store.appendEvidenceWithinTransaction(issuance.assignmentEvidence);
+    store.appendEvidenceWithinTransaction(issuance.outcomeEvidence);
+    store.appendClaimWithinTransaction(issuance.armDifference);
+    if (issuance.identification === null || issuance.effect === null || issuance.derivation === null) return;
+    store.appendWitnessWithinTransaction(issuance.identification);
+    store.appendClaimWithinTransaction(issuance.effect);
+    store.appendDerivationWithinTransaction(issuance.derivation);
+  });
 }
 
 test('the fixture this file rests on really does earn a causal claim', () => {
@@ -146,16 +161,23 @@ test('the kernel refuses the same derivation once its identification witness is 
   const issuance = buildCausalStudyKernelIssuance(data, estimate, ISSUED_AT_MS);
 
   const store = ledger();
-  store.appendEvidence(issuance.assignmentEvidence);
-  store.appendEvidence(issuance.outcomeEvidence);
-  store.appendClaim(issuance.armDifference);
-  store.appendClaim(issuance.effect!);
-
   assert.throws(
-    () => store.appendDerivation({ ...issuance.derivation!, witnesses: [] }),
+    () => store.runInTransaction(() => {
+      store.appendEvidenceWithinTransaction(issuance.assignmentEvidence);
+      store.appendEvidenceWithinTransaction(issuance.outcomeEvidence);
+      store.appendClaimWithinTransaction(issuance.armDifference);
+      store.appendClaimWithinTransaction(issuance.effect!);
+      store.appendDerivationWithinTransaction({ ...issuance.derivation!, witnesses: [] });
+    }),
     /causal_identification/,
     'a derivation that strengthens observational into randomized must name the missing witness',
   );
+
+  // And the refusal takes the claim with it. Under D-192 the strengthened claim
+  // cannot outlive a transaction that failed to legalize it, so the counterfactual
+  // this test describes -- a randomized claim in the kernel with nothing binding
+  // it to the randomization -- is now unreachable rather than merely unwritten.
+  assert.equal(store.readClaim(issuance.effect!.id), null, 'the unwitnessed causal claim must not persist');
 });
 
 test('an inconclusive study issues its measurement and no causal claim at all', () => {

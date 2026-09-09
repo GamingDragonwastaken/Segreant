@@ -237,13 +237,27 @@ test('the same derivation with no witness at all is refused for the missing kind
 test('a witness is only required for the axis it guards, and a weakening needs none', () => {
   // Guard on the untouched half of the rule: descending the causality ladder
   // asserts nothing new, so it needs no witness before or after this change.
+  //
+  // The randomized claim has to be EARNED before it can be descended from:
+  // D-192 gave the direct path a floor, so a claim above `observational` that
+  // no derivation in its own transaction produced is rolled back. So the chain
+  // is the honest one — observational, lifted under a supported witness, then
+  // descended again — and only the descending step carries no witness.
   const ledger = new EpistemicLedger(new DatabaseSync(':memory:'));
+  const base = mk('claim:base', 'observational');
   const randomized = mk('claim:randomized', 'randomized');
   const observed = mk('claim:observational', 'observational');
+  const registered = proof('supported');
   ledger.runInTransaction(() => {
     ledger.appendEvidenceWithinTransaction(source());
+    ledger.appendClaimWithinTransaction(base);
+    ledger.appendWitnessWithinTransaction(registered);
     ledger.appendClaimWithinTransaction(randomized);
+    ledger.appendDerivationWithinTransaction(step(base, randomized, [
+      { id: registered.id, kind: registered.kind, evidenceIds: registered.evidenceIds, detail: registered.detail },
+    ]));
     ledger.appendClaimWithinTransaction(observed);
     ledger.appendDerivationWithinTransaction(step(randomized, observed, []));
   });
+  assert.equal(ledger.readDerivation('derivation:claim:randomized->claim:observational')?.witnesses.length, 0);
 });

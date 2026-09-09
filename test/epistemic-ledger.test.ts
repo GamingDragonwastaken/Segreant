@@ -130,18 +130,26 @@ test('the ledger refuses a derivation that strengthens a claim without the witne
 
   assert.equal(value.appendEvidence(e), 'inserted');
   assert.equal(value.appendClaim(source), 'inserted');
-  assert.equal(value.appendClaim(output), 'inserted');
 
+  // The randomized claim and its derivation share one transaction, because
+  // D-192 gave the direct path a floor: a claim above `observational` that no
+  // derivation in its own transaction produced is rolled back. Appending it
+  // alone first would fail before the derivation could be offered at all,
+  // which would test the floor instead of the legality rule this test is about.
   const unwitnessed = derivation({
     ...derivationInput(source.id, output.id),
     id: 'derivation:unwitnessed-causal',
   });
   assert.throws(
-    () => value.appendDerivation(unwitnessed),
+    () => value.runInTransaction(() => {
+      value.appendClaimWithinTransaction(output);
+      value.appendDerivationWithinTransaction(unwitnessed);
+    }),
     /causal_identification/,
     'a derivation may not promote an observational claim to a randomized one unwitnessed',
   );
   assert.equal(value.readDerivation('derivation:unwitnessed-causal'), null, 'a refused derivation must not persist');
+  assert.equal(value.readClaim(output.id), null, 'and the claim it failed to legalize must not persist either');
 
   // The same strengthening WITH its witness is legal. Without this half the
   // assertion above would also pass against a ledger that refused every
@@ -161,7 +169,11 @@ test('the ledger refuses a derivation that strengthens a claim without the witne
     id: 'derivation:witnessed-causal',
     witnesses: [{ id: proof.id, kind: proof.kind, evidenceIds: proof.evidenceIds, detail: proof.detail }],
   });
-  assert.equal(value.appendDerivation(witnessed), 'inserted');
+  value.runInTransaction(() => {
+    value.appendClaimWithinTransaction(output);
+    value.appendDerivationWithinTransaction(witnessed);
+  });
+  assert.equal(value.readDerivation('derivation:witnessed-causal')?.id, 'derivation:witnessed-causal');
   db.close();
 });
 

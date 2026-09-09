@@ -27,7 +27,7 @@ import {
   type RevocationProjection,
 } from './dag.ts';
 import { EPISTEMIC_STATES, type EpistemicState } from './state.ts';
-import { AUTHENTICITY, COVERAGE, INTEGRITY } from './profile.ts';
+import { AUTHENTICITY, CAUSALITY, COVERAGE, DECISION_FITNESS, INTEGRITY, MEASUREMENT } from './profile.ts';
 import { grainIsSupportedBy } from './grain.ts';
 import { scopeIsSupportedBy, scopeRelation } from './scope.ts';
 import {
@@ -68,6 +68,24 @@ interface StoredNodeRow {
 interface StoredPayloadRow {
   json: string;
   digest: string;
+}
+
+/**
+ * Claims appended in the current transaction that exceed the direct-claim
+ * floor, and the output claims a legal derivation has produced within it.
+ *
+ * The obligation is discharged at COMMIT rather than at the append, because
+ * the derivation that legalizes a strengthened claim necessarily arrives
+ * AFTER it: `appendDerivationWithinTransaction` reads the output claim back
+ * out of the ledger, so the claim must already be persisted when the
+ * derivation is offered. Checking at append time would refuse the only
+ * ordering the kernel permits.
+ */
+interface StrengtheningFrame {
+  /** Claim id -> the phrase naming which floor it exceeded. */
+  readonly pending: Map<string, string>;
+  /** Output claim ids of derivations this transaction accepted as legal. */
+  readonly legalized: Set<string>;
 }
 
 /** The four columns `epistemic_revocations` actually stores. No effective-time column exists. */
@@ -184,8 +202,31 @@ function row<T>(value: unknown): T | null {
   return value === undefined ? null : value as T;
 }
 
+/**
+ * Refuse at COMMIT every claim this transaction strengthened past the direct
+ * floor without a derivation producing it.
+ *
+ * The refusal names EVERY outstanding claim, ordered by id so the same
+ * transaction refuses the same way twice. A caller shown one at a time would
+ * repair it, rerun, and be refused again by the next.
+ */
+function assertStrengtheningDischarged(frame: StrengtheningFrame): void {
+  const outstanding = [...frame.pending.entries()]
+    .filter(([id]) => !frame.legalized.has(id))
+    .sort(([a], [b]) => a.localeCompare(b));
+  if (outstanding.length === 0) return;
+  const detail = outstanding.map(([id, reason]) => `claim ${id} ${reason}`).join('; ');
+  throw new Error(
+    `${detail}. No derivation in this transaction produced ${outstanding.length === 1 ? 'it' : 'them'}, `
+    + 'so the strengthening has no witness',
+  );
+}
+
 export class EpistemicLedger {
   private readonly db: DatabaseSync;
+
+  /** Non-null exactly while `transaction` owns an open SQLite transaction. */
+  private strengthening: StrengtheningFrame | null = null;
 
   public constructor(db: DatabaseSync) {
     this.db = db;
@@ -194,13 +235,19 @@ export class EpistemicLedger {
 
   private transaction<T>(work: () => T): T {
     this.db.exec('BEGIN IMMEDIATE');
+    const outer = this.strengthening;
+    const frame: StrengtheningFrame = { pending: new Map(), legalized: new Set() };
+    this.strengthening = frame;
     try {
       const result = work();
+      assertStrengtheningDischarged(frame);
       this.db.exec('COMMIT');
       return result;
     } catch (error) {
       try { this.db.exec('ROLLBACK'); } catch { /* preserve the original failure */ }
       throw error;
+    } finally {
+      this.strengthening = outer;
     }
   }
 
@@ -401,6 +448,14 @@ export class EpistemicLedger {
       return 'duplicate';
     }
     this.db.prepare('INSERT INTO epistemic_claims (claim_id, claim_json, claim_digest) VALUES (?, ?, ?)').run(item.id, encoded, digest(encoded));
+    // Recorded only on the INSERT path. A replay that finds an identical
+    // payload already stored returned `duplicate` above and never reaches
+    // here, so re-offering a claim some earlier transaction legalized does
+    // not re-raise an obligation its derivation is no longer present to
+    // discharge. Idempotent replay was a property of this ledger before this
+    // rule and stays one.
+    const obligation = this.directClaimObligation(item);
+    if (obligation !== null) this.strengthening?.pending.set(item.id, obligation);
     for (const supersededId of item.supersedes) this.insertEdge({ from: item.id, to: supersededId, relation: 'supersedes' });
     for (const evidenceId of item.evidenceIds) this.insertEdge({ from: evidenceId, to: item.id, relation: 'supports' });
     for (const assumptionId of item.assumptionIds) this.insertEdge({ from: assumptionId, to: item.id, relation: 'assumes' });
@@ -563,6 +618,15 @@ export class EpistemicLedger {
         );
       }
     }
+
+    // THE OBLIGATION RAISED BY A DIRECT APPEND IS DISCHARGED HERE (D-192).
+    // Every input claim has just been assessed and allowed, so the output
+    // claim is the product of a legal derivation and may carry a profile no
+    // direct claim could. Only a derivation with at least one INPUT CLAIM
+    // discharges anything: the loop above is the whole legality check, and a
+    // derivation over evidence alone runs none of it, so treating its output
+    // as legalized would hand back the bypass this rule closes.
+    if (item.inputClaimIds.length > 0) this.strengthening?.legalized.add(item.outputClaimId);
 
     const graph = this.graph();
     const extraEdges: DagEdgeInput[] = [
@@ -1157,6 +1221,103 @@ export class EpistemicLedger {
         + `${COVERAGE[coverageCeiling]} of the weakest evidence it cites`,
       );
     }
+  }
+
+  /**
+   * What a claim may conclude with NO derivation behind it (WP-B01, D-192).
+   *
+   * THE ASYMMETRY THIS CLOSES. `assessDerivationLegality` guards eight ordered
+   * profile axes: moving up any of them needs the matching witness. That rule
+   * runs on the derivation path and only there.
+   * `assertClaimWithinItsEvidence` guards the direct path, and it bounds the
+   * axes evidence can actually be compared against — integrity, authenticity,
+   * coverage — plus grain, scope and the measurement-model reference. Three
+   * ordered axes sat between the two lists and were guarded by neither, so the
+   * entire derivation registry could be bypassed by not using it: one
+   * `integrity: 'unknown'` local observation, one claim declaring
+   * `causality: 'randomized'`, and the kernel stored a randomized causal claim
+   * whose only support was its own declaration.
+   *
+   * WHY THIS IS A FLOOR AND NOT A FOURTH CEILING. The three existing ceilings
+   * read a field off the Evidence and take the weakest. `Evidence` has no
+   * causality field, no decision-fitness field, and no measurement rung — and
+   * cannot: randomization is a property of the ASSIGNMENT PROCEDURE, which is
+   * what a `causal_identification` witness records, and decision fitness is a
+   * property of a DOMINANCE ARGUMENT, which is what a `decision_fitness`
+   * witness records. There is nothing to compare against, so the rule states
+   * what a claim may reach unaided instead.
+   *
+   * THE EXACT RULE, AXIS BY AXIS:
+   *
+   * - `causality` at most `observational`. An observation is the strongest
+   *   causal reading a record of what happened can carry. `quasi_experimental`
+   *   and `randomized` are claims about how exposure was assigned, and the
+   *   derivation path already demands `causal_identification` for them.
+   *
+   * - `decisionFitness` at most `insufficient`. `sufficient` is the only rung
+   *   that licenses acting, and it is what `decision_fitness` witnesses.
+   *   `insufficient` is deliberately NOT refused here even though
+   *   `DECISION_FITNESS` ranks it above `not_assessed`: that ladder orders
+   *   INFORMATION, not permission, and a claim declaring a decision unfit to
+   *   act on cannot inflate anything by saying so. Withholding is the
+   *   behaviour this repository asks for, so the floor must not make it the
+   *   expensive path. `buildDecisionKernelIssuance` writes exactly this shape —
+   *   an observation claim at `insufficient` with no derivation, beside a
+   *   decision claim at `sufficient` that its derivation produces — and the
+   *   two are treated differently here on purpose.
+   *
+   * - `finality` `final` only when EVERY cited evidence carries `finalizedAt`.
+   *   This is the one axis of the three that CAN be read off the evidence, and
+   *   the quantifier matches the trust ceilings rather than the grain rule:
+   *   every citation is a prerequisite, so withdrawing one open record
+   *   reopens the claim, and `final` over a mixture would let one closed
+   *   invoice close an unclosed one.
+   *
+   * - `measurement` above `proxy_unvalidated` only when some cited evidence
+   *   declares a `measurementModelRef`. Nothing stronger is decidable here:
+   *   `Evidence` records WHICH model a record was collected under and never
+   *   how well validated that model is, so the rung itself has no
+   *   evidence-side ceiling and the derivation path keeps
+   *   `measurement_validation`. This particular floor is currently unreachable
+   *   — `claim()` refuses a null ref above `proxy_unvalidated` and D-168
+   *   refuses a ref no cited evidence declares, which together already imply
+   *   it — and it is stated anyway so the floor is one readable rule rather
+   *   than a consequence of two others that could each move independently.
+   *
+   * `monetaryBasis` is absent for the reason `assertClaimWithinItsEvidence`
+   * and `PROFILE_STRENGTH_AXES` both give: it is not a ladder, so there is no
+   * "above" to refuse. That gap is guarded by `monetary_rebasing` on the
+   * derivation path and remains open on this one.
+   *
+   * WHAT THIS RETURNS. The phrase naming the exceeded floor, or null. The
+   * refusal itself is raised at COMMIT by `assertStrengtheningDischarged`,
+   * because a derivation can only legalize a claim the ledger has already
+   * stored.
+   */
+  private directClaimObligation(item: Claim): string | null {
+    if (CAUSALITY.indexOf(item.profile.causality) > CAUSALITY.indexOf('observational')) {
+      return `declares causality ${item.profile.causality}, above the observational reading a claim may `
+        + 'reach without a derivation carrying a causal_identification witness';
+    }
+    if (DECISION_FITNESS.indexOf(item.profile.decisionFitness) > DECISION_FITNESS.indexOf('insufficient')) {
+      return `declares decision fitness ${item.profile.decisionFitness}, which no claim may reach without a `
+        + 'derivation carrying a decision_fitness witness';
+    }
+    if (item.profile.finality === 'final') {
+      const open = item.evidenceIds
+        .filter((evidenceId) => (this.readEvidence(evidenceId)?.finalizedAt ?? null) === null)
+        .sort();
+      if (open.length > 0) {
+        return `declares finality final while the evidence it cites is not finalized: ${open.join(', ')}`;
+      }
+    }
+    if (MEASUREMENT.indexOf(item.profile.measurement) > MEASUREMENT.indexOf('proxy_unvalidated')) {
+      const backed = item.evidenceIds.some((evidenceId) => (this.readEvidence(evidenceId)?.measurementModelRef ?? null) !== null);
+      if (!backed) {
+        return `declares measurement ${item.profile.measurement} while no cited evidence declares a measurement model`;
+      }
+    }
+    return null;
   }
 
   private ensureKinds(ids: readonly string[], kind: DagNode['kind']): void {

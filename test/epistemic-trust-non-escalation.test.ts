@@ -105,7 +105,7 @@ function claimInput(
       causality: 'observational',
       monetaryBasis: 'billed',
       finality: 'provisional',
-      decisionFitness: 'sufficient',
+      decisionFitness: 'not_assessed',
     }),
     measurementModelRef: 'measurement:provider-cost:v1',
     evidenceIds: [...evidenceIds],

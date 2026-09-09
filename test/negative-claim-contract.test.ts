@@ -16,7 +16,7 @@ const base = {
   grain: { dimensions: ['project', 'period'] },
   time: { asOf: '2026-09-03T00:00:00.000Z' },
   epistemic: 'supported',
-  profile: { epistemic: 'supported', integrity: 'verified', authenticity: 'pinned', scope: 'established', coverage: 'complete', measurement: 'validated', causality: 'none', monetaryBasis: 'none', finality: 'provisional', decisionFitness: 'sufficient' },
+  profile: { epistemic: 'supported', integrity: 'verified', authenticity: 'pinned', scope: 'established', coverage: 'complete', measurement: 'validated', causality: 'none', monetaryBasis: 'none', finality: 'provisional', decisionFitness: 'not_assessed' },
   measurementModelRef: 'model:ops-v1',
   evidenceIds: ['evidence:scan'],
   derivationRule: 'negative-claim.v1',
