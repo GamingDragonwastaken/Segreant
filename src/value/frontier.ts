@@ -95,6 +95,26 @@ export interface ModelSwitchRecommendation {
    */
   unitsExcludedStalePricing: number;
   /**
+   * Units dropped because retention deleted request rows from inside their
+   * attribution window (D-177), so the dollars charged to the model are a known
+   * undercount. Same objection as a superseded price, different cause: a model
+   * whose spend was partly deleted reads as cheaper by exactly the deleted
+   * amount, and the headroom moves for a reason that has nothing to do with the
+   * models. A model whose spend was deleted ENTIRELY was already refused by the
+   * `costPerUnit > 0` filter; partial contamination is what this catches.
+   */
+  unitsExcludedTruncatedSpend: number;
+  /**
+   * Units INCLUDED in this comparison whose spend-window coverage is unknown --
+   * realization snapshots written before D-176 recorded it.
+   *
+   * Not an exclusion. Dropping them would empty the frontier on every existing
+   * store on no evidence about those units; including them silently would read
+   * unknown as intact. So they are compared and counted, and a reader can see
+   * how much of the comparison rests on coverage nobody recorded.
+   */
+  unitsUnknownSpendCoverage: number;
+  /**
    * Reasons this comparison cannot isolate the model even if the outcome
    * statistics separate. Non-empty always caps `confidence` at `trial`.
    */
@@ -287,6 +307,11 @@ const MIN_DOMINANT_COST_SHARE = 0.8;
 function isPriceable(u: WorkUnit): boolean {
   return (
     !u.costStale &&
+    // A price retention undercut is not a price. `!== true` and not `=== false`
+    // on purpose: null is the unknown state from a pre-D-176 snapshot, and
+    // excluding those would empty the frontier on every existing store on no
+    // evidence about them. They stay eligible and are counted instead.
+    u.spendWindowTruncated !== true &&
     u.dominantModelCostShare !== null &&
     u.dominantModelCostUsd !== null &&
     u.dominantModelCostShare >= MIN_DOMINANT_COST_SHARE
@@ -455,14 +480,24 @@ function buildModelSwitchRecommendations(mature: WorkUnit[]): ModelSwitchRecomme
     // whatever its attribution share happens to say.
     const stalePricing = units.filter((u) => u.costStale);
     const priced = units.filter((u) => !u.costStale);
-    const unknownAttribution = priced.filter((u) => u.dominantModelCostShare === null || u.dominantModelCostUsd === null);
-    const mixedAttribution = priced.filter(
+    // Checked SECOND, for the same reason stale pricing is checked first: a
+    // price that is a known undercount is why the unit is out, whatever its
+    // attribution share happens to say, and a unit must land under exactly one
+    // reason.
+    const truncatedSpend = priced.filter((u) => u.spendWindowTruncated === true);
+    const covered = priced.filter((u) => u.spendWindowTruncated !== true);
+    const unknownAttribution = covered.filter((u) => u.dominantModelCostShare === null || u.dominantModelCostUsd === null);
+    const mixedAttribution = covered.filter(
       (u) =>
         u.dominantModelCostShare !== null &&
         u.dominantModelCostUsd !== null &&
         u.dominantModelCostShare < MIN_DOMINANT_COST_SHARE,
     );
     const attributable = priced.filter(isPriceable);
+    // Counted over what the comparison ACTUALLY used, not over everything seen:
+    // a unit excluded for another reason contributes no unrecorded coverage to
+    // this result.
+    const unknownCoverage = attributable.filter((u) => u.spendWindowTruncated === null).length;
 
     const cells = [...groupBy(attributable, modelIdentity)]
       .map(([identity, grouped]) => makeSwitchCell(identity, grouped))
@@ -622,6 +657,8 @@ function buildModelSwitchRecommendations(mature: WorkUnit[]): ModelSwitchRecomme
       unitsExcludedMixedAttribution: mixedAttribution.length,
       unitsExcludedUnknownAttribution: unknownAttribution.length,
       unitsExcludedStalePricing: stalePricing.length,
+      unitsExcludedTruncatedSpend: truncatedSpend.length,
+      unitsUnknownSpendCoverage: unknownCoverage,
       confounders,
       assumptions: [...MODEL_SWITCH_ASSUMPTIONS],
       candidateMedianUnitLines: candidate.medianUnitLines,
