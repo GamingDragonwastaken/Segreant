@@ -431,6 +431,11 @@ export async function computeRealization(
   const witnesses = opts.completenessWitnesses
     ?? (gitWitness === null ? [] : [gitWitness]);
 
+  // Read ONCE. The proposal-retention boundary cannot change during this
+  // computation, and a per-commit read would be one query per unit for a
+  // constant. Null is NO PRUNE ON RECORD, never "nothing was pruned" (D-170).
+  const proposalsPrunedBeforeMs = store.retentionFloor().proposalsPrunedBeforeMs;
+
   // The clock starts HERE, not at the top. `attributeCommits` and `revertScan`
   // above are fixed setup that runs once regardless of how many units there are,
   // and letting them consume a per-unit budget would mean a slow machine spent
@@ -537,11 +542,22 @@ export async function computeRealization(
         hadProposal ? 'supported' : 'unknown',
         hadProposal
           ? 'AI proposal captured'
+          // Ordered most-specific first, and the order is load-bearing (D-180).
+          // The two branches above are claims about the CAPTURE and can both be
+          // true of a unit whose window also lost rows -- a boundary INSIDE the
+          // window deletes the earlier proposals and leaves the later ones. The
+          // sharper answer must win, so retention is checked last of the three.
           : proposalCaptureCoverage === 'truncated'
             ? 'proposal capture truncated; coverage incomplete'
             : proposalCaptureCoverage === 'legacy_unknown'
               ? 'proposal capture predates coverage tracking'
-              : 'no complete proposal captured',
+              // Otherwise this rung would say "no complete proposal captured"
+              // about a proposal Fiscus captured and then deleted on the
+              // operator's own retention policy, sending them to fix
+              // instrumentation that was already working (D-179, D-180).
+              : proposalsPrunedBeforeMs !== null && a.windowStartMs < proposalsPrunedBeforeMs
+                ? 'proposals in this window were deleted by retention; whether one was captured cannot be read from here'
+                : 'no complete proposal captured',
       ),
       accepted: gate(
         'accepted',
