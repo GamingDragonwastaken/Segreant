@@ -23,7 +23,13 @@ test('every GUI capability has a complete, conservative CapabilitySpec', () => {
     assert.ok(spec.inputSchema.optional.every((field) => field.length > 0), `${spec.id} input optional fields`);
     assert.ok(spec.previewSchema.required.includes('applicable'), `${spec.id} preview must disclose applicability`);
     assert.ok(spec.previewSchema.required.includes('summary'), `${spec.id} preview must disclose a summary`);
-    assert.equal(spec.bindings.cli, spec.command, `${spec.id} CLI binding drifted from its displayed command`);
+    // A command without the `fiscus ` prefix is a GUI-only capability and no
+    // CLI claim, so its CLI binding is empty rather than an HTTP route.
+    assert.equal(
+      spec.bindings.cli,
+      spec.command.startsWith('fiscus ') ? spec.command : '',
+      `${spec.id} CLI binding drifted from its displayed command`,
+    );
     assert.ok(spec.bindings.docs.length > 0, `${spec.id} must name at least one documentation binding`);
     for (const doc of spec.bindings.docs) assert.equal(existsSync(join(ROOT, doc)), true, `${spec.id} docs binding is missing: ${doc}`);
     for (const path of spec.bindings.api) assert.equal(API_PATHS.has(path), true, `${spec.id} names an unknown API route: ${path}`);

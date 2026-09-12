@@ -50,7 +50,13 @@ export interface Capability {
   territory: Territory;
   consequence: Consequence;
   coverage: Coverage;
-  /** The equivalent command. Shown beside every action: the developer's shortcut and the audit trail. */
+  /**
+   * The equivalent command. Shown beside every action: the developer's
+   * shortcut and the audit trail. A value that does not start with `fiscus `
+   * is a capability the CLI does not offer at all, and names the local API
+   * route the GUI calls instead; it is then no CLI claim and carries no CLI
+   * binding.
+   */
   command: string;
   /** Stated only where a consequence needs naming out loud before it happens. */
   warning?: string;
@@ -186,9 +192,17 @@ export const CAPABILITIES: readonly Capability[] = [
     territory: 'system', consequence: 'destructive', coverage: 'planned', command: 'fiscus prune',
     warning: 'Permanently deletes ledger rows. There is no undo and no backup unless you made one. Derived records that referenced the deleted rows keep their recorded amounts and become unverifiable.',
   },
+  // GUI-ONLY, AND SAID SO. This row documented `fiscus config --clear-proposals`
+  // from the day it was written, and no such command has ever existed:
+  // `cmdConfig` reads no such flag, so the string printed the config, exited 0,
+  // and was offered in the drawer with a copy button as the shortcut for
+  // deleting every captured proposal. The operation is real and lives on the
+  // route below (`store.clearProposals()`); the CLI has no path to it. A
+  // `command` without the `fiscus ` prefix is how the map says that, and
+  // `test/dashboard-parity-population.test.ts` holds it to a declared route.
   {
     id: 'clear-proposals', label: 'Clear proposals', plain: 'Discard captured AI proposals.',
-    territory: 'system', consequence: 'destructive', coverage: 'full', command: 'fiscus config --clear-proposals',
+    territory: 'system', consequence: 'destructive', coverage: 'full', command: 'POST /api/settings/clear-proposals',
     warning: 'Permanently deletes captured proposals. Acceptance rates computed from them cannot be recomputed afterwards.',
   },
   // ADDED AT D-167, and the reason each was missing is the same: nothing
@@ -315,7 +329,7 @@ function capabilityMetadata(capability: Capability): CapabilityMetadata {
               ? 'reviewed_local_apply'
               : 'recommendation',
     bindings: {
-      cli: capability.command,
+      cli: capability.command.startsWith('fiscus ') ? capability.command : '',
       api: Object.freeze([...(API_BINDINGS[capability.id] ?? [])]),
       gui: Object.freeze(noGuiSurface(capability.coverage) ? [] : ['modern']),
       docs: Object.freeze([...(DOC_BINDINGS[capability.territory] ?? [])]),
