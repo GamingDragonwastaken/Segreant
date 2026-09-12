@@ -10,7 +10,7 @@ import { loadConfig, saveConfig, dbPath, configPath, fiscusHome, isDemo, type Fi
 import { startOfLocalDay } from '../budget/guard.ts';
 import { requestsToCsv } from '../export/csv.ts';
 import { economicRequestsToCsv, economicRequestsToJson } from '../export/economic.ts';
-import { computeAlerts } from '../alerts/detect.ts';
+import { computeAlerts, computeAlertCoverage, type Alert, type AlertCoverage } from '../alerts/detect.ts';
 import { describeSourceDepth } from '../value/sourceDepth.ts';
 import { isDeclaredAttribution } from '../value/characterization.ts';
 import { C, color, usd, num, pct, printJson } from './ui.ts';
@@ -32,8 +32,25 @@ export function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void 
   // configurable and a seven-day policy reaches `month` (D-171).
   const retention = store.windowCoverage(startMs);
 
+  // Alerts are evaluated for `today` only, as they always were. What changed is
+  // that the surface now reads COVERAGE beside them: on a default install every
+  // channel is dark -- caps opt-in, no baseline, value uninstrumented, nothing
+  // to price -- so an empty alert list records that nothing was looked at, not
+  // that nothing fired. `fiscus ops` and the dashboard already read this
+  // producer (D-141); `show` was the one surface still printing silence over
+  // it. Same producer, same sentences, so the three cannot disagree.
+  let alerts: Alert[] | null = null;
+  let coverage: AlertCoverage | null = null;
+  if (window === 'today') {
+    alerts = computeAlerts(store, cfg);
+    coverage = computeAlertCoverage(store, cfg);
+  }
+
   if (flags.json) {
-    printJson({ window, label, demo: isDemo(), retention, summary, byModel, byProject, byUser, bySource });
+    printJson({
+      window, label, demo: isDemo(), retention, summary, byModel, byProject, byUser, bySource,
+      ...(alerts === null || coverage === null ? {} : { alerts, alertCoverage: coverage }),
+    });
     store.close();
     return;
   }
@@ -50,16 +67,26 @@ export function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void 
   console.log(`  Input       ${num(summary.inputTokens)} tokens`);
   console.log(`  Output      ${num(summary.outputTokens)} tokens`);
 
-  if (window === 'today') {
-    const alerts = computeAlerts(store, cfg);
+  if (alerts !== null && coverage !== null) {
+    console.log('');
     if (alerts.length) {
       const crit = alerts.filter((a) => a.severity === 'critical').length;
       const top = alerts[0]!;
       const sevColor = top.severity === 'critical' ? C.red : top.severity === 'warn' ? C.yellow : C.gray;
-      console.log('');
       console.log(
         `  ${color(tty, sevColor, `● ${alerts.length} ${alerts.length === 1 ? 'alert' : 'alerts'}`)}${crit ? color(tty, C.red, ` (${crit} critical)`) : ''}  ${color(tty, C.gray, `— ${top.title}. Run: fiscus alerts`)}`,
       );
+    } else {
+      // NOT silence. An empty list from six dark channels and an empty list
+      // from six watching ones are different findings, and only the summary
+      // can tell them apart.
+      console.log(`  ${color(tty, coverage.complete ? C.green : C.yellow, `● no alerts · ${coverage.summary}`)}`);
+    }
+    // A dark channel names the setting that would light it. Printed whether or
+    // not something else fired: one live channel does not vouch for the rest.
+    for (const channel of coverage.channels) {
+      if (channel.live) continue;
+      console.log(color(tty, C.gray, `    ${channel.channel}: ${channel.darkBecause}`));
     }
   }
 
