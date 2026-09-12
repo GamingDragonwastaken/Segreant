@@ -11,7 +11,7 @@
 
 import pg from 'pg';
 const { Pool } = pg;
-import { combineRollupCoverage, normalizeRollupCoverage, type RollupCoverage, type SignedRollup, type RollupBody } from '../../src/team/rollup.ts';
+import { combineRollupCoverage, normalizeRollupCoverage, normalizeRollupScope, type RollupCoverage, type RollupScopeKind, type SignedRollup, type RollupBody } from '../../src/team/rollup.ts';
 
 export interface RegisteredDeveloper {
   keyId: string;
@@ -74,6 +74,22 @@ export interface ObservationWindow {
   periodTo: string;
   developerCount: number;
   coverage: RollupCoverage;
+  /**
+   * The distinct scope claims among the rollups grouped into this window.
+   *
+   * A SECOND AXIS, NOT MORE OF THE FIRST. `coverage` says whether retention cut
+   * into a contributor's window; `scopes` says whether the contributor was
+   * summarising their whole machine at all. `aggregateProjects` keeps one
+   * rollup per developer and reads it as that developer's window, which is only
+   * true of a rollup that covered every project on it -- and nothing on the
+   * wire said so until the signer began declaring it.
+   *
+   * A rollup pushed before the field existed contributes `unknown`. That is not
+   * upgraded to `all-projects` here or anywhere: the aggregate is the context,
+   * and inferring the claim from the context is the failure the sentinel exists
+   * to prevent.
+   */
+  scopes: RollupScopeKind[];
 }
 
 export interface ProjectTotals {
@@ -113,6 +129,29 @@ export interface RollupStore {
   /** The distinct windows of the rollups that `aggregateProjects` would sum. */
   observationWindows(filter?: PeriodFilter): Promise<ObservationWindow[]>;
   close(): Promise<void>;
+}
+
+/**
+ * Distinct declared scope kinds, sorted, with anything unrecognized or absent
+ * read as `unknown`. Shared by the Postgres store and its in-memory double so
+ * the two cannot drift on the one value that must never be inferred.
+ */
+export function normalizeScopeKinds(values: readonly (string | null | undefined)[]): RollupScopeKind[] {
+  const kinds = new Set<RollupScopeKind>();
+  for (const value of values) {
+    kinds.add(normalizeRollupScope({
+      v: 1,
+      keyId: 'scope-only',
+      generatedAt: '1970-01-01T00:00:00.000Z',
+      period: { from: '1970-01-01T00:00:00.000Z', to: '1970-01-02T00:00:00.000Z' },
+      projects: [],
+      // A `project` kind needs a name to be well-formed, and the other kinds
+      // must NOT carry one. Only the kind is read back: the project name stays
+      // in the contributing rollup and never reaches a team-wide reader.
+      scope: value === 'project' ? { kind: 'project', project: 'scope-only' } : { kind: value as RollupScopeKind },
+    }).kind);
+  }
+  return [...kinds].sort();
 }
 
 interface DeveloperRow {
@@ -296,10 +335,12 @@ export class PgRollupStore implements RollupStore {
       period_to: Date;
       developer_count: string | number;
       coverages: string[];
+      scope_kinds: string[];
     }>(
       `WITH latest_rollup_per_dev AS (
          SELECT DISTINCT ON (r.key_id) r.id, r.key_id, r.period_from, r.period_to,
-                COALESCE(r.body->>'coverage', 'unknown') AS coverage
+                COALESCE(r.body->>'coverage', 'unknown') AS coverage,
+                COALESCE(r.body->'scope'->>'kind', 'unknown') AS scope_kind
          FROM rollups r
          WHERE ($1::timestamptz IS NULL OR r.period_to > $1::timestamptz)
            AND ($2::timestamptz IS NULL OR r.period_from < $2::timestamptz)
@@ -307,7 +348,8 @@ export class PgRollupStore implements RollupStore {
        )
        SELECT lr.period_from AS period_from, lr.period_to AS period_to,
               COUNT(DISTINCT lr.key_id)::float8 AS developer_count,
-              ARRAY_AGG(DISTINCT lr.coverage) AS coverages
+              ARRAY_AGG(DISTINCT lr.coverage) AS coverages,
+              ARRAY_AGG(DISTINCT lr.scope_kind) AS scope_kinds
        FROM latest_rollup_per_dev lr
        GROUP BY lr.period_from, lr.period_to
        ORDER BY lr.period_from ASC, lr.period_to ASC`,
@@ -325,6 +367,10 @@ export class PgRollupStore implements RollupStore {
         projects: [],
         coverage: value as RollupCoverage,
       }))),
+      // Through the same normalizer the mint writes with, so an unrecognized or
+      // absent value becomes `unknown` here rather than reaching a reader as a
+      // string nobody validated.
+      scopes: normalizeScopeKinds(row.scope_kinds),
     }));
   }
 

@@ -5,7 +5,8 @@
  */
 
 import type { RollupStore, RegisteredDeveloper, StoredRollup, InsertRollupResult, PeriodFilter, ProjectTotals, DeveloperTotals, ObservationWindow } from '../src/store.ts';
-import { combineRollupCoverage, normalizeRollupCoverage, type SignedRollup } from '../../src/team/rollup.ts';
+import { normalizeScopeKinds } from '../src/store.ts';
+import { combineRollupCoverage, normalizeRollupCoverage, normalizeRollupScope, type SignedRollup } from '../../src/team/rollup.ts';
 
 /** True if [rollup's period_from, period_to) overlaps the requested [periodFrom, periodTo) window (open bounds = unbounded). */
 function overlapsWindow(periodFrom: string, periodTo: string, filter: PeriodFilter): boolean {
@@ -54,16 +55,17 @@ export class FakeRollupStore implements RollupStore {
   /** Mirrors PgRollupStore.observationWindows: the same latest-per-developer population, grouped by declared window. */
   async observationWindows(filter: PeriodFilter = {}): Promise<ObservationWindow[]> {
     const latest = this.latestPerDeveloper(filter);
-    const byWindow = new Map<string, { periodFrom: string; periodTo: string; developers: Set<string>; coverages: Set<ReturnType<typeof normalizeRollupCoverage>> }>();
+    const byWindow = new Map<string, { periodFrom: string; periodTo: string; developers: Set<string>; coverages: Set<ReturnType<typeof normalizeRollupCoverage>>; scopeKinds: Set<string> }>();
     for (const r of latest) {
       const key = `${r.periodFrom}\u0000${r.periodTo}`;
       let entry = byWindow.get(key);
       if (!entry) {
-        entry = { periodFrom: r.periodFrom, periodTo: r.periodTo, developers: new Set(), coverages: new Set() };
+        entry = { periodFrom: r.periodFrom, periodTo: r.periodTo, developers: new Set(), coverages: new Set(), scopeKinds: new Set() };
         byWindow.set(key, entry);
       }
       entry.developers.add(r.keyId);
       entry.coverages.add(normalizeRollupCoverage(r.body));
+      entry.scopeKinds.add(normalizeRollupScope(r.body).kind);
     }
     return [...byWindow.values()]
       .map((entry) => ({
@@ -71,6 +73,7 @@ export class FakeRollupStore implements RollupStore {
         periodTo: entry.periodTo,
         developerCount: entry.developers.size,
         coverage: combineRollupCoverage([...entry.coverages]),
+        scopes: normalizeScopeKinds([...entry.scopeKinds]),
       }))
       .sort((a, b) => a.periodFrom.localeCompare(b.periodFrom) || a.periodTo.localeCompare(b.periodTo));
   }

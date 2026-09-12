@@ -52,7 +52,10 @@ import { buildWindowCoverage } from '../src/aggregate.ts';
 import type { ObservationWindow } from '../src/store.ts';
 
 function window(from: string, to: string, developerCount = 1): ObservationWindow {
-  return { periodFrom: from, periodTo: to, developerCount, coverage: 'complete' };
+  // `scopes` is what each contributing rollup declared it covered — a separate
+  // axis from `coverage`, and irrelevant to the position question this file
+  // asks, so every window here declares the same whole-machine scope.
+  return { periodFrom: from, periodTo: to, developerCount, coverage: 'complete', scopes: ['all-projects'] };
 }
 
 const JANUARY = window('2026-01-01T00:00:00.000Z', '2026-01-31T00:00:00.000Z');

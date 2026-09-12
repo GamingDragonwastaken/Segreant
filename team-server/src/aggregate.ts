@@ -25,7 +25,7 @@
  * breakdown it needs no separate opt-in — only the per-row floor.
  */
 
-import { combineRollupCoverage, type RollupCoverage } from '../../src/team/rollup.ts';
+import { combineRollupCoverage, type RollupCoverage, type RollupScopeKind } from '../../src/team/rollup.ts';
 import type { ProjectTotals, DeveloperTotals, ObservationWindow } from './store.ts';
 import { standardizedScore, type StandardizedScore } from '../../src/team/standardize.ts';
 
@@ -97,6 +97,27 @@ export interface WindowCoverage {
   overlapTo: string | null;
   /** Conservative combination of the signer-declared coverage states. */
   status: RollupCoverage;
+  /**
+   * True only when EVERY contributing rollup declared it covered all of its
+   * machine's projects.
+   *
+   * `aggregateProjects` keeps one rollup per developer and reads it as that
+   * developer's whole window. That is an assumption about the payload, and
+   * until the signer began declaring its scope there was nothing to check it
+   * against: a total summed from one scoped rollup and one whole one reported
+   * exactly what a total summed from two whole ones reported. A scoped
+   * contributor does not merely understate a figure — the projects it omits
+   * leave every team total, `developerCount` falls with them, and
+   * `buildProjectReport` can then withhold a colleague's project behind a
+   * k-anonymity floor that has nothing to do with them.
+   *
+   * An empty set reports `false`, for the same reason the empty coverage
+   * reports `uniform: false`: nothing is not agreement. A contributor that did
+   * not say reports `unknown` and is never read as `all-projects`.
+   */
+  wholeSnapshot: boolean;
+  /** The distinct scope claims among the contributing rollups, sorted. */
+  scopeKinds: RollupScopeKind[];
   /** What the totals beside this do, and do not, describe. */
   note: string;
 }
@@ -154,6 +175,8 @@ export function buildWindowCoverage(windows: ObservationWindow[]): WindowCoverag
       overlapFrom: null,
       overlapTo: null,
       status: 'unknown',
+      wholeSnapshot: false,
+      scopeKinds: [],
       note: 'no rollups contributed to these totals, so there is no observation window to state',
     };
   }
@@ -166,6 +189,14 @@ export function buildWindowCoverage(windows: ObservationWindow[]): WindowCoverag
   const contributingDevelopers = windows.reduce((total, w) => total + w.developerCount, 0);
   const uniform = windows.length === 1;
   const status = combineRollupCoverage(windows.map((window) => window.coverage));
+
+  // A SECOND AXIS, KEPT SEPARATE FROM `status` DELIBERATELY. Folding scope into
+  // the coverage value would make two different absences -- rows retention
+  // deleted, and projects the signer never included -- render as one word, and a
+  // reader could no longer tell which one they were looking at. That collapse is
+  // the defect this whole block exists to answer, one level down.
+  const scopeKinds = [...new Set(windows.flatMap((window) => window.scopes ?? []))].sort() as RollupScopeKind[];
+  const wholeSnapshot = scopeKinds.length === 1 && scopeKinds[0] === 'all-projects';
 
   // THE INTERSECTION, NOT A PAIRWISE CHECK. Two of three windows agreeing is
   // not an agreement; a total is summed across all of them at once, so the
@@ -195,6 +226,16 @@ export function buildWindowCoverage(windows: ObservationWindow[]): WindowCoverag
       + 'across periods of unequal length and do not describe any single window'
       + `; a machine that observed for longer contributes more of it for that reason alone. ${spread}`;
 
+  // Appended rather than folded in, so the window sentence keeps saying exactly
+  // what it said and the scope sentence can be read on its own.
+  const scopeNote = wholeSnapshot
+    ? ' Every contributing rollup declares it covers all of its machine\'s projects.'
+    : scopeKinds.includes('project')
+      ? ' At least one contributing rollup declares it covers only ONE project on its machine, so these totals are'
+        + ' missing that machine\'s other projects entirely — not understated, absent.'
+      : ' At least one contributing rollup does not say whether it covers all of its machine\'s projects, so these'
+        + ' totals must not be read as a snapshot of the team.';
+
   return {
     distinctWindows: windows.length,
     contributingDevelopers,
@@ -207,7 +248,9 @@ export function buildWindowCoverage(windows: ObservationWindow[]): WindowCoverag
     overlapFrom,
     overlapTo,
     status,
-    note,
+    wholeSnapshot,
+    scopeKinds,
+    note: note + scopeNote,
   };
 }
 

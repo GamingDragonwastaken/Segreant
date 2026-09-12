@@ -14,9 +14,6 @@ import { discardResponseBody, egressFetch, EgressError, type EgressErrorCode } f
 import { isGitRepo, projectName } from '../git/correlate.ts';
 import {
   computeRealization,
-  projectValueBreakdown,
-  projectTaskStrata,
-  spendCoverageForProjects,
   type ProjectValue,
   type ProjectTaskStratum,
 } from '../value/realization.ts';
@@ -31,7 +28,8 @@ import {
   type VerifyOptions,
   type KeyPair,
 } from '../value/receipt.ts';
-import { buildEconomicRollupBody, buildRollupBody, signRollup, type EconomicProjectValue, type RollupCoverage, type SignedRollup } from '../team/rollup.ts';
+import { buildEconomicRollupBody, buildRollupBody, describeRollupScope, normalizeRollupCoverage, normalizeRollupScope, signRollup, type EconomicProjectValue, type RollupCoverage, type RollupLedgerEvidence, type RollupScope, type SignedRollup } from '../team/rollup.ts';
+import { readLedgerForRollup, rollupCoverageForBody, rollupPeriod, rollupScopeForFilter } from '../team/ledger-evidence.ts';
 import { judgeSessionFromStore } from '../judge/orchestrate.ts';
 import { C, color, usd, pct, printNotAGitRepo, printJson } from './ui.ts';
 import { type Flags } from './flags.ts';
@@ -421,7 +419,25 @@ function scopedPushRefusal(projectFilter: string | null): string | null {
  */
 async function signAndPushRollup(
   projects: ProjectValue[],
-  opts: { windowDays: number; projectFilter: string | null; keys: KeyPair; url: string | null; dryRun: boolean; strata?: ProjectTaskStratum[]; coverage: RollupCoverage },
+  opts: {
+    windowDays: number;
+    projectFilter: string | null;
+    keys: KeyPair;
+    url: string | null;
+    dryRun: boolean;
+    strata?: ProjectTaskStratum[];
+    coverage: RollupCoverage;
+    /** The window the ledger was read over, so the body's period is that window and not a later one. */
+    period: { from: string; to: string };
+    scope: RollupScope;
+    /**
+     * REQUIRED, not optional. The builders check a body against the ledger only
+     * when they are given one, so an optional field here would let a future
+     * caller re-inherit the hole by forgetting it -- the same reasoning that put
+     * the containment check at the mint rather than at this call site.
+     */
+    ledger: RollupLedgerEvidence;
+  },
 ): Promise<PushResult> {
   if (projects.length === 0) {
     const message = opts.projectFilter
@@ -436,9 +452,11 @@ async function signAndPushRollup(
   const scopeRefusal = scopedPushRefusal(opts.dryRun ? null : opts.projectFilter);
   if (scopeRefusal !== null) return { status: 'error', message: scopeRefusal };
 
-  const to = new Date();
-  const from = new Date(to.getTime() - opts.windowDays * 86_400_000);
-  const period = { from: from.toISOString(), to: to.toISOString() };
+  // Computed by the caller alongside the ledger read (`rollupPeriod`), not here.
+  // It used to be taken from `new Date()` at signing time, several statements
+  // after the ledger had been read, so the body claimed a window that was not
+  // quite the one measured.
+  const period = opts.period;
   // Coverage is REQUIRED of this function, not defaulted (D-181). Both mint
   // helpers default it to `complete`, and both call sites used to omit it, so a
   // rollup over a window whose request rows retention had deleted was signed as
@@ -446,9 +464,20 @@ async function signAndPushRollup(
   // receiver sums into a shared total and cannot qualify. An unwired default
   // that is the most confident value the field can take is the worst shape a
   // never-wired mechanism can have.
-  const body = projects.every((project) => project.economic !== undefined)
-    ? buildEconomicRollupBody(opts.keys, projects as EconomicProjectValue[], period, opts.strata, opts.coverage)
-    : buildRollupBody(opts.keys, projects, period, opts.strata, opts.coverage);
+  // The basis travels WITH the mint: `scope` so a receiver that checks nothing
+  // still cannot read a filtered rollup as a whole snapshot, and `ledger` so a
+  // body the local ledger does not support is never signed at all.
+  const basis = { scope: opts.scope, ledger: opts.ledger };
+  let body;
+  try {
+    body = projects.every((project) => project.economic !== undefined)
+      ? buildEconomicRollupBody(opts.keys, projects as EconomicProjectValue[], period, opts.strata, opts.coverage, basis)
+      : buildRollupBody(opts.keys, projects, period, opts.strata, opts.coverage, basis);
+  } catch (e) {
+    // A refusal to mint is a result, not a crash: the operator needs the reason
+    // in the same place they would have got the rollup.
+    return { status: 'error', message: e instanceof Error ? e.message : String(e) };
+  }
   const signed: SignedRollup = signRollup(body, opts.keys);
 
   if (opts.dryRun) {
@@ -587,21 +616,38 @@ export async function cmdTeamPush(flags: Flags): Promise<void> {
   }
 
   const store = new Store(dbPath());
-  let projects = projectValueBreakdown(store, { windowDays });
+  // ONE read of the ledger, and the period it was read over. Reading twice --
+  // once for the body, once for the evidence it is checked against -- measures
+  // two windows a few milliseconds apart, and a unit ageing out between them
+  // would make the two disagree over nothing.
+  const period = rollupPeriod(windowDays);
+  const read = readLedgerForRollup(store, { windowDays, period });
+  let projects = read.projects;
   // Task strata travel with the rollup so the server can standardize on a fixed
   // task basket (src/team/standardize.ts) — same project filter as the totals.
-  let strata = projectTaskStrata(store, { windowDays });
+  let strata = read.strata;
   if (projectFilter) {
     projects = projects.filter((p) => p.project === projectFilter);
     strata = strata.filter((s) => s.project === projectFilter);
   }
   // AFTER the filter, because coverage describes the body that gets signed and
   // not the window it was drawn from. The store stays open until this is read.
-  const coverage = spendCoverageForProjects(store, projects, { windowDays });
+  const coverage = rollupCoverageForBody(store, projects, windowDays);
   store.close();
 
   const keys = loadOrCreateKeyPair(keyPath);
-  const result = await signAndPushRollup(projects, { windowDays, projectFilter, keys, url, dryRun, strata, coverage });
+  const result = await signAndPushRollup(projects, {
+    windowDays,
+    projectFilter,
+    keys,
+    url,
+    dryRun,
+    strata,
+    coverage,
+    period,
+    scope: rollupScopeForFilter(projectFilter),
+    ledger: read.evidence,
+  });
 
   if (result.status === 'empty') {
     if (flags.json) {
@@ -623,6 +669,12 @@ export async function cmdTeamPush(flags: Flags): Promise<void> {
       const roiStr = p.roiIndex === null ? 'RoI —' : `RoI ${Math.round(p.roiIndex)}`;
       console.log(`    ${p.project.padEnd(24)} ${usd(p.costUsd).padStart(12)}   ${roiStr}`);
     }
+    // The basis, printed beside the figures rather than only encoded in the
+    // body a `--json` reader would have to parse. A dry run is the one place an
+    // operator inspects a scoped rollup, so it is the place the scope has to be
+    // legible.
+    console.log(color(tty, C.gray, `  Basis: ${describeRollupScope(normalizeRollupScope(result.signed.body))}`));
+    console.log(color(tty, C.gray, `  Spend coverage claimed: ${normalizeRollupCoverage(result.signed.body)}`));
     console.log(color(tty, C.gray, `  Nothing was sent. Re-run with --url <url> to actually push.`));
     console.log('');
     return;
@@ -680,15 +732,18 @@ async function cmdTeamPushWatch(opts: {
   const tick = async (): Promise<void> => {
     const time = new Date().toLocaleTimeString('en-US', { hour12: false });
     try {
-      let projects = projectValueBreakdown(store, { windowDays: opts.windowDays });
-      let strata = projectTaskStrata(store, { windowDays: opts.windowDays });
+      // Re-read every tick, ledger and window together: a prune between ticks
+      // changes what this body can claim, and evidence computed once at startup
+      // would go stale silently against a window that keeps moving.
+      const period = rollupPeriod(opts.windowDays);
+      const read = readLedgerForRollup(store, { windowDays: opts.windowDays, period });
+      let projects = read.projects;
+      let strata = read.strata;
       if (opts.projectFilter) {
         projects = projects.filter((p) => p.project === opts.projectFilter);
         strata = strata.filter((s) => s.project === opts.projectFilter);
       }
-      // Re-read every tick: a prune between ticks changes what this body can
-      // claim, and a coverage computed once at startup would go stale silently.
-      const coverage = spendCoverageForProjects(store, projects, { windowDays: opts.windowDays });
+      const coverage = rollupCoverageForBody(store, projects, opts.windowDays);
       const result = await signAndPushRollup(projects, {
         windowDays: opts.windowDays,
         projectFilter: opts.projectFilter,
@@ -697,6 +752,9 @@ async function cmdTeamPushWatch(opts: {
         dryRun: false,
         strata,
         coverage,
+        period,
+        scope: rollupScopeForFilter(opts.projectFilter),
+        ledger: read.evidence,
       });
       if (result.status === 'ok') {
         console.log(color(tty, C.gray, `  ${time}  `) + color(tty, C.green, `✓ pushed ${result.projectCount} project(s)`));

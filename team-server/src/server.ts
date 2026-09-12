@@ -33,7 +33,7 @@
 
 import http from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
-import { validateRollupBody, verifyRollup, type SignedRollup } from '../../src/team/rollup.ts';
+import { rollupScopeError, validateRollupBody, verifyRollup, type SignedRollup } from '../../src/team/rollup.ts';
 import { keyIdForPem } from '../../src/value/receipt.ts';
 import type { RollupStore, PeriodFilter } from './store.ts';
 import { verifyIdToken, type OidcConfig } from './oidc.ts';
@@ -269,6 +269,18 @@ function validateRollupSemantics(signed: SignedRollup): string | null {
     return 'body.period must contain valid from and to timestamps';
   }
   if (Date.parse(period['from']) >= Date.parse(period['to'])) return 'body.period.from must be before body.period.to';
+
+  // SCOPE, CHECKED HERE FOR EVERY VERSION. `validateRollupBody` is called below
+  // only for v2 bodies, so a v1 body's scope would otherwise reach the store
+  // unvalidated and be read back by `observationWindows`. Absent is the
+  // older-client shape and normalizes to `unknown`; an explicit value that is
+  // not a scope is a malformed claim and is refused rather than silently
+  // downgraded, because a receiver quietly reinterpreting a claim is how a
+  // signer's statement stops being the signer's statement.
+  if (body['scope'] !== undefined) {
+    const scopeError = rollupScopeError(body['scope']);
+    if (scopeError !== null) return scopeError;
+  }
 
   const projects = body['projects'];
   if (!Array.isArray(projects) || projects.length > MAX_PROJECTS) return `body.projects must be an array of at most ${MAX_PROJECTS} project rows`;
