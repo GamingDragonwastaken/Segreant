@@ -237,7 +237,11 @@ test('the ledger refuses to persist an unwitnessed re-basing', () => {
     id: 'witness:rebasing',
     kind: 'monetary_rebasing',
     evidenceIds: [EVIDENCE_ID],
-    detail: 'allocation from the declared rate-card estimate under the recorded allocation rule',
+    detail: 'provider invoice line reconciled against the declared rate-card estimate',
+    // D-201: a registered re-basing witness names the bases it moves between,
+    // and the ledger holds it to THIS step's pair. The inline reference below
+    // does not carry it; the registered record is what is held to it.
+    basisChange: { from: 'estimated', to: 'billed' },
     issuedAt: at,
     epistemic: 'supported',
     schemaVersion: 1,

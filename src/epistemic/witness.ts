@@ -17,9 +17,27 @@ import {
   type DerivationWitnessKind,
 } from './derivation.ts';
 import { grain, type Grain } from './grain.ts';
+import { MONETARY_BASIS, type MonetaryBasisStatus } from './profile.ts';
 import { scope, type Scope } from './scope.ts';
 import { EPISTEMIC_STATES, type EpistemicState } from './state.ts';
 import { instant, type Instant } from './time.ts';
+
+/**
+ * The two bases a `monetary_rebasing` witness declares it moves between.
+ *
+ * THE MONEY AXIS GETS THE SAME TREATMENT THE COORDINATE AXES ALWAYS HAD.
+ * A coordinate witness carries `from`/`to` coordinates and
+ * `assessCoordinateDerivation` refuses it unless they are the exact
+ * coordinates being moved between. `monetary_rebasing` was added at D-152 with
+ * no such field, so the witness that defends `metered usage !=
+ * provider-billed cost` named neither side of the move it licensed and
+ * `estimated -> billed` was discharged by a witness written about an
+ * allocation. `detail` is prose and cannot be checked; this can.
+ */
+export interface MonetaryBasisChange {
+  readonly from: MonetaryBasisStatus;
+  readonly to: MonetaryBasisStatus;
+}
 
 export interface WitnessInput {
   readonly id: string;
@@ -27,6 +45,8 @@ export interface WitnessInput {
   /** Required for coordinate witness kinds; forbidden for all others. */
   readonly from?: ClaimCoordinates;
   readonly to?: ClaimCoordinates;
+  /** Required for `monetary_rebasing`; forbidden for every other kind. */
+  readonly basisChange?: MonetaryBasisChange;
   /** Every canonical witness must retain at least one grounding evidence ID. */
   readonly evidenceIds: readonly string[];
   readonly detail?: string | null;
@@ -41,6 +61,7 @@ export interface Witness {
   readonly kind: DerivationWitnessKind;
   readonly from?: ClaimCoordinates;
   readonly to?: ClaimCoordinates;
+  readonly basisChange?: MonetaryBasisChange;
   readonly evidenceIds: readonly string[];
   readonly detail: string | null;
   readonly issuedAt: Instant;
@@ -49,8 +70,10 @@ export interface Witness {
 }
 
 const WITNESS_KEYS = new Set([
-  'id', 'kind', 'from', 'to', 'evidenceIds', 'detail', 'issuedAt', 'epistemic', 'schemaVersion',
+  'id', 'kind', 'from', 'to', 'basisChange', 'evidenceIds', 'detail', 'issuedAt', 'epistemic',
+  'schemaVersion',
 ]);
+const BASIS_CHANGE_KEYS = new Set(['from', 'to']);
 const COORDINATE_KEYS = new Set(['grain', 'scope']);
 const GRAIN_KEYS = new Set(['dimensions']);
 const SCOPE_KEYS = new Set(['constraints']);
@@ -119,6 +142,24 @@ function canonicalInstant(value: unknown, label: string): Instant {
   }
 }
 
+function canonicalBasisChange(value: unknown, label: string): MonetaryBasisChange {
+  assertKnownKeys(value, BASIS_CHANGE_KEYS, label);
+  const input = value as { readonly from?: unknown; readonly to?: unknown };
+  for (const side of ['from', 'to'] as const) {
+    const basis = input[side];
+    if (typeof basis !== 'string' || !MONETARY_BASIS.includes(basis as MonetaryBasisStatus)) {
+      throw new Error(`${label}.${side} must be a monetary basis: ${String(basis)}`);
+    }
+  }
+  const from = input.from as MonetaryBasisStatus;
+  const to = input.to as MonetaryBasisStatus;
+  // The same two moves `monetaryRebasing` in derivation.ts leaves free are not
+  // re-basings, so a witness declaring one would be a witness to nothing.
+  if (from === to) throw new Error(`${label} declares no change: ${from} -> ${to}`);
+  if (to === 'none' || to === 'mixed') throw new Error(`${label} declares a weakening, which needs no witness: ${from} -> ${to}`);
+  return Object.freeze({ from, to });
+}
+
 function witnessKind(value: unknown): DerivationWitnessKind {
   if (typeof value !== 'string' || !DERIVATION_WITNESS_KINDS.includes(value as DerivationWitnessKind)) {
     throw new Error(`invalid witness kind: ${String(value)}`);
@@ -137,6 +178,10 @@ export function witness(input: WitnessInput): Witness {
   const hasTo = value.to !== undefined;
   if (coordinateKind && (!hasFrom || !hasTo)) throw new Error(`coordinate witness ${id} requires from and to coordinates`);
   if (!coordinateKind && (hasFrom || hasTo)) throw new Error(`non-coordinate witness ${id} cannot carry coordinates`);
+  const rebasingKind = kind === 'monetary_rebasing';
+  const hasBasisChange = value.basisChange !== undefined;
+  if (rebasingKind && !hasBasisChange) throw new Error(`monetary_rebasing witness ${id} requires a basisChange naming the bases it moves between`);
+  if (!rebasingKind && hasBasisChange) throw new Error(`${kind} witness ${id} cannot carry a basisChange`);
 
   const evidenceIds = stringList(value.evidenceIds, `witness ${id} evidenceIds`);
   const detail = value.detail === undefined || value.detail === null ? null : nonEmpty(value.detail, `witness ${id} detail`);
@@ -155,6 +200,7 @@ export function witness(input: WitnessInput): Witness {
       from: canonicalCoordinates(value.from, `witness ${id}.from`),
       to: canonicalCoordinates(value.to, `witness ${id}.to`),
     } : {}),
+    ...(rebasingKind ? { basisChange: canonicalBasisChange(value.basisChange, `witness ${id}.basisChange`) } : {}),
     evidenceIds,
     detail,
     issuedAt,

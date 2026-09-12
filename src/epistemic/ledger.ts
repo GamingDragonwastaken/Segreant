@@ -40,6 +40,7 @@ import {
 import { canonicalJson } from './serialization.ts';
 import { instant, intervalRelation, type Instant } from './time.ts';
 import { witness, type Witness } from './witness.ts';
+import { assessWitnessObligation } from './obligation.ts';
 
 export type AppendResult = 'inserted' | 'duplicate';
 
@@ -559,6 +560,7 @@ export class EpistemicLedger {
     // by analogy: a conflict is a live disagreement, and nothing known is not
     // assent. Only `supported` discharges; the rest are set aside here and the
     // refusal below names the witness and the state it is in.
+    const registeredWitnesses = new Map<string, Witness>();
     const unsupported = new Map<string, EpistemicState>();
     for (const reference of item.witnesses) {
       const registered = this.readWitness(reference.id);
@@ -566,15 +568,9 @@ export class EpistemicLedger {
       if (!sameWitnessReference(reference, registered)) {
         throw new Error(`derivation witness ${reference.id} does not match the registered witness`);
       }
+      registeredWitnesses.set(reference.id, registered);
       if (registered.epistemic !== 'supported') unsupported.set(reference.id, registered.epistemic);
     }
-    // Legality is assessed against the discharging subset. Setting a witness
-    // aside is not the same as the derivation never citing it: the citation
-    // stays in the stored payload and in the DAG, so the record still shows
-    // which proof was offered and why it did not count.
-    const discharging: Derivation = unsupported.size === 0
-      ? item
-      : { ...item, witnesses: Object.freeze(item.witnesses.filter((entry) => !unsupported.has(entry.id))) };
     const output = this.readClaim(item.outputClaimId);
     if (output === null) throw new Error(`unknown output claim: ${item.outputClaimId}`);
     if (JSON.stringify(output.proposition) !== JSON.stringify(item.outputProposition)) throw new Error(`derivation output proposition does not match ${item.outputClaimId}`);
@@ -597,6 +593,31 @@ export class EpistemicLedger {
     for (const sourceId of item.inputClaimIds) {
       const source = this.readClaim(sourceId);
       if (source === null) throw new Error(`unknown input claim: ${sourceId}`);
+      // A WITNESS DISCHARGES ONLY WHEN IT CONTAINS WHAT ITS KIND OBLIGES (D-201).
+      // D-190 asked whether the registered record still holds; this asks
+      // whether it is ABOUT this step. `assessDerivationLegality` matches kind
+      // and `sameWitnessReference` matches identity, and neither can tell a
+      // `causal_identification` grounded in some other study's evidence from
+      // one grounded in this study's. The obligations live in `obligation.ts`,
+      // per kind, and most kinds have none the records can decide -- that
+      // file says which by name. The check is per input claim because a
+      // re-basing witness must name the bases THIS source and output move
+      // between, and a derivation may have several inputs.
+      //
+      // Set aside, not erased, exactly as an unsupported witness is: legality
+      // is assessed against the discharging subset, the citation stays in the
+      // stored payload and the DAG, and the refusal below says why it did not
+      // count. `setAside` maps each witness id to that reason.
+      const setAside = new Map<string, string>();
+      for (const [id, state] of unsupported) setAside.set(id, `${id} is ${state}`);
+      for (const [id, registered] of registeredWitnesses) {
+        if (setAside.has(id)) continue;
+        const verdict = assessWitnessObligation(registered, { source, output, evidence: (evidenceId) => this.readEvidence(evidenceId) });
+        if (!verdict.discharges) setAside.set(id, verdict.reason ?? `${id} does not discharge its obligation`);
+      }
+      const discharging: Derivation = setAside.size === 0
+        ? item
+        : { ...item, witnesses: Object.freeze(item.witnesses.filter((entry) => !setAside.has(entry.id))) };
       const legality = assessDerivationLegality(source, output, discharging);
       if (!legality.allowed) {
         // An obligation with no witness at all and one whose witness does not
@@ -604,12 +625,12 @@ export class EpistemicLedger {
         // register a proof, or resolve the one already on record. Collapsing
         // them would send someone to create a witness they already have.
         const blocked = item.witnesses
-          .filter((entry) => unsupported.has(entry.id) && legality.missingWitnesses.includes(entry.kind))
-          .map((entry) => `${entry.id} is ${unsupported.get(entry.id)}`);
+          .filter((entry) => setAside.has(entry.id) && legality.missingWitnesses.includes(entry.kind))
+          .map((entry) => setAside.get(entry.id) as string);
         if (blocked.length > 0) {
           throw new Error(
-            `derivation ${item.id} strengthens ${sourceId} into ${output.id} without a supported `
-            + `${legality.missingWitnesses.join(', ')} witness: ${blocked.join(', ')}`,
+            `derivation ${item.id} strengthens ${sourceId} into ${output.id} without a discharging `
+            + `${legality.missingWitnesses.join(', ')} witness: ${blocked.join('; ')}`,
           );
         }
         throw new Error(
