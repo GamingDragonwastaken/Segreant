@@ -89,11 +89,35 @@ test('an adjustment cannot carry a basis that no charge can hold', () => {
 test('an adjustment may carry any basis a charge can hold', () => {
   // The permitted path, which matters as much as the refusal: a rule that
   // rejected everything would pass the test above and destroy the feature.
+  //
+  // The adjustment names the fixture bill as its source. That is not what this
+  // test is about — it is about basis — but since D-206 an adjustment that
+  // names nothing is refused at construction, and the refusal test above stays
+  // sourceless on purpose: the basis check fires first, so it proves the basis
+  // rule and not the source rule.
   for (const kind of ADJUSTMENT_KINDS) {
     for (const basis of ['list', 'estimated', 'provider_observed', 'billed'] as const) {
-      const built = economicEvent(event({ id: `event:${kind}:ok`, kind, amount: money('-1.00', 'USD', basis) }));
+      const built = economicEvent(event({
+        id: `event:${kind}:ok`,
+        kind,
+        amount: money('-1.00', 'USD', basis),
+        sourceEventIds: ['event:bill:1'],
+        reversalOf: 'event:bill:1',
+      }));
       assert.equal(built.amount?.basis, basis);
     }
+  }
+});
+
+test('an adjustment that names no charge is refused before it can reach a balance', () => {
+  // D-206. The bound on negative adjustments is keyed on the charge they name;
+  // an adjustment naming nothing walked around it entirely. All six kinds.
+  for (const kind of ADJUSTMENT_KINDS) {
+    assert.throws(
+      () => economicEvent(event({ id: `event:${kind}:sourceless`, kind, amount: money('-1.00', 'USD', 'billed'), sourceEventIds: [] })),
+      /adjusts a charge and must name it: sourceEventIds is empty/,
+      `sourceless ${kind} was accepted`,
+    );
   }
 });
 

@@ -81,6 +81,15 @@
   after its `asOf` boundary;
 - allocation reversals must target a compatible, non-negative allocation and
   cannot exceed it;
+- an adjustment (`credit_applied`, `discount_applied`, `commitment_recognized`,
+  `tax_recognized`, `true_up`, `write_off`) names at least one charge in
+  `sourceEventIds`; one that names nothing is refused at construction and on
+  read of a persisted row, so it can reach neither a projection nor a close;
+- negative adjustments against one charge never total more than that charge
+  net of its `price_corrected` chain, in any arrival order: an adjustment that
+  would exceed the corrected amount is refused, and a correction that would
+  take the charge below what is already adjusted against it is refused, since
+  no event takes an adjustment back;
 - source-event IDs must already exist before a new event is appended;
 - no floating-point value is introduced by serialization, replay or projection;
 - exact request issuance accepts only USD Money and maps list/estimated,

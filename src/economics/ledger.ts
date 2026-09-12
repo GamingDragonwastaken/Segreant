@@ -400,6 +400,84 @@ export class EconomicLedger {
     return current;
   }
 
+  /**
+   * The charge as it currently stands: its asserted amount plus every
+   * `price_corrected` delta recorded against it, followed along the chain.
+   *
+   * THE BOUND IS AGAINST THE CORRECTED CHARGE, NOT THE ASSERTED ONE (WP-C04,
+   * D-206). A $10.00 charge corrected to $1.00 is a $1.00 charge; the
+   * correction exists to say so. Bounding credits against the raw $10.00 let
+   * a $10.00 credit stand against a charge the ledger itself had already
+   * restated as $1.00, and the close then carried `charge 10, price -9,
+   * adjustment -10`: three true rows whose sum is a negative position.
+   *
+   * The chain is linear by construction — each predecessor has at most one
+   * direct correction — so a second successor here is a corrupt store, and is
+   * refused rather than picked between. Reads the stored rows without closure
+   * validation, as the sibling aggregate walks do, because this runs INSIDE
+   * closure validation.
+   */
+  private correctedChargeAmount(charge: EconomicEvent): { readonly amount: Money; readonly correctionIds: readonly string[] } {
+    if (charge.amount === null) throw new Error(`economic event ${charge.id} has no monetary amount to correct`);
+    let amount = charge.amount;
+    const correctionIds: string[] = [];
+    const seen = new Set<string>([charge.id]);
+    let current = charge.id;
+    for (;;) {
+      const successors = this.db.prepare(
+        `SELECT s.event_id AS eventId
+         FROM economic_event_sources AS s
+         JOIN economic_events AS e ON e.event_id = s.event_id
+         WHERE s.source_event_id = ? AND e.event_kind = 'price_corrected'
+         ORDER BY s.event_id ASC`,
+      ).all(current) as unknown as { eventId?: unknown }[];
+      const ids = successors.map((item) => item.eventId).filter((id): id is string => typeof id === 'string');
+      if (ids.length === 0) break;
+      if (ids.length > 1) {
+        throw new Error(`economic event ${current} has more than one direct price correction (${ids.join(', ')})`);
+      }
+      const nextId = ids[0] as string;
+      if (seen.has(nextId)) throw new Error(`economic event price correction cycle detected at ${nextId}`);
+      seen.add(nextId);
+      const correction = this.readStored(nextId);
+      if (correction === null || correction.amount === null) break;
+      amount = addMoney(amount, correction.amount);
+      correctionIds.push(nextId);
+      current = nextId;
+    }
+    return { amount, correctionIds };
+  }
+
+  /**
+   * Every negative adjustment already recorded against `target`, other than
+   * `excludeId`, summed in the target's currency and basis. Keyed on the
+   * TARGET so one charge's credits never constrain another's.
+   */
+  private recordedNegativeAdjustments(target: EconomicEvent, excludeId: string): { readonly total: Money; readonly ids: readonly string[] } {
+    if (target.amount === null) throw new Error(`economic event ${target.id} has no monetary amount to adjust`);
+    const rows = this.db.prepare(
+      `SELECT s.event_id AS eventId
+       FROM economic_event_sources AS s
+       JOIN economic_events AS e ON e.event_id = s.event_id
+       WHERE s.source_event_id = ? AND s.event_id <> ?
+       ORDER BY s.event_id ASC`,
+    ).all(target.id, excludeId) as unknown as { eventId?: unknown }[];
+    let total = money('0', target.amount.currency, target.amount.basis);
+    const ids: string[] = [];
+    for (const rowValue of rows) {
+      if (typeof rowValue.eventId !== 'string') continue;
+      const recorded = this.readStored(rowValue.eventId);
+      if (recorded === null || recorded.amount === null) continue;
+      if (economicEventRole(recorded.kind) !== 'adjustment' || recorded.amount.coefficient >= 0n) continue;
+      const recordedTarget = recorded.reversalOf
+        ?? (recorded.sourceEventIds.length === 1 ? recorded.sourceEventIds[0] : null);
+      if (recordedTarget !== target.id) continue;
+      total = addMoney(total, negateMoney(recorded.amount));
+      ids.push(recorded.id);
+    }
+    return { total, ids };
+  }
+
   private validateReferenceClosure(
     value: EconomicEvent,
     visiting: Set<string> = new Set<string>(),
@@ -422,7 +500,17 @@ export class EconomicLedger {
       sources.set(sourceId, source);
       this.validateReferenceClosure(source, visiting, validated);
     }
-    if (economicEventRole(value.kind) === 'adjustment' && value.amount !== null && value.sourceEventIds.length > 0) {
+    // Belt and braces with the constructor: every stored row is rebuilt through
+    // `economicEvent` on read, so this is unreachable for a canonical row. It
+    // stays because the bound below is what a sourceless adjustment walks
+    // around, and the refusal belongs next to the thing it protects.
+    if (economicEventRole(value.kind) === 'adjustment' && value.amount !== null && value.sourceEventIds.length === 0) {
+      throw new Error(
+        `economic event ${value.id} kind ${value.kind} adjusts a charge and must name it: sourceEventIds is empty. `
+        + 'List the charge_estimated, provider_charge_observed or bill_observed event this adjusts',
+      );
+    }
+    if (economicEventRole(value.kind) === 'adjustment' && value.amount !== null) {
       const chargeSources = [...sources.values()].filter((source) => economicEventRole(source.kind) === 'charge');
       if (chargeSources.length !== value.sourceEventIds.length) {
         throw new Error(`economic event ${value.id} adjustment sources must all be charge events`);
@@ -434,7 +522,7 @@ export class EconomicLedger {
         }
       }
     }
-    if (economicEventRole(value.kind) === 'adjustment' && value.amount !== null && value.amount.coefficient < 0n && value.sourceEventIds.length > 0) {
+    if (economicEventRole(value.kind) === 'adjustment' && value.amount !== null && value.amount.coefficient < 0n) {
       if (value.reversalOf === null && value.sourceEventIds.length !== 1) {
         throw new Error(`economic event ${value.id} negative adjustments with multiple charge sources require an explicit reversalOf target`);
       }
@@ -442,31 +530,20 @@ export class EconomicLedger {
       if (targetId !== undefined) {
         const target = sources.get(targetId);
         if (target !== undefined && economicEventRole(target.kind) === 'charge' && target.amount !== null) {
-          const priorAdjustments = this.db.prepare(
-            `SELECT s.event_id AS eventId
-             FROM economic_event_sources AS s
-             JOIN economic_events AS e ON e.event_id = s.event_id
-             WHERE s.source_event_id = ? AND s.event_id <> ?
-             ORDER BY s.event_id ASC`,
-          ).all(target.id, value.id) as unknown as { eventId?: unknown }[];
-          let adjusted = negateMoney(value.amount);
-          const adjustmentIds = [value.id];
-          for (const prior of priorAdjustments) {
-            if (typeof prior.eventId !== 'string') continue;
-            const recorded = this.readStored(prior.eventId);
-            if (recorded === null || recorded.amount === null) continue;
-            if (economicEventRole(recorded.kind) !== 'adjustment' || recorded.amount.coefficient >= 0n) continue;
-            const recordedTarget = recorded.reversalOf
-              ?? (recorded.sourceEventIds.length === 1 ? recorded.sourceEventIds[0] : null);
-            if (recordedTarget !== target.id) continue;
-            adjusted = addMoney(adjusted, negateMoney(recorded.amount));
-            adjustmentIds.push(recorded.id);
-          }
-          if (compareMoney(adjusted, target.amount) > 0) {
+          const prior = this.recordedNegativeAdjustments(target, value.id);
+          const adjusted = addMoney(negateMoney(value.amount), prior.total);
+          const adjustmentIds = [value.id, ...prior.ids];
+          // The charge net of its correction chain, not the charge as first
+          // asserted: see `correctedChargeAmount`.
+          const corrected = this.correctedChargeAmount(target);
+          if (compareMoney(adjusted, corrected.amount) > 0) {
+            const restated = corrected.correctionIds.length === 0
+              ? ''
+              : ` as corrected from ${formatMoneyAmount(target.amount)} by ${corrected.correctionIds.join(', ')}`;
             throw new Error(
               `economic event ${value.id} adjustments total ${formatMoneyAmount(adjusted)} `
-              + `${target.amount.currency}, which exceeds the ${formatMoneyAmount(target.amount)} charge `
-              + `${target.id} (${adjustmentIds.sort().join(', ')})`,
+              + `${target.amount.currency}, which exceeds the ${formatMoneyAmount(corrected.amount)} charge `
+              + `${target.id}${restated} (${adjustmentIds.sort().join(', ')})`,
             );
           }
         }
@@ -640,6 +717,41 @@ export class EconomicLedger {
       ).get(source.id, value.id) as { eventId?: unknown } | undefined;
       if (priorCorrections !== undefined && typeof priorCorrections.eventId === 'string') {
         throw new Error(`economic event ${value.id} price correction source ${source.id} already has a correction`);
+      }
+
+      // THE SAME BOUND, FROM THE OTHER SIDE (WP-C04, D-206).
+      //
+      // Conservation is a property of the set, so it cannot depend on which
+      // event arrives last. {charge 10, credit -10, correction -> 1} is refused
+      // when the credit is last (above); it must be refused when the correction
+      // is last too, or the D-197 order-independence law fails and — worse — an
+      // accepted append leaves a credit that every subsequent read revalidates
+      // against a charge it now exceeds, which is a ledger that closes itself.
+      //
+      // Compared against the chain's TERMINAL amount, not this correction's own
+      // `nextAmount`: a correction to $5.00 later restated to $8.00 is not
+      // breached by an $8.00 credit, and a read-time revalidation of the older
+      // link must not say it is.
+      let root: EconomicEvent = source;
+      const chain = new Set<string>([value.id]);
+      while (root.kind === 'price_corrected') {
+        if (chain.has(root.id)) throw new Error(`economic event price correction cycle detected at ${root.id}`);
+        chain.add(root.id);
+        const predecessorId = root.sourceEventIds[0];
+        const predecessor = predecessorId === undefined ? null : this.readStored(predecessorId);
+        if (predecessor === null) throw new Error(`economic event ${value.id} price correction chain does not reach its charge`);
+        root = predecessor;
+      }
+      const stored = this.correctedChargeAmount(root);
+      const terminal = stored.correctionIds.includes(value.id) ? stored.amount : addMoney(stored.amount, value.amount);
+      const credited = this.recordedNegativeAdjustments(root, value.id);
+      if (compareMoney(credited.total, terminal) > 0) {
+        throw new Error(
+          `economic event ${value.id} corrects charge ${root.id} to ${formatMoneyAmount(terminal)} `
+          + `${terminal.currency}, below the ${formatMoneyAmount(credited.total)} already adjusted against it `
+          + `(${[...credited.ids].sort().join(', ')}); the ledger has no event that takes an adjustment back, `
+          + 'so the correction cannot be recorded while those adjustments stand',
+        );
       }
     }
     if (value.kind === 'fx_translated') {

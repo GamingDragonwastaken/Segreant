@@ -48,8 +48,11 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { EconomicLedger } from '../src/economics/ledger.ts';
+import { serializeEconomicEvent } from '../src/economics/serialization.ts';
+import { canonicalJson } from '../src/epistemic/serialization.ts';
 import {
   ECONOMIC_EVENT_KINDS,
   ECONOMIC_EVENT_ROLES,
@@ -777,4 +780,286 @@ test('LAW a close fixes what was visible, so an event cannot be inserted behind 
       assert.equal(close.eventCount, scenario.events.length);
     });
   }
+});
+
+// ---------------------------------------------------------------------------
+// D-206: the two shapes the generator above never produced
+// ---------------------------------------------------------------------------
+//
+// D-200 verified the adjustment bound over the corpus above and reported that it
+// held — and that the corpus never contained a counterexample. `buildScenario`
+// gives every adjustment a bill to name, and the bound law above corrects
+// nothing. A law that never generates the shape it forbids is not testing it.
+// These two do.
+
+/** The three charge kinds an adjustment may name, with a basis each may hold. */
+const CHARGE_SHAPES = [
+  { kind: 'bill_observed', basis: 'billed' },
+  { kind: 'provider_charge_observed', basis: 'provider_observed' },
+  { kind: 'charge_estimated', basis: 'list' },
+  { kind: 'charge_estimated', basis: 'estimated' },
+] as const;
+
+test('LAW an adjustment that names no charge is refused, at construction and on read of a persisted row', () => {
+  // Shape (a) from D-200: three sourceless `write_off -8.00` projected
+  // `adjustment/billed -24` against `charge/billed 10` and closed. An adjustment
+  // without a source is outside every bound because every bound is keyed on the
+  // source. Refused where it is built, and — because a persisted row is rebuilt
+  // through the same constructor on read — refused where it is read, so a row
+  // written around the constructor cannot reach a projection or a close.
+  const { seed, rng } = stream('conservation/sourceless-adjustment');
+  let negativeCases = 0;
+  let positiveCases = 0;
+  for (let index = 0; index < BOUND_CASES; index += 1) {
+    const scale = 4;
+    const subject = `economic:sourceless:${index}`;
+    const occurredAt = at(PERIOD_START + rng.between(0, 20) * DAY);
+    const recordedBase = Date.parse(occurredAt) + DAY;
+    const shape = rng.pick(CHARGE_SHAPES);
+    const chargeCoefficient = positiveCoefficient(rng, scale);
+    const charge = economicEvent({
+      id: `${subject}:charge`,
+      kind: shape.kind,
+      subject,
+      occurredAt,
+      recordedAt: at(recordedBase),
+      amount: money(decimalText(chargeCoefficient, scale), 'USD', shape.basis),
+      sourceEventIds: [],
+      reversalOf: null,
+      metadata: { fixture: 'sourceless-law' },
+      schemaVersion: 1,
+    });
+    // Sign is generated too: the rule is about naming, not about direction. A
+    // positive sourceless tax is as meaningless as a negative sourceless credit.
+    const negative = rng.chance(2, 3);
+    if (negative) negativeCases += 1; else positiveCases += 1;
+    const coefficient = positiveCoefficient(rng, scale) * (negative ? -1n : 1n);
+    const kind = rng.pick(ADJUSTMENT_KINDS);
+    const context = `${reproduce(seed, index)}\ncharge ${shape.kind} ${formatMoneyAmount(charge.amount as Money)}`
+      + `\nsourceless ${kind} ${decimalText(coefficient, scale)}`;
+    const input = {
+      id: `${subject}:adjustment`,
+      kind,
+      subject,
+      occurredAt,
+      recordedAt: at(recordedBase + HOUR),
+      amount: money(decimalText(coefficient, scale), 'USD', shape.basis),
+      reversalOf: null,
+      metadata: { fixture: 'sourceless-law' },
+      schemaVersion: 1,
+    } as const;
+
+    // Construction: refused with the route out named.
+    assert.throws(
+      () => economicEvent({ ...input, sourceEventIds: [] }),
+      /adjusts a charge and must name it: sourceEventIds is empty[\s\S]*List the charge_estimated, provider_charge_observed or bill_observed event/,
+      `${context}\na sourceless adjustment was constructed`,
+    );
+    // The same input, naming the charge, is a legitimate event: the refusal is
+    // about the missing source and nothing else.
+    const named = economicEvent({ ...input, sourceEventIds: [charge.id], reversalOf: negative ? charge.id : null });
+
+    // Persistence: write the sourceless row around the constructor, with a
+    // digest that verifies, and prove no read surface honours it.
+    withLedger((ledger) => {
+      assert.equal(ledger.append(charge), 'inserted');
+      const encoded = serializeEconomicEvent(named);
+      const stripped = { ...(JSON.parse(encoded.body) as Record<string, unknown>), sourceEventIds: [], reversalOf: null };
+      const body = canonicalJson(stripped);
+      const digest = `sha256:${createHash('sha256').update(body, 'utf8').digest('hex')}`;
+      const db = (ledger as unknown as { db: DatabaseSync }).db;
+      db.prepare(
+        'INSERT INTO economic_events (event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ).run(named.id, named.kind, named.subject, named.occurredAt, named.recordedAt, body, digest);
+
+      const refusal = /adjusts a charge and must name it: sourceEventIds is empty/;
+      assert.throws(() => ledger.read(named.id), refusal, `${context}\na persisted sourceless adjustment was read`);
+      assert.throws(() => ledger.project(), refusal, `${context}\na persisted sourceless adjustment reached a projection`);
+      assert.throws(
+        () => ledger.finalizePeriod({ id: `${subject}:close`, periodStartMs: PERIOD_START, periodEndMs: PERIOD_END, recordedAt: at(PERIOD_END + DAY) }),
+        refusal,
+        `${context}\na persisted sourceless adjustment survived into a close`,
+      );
+    });
+  }
+  assert.ok(negativeCases > 0 && positiveCases > 0, `sweep degenerated: ${negativeCases} negative, ${positiveCases} positive`);
+});
+
+test('LAW negative adjustments never total more than the charge AS CORRECTED, in any arrival order', () => {
+  // Shape (b) from D-200: a $10.00 charge corrected to $1.00 still admitted a
+  // $10.00 credit, because the bound compared against the charge as first
+  // asserted rather than against the chain of corrections the ledger itself
+  // holds for it. The close then read `charge 10, price -9, adjustment -10`.
+  //
+  // The generator here builds a correction chain of one to three links whose
+  // amounts move in both directions, and a set of negative adjustments that
+  // either stays inside the bound or deliberately exceeds it. In the "over" case
+  // the sweep is steered, when the chain allows it, into the exact gap D-200
+  // described: over the corrected charge but WITHIN the asserted one, so the
+  // refusal can only come from comparing against the corrected amount.
+  //
+  // Arrival order is generated over corrections and adjustments together, so
+  // the correction lands last in some orders and the adjustment in others; the
+  // set must be refused either way, or admission is order-dependent.
+  //
+  // WHAT "CONSERVING" MEANS WHEN THE CHARGE MOVES. Recorded time is load-bearing
+  // (the third law above): each append is judged against the charge as it stood
+  // at that instant, so a set that conserves only at its final state may be
+  // refused part-way in some orders. The order-independence assertion is
+  // therefore made for sets that conserve at EVERY prefix — adjustments no
+  // larger than the smallest amount the chain passes through — which is the
+  // strongest statement the ledger's own semantics support.
+  const { seed, rng } = stream('conservation/corrected-charge-bound');
+  let overCases = 0;
+  let gapCases = 0;
+  let conservingCases = 0;
+  let correctionLastOrders = 0;
+  let adjustmentLastOrders = 0;
+  // Every arrival order finalizes a period, which is the surface the defect
+  // reached; that is the expensive step, so this sweep runs half the bound
+  // cases and asserts below that it still reached every region it exists for.
+  for (let index = 0; index < BOUND_CASES / 2; index += 1) {
+    const scale = 4;
+    const subject = `economic:corrected-bound:${index}`;
+    const basis = rng.pick(['list', 'estimated'] as const);
+    const occurredAt = at(PERIOD_START + rng.between(0, 20) * DAY);
+    const recordedBase = Date.parse(occurredAt) + DAY;
+    const chargeCoefficient = positiveCoefficient(rng, scale);
+    const charge = economicEvent({
+      id: `${subject}:charge`,
+      kind: 'charge_estimated',
+      subject,
+      occurredAt,
+      recordedAt: at(recordedBase),
+      amount: money(decimalText(chargeCoefficient, scale), 'USD', basis),
+      sourceEventIds: [],
+      reversalOf: null,
+      metadata: { rateCard: 'fixture' },
+      schemaVersion: 1,
+    });
+
+    const corrections: EconomicEvent[] = [];
+    let previous = charge;
+    let previousCoefficient = chargeCoefficient;
+    let floor = chargeCoefficient;
+    const links = rng.between(1, 3);
+    for (let link = 0; link < links; link += 1) {
+      const nextCoefficient = positiveCoefficient(rng, scale);
+      const correction = priceCorrectionEvent({
+        id: `${subject}:correction-${link}`,
+        source: previous,
+        previousAmount: money(decimalText(previousCoefficient, scale), 'USD', basis),
+        nextAmount: money(decimalText(nextCoefficient, scale), 'USD', basis),
+        recordedAt: at(recordedBase + (1 + link) * HOUR),
+      });
+      corrections.push(correction);
+      previous = correction;
+      previousCoefficient = nextCoefficient;
+      if (nextCoefficient < floor) floor = nextCoefficient;
+    }
+    const terminal = previousCoefficient;
+
+    const over = rng.chance(1, 2);
+    let target: bigint;
+    if (over) {
+      overCases += 1;
+      if (terminal < chargeCoefficient) {
+        // The D-200 gap: strictly over the corrected charge, at most the asserted one.
+        gapCases += 1;
+        const gap = chargeCoefficient - terminal;
+        target = terminal + 1n + ((gap - 1n) * BigInt(rng.between(0, 100))) / 100n;
+      } else {
+        target = terminal + positiveCoefficient(rng, scale);
+      }
+    } else {
+      conservingCases += 1;
+      target = (floor * BigInt(rng.between(0, 100))) / 100n;
+    }
+    const count = rng.between(1, 4);
+    const adjustments = partition(rng, target, count).map((share, position) => economicEvent({
+      id: `${subject}:adjustment-${position}`,
+      kind: rng.pick(ADJUSTMENT_KINDS),
+      subject,
+      occurredAt,
+      recordedAt: at(recordedBase + (5 + position) * HOUR),
+      amount: money(decimalText(-share, scale), 'USD', basis),
+      sourceEventIds: [charge.id],
+      reversalOf: charge.id,
+      metadata: { rateCard: 'fixture' },
+      schemaVersion: 1,
+    }));
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const order = topologicalOrder(rng, [charge, ...corrections, ...adjustments]);
+      const lastCorrection = Math.max(...corrections.map((item) => order.indexOf(item)));
+      const lastAdjustment = Math.max(...adjustments.map((item) => order.indexOf(item)));
+      if (lastCorrection > lastAdjustment) correctionLastOrders += 1; else adjustmentLastOrders += 1;
+      const context = `${reproduce(seed, index)} (arrival ${attempt}, ${over ? 'over' : 'conserving'})`
+        + `\ncharge ${formatMoneyAmount(charge.amount as Money)} corrected through `
+        + corrections.map((item) => formatMoneyAmount(item.amount as Money)).join(', ')
+        + ` to ${decimalText(terminal, scale)} (floor ${decimalText(floor, scale)})`
+        + `\nadjustments ${adjustments.map((item) => formatMoneyAmount(item.amount as Money)).join(', ')}`
+        + `\norder ${order.map((item) => item.id.slice(subject.length + 1)).join(' -> ')}`;
+      withLedger((ledger) => {
+        let refusals = 0;
+        let orphaned = 0;
+        const refused = new Set<string>();
+        for (const item of order) {
+          // A refused correction takes the rest of its chain with it: a later
+          // link names a source that never landed, which is a different refusal
+          // ("unknown source") and not the one under test. Skip it, and count it
+          // so the close binds exactly what was accepted.
+          if (item.sourceEventIds.some((sourceId) => refused.has(sourceId))) {
+            refused.add(item.id);
+            orphaned += 1;
+            continue;
+          }
+          try {
+            assert.equal(ledger.append(item), 'inserted');
+          } catch (error) {
+            refusals += 1;
+            refused.add(item.id);
+            const message = error instanceof Error ? error.message : String(error);
+            assert.match(
+              message,
+              /adjustments total [\s\S]*exceeds the [\s\S]*charge|corrects charge [\s\S]*below the [\s\S]*already adjusted against it/,
+              `${context}\nrefused for an unexpected reason: ${message}`,
+            );
+          }
+        }
+
+        // The invariant, on the close surface: what closes nets to a
+        // non-negative position once the charge, its corrections and its
+        // adjustments — three roles, one currency and basis — are read together.
+        const close = ledger.finalizePeriod({ id: `${subject}:close`, periodStartMs: PERIOD_START, periodEndMs: PERIOD_END, recordedAt: at(PERIOD_END + DAY) });
+        const balances = ledger.project().balances.filter((item) => item.basis === basis);
+        const chargeBalance = balances.find((item) => item.role === 'charge');
+        assert.ok(chargeBalance !== undefined, `${context}\nthe charge disappeared from the projection`);
+        let net = chargeBalance.amount;
+        for (const role of ['price', 'adjustment'] as const) {
+          const balance = balances.find((item) => item.role === role);
+          if (balance !== undefined) net = addMoney(net, balance.amount);
+        }
+        assert.ok(
+          compareMoney(net, money('0', 'USD', basis)) >= 0,
+          `${context}\nnet corrected position went negative at ${formatMoneyAmount(net)} and closed as ${close.projectionDigest}`,
+        );
+        assert.equal(close.eventCount, order.length - refusals - orphaned, `${context}\nthe close did not bind exactly the accepted events`);
+
+        if (over) {
+          assert.ok(refusals > 0, `${context}\nan over-adjusting set was accepted in full`);
+        } else {
+          assert.equal(refusals, 0, `${context}\na set conserving at every prefix was refused, which makes admission order-dependent`);
+        }
+      });
+    }
+  }
+  assert.ok(
+    overCases > 0 && gapCases > 0 && conservingCases > 0,
+    `sweep degenerated: ${overCases} over (${gapCases} in the D-200 gap), ${conservingCases} conserving`,
+  );
+  assert.ok(
+    correctionLastOrders > 0 && adjustmentLastOrders > 0,
+    `sweep never varied which side arrived last: ${correctionLastOrders} correction-last, ${adjustmentLastOrders} adjustment-last`,
+  );
 });

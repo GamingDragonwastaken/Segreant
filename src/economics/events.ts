@@ -258,6 +258,30 @@ export function economicEvent(input: EconomicEventInput): EconomicEvent {
   if (MONETARY_EVENT_KINDS.has(kind) && amount === null) throw new Error(`economic event ${id} of kind ${kind} requires an amount`);
   validateEventBasis(kind, amount, id);
   const sourceEventIds = eventIds(value.sourceEventIds);
+
+  // AN ADJUSTMENT MUST NAME WHAT IT ADJUSTS (WP-C04, D-206).
+  //
+  // The ledger bounds negative adjustments against the charge they point at,
+  // in aggregate. An adjustment that points at nothing was not bounded by
+  // anything: three sourceless `write_off -8.00` events projected
+  // `adjustment/billed -24` against a `charge/billed 10` and survived into an
+  // immutable close, a negative billed position that no set of true facts can
+  // produce. The conservation law at D-197 never generated the shape because
+  // every adjustment it built named its bill — which is the point: an
+  // adjustment without a source is not a fact about a charge, it is a signed
+  // number in a basis, and the sum it lands in then means nothing.
+  //
+  // Refused at construction so the earliest surface says so, and because every
+  // stored row is rebuilt through this constructor on read, a sourceless
+  // adjustment already persisted fails closed rather than projecting.
+  if (EVENT_ROLE_BY_KIND[kind] === 'adjustment' && sourceEventIds.length === 0) {
+    throw new Error(
+      `economic event ${id} kind ${kind} adjusts a charge and must name it: sourceEventIds is empty. `
+      + 'List the charge_estimated, provider_charge_observed or bill_observed event this adjusts '
+      + '(and set reversalOf to it when the amount is negative and more than one charge is named)',
+    );
+  }
+
   const reversalOf = value.reversalOf === undefined || value.reversalOf === null ? null : nonEmpty(value.reversalOf, `economic event ${id} reversalOf`);
   if (reversalOf === id) throw new Error(`economic event ${id} cannot reverse itself`);
   if (kind === 'allocation_reversed' && reversalOf === null) throw new Error(`economic event ${id} allocation_reversed requires reversalOf`);

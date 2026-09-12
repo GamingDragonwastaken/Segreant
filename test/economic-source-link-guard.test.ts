@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { economicEvent, type EconomicEvent, type EconomicEventInput } from '../src/economics/events.ts';
+import { economicEvent, economicEventRole, type EconomicEvent, type EconomicEventInput } from '../src/economics/events.ts';
 import { EconomicLedger } from '../src/economics/ledger.ts';
 import { priceCorrectionEvent } from '../src/economics/corrections.ts';
 import { exactRate } from '../src/economics/rate.ts';
@@ -76,11 +76,24 @@ test('an FX translation refuses non-charge and non-translation monetary source r
   try {
     const ledger = new EconomicLedger(db);
     for (const [index, item] of cases.entries()) {
+      // The credit is a prop here — it exists only to be the wrong kind of FX
+      // source — but since D-206 an adjustment must name the charge it adjusts,
+      // so it is given one. The allocation needs no source and keeps none.
+      const charge = monetaryEvent({
+        id: `economic:source:guard:incompatible:${index}:charge`,
+        subject: `source-link-guard:${item.kind}`,
+        amount: money('10', item.amount.currency, item.amount.basis === 'allocated' ? 'list' : item.amount.basis),
+      });
+      const adjusts = economicEventRole(item.kind) === 'adjustment';
+      if (adjusts) ledger.append(charge);
       const source = monetaryEvent({
         id: `economic:source:guard:incompatible:${index}`,
         kind: item.kind,
         subject: `source-link-guard:${item.kind}`,
         amount: item.amount,
+        recordedAt: adjusts ? DERIVATIVE_RECORDED_AT : SOURCE_RECORDED_AT,
+        sourceEventIds: adjusts ? [charge.id] : [],
+        reversalOf: adjusts ? charge.id : null,
       });
       ledger.append(source);
       const invalid = translation(`economic:source:guard:incompatible:${index}:translation`, source);
