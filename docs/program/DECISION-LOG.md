@@ -3065,3 +3065,45 @@ implicated by this packet.
 **Fix.** `economicEvent()` refuses an adjustment with empty `sourceEventIds`, and closure validation refuses again so a row written around the constructor fails closed on read. The credit bound compares against the charge net of its `price_corrected` chain (`correctedChargeAmount`, linear by construction, a second successor is refused as corrupt); the correction side refuses to restate a charge below what is already credited against it, so the set is refused in either arrival order (D-197's order-independence law).
 **Verification.** Two new laws RED 2/9 against the prior implementation, GREEN 9/9; `test/economic-*.test.ts` + `test/team-*.test.ts` 184/184; root tsc clean. Commit `d4ec82e` (from worktree `f9e0e31`).
 **Limitation.** Positive adjustments (a `true_up` upward) remain unbounded above — no law says what bounds them; provider FX authority still undecided (D-200).
+
+## D-207 — the nullable-equality sweep found no live partition defect
+
+**Decision (2026-09-15):** Treat item 12's general `= ?` search as a completed
+read-only sweep with no production predicate change. The corpus contains 198
+lexical `= ?` matches, 14 update assignments, 184 predicates in `src/`, and
+four PostgreSQL equality predicates in `team-server/`. Fourteen source
+locations (18 physical instances after the dynamic epistemic payload table
+expansion) touch nullable columns; each is an identity lookup whose contract
+requires a concrete non-null identifier, so SQL `NULL` non-matching is the
+correct result. The sole nullable partitioning query (`openAiReconciliationCoverage`)
+already uses SQLite's NULL-safe `IS ?` form from D-187.
+
+**What this establishes:** No live user-facing claim currently depends on
+`NULL = NULL`, and replacing these identity lookups with `IS ?` would be a
+regression because malformed null-identity rows would become discoverable.
+
+**What remains:** The older SQLite identity tables declare `TEXT PRIMARY KEY`
+without explicit `NOT NULL`; that is a latent schema-hardening concern, not a
+predicate bug. Any future repair needs a migration/quarantine contract and a
+RED test for direct null-identity insertion rather than a blanket SQL rewrite.
+
+## D-208 — unreadable runaway windows fail before budget reads
+
+**Decision (2026-09-15):** `BudgetGuard.evaluate()` rejects a non-finite,
+non-positive, or over-limit `runawayWindowSec` before constructing any exact or
+legacy Store query. It reuses the canonical `MAX_RUNAWAY_WINDOW_SEC` bound from
+configuration so a runtime config supplier cannot turn an invalid window into a
+NaN timestamp range or silently bypass the runaway control. The explicit manual
+budget path and all valid-window behavior are unchanged.
+
+**Evidence:** `test/cap-basis.test.ts` exercises the invalid-window refusal;
+the focused cap suite passes 8/8, root/browser/team typechecks and build pass,
+and the implementation is checkpointed locally at `236cd9d`. The test was
+first observed RED against the unguarded path (the Store threw only after it
+received an invalid range), then GREEN after the guard moved the validation to
+the decision boundary.
+
+**Limitation:** This closes the last named `runawayWindowSec` validation gap in
+the C01 budget remainder only. Reporting projections remain numeric by design,
+the many legacy read paths are not thereby exact, and the local commit has no
+remote CI result until credentials permit publication.

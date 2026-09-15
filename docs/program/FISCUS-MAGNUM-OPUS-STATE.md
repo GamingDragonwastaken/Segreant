@@ -587,3 +587,28 @@ rejection is claimed. Full migration-interruption/corruption/fault-injection
 recovery, epistemic payload replay, backup confidentiality, external
 disaster-recovery guarantees, and packet completion remain open. The packet
 inventory remains **11 COMPLETED / 32 PARTIAL / 33 NOT_STARTED**.
+
+## Accelerated synchronization checkpoint (2026-09-15)
+
+- The canonical checkout is synchronized exactly to
+  `origin/gpt56/magnum-opus-reconstruction` at
+  `7373f261b58c4061c82b1ecf020e907e61c28a38`.
+- GitHub Actions run `34710195843` is **success** on all eight configured jobs:
+  root Ubuntu/macOS/Windows, team-server Ubuntu/macOS/Windows, package-smoke,
+  and candidate-head.
+- Quiet local verification at that remote head: root 1,969 total / 1,965 pass
+  / 0 fail / 4 platform skips; team-server 78/78; root/browser/team
+  TypeScript typechecks and build pass.
+- Local prior-base work was preserved before synchronization on salvage branch
+  `salvage/local-c01-export` at `3e34e45721e0f28b5dcb727cdcda8b4a6bd2e086`.
+  It is not merged blindly because the remote now carries newer C01/C02/C03
+  decisions and implementations.
+- Current local candidate `236cd9d` adds the BudgetGuard runaway-window
+  validation that the synchronized packet inventory still names as a C01
+  remainder; focused cap verification is 8/8. It is not remotely verified yet.
+- The accelerated packet burn-down is 76 total: 11 `COMPLETED`, 43 `PARTIAL`,
+  22 `NOT_STARTED`. The next high-value product boundary is
+  recommendation-derived budget application: the decision engine is present,
+  but applying a heuristic cap still requires an explicit consequence policy,
+  ledger-backed assurance inputs, and fail-closed action semantics. This is
+  separate from the nullable-predicate sweep, which found no live defect.

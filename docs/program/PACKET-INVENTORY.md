@@ -12,6 +12,14 @@ grep -cE '^## WP-[A-Z][0-9]{2}' FISCUS_EXECUTION_DOSSIER_III.md   # -> 76
 States: `NOT_STARTED` `IN_PROGRESS` `PARTIAL` `COMPLETED` `BLOCKED_EXTERNAL`
 `SUPERSEDED_WITH_REASON`. Every packet carries exactly one.
 
+Latest reconciliation (2026-09-15): the synchronized remote tip is
+`7373f261b58c4061c82b1ecf020e907e61c28a38` with exact-head CI run
+`34710195843` green across all eight jobs. The nullable-equality sweep found no
+live defect (D-207). The remaining C01 budget-window gap is closed locally at
+`236cd9d` (D-208) but has no remote CI result until it is published; C01 remains
+`PARTIAL` for its unresolved legacy read-model, receipt/team reconciliation,
+provider-FX and other consumer requirements.
+
 | Packet | Subject | State | Evidence / remainder |
 |---|---|---|---|
 | `WP-A01` | Make perfect-information VoI probabilistically coherent | `COMPLETED` | Checkpointed and remotely green at or before `896c093`; see DECISION-LOG and EVIDENCE-INDEX. |
