@@ -15,7 +15,7 @@
  */
 
 import type { ExactSpendProjection, Store } from '../store/db.ts';
-import { decimalStringFromNumber, exactBudgetCaps, type BudgetConfig } from '../config.ts';
+import { decimalStringFromNumber, exactBudgetCaps, MAX_RUNAWAY_WINDOW_SEC, type BudgetConfig } from '../config.ts';
 import {
   compareMoney,
   formatMoneyAmount,
@@ -260,6 +260,12 @@ export class BudgetGuard {
 
   evaluate(opts: { sessionId?: string | null; nowMs?: number } = {}): GuardDecision {
     const cfg = this.getConfig();
+    if (typeof cfg.runawayWindowSec !== 'number'
+        || !Number.isFinite(cfg.runawayWindowSec)
+        || cfg.runawayWindowSec <= 0
+        || cfg.runawayWindowSec > MAX_RUNAWAY_WINDOW_SEC) {
+      throw new Error(`budget.runawayWindowSec must be a finite positive value no greater than ${MAX_RUNAWAY_WINDOW_SEC}`);
+    }
     // Before anything is read: the caps must be readable as exact money. A cap
     // that is not is a configuration failure, and it stops the request here
     // rather than being quietly dropped from the comparison.

@@ -22,6 +22,18 @@ function budget(over: Partial<BudgetConfig>): BudgetConfig {
   return { dailyUsd: null, dailySoftUsd: null, sessionUsd: null, runawayWindowSec: 60, runawayMaxUsd: null, capIncludesImported: false, ...over };
 }
 
+test('cap basis: an unreadable runaway window fails closed before the store query', () => {
+  const store = new Store(':memory:');
+  try {
+    assert.throws(
+      () => new BudgetGuard(store, budget({ runawayWindowSec: Number.NaN, runawayMaxUsd: 1 })).evaluate(),
+      /runawayWindowSec.*finite/i,
+    );
+  } finally {
+    store.close();
+  }
+});
+
 test('cap basis: imported spend does NOT trip the daily cap by default (the dogfood freeze)', () => {
   const store = new Store(':memory:');
   // $158 of imported subscription spend, $2 of live proxy spend — the real incident shape.

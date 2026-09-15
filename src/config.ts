@@ -54,7 +54,7 @@ export interface BudgetConfig {
 
 /** Highest USD value that can still round to an exact safe microdollar integer. */
 export const MAX_SAFE_USD = Number.MAX_SAFE_INTEGER / 1_000_000;
-const MAX_RUNAWAY_WINDOW_SEC = 366 * 24 * 60 * 60;
+export const MAX_RUNAWAY_WINDOW_SEC = 366 * 24 * 60 * 60;
 
 export class ConfigValidationError extends Error {
   readonly code = 'CONFIG_INVALID';
