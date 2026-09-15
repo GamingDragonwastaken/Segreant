@@ -73,8 +73,11 @@ export function controlView(): Node {
       const includesImported = budget?.capIncludesImported === true;
 
       const alerts = today()?.alerts ?? [];
+      const coverage = today()?.alertCoverage ?? null;
 
       return h('div', null,
+        coverage ? alertCoveragePanel(coverage, alerts.length) : null,
+
         // Live governance alerts, above the caps that produced them. The server
         // already computed these; until now no screen rendered them, so an
         // operator whose cap was exhausted had to infer it from a percentage.
@@ -178,6 +181,39 @@ export function controlView(): Node {
             actionCard('alerts'),
             actionCard('exec'))));
     });
+}
+
+/**
+ * Alert absence is only a useful result when every detector was watching. Keep
+ * the producer's coverage summary beside the active alerts and enumerate every
+ * dark channel, including when another channel fired. A missing reason on a
+ * dark channel is itself unknown; it must not be rendered as though the
+ * detector observed traffic and found nothing.
+ */
+function alertCoveragePanel(
+  coverage: NonNullable<Overview['alertCoverage']>,
+  alertCount: number,
+): Node {
+  const dark = coverage.channels.filter((channel) => !channel.live);
+  const status = coverage.complete
+    ? alertCount === 0
+      ? 'No alerts fired while every channel was watching.'
+      : `${alertCount} active alert${alertCount === 1 ? '' : 's'}; every channel was watching.`
+    : coverage.summary;
+
+  return h('div', { class: 'card alert-coverage', role: 'region', 'aria-label': 'Alert coverage' },
+    h('div', { class: 'card-head' },
+      h('span', { class: 'card-title', text: () => (isPrecise() ? 'Alert coverage' : 'What alerts could see') }),
+      h('span', {
+        class: `pill ${coverage.complete ? 'pill-ok' : 'pill-unverified'}`,
+        text: coverage.complete ? 'complete' : 'partial',
+      })),
+    h('p', { class: 'basis', text: status }),
+    dark.length > 0
+      ? h('ul', { class: 'drawer-notes' }, ...dark.map((channel) => h('li', {
+          text: `${channel.channel}: ${channel.darkBecause ?? 'coverage reason is unknown; detector observation is not established'}`,
+        })))
+      : null);
 }
 
 /**
