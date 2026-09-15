@@ -47,9 +47,27 @@ Boundaries still classified `unmigrated_authority`: `decision.certificate`. That
 | AII-031 | P0 | Root proxy/body and proposal buffering lacks universal caps | PARTIAL | Shared bounded readers and intrinsic proxy/SSE/proposal/storage/import/judge/cost/team/canonical limits now reject or disclose truncation; complete closure still requires the versioned streaming `.fiscuspack` format/verifier and any newly added external ingestion surface |
 | AII-032 | P1 | DB relies heavily on application-managed integrity | OPEN | Review and push critical invariants into DB where sound |
 | AII-033 | P1 | Supply-chain assurance below target | PARTIAL | `scripts/check-supply-chain.mjs` audits runtime dependencies, the devDependency allowlist, lockfile-to-manifest drift, registry resolution and integrity pinning on both lockfiles, 40-hex action pins with reviewable version comments, the publish allowlist, lockfile installs, and no-remote-code-execution -- each driven by a counterexample mutated from the real files. At D-163 it also refuses any workflow install that would run dependency lifecycle scripts, and `prepublishOnly` was widened from one compilation domain to all three plus team-server's suite. NONE of the five conditions this row names is met by that work: no CodeQL or static security analysis, no dependency review, no SBOM, no provenance or signing, no secret scanning. SBOM and provenance need either a runtime dependency (refused by this project's zero-dependency rule) or `id-token: write` (owner-reserved); the other three are unblocked and simply not done |
-| AII-034 | P1 | Hand-rolled OIDC requires production-grade scrutiny | IN_PROGRESS | Deterministic clock semantics now; later mature JOSE-vs-custom decision and production validation |
+| AII-034 | P1 | Hand-rolled OIDC requires production-grade scrutiny | PARTIAL | D-209 adds canonical JWT base64url and JWK `alg`/`kty`/`use`/`key_ops`/`crv` reconciliation with 33/33 direct OIDC and 87/87 team-server evidence. The production mature-library/provider/deployment decision and live validation remain open |
 | AII-035 | P0 | Exact-head CI red on macOS OIDC time-boundary race | COMPLETED | OIDC clock repair plus exact-SHA GitHub run `33253835881` green across root Ubuntu/macOS/Windows, package-smoke, and team-server Ubuntu/macOS/Windows |
 | AII-036 | P0 | No universal formal legality of evidence derivations | PARTIAL | Canonical Derivation/Witness legality, evidence-grounded persistent witness registry and soundness tests now exist; the legality rule now also guards the money axis, which previously had no rule of any kind — a `monetary_rebasing` witness is required for any change of `monetaryBasis` other than a weakening, enforced where derivations persist (D-152); a repository-wide issuance map declares every claim-issuance boundary, its class of authority and whether any product path reaches it, and `test/issuance-map.test.ts` checks both axes against the source tree and the import graph rather than against this row. **Read `src/epistemic/issuance-map.ts` for the current classification; this row states no totals, because the version of it that did went two closures stale (D-169).** One boundary remains `unmigrated_authority` — `decision.certificate` — and the map has it as `unreached`, so nothing in the product passes through it. The two causal boundaries this row previously named alongside it are `kernel_primitive`: `causal.issuance` converts a qualified study into kernel records with a `causal_identification` witness, so their conclusions are bound to their evidence and revoking a source invalidates what depends on it. Universal issuance integration at the remaining boundary and at all product consumers remains |
+
+## Accelerated continuation reconciliation (2026-09-15)
+
+The latest implementation checkpoint preserves the ambitious architecture while
+closing four concrete boundary gaps. Strict JOSE encoding and JWK metadata are
+now fail-closed (D-209); value retention coverage is required and rendered by
+both dashboard generations (D-210); instrumentation sensitivity is explicitly
+an exposure ranking rather than a purchase/VoI decision (D-211); an independent
+FiscusPack verifier is shipped with fixed vectors and package exposure (D-212);
+heuristic budget-cap application refuses before mutation without a DAL-3
+DecisionCertificate (D-213); and the benchmark now proves that its canonical
+Evidence/Claim workload is non-vacuous at every selected scale (D-214).
+
+These are bounded closures, not claims that production trust, action
+authorization, provider authority, or universal consumer migration exists. The
+packet inventory is 76 total: 11 `COMPLETED`, 47 `PARTIAL`, 18 `NOT_STARTED`.
+The exact remote head is `e5a841f5fb53ae2dc90cdfd9feea7928e09e0f27`; GitHub
+Actions run `34950922535` concluded **success** on all eight jobs.
 
 ## Residual requirements behind each PARTIAL (WP-A09, 2026-09-01)
 

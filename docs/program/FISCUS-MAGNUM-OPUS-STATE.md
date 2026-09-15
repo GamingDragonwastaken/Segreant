@@ -606,9 +606,22 @@ inventory remains **11 COMPLETED / 32 PARTIAL / 33 NOT_STARTED**.
 - Current local candidate `236cd9d` adds the BudgetGuard runaway-window
   validation that the synchronized packet inventory still names as a C01
   remainder; focused cap verification is 8/8. It is not remotely verified yet.
-- The accelerated packet burn-down is 76 total: 11 `COMPLETED`, 44 `PARTIAL`,
-  21 `NOT_STARTED`. The next high-value product boundary is
-  recommendation-derived budget application: the decision engine is present,
-  but applying a heuristic cap still requires an explicit consequence policy,
-  ledger-backed assurance inputs, and fail-closed action semantics. This is
+- The accelerated packet burn-down is 76 total: 11 `COMPLETED`, 47 `PARTIAL`,
+  18 `NOT_STARTED`. The recommendation-derived budget boundary is now fail-closed:
+  `fiscus budget --recommend --apply` refuses without a ledger-backed
+  `DecisionCertificate` at `DAL-3`; the read-only heuristic remains available and
+  manual cap configuration remains the explicit operator-controlled path. The
+  remaining work is to implement the owner-defined certificate inputs and action
+  semantics rather than silently applying a heuristic cap. This is
   separate from the nullable-predicate sweep, which found no live defect.
+
+## Accelerated continuation checkpoint (2026-09-15)
+
+- Exact remote head: `e5a841f5fb53ae2dc90cdfd9feea7928e09e0f27`; GitHub Actions run
+  `34950922535` concluded **success** on all eight jobs. Local and remote match.
+- Published slices: strict JOSE hardening (`89961c2`), instrumentation boundary
+  (`e18da69`), independent FiscusPack verifier (`c1dcb88`), fail-closed budget
+  application (`7d46552`) and non-vacuous epistemic benchmark (`e5a841f`).
+- Packet state is 76 total: 11 `COMPLETED`, 47 `PARTIAL`, 18 `NOT_STARTED`.
+  H02, G06, H06 and R09 are now PARTIAL; their production, integration and
+  external gates remain explicitly open.

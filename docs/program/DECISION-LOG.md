@@ -3105,5 +3105,105 @@ the decision boundary.
 
 **Limitation:** This closes the last named `runawayWindowSec` validation gap in
 the C01 budget remainder only. Reporting projections remain numeric by design,
-the many legacy read paths are not thereby exact, and the local commit has no
-remote CI result until credentials permit publication.
+and the many legacy read paths are not thereby exact.
+
+## D-209 — strict JOSE metadata and encoding are part of the verification boundary
+
+**Decision (2026-09-15):** Keep the dependency-free OIDC verifier, but make its
+wire checks strict before key lookup or signature verification. JWT header,
+payload and signature segments now require canonical unpadded base64url with
+zero discarded bits. A selected JWK must reconcile `alg`, `kty`, `use`,
+`key_ops` and (for ES256) `crv` with the requested algorithm; conflicting
+metadata is refused rather than treated as decoration.
+
+**Evidence:** The direct OIDC suite is 33/33 and the full team-server suite is
+87/87; exact-head GitHub Actions run `34949530088` concluded **success** on all
+eight jobs. The changes are in `89961c2`.
+
+**Limitation:** This is a bounded custom-JOSE hardening, not a production
+provider decision, independent library comparison, deployment validation or
+trust-policy approval.
+
+## D-210 — value retention metadata was present on the wire and absent from the views
+
+**Decision (2026-09-15):** Treat retention coverage as required consumer data,
+not optional decoration. `UsagePayload.retention` is required, frontier
+model-switch coverage is typed end to end, and modern/classic value surfaces
+render exclusions, unknown counts and the observational/non-routing boundary.
+
+**Evidence:** Value/dashboard focused coverage is 12/12; root/browser/team
+typechecks and build pass. GitHub Actions run `34948776719` for `57055cb`
+concluded **success** on all eight jobs.
+
+**Limitation:** Dashboard alert dark-reason rendering and the other AII-002
+negative claims remain open; retention metadata still describes what Fiscus
+recorded, not traffic that never reached it.
+
+## D-211 — instrumentation sensitivity is an exposure ranking, not a purchase decision
+
+**Decision (2026-09-15):** Preserve the existing five-field sensitivity API and
+rename its user-facing interpretation to “largest sensitivity/measurement
+exposure.” It carries no utility, probability, decision or acquisition-cost
+model. Formal `valueOfInformation()` remains the separate decision-theoretic
+calculation with explicit `measurementCost`.
+
+**Evidence:** Focused instrumentation/contract coverage is 5/5 and
+`test/value.test.ts` is 63/63. GitHub Actions run `34949530088` for `e18da69`
+concluded **success** on all eight jobs.
+
+**Limitation:** No product acquisition workflow or decision-certificate route
+exists yet; the legacy JSON field `instrumentNext` remains for compatibility.
+
+## D-212 — an independent FiscusPack verifier must not import its producer
+
+**Decision (2026-09-15):** Ship a dependency-free standalone Node verifier and
+fixed conformance vectors. `standalone/fiscuspack-verifier.mjs` accepts parsed
+JSON or UTF-8 bytes, checks canonical manifest/attachment integrity, resource
+limits, Ed25519 signatures, embedded-key identity and optional trust-anchor
+pinning, and leaves `truth` as `not_evaluated`. The `fiscuspack-verify` binary
+and `verify:fiscuspack` script are included in the package surface.
+
+**Evidence:** Standalone conformance is 6/6 and producer/standalone pack
+coverage is 16/16; root typecheck/build and package dry-run pass. GitHub
+Actions run `34950279202` for `c1dcb88` concluded **success** on all eight jobs.
+
+**Limitation:** This is an executable interoperability foundation, not a
+second implementation in another runtime, hosted production execution, API
+integration or trust-anchor governance.
+
+## D-213 — heuristic budget-cap application is an action that changes spend
+
+**Decision (2026-09-15):** `fiscus budget --recommend --apply` now fails closed
+before configuration mutation. Text and JSON identify the `changes_spend`
+consequence and require a ledger-backed `DecisionCertificate` at `DAL-3`.
+Read-only recommendations and explicit manual cap configuration remain
+available.
+
+**Evidence:** The old path was observed RED (it wrote the suggested caps and
+returned success); the focused regression is 1/1, root typecheck passes, and
+GitHub Actions run `34950378100` for `7d46552` concluded **success** on all
+eight jobs.
+
+**Limitation:** No production path currently accepts or verifies a DAL-3
+certificate, so recommendation application is intentionally unavailable until
+the owner-defined certificate inputs and action semantics exist.
+
+## D-214 — benchmark truth-boundary quality must be non-vacuous
+
+**Decision (2026-09-15):** Extend the deterministic benchmark with an
+`epistemicIssuance` operation that constructs Evidence/Claim pairs at each
+scale and publishes counts for requested records, issued records, linkage,
+immutability and one invalid-Claim refusal. The contract fails if any count is
+empty or diverges from the requested workload. This measures canonical
+construction/validation only; it does not claim persistence or latency budgets.
+
+**Evidence:** The pre-change contract was RED because the operation was absent;
+the focused contract passes 1/1, current-tier quality counts are 1,000/1,000
+for records, Evidence, Claims, links and immutability with one refusal, and
+root typecheck/build pass. GitHub Actions run `34950922535` for `e5a841f`
+concluded **success** on all eight jobs.
+
+**Limitation:** Persistent ledger append/replay/as-of, revocation closure,
+exact-economic and allocation workloads, FiscusPack verification, dashboard
+contracts and proxy streaming still need separate benchmark surfaces and
+measured budgets.
