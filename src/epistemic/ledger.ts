@@ -87,6 +87,16 @@ interface StrengtheningFrame {
   readonly pending: Map<string, string>;
   /** Output claim ids of derivations this transaction accepted as legal. */
   readonly legalized: Set<string>;
+  /** Direct monetary floor obligations, kept separate from the other floors. */
+  readonly monetaryPending: Map<string, MonetaryStrengtheningObligation>;
+  /** Output claim ids with a matching monetary rebasing witness. */
+  readonly monetaryLegalized: Set<string>;
+}
+
+interface MonetaryStrengtheningObligation {
+  readonly sourceBasis: 'estimated' | 'mixed';
+  readonly targetBasis: 'billed' | 'allocated';
+  readonly reason: string;
 }
 
 /** The four columns `epistemic_revocations` actually stores. No effective-time column exists. */
@@ -212,9 +222,18 @@ function row<T>(value: unknown): T | null {
  * repair it, rerun, and be refused again by the next.
  */
 function assertStrengtheningDischarged(frame: StrengtheningFrame): void {
-  const outstanding = [...frame.pending.entries()]
-    .filter(([id]) => !frame.legalized.has(id))
-    .sort(([a], [b]) => a.localeCompare(b));
+  const ids = new Set([...frame.pending.keys(), ...frame.monetaryPending.keys()]);
+  const outstanding = [...ids]
+    .sort((a, b) => a.localeCompare(b))
+    .map((id) => {
+      const reasons: string[] = [];
+      const floor = frame.pending.get(id);
+      if (floor !== undefined && !frame.legalized.has(id)) reasons.push(floor);
+      const monetary = frame.monetaryPending.get(id);
+      if (monetary !== undefined && !frame.monetaryLegalized.has(id)) reasons.push(monetary.reason);
+      return [id, reasons.join('; ')] as const;
+    })
+    .filter(([, reason]) => reason.length > 0);
   if (outstanding.length === 0) return;
   const detail = outstanding.map(([id, reason]) => `claim ${id} ${reason}`).join('; ');
   throw new Error(
@@ -237,7 +256,12 @@ export class EpistemicLedger {
   private transaction<T>(work: () => T): T {
     this.db.exec('BEGIN IMMEDIATE');
     const outer = this.strengthening;
-    const frame: StrengtheningFrame = { pending: new Map(), legalized: new Set() };
+    const frame: StrengtheningFrame = {
+      pending: new Map(),
+      legalized: new Set(),
+      monetaryPending: new Map(),
+      monetaryLegalized: new Set(),
+    };
     this.strengthening = frame;
     try {
       const result = work();
@@ -457,6 +481,8 @@ export class EpistemicLedger {
     // rule and stays one.
     const obligation = this.directClaimObligation(item);
     if (obligation !== null) this.strengthening?.pending.set(item.id, obligation);
+    const monetaryObligation = this.directClaimMonetaryObligation(item);
+    if (monetaryObligation !== null) this.strengthening?.monetaryPending.set(item.id, monetaryObligation);
     for (const supersededId of item.supersedes) this.insertEdge({ from: item.id, to: supersededId, relation: 'supersedes' });
     for (const evidenceId of item.evidenceIds) this.insertEdge({ from: evidenceId, to: item.id, relation: 'supports' });
     for (const assumptionId of item.assumptionIds) this.insertEdge({ from: assumptionId, to: item.id, relation: 'assumes' });
@@ -590,6 +616,8 @@ export class EpistemicLedger {
     // throws for it rather than returning a refusal, which is the right
     // distinction — a mismatch is a broken derivation, an unwitnessed
     // strengthening is a refused one.
+    const directMoney = this.strengthening?.monetaryPending.get(item.outputClaimId);
+    let monetaryDischarged = false;
     for (const sourceId of item.inputClaimIds) {
       const source = this.readClaim(sourceId);
       if (source === null) throw new Error(`unknown input claim: ${sourceId}`);
@@ -638,6 +666,14 @@ export class EpistemicLedger {
           + `${legality.missingWitnesses.join(', ')}`,
         );
       }
+      if (directMoney !== undefined && [...registeredWitnesses.values()].some((candidate) =>
+        !setAside.has(candidate.id)
+        && candidate.kind === 'monetary_rebasing'
+        && candidate.basisChange?.from === directMoney.sourceBasis
+        && candidate.basisChange.to === directMoney.targetBasis
+      )) {
+        monetaryDischarged = true;
+      }
     }
 
     // THE OBLIGATION RAISED BY A DIRECT APPEND IS DISCHARGED HERE (D-192).
@@ -647,7 +683,10 @@ export class EpistemicLedger {
     // discharges anything: the loop above is the whole legality check, and a
     // derivation over evidence alone runs none of it, so treating its output
     // as legalized would hand back the bypass this rule closes.
-    if (item.inputClaimIds.length > 0) this.strengthening?.legalized.add(item.outputClaimId);
+    if (item.inputClaimIds.length > 0) {
+      this.strengthening?.legalized.add(item.outputClaimId);
+      if (monetaryDischarged) this.strengthening?.monetaryLegalized.add(item.outputClaimId);
+    }
 
     const graph = this.graph();
     const extraEdges: DagEdgeInput[] = [
@@ -1305,10 +1344,13 @@ export class EpistemicLedger {
    *   it — and it is stated anyway so the floor is one readable rule rather
    *   than a consequence of two others that could each move independently.
    *
-   * `monetaryBasis` is absent for the reason `assertClaimWithinItsEvidence`
-   * and `PROFILE_STRENGTH_AXES` both give: it is not a ladder, so there is no
-   * "above" to refuse. That gap is guarded by `monetary_rebasing` on the
-   * derivation path and remains open on this one.
+   * `monetaryBasis` is not a ladder, so this floor never ranks one economic
+   * basis above another. The narrow direct-path guard only recognizes the
+   * explicitly unsafe transition from cited `estimated` or collectively
+   * `mixed` evidence to a `billed` or `allocated` Claim; its obligation is
+   * discharged only by a matching typed `monetary_rebasing` witness on a
+   * legal derivation in the same transaction. Other basis combinations stay
+   * outside this floor rather than acquiring an invented ordering.
    *
    * WHAT THIS RETURNS. The phrase naming the exceeded floor, or null. The
    * refusal itself is raised at COMMIT by `assertStrengtheningDischarged`,
@@ -1339,6 +1381,34 @@ export class EpistemicLedger {
       }
     }
     return null;
+  }
+
+  /**
+   * Identify the direct monetary transition this boundary must not accept
+   * without a typed rebasing witness. Evidence has no `mixed` member of its
+   * own: disagreement among multiple cited monetary bases is the claim-level
+   * `mixed` state, so the set is collapsed only for that exact purpose.
+   */
+  private directClaimMonetaryObligation(item: Claim): MonetaryStrengtheningObligation | null {
+    const target = item.profile.monetaryBasis;
+    if (target !== 'billed' && target !== 'allocated') return null;
+
+    const citedBases = new Set(
+      item.evidenceIds
+        .map((evidenceId) => this.readEvidence(evidenceId)?.monetaryBasis)
+        .filter((basis): basis is NonNullable<typeof basis> => basis !== null && basis !== undefined),
+    );
+    const sourceBasis: 'estimated' | 'mixed' | null = citedBases.size > 1
+      ? 'mixed'
+      : citedBases.has('estimated')
+        ? 'estimated'
+        : null;
+    if (sourceBasis === null) return null;
+    return Object.freeze({
+      sourceBasis,
+      targetBasis: target,
+      reason: `declares monetary basis ${target} from cited evidence basis ${sourceBasis}; this direct strengthening requires a discharging monetary_rebasing witness`,
+    });
   }
 
   private ensureKinds(ids: readonly string[], kind: DagNode['kind']): void {

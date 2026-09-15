@@ -32,9 +32,10 @@
  *
  * WHAT THIS DOES NOT ESTABLISH. That the derivation's witness is TRUE — D-190
  * settled that a witness discharges only while its own record reads
- * `supported`, and nothing here revisits it. Nor does it bound
- * `monetaryBasis`, which is not a ladder and has no "above" to refuse on this
- * path, nor the measurement RUNG against any measure of validation:
+ * `supported`, and nothing here revisits it. The direct monetary floor covered
+ * below is a targeted estimated/mixed-to-billed/allocated guard; it does not
+ * turn the unordered money axis into a ladder, nor does it bound the
+ * measurement RUNG against any measure of validation:
  * `Evidence` records which model a record was collected under and never how
  * well validated that model is.
  *
@@ -86,6 +87,10 @@ function weakEvidence(id: string, finalizedAt: string | null = null): Evidence {
     sensitivity: 'internal',
     redaction: 'none',
   });
+}
+
+function monetaryEvidence(id: string, monetaryBasis: 'estimated' | 'billed' | 'allocated'): Evidence {
+  return evidence({ ...weakEvidence(id), monetaryBasis });
 }
 
 const BASE_PROFILE: ClaimProfileInput = {
@@ -160,6 +165,48 @@ function randomizingDerivation(sourceId: string, outputId: string, evidenceIds: 
     uncertaintyTransformation: 'Bounds are carried through unchanged.',
     version: 1,
     reproducibilityHash: 'hash:randomization',
+  });
+}
+
+function rebasingWitness(
+  id: string,
+  from: 'estimated' | 'mixed',
+  to: 'billed' | 'allocated',
+  evidenceIds: readonly string[],
+): Witness {
+  return witness({
+    id,
+    kind: 'monetary_rebasing',
+    evidenceIds,
+    detail: `the recorded monetary reconciliation moves ${from} to ${to}`,
+    basisChange: { from, to },
+    issuedAt: ISSUED,
+    epistemic: 'supported',
+    schemaVersion: 1,
+  });
+}
+
+function rebasingDerivation(source: Claim, output: Claim, proofs: readonly Witness[]): Derivation {
+  return derivation({
+    id: `derivation:rebasing:${source.id}->${output.id}`,
+    inputEvidenceIds: [...output.evidenceIds],
+    inputClaimIds: [source.id],
+    transformation: 'money.rebase.v1',
+    outputClaimId: output.id,
+    outputProposition: output.proposition,
+    coordinateChange: {
+      from: { grain: STUDY_GRAIN, scope: STUDY_SCOPE },
+      to: { grain: STUDY_GRAIN, scope: STUDY_SCOPE },
+    },
+    witnesses: proofs.map((proof) => ({
+      id: proof.id,
+      kind: proof.kind,
+      evidenceIds: proof.evidenceIds,
+      detail: proof.detail,
+    })),
+    uncertaintyTransformation: 'The exact basis transition is carried unchanged.',
+    version: 1,
+    reproducibilityHash: `hash:rebasing:${source.id}->${output.id}`,
   });
 }
 
@@ -315,4 +362,119 @@ test('GUARD: an ordinary claim within its evidence still needs no derivation at 
     'observational is the top of the direct causal floor, not above it',
   );
   assert.notEqual(value.readClaim('claim:plain'), null);
+});
+
+test('a direct claim cannot strengthen estimated evidence to billed without a monetary rebasing obligation', () => {
+  const value = ledger();
+  assert.equal(value.appendEvidence(monetaryEvidence('evidence:estimated', 'estimated')), 'inserted');
+
+  assert.throws(
+    () => value.appendClaim(citingClaim('claim:billed', ['evidence:estimated'], { monetaryBasis: 'billed' })),
+    /monetary/i,
+    'a billed direct claim must not launder an estimated cited basis',
+  );
+  assert.equal(value.readClaim('claim:billed'), null, 'the direct monetary strengthening must roll back');
+});
+
+test('a direct claim cannot strengthen mixed cited evidence to allocated without a monetary rebasing obligation', () => {
+  const value = ledger();
+  assert.equal(value.appendEvidence(monetaryEvidence('evidence:estimated', 'estimated')), 'inserted');
+  assert.equal(value.appendEvidence(monetaryEvidence('evidence:billed', 'billed')), 'inserted');
+
+  assert.throws(
+    () => value.appendClaim(citingClaim(
+      'claim:allocated',
+      ['evidence:estimated', 'evidence:billed'],
+      { monetaryBasis: 'allocated' },
+    )),
+    /monetary/i,
+    'a claim resolving disagreeing cited bases into allocated must be withheld',
+  );
+  assert.equal(value.readClaim('claim:allocated'), null, 'the mixed-basis strengthening must roll back');
+});
+
+test('direct monetary weakening and unchanged basis remain legal', () => {
+  const value = ledger();
+  assert.equal(value.appendEvidence(monetaryEvidence('evidence:estimated', 'estimated')), 'inserted');
+  assert.equal(value.appendClaim(citingClaim('claim:estimated', ['evidence:estimated'], { monetaryBasis: 'estimated' })), 'inserted');
+  assert.equal(value.appendClaim(citingClaim('claim:mixed', ['evidence:estimated'], { monetaryBasis: 'mixed' })), 'inserted');
+  assert.equal(value.appendClaim(citingClaim('claim:none', ['evidence:estimated'], { monetaryBasis: 'none' })), 'inserted');
+});
+
+test('a typed monetary rebasing obligation discharges the direct estimated-to-billed floor', () => {
+  const value = ledger();
+  const source = citingClaim('claim:estimated', ['evidence:estimated'], { monetaryBasis: 'estimated' });
+  const output = citingClaim('claim:billed', ['evidence:estimated'], { monetaryBasis: 'billed' }, 'cost.billed');
+  const proof = rebasingWitness('witness:estimated-billed', 'estimated', 'billed', ['evidence:estimated']);
+
+  value.runInTransaction(() => {
+    value.appendEvidenceWithinTransaction(monetaryEvidence('evidence:estimated', 'estimated'));
+    value.appendClaimWithinTransaction(source);
+    value.appendClaimWithinTransaction(output);
+    value.appendWitnessWithinTransaction(proof);
+    value.appendDerivationWithinTransaction(rebasingDerivation(source, output, [proof]));
+  });
+
+  assert.equal(value.readClaim(output.id)?.profile.monetaryBasis, 'billed');
+});
+
+test('a typed monetary rebasing obligation discharges the direct mixed-to-allocated floor', () => {
+  const value = ledger();
+  const source = citingClaim(
+    'claim:mixed',
+    ['evidence:estimated', 'evidence:billed'],
+    { monetaryBasis: 'mixed' },
+  );
+  const output = citingClaim(
+    'claim:allocated',
+    ['evidence:estimated', 'evidence:billed'],
+    { monetaryBasis: 'allocated' },
+    'cost.allocated',
+  );
+  const proof = rebasingWitness('witness:mixed-allocated', 'mixed', 'allocated', [
+    'evidence:estimated',
+    'evidence:billed',
+  ]);
+
+  value.runInTransaction(() => {
+    value.appendEvidenceWithinTransaction(monetaryEvidence('evidence:estimated', 'estimated'));
+    value.appendEvidenceWithinTransaction(monetaryEvidence('evidence:billed', 'billed'));
+    value.appendClaimWithinTransaction(source);
+    value.appendClaimWithinTransaction(output);
+    value.appendWitnessWithinTransaction(proof);
+    value.appendDerivationWithinTransaction(rebasingDerivation(source, output, [proof]));
+  });
+
+  assert.equal(value.readClaim(output.id)?.profile.monetaryBasis, 'allocated');
+});
+
+test('an unrelated legal derivation cannot discharge a direct monetary floor', () => {
+  const value = ledger();
+  const unrelated = citingClaim('claim:already-billed', ['evidence:billed'], { monetaryBasis: 'billed' });
+  const output = citingClaim('claim:direct-billed', ['evidence:estimated'], { monetaryBasis: 'billed' });
+
+  assert.throws(
+    () => value.runInTransaction(() => {
+      value.appendEvidenceWithinTransaction(monetaryEvidence('evidence:estimated', 'estimated'));
+      value.appendEvidenceWithinTransaction(monetaryEvidence('evidence:billed', 'billed'));
+      value.appendClaimWithinTransaction(unrelated);
+      value.appendClaimWithinTransaction(output);
+      // Same basis on this derivation means its ordinary legality is satisfied
+      // without a monetary witness. It must not satisfy the direct claim's
+      // separate estimated-to-billed obligation merely by naming the output.
+      value.appendDerivationWithinTransaction(rebasingDerivation(unrelated, output, []));
+    }),
+    /monetary/i,
+    'only a content-matching monetary rebasing may discharge this floor',
+  );
+  assert.equal(value.readClaim(output.id), null, 'the unrelated derivation must not leave the claim persisted');
+});
+
+test('the direct floor does not invent an order between billed and allocated', () => {
+  const value = ledger();
+  assert.equal(value.appendEvidence(monetaryEvidence('evidence:billed', 'billed')), 'inserted');
+  assert.equal(value.appendClaim(citingClaim('claim:allocated', ['evidence:billed'], { monetaryBasis: 'allocated' })), 'inserted');
+
+  assert.equal(value.appendEvidence(monetaryEvidence('evidence:allocated', 'allocated')), 'inserted');
+  assert.equal(value.appendClaim(citingClaim('claim:billed', ['evidence:allocated'], { monetaryBasis: 'billed' })), 'inserted');
 });
