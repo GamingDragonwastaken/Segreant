@@ -19,10 +19,20 @@ import { DEFAULT_CONFIG } from '../src/config.ts';
 import { computeFrontier } from '../src/value/frontier.ts';
 import { createDashboardServer } from '../src/dashboard/server.ts';
 import { buildOverview } from '../src/dashboard/routes.ts';
+import { claim } from '../src/epistemic/claim.ts';
+import { evidence } from '../src/epistemic/evidence.ts';
+import { claimProfile } from '../src/epistemic/profile.ts';
+import { grain } from '../src/epistemic/grain.ts';
+import { scope } from '../src/epistemic/scope.ts';
+import { interval } from '../src/epistemic/time.ts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SCALE_ROWS = Object.freeze({ small: 100, current: 1_000, '10x': 10_000, '100x': 100_000 });
 const DEFAULT_SCALES = ['small', 'current', '10x'];
+const EPISTEMIC_OCCURRED_AT = '2026-01-01T00:00:00.000Z';
+const EPISTEMIC_OBSERVED_AT = '2026-01-01T00:00:01.000Z';
+const EPISTEMIC_ISSUED_AT = '2026-01-01T00:00:02.000Z';
+const EPISTEMIC_VALID_TIME = interval('2026-01-01T00:00:00.000Z', '2026-01-02T00:00:00.000Z');
 
 function parseArgs(argv) {
   const scalesArg = argv.find((arg) => arg.startsWith('--scale='));
@@ -154,6 +164,118 @@ function syntheticUnits(count) {
   return units;
 }
 
+/**
+ * Exercise the canonical Evidence/Claim issuance boundary with a deterministic
+ * workload. This intentionally constructs records in memory rather than
+ * appending them to SQLite: the first H06 slice measures canonicalization and
+ * validation, while persistent graph replay is a separate future slice.
+ *
+ * The returned counts are quality checks, not timing metadata. Keeping them in
+ * the report prevents a benchmark from passing while its workload silently
+ * becomes empty or stops checking the Evidence -> Claim relationship.
+ */
+function benchmarkEpistemicIssuance(count) {
+  const benchmarkScope = scope({ account: 'benchmark' });
+  const benchmarkGrain = grain(['day', 'project']);
+  const benchmarkProfile = claimProfile({
+    epistemic: 'supported',
+    integrity: 'verified',
+    authenticity: 'provider_authenticated',
+    scope: 'established',
+    coverage: 'complete',
+    measurement: 'proxy_unvalidated',
+    causality: 'none',
+    monetaryBasis: 'billed',
+    finality: 'provisional',
+    decisionFitness: 'not_assessed',
+  });
+  let evidenceIssued = 0;
+  let claimsIssued = 0;
+  let claimsLinkedToEvidence = 0;
+  let immutableEvidence = 0;
+  let immutableClaims = 0;
+
+  for (let i = 0; i < count; i++) {
+    const item = evidence({
+      id: `benchmark:evidence:${i}`,
+      evidenceType: 'benchmark.observation',
+      sourceIdentity: 'benchmark:synthetic',
+      sourceClass: 'synthetic_fixture',
+      payload: { index: i, value: 'deterministic' },
+      scope: benchmarkScope,
+      grain: benchmarkGrain,
+      occurredAt: EPISTEMIC_OCCURRED_AT,
+      observedAt: EPISTEMIC_OBSERVED_AT,
+      integrity: 'verified',
+      authenticity: 'provider_authenticated',
+      completeness: { status: 'complete', method: 'deterministic_fixture' },
+      monetaryBasis: 'billed',
+      schemaVersion: 1,
+      sensitivity: 'internal',
+      redaction: 'none',
+    });
+    const assertion = claim({
+      id: `benchmark:claim:${i}`,
+      proposition: { predicate: 'benchmark.observed', value: { index: i, value: 'deterministic' } },
+      subject: `benchmark:project:${i % 8}`,
+      scope: benchmarkScope,
+      grain: benchmarkGrain,
+      time: { validTime: EPISTEMIC_VALID_TIME, asOf: EPISTEMIC_ISSUED_AT },
+      epistemic: 'supported',
+      profile: benchmarkProfile,
+      measurementModelRef: null,
+      evidenceIds: [item.id],
+      derivationRule: 'benchmark.issuance.v1',
+      derivationVersion: 1,
+      causalStatus: 'none',
+      issuedAt: EPISTEMIC_ISSUED_AT,
+      schemaVersion: 1,
+    });
+    evidenceIssued++;
+    claimsIssued++;
+    if (assertion.evidenceIds.includes(item.id)) claimsLinkedToEvidence++;
+    if (Object.isFrozen(item)) immutableEvidence++;
+    if (Object.isFrozen(assertion)) immutableClaims++;
+  }
+
+  let invalidClaimsRefused = 0;
+  try {
+    claim({
+      id: 'benchmark:claim:invalid',
+      proposition: { predicate: 'benchmark.invalid', value: null },
+      subject: 'benchmark:invalid',
+      scope: benchmarkScope,
+      grain: benchmarkGrain,
+      time: { validTime: EPISTEMIC_VALID_TIME, asOf: EPISTEMIC_ISSUED_AT },
+      epistemic: 'supported',
+      profile: benchmarkProfile,
+      measurementModelRef: null,
+      evidenceIds: [],
+      derivationRule: 'benchmark.issuance.v1',
+      derivationVersion: 1,
+      causalStatus: 'none',
+      issuedAt: EPISTEMIC_ISSUED_AT,
+      schemaVersion: 1,
+    });
+  } catch {
+    invalidClaimsRefused++;
+  }
+
+  if (count < 1 || evidenceIssued !== count || claimsIssued !== count || claimsLinkedToEvidence !== count
+      || immutableEvidence !== count || immutableClaims !== count || invalidClaimsRefused !== 1) {
+    throw new Error('epistemic benchmark quality checks failed');
+  }
+  return {
+    requestedRecords: count,
+    evidenceIssued,
+    claimsIssued,
+    claimsLinkedToEvidence,
+    immutableEvidence,
+    immutableClaims,
+    invalidClaimsRefused,
+  };
+}
+
 function directoryBytes(path) {
   try {
     let total = 0;
@@ -212,6 +334,7 @@ async function runCase(name, rows, iterations) {
   const startMs = 0;
   const endMs = Date.now() + 1000;
   const units = syntheticUnits(Math.max(24, Math.min(rows, 100_000)));
+  const epistemicQuality = benchmarkEpistemicIssuance(rows);
   const observations = {
     startup,
     ingest: { samples: 1, minMs: ingestMs, medianMs: ingestMs, p95Ms: ingestMs, maxMs: ingestMs },
@@ -220,6 +343,7 @@ async function runCase(name, rows, iterations) {
     byModel: observe(() => ingestStore.byModel(startMs, endMs), iterations),
     overviewAssembly: observe(() => buildOverview(ingestStore, DEFAULT_CONFIG, 'all'), iterations),
     frontier: observe(() => computeFrontier(units), iterations),
+    epistemicIssuance: observe(() => benchmarkEpistemicIssuance(rows), iterations),
     apiOverviewHttp: await dashboardApiObservation(ingestStore),
   };
   ingestStore.close();
@@ -229,6 +353,7 @@ async function runCase(name, rows, iterations) {
     frontierUnits: units.length,
     rssDeltaBytes: Math.max(0, rssAfter - rssBefore),
     observations,
+    quality: { epistemicIssuance: epistemicQuality },
   };
 }
 

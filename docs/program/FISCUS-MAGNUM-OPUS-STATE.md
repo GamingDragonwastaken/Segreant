@@ -606,8 +606,8 @@ inventory remains **11 COMPLETED / 32 PARTIAL / 33 NOT_STARTED**.
 - Current local candidate `236cd9d` adds the BudgetGuard runaway-window
   validation that the synchronized packet inventory still names as a C01
   remainder; focused cap verification is 8/8. It is not remotely verified yet.
-- The accelerated packet burn-down is 76 total: 11 `COMPLETED`, 43 `PARTIAL`,
-  22 `NOT_STARTED`. The next high-value product boundary is
+- The accelerated packet burn-down is 76 total: 11 `COMPLETED`, 44 `PARTIAL`,
+  21 `NOT_STARTED`. The next high-value product boundary is
   recommendation-derived budget application: the decision engine is present,
   but applying a heuristic cap still requires an explicit consequence policy,
   ledger-backed assurance inputs, and fail-closed action semantics. This is

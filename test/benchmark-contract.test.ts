@@ -42,7 +42,22 @@ test('benchmark harness emits a finite, isolated observation contract', () => {
     isolatedHome: boolean;
     packagedDistBytes: number;
     sourceRevision: string;
-    cases: Array<{ scale: string; rows: number; observations: Record<string, Record<string, number>> }>;
+    cases: Array<{
+      scale: string;
+      rows: number;
+      observations: Record<string, Record<string, number>>;
+      quality?: {
+        epistemicIssuance?: {
+          requestedRecords: number;
+          evidenceIssued: number;
+          claimsIssued: number;
+          claimsLinkedToEvidence: number;
+          immutableEvidence: number;
+          immutableClaims: number;
+          invalidClaimsRefused: number;
+        };
+      };
+    }>;
   };
   assert.equal(report.benchmarkVersion, 1);
   assert.deepEqual(report.scales, ['small']);
@@ -54,6 +69,19 @@ test('benchmark harness emits a finite, isolated observation contract', () => {
   assert.equal(report.cases.length, 1);
   assert.equal(report.cases[0]?.scale, 'small');
   assert.equal(report.cases[0]?.rows, 100);
+  assert.ok(
+    Object.hasOwn(report.cases[0]?.observations ?? {}, 'epistemicIssuance'),
+    'the benchmark must exercise the canonical Evidence/Claim truth boundary',
+  );
+  const epistemicQuality = report.cases[0]?.quality?.epistemicIssuance;
+  assert.ok(epistemicQuality, 'the benchmark must publish non-vacuous epistemic quality checks');
+  assert.equal(epistemicQuality.requestedRecords, 100);
+  assert.equal(epistemicQuality.evidenceIssued, 100);
+  assert.equal(epistemicQuality.claimsIssued, 100);
+  assert.equal(epistemicQuality.claimsLinkedToEvidence, 100);
+  assert.equal(epistemicQuality.immutableEvidence, 100);
+  assert.equal(epistemicQuality.immutableClaims, 100);
+  assert.equal(epistemicQuality.invalidClaimsRefused, 1);
   for (const observation of Object.values(report.cases[0]?.observations ?? {})) {
     const samples = observation.samples;
     assert.equal(typeof samples, 'number');

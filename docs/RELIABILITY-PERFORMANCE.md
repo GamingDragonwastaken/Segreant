@@ -28,6 +28,25 @@ adds a real loopback HTTP request and response read. `frontier` exercises the
 same local model/value comparison engine used by the advisor. RSS is a process
 delta, so it is an observation rather than a leak verdict.
 
+## Epistemic issuance quality boundary
+
+The `epistemicIssuance` operation exercises canonical Evidence and Claim
+construction at every selected scale. It uses fixed timestamps, scope, grain,
+and profile inputs so the workload is reproducible; it does not read provider
+data, call a judge, or append to SQLite. Each case also publishes a quality
+record with the requested count, Evidence and Claim counts, Evidence-to-Claim
+link count, immutable-record count, and one deliberately invalid Claim refusal.
+The benchmark contract test requires these counts to be non-zero and equal to
+the requested workload, so a timing report cannot remain green after its truth
+workload becomes empty or loses the dependency it claims to exercise.
+
+This is the first H06 truth-boundary slice: canonical construction and
+validation are measured, while persistent ledger append, graph replay/as-of,
+revocation closure, exact projections, allocation, `.fiscuspack` verification,
+dashboard contract validation, and proxy streaming remain separate benchmark
+surfaces. The quality counts are correctness probes, not latency thresholds or
+release budgets.
+
 ## 2026-08-28 Windows baseline
 
 Environment: Node `v24.18.0`, `win32/x64`, with the source revision recorded in
