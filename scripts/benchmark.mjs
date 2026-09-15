@@ -28,10 +28,13 @@ import { interval } from '../src/epistemic/time.ts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SCALE_ROWS = Object.freeze({ small: 100, current: 1_000, '10x': 10_000, '100x': 100_000 });
+const SCALE_PERSISTENT_PAIRS = Object.freeze({ small: 25, current: 50, '10x': 100, '100x': 200 });
 const DEFAULT_SCALES = ['small', 'current', '10x'];
 const EPISTEMIC_OCCURRED_AT = '2026-01-01T00:00:00.000Z';
 const EPISTEMIC_OBSERVED_AT = '2026-01-01T00:00:01.000Z';
 const EPISTEMIC_ISSUED_AT = '2026-01-01T00:00:02.000Z';
+const EPISTEMIC_PRE_OCCURRED_AS_OF = '2025-12-31T23:59:59.000Z';
+const EPISTEMIC_POST_ISSUED_AS_OF = '2026-01-01T00:00:03.000Z';
 const EPISTEMIC_VALID_TIME = interval('2026-01-01T00:00:00.000Z', '2026-01-02T00:00:00.000Z');
 
 function parseArgs(argv) {
@@ -276,6 +279,171 @@ function benchmarkEpistemicIssuance(count) {
   };
 }
 
+/**
+ * Exercise persistent SQLite storage and hindsight-safe graph replay for canonical
+ * Evidence and Claim records.
+ *
+ * Populates pairs of synthetic Evidence and dependent Claims in an atomic
+ * transaction on an isolated in-memory Store. Following transactional append,
+ * the workload queries `replayAsOf` at a boundary before acquisition (asserting
+ * 0 nodes) and after issuance (asserting all nodes and citation edges), and inspects
+ * `latestClaims` visible tips.
+ *
+ * Quality checks also verify that re-appending an identical record returns 'duplicate',
+ * a divergent payload with the same ID is refused, and a Claim citing a non-existent
+ * Evidence ID is refused.
+ */
+function benchmarkEpistemicPersistence(pairCount) {
+  const store = new Store(':memory:');
+  const ledger = store.epistemic();
+  const benchmarkScope = scope({ account: 'benchmark' });
+  const benchmarkGrain = grain(['day', 'project']);
+  const benchmarkProfile = claimProfile({
+    epistemic: 'supported',
+    integrity: 'verified',
+    authenticity: 'provider_authenticated',
+    scope: 'established',
+    coverage: 'complete',
+    measurement: 'proxy_unvalidated',
+    causality: 'none',
+    monetaryBasis: 'billed',
+    finality: 'provisional',
+    decisionFitness: 'not_assessed',
+  });
+
+  let evidenceAppended = 0;
+  let claimsAppended = 0;
+
+  ledger.runInTransaction(() => {
+    for (let i = 0; i < pairCount; i++) {
+      const item = evidence({
+        id: `benchmark:persistence:evidence:${i}`,
+        evidenceType: 'benchmark.observation',
+        sourceIdentity: 'benchmark:synthetic',
+        sourceClass: 'synthetic_fixture',
+        payload: { index: i, value: 'persistent' },
+        scope: benchmarkScope,
+        grain: benchmarkGrain,
+        occurredAt: EPISTEMIC_OCCURRED_AT,
+        observedAt: EPISTEMIC_OBSERVED_AT,
+        integrity: 'verified',
+        authenticity: 'provider_authenticated',
+        completeness: { status: 'complete', method: 'deterministic_fixture' },
+        monetaryBasis: 'billed',
+        schemaVersion: 1,
+        sensitivity: 'internal',
+        redaction: 'none',
+      });
+      const evidenceResult = ledger.appendEvidenceWithinTransaction(item);
+      if (evidenceResult === 'inserted') evidenceAppended++;
+
+      const assertion = claim({
+        id: `benchmark:persistence:claim:${i}`,
+        proposition: { predicate: 'benchmark.observed', value: { index: i, value: 'persistent' } },
+        subject: `benchmark:project:${i % 8}`,
+        scope: benchmarkScope,
+        grain: benchmarkGrain,
+        time: { validTime: EPISTEMIC_VALID_TIME, asOf: EPISTEMIC_ISSUED_AT },
+        epistemic: 'supported',
+        profile: benchmarkProfile,
+        measurementModelRef: null,
+        evidenceIds: [item.id],
+        derivationRule: 'benchmark.issuance.v1',
+        derivationVersion: 1,
+        causalStatus: 'none',
+        issuedAt: EPISTEMIC_ISSUED_AT,
+        schemaVersion: 1,
+      });
+      const claimResult = ledger.appendClaimWithinTransaction(assertion);
+      if (claimResult === 'inserted') claimsAppended++;
+    }
+  });
+
+  const historicalReplay = ledger.replayAsOf(EPISTEMIC_PRE_OCCURRED_AS_OF);
+  const activeReplay = ledger.replayAsOf(EPISTEMIC_POST_ISSUED_AS_OF);
+  const latest = ledger.latestClaims(EPISTEMIC_POST_ISSUED_AS_OF);
+
+  let idempotentDuplicatesIgnored = 0;
+  const firstEvidence = ledger.readEvidence('benchmark:persistence:evidence:0');
+  if (firstEvidence !== null) {
+    const dupResult = ledger.appendEvidence(firstEvidence);
+    if (dupResult === 'duplicate') idempotentDuplicatesIgnored++;
+  }
+
+  let divergentRefused = 0;
+  if (firstEvidence !== null) {
+    try {
+      ledger.appendEvidence(evidence({
+        ...firstEvidence,
+        payload: { index: 0, value: 'tampered-payload' },
+      }));
+    } catch {
+      divergentRefused++;
+    }
+  }
+
+  let missingDependencyRefused = 0;
+  try {
+    ledger.appendClaim(claim({
+      id: 'benchmark:persistence:claim:missing-ref',
+      proposition: { predicate: 'benchmark.observed', value: { index: -1 } },
+      subject: 'benchmark:project:0',
+      scope: benchmarkScope,
+      grain: benchmarkGrain,
+      time: { validTime: EPISTEMIC_VALID_TIME, asOf: EPISTEMIC_ISSUED_AT },
+      epistemic: 'supported',
+      profile: benchmarkProfile,
+      measurementModelRef: null,
+      evidenceIds: ['benchmark:persistence:evidence:missing'],
+      derivationRule: 'benchmark.issuance.v1',
+      derivationVersion: 1,
+      causalStatus: 'none',
+      issuedAt: EPISTEMIC_ISSUED_AT,
+      schemaVersion: 1,
+    }));
+  } catch {
+    missingDependencyRefused++;
+  }
+
+  const edgesStored = activeReplay.graph.edges.length;
+  const historicalNodes = historicalReplay.graph.nodes.length;
+  const activeNodes = activeReplay.graph.nodes.length;
+  const edgesReplayed = activeReplay.graph.edges.length;
+  const latestClaimsCount = latest.length;
+
+  store.close();
+
+  if (
+    pairCount < 1 ||
+    evidenceAppended !== pairCount ||
+    claimsAppended !== pairCount ||
+    edgesStored !== pairCount ||
+    historicalNodes !== 0 ||
+    activeNodes !== pairCount * 2 ||
+    edgesReplayed !== pairCount ||
+    latestClaimsCount !== pairCount ||
+    idempotentDuplicatesIgnored !== 1 ||
+    divergentRefused !== 1 ||
+    missingDependencyRefused !== 1
+  ) {
+    throw new Error('epistemic persistence benchmark quality checks failed');
+  }
+
+  return {
+    requestedPairs: pairCount,
+    evidenceAppended,
+    claimsAppended,
+    edgesStored,
+    historicalNodes,
+    activeNodes,
+    edgesReplayed,
+    latestClaims: latestClaimsCount,
+    idempotentDuplicatesIgnored,
+    divergentRefused,
+    missingDependencyRefused,
+  };
+}
+
 function directoryBytes(path) {
   try {
     let total = 0;
@@ -334,7 +502,9 @@ async function runCase(name, rows, iterations) {
   const startMs = 0;
   const endMs = Date.now() + 1000;
   const units = syntheticUnits(Math.max(24, Math.min(rows, 100_000)));
+  const persistentPairs = SCALE_PERSISTENT_PAIRS[name] ?? 25;
   const epistemicQuality = benchmarkEpistemicIssuance(rows);
+  const persistenceQuality = benchmarkEpistemicPersistence(persistentPairs);
   const observations = {
     startup,
     ingest: { samples: 1, minMs: ingestMs, medianMs: ingestMs, p95Ms: ingestMs, maxMs: ingestMs },
@@ -344,6 +514,7 @@ async function runCase(name, rows, iterations) {
     overviewAssembly: observe(() => buildOverview(ingestStore, DEFAULT_CONFIG, 'all'), iterations),
     frontier: observe(() => computeFrontier(units), iterations),
     epistemicIssuance: observe(() => benchmarkEpistemicIssuance(rows), iterations),
+    epistemicPersistence: observe(() => benchmarkEpistemicPersistence(persistentPairs), iterations),
     apiOverviewHttp: await dashboardApiObservation(ingestStore),
   };
   ingestStore.close();
@@ -353,7 +524,10 @@ async function runCase(name, rows, iterations) {
     frontierUnits: units.length,
     rssDeltaBytes: Math.max(0, rssAfter - rssBefore),
     observations,
-    quality: { epistemicIssuance: epistemicQuality },
+    quality: {
+      epistemicIssuance: epistemicQuality,
+      epistemicPersistence: persistenceQuality,
+    },
   };
 }
 

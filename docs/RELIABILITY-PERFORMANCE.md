@@ -47,6 +47,31 @@ dashboard contract validation, and proxy streaming remain separate benchmark
 surfaces. The quality counts are correctness probes, not latency thresholds or
 release budgets.
 
+## Epistemic persistence and graph replay boundary
+
+The `epistemicPersistence` operation exercises persistent SQLite storage and
+hindsight-safe graph replay for canonical Evidence and Claims across the scale
+ladder (`small: 25`, `current: 50`, `10x: 100`, `100x: 200` pairs). It operates
+on an isolated in-memory Store handle without network egress or provider
+credentials.
+
+Each pair populates one synthetic Evidence record and one Claim citing that
+Evidence inside an atomic SQLite transaction, creating stored DAG nodes and
+citation edges. The workload then performs deterministic query and refusal checks:
+1. `replayAsOf` at a boundary preceding acquisition verifies 0 historical nodes.
+2. `replayAsOf` at a boundary following issuance reconstructs all persisted nodes and edges.
+3. `latestClaims` verifies that all visible tip claims are accessible.
+4. Idempotency check verifies that re-appending an identical record returns `'duplicate'`.
+5. Integrity check verifies that re-appending a divergent record for an existing identity is refused.
+6. Dependency check verifies that a Claim citing a missing Evidence ID is refused.
+
+Every synthetic fixture explicitly declares `sourceIdentity: 'benchmark:synthetic'`,
+`sourceClass: 'synthetic_fixture'`, and `completeness.method: 'deterministic_fixture'`,
+preventing synthetic benchmark records from resembling production evidence. Sizing is
+bounded across the scale ladder to maintain sub-second to low-second determinism under
+full SQLite schema, digest, and DAG validation invariants. The published counts are
+contract-tested quality gates, not latency budgets.
+
 ## 2026-08-28 Windows baseline
 
 Environment: Node `v24.18.0`, `win32/x64`, with the source revision recorded in

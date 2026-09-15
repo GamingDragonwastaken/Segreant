@@ -56,6 +56,19 @@ test('benchmark harness emits a finite, isolated observation contract', () => {
           immutableClaims: number;
           invalidClaimsRefused: number;
         };
+        epistemicPersistence?: {
+          requestedPairs: number;
+          evidenceAppended: number;
+          claimsAppended: number;
+          edgesStored: number;
+          historicalNodes: number;
+          activeNodes: number;
+          edgesReplayed: number;
+          latestClaims: number;
+          idempotentDuplicatesIgnored: number;
+          divergentRefused: number;
+          missingDependencyRefused: number;
+        };
       };
     }>;
   };
@@ -82,6 +95,23 @@ test('benchmark harness emits a finite, isolated observation contract', () => {
   assert.equal(epistemicQuality.immutableEvidence, 100);
   assert.equal(epistemicQuality.immutableClaims, 100);
   assert.equal(epistemicQuality.invalidClaimsRefused, 1);
+  assert.ok(
+    Object.hasOwn(report.cases[0]?.observations ?? {}, 'epistemicPersistence'),
+    'the benchmark must exercise persistent epistemic storage and DAG replay',
+  );
+  const persistenceQuality = report.cases[0]?.quality?.epistemicPersistence;
+  assert.ok(persistenceQuality, 'the benchmark must publish non-vacuous epistemic persistence quality checks');
+  assert.equal(persistenceQuality.requestedPairs, 25);
+  assert.equal(persistenceQuality.evidenceAppended, 25);
+  assert.equal(persistenceQuality.claimsAppended, 25);
+  assert.equal(persistenceQuality.edgesStored, 25);
+  assert.equal(persistenceQuality.historicalNodes, 0);
+  assert.equal(persistenceQuality.activeNodes, 50);
+  assert.equal(persistenceQuality.edgesReplayed, 25);
+  assert.equal(persistenceQuality.latestClaims, 25);
+  assert.equal(persistenceQuality.idempotentDuplicatesIgnored, 1);
+  assert.equal(persistenceQuality.divergentRefused, 1);
+  assert.equal(persistenceQuality.missingDependencyRefused, 1);
   for (const observation of Object.values(report.cases[0]?.observations ?? {})) {
     const samples = observation.samples;
     assert.equal(typeof samples, 'number');
