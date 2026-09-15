@@ -8,7 +8,7 @@
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { Store } from '../store/db.ts';
-import { loadConfig, saveConfig, dbPath, isDemo } from '../config.ts';
+import { loadConfig, dbPath, isDemo } from '../config.ts';
 import { isGitRepo, projectName, resolveCommit } from '../git/correlate.ts';
 import { computeArtifactPersistence } from '../git/quality.ts';
 import { loadRealization } from '../value/realization.ts';
@@ -568,6 +568,28 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
   // separately gated same-task model-switch trial, never a generic allocator.
   const allocation = null;
 
+  // A heuristic cap changes spend behaviour. Until a product path supplies a
+  // DecisionCertificate whose declared consequence reaches DAL-3, the only
+  // safe action semantics here are refusal. Keep the recommendation readable,
+  // but never let this surface write a cap outside the decision/assurance path.
+  if (flags.apply) {
+    const message = 'Refused: --recommend --apply changes spend and requires a DecisionCertificate with DAL-3 assurance; no certificate-backed apply path is available.';
+    if (flags.json) {
+      printJson({
+        applied: false,
+        error: 'decision_certificate_required',
+        consequence: 'changes_spend',
+        requiredAssurance: 'DAL-3',
+        message,
+      });
+    } else {
+      console.error(`  ${message}`);
+    }
+    process.exitCode = 1;
+    store.close();
+    return;
+  }
+
   if (flags.json) {
     printJson({ ...rec, allocation, shadowPrice: null });
     store.close();
@@ -630,16 +652,8 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
   }
   }
   */
-  if (flags.apply) {
-    cfg.budget.dailyUsd = dailyCap;
-    cfg.budget.dailySoftUsd = softCap;
-    saveConfig(cfg);
-    console.log('');
-    console.log(color(tty, C.green, `  Applied: daily cap ${usd(dailyCap)}, soft ${usd(softCap)} written to config.`));
-  } else {
-    console.log('');
-    console.log(color(tty, C.gray, '  Re-run with --apply to write these to your config.'));
-  }
+  console.log('');
+  console.log(color(tty, C.gray, '  No cap written. Applying a recommendation requires a DecisionCertificate with DAL-3 assurance.'));
   console.log('');
   store.close();
 }
