@@ -319,11 +319,12 @@ export async function cmdUsage(flags: Flags): Promise<void> {
     if (m.used > 0) parts.push(`${m.used} used`);
     console.log(`  Reach               ${parts.join(color(tty, C.gray, ' · '))}${m.none > 0 ? color(tty, C.gray, ` · ${m.none} no outcome yet`) : ''}`);
   }
-  // Instrumentation sensitivity: which measurement moves the composite most.
-  const usageVoi = instrumentationPriority(rep.roi);
-  if (usageVoi.length > 0 && rep.roi.roiIndex !== null) {
-    const top = usageVoi[0]!;
-    console.log(`  Instrument next     ${color(tty, C.cyan, top.lens)}   ${color(tty, C.gray, `largest unmeasured exposure — at a mid ${top.reference} the Index moves ${rep.roi.roiIndex.toFixed(0)} → ${top.indexAtReference.toFixed(0)}`)}`);
+  // Instrumentation sensitivity: report the largest sensitivity/measurement
+  // exposure without turning it into a cost or utility decision.
+  const usageSensitivity = instrumentationPriority(rep.roi);
+  if (usageSensitivity.length > 0 && rep.roi.roiIndex !== null) {
+    const top = usageSensitivity[0]!;
+    console.log(`  Largest exposure     ${color(tty, C.cyan, top.lens)}   ${color(tty, C.gray, `largest sensitivity/measurement exposure — at a mid ${top.reference} the Index moves ${rep.roi.roiIndex.toFixed(0)} → ${top.indexAtReference.toFixed(0)}`)}`);
   }
   console.log('');
   for (const n of rep.roi.notes) console.log(color(tty, C.gray, `  · ${n}`));
@@ -453,16 +454,18 @@ export async function cmdRoi(flags: Flags): Promise<void> {
     }
   }
 
-  // Sensitivity: name the next measurement worth buying, with the exposure quantified.
+  // Sensitivity: report the largest sensitivity/measurement exposure. This
+  // ranking has no acquisition-cost or utility model and is not a purchase
+  // recommendation; formal decision VoI lives in src/decision/engine.ts.
   if (voi.length > 0 && roi.roiIndex !== null) {
     const top = voi[0]!;
     console.log('');
     console.log(
-      `  ${color(tty, C.bold, 'Instrument next')}      ${color(tty, C.cyan, top.lens)}   ` +
+      `  ${color(tty, C.bold, 'Largest exposure')}     ${color(tty, C.cyan, top.lens)}   ` +
         color(
           tty,
           C.gray,
-          `largest unmeasured exposure: at a mid ${top.reference}, the observed Index moves ${roi.roiIndex.toFixed(0)} → ${top.indexAtReference.toFixed(0)} — direction is disclosed sensitivity, not a monotone promise`,
+          `largest sensitivity/measurement exposure: at a mid ${top.reference}, the observed Index moves ${roi.roiIndex.toFixed(0)} → ${top.indexAtReference.toFixed(0)} — direction is disclosed sensitivity, not a monotone promise`,
         ),
     );
   }

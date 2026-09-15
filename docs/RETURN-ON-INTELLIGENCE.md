@@ -775,10 +775,10 @@ gamed metric both trip it. Its job is to force the question no dashboard asks �
 > the probabilistic model this ranking deliberately does not have.
 
 Missing lenses create unmeasured exposure, not a universal upper-bound theorem
-(§4.4). "Wire more lenses" is not a decision — "wire **this** lens next" is. For
-each un-instrumented lens k, evaluate the composite with that lens hypothetically
-measured at a **disclosed neutral reference** v = 0.5 (a midpoint, not a
-prediction):
+(§4.4). This output reports the largest sensitivity/measurement exposure; it is
+descriptive rather than an action-selection rule. For each un-instrumented lens
+k, evaluate the composite with that lens hypothetically measured at a
+**disclosed neutral reference** v = 0.5 (a midpoint, not a prediction):
 
 ```
 Index_k(v) = 100 · exp( (Σᵢ wᵢ ln xᵢ + w_k ln v) / (Σᵢ wᵢ + w_k) )
@@ -786,17 +786,20 @@ Index_k(v) = 100 · exp( (Σᵢ wᵢ ln xᵢ + w_k ln v) / (Σᵢ wᵢ + w_k) )
 
 and rank by the size of the move. The arithmetic is fully transparent — no
 hidden priors. A heavier, further-from-current lens moves the Index more at this
-reference, but the actual measured value may move it either direction. The output
-is a sensitivity calculation that names the cheapest assumption to reduce, not a
-promise about the result. This completes the decision calculus the instrument
-hands an organization:
+reference, but the actual measured value may move it either direction. This
+ranking has no acquisition-cost or utility model, so it reports exposure rather
+than whether a measurement merits spending. Formal decision-theoretic VoI is a
+separate calculation in `src/decision/engine.ts` (§EVPI): `valueOfInformation()`
+requires posterior scenario probabilities, action utilities, and a declared
+`measurementCost`, then reports gross and net utility. The two results should not
+be conflated:
 
 | Question | Answer | Section |
 |---|---|---|
 | Where does the next **dollar** go? | the shadow price μ | §9 |
-| Which **measurement** do I buy next? | instrumentation priority | §12 |
+| Which **measurement** has the largest sensitivity/measurement exposure? | instrumentation priority | §12 |
 | When do I actually **know**? | the anytime-valid interval | §10 |
 | Has the rate **moved**? | the drift alarm | §11 |
 
-(`src/value/instrumentationSensitivity.ts`, `test/instrumentation-sensitivity.test.ts`; the "Instrument next" line in
+(`src/value/instrumentationSensitivity.ts`, `test/instrumentation-sensitivity.test.ts`; the "Largest exposure" line in
 `fiscus roi` / `usage`.)

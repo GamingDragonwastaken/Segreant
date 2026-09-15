@@ -2,20 +2,20 @@
  * Instrumentation sensitivity — which un-instrumented lens moves the Index most.
  * (docs/RETURN-ON-INTELLIGENCE.md §12.)
  *
- * This is NOT value of information. VoI needs a decision, a utility model and a
- * distribution over what the measurement might reveal; this module has none of
- * those. It reports how far the composite would move if a missing lens were
- * measured at one disclosed reference value — a sensitivity ranking of the
- * aggregator, useful for choosing instrumentation, and not a claim about what
- * that measurement is worth. Decision-theoretic VoI lives in
- * `src/decision/engine.ts`, where a scenario mixture supplies the probabilistic
- * model this ranking deliberately does not have.
+ * This is NOT value of information. VoI needs a decision, a utility model, a
+ * distribution over what the measurement might reveal, and a declared cost;
+ * this module has none of those. It reports how far the composite would move if
+ * a missing lens were measured at one disclosed reference value — the largest
+ * sensitivity/measurement exposure in the aggregator, not a claim about what
+ * that measurement is worth. Formal decision-theoretic VoI lives in
+ * `src/decision/engine.ts`, where `valueOfInformation()` combines posterior
+ * scenarios, action utilities, and a declared measurement cost.
  *
  * The observed Index is not generally a ceiling while lenses are un-instrumented:
  * weight renormalization means a missing lens can move the score either direction.
- * "Wire THIS lens next" is an instrumentation decision. This module ranks the
- * un-instrumented lenses by how much the Index would move if each were measured,
- * completing the decision calculus:
+ * This module is an exposure diagnostic, not an action-selection rule. It ranks
+ * the un-instrumented lenses by how much the Index would move if each were
+ * measured, keeping the sensitivity result separate from formal decision VoI:
  *
  *   shadow price (§9)  — where does the next DOLLAR go?
  *   sensitivity (this) — which MEASUREMENT moves the composite most?

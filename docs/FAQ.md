@@ -183,11 +183,15 @@ work change, or did the measuring get bent?"* — which no other dashboard even 
 False alarms are capped at 5% over all of time, and that cap is verified by
 simulation in the test suite.
 
-**What should I measure next?**
-Ask the tool: the "Instrument next" line names the unmeasured lens whose
-measurement would move your Index most at a disclosed midpoint (a sensitivity
-calculation, not a prediction). It names the cheapest place to reduce an
-unmeasured assumption; the measured value may move the Index up or down.
+**Where is the largest measurement exposure?**
+Ask the tool: the "Largest exposure" line reports the unmeasured lens with the
+largest sensitivity/measurement exposure at a disclosed midpoint (a sensitivity
+calculation, not a prediction). The ranking uses the current lens values,
+disclosed weights, and reference only; it has no acquisition-cost or utility
+model and does not decide whether a measurement merits spending. The measured
+value may move the Index up or down. Formal decision-theoretic VoI is separate:
+`src/decision/engine.ts` combines posterior scenarios, action utilities, and a
+declared measurement cost to calculate gross and net value.
 
 ## Cost & licensing
 
