@@ -27,6 +27,7 @@ import { signal, effect, onCleanup } from '../core/signal.ts';
 import { usd, isPrecise } from '../core/fmt.ts';
 import {
   claimIsSupported,
+  claimProfileRows,
   claimShowsFigure,
   type Layer,
 } from '../core/claimTypes.ts';
@@ -56,6 +57,28 @@ function list(title: string, items: string[], cls: string): Node {
   return h('div', { class: `claim-list ${cls}` },
     h('strong', { text: title }),
     h('ul', null, ...items.map((x) => h('li', { text: x.replace(/_/g, ' ') }))));
+}
+
+function profileCard(layer: Layer): Node {
+  return h('section', { class: 'claim-profile', 'aria-labelledby': 'claim-profile-title' },
+    h('h3', { id: 'claim-profile-title', class: 'claim-profile-title', text: isPrecise() ? 'ClaimProfile' : 'Evidence standing' }),
+    h('p', {
+      class: 'claim-profile-note',
+      text: isPrecise()
+        ? 'Kernel axes are shown as recorded; the figure row is a separate rendering decision.'
+        : 'These are the evidence labels behind this claim. A missing dollar figure is not the same as missing evidence.',
+    }),
+    h('dl', { class: 'claim-profile-rows' },
+      ...claimProfileRows(layer.support.profile, layer.support.figure).map((item) => h('div', {
+        class: 'claim-profile-row',
+        'data-axis': item.axis,
+        'data-value': item.value,
+      },
+        h('dt', { class: 'claim-key', text: item.label }),
+        h('dd', {
+          class: 'claim-val claim-profile-value',
+          text: () => (isPrecise() ? item.value : item.value.replaceAll('_', ' ')),
+        })) )));
 }
 
 export function mountClaimInspector(root: HTMLElement): void {
@@ -116,6 +139,8 @@ function panel(layer: Layer): Node {
       text: figureText(layer) }),
 
     h('p', { class: 'claim-basis', text: layer.basis }),
+
+    profileCard(layer),
 
     h('dl', { class: 'claim-rows' },
       row(isPrecise() ? 'Provenance' : 'Where it came from', i.provenance),

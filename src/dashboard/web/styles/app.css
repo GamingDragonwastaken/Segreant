@@ -500,6 +500,30 @@ body.claim-open { overflow: hidden; }
 .claim-unset { font-family: var(--sans); font-size: 15px; letter-spacing: 0; color: var(--faint); font-style: italic; }
 .claim-basis { color: var(--muted); font-size: 13px; max-width: 62ch; }
 
+.claim-profile {
+  margin: var(--s4) 0;
+  padding: var(--s3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--panel-2);
+}
+.claim-profile-title {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.claim-profile-note { margin: var(--s2) 0 var(--s3); color: var(--muted); font-size: 12px; }
+.claim-profile-rows { display: grid; grid-template-columns: auto 1fr; gap: var(--s2) var(--s4); font-size: 12px; }
+.claim-profile-row { display: contents; }
+.claim-profile-value { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+/* The word remains the authority; colour is only a redundant cue for the
+   states most likely to be mistaken for one another at a glance. */
+.claim-profile-row[data-value='unknown'] .claim-profile-value { color: var(--faint); }
+.claim-profile-row[data-value='conflicted'] .claim-profile-value,
+.claim-profile-row[data-value='withheld_uncosted'] .claim-profile-value { color: var(--gold-text); }
+.claim-profile-row[data-value='refuted'] .claim-profile-value { color: var(--coral); }
+
 .claim-rows { display: grid; grid-template-columns: auto 1fr; gap: var(--s2) var(--s4); font-size: 13px; }
 .claim-row { display: contents; }
 .claim-key { color: var(--faint); font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; padding-top: 2px; }
@@ -519,6 +543,7 @@ body.claim-open { overflow: hidden; }
 
 @media (max-width: 900px) {
   .claim-panel { width: 100%; padding: var(--s5); }
+  .claim-profile-rows { grid-template-columns: minmax(0, 1fr); gap: 2px var(--s2); }
   .claim-rows { grid-template-columns: minmax(0, 1fr); gap: 2px var(--s2); }
   .claim-key { padding-top: var(--s2); }
 }

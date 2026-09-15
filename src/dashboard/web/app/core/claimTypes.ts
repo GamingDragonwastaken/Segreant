@@ -44,6 +44,56 @@ export type {
 
 import type { ClaimProfilePayload, ClaimSupportPayload, ClaimFigureStatus } from './generated-types.ts';
 
+/** A row in the inspector's evidence-profile view. `figure` is not a profile axis. */
+export type ClaimProfileRow = {
+  readonly axis: keyof ClaimProfilePayload | 'figure';
+  readonly label: string;
+  readonly value: string;
+};
+
+const CLAIM_PROFILE_AXES = [
+  'epistemic',
+  'integrity',
+  'authenticity',
+  'scope',
+  'coverage',
+  'measurement',
+  'causality',
+  'monetaryBasis',
+  'finality',
+  'decisionFitness',
+] as const satisfies readonly (keyof ClaimProfilePayload)[];
+
+const CLAIM_PROFILE_LABELS: Record<keyof ClaimProfilePayload, string> = {
+  epistemic: 'Epistemic support',
+  integrity: 'Integrity',
+  authenticity: 'Authenticity',
+  scope: 'Scope standing',
+  coverage: 'Coverage',
+  measurement: 'Measurement validity',
+  causality: 'Causal status',
+  monetaryBasis: 'Monetary basis',
+  finality: 'Finality',
+  decisionFitness: 'Decision fitness',
+};
+
+/**
+ * Project an existing support payload for the read-only inspector. Preserve
+ * the kernel vocabulary: `unknown`, `conflicted`, and `refuted` remain
+ * distinct, and `withheld_uncosted` remains a figure decision rather than an
+ * epistemic downgrade.
+ */
+export function claimProfileRows(profile: ClaimProfilePayload, figure: ClaimFigureStatus): ClaimProfileRow[] {
+  return [
+    ...CLAIM_PROFILE_AXES.map((axis) => ({
+      axis,
+      label: CLAIM_PROFILE_LABELS[axis],
+      value: profile[axis],
+    })),
+    { axis: 'figure' as const, label: 'Figure', value: figure },
+  ];
+}
+
 /**
  * THE PROJECTION. The axes this GUI renders, and the axes it drops.
  *
