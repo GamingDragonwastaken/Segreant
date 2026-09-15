@@ -44,6 +44,30 @@ function validPayload(idp: FakeIdp, overrides: Record<string, unknown> = {}): Re
   return { iss: idp.issuer, aud: CLIENT_ID, sub: 'alice@example.com', iat: now, exp: now + 3600, ...overrides };
 }
 
+async function serveMutatedJwks(
+  idp: FakeIdp,
+  kid: string,
+  mutate: (key: Record<string, unknown>) => void,
+): Promise<{ server: http.Server; url: string }> {
+  const response = await fetch(idp.jwksUrl);
+  assert.equal(response.ok, true);
+  const document = await response.json() as { keys?: unknown };
+  assert.ok(Array.isArray(document.keys));
+  const key = document.keys.find(
+    (candidate): candidate is Record<string, unknown> =>
+      typeof candidate === 'object' && candidate !== null && (candidate as Record<string, unknown>).kid === kid,
+  );
+  assert.ok(key, `fake IdP did not publish a key with kid=${kid}`);
+  mutate(key);
+
+  const server = http.createServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ keys: document.keys }));
+  });
+  const base = await listen(server);
+  return { server, url: `${base}/jwks.json` };
+}
+
 test('verifyIdToken: a genuine RS256 token is accepted', async () => {
   const idp = await startFakeIdp();
   try {
@@ -191,6 +215,91 @@ test('verifyIdToken: a tampered payload invalidates the signature', async () => 
     await idp.close();
   }
 });
+
+test('verifyIdToken: an illegal character in the header segment is rejected before JWKS retrieval', async () => {
+  const idp = await startFakeIdp();
+  try {
+    clearJwksCacheForTests();
+    const [header, payload, signature] = idp.sign(validPayload(idp)).split('.') as [string, string, string];
+    const result = await verifyIdToken(`${header}!.${payload}.${signature}`, cfg(idp));
+    assert.equal(result.valid, false);
+    if (!result.valid) assert.match(result.reason, /canonical base64url/);
+    assert.equal(idp.jwksHits(), 0, 'malformed header encoding must fail before fetching signing keys');
+  } finally {
+    await idp.close();
+  }
+});
+
+test('verifyIdToken: non-canonical padding in the payload segment is rejected before JWKS retrieval', async () => {
+  const idp = await startFakeIdp();
+  try {
+    clearJwksCacheForTests();
+    const [header, payload, signature] = idp.sign(validPayload(idp)).split('.') as [string, string, string];
+    const result = await verifyIdToken(`${header}.${payload}=.${signature}`, cfg(idp));
+    assert.equal(result.valid, false);
+    if (!result.valid) assert.match(result.reason, /canonical base64url/);
+    assert.equal(idp.jwksHits(), 0, 'malformed payload encoding must fail before fetching signing keys');
+  } finally {
+    await idp.close();
+  }
+});
+
+test('verifyIdToken: an illegal character in the signature segment is rejected instead of being ignored', async () => {
+  const idp = await startFakeIdp();
+  try {
+    clearJwksCacheForTests();
+    const [header, payload, signature] = idp.sign(validPayload(idp)).split('.') as [string, string, string];
+    const result = await verifyIdToken(`${header}.${payload}.${signature}!`, cfg(idp));
+    assert.equal(result.valid, false);
+    if (!result.valid) assert.match(result.reason, /canonical base64url/);
+  } finally {
+    await idp.close();
+  }
+});
+
+test('verifyIdToken: non-canonical padding in the signature segment is rejected instead of being ignored', async () => {
+  const idp = await startFakeIdp();
+  try {
+    clearJwksCacheForTests();
+    const [header, payload, signature] = idp.sign(validPayload(idp)).split('.') as [string, string, string];
+    const result = await verifyIdToken(`${header}.${payload}.${signature}=`, cfg(idp));
+    assert.equal(result.valid, false);
+    if (!result.valid) assert.match(result.reason, /canonical base64url/);
+  } finally {
+    await idp.close();
+  }
+});
+
+const jwkMetadataConflictCases: Array<{
+  field: string;
+  alg: 'RS256' | 'ES256';
+  kid: string;
+  mutate: (key: Record<string, unknown>) => void;
+}> = [
+  { field: 'alg', alg: 'RS256', kid: 'rsa-key-1', mutate: (key) => { key.alg = 'ES256'; } },
+  { field: 'kty', alg: 'RS256', kid: 'rsa-key-1', mutate: (key) => { key.kty = 'EC'; } },
+  { field: 'use', alg: 'RS256', kid: 'rsa-key-1', mutate: (key) => { key.use = 'enc'; } },
+  { field: 'key_ops', alg: 'RS256', kid: 'rsa-key-1', mutate: (key) => { key.key_ops = ['encrypt']; } },
+  { field: 'crv', alg: 'ES256', kid: 'ec-key-1', mutate: (key) => { key.crv = 'P-384'; } },
+];
+
+for (const conflict of jwkMetadataConflictCases) {
+  test(`verifyIdToken: a JWK ${conflict.field} conflict is rejected`, async () => {
+    const idp = await startFakeIdp();
+    let mutated: { server: http.Server; url: string } | undefined;
+    try {
+      clearJwksCacheForTests();
+      mutated = await serveMutatedJwks(idp, conflict.kid, conflict.mutate);
+      const token = idp.sign(validPayload(idp), { alg: conflict.alg });
+      const result = await verifyIdToken(token, cfg(idp, { jwksUrl: mutated.url }));
+      assert.equal(result.valid, false);
+      if (!result.valid) assert.match(result.reason, /signing key metadata conflict/);
+    } finally {
+      if (mutated) await close(mutated.server);
+      await idp.close();
+    }
+  });
+}
 
 test('verifyIdToken: alg "none" is rejected outright (the classic JWT vulnerability)', async () => {
   const idp = await startFakeIdp();

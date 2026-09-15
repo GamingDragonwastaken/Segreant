@@ -73,9 +73,37 @@ const ALLOWED_ALGS = new Set(['RS256', 'ES256']);
 const DEFAULT_JWKS_CACHE_TTL_MS = 10 * 60 * 1000;
 const JWKS_FORCE_REFRESH_COOLDOWN_MS = 30_000;
 const MAX_IDP_JSON_BYTES = 256 * 1024;
+const BASE64URL_RE = /^[A-Za-z0-9_-]*$/;
 
 function base64UrlDecode(s: string): Buffer {
-  return Buffer.from(s.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+  // Buffer.from(..., 'base64') is intentionally permissive: it ignores
+  // illegal characters, accepts padding, and tolerates non-zero discarded
+  // bits. Compact JOSE serialization needs the unpadded canonical spelling,
+  // so validate the alphabet and round-trip the decoded bytes before use.
+  if (!BASE64URL_RE.test(s) || s.length % 4 === 1) {
+    throw new Error('not canonical base64url');
+  }
+  const decoded = Buffer.from(s.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+  if (decoded.toString('base64url') !== s) throw new Error('not canonical base64url');
+  return decoded;
+}
+
+function jwkMatchesAlgorithm(jwk: Jwk, alg: string): boolean {
+  const expectedKty = alg === 'RS256' ? 'RSA' : 'EC';
+  if (jwk.kty !== expectedKty) return false;
+  if ('alg' in jwk && jwk.alg !== alg) return false;
+  if ('use' in jwk && jwk.use !== 'sig') return false;
+  if ('key_ops' in jwk) {
+    if (!Array.isArray(jwk.key_ops) || !jwk.key_ops.every((op) => typeof op === 'string') || !jwk.key_ops.includes('verify')) {
+      return false;
+    }
+  }
+  if (alg === 'ES256') {
+    if (jwk.crv !== 'P-256') return false;
+  } else if ('crv' in jwk) {
+    return false;
+  }
+  return true;
 }
 
 const jwksCache = new Map<string, { jwks: Jwks; fetchedAtMs: number }>();
@@ -209,9 +237,17 @@ export async function verifyIdToken(
 
   let header: { alg?: unknown; kid?: unknown };
   let payload: Record<string, unknown>;
+  let headerBytes: Buffer;
+  let payloadBytes: Buffer;
   try {
-    header = JSON.parse(base64UrlDecode(headerB64).toString('utf8')) as { alg?: unknown; kid?: unknown };
-    payload = JSON.parse(base64UrlDecode(payloadB64).toString('utf8')) as Record<string, unknown>;
+    headerBytes = base64UrlDecode(headerB64);
+    payloadBytes = base64UrlDecode(payloadB64);
+  } catch {
+    return { valid: false, reason: 'malformed token: header or payload is not canonical base64url' };
+  }
+  try {
+    header = JSON.parse(headerBytes.toString('utf8')) as { alg?: unknown; kid?: unknown };
+    payload = JSON.parse(payloadBytes.toString('utf8')) as Record<string, unknown>;
   } catch {
     return { valid: false, reason: 'malformed token: header/payload is not valid JSON' };
   }
@@ -223,6 +259,13 @@ export async function verifyIdToken(
     };
   }
   const alg = header.alg;
+
+  let signature: Buffer;
+  try {
+    signature = base64UrlDecode(sigB64);
+  } catch {
+    return { valid: false, reason: 'malformed token: signature is not canonical base64url' };
+  }
 
   let jwksUrl: string;
   try {
@@ -254,9 +297,11 @@ export async function verifyIdToken(
   }
 
   const signingInput = Buffer.from(`${headerB64}.${payloadB64}`);
-  const signature = base64UrlDecode(sigB64);
   let sigOk = false;
+  let compatibleCandidateFound = false;
   for (const jwk of candidates) {
+    if (!jwkMatchesAlgorithm(jwk, alg)) continue;
+    compatibleCandidateFound = true;
     let publicKey: KeyObject;
     try {
       publicKey = createPublicKey({ key: jwk as unknown as Record<string, unknown>, format: 'jwk' });
@@ -273,6 +318,7 @@ export async function verifyIdToken(
     }
     if (sigOk) break;
   }
+  if (!compatibleCandidateFound) return { valid: false, reason: 'signing key metadata conflict' };
   if (!sigOk) return { valid: false, reason: 'signature mismatch' };
 
   const now = verifierNow(context);
