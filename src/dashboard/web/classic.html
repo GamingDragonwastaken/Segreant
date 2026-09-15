@@ -1542,6 +1542,15 @@ function renderValue(d) {
           // Kept separate from the attribution exclusions: those units could never
           // price a model, these carry a price that has since been superseded.
           const staleNote = staleDropped > 0 ? ` · ${staleDropped} unit(s) excluded — pre-reprice cost` : '';
+          // Retention is a separate exclusion reason from mixed attribution and
+          // stale pricing. Keep both states visible: excluded spend is known to
+          // be missing, while unknown coverage remains eligible but qualified.
+          const truncatedDropped = Number(m.unitsExcludedTruncatedSpend || 0);
+          const unknownCoverage = Number(m.unitsUnknownSpendCoverage || 0);
+          const retentionNote = [
+            truncatedDropped > 0 ? `${truncatedDropped} unit(s) excluded — retention deleted spend in their attribution window` : '',
+            unknownCoverage > 0 ? `${unknownCoverage} included unit(s) have unknown retention coverage` : '',
+          ].filter(Boolean).join(' · ');
           // Per-commit cost is what a budget owner feels; per-100-lines is the
           // check on whether the saving is a price or just smaller work. Both are
           // shown, because seeing only the first is how a size effect gets read as
@@ -1550,7 +1559,7 @@ function renderValue(d) {
             ? ` · $${money(m.candidateCostPerHundredLinesUsd)} vs $${money(m.incumbentCostPerHundredLinesUsd)} per 100 changed lines`
             : '';
           const sessions = ` · from ${Number(m.candidateSessions || 0)} vs ${Number(m.incumbentSessions || 0)} working sessions`;
-          const evidence = `${Number(m.candidateUnits || 0)} vs ${Number(m.incumbentUnits || 0)} mature units · observed realization ${candidateRate}% vs ${incumbentRate}%${perLine}${sessions}${droppedNote}${staleNote}`;
+          const evidence = `${Number(m.candidateUnits || 0)} vs ${Number(m.incumbentUnits || 0)} mature units · observed realization ${candidateRate}% vs ${incumbentRate}%${perLine}${sessions}${droppedNote}${staleNote}${retentionNote ? ' · ' + retentionNote : ''}`;
           const confounders = m.confounders || [];
           const confidenceNote = m.confidence === 'observational_separation'
             ? 'anytime-valid outcome bounds separate under the observational procedure — not a causal effect'
@@ -1703,6 +1712,7 @@ function renderValue(d) {
       <div class="rrow"><span style="color:var(--muted)">RoI Index</span><span style="font-family:var(--mono);color:${uidx == null ? 'var(--faint)' : 'var(--mint)'}">${uidx == null ? 'n/a' : uidx + ' / 100'}</span></div>
       <div class="rrow"><span style="color:var(--muted)">Realized sessions</span><span style="font-family:var(--mono)">${u.realizedUnits}/${u.units.length} · $${money(u.totalCostUsd)}</span></div>
       ${usageEconomicLine}
+      ${u.retention && u.retention.truncated ? `<div class="lenshow" style="color:var(--coral)">Some requests in this usage window were deleted by retention, so these figures cover what remains rather than everything metered.</div>` : ''}
       <div class="lenshow">Acceptance &amp; survival are n/a here (no diff, no git) — realized = a reported, no-incident outcome. Record with: <span style="color:var(--gold)">fiscus report --session &lt;id&gt; --kind used</span></div>
     </div>
     ${teamCard}`);

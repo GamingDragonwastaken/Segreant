@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "efd1e52d2a8ca2d160735b17570363fe922cefda6b960e2e6d496ee1557dd456";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "c0823d050e03c9c0028d036220a410888a16618fff0f284eb91daf1c80488d61";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -999,6 +999,23 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "type": "boolean"
     }
   ],
+  "WindowRetentionCoveragePayload": [
+    {
+      "name": "truncated",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "prunedBeforeMs",
+      "optional": false,
+      "type": "number | null"
+    },
+    {
+      "name": "rowsRemoved",
+      "optional": false,
+      "type": "number"
+    }
+  ],
   "UsagePayload": [
     {
       "name": "units",
@@ -1024,6 +1041,11 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "economic",
       "optional": true,
       "type": "RealizationEconomicRollupPayload"
+    },
+    {
+      "name": "retention",
+      "optional": false,
+      "type": "WindowRetentionCoveragePayload"
     }
   ],
   "ReconciliationRunRecord": [
@@ -1280,6 +1302,180 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "type": "RealizationEconomicRollupPayload"
     }
   ],
+  "ModelSwitchRecommendationPayload": [
+    {
+      "name": "taskType",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "incumbentProvider",
+      "optional": true,
+      "type": "string | null"
+    },
+    {
+      "name": "candidateProvider",
+      "optional": true,
+      "type": "string | null"
+    },
+    {
+      "name": "incumbentModel",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "candidateModel",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "incumbentUnits",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "candidateUnits",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "incumbentRealizationRate",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "candidateRealizationRate",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "incumbentCostPerUnitUsd",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "candidateCostPerUnitUsd",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "savingsPerUnitUsd",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "historicalEquivalentHeadroomUsd",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "historicalHeadroomPercent",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "confidence",
+      "optional": false,
+      "type": "'trial' | 'observational_separation'"
+    },
+    {
+      "name": "costBasis",
+      "optional": false,
+      "type": "'dominant_model_attributed'"
+    },
+    {
+      "name": "minimumDominantCostShare",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "unitsExcludedMixedAttribution",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "unitsExcludedUnknownAttribution",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "unitsExcludedStalePricing",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "unitsExcludedTruncatedSpend",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "unitsUnknownSpendCoverage",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "confounders",
+      "optional": false,
+      "type": "string[]"
+    },
+    {
+      "name": "assumptions",
+      "optional": false,
+      "type": "string[]"
+    },
+    {
+      "name": "candidateMedianUnitLines",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "incumbentMedianUnitLines",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "candidateCostPerHundredLinesUsd",
+      "optional": false,
+      "type": "number | null"
+    },
+    {
+      "name": "incumbentCostPerHundredLinesUsd",
+      "optional": false,
+      "type": "number | null"
+    },
+    {
+      "name": "candidateSessions",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "incumbentSessions",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "appliedConfidenceLevel",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "comparisonsConsidered",
+      "optional": false,
+      "type": "number"
+    },
+    {
+      "name": "rationale",
+      "optional": false,
+      "type": "string"
+    }
+  ],
+  "FrontierPayload": [
+    {
+      "name": "modelSwitches",
+      "optional": false,
+      "type": "ModelSwitchRecommendationPayload[]"
+    }
+  ],
   "ValuePayload": [
     {
       "name": "demo",
@@ -1304,7 +1500,7 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
     {
       "name": "frontier",
       "optional": true,
-      "type": "{ modelSwitches?: Array<{ confidence: string }> } | null"
+      "type": "FrontierPayload | null"
     },
     {
       "name": "valueSource",

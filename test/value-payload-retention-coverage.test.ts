@@ -8,8 +8,9 @@
  * on each model-switch recommendation.
  *
  * `/api/value` sends `rep.matured` whole, so all of that has been on the wire
- * from the moment it existed. None of it was DECLARED. `Matured` in
- * `shared-types.ts` lists the fields the GUI may rely on, and an undeclared
+ * from the moment it existed. The realization counts were declared at D-178;
+ * the usage retention object and D-177 model-switch counts were not. `Matured`
+ * in `shared-types.ts` lists the fields the GUI may rely on, and an undeclared
  * field is one a screen cannot read without a cast — which is exactly how
  * `reconciliation.runs` came to be declared a number while the server sent an
  * array, and the Billed band could never light up.
@@ -26,10 +27,10 @@
  * mines this checkout's own history.
  *
  * WHAT IT DOES NOT ESTABLISH. That the browser renders them well — the
- * rendering is held by the browser typecheck and by `views/value.ts` reading
- * the declared fields, not by this file. Nor that every other undeclared field
- * on this payload is declared: `usage` is still sent whole and still absent
- * from `ValuePayload`, and that remains open.
+ * rendering is held by the browser typecheck and by the two Value views reading
+ * the declared fields, not by this file. Nor that every other field sent by
+ * `usage` or the full frontier report is declared: this tranche only wires the
+ * retention and coverage fields that its regression cases exercise.
  *
  * Recorded at D-178.
  */
@@ -98,6 +99,19 @@ interface ValueShape {
       spendWindowUnknownUnits?: number;
     } | null;
   } | null;
+  usage?: {
+    retention?: {
+      truncated: boolean;
+      prunedBeforeMs: number | null;
+      rowsRemoved: number;
+    };
+  };
+  frontier?: {
+    modelSwitches?: Array<{
+      unitsExcludedTruncatedSpend: number;
+      unitsUnknownSpendCoverage: number;
+    }>;
+  } | null;
 }
 
 test('the value payload declares the retention counts the CLI already prints', async () => {
@@ -151,5 +165,59 @@ test('an intact ledger reports zero on both counts rather than omitting them', a
     await srv?.close();
     store.close();
     rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('the value payload carries usage-window retention coverage beside the usage figures', async () => {
+  const store = new Store(':memory:');
+  let srv: { base: string; close: () => Promise<void> } | null = null;
+  try {
+    // The value report's usage window is fourteen days. Put a recorded prune
+    // boundary inside it so the payload must preserve the distinction between
+    // an empty/intact usage window and one emptied by retention.
+    store.insertRequest(request('usage-old', 'usage', NOW - 10 * DAY, 2));
+    const boundary = NOW - 7 * DAY;
+    assert.equal(store.prune(boundary), 1);
+
+    srv = await boot(store);
+    const res = await fetch(`${srv.base}/api/value`);
+    assert.equal(res.status, 200);
+    const payload = (await res.json()) as ValueShape;
+    assert.deepEqual(payload.usage?.retention, {
+      truncated: true,
+      prunedBeforeMs: boundary,
+      rowsRemoved: 1,
+    });
+  } finally {
+    await srv?.close();
+    store.close();
+  }
+});
+
+test('the value payload carries D-177 model-switch retention and unknown-coverage counts', async () => {
+  const repo = makeRepo();
+  const store = new Store(':memory:');
+  let srv: { base: string; close: () => Promise<void> } | null = null;
+  const previousDemo = process.env.FISCUS_DEMO;
+  process.env.FISCUS_DEMO = '1';
+  try {
+    // Demo snapshots include a review-only model trial, so this exercises the
+    // actual /api/value frontier payload rather than a hand-built object.
+    const { seedDemo } = await import('../src/demo/seed.ts');
+    seedDemo(store, { now: NOW });
+    srv = await boot(store);
+    const res = await fetch(`${srv.base}/api/value?repo=${encodeURIComponent(repo)}`);
+    assert.equal(res.status, 200);
+    const payload = (await res.json()) as ValueShape;
+    const switches = payload.frontier?.modelSwitches ?? [];
+    assert.ok(switches.length > 0, 'the demo payload must expose its model-switch trial');
+    assert.ok(switches.every((item) => typeof item.unitsExcludedTruncatedSpend === 'number'));
+    assert.ok(switches.every((item) => typeof item.unitsUnknownSpendCoverage === 'number'));
+  } finally {
+    await srv?.close();
+    store.close();
+    rmSync(repo, { recursive: true, force: true });
+    if (previousDemo === undefined) delete process.env.FISCUS_DEMO;
+    else process.env.FISCUS_DEMO = previousDemo;
   }
 });

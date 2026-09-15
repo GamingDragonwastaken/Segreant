@@ -108,6 +108,77 @@ function causalStudyCard(payload: CausalPayload | null, failure: string | null):
     h('p', { class: 'drawer-muted', role: 'note', text: payload.boundary }));
 }
 
+/**
+ * Usage without code signals is a separate observational population. Keep its
+ * retention boundary beside the figures so an empty or reduced list cannot be
+ * read as proof that no sessions existed.
+ */
+function usageCoverageCard(usage: ValuePayload['usage']): Node | null {
+  if (!usage) return null;
+  const retention = usage.retention;
+  return h('div', { class: 'card', style: 'margin-top: var(--s4)' },
+    h('div', { class: 'card-head' },
+      h('span', { class: 'card-title', text: () => (isPrecise() ? 'Usage without code signals' : 'Chat, research, and drafting') })),
+    h('div', { class: 'facts' },
+      h('div', { class: 'fact' },
+        h('span', { class: 'fact-key', text: () => (isPrecise() ? 'observed sessions' : 'sessions') }),
+        h('span', { class: 'fact-val', text: count(usage.units.length) })),
+      h('div', { class: 'fact' },
+        h('span', { class: 'fact-key', text: () => (isPrecise() ? 'reported realized' : 'realized') }),
+        h('span', { class: 'fact-val', text: count(usage.realizedUnits) })),
+      h('div', { class: 'fact' },
+        h('span', { class: 'fact-key', text: () => (isPrecise() ? 'surviving cost' : 'cost recorded') }),
+        h('span', { class: 'fact-val', text: usd(usage.totalCostUsd) }))),
+    retention.truncated
+      ? h('p', { class: 'drawer-error', role: 'status', text: () => (isPrecise()
+          ? `This usage window reaches behind retention: ${count(retention.rowsRemoved)} request row(s) were deleted before ${retention.prunedBeforeMs === null ? 'an unrecorded boundary' : new Date(retention.prunedBeforeMs).toISOString()}. Figures cover what survived, not everything metered.`
+          : 'Some requests in this usage window were deleted by retention, so these figures cover what remains rather than everything metered.') })
+      : null,
+    h('p', { class: 'basis', text: () => (isPrecise()
+      ? 'These sessions have no captured code proposals; reported outcomes remain observational and do not become coding value.'
+      : 'These sessions have no captured code proposals, so their reported outcomes stay separate from git-based value.') }));
+}
+
+/**
+ * Review-only model comparisons. Retention-excluded units are disclosed on the
+ * recommendation itself, while unknown coverage stays a qualified caveat rather
+ * than being treated as an intact window.
+ */
+function modelSwitchCoverageCard(frontier: ValuePayload['frontier']): Node | null {
+  const switches = frontier?.modelSwitches ?? [];
+  if (switches.length === 0) return null;
+  return h('section', { class: 'section' },
+    h('h2', { class: 'section-title', text: () => (isPrecise() ? 'Model-switch trials' : 'Cheaper model trials') }),
+    h('p', { class: 'view-plain', text: () => (isPrecise()
+      ? 'Historical comparisons are review-only. Fiscus never changes provider routing from them, and neither separation nor savings is causal evidence.'
+      : 'These are local historical comparisons to review, not automatic routing changes or proof that one model causes better outcomes.') }),
+    ...switches.slice(0, 4).map((recommendation) => {
+      const retentionExcluded = recommendation.unitsExcludedTruncatedSpend;
+      const retentionUnknown = recommendation.unitsUnknownSpendCoverage;
+      return h('div', { class: 'card' },
+        h('div', { class: 'card-head' },
+          h('span', { class: 'card-title', text: `${recommendation.candidateModel} before ${recommendation.incumbentModel}` }),
+          h('span', {
+            class: `pill ${recommendation.confidence === 'observational_separation' ? 'pill-ok' : 'pill-warn'}`,
+            text: recommendation.confidence === 'observational_separation' ? 'separated' : 'trial',
+          })),
+        h('p', { text: `${count(recommendation.candidateUnits)} vs ${count(recommendation.incumbentUnits)} mature ${recommendation.taskType} units · observed realization ${pct(recommendation.candidateRealizationRate, 0)} vs ${pct(recommendation.incumbentRealizationRate, 0)}` }),
+        retentionExcluded > 0
+          ? h('p', { class: 'drawer-error', role: 'status', text: () => (isPrecise()
+              ? `${count(retentionExcluded)} unit(s) excluded because retention deleted spend inside their attribution window; the comparison uses only surviving priced units.`
+              : `${count(retentionExcluded)} unit(s) were excluded because retention deleted spend in their attribution window, so the comparison uses the surviving priced units.`) })
+          : null,
+        retentionUnknown > 0
+          ? h('p', { class: 'basis', role: 'status', text: () => (isPrecise()
+              ? `${count(retentionUnknown)} included unit(s) predate the retention-coverage record, so whether their spend window lost rows is unknown.`
+              : `For ${count(retentionUnknown)} included unit(s), we cannot tell whether retention deleted spend because their snapshots predate the coverage record.`) })
+          : null,
+        h('p', { class: 'basis', text: () => (isPrecise()
+          ? `Observed headroom ${usd(recommendation.historicalEquivalentHeadroomUsd)}; this is a local list-price comparison, not provider-billed savings.`
+          : `Observed headroom ${usd(recommendation.historicalEquivalentHeadroomUsd)}; this is not a promise of future savings.`) }));
+    }));
+}
+
 export function valueView(): Node {
   const data = signal<ValuePayload | null>(null);
   const error = signal<string | null>(null);
@@ -150,6 +221,7 @@ export function valueView(): Node {
               ? 'Maturation requires observable outcomes: a repository whose history can be read, or imported units with recorded gate results.'
               : 'Fiscus needs somewhere to watch outcomes happen — usually a code repository — before it can say what the spend produced.') })),
           causalStudyCard(causal(), causalError()),
+          usageCoverageCard(d.usage),
           actions());
       }
 
@@ -394,6 +466,9 @@ export function valueView(): Node {
                     : `${count(d.reclaimed?.uncreditedUnits)} ${plural(d.reclaimed?.uncreditedUnits ?? 0, 'piece', 'pieces')} of work got no credit here — they either failed, or we had nothing to compare them against.`) })
                 : null)
           : null,
+
+        modelSwitchCoverageCard(d.frontier),
+        usageCoverageCard(d.usage),
 
         // Per-user. The guardrail state is the content when the cohort is suppressed.
         team

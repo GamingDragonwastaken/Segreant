@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: efd1e52d2a8ca2d160735b17570363fe922cefda6b960e2e6d496ee1557dd456 */
+/** Source SHA-256: c0823d050e03c9c0028d036220a410888a16618fff0f284eb91daf1c80488d61 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -508,12 +508,21 @@ export interface UsageUnitPayload {
   realized: boolean;
 }
 
+/** Retention coverage for a usage window, including the recorded boundary. */
+export interface WindowRetentionCoveragePayload {
+  truncated: boolean;
+  prunedBeforeMs: number | null;
+  rowsRemoved: number;
+}
+
 export interface UsagePayload {
   units: UsageUnitPayload[];
   realizedUnits: number;
   totalCostUsd: number;
   outcomeMix: { published: number; resolved: number; used: number; none: number };
   economic?: RealizationEconomicRollupPayload;
+  /** Whether the usage window reaches behind request rows deleted by retention. */
+  retention: WindowRetentionCoveragePayload;
 }
 
 /** One recorded run. `result` is the immutable reconciliation record itself. */
@@ -671,6 +680,50 @@ export interface ValueProjectPayload {
   economic?: RealizationEconomicRollupPayload;
 }
 
+/** One review-only historical model comparison carried by `/api/value`. */
+export interface ModelSwitchRecommendationPayload {
+  taskType: string;
+  incumbentProvider?: string | null;
+  candidateProvider?: string | null;
+  incumbentModel: string;
+  candidateModel: string;
+  incumbentUnits: number;
+  candidateUnits: number;
+  incumbentRealizationRate: number;
+  candidateRealizationRate: number;
+  incumbentCostPerUnitUsd: number;
+  candidateCostPerUnitUsd: number;
+  savingsPerUnitUsd: number;
+  historicalEquivalentHeadroomUsd: number;
+  historicalHeadroomPercent: number;
+  confidence: 'trial' | 'observational_separation';
+  costBasis: 'dominant_model_attributed';
+  minimumDominantCostShare: number;
+  unitsExcludedMixedAttribution: number;
+  unitsExcludedUnknownAttribution: number;
+  unitsExcludedStalePricing: number;
+  /** Units excluded because retention deleted spend in their attribution window. */
+  unitsExcludedTruncatedSpend: number;
+  /** Included units whose pre-D-176 snapshot did not record retention coverage. */
+  unitsUnknownSpendCoverage: number;
+  confounders: string[];
+  assumptions: string[];
+  candidateMedianUnitLines: number;
+  incumbentMedianUnitLines: number;
+  candidateCostPerHundredLinesUsd: number | null;
+  incumbentCostPerHundredLinesUsd: number | null;
+  candidateSessions: number;
+  incumbentSessions: number;
+  appliedConfidenceLevel: number;
+  comparisonsConsidered: number;
+  rationale: string;
+}
+
+/** The frontier subset consumed by the dashboard value views. */
+export interface FrontierPayload {
+  modelSwitches: ModelSwitchRecommendationPayload[];
+}
+
 export interface ValuePayload {
   demo: boolean;
   /** The server's statement of this claim's support, on named axes (AII-014). */
@@ -679,7 +732,7 @@ export interface ValuePayload {
   allocation: unknown;
   /** Per-project value rows; classic rendering consumes this list directly. */
   projects?: ValueProjectPayload[];
-  frontier?: { modelSwitches?: Array<{ confidence: string }> } | null;
+  frontier?: FrontierPayload | null;
   /** 'git' | 'store' | null. Null means no matured outcomes could be observed. */
   valueSource?: string | null;
   gitRepo?: boolean;
