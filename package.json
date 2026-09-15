@@ -7,7 +7,8 @@
     "node": ">=24.0.0"
   },
   "bin": {
-    "fiscus": "bin/fiscus.mjs"
+    "fiscus": "bin/fiscus.mjs",
+    "fiscuspack-verify": "standalone/fiscuspack-verifier.mjs"
   },
   "exports": {
     "./package.json": "./package.json"
@@ -25,6 +26,7 @@
     "typecheck:all": "npm run typecheck && npm run typecheck:web && npm run typecheck:team-server",
     "test:team-server": "npm --prefix team-server test",
     "verify:supply-chain": "node scripts/check-supply-chain.mjs",
+    "verify:fiscuspack": "node standalone/fiscuspack-verifier.mjs",
     "build": "node scripts/build.mjs",
     "benchmark": "node --disable-warning=ExperimentalWarning scripts/benchmark.mjs",
     "prepare": "npm run build",
@@ -35,6 +37,7 @@
   },
   "files": [
     "bin",
+    "standalone",
     "dist",
     "pricing",
     "baselines",

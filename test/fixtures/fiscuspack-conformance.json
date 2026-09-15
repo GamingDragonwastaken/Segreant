@@ -1,0 +1,505 @@
+{
+  "format": "fiscuspack-conformance-v1",
+  "vectors": [
+    {
+      "name": "valid-unsigned",
+      "pack": {
+        "schema": "fiscuspack",
+        "version": 1,
+        "manifest": {
+          "schema": "fiscuspack.manifest",
+          "version": 1,
+          "packId": "pack:vector",
+          "createdAt": "2026-09-15T00:00:00.000Z",
+          "includedRecords": [
+            {
+              "kind": "claim",
+              "id": "claim:vector",
+              "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ],
+          "omissions": [],
+          "redactions": [],
+          "externalReferences": [],
+          "attachments": []
+        },
+        "manifestDigest": "sha256:f232c88d06390da73e2cfaf547d6962f8f5cd2230a0f2d3e61b10faeefd2b38a"
+      },
+      "expected": {
+        "ok": true,
+        "integrity": "verified",
+        "authenticity": "not_established",
+        "truth": "not_evaluated",
+        "signatureStatus": "absent",
+        "cryptographicVerification": "not_performed",
+        "pinned": false,
+        "attachmentStatus": "none",
+        "declaredAttachments": 0,
+        "presentAttachments": 0
+      }
+    },
+    {
+      "name": "valid-metadata-only",
+      "pack": {
+        "schema": "fiscuspack",
+        "version": 1,
+        "manifest": {
+          "schema": "fiscuspack.manifest",
+          "version": 1,
+          "packId": "pack:vector",
+          "createdAt": "2026-09-15T00:00:00.000Z",
+          "includedRecords": [
+            {
+              "kind": "claim",
+              "id": "claim:vector",
+              "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ],
+          "omissions": [],
+          "redactions": [],
+          "externalReferences": [],
+          "attachments": [],
+          "signature": {
+            "algorithm": "ed25519",
+            "keyId": "key:metadata",
+            "signature": "operator-attestation",
+            "signedDigest": "sha256:f232c88d06390da73e2cfaf547d6962f8f5cd2230a0f2d3e61b10faeefd2b38a"
+          }
+        },
+        "manifestDigest": "sha256:f232c88d06390da73e2cfaf547d6962f8f5cd2230a0f2d3e61b10faeefd2b38a"
+      },
+      "expected": {
+        "ok": true,
+        "integrity": "verified",
+        "authenticity": "not_established",
+        "truth": "not_evaluated",
+        "signatureStatus": "metadata_only",
+        "cryptographicVerification": "not_performed",
+        "pinned": false,
+        "attachmentStatus": "none",
+        "declaredAttachments": 0,
+        "presentAttachments": 0
+      }
+    },
+    {
+      "name": "valid-signature-with-anchor",
+      "options": {
+        "trustedPublicKey": "MCowBQYDK2VwAyEA1Wa9lo6534NsYuoSFiA6ARMgne0Xtvm/Q9SuxrerCnY="
+      },
+      "pack": {
+        "schema": "fiscuspack",
+        "version": 1,
+        "manifest": {
+          "schema": "fiscuspack.manifest",
+          "version": 1,
+          "packId": "pack:signed-vector",
+          "createdAt": "2026-09-15T00:00:00.000Z",
+          "includedRecords": [
+            {
+              "kind": "claim",
+              "id": "claim:vector",
+              "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ],
+          "omissions": [],
+          "redactions": [],
+          "externalReferences": [],
+          "attachments": [
+            {
+              "path": "evidence/vector.txt",
+              "mediaType": "text/plain",
+              "sizeBytes": 19,
+              "digest": "sha256:ae5d6e57fe07a52bded4946beaa514cc94f72403cbfd9df2e566667800d9bf60"
+            }
+          ],
+          "signature": {
+            "algorithm": "ed25519",
+            "keyId": "sha256:c4e34def790b628ee443c625ec8d6a8d704dfc98a35b442bff06cc2976fcd224",
+            "publicKey": "MCowBQYDK2VwAyEA1Wa9lo6534NsYuoSFiA6ARMgne0Xtvm/Q9SuxrerCnY=",
+            "signature": "Bx6goq18j8wScr03S00wxaJQDL623VWASmrCAKjx2dBJgnE51amwADUb6X7CsPJ4S8OMO0bfkcTVahwnaxzgBQ==",
+            "signedDigest": "sha256:90f9985476a31a76873634b92500aa4a8c09978a90704b64512814259641891a"
+          }
+        },
+        "manifestDigest": "sha256:90f9985476a31a76873634b92500aa4a8c09978a90704b64512814259641891a",
+        "attachments": [
+          {
+            "path": "evidence/vector.txt",
+            "data": "dmVjdG9yIGF0dGFjaG1lbnRcbg=="
+          }
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "integrity": "verified",
+        "authenticity": "verified",
+        "truth": "not_evaluated",
+        "signatureStatus": "valid",
+        "cryptographicVerification": "verified",
+        "pinned": true,
+        "attachmentStatus": "complete",
+        "declaredAttachments": 1,
+        "presentAttachments": 1
+      }
+    },
+    {
+      "name": "wrong-trust-anchor",
+      "options": {
+        "trustedPublicKey": "MCowBQYDK2VwAyEASkyFebuZ4hnhafkx7hHd5Y3za6s6OXemooOooPNFkKM="
+      },
+      "pack": {
+        "schema": "fiscuspack",
+        "version": 1,
+        "manifest": {
+          "schema": "fiscuspack.manifest",
+          "version": 1,
+          "packId": "pack:signed-vector",
+          "createdAt": "2026-09-15T00:00:00.000Z",
+          "includedRecords": [
+            {
+              "kind": "claim",
+              "id": "claim:vector",
+              "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ],
+          "omissions": [],
+          "redactions": [],
+          "externalReferences": [],
+          "attachments": [
+            {
+              "path": "evidence/vector.txt",
+              "mediaType": "text/plain",
+              "sizeBytes": 19,
+              "digest": "sha256:ae5d6e57fe07a52bded4946beaa514cc94f72403cbfd9df2e566667800d9bf60"
+            }
+          ],
+          "signature": {
+            "algorithm": "ed25519",
+            "keyId": "sha256:c4e34def790b628ee443c625ec8d6a8d704dfc98a35b442bff06cc2976fcd224",
+            "publicKey": "MCowBQYDK2VwAyEA1Wa9lo6534NsYuoSFiA6ARMgne0Xtvm/Q9SuxrerCnY=",
+            "signature": "Bx6goq18j8wScr03S00wxaJQDL623VWASmrCAKjx2dBJgnE51amwADUb6X7CsPJ4S8OMO0bfkcTVahwnaxzgBQ==",
+            "signedDigest": "sha256:90f9985476a31a76873634b92500aa4a8c09978a90704b64512814259641891a"
+          }
+        },
+        "manifestDigest": "sha256:90f9985476a31a76873634b92500aa4a8c09978a90704b64512814259641891a",
+        "attachments": [
+          {
+            "path": "evidence/vector.txt",
+            "data": "dmVjdG9yIGF0dGFjaG1lbnRcbg=="
+          }
+        ]
+      },
+      "expected": {
+        "ok": false,
+        "integrity": "verified",
+        "authenticity": "not_established",
+        "truth": "not_evaluated",
+        "signatureStatus": "valid",
+        "cryptographicVerification": "verified",
+        "pinned": false,
+        "attachmentStatus": "complete",
+        "declaredAttachments": 1,
+        "presentAttachments": 1,
+        "errorIncludes": ["not trusted"]
+      }
+    },
+    {
+      "name": "manifest-tamper",
+      "pack": {
+        "schema": "fiscuspack",
+        "version": 1,
+        "manifest": {
+          "schema": "fiscuspack.manifest",
+          "version": 1,
+          "packId": "pack:vector",
+          "createdAt": "2026-09-15T00:00:00.000Z",
+          "includedRecords": [
+            {
+              "kind": "claim",
+              "id": "claim:altered",
+              "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ],
+          "omissions": [],
+          "redactions": [],
+          "externalReferences": [],
+          "attachments": []
+        },
+        "manifestDigest": "sha256:f232c88d06390da73e2cfaf547d6962f8f5cd2230a0f2d3e61b10faeefd2b38a"
+      },
+      "expected": {
+        "ok": false,
+        "integrity": "not_verified",
+        "authenticity": "not_established",
+        "truth": "not_evaluated",
+        "signatureStatus": "absent",
+        "cryptographicVerification": "not_performed",
+        "pinned": false,
+        "attachmentStatus": "none",
+        "declaredAttachments": 0,
+        "presentAttachments": 0,
+        "errorIncludes": ["manifest digest"]
+      }
+    },
+    {
+      "name": "attachment-tamper",
+      "pack": {
+        "schema": "fiscuspack",
+        "version": 1,
+        "manifest": {
+          "schema": "fiscuspack.manifest",
+          "version": 1,
+          "packId": "pack:signed-vector",
+          "createdAt": "2026-09-15T00:00:00.000Z",
+          "includedRecords": [
+            {
+              "kind": "claim",
+              "id": "claim:vector",
+              "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ],
+          "omissions": [],
+          "redactions": [],
+          "externalReferences": [],
+          "attachments": [
+            {
+              "path": "evidence/vector.txt",
+              "mediaType": "text/plain",
+              "sizeBytes": 19,
+              "digest": "sha256:ae5d6e57fe07a52bded4946beaa514cc94f72403cbfd9df2e566667800d9bf60"
+            }
+          ],
+          "signature": {
+            "algorithm": "ed25519",
+            "keyId": "sha256:c4e34def790b628ee443c625ec8d6a8d704dfc98a35b442bff06cc2976fcd224",
+            "publicKey": "MCowBQYDK2VwAyEA1Wa9lo6534NsYuoSFiA6ARMgne0Xtvm/Q9SuxrerCnY=",
+            "signature": "Bx6goq18j8wScr03S00wxaJQDL623VWASmrCAKjx2dBJgnE51amwADUb6X7CsPJ4S8OMO0bfkcTVahwnaxzgBQ==",
+            "signedDigest": "sha256:90f9985476a31a76873634b92500aa4a8c09978a90704b64512814259641891a"
+          }
+        },
+        "manifestDigest": "sha256:90f9985476a31a76873634b92500aa4a8c09978a90704b64512814259641891a",
+        "attachments": [
+          {
+            "path": "evidence/vector.txt",
+            "data": "dGFtcGVkIGF0dGFjaG1lbnQ="
+          }
+        ]
+      },
+      "expected": {
+        "ok": false,
+        "integrity": "not_verified",
+        "authenticity": "not_established",
+        "truth": "not_evaluated",
+        "signatureStatus": "valid",
+        "cryptographicVerification": "verified",
+        "pinned": false,
+        "attachmentStatus": "complete",
+        "declaredAttachments": 1,
+        "presentAttachments": 1,
+        "errorIncludes": ["attachment", "digest"]
+      }
+    },
+    {
+      "name": "malformed-signature-base64",
+      "pack": {
+        "schema": "fiscuspack",
+        "version": 1,
+        "manifest": {
+          "schema": "fiscuspack.manifest",
+          "version": 1,
+          "packId": "pack:signed-vector",
+          "createdAt": "2026-09-15T00:00:00.000Z",
+          "includedRecords": [
+            {
+              "kind": "claim",
+              "id": "claim:vector",
+              "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ],
+          "omissions": [],
+          "redactions": [],
+          "externalReferences": [],
+          "attachments": [],
+          "signature": {
+            "algorithm": "ed25519",
+            "keyId": "key:malformed",
+            "publicKey": "not-base64",
+            "signature": "also-not-base64",
+            "signedDigest": "sha256:f232c88d06390da73e2cfaf547d6962f8f5cd2230a0f2d3e61b10faeefd2b38a"
+          }
+        },
+        "manifestDigest": "sha256:f232c88d06390da73e2cfaf547d6962f8f5cd2230a0f2d3e61b10faeefd2b38a"
+      },
+      "expected": {
+        "ok": false,
+        "integrity": "not_verified",
+        "authenticity": "not_established",
+        "truth": "not_evaluated",
+        "signatureStatus": "invalid",
+        "cryptographicVerification": "failed",
+        "pinned": false,
+        "attachmentStatus": "none",
+        "declaredAttachments": 0,
+        "presentAttachments": 0,
+        "errorIncludes": ["base64"]
+      }
+    },
+    {
+      "name": "partial-attachments",
+      "pack": {
+        "schema": "fiscuspack",
+        "version": 1,
+        "manifest": {
+          "schema": "fiscuspack.manifest",
+          "version": 1,
+          "packId": "pack:signed-vector",
+          "createdAt": "2026-09-15T00:00:00.000Z",
+          "includedRecords": [
+            {
+              "kind": "claim",
+              "id": "claim:vector",
+              "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ],
+          "omissions": [],
+          "redactions": [],
+          "externalReferences": [],
+          "attachments": [
+            {
+              "path": "evidence/vector.txt",
+              "mediaType": "text/plain",
+              "sizeBytes": 19,
+              "digest": "sha256:ae5d6e57fe07a52bded4946beaa514cc94f72403cbfd9df2e566667800d9bf60"
+            }
+          ]
+        },
+        "manifestDigest": "sha256:90f9985476a31a76873634b92500aa4a8c09978a90704b64512814259641891a"
+      },
+      "expected": {
+        "ok": true,
+        "integrity": "verified",
+        "authenticity": "not_established",
+        "truth": "not_evaluated",
+        "signatureStatus": "absent",
+        "cryptographicVerification": "not_performed",
+        "pinned": false,
+        "attachmentStatus": "partial",
+        "declaredAttachments": 1,
+        "presentAttachments": 0
+      }
+    },
+    {
+      "name": "unsafe-attachment-path",
+      "pack": {
+        "schema": "fiscuspack",
+        "version": 1,
+        "manifest": {
+          "schema": "fiscuspack.manifest",
+          "version": 1,
+          "packId": "pack:vector",
+          "createdAt": "2026-09-15T00:00:00.000Z",
+          "includedRecords": [],
+          "omissions": [],
+          "redactions": [],
+          "externalReferences": [],
+          "attachments": [
+            {
+              "path": "../secret.txt",
+              "mediaType": "text/plain",
+              "sizeBytes": 0,
+              "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          ]
+        },
+        "manifestDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "expected": {
+        "ok": false,
+        "integrity": "not_verified",
+        "authenticity": "not_established",
+        "truth": "not_evaluated",
+        "signatureStatus": "absent",
+        "cryptographicVerification": "not_performed",
+        "pinned": false,
+        "attachmentStatus": "partial",
+        "declaredAttachments": 1,
+        "presentAttachments": 0,
+        "errorIncludes": ["safe relative"]
+      }
+    },
+    {
+      "name": "unsupported-version",
+      "pack": {
+        "schema": "fiscuspack",
+        "version": 2,
+        "manifest": {
+          "schema": "fiscuspack.manifest",
+          "version": 1,
+          "packId": "pack:vector",
+          "createdAt": "2026-09-15T00:00:00.000Z",
+          "includedRecords": [],
+          "omissions": [],
+          "redactions": [],
+          "externalReferences": [],
+          "attachments": []
+        },
+        "manifestDigest": "sha256:4104844e8f388d219233de828ad443e47a0147d5390d0418ca95c86ba75f33e8"
+      },
+      "expected": {
+        "ok": false,
+        "integrity": "not_verified",
+        "authenticity": "not_established",
+        "truth": "not_evaluated",
+        "signatureStatus": "absent",
+        "cryptographicVerification": "not_performed",
+        "pinned": false,
+        "attachmentStatus": "none",
+        "declaredAttachments": 0,
+        "presentAttachments": 0,
+        "errorIncludes": ["version"]
+      }
+    },
+    {
+      "name": "resource-limit",
+      "options": {
+        "limits": {
+          "maxIncludedRecords": 0
+        }
+      },
+      "pack": {
+        "schema": "fiscuspack",
+        "version": 1,
+        "manifest": {
+          "schema": "fiscuspack.manifest",
+          "version": 1,
+          "packId": "pack:vector",
+          "createdAt": "2026-09-15T00:00:00.000Z",
+          "includedRecords": [
+            {
+              "kind": "claim",
+              "id": "claim:vector",
+              "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ],
+          "omissions": [],
+          "redactions": [],
+          "externalReferences": [],
+          "attachments": []
+        },
+        "manifestDigest": "sha256:f232c88d06390da73e2cfaf547d6962f8f5cd2230a0f2d3e61b10faeefd2b38a"
+      },
+      "expected": {
+        "ok": false,
+        "integrity": "not_verified",
+        "authenticity": "not_established",
+        "truth": "not_evaluated",
+        "signatureStatus": "absent",
+        "cryptographicVerification": "not_performed",
+        "pinned": false,
+        "attachmentStatus": "none",
+        "declaredAttachments": 0,
+        "presentAttachments": 0,
+        "errorIncludes": ["included records"]
+      }
+    }
+  ]
+}
