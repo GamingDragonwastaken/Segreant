@@ -606,8 +606,8 @@ inventory remains **11 COMPLETED / 32 PARTIAL / 33 NOT_STARTED**.
 - Current local candidate `236cd9d` adds the BudgetGuard runaway-window
   validation that the synchronized packet inventory still names as a C01
   remainder; focused cap verification is 8/8. It is not remotely verified yet.
-- The accelerated packet burn-down is 76 total: 11 `COMPLETED`, 47 `PARTIAL`,
-  18 `NOT_STARTED`. The recommendation-derived budget boundary is now fail-closed:
+- The accelerated packet burn-down is 76 total: 11 `COMPLETED`, 49 `PARTIAL`,
+  16 `NOT_STARTED`. The recommendation-derived budget boundary is now fail-closed:
   `fiscus budget --recommend --apply` refuses without a ledger-backed
   `DecisionCertificate` at `DAL-3`; the read-only heuristic remains available and
   manual cap configuration remains the explicit operator-controlled path. The
@@ -615,13 +615,17 @@ inventory remains **11 COMPLETED / 32 PARTIAL / 33 NOT_STARTED**.
   semantics rather than silently applying a heuristic cap. This is
   separate from the nullable-predicate sweep, which found no live defect.
 
-## Accelerated continuation checkpoint (2026-09-15)
+## Accelerated continuation checkpoint (2026-09-16)
 
-- Exact remote head: `e5a841f5fb53ae2dc90cdfd9feea7928e09e0f27`; GitHub Actions run
-  `34950922535` concluded **success** on all eight jobs. Local and remote match.
+- Exact remote head: `760f5072eb2fd209e953043caf82becb71d8aa10`; GitHub Actions run
+  `35055951384` concluded **success** on all eight jobs. Local and remote match.
 - Published slices: strict JOSE hardening (`89961c2`), instrumentation boundary
   (`e18da69`), independent FiscusPack verifier (`c1dcb88`), fail-closed budget
-  application (`7d46552`) and non-vacuous epistemic benchmark (`e5a841f`).
-- Packet state is 76 total: 11 `COMPLETED`, 47 `PARTIAL`, 18 `NOT_STARTED`.
-  H02, G06, H06 and R09 are now PARTIAL; their production, integration and
-  external gates remain explicitly open.
+  application (`7d46552`), epistemic benchmarks (`e5a841f` and `548d037`),
+  Claim Inspector (`3472d08`), direct monetary-basis guard (`c83746b`), modern
+  and classic alert coverage (`f6dd443` and `df37dc4`), model identity repair
+  (`b09570c`) and J03 precondition report (`41baf80` plus `760f507`).
+- Packet state is 76 total: 11 `COMPLETED`, 49 `PARTIAL`, 16 `NOT_STARTED`.
+  H02, G06, H06, I01 and R10 are now PARTIAL; R01 remains blocked by the
+  current evidence-root and transition contracts, and all production,
+  integration and external gates remain explicitly open.

@@ -61,13 +61,16 @@ an exposure ranking rather than a purchase/VoI decision (D-211); an independent
 FiscusPack verifier is shipped with fixed vectors and package exposure (D-212);
 heuristic budget-cap application refuses before mutation without a DAL-3
 DecisionCertificate (D-213); and the benchmark now proves that its canonical
-Evidence/Claim workload is non-vacuous at every selected scale (D-214).
+Evidence/Claim workload is non-vacuous at every selected scale (D-214). The
+next tranche adds the direct monetary-basis floor, Claim Inspector profile,
+provider/model tuple identity, classic alert-coverage rendering and the J03
+precondition audit (D-215 through D-218).
 
 These are bounded closures, not claims that production trust, action
 authorization, provider authority, or universal consumer migration exists. The
-packet inventory is 76 total: 11 `COMPLETED`, 47 `PARTIAL`, 18 `NOT_STARTED`.
-The exact remote head is `e5a841f5fb53ae2dc90cdfd9feea7928e09e0f27`; GitHub
-Actions run `34950922535` concluded **success** on all eight jobs.
+packet inventory is 76 total: 11 `COMPLETED`, 49 `PARTIAL`, 16 `NOT_STARTED`.
+The exact remote head is `760f5072eb2fd209e953043caf82becb71d8aa10`; GitHub
+Actions run `35055951384` concluded **success** on all eight jobs.
 
 ## Residual requirements behind each PARTIAL (WP-A09, 2026-09-01)
 

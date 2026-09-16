@@ -3207,3 +3207,81 @@ concluded **success** on all eight jobs.
 exact-economic and allocation workloads, FiscusPack verification, dashboard
 contracts and proxy streaming still need separate benchmark surfaces and
 measured budgets.
+
+## D-215 — direct monetary-basis strengthening cannot bypass the witness floor
+
+**Decision (2026-09-16):** The direct Claim append boundary now detects an
+estimated or mixed cited monetary basis being asserted as billed or allocated.
+That transition creates a transaction-local obligation which only a supported
+registered `monetary_rebasing` Witness with the exact typed basis pair can
+discharge. Legal weakening, unchanged bases and billed/allocated comparison
+remain admissible; no global ordering is introduced.
+
+**Evidence:** RED estimated-to-billed and mixed-to-allocated regressions failed
+before the guard; the direct strengthening suite is 15/15 and the focused
+epistemic/ledger tranche is 302/302. Canonical integration is `c83746b`.
+
+**Limitation:** Other direct cross-basis combinations remain outside this narrow
+floor, and witness content is still a declaration rather than independent
+financial reconciliation.
+
+## D-216 — the Claim Inspector exposes the transported profile without creating an action surface
+
+**Decision (2026-09-16):** The existing read-only inspector now renders all ten
+transported ClaimProfile axes and a separate figure-status row. Unknown,
+conflicted, refuted, supported-but-uncosted and unsupported states remain
+distinct; the projection adds no new claim, Evidence, derivation or action.
+
+**Evidence:** RED profile/mount regressions were observed before implementation;
+focused Claim Inspector coverage is 2/2, the dashboard/kernel tranche is 58/58,
+and root/browser/team typechecks plus build pass. Canonical integration is
+`3472d08`.
+
+**Limitation:** Derivation DAG, assumptions, raw Evidence and historical as-of
+inspection remain outside this first viewer slice.
+
+## D-217 — provider/model tuple identity must be injective
+
+**Decision (2026-09-16):** Frontier and exact economic model grouping now use a
+collision-free two-field JSON tuple key instead of delimiter concatenation.
+Provider/model names containing the delimiter remain distinct observational
+comparison identities.
+
+**Evidence:** The preserved collision fixture was RED at two assertions and is
+GREEN at 2/2; surrounding value/economic coverage is 80/80 and root typecheck
+and build pass. Canonical integration is `b09570c`.
+
+**Limitation:** This closes only the two affected grouping paths; unrelated
+composite-key constructions and any routing or causal-superiority decision stay
+outside the change.
+
+## D-218 — classic alert coverage must match the modern today-only boundary
+
+**Decision (2026-09-16):** The classic Overview now renders the existing
+`alertCoverage` summary, complete/partial state and every dark channel reason,
+but clears the panel for 7d/30d/All because the producer does not compute those
+windows. HTML channel/reason text is escaped before rendering.
+
+**Evidence:** Focused alert-coverage tests are 3/3, classic dashboard interaction
+coverage is 17/17, root/web typechecks and build pass. Canonical integration is
+`df37dc4`.
+
+**Limitation:** This completes the dashboard alert-coverage surfaces only; the
+other AII-002 negative claims remain open.
+
+## D-219 — Complexity Lab remains unstarted until its promotion gates are real
+
+**Decision (2026-09-16):** Preserve a durable read-only WP-J03 report and keep
+the packet `NOT_STARTED`. The current repository exposes no operational
+complexity surface: no production source metric, CLI dispatch, dashboard route
+or benchmark operation exists. Adding an ad-hoc scalar or route would create
+complexity theater and could leak an uncalibrated routing objective into the
+FinOps product.
+
+**Evidence:** The report enumerates the zero surface and all ten promotion
+prerequisites from the token-governance document. Focused complexity coverage is
+6/6 after a strict TypeScript capture-narrowing repair; root/browser/team
+typechecks and build pass. Canonical integration is `41baf80` plus `760f507`.
+
+**Limitation:** This is a continuity and precondition artifact, not a Complexity
+Lab implementation, calibration result, decision feature or production route.

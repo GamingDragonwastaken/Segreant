@@ -7,20 +7,32 @@
 | | |
 | --- | --- |
 | Branch | `gpt56/magnum-opus-reconstruction` — never `main`, never force-pushed |
-| Last CI-verified exact head | `e5a841f5fb53ae2dc90cdfd9feea7928e09e0f27` — run `34950922535`, **success on all eight configured jobs**, inspected job by job on 2026-09-15. |
+| Last CI-verified exact head | `760f5072eb2fd209e953043caf82becb71d8aa10` — run `35055951384`, **success on all eight configured jobs**, inspected job by job on 2026-09-16. |
 | Code ahead of that head | None. The canonical checkout's prior-base C01 work is preserved on `salvage/local-c01-export` and has not been replayed blindly. |
-| Local gates on the current tree | Root suite **1,983 total / 1,979 pass / 0 fail / 4 skipped** (H06 worker run), root/browser/team TypeScript typechecks clean, `npm run build` passes, and the standalone verifier plus OIDC and budget-gate focused suites pass. Team-server full suite: **87/87**. |
+| Local gates on the current tree | The integrated Luna tranche's focused suite is **26/26**, root/browser/team TypeScript typechecks and build pass, and exact-head GitHub Actions run `35055951384` is **success on all eight jobs**. |
 | Dossier source | `FISCUS_EXECUTION_DOSSIER_III.md` is **not in this checkout and not in git history** — it was an owner-supplied input. `docs/program/PACKET-INVENTORY.md` is the surviving mechanical enumeration of all 76 packets and is authoritative here. Do not re-derive a packet count from anything else. |
 
 ## Packet accounting
 
-76 packets. **11 COMPLETED, 47 PARTIAL, 18 NOT_STARTED, 0 IN_PROGRESS, 0 BLOCKED_EXTERNAL, 0 SUPERSEDED.** Regenerate rather than trust this line:
+76 packets. **11 COMPLETED, 49 PARTIAL, 16 NOT_STARTED, 0 IN_PROGRESS, 0 BLOCKED_EXTERNAL, 0 SUPERSEDED.** Regenerate rather than trust this line:
 
 ```bash
 grep -oE '\| `(NOT_STARTED|IN_PROGRESS|PARTIAL|COMPLETED|BLOCKED_EXTERNAL|SUPERSEDED_WITH_REASON)` \|' docs/program/PACKET-INVENTORY.md | sort | uniq -c
 ```
 
 `PARTIAL` is not a nearly-finished `COMPLETED`. Every PARTIAL row names its own remainder; read the row before assuming a packet is nearly done.
+
+## Luna packet checkpoint (2026-09-16)
+
+The latest integrated packet tranche is `760f507` and is exact-head green on
+GitHub Actions run `35055951384` across all eight configured jobs. I01's
+read-only Claim Inspector profile, B01's direct monetary-basis strengthening
+floor, D06's modern and classic alert-coverage surfaces, R10's collision-free
+provider/model tuple identity, and J03's truthful read-only precondition report
+are now present. R01 remains explicitly blocked: no production caller for the
+whole-chain abstraction is sound under the current evidence-root and transition
+contracts. The packet inventory is 76 total: 11 `COMPLETED`, 49 `PARTIAL`, 16
+`NOT_STARTED`.
 
 ## The local suite is now a deterministic gate, and it was not before
 
