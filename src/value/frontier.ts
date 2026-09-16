@@ -216,16 +216,25 @@ function makeCell(key: string, model: string | null, taskType: string | null, un
 }
 
 /** Provider/model identity used for every consequential frontier comparison. */
+const UNATTRIBUTED_MODEL_IDENTITY = JSON.stringify([null, null]);
+
 function modelIdentity(u: WorkUnit): string {
-  if (u.dominantModel === null) return 'unattributed';
-  return `${u.dominantProvider ?? ''}\u0000${u.dominantModel}`;
+  // A delimiter is not an injective encoding: a provider containing the
+  // delimiter and a model containing it can produce the same key as a
+  // different provider/model pair. JSON's fixed two-element tuple preserves
+  // each string as its own field, including empty strings and delimiters.
+  if (u.dominantModel === null) return UNATTRIBUTED_MODEL_IDENTITY;
+  return JSON.stringify([u.dominantProvider ?? null, u.dominantModel]);
 }
 
 function modelIdentityParts(identity: string): { provider: string | null; model: string | null } {
-  if (identity === 'unattributed') return { provider: null, model: null };
-  const separator = identity.indexOf('\u0000');
-  if (separator < 0) return { provider: null, model: identity };
-  return { provider: identity.slice(0, separator) || null, model: identity.slice(separator + 1) || null };
+  const parsed: unknown = JSON.parse(identity);
+  if (!Array.isArray(parsed) || parsed.length !== 2) throw new Error('provider/model identity must be a two-element tuple');
+  const [provider, model] = parsed;
+  if ((provider !== null && typeof provider !== 'string') || (model !== null && typeof model !== 'string')) {
+    throw new Error('provider/model identity tuple contains a non-text field');
+  }
+  return { provider, model };
 }
 
 function groupBy<K>(units: WorkUnit[], keyFn: (u: WorkUnit) => K): Map<K, WorkUnit[]> {
@@ -466,7 +475,7 @@ function buildModelSwitchRecommendations(mature: WorkUnit[]): ModelSwitchRecomme
     1,
     taskGroups.reduce((total, [, units]) => {
       const models = new Set(units.filter(isPriceable).map(modelIdentity));
-      models.delete('unattributed');
+      models.delete(UNATTRIBUTED_MODEL_IDENTITY);
       return total + (models.size >= 2 ? models.size - 1 : 0);
     }, 0),
   );

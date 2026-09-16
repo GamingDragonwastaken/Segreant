@@ -262,7 +262,11 @@ export function groupEconomicSessionUsers(rows: readonly EffectiveRequestRow[]):
 export function groupEconomicModels(rows: readonly EffectiveRequestRow[]): EconomicModelUnit[] {
   const grouped = new Map<string, EffectiveRequestRow[]>();
   for (const row of rows) {
-    const key = `${row.provider}\u0000${row.model}`;
+    // A delimiter is not an injective encoding: a provider containing the
+    // delimiter and a model containing it can produce the same key as a
+    // different provider/model pair. JSON's fixed two-element tuple preserves
+    // each string as its own field, including empty strings and delimiters.
+    const key = JSON.stringify([row.provider, row.model]);
     const bucket = grouped.get(key);
     if (bucket === undefined) grouped.set(key, [row]);
     else bucket.push(row);
