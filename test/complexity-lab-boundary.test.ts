@@ -66,7 +66,8 @@ test('WP-J03 status in PACKET-INVENTORY.md records the unstarted audit and expli
   const inventory = read('docs/program/PACKET-INVENTORY.md');
   const match = /\|\s*`WP-J03`\s*\|\s*Complexity Lab\s*\|\s*`([^`]+)`\s*\|\s*([^|]+)\|/.exec(inventory);
   assert.ok(match, 'WP-J03 row must exist in PACKET-INVENTORY.md');
-  const [, status, notes] = match;
+  const status = match[1]!;
+  const notes = match[2]!;
   assert.equal(status, 'NOT_STARTED', 'WP-J03 has no operational implementation and must remain NOT_STARTED');
   assert.match(
     notes,
