@@ -23,6 +23,14 @@ const CONTROL = join(
   'views',
   'control.ts',
 );
+const CLASSIC = join(
+  import.meta.dirname,
+  '..',
+  'src',
+  'dashboard',
+  'web',
+  'classic.html',
+);
 
 test('the overview boundary requires the alert coverage that qualifies an empty alert list', () => {
   const contract = dashboardPayloadContract('overview', 'GET');
@@ -57,6 +65,21 @@ test('modern Control consumes today coverage and renders dark reasons without cl
   assert.match(source, /channel\.darkBecause/, 'dark channels must expose the producer reason');
 
   // An incomplete observation cannot be rendered as a clean negative result.
+  assert.doesNotMatch(
+    source,
+    /!coverage\.complete[\s\S]{0,320}(?:no alerts|nothing fired|all clear)/i,
+    'partial coverage must not be labelled as no alerts or all clear',
+  );
+});
+
+test('classic today surface consumes alert coverage and renders every dark reason', () => {
+  const source = readFileSync(CLASSIC, 'utf8');
+
+  assert.match(source, /alertCoverage/, 'classic must consume the overview coverage object');
+  assert.match(source, /coverage\.summary/, 'the producer summary must reach the classic operator');
+  assert.match(source, /channel\.live/, 'classic must distinguish watching channels from dark channels');
+  assert.match(source, /channel\.darkBecause/, 'classic must expose the producer reason for each dark channel');
+  assert.match(source, /RANGE\s*!==\s*['\"]today['\"]/, 'coverage must remain scoped to the today observation');
   assert.doesNotMatch(
     source,
     /!coverage\.complete[\s\S]{0,320}(?:no alerts|nothing fired|all clear)/i,

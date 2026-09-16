@@ -289,6 +289,13 @@
   .foot b { color: var(--mint); }
 
   /* Governance alerts banner */
+  #alert-coverage { margin-bottom: var(--s5); }
+  #alert-coverage .coverage-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); margin-bottom: var(--s2); }
+  #alert-coverage .coverage-title { font-family: var(--serif); font-size: 17px; }
+  #alert-coverage .coverage-state { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold); }
+  #alert-coverage .coverage-summary { color: var(--muted); font-size: 12.5px; }
+  #alert-coverage .coverage-dark { display: grid; gap: var(--s2); margin-top: var(--s3); padding-left: var(--s4); color: var(--muted); font-family: var(--mono); font-size: 11px; }
+  #alert-coverage .coverage-dark strong { color: var(--text); font-weight: 500; }
   #alerts { display: flex; flex-direction: column; gap: var(--s2); margin-bottom: var(--s5); }
   #alerts:empty { display: none; }
   /* Tinted full-width banners with a leading icon (mockup U1's alert strip) */
@@ -477,6 +484,7 @@
 
   <div id="view-overview" class="view">
     <div id="demobanner"></div>
+    <div id="alert-coverage" role="region" aria-label="Alert coverage"></div>
     <div id="alerts" role="status" aria-live="polite"></div>
     <div id="guide" role="status" aria-live="polite"></div>
     <div id="scanpanel" role="status" aria-live="polite"></div>
@@ -708,6 +716,26 @@ function renderAlerts(alerts, health) {
     </div>`).join(''));
 }
 
+// Coverage is an observation of the alert detectors for today, not a property
+// of the selected spend window. Keep it off 7d/30d/All so those views cannot
+// imply that they evaluated alert coverage they did not compute.
+function renderAlertCoverage(coverage) {
+  const host = $('#alert-coverage');
+  if (!host) return;
+  if (RANGE !== 'today' || !coverage || !Array.isArray(coverage.channels)) {
+    setNodes(host, '');
+    return;
+  }
+  const dark = coverage.channels.filter((channel) => !channel.live);
+  const state = coverage.complete ? 'complete' : 'partial';
+  const reasons = dark.map((channel) => `<li><strong>${esc(channel.channel)}</strong>: ${esc(channel.darkBecause || 'coverage reason is unknown; detector observation is not established')}</li>`).join('');
+  setNodes(host, `<div class="card fade">
+    <div class="coverage-head"><span class="coverage-title">Alert coverage</span><span class="coverage-state">${state}</span></div>
+    <div class="coverage-summary">${esc(coverage.summary)}</div>
+    ${reasons ? `<ul class="coverage-dark">${reasons}</ul>` : ''}
+  </div>`);
+}
+
 function renderDemo(isDemo) {
   const host = $('#demobanner');
   if (!host) return;
@@ -727,6 +755,7 @@ function render(d) {
   const over = cap != null && b.todaySpendUsd > cap;
   const pct = cap ? (b.todaySpendUsd / cap) * 100 : 0;
   const s = d.summary;
+  renderAlertCoverage(d.alertCoverage);
   renderAlerts(d.alerts, { requests: s.requests, capSet: cap != null, pctUsed: pct, models: d.byModel.length });
 
   if (s.requests === 0) {
