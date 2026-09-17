@@ -938,6 +938,112 @@ test('plan deviation, pending outcome, and modeled cost each invalidate or withh
   assert.equal(qualifyCausalStudy(modeled).state, 'invalid');
 });
 
+test('ITT retains observed noncompliance in the assigned arm rather than rejecting or reassigning it', () => {
+  const data = completedData();
+  const decision = data.decisions.find((item) => item.assignedArmId === 'candidate')!;
+  const execution = data.executions.find((item) => item.decisionId === decision.decisionId)!;
+  execution.adherence = 'deviated';
+  execution.actualExecutionPlanHash = data.protocol.arms.find((arm) => arm.armId === 'control')!.executionPlanHash;
+  execution.directAiCostUsd = 25;
+  execution.eventHash = causalEventHash({ ...execution, eventHash: undefined });
+  const outcome = data.outcomes.find((item) => item.decisionId === decision.decisionId)!;
+  outcome.previousEventHash = execution.eventHash;
+  outcome.eventHash = causalEventHash({ ...outcome, eventHash: undefined });
+
+  const result = estimateCausalStudy(data);
+  assert.equal(result.qualification.state, 'qualified');
+  assert.equal(result.costEffectUsd!.estimate, 3);
+  assert.equal(result.estimandId, RANDOMIZED_ITT_ESTIMAND_ID);
+  assert.equal(result.qualification.countsByArm.candidate!.adherenceConfirmed, 1);
+  assert.equal(result.qualification.includedDecisionIds.length, 4);
+  assert.match(result.limitations.join(' '), /noncompliance.*1|1.*noncompliance/i);
+});
+
+function rechainStudy(data: CausalStudyData): void {
+  for (const decision of data.decisions) {
+    decision.previousEventHash = data.protocol.protocolHash;
+    decision.eventHash = causalEventHash({ ...decision, eventHash: undefined });
+    const execution = data.executions.find((item) => item.decisionId === decision.decisionId);
+    if (!execution) continue;
+    execution.previousEventHash = decision.eventHash;
+    execution.eventHash = causalEventHash({ ...execution, eventHash: undefined });
+    const outcome = data.outcomes.find((item) => item.decisionId === decision.decisionId);
+    if (!outcome) continue;
+    outcome.previousEventHash = execution.eventHash;
+    outcome.eventHash = causalEventHash({ ...outcome, eventHash: undefined });
+  }
+}
+
+test('block-aware ITT refuses globally balanced assignments with no within-block comparison', () => {
+  const data = completedData();
+  for (const decision of data.decisions) decision.randomizationBlockId = 'block:' + decision.assignedArmId;
+  rechainStudy(data);
+  const result = estimateCausalStudy(data);
+  assert.equal(result.allowedClaim, 'not_established');
+  assert.equal(result.costEffectUsd, null);
+  assert.match(result.qualification.reasons.join(' '), /block/i);
+});
+
+test('block-aware ITT withholds a partially retained block even with observed outcomes in both arms', () => {
+  const data = completedData(modelDraft({ analysis: { ...modelDraft().analysis, minCompletedPerArm: 1 } }));
+  const removed = data.decisions.pop()!;
+  data.executions = data.executions.filter((item) => item.decisionId !== removed.decisionId);
+  data.outcomes = data.outcomes.filter((item) => item.decisionId !== removed.decisionId);
+  rechainStudy(data);
+  const result = estimateCausalStudy(data);
+  assert.equal(result.qualification.state, 'collecting');
+  assert.equal(result.costEffectUsd, null);
+  assert.match(result.qualification.reasons.join(' '), /incomplete.*block|block.*incomplete/i);
+});
+
+test('block-aware ITT refuses conflicting allocation identities within a block', () => {
+  const data = completedData();
+  data.decisions[0]!.allocationHash = H('f');
+  rechainStudy(data);
+  const result = estimateCausalStudy(data);
+  assert.equal(result.qualification.state, 'invalid');
+  assert.equal(result.costEffectUsd, null);
+  assert.match(result.qualification.reasons.join(' '), /block.*allocation/i);
+});
+
+test('block-aware ITT reports the registered block weighting and preserves permutation invariance', () => {
+  const data = repeatedCostQualityData(0.5, 0.5, 40, 50);
+  for (let index = 0; index < data.executions.length; index++) {
+    const execution = data.executions[index]!;
+    const block = Math.floor(index / 4);
+    const candidate = data.decisions[index]!.assignedArmId === 'candidate';
+    execution.directAiCostUsd = block % 2 === 0 ? (candidate ? 10 : 20) : (candidate ? 90 : 60);
+  }
+  rechainStudy(data);
+  const result = estimateCausalStudy(data);
+  assert.equal(result.qualification.state, 'qualified');
+  assert.ok(Math.abs(result.costEffectUsd!.estimate - 10) < 1e-10);
+  assert.match(result.limitations.join(' '), /250.*block/i);
+  assert.match(result.limitations.join(' '), /assignment.count.weighted/i);
+  const reversed = estimateCausalStudy({ ...data, decisions: [...data.decisions].reverse(), executions: [...data.executions].reverse(), outcomes: [...data.outcomes].reverse() });
+  assert.deepEqual(result.costEffectUsd, reversed.costEffectUsd);
+});
+
+test('noncompliance cannot turn missing, unverifiable, or altered evidence into an ITT estimate', () => {
+  for (const mode of ['missing-outcome', 'missing-execution', 'unverifiable', 'false-confirmation', 'wrong-assigned-plan', 'missing-cost'] as const) {
+    const data = completedData();
+    const execution = data.executions[0]!;
+    execution.adherence = 'deviated';
+    execution.actualExecutionPlanHash = H('f');
+    if (mode === 'missing-outcome') data.outcomes.shift();
+    if (mode === 'missing-execution') { data.executions.shift(); data.outcomes.shift(); }
+    if (mode === 'unverifiable') execution.adherence = 'unverifiable';
+    if (mode === 'false-confirmation') execution.adherence = 'confirmed';
+    if (mode === 'wrong-assigned-plan') execution.assignedExecutionPlanHash = H('e');
+    if (mode === 'missing-cost') execution.directAiCostUsd = null;
+    rechainStudy(data);
+    const result = estimateCausalStudy(data);
+    assert.equal(result.allowedClaim, 'not_established', mode);
+    assert.equal(result.costEffectUsd, null, mode);
+    assert.equal(result.qualification.includedDecisionIds.length, 0, mode);
+  }
+});
+
 test('AI-versus-incumbent claim requires its extra economic/full-cost protocol fields', () => {
   const missingEconomic = modelDraft({ question: 'ai_vs_incumbent_net_benefit' });
   assert.ok(validateCausalProtocol(missingEconomic).some((error) => /economic outcome/i.test(error)));

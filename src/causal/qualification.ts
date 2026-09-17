@@ -140,6 +140,27 @@ export function qualifyCausalStudy(data: CausalStudyData): CausalQualification {
     count.assigned += 1;
   }
 
+  const blocks = new Map<string, CausalDecisionRecord[]>();
+  for (const decision of decisionById.values()) {
+    const block = blocks.get(decision.randomizationBlockId) ?? [];
+    block.push(decision);
+    blocks.set(decision.randomizationBlockId, block);
+  }
+  const incompleteBlocks: string[] = [];
+  for (const [blockId, block] of blocks) {
+    if (new Set(block.map((decision) => decision.allocationHash)).size !== 1 ||
+        new Set(block.map((decision) => decision.randomizationMaterialSha256)).size !== 1) {
+      reasons.push('block ' + blockId + ' has conflicting allocation identities');
+    }
+    const perArm = protocol.allocation.blockSize / 2;
+    if (block.length > protocol.allocation.blockSize ||
+        [...armIds].some((armId) => block.filter((decision) => decision.assignedArmId === armId).length > perArm)) {
+      reasons.push('block ' + blockId + ' violates the registered balanced allocation');
+    } else if (block.length < protocol.allocation.blockSize) {
+      incompleteBlocks.push('block ' + blockId + ' is incomplete; all assigned units are required for ITT');
+    }
+  }
+
   const executionByDecision = new Map<string, CausalExecutionRecord>();
   for (const execution of executions) {
     const decision = decisionById.get(execution.decisionId);
@@ -163,9 +184,10 @@ export function qualifyCausalStudy(data: CausalStudyData): CausalQualification {
     }
     const arm = protocol.arms.find((candidate) => candidate.armId === decision.assignedArmId)!;
     if (execution.assignedExecutionPlanHash !== arm.executionPlanHash ||
-        execution.actualExecutionPlanHash !== arm.executionPlanHash ||
-        execution.adherence !== 'confirmed') {
-      reasons.push('execution ' + execution.executionId + ' does not confirm the assigned intervention plan');
+        (execution.adherence !== 'confirmed' && execution.adherence !== 'deviated') ||
+        execution.actualExecutionPlanHash === null ||
+        (execution.adherence === 'confirmed' && execution.actualExecutionPlanHash !== arm.executionPlanHash)) {
+      reasons.push('execution ' + execution.executionId + ' lacks verifiable assigned-plan identity or observed adherence/noncompliance');
       continue;
     }
     if (execution.directAiCostUsd === null ||
@@ -184,7 +206,7 @@ export function qualifyCausalStudy(data: CausalStudyData): CausalQualification {
       continue;
     }
     executionByDecision.set(execution.decisionId, execution);
-    countsByArm[decision.assignedArmId]!.adherenceConfirmed += 1;
+    if (execution.adherence === 'confirmed') countsByArm[decision.assignedArmId]!.adherenceConfirmed += 1;
   }
 
   const outcomeByDecision = new Map<string, CausalOutcomeRecord>();
@@ -246,8 +268,8 @@ export function qualifyCausalStudy(data: CausalStudyData): CausalQualification {
   }
 
   if (reasons.length > 0) return qualification('invalid', reasons, countsByArm, []);
-  if (decisions.length === 0 || pending) {
-    return qualification('collecting', ['Protocol is valid but outcomes/execution are still incomplete.'], countsByArm, []);
+  if (decisions.length === 0 || pending || incompleteBlocks.length > 0) {
+    return qualification('collecting', [...incompleteBlocks, ...(pending || decisions.length === 0 ? ['Protocol is valid but outcomes/execution are still incomplete.'] : [])], countsByArm, []);
   }
   for (const [armId, count] of Object.entries(countsByArm)) {
     if (count.assigned > 0 && count.missing / count.assigned > protocol.analysis.maxMissingFractionPerArm) {

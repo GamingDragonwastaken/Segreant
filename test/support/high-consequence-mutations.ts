@@ -232,6 +232,9 @@ function causalPlanMutationInput(): Parameters<typeof qualifyCausalStudy>[0] {
   assert.ok(original, 'causal fixture must contain an execution');
   const alteredCore = {
     ...original,
+    // A CONFIRMED execution whose actual plan differs from the assigned arm's
+    // plan is the mutation target. (An honestly DEVIATED execution with a
+    // verifiable plan identity is retained under ITT, not refused.)
     actualExecutionPlanHash: H('f'),
   };
   const altered = {
@@ -251,7 +254,7 @@ function causalPlanMutationInput(): Parameters<typeof qualifyCausalStudy>[0] {
 function mutatedCausalQualificationGate(data: Parameters<typeof qualifyCausalStudy>[0]): boolean {
   const qualification = qualifyCausalStudy(data);
   const withoutPlanGate = qualification.reasons.filter(
-    (reason) => !reason.includes('does not confirm the assigned intervention plan')
+    (reason) => !reason.includes('lacks verifiable assigned-plan identity or observed adherence/noncompliance')
       && !reason.includes('does not bind a qualifying execution'),
   );
   return withoutPlanGate.length === 0;
@@ -355,7 +358,7 @@ const MUTATIONS: readonly MutationDefinition[] = [
       const mutatedInput = causalPlanMutationInput();
       const baseline = qualifyCausalStudy(mutatedInput);
       assert.equal(baseline.state, 'invalid');
-      assert.ok(baseline.reasons.some((reason) => reason.includes('does not confirm the assigned intervention plan')));
+      assert.ok(baseline.reasons.some((reason) => reason.includes('lacks verifiable assigned-plan identity or observed adherence/noncompliance')));
       const mutantAccepted = mutatedCausalQualificationGate(mutatedInput);
       return {
         actualOutcome: mutantAccepted ? 'accepted' : 'refused',

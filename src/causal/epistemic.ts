@@ -79,7 +79,7 @@ export interface CausalStudyKernelIssuance {
 
 const CAUSAL_ASSUMPTIONS = Object.freeze([
   'A scoped local intention-to-treat result for the registered eligible population and study period. It is not a forecast and does not transport to another population.',
-  'The declared no-interference, outcome-completeness, assignment-following, and measurement assumptions are conditions of the estimate, not findings of it.',
+  'ITT conditions on fixed eligible units and bounded potential outcomes, with uniform randomization within each registered complete balanced block, independent randomization across blocks, and no interference. Observed noncompliance stays in its assigned arm; per-protocol and CACE/LATE effects are not identified by this result.',
   'Fiscus verifies retained protocol, assignment, execution and outcome lineage locally. That is not an independent audit and not a provider-invoice certification.',
 ]);
 

@@ -48,16 +48,22 @@ export function hoeffdingArmRadius(outcomeRange: number, sampleSize: number, alp
  * favourable empirical variance after outcomes are observed.
  */
 function boundedDifference(
-  treatment: number[],
-  control: number[],
+  treatment: number[][],
+  control: number[][],
   bounds: NumericBounds,
   confidenceLevel: number,
 ): CausalEffectInterval {
-  const estimate = mean(treatment) - mean(control);
+  const treatmentCount = treatment.reduce((sum, block) => sum + block.length, 0);
+  const controlCount = control.reduce((sum, block) => sum + block.length, 0);
+  const total = treatmentCount + controlCount;
+  const estimate = treatment.reduce((sum, block, index) => {
+    const other = control[index]!;
+    return sum + (block.length + other.length) * (mean(block) - mean(other));
+  }, 0) / total;
   const alpha = 1 - confidenceLevel;
   const width = bounds.high - bounds.low;
-  const radius = hoeffdingArmRadius(width, treatment.length, alpha)
-    + hoeffdingArmRadius(width, control.length, alpha);
+  const radius = hoeffdingArmRadius(width, treatmentCount, alpha)
+    + hoeffdingArmRadius(width, controlCount, alpha);
   return {
     estimate,
     lower: Math.max(-width, estimate - radius),
@@ -69,7 +75,8 @@ function standardLimitations(): string[] {
   return [
     'This is a scoped local ITT estimate for the registered eligible population and study period, not a future-performance guarantee.',
     'Fiscus validates retained protocol, assignment, execution, outcome, and arithmetic lineage locally; it is not an independent audit or provider-invoice certification.',
-    'The result depends on the declared no-interference, outcome-completeness, assignment-following, and measurement assumptions.',
+    'The result depends on valid randomized assignment, no interference, outcome completeness, and measurement assumptions; adherence is not required for ITT.',
+    'ITT is primary: observed noncompliance stays in the assigned arm. Per-protocol and CACE/LATE effects are not estimated or identified by this result.',
   ];
 }
 
@@ -143,6 +150,7 @@ export function estimateCausalStudy(data: CausalStudyData): CausalStudyEstimate 
     allowedClaim: 'not_established',
     limitations: [
       ...standardLimitations(),
+      `Recorded noncompliance: ${data.executions.filter((execution) => execution.adherence === 'deviated').length} execution record(s); inclusion still requires valid lineage and complete observed cost/outcome evidence.`,
       ...(estimandDefinition === null
         ? ['The protocol does not name a registered causal estimand; no estimand identity is inferred.']
         : []),
@@ -163,30 +171,35 @@ export function estimateCausalStudy(data: CausalStudyData): CausalStudyEstimate 
   const executions = new Map(data.executions.map((execution) => [execution.decisionId, execution]));
   const outcomes = new Map(data.outcomes.map((outcome) => [outcome.decisionId, outcome]));
 
-  const treatmentCost: number[] = [];
-  const controlCost: number[] = [];
-  const treatmentQuality: number[] = [];
-  const controlQuality: number[] = [];
-  const treatmentNetBenefit: number[] = [];
-  const controlNetBenefit: number[] = [];
+  const blockIds = [...new Set(data.decisions.map((decision) => decision.randomizationBlockId))].sort();
+  const blockIndex = new Map(blockIds.map((id, index) => [id, index]));
+  const treatmentCost: number[][] = blockIds.map(() => []);
+  const controlCost: number[][] = blockIds.map(() => []);
+  const treatmentQuality: number[][] = blockIds.map(() => []);
+  const controlQuality: number[][] = blockIds.map(() => []);
+  const treatmentNetBenefit: number[][] = blockIds.map(() => []);
+  const controlNetBenefit: number[][] = blockIds.map(() => []);
+  noEstimate.limitations.push(`${blockIds.length} complete balanced randomization block(s); assignment-count-weighted within-block contrasts, with conservative union-bound Hoeffding arm radii. Under the registered equal allocation these radii equal the pooled per-arm radii; no post-hoc variance reduction is claimed.`);
+  noEstimate.limitations.push('Inference conditions on fixed eligible units and bounded potential outcomes, with uniform randomization within each block, independent randomization across blocks, and no interference. Retained blocks that are incomplete or unbalanced withhold the entire estimate; a whole block that was never retained is enrollment coverage, which lineage cannot establish here.');
   for (const decisionId of qualification.includedDecisionIds) {
     const decision = decisions.get(decisionId)!;
     const execution = executions.get(decisionId)!;
     const outcome = outcomes.get(decisionId)!;
+    const index = blockIndex.get(decision.randomizationBlockId)!;
     const isTreatment = decision.assignedArmId === treatmentArm.armId;
     const cost = execution.directAiCostUsd!;
     const quality = outcome.qualityValue!;
     if (isTreatment) {
-      treatmentCost.push(cost);
-      treatmentQuality.push(quality);
+      treatmentCost[index]!.push(cost);
+      treatmentQuality[index]!.push(quality);
       if (protocol.question === 'ai_vs_incumbent_net_benefit') {
-        treatmentNetBenefit.push(outcome.economicValueUsd! - execution.fullArmCostUsd!);
+        treatmentNetBenefit[index]!.push(outcome.economicValueUsd! - execution.fullArmCostUsd!);
       }
     } else if (decision.assignedArmId === controlArm.armId) {
-      controlCost.push(cost);
-      controlQuality.push(quality);
+      controlCost[index]!.push(cost);
+      controlQuality[index]!.push(quality);
       if (protocol.question === 'ai_vs_incumbent_net_benefit') {
-        controlNetBenefit.push(outcome.economicValueUsd! - execution.fullArmCostUsd!);
+        controlNetBenefit[index]!.push(outcome.economicValueUsd! - execution.fullArmCostUsd!);
       }
     }
   }

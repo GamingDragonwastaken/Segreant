@@ -137,6 +137,16 @@ test('kernel issuance carries the registered estimand id and definition without 
   }
 });
 
+test('kernel ITT assumptions describe assignment rather than compliance and disclose block conditions', () => {
+  const data = supportedStudy();
+  const issuance = buildCausalStudyKernelIssuance(data, estimateCausalStudy(data), ISSUED_AT_MS);
+  for (const record of [issuance.assignmentEvidence, issuance.outcomeEvidence, issuance.armDifference, issuance.effect!]) {
+    assert.doesNotMatch(record.assumptions.join(' '), /assignment-following/i);
+    assert.match(record.assumptions.join(' '), /independent.*block/i);
+    assert.match(record.assumptions.join(' '), /noncompliance.*assigned arm/i);
+  }
+});
+
 test('kernel issuance rejects an unsupported estimand before emitting any record', () => {
   const data = supportedStudy();
   const unsupported = structuredClone(data) as CausalStudyData;
