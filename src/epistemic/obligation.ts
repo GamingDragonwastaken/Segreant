@@ -57,6 +57,10 @@ export const WITNESS_OBLIGATIONS: Readonly<Record<DerivationWitnessKind, Witness
   scope_filter: COORDINATE_OBLIGATION,
   scope_coverage: COORDINATE_OBLIGATION,
   scope_bridge: COORDINATE_OBLIGATION,
+  causal_transport: Object.freeze({
+    checked: true,
+    obligation: 'names the exact source and target claims and cites retained target evidence beyond the source evidence; this checks declared transport backing, not external validity.',
+  }),
   causal_identification: Object.freeze({
     checked: true,
     obligation: 'cites at least one evidence record the output claim also cites: an identification is an identification OF the study whose effect it licenses.',
@@ -128,6 +132,19 @@ function refused(reason: string): ObligationVerdict {
  */
 export function assessWitnessObligation(registered: Witness, step: ObligationStep): ObligationVerdict {
   switch (registered.kind) {
+    case 'causal_transport': {
+      if (registered.transport?.sourceClaimId !== step.source.id
+          || registered.transport.targetClaimId !== step.output.id) {
+        return refused(`${registered.id} does not name this source and target claim pair`);
+      }
+      const backing = registered.evidenceIds.some((id) => {
+        const record = step.evidence(id);
+        return step.output.evidenceIds.includes(id)
+          && !step.source.evidenceIds.includes(id)
+          && record !== null && record.payload !== undefined && record.payload !== null;
+      });
+      return backing ? DISCHARGES : refused(`${registered.id} requires retained target evidence beyond the source evidence`);
+    }
     case 'causal_identification': {
       const shared = registered.evidenceIds.some((id) => step.output.evidenceIds.includes(id));
       if (shared) return DISCHARGES;

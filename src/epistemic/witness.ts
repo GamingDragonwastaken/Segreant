@@ -47,6 +47,7 @@ export interface WitnessInput {
   readonly to?: ClaimCoordinates;
   /** Required for `monetary_rebasing`; forbidden for every other kind. */
   readonly basisChange?: MonetaryBasisChange;
+  readonly transport?: { readonly sourceClaimId: string; readonly targetClaimId: string };
   /** Every canonical witness must retain at least one grounding evidence ID. */
   readonly evidenceIds: readonly string[];
   readonly detail?: string | null;
@@ -62,6 +63,7 @@ export interface Witness {
   readonly from?: ClaimCoordinates;
   readonly to?: ClaimCoordinates;
   readonly basisChange?: MonetaryBasisChange;
+  readonly transport?: { readonly sourceClaimId: string; readonly targetClaimId: string };
   readonly evidenceIds: readonly string[];
   readonly detail: string | null;
   readonly issuedAt: Instant;
@@ -71,7 +73,7 @@ export interface Witness {
 
 const WITNESS_KEYS = new Set([
   'id', 'kind', 'from', 'to', 'basisChange', 'evidenceIds', 'detail', 'issuedAt', 'epistemic',
-  'schemaVersion',
+  'schemaVersion', 'transport',
 ]);
 const BASIS_CHANGE_KEYS = new Set(['from', 'to']);
 const COORDINATE_KEYS = new Set(['grain', 'scope']);
@@ -183,6 +185,19 @@ export function witness(input: WitnessInput): Witness {
   if (rebasingKind && !hasBasisChange) throw new Error(`monetary_rebasing witness ${id} requires a basisChange naming the bases it moves between`);
   if (!rebasingKind && hasBasisChange) throw new Error(`${kind} witness ${id} cannot carry a basisChange`);
 
+  const transportKind = kind === 'causal_transport';
+  if (transportKind !== (value.transport !== undefined)) {
+    throw new Error(`${kind} witness ${id} ${transportKind ? 'requires' : 'cannot carry'} transport`);
+  }
+  let transport: Witness['transport'];
+  if (value.transport !== undefined) {
+    assertKnownKeys(value.transport, new Set(['sourceClaimId', 'targetClaimId']), 'transport');
+    const sourceClaimId = nonEmpty(value.transport.sourceClaimId, 'transport sourceClaimId');
+    const targetClaimId = nonEmpty(value.transport.targetClaimId, 'transport targetClaimId');
+    if (sourceClaimId === targetClaimId) throw new Error('transport requires distinct source and target claims');
+    transport = Object.freeze({ sourceClaimId, targetClaimId });
+  }
+
   const evidenceIds = stringList(value.evidenceIds, `witness ${id} evidenceIds`);
   const detail = value.detail === undefined || value.detail === null ? null : nonEmpty(value.detail, `witness ${id} detail`);
   const issuedAt = canonicalInstant(value.issuedAt, `witness ${id} issuedAt`);
@@ -201,6 +216,7 @@ export function witness(input: WitnessInput): Witness {
       to: canonicalCoordinates(value.to, `witness ${id}.to`),
     } : {}),
     ...(rebasingKind ? { basisChange: canonicalBasisChange(value.basisChange, `witness ${id}.basisChange`) } : {}),
+    ...(transport === undefined ? {} : { transport }),
     evidenceIds,
     detail,
     issuedAt,

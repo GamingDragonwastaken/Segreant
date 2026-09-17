@@ -151,12 +151,13 @@ test('construct, causal, monetary, and trust strengthening each require their ow
   assert.equal(blocked.allowed, false);
   assert.ok(blocked.missingWitnesses.includes('measurement_validation'));
   assert.ok(blocked.missingWitnesses.includes('causal_identification'));
+  assert.ok(blocked.missingWitnesses.includes('causal_transport'));
   assert.ok(blocked.missingWitnesses.includes('monetary_finality'));
   assert.ok(blocked.missingWitnesses.includes('integrity_attestation'));
   assert.ok(blocked.missingWitnesses.includes('authenticity_attestation'));
 
   const witnessKinds = [
-    'measurement_validation', 'causal_identification', 'monetary_finality',
+    'measurement_validation', 'causal_identification', 'causal_transport', 'monetary_finality',
     'integrity_attestation', 'authenticity_attestation',
   ] as const;
   const witnessed = derivation(makeDerivation(source.id, output.id, {

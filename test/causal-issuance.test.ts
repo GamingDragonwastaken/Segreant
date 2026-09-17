@@ -32,6 +32,11 @@ import {
 } from '../src/causal/estimand.ts';
 import { EpistemicLedger } from '../src/epistemic/ledger.ts';
 import { instant } from '../src/epistemic/time.ts';
+import { claim } from '../src/epistemic/claim.ts';
+import { assessDerivationLegality } from '../src/epistemic/derivation.ts';
+import { scope } from '../src/epistemic/scope.ts';
+import { witness } from '../src/epistemic/witness.ts';
+import { evidence } from '../src/epistemic/evidence.ts';
 import { ISSUANCE_MAP } from '../src/epistemic/issuance-map.ts';
 import { completedData, repeatedCostQualityData } from './support/causalStudyFixture.ts';
 import type { CausalStudyData } from '../src/causal/types.ts';
@@ -279,6 +284,107 @@ test('revoking the randomization evidence carries the causal claim with it', () 
   // revoke the outcome records, which were observed regardless of how units
   // were assigned.
   assert.equal(revoked.has(issuance.outcomeEvidence.id), false);
+});
+
+test('causal transport requires a separate obligation even when a coordinate witness exists', () => {
+  const data = supportedStudy();
+  const issuance = buildCausalStudyKernelIssuance(data, estimateCausalStudy(data), ISSUED_AT_MS);
+  const source = issuance.effect!;
+  const targetScope = scope({ ledger: 'fiscus-causal', studyId: 'other-population', protocolHash: 'other-treatment' });
+  const output = claim({ ...source, id: 'claim:transported', scope: targetScope });
+  const from = { grain: source.grain, scope: source.scope };
+  const to = { grain: output.grain, scope: output.scope };
+  const step = {
+    ...issuance.derivation!, inputClaimIds: [source.id], outputClaimId: output.id,
+    outputProposition: output.proposition, coordinateChange: { from, to },
+    witnesses: [{ id: 'witness:scope-only', kind: 'scope_bridge' as const, from, to }],
+  };
+  assert.deepEqual(assessDerivationLegality(source, output, step).missingWitnesses, ['causal_transport']);
+});
+
+for (const change of ['time', 'subject', 'measurement'] as const) {
+  test(`causal ${change} changes cannot silently reuse a treatment effect`, () => {
+    const data = supportedStudy();
+    const issuance = buildCausalStudyKernelIssuance(data, estimateCausalStudy(data), ISSUED_AT_MS);
+    const source = issuance.effect!;
+    const output = claim({
+      ...source, id: 'claim:transported',
+      ...(change === 'time' ? { time: { ...source.time, validTime: null } } : {}),
+      ...(change === 'subject' ? { subject: 'other-treatment-version' } : {}),
+      ...(change === 'measurement' ? { measurementModelRef: 'other-context-model' } : {}),
+    });
+    const step = {
+      ...issuance.derivation!, inputClaimIds: [source.id], outputClaimId: output.id,
+      outputProposition: output.proposition, witnesses: [],
+    };
+    assert.deepEqual(assessDerivationLegality(source, output, step).missingWitnesses, ['causal_transport']);
+  });
+}
+
+for (const mode of ['valid', 'wrong_pair', 'source_only', 'missing_payload', 'revoked', 'unknown'] as const) {
+  test(`persistent transport boundary: ${mode}`, () => {
+    const data = supportedStudy();
+    const issuance = buildCausalStudyKernelIssuance(data, estimateCausalStudy(data), ISSUED_AT_MS);
+    const store = ledger();
+    persist(store, issuance);
+    const source = issuance.effect!;
+    const targetEvidence = evidence({
+      ...issuance.outcomeEvidence, id: 'evidence:transport-validation',
+      ...(mode === 'missing_payload' ? { payload: undefined, payloadHash: 'sha256:' + 'a'.repeat(64) } : {}),
+    });
+    store.appendEvidence(targetEvidence);
+    if (mode === 'revoked') store.appendRevocation({
+      eventId: 'revocation:transport', targetId: targetEvidence.id,
+      recordedAt: source.issuedAt, reason: 'transport evidence withdrawn',
+    });
+    const output = claim({
+      ...source, id: 'claim:transported', subject: 'target-treatment-version',
+      evidenceIds: [...source.evidenceIds, targetEvidence.id],
+    });
+    const proof = witness({
+      id: 'witness:transport', kind: 'causal_transport',
+      transport: { sourceClaimId: mode === 'wrong_pair' ? 'other-source' : source.id, targetClaimId: output.id },
+      evidenceIds: mode === 'source_only' ? source.evidenceIds : [targetEvidence.id],
+      epistemic: mode === 'unknown' ? 'unknown' : 'supported', issuedAt: source.issuedAt, schemaVersion: 1,
+    });
+    store.appendWitness(proof);
+    const append = () => store.runInTransaction(() => {
+      store.appendClaimWithinTransaction(output);
+      store.appendDerivationWithinTransaction({
+        ...issuance.derivation!, id: 'derivation:transport', inputClaimIds: [source.id],
+        inputEvidenceIds: output.evidenceIds, outputClaimId: output.id, outputProposition: output.proposition,
+        witnesses: [{ id: proof.id, kind: proof.kind, evidenceIds: proof.evidenceIds, detail: proof.detail }],
+      });
+    });
+    if (mode !== 'valid') {
+      assert.throws(append, /causal_transport/);
+      assert.equal(store.readClaim(output.id), null);
+      return;
+    }
+    append();
+    assert.deepEqual(store.readWitness(proof.id)?.transport, proof.transport);
+    assert.equal(store.readClaim(output.id)?.subject, output.subject);
+    store.appendRevocation({
+      eventId: 'revocation:transport', targetId: targetEvidence.id,
+      recordedAt: instant(new Date(ISSUED_AT_MS + 2_000).toISOString()), reason: 'transport evidence withdrawn',
+    });
+    const before = store.revocationProjectionAsOf(source.issuedAt);
+    const after = store.revocationProjectionAsOf(instant(new Date(ISSUED_AT_MS + 3_000).toISOString()));
+    assert.equal(before.revokedIds.includes(output.id), false);
+    assert.ok(after.revokedIds.includes(output.id));
+    assert.ok(after.revokedIds.includes(proof.id));
+    assert.equal(after.revokedIds.includes(source.id), false);
+  });
+}
+
+test('transport witnesses require explicit distinct claim identities', () => {
+  const base = {
+    id: 'witness:transport', kind: 'causal_transport' as const, evidenceIds: ['evidence:validation'],
+    epistemic: 'supported' as const, issuedAt: instant('2026-09-01T00:00:00.000Z'), schemaVersion: 1,
+  };
+  assert.throws(() => witness(base), /requires transport/);
+  assert.throws(() => witness({ ...base, transport: { sourceClaimId: 'claim:a', targetClaimId: 'claim:a' } }), /distinct/);
+  assert.throws(() => witness({ ...base, kind: 'causal_identification', transport: { sourceClaimId: 'claim:a', targetClaimId: 'claim:b' } }), /cannot carry transport/);
 });
 
 test('the issuance map records the causal boundary as migrated', () => {

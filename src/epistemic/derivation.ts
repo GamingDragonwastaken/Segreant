@@ -120,6 +120,7 @@ export const DERIVATION_WITNESS_KINDS = [
   'scope_validation',
   'measurement_validation',
   'causal_identification',
+  'causal_transport',
   'monetary_finality',
   /**
    * A declared re-basing on the money axis, which is NOT the same claim as
@@ -452,6 +453,14 @@ export function assessDerivationLegality(
   );
   const required: DerivationWitnessKind[] = [...coordinate.requiredWitnesses];
 
+  if (CAUSALITY.indexOf(output.causalStatus) > CAUSALITY.indexOf('observational')
+      && (!sameCoordinates(source, output)
+        || source.subject !== output.subject
+        || source.measurementModelRef !== output.measurementModelRef
+        || source.time.validTime?.from !== output.time.validTime?.from
+        || source.time.validTime?.to !== output.time.validTime?.to)) {
+    required.push('causal_transport');
+  }
   if (source.epistemic !== output.epistemic) required.push('epistemic_resolution');
   if (monetaryRebasing(source.profile.monetaryBasis, output.profile.monetaryBasis)) required.push('monetary_rebasing');
   for (const axis of PROFILE_STRENGTH_AXES) {

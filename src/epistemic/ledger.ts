@@ -630,6 +630,9 @@ export class EpistemicLedger {
     // throws for it rather than returning a refusal, which is the right
     // distinction — a mismatch is a broken derivation, an unwitnessed
     // strengthening is a refused one.
+    const transportRevocations = item.witnesses.some((entry) => entry.kind === 'causal_transport')
+      ? new Set(this.revocationProjectionAsOf(output.issuedAt).revokedIds)
+      : new Set<string>();
     const directMoney = this.strengthening?.monetaryPending.get(item.outputClaimId);
     let monetaryDischarged = false;
     for (const sourceId of item.inputClaimIds) {
@@ -654,6 +657,12 @@ export class EpistemicLedger {
       for (const [id, state] of unsupported) setAside.set(id, `${id} is ${state}`);
       for (const [id, registered] of registeredWitnesses) {
         if (setAside.has(id)) continue;
+        if (registered.kind === 'causal_transport'
+            && (transportRevocations.has(id) || transportRevocations.has(source.id)
+              || registered.evidenceIds.some((evidenceId) => transportRevocations.has(evidenceId)))) {
+          setAside.set(id, `${id} depends on revoked transport evidence or source claim`);
+          continue;
+        }
         const verdict = assessWitnessObligation(registered, { source, output, evidence: (evidenceId) => this.readEvidence(evidenceId) });
         if (!verdict.discharges) setAside.set(id, verdict.reason ?? `${id} does not discharge its obligation`);
       }
