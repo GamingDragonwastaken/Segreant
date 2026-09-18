@@ -900,3 +900,15 @@ it is not approved for an internet-facing production deployment. See
 and do not prove.
 
 MIT licensed.
+
+## For contributors and reviewers
+
+[CONTRIBUTING.md](CONTRIBUTING.md) is how work is verified here; [GOVERNANCE.md](GOVERNANCE.md)
+says who decides what and where decisions are recorded; [SECURITY.md](SECURITY.md)
+is the reporting policy. The trust boundaries and what the append-only ledger and
+signatures do and do not guarantee are in [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md);
+what stays stable across releases is in [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md);
+how a release is gated is in [docs/RELEASE-PROCESS.md](docs/RELEASE-PROCESS.md);
+support expectations are in [docs/SUPPORT.md](docs/SUPPORT.md); and
+[docs/NEUTRALITY.md](docs/NEUTRALITY.md) states that the core needs no hosted
+service, account, subscription or donation to be useful.
