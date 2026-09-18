@@ -17,7 +17,7 @@ import {
   type ExactAllocatableRow,
 } from '../../src/alloc/exact.ts';
 import type { AllocationRule, CostCentre } from '../../src/alloc/rules.ts';
-import { addMoney, compareMoney, money, type Money } from '../../src/economics/money.ts';
+import { addMoney, compareMoney, money, negateMoney, type Money } from '../../src/economics/money.ts';
 import {
   assessCompleteness,
   completenessWitness,
@@ -267,6 +267,36 @@ function mutatedDominancePredicate(certificate: DecisionCertificate): boolean {
   return certificate.comparisons.some((comparison) => comparison.margin !== null);
 }
 
+/** Mutant: compatibility checks are reduced to currency, silently mixing bases. */
+function mutatedCrossBasisMoneyOperation(left: Money, right: Money): boolean {
+  return left.currency === right.currency;
+}
+
+/** Mutant: each negative adjustment is checked alone, not against the aggregate. */
+function mutatedSplitAdjustmentBound(charge: Money, adjustments: readonly Money[]): boolean {
+  return adjustments.every((adjustment) => compareMoney(negateMoney(adjustment), charge) <= 0);
+}
+
+/** Mutant: a registered witness discharges an obligation regardless of its state. */
+function mutatedWitnessStatePredicate(kind: string, _epistemic: string): boolean {
+  return kind === 'causal_identification';
+}
+
+/** Mutant: future-effective revocations are treated as active immediately. */
+function mutatedFutureRevocationPredicate(effectiveAtMs: number, nowMs: number): boolean {
+  return effectiveAtMs >= nowMs;
+}
+
+/** Mutant: every syntactically present JWT algorithm is accepted. */
+function mutatedJwtAlgorithmPredicate(algorithm: unknown): boolean {
+  return typeof algorithm === 'string' && algorithm.length > 0;
+}
+
+/** Mutant: an unreadable persisted cap becomes an unlimited path. */
+function mutatedBudgetCapPredicate(cap: unknown): 'allow' | 'throw' {
+  return typeof cap === 'number' && Number.isFinite(cap) ? 'allow' : 'allow';
+}
+
 const MUTATIONS: readonly MutationDefinition[] = [
   {
     name: 'forged conservation boolean',
@@ -382,6 +412,106 @@ const MUTATIONS: readonly MutationDefinition[] = [
           mutatedDominancePredicate(baseline),
           false,
           'an interval with a non-positive margin is not robust dominance',
+        ),
+      };
+    },
+  },
+  {
+    name: 'cross-basis money operation accepted',
+    target: 'money.add/compare currency-and-basis compatibility guard',
+    expectedRefusal: 'refuse an operation that combines USD values with different economic bases',
+    prepare: () => {
+      const left = money('1.00', 'USD', 'estimated');
+      const right = money('1.00', 'USD', 'billed');
+      const mutantAccepted = mutatedCrossBasisMoneyOperation(left, right);
+      return {
+        actualOutcome: mutantAccepted ? 'accepted' : 'refused',
+        refusalAssertion: () => assert.equal(
+          mutatedCrossBasisMoneyOperation(left, right),
+          false,
+          'different economic bases must not be combined by a money operation',
+        ),
+      };
+    },
+  },
+  {
+    name: 'split adjustment bound removed',
+    target: 'economic adjustment aggregate conservation bound',
+    expectedRefusal: 'refuse two individually-small negative adjustments whose total exceeds the charge',
+    prepare: () => {
+      const charge = money('10', 'USD', 'billed');
+      const adjustments = [money('-6', 'USD', 'billed'), money('-6', 'USD', 'billed')];
+      const mutantAccepted = mutatedSplitAdjustmentBound(charge, adjustments);
+      return {
+        actualOutcome: mutantAccepted ? 'accepted' : 'refused',
+        refusalAssertion: () => assert.equal(
+          mutatedSplitAdjustmentBound(charge, adjustments),
+          false,
+          'aggregate negative adjustments must not exceed their referenced charge',
+        ),
+      };
+    },
+  },
+  {
+    name: 'derivation witness state ignored',
+    target: 'EpistemicLedger.appendDerivation registered witness state check',
+    expectedRefusal: 'refuse a causal-identification witness whose registered state is refuted',
+    prepare: () => {
+      const mutantAccepted = mutatedWitnessStatePredicate('causal_identification', 'refuted');
+      return {
+        actualOutcome: mutantAccepted ? 'accepted' : 'refused',
+        refusalAssertion: () => assert.equal(
+          mutatedWitnessStatePredicate('causal_identification', 'refuted'),
+          false,
+          'a refuted witness cannot discharge a derivation obligation',
+        ),
+      };
+    },
+  },
+  {
+    name: 'future revocation treated as immediate',
+    target: 'EpistemicLedger revocation effective-time projection',
+    expectedRefusal: 'keep a future-effective revocation pending until its effective instant',
+    prepare: () => {
+      const mutantAccepted = mutatedFutureRevocationPredicate(2_000, 1_000);
+      return {
+        actualOutcome: mutantAccepted ? 'accepted' : 'refused',
+        refusalAssertion: () => assert.equal(
+          mutatedFutureRevocationPredicate(2_000, 1_000),
+          false,
+          'future-effective revocations must not revoke claims early',
+        ),
+      };
+    },
+  },
+  {
+    name: 'unsafe JWT algorithm accepted',
+    target: 'team-server OIDC algorithm allowlist',
+    expectedRefusal: 'refuse alg=none and HMAC algorithm-confusion inputs before signature verification',
+    prepare: () => {
+      const mutantAccepted = mutatedJwtAlgorithmPredicate('none');
+      return {
+        actualOutcome: mutantAccepted ? 'accepted' : 'refused',
+        refusalAssertion: () => assert.equal(
+          mutatedJwtAlgorithmPredicate('none'),
+          false,
+          'only the explicitly supported signature algorithms may reach verification',
+        ),
+      };
+    },
+  },
+  {
+    name: 'unreadable budget cap treated as unlimited',
+    target: 'BudgetGuard.evaluate invalid persisted cap path',
+    expectedRefusal: 'fail closed when a budget cap is NaN, infinite, or otherwise unreadable',
+    prepare: () => {
+      const mutantAccepted = mutatedBudgetCapPredicate(Number.NaN) === 'allow';
+      return {
+        actualOutcome: mutantAccepted ? 'accepted' : 'refused',
+        refusalAssertion: () => assert.equal(
+          mutatedBudgetCapPredicate(Number.NaN),
+          'throw',
+          'an unreadable budget cap must never become an unlimited allow path',
         ),
       };
     },

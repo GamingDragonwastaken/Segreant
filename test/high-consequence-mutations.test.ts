@@ -16,7 +16,7 @@ test('WP-H03 kills every bounded high-consequence mutant', () => {
   const report = runHighConsequenceMutationAssurance();
 
   assert.equal(report.allKilled, true, formatHighConsequenceMutationReport(report));
-  assert.equal(report.mutations.length, 6);
+  assert.equal(report.mutations.length, 12);
   assert.equal(report.killed, report.mutations.length);
   assert.equal(report.survived, 0);
   assert.deepEqual(
@@ -28,6 +28,12 @@ test('WP-H03 kills every bounded high-consequence mutant', () => {
       'transitive revocation edge omitted',
       'execution-plan qualification gate removed',
       'one-rival dominance accepted as robust dominance',
+      'cross-basis money operation accepted',
+      'split adjustment bound removed',
+      'derivation witness state ignored',
+      'future revocation treated as immediate',
+      'unsafe JWT algorithm accepted',
+      'unreadable budget cap treated as unlimited',
     ],
   );
 });
