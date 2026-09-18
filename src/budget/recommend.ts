@@ -17,19 +17,35 @@
  * scenario under that share continuing — not a forecast and not a saving.
  *
  * A cap that materially changes behaviour is a decision, and decisions belong to
- * `src/decision/engine.ts` and the assurance chain above it. Until a proposal
- * carries a DecisionCertificate, this output stays advisory: it is rendered for
- * review, and `canApply` gates whether an operator may even act on it.
+ * `src/decision/engine.ts` and the assurance chain above it. Since D-220 a
+ * proposal that can be applied CARRIES that decision: `decision` states the
+ * objective, evaluates `apply_recommended` against `keep_current` as utility
+ * intervals, and reports the engine's certificate, the minimax-regret pick, the
+ * derived assurance level and the D-193 standing. The heuristic that picks the
+ * number is unchanged; what changed is that the number no longer travels
+ * without saying whether choosing it over the alternative is certified. The
+ * output stays advisory either way: `canApply` gates whether an operator may
+ * act on it, and `decision.standing` says whether acting is review-only.
  *
  * Pure function over precomputed inputs, so it is testable without a store.
  */
 
 import type { FrontierCell } from '../value/frontier.ts';
+import type { DecisionAssuranceInput } from '../decision/assurance.ts';
+import { decideBudgetCap, type BudgetCapDecision } from './capDecision.ts';
 
 export interface BudgetInputs {
   dailySpends: number[]; // recent per-day spend totals (USD)
   realizedSpendShare: number | null; // share of attributed SPEND that reached a kept outcome (0..1) — not a value rate
   frontier?: FrontierCell[]; // byModelAndTask cells, for reallocation hints
+  /** The cap the proxy runs today; `null`/absent means no daily cap. The decision's `keep_current` action. */
+  currentDailyCapUsd?: number | null;
+  /**
+   * Kernel profiles of the claims the cap decision rests on, declared by the
+   * caller that holds the evidence. Absent means undeclared, which the
+   * assurance gate reads as DAL-0 rather than as "nothing contrary was found".
+   */
+  decisionInputs?: readonly DecisionAssuranceInput[];
 }
 
 export interface Reallocation {
@@ -54,6 +70,12 @@ export interface BudgetRecommendation {
   projectedMonthlyWasteUsd: number | null;
   rationale: string[];
   reallocations: Reallocation[];
+  /**
+   * The cap as a decision problem (D-220): `null` exactly when there is no cap
+   * to apply (`recommendedDailyUsd === null`), never an invented problem over
+   * a cold-start or thin-history window.
+   */
+  decision: BudgetCapDecision | null;
 }
 
 function percentile(sorted: number[], p: number): number {
@@ -98,6 +120,7 @@ export function recommendBudget(
       projectedMonthlyWasteUsd: null,
       rationale: ['Not enough spend history yet — keep metering. A value-aware cap appears once there are a few active days of real usage.'],
       reallocations: [],
+      decision: null,
     };
   }
 
@@ -116,6 +139,7 @@ export function recommendBudget(
         `Only ${spends.length} active day${spends.length === 1 ? '' : 's'} of real spend observed; keep metering until at least ${minActiveDays} active days exist before applying a cap.`,
       ],
       reallocations: [],
+      decision: null,
     };
   }
 
@@ -179,6 +203,17 @@ export function recommendBudget(
     }
   }
 
+  // The cap that can be applied is a decision with an alternative (keep the
+  // current cap) and a consequence (it changes which future spend the proxy
+  // admits). Stated here rather than left implicit, per D-220.
+  const decision = decideBudgetCap({
+    dailySpends: spends,
+    realizedSpendShare: rvr,
+    currentDailyCapUsd: inp.currentDailyCapUsd,
+    recommendedDailyUsd,
+    inputs: inp.decisionInputs,
+  });
+
   return {
     status: rvr === null ? 'usage_only' : 'review_ready',
     canApply: true,
@@ -191,6 +226,7 @@ export function recommendBudget(
     projectedMonthlyWasteUsd,
     rationale,
     reallocations,
+    decision,
   };
 }
 

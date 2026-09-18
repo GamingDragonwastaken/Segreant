@@ -267,18 +267,18 @@ export const ISSUANCE_MAP: readonly IssuanceBoundary[] = Object.freeze([
     module: 'src/decision/engine.ts',
     asserts: 'One action robustly dominates the alternatives under the declared utility intervals, or the comparison is undetermined.',
     issuanceClass: 'unmigrated_authority',
-    reach: 'unreached',
+    reach: 'product',
     invocation: { symbol: 'certifyDecision', definedIn: ['src/decision/engine.ts'] },
-    note: 'The pure engine computes a plain certificate but issues no kernel record. Closing it requires every consequential certificate path to use the canonical adapter when a decision certificate becomes a durable claim.',
+    note: 'The pure engine computes a plain certificate and still issues no kernel record itself (D-220): `src/budget/capDecision.ts` is the first product consumer, calling `certifyDecision` and rendering the raw certificate status/margin in `fiscus budget --recommend` output BEFORE any kernel persistence happens. That render is never presented as authorization — it always carries the `changes_spend` assurance gate result beside it, so a dominant-but-uncertified certificate reads as review-only with its shortfalls named, not as a recommendation. `--apply` additionally routes the same certificate through the canonical adapter (`decision.certificate.issuance`) as a no-action bundle. The class stays `unmigrated_authority` because the display path itself is still a direct consumer of the bare engine output, not of a kernel-checked claim. Closing it requires that display path to read the persisted decision-fitness Claim (via `decision.certificate.issuance`) instead of the raw certificate.',
   },
   {
     id: 'decision.certificate.issuance',
     module: 'src/decision/epistemic.ts',
     asserts: 'One action robustly dominates the alternatives under the declared utility intervals, or the comparison is undetermined.',
     issuanceClass: 'canonical',
-    reach: 'unreached',
+    reach: 'product',
     invocation: { symbol: 'issueDecisionToKernel', definedIn: ['src/decision/epistemic.ts'] },
-    note: 'The engine remains a pure decision primitive. This adapter binds a recomputed proven certificate to an observational interval Claim, a decision_fitness Witness, and a Derivation; undetermined certificates issue only the observation. The adapter is currently tested but unreached, so the next product step is a reviewed consumer that persists it before action.',
+    note: 'The engine remains a pure decision primitive. This adapter binds a recomputed proven certificate to an observational interval Claim, a decision_fitness Witness, and a Derivation; undetermined certificates issue only the observation. Since D-220, `src/budget/capDecision.ts` calls `issueDecisionToKernel` from `fiscus budget --recommend --apply`, persisting the cap decision as an explicit `actionSemantics.mode: "no_action"` bundle — the record exists so a later withdrawal of the basis evidence is visible on read (`pendingInvalidationBy`), and it neither executes nor authorizes the cap change.',
   },
 ]);
 

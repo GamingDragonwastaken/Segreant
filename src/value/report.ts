@@ -67,6 +67,8 @@ import { computeUsageRoI, type UsageReport } from './usage.ts';
 import { computeCohort, type CohortReport } from './cohort.ts';
 import { recommendBudget, type BudgetRecommendation } from '../budget/recommend.ts';
 import { economicAttributionFromRows, type EconomicAttribution } from '../economics/attribution.ts';
+import { claimProfile } from '../epistemic/profile.ts';
+import type { DecisionAssuranceInput } from '../decision/assurance.ts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -329,6 +331,47 @@ export type BudgetAdvice = BudgetRecommendation & {
 };
 
 /**
+ * The product's own kernel profiles for the cap decision's basis (D-220): the
+ * metered daily-spend series is always declared, since a cap is never proposed
+ * without one; the realized-value share is declared only when instrumented,
+ * since an absent lens is `undefined`/`null` rather than a fabricated zero.
+ *
+ * Stated honestly rather than optimistically: the request ledger is read, not
+ * digested (`integrity: 'unknown'`), the series prices at list rather than
+ * provider-billed cost (`monetaryBasis: 'list'`), and neither series carries a
+ * causal claim (`causality: 'none'`). The realized-value share is a ratio, not
+ * a dollar figure (`monetaryBasis: 'none'`), and rides on the same measurement
+ * axis as the funnel it comes from (`proxy_unvalidated`).
+ */
+function budgetCapDecisionInputs(
+  coverage: 'exact' | 'partial' | 'legacy_unknown',
+  realizedSpendShare: number | null,
+): readonly DecisionAssuranceInput[] {
+  const seriesCoverage = coverage === 'exact' ? 'complete' : coverage === 'partial' ? 'partial' : 'unknown';
+  const inputs: DecisionAssuranceInput[] = [
+    {
+      id: 'claim:budget:cap:input:metered_daily_spend',
+      profile: claimProfile({
+        epistemic: 'supported', integrity: 'unknown', authenticity: 'self_asserted', scope: 'conditional',
+        coverage: seriesCoverage, measurement: 'proxy_unvalidated', causality: 'none', monetaryBasis: 'list',
+        finality: 'provisional', decisionFitness: 'not_assessed',
+      }),
+    },
+  ];
+  if (realizedSpendShare !== null) {
+    inputs.push({
+      id: 'claim:budget:cap:input:realized_spend_share',
+      profile: claimProfile({
+        epistemic: 'supported', integrity: 'unknown', authenticity: 'self_asserted', scope: 'conditional',
+        coverage: seriesCoverage, measurement: 'proxy_unvalidated', causality: 'none', monetaryBasis: 'none',
+        finality: 'provisional', decisionFitness: 'not_assessed',
+      }),
+    });
+  }
+  return Object.freeze(inputs);
+}
+
+/**
  * A cap recommendation, on the same spend basis the `--apply` action will
  * govern. Imported usage is observed-only by default, so it is excluded from
  * the basis unless the user explicitly opted into total-observed-spend
@@ -352,16 +395,21 @@ export function budgetAdvice(
   const exactRows = store.economicRequestRowsInRange(startMs, endMs, { liveOnly });
   const exact = economicAttributionFromRows(exactRows);
   const series = store.economicSeries(startMs, endMs, DAY_MS, liveOnly);
+  const realizedSpendShare = opts.realizedSpendShare ?? null;
+  const coverage: 'exact' | 'partial' | 'legacy_unknown' =
+    exactRows.length === 0 ? 'legacy_unknown' : exact.complete ? 'exact' : 'partial';
   return {
     ...recommendBudget({
       dailySpends: series.map((s) => s.costUsd),
-      realizedSpendShare: opts.realizedSpendShare ?? null,
+      realizedSpendShare,
       frontier: opts.frontier ?? [],
+      currentDailyCapUsd: config.budget.dailyUsd,
+      decisionInputs: budgetCapDecisionInputs(coverage, realizedSpendShare),
     }),
     spendBasis: liveOnly ? 'live_proxy' : 'all_observed',
     windowDays: days,
     economic: {
-      coverage: exactRows.length === 0 ? 'legacy_unknown' : exact.complete ? 'exact' : 'partial',
+      coverage,
       total: exactRows.length === 0 ? null : exact,
     },
   };

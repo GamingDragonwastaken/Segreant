@@ -54,14 +54,16 @@ node --test --experimental-strip-types test/decision-assurance.test.ts
 
 ## Does not establish
 
-Nothing here is reached from a product path. A grep for `issueDecisionToKernel`
-and `buildDecisionKernelIssuance` across `src/` finds no caller — the boundary
-`decision.certificate` is classified `unreached` in
-`src/epistemic/issuance-map.ts`, and that is still true with the assurance gate
-in place. The gate exists and is checked at the only point that persists a
-decision certificate; **no surface passes through it**, so an observational
-separation still reaches an operator through `recommendBudget`, the frontier and
-every other advisory surface without being refused anywhere. The assurance
-ladder is a Fiscus policy choice, not a derived threshold, and it assumes the
-declared input set is complete — an undeclared input cannot lower the level it
-was left out of.
+One product path reaches this module (D-220): `src/budget/capDecision.ts`
+frames the budget advisor's cap as a decision between `apply_recommended` and
+`keep_current`, calls `certifyDecision`, `minimaxRegret`,
+`decisionCountermodels`, `decisionInvalidatingAssumptionSets` and
+`gateDecisionForConsequence`, renders the result in `fiscus budget
+--recommend`, and routes a certified cap through `issueDecisionToKernel` on
+`--apply`. A review-only or under-assured decision is rendered with its
+shortfalls and `--apply` is refused (D-213). The frontier and the other
+advisory surfaces still reach an operator without passing through this module,
+so an observational separation is refused here and nowhere else yet. The
+assurance ladder is a Fiscus policy choice, not a derived threshold, and it
+assumes the declared input set is complete — an undeclared input cannot lower
+the level it was left out of.

@@ -67,11 +67,12 @@ The test also walks the import graph and compares it against the declaration, so
 a boundary that gains or loses a consumer fails until the map is corrected: the
 moment to reconsider its queue position, rather than a field to update quietly.
 
-Of the seventeen boundaries, fourteen are `product`, one is
-`imported_uninvoked`, and two are `unreached`. Neither decision boundary is
-imported at all — nothing imports `src/decision/engine.ts`, and the two modules
-that name it (`src/budget/recommend.ts`, `src/value/instrumentationSensitivity.ts`)
-do so in comments describing where it is intended to go. `alloc.exactRun` is the
+Of the seventeen boundaries, sixteen are `product`, one is
+`imported_uninvoked`, and none is `unreached`. The two decision boundaries
+were the unreached pair until D-220: `src/budget/capDecision.ts` now calls
+`certifyDecision` and `minimaxRegret` for the budget-cap decision that
+`fiscus budget --recommend` renders, and routes a certified cap through
+`issueDecisionToKernel` on `--apply`. `alloc.exactRun` is the
 middle case: `src/store/db.ts` imports it, and no product path calls the store
 method that would run it. None of this is dead code to delete on sight; each is
 a deliberate primitive without a consumer yet. But it changes the reading of the
@@ -113,8 +114,8 @@ from the table directly below it.
 | `causal.estimate` | `src/causal/estimate.ts` | kernel_primitive | product | An assigned-arm difference with a finite-range interval |
 | `causal.issuance` | `src/causal/epistemic.ts` | canonical | product | A randomized study supports a causal effect, bound by derivation to the randomization |
 | `billing.countermodels` | `src/billing/countermodels.ts` | kernel_primitive | product | What the reconciliation residual degrades to if one of its stated conditions is false, and whether anything Fiscus has could tell |
-| `decision.certificate` | `src/decision/engine.ts` | **unmigrated_authority** | unreached | One action robustly dominates the alternatives under the declared utility intervals |
-| `decision.certificate.issuance` | `src/decision/epistemic.ts` | **canonical** | unreached | One action robustly dominates the alternatives under the declared utility intervals, bound to interval Evidence and a decision-fitness Derivation |
+| `decision.certificate` | `src/decision/engine.ts` | **unmigrated_authority** | product | One action robustly dominates the alternatives under the declared utility intervals |
+| `decision.certificate.issuance` | `src/decision/epistemic.ts` | **canonical** | product | One action robustly dominates the alternatives under the declared utility intervals, bound to interval Evidence and a decision-fitness Derivation |
 
 Each module states its own class in its own docblock, so a reader opening the
 file learns what authority it holds without having to find this page first.
@@ -129,8 +130,9 @@ to provide and the reason "unchecked" is not the same as "fine".
 
 The causal pair is closed. `causal.qualification` and `causal.estimate` were
 the `product`-reaching pair, and `causal.issuance` carries their output into the
-kernel. The decision adapter is now canonical but remains unreached by a product
-consumer, which lowers urgency without lowering priority.
+kernel. The decision adapter is canonical and, since D-220, reached by the
+budget-cap consumer; what remains is that the display path reads the bare engine
+certificate rather than a kernel-checked claim.
 
 **`causal.qualification` and `causal.estimate` — CLOSED by `causal.issuance`.**
 The gates were never wrong; they refuse to derive causality from Lift, from a
@@ -163,8 +165,12 @@ decision-fitness claim. The pure engine remains an unmigrated primitive, while
 `src/decision/epistemic.ts` is now the canonical adapter: it recomputes the
 certificate, issues the interval observation, and for strict dominance binds a
 `decision_fitness` Witness and Derivation to the source Evidence. Undetermined
-certificates issue no decision-fitness claim. A reviewed product consumer still
-needs to call this adapter before any action-grade policy can be applied.
+certificates issue no decision-fitness claim. Since D-220 the budget-cap
+consumer calls this adapter from `fiscus budget --recommend --apply`; the
+certificate a cap is set under is persisted as a `no_action` bundle so a later
+withdrawal of its basis evidence is visible on read. Closing the engine row
+itself requires the display path to read a kernel-checked claim rather than the
+bare certificate.
 
 ## What this map does not establish
 

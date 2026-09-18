@@ -8,7 +8,7 @@
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { Store } from '../store/db.ts';
-import { loadConfig, dbPath, isDemo } from '../config.ts';
+import { loadConfig, saveConfig, dbPath, isDemo } from '../config.ts';
 import { isGitRepo, projectName, resolveCommit } from '../git/correlate.ts';
 import { computeArtifactPersistence } from '../git/quality.ts';
 import { loadRealization } from '../value/realization.ts';
@@ -18,6 +18,11 @@ import { computeFrontier } from '../value/frontier.ts';
 // These commands used to sequence the same primitives themselves; the sequence
 // now has a single home, so the two surfaces cannot drift apart.
 import { valueSpine, usageValue, budgetAdvice } from '../value/report.ts';
+import {
+  issueBudgetCapDecision,
+  readBudgetCapCertificates,
+  renderBudgetCapDecision,
+} from '../budget/capDecision.ts';
 import { instrumentationPriority } from '../value/instrumentationSensitivity.ts';
 import { GATE_LADDER, GATE_META } from '../value/gates.ts';
 import { describeDriftReading, driftReading } from '../value/drift.ts';
@@ -568,22 +573,40 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
   // separately gated same-task model-switch trial, never a generic allocator.
   const allocation = null;
 
-  // A heuristic cap changes spend behaviour. Until a product path supplies a
-  // DecisionCertificate whose declared consequence reaches DAL-3, the only
-  // safe action semantics here are refusal. Keep the recommendation readable,
-  // but never let this surface write a cap outside the decision/assurance path.
-  if (flags.apply) {
-    const message = 'Refused: --recommend --apply changes spend and requires a DecisionCertificate with DAL-3 assurance; no certificate-backed apply path is available.';
+  // The decision subsystem reaches this operator here (D-220): a cap that can
+  // be applied carries a decision problem, a certificate, the minimax-regret
+  // pick and the derived assurance level. `certificates` is every persisted
+  // bundle for THIS problem, revalidated as-of now — empty until the first
+  // certified --apply.
+  const nowIso = new Date().toISOString();
+  const decision = rec.decision;
+  const certificates = decision ? readBudgetCapCertificates(store.epistemic(), nowIso) : [];
+
+  // A heuristic cap changes spend behaviour (D-213). --apply is honoured only
+  // when the decision the recommendation carries is certified AND its derived
+  // assurance reaches the level a spend change requires; anything less is
+  // refused, and the refusal now says which of the two fell short.
+  const applyPermitted = decision !== null
+    && decision.standing.status !== 'review_only'
+    && decision.assurance.meetsRequirement;
+  if (flags.apply && !applyPermitted) {
+    const observed = decision ? decision.assurance.assessment.level : 'DAL-0';
+    const standing = decision ? decision.standing.status : 'no_decision';
+    const message = `Refused: --recommend --apply changes spend and requires a certified DecisionCertificate at ${decision?.assurance.requiredLevel ?? 'DAL-3'}; this recommendation stands at ${observed} with standing ${standing}.`;
     if (flags.json) {
       printJson({
         applied: false,
         error: 'decision_certificate_required',
         consequence: 'changes_spend',
-        requiredAssurance: 'DAL-3',
+        requiredAssurance: decision?.assurance.requiredLevel ?? 'DAL-3',
+        observedAssurance: observed,
+        standing,
+        reasons: decision ? decision.standing.reasons : [],
         message,
       });
     } else {
       console.error(`  ${message}`);
+      if (decision) for (const reason of decision.standing.reasons) console.error(`    · ${reason}`);
     }
     process.exitCode = 1;
     store.close();
@@ -591,7 +614,7 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
   }
 
   if (flags.json) {
-    printJson({ ...rec, allocation, shadowPrice: null });
+    printJson({ ...rec, decision: decision ? { ...decision, certificates } : null, allocation, shadowPrice: null });
     store.close();
     return;
   }
@@ -620,6 +643,10 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
   }
   console.log('');
   for (const r of rec.rationale) console.log(color(tty, C.gray, `  · ${r}`));
+  if (decision) {
+    console.log('');
+    for (const line of renderBudgetCapDecision(decision, certificates)) console.log(color(tty, C.gray, line));
+  }
   // Prefer the quantified allocation (concrete $ moves + projected value gain);
   // fall back to the qualitative trim/grow when there isn't enough frontier data.
   /*
@@ -652,8 +679,30 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
   }
   }
   */
-  console.log('');
-  console.log(color(tty, C.gray, '  No cap written. Applying a recommendation requires a DecisionCertificate with DAL-3 assurance.'));
+  if (flags.apply && applyPermitted && decision) {
+    cfg.budget.dailyUsd = dailyCap;
+    cfg.budget.dailySoftUsd = softCap;
+    saveConfig(cfg);
+    console.log('');
+    console.log(color(tty, C.green, `  Applied: daily cap ${usd(dailyCap)}, soft ${usd(softCap)} written to config.`));
+    // Persist the certificate the cap was set under (D-220): the record is never
+    // authorization and never executes anything; it exists so a later
+    // withdrawal of the basis evidence is visible on read.
+    const seriesCoverage = rec.economic?.coverage === 'exact' ? 'complete' : rec.economic?.coverage === 'partial' ? 'partial' : 'unknown';
+    const issued = issueBudgetCapDecision(store.epistemic(), decision, {
+      issuedAt: nowIso,
+      windowDays: days,
+      spendBasis,
+      monetaryBasis: 'list',
+      seriesCoverage,
+    });
+    console.log(color(tty, C.gray, `  Recorded the decision certificate the cap was set under: ${issued.certificateBundle.id} — it does not authorize spend, route, or provider changes.`));
+  } else {
+    console.log('');
+    console.log(color(tty, C.gray, decision && applyPermitted
+      ? '  Re-run with --apply to write these to your config.'
+      : '  No cap written. Applying a recommendation requires a certified DecisionCertificate with DAL-3 assurance; the decision block above says what is missing.'));
+  }
   console.log('');
   store.close();
 }

@@ -15,7 +15,15 @@ import { claim, type Claim } from '../epistemic/claim.ts';
 import { derivation, type Derivation, type DerivationWitness } from '../epistemic/derivation.ts';
 import { evidence, type Evidence } from '../epistemic/evidence.ts';
 import { grain } from '../epistemic/grain.ts';
-import { claimProfile } from '../epistemic/profile.ts';
+import {
+  AUTHENTICITY,
+  COVERAGE,
+  INTEGRITY,
+  claimProfile,
+  type AuthenticityStatus,
+  type CoverageStatus,
+  type IntegrityStatus,
+} from '../epistemic/profile.ts';
 import { scope } from '../epistemic/scope.ts';
 import { instant, interval, type Instant } from '../epistemic/time.ts';
 import { witness, type Witness } from '../epistemic/witness.ts';
@@ -220,6 +228,39 @@ function coordinates(decisionId: string) {
   return { scope: scope({ ledger: 'fiscus-decision', decisionId }), grain: grain(['decision', 'action']) };
 }
 
+/**
+ * The three axes a claim cannot hold above the evidence it cites (D-221).
+ *
+ * `EpistemicLedger.assertClaimWithinItsEvidence` bounds integrity, authenticity
+ * and coverage by the WEAKEST cited evidence, and the adapter used to write
+ * `verified` / `self_asserted` / `complete` on both of its claims regardless --
+ * so a preview built over `integrity: 'unknown'` source evidence produced
+ * records the commit refused. Computing the ceiling here is not a new rule; it
+ * is the ledger's rule applied where the records are built, so the preview
+ * half of preview-then-commit builds only what the commit half will keep.
+ * Nothing is raised: the adapter's own two records are `verified`, `self_asserted`
+ * and `complete`, so a source at those values yields exactly those values.
+ */
+function evidenceBoundedAxes(cited: readonly Evidence[]): {
+  readonly integrity: IntegrityStatus;
+  readonly authenticity: AuthenticityStatus;
+  readonly coverage: CoverageStatus;
+} {
+  let integrity = INTEGRITY.length - 1;
+  let authenticity = AUTHENTICITY.length - 1;
+  let coverage = COVERAGE.length - 1;
+  for (const source of cited) {
+    integrity = Math.min(integrity, INTEGRITY.indexOf(source.integrity));
+    authenticity = Math.min(authenticity, AUTHENTICITY.indexOf(source.authenticity));
+    coverage = Math.min(coverage, COVERAGE.indexOf(source.completeness.status));
+  }
+  return Object.freeze({
+    integrity: INTEGRITY[integrity]!,
+    authenticity: AUTHENTICITY[authenticity]!,
+    coverage: COVERAGE[coverage]!,
+  });
+}
+
 function decisionProblem(value: unknown, fallbackId: string): DecisionProblemIdentity {
   if (value === undefined) return Object.freeze({ id: fallbackId, version: 1 });
   assertKnownKeys(value, new Set(['id', 'version']), 'decisionProblem');
@@ -405,6 +446,8 @@ export function buildDecisionKernelIssuance(input: DecisionKernelIssuanceInput):
     sensitivity: 'internal',
     redaction: 'none',
   });
+  // Both claims cite the same evidence set, so both sit under the same ceiling.
+  const bounded = evidenceBoundedAxes([certificateEvidence, observationEvidence, ...source]);
   const observation = claim({
     id: observationId,
     proposition: { predicate: 'decision.utility_interval_observed', value: { decisionProblem: problem, decisionId, intervals: intervalValue, certificate: checked.certificate, certificateBundleId: certificateBundle.id } as never },
@@ -413,7 +456,7 @@ export function buildDecisionKernelIssuance(input: DecisionKernelIssuanceInput):
     grain: coordinate.grain,
     time: { validTime, asOf: at },
     epistemic: 'supported',
-    profile: claimProfile({ epistemic: 'supported', integrity: 'verified', authenticity: 'self_asserted', scope: 'conditional', coverage: 'complete', measurement: 'proxy_unvalidated', causality: 'none', monetaryBasis: 'none', finality: 'provisional', decisionFitness: 'insufficient' }),
+    profile: claimProfile({ epistemic: 'supported', ...bounded, scope: 'conditional', measurement: 'proxy_unvalidated', causality: 'none', monetaryBasis: 'none', finality: 'provisional', decisionFitness: 'insufficient' }),
     evidenceIds: [certificateEvidence.id, observationEvidence.id, ...sourceIds],
     derivationRule: 'decision.utility_interval_observation.v1',
     derivationVersion: 1,
@@ -440,7 +483,7 @@ export function buildDecisionKernelIssuance(input: DecisionKernelIssuanceInput):
     grain: coordinate.grain,
     time: { validTime, asOf: at },
     epistemic: 'supported',
-    profile: claimProfile({ epistemic: 'supported', integrity: 'verified', authenticity: 'self_asserted', scope: 'conditional', coverage: 'complete', measurement: 'proxy_unvalidated', causality: 'none', monetaryBasis: 'none', finality: 'provisional', decisionFitness: 'sufficient' }),
+    profile: claimProfile({ epistemic: 'supported', ...bounded, scope: 'conditional', measurement: 'proxy_unvalidated', causality: 'none', monetaryBasis: 'none', finality: 'provisional', decisionFitness: 'sufficient' }),
     measurementModelRef: null,
     evidenceIds: [certificateEvidence.id, observationEvidence.id, ...sourceIds],
     derivationRule: 'decision.strict_interval_dominance.v1',
