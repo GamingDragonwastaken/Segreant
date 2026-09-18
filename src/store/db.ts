@@ -122,6 +122,7 @@ import type {
 } from '../causal/types.ts';
 import { EpistemicLedger } from '../epistemic/ledger.ts';
 import type { Claim } from '../epistemic/claim.ts';
+import type { Instant } from '../epistemic/time.ts';
 import { EconomicLedger, type EconomicPeriodCloseStatus, type PeriodFinalizationInput, type PeriodFinalizationResult, type PeriodReopenInput, type PeriodReopenResult } from '../economics/ledger.ts';
 import { buildEconomicPeriodCloseKernelIssuance, type EconomicPeriodCloseKernelPersistenceResult } from '../economics/epistemic.ts';
 
@@ -467,6 +468,17 @@ function scopeCaptureForInsert(row: RequestRow): { status: ScopeCaptureStatus; d
 export interface KernelClaimView extends Pick<Claim, 'id' | 'proposition' | 'profile' | 'evidenceIds' | 'issuedAt' | 'monetaryBasis' | 'finality'> {
   /** True when the revocation projection reaches this claim. */
   readonly revoked: boolean;
+}
+
+/**
+ * The boundary a kernel read answers at (D-230). Live: the current projection.
+ * As of an instant: only what the ledger had learned by then — events recorded
+ * later do not apply, and a node not yet available is not visible at all.
+ */
+interface KernelReadBoundary {
+  readonly revokedIds: ReadonlySet<string>;
+  /** `null` for a live read; otherwise the node ids available at the boundary. */
+  readonly visible: ReadonlySet<string> | null;
 }
 
 function presentKernelClaim(item: Claim, revokedIds: ReadonlySet<string>): KernelClaimView {
@@ -2226,49 +2238,46 @@ export class Store {
     });
   }
 
-  /** Read canonical billed-period claims without exposing confidential raw payloads. */
-  billingKernelClaims(limit = 25): readonly KernelClaimView[] {
-    const safeLimit = Math.max(1, Math.min(100, Math.floor(limit)));
-    // Projected once per call, not per claim: the closure is over the whole
-    // graph, so asking it repeatedly would answer the same question N times.
-    const revokedIds = new Set(this.epistemic().revocationProjection().revokedIds);
+  // Projected once per call, not per claim: the closure is over the whole
+  // graph, so asking it repeatedly would answer the same question N times.
+  private kernelReadBoundary(asOf: Instant | undefined): KernelReadBoundary {
+    if (asOf === undefined) {
+      return { revokedIds: new Set(this.epistemic().revocationProjection().revokedIds), visible: null };
+    }
+    const replay = this.epistemic().replayAsOf(asOf);
+    return {
+      revokedIds: new Set(replay.revocation.revokedIds),
+      visible: new Set(replay.graph.nodes.map((node) => node.id)),
+    };
+  }
+
+  private kernelClaimsAt(ids: readonly string[], boundary: KernelReadBoundary): readonly KernelClaimView[] {
     const claims: KernelClaimView[] = [];
-    for (const run of this.billingImportRuns(safeLimit)) {
-      const item = this.epistemic().readClaim(`claim:billing:billed-total:${run.importId}`);
+    for (const id of ids) {
+      if (boundary.visible !== null && !boundary.visible.has(id)) continue;
+      const item = this.epistemic().readClaim(id);
       if (item === null) continue;
-      claims.push(presentKernelClaim(item, revokedIds));
+      claims.push(presentKernelClaim(item, boundary.revokedIds));
     }
     return Object.freeze(claims);
+  }
+
+  /** Read canonical billed-period claims without exposing confidential raw payloads. */
+  billingKernelClaims(limit = 25, asOf?: Instant): readonly KernelClaimView[] {
+    const safeLimit = Math.max(1, Math.min(100, Math.floor(limit)));
+    return this.kernelClaimsAt(this.billingImportRuns(safeLimit).map((run) => `claim:billing:billed-total:${run.importId}`), this.kernelReadBoundary(asOf));
   }
 
   /** Read canonical provider-observed Claims issued from complete Costs snapshots. */
-  openAiCostsKernelClaims(limit = 25): readonly KernelClaimView[] {
+  openAiCostsKernelClaims(limit = 25, asOf?: Instant): readonly KernelClaimView[] {
     const safeLimit = Math.max(1, Math.min(100, Math.floor(limit)));
-    // Projected once per call, not per claim: the closure is over the whole
-    // graph, so asking it repeatedly would answer the same question N times.
-    const revokedIds = new Set(this.epistemic().revocationProjection().revokedIds);
-    const claims: KernelClaimView[] = [];
-    for (const run of this.openAiCostsObservationRuns(safeLimit)) {
-      const item = this.epistemic().readClaim(`claim:billing:provider-observed-total:${run.observationRunId}`);
-      if (item === null) continue;
-      claims.push(presentKernelClaim(item, revokedIds));
-    }
-    return Object.freeze(claims);
+    return this.kernelClaimsAt(this.openAiCostsObservationRuns(safeLimit).map((run) => `claim:billing:provider-observed-total:${run.observationRunId}`), this.kernelReadBoundary(asOf));
   }
 
   /** Read canonical mixed-basis Claims issued for recorded reconciliations. */
-  billingReconciliationKernelClaims(limit = 25): readonly KernelClaimView[] {
+  billingReconciliationKernelClaims(limit = 25, asOf?: Instant): readonly KernelClaimView[] {
     const safeLimit = Math.max(1, Math.min(100, Math.floor(limit)));
-    // Projected once per call, not per claim: the closure is over the whole
-    // graph, so asking it repeatedly would answer the same question N times.
-    const revokedIds = new Set(this.epistemic().revocationProjection().revokedIds);
-    const claims: KernelClaimView[] = [];
-    for (const run of this.reconciliationRuns(safeLimit)) {
-      const item = this.epistemic().readClaim(`claim:billing:reconciliation:${run.reconciliationRunId}`);
-      if (item === null) continue;
-      claims.push(presentKernelClaim(item, revokedIds));
-    }
-    return Object.freeze(claims);
+    return this.kernelClaimsAt(this.reconciliationRuns(safeLimit).map((run) => `claim:billing:reconciliation:${run.reconciliationRunId}`), this.kernelReadBoundary(asOf));
   }
 
   /** Newest first, including empty/replay-only evidence runs for auditability. */

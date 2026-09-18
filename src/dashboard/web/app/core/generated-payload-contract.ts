@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "c0823d050e03c9c0028d036220a410888a16618fff0f284eb91daf1c80488d61";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "65fd1fb3feb68e361ac6bae192e5a1d8fca8d5d5a2123581892d015234fe1657";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -572,6 +572,11 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "demo",
       "optional": false,
       "type": "boolean"
+    },
+    {
+      "name": "asOf",
+      "optional": false,
+      "type": "string | null"
     },
     {
       "name": "claimSupport",

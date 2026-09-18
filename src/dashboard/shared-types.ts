@@ -366,6 +366,8 @@ export interface BillingKernelClaimSummary {
 
 export interface BillingPayload {
   demo: boolean;
+  /** The knowledge boundary the kernel claims answer at; `null` is a live read (D-230). */
+  asOf: string | null;
   /** The server's statement of this claim's support, on named axes (AII-014). */
   claimSupport: ClaimSupportPayload;
 

@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: c0823d050e03c9c0028d036220a410888a16618fff0f284eb91daf1c80488d61 */
+/** Source SHA-256: 65fd1fb3feb68e361ac6bae192e5a1d8fca8d5d5a2123581892d015234fe1657 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -368,6 +368,8 @@ export interface BillingKernelClaimSummary {
 
 export interface BillingPayload {
   demo: boolean;
+  /** The knowledge boundary the kernel claims answer at; `null` is a live read (D-230). */
+  asOf: string | null;
   /** The server's statement of this claim's support, on named axes (AII-014). */
   claimSupport: ClaimSupportPayload;
 

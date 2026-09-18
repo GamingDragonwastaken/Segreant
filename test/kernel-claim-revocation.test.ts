@@ -150,3 +150,79 @@ test('an unrevoked claim is untouched, so the repair withdraws rather than blank
     store.close();
   }
 });
+
+// ---------------------------------------------------------------------------
+// The as-of boundary (D-230)
+// ---------------------------------------------------------------------------
+//
+// WP-R07's remainder: the three kernel readers projected revocation LIVE, so
+// a revocation recorded today rewrote how every past read rendered — there
+// was no way to ask "what did the ledger know at T?" through the surface
+// that serves billing claims. The readers now take an optional `asOf` and
+// answer from `replayAsOf`: events the boundary had not yet learned of do
+// not apply, and a claim not yet available at the boundary is not served.
+// RED against the unfixed tree: the readers had no boundary parameter and
+// the as-of read returned the claim revoked.
+
+import { createDashboardServer } from '../src/dashboard/server.ts';
+import { DEFAULT_CONFIG } from '../src/config.ts';
+import type { AddressInfo } from 'node:net';
+
+const BEFORE_REVOCATION = '2026-08-10T13:00:00.000Z';
+const AFTER_REVOCATION = '2026-08-12T00:00:00.000Z';
+const BEFORE_ISSUANCE = '2026-08-01T00:00:00.000Z';
+
+test('a read as of an instant before the revocation was recorded renders the claim as it was known then', () => {
+  const store = new Store(':memory:');
+  try {
+    seed(store);
+    revokeAllEvidence(store);
+    const live = store.billingKernelClaims(25);
+    assert.equal(live[0]!.revoked, true, 'the live read must see the revocation, or the boundary below proves nothing');
+
+    const then = store.billingKernelClaims(25, BEFORE_REVOCATION);
+    assert.equal(then.length, 1);
+    assert.equal(then[0]!.revoked, false, 'as of an instant before the revocation was recorded, the claim was not revoked');
+    assert.equal(then[0]!.profile.epistemic, 'supported');
+
+    const later = store.billingKernelClaims(25, AFTER_REVOCATION);
+    assert.equal(later[0]!.revoked, true, 'as of an instant after it was recorded, it is');
+  } finally {
+    store.close();
+  }
+});
+
+test('a read as of an instant before the claim was available does not serve it', () => {
+  const store = new Store(':memory:');
+  try {
+    seed(store);
+    assert.equal(store.billingKernelClaims(25).length, 1);
+    assert.deepEqual(store.billingKernelClaims(25, BEFORE_ISSUANCE), [], 'a claim the boundary had not yet seen cannot be served as of it');
+  } finally {
+    store.close();
+  }
+});
+
+test('/api/billing?asOf= applies the same boundary and echoes it; a malformed instant is refused', async () => {
+  const store = new Store(':memory:');
+  seed(store);
+  revokeAllEvidence(store);
+  const server = createDashboardServer({ store, config: structuredClone(DEFAULT_CONFIG), version: 'test' });
+  const base = await new Promise<string>((resolve) => {
+    server.listen(0, '127.0.0.1', () => resolve(`http://127.0.0.1:${(server.address() as AddressInfo).port}`));
+  });
+  try {
+    type Body = { asOf: string | null; kernel: { claims: { revoked: boolean }[] } };
+    const live = await (await fetch(new URL('/api/billing', base))).json() as Body;
+    assert.equal(live.asOf, null);
+    assert.equal(live.kernel.claims[0]!.revoked, true);
+    const then = await (await fetch(new URL(`/api/billing?asOf=${BEFORE_REVOCATION}`, base))).json() as Body;
+    assert.equal(then.asOf, BEFORE_REVOCATION);
+    assert.equal(then.kernel.claims[0]!.revoked, false);
+    const bad = await fetch(new URL('/api/billing?asOf=yesterday', base));
+    assert.equal(bad.status, 400);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    store.close();
+  }
+});

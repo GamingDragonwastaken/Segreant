@@ -445,8 +445,21 @@ export function handleOverview({ res, url, store, config }: RouteContext): void 
  * deliberately separate from /api/overview and /api/value so an imported
  * charge line cannot silently affect metering, budgets, ROI, or advice.
  */
-export function handleBilling({ res, store }: RouteContext): void {
+export function handleBilling({ res, url, store }: RouteContext): void {
   try {
+    // An optional knowledge boundary for the kernel claims (D-230): what the
+    // ledger had learned by `asOf`, not what it knows now. The recorded runs
+    // and summary below are not replayed — they are store rows, not kernel
+    // nodes — so the payload says which instant the claims answer at.
+    let asOf: Instant | undefined;
+    const rawAsOf = url.searchParams.get('asOf');
+    if (rawAsOf !== null) {
+      try {
+        asOf = instant(rawAsOf);
+      } catch (error) {
+        return json(res, 400, { error: `asOf must be a canonical UTC ISO-8601 instant: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    }
     // Read once: the same recorded runs decide the claim's support and are
     // served as the evidence behind it. Reading them twice would let the two
     // disagree the moment a run landed between the calls.
@@ -454,6 +467,8 @@ export function handleBilling({ res, store }: RouteContext): void {
     const summary = store.billingSummary();
     return json(res, 200, {
       demo: isDemo(),
+      /** The boundary the kernel claims answer at; `null` is a live read. */
+      asOf: asOf ?? null,
       // `conflicted` lives here and nowhere else in this payload. Repeated
       // provider observations of the same days that disagree contradict the
       // billed claim rather than establishing it, and the browser's count-based
@@ -484,9 +499,9 @@ export function handleBilling({ res, store }: RouteContext): void {
       imports: store.billingImportRuns(25),
       kernel: {
         kind: 'trusted_epistemic_kernel_billing',
-        claims: store.billingKernelClaims(25),
-        observedClaims: store.openAiCostsKernelClaims(25),
-        reconciliationClaims: store.billingReconciliationKernelClaims(25),
+        claims: store.billingKernelClaims(25, asOf),
+        observedClaims: store.openAiCostsKernelClaims(25, asOf),
+        reconciliationClaims: store.billingReconciliationKernelClaims(25, asOf),
       },
       // Readiness is served BEFORE a credential is minted, which is the only
       // moment it is useful. `directOpenAiCosts.coverage` below is the
