@@ -40,6 +40,7 @@ import {
   type MeasurementModel,
   type MeasurementValidation,
 } from './model.ts';
+import { intervalContains, type Instant, type TimeInterval } from '../epistemic/time.ts';
 
 export interface MeasurementRegistry {
   /** Registered references, sorted, so a caller can report what was available. */
@@ -55,6 +56,36 @@ export interface MeasurementBackingRequest {
   readonly requiredConstruct: string;
   /** The strength the citing claim asserts on its measurement axis. */
   readonly assertedValidation: MeasurementValidation;
+  /**
+   * The instant the citation is made about (D-227).
+   *
+   * Optional, and its ABSENCE is not "now". A model that declares a
+   * `validTime` and is asked without an instant has been asked a question it
+   * cannot answer, so it backs nothing above `proxy_unvalidated`. A model that
+   * declares no window is unbounded by declaration and unaffected either way.
+   */
+  readonly asOf?: Instant;
+}
+
+/**
+ * Why a validity window does not license a citation at `asOf`, or `null`
+ * when it does or when there is no window. A window asked with no instant is
+ * a question that was not asked, and the rung that depends on the answer is
+ * withheld; a window that does not contain the instant is an expired citation.
+ */
+export function windowReason(
+  validTime: TimeInterval | undefined,
+  asOf: Instant | undefined,
+  subject: string,
+): string | null {
+  if (validTime === undefined) return null;
+  if (asOf === undefined) {
+    return `${subject} declares a validity window (${validTime.from} to ${validTime.to}) and the citation names no instant to check it against, so whether it still holds is unknown`;
+  }
+  if (!intervalContains(validTime, asOf)) {
+    return `${subject} is valid from ${validTime.from} to ${validTime.to} and does not cover ${asOf}`;
+  }
+  return null;
 }
 
 export interface MeasurementBacking {
@@ -166,7 +197,12 @@ export function assessMeasurementBacking(
     requiredConstruct: request.requiredConstruct,
     requiredValidation: request.assertedValidation,
   });
-  return Object.freeze({ admissible: fitness.fitForConstructClaim, model, reasons: fitness.reasons });
+  // The window is checked after fitness so a stale model still reports its
+  // construct and strength reasons; it is checked at all only above the
+  // bottom rung, which is the only rung a model's currency can license.
+  const stale = windowReason(model.validTime, request.asOf, `measurement model ${model.id}`);
+  const reasons = stale === null ? fitness.reasons : Object.freeze([...fitness.reasons, stale]);
+  return Object.freeze({ admissible: fitness.fitForConstructClaim && stale === null, model, reasons });
 }
 
 /**

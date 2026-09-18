@@ -1,5 +1,4 @@
 # Decision Log
-
 ## D-001 — Reconstruction branch
 **Decision:** Build on `gpt56/magnum-opus-reconstruction`, starting exactly from `31577d5...`.
 **Reason:** Preserve PR #8/Luna work as a reviewed foundation while allowing constitutional migration without rewriting shared history.
@@ -3332,3 +3331,9 @@ Lab implementation, calibration result, decision feature or production route.
 **G06.** Staged approach steps 1–2 are done (`standalone/fiscuspack-verifier.mjs`, no producer import, committed vectors, D-212); step 3 is "if the value justifies it" and cross-runtime/hosted/independent review are external. COMPLETED.
 **I04.** The enumerated defect list is closed; runtime accessibility needs a DOM, and the zero-dependency rule (hard rule 7) refuses jsdom even as a devDependency without an owner decision. BLOCKED_EXTERNAL: owner decision on a devDependency exception, or an external audit.
 **Verification.** Row-by-row grep against `src/` and the cited decisions; no code changed. Commit noted in the records commit.
+
+## D-227 — the model window was read only by the bridge path, so the ledger's direct floor asked a model without saying when
+**Problem.** D-159 made `validTime` a read field on the bridged path and D-224 made the direct floor resolve a model, but the floor passed no instant: `assessMeasurementBacking` had no `asOf` at all, so a model with a closed window backed a direct claim and nothing decided which instant a surface asks about.
+**Counterexample.** A model valid 2026-07-01..07-15 backed a `proxy_validated` claim with `asOf` 2026-08-02; a windowed model backed a claim whose `time.asOf` was null. RED 2/3 (the in-window guard passed as control).
+**Fix.** `MeasurementBackingRequest.asOf`; `windowReason` moved from the surrogate module into the registry and exported; the direct floor in `src/epistemic/ledger.ts` passes the claim's own `time.asOf` (absent stays absent — a windowed model asked with none is refused, never read as now); `assessBridgedMeasurementBacking` still withholds `asOf` from the base call and lowers rather than refuses, as before; `causalQualityMeasurementBacking` takes the issuance instant. GREEN 3/3; measurement 65/65; epistemic/causal neighbourhood 472/472; root tsc.
+**Limitation.** Only `asOf` is checked, not the claim's `validTime` interval; the causal model and bridge declare no window, so that caller's instant changes nothing until one does.

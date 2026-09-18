@@ -38,6 +38,17 @@
  * path invents.
  *
  * Recorded at D-224.
+ *
+ * THE WINDOW (D-227). `MeasurementModel.validTime` was declared, carried, and
+ * read by the surrogate-bridge path only; the direct floor resolved a model
+ * and never asked WHEN. A model whose author bounded its calibration to July
+ * backed an August claim, and a claim that named no instant at all was backed
+ * by a model that could only answer for an instant. The floor now passes the
+ * claim's own `time.asOf` as the instant the citation is made about: a model
+ * with a window that does not contain it is refused, and a model with a
+ * window asked by a claim with no `asOf` is refused because the question was
+ * not asked — absence of an instant is not "now". A model that declares no
+ * window is unbounded by declaration and unaffected.
  */
 
 import { test } from 'node:test';
@@ -64,8 +75,9 @@ const STUDY_GRAIN = grain(['day', 'project']);
 const PREDICATE = 'ops.incident_count';
 const MODEL_REF = 'model:ops-incidents-v1';
 
-function model(overrides: Partial<{ id: string; targetConstruct: string; validation: MeasurementValidation }> = {}): MeasurementModel {
+function model(overrides: Partial<{ id: string; targetConstruct: string; validation: MeasurementValidation; validTime: { from: string; to: string } }> = {}): MeasurementModel {
   return measurementModel({
+    ...(overrides.validTime ? { validTime: overrides.validTime } : {}),
     id: overrides.id ?? MODEL_REF,
     targetConstruct: overrides.targetConstruct ?? PREDICATE,
     measurand: 'incidents opened per day',
@@ -124,6 +136,7 @@ function measuringClaim(
   measurement: MeasurementValidation,
   measurementModelRef: string | null,
   predicate = PREDICATE,
+  asOf: string | null = ISSUED,
 ): Claim {
   const profile = { ...BASE_PROFILE, measurement };
   return claim({
@@ -132,7 +145,7 @@ function measuringClaim(
     subject: 'project:api',
     scope: STUDY_SCOPE,
     grain: STUDY_GRAIN,
-    time: { validTime: { from: VALID_FROM, to: VALID_TO }, asOf: ISSUED },
+    time: { validTime: { from: VALID_FROM, to: VALID_TO }, asOf },
     epistemic: 'supported',
     profile: claimProfile(profile),
     measurementModelRef,
@@ -196,6 +209,32 @@ test('COUNTEREXAMPLE: a ledger built with no registry holds no models and resolv
     /resolves to no registered measurement model/,
   );
   assert.equal(value.readClaim('claim:unresolvable'), null);
+});
+
+test('COUNTEREXAMPLE (D-227): a model whose validity window closed before the claim\'s asOf cannot back it', () => {
+  const ledger = ledgerWith([model({ validTime: { from: '2026-07-01T00:00:00.000Z', to: '2026-07-15T00:00:00.000Z' } })]);
+  ledger.appendEvidence(record('evidence:feed', MODEL_REF));
+  assert.throws(
+    () => ledger.appendClaim(measuringClaim('claim:expired-window', 'proxy_validated', MODEL_REF)),
+    (error: Error) => /valid from 2026-07-01T00:00:00.000Z to 2026-07-15T00:00:00.000Z and does not cover 2026-08-02T00:00:01.000Z/.test(error.message),
+  );
+  assert.equal(ledger.readClaim('claim:expired-window'), null);
+});
+
+test('COUNTEREXAMPLE (D-227): a windowed model asked by a claim that names no asOf is refused, not read as current', () => {
+  const ledger = ledgerWith([model({ validTime: { from: VALID_FROM, to: '2026-09-01T00:00:00.000Z' } })]);
+  ledger.appendEvidence(record('evidence:feed', MODEL_REF));
+  assert.throws(
+    () => ledger.appendClaim(measuringClaim('claim:no-instant', 'proxy_validated', MODEL_REF, PREDICATE, null)),
+    (error: Error) => /names no instant to check it against/.test(error.message),
+  );
+  assert.equal(ledger.readClaim('claim:no-instant'), null);
+});
+
+test('GUARD (D-227): a windowed model whose window contains the claim\'s asOf is accepted', () => {
+  const ledger = ledgerWith([model({ validTime: { from: VALID_FROM, to: '2026-09-01T00:00:00.000Z' } })]);
+  ledger.appendEvidence(record('evidence:feed', MODEL_REF));
+  assert.equal(ledger.appendClaim(measuringClaim('claim:in-window', 'proxy_validated', MODEL_REF)), 'inserted');
 });
 
 test('GUARD: a registered, construct-matching model strong enough for the rung is accepted', () => {

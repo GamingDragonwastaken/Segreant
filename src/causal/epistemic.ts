@@ -191,7 +191,7 @@ export function buildCausalStudyKernelIssuance(
   // that at `proxy_unvalidated`; see `measurement.ts` for why that is the
   // answer rather than a limitation of this adapter.
   const measurementModelRef = causalQualityMeasurementModelRef(data.protocol);
-  const measurementValidation = causalQualityMeasurementBacking(data.protocol).earnedValidation;
+  const measurementValidation = causalQualityMeasurementBacking(data.protocol, issued).earnedValidation;
 
   const assignmentEvidence = evidence({
     id: `evidence:causal:assignment:${studyId}`,

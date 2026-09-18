@@ -178,12 +178,18 @@ export function causalQualityRegistries(protocol: CausalQualityMeasurementSource
  */
 export function causalQualityMeasurementBacking(
   protocol: CausalQualityMeasurementSource,
+  asOf?: string,
 ): BridgedMeasurementBacking {
   const { models, bridges } = causalQualityRegistries(protocol);
+  // `asOf` is the instant the issued claims are made about (their own
+  // `time.asOf`, D-227). The model and bridge declared here carry no
+  // `validTime`, so today it changes nothing; a future window on either would
+  // be checked against the claim's instant rather than silently read as now.
   return assessBridgedMeasurementBacking(models, bridges, {
     measurementModelRef: causalQualityMeasurementModelRef(protocol),
     surrogateBridgeRef: causalQualitySurrogateBridgeRef(protocol),
     requiredConstruct: CAUSAL_QUALITY_CONSTRUCT,
     assertedValidation: ASSERTED_VALIDATION,
+    ...(asOf === undefined ? {} : { asOf }),
   });
 }

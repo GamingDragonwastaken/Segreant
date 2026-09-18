@@ -1426,10 +1426,14 @@ export class EpistemicLedger {
       if (!backed) {
         return `declares measurement ${item.profile.measurement} while no cited evidence declares a measurement model`;
       }
+      // The claim's own `asOf` is the instant the citation is made about
+      // (D-227). A claim that names none asks a windowed model a question it
+      // cannot answer, and the window check withholds rather than reads "now".
       const backing = assessMeasurementBacking(this.measurementModels, {
         measurementModelRef: item.measurementModelRef,
         requiredConstruct: item.proposition.predicate,
         assertedValidation: item.profile.measurement,
+        ...(item.time.asOf === null ? {} : { asOf: item.time.asOf }),
       });
       if (!backing.admissible) {
         const known = this.measurementModels.ids.length === 0

@@ -46,8 +46,8 @@
  */
 
 import { MEASUREMENT_VALIDATIONS, type MeasurementModel, type MeasurementValidation } from './model.ts';
-import { assessMeasurementBacking, type MeasurementRegistry } from './registry.ts';
-import { intervalContains, interval, type Instant, type TimeInterval } from '../epistemic/time.ts';
+import { assessMeasurementBacking, windowReason, type MeasurementRegistry } from './registry.ts';
+import { interval, type Instant, type TimeInterval } from '../epistemic/time.ts';
 
 /**
  * Which way the surrogate is claimed to move with the target. `unknown_direction`
@@ -287,21 +287,6 @@ interface BridgeSupport {
  * that depends on the answer is withheld. A window that does not contain the
  * instant is an expired citation.
  */
-function windowReason(
-  validTime: TimeInterval | undefined,
-  asOf: Instant | undefined,
-  subject: string,
-): string | null {
-  if (validTime === undefined) return null;
-  if (asOf === undefined) {
-    return `${subject} declares a validity window (${validTime.from} to ${validTime.to}) and the citation names no instant to check it against, so whether it still holds is unknown`;
-  }
-  if (!intervalContains(validTime, asOf)) {
-    return `${subject} is valid from ${validTime.from} to ${validTime.to} and does not cover ${asOf}`;
-  }
-  return null;
-}
-
 function bridgeSupport(
   models: MeasurementRegistry,
   bridge: SurrogateBridge,
@@ -372,6 +357,9 @@ export function assessBridgedMeasurementBacking(
   bridges: SurrogateBridgeRegistry,
   request: BridgedMeasurementRequest,
 ): BridgedMeasurementBacking {
+  // `asOf` is deliberately NOT passed here: the base check would refuse a
+  // stale model outright, and this path instead lowers the earned rung and
+  // reports the window reason itself, below.
   const base = assessMeasurementBacking(models, {
     measurementModelRef: request.measurementModelRef,
     requiredConstruct: request.requiredConstruct,
