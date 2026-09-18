@@ -28,6 +28,7 @@ precision.
 - invalid, duplicate, non-finite, or mismatched inputs fail closed;
 - ties are returned in deterministic action-identifier order.
 - `control.ts` models shadow → simulated effect → canary → monitored expansion → full rollout and rollback as an immutable, preview-then-commit, revision-checked state machine; it never executes, authorizes, or persists an external action.
+- `policy.ts` models recommendation → policy proposal → independent human approval → explicitly confirmed action intent as an immutable, idempotent, revisioned lifecycle. It rechecks evidence freshness/revocation and TTL at every consequential boundary, and records `not_executed`/`not_attempted` action receipts only; it never calls a provider or changes a budget.
 - `assurance.ts` DERIVES a Decision Assurance Level from the ten-axis `ClaimProfile` of every declared input claim and from the dominance certificate's own result. A caller cannot assert a level; there is no field to assert one with. `buildDecisionKernelIssuance` refuses to issue when a declared consequence class requires more than the declared inputs reach, and `issueDecisionToKernel` therefore cannot persist past a refusal.
 
 ## Invariants
@@ -40,9 +41,12 @@ precision.
 - measurement cost is subtracted from gross decision-loss reduction exactly once.
 - control transitions fail closed on stale/revoked/conflicted/incomplete evidence, changed treatment/model/pricing/environment regime, degraded completeness, broken measurement, harmful or unobservable outcomes, and expired policy TTL; a rollback is terminal and idempotent.
 - an assurance level classifies evidential support for acting and is never authorization to act: `authorizesAction` is permanently `false`, and execution stays outside this module.
+- a policy proposal cannot be created from an undetermined certificate, unresolved/stale/revoked evidence, or insufficient assurance; approval requires an independent principal with the declared role and an explicit confirmation; action intent requires a still-valid approval, an authorized executor, explicit confirmation and an idempotency key.
+- policy and approval TTLs are bounded and checked at the exact expiry instant; any recorded revocation blocks later action while preserving the prior immutable records. Replaying the same idempotency key and request returns the same state; a divergent replay is refused.
 - `decisionFitness` is excluded from the assurance ladder, because it is the axis being assessed; including it would let a claim assert its own decision fitness and have that assertion raise the level governing it.
 - every assurance cap is the WEAKEST declared input on an axis, never an average, and no axis compensates for another: a randomized estimand does not buy back missing coverage.
 - no declared inputs is `DAL-0`, not "nothing contrary was found"; an undeclared consequence is held to the strictest requirement, not the loosest; an issuance that declares no consequence reports `assurance: null`, which means NOT ASSESSED and never assessed-and-fine.
+- the policy module is an in-memory control boundary, not durable Store persistence, identity-provider authorization, provider readback, rollback, or a live `ControlTarget`; its action receipt is an audit intent and not evidence that a financial action occurred.
 
 ## Verify
 
@@ -50,6 +54,7 @@ precision.
 node --test --experimental-strip-types test/decision-engine.test.ts
 node --test --experimental-strip-types test/decision-control.test.ts
 node --test --experimental-strip-types test/decision-assurance.test.ts
+node --test --experimental-strip-types test/decision-policy-lifecycle.test.ts
 ```
 
 ## Does not establish
