@@ -76,16 +76,23 @@ measures the same construct — and never for the strength, sign, or
 reproducibility of the association. This module refuses to let a declaration be
 read as stronger than it is; it cannot make one true.
 
-**Nothing here is enforced at a product boundary yet.** `claim()` still accepts
-any non-null `measurementModelRef` at construction, though the ledger bounds a
-claim's reference against its cited evidence (D-168). **One production call site
-now resolves a model through `measurementRegistry`:** `src/causal/measurement.ts`
-builds a registry from the protocol's own quality model, and it is inside the
-product import closure. This paragraph said no site did, until D-198 checked.
-No surrogate bridge is declared for Fiscus's own
-`proxy_validated` claims, and no registry of Fiscus's own models is assembled
-anywhere. These are the mechanisms that make enforcement possible; the wiring is
-the open remainder of WP-D05 and WP-D07.
+**The kernel's direct floor now resolves through this module (D-224).**
+`claim()` still accepts any non-null `measurementModelRef` at construction — it
+has no registry and must not acquire a database (D-168) — but
+`EpistemicLedger` consults `assessMeasurementBacking` against the
+`MeasurementRegistry` it was constructed with before persisting a DIRECT claim
+above `proxy_unvalidated`, with the claim's proposition predicate as the
+required construct. A ledger given no registry holds the empty one and refuses
+every such claim rather than skipping the check. **Two production call sites
+resolve through `measurementRegistry`:** `src/causal/measurement.ts` builds a
+registry from the protocol's own quality model, and `src/epistemic/ledger.ts`
+resolves at the floor. `Store` constructs its ledger with no registry, so no
+registry of Fiscus's own models is assembled anywhere and the causal reference
+— synthesized from a stored protocol — could not be in a static one; that is
+harmless today only because every production issuer writes `proxy_unvalidated`.
+No surrogate bridge is declared for Fiscus's own `proxy_validated` claims, and
+the derivation path (`measurement_validation`) resolves nothing. These are the
+open remainders of WP-D05 and WP-D07.
 
 ## Files
 

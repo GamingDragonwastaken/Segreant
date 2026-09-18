@@ -43,6 +43,7 @@ import { witness, type Witness } from './witness.ts';
 import { assessWitnessObligation } from './obligation.ts';
 import { analyzeDerivationChain } from './abstract.ts';
 import type { MonetaryBasisStatus } from './profile.ts';
+import { assessMeasurementBacking, measurementRegistry, type MeasurementRegistry } from '../measurement/registry.ts';
 
 export type AppendResult = 'inserted' | 'duplicate';
 
@@ -244,14 +245,25 @@ function assertStrengtheningDischarged(frame: StrengtheningFrame): void {
   );
 }
 
+export interface EpistemicLedgerOptions {
+  /**
+   * The measurement models a DIRECT claim above `proxy_unvalidated` may cite.
+   * Omitted means the EMPTY registry — this ledger knows no models and can
+   * resolve nothing — not "do not check". See `directClaimObligation`.
+   */
+  readonly measurementModels?: MeasurementRegistry;
+}
+
 export class EpistemicLedger {
   private readonly db: DatabaseSync;
+  private readonly measurementModels: MeasurementRegistry;
 
   /** Non-null exactly while `transaction` owns an open SQLite transaction. */
   private strengthening: StrengtheningFrame | null = null;
 
-  public constructor(db: DatabaseSync) {
+  public constructor(db: DatabaseSync, options: EpistemicLedgerOptions = {}) {
     this.db = db;
+    this.measurementModels = options.measurementModels ?? measurementRegistry([]);
     initializeEpistemicSchema(this.db);
   }
 
@@ -1356,15 +1368,28 @@ export class EpistemicLedger {
    *   invoice close an unclosed one.
    *
    * - `measurement` above `proxy_unvalidated` only when some cited evidence
-   *   declares a `measurementModelRef`. Nothing stronger is decidable here:
-   *   `Evidence` records WHICH model a record was collected under and never
-   *   how well validated that model is, so the rung itself has no
-   *   evidence-side ceiling and the derivation path keeps
-   *   `measurement_validation`. This particular floor is currently unreachable
-   *   — `claim()` refuses a null ref above `proxy_unvalidated` and D-168
-   *   refuses a ref no cited evidence declares, which together already imply
-   *   it — and it is stated anyway so the floor is one readable rule rather
-   *   than a consequence of two others that could each move independently.
+   *   declares a `measurementModelRef` AND that reference RESOLVES (D-224).
+   *   The first half is implied by two other rules — `claim()` refuses a null
+   *   ref above the bottom rung and D-168 refuses a ref no cited evidence
+   *   declares — and is stated so the floor is one readable rule. The second
+   *   half is what those rules stopped short of: they checked a reference was
+   *   WRITTEN and CARRIED, never that it named a model. It is resolved against
+   *   `measurementModels`, the registry this ledger was constructed with,
+   *   through `assessMeasurementBacking`: the reference must name a registered
+   *   model whose `targetConstruct` is the claim's proposition predicate — the
+   *   envelope has no other field saying what the claim is a measurement OF —
+   *   and whose own declared validation reaches the asserted rung. A ledger
+   *   constructed without a registry holds the EMPTY one and refuses every
+   *   direct claim above the bottom rung, because a ledger that knows no
+   *   models can resolve nothing; that is the ledger `Store` builds today,
+   *   and no production issuer writes a direct claim above `proxy_unvalidated`.
+   *   `Evidence` still records WHICH model a record was collected under and
+   *   never how well validated it is, so there is no evidence-side ceiling;
+   *   the derivation path keeps `measurement_validation`, and a claim it
+   *   legalizes is not judged here. A row persisted before this check reads
+   *   back as stored and an identical re-offer is `duplicate`: the floor runs
+   *   on INSERT only, and the read path does not re-judge, upgrade or
+   *   backfill what an earlier issuer wrote.
    *
    * `monetaryBasis` is not a ladder, so this floor never ranks one economic
    * basis above another. The narrow direct-path guard only recognizes the
@@ -1400,6 +1425,18 @@ export class EpistemicLedger {
       const backed = item.evidenceIds.some((evidenceId) => (this.readEvidence(evidenceId)?.measurementModelRef ?? null) !== null);
       if (!backed) {
         return `declares measurement ${item.profile.measurement} while no cited evidence declares a measurement model`;
+      }
+      const backing = assessMeasurementBacking(this.measurementModels, {
+        measurementModelRef: item.measurementModelRef,
+        requiredConstruct: item.proposition.predicate,
+        assertedValidation: item.profile.measurement,
+      });
+      if (!backing.admissible) {
+        const known = this.measurementModels.ids.length === 0
+          ? 'this ledger holds no measurement models'
+          : `registered: ${this.measurementModels.ids.join(', ')}`;
+        return `declares measurement ${item.profile.measurement} citing ${item.measurementModelRef ?? 'no model'}, `
+          + `and the reference does not resolve to a model that backs it: ${backing.reasons.join('; ')} (${known})`;
       }
     }
     return null;

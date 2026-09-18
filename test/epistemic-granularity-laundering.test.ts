@@ -60,6 +60,27 @@ import { claimProfile } from '../src/epistemic/profile.ts';
 import { grain } from '../src/epistemic/grain.ts';
 import { interval } from '../src/epistemic/time.ts';
 import { scope } from '../src/epistemic/scope.ts';
+import { measurementModel } from '../src/measurement/model.ts';
+import { measurementRegistry } from '../src/measurement/registry.ts';
+
+/**
+ * The model the fixture's `validated` claims cite. Since D-203 the direct
+ * floor resolves a reference against the ledger's registry, so a fixture that
+ * asserts `validated` behind a model that resolves to nothing is now refused —
+ * which was the hole, not a fixture convention worth keeping.
+ */
+const PROVIDER_COST_MODELS = measurementRegistry([measurementModel({
+  id: 'measurement:provider-cost:v1',
+  targetConstruct: 'cost.reconciled',
+  measurand: 'reconciled provider cost',
+  observable: 'provider invoice line items',
+  procedure: 'sum invoice line items per period',
+  scope: scope({ organization: 'acme' }),
+  population: 'all invoiced line items',
+  validation: 'validated',
+  calibration: null,
+  uncertainty: { kind: 'none', description: 'exact invoice amounts' },
+})]);
 
 function evidenceInput(id: string, dimensions: readonly string[]): EvidenceInput {
   return {
@@ -130,7 +151,7 @@ function claimInput(id: string, evidenceIds: readonly string[], dimensions: read
 }
 
 function ledger(): EpistemicLedger {
-  return new EpistemicLedger(new DatabaseSync(':memory:'));
+  return new EpistemicLedger(new DatabaseSync(':memory:'), { measurementModels: PROVIDER_COST_MODELS });
 }
 
 test('a claim cannot report per-request detail that its daily-total evidence never had', () => {

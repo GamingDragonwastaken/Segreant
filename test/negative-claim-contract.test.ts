@@ -7,6 +7,25 @@ import { evidence, type Evidence } from '../src/epistemic/evidence.ts';
 import { scope } from '../src/epistemic/scope.ts';
 import { grain } from '../src/epistemic/grain.ts';
 import { interval } from '../src/epistemic/time.ts';
+import { measurementModel } from '../src/measurement/model.ts';
+import { measurementRegistry } from '../src/measurement/registry.ts';
+
+/**
+ * The model the claim under test cites. Since D-203 the direct floor resolves
+ * the reference against the ledger's registry, so the ledger has to hold it.
+ */
+const OPS_MODELS = measurementRegistry([measurementModel({
+  id: 'model:ops-v1',
+  targetConstruct: 'ops.no_incident',
+  measurand: 'linked incidents in the period',
+  observable: 'rows in the incident feed',
+  procedure: 'scan the feed for incidents linked to the project',
+  scope: scope({ organization: 'acme', project: 'atlas' }),
+  population: 'all incidents in the feed',
+  validation: 'validated',
+  calibration: null,
+  uncertainty: { kind: 'none', description: 'exact count' },
+})]);
 
 const base = {
   id: 'claim:negative:1',
@@ -95,14 +114,14 @@ test('positive claims remain valid without the opt-in contract', () => {
 });
 
 test('append boundary refuses a negative claim whose witness ID is not cited', () => {
-  const ledger = new EpistemicLedger(new DatabaseSync(':memory:'));
+  const ledger = new EpistemicLedger(new DatabaseSync(':memory:'), { measurementModels: OPS_MODELS });
   const item = claim({ ...base, negativeClaim: { eventType: 'linked_incident', completenessWitnessIds: ['cw:missing'] } });
   assert.throws(() => ledger.appendClaim(item), /must be cited in evidenceIds/);
 });
 
 test('append boundary refuses an as-of-only negative claim without a declared absence period', () => {
   const db = new DatabaseSync(':memory:');
-  const ledger = new EpistemicLedger(db);
+  const ledger = new EpistemicLedger(db, { measurementModels: OPS_MODELS });
   try {
     const source = completenessEvidence();
     ledger.appendEvidence(source);
@@ -123,7 +142,7 @@ test('append boundary refuses incomplete or semantically mismatched completeness
 
   for (const candidate of cases) {
     const db = new DatabaseSync(':memory:');
-    const ledger = new EpistemicLedger(db);
+    const ledger = new EpistemicLedger(db, { measurementModels: OPS_MODELS });
     try {
       ledger.appendEvidence(candidate.evidence);
       assert.throws(() => ledger.appendClaim(negativeClaim({
@@ -137,7 +156,7 @@ test('append boundary refuses incomplete or semantically mismatched completeness
 
 test('a broader complete completeness witness supports the negative claim and exact replay is idempotent', () => {
   const db = new DatabaseSync(':memory:');
-  const ledger = new EpistemicLedger(db);
+  const ledger = new EpistemicLedger(db, { measurementModels: OPS_MODELS });
   try {
     ledger.appendEvidence(completenessEvidence());
     const item = negativeClaim();
