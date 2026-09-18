@@ -94,9 +94,14 @@ export function reconcileReceiptWithLedger(body: ReceiptBody, ledger: EconomicLe
   const charges = ledger.effectiveChargesFor(sourceIds, asOf);
   let ledgerAmount = money('0', receiptAmount.currency, 'effective');
   const lineage = new Set<string>();
+  const foreignCurrency: string[] = [];
   for (const id of sourceIds) {
     const charge = charges.get(id);
     if (charge === undefined) { missing.push(id); continue; }
+    // Single-currency by construction: the receipt's currency is the unit of
+    // the comparison, and a ledger charge in another currency is a stated
+    // disagreement rather than a sum that addMoney would refuse mid-way.
+    if (charge.amount.currency !== receiptAmount.currency) { foreignCurrency.push(`${id} (${charge.amount.currency})`); continue; }
     ledgerAmount = addMoney(ledgerAmount, charge.amount);
     for (const eventId of charge.eventIds) lineage.add(eventId);
   }
@@ -108,7 +113,10 @@ export function reconcileReceiptWithLedger(body: ReceiptBody, ledger: EconomicLe
   const reasons: string[] = [];
 
   let status: ReceiptReconciliationStatus;
-  if (missing.length > 0) {
+  if (foreignCurrency.length > 0) {
+    status = 'disagrees';
+    reasons.push(`${foreignCurrency.length} source(s) are charged in a currency other than the receipt's ${receiptAmount.currency}: ${foreignCurrency.join(', ')}`);
+  } else if (missing.length > 0) {
     status = 'disagrees';
     reasons.push(`${missing.length} event(s) the receipt names are not in this ledger${boundary === null ? '' : ` as of ${boundary}`}: ${missing.join(', ')}`);
   } else if (sameAmount && unseen.length === 0) {

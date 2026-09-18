@@ -232,6 +232,11 @@ const CONSUMERS: ReadonlyArray<{ file: string; klass: Classification; why: strin
     why: 'assertAgreesWithUsdCompatibility refuses to reconcile a non-USD exact amount against a USD-named float',
   },
   {
+    file: 'src/value/receiptReconciliation.ts',
+    klass: 'c',
+    why: 'sums ledger charges in the receipt currency only; a source charged in another currency is reported as a disagreement, never summed or converted (D-231)',
+  },
+  {
     file: 'src/value/report.ts',
     klass: 'c',
     why: 'aggregates through economicAttributionFromRows',
