@@ -252,6 +252,13 @@ fiscus project               Spend by project with aliases applied (--json). Too
                                 or never attributed at all
 fiscus prune                 Prune old rows and compact the DB
 fiscus backup --out <file>  Create a verified local SQLite ledger snapshot
+fiscus pack export --out <file>
+                                Write the epistemic ledger as a .fiscuspack: every
+                                record bound by digest, omissions and redactions
+                                stated ([--sign <private-key.pem>]); pack verify
+                                <file> [--trust <key>] and pack inspect <file>
+                                check the bytes and read the manifest — truth is
+                                never evaluated
 fiscus restore --from <file> --out <file>
                                 Preview a snapshot, or create a new verified
                                 database with --apply (never overwrites the active ledger)

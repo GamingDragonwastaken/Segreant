@@ -1,7 +1,7 @@
 /**
  * A MODULE CONTRACT IS A PROJECTION OF ITS MODULE, AND NOTHING READ IT.
  *
- * Fifteen `CONTEXT.md` files under `src/` are the interface a newcomer meets
+ * Sixteen `CONTEXT.md` files under `src/` are the interface a newcomer meets
  * first — human or agent — and until this test existed, nothing compared a
  * single sentence of them against the code they describe. They drifted exactly
  * as D-188 predicted a projection drifts: `src/epistemic/CONTEXT.md` said

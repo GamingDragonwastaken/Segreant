@@ -202,6 +202,15 @@ The signed GitHub Actions outcome importer is offline: it reads an artifact from
 disk, verifies it against a locally pinned public key and explicit policy flags,
 then retains the verified envelope in the local ledger. It does not call GitHub.
 
+`fiscus pack export --out <file>` writes the epistemic ledger's records as a
+`.fiscuspack` file on local disk and sends nothing anywhere; what you then do
+with the file is an egress you choose. The manifest binds every record by
+digest and states what was left out. Evidence classed `confidential` or
+`restricted` travels with its `payload` removed and a redaction entry naming
+it; `internal` and `public` evidence travels whole, so read
+`fiscus pack inspect` before sharing a pack. A pack proves integrity and,
+with an out-of-band key, authenticity — never whether its claims are true.
+
 ## What this page does not promise
 
 Fiscus cannot change an upstream provider's retention, training, privacy, or

@@ -29,6 +29,7 @@ import { cmdShow, cmdSources, cmdExport, cmdConfig, cmdBudget, cmdPrune, cmdProj
 import { cmdStart, cmdDemo, cmdPricing, cmdBaseline, cmdReprice } from './cli/runCmd.ts';
 import { cmdBackup, cmdRestore } from './cli/backupCmd.ts';
 import { cmdDiagnostics } from './cli/diagnosticsCmd.ts';
+import { cmdPack } from './cli/packCmd.ts';
 import { cmdEconomic } from './cli/economicCmd.ts';
 
 function cmdHelp(): void {
@@ -177,6 +178,13 @@ function cmdHelp(): void {
     restore --from <file> --out <file>
                           Preview a backup, or create a new verified database
                           with --apply. The active ledger is never overwritten.
+    pack export --out <file>
+                          Write the epistemic ledger as a .fiscuspack envelope:
+                          every record bound by digest, omissions and redactions
+                          stated in the manifest ([--sign <private-key.pem>])
+    pack verify <file>    Check a pack's bytes: integrity, authenticity (only with
+                          --trust <public-key>), truth never evaluated
+    pack inspect <file>   Print what a pack's manifest says, evaluating nothing
     diagnostics [--json]   Emit redacted local runtime/database/egress diagnostics
                           (--out <file> writes an atomic bundle; no telemetry)
     demo                  Generate isolated, clearly-labeled synthetic data so every
@@ -364,6 +372,9 @@ async function main(): Promise<void> {
       break;
     case 'restore':
       cmdRestore(flags);
+      break;
+    case 'pack':
+      cmdPack(flags);
       break;
     case 'diagnostics':
     case 'diagnostic':
