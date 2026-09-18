@@ -241,6 +241,10 @@ export const CAPABILITIES: readonly Capability[] = [
     id: 'diagnostics', label: 'Diagnostics bundle', plain: 'A redacted snapshot of how this install is wired, for a bug report.',
     territory: 'system', consequence: 'read', coverage: 'planned', command: 'fiscus diagnostics',
   },
+  {
+    id: 'pack', label: 'Export a verifiable record bundle', plain: 'Write the kernel records as a signed, digest-bound file another machine can check without trusting this one. Truth is never evaluated.',
+    territory: 'data', consequence: 'local', coverage: 'planned', command: 'fiscus pack export --out <file>',
+  },
 ];
 
 type CapabilityMetadata = Omit<CapabilitySpec, keyof Capability>;
