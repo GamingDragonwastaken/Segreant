@@ -8,6 +8,9 @@ import { join } from 'node:path';
 import { money } from '../src/economics/money.ts';
 import { backupDatabase } from '../src/store/backup.ts';
 import { Store, type RequestRow } from '../src/store/db.ts';
+import { evidence } from '../src/epistemic/evidence.ts';
+import { grain } from '../src/epistemic/grain.ts';
+import { scope } from '../src/epistemic/scope.ts';
 
 function request(): RequestRow {
   return {
@@ -365,6 +368,87 @@ test('a legacy manifest without schemaVersion remains inspectable using the data
     const inspected = Store.inspectBackup(backup);
     assert.equal(inspected.ok, true);
     if (inspected.ok) assert.equal(inspected.schemaVersion, 1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Epistemic payload replay (D-232)
+// ---------------------------------------------------------------------------
+//
+// WP-H04's remainder. Backup inspection revalidated economic and historical-FX
+// payload digests before restore and never the epistemic tables, so a backup
+// whose evidence_json had been rewritten under a stale digest — with the
+// manifest re-emitted to match the file — restored cleanly and the kernel
+// only found out on the first read of that node. RED against the unfixed
+// tree: the restore below succeeded.
+
+function kernelEvidence() {
+  return evidence({
+    id: 'evidence:backup-fixture', evidenceType: 'ops.feed', sourceIdentity: 'fiscus:local', sourceClass: 'fiscus_local_records',
+    payload: { value: 'backup-fixture' }, scope: scope({ account: 'acct-1' }), grain: grain(['day', 'project']),
+    occurredAt: '2026-08-01T00:00:00.000Z', observedAt: '2026-08-01T00:00:00.000Z', finalizedAt: null,
+    integrity: 'verified', authenticity: 'pinned', completeness: { status: 'complete', method: 'local_scan' },
+    measurementModelRef: null, monetaryBasis: null, schemaVersion: 1, sensitivity: 'internal', redaction: 'none',
+  });
+}
+
+test('restore refuses a manifest-consistent backup with a corrupted epistemic payload before publishing', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-backup-epistemic-corrupt-'));
+  const source = join(dir, 'source.sqlite');
+  const backup = join(dir, 'backup.sqlite');
+  const restored = join(dir, 'restored.sqlite');
+  const store = new Store(source);
+  assert.equal(store.epistemic().appendEvidence(kernelEvidence()), 'inserted');
+  assert.equal(store.backupTo(backup).ok, true);
+  store.close();
+  try {
+    const corrupted = new DatabaseSync(backup);
+    try {
+      const row = corrupted.prepare('SELECT evidence_id, evidence_json FROM epistemic_evidence LIMIT 1').get() as { evidence_id: string; evidence_json: string } | undefined;
+      assert.ok(row);
+      const evidenceJson = row.evidence_json.replace('backup-fixture"}', 'corrupted-value"}');
+      assert.notEqual(evidenceJson, row.evidence_json, 'the fixture must actually change the payload');
+      corrupted.prepare('DROP TRIGGER epistemic_evidence_append_only_update').run();
+      corrupted.prepare('UPDATE epistemic_evidence SET evidence_json = ? WHERE evidence_id = ?').run(evidenceJson, row.evidence_id);
+      corrupted.prepare(
+        "CREATE TRIGGER epistemic_evidence_append_only_update BEFORE UPDATE ON epistemic_evidence BEGIN SELECT RAISE(ABORT, 'epistemic ledger is append-only'); END",
+      ).run();
+    } finally {
+      corrupted.close();
+    }
+    rewriteManifestForArtifact(backup);
+    const result = Store.restoreBackup(backup, restored);
+    assert.equal(result.ok, false, 'a rewritten kernel payload under a stale digest must not restore');
+    assert.match(result.reason ?? '', /evidence.*digest|digest.*evidence|epistemic/i);
+    assert.equal(existsSync(restored), false, 'corrupt history must not publish a destination');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a backup carrying every epistemic node kind restores and replays each node through the kernel readers', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-backup-epistemic-replay-'));
+  const source = join(dir, 'source.sqlite');
+  const backup = join(dir, 'backup.sqlite');
+  const restored = join(dir, 'restored.sqlite');
+  const store = new Store(source);
+  assert.equal(store.epistemic().appendEvidence(kernelEvidence()), 'inserted');
+  const before = store.epistemic().graph();
+  assert.equal(store.backupTo(backup).ok, true);
+  store.close();
+  try {
+    assert.equal(Store.restoreBackup(backup, restored).ok, true);
+    const replayed = new Store(restored);
+    try {
+      const after = replayed.epistemic().graph();
+      assert.deepEqual(after.nodes.map((n) => n.id), before.nodes.map((n) => n.id));
+      assert.deepEqual(replayed.epistemic().readEvidence('evidence:backup-fixture')?.payload, { value: 'backup-fixture' });
+      assert.equal(replayed.epistemic().appendEvidence(kernelEvidence()), 'duplicate', 're-offering the same node after restore is a duplicate, not a second row');
+    } finally {
+      replayed.close();
+    }
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

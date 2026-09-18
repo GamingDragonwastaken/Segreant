@@ -184,8 +184,40 @@ function storedPayloadIntegrity(db: DatabaseSync): string | null {
       }
     }
   }
+  // The kernel's own tables (D-232). Each row's digest is over its canonical
+  // JSON exactly as `EpistemicLedger.nodePayload` recomputes it on read, so a
+  // payload rewritten under a stale digest is refused here, before restore
+  // publishes a destination, rather than on the first read of that node.
+  for (const table of EPISTEMIC_PAYLOAD_TABLES) {
+    if (!tableExists(db, table.name)) continue;
+    const rows = db.prepare(
+      `SELECT ${table.key} AS id, ${table.json} AS json, ${table.digest} AS digest FROM ${table.name} ORDER BY ${table.key} ASC`,
+    ).all() as Array<{ id: string; json: string; digest: string }>;
+    for (const row of rows) {
+      if (typeof row.json !== 'string' || typeof row.digest !== 'string') {
+        return `stored ${table.label} ${row.id} failed integrity verification: payload or digest is not text`;
+      }
+      if (createHash('sha256').update(row.json, 'utf8').digest('hex') !== row.digest) {
+        return `stored ${table.label} ${row.id} failed digest verification`;
+      }
+      try {
+        const parsed = JSON.parse(row.json) as { id?: unknown };
+        if (parsed.id !== row.id) return `stored ${table.label} ${row.id} failed physical identity verification`;
+      } catch (error) {
+        return `stored ${table.label} ${row.id} failed integrity verification: ${error instanceof Error ? error.message : String(error)}`;
+      }
+    }
+  }
   return null;
 }
+
+const EPISTEMIC_PAYLOAD_TABLES: ReadonlyArray<{ name: string; key: string; json: string; digest: string; label: string }> = Object.freeze([
+  { name: 'epistemic_evidence', key: 'evidence_id', json: 'evidence_json', digest: 'evidence_digest', label: 'epistemic evidence' },
+  { name: 'epistemic_claims', key: 'claim_id', json: 'claim_json', digest: 'claim_digest', label: 'epistemic claim' },
+  { name: 'epistemic_assumptions', key: 'assumption_id', json: 'assumption_json', digest: 'assumption_digest', label: 'epistemic assumption' },
+  { name: 'epistemic_witnesses', key: 'witness_id', json: 'witness_json', digest: 'witness_digest', label: 'epistemic witness' },
+  { name: 'epistemic_derivations', key: 'derivation_id', json: 'derivation_json', digest: 'derivation_digest', label: 'epistemic derivation' },
+]);
 
 function inspectOpenDatabase(path: string): OpenInspection | BackupFailure {
   if (!regularFile(path)) return failure(path, 'backup path is missing or is not a regular file');
