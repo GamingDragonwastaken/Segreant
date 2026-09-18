@@ -29,6 +29,7 @@
     "verify:fiscuspack": "node standalone/fiscuspack-verifier.mjs",
     "build": "node scripts/build.mjs",
     "benchmark": "node --disable-warning=ExperimentalWarning scripts/benchmark.mjs",
+    "benchmark:contribution": "node --disable-warning=ExperimentalWarning scripts/contribution-benchmark.mjs",
     "prepare": "npm run build",
     "predemo": "npm run build",
     "demo": "node --disable-warning=ExperimentalWarning bin/fiscus.mjs demo --serve",
