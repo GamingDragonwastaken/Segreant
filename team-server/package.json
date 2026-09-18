@@ -13,6 +13,7 @@
     "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit"
   },
   "dependencies": {
+    "jose": "6.2.12",
     "pg": "^8.23.0"
   },
   "devDependencies": {

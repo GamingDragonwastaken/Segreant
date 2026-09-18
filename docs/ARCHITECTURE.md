@@ -350,7 +350,8 @@ genuinely open:
    client↔server wire format matches, for both the accept and the
    unregistered-key-reject paths.
    **OIDC/JWT verification is now built too:** `team-server/src/oidc.ts`'s
-   `verifyIdToken`, `node:crypto` only (no `jsonwebtoken`/`jose` dependency),
+   `verifyIdToken`, JWS verification via `jose` (team-server's only dependency
+   besides `pg`; D-223) with parsing, key management and claim policy kept local,
    gating a real route (`GET /me`) rather than left untested in isolation.
    Algorithm whitelisted to RS256/ES256 — rejects `alg: "none"` (a real
    historical JWT vulnerability) and HS256 (would allow an algorithm-confusion

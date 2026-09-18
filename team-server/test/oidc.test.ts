@@ -1,10 +1,13 @@
 /**
- * Adversarial tests for oidc.ts's verifyIdToken — proves the hand-rolled
- * node:crypto JWT verification (no jsonwebtoken/jose dependency) actually
- * works against genuine RS256 and ES256 signatures, not just that the code
- * compiles. Both the signer (fakeIdp.ts) and verifier are exercised together,
- * the same "prove both sides interoperate" approach used for the CLI↔server
- * integration check in this slice.
+ * Contract tests for oidc.ts's verifyIdToken — proves the jose-backed
+ * verification (D-209) actually works against genuine RS256 and ES256
+ * signatures and keeps the reasons server.ts and operators read, not just
+ * that the code compiles. The adversarial matrix (algorithm confusion, key
+ * types, malformed segments, claim shapes, clock boundaries, JWKS failure,
+ * kid handling, issuer substitution, Unicode/coercion) is in
+ * oidc-adversarial.test.ts. Both the signer (fakeIdp.ts) and verifier are
+ * exercised together, the same "prove both sides interoperate" approach used
+ * for the CLI↔server integration check in this slice.
  */
 
 import { test } from 'node:test';
@@ -393,11 +396,16 @@ test('verifyIdToken: without an explicit jwksUrl, OIDC discovery is cached — a
   }
 });
 
-test('verifyIdToken: a key rotated in after the JWKS was cached is still accepted (forces one refresh on unknown kid)', async () => {
+test('verifyIdToken: a key rotated in after the JWKS was cached is still accepted (forces one refresh on unknown kid once the cooldown allows)', async () => {
   const idp = await startFakeIdp();
   try {
     clearJwksCacheForTests();
-    const c = cfg(idp, { jwksCacheTtlMs: 60_000 });
+    // The refresh cooldown is measured from the last successful JWKS fetch
+    // (jose semantics, D-209), so with the default 30s cooldown a rotation
+    // landing seconds after the cache primed would be refused until the
+    // cooldown lapses. Zero here isolates the rotation behaviour; the
+    // cooldown itself is proven in oidc-adversarial.test.ts (unknown-kid storm).
+    const c = cfg(idp, { jwksCacheTtlMs: 60_000, jwksRefreshCooldownMs: 0 } as Partial<OidcConfig>);
     await verifyIdToken(idp.sign(validPayload(idp)), c);
     const hitsBeforeRotation = idp.jwksHits();
 

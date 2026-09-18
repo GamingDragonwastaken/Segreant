@@ -1,10 +1,24 @@
 /**
- * OIDC relying-party JWT verification — node:crypto only, no jsonwebtoken/jose
- * dependency, so team-server's dependency footprint stays at just `pg`. Per
- * docs/TEAM-TIER-DESIGN.md §3: "verify an incoming JWT against a configured
- * issuer URL and JWKS endpoint, extract an identity claim, done." This is the
- * human-facing auth layer — separate from src/team/rollup.ts's ed25519
- * machine-to-machine trust for POST /rollups (see server.ts's header comment).
+ * OIDC relying-party JWT verification. Per docs/TEAM-TIER-DESIGN.md §3:
+ * "verify an incoming JWT against a configured issuer URL and JWKS endpoint,
+ * extract an identity claim, done." This is the human-facing auth layer —
+ * separate from src/team/rollup.ts's ed25519 machine-to-machine trust for
+ * POST /rollups (see server.ts's header comment).
+ *
+ * WHAT `jose` DOES HERE AND WHAT IT DOES NOT (WP-H02, D-223). The JWS step —
+ * importing a candidate JWK for the header's algorithm and verifying the
+ * compact signature — is delegated to `jose` (`importJWK` + `compactVerify`),
+ * the one runtime dependency team-server carries besides `pg`; the root
+ * package stays at zero. Everything around it stays this module's
+ * responsibility and is tested here rather than assumed of the library:
+ * canonical base64url of every segment before any key is fetched, the
+ * RS256/ES256 allowlist read from the header before `jose` sees the token,
+ * JWKS discovery/caching/forced-refresh cooldown, JWK metadata reconciliation
+ * (`kty`/`alg`/`use`/`key_ops`/`crv`) against the header algorithm, trying
+ * every candidate that shares a kid, and every relying-party claim rule
+ * (exp with no leeway, iat/nbf skew, issuer, audience, azp, sub). The
+ * adversarial matrix in test/oidc-adversarial.test.ts is what makes that
+ * division checkable; test/oidc.test.ts holds the D-209 strictness cases.
  *
  * Security notes (the parts that are easy to get wrong hand-rolling this):
  *  - `alg` is whitelisted to RS256/ES256 only. A JWT with `alg: "none"` (a
@@ -26,7 +40,7 @@
  *    never just the first one that happens to be constructible as a KeyObject.
  */
 
-import { createPublicKey, verify as cryptoVerify, type KeyObject } from 'node:crypto';
+import { compactVerify, importJWK, type CryptoKey, type KeyObject } from 'jose';
 
 export interface OidcConfig {
   issuerUrl: string;
@@ -34,6 +48,10 @@ export interface OidcConfig {
   /** Skips discovery when set — useful to pin exactly, or in tests. */
   jwksUrl?: string;
   jwksCacheTtlMs?: number;
+  /** Minimum time between forced (unknown-kid) JWKS refreshes per endpoint. Default 30 s. */
+  jwksRefreshCooldownMs?: number;
+  /** Timeout for one discovery or JWKS fetch. Default 10 s. */
+  jwksFetchTimeoutMs?: number;
 }
 
 /**
@@ -71,7 +89,8 @@ export type VerifyResult = VerifiedIdentity | VerificationFailure;
 
 const ALLOWED_ALGS = new Set(['RS256', 'ES256']);
 const DEFAULT_JWKS_CACHE_TTL_MS = 10 * 60 * 1000;
-const JWKS_FORCE_REFRESH_COOLDOWN_MS = 30_000;
+const DEFAULT_JWKS_FORCE_REFRESH_COOLDOWN_MS = 30_000;
+const DEFAULT_FETCH_TIMEOUT_MS = 10_000;
 const MAX_IDP_JSON_BYTES = 256 * 1024;
 const BASE64URL_RE = /^[A-Za-z0-9_-]*$/;
 
@@ -176,7 +195,15 @@ async function discoverJwksUri(issuerUrl: string): Promise<string> {
     await res.body?.cancel().catch(() => undefined);
     throw new Error(`OIDC discovery failed: HTTP ${res.status} from ${wellKnown.origin}`);
   }
-  const doc = await readJsonLimited<{ jwks_uri?: unknown }>(res, 'OIDC discovery');
+  const doc = await readJsonLimited<{ jwks_uri?: unknown; issuer?: unknown }>(res, 'OIDC discovery');
+  // Issuer substitution: a discovery document is only trusted for the issuer
+  // it names. OpenID Connect Discovery §4.3 requires `issuer` to equal the
+  // issuer the document was fetched for; a document that names another
+  // issuer would otherwise hand this verifier a JWKS for the wrong party.
+  const documentIssuer = typeof doc.issuer === 'string' ? doc.issuer.replace(/\/$/, '') : null;
+  if (documentIssuer === null || documentIssuer !== issuerUrl.replace(/\/$/, '')) {
+    throw new Error(`OIDC discovery document at ${wellKnown.origin} names issuer ${JSON.stringify(doc.issuer)}, not the configured ${issuerUrl}`);
+  }
   if (typeof doc.jwks_uri !== 'string') throw new Error(`OIDC discovery document at ${wellKnown.origin} is missing jwks_uri`);
   const jwks = validateEndpoint(doc.jwks_uri, 'discovered JWKS URL');
   if (jwks.origin !== issuer.origin) {
@@ -185,17 +212,17 @@ async function discoverJwksUri(issuerUrl: string): Promise<string> {
   return jwks.href;
 }
 
-async function fetchJwks(jwksUrl: string, cacheTtlMs: number, forceRefresh = false): Promise<Jwks> {
+async function fetchJwks(jwksUrl: string, cacheTtlMs: number, cooldownMs: number, timeoutMs: number, forceRefresh = false): Promise<Jwks> {
   const jwksEndpoint = validateEndpoint(jwksUrl, 'JWKS URL');
   const cacheKey = jwksEndpoint.href;
   const cached = jwksCache.get(cacheKey);
   if (!forceRefresh && cached && Date.now() - cached.fetchedAtMs < cacheTtlMs) return cached.jwks;
   if (forceRefresh) {
     const lastForced = jwksForceRefreshedAt.get(cacheKey) ?? 0;
-    if (cached && Date.now() - lastForced < JWKS_FORCE_REFRESH_COOLDOWN_MS) return cached.jwks;
+    if (cached && Date.now() - lastForced < cooldownMs) return cached.jwks;
     jwksForceRefreshedAt.set(cacheKey, Date.now());
   }
-  const res = await fetch(jwksEndpoint, { signal: AbortSignal.timeout(10_000), redirect: 'error', headers: { accept: 'application/json' } });
+  const res = await fetch(jwksEndpoint, { signal: AbortSignal.timeout(timeoutMs), redirect: 'error', headers: { accept: 'application/json' } });
   if (!res.ok) {
     await res.body?.cancel().catch(() => undefined);
     throw new Error(`JWKS fetch failed: HTTP ${res.status} from ${jwksEndpoint.origin}`);
@@ -216,8 +243,17 @@ async function resolveJwksUrl(cfg: OidcConfig): Promise<string> {
   return jwksUri;
 }
 
-function findCandidates(jwks: Jwks, kid: string | undefined): Jwk[] {
-  return kid ? jwks.keys.filter((k) => k.kid === kid) : jwks.keys;
+/**
+ * Which published keys may verify this token. A header WITHOUT a kid may be
+ * checked against every key; a header WITH one — including an empty string
+ * or a non-string value — names a key, and a name nothing carries matches
+ * nothing. Coercing a present-but-odd kid into "no kid" would widen the
+ * candidate set exactly when the token is least trustworthy.
+ */
+function findCandidates(jwks: Jwks, kid: unknown): Jwk[] {
+  if (kid === undefined) return jwks.keys;
+  if (typeof kid !== 'string') return [];
+  return jwks.keys.filter((k) => typeof k.kid === 'string' && k.kid === kid);
 }
 
 function verifierNow(context: OidcVerificationContext): number | null {
@@ -275,51 +311,57 @@ export async function verifyIdToken(
   }
 
   const cacheTtlMs = cfg.jwksCacheTtlMs ?? DEFAULT_JWKS_CACHE_TTL_MS;
+  const cooldownMs = cfg.jwksRefreshCooldownMs ?? DEFAULT_JWKS_FORCE_REFRESH_COOLDOWN_MS;
+  const timeoutMs = cfg.jwksFetchTimeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
   let jwks: Jwks;
   try {
-    jwks = await fetchJwks(jwksUrl, cacheTtlMs);
+    jwks = await fetchJwks(jwksUrl, cacheTtlMs, cooldownMs, timeoutMs);
   } catch (err) {
     return { valid: false, reason: `JWKS fetch error: ${String(err)}` };
   }
 
-  const kid = typeof header.kid === 'string' ? header.kid : undefined;
+  const kid: unknown = 'kid' in header ? header.kid : undefined;
   let candidates = findCandidates(jwks, kid);
   if (candidates.length === 0) {
     try {
-      jwks = await fetchJwks(jwksUrl, cacheTtlMs, true);
+      jwks = await fetchJwks(jwksUrl, cacheTtlMs, cooldownMs, timeoutMs, true);
     } catch (err) {
       return { valid: false, reason: `JWKS fetch error: ${String(err)}` };
     }
     candidates = findCandidates(jwks, kid);
     if (candidates.length === 0) {
-      return { valid: false, reason: `no matching signing key found in JWKS for kid=${kid ?? '(none)'} (after refresh)` };
+      return { valid: false, reason: `no matching signing key found in JWKS for kid=${kid === undefined ? '(none)' : typeof kid === 'string' ? kid : JSON.stringify(kid)} (after refresh)` };
     }
   }
 
-  const signingInput = Buffer.from(`${headerB64}.${payloadB64}`);
-  let sigOk = false;
+  // The JWS step is jose's. `compactVerify` re-parses the protected header
+  // itself (so an unknown `crit` or a header that disagrees with the
+  // reconciled key is jose's refusal, not a silent pass), verifies against the
+  // ONE algorithm this module already reconciled, and returns the payload
+  // bytes it actually verified — which are what the claim checks below read.
+  let verifiedPayload: Buffer | null = null;
   let compatibleCandidateFound = false;
   for (const jwk of candidates) {
     if (!jwkMatchesAlgorithm(jwk, alg)) continue;
     compatibleCandidateFound = true;
-    let publicKey: KeyObject;
+    let publicKey: CryptoKey | KeyObject | Uint8Array;
     try {
-      publicKey = createPublicKey({ key: jwk as unknown as Record<string, unknown>, format: 'jwk' });
+      publicKey = await importJWK(jwk as unknown as Parameters<typeof importJWK>[0], alg);
     } catch {
       continue;
     }
     try {
-      sigOk =
-        alg === 'ES256'
-          ? cryptoVerify('sha256', signingInput, { key: publicKey, dsaEncoding: 'ieee-p1363' }, signature)
-          : cryptoVerify('sha256', signingInput, publicKey, signature);
+      const result = await compactVerify(token, publicKey, { algorithms: [alg] });
+      verifiedPayload = Buffer.from(result.payload);
     } catch {
-      sigOk = false;
+      verifiedPayload = null;
     }
-    if (sigOk) break;
+    if (verifiedPayload !== null) break;
   }
   if (!compatibleCandidateFound) return { valid: false, reason: 'signing key metadata conflict' };
-  if (!sigOk) return { valid: false, reason: 'signature mismatch' };
+  if (verifiedPayload === null) return { valid: false, reason: 'signature mismatch' };
+  if (!verifiedPayload.equals(payloadBytes)) return { valid: false, reason: 'malformed token: verified payload differs from the parsed payload' };
+  void signature;
 
   const now = verifierNow(context);
   if (now === null) return { valid: false, reason: 'OIDC verification clock returned invalid epoch seconds' };

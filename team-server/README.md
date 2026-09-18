@@ -8,7 +8,8 @@ the full design reasoning.
 
 This is a genuinely separate package (its own `package.json`) so the main
 `fiscus` CLI/proxy stays at zero runtime dependencies. `pg` (the standard
-Postgres driver) lives only here.
+Postgres driver) and `jose` (JWS verification for OIDC ID tokens, D-223)
+live only here.
 
 ## What this does today
 
@@ -175,9 +176,18 @@ opt-in, k-anonymized distribution — never a name attached to a number.
 
 ## Security notes on the OIDC verification (`src/oidc.ts`)
 
-Hand-rolled against `node:crypto` — no `jsonwebtoken`/`jose` dependency, so
-`pg` stays this package's only one. Two easy-to-get-wrong details it handles
-explicitly:
+The JWS step — importing a candidate JWK and verifying the compact signature
+— is `jose`'s (`importJWK` + `compactVerify`, exact-pinned in
+`package.json`; D-223 records the decision). Everything around it is this
+package's responsibility and is tested in `test/oidc.test.ts` and the
+adversarial matrix in `test/oidc-adversarial.test.ts` rather than assumed of
+the library: canonical base64url of every segment before any key is fetched,
+the `RS256`/`ES256` allowlist read before `jose` sees the token, JWKS
+discovery (the document's own `issuer` must equal the configured one),
+caching and the forced-refresh cooldown, JWK metadata reconciliation
+(`kty`/`alg`/`use`/`key_ops`/`crv`), trying every candidate that shares a
+`kid` (a present-but-empty or non-string `kid` matches nothing), and every
+relying-party claim rule. Two easy-to-get-wrong details it handles explicitly:
 
 - **Algorithm whitelist.** Only `RS256`/`ES256` are accepted. A token with
   `alg: "none"` (a real historical JWT vulnerability class) is rejected
@@ -185,9 +195,9 @@ explicitly:
   confusion" attack where an attacker signs a forged token using the issuer's
   *public* RSA key as an HMAC secret.
 - **ES256 signature encoding.** JWT ES256 signatures are raw `r‖s` (IEEE
-  P1363), not the DER/ASN.1 encoding `node:crypto` uses by default for ECDSA —
-  handled via the `dsaEncoding: 'ieee-p1363'` option. Getting this wrong
-  silently rejects every genuine ES256 token.
+  P1363), not the DER/ASN.1 encoding `node:crypto` uses by default for ECDSA.
+  `jose` handles the encoding; the adversarial matrix keeps a genuine ES256
+  token passing so a regression here cannot be silent.
 
 Time claims use a 60-second clock-skew allowance for future-issued and
 not-before tokens. When an ID token has more than one `aud` value, its `azp`
