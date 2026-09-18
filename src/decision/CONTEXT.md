@@ -61,9 +61,13 @@ frames the budget advisor's cap as a decision between `apply_recommended` and
 `gateDecisionForConsequence`, renders the result in `fiscus budget
 --recommend`, and routes a certified cap through `issueDecisionToKernel` on
 `--apply`. A review-only or under-assured decision is rendered with its
-shortfalls and `--apply` is refused (D-213). The frontier and the other
-advisory surfaces still reach an operator without passing through this module,
-so an observational separation is refused here and nowhere else yet. The
-assurance ladder is a Fiscus policy choice, not a derived threshold, and it
-assumes the declared input set is complete — an undeclared input cannot lower
-the level it was left out of.
+shortfalls and `--apply` is refused (D-213). `decisionCertificationStructure`
+and `decisionInvalidatingAssumptionSets` (D-195) are this module's own adapter
+onto `minimalInvalidatingAssumptionSets` in `src/epistemic/countermodel.ts`,
+declaring the one support a strict-interval-dominance certificate rests on and
+reporting the `minimaxRegret` rectangularity assumption as inert to it. The
+frontier and the other advisory surfaces still reach an operator without
+passing through this module, so an observational separation is refused here
+and nowhere else yet. The assurance ladder is a Fiscus policy choice, not a
+derived threshold, and it assumes the declared input set is complete — an
+undeclared input cannot lower the level it was left out of.

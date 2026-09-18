@@ -421,7 +421,20 @@ export function boundViolations(profile: ClaimProfile, bound: ClaimBound): reado
 export interface ChainInput {
   readonly claims: readonly Claim[];
   readonly derivations: readonly Derivation[];
+  /** Re-basings licensed for EVERY step of the chain. */
   readonly licensedBasisTransitions?: ReadonlyArray<readonly [MonetaryBasisStatus, MonetaryBasisStatus]>;
+  /**
+   * Re-basings licensed for ONE step, keyed by derivation id — what a
+   * registered `monetary_rebasing` witness on that step declares (D-222).
+   *
+   * Per step and not chain-wide, because a witness is a declaration about the
+   * derivation that cites it: a `mixed -> billed` witness three steps
+   * downstream says nothing about the leaf, and licensing the whole chain from
+   * it would be exactly the neighbour-only reading this analysis exists to
+   * replace. The declaration is the caller's; this module only applies it
+   * where the step's meet actually holds the `from` basis.
+   */
+  readonly stepBasisTransitions?: ReadonlyMap<string, ReadonlyArray<readonly [MonetaryBasisStatus, MonetaryBasisStatus]>>;
 }
 
 export interface ChainViolation {
@@ -504,7 +517,11 @@ export function analyzeDerivationChain(input: ChainInput): ChainAnalysis {
     } else {
       const perStep = steps.map((step) => {
         const inputBounds = step.inputClaimIds.map((id) => boundOf(id));
-        return derivedBound(inputBounds, step.witnesses.map((w) => w.kind), options);
+        const declared = input.stepBasisTransitions?.get(step.id);
+        const stepOptions: DerivedBoundOptions = declared === undefined || declared.length === 0
+          ? options
+          : { licensedBasisTransitions: [...(options.licensedBasisTransitions ?? []), ...declared] };
+        return derivedBound(inputBounds, step.witnesses.map((w) => w.kind), stepOptions);
       });
       result = perStep.reduce((left, right) => meetClaimBounds(left, right));
       for (let index = 0; index < steps.length; index += 1) {

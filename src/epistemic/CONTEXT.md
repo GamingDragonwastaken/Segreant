@@ -23,17 +23,26 @@
 `PreservationAssessment.isProofOfTruth: false`; a bound is about what the
 evidence structure licenses.
 
-It also does not close the hole it was built to cover. `assessDerivationLegality`
-iterates `PROFILE_STRENGTH_AXES`, which cannot include `monetaryBasis` because
-that axis has no ladder — measured, a derivation whose input carries
-`monetaryBasis: 'estimated'` and whose output carries `'billed'` is
-`allowed: true` with ZERO required witnesses, and the ledger stores it, because
-the ledger checks every input claim against a rule that never looks at the money
-axis. `abstract.ts` refuses that re-basing, and **nothing calls `abstract.ts`**:
-no ledger path, no product path. `BASIS_DERIVATIONS` is deliberately empty, which
-means "nobody has declared a legitimate re-basing", not "none exist" — allocation
-is the obvious candidate and inventing it here to make a bound look useful would
-be the inflation the module refuses.
+This paragraph described a hole that closed in two steps and stayed unedited
+through both, which is exactly the drift `module-contracts.test.ts` exists to
+catch. **Per step (D-152):** `assessDerivationLegality` originally iterated
+`PROFILE_STRENGTH_AXES`, which cannot include `monetaryBasis` because that axis
+has no ladder, so an `estimated -> billed` derivation was `allowed: true` with
+ZERO required witnesses. A `monetary_rebasing` witness kind and a requirement
+inside `assessDerivationLegality` now refuse that re-basing unwitnessed, at the
+boundary `appendDerivationWithinTransaction` runs. **Per chain (D-222):**
+`analyzeDerivationChain` bounded what a whole chain licenses from the day it was
+built and had no caller — `assertChainWithinBound` in `ledger.ts` now walks
+every stored derivation upstream of a candidate's input claims back to its
+leaves and refuses a conclusion the chain does not license, which per-step
+comparison against only the immediate predecessor could not catch: a `billed`
+leaf reaching `mixed` in one hop, or `estimated` reaching `billed` through an
+intermediate `mixed` step witnessed only for its own hop. A registered,
+`supported` `monetary_rebasing` witness lifts the chain for the pair it
+declares, same as it lifts the per-step rule, and no further. `BASIS_DERIVATIONS`
+is still deliberately empty, which means "nobody has declared a legitimate
+re-basing", not "none exist" — allocation is the obvious candidate and inventing
+it here to make a bound look useful would be the inflation the module refuses.
 
 The analysis takes each leaf at face value: it bounds what a CHAIN adds, and what
 a root may say about its own cited evidence is `assertClaimWithinItsEvidence` and
@@ -58,10 +67,11 @@ that overstates its reach overstates this bound too.
 - Derivation legality refuses unsupported strengthening of coordinates, epistemic state, coverage, measurement, causality, monetary finality, trust or decision fitness.
 - A registered witness discharges an obligation only while its own record reads `supported` (D-190) AND it contains what its kind obliges (D-201, `obligation.ts`): `causal_identification` must cite evidence the output claim also cites; `measurement_validation` must cite evidence collected under the `measurementModelRef` the output claim asserts a rung for; `monetary_rebasing` must carry a `basisChange` equal to the pair the step moves between, and `witness()` refuses the kind without one and every other kind with one. The remaining kinds are kind-only, and `WITNESS_OBLIGATIONS` says so by name with the reason — the records carry nothing typed to hold them to. Checked at the ledger against the REGISTERED record, per input claim; `assessDerivationLegality` alone still matches kind only. A failing witness is set aside, not erased, and the refusal names it and what it failed to contain.
 - Every product path that issues a kernel Claim is declared in `issuance-map.ts`, and a path that issues without appearing there fails a test rather than becoming a second authority.
-- `abstract.ts` bounds what a whole chain licenses, which no per-step check does: `assessDerivationLegality` compares one step against one input claim and `assessPreservation` compares one claim against its cited evidence, so a conclusion several merges downstream of its leaves was compared with its neighbours and nothing else.
+- `abstract.ts` bounds what a whole chain licenses, which no per-step check does: `assessDerivationLegality` compares one step against one input claim and `assessPreservation` compares one claim against its cited evidence, so a conclusion several merges downstream of its leaves was compared with its neighbours and nothing else. **`appendDerivationWithinTransaction` now calls it (D-222):** every derivation with at least one input claim is checked with `analyzeDerivationChain` against every stored derivation reachable upstream of those inputs back to their leaves, not just the immediate predecessor, so a conclusion the per-step rule allows but the chain does not license — a `billed` leaf relabelled `mixed` in one hop, or an `estimated` leaf reaching `billed` through a `mixed` hop witnessed only for its own step — is refused and nothing is stored. A step's registered, `supported` `monetary_rebasing` witness is passed to the analysis as the transition licensed for that step alone, never the whole chain, so a re-basing declared three steps downstream cannot lift a leaf it says nothing about.
 - The abstract domain reuses the split `admissibility.ts` already declares: ordered axes are bounded by a CEILING, and the two unordered axes — `monetaryBasis` and `epistemic` — by an ADMISSIBLE SET. `monetaryBasis` acquires no ordering here, and refusing to give it one is the point.
 - `PROFILE_STRENGTH_AXES` is exported from `derivation.ts` and read rather than restated, so the per-step rule and its abstraction cannot drift apart.
 - Every choice in the abstraction NARROWS rather than widens: an unresolved input is BOTTOM and not "ignore it"; no inputs at all is BOTTOM and not "unconstrained"; disagreeing monetary bases become `mixed` rather than the stronger of the two; a conflicted epistemic join admits only `conflicted`. A bound that is too tight costs a caller an explicit witness; a bound that is too loose says a chain can establish something it cannot.
+- `minimalHittingSets`, exported from `dag.ts`, is the one hitting-set fold both `minimalCutSets` (this module) and `minimalInvalidatingAssumptionSets` (`countermodel.ts`, D-195) call, so the two questions cannot disagree by drifting apart the way they once did. The decision domain's own adapter, `decisionCertificationStructure` in `src/decision/countermodels.ts`, uses this fold but is not wired into any product surface.
 
 ## Invariants
 

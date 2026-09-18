@@ -41,6 +41,8 @@ import { canonicalJson } from './serialization.ts';
 import { instant, intervalRelation, type Instant } from './time.ts';
 import { witness, type Witness } from './witness.ts';
 import { assessWitnessObligation } from './obligation.ts';
+import { analyzeDerivationChain } from './abstract.ts';
+import type { MonetaryBasisStatus } from './profile.ts';
 
 export type AppendResult = 'inserted' | 'duplicate';
 
@@ -674,6 +676,26 @@ export class EpistemicLedger {
       )) {
         monetaryDischarged = true;
       }
+    }
+
+    // THE CHAIN IS CHECKED HERE, AGAINST ITS LEAVES (D-222). The loop above
+    // compares each hop with its neighbour and nothing else, and on the money
+    // axis that reading is loose in one measured direction: `billed -> mixed`
+    // is a "free weakening" per step, and `claim-uses.ts` admits `mixed` to
+    // `request_metered_spend` because the metered builder writes it for "some
+    // list, some estimated" -- so a provider-billed figure re-labelled by a
+    // one-input derivation walked into the use built to keep it out. In two
+    // hops, `estimated -> mixed -> billed` needed only a witness naming
+    // `mixed -> billed`, which `witness()` accepts. `analyzeDerivationChain`
+    // was built for exactly this at D-151 and nothing called it; now every
+    // derivation is checked with the stored chain upstream of its inputs.
+    // What the leaf may say about its own evidence stays with
+    // `assertClaimWithinItsEvidence`; this bounds only what the chain ADDS.
+    if (item.inputClaimIds.length > 0) {
+      const chainWitnesses = unsupported.size === 0
+        ? item
+        : { ...item, witnesses: Object.freeze(item.witnesses.filter((entry) => !unsupported.has(entry.id))) };
+      this.assertChainWithinBound(chainWitnesses, output);
     }
 
     // THE OBLIGATION RAISED BY A DIRECT APPEND IS DISCHARGED HERE (D-192).
@@ -1409,6 +1431,86 @@ export class EpistemicLedger {
       targetBasis: target,
       reason: `declares monetary basis ${target} from cited evidence basis ${sourceBasis}; this direct strengthening requires a discharging monetary_rebasing witness`,
     });
+  }
+
+  /**
+   * Refuse a derivation whose conclusion, or any stored conclusion it rests
+   * on, is not below what its chain licenses (D-222).
+   *
+   * The chain is the candidate plus every stored derivation reachable
+   * upstream from its input claims, with each claim in between. Leaves are
+   * claims no stored derivation produces, taken at face value -- the deliberate
+   * edge `abstract.ts` declares. A stored step that does not hold taints
+   * everything downstream of it and the refusal names it: a ledger written
+   * before this gate can hold such a step, and the answer is not to trust it
+   * because it is on record.
+   *
+   * WHAT LIFTS THE MONEY AXIS. A `monetary_rebasing` witness carries no rung
+   * to lift to; it declares a pair, and that pair is passed to the analysis as
+   * the transition licensed for the step citing it -- only from a registered
+   * record that reads `supported` (D-190), on every step of the chain alike.
+   * D-201's per-source content check stays where it is; the chain applies the
+   * declaration only where the step's meet holds the `from` basis, which is
+   * what makes `mixed -> billed` insufficient for a leaf that was `estimated`.
+   */
+  private assertChainWithinBound(candidate: Derivation, output: Claim): void {
+    const producers = new Map<string, Derivation[]>();
+    const rows = this.db.prepare('SELECT derivation_id FROM epistemic_derivations ORDER BY derivation_id').all() as unknown as Array<{ derivation_id: string }>;
+    for (const stored of rows) {
+      if (stored.derivation_id === candidate.id) continue;
+      const step = this.readDerivation(stored.derivation_id);
+      if (step === null) throw new Error(`stored derivation ${stored.derivation_id} has no payload`);
+      const existing = producers.get(step.outputClaimId);
+      if (existing === undefined) producers.set(step.outputClaimId, [step]);
+      else existing.push(step);
+    }
+
+    const claims = new Map<string, Claim>([[output.id, output]]);
+    const derivations = new Map<string, Derivation>([[candidate.id, candidate]]);
+    const stepBasisTransitions = new Map<string, ReadonlyArray<readonly [MonetaryBasisStatus, MonetaryBasisStatus]>>();
+    stepBasisTransitions.set(candidate.id, this.declaredRebasings(candidate));
+    const queue = [...candidate.inputClaimIds];
+    while (queue.length > 0) {
+      const claimId = queue.pop() as string;
+      if (claims.has(claimId)) continue;
+      const item = this.readClaim(claimId);
+      if (item === null) throw new Error(`unknown input claim: ${claimId}`);
+      claims.set(claimId, item);
+      for (const step of producers.get(claimId) ?? []) {
+        if (derivations.has(step.id)) continue;
+        derivations.set(step.id, step);
+        stepBasisTransitions.set(step.id, this.declaredRebasings(step));
+        queue.push(...step.inputClaimIds);
+      }
+    }
+
+    const analysis = analyzeDerivationChain({
+      claims: [...claims.values()],
+      derivations: [...derivations.values()],
+      stepBasisTransitions,
+    });
+    if (analysis.withinBound) return;
+    const detail = analysis.violations
+      .map((found) => {
+        const where = found.derivationId === candidate.id
+          ? `concludes ${found.claimId}`
+          : `rests on ${found.claimId}, produced by stored derivation ${found.derivationId},`;
+        return `${where} above what its chain licenses: ${found.violations.map((axis) => axis.message).join('; ')}`;
+      })
+      .join('. ');
+    throw new Error(`derivation ${candidate.id} ${detail}`);
+  }
+
+  /** The re-basings a step's registered, supported `monetary_rebasing` witnesses declare. */
+  private declaredRebasings(step: Derivation): ReadonlyArray<readonly [MonetaryBasisStatus, MonetaryBasisStatus]> {
+    const declared: Array<readonly [MonetaryBasisStatus, MonetaryBasisStatus]> = [];
+    for (const reference of step.witnesses) {
+      if (reference.kind !== 'monetary_rebasing') continue;
+      const registered = this.readWitness(reference.id);
+      if (registered === null || registered.epistemic !== 'supported' || registered.basisChange === undefined) continue;
+      declared.push([registered.basisChange.from, registered.basisChange.to]);
+    }
+    return Object.freeze(declared);
   }
 
   private ensureKinds(ids: readonly string[], kind: DagNode['kind']): void {
