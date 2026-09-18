@@ -10,6 +10,8 @@
 import { createHash } from 'node:crypto';
 import { egressFetch, EgressError } from '../egress/transport.ts';
 import type { ProviderScopeDeclaration } from './scope.ts';
+import { OPENAI_COSTS_EXCLUDED_FLOOR } from './epistemic.ts';
+import type { ClaimUse } from '../epistemic/claim-uses.ts';
 import { readBoundedResponseBytes, ResourceLimitError } from '../util/resource-limits.ts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -36,7 +38,7 @@ export interface OpenAiCostsPreview {
   providerFinality: 'undocumented';
   rawRetention: 'digest_only';
   requestLedgerIncluded: false;
-  excludedFrom: readonly ['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations'];
+  excludedFrom: readonly ClaimUse[];
 }
 
 /** A single returned provider daily cost grouping. Amounts are never summed here. */
@@ -151,7 +153,7 @@ export function previewOpenAiCosts(scope: ProviderScopeDeclaration | null, from:
     providerFinality: 'undocumented',
     rawRetention: 'digest_only',
     requestLedgerIncluded: false,
-    excludedFrom: ['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations'],
+    excludedFrom: OPENAI_COSTS_EXCLUDED_FLOOR,
   };
 }
 

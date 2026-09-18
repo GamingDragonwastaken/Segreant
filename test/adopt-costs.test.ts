@@ -241,7 +241,8 @@ test('an adopted observation is stamped, and the stamp survives into the reconci
 
     // It is still never called clean, and still never feeds a control.
     assert.equal(result!.trust, 'scope_conditional_reconciliation');
-    assert.deepEqual(result!.excludedFrom, ['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations']);
+    // A partial-coverage comparison is also barred from attribution (D-228).
+    assert.deepEqual(result!.excludedFrom, ['request_metered_spend', 'budget_enforcement', 'outcome_attribution', 'roi', 'model_recommendations']);
 
     const recordedId = store.saveReconciliationRun(result!);
     const reread = store.reconciliationRuns(1)[0]!;

@@ -4,6 +4,8 @@ import { applyExactRate, exactRate } from '../economics/rate.ts';
 import { addMoney, compareMoney, ECONOMIC_BASES, money, moneyFromJson, moneyToJson, type EconomicBasis, type Money } from '../economics/money.ts';
 import { createHash } from 'node:crypto';
 import { canonicalJson } from '../epistemic/serialization.ts';
+import { barredUses, type ClaimUse } from '../epistemic/claim-uses.ts';
+import { claimProfile, type ClaimProfile } from '../epistemic/profile.ts';
 import {
   orderRules,
   matchesRow,
@@ -71,7 +73,58 @@ export interface ExactAllocationRunResult {
   readonly complete: boolean;
   readonly conserves: boolean;
   readonly trust: 'derived_allocation_of_exact_effective_charges';
-  readonly excludedFrom: readonly ['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations'];
+  /** `barredUses(exactAllocationClaimProfile(complete), EXACT_ALLOCATION_EXCLUDED_FLOOR)` (D-228). */
+  readonly excludedFrom: readonly ClaimUse[];
+}
+
+/**
+ * The uses an exact allocation bars in writing, whatever its profile: an
+ * allocated figure is a showback of local estimates, not the metered figure,
+ * not an enforcement input, not a return, and not a model comparison.
+ */
+export const EXACT_ALLOCATION_EXCLUDED_FLOOR: readonly ClaimUse[] = Object.freeze(['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations']);
+
+/**
+ * The profile `src/alloc/epistemic.ts` issues for a run, stated here so the
+ * run's own `excludedFrom` is derived from the same profile the kernel claim
+ * carries rather than from a list written beside it.
+ */
+export function exactAllocationClaimProfile(complete: boolean): ClaimProfile {
+  return claimProfile({
+    epistemic: 'supported',
+    integrity: 'verified',
+    authenticity: 'self_asserted',
+    scope: 'conditional',
+    coverage: complete ? 'complete' : 'partial',
+    measurement: 'proxy_unvalidated',
+    causality: 'none',
+    monetaryBasis: 'allocated',
+    finality: 'provisional',
+    decisionFitness: 'not_assessed',
+  });
+}
+
+function exactAllocationExcludedFrom(complete: boolean): readonly ClaimUse[] {
+  return barredUses(exactAllocationClaimProfile(complete), EXACT_ALLOCATION_EXCLUDED_FLOOR);
+}
+
+/**
+ * The one way to mark a result incomplete. `applyExactAllocation` allocates
+ * only the rows it was handed and cannot see the requests that resolved to
+ * none; the store discloses those here. The exclusions are re-derived from the
+ * resulting coverage, so a partial run bars `outcome_attribution` (D-228) —
+ * spreading `{ ...result, complete: false }` by hand kept the complete run's
+ * list and was refused by the validator, which is the point of the validator.
+ */
+export function withUnresolvedRequests(result: ExactAllocationRunResult, unresolvedRequestIds: readonly string[]): ExactAllocationRunResult {
+  const unresolved = Object.freeze([...new Set(unresolvedRequestIds)].sort());
+  const complete = unresolved.length === 0;
+  return Object.freeze({
+    ...result,
+    unresolvedRequestIds: unresolved,
+    complete,
+    excludedFrom: exactAllocationExcludedFrom(complete),
+  });
 }
 
 /** Immutable economic-period finalization that authorized one exact run. */
@@ -106,7 +159,6 @@ export function validateExactAllocationCloseBinding(
   }
 }
 
-const EXACT_EXCLUDED_FROM = ['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations'] as const;
 
 export interface SerializedExactAllocationRun {
   readonly kind: 'exact_allocation_run';
@@ -309,7 +361,8 @@ export function validateExactAllocationResult(value: ExactAllocationRunResult): 
   if (!Number.isSafeInteger(value.runAtMs)) throw new Error('exact allocation result runAt must be a safe timestamp');
   if (!Array.isArray(value.totalByIdentity) || !Array.isArray(value.allocatedByIdentity) || !Array.isArray(value.unallocatedByIdentity) || !Array.isArray(value.lines) || !Array.isArray(value.unallocated) || !Array.isArray(value.sourceBases) || !Array.isArray(value.unresolvedRequestIds) || !Array.isArray(value.excludedFrom)) throw new Error('exact allocation result arrays are malformed');
   if (value.trust !== 'derived_allocation_of_exact_effective_charges') throw new Error('exact allocation result trust is invalid');
-  if (value.excludedFrom.length !== EXACT_EXCLUDED_FROM.length || value.excludedFrom.some((item, index) => item !== EXACT_EXCLUDED_FROM[index])) throw new Error('exact allocation result excludedFrom is invalid');
+  const expectedExcluded = exactAllocationExcludedFrom(value.complete);
+  if (value.excludedFrom.length !== expectedExcluded.length || value.excludedFrom.some((item, index) => item !== expectedExcluded[index])) throw new Error('exact allocation result excludedFrom is invalid');
   if (typeof value.complete !== 'boolean' || typeof value.conserves !== 'boolean') throw new Error('exact allocation result status is invalid');
   if (!value.conserves) throw new Error('exact allocation result is not conserving');
   const unresolved = stringArray(value.unresolvedRequestIds, 'unresolvedRequestIds', true);
@@ -394,8 +447,10 @@ export function deserializeExactAllocationRun(record: SerializedExactAllocationR
   }));
   const unresolvedRequestIds = Object.freeze(stringArray(value.unresolvedRequestIds, 'unresolvedRequestIds', true));
   const excludedFrom = Object.freeze(stringArray(value.excludedFrom, 'excludedFrom', true));
-  if (excludedFrom.length !== 4 || excludedFrom.join('\u0000') !== ['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations'].join('\u0000')) throw new Error('exact allocation run excludedFrom is invalid');
   if (typeof value.complete !== 'boolean' || typeof value.conserves !== 'boolean' || value.trust !== 'derived_allocation_of_exact_effective_charges') throw new Error('exact allocation run status/trust is invalid');
+  // The stored list must be what this run's own profile and floor derive; a
+  // row that disagrees was written by something other than this module.
+  if (excludedFrom.join('\u0000') !== exactAllocationExcludedFrom(value.complete).join('\u0000')) throw new Error('exact allocation run excludedFrom is invalid');
   if (value.complete !== (unresolvedRequestIds.length === 0)) throw new Error('exact allocation run completeness disagrees with unresolved requests');
   if (!value.conserves) throw new Error('exact allocation run is not conserving');
   const periodStartMs = safeInteger(value.periodStartMs, 'periodStartMs');
@@ -415,7 +470,7 @@ export function deserializeExactAllocationRun(record: SerializedExactAllocationR
     complete: value.complete,
     conserves: value.conserves,
     trust: 'derived_allocation_of_exact_effective_charges',
-    excludedFrom: EXACT_EXCLUDED_FROM,
+    excludedFrom: exactAllocationExcludedFrom(value.complete),
   });
   validateExactAllocationResult(result);
   return result;
@@ -717,6 +772,6 @@ export function applyExactAllocation(input: {
     complete: true,
     conserves,
     trust: 'derived_allocation_of_exact_effective_charges',
-    excludedFrom: ['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations'] as const,
+    excludedFrom: exactAllocationExcludedFrom(true),
   });
 }

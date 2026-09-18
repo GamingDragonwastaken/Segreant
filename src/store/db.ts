@@ -2490,11 +2490,7 @@ export class Store {
       periodEndMs,
       runAtMs,
     });
-    return Object.freeze({
-      ...result,
-      unresolvedRequestIds: Object.freeze(unresolvedRequestIds.sort()),
-      complete: unresolvedRequestIds.length === 0,
-    });
+    return exactAllocation.withUnresolvedRequests(result, unresolvedRequestIds);
   }
 
   /** Persist an exact allocation projection as a canonical append-only record. */

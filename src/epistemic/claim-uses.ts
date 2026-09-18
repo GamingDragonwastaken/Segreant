@@ -37,7 +37,8 @@
  * `compareForUse` on axes the use does not turn on. See the entry.
  */
 
-import { useRequirement, type UseRequirement } from './admissibility.ts';
+import { admits, useRequirement, type UseRequirement } from './admissibility.ts';
+import type { ClaimProfile } from './profile.ts';
 
 /**
  * Every use any surface in this repository bars a figure from. The union of the
@@ -190,4 +191,28 @@ export const STATED_USES: readonly ClaimUse[] = Object.freeze(
 /** Is this one of the declared uses? Used to catch a name no registry knows. */
 export function isClaimUse(value: string): value is ClaimUse {
   return (CLAIM_USES as readonly string[]).includes(value);
+}
+
+/**
+ * Every use `admits` refuses this profile, in vocabulary order. An unstated
+ * use (`roi`) is refused, because an unstated requirement is not a passed one.
+ */
+export function excludedUsesFor(profile: ClaimProfile): readonly ClaimUse[] {
+  return Object.freeze(CLAIM_USES.filter((use) => !admits(profile, USE_REQUIREMENTS[use]).admitted));
+}
+
+/**
+ * What a surface bars a figure from: the uses it bars IN WRITING (`floor` — a
+ * definitional bar the profile cannot express, such as a `mixed` comparison
+ * being neither the metered figure nor the enforcement figure) united with
+ * every use the vocabulary refuses the profile the surface's kernel adapter
+ * issues (D-228). Both sides can only add a bar; nothing here removes one.
+ * Returned in vocabulary order so a persisted list is canonical.
+ */
+export function barredUses(profile: ClaimProfile, floor: readonly ClaimUse[]): readonly ClaimUse[] {
+  for (const use of floor) {
+    if (!isClaimUse(use)) throw new Error(`excludedFrom floor names a use no registry declares: ${String(use)}`);
+  }
+  const refused = new Set<ClaimUse>([...floor, ...excludedUsesFor(profile)]);
+  return Object.freeze(CLAIM_USES.filter((use) => refused.has(use)));
 }

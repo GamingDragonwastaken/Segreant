@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyExactAllocation, type ExactAllocatableRow } from '../src/alloc/exact.ts';
+import { applyExactAllocation, withUnresolvedRequests, type ExactAllocatableRow } from '../src/alloc/exact.ts';
 import { type AllocationRule, type CostCentre } from '../src/alloc/rules.ts';
 import { economicEvent } from '../src/economics/events.ts';
 import { priceCorrectionEvent } from '../src/economics/corrections.ts';
@@ -79,7 +79,7 @@ test('incomplete exact allocation remains a partial kernel claim, not an exact c
       rules: [], costCentres: [], periodStartMs: 0, periodEndMs: 100, runAtMs: 100,
     });
     closeAllocationPeriod(store);
-    const runId = store.saveExactAllocationRun({ ...result, complete: false, unresolvedRequestIds: ['legacy-request'] }, 200);
+    const runId = store.saveExactAllocationRun(withUnresolvedRequests(result, ['legacy-request']), 200);
     const claim = store.epistemic().readClaim(`claim:economic:allocation:${runId}`)!;
     assert.equal(claim.profile.coverage, 'partial');
     assert.equal((claim.proposition.value as { result: { unresolvedRequestIds: string[] } }).result.unresolvedRequestIds[0], 'legacy-request');

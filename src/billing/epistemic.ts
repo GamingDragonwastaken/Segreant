@@ -17,7 +17,8 @@ import { grain } from '../epistemic/grain.ts';
 import { scope } from '../epistemic/scope.ts';
 import { instant, interval, type Instant } from '../epistemic/time.ts';
 import { addMoney, compareMoney, money, moneyToJson, type EconomicBasis, type Money } from '../economics/money.ts';
-import type { ReconciliationRun } from './reconcile.ts';
+import { reconciliationClaimProfile, type ReconciliationRun } from './reconcile.ts';
+import type { ClaimUse } from '../epistemic/claim-uses.ts';
 import type { BillingEvidenceRecord, BillingImportRun, OpenAiCostsObservationLine, OpenAiCostsObservationRun } from '../store/billing.ts';
 
 export interface BillingKernelIssuanceInput {
@@ -367,11 +368,18 @@ function openAiScope(run: OpenAiCostsObservationRun) {
   });
 }
 
-function openAiProfile(run: OpenAiCostsObservationRun) {
+/**
+ * The uses an OpenAI Costs observation bars in writing. `test/claim-uses-operative.test.ts`
+ * checks the floor is at least what the vocabulary refuses the issued profile.
+ */
+export const OPENAI_COSTS_EXCLUDED_FLOOR: readonly ClaimUse[] = Object.freeze(['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations']);
+
+/** The profile issued for an observation of the given source kind. */
+export function openAiCostsClaimProfile(sourceKind: OpenAiCostsObservationRun['sourceKind']) {
   return claimProfile({
     epistemic: 'supported',
     integrity: 'verified',
-    authenticity: openAiAuthenticity(run.sourceKind),
+    authenticity: openAiAuthenticity(sourceKind),
     scope: 'conditional',
     coverage: 'complete',
     measurement: 'proxy_unvalidated',
@@ -380,6 +388,10 @@ function openAiProfile(run: OpenAiCostsObservationRun) {
     finality: 'provisional',
     decisionFitness: 'not_assessed',
   });
+}
+
+function openAiProfile(run: OpenAiCostsObservationRun) {
+  return openAiCostsClaimProfile(run.sourceKind);
 }
 
 function validateOpenAiRun(run: OpenAiCostsObservationRun): void {
@@ -665,12 +677,10 @@ export function billingReconciliationClaim(input: BillingReconciliationClaimInpu
     grain: grain(['provider_project_period']),
     time: { validTime, asOf: issuedAt },
     epistemic: 'supported',
-    profile: claimProfile({
-      // The derived comparison itself is a Fiscus assertion even when its
-      // provider-side input was fetched from an authenticated endpoint.
-      epistemic: 'supported', integrity: 'verified', authenticity: 'self_asserted', scope: 'conditional', coverage: 'partial', measurement: 'proxy_unvalidated',
-      causality: 'none', monetaryBasis: 'mixed', finality: 'provisional', decisionFitness: 'not_assessed',
-    }),
+    // The derived comparison itself is a Fiscus assertion even when its
+    // provider-side input was fetched from an authenticated endpoint. The same
+    // profile the run's `excludedFrom` was derived from (D-228).
+    profile: reconciliationClaimProfile(),
     measurementModelRef: null,
     evidenceIds: [...input.evidenceIds],
     derivationRule: 'billing.reconciliation.v1',

@@ -36,6 +36,8 @@
 
 import { usdMicros, formatUsdMicros } from './types.ts';
 import { formatMoneyAmount } from '../economics/money.ts';
+import { barredUses, type ClaimUse } from '../epistemic/claim-uses.ts';
+import { claimProfile, type ClaimProfile } from '../epistemic/profile.ts';
 import type { OpenAiCostsObservationLine, OpenAiCostsObservationRun, RequestRow } from '../store/db.ts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -185,7 +187,29 @@ export interface ReconciliationRun {
   /** Permanent limits of this result. They are conditions, not defects. */
   conditions: readonly ReconciliationCondition[];
   trust: 'scope_conditional_reconciliation';
-  excludedFrom: readonly ['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations'];
+  /** `barredUses(reconciliationClaimProfile(), RECONCILIATION_EXCLUDED_FLOOR)` (D-228). */
+  excludedFrom: readonly ClaimUse[];
+}
+
+/**
+ * The uses a reconciliation bars in writing. Its profile carries
+ * `monetaryBasis: mixed`, and the vocabulary ADMITS `mixed` to the two
+ * definitional uses because the metered path also emits it when some requests
+ * were estimated — so for this surface the floor is stricter than `admits`,
+ * and it stays: a billed-against-metered comparison is neither figure.
+ */
+export const RECONCILIATION_EXCLUDED_FLOOR: readonly ClaimUse[] = Object.freeze(['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations']);
+
+/**
+ * The profile `src/billing/epistemic.ts` issues for a reconciliation claim.
+ * Constant by construction: every reconciliation is a partial-coverage,
+ * mixed-basis comparison (D-115), so the derived exclusions are constant too.
+ */
+export function reconciliationClaimProfile(): ClaimProfile {
+  return claimProfile({
+    epistemic: 'supported', integrity: 'verified', authenticity: 'self_asserted', scope: 'conditional', coverage: 'partial', measurement: 'proxy_unvalidated',
+    causality: 'none', monetaryBasis: 'mixed', finality: 'provisional', decisionFitness: 'not_assessed',
+  });
 }
 
 /**
@@ -519,7 +543,7 @@ export function reconcileOpenAiCosts(input: {
       ...(truncatedByRetention ? ['local_ledger_truncated_by_retention' as const] : []),
     ],
     trust: 'scope_conditional_reconciliation',
-    excludedFrom: ['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations'],
+    excludedFrom: barredUses(reconciliationClaimProfile(), RECONCILIATION_EXCLUDED_FLOOR),
   };
 }
 

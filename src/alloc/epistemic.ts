@@ -6,13 +6,12 @@
 
 import { claim, type Claim } from '../epistemic/claim.ts';
 import { evidence, type Evidence } from '../epistemic/evidence.ts';
-import { claimProfile } from '../epistemic/profile.ts';
 import { grain } from '../epistemic/grain.ts';
 import { scope } from '../epistemic/scope.ts';
 import { instant, interval } from '../epistemic/time.ts';
 import { canonicalPeriod } from '../economics/close.ts';
 import { ECONOMIC_BASES, type EconomicBasis } from '../economics/money.ts';
-import { exactAllocationToJson, serializeExactAllocationRun, validateExactAllocationResult, type ExactAllocationRunResult } from './exact.ts';
+import { exactAllocationClaimProfile, exactAllocationToJson, serializeExactAllocationRun, validateExactAllocationResult, type ExactAllocationRunResult } from './exact.ts';
 
 export type AllocationKernelAppendResult = 'inserted' | 'duplicate';
 
@@ -146,18 +145,8 @@ export function buildExactAllocationKernelIssuance(allocationRunId: string, resu
     grain: grain(['economic_period', 'cost_centre']),
     time: { validTime, asOf: computed },
     epistemic: 'supported',
-    profile: claimProfile({
-      epistemic: 'supported',
-      integrity: 'verified',
-      authenticity: 'self_asserted',
-      scope: 'conditional',
-      coverage,
-      measurement: 'proxy_unvalidated',
-      causality: 'none',
-      monetaryBasis: 'allocated',
-      finality: 'provisional',
-      decisionFitness: 'not_assessed',
-    }),
+    // The same profile the run's `excludedFrom` was derived from (D-228).
+    profile: exactAllocationClaimProfile(result.complete),
     measurementModelRef: null,
     evidenceIds: [evidenceValue.id],
     derivationRule: 'economic.allocation.v1',

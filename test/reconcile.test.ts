@@ -315,7 +315,8 @@ test('reconcile: every result carries the conditions it can never discharge', ()
     'provider_line_items_do_not_join_to_requests_or_models',
     'local_request_amounts_are_rate_card_estimates',
   ]);
-  assert.deepEqual([...result.excludedFrom], ['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations']);
+  // The floor plus what the vocabulary refuses a partial-coverage profile (D-228).
+  assert.deepEqual([...result.excludedFrom], ['request_metered_spend', 'budget_enforcement', 'outcome_attribution', 'roi', 'model_recommendations']);
 });
 
 test('reconcile: provider amounts are summed exactly, never through a float', () => {

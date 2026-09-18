@@ -18,6 +18,7 @@
 import type http from 'node:http';
 import { reconciliationReadiness } from '../billing/readiness.ts';
 import { CLAIM_USES } from '../epistemic/claim-uses.ts';
+import { EXACT_ALLOCATION_EXCLUDED_FLOOR } from '../alloc/exact.ts';
 import { existsSync, statSync } from 'node:fs';
 import type { Store } from '../store/db.ts';
 import {
@@ -567,12 +568,8 @@ export function handleAllocation({ res, store }: RouteContext): void {
       trust: 'derived_allocation_of_local_estimates',
       /** Showback, never chargeback: a chargeback implies a settlement this product does not have. */
       basis: 'showback_only',
-      excludedFrom: [
-        'request_metered_spend',
-        'budget_enforcement',
-        'roi',
-        'model_recommendations',
-      ],
+      // The surface-level floor; each run carries its own derived list (D-228).
+      excludedFrom: [...EXACT_ALLOCATION_EXCLUDED_FLOOR],
       costCentres,
       rules: store.allocationRules(),
       runs: allocationRuns,
