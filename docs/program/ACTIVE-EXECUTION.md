@@ -7,14 +7,14 @@
 | | |
 | --- | --- |
 | Branch | `gpt56/magnum-opus-reconstruction` — never `main`, never force-pushed |
-| Last CI-verified exact head | `760f5072eb2fd209e953043caf82becb71d8aa10` — run `35055951384`, **success on all eight configured jobs**, inspected job by job on 2026-09-16. |
-| Code ahead of that head | None. The canonical checkout's prior-base C01 work is preserved on `salvage/local-c01-export` and has not been replayed blindly. |
-| Local gates on the current tree | The integrated Luna tranche's focused suite is **26/26**, root/browser/team TypeScript typechecks and build pass, and exact-head GitHub Actions run `35055951384` is **success on all eight jobs**. |
+| Last CI-verified exact head | `5fec522313a31336571e2acb4336033cf508e57a` — run `35376323130`, **success on all eight configured jobs**, inspected job by job on 2026-09-18. |
+| Code ahead of that head | D-226..D-230 (`50d6a00`, `ad6081e`, `ad03f01`, `3f30b38`, `080b2a2`, `bda3706`) — this tranche; its exact-head CI row is PENDING until the run at the pushed head is observed. |
+| Local gates on the current tree | Root suite **2041/2042 at `3f30b38`** with the one failure (parity map) closed at `080b2a2`; the D-230 neighbourhood 178/178 and contract gates 16/16 after it; root, browser and team-server typecheck; team-server suite 130/130; full-suite rerun at the pushed head recorded below when observed. |
 | Dossier source | `FISCUS_EXECUTION_DOSSIER_III.md` is **not in this checkout and not in git history** — it was an owner-supplied input. `docs/program/PACKET-INVENTORY.md` is the surviving mechanical enumeration of all 76 packets and is authoritative here. Do not re-derive a packet count from anything else. |
 
 ## Packet accounting
 
-76 packets. **24 COMPLETED, 36 PARTIAL, 15 NOT_STARTED, 0 IN_PROGRESS, 1 BLOCKED_EXTERNAL, 0 SUPERSEDED.** Regenerate rather than trust this line:
+76 packets. **28 COMPLETED, 32 PARTIAL, 15 NOT_STARTED, 0 IN_PROGRESS, 1 BLOCKED_EXTERNAL, 0 SUPERSEDED.** Regenerate rather than trust this line:
 
 ```bash
 grep -oE '\| `(NOT_STARTED|IN_PROGRESS|PARTIAL|COMPLETED|BLOCKED_EXTERNAL|SUPERSEDED_WITH_REASON)` \|' docs/program/PACKET-INVENTORY.md | sort | uniq -c
