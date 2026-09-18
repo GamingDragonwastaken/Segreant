@@ -47,6 +47,7 @@ const anOverview = (costUsd: number, requests: number): Overview => ({
 
 const aBilling = (recordCount: number, runs: ReconciliationRunRecord[] = []): BillingPayload => ({
   demo: false,
+  asOf: null,
   claimSupport: billedClaimSupport({ recordCount, runCount: runs.length, latest: runs[0]?.result ?? null }),
   evidence: { reconciliationStatus: 'not_reconciled' },
   summary: { recordCount },
