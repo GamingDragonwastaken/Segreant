@@ -128,6 +128,8 @@ function cmdHelp(): void {
     receipt --repo <path> Emit signed, verifiable value receipts (--unit <hash>, --json)
                           Publish identity:  receipt --pubkey
                           Verify + pin signer: receipt --verify <file> --key-id <id>
+                          Reconcile against this ledger: receipt --reconcile <file>
+                          [--as-of <instant>] — agrees / ledger moved / disagrees
     yield --repo <path>   Artifact persistence (legacy yield lens): retained introduced
                           lines per $ — retention and non-retention (--window DAYS,
                           --limit N, --json)

@@ -54,7 +54,11 @@
   canonical effective Money/source/correction lineage; incomplete or oversized
   numeric projections stay on receipt v1. A valid signature proves integrity of
   the signed bytes, not provider authority, causal truth, or completeness beyond
-  the v2 semantic checks.
+  the v2 semantic checks. A v2 body can also be reconciled against the economic
+  ledger it was signed over (`receiptReconciliation.ts`, D-231): `agrees`,
+  `ledger_moved` (a correction retained after signing), `disagrees`, or
+  `not_reconcilable` (a v1 body, or another ledger's events), read live or as
+  of an instant; `requestCount` and the signature are stated as not checked.
 
 - Exact-covered project values can travel through signed team-rollup v2 bodies
   carrying the same canonical effective/source lineage. The team server keeps

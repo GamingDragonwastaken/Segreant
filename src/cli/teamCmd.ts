@@ -34,6 +34,8 @@ import { judgeSessionFromStore } from '../judge/orchestrate.ts';
 import { C, color, usd, pct, printNotAGitRepo, printJson } from './ui.ts';
 import { type Flags } from './flags.ts';
 import { readBoundedUtf8File, RESOURCE_LIMITS } from '../util/resource-limits.ts';
+import { reconcileReceiptWithLedger } from '../value/receiptReconciliation.ts';
+import { instant } from '../epistemic/time.ts';
 
 export async function cmdTeam(flags: Flags): Promise<void> {
   const cfg = loadConfig();
@@ -136,6 +138,57 @@ export async function cmdReceipt(flags: Flags): Promise<void> {
     console.log(color(tty, C.gray, '  A buyer/auditor verifies your receipts against this identity with:'));
     console.log(color(tty, C.gray, `    fiscus receipt --verify <file> --key-id ${keys.keyId}`));
     console.log('');
+    return;
+  }
+
+  // Reconcile a receipt against THIS machine's economic ledger (D-231): does
+  // the ledger still say what the receipt says? Integrity is `--verify`'s
+  // question and is not asked here; the two are printed as separate outcomes
+  // by design, so a receipt can be intact and stale, or tampered and matching.
+  if (flags.reconcile) {
+    const file = String(flags.reconcile);
+    let receipt: SignedReceipt;
+    try {
+      receipt = JSON.parse(readBoundedUtf8File(file, RESOURCE_LIMITS.receiptBytes, 'receipt_bytes')) as SignedReceipt;
+    } catch (e) {
+      console.error(`  Could not read receipt: ${String(e)}`);
+      process.exitCode = 1;
+      return;
+    }
+    let asOf: string | undefined;
+    if (typeof flags['as-of'] === 'string') {
+      try {
+        asOf = instant(flags['as-of']);
+      } catch (e) {
+        console.error(`  --as-of must be a canonical UTC ISO-8601 instant: ${e instanceof Error ? e.message : String(e)}`);
+        process.exitCode = 1;
+        return;
+      }
+    }
+    const store = new Store(dbPath());
+    try {
+      const outcome = reconcileReceiptWithLedger(receipt.body, store.economic(), asOf);
+      if (outcome.status !== 'agrees') process.exitCode = 1;
+      if (flags.json) { printJson({ unit: receipt.body.unit, ...outcome }); return; }
+      console.log('');
+      console.log(`  Receipt for unit ${receipt.body.unit.slice(0, 7)} against this ledger${asOf === undefined ? '' : ` as of ${asOf}`}`);
+      const line = outcome.status === 'agrees'
+        ? color(tty, C.green, '  ✓ AGREES — the ledger still says what the receipt says')
+        : outcome.status === 'ledger_moved'
+          ? color(tty, C.yellow, '  ! LEDGER MOVED — true when signed; corrections since changed the effective amount')
+          : outcome.status === 'disagrees'
+            ? color(tty, C.red, '  ✗ DISAGREES — the ledger does not support the receipt')
+            : color(tty, C.yellow, '  ? NOT RECONCILABLE — this ledger cannot answer for this receipt');
+      console.log(line);
+      console.log(`  Receipt       ${outcome.receiptAmountText ?? '—'}`);
+      console.log(`  Ledger        ${outcome.ledgerAmountText ?? '—'}`);
+      for (const reason of outcome.reasons) console.log(`  - ${reason}`);
+      for (const item of outcome.notChecked) console.log(color(tty, C.gray, `  not checked: ${item}`));
+      console.log(color(tty, C.gray, '  Integrity and signer are a separate question: fiscus receipt --verify <file>'));
+      console.log('');
+    } finally {
+      store.close();
+    }
     return;
   }
 
