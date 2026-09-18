@@ -3285,3 +3285,38 @@ typechecks and build pass. Canonical integration is `41baf80` plus `760f507`.
 
 **Limitation:** This is a continuity and precondition artifact, not a Complexity
 Lab implementation, calibration result, decision feature or production route.
+
+## D-220 — the decision engine reached no operator, so the budget cap became its first decision
+**Problem.** `certifyDecision`, `minimaxRegret`, the countermodels, the kernel adapter and the assurance gate were each built and reached by nothing (WP-F05/F02/R08/R07/B04). `recommendBudget` proposed a cap beside a comment saying decisions belong to `src/decision/`.
+**Counterexample.** `fiscus budget --recommend` printed a cap with no statement of the alternative, the objective, or whether choosing it was certified; `--apply` was refused wholesale (D-213) with no way to become permitted.
+**Fix.** `src/budget/capDecision.ts`: `apply_recommended` vs `keep_current` under one declared objective (net well-landed spend), utility intervals that refuse to assume which days' spend realized, the certificate, the regret pick (rendered as a selection rule, never dominance), the invalidating assumption sets, and the derived DAL. `--apply` is honoured only for a certified decision at the required level and otherwise refused with the observed level, standing and reasons; a certified apply persists a `no_action` bundle so a later withdrawal shows on read via `pendingInvalidationBy`. Issuance map: both decision boundaries `unreached` → `product`.
+**Verification.** Focused 14/14; decision/budget/value/contract neighbourhood 151/151; root and browser tsc. Commit `6dbb05a`.
+**Limitation.** The display path reads the bare certificate, not a kernel-checked claim (engine row stays `unmigrated_authority`); the frontier and other advisory surfaces still bypass the module; nothing evaluates whether the declared input set is complete.
+
+## D-221 — the decision adapter wrote axes its cited evidence could not support
+**Problem.** `src/decision/epistemic.ts` wrote `verified` / `self_asserted` / `complete` on both of its claims regardless of the evidence cited.
+**Counterexample.** A preview over `integrity: 'unknown'` source evidence built records the ledger's weakest-cited-evidence ceiling (R05) then refused at commit — preview and commit disagreed. RED 2/3.
+**Fix.** The adapter computes the same ceiling where the records are built (`evidenceBoundedAxes`); nothing is raised. GREEN 3/3. Commit `6dbb05a`.
+**Limitation.** The ceiling is the ledger's rule applied early, not a new rule.
+
+## D-222 — a derivation was checked against its neighbour and never against its leaves
+**Problem.** `analyzeDerivationChain` (D-151) bounded what a whole chain licenses and had no caller; `appendDerivationWithinTransaction` ran only the per-step legality check.
+**Counterexample.** `estimated → mixed → billed` in two hops needed only a witness naming `mixed → billed`; `claim-uses.ts` admits `mixed` to `request_metered_spend`, so a provider-billed figure walked into the use built to keep it out. RED 3/7.
+**Fix.** The append walks every stored derivation upstream of the candidate's inputs back to the leaves and checks the whole chain; a step's registered supported `monetary_rebasing` witness is passed as the transition licensed for that step alone; a stored step that does not hold taints everything downstream and the refusal names it. `src/epistemic/CONTEXT.md` corrected (pre-D-152 paragraph; D-195 exports). GREEN 7/7; epistemic/causal/decision neighbourhood 465/465. Commit `41d9b6b`.
+**Limitation.** Leaves are taken at face value; a witness lifts its axis to the top, so the bound is only as tight as the witness discipline.
+
+## D-223 — jose verifies the signature; parsing, keys and claims stay local and are tested adversarially
+**Problem.** WP-H02's production decision between the hand-rolled verifier and a mature library was open; the owner authorized `jose` inside team-server only.
+**Counterexample.** The adversarial matrix, run against the pre-packet verifier, failed 4/43: an RSA modulus below 2048 bits verified a genuine signature; a present-but-empty or non-string `kid` was coerced to "no kid" and widened the candidate set to every key; the discovery document's own `issuer` was never compared with the configured one.
+**Fix.** `compactVerify` + `importJWK` (jose 6.2.12, exact-pinned, registry.npmjs.org, sha512, zero transitive deps) replace the node:crypto loop; canonical base64url, the RS256/ES256 allowlist, JWKS discovery (issuer must match), caching and cooldown, JWK metadata reconciliation (D-209), every-candidate-tried, and all claim rules stay in `oidc.ts`; the three defects are closed. `test/oidc-adversarial.test.ts`: 43 tests, one per dossier bullet minimum, each stating RED/old or its mutant. Team-server 130/130. Commit `5300826`.
+**Limitation.** Provider validation against a live IdP and deployment policy are operational, outside the repository.
+
+## D-224 — a measurement model reference was checked for presence, never for resolution
+**Problem.** `claim()` refuses a null `measurementModelRef` above `proxy_unvalidated` and D-168 refuses a ref no cited evidence declares; neither checks the reference names a model (WP-D05/D07).
+**Counterexample.** A direct claim asserting `proxy_validated` citing `model:does-not-exist`, or a model validated for another construct, or one whose declared validation is below the rung: accepted. RED 4/8.
+**Fix.** `EpistemicLedger` takes a `MeasurementRegistry`; the direct-claim floor resolves through `assessMeasurementBacking` (registered, `targetConstruct` = proposition predicate, validation ≥ asserted rung). No registry means the empty one, which refuses every direct claim above the bottom rung — the ledger `Store` builds today; no production issuer writes such a claim. INSERT-only; nothing is upgraded or backfilled. GREEN 8/8; neighbourhood 604/604. Commit `71ae55f`.
+**Limitation.** `Evidence` still records which model, never how validated, so there is no evidence-side ceiling; no caller supplies `asOf` to the D07 bridge window yet.
+
+## D-225 — the repository-side launch set exists and what it points at is checked
+**Decision.** CONTRIBUTING, GOVERNANCE, SECURITY (no address; reporting via GitHub private reporting or the maintainer), THREAT-MODEL, RELEASE-PROCESS, COMPATIBILITY, SUPPORT, NEUTRALITY and a dated NAME-COLLISION-REVIEW (bare name already on npm as `fiscus@0.0.0`, 2026-07-23; five near names free; 101 GitHub repositories, none above single-digit stars; no rename recommendation — owner-reserved). `test/launch-readiness-docs.test.ts` checks existence, every path reference by suffix against `git ls-files`, every `fiscus <verb>` against dispatch, no e-mail in SECURITY.md, README links; shown able to fail. `documentation-commands` caught `npm view fiscus time --json` as a copyable `fiscus time`; the span was reworded. Commit `431eba9`.
+**Limitation.** Prose claims are unchecked; release, publish, tag, rename, license and brand remain owner actions (WP-J07 repository side only).

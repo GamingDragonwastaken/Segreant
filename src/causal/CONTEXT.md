@@ -81,3 +81,11 @@ node --test --experimental-strip-types test/causal-inference-ledger.test.ts
 node --test --experimental-strip-types test/causal-precision.test.ts
 node --test --experimental-strip-types test/causal-measurement-backing.test.ts
 ```
+
+## Does not establish
+
+The sequential lane is standalone: nothing calls `sequential.ts` from a
+product path — no store persistence, CLI action or dashboard route reaches
+it — so its registered-look discipline is proven by its own tests and by
+nothing an operator can run (WP-E07 remainder). A sequential result that
+exists only in a test has not been reported to anyone.
