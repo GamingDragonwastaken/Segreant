@@ -259,6 +259,10 @@ fiscus pack export --out <file>
                                 <file> [--trust <key>] and pack inspect <file>
                                 check the bytes and read the manifest — truth is
                                 never evaluated
+fiscus plugin run --manifest <file> --request <file> --exec <path> --scope k=v
+                                One bounded exchange with a plugin process; preview
+                                the kernel Evidence it would append (self-asserted,
+                                completeness unknown), --apply to append it
 fiscus restore --from <file> --out <file>
                                 Preview a snapshot, or create a new verified
                                 database with --apply (never overwrites the active ledger)

@@ -17,6 +17,14 @@
 - `runPluginProcess` binds the returned evidence to the active request ID,
   scrubs the child environment, and refuses capabilities that need unsupported
   OS-level restrictions.
+- `intake.ts` is the one bridge into the kernel (D-234): each record of a
+  hosted output becomes an `Evidence` envelope under
+  `plugin:<id>@<version>`, with `integrity` `verified` only when a carried
+  `payloadHash` matches the payload, `authenticity` `self_asserted`, and
+  `completeness` `unknown`; nothing is raised by category or manifest. The
+  envelope is a pure function of the output and the caller's declared scope,
+  so a re-run is a `duplicate`; a record changed under the same id is a
+  conflict that refuses the whole batch before anything is written.
 
 ## Invariants
 
@@ -35,5 +43,6 @@
 ```bash
 node --test --experimental-strip-types test/plugins-contract.test.ts test/plugins-isolation.test.ts
 node --test --experimental-strip-types test/plugins-host.test.ts
+node --test --experimental-strip-types test/plugins-intake.test.ts
 node ./node_modules/typescript/bin/tsc --noEmit -p tsconfig.json
 ```

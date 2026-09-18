@@ -245,6 +245,10 @@ export const CAPABILITIES: readonly Capability[] = [
     id: 'pack', label: 'Export a verifiable record bundle', plain: 'Write the kernel records as a signed, digest-bound file another machine can check without trusting this one. Truth is never evaluated.',
     territory: 'data', consequence: 'local', coverage: 'planned', command: 'fiscus pack export --out <file>',
   },
+  {
+    id: 'plugin', label: 'Run a plugin exchange', plain: 'One bounded exchange with a plugin process; what it reports is recorded as what it said, never as more.',
+    territory: 'data', consequence: 'local', coverage: 'planned', command: 'fiscus plugin run --manifest <file> --request <file> --exec <path> --scope <key=value>',
+  },
 ];
 
 type CapabilityMetadata = Omit<CapabilitySpec, keyof Capability>;

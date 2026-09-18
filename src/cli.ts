@@ -30,6 +30,7 @@ import { cmdStart, cmdDemo, cmdPricing, cmdBaseline, cmdReprice } from './cli/ru
 import { cmdBackup, cmdRestore } from './cli/backupCmd.ts';
 import { cmdDiagnostics } from './cli/diagnosticsCmd.ts';
 import { cmdPack } from './cli/packCmd.ts';
+import { cmdPlugin } from './cli/pluginCmd.ts';
 import { cmdEconomic } from './cli/economicCmd.ts';
 
 function cmdHelp(): void {
@@ -187,6 +188,9 @@ function cmdHelp(): void {
     pack verify <file>    Check a pack's bytes: integrity, authenticity (only with
                           --trust <public-key>), truth never evaluated
     pack inspect <file>   Print what a pack's manifest says, evaluating nothing
+    plugin run --manifest <file> --request <file> --exec <path> --scope k=v
+                          One bounded exchange with a plugin process; preview the
+                          kernel Evidence it would append, --apply to append it
     diagnostics [--json]   Emit redacted local runtime/database/egress diagnostics
                           (--out <file> writes an atomic bundle; no telemetry)
     demo                  Generate isolated, clearly-labeled synthetic data so every
@@ -377,6 +381,9 @@ async function main(): Promise<void> {
       break;
     case 'pack':
       cmdPack(flags);
+      break;
+    case 'plugin':
+      await cmdPlugin(flags);
       break;
     case 'diagnostics':
     case 'diagnostic':
