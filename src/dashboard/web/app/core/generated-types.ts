@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-/** Source SHA-256: 69b3c34a1aad83c29115b8fab756c72a8bf73b7610a31e878c56a9b6da204f4c */
+/** Source SHA-256: 2b35c8d6259aaeb7639187b3993ea2472a6f3e09d8da1a5f6062adc496c9aed2 */
 /**
  * Canonical no-runtime dashboard payload types shared by server contracts and
  * the browser client. Edit this file first; the build generates the browser copy
@@ -364,6 +364,34 @@ export interface BillingKernelClaimSummary {
   issuedAt: string;
   monetaryBasis: string;
   finality: string;
+}
+
+/**
+ * One kernel node with its neighbourhood, as `/api/kernel?node=<id>[&asOf=]`
+ * serves it (D-257). `found: false` means the node does not exist or was not
+ * yet available at `asOf` — a hindsight-safe read gives the two the same
+ * answer. Payloads of billing evidence are withheld and say so.
+ */
+export interface KernelNodePayload {
+  found: boolean;
+  id: string;
+  asOf: string | null;
+  node: { id: string; kind: string; availableAt: string; epistemic: string; supersedes: string[] } | null;
+  revoked: boolean;
+  record: unknown;
+  restsOn: Array<{ from: string; to: string; relation: string }>;
+  supports: Array<{ from: string; to: string; relation: string }>;
+  derivations: Array<{
+    id: string;
+    transformation: string;
+    inputEvidenceIds: string[];
+    inputClaimIds: string[];
+    witnessIds: string[];
+    assumptions: string[];
+    uncertaintyTransformation: string | null;
+  }>;
+  assumptions: string[];
+  graphSize: { nodes: number; edges: number };
 }
 
 export interface BillingPayload {

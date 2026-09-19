@@ -850,6 +850,19 @@ export class EpistemicLedger {
     }
   }
 
+  /**
+   * Every derivation whose output is `claimId`, validated on read (D-257). A
+   * derivation is not a DAG node — it is the record behind the `derives`,
+   * `depends_on` and `witnesses` edges into its output — so a viewer that
+   * wants the assumptions a claim was derived under reads them here.
+   */
+  derivationsForClaim(claimId: string): readonly Derivation[] {
+    const rows = this.db
+      .prepare("SELECT derivation_id AS id FROM epistemic_derivations WHERE json_extract(derivation_json, '$.outputClaimId') = ? ORDER BY derivation_id")
+      .all(claimId) as Array<{ id: string }>;
+    return Object.freeze(rows.map((row) => this.readDerivation(row.id)).filter((item): item is Derivation => item !== null));
+  }
+
   graph(): EpistemicDag {
     const nodes = (this.db.prepare('SELECT node_id, node_kind, available_at, epistemic, supersedes_json FROM epistemic_nodes ORDER BY node_id').all() as unknown as StoredNodeRow[]).map((stored) => {
       let supersedes: unknown;

@@ -11,6 +11,7 @@
 - immutable Evidence/Claim dependency DAG snapshots with as-of views, assumption/measurement queries, conflict paths, supersession links and revocation projections;
 - SQLite-backed append-only kernel ledger with canonical JSON/digest revalidation, atomic dependency writes and revocation-event replay;
 - a combined `replayAsOf` projection that applies node availability and event-recording boundaries in one immutable result;
+- `derivationsForClaim(claimId)` (D-257): the validated derivations whose output is a claim — derivations are not DAG nodes, they are the records behind the `derives`/`depends_on`/`witnesses` edges into their output, and a viewer that wants a claim's assumptions reads them here;
 - canonical JSON serialization/digest envelopes for Evidence, Claim, Assumption and Derivation records;
 - directed prerequisite-to-dependent edges;
 - revocation events supplied by an append-only store or protocol layer;

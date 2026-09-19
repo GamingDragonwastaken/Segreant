@@ -813,3 +813,11 @@ body.claim-open { overflow: hidden; }
   .fact-val { text-align: left; }
   .waste-call { gap: var(--s1); }
 }
+
+/* Kernel viewer (D-257): a reader over the epistemic ledger, no action surface. */
+.kernel-controls { display: grid; grid-template-columns: 1fr; gap: var(--s2); margin: var(--s3) 0; max-width: 40rem; }
+.kernel-edges { margin-top: var(--s3); }
+.kernel-edge-list { list-style: none; padding: 0; margin: var(--s1) 0 0; display: grid; gap: var(--s1); }
+.kernel-link { background: none; border: 0; padding: 0; color: var(--sky); font-family: var(--mono); font-size: 12px; cursor: pointer; text-align: left; word-break: break-all; }
+.kernel-link:hover, .kernel-link:focus-visible { text-decoration: underline; }
+.kernel-record { font-family: var(--mono); font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; max-height: 24rem; overflow: auto; padding: var(--s3); border: 1px solid var(--line); border-radius: 6px; margin: var(--s2) 0 0; }

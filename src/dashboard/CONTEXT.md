@@ -52,6 +52,25 @@ web/
   needs an action builder keyed by the id, the id in a view, or a `guiEvidence`
   pointer to a file and token the gate reads; rows with no surface may carry
   none. This proves a live binding, not that the screen does the whole job.
+- **Progressive disclosure is a decision, and presentation follows the axes
+  (D-256, `test/dashboard-progressive-disclosure.test.ts`).** A first-run
+  operator sees the plain/precise choice and nothing routes until they choose;
+  `plain` rounds every figure and says its basis in words, `precise` states
+  the microdollar, the provenance label and the equivalent command; every
+  non-`read` consequence is rendered as a styled tag on its action card, and
+  the territory axis builds the operations bar and the System table. The
+  formatters are tested under both registers; the structural rules are read
+  from the shell and view sources.
+- **The Claim Inspector has a kernel behind it (D-257,
+  `test/dashboard-kernel-viewer.test.ts`).** `GET /api/kernel?node=<id>[&asOf=]`
+  serves one epistemic node with its record, the edges into and out of it, the
+  derivations and assumptions behind a claim, whether revocation reaches it,
+  and how much the ledger held — live, or replayed to `asOf` through the same
+  hindsight-safe boundary `/api/billing` uses, so a node not yet available
+  answers `found: false` exactly like one that never existed. The Evidence
+  view renders it as a reader (pick an issued billing claim or type an id,
+  follow an edge, set a boundary) with no action surface. Billing evidence
+  payloads are withheld and named by their canonical digest.
 - **The test prerequisite is explicit.** `npm test` performs a full build before
   running tests because package-boundary checks inspect both browser and Node
   artifacts in `dist/`. The build script's `--web` mode remains a targeted GUI
@@ -230,6 +249,7 @@ web/
 
 ```bash
 npm run build && npm test -- --test-name-pattern="dashboard|GUI"
+node --test --experimental-strip-types test/dashboard-progressive-disclosure.test.ts test/dashboard-kernel-viewer.test.ts
 ```
 
 The build must run first: three of these tests read the emitted `dist/` tree,

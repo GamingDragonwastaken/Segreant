@@ -196,7 +196,10 @@ function boot(store: Store): Promise<{ base: string; close: () => Promise<void> 
 }
 
 /** Substitute a usable value for any template hole in a declared path. */
-function concretePath(path: string): string {
+function concretePath(path: string, kernelNode: string): string {
+  // The kernel viewer addresses one node; the walk opens the first node the
+  // seeded ledger holds so a populated payload is validated, not a not-found.
+  if (path === '/api/kernel') return `${path}?node=${encodeURIComponent(kernelNode)}`;
   return path.replace(/\$\{[^}]*\}/g, '30d');
 }
 
@@ -234,13 +237,14 @@ test('every required field the GUI declares exists in the payload the server sen
   // and a field that is merely unreachable on an empty ledger look alike.
   const store = new Store(':memory:');
   seedDemo(store);
+  const kernelNode = store.epistemic().graph().nodes[0]?.id ?? 'claim:none';
   const srv = await boot(store);
   const problems: string[] = [];
   const checkedPayloads = new Set<string>();
 
   try {
     for (const endpoint of endpoints) {
-      const res = await fetch(`${srv.base}${concretePath(endpoint.path)}`, {
+      const res = await fetch(`${srv.base}${concretePath(endpoint.path, kernelNode)}`, {
         headers: { 'x-fiscus-local': '1' },
       });
       assert.equal(

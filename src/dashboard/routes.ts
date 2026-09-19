@@ -747,6 +747,37 @@ export function handleRealization({ res, url, store }: RouteContext): void {
   })();
 }
 
+/**
+ * A kernel node and its neighbourhood, read-only (D-257). The as-of boundary
+ * is the same hindsight-safe replay `/api/billing` uses for its claims; a node
+ * that did not exist yet answers `found: false` exactly like one that never
+ * existed. Nothing here writes, and the id is looked up, never pattern-matched.
+ */
+export function handleKernel({ res, url, store }: RouteContext): void {
+  try {
+    const id = url.searchParams.get('node');
+    if (id === null || id.length === 0 || id.length > 512) {
+      return json(res, 400, { error: 'node is required: the id of one kernel node, at most 512 characters' });
+    }
+    let asOf: Instant | undefined;
+    const rawAsOf = url.searchParams.get('asOf');
+    if (rawAsOf !== null) {
+      try {
+        asOf = instant(rawAsOf);
+      } catch (error) {
+        return json(res, 400, { error: `asOf must be a canonical UTC ISO-8601 instant: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    }
+    const view = store.kernelNodeView(id, asOf);
+    if (view === null) {
+      return json(res, 200, { found: false, id, asOf: asOf ?? null, node: null, revoked: false, record: null, restsOn: [], supports: [], derivations: [], assumptions: [], graphSize: store.kernelGraphSize(asOf) });
+    }
+    return json(res, 200, { found: true, id, ...view });
+  } catch (err) {
+    return json(res, 500, { error: String(err) });
+  }
+}
+
 export function handleGuide({ res, store, config }: RouteContext): void {
   // Same journey engine as `fiscus guide` — one truth, two renderers.
   void (async () => {
@@ -1110,6 +1141,7 @@ export const ROUTES: readonly Route[] = [
   apiRoute('judge', handleJudge),
   apiRoute('value', handleValue),
   apiRoute('causal', handleCausal),
+  apiRoute('kernel', handleKernel),
   // Reads GET only, but has always advertised 'GET, POST' on the 405 — the
   // POST that Settings actually performs goes to /api/settings/update. The
   // header is preserved verbatim rather than "corrected": it is part of the

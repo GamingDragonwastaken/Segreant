@@ -364,6 +364,34 @@ export interface BillingKernelClaimSummary {
   finality: string;
 }
 
+/**
+ * One kernel node with its neighbourhood, as `/api/kernel?node=<id>[&asOf=]`
+ * serves it (D-257). `found: false` means the node does not exist or was not
+ * yet available at `asOf` — a hindsight-safe read gives the two the same
+ * answer. Payloads of billing evidence are withheld and say so.
+ */
+export interface KernelNodePayload {
+  found: boolean;
+  id: string;
+  asOf: string | null;
+  node: { id: string; kind: string; availableAt: string; epistemic: string; supersedes: string[] } | null;
+  revoked: boolean;
+  record: unknown;
+  restsOn: Array<{ from: string; to: string; relation: string }>;
+  supports: Array<{ from: string; to: string; relation: string }>;
+  derivations: Array<{
+    id: string;
+    transformation: string;
+    inputEvidenceIds: string[];
+    inputClaimIds: string[];
+    witnessIds: string[];
+    assumptions: string[];
+    uncertaintyTransformation: string | null;
+  }>;
+  assumptions: string[];
+  graphSize: { nodes: number; edges: number };
+}
+
 export interface BillingPayload {
   demo: boolean;
   /** The knowledge boundary the kernel claims answer at; `null` is a live read (D-230). */

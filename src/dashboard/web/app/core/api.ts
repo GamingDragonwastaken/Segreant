@@ -58,6 +58,7 @@ import type {
   ValuePayload,
   BudgetAdvice,
   CausalPayload,
+  KernelNodePayload,
   BudgetConfig,
   SettingsSnapshot,
   BudgetEnforcement,
@@ -110,6 +111,7 @@ export type {
   ValuePayload,
   BudgetAdvice,
   CausalPayload,
+  KernelNodePayload,
   BudgetConfig,
   SettingsSnapshot,
   BudgetEnforcement,
@@ -230,6 +232,10 @@ export const api = {
   },
   causal: (studyId?: string) => request<CausalPayload>(
     studyId ? routePath('causal') + '?study=' + encodeURIComponent(studyId) : routePath('causal'),
+  ),
+  /** One kernel node with its neighbourhood, live or as the ledger had it at `asOf` (D-257). */
+  kernel: (nodeId: string, asOf?: string) => request<KernelNodePayload>(
+    `${routePath('kernel')}?node=${encodeURIComponent(nodeId)}${asOf ? '&asOf=' + encodeURIComponent(asOf) : ''}`,
   ),
   value: () => request<ValuePayload>(routePath('value')),
   settings: () => request<SettingsSnapshot>(routePath('settings')),

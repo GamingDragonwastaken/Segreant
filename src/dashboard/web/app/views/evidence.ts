@@ -10,7 +10,7 @@
 
 import { h } from '../core/dom.ts';
 import { signal, scopedEffect } from '../core/signal.ts';
-import { api, type BillingPayload } from '../core/api.ts';
+import { api, type BillingPayload, type KernelNodePayload } from '../core/api.ts';
 import { isPrecise, relative, basisWords, usd, usdFromMicros, count } from '../core/fmt.ts';
 import { actionCard } from './spend.ts';
 import { projectRenderedAxes } from '../core/claimTypes.ts';
@@ -118,6 +118,100 @@ function residualBoundWords(bound: string | undefined, precise: boolean): string
  * not be turned into a warning either. Silence is the honest rendering of "not
  * reported".
  */
+/**
+ * The kernel viewer (D-257, WP-I01): the billing claims the server has issued
+ * to the epistemic kernel, and for any one of them — or any node id typed in —
+ * the node as the ledger holds it: its record, what it rests on, what rests on
+ * it, the derivations and assumptions behind it, and whether revocation
+ * reaches it. An as-of boundary replays the ledger to that instant, so the
+ * answer is what was known then, not what is known now. A viewer only: nothing
+ * here writes, and a billing evidence payload is withheld with its hash shown.
+ */
+function kernelPanel(d: BillingPayload): Node | null {
+  const claims = [...(d.kernel?.claims ?? []), ...(d.kernel?.observedClaims ?? []), ...(d.kernel?.reconciliationClaims ?? [])];
+  const nodeId = signal<string>(claims[0]?.id ?? '');
+  const asOf = signal<string>(d.asOf ?? '');
+  const view = signal<KernelNodePayload | null>(null);
+  const failure = signal<string | null>(null);
+  const load = (): void => {
+    const id = nodeId().trim();
+    if (!id) return;
+    failure.set(null);
+    void api.kernel(id, asOf().trim() || undefined)
+      .then((payload) => view.set(payload))
+      .catch((e: unknown) => failure.set(e instanceof Error ? e.message : String(e)));
+  };
+  type Edge = KernelNodePayload['restsOn'][number];
+  const edgeList = (title: string, edges: Edge[], pick: (edge: Edge) => string): Node =>
+    h('div', { class: 'kernel-edges' },
+      h('h3', { class: 'drawer-h3', text: title + ' (' + edges.length + ')' }),
+      edges.length === 0
+        ? h('p', { class: 'drawer-muted', text: 'none recorded' })
+        : h('ul', { class: 'kernel-edge-list' }, ...edges.map((edge) => h('li', null,
+            h('span', { class: 'tag', text: edge.relation }), ' ',
+            h('button', { class: 'kernel-link', type: 'button', onclick: () => { nodeId.set(pick(edge)); load(); }, text: pick(edge) })))));
+  return h('div', { class: 'card', style: 'margin-top: var(--s5)' },
+    h('div', { class: 'card-head' },
+      h('h2', { class: 'card-title', text: () => (isPrecise() ? 'Kernel viewer' : 'What the ledger actually holds') }),
+      h('span', { class: 'tag tag-read', text: 'reads only' })),
+    h('p', { class: 'drawer-muted', text: () => (isPrecise()
+      ? claims.length + ' billing claim(s) issued to the kernel. Open a node to see its record, the edges into and out of it, the derivations and assumptions behind it, and whether revocation reaches it — live, or as of an instant.'
+      : claims.length + ' billing claim(s) have been written to the evidence ledger. Pick one to see exactly what it rests on and whether anything has since withdrawn it.') }),
+    h('div', { class: 'kernel-controls' },
+      h('label', { class: 'drawer-h3', for: 'kernel-node-id', text: 'Node id' }),
+      claims.length > 0
+        ? h('select', { id: 'kernel-node-select', class: 'drawer-input', 'aria-label': 'Issued billing claims', onchange: (event: Event) => { nodeId.set((event.target as HTMLSelectElement).value); load(); } },
+            ...claims.map((claim) => h('option', { value: claim.id, text: claim.id })))
+        : null,
+      h('input', { id: 'kernel-node-id', class: 'drawer-input', type: 'text', autocomplete: 'off', spellcheck: 'false', value: () => nodeId(), placeholder: 'claim:… or evidence:…',
+        oninput: (event: Event) => nodeId.set((event.target as HTMLInputElement).value) }),
+      h('label', { class: 'drawer-h3', for: 'kernel-as-of', text: 'As of (UTC instant, blank = live)' }),
+      h('input', { id: 'kernel-as-of', class: 'drawer-input', type: 'text', autocomplete: 'off', spellcheck: 'false', value: () => asOf(), placeholder: '2026-09-19T00:00:00.000Z',
+        oninput: (event: Event) => asOf.set((event.target as HTMLInputElement).value) }),
+      h('button', { class: 'btn-ghost', type: 'button', onclick: load, text: 'Open node' })),
+    () => {
+      const err = failure();
+      if (err) return h('p', { class: 'drawer-error', role: 'alert', text: err });
+      const v = view();
+      if (!v) return h('p', { class: 'drawer-muted', role: 'status', text: 'No node opened yet.' });
+      if (!v.found) {
+        return h('p', { class: 'drawer-muted', role: 'status', text: v.asOf
+          ? v.id + ' was not in the ledger as of ' + v.asOf + ' — it either never existed or was not yet available; the ledger held ' + v.graphSize.nodes + ' node(s) then.'
+          : v.id + ' is not in the ledger (' + v.graphSize.nodes + ' node(s) held).' });
+      }
+      const node = v.node!;
+      const record = v.record as { kind?: string; evidence?: { payloadWithheld?: boolean; payloadDigest?: string | null } } | null;
+      const row = (key: string, value: string): Node =>
+        h('div', { class: 'claim-profile-row' }, h('dt', { class: 'claim-key', text: key }), h('dd', { class: 'claim-val', text: value }));
+      return h('div', { class: 'kernel-node' },
+        h('dl', { class: 'claim-profile-rows' },
+          row('node', node.id + ' · ' + node.kind),
+          row('available at', node.availableAt),
+          row('epistemic', node.epistemic),
+          row('revoked', v.revoked ? 'yes — the revocation projection reaches this node' + (v.asOf ? ' as of ' + v.asOf : '') : 'no'),
+          row('boundary', v.asOf ? 'as of ' + v.asOf + ' (' + v.graphSize.nodes + ' nodes, ' + v.graphSize.edges + ' edges then)' : 'live (' + v.graphSize.nodes + ' nodes, ' + v.graphSize.edges + ' edges)')),
+        edgeList('Rests on', v.restsOn, (edge) => edge.from),
+        edgeList('Supports', v.supports, (edge) => edge.to),
+        h('div', { class: 'kernel-edges' },
+          h('h3', { class: 'drawer-h3', text: 'Derivations (' + v.derivations.length + ')' }),
+          v.derivations.length === 0
+            ? h('p', { class: 'drawer-muted', text: node.kind === 'claim' ? 'a direct claim: no derivation produced it' : 'not a claim' })
+            : h('ul', { class: 'kernel-edge-list' }, ...v.derivations.map((der) => h('li', null,
+                h('code', { text: der.id }), ' — ' + der.transformation + '; from ' + der.inputClaimIds.length + ' claim(s), ' + der.inputEvidenceIds.length + ' evidence, ' + der.witnessIds.length + ' witness(es)')))),
+        h('div', { class: 'kernel-edges' },
+          h('h3', { class: 'drawer-h3', text: 'Assumptions (' + v.assumptions.length + ')' }),
+          v.assumptions.length === 0
+            ? h('p', { class: 'drawer-muted', text: 'none stated on a derivation behind this node' })
+            : h('ul', { class: 'kernel-edge-list' }, ...v.assumptions.map((a) => h('li', { text: a })))),
+        h('div', { class: 'kernel-edges' },
+          h('h3', { class: 'drawer-h3', text: 'Record' }),
+          record?.kind === 'evidence' && record.evidence?.payloadWithheld
+            ? h('p', { class: 'drawer-muted', text: 'billing evidence payload withheld — operator-supplied exports can be confidential; canonical payload digest ' + (record.evidence.payloadDigest ?? 'not recorded') })
+            : null,
+          h('pre', { class: 'kernel-record', text: record ? JSON.stringify(record, null, 2) : 'no record body is stored for this node kind' })));
+    });
+}
+
 function readinessPanel(d: BillingPayload): Node | null {
   const r = d.readiness;
   if (!r) return null;
@@ -302,6 +396,7 @@ export function evidenceView(): Node {
 
         readinessPanel(d),
         mappingPanel(d),
+        kernelPanel(d),
 
         h('div', { style: 'margin-top: var(--s6)' },
           h('h2', { class: 'card-title', style: 'margin-bottom: var(--s3)', text: 'Start here' }),

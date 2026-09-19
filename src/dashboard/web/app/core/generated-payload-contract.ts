@@ -1,5 +1,5 @@
 /** Generated from src/dashboard/shared-types.ts; do not edit by hand. */
-export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "69b3c34a1aad83c29115b8fab756c72a8bf73b7610a31e878c56a9b6da204f4c";
+export const DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 = "2b35c8d6259aaeb7639187b3993ea2472a6f3e09d8da1a5f6062adc496c9aed2";
 export const DASHBOARD_INTERFACE_CONTRACTS = {
   "Summary": [
     {
@@ -565,6 +565,63 @@ export const DASHBOARD_INTERFACE_CONTRACTS = {
       "name": "finality",
       "optional": false,
       "type": "string"
+    }
+  ],
+  "KernelNodePayload": [
+    {
+      "name": "found",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "id",
+      "optional": false,
+      "type": "string"
+    },
+    {
+      "name": "asOf",
+      "optional": false,
+      "type": "string | null"
+    },
+    {
+      "name": "node",
+      "optional": false,
+      "type": "{ id: string; kind: string; availableAt: string; epistemic: string; supersedes: string[] } | null"
+    },
+    {
+      "name": "revoked",
+      "optional": false,
+      "type": "boolean"
+    },
+    {
+      "name": "record",
+      "optional": false,
+      "type": "unknown"
+    },
+    {
+      "name": "restsOn",
+      "optional": false,
+      "type": "Array<{ from: string; to: string; relation: string }>"
+    },
+    {
+      "name": "supports",
+      "optional": false,
+      "type": "Array<{ from: string; to: string; relation: string }>"
+    },
+    {
+      "name": "derivations",
+      "optional": false,
+      "type": "Array<{"
+    },
+    {
+      "name": "assumptions",
+      "optional": false,
+      "type": "string[]"
+    },
+    {
+      "name": "graphSize",
+      "optional": false,
+      "type": "{ nodes: number; edges: number }"
     }
   ],
   "BillingPayload": [

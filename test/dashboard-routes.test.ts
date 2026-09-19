@@ -186,6 +186,7 @@ const READ_ONLY_ALLOW: Record<string, string> = {
   '/api/guide': 'GET, HEAD',
   '/api/value': 'GET, HEAD',
   '/api/causal': 'GET, HEAD',
+  '/api/kernel': 'GET, HEAD',
   '/': 'GET, HEAD',
   '/index.html': 'GET, HEAD',
   '/classic': 'GET, HEAD',
@@ -428,7 +429,9 @@ test('restricting those routes did not break the methods they legitimately serve
   // them at an empty non-repo makes them return the same shape in ~60ms. The
   // subject here is method dispatch, not correlation depth.
   const empty = mkdtempSync(join(tmpdir(), 'fiscus-norepo-'));
-  const scoped = (path: string) => `${path}?repo=${encodeURIComponent(empty)}`;
+  // `/api/kernel` addresses one node and refuses a request that names none
+  // (400 by contract), so the dispatch check asks for a node that is not there.
+  const scoped = (path: string) => `${path}?repo=${encodeURIComponent(empty)}${path === '/api/kernel' ? '&node=claim:none' : ''}`;
   try {
     for (const path of Object.keys(READ_ONLY_ALLOW)) {
       const get = await rawRequest(srv.base, scoped(path), 'GET');

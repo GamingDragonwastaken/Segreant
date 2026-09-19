@@ -121,6 +121,9 @@ import type {
 } from '../causal/types.ts';
 import { EpistemicLedger } from '../epistemic/ledger.ts';
 import type { Claim } from '../epistemic/claim.ts';
+import type { DagEdge, DagNode } from '../epistemic/dag.ts';
+import type { Evidence, JsonValue } from '../epistemic/evidence.ts';
+import type { Witness } from '../epistemic/witness.ts';
 import type { Instant } from '../epistemic/time.ts';
 import { EconomicLedger, type EconomicPeriodCloseStatus, type PeriodFinalizationInput, type PeriodFinalizationResult, type PeriodReopenInput, type PeriodReopenResult } from '../economics/ledger.ts';
 import { buildEconomicPeriodCloseKernelIssuance, type EconomicPeriodCloseKernelPersistenceResult } from '../economics/epistemic.ts';
@@ -460,6 +463,35 @@ function scopeCaptureForInsert(row: RequestRow): { status: ScopeCaptureStatus; d
 export interface KernelClaimView extends Pick<Claim, 'id' | 'proposition' | 'profile' | 'evidenceIds' | 'issuedAt' | 'monetaryBasis' | 'finality'> {
   /** True when the revocation projection reaches this claim. */
   readonly revoked: boolean;
+}
+
+/** One kernel node with its neighbourhood, as `kernelNodeView` presents it (D-257). */
+export interface KernelNodeView {
+  readonly asOf: Instant | null;
+  readonly node: DagNode;
+  readonly revoked: boolean;
+  readonly record:
+    | { kind: 'evidence'; evidence: Omit<Evidence, 'payload'> & { payload?: JsonValue | null; payloadWithheld: boolean; payloadDigest: string | null } }
+    | { kind: 'claim'; claim: KernelClaimView }
+    | { kind: 'witness'; witness: Witness }
+    | null;
+  /** Edges into this node: what it rests on. */
+  readonly restsOn: readonly DagEdge[];
+  /** Edges out of this node: what rests on it. */
+  readonly supports: readonly DagEdge[];
+  /** The derivations that produced this claim (empty for any other kind). */
+  readonly derivations: ReadonlyArray<{
+    readonly id: string;
+    readonly transformation: string;
+    readonly inputEvidenceIds: readonly string[];
+    readonly inputClaimIds: readonly string[];
+    readonly witnessIds: readonly string[];
+    readonly assumptions: readonly string[];
+    readonly uncertaintyTransformation: string | null;
+  }>;
+  /** Assumptions of the derivations that produced this node, deduplicated. */
+  readonly assumptions: readonly string[];
+  readonly graphSize: { readonly nodes: number; readonly edges: number };
 }
 
 /**
@@ -2261,6 +2293,65 @@ export class Store {
       claims.push(presentKernelClaim(item, boundary.revokedIds));
     }
     return Object.freeze(claims);
+  }
+
+  /**
+   * One kernel node with its neighbourhood, as the ledger had it at `asOf`
+   * (D-257): the record itself (evidence, claim, witness or derivation), the
+   * edges into and out of it, the assumptions of any derivation that produced
+   * it, and whether the revocation projection reaches it. `null` when the node
+   * does not exist or was not yet available at the boundary — the two are the
+   * same answer from a hindsight-safe read. Billing evidence payloads stay
+   * withheld (operator-supplied exports can be confidential); their hash is
+   * served instead, so the viewer shows what is known and says what is not.
+   */
+  /** How many nodes and edges the kernel had at `asOf` (live when omitted). */
+  kernelGraphSize(asOf?: Instant): { nodes: number; edges: number } {
+    const graph = asOf === undefined ? this.epistemic().graph() : this.epistemic().replayAsOf(asOf).graph;
+    return { nodes: graph.nodes.length, edges: graph.edges.length };
+  }
+
+  kernelNodeView(id: string, asOf?: Instant): KernelNodeView | null {
+    const ledger = this.epistemic();
+    const replay = asOf === undefined ? null : ledger.replayAsOf(asOf);
+    const graph = replay === null ? ledger.graph() : replay.graph;
+    const node = graph.nodes.find((candidate) => candidate.id === id);
+    if (node === undefined) return null;
+    const revokedIds = new Set(replay === null ? ledger.revocationProjection().revokedIds : replay.revocation.revokedIds);
+    const restsOn = graph.edges.filter((edge) => edge.to === id);
+    const supports = graph.edges.filter((edge) => edge.from === id);
+    let record: KernelNodeView['record'] = null;
+    if (node.kind === 'evidence') {
+      const item = ledger.readEvidence(id);
+      if (item !== null) {
+        const withheld = item.evidenceType.startsWith('billing.');
+        const { payload, ...rest } = item;
+        // A withheld payload is still identifiable: its canonical digest is
+        // served so the viewer can name what it is not showing.
+        const payloadDigest = payload === undefined ? null : createHash('sha256').update(canonicalJson(payload)).digest('hex');
+        record = { kind: 'evidence', evidence: { ...rest, ...(withheld ? {} : { payload: payload ?? null }), payloadWithheld: withheld && payload !== undefined, payloadDigest } };
+      }
+    } else if (node.kind === 'claim') {
+      const item = ledger.readClaim(id);
+      if (item !== null) record = { kind: 'claim', claim: presentKernelClaim(item, revokedIds) };
+    } else if (node.kind === 'witness') {
+      const item = ledger.readWitness(id);
+      if (item !== null) record = { kind: 'witness', witness: item };
+    }
+    // Derivations are not nodes: they are the records behind the edges into a
+    // claim, and the assumptions a claim was derived under live on them.
+    const derivations = node.kind === 'claim' ? ledger.derivationsForClaim(id) : [];
+    return Object.freeze({
+      asOf: asOf ?? null,
+      node,
+      revoked: revokedIds.has(id),
+      record,
+      restsOn: Object.freeze(restsOn),
+      supports: Object.freeze(supports),
+      derivations: Object.freeze(derivations.map((item) => ({ id: item.id, transformation: item.transformation, inputEvidenceIds: item.inputEvidenceIds, inputClaimIds: item.inputClaimIds, witnessIds: item.witnesses.map((w) => w.id), assumptions: item.assumptions, uncertaintyTransformation: item.uncertaintyTransformation }))),
+      assumptions: Object.freeze([...new Set(derivations.flatMap((item) => item.assumptions))]),
+      graphSize: { nodes: graph.nodes.length, edges: graph.edges.length },
+    });
   }
 
   /** Read canonical billed-period claims without exposing confidential raw payloads. */
