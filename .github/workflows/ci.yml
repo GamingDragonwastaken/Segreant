@@ -90,12 +90,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm run --silent sbom > ../fiscus-pack/fiscus-runtime.cdx.json
-          node scripts/check-sbom.mjs ../fiscus-pack/fiscus-runtime.cdx.json
+          npm run --silent sbom > fiscus-runtime.cdx.json
+          node scripts/check-sbom.mjs fiscus-runtime.cdx.json
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: fiscus-runtime-sbom
-          path: ../fiscus-pack/fiscus-runtime.cdx.json
+          path: fiscus-runtime.cdx.json
           if-no-files-found: error
           retention-days: 30
       - working-directory: ../fiscus-install

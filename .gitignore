@@ -33,3 +33,6 @@ docs/planning/
 
 # Local agent-lane worktree copies. Orchestration scratch, never a release input.
 .agent-worktrees/
+
+# Local SBOM output (`npm run sbom > fiscus-runtime.cdx.json`); CI uploads its own copy as an artifact.
+*.cdx.json
