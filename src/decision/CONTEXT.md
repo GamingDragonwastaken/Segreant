@@ -50,6 +50,7 @@ precision.
 node --test --experimental-strip-types test/decision-engine.test.ts
 node --test --experimental-strip-types test/decision-control.test.ts
 node --test --experimental-strip-types test/decision-assurance.test.ts
+node --test --experimental-strip-types test/advice-assurance-reach.test.ts
 node --test --experimental-strip-types test/frontier-assurance-gate.test.ts
 ```
 
@@ -73,8 +74,15 @@ intervals and gates it for `advisory_only` and `changes_spend` with the
 comparison's own profile (`observational` only when the separation held,
 `estimated` money, `proxy_unvalidated` outcome), so every recommendation
 carries a derived level, the CLI sentence and the Value view print it, and no
-observational comparison reaches DAL-3. Other advisory surfaces (the budget
-advisor's frontier cells, usage and cohort advice) still reach an operator
-without this module. The assurance ladder is a Fiscus policy choice, not a
-derived threshold, and it assumes the declared input set is complete — an
-undeclared input cannot lower the level it was left out of.
+observational comparison reaches DAL-3. Since D-248 no other advisory surface
+exists: `test/advice-assurance-reach.test.ts` enumerates every exported
+producer named for recommending or advising and requires each to be gated
+(`recommendBudget`, `budgetAdvice`), withheld with no product caller
+(`recommendAllocation`), or a consumer that refuses to act below the bar
+(`cmdBudgetAdvisor`); the budget advisor's frontier cells are never ranked
+into an action (the input is accepted and not read; the dead branch is gone),
+and the usage path issues no advice — its exposure line is labelled as none.
+The assurance ladder is a Fiscus policy choice, not a derived threshold, and it
+assumes the declared input set is complete — an undeclared input cannot lower
+the level it was left out of; that completeness is the evidence holder's claim
+and is not evaluated by this module.

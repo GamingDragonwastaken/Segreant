@@ -658,38 +658,9 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
     console.log('');
     for (const line of renderBudgetCapDecision(decision, certificates)) console.log(color(tty, C.gray, line));
   }
-  // Prefer the quantified allocation (concrete $ moves + projected value gain);
-  // fall back to the qualitative trim/grow when there isn't enough frontier data.
-  /*
-   * Raw allocation is intentionally withheld from the CLI. The retained helper
-   * is an offline `exploratory_raw` scenario only; generic contexts can be
-   * unlike work and its arithmetic is not a recommendation or forecast.
-  if (allocation && allocation.moves.length) {
-    const d2 = (n: number) => '$' + n.toFixed(2); // aggregate dollars read best at 2dp
-    console.log('');
-    console.log(
-      color(tty, C.bold, '  Exploratory raw allocation scenario') +
-        color(tty, C.gray, `   → raw arithmetic ${d2(allocation.rawRateScenarioGainUsd)} (not a recommendation)`),
-    );
-    for (const m of allocation.moves.slice(0, 5)) {
-      console.log(
-        `    ${color(tty, C.yellow, 'MOVE')} ${d2(m.amountUsd).padStart(8)}  ` +
-          `${color(tty, C.gray, `${m.fromKey} → ${m.toKey}`)}  ${color(tty, C.green, d2(m.rawRateScenarioGainUsd))}`,
-      );
-    }
-    for (const assumption of allocation.assumptions) {
-      console.log(color(tty, C.gray, `  ${assumption}`));
-    }
-  } else if (rec.reallocations.length) {
-    console.log('');
-    console.log(color(tty, C.bold, '  Reallocate'));
-    for (const re of rec.reallocations) {
-      const tag = re.action === 'grow' ? color(tty, C.green, 'GROW') : color(tty, C.yellow, 'TRIM');
-      console.log(`    ${tag}  ${re.context.padEnd(28)} ${color(tty, C.gray, re.reason)}`);
-    }
-  }
-  }
-  */
+  // Raw allocation and frontier trim/grow hints are withheld from this surface
+  // (D-248): generic contexts can be unlike work, and comparable model guidance
+  // reaches the operator only through the gated frontier trial.
   if (flags.apply && applyPermitted && decision) {
     cfg.budget.dailyUsd = dailyCap;
     cfg.budget.dailySoftUsd = softCap;

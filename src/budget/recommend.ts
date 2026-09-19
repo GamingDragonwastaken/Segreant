@@ -37,7 +37,8 @@ import { decideBudgetCap, type BudgetCapDecision } from './capDecision.ts';
 export interface BudgetInputs {
   dailySpends: number[]; // recent per-day spend totals (USD)
   realizedSpendShare: number | null; // share of attributed SPEND that reached a kept outcome (0..1) — not a value rate
-  frontier?: FrontierCell[]; // byModelAndTask cells, for reallocation hints
+  /** Accepted for compatibility; never read into an action (D-248). */
+  frontier?: FrontierCell[];
   /** The cap the proxy runs today; `null`/absent means no daily cap. The decision's `keep_current` action. */
   currentDailyCapUsd?: number | null;
   /**
@@ -69,6 +70,7 @@ export interface BudgetRecommendation {
   realizedSpendShare: number | null;
   projectedMonthlyWasteUsd: number | null;
   rationale: string[];
+  /** Always empty since D-248: frontier ranking is not converted into an action. */
   reallocations: Reallocation[];
   /**
    * The cap as a decision problem (D-220): `null` exactly when there is no cap
@@ -175,33 +177,12 @@ export function recommendBudget(
     rationale.push('Realized-value rate is uninstrumented; wire outcomes (git/`report`) to turn this into a value-based budget rather than a usage-based one.');
   }
 
+  // Frontier cells are accepted on the input for compatibility and never
+  // ranked into a trim/grow action: generic model×task cells can represent
+  // unlike work, and a ranking is not allocation-grade evidence. Comparable
+  // model guidance comes only from the within-task frontier trial, through the
+  // assurance gate (D-240, D-248). `reallocations` is therefore always empty.
   const reallocations: Reallocation[] = [];
-  // Do not convert raw frontier ranking into an action. Generic model×task cells
-  // can represent unlike work, and a two-unit threshold is not allocation-grade
-  // evidence. Comparable model guidance is emitted only by the within-task,
-  // review-only frontier trial contract instead.
-  const cells: FrontierCell[] = [];
-  if (cells.length >= 2) {
-    const byRoi = [...cells].sort((a, b) => (a.roiIndex ?? 0) - (b.roiIndex ?? 0));
-    const worst = byRoi[0]!;
-    const best = byRoi[byRoi.length - 1]!;
-    reallocations.push({
-      context: worst.key,
-      action: 'trim',
-      roiIndex: worst.roiIndex,
-      costUsd: worst.costUsd,
-      reason: `Lowest RoI (${worst.roiIndex!.toFixed(0)}) at ${fmt(worst.costUsd)} — spend here returns the least.`,
-    });
-    if (best.key !== worst.key) {
-      reallocations.push({
-        context: best.key,
-        action: 'grow',
-        roiIndex: best.roiIndex,
-        costUsd: best.costUsd,
-        reason: `Highest RoI (${best.roiIndex!.toFixed(0)}) — the safe place to lean spend in.`,
-      });
-    }
-  }
 
   // The cap that can be applied is a decision with an alternative (keep the
   // current cap) and a consequence (it changes which future spend the proxy
