@@ -42,10 +42,12 @@ workload becomes empty or loses the dependency it claims to exercise.
 
 This is the first H06 truth-boundary slice: canonical construction and
 validation are measured, while persistent ledger append, graph replay/as-of,
-revocation closure, exact projections, allocation, `.fiscuspack` verification,
-dashboard contract validation, and proxy streaming remain separate benchmark
-surfaces. The quality counts are correctness probes, not latency thresholds or
-release budgets.
+revocation closure and `.fiscuspack` verification are measured by the two
+sections below. Exact projections, allocation, dashboard contract validation
+and proxy streaming are not benchmarked; those are the four surfaces still
+outside the harness, stated here so the list cannot pass for coverage. The
+quality counts are correctness probes, not latency thresholds or release
+budgets.
 
 ## Epistemic persistence and graph replay boundary
 
@@ -71,6 +73,21 @@ preventing synthetic benchmark records from resembling production evidence. Sizi
 bounded across the scale ladder to maintain sub-second to low-second determinism under
 full SQLite schema, digest, and DAG validation invariants. The published counts are
 contract-tested quality gates, not latency budgets.
+
+## Revocation closure and `.fiscuspack` round-trip boundary
+
+The `revocationClosure` and `fiscuspackRoundTrip` operations (D-238) share
+one ledger per scale: a fan-out graph of one shared root Evidence cited by
+every Claim beside that Claim's own leaf Evidence (`small: 25` pairs, up to
+`100x: 200`). Two revocations are recorded — one leaf and the shared root —
+and the graph is built once so that what is timed is the READ:
+`revocationProjection()` for closure, and `exportLedgerPack` →
+`serializeFiscusPack` → `verifyFiscusPack` for the pack. The quality block
+requires the root's closure to reach every Claim and exactly one other leaf
+(`nodesRevoked = pairs + 2`), no pending entries, the whole graph packed with
+nothing omitted, and the verifier's own verdict `ok` with `integrity:
+verified`. A timing over an empty or half-built graph therefore cannot pass
+the contract test.
 
 ## 2026-08-28 Windows baseline
 

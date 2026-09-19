@@ -69,6 +69,8 @@ test('benchmark harness emits a finite, isolated observation contract', () => {
           divergentRefused: number;
           missingDependencyRefused: number;
         };
+        revocationClosure?: { requestedPairs: number; nodesRevoked: number; claimsRevoked: number; traceEntries: number };
+        fiscuspackRoundTrip?: { included: number; omitted: number; redacted: number; envelopeBytes: number };
       };
     }>;
   };
@@ -112,6 +114,22 @@ test('benchmark harness emits a finite, isolated observation contract', () => {
   assert.equal(persistenceQuality.idempotentDuplicatesIgnored, 1);
   assert.equal(persistenceQuality.divergentRefused, 1);
   assert.equal(persistenceQuality.missingDependencyRefused, 1);
+  // D-238: revocation closure and .fiscuspack round-trip are observed, and each
+  // observation is backed by a quality block the script computed from the same
+  // ledger, so a timing over an empty or half-built graph cannot pass.
+  for (const key of ['revocationClosure', 'fiscuspackRoundTrip'] as const) {
+    assert.ok(Object.hasOwn(report.cases[0]?.observations ?? {}, key), `the benchmark must observe ${key}`);
+  }
+  const revocation = report.cases[0]?.quality?.revocationClosure;
+  assert.ok(revocation, 'the benchmark must publish revocation closure quality checks');
+  assert.equal(revocation.requestedPairs, 25);
+  assert.equal(revocation.claimsRevoked, 25, 'revoking the shared root must reach every claim');
+  assert.equal(revocation.nodesRevoked, 27, 'root, one leaf, every claim — and no other leaf');
+  const pack = report.cases[0]?.quality?.fiscuspackRoundTrip;
+  assert.ok(pack, 'the benchmark must publish .fiscuspack round-trip quality checks');
+  assert.equal(pack.included, 51, 'the whole revocation graph is packed');
+  assert.equal(pack.omitted, 0);
+  assert.ok(pack.envelopeBytes > 0);
   for (const observation of Object.values(report.cases[0]?.observations ?? {})) {
     const samples = observation.samples;
     assert.equal(typeof samples, 'number');

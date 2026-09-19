@@ -25,6 +25,8 @@ import { claimProfile } from '../src/epistemic/profile.ts';
 import { grain } from '../src/epistemic/grain.ts';
 import { scope } from '../src/epistemic/scope.ts';
 import { interval } from '../src/epistemic/time.ts';
+import { exportLedgerPack } from '../src/pack/export.ts';
+import { serializeFiscusPack, verifyFiscusPack } from '../src/pack/index.ts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SCALE_ROWS = Object.freeze({ small: 100, current: 1_000, '10x': 10_000, '100x': 100_000 });
@@ -444,6 +446,76 @@ function benchmarkEpistemicPersistence(pairCount) {
   };
 }
 
+/**
+ * Revocation closure over a fan-out graph (D-238): one root evidence cited by
+ * every claim beside each claim's own record, so revoking the root must reach
+ * every claim while revoking one leaf reaches exactly one. The graph is built
+ * once; what is observed is the projection read, which is the operation a
+ * dashboard or as-of reader pays for.
+ */
+function buildRevocationLedger(pairCount) {
+  const store = new Store(':memory:');
+  const ledger = store.epistemic();
+  const benchmarkScope = scope({ account: 'benchmark' });
+  const benchmarkGrain = grain(['day', 'project']);
+  const benchmarkProfile = claimProfile({
+    epistemic: 'supported', integrity: 'verified', authenticity: 'provider_authenticated', scope: 'established',
+    coverage: 'complete', measurement: 'proxy_unvalidated', causality: 'none', monetaryBasis: 'billed',
+    finality: 'provisional', decisionFitness: 'not_assessed',
+  });
+  const record = (id, index) => evidence({
+    id, evidenceType: 'benchmark.observation', sourceIdentity: 'benchmark:synthetic', sourceClass: 'synthetic_fixture',
+    payload: { index }, scope: benchmarkScope, grain: benchmarkGrain, occurredAt: EPISTEMIC_OCCURRED_AT, observedAt: EPISTEMIC_OBSERVED_AT,
+    integrity: 'verified', authenticity: 'provider_authenticated', completeness: { status: 'complete', method: 'deterministic_fixture' },
+    monetaryBasis: 'billed', schemaVersion: 1, sensitivity: 'internal', redaction: 'none',
+  });
+  ledger.runInTransaction(() => {
+    ledger.appendEvidenceWithinTransaction(record('benchmark:revocation:root', -1));
+    for (let i = 0; i < pairCount; i++) {
+      ledger.appendEvidenceWithinTransaction(record(`benchmark:revocation:leaf:${i}`, i));
+      ledger.appendClaimWithinTransaction(claim({
+        id: `benchmark:revocation:claim:${i}`,
+        proposition: { predicate: 'benchmark.observed', value: { index: i } },
+        subject: `benchmark:project:${i % 8}`, scope: benchmarkScope, grain: benchmarkGrain,
+        time: { validTime: EPISTEMIC_VALID_TIME, asOf: EPISTEMIC_ISSUED_AT }, epistemic: 'supported', profile: benchmarkProfile,
+        measurementModelRef: null, evidenceIds: ['benchmark:revocation:root', `benchmark:revocation:leaf:${i}`],
+        derivationRule: 'benchmark.issuance.v1', derivationVersion: 1, causalStatus: 'none', issuedAt: EPISTEMIC_ISSUED_AT, schemaVersion: 1,
+      }));
+    }
+  });
+  ledger.appendRevocation({ eventId: 'benchmark:revoke:leaf:0', targetId: 'benchmark:revocation:leaf:0', recordedAt: EPISTEMIC_POST_ISSUED_AS_OF, reason: 'benchmark leaf withdrawal' });
+  ledger.appendRevocation({ eventId: 'benchmark:revoke:root', targetId: 'benchmark:revocation:root', recordedAt: EPISTEMIC_POST_ISSUED_AS_OF, reason: 'benchmark root withdrawal' });
+  return { store, ledger };
+}
+
+function revocationQuality(ledger, pairCount) {
+  const projection = ledger.revocationProjection();
+  const revoked = new Set(projection.revokedIds);
+  let claimsRevoked = 0;
+  for (let i = 0; i < pairCount; i++) if (revoked.has(`benchmark:revocation:claim:${i}`)) claimsRevoked++;
+  const nodesRevoked = revoked.size;
+  // root + leaf 0 + every claim; no other leaf is reached.
+  if (claimsRevoked !== pairCount || nodesRevoked !== pairCount + 2 || projection.pendingIds.length !== 0) {
+    throw new Error('revocation closure benchmark quality checks failed');
+  }
+  return { requestedPairs: pairCount, nodesRevoked, claimsRevoked, traceEntries: projection.trace.length };
+}
+
+/**
+ * `.fiscuspack` export and standalone-equivalent verification over the same
+ * ledger (D-238): the whole graph is packed, serialized and verified, and the
+ * verifier's own verdict is the quality check.
+ */
+function packRoundTrip(ledger) {
+  const { pack, summary } = exportLedgerPack({ ledger, packId: 'pack:benchmark', createdAt: EPISTEMIC_POST_ISSUED_AS_OF });
+  const encoded = serializeFiscusPack(pack);
+  const verdict = verifyFiscusPack(encoded);
+  if (!verdict.ok || verdict.integrity !== 'verified' || summary.omitted !== 0) {
+    throw new Error('fiscuspack round-trip benchmark quality checks failed');
+  }
+  return { included: summary.included, omitted: summary.omitted, redacted: summary.redacted, envelopeBytes: Buffer.byteLength(encoded, 'utf8') };
+}
+
 function directoryBytes(path) {
   try {
     let total = 0;
@@ -505,6 +577,9 @@ async function runCase(name, rows, iterations) {
   const persistentPairs = SCALE_PERSISTENT_PAIRS[name] ?? 25;
   const epistemicQuality = benchmarkEpistemicIssuance(rows);
   const persistenceQuality = benchmarkEpistemicPersistence(persistentPairs);
+  const revocation = buildRevocationLedger(persistentPairs);
+  const revocationQualityReport = revocationQuality(revocation.ledger, persistentPairs);
+  const packQuality = packRoundTrip(revocation.ledger);
   const observations = {
     startup,
     ingest: { samples: 1, minMs: ingestMs, medianMs: ingestMs, p95Ms: ingestMs, maxMs: ingestMs },
@@ -515,9 +590,12 @@ async function runCase(name, rows, iterations) {
     frontier: observe(() => computeFrontier(units), iterations),
     epistemicIssuance: observe(() => benchmarkEpistemicIssuance(rows), iterations),
     epistemicPersistence: observe(() => benchmarkEpistemicPersistence(persistentPairs), iterations),
+    revocationClosure: observe(() => revocation.ledger.revocationProjection(), iterations),
+    fiscuspackRoundTrip: observe(() => packRoundTrip(revocation.ledger), iterations),
     apiOverviewHttp: await dashboardApiObservation(ingestStore),
   };
   ingestStore.close();
+  revocation.store.close();
   return {
     scale: name,
     rows,
@@ -527,6 +605,8 @@ async function runCase(name, rows, iterations) {
     quality: {
       epistemicIssuance: epistemicQuality,
       epistemicPersistence: persistenceQuality,
+      revocationClosure: revocationQualityReport,
+      fiscuspackRoundTrip: packQuality,
     },
   };
 }
