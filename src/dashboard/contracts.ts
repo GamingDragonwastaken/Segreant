@@ -137,3 +137,87 @@ export function validateDashboardPayload(contract: DashboardPayloadContract, pay
     }
   }
 }
+
+/**
+ * Deep interface check shared by the browser client and the contract test
+ * (WP-G01, D-243). `interfaces` is the generated field table of
+ * `shared-types.ts`; a payload is walked against the named response type,
+ * recursing into other declared interfaces, arrays and unions. Absent optional
+ * fields pass; absent REQUIRED fields and wrong primitive kinds are reported
+ * with their path. Inline object types, functions and `Record<...>` are not
+ * described by the table and pass by construction. The same function runs in
+ * the browser after the envelope check and in the test against live routes,
+ * so the two cannot disagree by drifting apart.
+ */
+export interface DashboardInterfaceField {
+  readonly name: string;
+  readonly optional: boolean;
+  readonly type: string;
+}
+export type DashboardInterfaceTable = Readonly<Record<string, readonly DashboardInterfaceField[]>>;
+
+export function checkInterfaceShape(typeName: string, value: unknown, interfaces: DashboardInterfaceTable, where: string): string[] {
+  const problems: string[] = [];
+  walkShape(typeName, value, interfaces, where, problems, new Set());
+  return problems;
+}
+
+function walkValue(type: string, value: unknown, where: string, interfaces: DashboardInterfaceTable, problems: string[], seen: Set<string>): void {
+  const normalized = type.replace(/\s+/g, ' ').trim();
+  const alternatives = normalized.split('|').map((part) => part.trim());
+  if (alternatives.length > 1) {
+    if (value === null && alternatives.includes('null')) return;
+    if (value === undefined && alternatives.includes('undefined')) return;
+    if (alternatives.some((alternative) => alternative !== 'null' && alternative !== 'undefined'
+      && valueMatches(alternative, value, where, interfaces, problems, seen))) return;
+    problems.push(`${where} — expected ${type}, got ${value === null ? 'null' : typeof value}`);
+    return;
+  }
+  if (value === undefined) return;
+  if (!valueMatches(normalized, value, where, interfaces, problems, seen)) {
+    problems.push(`${where} — expected ${type}, got ${value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value}`);
+  }
+}
+
+function valueMatches(type: string, value: unknown, where: string, interfaces: DashboardInterfaceTable, problems: string[], seen: Set<string>): boolean {
+  if (type === 'unknown' || type === 'any') return true;
+  if (type === 'string') return typeof value === 'string';
+  if (type === 'number') return typeof value === 'number' && Number.isFinite(value);
+  if (type === 'boolean') return typeof value === 'boolean';
+  if (type === 'null') return value === null;
+  if (type.endsWith('[]')) {
+    if (!Array.isArray(value)) return false;
+    const elementType = type.slice(0, -2).trim();
+    value.forEach((element, index) => walkValue(elementType, element, `${where}[${index}]`, interfaces, problems, seen));
+    return true;
+  }
+  if (type.startsWith('Record<')) return value !== null && typeof value === 'object' && !Array.isArray(value);
+  if (type.startsWith('{') || type.startsWith('(') || type.includes('=>')) return true;
+  const literal = /^['"](.+)['"]$/.exec(type);
+  if (literal) return typeof value === 'string' && value === literal[1];
+  const numeric = /^-?\d+(\.\d+)?$/.exec(type);
+  if (numeric) return typeof value === 'number' && value === Number(type);
+  const named = /^([A-Z]\w*)$/.exec(type);
+  if (named && Object.hasOwn(interfaces, named[1]!)) {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+    walkShape(named[1]!, value, interfaces, where, problems, seen);
+    return true;
+  }
+  return true;
+}
+
+function walkShape(typeName: string, value: unknown, interfaces: DashboardInterfaceTable, where: string, problems: string[], seen: Set<string>): void {
+  const fields = interfaces[typeName];
+  if (!fields || seen.has(typeName)) return;
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return;
+  const object = value as Record<string, unknown>;
+  for (const field of fields) {
+    if (!(field.name in object)) {
+      if (!field.optional) problems.push(`${where}.${field.name} — declared as required, absent from the payload`);
+      continue;
+    }
+    const next = new Set(seen);
+    next.add(typeName);
+    walkValue(field.type, object[field.name], `${where}.${field.name}`, interfaces, problems, next);
+  }
+}

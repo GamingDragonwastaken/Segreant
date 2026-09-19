@@ -14,10 +14,12 @@
 import {
   DASHBOARD_API_CONTRACTS,
   DASHBOARD_PAYLOAD_CONTRACTS,
+  checkInterfaceShape,
   dashboardApiContract,
   validateDashboardPayload,
   type DashboardApiContractId,
 } from './generated-contract.ts';
+import { DASHBOARD_INTERFACE_CONTRACTS } from './generated-payload-contract.ts';
 
 const routePath = (id: DashboardApiContractId): string => dashboardApiContract(id).path;
 
@@ -188,6 +190,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
           502,
           path,
         );
+      }
+      // Deep check against the generated field table of shared-types.ts
+      // (D-243): the same walk the contract test runs against live routes, so a
+      // declaration that does not match the wire fails here in the browser
+      // rather than as NaN in a view. Fail closed: a screen built on a payload
+      // the declaration misdescribes is the defect this repository keeps finding.
+      if (/^[A-Z]\w*$/.test(payloadContract.responseType)) {
+        const problems = checkInterfaceShape(payloadContract.responseType, payload, DASHBOARD_INTERFACE_CONTRACTS, payloadContract.responseType);
+        if (problems.length > 0) {
+          throw new ApiError(`Dashboard interface contract violation: ${problems.slice(0, 3).join('; ')}${problems.length > 3 ? ` (+${problems.length - 3} more)` : ''}`, 502, path);
+        }
       }
     }
   }

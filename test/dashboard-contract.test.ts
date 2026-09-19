@@ -38,7 +38,7 @@ import { join } from 'node:path';
 import { Store } from '../src/store/db.ts';
 import { DEFAULT_CONFIG } from '../src/config.ts';
 import { createDashboardServer } from '../src/dashboard/server.ts';
-import { DASHBOARD_API_CONTRACTS, DASHBOARD_PAYLOAD_CONTRACTS, type DashboardPayloadContract } from '../src/dashboard/contracts.ts';
+import { DASHBOARD_API_CONTRACTS, DASHBOARD_PAYLOAD_CONTRACTS, checkInterfaceShape, type DashboardPayloadContract } from '../src/dashboard/contracts.ts';
 import { DASHBOARD_INTERFACE_CONTRACTS, DASHBOARD_INTERFACE_CONTRACT_SOURCE_SHA256 } from '../src/dashboard/web/app/core/generated-payload-contract.ts';
 import { seedDemo } from '../src/demo/seed.ts';
 
@@ -136,6 +136,22 @@ function generatedInterfaces(): Map<string, Field[]> {
   ]));
 }
 
+/**
+ * D-243: the deep walk is the SHARED one in `src/dashboard/contracts.ts`, which
+ * the browser client runs after the envelope check. This test and the browser
+ * therefore validate with one function and cannot disagree by drifting apart.
+ */
+function checkShape(
+  typeName: string,
+  value: unknown,
+  interfaces: Map<string, Field[]>,
+  where: string,
+  problems: string[],
+  _seen: Set<string>,
+): void {
+  problems.push(...checkInterfaceShape(typeName, value, Object.fromEntries(interfaces), where));
+}
+
 function payloadKind(value: unknown): string {
   if (Array.isArray(value)) return 'array';
   if (value !== null && typeof value === 'object') return 'object';
@@ -184,95 +200,6 @@ function concretePath(path: string): string {
   return path.replace(/\$\{[^}]*\}/g, '30d');
 }
 
-/**
- * Check every required field of `typeName` against `value`, recursing into other
- * declared interfaces. Absent optional fields are fine; absent REQUIRED ones are
- * the defect this file exists to catch.
- */
-function checkValueType(
-  type: string,
-  value: unknown,
-  where: string,
-  interfaces: Map<string, Field[]>,
-  problems: string[],
-  seen: Set<string>,
-): void {
-  const normalized = type.replace(/\s+/g, ' ').trim();
-  const alternatives = normalized.split('|').map((part) => part.trim());
-  if (alternatives.length > 1) {
-    if (value === null && alternatives.includes('null')) return;
-    if (value === undefined && alternatives.includes('undefined')) return;
-    if (alternatives.some((alternative) => alternative !== 'null' && alternative !== 'undefined'
-      && valueMatchesType(alternative, value, where, interfaces, problems, seen))) return;
-    problems.push(where + ' — expected ' + type + ', got ' + (value === null ? 'null' : typeof value));
-    return;
-  }
-  if (value === undefined) return;
-  if (!valueMatchesType(normalized, value, where, interfaces, problems, seen)) {
-    problems.push(where + ' — expected ' + type + ', got ' + (value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value));
-  }
-}
-
-function valueMatchesType(
-  type: string,
-  value: unknown,
-  where: string,
-  interfaces: Map<string, Field[]>,
-  problems: string[],
-  seen: Set<string>,
-): boolean {
-  if (type === 'unknown' || type === 'any') return true;
-  if (type === 'string') return typeof value === 'string';
-  if (type === 'number') return typeof value === 'number' && Number.isFinite(value);
-  if (type === 'boolean') return typeof value === 'boolean';
-  if (type === 'null') return value === null;
-  if (type.endsWith('[]')) {
-    if (!Array.isArray(value)) return false;
-    const elementType = type.slice(0, -2).trim();
-    for (const [index, element] of value.entries()) {
-      checkValueType(elementType, element, where + '[' + index + ']', interfaces, problems, seen);
-    }
-    return true;
-  }
-  if (type.startsWith('Record<')) return value !== null && typeof value === 'object' && !Array.isArray(value);
-  if (type.startsWith('{') || type.startsWith('(') || type.includes('=>')) return true;
-  const literal = /^['"](.+)['"]$/.exec(type);
-  if (literal) return typeof value === 'string' && value === literal[1];
-  const named = /^([A-Z]\w*)$/.exec(type);
-  if (named && interfaces.has(named[1]!)) {
-    if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
-    checkShape(named[1]!, value, interfaces, where, problems, seen);
-    return true;
-  }
-  return true;
-}
-
-function checkShape(
-  typeName: string,
-  value: unknown,
-  interfaces: Map<string, Field[]>,
-  where: string,
-  problems: string[],
-  seen: Set<string>,
-): void {
-  const fields = interfaces.get(typeName);
-  if (!fields || seen.has(typeName)) return;
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return;
-
-  const obj = value as Record<string, unknown>;
-  for (const field of fields) {
-    const present = field.name in obj;
-    if (!present) {
-      if (!field.optional) {
-        problems.push(`${where}.${field.name} — declared as required, absent from the payload`);
-      }
-      continue;
-    }
-    const next = new Set(seen);
-    next.add(typeName);
-    checkValueType(field.type, obj[field.name], where + '.' + field.name, interfaces, problems, next);
-  }
-}
 
 test('dashboard contract checker rejects a runtime primitive type mismatch', () => {
   const source = readFileSync(SHARED_TYPES_SRC, 'utf8');
@@ -341,6 +268,22 @@ test('every required field the GUI declares exists in the payload the server sen
       assert.equal(res.status, 200, `GET ${route!.path} returned ${res.status}`);
       checkPayloadContract(contract, await res.json(), `${contract.responseType} (${route!.path})`, problems);
     }
+    // D-243: the browser's deep check now runs on POST responses too, so the
+    // POST envelopes that can be exercised against an in-memory store without
+    // touching the machine are walked here with the same function. `discover`,
+    // `scan` and `import` read the operator's machine and `settings-update`
+    // writes configuration; they stay out of this test by design and are
+    // named so their absence is not read as coverage.
+    for (const routeId of ['clear-proposals'] as const) {
+      const contract = DASHBOARD_PAYLOAD_CONTRACTS.find((candidate) => candidate.routeId === routeId && candidate.method === 'POST');
+      const route = DASHBOARD_API_CONTRACTS.find((candidate) => candidate.id === routeId);
+      assert.ok(contract && route, `${routeId} needs both contracts`);
+      const res = await fetch(`${srv.base}${route!.path}`, { method: 'POST', headers: { 'x-fiscus-local': '1', 'content-type': 'application/json' }, body: '{}' });
+      assert.equal(res.status, 200, `POST ${route!.path} returned ${res.status}`);
+      const payload: unknown = await res.json();
+      checkPayloadContract(contract!, payload, `${contract!.responseType} (POST ${route!.path})`, problems);
+      checkShape(contract!.responseType, payload, interfaces, `${contract!.responseType} (POST ${route!.path})`, problems, new Set());
+    }
   } finally {
     await srv.close();
     store.close();
@@ -351,4 +294,27 @@ test('every required field the GUI declares exists in the payload the server sen
     [],
     `the GUI declares fields the server does not send:${String.fromCharCode(10)}  ${problems.join(String.fromCharCode(10) + '  ')}`,
   );
+});
+
+test('the shared deep walker is the one the browser runs, and it refuses a nested declaration the wire does not honour (D-243)', () => {
+  // Browser wiring: the client imports the walker from the copied contract and
+  // the generated field table, and throws a 502-class ApiError on problems.
+  const client = readFileSync(join(import.meta.dirname, '..', 'src', 'dashboard', 'web', 'app', 'core', 'api.ts'), 'utf8');
+  assert.match(client, /checkInterfaceShape\(payloadContract\.responseType, payload, DASHBOARD_INTERFACE_CONTRACTS/);
+  assert.match(client, /Dashboard interface contract violation/);
+  // The copied contract carries the walker byte-for-byte.
+  const copied = readFileSync(join(import.meta.dirname, '..', 'src', 'dashboard', 'web', 'app', 'core', 'generated-contract.ts'), 'utf8');
+  assert.match(copied, /export function checkInterfaceShape\(/);
+
+  // Able to fail: a nested required field declared as number arrives as a string.
+  const table = {
+    Outer: [{ name: 'inner', optional: false, type: 'Inner' }, { name: 'items', optional: true, type: 'Inner[]' }],
+    Inner: [{ name: 'count', optional: false, type: 'number' }, { name: 'note', optional: true, type: 'string | null' }],
+  };
+  assert.deepEqual(checkInterfaceShape('Outer', { inner: { count: 3, note: null }, items: [{ count: 1 }] }, table, 'Outer'), []);
+  const problems = checkInterfaceShape('Outer', { inner: { count: '3' }, items: [{ note: 'x' }] }, table, 'Outer');
+  assert.ok(problems.some((item) => item.startsWith('Outer.inner.count — expected number')), problems.join('; '));
+  assert.ok(problems.some((item) => item.startsWith('Outer.items[0].count — declared as required')), problems.join('; '));
+  // The defect that motivated the rule: a number declared where the server sends an array.
+  assert.ok(checkInterfaceShape('Inner', { count: [] }, table, 'Inner').length === 1);
 });

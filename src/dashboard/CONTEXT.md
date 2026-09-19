@@ -168,6 +168,13 @@ web/
   shape and runtime primitive/array/record/interface/null-union types, against
   records that actually exist. It is still a conformance gate, not a generated
   single-source schema; the release gate keeps that distinction explicit.
+  Since D-243 the deep walk is ONE function, `checkInterfaceShape` in
+  `contracts.ts` (byte-copied into the browser): the client runs it on every
+  JSON response after the envelope check, against the generated field table of
+  `shared-types.ts`, and fails closed with a 502-class error naming the path;
+  the contract test runs the same function against live routes. Server and
+  browser therefore validate with the same walk and cannot drift apart. The
+  server does not validate its own responses at send time.
 - **Exact economic data has a read-only route and a typed client contract.**
   `GET/HEAD /api/economic` serves the CLI's canonical report with exact Money
   strings, source/effective request coverage, role-aware balances and bounded
