@@ -7,14 +7,14 @@
 | | |
 | --- | --- |
 | Branch | `gpt56/magnum-opus-reconstruction` — never `main`, never force-pushed |
-| Last CI-verified exact head | | Last CI-verified exact head | `980b2506d08e48fe8e67e8e1e96f2c0c8fd125ce` — run `35382286751`, **success on all eight configured jobs**, inspected job by job on 2026-09-19 (the D-231..D-234 tranche). `c5c4a92` (D-235..D-239) ran `35421763553`: seven jobs green, `package-smoke` failed on the new `upload-artifact` step alone — the action refuses `..` paths — fixed at `4f5a909`; the SBOM check itself had passed. | |
-| Code ahead of that head | | Code ahead of that head | D-235..D-240 (`1b1250a`, `449bd66`, `51e4fe7`, `bd84b80`, `0ecdbf9`, `c5c4a92`, `4f5a909`, `5ffea2f`) — this tranche; its exact-head CI row is PENDING until the run at the pushed head is observed. | |
-| Local gates on the current tree | | Local gates on the current tree | Root suite 2061/2065, 0 fail at `51e4fe7` (full `npm test`); later commits re-ran their own files plus neighbourhoods against a rebuilt `dist/` (dashboard/GUI 128/128 at `0ecdbf9`; frontier/decision/dashboard/value 301/301 at `5ffea2f`); `npm run typecheck` (the CI form), browser and team-server typecheck; team-server suite 130/130 at `449bd66`. | |
+| Last CI-verified exact head | `7fa9053ae26fbf9b38c9e4d16ef61328d4274c2e` — run `35422132017`, **success on all eight configured jobs**, inspected job by job on 2026-09-19 (the D-235..D-240 tranche plus the `package-smoke` upload-path fix at `4f5a909`). |
+| Code ahead of that head | D-241..D-245 (`605fdf3`, `d683040`, `3250847`, `734d76b`, `775b645`) — this tranche; its exact-head CI row is PENDING until the run at the pushed head is observed. |
+| Local gates on the current tree | Root suite 2072/2076, 0 fail at `775b645` (full `npm test`, 2026-09-19); `npm run typecheck` (the CI form), browser and team-server typecheck; team-server suite 130/130 at `449bd66` (nothing under `src/team/` or `src/value/` exports changed since except the frontier assurance surface, re-run 301/301 at `5ffea2f`). |
 | Dossier source | `FISCUS_EXECUTION_DOSSIER_III.md` is **not in this checkout and not in git history** — it was an owner-supplied input. `docs/program/PACKET-INVENTORY.md` is the surviving mechanical enumeration of all 76 packets and is authoritative here. Do not re-derive a packet count from anything else. |
 
 ## Packet accounting
 
-76 packets. **39 COMPLETED, 21 PARTIAL, 15 NOT_STARTED, 0 IN_PROGRESS, 1 BLOCKED_EXTERNAL, 0 SUPERSEDED.** Regenerate rather than trust this line:
+76 packets. **44 COMPLETED, 16 PARTIAL, 14 NOT_STARTED, 0 IN_PROGRESS, 1 BLOCKED_EXTERNAL, 1 SUPERSEDED_WITH_REASON.** Regenerate rather than trust this line:
 
 ```bash
 grep -oE '\| `(NOT_STARTED|IN_PROGRESS|PARTIAL|COMPLETED|BLOCKED_EXTERNAL|SUPERSEDED_WITH_REASON)` \|' docs/program/PACKET-INVENTORY.md | sort | uniq -c
