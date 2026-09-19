@@ -175,6 +175,8 @@ export const CODING_OUTCOME_ADAPTER: OutcomeAdapter = Object.freeze({
 
 /** Evaluate coding gates through the domain-neutral OutcomeAdapter contract. */
 export interface CodingOutcomeEvaluation extends OutcomeEvaluation {
+  /** The adapter that judged this evaluation — carried so a consumer can name the route, not infer it (D-247). */
+  readonly adapterId: string;
   /** Compatibility projection retaining the coding funnel's ordered gate detail. */
   readonly funnel: FunnelOutcome;
 }
@@ -192,6 +194,7 @@ export function evaluateCodingOutcome(verdicts: Readonly<Record<Gate, GateResult
   const adapted = adaptOutcome(unit, CODING_OUTCOME_ADAPTER);
   return Object.freeze({
     ...adapted.evaluation,
+    adapterId: adapted.adapterId,
     funnel: scoreFunnelProjection(verdicts, adapted.evaluation.status === 'confirmed'),
   });
 }

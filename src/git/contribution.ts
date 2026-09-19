@@ -759,3 +759,75 @@ export function assessContributionEvidenceForCandidates(
     ]),
   });
 }
+
+// ---------------------------------------------------------------------------
+// Operator summary (D-246). Counts are observations over the assessed units;
+// the non-claim list is printed WITH them so a reader never takes an
+// association tally for an authorship, quality, outcome or value finding.
+// ---------------------------------------------------------------------------
+
+export interface ContributionEvidenceSummary {
+  readonly units: number;
+  readonly assessed: number;
+  /** Units with no assessment at all — never folded into `unresolved`. */
+  readonly unassessed: number;
+  readonly byStatus: Readonly<Record<ContributionEvidenceStatus, number>>;
+  readonly byMethod: Readonly<Record<ContributionEvidenceMethod, number>>;
+  /** Assessed units carrying at least one declared confounder. */
+  readonly confounded: number;
+  /** Union of non-claims across the assessed units, sorted. */
+  readonly nonClaims: readonly ContributionNonClaim[];
+}
+
+export function summarizeContributionEvidence(
+  units: ReadonlyArray<{ readonly contributionEvidence?: ContributionEvidenceResult }>,
+): ContributionEvidenceSummary {
+  const byStatus = Object.fromEntries(CONTRIBUTION_EVIDENCE_STATUSES.map((s) => [s, 0])) as Record<ContributionEvidenceStatus, number>;
+  const byMethod = Object.fromEntries(CONTRIBUTION_EVIDENCE_METHODS.map((m) => [m, 0])) as Record<ContributionEvidenceMethod, number>;
+  const nonClaims = new Set<ContributionNonClaim>();
+  let assessed = 0;
+  let confounded = 0;
+  for (const unit of units) {
+    const evidence = unit.contributionEvidence;
+    if (evidence === undefined) continue;
+    assessed++;
+    byStatus[evidence.status]++;
+    byMethod[evidence.method]++;
+    if (evidence.confounders.length > 0) confounded++;
+    for (const claim of evidence.nonClaims) nonClaims.add(claim);
+  }
+  return freezeObject({
+    units: units.length,
+    assessed,
+    unassessed: units.length - assessed,
+    byStatus: freezeObject(byStatus),
+    byMethod: freezeObject(byMethod),
+    confounded,
+    nonClaims: [...nonClaims].sort(),
+  });
+}
+
+const NON_CLAIM_LABELS: Readonly<Record<ContributionNonClaim, string>> = {
+  ai_authorship: 'AI authorship',
+  code_quality: 'code quality',
+  outcome_success: 'outcome success',
+  realized_value: 'realized value',
+};
+
+/** Human lines for the summary; empty when no unit was assessed, so absence is not printed as a zero finding. */
+export function contributionEvidenceLines(summary: ContributionEvidenceSummary): string[] {
+  if (summary.assessed === 0) return [];
+  const statuses = CONTRIBUTION_EVIDENCE_STATUSES.filter((s) => summary.byStatus[s] > 0).map((s) => `${summary.byStatus[s]} ${s}`);
+  const methods = CONTRIBUTION_EVIDENCE_METHODS.filter((m) => summary.byMethod[m] > 0).map((m) => `${summary.byMethod[m]} ${m.replaceAll('_', ' ')}`);
+  const lines = [
+    `${summary.assessed} of ${summary.units} units assessed (${summary.unassessed} unassessed): ${statuses.join(', ')}` +
+      (summary.confounded > 0 ? `; ${summary.confounded} with a declared confounder` : ''),
+    `method: ${methods.join(', ')}`,
+  ];
+  const denied = summary.nonClaims.map((c) => NON_CLAIM_LABELS[c]);
+  const last = denied.pop();
+  lines.push(
+    `proposal↔commit association only — never ${denied.length > 0 ? `${denied.join(', ')}, or ${last}` : last}`,
+  );
+  return lines;
+}

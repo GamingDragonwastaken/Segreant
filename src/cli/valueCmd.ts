@@ -11,6 +11,7 @@ import { Store } from '../store/db.ts';
 import { loadConfig, saveConfig, dbPath, isDemo } from '../config.ts';
 import { isGitRepo, projectName, resolveCommit } from '../git/correlate.ts';
 import { computeArtifactPersistence } from '../git/quality.ts';
+import { contributionEvidenceLines, summarizeContributionEvidence } from '../git/contribution.ts';
 import { loadRealization } from '../value/realization.ts';
 import { WORK_WEEK_MINUTES } from '../value/timeReclaimed.ts';
 import { computeFrontier } from '../value/frontier.ts';
@@ -190,6 +191,16 @@ export async function cmdRealize(flags: Flags): Promise<void> {
           ? color(tty, C.yellow, `conflicted:${u.funnel.conflicts[0]}`)
           : color(tty, C.red, `died:${u.funnel.diedAt ?? '—'}`);
     console.log(`    ${short}  ${age.padStart(4)}  ${usd(u.attributedCostUsd).padStart(9)}  acc ${acc}  ${funnel}  ${status}`);
+  }
+
+  // Contribution evidence: how each unit's proposals relate to its commit.
+  // An association tally, printed with its non-claims; silent when no unit
+  // was assessed rather than reporting zeros as a finding (D-246).
+  const contribution = contributionEvidenceLines(summarizeContributionEvidence(report.units));
+  if (contribution.length > 0) {
+    console.log('');
+    console.log(color(tty, C.bold, '  Contribution evidence'));
+    for (const line of contribution) console.log(color(tty, C.gray, `    ${line}`));
   }
   console.log('');
   console.log(color(tty, C.gray, '  Production is dollar-free (Realization Rate); cost is a lens on top. See docs/THE-STANDARD.md'));

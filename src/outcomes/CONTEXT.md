@@ -19,9 +19,11 @@
 - Unknown evidence never becomes confirmation; conflict never becomes confirmation.
 - Work-unit identity and interval validation occur before adapter evaluation.
 - Domain-specific adapters may be added without changing the generic contract or inventing coding lifecycle gates for non-coding work.
+- Reach is gated (D-247, `test/outcome-adapter-reach.test.ts`): `adaptOutcome` is called from the two canonical adapter modules (`src/value/gates.ts`, `src/value/usage.ts`) and nowhere else in `src/`; the coding evaluation carries `adapterId`; the durable registry refuses an identity not allowlisted. A third call site fails the gate until it is a declared adapter.
 
 ## Verify
 
 ```bash
 node --test --experimental-strip-types test/outcome-contract.test.ts test/work-unit-outcome-adapter.test.ts test/outcome-adapter-integration.test.ts
+node --test --experimental-strip-types test/outcome-adapter-reach.test.ts test/outcome-adapter-registry.test.ts
 ```

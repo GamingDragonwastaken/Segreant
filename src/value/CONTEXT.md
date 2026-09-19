@@ -114,7 +114,13 @@
   retained proposal/commit artifacts. It never feeds outcome, quality, or value
   gates; competing sources, incomplete captures, generated content without
   lineage, and weak temporal evidence remain explicit rather than becoming
-  authorship or success claims.
+  authorship or success claims. Since D-246 it reaches the operator:
+  `summarizeContributionEvidence` / `contributionEvidenceLines` in
+  `src/git/contribution.ts` give `fiscus realize` a "Contribution evidence"
+  block — counts by status and method, declared confounders, unassessed units
+  kept apart from `unresolved`, and the non-claim sentence printed with them;
+  nothing is printed when no unit was assessed. JSON output carries the
+  per-unit result unchanged.
 - Dominant provider/model attribution comes from `canonicalModelAttribution()`
   over effective request rows. Exact Money chooses the winner and share before
   numeric projection; partial windows have no winner, and wholly legacy windows
@@ -150,4 +156,5 @@
 ```bash
 npm test -- --test-name-pattern="value|trial|frontier|realization|lift"
 npm test -- --test-name-pattern="contribution"
+node --test --experimental-strip-types test/contribution-surface.test.ts
 ```
