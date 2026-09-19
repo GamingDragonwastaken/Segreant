@@ -171,6 +171,19 @@ with the Settings action or `fiscus prune`. If Fiscus is not running, no
 background process is active to delete data; run one of those controls when an
 immediate deletion deadline matters.
 
+The request ledger itself has its own, separate period: `retentionDays` (180
+days by default), configurable in Settings or the config file. Unlike
+proposals, request rows are **not** pruned automatically when `fiscus start`
+begins — only an explicit `fiscus prune` deletes request rows older than
+`retentionDays`. A window that reaches behind whatever boundary is actually on
+record is disclosed on the figures themselves (`retention` in `/api/overview`
+and the CLI's own windowed reports) rather than silently narrowed; see
+`Store.windowCoverage` and `Store.retentionFloor` in `src/store/db.ts`. To get
+your own data out before pruning it, `fiscus pack export --out <file>` writes
+the local epistemic ledger's records to disk (described above); there is no
+separate hosted subject-access request path because there is no hosted copy of
+this data to request in the first place.
+
 ## Optional outbound paths
 
 These paths are off unless an operator deliberately invokes or configures them:
