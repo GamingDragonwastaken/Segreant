@@ -82,29 +82,34 @@ export type PricingSourceKind = 'manual' | 'native_manifest' | 'litellm_transfor
  * billing states: Fiscus does not receive provider invoices, discounts, taxes,
  * credits, or reconciliation data.
  */
-export type CostBasis =
-  | 'local_list_price'
-  | 'fallback_estimate'
-  | 'tool_reported_unverified'
-  | 'synthetic_demo'
-  | 'unpriced'
-  | 'legacy_unknown';
+export const COST_BASES = [
+  'local_list_price',
+  'fallback_estimate',
+  'tool_reported_unverified',
+  'synthetic_demo',
+  'unpriced',
+  'legacy_unknown',
+] as const;
+export type CostBasis = (typeof COST_BASES)[number];
 
 /** Source of an attached rate-card hash. `none` is deliberately explicit for
  * tool-reported and unpriced rows, so a null hash is never mistaken for a lost
  * local rate card. */
-export type RateCardSourceKind = PricingSourceKind | 'bundled' | 'legacy_unknown' | 'none';
+export const RATE_CARD_SOURCE_KINDS = ['manual', 'native_manifest', 'litellm_transformed', 'bundled', 'legacy_unknown', 'none'] as const;
+export type RateCardSourceKind = (typeof RATE_CARD_SOURCE_KINDS)[number];
 
 /** How the observed model was resolved against a local rate card, if any. */
-export type RateMatchKind =
-  | 'exact_provider'
-  | 'exact_cross_provider'
-  | 'family_provider'
-  | 'family_cross_provider'
-  | 'fallback'
-  | 'reported'
-  | 'unpriced'
-  | 'legacy_unknown';
+export const RATE_MATCH_KINDS = [
+  'exact_provider',
+  'exact_cross_provider',
+  'family_provider',
+  'family_cross_provider',
+  'fallback',
+  'reported',
+  'unpriced',
+  'legacy_unknown',
+] as const;
+export type RateMatchKind = (typeof RATE_MATCH_KINDS)[number];
 
 /**
  * Request-level pricing lineage. It is captured at calculation time so a later

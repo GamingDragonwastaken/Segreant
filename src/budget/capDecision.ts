@@ -75,11 +75,15 @@
 
 import { createHash } from 'node:crypto';
 import {
+  buildUtilityIntervalProblem,
   certifyDecision,
   minimaxRegret,
+  preferenceRobustness,
   type ActionUtilityInterval,
   type DecisionCertificate,
   type MinimaxRegretResult,
+  type PreferenceRobustnessResult,
+  type UtilityIntervalProblem,
 } from '../decision/engine.ts';
 import { decisionCountermodels, decisionInvalidatingAssumptionSets } from '../decision/countermodels.ts';
 import { gateDecisionForConsequence, type DecisionAssuranceGate, type DecisionAssuranceInput } from '../decision/assurance.ts';
@@ -125,6 +129,42 @@ export interface BudgetCapActionEvaluation {
   /** Observed-window spend the cap would have blocked. */
   readonly blockedUsd: number;
   readonly utility: { readonly low: number; readonly high: number };
+  /** Realized spend inside the admitted portion, over every split consistent with observation. */
+  readonly realizedAdmitted: { readonly low: number; readonly high: number };
+}
+
+/**
+ * The admissible preference set for the cap decision (D-249). The declared
+ * objective weighs a realized dollar at +1 and an unrealized admitted dollar
+ * at -1; an operator who prices realization higher or lower is still acting
+ * on the same evidence. Each entry is a point utility per action, so the set
+ * is evaluated at both ends of the realized-admitted interval rather than at
+ * a midpoint the evidence does not support. Finite and explicit: a preference
+ * not listed here is not admissible, and no weight is inferred.
+ */
+export const BUDGET_CAP_ADMISSIBLE_PREFERENCES: ReadonlyArray<{
+  readonly id: string;
+  /** Utility per admitted dollar that realized; unrealized admitted dollars always cost 1. */
+  readonly realizedWeight: number;
+  readonly end: 'low' | 'high';
+  readonly rationale: string;
+}> = Object.freeze([
+  { id: 'objective:low', realizedWeight: 2, end: 'low', rationale: 'the declared objective at the pessimistic end of the realized-admitted interval' },
+  { id: 'objective:high', realizedWeight: 2, end: 'high', rationale: 'the declared objective at the optimistic end of the realized-admitted interval' },
+  { id: 'break_even:low', realizedWeight: 1, end: 'low', rationale: 'a realized dollar merely recovers its cost; pessimistic end' },
+  { id: 'break_even:high', realizedWeight: 1, end: 'high', rationale: 'a realized dollar merely recovers its cost; optimistic end' },
+  { id: 'value_heavy:low', realizedWeight: 4, end: 'low', rationale: 'a realized dollar is worth three more than it cost; pessimistic end' },
+  { id: 'value_heavy:high', realizedWeight: 4, end: 'high', rationale: 'a realized dollar is worth three more than it cost; optimistic end' },
+]);
+
+function admissiblePreferenceScenarios(actions: readonly BudgetCapActionEvaluation[]) {
+  return BUDGET_CAP_ADMISSIBLE_PREFERENCES.map((preference) => ({
+    preferenceId: preference.id,
+    utilities: Object.fromEntries(actions.map((item) => {
+      const realized = item.realizedAdmitted[preference.end];
+      return [item.action, preference.realizedWeight * realized - (item.admittedUsd - realized)];
+    })),
+  }));
 }
 
 /**
@@ -163,12 +203,21 @@ export interface BudgetCapDecision {
   };
   readonly actions: readonly BudgetCapActionEvaluation[];
   readonly intervals: readonly ActionUtilityInterval[];
+  /** The intervals as the engine's normalized problem: which uncertainty representation they carry (D-249). */
+  readonly utilityProblem: UtilityIntervalProblem;
   /** Strict interval dominance, verbatim from the engine. */
   readonly certificate: DecisionCertificate;
   /** The declared ambiguity rule, routed through the same intervals; never a proof. */
   readonly regret: MinimaxRegretResult;
   /** The gate for the consequence acting on this decision has: changing spend. */
   readonly assurance: DecisionAssuranceGate;
+  /**
+   * Robustness of the pick across the declared admissible preference set
+   * (D-249): which actions stay optimal under every admissible weighting of
+   * realized against admitted spend, at both ends of the realized interval. A
+   * diagnostic beside the certificate; it never moves standing.
+   */
+  readonly preference: PreferenceRobustnessResult;
   readonly standing: BudgetCapStanding;
   /** "Why not certified?" -- one live witness per stated assumption, and the load-bearing sets. */
   readonly whyNotCertified: {
@@ -230,6 +279,7 @@ function evaluate(
       low: 2 * realizedAdmittedLow - admittedUsd,
       high: 2 * realizedAdmittedHigh - admittedUsd,
     }),
+    realizedAdmitted: Object.freeze({ low: realizedAdmittedLow, high: realizedAdmittedHigh }),
   });
 }
 
@@ -264,8 +314,10 @@ export function decideBudgetCap(input: BudgetCapDecisionInput): BudgetCapDecisio
     low: item.utility.low,
     high: item.utility.high,
   })));
-  const certificate = certifyDecision(intervals);
-  const regret = minimaxRegret(intervals);
+  const utilityProblem = buildUtilityIntervalProblem(intervals);
+  const certificate = certifyDecision(utilityProblem.intervals);
+  const regret = minimaxRegret(utilityProblem.intervals);
+  const preference = preferenceRobustness(admissiblePreferenceScenarios(actions));
   const assurance = gateDecisionForConsequence({
     certificate,
     inputs: input.inputs ?? [],
@@ -323,9 +375,11 @@ export function decideBudgetCap(input: BudgetCapDecisionInput): BudgetCapDecisio
     }),
     actions,
     intervals,
+    utilityProblem,
     certificate,
     regret,
     assurance,
+    preference,
     standing,
     whyNotCertified: Object.freeze({ countermodels, invalidatingAssumptionSets }),
     assumptions: Object.freeze([...CAP_ASSUMPTIONS, ...certificate.assumptions]),
@@ -508,6 +562,11 @@ export function renderBudgetCapDecision(decision: BudgetCapDecision, certificate
   lines.push(
     `  Minimax regret selects ${decision.regret.actions.join(', ')} (worst-case regret ${money(decision.regret.minimaxRegret)}) — `
     + `rule ${decision.regret.rule}: a declared selection rule, not dominance and not proof of objective optimality.`,
+  );
+  const pref = decision.preference;
+  lines.push(
+    `  Preference   ${pref.status}: ${pref.robustOptimalActions.length > 0 ? `${pref.robustOptimalActions.join(', ')} stays optimal` : 'no action stays optimal'} `
+    + `across ${pref.preferenceIds.length} declared admissible preferences — a robustness diagnostic, not a recommendation.`,
   );
   const assessment = decision.assurance.assessment;
   lines.push(

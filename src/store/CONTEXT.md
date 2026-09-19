@@ -64,6 +64,19 @@ two domain callers goes in `rows.ts`.
   PRUNE IS ON RECORD, never "nothing was pruned", and is never inferred from
   the oldest surviving row. `truncated` is a comparison against the window and
   is false at the boundary instant, which `prune` retains (D-170, D-171).
+- **A damaged ledger refuses; it does not drift.** Byte-level fault injection
+  (D-251, `test/store-corruption-fault-injection.test.ts`) holds startup and the
+  read boundary to one oracle: a flipped byte is refused at open, refused at
+  read, or the rows read back exactly. Two classes it found are closed: the
+  retained schema text is validated before any idempotent DDL can repair over
+  it (a damaged column name used to be re-added with its default, resetting a
+  provenance column to the legacy sentinel on every row), and a selected
+  provenance column (`cost_basis`, `rate_card_source_kind`, `rate_match_kind`,
+  `scope_capture_status`, `attribution_basis`, `capture_coverage`) holding a
+  null or a string outside its vocabulary refuses with the column named instead
+  of reading as `legacy_unknown`. A flip inside a free-text or REAL payload
+  that stays a well-formed record is not seen — request rows carry no row
+  digest — and the sweep bounds that residue rather than hiding it.
 - **Recorded labels are never rewritten.** Alias resolution happens at query
   time (`projectCanonical` beside the recorded `project`), so an export and a
   rollup total identically without either mutating a row.
@@ -172,6 +185,7 @@ two domain callers goes in `rows.ts`.
 
 ```bash
 npm test -- --test-name-pattern="store|migration|provenance"
+node --test --experimental-strip-types test/store-corruption-fault-injection.test.ts
 ```
 
 A schema change needs a test that fails against the pre-change behaviour, and a

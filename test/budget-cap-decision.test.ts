@@ -30,6 +30,7 @@ process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'fiscus-home-cap-decision-'
 import { Store, type RequestRow } from '../src/store/db.ts';
 import { recommendBudget } from '../src/budget/recommend.ts';
 import {
+  BUDGET_CAP_ADMISSIBLE_PREFERENCES,
   BUDGET_CAP_PROBLEM,
   budgetCapIssuanceInput,
   decideBudgetCap,
@@ -343,4 +344,33 @@ test('fiscus budget --recommend shows the decision review-only, and --apply is r
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
+});
+
+// ---------------------------------------------------------------------------
+// D-249: the cap decision is the product's one utility problem, and it goes
+// through the engine's representation layer (F01) and its admissible
+// preference set diagnostic (F03) rather than restating either.
+// ---------------------------------------------------------------------------
+
+test('the cap decision normalizes its intervals through buildUtilityIntervalProblem and reports the representation', () => {
+  const decision = decideBudgetCap({ dailySpends: [10, 12, 30, 9, 11], realizedSpendShare: 0.5, currentDailyCapUsd: null, recommendedDailyUsd: 15 });
+  assert.equal(decision.utilityProblem.uncertainty, 'explicit_intervals');
+  assert.deepEqual(decision.utilityProblem.intervals, decision.intervals);
+});
+
+test('the cap decision evaluates a declared admissible preference set and never lets it change standing', () => {
+  const decision = decideBudgetCap({ dailySpends: [10, 12, 30, 9, 11], realizedSpendShare: null, currentDailyCapUsd: null, recommendedDailyUsd: 15 });
+  const pref = decision.preference;
+  assert.equal(pref.rule, 'admissible_preference_set');
+  assert.ok(pref.preferenceIds.length >= 4, 'the admissible set is declared, finite, and more than the objective alone');
+  assert.ok(pref.preferenceIds.every((id) => BUDGET_CAP_ADMISSIBLE_PREFERENCES.some((p) => p.id === id)));
+  assert.deepEqual(pref.actionSet, ['apply_recommended', 'keep_current']);
+  // Unobserved realization: the optimistic and pessimistic preferences disagree.
+  assert.equal(pref.status, 'preference_sensitive');
+  assert.equal(decision.standing.status, 'review_only');
+  for (const p of BUDGET_CAP_ADMISSIBLE_PREFERENCES) assert.ok(p.rationale.length > 20, `${p.id} states why it is admissible`);
+  // The robustness diagnostic is rendered, as a diagnostic.
+  const text = renderBudgetCapDecision(decision, []).join('\n');
+  assert.match(text, /Preference\s+preference_sensitive/);
+  assert.match(text, /not a recommendation/);
 });

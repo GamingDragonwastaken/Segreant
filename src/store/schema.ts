@@ -913,7 +913,35 @@ export function assertDatabaseIntegrity(
   }
   const foreignKeyRows = db.prepare('PRAGMA foreign_key_check').all();
   if (foreignKeyRows.length > 0) throw new Error('SQLite foreign_key_check reported violations');
+  validateRetainedSchemaText(db);
   if (options.appendOnlyTriggers) validateAppendOnlyTriggerAuthority(db);
+}
+
+/**
+ * The schema text is data too. `integrity_check` verifies the b-tree, not the
+ * DDL stored in `sqlite_master`: one damaged byte inside a column name leaves
+ * every page valid while the column becomes unreachable — and the idempotent
+ * migration would then re-add it with its default, silently resetting a
+ * provenance column to the legacy sentinel for every row (found by byte-level
+ * fault injection, D-251). Every identifier Fiscus writes is ASCII snake_case,
+ * so a table or column name outside that alphabet is damage, refused before
+ * any DDL can repair over it.
+ */
+function validateRetainedSchemaText(db: DatabaseSync): void {
+  const identifier = /^[A-Za-z_][A-Za-z0-9_]*$/;
+  const objects = db.prepare("SELECT type, name, tbl_name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'").all() as Array<{ type: string; name: string; tbl_name: string }>;
+  for (const object of objects) {
+    if (!identifier.test(object.name) || !identifier.test(object.tbl_name)) {
+      throw new Error(`database integrity validation failed: ${object.type} name ${JSON.stringify(object.name)} is not an identifier Fiscus writes; the schema text is damaged`);
+    }
+    if (object.type !== 'table') continue;
+    const columns = db.prepare(`PRAGMA table_info("${object.name}")`).all() as Array<{ name: string }>;
+    for (const column of columns) {
+      if (!identifier.test(column.name)) {
+        throw new Error(`database integrity validation failed: table ${object.name} column ${JSON.stringify(column.name)} is not an identifier Fiscus writes; the schema text is damaged`);
+      }
+    }
+  }
 }
 
 /** Reject tampered append-only metadata before idempotent DDL can repair it. */

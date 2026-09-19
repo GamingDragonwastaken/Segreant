@@ -27,7 +27,7 @@ import {
 } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { legacyPricingEvidence, pricingCardProvenance, type PricingCardProvenance, type RequestPricingEvidence } from '../cost/pricing.ts';
-import { pricingEvidenceFromRecord } from './rows.ts';
+import { pricingEvidenceFromRecord, vocabularyValue } from './rows.ts';
 import { addMoney, formatMoneyAmount, money, type EconomicBasis, type Money } from '../economics/money.ts';
 import { requestEconomicEvent, requestEconomicEventId } from '../economics/request.ts';
 import { serializeEconomicEvent } from '../economics/serialization.ts';
@@ -393,6 +393,9 @@ export interface VerifiedGateEvidenceInput {
 
 export type VerifiedGateEvidenceWrite = 'inserted' | 'duplicate' | 'conflict';
 
+const SCOPE_CAPTURE_STATUSES = ['legacy_unknown', 'unscoped', 'declared_unverified', 'not_observed'] as const satisfies readonly ScopeCaptureStatus[];
+const CAPTURE_COVERAGES = ['complete', 'truncated', 'unknown', 'legacy_unknown'] as const;
+
 function requestRowFromRecord(record: Record<string, unknown>): RequestRow {
   const {
     costBasis,
@@ -408,25 +411,15 @@ function requestRowFromRecord(record: Record<string, unknown>): RequestRow {
     estimated: Boolean(record.estimated),
     streamed: Boolean(record.streamed),
     pricing: pricingEvidenceFromRecord(record),
-    scopeCaptureStatus: typeof record.scopeCaptureStatus === 'string'
-      ? record.scopeCaptureStatus as ScopeCaptureStatus
-      : 'legacy_unknown',
-    // An unrecognized value reads as legacy_unknown rather than being passed
-    // through: a label nobody can interpret must not look like a real basis.
-    attributionBasis:
-      typeof record.attributionBasis === 'string'
-        && (ATTRIBUTION_BASES as readonly string[]).includes(record.attributionBasis)
-        ? record.attributionBasis as AttributionBasis
-        : 'legacy_unknown',
+    // A missing value reads as legacy_unknown; a string outside the vocabulary
+    // refuses (D-251): no writer produces one, so it is damage, and a label
+    // nobody can interpret must neither pass through nor hide as "unknown".
+    scopeCaptureStatus: vocabularyValue(record.scopeCaptureStatus, SCOPE_CAPTURE_STATUSES, 'scopeCaptureStatus', 'legacy_unknown') as ScopeCaptureStatus,
+    attributionBasis: vocabularyValue(record.attributionBasis, ATTRIBUTION_BASES, 'attributionBasis', 'legacy_unknown') as AttributionBasis,
     providerScopeDeclarationId: typeof record.providerScopeDeclarationId === 'string'
       ? record.providerScopeDeclarationId
       : null,
-    captureCoverage: record.captureCoverage === 'complete'
-      || record.captureCoverage === 'truncated'
-      || record.captureCoverage === 'unknown'
-      || record.captureCoverage === 'legacy_unknown'
-      ? record.captureCoverage
-      : 'legacy_unknown',
+    captureCoverage: vocabularyValue(record.captureCoverage, CAPTURE_COVERAGES, 'captureCoverage', 'legacy_unknown'),
   };
 }
 

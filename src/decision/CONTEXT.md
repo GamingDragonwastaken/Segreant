@@ -27,7 +27,7 @@ precision.
   mixture; measurement cost is applied only afterward;
 - invalid, duplicate, non-finite, or mismatched inputs fail closed;
 - ties are returned in deterministic action-identifier order.
-- `control.ts` models shadow → simulated effect → canary → monitored expansion → full rollout and rollback as an immutable, preview-then-commit, revision-checked state machine; it never executes, authorizes, or persists an external action.
+- `control.ts` models shadow → simulated effect → canary → monitored expansion → full rollout and rollback as an immutable, preview-then-commit, revision-checked state machine; it never executes, authorizes, or persists an external action. Nothing calls `control.ts` from a product path, by decision (D-250): the product's one spend-changing action has its shadow phase as the replay inside `decideBudgetCap`, refuses authorization by construction, and has no external target; a persisted lifecycle nothing advances would be the unwired-mechanism state D-220 ended.
 - `assurance.ts` DERIVES a Decision Assurance Level from the ten-axis `ClaimProfile` of every declared input claim and from the dominance certificate's own result. A caller cannot assert a level; there is no field to assert one with. `buildDecisionKernelIssuance` refuses to issue when a declared consequence class requires more than the declared inputs reach, and `issueDecisionToKernel` therefore cannot persist past a refusal.
 
 ## Invariants
@@ -58,7 +58,10 @@ node --test --experimental-strip-types test/frontier-assurance-gate.test.ts
 
 One product path reaches this module (D-220): `src/budget/capDecision.ts`
 frames the budget advisor's cap as a decision between `apply_recommended` and
-`keep_current`, calls `certifyDecision`, `minimaxRegret`,
+`keep_current`, normalizes its intervals through `buildUtilityIntervalProblem`
+and evaluates a declared six-member admissible preference set through
+`preferenceRobustness` (D-249; a diagnostic rendered beside the certificate
+that never moves standing), calls `certifyDecision`, `minimaxRegret`,
 `decisionCountermodels`, `decisionInvalidatingAssumptionSets` and
 `gateDecisionForConsequence`, renders the result in `fiscus budget
 --recommend`, and routes a certified cap through `issueDecisionToKernel` on
