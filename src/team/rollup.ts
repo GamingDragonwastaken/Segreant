@@ -239,6 +239,11 @@ function canonicalEconomicProject(project: EconomicProjectValue): EconomicProjec
   if (total !== null) {
     assertAgreesWithUsdCompatibility(total, project.costUsd, `economic team rollup project ${project.project}`);
   }
+  // The second compatibility float in the row is the one a receiver reads as
+  // value; it travelled unreconciled beside its exact amount until D-236.
+  if (realized !== null) {
+    assertAgreesWithUsdCompatibility(realized, project.spendOnRealizedUnitsUsd, `economic team rollup project ${project.project} realized`);
+  }
   return Object.freeze({
     ...project,
     economic: Object.freeze({ coverage, total, realized }),

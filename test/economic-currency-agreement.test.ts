@@ -132,3 +132,28 @@ test('the reconciliation still catches a magnitude disagreement, in either curre
     /disagrees with exact amount/,
   );
 });
+
+test('a team rollup reconciles the realized exact amount against spendOnRealizedUnitsUsd, not only the total', () => {
+  // D-236. `canonicalEconomicProject` checked `economic.total` against `costUsd`
+  // and let `economic.realized` travel unreconciled beside
+  // `spendOnRealizedUnitsUsd` — the second compatibility float in the same row,
+  // and the one a receiver reads as "value". Same rule, same helper.
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-currency-rollup-realized-'));
+  try {
+    const keys = loadOrCreateKeyPair(join(dir, 'key.json'));
+    const total = attribution('USD');
+    const realized = economicAttributionView({
+      amount: money('40', 'USD', 'effective'), eventIds: ['economic:request:r1:charge'], sourceBases: ['list'], requestCount: 1, unresolvedRequests: 0,
+    });
+    const drifted: EconomicProjectValue = { ...project('USD'), economic: { coverage: 'exact', total, realized } };
+    assert.throws(
+      () => buildEconomicRollupBody(keys, [drifted], period),
+      /realized.*disagrees with exact amount/,
+      'an exact realized 40 beside a float 100 must not be signed',
+    );
+    const agreeing: EconomicProjectValue = { ...drifted, spendOnRealizedUnitsUsd: 40, acceptanceWeightedSpendUsd: 40 };
+    assert.equal(buildEconomicRollupBody(keys, [agreeing], period).v, 2);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

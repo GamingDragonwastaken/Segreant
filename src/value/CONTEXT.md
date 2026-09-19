@@ -66,6 +66,11 @@
   `economic_json` project read model, and validates v2 semantics before insert.
   This is a transport/read-model migration, not provider attestation or causal
   proof; live Postgres execution and trust-anchor governance remain external.
+  In a v2 body the unit travels on the wire as `economic.total.amount.currency`
+  and `economic.realized.amount.currency`, and BOTH exact amounts are
+  reconciled against their USD-named compatibility floats (`costUsd`,
+  `spendOnRealizedUnitsUsd`) before signing (D-096, D-236); the v1 floats
+  carry their unit in the schema's name only, and the v1 byte layout is frozen.
 
 - The classic Value renderer now carries the same exact/partial/legacy coverage
   disclosure as the modern view for mature, usage, budget, project and team

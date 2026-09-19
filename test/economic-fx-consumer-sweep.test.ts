@@ -28,8 +28,8 @@
  *
  * WHAT THIS SWEEP DOES NOT COVER, stated here rather than discovered later:
  *
- *  - `src/team/**` is excluded. A concurrent packet owns it; its two read sites
- *    in `src/team/rollup.ts` are real and are NOT counted or classified here.
+ *  - `src/team/**` WAS excluded while a concurrent packet owned it; since
+ *    D-236 it is in the corpus and `src/team/rollup.ts` is classified below.
  *  - The corpus is CALL sites. A reader that only touches a money-bearing FIELD
  *    is invisible to it — `src/dashboard/web/app/views/value.ts` renders
  *    `total.amountText` and appears in no count below. It is classified by hand
@@ -91,7 +91,7 @@ const MONETARY_READ = new RegExp(
 type Classification = 'a' | 'b' | 'c';
 
 /**
- * Every file under `src/` (outside `src/team/**`) that holds at least one
+ * Every file under `src/` that holds at least one
  * monetary read site, and what routing it has. `why` is the evidence, not a
  * summary: it names the mechanism that makes the classification true.
  */
@@ -251,6 +251,11 @@ const CONSUMERS: ReadonlyArray<{ file: string; klass: Classification; why: strin
     klass: 'c',
     why: 'aggregates through economicAttributionFromAttributions',
   },
+  {
+    file: 'src/team/rollup.ts',
+    klass: 'c',
+    why: 'canonicalises total and realized through canonicalEconomicAttribution and reconciles BOTH against their USD-named compatibility floats with assertAgreesWithUsdCompatibility (realized since D-236); a non-USD exact amount is refused before signing',
+  },
 ];
 
 /**
@@ -284,13 +289,12 @@ const PROVIDER_FX_AUTHORITY_SITES: ReadonlyArray<{ file: string; what: string }>
 ];
 
 /** Floors, not equalities: this must fail when the regex stops matching. */
-const CORPUS_FILE_FLOOR = 29;
-const CORPUS_SITE_FLOOR = 169;
+const CORPUS_FILE_FLOOR = 30;
+const CORPUS_SITE_FLOOR = 171;
 
 function monetaryReadSites(): Map<string, number[]> {
   const found = new Map<string, number[]>();
   for (const file of sourceFiles()) {
-    if (file.startsWith('src/team/')) continue;
     const lines = readFileSync(join(ROOT, file), 'utf8').split('\n');
     const hits: number[] = [];
     let inBlockComment = false;
@@ -353,7 +357,7 @@ test('SWEEP the monetary read sites, classify every file holding one, and state 
     `      corpus: ${sites.size} files, ${totalSites} monetary read sites`
     + ` — ${counts.a} routed (a), ${counts.b} not-routed-and-consequential (b), ${counts.c} single-currency-by-construction (c);`
     + ` ${EXTRA_CONSUMERS.length} further consumers classified by reading, not by match;`
-    + ` src/team/** excluded; provider FX authority enumerated at ${PROVIDER_FX_AUTHORITY_SITES.length} sites and NOT decided`,
+    + ` src/team/** included since D-236; provider FX authority enumerated at ${PROVIDER_FX_AUTHORITY_SITES.length} sites and NOT decided`,
   );
 });
 
