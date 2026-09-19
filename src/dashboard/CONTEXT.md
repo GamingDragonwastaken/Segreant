@@ -47,6 +47,11 @@ web/
 - **The GUI reaches for CLI parity, and says where it has not.** `registry.ts` is
   the single source for navigation, action cards, and the parity table rendered
   in System. A capability with no screen is visible in the product as unbuilt.
+  A row's `coverage` VALUE is checked against the app source, not taken as a
+  claim (D-239, `test/dashboard-coverage-value.test.ts`): `full` or `partial`
+  needs an action builder keyed by the id, the id in a view, or a `guiEvidence`
+  pointer to a file and token the gate reads; rows with no surface may carry
+  none. This proves a live binding, not that the screen does the whole job.
 - **The test prerequisite is explicit.** `npm test` performs a full build before
   running tests because package-boundary checks inspect both browser and Node
   artifacts in `dist/`. The build script's `--web` mode remains a targeted GUI

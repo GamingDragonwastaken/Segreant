@@ -66,6 +66,15 @@ export interface Capability {
    * impossibility has to say what makes it impossible.
    */
   coverageNote?: string;
+  /**
+   * Where in this app the claimed surface is (D-239). A `full` or `partial`
+   * row is checked against the app source by `test/dashboard-coverage-value.test.ts`:
+   * an action builder keyed by its id, or its id in a view, is evidence on its
+   * own; a row the GUI covers WITHOUT naming the id names the file and a token
+   * that file must contain, so the pointer is checked rather than trusted.
+   * Refused on rows that claim no surface.
+   */
+  guiEvidence?: { file: string; token: string; note?: string };
 }
 
 /** Machine-readable contract for a capability and every surface that binds it. */
@@ -115,8 +124,14 @@ export const TERRITORIES: ReadonlyArray<{ id: Territory; label: string; plain: s
 export const CAPABILITIES: readonly Capability[] = [
   // ---- Spend --------------------------------------------------------------
   { id: 'today', label: 'Today', plain: 'What today has cost so far.', territory: 'spend', consequence: 'read', coverage: 'full', command: 'fiscus today' },
-  { id: 'week', label: 'This week', plain: 'The last seven days of spend.', territory: 'spend', consequence: 'read', coverage: 'full', command: 'fiscus week' },
-  { id: 'month', label: 'This month', plain: 'The current month of spend.', territory: 'spend', consequence: 'read', coverage: 'full', command: 'fiscus month' },
+  {
+    id: 'week', label: 'This week', plain: 'The last seven days of spend.', territory: 'spend', consequence: 'read', coverage: 'full', command: 'fiscus week',
+    guiEvidence: { file: 'core/api.ts', token: "{ id: '7d', label: '7 days'", note: 'the spend range picker; the Spend view reads the same overview for the same window' },
+  },
+  {
+    id: 'month', label: 'This month', plain: 'The current month of spend.', territory: 'spend', consequence: 'read', coverage: 'partial', command: 'fiscus month',
+    guiEvidence: { file: 'core/api.ts', token: "{ id: '30d', label: '30 days'", note: 'the picker offers the last 30 days, not the calendar month the command reports; partial, not full' },
+  },
   { id: 'usage', label: 'Usage detail', plain: 'Requests and tokens broken down.', territory: 'spend', consequence: 'read', coverage: 'full', command: 'fiscus usage' },
   { id: 'report', label: 'Period report', plain: 'A summary you can hand to someone.', territory: 'spend', consequence: 'read', coverage: 'partial', command: 'fiscus report' },
   { id: 'export', label: 'Export CSV', plain: 'Download the ledger as a spreadsheet.', territory: 'spend', consequence: 'read', coverage: 'full', command: 'fiscus export' },
@@ -129,7 +144,7 @@ export const CAPABILITIES: readonly Capability[] = [
 
   // ---- Allocation ---------------------------------------------------------
   { id: 'project', label: 'Projects', plain: 'Which project each request belongs to, and how we know.', territory: 'allocation', consequence: 'read', coverage: 'full', command: 'fiscus project --coverage' },
-  { id: 'project-alias', label: 'Merge project names', plain: 'Treat two names as the same project.', territory: 'allocation', consequence: 'local', coverage: 'partial', command: 'fiscus project alias' },
+  { id: 'project-alias', label: 'Merge project names', plain: 'Treat two names as the same project.', territory: 'allocation', consequence: 'local', coverage: 'planned', command: 'fiscus project alias' },
   { id: 'alloc-centres', label: 'Cost centres', plain: 'The teams or budgets that carry the cost.', territory: 'allocation', consequence: 'local', coverage: 'partial', command: 'fiscus alloc centre' },
   { id: 'alloc-rules', label: 'Allocation rules', plain: 'How spend is split across cost centres.', territory: 'allocation', consequence: 'local', coverage: 'partial', command: 'fiscus alloc rule' },
   { id: 'alloc-run', label: 'Run an allocation', plain: 'Apply the rules to a period and record the result.', territory: 'allocation', consequence: 'local', coverage: 'partial', command: 'fiscus alloc run --apply' },
@@ -144,23 +159,28 @@ export const CAPABILITIES: readonly Capability[] = [
     warning: 'Reads an OpenAI Admin credential from your environment and makes a network request to OpenAI. Fiscus never stores it. Check readiness first — on a ledger with no proxy traffic on the declared route, a pull reports your entire bill as unexplained.',
   },
   { id: 'billing-reconcile', label: 'Reconcile', plain: 'Compare what we metered against what you were billed.', territory: 'evidence', consequence: 'local', coverage: 'partial', command: 'fiscus billing reconcile --apply' },
-  { id: 'receipt', label: 'Receipts', plain: 'The evidence behind a single claim.', territory: 'evidence', consequence: 'read', coverage: 'partial', command: 'fiscus receipt' },
+  { id: 'receipt', label: 'Receipts', plain: 'The evidence behind a single claim.', territory: 'evidence', consequence: 'read', coverage: 'planned', command: 'fiscus receipt' },
   { id: 'evidence', label: 'Evidence records', plain: 'Signed CI artifacts and verified outcomes.', territory: 'evidence', consequence: 'read', coverage: 'partial', command: 'fiscus evidence' },
-  { id: 'audit', label: 'Audit', plain: 'Check the ledger against itself for inconsistencies.', territory: 'evidence', consequence: 'read', coverage: 'partial', command: 'fiscus audit' },
+  { id: 'audit', label: 'Audit', plain: 'Check the ledger against itself for inconsistencies.', territory: 'evidence', consequence: 'read', coverage: 'planned', command: 'fiscus audit' },
 
   // ---- Value --------------------------------------------------------------
   { id: 'roi', label: 'Return on Intelligence', plain: 'What the spend produced, with the limits stated.', territory: 'value', consequence: 'read', coverage: 'full', command: 'fiscus roi' },
-  { id: 'causal', label: 'Causal studies', plain: 'Registered randomized evidence and its qualification gates.', territory: 'value', consequence: 'local', coverage: 'partial', command: 'fiscus causal status' },
+  {
+    id: 'causal', label: 'Causal studies', plain: 'Registered randomized evidence and its qualification gates.', territory: 'value', consequence: 'local', coverage: 'partial', command: 'fiscus causal status',
+    guiEvidence: { file: 'views/value.ts', token: 'api.causal()', note: 'the Value view reads causal status; registration and gates stay on the CLI' },
+  },
   { id: 'realize', label: 'Realized value', plain: 'Work that actually shipped, not work that was proposed.', territory: 'value', consequence: 'local', coverage: 'partial', command: 'fiscus realize' },
   { id: 'frontier', label: 'Model comparison', plain: 'Whether a cheaper model would have done the same job.', territory: 'value', consequence: 'read', coverage: 'full', command: 'fiscus frontier' },
   { id: 'saved', label: 'Savings', plain: 'What routing decisions have avoided so far.', territory: 'value', consequence: 'read', coverage: 'partial', command: 'fiscus saved' },
-  { id: 'yield', label: 'Yield', plain: 'Output per dollar across projects.', territory: 'value', consequence: 'read', coverage: 'partial', command: 'fiscus yield' },
+  { id: 'yield', label: 'Yield', plain: 'Output per dollar across projects.', territory: 'value', consequence: 'read', coverage: 'planned', command: 'fiscus yield' },
   { id: 'judge', label: 'Judge', plain: 'Score a change on quality, not just cost.', territory: 'value', consequence: 'local', coverage: 'partial', command: 'fiscus judge' },
   { id: 'team', label: 'Team view', plain: 'Per-person value on this machine, anonymized.', territory: 'value', consequence: 'read', coverage: 'planned', command: 'fiscus team' },
 
   // ---- Data ---------------------------------------------------------------
   { id: 'sources', label: 'Sources', plain: 'Which tools are feeding data in.', territory: 'data', consequence: 'read', coverage: 'full', command: 'fiscus sources' },
-  { id: 'discover', label: 'Find tools', plain: 'Look for AI tools installed on this machine.', territory: 'data', consequence: 'read', coverage: 'full', command: 'fiscus discover' },
+  // `core/api.ts` binds POST /api/discover and no view calls it (D-239): an
+  // API binding is not a screen.
+  { id: 'discover', label: 'Find tools', plain: 'Look for AI tools installed on this machine.', territory: 'data', consequence: 'read', coverage: 'planned', command: 'fiscus discover' },
   { id: 'connect', label: 'Connect a tool', plain: 'Point a tool at Fiscus so its spend is metered.', territory: 'data', consequence: 'local', coverage: 'partial', command: 'fiscus connect <tool>' },
   { id: 'import', label: 'Import history', plain: 'Read past usage out of tool logs on this machine.', territory: 'data', consequence: 'local', coverage: 'full', command: 'fiscus import all' },
   { id: 'scan', label: 'Scan', plain: 'Check what is available to import before importing.', territory: 'data', consequence: 'read', coverage: 'full', command: 'fiscus scan' },
@@ -171,17 +191,22 @@ export const CAPABILITIES: readonly Capability[] = [
   {
     id: 'egress', label: 'Egress assurance', plain: 'Which cloud routes Fiscus itself may use, with local receipts.',
     territory: 'system', consequence: 'egress', coverage: 'partial', command: 'fiscus egress status',
+    guiEvidence: { file: 'core/actions.ts', token: 'settings.egress.receipts', note: 'the Settings drawer renders egress mode and receipt-chain health; plan/apply stay on the CLI' },
     warning: 'The dashboard shows Fiscus-process status and receipt-chain health. Use the CLI to plan or apply an exact cloud permission. This is not a machine-wide firewall or a provider-retention guarantee.',
   },
   { id: 'settings', label: 'Settings', plain: 'How Fiscus behaves on this machine.', territory: 'system', consequence: 'local', coverage: 'partial', command: 'fiscus config' },
-  { id: 'pricing', label: 'Pricing', plain: 'The rate cards used to estimate cost.', territory: 'system', consequence: 'read', coverage: 'partial', command: 'fiscus pricing --coverage' },
+  {
+    id: 'pricing', label: 'Pricing', plain: 'The rate cards used to estimate cost.', territory: 'system', consequence: 'read', coverage: 'partial', command: 'fiscus pricing --coverage',
+    guiEvidence: { file: 'core/claimLayers.ts', token: 'pricing.estimatedSpendShare', note: 'the claim layers show the estimated-spend share the rate cards imply; the cards themselves are CLI only' },
+  },
   {
     id: 'reprice', label: 'Reprice history', plain: 'Recalculate past costs against a corrected rate card.',
     territory: 'system', consequence: 'destructive', coverage: 'planned', command: 'fiscus reprice --apply',
     warning: 'Rewrites the recorded cost of past requests. Value snapshots are re-attributed on their own basis, and outcomes are never moved — but the money figures you have already reported will change.',
   },
   { id: 'doctor', label: 'Doctor', plain: 'Check that everything is wired up correctly.', territory: 'system', consequence: 'read', coverage: 'partial', command: 'fiscus doctor' },
-  { id: 'guide', label: 'What next', plain: 'The most useful next step, given your setup.', territory: 'system', consequence: 'read', coverage: 'full', command: 'fiscus guide' },
+  // `core/api.ts` binds GET /api/guide and no view calls it (D-239).
+  { id: 'guide', label: 'What next', plain: 'The most useful next step, given your setup.', territory: 'system', consequence: 'read', coverage: 'planned', command: 'fiscus guide' },
   {
     id: 'team-push', label: 'Push to team server', plain: 'Send a signed, aggregated rollup to your team server.',
     territory: 'system', consequence: 'egress', coverage: 'planned', command: 'fiscus team push',
@@ -226,6 +251,7 @@ export const CAPABILITIES: readonly Capability[] = [
   {
     id: 'economic', label: 'Exact economic ledger', plain: 'The exact-money ledger behind the rounded figures, by period.',
     territory: 'evidence', consequence: 'read', coverage: 'partial', command: 'fiscus economic',
+    guiEvidence: { file: 'views/value.ts', token: 'matured?.economic', note: 'the Value view renders exact/partial/legacy coverage of matured spend; the period ledger itself is CLI only' },
   },
   {
     id: 'backup', label: 'Back up the ledger', plain: 'Copy the local ledger somewhere safe, with a manifest that proves the copy.',
