@@ -760,9 +760,15 @@ function buildModelSwitchStrings(switches: ModelSwitchRecommendation[]): string[
     const confounded = item.confounders.length > 0 ? `  [confounded: ${item.confounders.join('; ')}]` : '';
     // The derived level travels with the sentence (D-240): what this comparison
     // supports is stated beside the number, and a routing change is never it.
+    // When the advice bar is not met, the gate's own remedy is the minimal next
+    // evidence (WP-R09, D-242): the shortfall names what to acquire, without a
+    // probability model the product does not have.
+    const nextEvidence = item.assurance.advisory.refusal === null
+      ? ''
+      : ` — next evidence: ${item.assurance.advisory.refusal.remedy[0] ?? 'raise the axes named in the shortfalls'}`;
     const assurance = `decision assurance ${item.assurance.level} (${item.assurance.label}); ` +
       (item.assurance.advisory.meetsRequirement ? 'meets the bar for advice' : 'below the bar for advice') +
-      ', not for changing spend';
+      ', not for changing spend' + nextEvidence;
     return (
       `For ${item.taskType}: try ${item.candidateModel} before ${item.incumbentModel} - ` +
       `${item.historicalEquivalentHeadroomUsd.toFixed(2)} historical-equivalent headroom across ` +

@@ -91,3 +91,11 @@ test('a trial with overlapping bounds is DAL-0, and the dominance shortfall is n
   }
   assert.equal(rec.assurance.inputProfile.causality, 'none', 'no separation held, so no observational reading is claimed');
 });
+
+test('a trial names the next evidence to acquire in its one-line recommendation (WP-R09, D-242)', () => {
+  const report = computeFrontier([...many('incumbent', 6, 2, 4), ...many('candidate', 6, 2, 2)]);
+  const line = report.recommendations[0] ?? '';
+  assert.match(line, /decision assurance DAL-0/);
+  assert.match(line, /next evidence: The intervals do not separate/);
+  assert.doesNotMatch(line, /probab|expected value/i, 'no probability model is invented to rank acquisitions');
+});
