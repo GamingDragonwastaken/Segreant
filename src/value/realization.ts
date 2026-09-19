@@ -494,7 +494,9 @@ export async function computeRealization(
         } } => ({
           source: {
             id: proposal.proposalId,
-            sourceId: `proxy:${proposal.provider}:${proposal.model}`,
+            // Tuple identity (D-241): a model name may carry ':'; the source of an
+            // attribution must not alias another provider/model pair.
+            sourceId: `proxy:${JSON.stringify([proposal.provider, proposal.model])}`,
             files: proposal.files.map((file) => ({
               path: file.path,
               kind: 'text' as const,

@@ -362,7 +362,8 @@ export function cmdReprice(flags: Flags): void {
         continue; // still a guess — keep the original guess rather than churn numbers
       }
       updates.push({ requestId: r.requestId, costUsd: c.costUsd, pricing: c.pricing, ...(c.exact === undefined ? {} : { economicAmount: c.exact.total }) });
-      const key = `${r.provider}/${r.model}`;
+      // Tuple key, not a delimiter join (D-217/D-241): a model name may carry '/'.
+      const key = JSON.stringify([r.provider, r.model]);
       const agg = byModel.get(key) ?? { n: 0, before: 0, after: 0 };
       agg.n++;
       agg.before += r.costUsd;
@@ -387,7 +388,10 @@ export function cmdReprice(flags: Flags): void {
           sourceKind: updates[0]!.pricing.rateCardSourceKind,
           note: 'Local list-price estimate only; never provider invoice, discount, tax, credit, or reconciliation.',
         } : null,
-        byModel: [...byModel.entries()].map(([model, v]) => ({ model, rows: v.n, beforeUsd: v.before, afterUsd: v.after })),
+        byModel: [...byModel.entries()].map(([key, v]) => {
+          const [provider, model] = JSON.parse(key) as [string, string];
+          return { provider, model, rows: v.n, beforeUsd: v.before, afterUsd: v.after };
+        }),
         realizationSync: sync,
       });
       return;

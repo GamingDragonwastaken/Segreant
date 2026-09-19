@@ -140,3 +140,18 @@ test('a record that changed under the same id is a conflict the plan names, and 
   assert.match(changed.refusals.join(' '), /conflict/);
   assert.equal(ledger.graph().nodes.length, 1, 'e2 must not land beside a conflicting e1');
 });
+
+test('the kernel id is injective over (plugin, request, evidence): a colon inside one part cannot alias another record', () => {
+  // WP-R10's composite-key audit reached this file (D-241): `safeIdentifier`
+  // admits ':' in requestId and evidenceId, so `r:1` + `e` and `r` + `1:e` met
+  // at the same delimiter-joined id. Two distinct records from an UNTRUSTED
+  // plugin then read as one, and the second was refused as a conflict.
+  assert.notEqual(pluginEvidenceId('usage.local', 'r:1', 'e'), pluginEvidenceId('usage.local', 'r', '1:e'));
+  const plan = planPluginIntake({ ...INTAKE, output: output([
+    { evidenceId: 'e', evidenceType: 'usage.observation', source: 'child', observedAtMs: 1700000000000, payload: { tokens: 1 } },
+  ], { requestId: 'r:1' }) });
+  const other = planPluginIntake({ ...INTAKE, output: output([
+    { evidenceId: '1:e', evidenceType: 'usage.observation', source: 'child', observedAtMs: 1700000000000, payload: { tokens: 2 } },
+  ], { requestId: 'r' }) });
+  assert.notEqual(plan.evidence[0]!.id, other.evidence[0]!.id);
+});

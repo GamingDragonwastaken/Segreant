@@ -576,7 +576,9 @@ export function prepareIndependentCausalLineageBindingV2(
     const bindingMaterial = {
       type: 'fiscus.causal-lineage-binding' as const,
       version: 2 as const,
-      bindingId: input.bindingId ?? `lineage:${input.studyId}:${input.decisionId}`,
+      // Tuple identity (D-241): causal identifiers admit ':', so a delimiter join
+      // let two (study, decision) pairs share one binding id.
+      bindingId: input.bindingId ?? `lineage:${JSON.stringify([input.studyId, input.decisionId])}`,
       studyId: protocol.studyId,
       protocolHash: protocol.protocolHash,
       decisionId: decision.decisionId,

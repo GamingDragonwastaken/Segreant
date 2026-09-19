@@ -675,7 +675,7 @@ function buildModelSwitchRecommendations(mature: WorkUnit[]): ModelSwitchRecomme
       { action: `keep:${incumbent.model}`, low: incumbentCs.low, high: incumbentCs.high },
       { action: `switch:${candidate.model}`, low: candidateCs.low, high: candidateCs.high },
     ]);
-    const inputs = [{ id: `frontier:${taskType}:${incumbent.model}->${candidate.model}`, profile: inputProfile }];
+    const inputs = [{ id: `frontier:${JSON.stringify([taskType, incumbent.model, candidate.model])}`, profile: inputProfile }];
     const advisory = gateDecisionForConsequence({ certificate, inputs, consequence: 'advisory_only' });
     const changesSpend = gateDecisionForConsequence({ certificate, inputs, consequence: 'changes_spend' });
     const assurance: ModelSwitchAssurance = {
