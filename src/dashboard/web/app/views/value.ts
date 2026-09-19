@@ -161,7 +161,16 @@ function modelSwitchCoverageCard(frontier: ValuePayload['frontier']): Node | nul
           h('span', {
             class: `pill ${recommendation.confidence === 'observational_separation' ? 'pill-ok' : 'pill-warn'}`,
             text: recommendation.confidence === 'observational_separation' ? 'separated' : 'trial',
+          }),
+          // The derived assurance level beside the confidence word (D-240): what
+          // this comparison supports, stated where the number is.
+          h('span', {
+            class: `pill ${recommendation.assurance.advisory.meetsRequirement ? 'pill-ok' : 'pill-warn'}`,
+            text: `${recommendation.assurance.level} ${recommendation.assurance.label}`,
           })),
+        h('p', { class: 'basis', role: 'status', text: () => (isPrecise()
+          ? `Decision assurance ${recommendation.assurance.level}: ${recommendation.assurance.advisory.meetsRequirement ? 'meets' : 'below'} the advisory requirement; the spend-change requirement (DAL-3, randomized) is not met by any observational comparison.`
+          : `${recommendation.assurance.advisory.meetsRequirement ? 'Strong enough to review as advice' : 'Not yet strong enough to act on as advice'}; never strong enough on its own to change which model you use.`) }),
         h('p', { text: `${count(recommendation.candidateUnits)} vs ${count(recommendation.incumbentUnits)} mature ${recommendation.taskType} units · observed realization ${pct(recommendation.candidateRealizationRate, 0)} vs ${pct(recommendation.incumbentRealizationRate, 0)}` }),
         retentionExcluded > 0
           ? h('p', { class: 'drawer-error', role: 'status', text: () => (isPrecise()

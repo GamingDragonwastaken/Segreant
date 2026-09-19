@@ -697,6 +697,19 @@ export interface ModelSwitchRecommendationPayload {
   historicalEquivalentHeadroomUsd: number;
   historicalHeadroomPercent: number;
   confidence: 'trial' | 'observational_separation';
+  /**
+   * Derived by the decision assurance gate (D-240), never asserted by the
+   * frontier. `level` is the weakest-input ladder result; each gate says
+   * whether the evidence bar for that consequence class was met and always
+   * carries `authorizesAction: false`. The full gate objects travel so the
+   * browser renders the same shortfalls the CLI prints.
+   */
+  assurance: {
+    level: 'DAL-0' | 'DAL-1' | 'DAL-2' | 'DAL-3';
+    label: string;
+    advisory: { meetsRequirement: boolean; authorizesAction: false; refusal: { message: string } | null };
+    changesSpend: { meetsRequirement: boolean; authorizesAction: false; refusal: { message: string } | null };
+  };
   costBasis: 'dominant_model_attributed';
   minimumDominantCostShare: number;
   unitsExcludedMixedAttribution: number;

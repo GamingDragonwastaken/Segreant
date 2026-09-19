@@ -50,6 +50,7 @@ precision.
 node --test --experimental-strip-types test/decision-engine.test.ts
 node --test --experimental-strip-types test/decision-control.test.ts
 node --test --experimental-strip-types test/decision-assurance.test.ts
+node --test --experimental-strip-types test/frontier-assurance-gate.test.ts
 ```
 
 ## Does not establish
@@ -65,9 +66,15 @@ shortfalls and `--apply` is refused (D-213). `decisionCertificationStructure`
 and `decisionInvalidatingAssumptionSets` (D-195) are this module's own adapter
 onto `minimalInvalidatingAssumptionSets` in `src/epistemic/countermodel.ts`,
 declaring the one support a strict-interval-dominance certificate rests on and
-reporting the `minimaxRegret` rectangularity assumption as inert to it. The
-frontier and the other advisory surfaces still reach an operator without
-passing through this module, so an observational separation is refused here
-and nowhere else yet. The assurance ladder is a Fiscus policy choice, not a
+reporting the `minimaxRegret` rectangularity assumption as inert to it. A
+second product path reaches this module since D-240: `src/value/frontier.ts`
+certifies each model-switch comparison over its two anytime-valid realization
+intervals and gates it for `advisory_only` and `changes_spend` with the
+comparison's own profile (`observational` only when the separation held,
+`estimated` money, `proxy_unvalidated` outcome), so every recommendation
+carries a derived level, the CLI sentence and the Value view print it, and no
+observational comparison reaches DAL-3. Other advisory surfaces (the budget
+advisor's frontier cells, usage and cohort advice) still reach an operator
+without this module. The assurance ladder is a Fiscus policy choice, not a
 derived threshold, and it assumes the declared input set is complete — an
 undeclared input cannot lower the level it was left out of.

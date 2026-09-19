@@ -46,7 +46,11 @@
   correction updates this lineage transactionally; it never changes funnel
   outcomes. Usage, cohort and budget advice now consume the same grouped exact
   read model, and frontier/time-reclaimed projections plus the modern Value view
-  carry its coverage disclosures. Signed receipts and team rollups remain
+  carry its coverage disclosures. Every model-switch recommendation carries a
+  derived decision assurance level (`assurance`, D-240): a dominance
+  certificate over the two anytime-valid intervals, gated for advice (DAL-1)
+  and for changing spend (DAL-3, never met observationally), with
+  `authorizesAction: false` on both. Signed receipts and team rollups remain
   explicit follow-on migrations until their public compatibility boundaries are
   versioned.
 

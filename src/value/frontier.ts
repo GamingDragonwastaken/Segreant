@@ -14,6 +14,34 @@ import type { WorkUnit } from './realization.ts';
 import { computeReturnOnIntelligence, lensRedundancy, type LensRedundancy } from './lenses.ts';
 import { anytimeRateInterval } from './anytime.ts';
 import { economicAttributionFromAttributions, economicAttributionNumber, type EconomicAttribution } from '../economics/attribution.ts';
+import { certifyDecision } from '../decision/engine.ts';
+import { gateDecisionForConsequence, type DecisionAssuranceGate } from '../decision/assurance.ts';
+import { claimProfile, type ClaimProfile } from '../epistemic/profile.ts';
+
+/**
+ * The assurance a model-switch comparison DERIVES for itself (WP-F05, D-240).
+ *
+ * Until D-240 the frontier reached an operator without passing through
+ * `src/decision/assurance.ts`, so an observational separation was refused by
+ * the budget advisor and nowhere else. Each recommendation now carries the
+ * gate's own verdict for the two consequence classes an operator might read
+ * it as: advice (`advisory_only`, DAL-1) and a routing change
+ * (`changes_spend`, DAL-3). Nothing here is asserted by the frontier: the
+ * level falls out of a dominance certificate over the anytime-valid
+ * realization intervals and the comparison's own ten-axis profile, which
+ * says `observational` only when the separation actually held, `partial`
+ * coverage when any unit was excluded, `estimated` money (local list
+ * price) and a `proxy_unvalidated` outcome. `authorizesAction` is false on
+ * both gates by construction.
+ */
+export interface ModelSwitchAssurance {
+  readonly level: DecisionAssuranceGate['assessment']['level'];
+  readonly label: string;
+  /** The profile the level was derived from — the comparison's own, not a claim about the models. */
+  readonly inputProfile: ClaimProfile;
+  readonly advisory: DecisionAssuranceGate;
+  readonly changesSpend: DecisionAssuranceGate;
+}
 
 export interface FrontierCell {
   key: string;
@@ -62,6 +90,8 @@ export interface ModelSwitchRecommendation {
   /** Savings across the incumbent's observed units at the candidate's historical rate. */
   historicalEquivalentHeadroomUsd: number;
   historicalHeadroomPercent: number;
+  /** Derived by the decision assurance gate; see `ModelSwitchAssurance`. */
+  assurance: ModelSwitchAssurance;
   /**
    * What the OBSERVATIONAL procedure returned — never a treatment effect.
    *
@@ -628,6 +658,33 @@ function buildModelSwitchRecommendations(mature: WorkUnit[]): ModelSwitchRecomme
     }
 
     const confidence = separates && survivesOneFlip && confounders.length === 0 ? 'observational_separation' : 'trial';
+    const excluded = mixedAttribution.length + unknownAttribution.length + stalePricing.length + truncatedSpend.length;
+    const inputProfile = claimProfile({
+      epistemic: 'supported',
+      integrity: 'verified',
+      authenticity: 'self_asserted',
+      scope: 'conditional',
+      coverage: excluded === 0 && unknownCoverage === 0 ? 'complete' : 'partial',
+      measurement: 'proxy_unvalidated',
+      causality: confidence === 'observational_separation' ? 'observational' : 'none',
+      monetaryBasis: 'estimated',
+      finality: 'provisional',
+      decisionFitness: 'not_assessed',
+    });
+    const certificate = certifyDecision([
+      { action: `keep:${incumbent.model}`, low: incumbentCs.low, high: incumbentCs.high },
+      { action: `switch:${candidate.model}`, low: candidateCs.low, high: candidateCs.high },
+    ]);
+    const inputs = [{ id: `frontier:${taskType}:${incumbent.model}->${candidate.model}`, profile: inputProfile }];
+    const advisory = gateDecisionForConsequence({ certificate, inputs, consequence: 'advisory_only' });
+    const changesSpend = gateDecisionForConsequence({ certificate, inputs, consequence: 'changes_spend' });
+    const assurance: ModelSwitchAssurance = {
+      level: advisory.assessment.level,
+      label: advisory.assessment.label,
+      inputProfile,
+      advisory,
+      changesSpend,
+    };
     const savingsPerUnitUsd = incumbent.costPerUnit - candidate.costPerUnit;
     const historicalEquivalentHeadroomUsd = savingsPerUnitUsd * incumbent.units;
     // Percent of the incumbent MODEL's own attributed spend — the same basis the
@@ -661,6 +718,7 @@ function buildModelSwitchRecommendations(mature: WorkUnit[]): ModelSwitchRecomme
       historicalEquivalentHeadroomUsd,
       historicalHeadroomPercent,
       confidence,
+      assurance,
       costBasis: 'dominant_model_attributed',
       minimumDominantCostShare: MIN_DOMINANT_COST_SHARE,
       unitsExcludedMixedAttribution: mixedAttribution.length,
@@ -700,10 +758,15 @@ function buildModelSwitchStrings(switches: ModelSwitchRecommendation[]): string[
     // it is why the number may not be about the model at all — so it goes in the
     // one-line summary rather than only in the detail payload.
     const confounded = item.confounders.length > 0 ? `  [confounded: ${item.confounders.join('; ')}]` : '';
+    // The derived level travels with the sentence (D-240): what this comparison
+    // supports is stated beside the number, and a routing change is never it.
+    const assurance = `decision assurance ${item.assurance.level} (${item.assurance.label}); ` +
+      (item.assurance.advisory.meetsRequirement ? 'meets the bar for advice' : 'below the bar for advice') +
+      ', not for changing spend';
     return (
       `For ${item.taskType}: try ${item.candidateModel} before ${item.incumbentModel} - ` +
-      `$${item.historicalEquivalentHeadroomUsd.toFixed(2)} historical-equivalent headroom across ` +
-      `${item.incumbentUnits} incumbent units (${confidence}).${confounded}`
+      `${item.historicalEquivalentHeadroomUsd.toFixed(2)} historical-equivalent headroom across ` +
+      `${item.incumbentUnits} incumbent units (${confidence}; ${assurance}).${confounded}`
     );
   });
 }
