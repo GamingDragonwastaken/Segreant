@@ -71,6 +71,9 @@ test('benchmark harness emits a finite, isolated observation contract', () => {
         };
         revocationClosure?: { requestedPairs: number; nodesRevoked: number; claimsRevoked: number; traceEntries: number };
         fiscuspackRoundTrip?: { included: number; omitted: number; redacted: number; envelopeBytes: number };
+        exactProjection?: { rows: number; requestCount: number; unresolvedRequests: number; complete: boolean; amountText: string };
+        allocationRun?: { rows: number; costCentres: number; lines: number; totalMicros: number; allocatedMicros: number; unallocatedMicros: number; conserves: boolean };
+        dashboardContractWalk?: { typeName: string; fields: number; problems: number; firstProblem: string | null };
       };
     }>;
   };
@@ -130,6 +133,31 @@ test('benchmark harness emits a finite, isolated observation contract', () => {
   assert.equal(pack.included, 51, 'the whole revocation graph is packed');
   assert.equal(pack.omitted, 0);
   assert.ok(pack.envelopeBytes > 0);
+  // D-253: the exact effective-money projection, an allocation run over the
+  // same rows, and the browser's deep interface walk are observed, each with a
+  // quality block from the same data — a resolved-nothing projection, a
+  // non-conserving run or a walk that found problems cannot pass as a timing.
+  for (const key of ['exactProjection', 'allocationRun', 'dashboardContractWalk'] as const) {
+    assert.ok(Object.hasOwn(report.cases[0]?.observations ?? {}, key), `the benchmark must observe ${key}`);
+  }
+  const projection = report.cases[0]?.quality?.exactProjection;
+  assert.ok(projection, 'the benchmark must publish exact projection quality checks');
+  assert.equal(projection.rows, 100);
+  assert.equal(projection.unresolvedRequests, 0, 'every benchmark row carries an exact amount');
+  assert.equal(projection.complete, true);
+  assert.equal(projection.amountText, '0.2785');
+  const allocation = report.cases[0]?.quality?.allocationRun;
+  assert.ok(allocation, 'the benchmark must publish allocation run quality checks');
+  assert.equal(allocation.rows, 100);
+  assert.equal(allocation.costCentres, 8);
+  assert.equal(allocation.conserves, true);
+  assert.equal(allocation.allocatedMicros + allocation.unallocatedMicros, allocation.totalMicros);
+  assert.equal(allocation.unallocatedMicros, 0, 'one direct rule per project places every row');
+  const walk = report.cases[0]?.quality?.dashboardContractWalk;
+  assert.ok(walk, 'the benchmark must publish the contract walk quality checks');
+  assert.equal(walk.typeName, 'Overview');
+  assert.ok(walk.fields >= 10);
+  assert.equal(walk.problems, 0, walk.firstProblem ?? '');
   for (const observation of Object.values(report.cases[0]?.observations ?? {})) {
     const samples = observation.samples;
     assert.equal(typeof samples, 'number');

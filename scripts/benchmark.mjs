@@ -27,6 +27,11 @@ import { scope } from '../src/epistemic/scope.ts';
 import { interval } from '../src/epistemic/time.ts';
 import { exportLedgerPack } from '../src/pack/export.ts';
 import { serializeFiscusPack, verifyFiscusPack } from '../src/pack/index.ts';
+import { economicAttributionFromRows } from '../src/economics/attribution.ts';
+import { money } from '../src/economics/money.ts';
+import { applyAllocation } from '../src/alloc/apply.ts';
+import { checkInterfaceShape } from '../src/dashboard/contracts.ts';
+import { DASHBOARD_INTERFACE_CONTRACTS } from '../src/dashboard/web/app/core/generated-payload-contract.ts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SCALE_ROWS = Object.freeze({ small: 100, current: 1_000, '10x': 10_000, '100x': 100_000 });
@@ -111,6 +116,9 @@ function insertRows(store, count) {
       cacheReadTokens: i % 5 === 0 ? 20 : 0,
       reasoningTokens: 0,
       costUsd: 0.002 + (i % 17) / 10_000,
+      // The exact list-price amount the proxy path records beside the float, so
+      // the exact projection benchmark resolves every row (D-253).
+      economicAmount: money((0.002 + (i % 17) / 10_000).toFixed(6), 'USD', 'list'),
       estimated: false,
       streamed: i % 4 === 0,
       statusCode: i % 37 === 0 ? 429 : 200,
@@ -559,6 +567,37 @@ async function dashboardApiObservation(store) {
   }
 }
 
+// D-253: the exact effective-money projection over the ingested window, the
+// allocation run over the same rows under one direct rule per project, and the
+// deep interface walk the browser runs on every /api/overview response. Each
+// has a quality block computed from the same data, so a fast timing over an
+// empty projection, a non-conserving run or a skipped walk cannot pass.
+function exactProjection(store, startMs, endMs) {
+  const rows = store.economicRequestRowsInRange(startMs, endMs, { liveOnly: true });
+  const attribution = economicAttributionFromRows(rows);
+  return { rows: rows.length, requestCount: attribution.requestCount, unresolvedRequests: attribution.unresolvedRequests, complete: attribution.complete, amountText: attribution.amountText };
+}
+
+function allocationRun(store, startMs, endMs, runAtMs) {
+  const rows = store.requestsInRange(startMs, endMs).map((row) => ({
+    project: row.project, provider: row.provider, model: row.model, source: row.source ?? null, user: row.user ?? null,
+    tsEpochMs: row.tsEpochMs, costUsd: row.costUsd, costBasis: row.pricing.costBasis,
+  }));
+  const projects = [...new Set(rows.map((row) => row.project))].sort();
+  const costCentres = projects.map((project) => ({ costCentreId: `cc:${project}`, name: project, owner: null, createdAtMs: 0, archivedAtMs: null }));
+  const rules = projects.map((project, i) => ({
+    ruleId: `rule:${project}`, version: 1, method: 'direct', match: { project }, targets: [{ costCentreId: `cc:${project}`, ratio: 1 }],
+    priority: 100 + i, effectiveFromMs: 0, effectiveToMs: null, revokedAtMs: null, owner: null, note: null, createdAtMs: 0,
+  }));
+  const result = applyAllocation({ rows, rules, costCentres, periodStartMs: startMs, periodEndMs: endMs, runAtMs, requestsPrunedBeforeMs: null });
+  return { rows: rows.length, costCentres: costCentres.length, lines: result.lines.length, totalMicros: result.totalMicros, allocatedMicros: result.allocatedMicros, unallocatedMicros: result.unallocatedMicros, conserves: result.conserves };
+}
+
+function contractWalk(payload) {
+  const problems = checkInterfaceShape('Overview', payload, DASHBOARD_INTERFACE_CONTRACTS, 'Overview');
+  return { typeName: 'Overview', fields: Object.keys(payload).length, problems: problems.length, firstProblem: problems[0] ?? null };
+}
+
 async function runCase(name, rows, iterations) {
   const startup = observe(() => {
     const store = new Store(':memory:');
@@ -580,6 +619,10 @@ async function runCase(name, rows, iterations) {
   const revocation = buildRevocationLedger(persistentPairs);
   const revocationQualityReport = revocationQuality(revocation.ledger, persistentPairs);
   const packQuality = packRoundTrip(revocation.ledger);
+  const projectionQuality = exactProjection(ingestStore, startMs, endMs);
+  const allocationQuality = allocationRun(ingestStore, startMs, endMs, endMs + 1);
+  const overviewPayload = buildOverview(ingestStore, DEFAULT_CONFIG, 'all');
+  const contractQuality = contractWalk(overviewPayload);
   const observations = {
     startup,
     ingest: { samples: 1, minMs: ingestMs, medianMs: ingestMs, p95Ms: ingestMs, maxMs: ingestMs },
@@ -593,6 +636,9 @@ async function runCase(name, rows, iterations) {
     revocationClosure: observe(() => revocation.ledger.revocationProjection(), iterations),
     fiscuspackRoundTrip: observe(() => packRoundTrip(revocation.ledger), iterations),
     apiOverviewHttp: await dashboardApiObservation(ingestStore),
+    exactProjection: observe(() => exactProjection(ingestStore, startMs, endMs), iterations),
+    allocationRun: observe(() => allocationRun(ingestStore, startMs, endMs, endMs + 1), iterations),
+    dashboardContractWalk: observe(() => contractWalk(overviewPayload), iterations),
   };
   ingestStore.close();
   revocation.store.close();
@@ -607,6 +653,9 @@ async function runCase(name, rows, iterations) {
       epistemicPersistence: persistenceQuality,
       revocationClosure: revocationQualityReport,
       fiscuspackRoundTrip: packQuality,
+      exactProjection: projectionQuality,
+      allocationRun: allocationQuality,
+      dashboardContractWalk: contractQuality,
     },
   };
 }

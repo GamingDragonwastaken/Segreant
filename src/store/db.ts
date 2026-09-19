@@ -26,7 +26,7 @@ import {
   realpathSync,
 } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
-import { legacyPricingEvidence, pricingCardProvenance, type PricingCardProvenance, type RequestPricingEvidence } from '../cost/pricing.ts';
+import { COST_BASES, RATE_CARD_SOURCE_KINDS, RATE_MATCH_KINDS, legacyPricingEvidence, pricingCardProvenance, type PricingCardProvenance, type RequestPricingEvidence } from '../cost/pricing.ts';
 import { pricingEvidenceFromRecord, vocabularyValue } from './rows.ts';
 import { addMoney, formatMoneyAmount, money, type EconomicBasis, type Money } from '../economics/money.ts';
 import { requestEconomicEvent, requestEconomicEventId } from '../economics/request.ts';
@@ -652,6 +652,15 @@ export class Store {
     const pricing = row.pricing ?? legacyPricingEvidence();
     const scope = scopeCaptureForInsert(row);
     const costUsd = this.compatibilityCostUsd(row);
+    // The write boundary refuses a provenance label outside its vocabulary
+    // (D-251): a caller that could write one would make the read refusal look
+    // like data loss instead of the damage it detects.
+    vocabularyValue(row.attributionBasis, ATTRIBUTION_BASES, 'attributionBasis', 'legacy_unknown');
+    vocabularyValue(row.captureCoverage, CAPTURE_COVERAGES, 'captureCoverage', 'legacy_unknown');
+    vocabularyValue(scope.status, SCOPE_CAPTURE_STATUSES, 'scopeCaptureStatus', 'legacy_unknown');
+    vocabularyValue(pricing.costBasis, COST_BASES, 'costBasis', 'legacy_unknown');
+    vocabularyValue(pricing.rateCardSourceKind, RATE_CARD_SOURCE_KINDS, 'rateCardSourceKind', 'legacy_unknown');
+    vocabularyValue(pricing.rateMatchKind, RATE_MATCH_KINDS, 'rateMatchKind', 'legacy_unknown');
     return this.transaction(() => {
       const sql = `INSERT INTO requests (
             request_id, session_id, ts_iso, ts_epoch_ms, provider, model, project,

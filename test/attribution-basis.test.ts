@@ -10,6 +10,10 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { Store, type RequestRow } from '../src/store/db.ts';
 import { projectKeyWithBasis, isDeclaredAttribution } from '../src/value/characterization.ts';
 import { requestsToCsv } from '../src/export/csv.ts';
@@ -90,12 +94,29 @@ test('attribution: a row written before the basis existed stays legacy_unknown â
   store.close();
 });
 
-test('attribution: an unrecognized stored basis reads as legacy_unknown, not passed through', () => {
-  const store = new Store(':memory:');
-  store.insertRequest({ ...row('a', 'api', 'client_declared'), attributionBasis: 'totally_made_up' as never });
-  const [r] = store.requestsInRange(0, 5000);
-  assert.equal(r!.attributionBasis, 'legacy_unknown', 'an uninterpretable label must not look like a real basis');
-  store.close();
+test('attribution: an unrecognized basis is refused at the write boundary, and a stored one refuses at read naming the column', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-basis-'));
+  const path = join(dir, 'ledger.sqlite');
+  try {
+    const store = new Store(path);
+    // D-251: neither passed through nor laundered into legacy_unknown. A label
+    // nobody wrote is damage, and reading it as "unknown" would hide the damage
+    // behind the one sentinel the column exists to keep honest.
+    assert.throws(
+      () => store.insertRequest({ ...row('a', 'api', 'client_declared'), attributionBasis: 'totally_made_up' as never }),
+      /ledger integrity: column attributionBasis holds an unrecognized value "totally_made_up"/,
+    );
+    store.insertRequest(row('a', 'api', 'client_declared'));
+    store.close();
+    const raw = new DatabaseSync(path);
+    raw.prepare("UPDATE requests SET attribution_basis = 'totally_made_up' WHERE request_id = 'a'").run();
+    raw.close();
+    const reopened = new Store(path);
+    assert.throws(() => reopened.requestsInRange(0, 5000), /ledger integrity: column attributionBasis holds an unrecognized value "totally_made_up"/);
+    reopened.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('attribution: only a deliberate attribution counts as declared â€” and none of them is verified', () => {

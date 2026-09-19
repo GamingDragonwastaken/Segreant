@@ -89,6 +89,22 @@ nothing omitted, and the verifier's own verdict `ok` with `integrity:
 verified`. A timing over an empty or half-built graph therefore cannot pass
 the contract test.
 
+## Exact projection, allocation run and contract-walk boundary
+
+`exactProjection`, `allocationRun` and `dashboardContractWalk` (D-253) run
+over the same ingested window as the summary operations. Every benchmark row
+now carries the exact list-price `economicAmount` the proxy path records
+beside the float, so the projection resolves every row (`complete: true`,
+`unresolvedRequests: 0`, `amountText` the exact sum) rather than timing an
+unresolved join. The allocation run applies one direct rule per synthetic
+project and must conserve to the microdollar with nothing unallocated. The
+contract walk is the same `checkInterfaceShape` the browser runs on every
+`/api/overview` response, against the generated field table, and must find
+no problems. Proxy streaming is not benchmarked here: it needs an upstream,
+and this harness attempts no network by contract. No latency budget is
+asserted for any operation — that is a policy the release owner sets from
+repeated runs on the release machine, not a number this file can supply.
+
 ## 2026-08-28 Windows baseline
 
 Environment: Node `v24.18.0`, `win32/x64`, with the source revision recorded in
