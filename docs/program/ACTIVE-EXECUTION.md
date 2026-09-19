@@ -7,14 +7,14 @@
 | | |
 | --- | --- |
 | Branch | `gpt56/magnum-opus-reconstruction` — never `main`, never force-pushed |
-| Last CI-verified exact head | `7fa9053ae26fbf9b38c9e4d16ef61328d4274c2e` — run `35422132017`, **success on all eight configured jobs**, inspected job by job on 2026-09-19 (the D-235..D-240 tranche plus the `package-smoke` upload-path fix at `4f5a909`). |
-| Code ahead of that head | D-241..D-245 (`605fdf3`, `d683040`, `3250847`, `734d76b`, `775b645`) — this tranche; its exact-head CI row is PENDING until the run at the pushed head is observed. |
-| Local gates on the current tree | Root suite 2072/2076, 0 fail at `775b645` (full `npm test`, 2026-09-19); `npm run typecheck` (the CI form), browser and team-server typecheck; team-server suite 130/130 at `449bd66` (nothing under `src/team/` or `src/value/` exports changed since except the frontier assurance surface, re-run 301/301 at `5ffea2f`). |
+| Last CI-verified exact head | `079100c2062bf7ba71cb0c6265268ec3dd49eea4` — run `35423205688`, **success on all eight configured jobs**, inspected job by job on 2026-09-19 (the D-241..D-245 tranche). |
+| Code ahead of that head | D-246..D-253 (`bc415e6`, `3290e94`, `e5c2fc0`, `4457f7d`, `9d94812`) — this tranche; its exact-head CI row is PENDING until the run at the pushed head is observed. |
+| Local gates on the current tree | Root suite 2083/2087, 0 fail at `9d94812` (full `npm test`, 2026-09-19); `npm run typecheck` (the CI form), browser and team-server typecheck; team-server suite 130/130 at `9d94812`. |
 | Dossier source | `FISCUS_EXECUTION_DOSSIER_III.md` is **not in this checkout and not in git history** — it was an owner-supplied input. `docs/program/PACKET-INVENTORY.md` is the surviving mechanical enumeration of all 76 packets and is authoritative here. Do not re-derive a packet count from anything else. |
 
 ## Packet accounting
 
-76 packets. **44 COMPLETED, 16 PARTIAL, 14 NOT_STARTED, 0 IN_PROGRESS, 1 BLOCKED_EXTERNAL, 1 SUPERSEDED_WITH_REASON.** Regenerate rather than trust this line:
+76 packets. **53 COMPLETED, 5 PARTIAL, 13 NOT_STARTED, 0 IN_PROGRESS, 1 BLOCKED_EXTERNAL, 4 SUPERSEDED_WITH_REASON.** Regenerate rather than trust this line:
 
 ```bash
 grep -oE '\| `(NOT_STARTED|IN_PROGRESS|PARTIAL|COMPLETED|BLOCKED_EXTERNAL|SUPERSEDED_WITH_REASON)` \|' docs/program/PACKET-INVENTORY.md | sort | uniq -c
