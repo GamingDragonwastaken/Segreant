@@ -67,6 +67,12 @@ npm install        # compiles the local CLI; Fiscus has zero runtime dependencie
 npm run demo       # rebuilds, seeds labelled synthetic data, and starts the local dashboard
 ```
 
+"Zero runtime dependencies" is checked, not asserted: `npm run sbom` emits a
+CycloneDX bill of materials for the runtime tree from npm's own generator, and
+`npm run verify:sbom` (run by CI on every package build, SBOM uploaded as an
+artifact) fails if that tree contains any component but Fiscus itself. The SBOM
+is unsigned; signed build provenance is not published.
+
 That lights up spend, governance alerts, the RoI index and its four value
 lenses, the model-by-task frontier, budget controls, and a review-only synthetic
 model trial in an isolated `demo.db`. Clear it with `fiscus demo --clear`.

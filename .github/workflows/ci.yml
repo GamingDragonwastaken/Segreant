@@ -81,6 +81,23 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: mkdir -p ../fiscus-pack ../fiscus-install
       - run: npm pack --pack-destination ../fiscus-pack
+      # Software bill of materials for the RUNTIME tree, from npm's own
+      # generator (no dependency added to make one). The zero-runtime-dependency
+      # rule is asserted against the SBOM, not against a sentence: a runtime
+      # package appearing here fails the job. The SBOM is an unsigned build
+      # fact; signed provenance needs `id-token: write`, which is owner-reserved.
+      - name: Runtime SBOM (CycloneDX) and zero-dependency assertion
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run --silent sbom > ../fiscus-pack/fiscus-runtime.cdx.json
+          node scripts/check-sbom.mjs ../fiscus-pack/fiscus-runtime.cdx.json
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: fiscus-runtime-sbom
+          path: ../fiscus-pack/fiscus-runtime.cdx.json
+          if-no-files-found: error
+          retention-days: 30
       - working-directory: ../fiscus-install
         run: npm install --ignore-scripts --no-package-lock ../fiscus-pack/fiscus-*.tgz
       - working-directory: ../fiscus-install
