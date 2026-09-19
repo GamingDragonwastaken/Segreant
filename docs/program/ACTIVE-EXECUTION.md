@@ -7,8 +7,8 @@
 | | |
 | --- | --- |
 | Branch | `gpt56/magnum-opus-reconstruction` — never `main`, never force-pushed |
-| Last CI-verified exact head | `b0163fb46015f201daaa6089d67026a79e630404` — run `35429815809`, **success on all eight configured jobs**, observed 2026-09-19 (D-255, docs-only). |
-| Code ahead of that head | `8fe95e2` — D-256 (progressive disclosure gated) and D-257 (`/api/kernel` viewer), rebased over the owner's D-254/D-255 commits; CI at this exact head is PENDING until observed. |
+| Last CI-verified exact head | `4a4f22bb6d467371df54a085bdb9de2e71e3b633` — run `35452460268`, **success on all eight configured jobs**, observed 2026-09-19. Includes D-256 (progressive disclosure gated) and D-257 (`/api/kernel` viewer), closing WP-I01 and WP-I03, pushed by another actor working this same branch directly. |
+| Code ahead of that head | None. The tree is exactly at the last CI-verified head. |
 | Local gates on the current tree | Root typecheck and browser typecheck clean; `npm run build` clean; full root suite 2072/2089 pass in THIS execution environment — the 17 failures are environment-specific (Node 22 here vs. the repo's declared `>=24` and CI's actual Node 24; missing `node:sqlite` `setAuthorizer`; sandbox subprocess/timing limits) and reproduce identically on the unmodified `af0cd11` tree, confirmed before attributing anything to D-254, and confirmed again by CI itself passing all eight jobs at `9eb869b`. Causal-focused suites (`causal-issuance`, `causal-store`, `causal-cli`, `causal-inference-store`, `causal-analysis-snapshot-path`, `ledger-strengthening-obligation`) are 109/110 locally, the one failure being the same environment-specific `setAuthorizer` gap. |
 | Dossier source | `FISCUS_EXECUTION_DOSSIER_III.md` is **not in this checkout and not in git history** — it was an owner-supplied input. `docs/program/PACKET-INVENTORY.md` is the surviving mechanical enumeration of all 76 packets and is authoritative here. Do not re-derive a packet count from anything else. |
 
