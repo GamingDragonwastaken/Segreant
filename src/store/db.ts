@@ -50,7 +50,6 @@ import type { ExactAllocationRunRecord } from './allocation.ts';
 import * as exactAllocation from '../alloc/exact.ts';
 import * as billing from './billing.ts';
 import { buildCausalStudyKernelIssuance, type CausalStudyKernelIssuance } from '../causal/epistemic.ts';
-import { estimateCausalStudy } from '../causal/estimate.ts';
 import type { CausalStudyInferenceReport } from '../causal/inference-ledger.ts';
 import * as causal from './causal.ts';
 import * as causalLineage from './causalLineage.ts';
@@ -2683,8 +2682,22 @@ export class Store {
    * This is the boundary AII-036 named. The estimate itself is unchanged: this
    * appends the records that BIND it — the randomization Evidence, the observed
    * arm difference as an observational Claim, and, only when the pre-registered
-   * rule already authorised claim language, the identification Witness, the
-   * randomized Claim and the Derivation between them.
+   * rule already authorised claim language AND multiplicity has not withheld it,
+   * the identification Witness, the randomized Claim and the Derivation between
+   * them.
+   *
+   * ISSUANCE IS A LOOK, THE SAME AS A PREVIEW. It used to call
+   * `estimateCausalStudy` directly, which produced a look `reportCausalStudy`
+   * never counted — the inference ledger records every `analyze` preview and
+   * `causal inspect`/`verify` read, but the one path that mints a durable,
+   * revocation-bound kernel Claim skipped it entirely. A study that had already
+   * exhausted its registered family through repeated previews could still be
+   * issued as if this were the first and only look. This now routes through
+   * `reportCausalStudy` so the issuance itself is recorded, and gates the causal
+   * escalation on `claimAfterMultiplicity` rather than the raw single-look
+   * `allowedClaim`: when multiplicity withholds the conclusion, only the
+   * observational arm-difference Claim is issued, exactly as for a study that
+   * never earned claim language at all (D-254).
    *
    * All five append on ONE transaction, which is why the kernel grew
    * `appendWitnessWithinTransaction` / `appendDerivationWithinTransaction`. The
@@ -2699,9 +2712,14 @@ export class Store {
    * has no v1 analysis path has not made an error.
    */
   issueCausalStudyToKernel(studyId: string, issuedAtMs = Date.now()): CausalStudyKernelIssuance | null {
+    const report = causal.reportCausalStudy(this.db, studyId, issuedAtMs);
+    if (report === null) return null;
     const data = causal.causalStudyData(this.db, studyId);
     if (data === null) return null;
-    const issuance = buildCausalStudyKernelIssuance(data, estimateCausalStudy(data), issuedAtMs);
+    const gatedEstimate = report.claimAfterMultiplicity === report.estimate.allowedClaim
+      ? report.estimate
+      : { ...report.estimate, allowedClaim: report.claimAfterMultiplicity };
+    const issuance = buildCausalStudyKernelIssuance(data, gatedEstimate, issuedAtMs);
     this.epistemicLedger.runInTransaction(() => {
       this.epistemicLedger.appendEvidenceWithinTransaction(issuance.assignmentEvidence);
       this.epistemicLedger.appendEvidenceWithinTransaction(issuance.outcomeEvidence);

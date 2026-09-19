@@ -348,6 +348,57 @@ test('the dashboard endpoint records its own look, twice', async () => {
   }
 });
 
+test('kernel issuance is itself a recorded look, and earns the causal escalation on a fresh first look', () => {
+  // BEFORE D-254, `issueCausalStudyToKernel` called `estimateCausalStudy`
+  // directly and never reached this ledger at all: the one path that mints a
+  // durable, revocation-bound causal Claim was invisible to the exact
+  // mechanism built to stop an exhausted study from being read as a fresh
+  // look. This is the counterexample recorded at D-254, run against the
+  // committed tree.
+  withStore((store) => {
+    const studyId = seedQualified(store, 800);
+    const issuance = store.issueCausalStudyToKernel(studyId, 1_700_000_001_000);
+    assert.equal(issuance?.effect?.profile.causality, 'randomized', 'a first look earns the causal escalation');
+    assert.equal(issuance?.identification?.kind, 'causal_identification');
+    assert.ok(issuance?.derivation);
+
+    const acts = (store.raw().prepare('SELECT COUNT(*) AS n FROM causal_inference_acts').get() as { n: number }).n;
+    assert.equal(acts, 2, 'issuance must append acts for the registered family, the same as a preview would');
+    assert.equal(store.epistemic().readClaim(issuance!.effect!.id)?.id, issuance!.effect!.id, 'the kernel must hold the causal claim');
+  });
+});
+
+test('a preview and a later issuance share the same look family, and issuance withholds once multiplicity does', () => {
+  // The two paths an operator can reach -- `analyze` without `--apply`, and
+  // `--apply`, which calls `issueCausalStudyToKernel` -- must count against the
+  // same registered family, or an operator could spend the budget on issuance
+  // while `reportCausalStudy` believed the study still had its first look. And
+  // the escalation withheld, not the measurement: a study that has spent its
+  // family's error budget is exactly the state `causalClaimIsEarned` exists to
+  // keep out of the kernel, whether the caller asked through a preview or
+  // through issuance.
+  withStore((store) => {
+    const studyId = seedQualified(store, 800);
+    const preview = store.reportCausalStudy(studyId, 1_700_000_001_000);
+    assert.equal(preview?.multiplicity.looks, 1);
+    assert.equal(preview?.claimAfterMultiplicity, 'comparative_cost_quality_supported');
+
+    extendQualified(store, 800);
+    const issued = store.issueCausalStudyToKernel(studyId, 1_700_000_002_000);
+    assert.equal(issued?.effect, null, 'the second look, reached through issuance, must see the same withheld family');
+    assert.equal(issued?.identification, null);
+    assert.equal(issued?.derivation, null);
+    // The measurement is still issued -- withholding it would hide the
+    // observation rather than the conclusion.
+    assert.equal(issued?.armDifference.profile.causality, 'observational');
+    assert.equal(store.epistemic().readClaim(`claim:causal:effect:${studyId}`), null, 'no unwitnessed causal claim may reach the kernel');
+
+    const afterIssuance = store.reportCausalStudy(studyId, 1_700_000_003_000);
+    assert.equal(afterIssuance?.multiplicity.looks, 3, 'the issuance call must have counted as look 2');
+    assert.equal(afterIssuance?.claimAfterMultiplicity, 'not_established');
+  });
+});
+
 test('the CLI records its own look, twice', () => {
   // The other surface an operator reaches, exercised as the packaged command
   // rather than as a Store call, for the same reason `test/causal-cli.test.ts`

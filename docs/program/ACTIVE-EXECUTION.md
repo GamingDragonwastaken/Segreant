@@ -7,9 +7,9 @@
 | | |
 | --- | --- |
 | Branch | `gpt56/magnum-opus-reconstruction` — never `main`, never force-pushed |
-| Last CI-verified exact head | `079100c2062bf7ba71cb0c6265268ec3dd49eea4` — run `35423205688`, **success on all eight configured jobs**, inspected job by job on 2026-09-19 (the D-241..D-245 tranche). |
-| Code ahead of that head | D-246..D-253 (`bc415e6`, `3290e94`, `e5c2fc0`, `4457f7d`, `9d94812`) — this tranche; its exact-head CI row is PENDING until the run at the pushed head is observed. |
-| Local gates on the current tree | Root suite 2083/2087, 0 fail at `9d94812` (full `npm test`, 2026-09-19); `npm run typecheck` (the CI form), browser and team-server typecheck; team-server suite 130/130 at `9d94812`. |
+| Last CI-verified exact head | `af0cd110d3593cc0044d652d49e021be86b21a2e` — run `35425444474`, **success on all eight configured jobs**, observed 2026-09-19 (the D-246..D-253 tranche; the prior resumption note recorded this run as PENDING before it was checked). |
+| Code ahead of that head | D-254 (kernel-issuance multiplicity gap, this tranche) — its exact-head CI row is PENDING until the run at the pushed head is observed. |
+| Local gates on the current tree | Root typecheck and browser typecheck clean; `npm run build` clean; full root suite 2072/2089 pass — the 17 failures are pre-existing on the unmodified `af0cd11` tree in this execution environment (Node 22 vs. the declared `>=24` requirement, `node:sqlite` `setAuthorizer` missing, and other sandbox-specific timing/subprocess issues; confirmed by re-running a sample of them against `af0cd11` unmodified before attributing anything to D-254). Causal-focused suites (`causal-issuance`, `causal-store`, `causal-cli`, `causal-inference-store`, `causal-analysis-snapshot-path`, `ledger-strengthening-obligation`) are 109/110, the one failure being the same pre-existing `setAuthorizer` gap. team-server/browser typecheck not re-run this tranche: the change touches only `src/store/db.ts` and a root test file, neither imported by `team-server/`. |
 | Dossier source | `FISCUS_EXECUTION_DOSSIER_III.md` is **not in this checkout and not in git history** — it was an owner-supplied input. `docs/program/PACKET-INVENTORY.md` is the surviving mechanical enumeration of all 76 packets and is authoritative here. Do not re-derive a packet count from anything else. |
 
 ## Packet accounting
