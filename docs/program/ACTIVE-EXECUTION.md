@@ -7,14 +7,14 @@
 | | |
 | --- | --- |
 | Branch | `gpt56/magnum-opus-reconstruction` — never `main`, never force-pushed |
-| Last CI-verified exact head | `b32720fdc452e9e0f6c6ba0b5fb6b3c8d1a7f0d4` — run `35380152613`, **success on all eight configured jobs**, inspected job by job on 2026-09-18 (the D-226..D-230 tranche; `ae31ddd` failed only on `npm run typecheck` over `test/`, fixed at `b32720f`). |
-| Code ahead of that head | D-231..D-234 (`5deff78`, `8339f91`, `b6fac54`, `8e196a8`, `9193ed2`) — this tranche; its exact-head CI row is PENDING until the run at the pushed head is observed. |
-| Local gates on the current tree | Root suite 2055/2060 at `8e196a8` with the one failure (the FX read-site sweep over the new reconciler) closed at `9193ed2`; `npm run typecheck` (the CI form, over `test/` too), browser and team-server typecheck; team-server suite 130/130. |
+| Last CI-verified exact head | | Last CI-verified exact head | `980b2506d08e48fe8e67e8e1e96f2c0c8fd125ce` — run `35382286751`, **success on all eight configured jobs**, inspected job by job on 2026-09-19 (the D-231..D-234 tranche). The previous row cited `b32720f` with a wrong long form; its true SHA is `b32720fdc452e52913a5e0ae166365bcb723ecee`, run `35380152613`, all eight green. | |
+| Code ahead of that head | | Code ahead of that head | D-235..D-239 (`1b1250a`, `449bd66`, `51e4fe7`, `bd84b80`, `0ecdbf9`) — this tranche; its exact-head CI row is PENDING until the run at the pushed head is observed. `51e4fe7` changes `ci.yml` (SBOM step + `upload-artifact`), so this run also proves the workflow edit. | |
+| Local gates on the current tree | | Local gates on the current tree | Root suite 2061/2065, 0 fail at `51e4fe7` (full `npm test`, build included); `bd84b80` and `0ecdbf9` re-ran their own files plus the dashboard/GUI neighbourhood (128/128) against a rebuilt `dist/`; `npm run typecheck` (the CI form), browser and team-server typecheck; team-server suite 130/130 at `449bd66`. | |
 | Dossier source | `FISCUS_EXECUTION_DOSSIER_III.md` is **not in this checkout and not in git history** — it was an owner-supplied input. `docs/program/PACKET-INVENTORY.md` is the surviving mechanical enumeration of all 76 packets and is authoritative here. Do not re-derive a packet count from anything else. |
 
 ## Packet accounting
 
-76 packets. **32 COMPLETED, 28 PARTIAL, 15 NOT_STARTED, 0 IN_PROGRESS, 1 BLOCKED_EXTERNAL, 0 SUPERSEDED.** Regenerate rather than trust this line:
+76 packets. **39 COMPLETED, 21 PARTIAL, 15 NOT_STARTED, 0 IN_PROGRESS, 1 BLOCKED_EXTERNAL, 0 SUPERSEDED.** Regenerate rather than trust this line:
 
 ```bash
 grep -oE '\| `(NOT_STARTED|IN_PROGRESS|PARTIAL|COMPLETED|BLOCKED_EXTERNAL|SUPERSEDED_WITH_REASON)` \|' docs/program/PACKET-INVENTORY.md | sort | uniq -c
