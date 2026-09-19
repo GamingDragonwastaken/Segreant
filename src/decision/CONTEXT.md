@@ -66,7 +66,13 @@ that never moves standing), calls `certifyDecision`, `minimaxRegret`,
 `gateDecisionForConsequence`, renders the result in `fiscus budget
 --recommend`, and routes a certified cap through `issueDecisionToKernel` on
 `--apply`. A review-only or under-assured decision is rendered with its
-shortfalls and `--apply` is refused (D-213). `decisionCertificationStructure`
+shortfalls and `--apply` is refused (D-213). That is the whole of the
+product's recommendation → approval → action chain (D-252): the recommendation
+is advisory output, the approval is the operator's `--apply` under a DAL-3
+certificate, the action is the configuration write, and the record is the
+persisted certificate bundle whose `actionSemantics` is `no_action` /
+`permitted: false` by type — Fiscus never acts on a certificate by itself, and
+there is no approved-policy object that could make it. `decisionCertificationStructure`
 and `decisionInvalidatingAssumptionSets` (D-195) are this module's own adapter
 onto `minimalInvalidatingAssumptionSets` in `src/epistemic/countermodel.ts`,
 declaring the one support a strict-interval-dominance certificate rests on and
