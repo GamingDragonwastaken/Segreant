@@ -20,8 +20,9 @@ register used for GitHub-facing integration decisions.
 At the time of this checkpoint:
 
 - Canonical branch: `gpt56/magnum-opus-reconstruction`
-- Canonical SHA: `f8f036117a397e7e2ef1a6fea9d5fcd0bba665f0`
-- Durable packet register: 76 total, 11 completed, 49 partial, 16 not started.
+- Canonical SHA: `55b3e387ab078df19ddcbff0d384ac4e91afc693`
+- Durable packet register: 76 total, 55 completed, 3 partial, 13 not started, 1 blocked external, 4 superseded with reason.
+- Exact-head CI: run `35452798654`, success across the configured matrix.
 - Canonical worktree: clean and synchronized with `origin/gpt56/magnum-opus-reconstruction`.
 
 These counts are not the full local execution state.
@@ -31,11 +32,11 @@ These counts are not the full local execution state.
 | Packet | Local state | Evidence | Worktree / branch | Canonical integration |
 | --- | --- | --- | --- | --- |
 | `WP-D04` | `LOCAL_COMPLETE_PENDING_INTEGRATION` | `c3b8f191`; 42-case synthetic corpus, deterministic evaluator, benchmark 42/42, root full suite 2008 total / 2004 pass / 0 fail / 4 skips, typechecks/build/team-server green | `luna-next/wp-d04` | Not cherry-picked or pushed |
-| `WP-H03` | `LOCAL_COMPLETE_PENDING_INTEGRATION` | `4dbe0ea`, `c8b3b14`, `2941e04`; 12 killed mutants, 520 deterministic fuzz cases, five fault-injection boundaries, focused 9/9, root/build/typecheck/team-server green | `luna-next/wp-h03` | Not cherry-picked or pushed |
-| `WP-F06` | `LOCAL_PARTIAL_PENDING_INTEGRATION` | `d08df8fc`; bounded immutable lifecycle, focused 10/10, related decision 52/52, root 2011 total / 2007 pass / 0 fail / 4 skips, typechecks/build/team-server green | `luna-next/wp-f06` | Not cherry-picked or pushed; persistence/product routing/provider readback/live action remain open |
-| `WP-B02` | `LOCAL_IN_PROGRESS` | Native Luna xhigh worker active; existing partial residuals are being completed in a fresh isolated lane | `luna-next/wp-b02` | Not integrated |
-| `WP-C01` | `LOCAL_IN_PROGRESS` | Native Luna xhigh worker active; accounting authority residuals are being completed in a fresh isolated lane | `luna-next/wp-c01` | Not integrated |
-| `WP-I06` | `LOCAL_IN_PROGRESS` | Native Luna xhigh worker active; documentation truth/reproducibility residuals are being completed in a fresh isolated lane | `luna-next/wp-i06` | Not integrated |
+| `WP-H03` | `CANONICAL_COMPLETED` | The canonical register and remote branch already include H03's bounded mutation/fuzz/fault-injection closure; local commits are historical duplicate evidence | `luna-next/wp-h03` | Already represented canonically; do not cherry-pick stale duplicate commits |
+| `WP-F06` | `SUPERSEDED_WITH_REASON` | The canonical branch supersedes F06 with the later decision-assurance/action-boundary implementation; local `d08df8fc` is historical and must not override the canonical decision | `luna-next/wp-f06` | Do not integrate as a separate competing lifecycle |
+| `WP-B02` | `STALE_LOCAL_BASE` | Old isolated lane was based on `f8f0361` and has no committed work; reselect only from canonical `55b3e38` if the dossier still requires it | `luna-next/wp-b02` | Not active |
+| `WP-C01` | `STALE_LOCAL_BASE` | Old isolated lane was based on `f8f0361` and has no committed work; reselect only from canonical `55b3e38` if the dossier still requires it | `luna-next/wp-c01` | Not active |
+| `WP-I06` | `STALE_LOCAL_BASE` | Old isolated lane was based on `f8f0361` and has no committed work; reselect only from canonical `55b3e38` if the dossier still requires it | `luna-next/wp-i06` | Not active |
 
 ## Interpretation
 
@@ -59,4 +60,4 @@ Instead:
    `EVIDENCE-INDEX.md`, and `ACTIVE-EXECUTION.md`;
 6. retain the local overlay as historical execution evidence.
 
-Last updated: 2026-09-18
+Last updated: 2026-09-20
