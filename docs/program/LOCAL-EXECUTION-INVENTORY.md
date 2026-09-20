@@ -20,7 +20,7 @@ register used for GitHub-facing integration decisions.
 At the time of this checkpoint:
 
 - Canonical branch: `gpt56/magnum-opus-reconstruction`
-- Canonical SHA: `55b3e387ab078df19ddcbff0d384ac4e91afc693`
+- Canonical SHA: `3948714` (E01 implementation and execution-head checkpoint; exact-head CI pending)
 - Durable packet register: 76 total, 55 completed, 3 partial, 13 not started, 1 blocked external, 4 superseded with reason.
 - Exact-head CI: run `35452798654`, success across the configured matrix.
 - Canonical worktree: clean and synchronized with `origin/gpt56/magnum-opus-reconstruction`.
@@ -32,6 +32,7 @@ These counts are not the full local execution state.
 | Packet | Local state | Evidence | Worktree / branch | Canonical integration |
 | --- | --- | --- | --- | --- |
 | `WP-D04` | `LOCAL_COMPLETE_PENDING_INTEGRATION` | `c3b8f191`; 42-case synthetic corpus, deterministic evaluator, benchmark 42/42, root full suite 2008 total / 2004 pass / 0 fail / 4 skips, typechecks/build/team-server green | `luna-next/wp-d04` | Not cherry-picked or pushed |
+| `WP-E01` | `LOCAL_COMPLETE_PENDING_INTEGRATION` | `c424d0a`; canonical registry now carries all dossier-required estimand dimensions and valid v1/v2 estimates/issuance resolve it; causal focused 60/60, root serial 2097 total / 2093 pass / 0 fail / 4 skips, typechecks/build green | current canonical local head | Exact-head CI pending; not yet reflected as canonical completed |
 | `WP-H03` | `CANONICAL_COMPLETED` | The canonical register and remote branch already include H03's bounded mutation/fuzz/fault-injection closure; local commits are historical duplicate evidence | `luna-next/wp-h03` | Already represented canonically; do not cherry-pick stale duplicate commits |
 | `WP-F06` | `SUPERSEDED_WITH_REASON` | The canonical branch supersedes F06 with the later decision-assurance/action-boundary implementation; local `d08df8fc` is historical and must not override the canonical decision | `luna-next/wp-f06` | Do not integrate as a separate competing lifecycle |
 | `WP-B02` | `STALE_LOCAL_BASE` | Old isolated lane was based on `f8f0361` and has no committed work; reselect only from canonical `55b3e38` if the dossier still requires it | `luna-next/wp-b02` | Not active |
