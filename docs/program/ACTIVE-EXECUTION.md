@@ -8,7 +8,7 @@
 | --- | --- |
 | Branch | `gpt56/magnum-opus-reconstruction` — never `main`, never force-pushed |
 | Last CI-verified exact head | `394871467d8f0216dafd308528d3ed2e7830eea4` — run `35533297107`, **success on all eight configured jobs**, observed 2026-09-20. Includes the E01 estimand-registry implementation. |
-| Code ahead of that head | `9e18d82` — E01 estimand-registry and local-inventory checkpoints; exact-head CI is pending for this current remote tip. |
+| Code ahead of that head | `6c58936` — E01 estimand-registry and local-inventory checkpoints; exact-head CI is pending for this current remote tip. |
 | Local gates on the current tree | Root typecheck and browser typecheck clean; `npm run build` clean; full root suite 2072/2089 pass in THIS execution environment — the 17 failures are environment-specific (Node 22 here vs. the repo's declared `>=24` and CI's actual Node 24; missing `node:sqlite` `setAuthorizer`; sandbox subprocess/timing limits) and reproduce identically on the unmodified `af0cd11` tree, confirmed before attributing anything to D-254, and confirmed again by CI itself passing all eight jobs at `9eb869b`. Causal-focused suites (`causal-issuance`, `causal-store`, `causal-cli`, `causal-inference-store`, `causal-analysis-snapshot-path`, `ledger-strengthening-obligation`) are 109/110 locally, the one failure being the same environment-specific `setAuthorizer` gap. |
 | Dossier source | `FISCUS_EXECUTION_DOSSIER_III.md` is **not in this checkout and not in git history** — it was an owner-supplied input. `docs/program/PACKET-INVENTORY.md` is the surviving mechanical enumeration of all 76 packets and is authoritative here. Do not re-derive a packet count from anything else. |
 
