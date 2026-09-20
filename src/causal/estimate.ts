@@ -125,8 +125,7 @@ export function resolveCausalJointInference(
 export function estimateCausalStudy(data: CausalStudyData): CausalStudyEstimate {
   const qualification = qualifyCausalStudy(data);
   const jointInference = resolveCausalJointInference(data.protocol);
-  const estimandDefinition = data.protocol.version === 1
-    && verifyCommittedCausalProtocol(data.protocol).length === 0
+  const estimandDefinition = verifyCommittedCausalProtocol(data.protocol).length === 0
     ? resolveEstimandDefinition((data.protocol.analysis as unknown as { estimand?: unknown }).estimand) ?? null
     : null;
   const noEstimate: CausalStudyEstimate = {

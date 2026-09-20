@@ -159,8 +159,7 @@ export function buildCausalStudyKernelIssuance(
     throw new Error('causal estimate does not belong to this study protocol');
   }
   const declaredEstimand = (data.protocol.analysis as unknown as { estimand?: unknown }).estimand;
-  const estimandDefinition = data.protocol.version === 1
-    && verifyCommittedCausalProtocol(data.protocol).length === 0
+  const estimandDefinition = verifyCommittedCausalProtocol(data.protocol).length === 0
     ? resolveEstimandDefinition(declaredEstimand)
     : undefined;
   if (estimandDefinition === undefined

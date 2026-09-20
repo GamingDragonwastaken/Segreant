@@ -15,11 +15,24 @@ export interface EstimandDefinition {
   readonly analysis: 'intention_to_treat';
   readonly contrast: 'difference_in_means';
   readonly population: 'registered_eligible_population';
+  readonly treatment: 'assigned_arm';
+  readonly control: 'other_assigned_arm';
+  /** Legacy aliases retained for callers that still use the earlier vocabulary. */
   readonly intervention: 'assigned_arm';
   readonly comparator: 'other_assigned_arm';
+  readonly treatmentVersions: 'registered_execution_plan_digest';
   readonly outcome: 'pre_registered_primary_outcome';
+  readonly outcomeConstruct: 'pre_registered_primary_outcome';
+  readonly measurementModel: 'registered_quality_measurement_model';
   readonly timeHorizon: 'registered_study_window';
+  readonly assignmentMechanism: 'blocked_randomized_equal_allocation';
+  readonly target: 'randomized_itt';
+  readonly interferenceAssumptions: 'no_interference_assumed_not_tested';
   readonly missingData: 'report_missingness_do_not_impute_as_success';
+  readonly missingnessAssumptions: 'report_missingness_do_not_impute_as_success';
+  readonly transportTarget: 'none_beyond_registered_eligible_population';
+  readonly identificationAssumptions: 'randomized_assignment_validity_and_consistent_assignment';
+  readonly estimatorVersion: 'bounded_difference_hoeffding_v1';
 }
 
 const RANDOMIZED_ITT: EstimandDefinition = Object.freeze({
@@ -29,11 +42,23 @@ const RANDOMIZED_ITT: EstimandDefinition = Object.freeze({
   analysis: 'intention_to_treat',
   contrast: 'difference_in_means',
   population: 'registered_eligible_population',
+  treatment: 'assigned_arm',
+  control: 'other_assigned_arm',
   intervention: 'assigned_arm',
   comparator: 'other_assigned_arm',
+  treatmentVersions: 'registered_execution_plan_digest',
   outcome: 'pre_registered_primary_outcome',
+  outcomeConstruct: 'pre_registered_primary_outcome',
+  measurementModel: 'registered_quality_measurement_model',
   timeHorizon: 'registered_study_window',
+  assignmentMechanism: 'blocked_randomized_equal_allocation',
+  target: 'randomized_itt',
+  interferenceAssumptions: 'no_interference_assumed_not_tested',
   missingData: 'report_missingness_do_not_impute_as_success',
+  missingnessAssumptions: 'report_missingness_do_not_impute_as_success',
+  transportTarget: 'none_beyond_registered_eligible_population',
+  identificationAssumptions: 'randomized_assignment_validity_and_consistent_assignment',
+  estimatorVersion: 'bounded_difference_hoeffding_v1',
 });
 
 const definitions = new Map<string, EstimandDefinition>([
