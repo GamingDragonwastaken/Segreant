@@ -33,6 +33,7 @@ import { cmdDiagnostics } from './cli/diagnosticsCmd.ts';
 import { cmdPack } from './cli/packCmd.ts';
 import { cmdPlugin } from './cli/pluginCmd.ts';
 import { cmdEconomic } from './cli/economicCmd.ts';
+import { cmdBudgetControl } from './cli/controlCmd.ts';
 
 function cmdHelp(): void {
   console.log(`
@@ -151,6 +152,10 @@ function cmdHelp(): void {
                           cap governs live proxy traffic, the spend it can block)
     budget --recommend    Suggest a value-aware budget from usage + realized value
                           (--repo <path> for value-based, --apply to write, --json)
+    budget --control      Evaluate one bounded autonomous daily-cap control step
+                          from a versioned JSON policy (--policy <file>, --repo <path>,
+                          --apply to delegate mutation, --json). Deterministic v1
+                          exploration is 0; unsafe/expired evidence falls back.
     alerts                Active governance alerts: spend spikes, throttling, runaway,
                           value craters (--repo <path> for value, --json; exits 1 if critical)
                           Deliver to your own webhook: --set-webhook <url>, then --notify
@@ -298,7 +303,8 @@ async function main(): Promise<void> {
       cmdConfig(flags);
       break;
     case 'budget':
-      if (flags.recommend) await cmdBudgetAdvisor(flags);
+      if (flags.control) await cmdBudgetControl(flags);
+      else if (flags.recommend) await cmdBudgetAdvisor(flags);
       else cmdBudget(flags);
       break;
     case 'alerts':
