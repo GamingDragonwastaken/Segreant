@@ -21,6 +21,7 @@ import { computeFrontier } from '../value/frontier.ts';
 import { valueSpine, usageValue, budgetAdvice } from '../value/report.ts';
 import {
   issueBudgetCapDecision,
+  previewBudgetCapIssuance,
   readBudgetCapCertificates,
   renderBudgetCapDecision,
 } from '../budget/capDecision.ts';
@@ -591,13 +592,25 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
   // certified --apply.
   const nowIso = new Date().toISOString();
   const decision = rec.decision;
+  const seriesCoverage = rec.economic?.coverage === 'exact' ? 'complete' : rec.economic?.coverage === 'partial' ? 'partial' : 'unknown';
+  // Product presentation and mutation eligibility consume the canonical adapter
+  // preview, not the bare engine certificate. The adapter recomputes the
+  // certificate from the intervals and binds a decision-fitness Claim when one
+  // is legally issuable. Persistence remains a separate --apply step.
+  const canonicalDecision = decision ? previewBudgetCapIssuance(decision, {
+    issuedAt: nowIso,
+    windowDays: days,
+    spendBasis,
+    monetaryBasis: 'list',
+    seriesCoverage,
+  }) : null;
   const certificates = decision ? readBudgetCapCertificates(store.epistemic(), nowIso) : [];
 
   // A heuristic cap changes spend behaviour (D-213). --apply is honoured only
-  // when the decision the recommendation carries is certified AND its derived
-  // assurance reaches the level a spend change requires; anything less is
-  // refused, and the refusal now says which of the two fell short.
+  // when the canonical adapter can issue decision fitness AND the separate
+  // changes-spend assurance reaches its required level.
   const applyPermitted = decision !== null
+    && canonicalDecision?.decision !== null
     && decision.standing.status !== 'review_only'
     && decision.assurance.meetsRequirement;
   if (flags.apply && !applyPermitted) {
@@ -625,7 +638,17 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
   }
 
   if (flags.json) {
-    printJson({ ...rec, decision: decision ? { ...decision, certificates } : null, allocation, shadowPrice: null });
+    printJson({
+      ...rec,
+      decision: decision && canonicalDecision ? {
+        ...decision,
+        certificate: canonicalDecision.certificateBundle.dominance,
+        kernelClaim: canonicalDecision.decision,
+        certificates,
+      } : null,
+      allocation,
+      shadowPrice: null,
+    });
     store.close();
     return;
   }
@@ -656,7 +679,7 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
   for (const r of rec.rationale) console.log(color(tty, C.gray, `  · ${r}`));
   if (decision) {
     console.log('');
-    for (const line of renderBudgetCapDecision(decision, certificates)) console.log(color(tty, C.gray, line));
+    for (const line of renderBudgetCapDecision(decision, certificates, canonicalDecision!)) console.log(color(tty, C.gray, line));
   }
   // Raw allocation and frontier trim/grow hints are withheld from this surface
   // (D-248): generic contexts can be unlike work, and comparable model guidance
@@ -670,7 +693,6 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
     // Persist the certificate the cap was set under (D-220): the record is never
     // authorization and never executes anything; it exists so a later
     // withdrawal of the basis evidence is visible on read.
-    const seriesCoverage = rec.economic?.coverage === 'exact' ? 'complete' : rec.economic?.coverage === 'partial' ? 'partial' : 'unknown';
     const issued = issueBudgetCapDecision(store.epistemic(), decision, {
       issuedAt: nowIso,
       windowDays: days,
