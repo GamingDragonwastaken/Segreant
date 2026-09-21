@@ -10,7 +10,7 @@ tip is `7373f261b58c4061c82b1ecf020e907e61c28a38` with exact-head CI run
 receipt/team reconciliation, provider-authoritative FX and universal exact
 consumer migration remain open.
 
-Boundaries still classified `unmigrated_authority`: `decision.certificate`. That line is checked against `src/epistemic/issuance-map.ts` by `test/program-record-issuance-classes.test.ts`, and both this file and `ACTIVE-EXECUTION.md` must carry it and agree with the map. It exists because the prose here once named three, two of which had stopped being that two closures earlier, and the frontier ordered a round of work on the strength of it (D-169). Read the map for every other classification; no total is stated anywhere in this file, because a number nobody asserts cannot go stale.
+Boundaries still classified `unmigrated_authority`: none. The final reconciliation routes the budget advisor presentation and the bounded online controller through the canonical decision adapter before a certificate can reach an operator or action gate; `test/program-record-issuance-classes.test.ts` holds this declaration to `src/epistemic/issuance-map.ts`.
 
 | ID | Severity | Finding | Status | Acceptance condition |
 |---|---|---|---|---|
