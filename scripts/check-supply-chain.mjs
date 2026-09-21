@@ -22,7 +22,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 /** The complete set of packages this project is permitted to install. */
-const ALLOWED_DEV_DEPENDENCIES = ['@types/node', 'typescript'];
+// Browser verification is deliberately test-only: Playwright and axe never
+// enter the published package or runtime dependency surface. Keeping them in
+// the exact allowlist makes that exception explicit instead of allowing
+// arbitrary tooling to accumulate unnoticed.
+const ALLOWED_DEV_DEPENDENCIES = ['@axe-core/playwright', '@types/node', 'playwright', 'typescript'];
 
 /** The only registry a locked tarball may be fetched from. */
 const ALLOWED_REGISTRY_HOST = 'registry.npmjs.org';

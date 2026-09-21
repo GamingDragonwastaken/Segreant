@@ -32,6 +32,7 @@
     "build": "node scripts/build.mjs",
     "benchmark": "node --disable-warning=ExperimentalWarning scripts/benchmark.mjs",
     "benchmark:contribution": "node --disable-warning=ExperimentalWarning scripts/contribution-benchmark.mjs",
+    "test:browser": "npm run build && node --test test/dashboard-runtime-accessibility.browser.mjs",
     "prepare": "npm run build",
     "predemo": "npm run build",
     "demo": "node --disable-warning=ExperimentalWarning bin/fiscus.mjs demo --serve",
@@ -67,7 +68,9 @@
   "homepage": "https://github.com/GamingDragonwastaken/Fiscus#readme",
   "bugs": "https://github.com/GamingDragonwastaken/Fiscus/issues",
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.0",
     "@types/node": "^26.2.0",
+    "playwright": "^1.63.0",
     "typescript": "^7.0.2"
   }
 }

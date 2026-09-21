@@ -371,6 +371,17 @@ export async function runPluginProcess(input: PluginProcessHostInput): Promise<P
       forceStop('failed', 'plugin process failed to start or communicate');
     });
 
+    // A bounded-output refusal terminates the child while the request pipe may
+    // still be flushing. On POSIX this can surface as an asynchronous EPIPE
+    // on stdin after `stdin.end()` has returned; without a listener Node treats
+    // that expected shutdown race as an uncaught process error. The child
+    // close handler remains the single settlement point, while this listener
+    // records the same failed communication only when no stronger refusal or
+    // timeout has already won.
+    stdin.once('error', () => {
+      forceStop('failed', 'plugin request pipe failed before the child completed');
+    });
+
     child.once('close', (code, signal) => {
       if (settled) return;
       settled = true;

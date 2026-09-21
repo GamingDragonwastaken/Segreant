@@ -3588,3 +3588,19 @@ Lab implementation, calibration result, decision feature or production route.
 **Fix.** `docs/program/MARKET-CAPABILITY-MATRIX.md` records current primary-source capabilities for Langfuse, Datadog Agent Observability, Vanta, FOCUS, and OpenTelemetry, then chooses build/interoperate/refuse per capability. `docs/program/ORIGINALITY-SUBSTITUTION-REVIEW.md` classifies standardized primitives, Fiscus-specific semantics, potentially distinctive combinations, and unproven claims. RED-first contract coverage is 2/2.
 
 **Decision.** WP-J05 and WP-J06 are `PARTIAL`. The defensible product distinction is the composition of exact local AI-finance accounting, epistemic/revocation semantics, causal/decision gates, and standards-compatible exports—not a novel theorem, generic trace platform, GRC suite, or signed envelope. Independent scholarly/market critique remains an external future gate.
+
+## D-271 — runtime accessibility is a repository-tested browser property, with assistive technology kept as an external gate
+
+**Problem.** The earlier WCAG tranche repaired source and contract defects, but its checks did not render the dashboard. A DOM/axe check cannot honestly establish what NVDA, JAWS, or VoiceOver announces, while refusing all browser tooling would leave keyboard, responsive-layout, console, and request-boundary behavior untested.
+
+**Fix.** `test/dashboard-runtime-accessibility.browser.mjs` runs the built dashboard in real Chromium over loopback and checks the required first-run choice and focus return, Escape behavior, skip-link focus without router navigation, accessible control names, responsive no-overflow, loopback-only requests, page/console errors, and axe WCAG 2A/2AA violations. Playwright and `@axe-core/playwright` are dev/test-only and are explicitly allowlisted by the supply-chain checker; CI has a separately pinned `browser-accessibility` job. Native Edge was also exercised against the loopback dashboard during this checkpoint. The local browser gate passed 1/1.
+
+**Boundary.** WP-I04 remains `BLOCKED_EXTERNAL`: this closes the repository/runtime gate, not exact assistive-technology announcement behavior. No screen-reader result is inferred from axe or from the browser accessibility tree.
+
+## D-272 — bounded plugin-host shutdown treats asynchronous request-pipe EPIPE as a lifecycle event
+
+**Problem.** On macOS, the existing bounded-output regression could fail the whole process with an asynchronous `EPIPE` from the child's request stdin after the host had already terminated the child for exceeding its output bound. The synchronous `stdin.end()` try/catch could not observe that later stream error.
+
+**Fix.** The process host now attaches a one-shot stdin error listener and routes it through the existing single-settlement `forceStop`/`close` path. A stronger refusal or timeout wins; an unhandled pipe error cannot turn an expected bounded shutdown into a CI crash. The focused plugin-host regression passes 9/9 locally.
+
+**Boundary.** This is lifecycle hardening, not a relaxation of output limits, capability refusal, egress policy, or credential isolation.

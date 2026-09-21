@@ -51,6 +51,18 @@ Boundaries still classified `unmigrated_authority`: `decision.certificate`. That
 | AII-035 | P0 | Exact-head CI red on macOS OIDC time-boundary race | COMPLETED | OIDC clock repair plus exact-SHA GitHub run `33253835881` green across root Ubuntu/macOS/Windows, package-smoke, and team-server Ubuntu/macOS/Windows |
 | AII-036 | P0 | No universal formal legality of evidence derivations | PARTIAL | Canonical Derivation/Witness legality, evidence-grounded persistent witness registry and soundness tests now exist; the legality rule now also guards the money axis, which previously had no rule of any kind — a `monetary_rebasing` witness is required for any change of `monetaryBasis` other than a weakening, enforced where derivations persist (D-152); a repository-wide issuance map declares every claim-issuance boundary, its class of authority and whether any product path reaches it, and `test/issuance-map.test.ts` checks both axes against the source tree and the import graph rather than against this row. **Read `src/epistemic/issuance-map.ts` for the current classification; this row states no totals, because the version of it that did went two closures stale (D-169).** One boundary remains `unmigrated_authority` — `decision.certificate` — and the map has it as `unreached`, so nothing in the product passes through it. The two causal boundaries this row previously named alongside it are `kernel_primitive`: `causal.issuance` converts a qualified study into kernel records with a `causal_identification` witness, so their conclusions are bound to their evidence and revoking a source invalidates what depends on it. Universal issuance integration at the remaining boundary and at all product consumers remains |
 
+## Current runtime-evidence note (2026-09-21)
+
+The dashboard's runtime accessibility repository gate is now real browser
+evidence rather than source-text inference (D-271): a loopback Chromium/axe
+harness passes first-run focus/escape/registration, skip-link focus, control
+names, responsive layout, network boundary and console/page-error checks. This
+strengthens AII-029/AII-030's runtime-contract evidence but does not close the
+external assistive-technology gate in WP-I04. The macOS EPIPE failure observed
+while exercising the existing plugin-host output-boundary regression is fixed
+at D-272 by consuming the asynchronous stdin shutdown error; cross-platform
+CI is still the acceptance gate.
+
 ## Accelerated continuation reconciliation (2026-09-15)
 
 The latest implementation checkpoint preserves the ambitious architecture while

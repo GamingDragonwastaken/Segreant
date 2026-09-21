@@ -183,3 +183,20 @@ Highest value first, each stated as the boundary that is missing rather than as 
 - **A program record is a gated artifact, not prose.** `test/program-evidence-contract.test.ts` requires every 11-digit CI run identifier in `docs/program/**` and `docs/RELEASE-GATE.md` to state that run's outcome within 200 characters. A list of run ids with one outcome word at the front turns CI red — it did, at `a0c9bc5`, on four jobs. Edit these files and then run the suite; a docs-only change is still a change the gate reads.
 - **The owner disabled Claude commit/PR attribution** in `.claude/settings.json` on `main` at `1572f54`, and this branch did not carry that file, so commits made here before `99e4384` have a `Co-Authored-By` trailer the owner's configuration asks not to be added. The file is now cherry-picked onto the branch and later commits omit the trailer. The earlier ones are NOT rewritten: this branch is pushed and force-pushing it is forbidden, so the honest record is a note here rather than a silently corrected history.
 - Five delegated lanes were cut off mid-packet by provider rate limits. Four have since been finished by the integrator and committed — WP-D07, WP-F05 and WP-R01 in full, each with its counterexample re-measured and its RED re-verified in this tree rather than taken on the lane's report. **WP-I01 remains open and its held output is two dashboard claim-inspector test files with NO implementation**; they are outside the repository and are not work that landed. WP-E02 produced nothing at all and is still `NOT_STARTED`.
+
+## Current execution checkpoint (2026-09-21)
+
+- The native Edge loopback check rendered the current dashboard and exercised
+  the first-run preference flow; the deterministic Chromium/axe gate passes
+  1/1 locally. This is repository/runtime evidence for D-271, not screen-reader
+  evidence.
+- The browser gate is dev/test-only. `playwright` and `@axe-core/playwright`
+  are explicitly allowlisted by `scripts/check-supply-chain.mjs`; they are not
+  runtime package dependencies. The exact CI tip is still pending after this
+  checkpoint.
+- D-272 hardens the process host against the asynchronous macOS stdin EPIPE
+  observed when an output-limit refusal terminates a child. Focused plugin-host
+  coverage is 9/9 locally; the next remote run is the cross-platform proof.
+- Do not mark WP-I04 `COMPLETED`: exact NVDA/JAWS/VoiceOver announcement
+  behavior remains a genuine external gate. Do not start J02 before J01's
+  causal-v3/policy-provenance foundations are durable.
