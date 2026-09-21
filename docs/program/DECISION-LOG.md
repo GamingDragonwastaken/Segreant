@@ -3542,3 +3542,11 @@ Lab implementation, calibration result, decision feature or production route.
 **Fix.** `DESIGN_ESTIMATOR_REGISTRY` names every lane and its status. Only the retained blocked ITT v1 resolves for estimation; v2/deferred, archived, and noncausal entries resolve to no causal estimator. The estimate carries `designEstimatorId`, kernel issuance requires that identity, and legacy snapshots project `null` without rewriting their stored bytes. RED-first registry/issuance/snapshot coverage is 4/4; typecheck/build pass.
 
 **Limitation.** This is an authority/routing closure, not implementation of the deferred v2 analysis or the archived/noncausal methods.
+
+## D-265 — standards are adapters and evidence vocabularies, not a replacement epistemic kernel
+
+**Problem.** The dossier required an implementation-time comparison with current interoperability standards. Treating a standards name as a feature would either duplicate mature cost/telemetry/provenance protocols or overclaim that a conformant envelope proves Fiscus's financial, causal, or decision semantics.
+
+**Fix.** `docs/program/STANDARDS-INTEROPERABILITY.md` records primary-source mappings for OpenTelemetry GenAI conventions, FOCUS Cost and Usage, W3C PROV, W3C VC/Data Integrity, in-toto/SLSA, and draft-only SCITT. Each row states the direction of interchange, maturity/version, omitted-field and exactness handling, and the semantic boundary that remains Fiscus-owned. A RED-first contract test checks the source links and non-equivalence rules.
+
+**Decision.** WP-G04 is `COMPLETED` on its research/mapping boundary. Fiscus will adapt outward from its exact local ledger and Trusted Epistemic Kernel; imported standard records require source/version/digest/coverage/basis evidence and cannot mint stronger Claims. OTel, VC/Data Integrity, and in-toto/SLSA are optional adapter surfaces; SCITT is research-only until a future threat-model and external-authority decision.
