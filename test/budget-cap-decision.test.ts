@@ -35,6 +35,7 @@ import {
   budgetCapIssuanceInput,
   decideBudgetCap,
   issueBudgetCapDecision,
+  previewBudgetCapIssuance,
   readBudgetCapCertificates,
   renderBudgetCapDecision,
 } from '../src/budget/capDecision.ts';
@@ -71,6 +72,20 @@ const DAL3_INPUT = {
 const TEN_DAYS = [2, 3, 4, 5, 2, 3, 10, 4, 3, 5];
 
 function ledger(): EpistemicLedger { return new EpistemicLedger(new DatabaseSync(':memory:')); }
+
+function renderDecision(
+  decision: ReturnType<typeof decideBudgetCap>,
+  reads: ReturnType<typeof readBudgetCapCertificates>,
+): string {
+  const canonical = previewBudgetCapIssuance(decision, {
+    issuedAt: ISSUED_AT,
+    windowDays: 30,
+    spendBasis: 'all_observed',
+    monetaryBasis: 'list',
+    seriesCoverage: 'complete',
+  });
+  return renderBudgetCapDecision(decision, reads, canonical).join('\n');
+}
 
 // ---- the pure advisor carries a decision -------------------------------------
 
@@ -221,18 +236,18 @@ test('a booked withdrawal on the basis evidence is rendered as pending, not hidd
     'the claim derived from it is named too',
   );
   assert.deepEqual(reads[0]!.invalidatedBy, [], 'nothing is withdrawn yet');
-  const text = renderBudgetCapDecision(decision, reads).join('\n');
+  const text = renderDecision(decision, reads);
   assert.match(text, /withdrawal booked/i);
   assert.ok(text.includes(basis.id), 'the pending id reaches the operator');
 
   const after = readBudgetCapCertificates(store, '2026-09-21T00:00:00.000Z');
   assert.equal(after[0]!.status, 'invalidated');
-  assert.match(renderBudgetCapDecision(decision, after).join('\n'), /invalidated/i);
+  assert.match(renderDecision(decision, after), /invalidated/i);
 });
 
 test('the renderer never presents the decision as actionable', () => {
   const decision = decideBudgetCap({ dailySpends: TEN_DAYS, realizedSpendShare: 0.3, currentDailyCapUsd: null, recommendedDailyUsd: 10, inputs: [METERED_INPUT] });
-  const text = renderBudgetCapDecision(decision, []).join('\n');
+  const text = renderDecision(decision, []);
   assert.match(text, /review only/i);
   assert.match(text, /not certified/i);
   assert.match(text, /minimax regret/i);
@@ -370,7 +385,7 @@ test('the cap decision evaluates a declared admissible preference set and never 
   assert.equal(decision.standing.status, 'review_only');
   for (const p of BUDGET_CAP_ADMISSIBLE_PREFERENCES) assert.ok(p.rationale.length > 20, `${p.id} states why it is admissible`);
   // The robustness diagnostic is rendered, as a diagnostic.
-  const text = renderBudgetCapDecision(decision, []).join('\n');
+  const text = renderDecision(decision, []);
   assert.match(text, /Preference\s+preference_sensitive/);
   assert.match(text, /not a recommendation/);
 });
