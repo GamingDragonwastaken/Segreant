@@ -45,4 +45,41 @@ those gates. This review therefore sends adaptive OPE, online control and
 complexity research back to their dependency-gated packets rather than adding
 decorative machinery to Fiscus now.
 
+## Independent scholarly and market critique (2026-09-21)
+
+The category and methodology review produces a narrowing result, not a
+superiority claim:
+
+- The OPE literature treats evaluation under a different logging policy as a
+  difficult estimation problem with bias/variance trade-offs and explicitly
+  discusses doubly robust methods as estimators, not automatic safety proofs
+  ([Jiang and Li, *Doubly Robust Off-policy Value Evaluation for Reinforcement
+  Learning*](https://arxiv.org/abs/1511.03722)). Fiscus’s J01 boundary therefore
+  keeps overlap, propensity provenance, clipping and non-causal limitations
+  explicit.
+- [OpenCost](https://opencost.io/docs/) already supplies a vendor-neutral
+  cloud/container measurement, allocation, showback and chargeback category.
+- [IBM Kubecost](https://www.kubecost.com/) already supplies Kubernetes
+  allocation, cloud-bill reconciliation, optimization recommendations,
+  budgets, anomaly detection and automated workload actions.
+- [IBM watsonx.governance](https://www.ibm.com/docs/en/watsonx/saas?topic=governing-ai)
+  already supplies AI-asset lifecycle tracking, factsheets, monitoring and
+  governance/risk workflows.
+
+The independent critique is adverse to any claim that Fiscus invented exact
+cost accounting, generic FinOps allocation, AI governance, OPE, or GRC. The
+only defensible distinction left standing is a product composition: local-first
+AI-finance evidence with exact monetary basis, retention/coverage consequences,
+epistemic revocation and conservative decision gates. That combination remains
+unvalidated as a market-original claim and must not be marketed as a theorem,
+standard or category monopoly.
+
+## Pre-claim review gate
+
+Before any field-leading or originality claim is published, the executor must
+re-run the market matrix against primary sources, name at least one direct
+substitute and one standards-based substitute, read the relevant scholarly
+methodology where a mathematical claim is involved, and record the strongest
+counterargument. A claim survives only if it is narrowed to the evidence that
+remains after that adversarial review.
 

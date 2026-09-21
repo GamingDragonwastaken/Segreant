@@ -3632,3 +3632,27 @@ exists yet. The module never authorizes or executes a policy and explicitly
 states that its estimate is not a causal treatment effect. WP-J02 remains
 `NOT_STARTED` until the runtime action adapter, safe baseline, rollback and
 circuit-breaker evidence are wired.
+
+## D-274 — J05/J06 close on broadened primary-source and adversarial review evidence
+
+**Problem.** The earlier market/originality review covered Langfuse, Datadog,
+Vanta, FOCUS and OpenTelemetry, but its own remainder required additional
+FinOps/AI-governance substitutes and an independent critique before external
+positioning. Leaving the rows `PARTIAL` after collecting that evidence would
+make the durable register lag the actual review; marking them complete without
+the critique would overstate originality.
+
+**Fix.** The market matrix now includes current primary-source observations for
+OpenCost, IBM Kubecost and IBM watsonx.governance, and records explicit
+build/interoperate/refuse decisions. The originality review adds an adverse
+methodological critique from the doubly-robust OPE literature plus direct
+substitution findings from those systems, and installs a pre-claim gate that
+requires a primary-source refresh, direct and standards substitutes, relevant
+scholarship and a strongest counterargument before field-leading language.
+The matrix/originality contract test passes with the broadened corpus.
+
+**Decision.** WP-J05 and WP-J06 are `COMPLETED` at the repository-review
+boundary. This is closure of the current benchmark/review deliverables, not a
+certificate of market leadership, historical originality, superiority, customer
+outcomes or future freshness; those claims remain prohibited without a later
+refresh and independent evidence.

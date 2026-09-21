@@ -208,3 +208,8 @@ Highest value first, each stated as the boundary that is missing rather than as 
   output is explicitly non-causal and non-authorizing. J02 stays
   no-action/not-started until the runtime control adapter and safety evidence
   exist.
+- J05 and J06 are now repository-review `COMPLETED`: the market matrix was
+  broadened with OpenCost, IBM Kubecost and IBM watsonx.governance, and the
+  originality review now contains an adverse OPE/market critique plus a
+  pre-claim counterargument gate. Neither closure asserts leadership or
+  historical originality.
