@@ -1890,7 +1890,13 @@ export function causalAnalysisSnapshotBasis(
 export function causalAnalysisSnapshots(db: DatabaseSync, studyId: string): CausalAnalysisSnapshot[] {
   return (db.prepare(
     'SELECT analysis_json FROM causal_analysis_snapshots WHERE study_id = ? ORDER BY computed_at_ms DESC, analysis_id DESC',
-  ).all(studyId) as Array<{ analysis_json: string }>).map((row) => parseJson(row.analysis_json, 'analysis snapshot'));
+  ).all(studyId) as Array<{ analysis_json: string }>).map((row) => {
+    const snapshot = parseJson<CausalAnalysisSnapshot>(row.analysis_json, 'analysis snapshot');
+    return {
+      ...snapshot,
+      estimate: { ...snapshot.estimate, designEstimatorId: snapshot.estimate.designEstimatorId ?? null },
+    };
+  });
 }
 
 export function causalStudySummaries(db: DatabaseSync): CausalStudySummary[] {

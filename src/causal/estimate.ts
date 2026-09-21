@@ -16,7 +16,7 @@
 
 import { qualifyCausalStudy } from './qualification.ts';
 import { resolveEstimandDefinition } from './estimand.ts';
-import { verifyCommittedCausalProtocol } from './protocol.ts';
+import { resolveCausalDesignEstimator } from './registry.ts';
 import type {
   ArmCounts,
   CausalEffectInterval,
@@ -148,7 +148,8 @@ export function resolveCausalJointInference(
 export function estimateCausalStudy(data: CausalStudyData): CausalStudyEstimate {
   const qualification = qualifyCausalStudy(data);
   const jointInference = resolveCausalJointInference(data.protocol);
-  const estimandDefinition = verifyCommittedCausalProtocol(data.protocol).length === 0
+  const designEstimator = resolveCausalDesignEstimator(data.protocol);
+  const estimandDefinition = designEstimator !== undefined
     ? resolveEstimandDefinition((data.protocol.analysis as unknown as { estimand?: unknown }).estimand) ?? null
     : null;
   const noEstimate: CausalStudyEstimate = {
@@ -156,6 +157,7 @@ export function estimateCausalStudy(data: CausalStudyData): CausalStudyEstimate 
     protocolHash: data.protocol.protocolHash,
     estimandId: estimandDefinition?.id ?? null,
     estimandDefinition,
+    designEstimatorId: designEstimator?.id ?? null,
     costEffectUsd: null,
     qualityEffect: null,
     netBenefitEffectUsd: null,
@@ -174,7 +176,7 @@ export function estimateCausalStudy(data: CausalStudyData): CausalStudyEstimate 
       `${jointInference.method} joint rule: ${(jointInference.overallConfidenceLevel * 100).toFixed(2)}% overall confidence allocated equally across ${jointInference.endpointCount} ${jointInference.endpointFamily} endpoint(s) at ${(jointInference.endpointConfidenceLevel * 100).toFixed(2)}% each; quality non-inferiority margin ${jointInference.nonInferiorityMargin}; cost superiority threshold $${jointInference.costSuperiorityThresholdUsd.toFixed(6)}; secondary endpoints ${jointInference.secondaryEndpointPolicy}${jointInference.ruleSource === 'version_default' ? ' (legacy protocol version default)' : ' (pre-registered in the protocol)'}.`,
     ],
   };
-  if (qualification.state !== 'qualified') return noEstimate;
+  if (qualification.state !== 'qualified' || designEstimator === undefined) return noEstimate;
 
   const { protocol } = data;
   const treatmentArm = protocol.question === 'model_cost_quality'

@@ -615,6 +615,8 @@ export interface CausalStudyEstimate {
   /** Canonical registry reference; null means the protocol estimand is unknown. */
   estimandId: EstimandDefinition['id'] | null;
   estimandDefinition: EstimandDefinition | null;
+  /** Canonical executable design/estimator identity; null means unresolved. */
+  designEstimatorId: string | null;
   costEffectUsd: CausalEffectInterval | null;
   qualityEffect: CausalEffectInterval | null;
   netBenefitEffectUsd: CausalEffectInterval | null;

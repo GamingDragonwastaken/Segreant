@@ -83,9 +83,12 @@ test('counterexample: the bare estimator reports the tenth look exactly like the
       `the tenth look's disclosure text matches the first look's structure: ${line}`,
     );
   }
-  const nonBlockTenth = looks[9]!.limitations.filter((line) => !/block\(/.test(line));
-  const nonBlockFirst = looks[0]!.limitations.filter((line) => !/block\(/.test(line));
-  assert.deepEqual(nonBlockTenth, nonBlockFirst);
+  const fixedLines = (estimate: ReturnType<typeof estimateCausalStudy>) =>
+    estimate.limitations.filter((line) => !/block\(/.test(line) && !/\/\d+ retained validated assignments/.test(line));
+  assert.deepEqual(fixedLines(looks[9]!), fixedLines(looks[0]!));
+  const armLines = (estimate: ReturnType<typeof estimateCausalStudy>) =>
+    estimate.limitations.filter((line) => /\/\d+ retained validated assignments/.test(line));
+  assert.notDeepEqual(armLines(looks[9]!), armLines(looks[0]!), 'per-arm missingness denominators track the evidence actually looked at');
   assert.ok(
     !/look|multiplic|repeat/i.test(JSON.stringify(looks[9])),
     'the tenth estimate records nothing about the nine looks that preceded it',

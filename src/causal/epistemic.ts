@@ -53,6 +53,7 @@ import { instant, interval } from '../epistemic/time.ts';
 import { witness, type Witness } from '../epistemic/witness.ts';
 import { canonicalJson, sha256, verifyCommittedCausalProtocol } from './protocol.ts';
 import { resolveEstimandDefinition } from './estimand.ts';
+import { resolveCausalDesignEstimator } from './registry.ts';
 import type { EstimandDefinition } from './estimand.ts';
 import type { CausalStudyData, CausalStudyEstimate } from './types.ts';
 
@@ -166,6 +167,10 @@ export function buildCausalStudyKernelIssuance(
       || estimate.estimandId !== estimandDefinition.id
       || !sameRegisteredEstimand(estimate.estimandDefinition, estimandDefinition)) {
     throw new Error('causal kernel issuance requires a registered estimand definition');
+  }
+  const designEstimator = resolveCausalDesignEstimator(data.protocol);
+  if (designEstimator === undefined || estimate.designEstimatorId !== designEstimator.id) {
+    throw new Error('causal kernel issuance requires the registered design/estimator identity');
   }
   const issued = timestamp(issuedAtMs, 'issuance timestamp');
   const validTime = studyInterval(data);
