@@ -355,6 +355,16 @@ export interface RetentionFloor {
   proposalsPrunes: number;
 }
 
+/** A durable, append-only change to a retention policy, separate from deletion. */
+export interface RetentionPolicyChange {
+  id: number;
+  stream: 'requests' | 'proposals';
+  previousDays: number;
+  nextDays: number;
+  changedAtMs: number;
+  source: string;
+}
+
 /**
  * Whether a particular window reaches behind what retention deleted.
  *
@@ -2972,6 +2982,50 @@ export class Store {
       proposalsRowsRemoved: int(proposals?.removed),
       proposalsPrunes: int(proposals?.prunes),
     };
+  }
+
+  /**
+   * Record a retention-policy edit separately from the rows it may later
+   * delete. This is the evidence that distinguishes a narrower policy from a
+   * quiet change in the meaning of an unchanged ledger.
+   */
+  recordRetentionPolicyChange(
+    stream: RetentionPolicyChange['stream'],
+    previousDays: number,
+    nextDays: number,
+    changedAtMs = Date.now(),
+    source = 'settings',
+  ): 'created' | 'existing' {
+    if (!Number.isSafeInteger(previousDays) || previousDays <= 0
+        || !Number.isSafeInteger(nextDays) || nextDays <= 0) {
+      throw new Error('retention policy days must be positive safe integers');
+    }
+    if (!Number.isSafeInteger(changedAtMs) || changedAtMs <= 0) {
+      throw new Error('retention policy changedAtMs must be a positive safe integer');
+    }
+    if (typeof source !== 'string' || source.trim() === '' || source.length > 128) {
+      throw new Error('retention policy source must be a bounded non-empty string');
+    }
+    const info = this.db.prepare(
+      `INSERT INTO retention_policy_changes (stream, previous_days, next_days, changed_at_ms, source)
+       VALUES (?, ?, ?, ?, ?) ON CONFLICT(stream, previous_days, next_days, changed_at_ms, source) DO NOTHING`,
+    ).run(stream, previousDays, nextDays, changedAtMs, source);
+    return Number(info.changes ?? 0) > 0 ? 'created' : 'existing';
+  }
+
+  /** Read policy changes in chronological order; absence is meaningful. */
+  retentionPolicyChanges(stream?: RetentionPolicyChange['stream']): RetentionPolicyChange[] {
+    const rows = (stream === undefined
+      ? this.db.prepare('SELECT id, stream, previous_days, next_days, changed_at_ms, source FROM retention_policy_changes ORDER BY changed_at_ms ASC, id ASC').all()
+      : this.db.prepare('SELECT id, stream, previous_days, next_days, changed_at_ms, source FROM retention_policy_changes WHERE stream = ? ORDER BY changed_at_ms ASC, id ASC').all(stream)) as Array<Record<string, unknown>>;
+    return rows.map((row) => ({
+      id: Number(row.id),
+      stream: row.stream as RetentionPolicyChange['stream'],
+      previousDays: Number(row.previous_days),
+      nextDays: Number(row.next_days),
+      changedAtMs: Number(row.changed_at_ms),
+      source: String(row.source),
+    }));
   }
 
   /**

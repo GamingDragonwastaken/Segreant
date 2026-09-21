@@ -254,6 +254,24 @@ CREATE TABLE IF NOT EXISTS retention_prunes (
 
 CREATE INDEX IF NOT EXISTS idx_retention_prunes_kind ON retention_prunes(kind, before_ms);
 
+-- A retention-policy edit is evidence in its own right. A later window can
+-- narrow because the policy changed, not because request rows were deleted;
+-- keeping this history separate prevents a policy change from being mistaken
+-- for a prune event or silently disappearing into configuration state.
+CREATE TABLE IF NOT EXISTS retention_policy_changes (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  stream        TEXT NOT NULL,
+  previous_days INTEGER NOT NULL,
+  next_days     INTEGER NOT NULL,
+  changed_at_ms INTEGER NOT NULL,
+  source        TEXT NOT NULL,
+  UNIQUE(stream, previous_days, next_days, changed_at_ms, source)
+);
+
+CREATE INDEX IF NOT EXISTS idx_retention_policy_changes_stream
+  ON retention_policy_changes(stream, changed_at_ms);
+
+
 -- Provider cost evidence has a deliberately separate grain and provenance from
 -- request rows: it must never be double-counted as metered agent traffic.
 CREATE TABLE IF NOT EXISTS billing_import_runs (
@@ -1044,6 +1062,16 @@ function validateAppendOnlyTriggerAuthority(db: DatabaseSync): void {
       table: 'economic_allocation_close_bindings',
       sql: "CREATE TRIGGER economic_allocation_close_bindings_append_only_insert BEFORE INSERT ON economic_allocation_close_bindings WHEN EXISTS (SELECT 1 FROM economic_allocation_close_bindings WHERE allocation_run_id = NEW.allocation_run_id) BEGIN SELECT RAISE(ABORT, 'exact economic allocation close bindings are append-only'); END",
     },
+    {
+      name: 'retention_policy_changes_no_update',
+      table: 'retention_policy_changes',
+      sql: "CREATE TRIGGER retention_policy_changes_no_update BEFORE UPDATE ON retention_policy_changes BEGIN SELECT RAISE(ABORT, 'retention policy changes are append-only'); END",
+    },
+    {
+      name: 'retention_policy_changes_no_delete',
+      table: 'retention_policy_changes',
+      sql: "CREATE TRIGGER retention_policy_changes_no_delete BEFORE DELETE ON retention_policy_changes BEGIN SELECT RAISE(ABORT, 'retention policy changes are append-only'); END",
+    },
   ];
   const generatedAuthorities: ReadonlyArray<{ table: string; key: string; message: string }> = [
     { table: 'epistemic_nodes', key: 'node_id = NEW.node_id', message: 'epistemic ledger is append-only' },
@@ -1403,6 +1431,16 @@ function installBillingMappingImmutability(db: DatabaseSync): void {
   db.prepare(
     "CREATE TRIGGER IF NOT EXISTS billing_mapping_no_delete BEFORE DELETE ON billing_record_mapping_versions " +
     "BEGIN SELECT RAISE(ABORT, 'billing mapping evidence is append-only'); END",
+  ).run();
+}
+
+/** Retention-policy history is evidence, not mutable configuration. */
+function installRetentionPolicyImmutability(db: DatabaseSync): void {
+  db.prepare(
+    "CREATE TRIGGER IF NOT EXISTS retention_policy_changes_no_update BEFORE UPDATE ON retention_policy_changes BEGIN SELECT RAISE(ABORT, 'retention policy changes are append-only'); END",
+  ).run();
+  db.prepare(
+    "CREATE TRIGGER IF NOT EXISTS retention_policy_changes_no_delete BEFORE DELETE ON retention_policy_changes BEGIN SELECT RAISE(ABORT, 'retention policy changes are append-only'); END",
   ).run();
 }
 
@@ -2259,6 +2297,7 @@ export function initializeSchema(
     migrate(db);
     installCausalImmutability(db);
     installBillingMappingImmutability(db);
+    installRetentionPolicyImmutability(db);
     initializeCausalClockState(db, lockedState);
     const finalAttestation = causalV2SchemaAttestation(db);
     if (finalAttestation.state !== 'exact') {

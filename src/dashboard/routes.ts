@@ -1069,6 +1069,12 @@ export function handleSettingsUpdate({ req, res, store, config, version, configP
       const current = configPersistence.load();
       const next = applySettingsPatch(current, patch);
       configPersistence.save(next);
+      if (current.retentionDays !== next.retentionDays) {
+        store.recordRetentionPolicyChange('requests', current.retentionDays, next.retentionDays, Date.now(), 'dashboard-settings');
+      }
+      if (current.proposalRetentionDays !== next.proposalRetentionDays) {
+        store.recordRetentionPolicyChange('proposals', current.proposalRetentionDays, next.proposalRetentionDays, Date.now(), 'dashboard-settings');
+      }
       // Mutate the shared config object IN PLACE rather than rebinding it.
       // `fiscus start` hands this same object to the proxy, and the guard holds
       // it as a getter (`new BudgetGuard(store, () => config.budget)`) that is

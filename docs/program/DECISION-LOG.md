@@ -3751,6 +3751,25 @@ supported-for-review bridge is not proof of exchangeability, causal transport,
 target validity, business value, or routing authority. The kernel witness and
 governed-study/external validity gates remain required for stronger claims.
 
+## D-283 — I05 makes retention-policy narrowing durable evidence
+
+**Problem.** The ledger already recorded deletions, but changing
+`retentionDays` or `proposalRetentionDays` narrowed future coverage without a
+durable event saying that the policy itself had changed. A later reader could
+see a smaller window without distinguishing deletion from policy edit.
+
+**Fix.** `retention_policy_changes` is a separate append-only Store table with
+stream, previous days, next days, timestamp and source. Dashboard Settings
+updates record request/proposal policy edits after persistence; the Store
+exposes `retentionPolicyChanges()` in chronological order, and update/delete
+triggers plus integrity authority protect the history. RED-first retention and
+settings coverage is green.
+
+**Boundary.** WP-I05 remains `PARTIAL`: the history does not establish traffic
+that never reached Fiscus, cannot distinguish total local erasure from a fresh
+install without an off-machine anchor, does not issue a negative completeness
+witness, and retains the source-walk/indirect-call limitation.
+
 ## D-282 — E06 makes cross-study families and dependence modes explicit
 
 **Problem.** E06's immutable per-study plan setup still left cross-study looks
