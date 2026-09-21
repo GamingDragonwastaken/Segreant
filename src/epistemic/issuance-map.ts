@@ -266,10 +266,10 @@ export const ISSUANCE_MAP: readonly IssuanceBoundary[] = Object.freeze([
     id: 'decision.certificate',
     module: 'src/decision/engine.ts',
     asserts: 'One action robustly dominates the alternatives under the declared utility intervals, or the comparison is undetermined.',
-    issuanceClass: 'unmigrated_authority',
+    issuanceClass: 'kernel_primitive',
     reach: 'product',
     invocation: { symbol: 'certifyDecision', definedIn: ['src/decision/engine.ts'] },
-    note: 'The pure engine computes a plain certificate and still issues no kernel record itself (D-220): `src/budget/capDecision.ts` is the first product consumer, calling `certifyDecision` and rendering the raw certificate status/margin in `fiscus budget --recommend` output BEFORE any kernel persistence happens. That render is never presented as authorization — it always carries the `changes_spend` assurance gate result beside it, so a dominant-but-uncertified certificate reads as review-only with its shortfalls named, not as a recommendation. `--apply` additionally routes the same certificate through the canonical adapter (`decision.certificate.issuance`) as a no-action bundle. The class stays `unmigrated_authority` because the display path itself is still a direct consumer of the bare engine output, not of a kernel-checked claim. Closing it requires that display path to read the persisted decision-fitness Claim (via `decision.certificate.issuance`) instead of the raw certificate.',
+    note: 'The engine computes a pure interval-dominance primitive and issues no claim itself. Product consumers no longer render or act on that bare object: the budget advisor builds `previewBudgetCapIssuance` before JSON/terminal presentation and substitutes the adapter-recomputed certificate plus kernel decision Claim; the online controller likewise requires the canonical preview to produce a decision Claim before its separate DAL-3/control-policy gate can act. `--apply` persists the same recomputed bundle through `decision.certificate.issuance`. The primitive is therefore reachable but no longer a claim-strengthening authority outside the kernel contract.',
   },
   {
     id: 'decision.certificate.issuance',
