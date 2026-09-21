@@ -75,6 +75,8 @@ export interface BudgetControlInput {
 
 export interface BudgetControlAuditEventInput {
   readonly policy: BudgetControlPolicy;
+  /** Stable id used to make crash recovery idempotent across config/state/audit files. */
+  readonly transactionId: string;
   readonly state: BudgetControlState;
   readonly action: BudgetControlAction;
   readonly fromDailyUsd: number | null;
@@ -86,6 +88,7 @@ export interface BudgetControlAuditEventInput {
 
 export interface BudgetControlAuditEvent {
   readonly sequence: number;
+  readonly transactionId: string;
   readonly policyId: string;
   readonly policyVersion: number;
   readonly policyDigest: string;
@@ -104,6 +107,40 @@ export interface BudgetControlAuditVerification {
   readonly valid: boolean;
   readonly firstInvalidSequence: number | null;
 }
+
+export interface BudgetControlPendingMutationInput {
+  readonly transactionId: string;
+  readonly policy: BudgetControlPolicy;
+  readonly previousState: BudgetControlState;
+  readonly plan: BudgetControlPlan;
+  readonly fromDailyUsd: number | null;
+  readonly at: string;
+}
+
+export interface BudgetControlPendingMutation {
+  readonly schemaVersion: 1;
+  readonly transactionId: string;
+  readonly policyId: string;
+  readonly policyVersion: number;
+  readonly policyDigest: string;
+  readonly previousState: BudgetControlState;
+  readonly nextState: BudgetControlState;
+  readonly action: Exclude<BudgetControlAction, 'no_action'>;
+  readonly fromDailyUsd: number | null;
+  readonly toDailyUsd: number | null;
+  readonly at: string;
+  readonly reason: string;
+  readonly decisionId: string | null;
+  readonly digest: string;
+}
+
+export type BudgetControlRecoveryStatus = 'complete' | 'abort' | 'conflict' | 'already_recorded';
+
+export interface BudgetControlPendingResolution {
+  readonly status: BudgetControlRecoveryStatus;
+  readonly reason: string;
+}
+
 
 function nonEmpty(value: unknown, label: string): string {
   if (typeof value !== 'string' || value.trim().length === 0) throw new Error(`${label} must be non-empty`);
@@ -356,8 +393,13 @@ export function appendBudgetControlAuditEvent(
   const fromDailyUsd = cap(input.fromDailyUsd, 'audit fromDailyUsd');
   const toDailyUsd = cap(input.toDailyUsd, 'audit toDailyUsd');
   const previousHash = history.length === 0 ? null : history[history.length - 1]!.hash;
+  const transactionId = nonEmpty(input.transactionId, 'budget control audit transactionId');
+  if (history.some((event) => event.transactionId === transactionId)) {
+    throw new Error(`budget control audit transaction already recorded: ${transactionId}`);
+  }
   const base = Object.freeze({
     sequence: history.length + 1,
+    transactionId,
     policyId: input.policy.id,
     policyVersion: input.policy.version,
     policyDigest: input.policy.digest,
@@ -372,6 +414,104 @@ export function appendBudgetControlAuditEvent(
   });
   const event: BudgetControlAuditEvent = Object.freeze({ ...base, hash: sha256(auditMaterial(base)) });
   return Object.freeze([...history, event]);
+}
+
+
+function pendingDigest(value: Omit<BudgetControlPendingMutation, 'digest'>): string {
+  return sha256(value);
+}
+
+export function budgetControlPendingMutation(
+  input: BudgetControlPendingMutationInput,
+): BudgetControlPendingMutation {
+  const transactionId = nonEmpty(input.transactionId, 'budget control transactionId');
+  validateState(input.policy, input.previousState);
+  const at = instant(input.at, 'budget control pending at');
+  if (input.plan.action === 'no_action') {
+    throw new Error('a no-action plan has no external mutation to journal');
+  }
+  if (input.plan.nextState.policyDigest !== input.policy.digest) {
+    throw new Error('pending mutation next state does not belong to the policy');
+  }
+  const fromDailyUsd = cap(input.fromDailyUsd, 'pending fromDailyUsd');
+  const toDailyUsd = cap(input.plan.nextDailyUsd, 'pending toDailyUsd');
+  const reason = input.plan.reasons.length > 0
+    ? input.plan.reasons.join('; ')
+    : input.plan.action === 'apply_recommended'
+      ? 'certified decision satisfied the delegated control envelope'
+      : 'circuit breaker restored the safe baseline';
+  const base = Object.freeze({
+    schemaVersion: 1 as const,
+    transactionId,
+    policyId: input.policy.id,
+    policyVersion: input.policy.version,
+    policyDigest: input.policy.digest,
+    previousState: input.previousState,
+    nextState: input.plan.nextState,
+    action: input.plan.action,
+    fromDailyUsd,
+    toDailyUsd,
+    at,
+    reason,
+    decisionId: input.plan.decisionId,
+  });
+  return Object.freeze({ ...base, digest: pendingDigest(base) });
+}
+
+function validatePending(pending: BudgetControlPendingMutation, policy: BudgetControlPolicy): void {
+  if (pending.schemaVersion !== 1) throw new Error('budget control pending mutation schema is unsupported');
+  if (pending.policyId !== policy.id || pending.policyVersion !== policy.version || pending.policyDigest !== policy.digest) {
+    throw new Error('budget control pending mutation belongs to a different policy');
+  }
+  validateState(policy, pending.previousState);
+  validateState(policy, pending.nextState);
+  if (pending.action !== 'apply_recommended' && pending.action !== 'rollback_to_baseline') {
+    throw new Error('budget control pending mutation action is invalid');
+  }
+  nonEmpty(pending.transactionId, 'budget control pending transactionId');
+  instant(pending.at, 'budget control pending at');
+  cap(pending.fromDailyUsd, 'pending fromDailyUsd');
+  cap(pending.toDailyUsd, 'pending toDailyUsd');
+  nonEmpty(pending.reason, 'budget control pending reason');
+  const { digest, ...base } = pending;
+  if (digest !== pendingDigest(base)) throw new Error('budget control pending mutation digest is invalid');
+}
+
+export function resolveBudgetControlPending(
+  pending: BudgetControlPendingMutation,
+  policy: BudgetControlPolicy,
+  currentDailyUsd: number | null,
+  audit: readonly BudgetControlAuditEvent[],
+): BudgetControlPendingResolution {
+  validatePending(pending, policy);
+  const verified = verifyBudgetControlAudit(audit);
+  if (!verified.valid) {
+    throw new Error(`budget control audit chain is invalid at sequence ${verified.firstInvalidSequence}`);
+  }
+  const matching = audit.find((event) => event.transactionId === pending.transactionId);
+  if (matching !== undefined) {
+    return Object.freeze({
+      status: 'already_recorded',
+      reason: 'the transaction is already present in the verified audit chain',
+    });
+  }
+  const current = cap(currentDailyUsd, 'currentDailyUsd');
+  if (sameNumber(current, pending.toDailyUsd)) {
+    return Object.freeze({
+      status: 'complete',
+      reason: 'the config mutation committed; controller state and audit must be completed idempotently',
+    });
+  }
+  if (sameNumber(current, pending.fromDailyUsd)) {
+    return Object.freeze({
+      status: 'abort',
+      reason: 'the config mutation did not commit; restore the previous controller state and record a recovered no-action',
+    });
+  }
+  return Object.freeze({
+    status: 'conflict',
+    reason: 'the live cap matches neither side of the pending mutation; treat this as an operator/external intervention and refuse recovery',
+  });
 }
 
 export function verifyBudgetControlAudit(history: readonly BudgetControlAuditEvent[]): BudgetControlAuditVerification {
