@@ -14,6 +14,7 @@ import {
   type SignedGithubActionsOutcome,
 } from '../githubActionsEvidence.ts';
 import { readBoundedUtf8File, RESOURCE_LIMITS } from '../util/resource-limits.ts';
+import { buildEpistemicUxBundle, type EpistemicUxBundleInput } from '../epistemic/ux.ts';
 
 function value(flags: Flags, name: string): string | null {
   const raw = flags[name];
@@ -29,6 +30,26 @@ function required(flags: Flags, name: string): string {
 function printUsage(): void {
   console.error('  Usage: fiscus evidence github emit --repository-id <id> --repository <owner/repo> --commit <40-char-sha> --run-id <id> --attempt <n> --job <name> --ref refs/heads/main --conclusion success|failure --workflow .github/workflows/ci.yml --policy <id> --workflow-digest <sha256> --test-plan-digest <sha256> --private-key <pem> [--out <artifact.json>]');
   console.error('         fiscus evidence github import --file <artifact.json> --repo <local-repo> --repository-id <id> --ref refs/heads/main --workflow .github/workflows/ci.yml --policy <id> --workflow-digest <sha256> --test-plan-digest <sha256> --public-key <pinned-public.pem>');
+  console.error('         fiscus evidence ux --options <file> [--json]  (read-only epistemic UX bundle)');
+}
+
+function cmdUx(flags: Flags): void {
+  const optionsFile = required(flags, 'options');
+  let supplied: unknown;
+  try {
+    supplied = JSON.parse(readBoundedUtf8File(optionsFile, RESOURCE_LIMITS.jsonDocumentBytes, 'json_document_bytes'));
+  } catch (error) {
+    throw new Error(`could not read epistemic UX options: ${String(error)}`);
+  }
+  if (supplied === null || typeof supplied !== 'object' || Array.isArray(supplied)) {
+    throw new Error('epistemic UX options must be a JSON object');
+  }
+  const bundle = buildEpistemicUxBundle(supplied as EpistemicUxBundleInput);
+  process.stdout.write(JSON.stringify({
+    operation: 'epistemic_ux_bundle',
+    bundle,
+    boundary: 'Review-only epistemic UX bundle; no claim issuance, strengthening, authorization, routing, or external truth inference.',
+  }, null, 2) + '\n');
 }
 
 function readJsonArtifact(path: string): SignedGithubActionsOutcome {
@@ -122,6 +143,10 @@ async function cmdGithubImport(flags: Flags): Promise<void> {
 export async function cmdEvidence(flags: Flags): Promise<void> {
   const platform = flags._[0];
   const action = flags._[1];
+  if (platform === 'ux') {
+    cmdUx(flags);
+    return;
+  }
   if (platform !== 'github' || (action !== 'emit' && action !== 'import')) {
     printUsage();
     process.exitCode = 1;

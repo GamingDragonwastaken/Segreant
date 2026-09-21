@@ -3751,6 +3751,27 @@ supported-for-review bridge is not proof of exchangeability, causal transport,
 target validity, business value, or routing authority. The kernel witness and
 governed-study/external validity gates remain required for stronger claims.
 
+## D-280 — I02 closes at a single structured, read-only epistemic UX boundary
+
+**Problem.** The Claim Inspector and progressive-disclosure rules existed, but
+the additional epistemic surfaces had no one semantic authority: Trace-the-
+Dollar, support/countermodel sets, measure-next planning, and preference maps
+could each drift or silently turn missing evidence into a recommendation.
+
+**Fix.** `src/epistemic/ux.ts` composes exact-money lineage, the bounded
+minimal-invalidating-set algorithm, qualitative evidence-gap planning, and
+`preferenceRobustness` into one immutable bundle. Missing trace predecessors
+withhold the path; countermodel truncation and empty reasons are preserved;
+measure-next has no invented prior/probability/cost/VoI; and preference ties
+remain `preference_sensitive`. `fiscus evidence ux --options <file> --json`
+is a review-only consumer with four focused tests.
+
+**Decision.** WP-I02 is `COMPLETED` at the structured semantic UX boundary.
+The bundle is the sole authority a future browser presentation may bind to; no
+browser-specific second support/trace/preference model is introduced. It does
+not claim completeness beyond supplied local nodes/declarations or authorize
+an action.
+
 ## D-279 — E06 gains an explicit preview/apply inference-plan setup surface
 
 **Problem.** The Store already enforced immutable pre-registration before the
