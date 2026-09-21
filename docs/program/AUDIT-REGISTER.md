@@ -66,9 +66,10 @@ CI is still the acceptance gate.
 J01 now has repository-side OPE evidence at D-273. This advances the adaptive
 experimentation lane without changing AII-023's standard: action-level
 propensity/treatment/policy provenance and overlap are required, and the pure
-estimate is not a causal effect or an execution authorization. Persistence,
-decision-boundary integration and a bounded consumer remain open; J02 remains
-an explicit no-action gate.
+estimate is not a causal effect or an execution authorization. The Store now
+retains digest-authenticated append-only action observations; decision-boundary
+integration and a bounded consumer remain open. J02 remains an explicit
+no-action gate.
 
 ## Accelerated continuation reconciliation (2026-09-15)
 

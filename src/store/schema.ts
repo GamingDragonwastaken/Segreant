@@ -571,6 +571,20 @@ CREATE TABLE IF NOT EXISTS causal_inference_plans (
 CREATE INDEX IF NOT EXISTS idx_causal_inference_plans_protocol
   ON causal_inference_plans(protocol_hash);
 
+-- Action-level policy evidence for provenance-aware off-policy evaluation.
+-- Raw prompts and source are intentionally absent. The observation retains
+-- only bounded outcome data, policy digests, and a pre-treatment context digest.
+CREATE TABLE IF NOT EXISTS ope_action_observations (
+  observation_id     TEXT PRIMARY KEY NOT NULL,
+  action_at_ms       INTEGER NOT NULL,
+  outcome_at_ms      INTEGER NOT NULL,
+  observation_digest TEXT NOT NULL UNIQUE,
+  observation_json   TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_ope_action_observations_action
+  ON ope_action_observations(action_at_ms, observation_id);
+
 CREATE INDEX IF NOT EXISTS idx_causal_analysis_latest
   ON causal_analysis_snapshots(study_id, computed_at_ms DESC, analysis_id DESC);
 
@@ -1195,6 +1209,7 @@ function installCausalImmutability(db: DatabaseSync): void {
     'causal_outcomes',
     'causal_analysis_snapshots',
     'causal_inference_plans',
+    'ope_action_observations',
     'causal_assignment_plans_v2',
     'causal_decisions_v2',
     'causal_assignment_units_v2',

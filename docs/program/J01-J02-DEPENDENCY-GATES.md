@@ -27,10 +27,11 @@ pre-treatment context timing, target/logging policy digests and probabilities;
 it implements unnormalized IPS, self-normalized IPS and doubly robust estimates
 with explicit overlap, clipping and tail-risk reports. RED-first coverage is
 9/9 in `test/causal-ope.test.ts`. The result is deliberately a pure evidence
-boundary: it does not persist a policy/action log, infer an unrecorded
-propensity, or authorize execution. The remaining J01 work is a Store-owned
-append-only logging schema, policy-version/action provenance at the real
-decision boundary, replay/idempotence and a bounded product consumer.
+boundary: it does not infer an unrecorded propensity or authorize execution.
+The Store now owns an append-only `ope_action_observations` log with digest
+replay and idempotent writes. The remaining J01 work is binding that log to a
+real decision-boundary policy provenance, adding a bounded product consumer
+and extending replay/idempotence across evaluation records.
 
 ## J02 — constrained online control
 

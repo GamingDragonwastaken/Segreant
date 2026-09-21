@@ -54,6 +54,7 @@ import type { CausalInferencePlan, CausalStudyInferenceReport } from '../causal/
 import * as causal from './causal.ts';
 import * as causalLineage from './causalLineage.ts';
 import * as causalProducer from './causalProducer.ts';
+import * as ope from './ope.ts';
 import * as backup from './backup.ts';
 import * as realization from './realization.ts';
 import {
@@ -165,6 +166,11 @@ export type {
   CommittedCausalStudyProtocol,
 } from '../causal/types.ts';
 export type { CausalAnalysisSnapshot, CausalStudySummary } from './causal.ts';
+export type {
+  OpeEvaluation,
+  OpeEvaluationOptions,
+  OpeObservation,
+} from '../causal/ope.ts';
 export type {
   CausalLineageBindingLookupV2,
   CausalLineageBindingValidationV2,
@@ -2672,6 +2678,21 @@ export class Store {
   /** Snapshot only when a request's resolved OpenAI endpoint exactly matches the active declaration. */
   matchingOpenAiScope(upstreamBase: string): ProviderScopeDeclaration | null {
     return billing.matchingOpenAiScope(this.db, upstreamBase);
+  }
+
+  /** Append one pre-treatment action observation for provenance-aware OPE. */
+  recordOpeObservation(observation: import('../causal/ope.ts').OpeObservation): 'created' | 'existing' {
+    return ope.recordOpeObservation(this.db, observation);
+  }
+
+  /** Read and re-authenticate the retained OPE action log. */
+  opeObservations(): import('../causal/ope.ts').OpeObservation[] {
+    return ope.opeObservations(this.db);
+  }
+
+  /** Evaluate only the append-only OPE log held by this Store. */
+  evaluateOpe(options: import('../causal/ope.ts').OpeEvaluationOptions): import('../causal/ope.ts').OpeEvaluation {
+    return ope.evaluatePersistedOpe(this.db, options);
   }
 
   /**

@@ -118,6 +118,8 @@ export interface OpeEvaluationInput {
   readonly clipping?: OpeClippingPolicy;
 }
 
+export type OpeEvaluationOptions = Omit<OpeEvaluationInput, 'observations'>;
+
 export interface OpeProvenance {
   readonly targetPolicy: OpePolicyReference;
   readonly loggingPolicies: readonly OpePolicyReference[];

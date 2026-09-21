@@ -3612,7 +3612,8 @@ but retrospective model comparisons must not acquire the name OPE and a
 missing logging propensity, treatment identity or overlap support must not be
 converted into a number.
 
-**Fix.** `src/causal/ope.ts` and `test/causal-ope.test.ts` add a bounded J01
+**Fix.** `src/causal/ope.ts`, `src/store/ope.ts`, `test/causal-ope.test.ts`
+and `test/causal-ope-store.test.ts` add a bounded J01
 foundation. Each action observation carries explicit treatment identity,
 pre-treatment context timing, logging propensity, target-policy identity/version
 and digests, outcome timing and (for doubly robust evaluation) a pre-treatment
@@ -3621,10 +3622,12 @@ self-normalized IPS and doubly robust estimates; refuses missing evidence,
 post-treatment leakage, unsupported overlap, uncontrolled importance tails and
 model-provenance conflicts; and reports effective sample size, clipping,
 tail-risk/bias status, assumptions, limitations and a provenance digest. RED-first
-focused coverage passes 9/9, with root typecheck/build green.
+focused coverage passes 11/11, with root typecheck/build green. The Store
+persists observations in an append-only, digest-authenticated table and
+replays them through the same evaluator.
 
-**Boundary.** WP-J01 is `PARTIAL`, not complete: no append-only Store log,
-decision-boundary policy adapter, replay/idempotence path or product consumer
+**Boundary.** WP-J01 is `PARTIAL`, not complete: no real decision-boundary
+policy adapter, bounded product consumer or evaluation-record replay path
 exists yet. The module never authorizes or executes a policy and explicitly
 states that its estimate is not a causal treatment effect. WP-J02 remains
 `NOT_STARTED` until the runtime action adapter, safe baseline, rollback and
