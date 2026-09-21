@@ -15,6 +15,7 @@ import { printJson } from './ui.ts';
 import { readBoundedUtf8File, RESOURCE_LIMITS } from '../util/resource-limits.ts';
 import type { OpeEvaluationOptions } from '../causal/ope.ts';
 import { assessCausalDesign, type CausalDesignPlan } from '../causal/design.ts';
+import { assessTransportBridge, type CausalTransportDeclaration } from '../causal/transport.ts';
 
 function requireStringFlag(flags: Flags, name: string): string {
   const value = flags[name];
@@ -66,6 +67,7 @@ function usage(): void {
   console.log('  fiscus causal verify <study-id> [--json]');
   console.log('  fiscus causal ope --options <file> [--json]');
   console.log('  fiscus causal design --options <file> [--json]');
+  console.log('  fiscus causal transport --options <file> [--json]');
   console.log('');
   console.log('  OPE reads only the Store-owned append-only action log. It is review-only,');
   console.log('  not a causal treatment effect and never authorizes policy execution.');
@@ -152,6 +154,20 @@ export function cmdCausal(flags: Flags): void {
       operation: 'causal_design_assessment',
       assessment,
       boundary: 'Review-only protocol-linked design declaration; not observed missingness, interference, transportability, or causal-effect evidence.',
+    }, flags);
+    return;
+  }
+  if (action === 'transport') {
+    const optionsFile = requireStringFlag(flags, 'options');
+    const supplied = readJsonFile(optionsFile);
+    if (typeof supplied !== 'object' || supplied === null || Array.isArray(supplied)) {
+      throw new Error('causal transport options must be a JSON object');
+    }
+    const assessment = assessTransportBridge(supplied as CausalTransportDeclaration);
+    emit({
+      operation: 'causal_transport_assessment',
+      assessment,
+      boundary: 'Review-only cross-study bridge declaration; no automatic pooling, transported causal effect, or routing authority.',
     }, flags);
     return;
   }

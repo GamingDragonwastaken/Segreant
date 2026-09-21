@@ -3727,3 +3727,26 @@ The declaration does not observe attrition, validate an exposure mapping in the
 world, establish interference absence, or issue a causal effect. Governed study
 records and external evidence remain required for those claims; the existing
 estimator's no-imputation/no-reweighting boundary is unchanged.
+
+## D-278 — E05 closes at an explicit bridge and cross-study pooling boundary
+
+**Problem.** Kernel transport witnesses already protected causal coordinate
+changes, but an operator still had no typed declaration for target-population
+evidence and no generic guard against pooling studies whose population,
+treatment, measurement model, or time horizon differed.
+
+**Fix.** `src/causal/transport.ts` adds `CausalTransportDeclaration` and
+`assessTransportBridge()`, requiring distinct source/target protocol hashes,
+all four coordinates, target evidence, and named
+consistency/exchangeability/positivity assumptions. The assessment reports
+changed coordinates and withholds missing evidence or assumptions.
+`assessStudyPooling()` produces a coordinate key only when every study agrees
+on population, treatment identity, measurement model and time horizon;
+otherwise it refuses pooling with the mismatched coordinate named. The bounded
+`fiscus causal transport --options <file> --json` consumer is review-only.
+
+**Decision.** WP-E05 is `COMPLETED` at this repository-side bridge/pooling
+boundary. Target evidence is identified but not semantically audited; a
+supported-for-review bridge is not proof of exchangeability, causal transport,
+target validity, business value, or routing authority. The kernel witness and
+governed-study/external validity gates remain required for stronger claims.

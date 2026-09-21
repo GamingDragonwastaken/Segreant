@@ -57,7 +57,9 @@ function cmdHelp(): void {
                           Ordinary value, Lift, and price scenarios cannot become
                           causal claims; this command never changes provider routing.
                           causal design --options <file> checks protocol-linked
-                          missingness, attrition, interference and exposure declarations.
+                          missingness, attrition, interference and exposure declarations;
+                          causal transport --options <file> checks explicit
+                          cross-study bridge assumptions and target evidence.
     capital evaluate      Review-only exact AI-capital decomposition from a bounded
                           JSON snapshot (--options <file>, --json). Distinguishes
                           commitment, consumption, showback, opportunity and
