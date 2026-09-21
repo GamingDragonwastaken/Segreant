@@ -20,7 +20,7 @@ register used for GitHub-facing integration decisions.
 At the time of this checkpoint:
 
 - Canonical branch: `gpt56/magnum-opus-reconstruction`
-- Canonical SHA: `d643af91b33f023c1595f021b1fa5073c74555ee` (structured I02 epistemic UX bundle on top of J04, E04, E05 and E06 checkpoints; pushed to `origin/gpt56/magnum-opus-reconstruction`; exact-head CI pending)
+- Canonical SHA: `e1b81ee91ca3288ded8e1a63f3badfb30c878423` (J03 research profile, E06 family boundary, and I02 UX Money-consumer classification on top of J04/E04/E05/E06 checkpoints; pushed to `origin/gpt56/magnum-opus-reconstruction`; exact-head CI pending)
 - Durable packet register: 76 total, 67 completed, 3 partial, 1 not started, 1 blocked external, 4 superseded with reason.
 - Exact-head CI: run `35641090995` concluded **success** across all nine configured jobs, including browser accessibility and the team-server matrix.
 - Canonical worktree: clean and synchronized with `origin/gpt56/magnum-opus-reconstruction`.
@@ -39,8 +39,10 @@ These counts are not the full local execution state.
 | `WP-E04` | `CANONICAL_COMPLETED` | `977043b`; protocol-linked missingness/interference design declaration and review-only CLI; focused 6/6, typecheck/build green | canonical checkout | Governed study evidence remains external |
 | `WP-E05` | `CANONICAL_COMPLETED` | `d0ea0d8`; explicit bridge and cross-study coordinate pooling refusal; focused 6/6, typecheck/build green | canonical checkout | External transport validity remains open |
 | `WP-E06` | `CANONICAL_PARTIAL` | `079c5cc`; operator-facing immutable preview/apply inference-plan setup; focused CLI 1/1 plus causal Store tranche green | canonical checkout | Cross-study families, correlation adjustment and precision probability remain |
+| `WP-E06-family` | `CANONICAL_PARTIAL` | `9b565a5`; explicit cross-study family/dependence assessment; Bonferroni arbitrary-dependence and Šidák declared-independence modes; family focused 4/4 | canonical checkout | Validated correlation adjustment and precision power/probability remain |
 | `WP-I02` | `CANONICAL_COMPLETED` | `d643af9`; structured Trace-the-Dollar/support/countermodel/measure-next/preference UX bundle and CLI; focused 4/4, typecheck/build green | canonical checkout | Browser may bind the single bundle later |
 | `WP-J04` | `CANONICAL_COMPLETED` | `4e0b412`; exact review-only AI-capital account evaluator and CLI; focused 5/5, typecheck/build green | canonical checkout | Durable provider-capital authority remains owner-gated |
+| `WP-J03` | `CANONICAL_PARTIAL` | `52fac05`; isolated research-only complexity profile over structural/execution observables; focused profile/boundary 6/6, typecheck/build green | canonical checkout | Calibration, held-out decision value, shift/privacy/uncertainty/rollback gates remain |
 | `WP-J01` | `CANONICAL_COMPLETED` | Current checkpoint `src/causal/ope.ts` + Store `ope_action_observations` + `fiscus causal ope`; typed exploration/budget/tail-risk constraints; focused coverage 13/13; root typecheck/build pass | canonical checkout | Review-only OPE boundary complete; online execution/routing authority remains J02 and is deliberately absent |
 | `WP-J05` | `CANONICAL_COMPLETED` | Current-source market matrix refreshed with OpenCost, IBM Kubecost and IBM watsonx.governance; contract test passes | canonical checkout | Refresh before future external positioning; no superiority/leadership/certification claim |
 | `WP-J06` | `CANONICAL_COMPLETED` | Independent scholarly/market substitution critique and pre-claim gate recorded; contract test passes | canonical checkout | Historical originality and market leadership remain unproven by design |
