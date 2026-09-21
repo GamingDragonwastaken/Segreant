@@ -1,9 +1,8 @@
 # J01/J02 dependency gates
 
-These packets remain `NOT_STARTED` by design. The dossier places adaptive
-experimentation/OPE after causal-v3 and places online control after a safe
-decision/control architecture. A design note is not an implementation and must
-not be counted as one.
+J01 is now `PARTIAL`; J02 remains `NOT_STARTED`. The authority directive
+permits implementation under bounded delegated policy, but a design note is
+not an implementation and an OPE estimator is not an online controller.
 
 ## J01 — adaptive experimentation / provenance-aware OPE
 
@@ -22,6 +21,17 @@ Required prerequisites before code:
 The current repository does not satisfy those prerequisites. Ordinary
 retrospective model comparisons remain observational comparisons, not OPE.
 
+The first repository-side J01 slice now exists in `src/causal/ope.ts`:
+`evaluateOpe()` accepts only action-level logs with treatment identity,
+pre-treatment context timing, target/logging policy digests and probabilities;
+it implements unnormalized IPS, self-normalized IPS and doubly robust estimates
+with explicit overlap, clipping and tail-risk reports. RED-first coverage is
+9/9 in `test/causal-ope.test.ts`. The result is deliberately a pure evidence
+boundary: it does not persist a policy/action log, infer an unrecorded
+propensity, or authorize execution. The remaining J01 work is a Store-owned
+append-only logging schema, policy-version/action provenance at the real
+decision boundary, replay/idempotence and a bounded product consumer.
+
 ## J02 — constrained online control
 
 Required prerequisites before code:
@@ -35,6 +45,6 @@ Required prerequisites before code:
   rollout enum.
 
 The current control and decision modules are review-only/no-action foundations.
-They do not authorize online spend-changing or routing actions. Implementing an
-online controller now would expand authority beyond the dossier's proven
-boundary, so J02 remains not started.
+They do not authorize online spend-changing or routing actions. J02 remains
+`NOT_STARTED` until a bounded runtime action adapter, safe baseline, durable
+rollback/circuit-breaker evidence and an explicit no-action default are wired.

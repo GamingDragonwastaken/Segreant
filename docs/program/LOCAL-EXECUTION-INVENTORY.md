@@ -21,7 +21,7 @@ At the time of this checkpoint:
 
 - Canonical branch: `gpt56/magnum-opus-reconstruction`
 - Canonical SHA: `cccff98d04ac75d1a80d34e50fa333f7c578372a` (runtime Chromium/axe accessibility gate, CI topology contract, supply-chain test-only allowlist, and macOS plugin-host EPIPE lifecycle hardening; all pushed to `origin/gpt56/magnum-opus-reconstruction`)
-- Durable packet register: 76 total, 60 completed, 9 partial, 2 not started, 1 blocked external, 4 superseded with reason.
+- Durable packet register: 76 total, 60 completed, 10 partial, 1 not started, 1 blocked external, 4 superseded with reason.
 - Exact-head CI: run `35630657686` concluded **success** across all nine configured jobs, including the new `browser-accessibility` job on `cccff98`.
 - Canonical worktree: clean and synchronized with `origin/gpt56/magnum-opus-reconstruction`.
 - Local baseline: root suite `2,137 total / 2,133 pass / 0 fail / 4 skipped` after the CI-hardening contract update; plugin-host 9/9; dashboard/program contract tranche 6/6; runtime browser/axe 1/1; root/browser/team-server typechecks, build, and supply-chain audit pass.
@@ -39,6 +39,7 @@ These counts are not the full local execution state.
 | `WP-E04` | `CANONICAL_PARTIAL` | `a44007a`; per-arm missingness/attrition/interference disclosure and no-imputation policy; focused RED-first tests green | canonical checkout | Residual design obligations remain |
 | `WP-E05` | `CANONICAL_PARTIAL` | `bb5cfb2`; witnessed causal transport with target evidence and revocation propagation; focused transport/epistemic tests green | canonical checkout | Cross-study pooling/bridge workflow remains |
 | `WP-E06` | `CANONICAL_PARTIAL` | `4cf26c7`; durable pre-registration boundary and restart recovery; focused causal inference tests green | canonical checkout | Operator-facing setup, cross-study families, correlation adjustment and precision probability remain |
+| `WP-J01` | `CANONICAL_PARTIAL` | Current checkpoint `src/causal/ope.ts`; focused OPE coverage 9/9; root typecheck/build pass | canonical checkout | Pure evidence boundary only; Store-owned action-log persistence, decision-boundary provenance, replay/idempotence and a bounded consumer remain |
 | `WP-H03` | `CANONICAL_COMPLETED` | The canonical register and remote branch already include H03's bounded mutation/fuzz/fault-injection closure; local commits are historical duplicate evidence | `luna-next/wp-h03` | Already represented canonically; do not cherry-pick stale duplicate commits |
 | `WP-F06` | `SUPERSEDED_WITH_REASON` | The canonical branch supersedes F06 with the later decision-assurance/action-boundary implementation; local `d08df8fc` is historical and must not override the canonical decision | `luna-next/wp-f06` | Do not integrate as a separate competing lifecycle |
 | `WP-B02` | `STALE_LOCAL_BASE` | Old isolated lane was based on `f8f0361` and has no committed work; reselect only from canonical `55b3e38` if the dossier still requires it | `luna-next/wp-b02` | Not active |

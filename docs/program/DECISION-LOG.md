@@ -3604,3 +3604,28 @@ Lab implementation, calibration result, decision feature or production route.
 **Fix.** The process host now attaches a one-shot stdin error listener and routes it through the existing single-settlement `forceStop`/`close` path. A stronger refusal or timeout wins; an unhandled pipe error cannot turn an expected bounded shutdown into a CI crash. The focused plugin-host regression passes 9/9 locally.
 
 **Boundary.** This is lifecycle hardening, not a relaxation of output limits, capability refusal, egress policy, or credential isolation.
+
+## D-273 — J01 gains a pure provenance-aware OPE boundary while J02 stays no-action
+
+**Problem.** The authority directive permits the adaptive experimentation lane,
+but retrospective model comparisons must not acquire the name OPE and a
+missing logging propensity, treatment identity or overlap support must not be
+converted into a number.
+
+**Fix.** `src/causal/ope.ts` and `test/causal-ope.test.ts` add a bounded J01
+foundation. Each action observation carries explicit treatment identity,
+pre-treatment context timing, logging propensity, target-policy identity/version
+and digests, outcome timing and (for doubly robust evaluation) a pre-treatment
+outcome-model identity. The evaluator implements ordinary IPS,
+self-normalized IPS and doubly robust estimates; refuses missing evidence,
+post-treatment leakage, unsupported overlap, uncontrolled importance tails and
+model-provenance conflicts; and reports effective sample size, clipping,
+tail-risk/bias status, assumptions, limitations and a provenance digest. RED-first
+focused coverage passes 9/9, with root typecheck/build green.
+
+**Boundary.** WP-J01 is `PARTIAL`, not complete: no append-only Store log,
+decision-boundary policy adapter, replay/idempotence path or product consumer
+exists yet. The module never authorizes or executes a policy and explicitly
+states that its estimate is not a causal treatment effect. WP-J02 remains
+`NOT_STARTED` until the runtime action adapter, safe baseline, rollback and
+circuit-breaker evidence are wired.
