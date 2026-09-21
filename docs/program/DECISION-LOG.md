@@ -3550,3 +3550,19 @@ Lab implementation, calibration result, decision feature or production route.
 **Fix.** `docs/program/STANDARDS-INTEROPERABILITY.md` records primary-source mappings for OpenTelemetry GenAI conventions, FOCUS Cost and Usage, W3C PROV, W3C VC/Data Integrity, in-toto/SLSA, and draft-only SCITT. Each row states the direction of interchange, maturity/version, omitted-field and exactness handling, and the semantic boundary that remains Fiscus-owned. A RED-first contract test checks the source links and non-equivalence rules.
 
 **Decision.** WP-G04 is `COMPLETED` on its research/mapping boundary. Fiscus will adapt outward from its exact local ledger and Trusted Epistemic Kernel; imported standard records require source/version/digest/coverage/basis evidence and cannot mint stronger Claims. OTel, VC/Data Integrity, and in-toto/SLSA are optional adapter surfaces; SCITT is research-only until a future threat-model and external-authority decision.
+
+## D-266 — WP-J03 is a truthful partial precondition audit, not a fabricated complexity feature
+
+**Problem.** The Complexity Lab packet is intended to keep advanced mathematics honest, but the repository currently has no production complexity surface, benchmark operation, or route that could be calibrated. Marking the packet complete would reward complexity theatre; leaving the durable audit as wholly unstarted would hide useful work that already constrains future admission.
+
+**Decision.** WP-J03 is `PARTIAL`. The read-only report and ten promotion gates remain authoritative: precise target, separated evaluation, calibration, simple baseline, held-out decision value, shift abstention, privacy, no outcome leakage, uncertainty/coverage, and rollback. No complexity score, CLI route, dashboard surface, or production algorithm is added until a real candidate and baseline exist and those gates are measured.
+
+**Limitation.** The packet has no admitted implementation yet. A future candidate must earn promotion with independent evidence and a reversible fallback; a report or design is not a benchmark result.
+
+## D-267 — I02 remains partial because existing epistemic readers do not cover every dossier surface
+
+**Problem.** The repository already has a Claim Inspector/kernel viewer, as-of graph replay, progressive disclosure, and preference/decision primitives, but that is not the same as implementing every additional epistemic UX surface named by the dossier.
+
+**Decision.** WP-I02 is `PARTIAL`. The current read-only kernel viewer and progressive-disclosure contract are retained as evidence for Prove-a-Claim and What-Did-We-Know-Then foundations. No new action surface is invented merely to fill a packet row.
+
+**Remaining.** A dedicated Trace-the-Dollar traversal through exact economic events/corrections/allocation, minimal support-set/countermodel presentation, decision-theoretic What-Should-We-Measure-Next planning, and Preference Map rendering still need end-to-end route/UI evidence. The existing primitives do not close those claims by implication.

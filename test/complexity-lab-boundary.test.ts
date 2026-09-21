@@ -62,13 +62,13 @@ test('frontier model comparison conditions on task type and unit size without sc
   );
 });
 
-test('WP-J03 status in PACKET-INVENTORY.md records the unstarted audit and explicit prerequisites', () => {
+test('WP-J03 status in PACKET-INVENTORY.md records the partial audit and explicit prerequisites', () => {
   const inventory = read('docs/program/PACKET-INVENTORY.md');
   const match = /\|\s*`WP-J03`\s*\|\s*Complexity Lab\s*\|\s*`([^`]+)`\s*\|\s*([^|]+)\|/.exec(inventory);
   assert.ok(match, 'WP-J03 row must exist in PACKET-INVENTORY.md');
   const status = match[1]!;
   const notes = match[2]!;
-  assert.equal(status, 'NOT_STARTED', 'WP-J03 has no operational implementation and must remain NOT_STARTED');
+  assert.equal(status, 'PARTIAL', 'WP-J03 has a durable precondition audit but no admitted complexity implementation');
   assert.match(
     notes,
     /docs\/program\/WP-J03-COMPLEXITY-LAB-REPORT\.md/,
@@ -91,7 +91,7 @@ test('WP-J03 design and precondition report exists and covers all 10 research pr
   assert.match(report, /Structural complexity/);
   assert.match(report, /Execution complexity/);
   assert.match(report, /Promotion Rules/);
-  assert.match(report, /\*\*Status:\*\*\s*`NOT_STARTED`/);
+  assert.match(report, /\*\*Status:\*\*\s*`(?:NOT_STARTED|PARTIAL)`/);
   assert.doesNotMatch(report, /\bBLOCKED\b/, 'the report must use the packet vocabulary and not invent BLOCKED');
   for (let rule = 1; rule <= 10; rule++) {
     assert.match(report, new RegExp(`Rule\\s+${rule}\\b`, 'i'), `Report must address promotion Rule ${rule}`);
