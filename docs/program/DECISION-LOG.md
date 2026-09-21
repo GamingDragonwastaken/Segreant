@@ -3751,6 +3751,22 @@ supported-for-review bridge is not proof of exchangeability, causal transport,
 target validity, business value, or routing authority. The kernel witness and
 governed-study/external validity gates remain required for stronger claims.
 
+## D-282 — E06 makes cross-study families and dependence modes explicit
+
+**Problem.** E06's immutable per-study plan setup still left cross-study looks
+outside any named family, and a future contributor could apply a correlation
+adjustment without a validated dependence method.
+
+**Fix.** `src/causal/family.ts` and `fiscus causal family --options <file>`
+validate a named family and total planned acts. Arbitrary dependence receives a
+Bonferroni per-act alpha; a Šidák allocation is available only under an explicit
+independence declaration; and `declared_correlation` is refused until a
+validated matrix procedure exists. Four focused tests cover the boundary.
+
+**Boundary.** WP-E06 remains `PARTIAL`: no pooled causal estimate is emitted,
+correlation is not inferred, and precision planning still reports width rather
+than power or probability of reaching a decision.
+
 ## D-281 — J03 gains a research-only complexity profile foundation without production admission
 
 **Problem.** WP-J03 had a truthful precondition report but no executable

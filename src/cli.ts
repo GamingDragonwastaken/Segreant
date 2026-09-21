@@ -59,7 +59,8 @@ function cmdHelp(): void {
                           causal design --options <file> checks protocol-linked
                           missingness, attrition, interference and exposure declarations;
                           causal transport --options <file> checks explicit
-                          cross-study bridge assumptions and target evidence.
+                          cross-study bridge assumptions and target evidence;
+                          causal family --options <file> plans cross-study error budgets.
     capital evaluate      Review-only exact AI-capital decomposition from a bounded
                           JSON snapshot (--options <file>, --json). Distinguishes
                           commitment, consumption, showback, opportunity and

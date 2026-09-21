@@ -22,6 +22,7 @@ import {
   validateCausalInferencePlan,
   type CausalInferencePlan,
 } from '../causal/inference-ledger.ts';
+import { assessInferenceFamily, type InferenceFamilyInput } from '../causal/family.ts';
 
 function requireStringFlag(flags: Flags, name: string): string {
   const value = flags[name];
@@ -75,6 +76,7 @@ function usage(): void {
   console.log('  fiscus causal design --options <file> [--json]');
   console.log('  fiscus causal transport --options <file> [--json]');
   console.log('  fiscus causal plan --study <study-id> --options <file> [--apply] [--json]');
+  console.log('  fiscus causal family --options <file> [--json]');
   console.log('');
   console.log('  OPE reads only the Store-owned append-only action log. It is review-only,');
   console.log('  not a causal treatment effect and never authorizes policy execution.');
@@ -201,6 +203,20 @@ export function cmdCausal(flags: Flags): void {
       }, flags);
       return;
     }
+  }
+  if (action === 'family') {
+    const optionsFile = requireStringFlag(flags, 'options');
+    const supplied = readJsonFile(optionsFile);
+    if (typeof supplied !== 'object' || supplied === null || Array.isArray(supplied)) {
+      throw new Error('causal family options must be a JSON object');
+    }
+    const assessment = assessInferenceFamily(supplied as InferenceFamilyInput);
+    emit({
+      operation: 'causal_inference_family_assessment',
+      assessment,
+      boundary: 'Review-only cross-study error-budget plan; no pooled estimate or causal claim is issued.',
+    }, flags);
+    return;
   }
   const store = new Store(dbPath());
   try {
