@@ -7,14 +7,14 @@
 | | |
 | --- | --- |
 | Branch | `gpt56/magnum-opus-reconstruction` — never `main`, never force-pushed |
-| Last CI-verified exact head | `dc2fe09984a7a8dad961682156d72715751e4b08` — run `35624428865`, **success on all eight configured jobs**, observed 2026-09-21. |
-| Code ahead of that head | `94ef073` — docs-only register alignment; exact-head CI run `35625642404` is in progress. No production code differs from the green `dc2fe09` head. |
-| Local gates on the current tree | Root/browser/team-server typechecks and `npm run build` are clean. The serial root suite completed **2,132 total / 2,128 pass / 0 fail / 4 skipped** in this execution environment; the four skips are the documented Windows capability skips. The causal/epistemic tranche completed 279/279. GitHub exact-head run `35622028118` independently passed the full matrix. |
+| Last CI-verified exact head | `079c5ccf28c3ec90a0ead3ed4ee345f49539c1da` — run `35646161360`, **success on all configured jobs**, observed 2026-09-21. |
+| Code ahead of that head | `d643af9` — structured I02 epistemic UX bundle; exact-head CI run is in progress. |
+| Local gates on the current tree | Root typecheck/build and focused causal/epistemic UX tranches are clean. Exact local evidence includes E04 6/6, E05 6/6, E06 plan CLI 1/1, J04 5/5, and I02 4/4; the prior full local suite was 2,155 total / 2,148 pass / 3 failures from pre-fix parity/sweep/doc expectations, all re-run green in focused coverage. |
 | Dossier source | `FISCUS_EXECUTION_DOSSIER_III.md` is **not in this checkout and not in git history** — it was an owner-supplied input. `docs/program/PACKET-INVENTORY.md` is the surviving mechanical enumeration of all 76 packets and is authoritative here. Do not re-derive a packet count from anything else. |
 
 ## Packet accounting
 
-76 packets. **60 COMPLETED, 9 PARTIAL, 2 NOT_STARTED, 0 IN_PROGRESS, 1 BLOCKED_EXTERNAL, 4 SUPERSEDED_WITH_REASON.** Regenerate rather than trust this line:
+76 packets. **67 COMPLETED, 3 PARTIAL, 1 NOT_STARTED, 0 IN_PROGRESS, 1 BLOCKED_EXTERNAL, 4 SUPERSEDED_WITH_REASON.** Regenerate rather than trust this line:
 
 ```bash
 grep -oE '\| `(NOT_STARTED|IN_PROGRESS|PARTIAL|COMPLETED|BLOCKED_EXTERNAL|SUPERSEDED_WITH_REASON)` \|' docs/program/PACKET-INVENTORY.md | sort | uniq -c

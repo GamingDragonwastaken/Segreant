@@ -20,8 +20,8 @@ register used for GitHub-facing integration decisions.
 At the time of this checkpoint:
 
 - Canonical branch: `gpt56/magnum-opus-reconstruction`
-- Canonical SHA: `481383638f1a2519891b923159301385d50c66ea` (J01 review-only OPE closure on top of the green browser/runtime and market-review checkpoints; pushed to `origin/gpt56/magnum-opus-reconstruction`)
-- Durable packet register: 76 total, 63 completed, 7 partial, 1 not started, 1 blocked external, 4 superseded with reason.
+- Canonical SHA: `d643af91b33f023c1595f021b1fa5073c74555ee` (structured I02 epistemic UX bundle on top of J04, E04, E05 and E06 checkpoints; pushed to `origin/gpt56/magnum-opus-reconstruction`; exact-head CI pending)
+- Durable packet register: 76 total, 67 completed, 3 partial, 1 not started, 1 blocked external, 4 superseded with reason.
 - Exact-head CI: run `35641090995` concluded **success** across all nine configured jobs, including browser accessibility and the team-server matrix.
 - Canonical worktree: clean and synchronized with `origin/gpt56/magnum-opus-reconstruction`.
 - Local baseline: root suite exits 0 under the compact reporter after the J01 Store schema; focused OPE/Store/dependency tranche 12/12; plugin-host 9/9; runtime browser/axe 1/1; root/browser/team-server typechecks, build, and supply-chain audit pass.
@@ -36,9 +36,11 @@ These counts are not the full local execution state.
 | `WP-E01` | `LOCAL_COMPLETE_PENDING_INTEGRATION` | `c424d0a`; canonical registry now carries all dossier-required estimand dimensions and valid v1/v2 estimates/issuance resolve it; causal focused 60/60, root serial 2097 total / 2093 pass / 0 fail / 4 skips, typechecks/build green | current canonical local head | Exact-head CI pending; not yet reflected as canonical completed |
 | `WP-E02` | `CANONICAL_COMPLETED` | `bb5cfb2`; one design/estimator registry routes retained ITT and explicitly classifies deferred/archived/noncausal lanes; registry/issuance/snapshot tests 4/4 | canonical checkout | Exact-head CI pending |
 | `WP-E03` | `CANONICAL_COMPLETED` | `f310682`; block-aware ITT, explicit observed noncompliance, incomplete/conflicting block refusal; causal core/ledger/issuance tranche green | canonical checkout | Exact-head CI pending |
-| `WP-E04` | `CANONICAL_PARTIAL` | `a44007a`; per-arm missingness/attrition/interference disclosure and no-imputation policy; focused RED-first tests green | canonical checkout | Residual design obligations remain |
-| `WP-E05` | `CANONICAL_PARTIAL` | `bb5cfb2`; witnessed causal transport with target evidence and revocation propagation; focused transport/epistemic tests green | canonical checkout | Cross-study pooling/bridge workflow remains |
-| `WP-E06` | `CANONICAL_PARTIAL` | `4cf26c7`; durable pre-registration boundary and restart recovery; focused causal inference tests green | canonical checkout | Operator-facing setup, cross-study families, correlation adjustment and precision probability remain |
+| `WP-E04` | `CANONICAL_COMPLETED` | `977043b`; protocol-linked missingness/interference design declaration and review-only CLI; focused 6/6, typecheck/build green | canonical checkout | Governed study evidence remains external |
+| `WP-E05` | `CANONICAL_COMPLETED` | `d0ea0d8`; explicit bridge and cross-study coordinate pooling refusal; focused 6/6, typecheck/build green | canonical checkout | External transport validity remains open |
+| `WP-E06` | `CANONICAL_PARTIAL` | `079c5cc`; operator-facing immutable preview/apply inference-plan setup; focused CLI 1/1 plus causal Store tranche green | canonical checkout | Cross-study families, correlation adjustment and precision probability remain |
+| `WP-I02` | `CANONICAL_COMPLETED` | `d643af9`; structured Trace-the-Dollar/support/countermodel/measure-next/preference UX bundle and CLI; focused 4/4, typecheck/build green | canonical checkout | Browser may bind the single bundle later |
+| `WP-J04` | `CANONICAL_COMPLETED` | `4e0b412`; exact review-only AI-capital account evaluator and CLI; focused 5/5, typecheck/build green | canonical checkout | Durable provider-capital authority remains owner-gated |
 | `WP-J01` | `CANONICAL_COMPLETED` | Current checkpoint `src/causal/ope.ts` + Store `ope_action_observations` + `fiscus causal ope`; typed exploration/budget/tail-risk constraints; focused coverage 13/13; root typecheck/build pass | canonical checkout | Review-only OPE boundary complete; online execution/routing authority remains J02 and is deliberately absent |
 | `WP-J05` | `CANONICAL_COMPLETED` | Current-source market matrix refreshed with OpenCost, IBM Kubecost and IBM watsonx.governance; contract test passes | canonical checkout | Refresh before future external positioning; no superiority/leadership/certification claim |
 | `WP-J06` | `CANONICAL_COMPLETED` | Independent scholarly/market substitution critique and pre-claim gate recorded; contract test passes | canonical checkout | Historical originality and market leadership remain unproven by design |
