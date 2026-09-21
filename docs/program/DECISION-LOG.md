@@ -3751,6 +3751,25 @@ supported-for-review bridge is not proof of exchangeability, causal transport,
 target validity, business value, or routing authority. The kernel witness and
 governed-study/external validity gates remain required for stronger claims.
 
+## D-281 — J03 gains a research-only complexity profile foundation without production admission
+
+**Problem.** WP-J03 had a truthful precondition report but no executable
+research artifact. Leaving the research lane entirely empty made the next
+experiment harder to reproduce; adding a score or routing hook would violate
+the ten promotion gates and create complexity theatre.
+
+**Fix.** `src/research/complexity/profile.ts` records a deterministic,
+provenance-bearing vector over content-free structural and execution
+observables. It carries explicit nulls for epistemic/model sensitivity and
+predicted compute, labels calibration `uncalibrated_research`, and emits no
+scalar score, routing, budget, causal, CLI or dashboard authority. Focused
+profile/boundary coverage is 6/6.
+
+**Decision.** WP-J03 remains `PARTIAL`. Prospective calibration, simple
+baseline/held-out decision value, shift abstention, privacy, decision-time
+availability, uncertainty coverage and rollback evidence remain required before
+any complexity estimator can enter the product decision/control plane.
+
 ## D-280 — I02 closes at a single structured, read-only epistemic UX boundary
 
 **Problem.** The Claim Inspector and progressive-disclosure rules existed, but

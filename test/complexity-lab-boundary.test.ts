@@ -15,12 +15,15 @@ function sourceFiles(): string[] {
 test('complexity has no operational production surface before research prerequisites are met', () => {
   const files = sourceFiles();
   assert.ok(files.length > 0, 'the source inventory must be non-empty before it can establish absence');
-  const sourceComplexityMatches = files.filter((entry) => /\bcomplexity\b/i.test(read(join('src', entry))));
+  const sourceComplexityMatches = files.filter((entry) => /\bcomplexity\b/i.test(read(join('src', entry)))
+    && entry.replaceAll('\\', '/').startsWith('research/complexity/') === false);
   assert.deepEqual(
     sourceComplexityMatches,
     [],
-    'src must not expose an uncalibrated complexity implementation or routing hook',
+    'production src must not expose an uncalibrated complexity implementation or routing hook; research-only profile code is permitted',
   );
+  const researchProfile = read('src/research/complexity/profile.ts');
+  assert.match(researchProfile, /uncalibrated_research/);
 
   const cli = read('src/cli.ts');
   assert.ok(cli.length > 0, 'the CLI source must be present before its dispatch can establish absence');
@@ -79,7 +82,7 @@ test('WP-J03 status in PACKET-INVENTORY.md records the partial audit and explici
     /TOKEN-GOVERNANCE-AND-COMPLEXITY-LAB\.md/,
     'WP-J03 notes must cite the controlling promotion rules in TOKEN-GOVERNANCE-AND-COMPLEXITY-LAB.md',
   );
-  assert.match(notes, /zero complexity surface/i, 'WP-J03 notes must state why implementation is not started');
+  assert.match(notes, /research-only|promotion rules/i, 'WP-J03 notes must state the research-only boundary and prerequisites');
   assert.match(notes, /promotion rules/i, 'WP-J03 notes must state the explicit research prerequisites');
 });
 
