@@ -3565,6 +3565,14 @@ Lab implementation, calibration result, decision feature or production route.
 
 **Decision.** WP-J04 is `PARTIAL`. `docs/program/J04-AI-CAPITAL-SHOWBACK-BOUNDARY.md` records the proven showback/marginal foundations and the typed schemas/conservation obligations still required. Allocation remains showback-only and non-causal; no provider commitment authority, chargeback settlement, autonomous capital action, or business-value claim is introduced.
 
+## D-270 — J01/J02 remain not-started dependency gates
+
+**Problem.** Adaptive OPE and online control are consequential mechanisms, not ordinary dashboard features. Starting them before treatment/policy logging, causal-v3, action authority, rollback, and safe-baseline foundations exist would create an unsafe controller or call retrospective comparisons OPE.
+
+**Decision.** WP-J01 and WP-J02 remain `NOT_STARTED`. `docs/program/J01-J02-DEPENDENCY-GATES.md` records the exact prerequisites and the current evidence that is absent. The current decision/control modules remain review-only/no-action foundations; no propensity estimator, online policy, spend-changing action, or routing controller is fabricated.
+
+**Re-entry condition.** Re-open J01 only after causal-v3 and policy-provenance records are durable; re-open J02 only after an owner-approved control target and runtime action/rollback boundary are evidenced. The gate is an explicit safety decision, not an execution failure.
+
 ## D-267 — I02 remains partial because existing epistemic readers do not cover every dossier surface
 
 **Problem.** The repository already has a Claim Inspector/kernel viewer, as-of graph replay, progressive disclosure, and preference/decision primitives, but that is not the same as implementing every additional epistemic UX surface named by the dossier.
