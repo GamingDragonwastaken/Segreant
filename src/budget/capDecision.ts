@@ -542,7 +542,12 @@ function capLabel(capUsd: number | null): string {
  * a proven certificate as a recommendation when the inputs fall short, or
  * present a truncated invalidating-set search as the whole answer.
  */
-export function renderBudgetCapDecision(decision: BudgetCapDecision, certificates: readonly DecisionCertificateBundleRead[]): readonly string[] {
+export function renderBudgetCapDecision(decision: BudgetCapDecision, certificates: readonly DecisionCertificateBundleRead[], canonical: DecisionKernelIssuance): readonly string[] {
+  if (canonical.certificateBundle.decisionProblem.id !== decision.problem.id
+      || canonical.certificateBundle.decisionProblem.version !== decision.problem.version
+      || canonicalJson(canonical.certificateBundle.dominance) !== canonicalJson(decision.certificate)) {
+    throw new Error('canonical decision preview does not match the budget decision being rendered');
+  }
   const lines: string[] = [];
   const standing = decision.standing.status === 'review_only' ? 'REVIEW ONLY' : 'CERTIFIED (never authorization)';
   lines.push(`Decision — ${decision.problem.id} v${decision.problem.version}: ${standing}`);
@@ -553,11 +558,16 @@ export function renderBudgetCapDecision(decision: BudgetCapDecision, certificate
       + `   utility [${money(action.utility.low)}, ${money(action.utility.high)}]`,
     );
   }
-  const certificate = decision.certificate;
+  const certificate = canonical.certificateBundle.dominance;
   lines.push(
     certificate.status === 'proven_dominant'
       ? `  Certificate  proven_dominant: ${certificate.action} by a margin of ${money(certificate.margin ?? 0)} (${certificate.rule})`
       : `  Certificate  ${certificate.status} (${certificate.reason}) under ${certificate.rule}`,
+  );
+  lines.push(
+    canonical.decision === null
+      ? '  Kernel claim  no decision-fitness Claim issued (certificate is undetermined).'
+      : `  Kernel claim  ${canonical.decision.id} · decisionFitness=${canonical.decision.profile.decisionFitness}`,
   );
   lines.push(
     `  Minimax regret selects ${decision.regret.actions.join(', ')} (worst-case regret ${money(decision.regret.minimaxRegret)}) — `
