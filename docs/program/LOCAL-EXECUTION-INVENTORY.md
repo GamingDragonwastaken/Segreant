@@ -22,7 +22,7 @@ At the time of this checkpoint:
 - Canonical branch: `gpt56/magnum-opus-reconstruction`
 - Canonical SHA: `94ef073` (docs-only register alignment on top of exact green code head `dc2fe09`; G04 standards, I02/J03/J04/J05/J06 partial reconciliations and explicit J01/J02 dependency gates integrated)
 - Durable packet register: 76 total, 60 completed, 9 partial, 2 not started, 1 blocked external, 4 superseded with reason.
-- Exact-head CI: run `35624428865` succeeded for the code head; docs-only tip run `35625642404` is in progress.
+- Exact-head CI: code head run `35624428865` concluded **success** across all eight configured jobs. Docs-only tip run `35625791036` concluded **failure** because the evidence-register grammar did not state that run's outcome; that register defect is being repaired without changing production code.
 - Canonical worktree: clean and synchronized with `origin/gpt56/magnum-opus-reconstruction`.
 - Local baseline: serial root suite `2,132 total / 2,128 pass / 0 fail / 4 skipped`; causal/epistemic tranche `279/279`; G04/J03/I02/J04/J05/J06 focused frontier `16/16`; root/browser/team-server typechecks and build pass.
 
