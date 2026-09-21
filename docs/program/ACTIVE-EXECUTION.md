@@ -7,9 +7,9 @@
 | | |
 | --- | --- |
 | Branch | `gpt56/magnum-opus-reconstruction` — never `main`, never force-pushed |
-| Last CI-verified exact head | `560eaa1c6d840703006998f277ed2fb520110165` — run `35562385954`, **success on all eight configured jobs**, observed 2026-09-21. Includes D04 and the expert execution contract. |
-| Code ahead of that head | `aa135eb` — G04 standards map plus I02/J03/J04/J05/J06 partial reconciliations and explicit J01/J02 dependency gates on top of the causal tranche; exact-head CI is pending for this current remote tip. |
-| Local gates on the current tree | Root/browser/team-server typechecks and `npm run build` are clean. The serial root suite completed **2,132 total / 2,128 pass / 0 fail / 4 skipped** in this execution environment; the four skips are the documented Windows capability skips. The causal/epistemic tranche completed 279/279. |
+| Last CI-verified exact head | `dc4c16120635bc2fb775318f06889a3c7573c20a` — run `35622028118`, **success on all eight configured jobs**, observed 2026-09-21. |
+| Code ahead of that head | None; the canonical checkout is at the exact green head. |
+| Local gates on the current tree | Root/browser/team-server typechecks and `npm run build` are clean. The serial root suite completed **2,132 total / 2,128 pass / 0 fail / 4 skipped** in this execution environment; the four skips are the documented Windows capability skips. The causal/epistemic tranche completed 279/279. GitHub exact-head run `35622028118` independently passed the full matrix. |
 | Dossier source | `FISCUS_EXECUTION_DOSSIER_III.md` is **not in this checkout and not in git history** — it was an owner-supplied input. `docs/program/PACKET-INVENTORY.md` is the surviving mechanical enumeration of all 76 packets and is authoritative here. Do not re-derive a packet count from anything else. |
 
 ## Packet accounting
