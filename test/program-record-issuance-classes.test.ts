@@ -103,20 +103,20 @@ test('each state-of-the-world record declares exactly the unmigrated boundaries 
   }
 });
 
-test('the declaration is not vacuous: there is something to declare and the line is found', () => {
-  // If every boundary were migrated the expected set would be empty, both
-  // records could say `none`, and the test above would pass while checking that
-  // two documents agree about nothing. It would also mean AII-036's issuance
-  // half had closed, which is a thing to notice rather than to sail past.
-  assert.ok(
-    mappedUnmigratedIds().length > 0,
-    'every issuance boundary is now migrated -- AII-036 has moved, and this test and the records it reads both need revisiting',
+test('the state records explicitly declare the closed unmigrated frontier', () => {
+  assert.deepEqual(
+    mappedUnmigratedIds(),
+    [],
+    'an unmigrated claim-strengthening boundary remains; AII-036 cannot be closed',
   );
   for (const path of STATE_RECORDS) {
-    assert.match(record(path), DECLARATION, `${path} must state the declaration in the exact form this test reads`);
+    assert.match(
+      record(path),
+      /Boundaries still classified `unmigrated_authority`: none\./,
+      `${path} must state the closed frontier explicitly rather than omitting it`,
+    );
   }
 });
-
 test('every declared id is a boundary the map actually defines', () => {
   // A declaration naming a boundary that does not exist would satisfy nothing
   // and would read as authoritative. The set equality above catches a wrong
