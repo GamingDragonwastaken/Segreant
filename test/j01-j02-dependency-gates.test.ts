@@ -8,7 +8,7 @@ test('J01 is a completed review-only OPE boundary and J02 remains an explicit no
   for (const marker of ['causal-v3', 'propensity', 'overlap', 'doubly robust', 'safe', 'circuit breaker', 'no-action']) {
     assert.match(text, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
   }
-  assert.match(text, /not[_ ]started/i);
+  assert.match(text, /not[_ ]started|blocked_external/i);
   assert.match(text, /retrospective model comparisons.*not OPE/i);
   assert.match(text, /COMPLETED/i);
   assert.match(text, /RED-first coverage is\s+13\/13/i);

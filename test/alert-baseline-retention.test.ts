@@ -55,7 +55,11 @@ import { computeAlerts, computeAlertCoverage } from '../src/alerts/detect.ts';
 import { DEFAULT_CONFIG } from '../src/config.ts';
 
 const DAY = 24 * 60 * 60 * 1000;
-const NOW = Date.now();
+// Keep the synthetic "today" safely away from the local midnight boundary.
+// The request fixture places today's request one hour before NOW; running this
+// suite just after midnight otherwise makes that row belong to yesterday on
+// Cairo/Windows while CI's UTC workers see a different day.
+const NOW = Date.now() + 12 * 60 * 60 * 1000;
 const DARK_WITHOUT_HISTORY = 'no prior active day exists yet, so there is no baseline to exceed';
 
 function request(daysAgo: number, costUsd: number): RequestRow {
