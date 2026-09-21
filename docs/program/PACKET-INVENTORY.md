@@ -13,8 +13,9 @@ States: `NOT_STARTED` `IN_PROGRESS` `PARTIAL` `COMPLETED` `BLOCKED_EXTERNAL`
 `SUPERSEDED_WITH_REASON`. Every packet carries exactly one.
 
 Latest reconciliation (2026-09-21): the synchronized remote tip is
-`024a2fe45c264d3610120910db660d9fbc53b874` with exact-head CI run
-`35634017331` green across all nine jobs. J01 now has a bounded, persisted
+`5587b1872b7ed066142699f633aff71a70c72680` with exact-head CI run
+`35634944716` green across all nine jobs. The code head beneath this docs
+checkpoint is `024a2fe45c264d3610120910db660d9fbc53b874`. J01 now has a bounded, persisted
 provenance-aware OPE foundation and remains `PARTIAL`; J02 remains an explicit
 no-action/not-started gate. The remaining C01 budget-window, legacy read-model,
 receipt/team reconciliation and provider-FX requirements remain as recorded in
