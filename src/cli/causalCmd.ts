@@ -16,6 +16,12 @@ import { readBoundedUtf8File, RESOURCE_LIMITS } from '../util/resource-limits.ts
 import type { OpeEvaluationOptions } from '../causal/ope.ts';
 import { assessCausalDesign, type CausalDesignPlan } from '../causal/design.ts';
 import { assessTransportBridge, type CausalTransportDeclaration } from '../causal/transport.ts';
+import {
+  plannedInferenceActs,
+  requiredActAlphaForPlan,
+  validateCausalInferencePlan,
+  type CausalInferencePlan,
+} from '../causal/inference-ledger.ts';
 
 function requireStringFlag(flags: Flags, name: string): string {
   const value = flags[name];
@@ -68,6 +74,7 @@ function usage(): void {
   console.log('  fiscus causal ope --options <file> [--json]');
   console.log('  fiscus causal design --options <file> [--json]');
   console.log('  fiscus causal transport --options <file> [--json]');
+  console.log('  fiscus causal plan --study <study-id> --options <file> [--apply] [--json]');
   console.log('');
   console.log('  OPE reads only the Store-owned append-only action log. It is review-only,');
   console.log('  not a causal treatment effect and never authorizes policy execution.');
@@ -171,8 +178,45 @@ export function cmdCausal(flags: Flags): void {
     }, flags);
     return;
   }
+  let inferencePlan: { studyId: string; plan: CausalInferencePlan } | null = null;
+  if (action === 'plan') {
+    const studyId = requireStringFlag(flags, 'study');
+    const optionsFile = requireStringFlag(flags, 'options');
+    const supplied = readJsonFile(optionsFile);
+    if (typeof supplied !== 'object' || supplied === null || Array.isArray(supplied)) {
+      throw new Error('causal plan options must be a JSON object');
+    }
+    const plan = supplied as CausalInferencePlan;
+    validateCausalInferencePlan(plan);
+    inferencePlan = { studyId, plan };
+    if (!flags.apply) {
+      emit({
+        operation: 'causal_inference_plan_preview',
+        studyId,
+        plan,
+        plannedActs: plannedInferenceActs(plan),
+        requiredActAlpha: requiredActAlphaForPlan(plan),
+        warning: 'No plan was persisted. Re-run with --apply before the first inferential look.',
+        boundary: 'Preview-only family-wise error budget; no study read, analysis, or provider action is performed.',
+      }, flags);
+      return;
+    }
+  }
   const store = new Store(dbPath());
   try {
+    if (inferencePlan !== null) {
+      const result = store.registerCausalInferencePlan(inferencePlan.studyId, inferencePlan.plan);
+      emit({
+        operation: 'causal_inference_plan_registered',
+        studyId: inferencePlan.studyId,
+        registration: result,
+        plan: inferencePlan.plan,
+        plannedActs: plannedInferenceActs(inferencePlan.plan),
+        requiredActAlpha: requiredActAlphaForPlan(inferencePlan.plan),
+        boundary: 'Immutable pre-registration recorded before inferential acts; later looks cannot rewrite this family.',
+      }, flags);
+      return;
+    }
     if (action === 'status') {
       const studies = store.causalStudySummaries();
       emit({

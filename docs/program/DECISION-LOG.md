@@ -3750,3 +3750,21 @@ boundary. Target evidence is identified but not semantically audited; a
 supported-for-review bridge is not proof of exchangeability, causal transport,
 target validity, business value, or routing authority. The kernel witness and
 governed-study/external validity gates remain required for stronger claims.
+
+## D-279 — E06 gains an explicit preview/apply inference-plan setup surface
+
+**Problem.** The Store already enforced immutable pre-registration before the
+first inferential act, but no operator-facing command could preview or create a
+plan. A reader had to reach into the Store API, and the packet consequently
+still named setup as open.
+
+**Fix.** `fiscus causal plan --study <study-id> --options <file> [--apply]`
+validates a `CausalInferencePlan`, reports planned acts and required per-act
+alpha in preview mode without opening or mutating a Store, and calls the
+existing immutable Store registration only with `--apply`. Focused CLI
+coverage is 1/1; the existing Store/inference tranche remains green.
+
+**Boundary.** WP-E06 remains `PARTIAL`. The ledger is still per-study, with no
+cross-study family or correlation-adjusted multiplicity model, and precision
+planning still reports width rather than probability/power. The command does
+not weaken the pre-registration or no-action semantics.
