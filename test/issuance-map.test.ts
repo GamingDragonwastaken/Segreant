@@ -104,20 +104,12 @@ test('every boundary states its issuance class in its own source', () => {
   assert.deepEqual(missing, [], `these modules do not declare their issuance class: ${missing.join(', ')}`);
 });
 
-test('the map records the open frontier rather than an empty one', () => {
-  // AII-036 is PARTIAL. An empty unmigrated set would mean it is closed, and a
-  // green test asserting that would be worse than no test at all.
-  assert.ok(
-    UNMIGRATED_BOUNDARIES.length > 0,
-    'AII-036 is PARTIAL: if the unmigrated set is genuinely empty, close the finding rather than emptying this list',
+test('the issuance map has no remaining claim-strengthening boundary outside the kernel contract', () => {
+  assert.deepEqual(
+    UNMIGRATED_BOUNDARIES,
+    [],
+    'AII-036 cannot close while any product claim-strengthening boundary remains unmigrated',
   );
-  for (const boundary of UNMIGRATED_BOUNDARIES) {
-    assert.match(
-      boundary.note,
-      /Closing it requires|inherits its position/,
-      `${boundary.id} must say what closing it requires, not merely that it is open`,
-    );
-  }
 });
 
 test('the program record lists exactly the boundaries the map declares', () => {
