@@ -192,11 +192,12 @@ Highest value first, each stated as the boundary that is missing rather than as 
   evidence.
 - The browser gate is dev/test-only. `playwright` and `@axe-core/playwright`
   are explicitly allowlisted by `scripts/check-supply-chain.mjs`; they are not
-  runtime package dependencies. The exact CI tip is still pending after this
-  checkpoint.
+  runtime package dependencies. Exact-head run `35634017331` concluded
+  **success** across all nine configured jobs on `024a2fe`.
 - D-272 hardens the process host against the asynchronous macOS stdin EPIPE
   observed when an output-limit refusal terminates a child. Focused plugin-host
-  coverage is 9/9 locally; the next remote run is the cross-platform proof.
+  coverage is 9/9 locally; run `35634017331` concluded **success** and supplies
+  the cross-platform proof.
 - Do not mark WP-I04 `COMPLETED`: exact NVDA/JAWS/VoiceOver announcement
   behavior remains a genuine external gate. Do not start J02 before J01's
   causal-v3/policy-provenance foundations are durable.

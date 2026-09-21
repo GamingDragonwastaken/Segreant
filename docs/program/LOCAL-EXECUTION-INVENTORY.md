@@ -20,11 +20,11 @@ register used for GitHub-facing integration decisions.
 At the time of this checkpoint:
 
 - Canonical branch: `gpt56/magnum-opus-reconstruction`
-- Canonical SHA: `cccff98d04ac75d1a80d34e50fa333f7c578372a` (runtime Chromium/axe accessibility gate, CI topology contract, supply-chain test-only allowlist, and macOS plugin-host EPIPE lifecycle hardening; all pushed to `origin/gpt56/magnum-opus-reconstruction`)
+- Canonical SHA: `024a2fe45c264d3610120910db660d9fbc53b874` (J01 provenance-aware OPE plus Store-owned append-only action observations, on the green browser/runtime checkpoint; pushed to `origin/gpt56/magnum-opus-reconstruction`)
 - Durable packet register: 76 total, 60 completed, 10 partial, 1 not started, 1 blocked external, 4 superseded with reason.
-- Exact-head CI: run `35630657686` concluded **success** across all nine configured jobs, including the new `browser-accessibility` job on `cccff98`.
+- Exact-head CI: run `35634017331` concluded **success** across all nine configured jobs, including browser accessibility and the team-server matrix.
 - Canonical worktree: clean and synchronized with `origin/gpt56/magnum-opus-reconstruction`.
-- Local baseline: root suite `2,137 total / 2,133 pass / 0 fail / 4 skipped` after the CI-hardening contract update; plugin-host 9/9; dashboard/program contract tranche 6/6; runtime browser/axe 1/1; root/browser/team-server typechecks, build, and supply-chain audit pass.
+- Local baseline: root suite exits 0 under the compact reporter after the J01 Store schema; focused OPE/Store/dependency tranche 12/12; plugin-host 9/9; runtime browser/axe 1/1; root/browser/team-server typechecks, build, and supply-chain audit pass.
 
 These counts are not the full local execution state.
 
