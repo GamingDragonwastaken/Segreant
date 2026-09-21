@@ -8,13 +8,13 @@
 | --- | --- |
 | Branch | `gpt56/magnum-opus-reconstruction` — never `main`, never force-pushed |
 | Last CI-verified exact head | `560eaa1c6d840703006998f277ed2fb520110165` — run `35562385954`, **success on all eight configured jobs**, observed 2026-09-21. Includes D04 and the expert execution contract. |
-| Code ahead of that head | `836edee` — G04 standards map plus I02/J03 partial reconciliations on top of the causal tranche; exact-head CI is pending for this current remote tip. |
+| Code ahead of that head | `fe4ca18` — G04 standards map plus I02/J03/J05/J06 partial reconciliations on top of the causal tranche; exact-head CI is pending for this current remote tip. |
 | Local gates on the current tree | Root/browser/team-server typechecks and `npm run build` are clean. The serial root suite completed **2,132 total / 2,128 pass / 0 fail / 4 skipped** in this execution environment; the four skips are the documented Windows capability skips. The causal/epistemic tranche completed 279/279. |
 | Dossier source | `FISCUS_EXECUTION_DOSSIER_III.md` is **not in this checkout and not in git history** — it was an owner-supplied input. `docs/program/PACKET-INVENTORY.md` is the surviving mechanical enumeration of all 76 packets and is authoritative here. Do not re-derive a packet count from anything else. |
 
 ## Packet accounting
 
-76 packets. **60 COMPLETED, 6 PARTIAL, 5 NOT_STARTED, 0 IN_PROGRESS, 1 BLOCKED_EXTERNAL, 4 SUPERSEDED_WITH_REASON.** Regenerate rather than trust this line:
+76 packets. **60 COMPLETED, 8 PARTIAL, 3 NOT_STARTED, 0 IN_PROGRESS, 1 BLOCKED_EXTERNAL, 4 SUPERSEDED_WITH_REASON.** Regenerate rather than trust this line:
 
 ```bash
 grep -oE '\| `(NOT_STARTED|IN_PROGRESS|PARTIAL|COMPLETED|BLOCKED_EXTERNAL|SUPERSEDED_WITH_REASON)` \|' docs/program/PACKET-INVENTORY.md | sort | uniq -c

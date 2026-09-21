@@ -3566,3 +3566,11 @@ Lab implementation, calibration result, decision feature or production route.
 **Decision.** WP-I02 is `PARTIAL`. The current read-only kernel viewer and progressive-disclosure contract are retained as evidence for Prove-a-Claim and What-Did-We-Know-Then foundations. No new action surface is invented merely to fill a packet row.
 
 **Remaining.** A dedicated Trace-the-Dollar traversal through exact economic events/corrections/allocation, minimal support-set/countermodel presentation, decision-theoretic What-Should-We-Measure-Next planning, and Preference Map rendering still need end-to-end route/UI evidence. The existing primitives do not close those claims by implication.
+
+## D-268 — current-market and originality reviews constrain, rather than inflate, Fiscus claims
+
+**Problem.** Fiscus cannot responsibly position itself as a world-first system without checking mature observability, FinOps, GRC, provenance, and standards ecosystems and asking whether each mechanism is replaceable by an existing standard.
+
+**Fix.** `docs/program/MARKET-CAPABILITY-MATRIX.md` records current primary-source capabilities for Langfuse, Datadog Agent Observability, Vanta, FOCUS, and OpenTelemetry, then chooses build/interoperate/refuse per capability. `docs/program/ORIGINALITY-SUBSTITUTION-REVIEW.md` classifies standardized primitives, Fiscus-specific semantics, potentially distinctive combinations, and unproven claims. RED-first contract coverage is 2/2.
+
+**Decision.** WP-J05 and WP-J06 are `PARTIAL`. The defensible product distinction is the composition of exact local AI-finance accounting, epistemic/revocation semantics, causal/decision gates, and standards-compatible exports—not a novel theorem, generic trace platform, GRC suite, or signed envelope. Independent scholarly/market critique remains an external future gate.
