@@ -20,7 +20,7 @@ register used for GitHub-facing integration decisions.
 At the time of this checkpoint:
 
 - Canonical branch: `gpt56/magnum-opus-reconstruction`
-- Canonical SHA: `e1b81ee91ca3288ded8e1a63f3badfb30c878423` (J03 research profile, E06 family boundary, and I02 UX Money-consumer classification on top of J04/E04/E05/E06 checkpoints; pushed to `origin/gpt56/magnum-opus-reconstruction`; exact-head CI pending)
+- Canonical SHA: `8ffb0daf6f8626fd07967ed74093e11420c3f06a` (durable register alignment after the J03 research profile, E06 family boundary, I02 UX Money-consumer classification, and exact green matrix; pushed to `origin/gpt56/magnum-opus-reconstruction`; exact-head CI run `35653493279` success)
 - Durable packet register: 76 total, 67 completed, 3 partial, 1 not started, 1 blocked external, 4 superseded with reason.
 - Exact-head CI: run `35641090995` concluded **success** across all nine configured jobs, including browser accessibility and the team-server matrix.
 - Canonical worktree: clean and synchronized with `origin/gpt56/magnum-opus-reconstruction`.
