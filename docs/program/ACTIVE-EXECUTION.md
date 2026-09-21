@@ -8,8 +8,8 @@
 | --- | --- |
 | Branch | `gpt56/magnum-opus-reconstruction` — never `main`, never force-pushed |
 | Last CI-verified exact head | `560eaa1c6d840703006998f277ed2fb520110165` — run `35562385954`, **success on all eight configured jobs**, observed 2026-09-21. Includes D04 and the expert execution contract. |
-| Code ahead of that head | `bb5cfb2` — E02/E03/E04/E05 causal tranche plus durable E06 pre-registration; exact-head CI is pending for this current remote tip. |
-| Local gates on the current tree | Root typecheck and browser typecheck clean; `npm run build` clean; full root suite 2072/2089 pass in THIS execution environment — the 17 failures are environment-specific (Node 22 here vs. the repo's declared `>=24` and CI's actual Node 24; missing `node:sqlite` `setAuthorizer`; sandbox subprocess/timing limits) and reproduce identically on the unmodified `af0cd11` tree, confirmed before attributing anything to D-254, and confirmed again by CI itself passing all eight jobs at `9eb869b`. Causal-focused suites (`causal-issuance`, `causal-store`, `causal-cli`, `causal-inference-store`, `causal-analysis-snapshot-path`, `ledger-strengthening-obligation`) are 109/110 locally, the one failure being the same environment-specific `setAuthorizer` gap. |
+| Code ahead of that head | `098f12d` — E02/E03/E04/E05 causal tranche plus durable E06 pre-registration and reconciled registers; exact-head CI is pending for this current remote tip. |
+| Local gates on the current tree | Root/browser/team-server typechecks and `npm run build` are clean. The serial root suite completed **2,132 total / 2,128 pass / 0 fail / 4 skipped** in this execution environment; the four skips are the documented Windows capability skips. The causal/epistemic tranche completed 279/279. |
 | Dossier source | `FISCUS_EXECUTION_DOSSIER_III.md` is **not in this checkout and not in git history** — it was an owner-supplied input. `docs/program/PACKET-INVENTORY.md` is the surviving mechanical enumeration of all 76 packets and is authoritative here. Do not re-derive a packet count from anything else. |
 
 ## Packet accounting

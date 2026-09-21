@@ -24,6 +24,7 @@ At the time of this checkpoint:
 - Durable packet register: 76 total, 59 completed, 4 partial, 8 not started, 1 blocked external, 4 superseded with reason.
 - Exact-head CI: last verified run `35562385954` for predecessor `560eaa1`; the causal tranche head is pending its own exact-SHA run.
 - Canonical worktree: clean and synchronized with `origin/gpt56/magnum-opus-reconstruction`.
+- Local baseline: serial root suite `2,132 total / 2,128 pass / 0 fail / 4 skipped`; causal/epistemic tranche `279/279`; root/browser/team-server typechecks and build pass.
 
 These counts are not the full local execution state.
 
