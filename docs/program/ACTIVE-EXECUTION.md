@@ -7,14 +7,14 @@
 | | |
 | --- | --- |
 | Branch | `gpt56/magnum-opus-reconstruction` — never `main`, never force-pushed |
-| Last CI-verified exact head | `562a85d8b3c5456e24d21bb6e65bbd02105d2034` — run `35654096222`, **success on all configured jobs**, observed 2026-09-22. |
+| Last CI-verified exact head | `1130ca723342f60eea7db9fb27f5bb6faaeb9929` — run `35656559576`, **success on all configured jobs**, observed 2026-09-22. |
 | Code ahead of that head | none — local checkout is clean and synchronized with `origin/gpt56/magnum-opus-reconstruction`. |
 | Local gates on the current tree | Root typecheck/build and focused causal/epistemic/research tranches are clean. Exact evidence includes E04 6/6, E05 6/6, E06 plan 1/1 plus family 4/4, J04 5/5, I02 4/4, J03 profile/boundary 6/6; GitHub run `35652074768` independently passed the full matrix. |
 | Dossier source | `FISCUS_EXECUTION_DOSSIER_III.md` is **not in this checkout and not in git history** — it was an owner-supplied input. `docs/program/PACKET-INVENTORY.md` is the surviving mechanical enumeration of all 76 packets and is authoritative here. Do not re-derive a packet count from anything else. |
 
 ## Packet accounting
 
-76 packets. **67 COMPLETED, 3 PARTIAL, 1 NOT_STARTED, 0 IN_PROGRESS, 1 BLOCKED_EXTERNAL, 4 SUPERSEDED_WITH_REASON.** Regenerate rather than trust this line:
+76 packets. **70 COMPLETED, 0 PARTIAL, 0 NOT_STARTED, 0 IN_PROGRESS, 2 BLOCKED_EXTERNAL, 4 SUPERSEDED_WITH_REASON.** Regenerate rather than trust this line:
 
 ```bash
 grep -oE '\| `(NOT_STARTED|IN_PROGRESS|PARTIAL|COMPLETED|BLOCKED_EXTERNAL|SUPERSEDED_WITH_REASON)` \|' docs/program/PACKET-INVENTORY.md | sort | uniq -c

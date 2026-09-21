@@ -3751,6 +3751,33 @@ supported-for-review bridge is not proof of exchangeability, causal transport,
 target validity, business value, or routing authority. The kernel witness and
 governed-study/external validity gates remain required for stronger claims.
 
+## D-284 — repository-side packet closure distinguishes durable boundaries from external gates
+
+**Problem.** The remaining packet rows mixed three different states: repository
+work that had now reached a truthful terminal boundary, methods that still had
+explicit research limits, and actions that could not be implemented without
+owner authority or external runtime evidence. Treating all three as `PARTIAL`
+or silently marking them complete would make the inventory less truthful.
+
+**Decision.** Close the repository-side boundaries for E06, I05 and J03 at the
+levels now implemented and verified: E06 has immutable plan setup, explicit
+cross-study family/dependence planning and a stated no-power/no-validated-
+correlation limit; I05 has the egress/data/retention evidence boundary plus
+append-only retention-policy history; J03 has the isolated research profile
+and a hard no-promotion boundary. Their remaining research/external limits are
+terminally documented, not erased.
+
+Move J02 from `NOT_STARTED` to `BLOCKED_EXTERNAL`: the repository has a
+review-only/no-action foundation and a precise re-entry contract, but no
+owner-approved target or runtime authority exists. I04 remains
+`BLOCKED_EXTERNAL` for assistive-technology evidence. No online controller,
+production deployment, or screen-reader result is fabricated.
+
+The resulting inventory is 70 `COMPLETED`, 0 `PARTIAL`, 0 `NOT_STARTED`, 2
+`BLOCKED_EXTERNAL`, and 4 `SUPERSEDED_WITH_REASON`. This is repository-side
+closure with explicit external gates, not a claim that those external gates
+have passed.
+
 ## D-283 — I05 makes retention-policy narrowing durable evidence
 
 **Problem.** The ledger already recorded deletions, but changing

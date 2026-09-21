@@ -1,7 +1,7 @@
 # J01/J02 dependency gates
 
-J01 is now `COMPLETED` at the review-only OPE boundary; J02 remains
-`NOT_STARTED`. The authority directive
+J01 is now `COMPLETED` at the review-only OPE boundary; J02 is
+`BLOCKED_EXTERNAL` at its explicit safety/authority gate. The authority directive
 permits implementation under bounded delegated policy, but a design note is
 not an implementation and an OPE estimator is not an online controller.
 
@@ -49,5 +49,7 @@ Required prerequisites before code:
 
 The current control and decision modules are review-only/no-action foundations.
 They do not authorize online spend-changing or routing actions. J02 remains
-`NOT_STARTED` until a bounded runtime action adapter, safe baseline, durable
-rollback/circuit-breaker evidence and an explicit no-action default are wired.
+`BLOCKED_EXTERNAL` until a bounded runtime action adapter, safe baseline,
+durable rollback/circuit-breaker evidence and an explicit no-action default are
+wired under owner-approved authority. No repository-only implementation can
+prove that external gate.

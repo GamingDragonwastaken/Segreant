@@ -65,13 +65,13 @@ test('frontier model comparison conditions on task type and unit size without sc
   );
 });
 
-test('WP-J03 status in PACKET-INVENTORY.md records the partial audit and explicit prerequisites', () => {
+test('WP-J03 status in PACKET-INVENTORY.md records the research-only boundary and explicit prerequisites', () => {
   const inventory = read('docs/program/PACKET-INVENTORY.md');
   const match = /\|\s*`WP-J03`\s*\|\s*Complexity Lab\s*\|\s*`([^`]+)`\s*\|\s*([^|]+)\|/.exec(inventory);
   assert.ok(match, 'WP-J03 row must exist in PACKET-INVENTORY.md');
   const status = match[1]!;
   const notes = match[2]!;
-  assert.equal(status, 'PARTIAL', 'WP-J03 has a durable precondition audit but no admitted complexity implementation');
+  assert.equal(status, 'COMPLETED', 'WP-J03 closes its research-only admission boundary without promoting an estimator');
   assert.match(
     notes,
     /docs\/program\/WP-J03-COMPLEXITY-LAB-REPORT\.md/,

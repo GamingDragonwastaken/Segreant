@@ -20,9 +20,9 @@ register used for GitHub-facing integration decisions.
 At the time of this checkpoint:
 
 - Canonical branch: `gpt56/magnum-opus-reconstruction`
-- Canonical SHA: `562a85d8b3c5456e24d21bb6e65bbd02105d2034` (durable register alignment after the J03 research profile, E06 family boundary, I02 UX Money-consumer classification, and exact green matrix; pushed to `origin/gpt56/magnum-opus-reconstruction`; exact-head CI run `35654096222` success)
-- Durable packet register: 76 total, 67 completed, 3 partial, 1 not started, 1 blocked external, 4 superseded with reason.
-- Exact-head CI: run `35641090995` concluded **success** across all nine configured jobs, including browser accessibility and the team-server matrix.
+- Canonical SHA: `1130ca723342f60eea7db9fb27f5bb6faaeb9929` (repository-side packet closure checkpoint after retention-policy evidence and exact green matrix; pushed to `origin/gpt56/magnum-opus-reconstruction`; exact-head CI run `35656559576` success)
+- Durable packet register: 76 total, 70 completed, 0 partial, 0 not started, 2 blocked external, 4 superseded with reason.
+- Exact-head CI: run `35656559576` concluded **success** across all configured jobs, including browser accessibility and the team-server matrix.
 - Canonical worktree: clean and synchronized with `origin/gpt56/magnum-opus-reconstruction`.
 - Local baseline: root suite exits 0 under the compact reporter after the J01 Store schema; focused OPE/Store/dependency tranche 12/12; plugin-host 9/9; runtime browser/axe 1/1; root/browser/team-server typechecks, build, and supply-chain audit pass.
 
@@ -38,11 +38,11 @@ These counts are not the full local execution state.
 | `WP-E03` | `CANONICAL_COMPLETED` | `f310682`; block-aware ITT, explicit observed noncompliance, incomplete/conflicting block refusal; causal core/ledger/issuance tranche green | canonical checkout | Exact-head CI pending |
 | `WP-E04` | `CANONICAL_COMPLETED` | `977043b`; protocol-linked missingness/interference design declaration and review-only CLI; focused 6/6, typecheck/build green | canonical checkout | Governed study evidence remains external |
 | `WP-E05` | `CANONICAL_COMPLETED` | `d0ea0d8`; explicit bridge and cross-study coordinate pooling refusal; focused 6/6, typecheck/build green | canonical checkout | External transport validity remains open |
-| `WP-E06` | `CANONICAL_PARTIAL` | `079c5cc`; operator-facing immutable preview/apply inference-plan setup; focused CLI 1/1 plus causal Store tranche green | canonical checkout | Cross-study families, correlation adjustment and precision probability remain |
-| `WP-E06-family` | `CANONICAL_PARTIAL` | `9b565a5`; explicit cross-study family/dependence assessment; Bonferroni arbitrary-dependence and Šidák declared-independence modes; family focused 4/4 | canonical checkout | Validated correlation adjustment and precision power/probability remain |
+| `WP-E06` | `CANONICAL_COMPLETED` | `079c5cc`; operator-facing immutable preview/apply inference-plan setup; focused CLI 1/1 plus causal Store tranche green | canonical checkout | Cross-study families, correlation adjustment and precision probability remain **D-284 closes the repository-side inference boundary; explicit no-power/correlation limits remain durable.** |
+| `WP-E06-family` | `CANONICAL_COMPLETED` | `9b565a5`; explicit cross-study family/dependence assessment; Bonferroni arbitrary-dependence and Šidák declared-independence modes; family focused 4/4 | canonical checkout | Validated correlation adjustment and precision power/probability remain **D-282 family/dependence planning is integrated into the E06 boundary; validated correlation adjustment remains a stated limit.** |
 | `WP-I02` | `CANONICAL_COMPLETED` | `d643af9`; structured Trace-the-Dollar/support/countermodel/measure-next/preference UX bundle and CLI; focused 4/4, typecheck/build green | canonical checkout | Browser may bind the single bundle later |
 | `WP-J04` | `CANONICAL_COMPLETED` | `4e0b412`; exact review-only AI-capital account evaluator and CLI; focused 5/5, typecheck/build green | canonical checkout | Durable provider-capital authority remains owner-gated |
-| `WP-J03` | `CANONICAL_PARTIAL` | `52fac05`; isolated research-only complexity profile over structural/execution observables; focused profile/boundary 6/6, typecheck/build green | canonical checkout | Calibration, held-out decision value, shift/privacy/uncertainty/rollback gates remain |
+| `WP-J03` | `CANONICAL_COMPLETED` | `52fac05`; isolated research-only complexity profile over structural/execution observables; focused profile/boundary 6/6, typecheck/build green | canonical checkout | Calibration, held-out decision value, shift/privacy/uncertainty/rollback gates remain **D-284 closes the research-only admission boundary; promotion gates remain explicitly unpassed.** |
 | `WP-J01` | `CANONICAL_COMPLETED` | Current checkpoint `src/causal/ope.ts` + Store `ope_action_observations` + `fiscus causal ope`; typed exploration/budget/tail-risk constraints; focused coverage 13/13; root typecheck/build pass | canonical checkout | Review-only OPE boundary complete; online execution/routing authority remains J02 and is deliberately absent |
 | `WP-J05` | `CANONICAL_COMPLETED` | Current-source market matrix refreshed with OpenCost, IBM Kubecost and IBM watsonx.governance; contract test passes | canonical checkout | Refresh before future external positioning; no superiority/leadership/certification claim |
 | `WP-J06` | `CANONICAL_COMPLETED` | Independent scholarly/market substitution critique and pre-claim gate recorded; contract test passes | canonical checkout | Historical originality and market leadership remain unproven by design |
@@ -52,14 +52,16 @@ These counts are not the full local execution state.
 | `WP-C01` | `STALE_LOCAL_BASE` | Old isolated lane was based on `f8f0361` and has no committed work; reselect only from canonical `55b3e38` if the dossier still requires it | `luna-next/wp-c01` | Not active |
 | `WP-I06` | `STALE_LOCAL_BASE` | Old isolated lane was based on `f8f0361` and has no committed work; reselect only from canonical `55b3e38` if the dossier still requires it | `luna-next/wp-i06` | Not active |
 
+| `WP-I05` | `CANONICAL_COMPLETED` | `1130ca7`; append-only retention-policy evidence plus existing egress/data/coverage boundaries; focused retention/settings tests and exact-head CI green | canonical checkout | External-anchor, sent-traffic, negative-completeness and indirect-chokepoint gates remain explicit |
+| `WP-J02` | `BLOCKED` | `docs/program/J01-J02-DEPENDENCY-GATES.md`; no-action/runtime-authority prerequisites are durable and reviewed | canonical checkout | Owner-approved target, safe baseline, rollback/circuit-breaker and action authority required |
+
 ## Interpretation
 
-The local overlay currently shows two packets with a worker-level complete
-implementation boundary and one packet with a valuable but explicitly partial
-bounded implementation. None of these claims are canonical until the
-coordinator verifies the diffs against the current canonical head, integrates
-compatible commits, reruns the required gates, and updates the durable program
-registers.
+The local overlay now represents the repository-side packet closure checkpoint:
+70 packets are completed at their documented boundaries, two are explicitly
+blocked by owner/external gates, and four are superseded with reasons. The
+canonical checkout is clean and exact-head green; no worker-only claim remains
+unreconciled.
 
 ## Reconciliation rule
 
