@@ -18,6 +18,7 @@ import { qualifyCausalStudy } from './qualification.ts';
 import { resolveEstimandDefinition } from './estimand.ts';
 import { verifyCommittedCausalProtocol } from './protocol.ts';
 import type {
+  ArmCounts,
   CausalEffectInterval,
   CausalStudyData,
   CausalStudyEstimate,
@@ -77,7 +78,22 @@ function standardLimitations(): string[] {
     'Fiscus validates retained protocol, assignment, execution, outcome, and arithmetic lineage locally; it is not an independent audit or provider-invoice certification.',
     'The result depends on valid randomized assignment, no interference, outcome completeness, and measurement assumptions; adherence is not required for ITT.',
     'ITT is primary: observed noncompliance stays in the assigned arm. Per-protocol and CACE/LATE effects are not estimated or identified by this result.',
+    'Interference between units is not assessed by this estimator; the declared no-interference assumption is not an established absence of cross-unit effects.',
   ];
+}
+
+function missingnessLimitations(countsByArm: Record<string, ArmCounts>): string[] {
+  const lines = ['Missingness counts use retained assignments that passed decision validation and qualifying execution/outcome pairs; rejected records and unretained assignments are not evidence of population completeness.'];
+  for (const [armId, count] of Object.entries(countsByArm)) {
+    if (count.assigned === 0) {
+      lines.push('Arm ' + armId + ': missingness rate is unknown with zero assigned units counted by qualification, not a zero rate.');
+      continue;
+    }
+    const missing = count.assigned - count.completed;
+    lines.push('Arm ' + armId + ': ' + missing + '/' + count.assigned + ' retained validated assignments have unavailable qualifying execution/outcome pairs; this includes absent, pending, or rejected evidence, not confirmed attrition.');
+  }
+  lines.push('Attrition is unknown and the missingness mechanism is unknown; no imputation, reweighting, or complete-case re-analysis is applied. Incomplete qualifying pairs withhold an estimate rather than shrinking the assigned denominator.');
+  return lines;
 }
 
 /**
@@ -151,6 +167,7 @@ export function estimateCausalStudy(data: CausalStudyData): CausalStudyEstimate 
     limitations: [
       ...standardLimitations(),
       `Recorded noncompliance: ${data.executions.filter((execution) => execution.adherence === 'deviated').length} execution record(s); inclusion still requires valid lineage and complete observed cost/outcome evidence.`,
+      ...missingnessLimitations(qualification.countsByArm),
       ...(estimandDefinition === null
         ? ['The protocol does not name a registered causal estimand; no estimand identity is inferred.']
         : []),

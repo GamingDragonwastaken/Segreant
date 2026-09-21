@@ -1044,6 +1044,35 @@ test('noncompliance cannot turn missing, unverifiable, or altered evidence into 
   }
 });
 
+test('missingness disclosure keeps the assigned denominator and unknown mechanism', () => {
+  const data = completedData();
+  const removed = data.outcomes.pop()!;
+  const arm = data.decisions.find((decision) => decision.decisionId === removed.decisionId)!.assignedArmId;
+  const estimate = estimateCausalStudy(data);
+  assert.equal(estimate.allowedClaim, 'not_established');
+  assert.equal(estimate.costEffectUsd, null);
+  assert.ok(estimate.limitations.some((line) => line.includes(arm) && line.includes('1/2') && line.includes('unavailable')));
+  assert.match(estimate.limitations.join(' '), /missingness mechanism is unknown/i);
+  assert.match(estimate.limitations.join(' '), /attrition.*unknown/i);
+});
+
+test('complete retained outcomes do not establish absence of interference', () => {
+  const estimate = estimateCausalStudy(completedData());
+  assert.equal(estimate.qualification.state, 'qualified');
+  assert.match(estimate.limitations.join(' '), /interference.*not assessed/i);
+  assert.match(estimate.limitations.join(' '), /0\/2.*unavailable/);
+});
+
+test('empty assignment support has unknown missingness rather than a zero rate', () => {
+  const data = completedData();
+  data.decisions = [];
+  data.executions = [];
+  data.outcomes = [];
+  const estimate = estimateCausalStudy(data);
+  assert.match(estimate.limitations.join(' '), /missingness.*unknown.*zero assigned/i);
+  assert.equal(estimate.allowedClaim, 'not_established');
+});
+
 test('AI-versus-incumbent claim requires its extra economic/full-cost protocol fields', () => {
   const missingEconomic = modelDraft({ question: 'ai_vs_incumbent_net_benefit' });
   assert.ok(validateCausalProtocol(missingEconomic).some((error) => /economic outcome/i.test(error)));
