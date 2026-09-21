@@ -20,11 +20,11 @@ register used for GitHub-facing integration decisions.
 At the time of this checkpoint:
 
 - Canonical branch: `gpt56/magnum-opus-reconstruction`
-- Canonical SHA: `94ef073` (docs-only register alignment on top of exact green code head `dc2fe09`; G04 standards, I02/J03/J04/J05/J06 partial reconciliations and explicit J01/J02 dependency gates integrated)
+- Canonical SHA: `cccff98d04ac75d1a80d34e50fa333f7c578372a` (runtime Chromium/axe accessibility gate, CI topology contract, supply-chain test-only allowlist, and macOS plugin-host EPIPE lifecycle hardening; all pushed to `origin/gpt56/magnum-opus-reconstruction`)
 - Durable packet register: 76 total, 60 completed, 9 partial, 2 not started, 1 blocked external, 4 superseded with reason.
-- Exact-head CI: code head run `35624428865` concluded **success** across all eight configured jobs. Docs-only tip run `35625791036` concluded **failure** because the evidence-register grammar did not state that run's outcome; that register defect is being repaired without changing production code.
+- Exact-head CI: run `35630657686` concluded **success** across all nine configured jobs, including the new `browser-accessibility` job on `cccff98`.
 - Canonical worktree: clean and synchronized with `origin/gpt56/magnum-opus-reconstruction`.
-- Local baseline: serial root suite `2,132 total / 2,128 pass / 0 fail / 4 skipped`; causal/epistemic tranche `279/279`; G04/J03/I02/J04/J05/J06 focused frontier `16/16`; root/browser/team-server typechecks and build pass.
+- Local baseline: root suite `2,137 total / 2,133 pass / 0 fail / 4 skipped` after the CI-hardening contract update; plugin-host 9/9; dashboard/program contract tranche 6/6; runtime browser/axe 1/1; root/browser/team-server typechecks, build, and supply-chain audit pass.
 
 These counts are not the full local execution state.
 
