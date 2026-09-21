@@ -4,6 +4,8 @@ import { claimProfile } from '../src/epistemic/profile.ts';
 import { decideBudgetCap } from '../src/budget/capDecision.ts';
 import {
   appendBudgetControlAuditEvent,
+  budgetControlPendingMutation,
+  resolveBudgetControlPending,
   budgetControlPolicy,
   initialBudgetControlState,
   planBudgetControl,
@@ -178,6 +180,7 @@ test('J02: audit events form a verifiable hash chain and tampering is detected',
     at: '2026-09-22T00:01:00.000Z',
     reason: 'controller armed',
     decisionId: null,
+    transactionId: 'tx-1',
   });
   const second = appendBudgetControlAuditEvent(first, {
     policy: p,
@@ -188,8 +191,54 @@ test('J02: audit events form a verifiable hash chain and tampering is detected',
     at: '2026-09-22T00:02:00.000Z',
     reason: 'certified bounded action',
     decisionId: 'budget-cap:daily:example',
+    transactionId: 'tx-2',
   });
   assert.equal(verifyBudgetControlAudit(second).valid, true);
   const tampered = second.map((event, index) => index === 0 ? { ...event, reason: 'tampered' } : event);
   assert.equal(verifyBudgetControlAudit(tampered).valid, false);
+});
+
+
+test('J02: a durable pending mutation distinguishes complete, abort, and conflict recovery', () => {
+  const p = policy();
+  const previous = initialBudgetControlState(p, 100, '2026-09-22T00:01:00.000Z');
+  const plan = planBudgetControl({
+    policy: p,
+    state: previous,
+    decision: CERTIFIED,
+    currentDailyUsd: 100,
+    runawayMaxUsd: 5,
+    runawayTripped: false,
+    now: '2026-09-22T00:02:00.000Z',
+  });
+  assert.equal(plan.action, 'apply_recommended');
+  const pending = budgetControlPendingMutation({
+    transactionId: 'tx-recovery',
+    policy: p,
+    previousState: previous,
+    plan,
+    fromDailyUsd: 100,
+    at: '2026-09-22T00:02:00.000Z',
+  });
+
+  assert.equal(resolveBudgetControlPending(pending, p, 10, []).status, 'complete');
+  assert.equal(resolveBudgetControlPending(pending, p, 100, []).status, 'abort');
+  assert.equal(resolveBudgetControlPending(pending, p, 42, []).status, 'conflict');
+
+  const recorded = appendBudgetControlAuditEvent([], {
+    policy: p,
+    state: plan.nextState,
+    action: plan.action,
+    fromDailyUsd: 100,
+    toDailyUsd: 10,
+    at: '2026-09-22T00:02:00.000Z',
+    reason: 'committed',
+    decisionId: plan.decisionId,
+    transactionId: 'tx-recovery',
+  });
+  assert.equal(resolveBudgetControlPending(pending, p, 100, recorded).status, 'already_recorded');
+  assert.throws(
+    () => resolveBudgetControlPending(pending, policy({ version: 2 }), 10, []),
+    /policy/i,
+  );
 });
