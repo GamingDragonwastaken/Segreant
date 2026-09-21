@@ -3559,6 +3559,12 @@ Lab implementation, calibration result, decision feature or production route.
 
 **Limitation.** The packet has no admitted implementation yet. A future candidate must earn promotion with independent evidence and a reversible fallback; a report or design is not a benchmark result.
 
+## D-269 — J04 preserves showback foundations while refusing premature AI-capital authority
+
+**Problem.** Fiscus already has exact allocation/showback and marginal-return primitives, but the dossier's AI-capital workstream also needs commitments, capacity, spend decomposition, opportunity gaps and fairness. Treating the existing showback split as a capital account or chargeback would overclaim.
+
+**Decision.** WP-J04 is `PARTIAL`. `docs/program/J04-AI-CAPITAL-SHOWBACK-BOUNDARY.md` records the proven showback/marginal foundations and the typed schemas/conservation obligations still required. Allocation remains showback-only and non-causal; no provider commitment authority, chargeback settlement, autonomous capital action, or business-value claim is introduced.
+
 ## D-267 — I02 remains partial because existing epistemic readers do not cover every dossier surface
 
 **Problem.** The repository already has a Claim Inspector/kernel viewer, as-of graph replay, progressive disclosure, and preference/decision primitives, but that is not the same as implementing every additional epistemic UX surface named by the dossier.
