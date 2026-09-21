@@ -3,15 +3,24 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-test('J01 is a completed review-only OPE boundary and J02 remains an explicit no-action gate', () => {
-  const text = readFileSync(join(import.meta.dirname, '..', 'docs', 'program', 'J01-J02-DEPENDENCY-GATES.md'), 'utf8');
-  for (const marker of ['causal-v3', 'propensity', 'overlap', 'doubly robust', 'safe', 'circuit breaker', 'no-action']) {
-    assert.match(text, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+test('J01 and J02 expose separate evidence and bounded action boundaries', () => {
+  const doc = readFileSync(join(import.meta.dirname, '..', 'docs', 'program', 'J01-J02-DEPENDENCY-GATES.md'), 'utf8');
+  for (const marker of [
+    'propensity',
+    'overlap',
+    'doubly robust',
+    'budget.dailyUsd',
+    'safe baseline',
+    'circuit breaker',
+    'default no action',
+    'explorationRateCap = 0',
+    'operator/external override',
+    'write-ahead',
+  ]) {
+    assert.ok(doc.toLowerCase().includes(marker.toLowerCase()), `missing J01/J02 marker: ${marker}`);
   }
-  assert.match(text, /not[_ ]started|blocked_external/i);
-  assert.match(text, /retrospective model comparisons.*not OPE/i);
-  assert.match(text, /COMPLETED/i);
-  assert.match(text, /RED-first coverage is\s+13\/13/i);
-  assert.match(text, /pure evidence\s+boundary/i);
-  assert.match(text, /exploration.*budget.*tail-risk/i);
+  assert.doesNotMatch(doc, /J02.*BLOCKED_EXTERNAL/i);
+  assert.match(doc, /J01 and J02 are now `COMPLETED`/i);
+  assert.match(doc, /retrospective model comparisons.*observational/i);
+  assert.match(doc, /DecisionCertificate alone still cannot mutate/i);
 });
