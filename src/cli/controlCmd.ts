@@ -5,18 +5,22 @@
  * a second prompt. Re-run from a scheduler for continuous control.
  */
 
-import { existsSync, readFileSync, renameSync, writeFileSync, appendFileSync } from 'node:fs';
+import { closeSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, unlinkSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { Store } from '../store/db.ts';
 import { BudgetGuard } from '../budget/guard.ts';
 import { issueBudgetCapDecision } from '../budget/capDecision.ts';
 import {
   appendBudgetControlAuditEvent,
+  budgetControlPendingMutation,
+  resolveBudgetControlPending,
   budgetControlPolicy,
   initialBudgetControlState,
   planBudgetControl,
   verifyBudgetControlAudit,
   type BudgetControlAuditEvent,
+  type BudgetControlPendingMutation,
   type BudgetControlPolicy,
   type BudgetControlState,
 } from '../budget/onlineControl.ts';
@@ -40,6 +44,34 @@ function policyFromFile(path: string): BudgetControlPolicy {
 
 function stateFile(): string { return join(fiscusHome(), 'budget-control-state.json'); }
 function auditFile(): string { return join(fiscusHome(), 'budget-control-audit.jsonl'); }
+function pendingFile(): string { return join(fiscusHome(), 'budget-control-pending.json'); }
+
+function durableWrite(path: string, text: string): void {
+  const temp = `${path}.tmp-${process.pid}-${randomUUID()}`;
+  let fd: number | null = null;
+  try {
+    fd = openSync(temp, 'wx', 0o600);
+    writeSync(fd, text, undefined, 'utf8');
+    fsyncSync(fd);
+    closeSync(fd);
+    fd = null;
+    renameSync(temp, path);
+  } catch (error) {
+    if (fd !== null) closeSync(fd);
+    try { if (existsSync(temp)) unlinkSync(temp); } catch { /* preserve original error */ }
+    throw error;
+  }
+}
+
+function durableAppend(path: string, text: string): void {
+  const fd = openSync(path, 'a', 0o600);
+  try {
+    writeSync(fd, text, undefined, 'utf8');
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+}
 
 function loadAudit(): readonly BudgetControlAuditEvent[] {
   const path = auditFile();
@@ -66,14 +98,76 @@ function loadState(policy: BudgetControlPolicy, currentDailyUsd: number | null, 
 }
 
 function writeState(state: BudgetControlState): void {
-  const path = stateFile();
-  const temp = `${path}.tmp-${process.pid}`;
-  writeFileSync(temp, JSON.stringify(state, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
-  renameSync(temp, path);
+  durableWrite(stateFile(), JSON.stringify(state, null, 2) + '\n');
 }
 
 function appendAudit(event: BudgetControlAuditEvent): void {
-  appendFileSync(auditFile(), JSON.stringify(event) + '\n', { encoding: 'utf8', mode: 0o600 });
+  durableAppend(auditFile(), JSON.stringify(event) + '\n');
+}
+
+function writePending(pending: BudgetControlPendingMutation): void {
+  durableWrite(pendingFile(), JSON.stringify(pending, null, 2) + '\n');
+}
+
+function loadPending(): BudgetControlPendingMutation | null {
+  const path = pendingFile();
+  if (!existsSync(path)) return null;
+  try {
+    return JSON.parse(readFileSync(path, 'utf8')) as BudgetControlPendingMutation;
+  } catch {
+    throw new Error('budget control pending mutation is unreadable; refusing autonomous action');
+  }
+}
+
+function clearPending(): void {
+  const path = pendingFile();
+  if (existsSync(path)) unlinkSync(path);
+}
+
+function recoverPending(policy: BudgetControlPolicy, currentDailyUsd: number | null): void {
+  const pending = loadPending();
+  if (pending === null) return;
+  const audit = loadAudit();
+  const resolution = resolveBudgetControlPending(pending, policy, currentDailyUsd, audit);
+  if (resolution.status === 'conflict') {
+    throw new Error(`budget control recovery conflict: ${resolution.reason}`);
+  }
+  if (resolution.status === 'already_recorded') {
+    clearPending();
+    return;
+  }
+  if (resolution.status === 'complete') {
+    writeState(pending.nextState);
+    const next = appendBudgetControlAuditEvent(audit, {
+      transactionId: pending.transactionId,
+      policy,
+      state: pending.nextState,
+      action: pending.action,
+      fromDailyUsd: pending.fromDailyUsd,
+      toDailyUsd: pending.toDailyUsd,
+      at: pending.at,
+      reason: `${pending.reason}; recovered after interrupted durable commit`,
+      decisionId: pending.decisionId,
+    });
+    appendAudit(next[next.length - 1]!);
+    clearPending();
+    return;
+  }
+
+  writeState(pending.previousState);
+  const next = appendBudgetControlAuditEvent(audit, {
+    transactionId: pending.transactionId,
+    policy,
+    state: pending.previousState,
+    action: 'no_action',
+    fromDailyUsd: pending.fromDailyUsd,
+    toDailyUsd: pending.fromDailyUsd,
+    at: pending.at,
+    reason: 'recovered pending control mutation before the config change committed',
+    decisionId: pending.decisionId,
+  });
+  appendAudit(next[next.length - 1]!);
+  clearPending();
 }
 
 export async function cmdBudgetControl(flags: Flags): Promise<void> {
@@ -86,6 +180,7 @@ export async function cmdBudgetControl(flags: Flags): Promise<void> {
 
   const policy = policyFromFile(policyPath);
   const cfg = loadConfig();
+  recoverPending(policy, cfg.budget.dailyUsd);
   const store = new Store(dbPath());
   try {
     const now = new Date().toISOString();
@@ -119,13 +214,18 @@ export async function cmdBudgetControl(flags: Flags): Promise<void> {
     let auditHead: string | null = null;
     if (flags.apply) {
       const before = cfg.budget.dailyUsd;
-      if (plan.action !== 'no_action') {
-        cfg.budget.dailyUsd = plan.nextDailyUsd;
-        saveConfig(cfg);
-        applied = true;
-      }
-      writeState(plan.nextState);
+      const transactionId = randomUUID();
+      const history = loadAudit();
+      const reason = plan.reasons.length > 0
+        ? plan.reasons.join('; ')
+        : plan.action === 'apply_recommended'
+          ? 'certified decision satisfied the delegated control envelope'
+          : plan.action === 'rollback_to_baseline'
+            ? 'circuit breaker restored the safe baseline'
+            : 'controller evaluated the policy and made no mutation';
 
+      // Persist the certificate before changing the live cap. A failure here is
+      // therefore a refusal, never an unaudited spend mutation.
       if (plan.action === 'apply_recommended' && advice.decision !== null) {
         const coverage = advice.economic?.coverage === 'exact'
           ? 'complete'
@@ -142,15 +242,27 @@ export async function cmdBudgetControl(flags: Flags): Promise<void> {
         certificateBundleId = issued.certificateBundle.id;
       }
 
-      const history = loadAudit();
-      const reason = plan.reasons.length > 0
-        ? plan.reasons.join('; ')
-        : plan.action === 'apply_recommended'
-          ? 'certified decision satisfied the delegated control envelope'
-          : plan.action === 'rollback_to_baseline'
-            ? 'circuit breaker restored the safe baseline'
-            : 'controller evaluated the policy and made no mutation';
+      if (plan.action !== 'no_action') {
+        const pending = budgetControlPendingMutation({
+          transactionId,
+          policy,
+          previousState: state,
+          plan,
+          fromDailyUsd: before,
+          at: now,
+        });
+        // Write-ahead intent first. If the process dies after saveConfig but
+        // before state/audit, the next invocation can prove whether the config
+        // reached the from-side or to-side and finish/abort idempotently.
+        writePending(pending);
+        cfg.budget.dailyUsd = plan.nextDailyUsd;
+        saveConfig(cfg);
+        applied = true;
+      }
+
+      writeState(plan.nextState);
       const next = appendBudgetControlAuditEvent(history, {
+        transactionId,
         policy,
         state: plan.nextState,
         action: plan.action,
@@ -163,6 +275,7 @@ export async function cmdBudgetControl(flags: Flags): Promise<void> {
       const event = next[next.length - 1]!;
       appendAudit(event);
       auditHead = event.hash;
+      if (plan.action !== 'no_action') clearPending();
     }
 
     const payload = {
