@@ -7,9 +7,9 @@
 | | |
 | --- | --- |
 | Branch | `gpt56/magnum-opus-reconstruction` — never `main`, never force-pushed |
-| Last CI-verified exact head | `079c5ccf28c3ec90a0ead3ed4ee345f49539c1da` — run `35646161360`, **success on all configured jobs**, observed 2026-09-21. |
-| Code ahead of that head | `d643af9` — structured I02 epistemic UX bundle; exact-head CI run is in progress. |
-| Local gates on the current tree | Root typecheck/build and focused causal/epistemic UX tranches are clean. Exact local evidence includes E04 6/6, E05 6/6, E06 plan CLI 1/1, J04 5/5, and I02 4/4; the prior full local suite was 2,155 total / 2,148 pass / 3 failures from pre-fix parity/sweep/doc expectations, all re-run green in focused coverage. |
+| Last CI-verified exact head | `a13bea1fcf59e43f2d844282befb368fc0f5a610` — run `35652074768`, **success on all configured jobs**, observed 2026-09-21. |
+| Code ahead of that head | none — local checkout is clean and synchronized with `origin/gpt56/magnum-opus-reconstruction`. |
+| Local gates on the current tree | Root typecheck/build and focused causal/epistemic/research tranches are clean. Exact evidence includes E04 6/6, E05 6/6, E06 plan 1/1 plus family 4/4, J04 5/5, I02 4/4, J03 profile/boundary 6/6; GitHub run `35652074768` independently passed the full matrix. |
 | Dossier source | `FISCUS_EXECUTION_DOSSIER_III.md` is **not in this checkout and not in git history** — it was an owner-supplied input. `docs/program/PACKET-INVENTORY.md` is the surviving mechanical enumeration of all 76 packets and is authoritative here. Do not re-derive a packet count from anything else. |
 
 ## Packet accounting
