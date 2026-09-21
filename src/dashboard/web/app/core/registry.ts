@@ -254,6 +254,10 @@ export const CAPABILITIES: readonly Capability[] = [
     guiEvidence: { file: 'views/value.ts', token: 'matured?.economic', note: 'the Value view renders exact/partial/legacy coverage of matured spend; the period ledger itself is CLI only' },
   },
   {
+    id: 'capital', label: 'AI-capital review', plain: 'Review committed capacity, consumption, showback, and declared gaps.',
+    territory: 'evidence', consequence: 'read', coverage: 'planned', command: 'fiscus capital evaluate --options <file>',
+  },
+  {
     id: 'backup', label: 'Back up the ledger', plain: 'Copy the local ledger somewhere safe, with a manifest that proves the copy.',
     territory: 'data', consequence: 'local', coverage: 'planned', command: 'fiscus backup --out <file>',
   },

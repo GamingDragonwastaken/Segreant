@@ -144,6 +144,11 @@ const CONSUMERS: ReadonlyArray<{ file: string; klass: Classification; why: strin
     klass: 'b',
     why: 'buckets and lines are partitioned by currency+basis and never summed across, but sourceBases is a basis-only summary that a multi-currency run collapses to one entry. The figure is right; the summary of its basis is not (D-200)',
   },
+  {
+    file: 'src/capital.ts',
+    klass: 'b',
+    why: 'review-only capital snapshots require one declared currency and economic basis, and every exact operation refuses cross-currency/basis arithmetic; no FX translation or provider-authoritative conversion is attempted',
+  },
 
   // --- (c) not routed, single-currency by construction --------------------
   {

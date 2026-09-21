@@ -24,6 +24,7 @@ import { cmdTeam, cmdReceipt, cmdJudge, cmdTeamPush } from './cli/teamCmd.ts';
 import { cmdConnect } from './cli/connectCmd.ts';
 import { cmdEgress } from './cli/egressCmd.ts';
 import { cmdCausal } from './cli/causalCmd.ts';
+import { cmdCapital } from './cli/capitalCmd.ts';
 import { cmdAlerts, cmdDoctor, cmdInit, cmdGuide, cmdAudit } from './cli/opsCmd.ts';
 import { cmdShow, cmdSources, cmdExport, cmdConfig, cmdBudget, cmdPrune, cmdProject } from './cli/showCmd.ts';
 import { cmdStart, cmdDemo, cmdPricing, cmdBaseline, cmdReprice } from './cli/runCmd.ts';
@@ -55,6 +56,10 @@ function cmdHelp(): void {
                           mutations and v2 public projection remain deferred.
                           Ordinary value, Lift, and price scenarios cannot become
                           causal claims; this command never changes provider routing.
+    capital evaluate      Review-only exact AI-capital decomposition from a bounded
+                          JSON snapshot (--options <file>, --json). Distinguishes
+                          commitment, consumption, showback, opportunity and
+                          policy-relative fairness; no chargeback or action.
     today | week | month  Show spend for a window      (--json)
     economic              Inspect exact economic events, roles, bases, and legacy coverage
                           (--days N | --all, --target-currency UNIT, --as-of <ISO>,
@@ -277,6 +282,9 @@ async function main(): Promise<void> {
     case 'causal':
     case 'study':
       cmdCausal(flags);
+      break;
+    case 'capital':
+      cmdCapital(flags);
       break;
     case 'init':
       cmdInit();

@@ -3675,3 +3675,31 @@ boundary. It refuses unsupported evidence, records policy provenance, persists
 the action log append-only, and returns no execution authority. WP-J02 remains
 `NOT_STARTED` as the separate online-control packet; no spend-changing or
 routing action is authorized by J01.
+
+## D-276 — J04 closes at a typed, exact, review-only AI-capital boundary
+
+**Problem.** Existing allocation/showback and marginal-return primitives were
+useful but did not distinguish committed capacity from consumption, did not
+conserve direct/allocated/realized spend, and could be relabelled into a
+chargeback, opportunity, fairness, or business-value claim by a caller.
+
+**Fix.** `src/capital.ts` adds a versioned `CapitalAccountInput` and
+`CapitalAccountResult` over exact `Money`. The evaluator validates bounded
+half-open observations, currency/basis identity, committed-versus-consumed-
+versus-reserved capacity, unused commitment, direct/allocated/full/realized/
+avoidable spend, and marginal scenarios that are kept outside realized spend.
+It refuses negative amounts, duplicate observations, capacity violations, and
+direct-plus-allocated totals that differ from realized cash. Coverage is an
+explicit field rather than an inference from row count. A declared target
+produces a `counterfactual_only` opportunity gap; a declared group policy
+produces a `policy_relative`/`descriptive_only` fairness spread. The bounded
+`fiscus capital evaluate --options <file> --json` consumer is review-only and
+cannot write a Store row, change a budget, route a request, settle chargeback,
+or authorize payment.
+
+**Decision.** WP-J04 is `COMPLETED` at this repository-side review boundary.
+The evaluator does not claim provider commitment authority, invoice/request
+reconciliation, causal effect, or business value. A future durable capital
+ledger requires an owner-approved source identity, retention policy, and
+reconciliation contract rather than a more permissive interpretation of this
+snapshot evaluator. Focused coverage is 5/5; root typecheck and build pass.
