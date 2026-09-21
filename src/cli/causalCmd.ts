@@ -14,6 +14,7 @@ import type { Flags } from './flags.ts';
 import { printJson } from './ui.ts';
 import { readBoundedUtf8File, RESOURCE_LIMITS } from '../util/resource-limits.ts';
 import type { OpeEvaluationOptions } from '../causal/ope.ts';
+import { assessCausalDesign, type CausalDesignPlan } from '../causal/design.ts';
 
 function requireStringFlag(flags: Flags, name: string): string {
   const value = flags[name];
@@ -64,6 +65,7 @@ function usage(): void {
   console.log('  fiscus causal inspect <study-id> [--json]');
   console.log('  fiscus causal verify <study-id> [--json]');
   console.log('  fiscus causal ope --options <file> [--json]');
+  console.log('  fiscus causal design --options <file> [--json]');
   console.log('');
   console.log('  OPE reads only the Store-owned append-only action log. It is review-only,');
   console.log('  not a causal treatment effect and never authorizes policy execution.');
@@ -138,6 +140,20 @@ export function cmdCausal(flags: Flags): void {
       throw new CausalCliLegacyInspectOnlyError('register a version-1 protocol');
     }
     throw new CausalCliV2DeferredError('protocol registration');
+  }
+  if (action === 'design') {
+    const optionsFile = requireStringFlag(flags, 'options');
+    const supplied = readJsonFile(optionsFile);
+    if (typeof supplied !== 'object' || supplied === null || Array.isArray(supplied)) {
+      throw new Error('causal design options must be a JSON object');
+    }
+    const assessment = assessCausalDesign(supplied as CausalDesignPlan);
+    emit({
+      operation: 'causal_design_assessment',
+      assessment,
+      boundary: 'Review-only protocol-linked design declaration; not observed missingness, interference, transportability, or causal-effect evidence.',
+    }, flags);
+    return;
   }
   const store = new Store(dbPath());
   try {

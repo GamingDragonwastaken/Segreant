@@ -3703,3 +3703,27 @@ reconciliation, causal effect, or business value. A future durable capital
 ledger requires an owner-approved source identity, retention policy, and
 reconciliation contract rather than a more permissive interpretation of this
 snapshot evaluator. Focused coverage is 5/5; root typecheck and build pass.
+
+## D-277 — E04 closes at a protocol-linked missingness/interference design boundary
+
+**Problem.** The causal estimator disclosed per-arm missingness and refused to
+impute or reweight, but the durable program still had no typed place to declare
+missingness indicators/reasons, attrition sensitivity, cluster identity,
+interference assumptions, or exposure mappings for estimands that require them.
+
+**Fix.** `src/causal/design.ts` adds a versioned `CausalDesignPlan` bound to the
+committed protocol hash and a fail-closed `assessCausalDesign()` result. The
+plan names the target population, missingness mechanism and reason vocabulary,
+an attrition-sensitivity range, interference assumption, optional cluster
+source, exposure-map digest and explicit estimand set. Cluster and exposure
+estimands are withheld without the corresponding cluster/mapping declaration;
+unknown missingness is retained as unknown; and `none_declared` interference
+is labelled an assumption rather than evidence of absence. The bounded
+`fiscus causal design --options <file> --json` consumer has six RED-first tests
+including the packaged CLI path.
+
+**Decision.** WP-E04 is `COMPLETED` at this repository-side design boundary.
+The declaration does not observe attrition, validate an exposure mapping in the
+world, establish interference absence, or issue a causal effect. Governed study
+records and external evidence remain required for those claims; the existing
+estimator's no-imputation/no-reweighting boundary is unchanged.

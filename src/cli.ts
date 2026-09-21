@@ -56,6 +56,8 @@ function cmdHelp(): void {
                           mutations and v2 public projection remain deferred.
                           Ordinary value, Lift, and price scenarios cannot become
                           causal claims; this command never changes provider routing.
+                          causal design --options <file> checks protocol-linked
+                          missingness, attrition, interference and exposure declarations.
     capital evaluate      Review-only exact AI-capital decomposition from a bounded
                           JSON snapshot (--options <file>, --json). Distinguishes
                           commitment, consumption, showback, opportunity and
