@@ -3510,3 +3510,35 @@ Lab implementation, calibration result, decision feature or production route.
 **Fix.** `causal_inference_plans` is an immutable local table keyed by study and bound to the committed protocol hash. `Store.registerCausalInferencePlan()` validates the plan, takes an immediate transaction lock, rejects unknown studies and any post-act registration, permits only byte-identical idempotent retries, and persists the canonical plan. Update/delete triggers protect the record. `causalInferenceLedger()` validates and loads the plan on every report, so the plan basis survives process restart and protocol mismatch fails closed. RED-first store coverage proves first-look plan basis, restart recovery, idempotence, conflict refusal, append-only protection, unknown-study refusal, and invalid-shape refusal (15/15 focused store tests; causal inference tranche 49/49; typecheck/build green).
 
 **Limitation.** This closes durable plan registration, not the whole E06 packet. No CLI/API setup surface creates plans yet; families remain per-study rather than question-level; multiplicity remains a union-bound count rather than a correlation-adjusted method; precision planning reports interval width and deliberately does not invent a probability of reaching a decision; and `claimAfterMultiplicity` remains a conservative Fiscus policy rather than a theorem.
+
+## D-261 — retained causal estimation is ITT-primary and block-aware
+
+**Problem.** The registered protocol declared blocked equal randomization, but the estimator pooled assigned-arm means and rejected any execution whose observed plan deviated. That neither used the registered block structure nor represented the intention-to-treat question honestly when a unit received a different plan.
+
+**Fix.** Qualification now verifies block identity/allocation consistency, refuses incomplete or unbalanced retained blocks, and accepts a deviated execution only when the assigned and actual plan identities remain verifiable. The estimator computes assignment-count-weighted within-block contrasts with the same predeclared bounded-outcome radius, keeps the unit in its assigned arm, and states that per-protocol/CACE/LATE effects are not estimated. RED-first coverage includes noncompliance, incomplete/conflicting blocks, permutation invariance, and malformed evidence; the causal core/ledger/issuance tranche is green.
+
+**Limitation.** The local lineage cannot prove that an entire block or eligible population was never omitted, and no per-protocol or interference-adjusted estimand is being invented.
+
+## D-262 — missingness and interference are disclosed at the estimator boundary
+
+**Problem.** A missing outcome could otherwise be read as a smaller denominator or an attrition rate of zero, while complete retained data could be mistaken for evidence that units did not interfere.
+
+**Fix.** Every causal estimate now carries per-arm retained-assignment and completed-pair counts, names zero-assignment missingness as unknown, refuses imputation/reweighting/complete-case reinterpretation, and states that attrition and the missingness mechanism remain unknown. The estimator explicitly says interference is not assessed. RED-first tests cover missing outcomes, empty assignment support, and the complete-data non-claim.
+
+**Limitation.** Protocol-level missingness indicators/reasons, attrition bounds or sensitivity sets, cluster/interference declarations, exposure mappings, and estimand-specific qualification remain open; the packet is therefore `PARTIAL`.
+
+## D-263 — treatment transport across claim coordinates requires witnessed target evidence
+
+**Problem.** A coordinate witness could make a causal claim appear to move across subject, time, measurement-model, or treatment context without proving that the target population/regime had any supporting evidence. Treatment identity was named in the protocol but transportability was not a typed obligation.
+
+**Fix.** `causal_transport` is a typed witness kind with explicit source/target claim identities and a retained target evidence requirement distinct from source evidence. Derivation legality requires it for causal coordinate changes; the persistent ledger checks witness identity, target backing, payload presence, epistemic support, and revocation propagation. Focused transport/issuance/epistemic coverage is green.
+
+**Limitation.** Cross-study pooling and bridge selection remain unimplemented, no operator-facing transport declaration workflow exists, and local target evidence does not establish external transport validity; WP-E05 remains `PARTIAL`.
+
+## D-264 — causal design and estimator identities are routed through one registry
+
+**Problem.** The causal subsystem contained a randomized ITT estimator alongside a deferred v2 protocol, an archived paired-return experiment, and a standalone sequential-rate lane. Without an explicit authority, future callers could treat any of them as interchangeable causal truth.
+
+**Fix.** `DESIGN_ESTIMATOR_REGISTRY` names every lane and its status. Only the retained blocked ITT v1 resolves for estimation; v2/deferred, archived, and noncausal entries resolve to no causal estimator. The estimate carries `designEstimatorId`, kernel issuance requires that identity, and legacy snapshots project `null` without rewriting their stored bytes. RED-first registry/issuance/snapshot coverage is 4/4; typecheck/build pass.
+
+**Limitation.** This is an authority/routing closure, not implementation of the deferred v2 analysis or the archived/noncausal methods.

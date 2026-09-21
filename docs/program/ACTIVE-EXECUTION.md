@@ -7,14 +7,14 @@
 | | |
 | --- | --- |
 | Branch | `gpt56/magnum-opus-reconstruction` — never `main`, never force-pushed |
-| Last CI-verified exact head | `394871467d8f0216dafd308528d3ed2e7830eea4` — run `35533297107`, **success on all eight configured jobs**, observed 2026-09-20. Includes the E01 estimand-registry implementation. |
-| Code ahead of that head | `6c58936` — E01 estimand-registry and local-inventory checkpoints; exact-head CI is pending for this current remote tip. |
+| Last CI-verified exact head | `560eaa1c6d840703006998f277ed2fb520110165` — run `35562385954`, **success on all eight configured jobs**, observed 2026-09-21. Includes D04 and the expert execution contract. |
+| Code ahead of that head | `bb5cfb2` — E02/E03/E04/E05 causal tranche plus durable E06 pre-registration; exact-head CI is pending for this current remote tip. |
 | Local gates on the current tree | Root typecheck and browser typecheck clean; `npm run build` clean; full root suite 2072/2089 pass in THIS execution environment — the 17 failures are environment-specific (Node 22 here vs. the repo's declared `>=24` and CI's actual Node 24; missing `node:sqlite` `setAuthorizer`; sandbox subprocess/timing limits) and reproduce identically on the unmodified `af0cd11` tree, confirmed before attributing anything to D-254, and confirmed again by CI itself passing all eight jobs at `9eb869b`. Causal-focused suites (`causal-issuance`, `causal-store`, `causal-cli`, `causal-inference-store`, `causal-analysis-snapshot-path`, `ledger-strengthening-obligation`) are 109/110 locally, the one failure being the same environment-specific `setAuthorizer` gap. |
 | Dossier source | `FISCUS_EXECUTION_DOSSIER_III.md` is **not in this checkout and not in git history** — it was an owner-supplied input. `docs/program/PACKET-INVENTORY.md` is the surviving mechanical enumeration of all 76 packets and is authoritative here. Do not re-derive a packet count from anything else. |
 
 ## Packet accounting
 
-76 packets. **55 COMPLETED, 3 PARTIAL, 13 NOT_STARTED, 0 IN_PROGRESS, 1 BLOCKED_EXTERNAL, 4 SUPERSEDED_WITH_REASON.** Regenerate rather than trust this line:
+76 packets. **59 COMPLETED, 4 PARTIAL, 8 NOT_STARTED, 0 IN_PROGRESS, 1 BLOCKED_EXTERNAL, 4 SUPERSEDED_WITH_REASON.** Regenerate rather than trust this line:
 
 ```bash
 grep -oE '\| `(NOT_STARTED|IN_PROGRESS|PARTIAL|COMPLETED|BLOCKED_EXTERNAL|SUPERSEDED_WITH_REASON)` \|' docs/program/PACKET-INVENTORY.md | sort | uniq -c
