@@ -20,9 +20,9 @@ register used for GitHub-facing integration decisions.
 At the time of this checkpoint:
 
 - Canonical branch: `gpt56/magnum-opus-reconstruction`
-- Canonical SHA: `5587b1872b7ed066142699f633aff71a70c72680` (docs checkpoint on green code head `024a2fe45c264d3610120910db660d9fbc53b874`; J01 provenance-aware OPE plus Store-owned append-only action observations, pushed to `origin/gpt56/magnum-opus-reconstruction`)
+- Canonical SHA: `481383638f1a2519891b923159301385d50c66ea` (J01 review-only OPE closure on top of the green browser/runtime and market-review checkpoints; pushed to `origin/gpt56/magnum-opus-reconstruction`)
 - Durable packet register: 76 total, 63 completed, 7 partial, 1 not started, 1 blocked external, 4 superseded with reason.
-- Exact-head CI: run `35634944716` concluded **success** across all nine configured jobs, including browser accessibility and the team-server matrix.
+- Exact-head CI: run `35641090995` concluded **success** across all nine configured jobs, including browser accessibility and the team-server matrix.
 - Canonical worktree: clean and synchronized with `origin/gpt56/magnum-opus-reconstruction`.
 - Local baseline: root suite exits 0 under the compact reporter after the J01 Store schema; focused OPE/Store/dependency tranche 12/12; plugin-host 9/9; runtime browser/axe 1/1; root/browser/team-server typechecks, build, and supply-chain audit pass.
 
