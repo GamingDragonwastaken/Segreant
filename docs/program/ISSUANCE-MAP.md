@@ -114,7 +114,7 @@ from the table directly below it.
 | `causal.estimate` | `src/causal/estimate.ts` | kernel_primitive | product | An assigned-arm difference with a finite-range interval |
 | `causal.issuance` | `src/causal/epistemic.ts` | canonical | product | A randomized study supports a causal effect, bound by derivation to the randomization |
 | `billing.countermodels` | `src/billing/countermodels.ts` | kernel_primitive | product | What the reconciliation residual degrades to if one of its stated conditions is false, and whether anything Fiscus has could tell |
-| `decision.certificate` | `src/decision/engine.ts` | **unmigrated_authority** | product | One action robustly dominates the alternatives under the declared utility intervals |
+| `decision.certificate` | `src/decision/engine.ts` | **kernel_primitive** | product | Pure interval-dominance primitive; product presentation/action routes through the canonical adapter before strengthening |
 | `decision.certificate.issuance` | `src/decision/epistemic.ts` | **canonical** | product | One action robustly dominates the alternatives under the declared utility intervals, bound to interval Evidence and a decision-fitness Derivation |
 
 Each module states its own class in its own docblock, so a reader opening the
@@ -160,17 +160,19 @@ because it is arithmetic on the run rather than judgement, and it is the first
 thing to migrate if these worlds ever acquire a source other than the run
 itself. See D-084.
 
-**`decision.certificate`** produces a dominance certificate, which is a
-decision-fitness claim. The pure engine remains an unmigrated primitive, while
-`src/decision/epistemic.ts` is now the canonical adapter: it recomputes the
-certificate, issues the interval observation, and for strict dominance binds a
-`decision_fitness` Witness and Derivation to the source Evidence. Undetermined
-certificates issue no decision-fitness claim. Since D-220 the budget-cap
-consumer calls this adapter from `fiscus budget --recommend --apply`; the
-certificate a cap is set under is persisted as a `no_action` bundle so a later
-withdrawal of its basis evidence is visible on read. Closing the engine row
-itself requires the display path to read a kernel-checked claim rather than the
-bare certificate.
+**`decision.certificate`** is now a pure decision-engine primitive rather
+than a claim-strengthening authority. `src/decision/epistemic.ts` is the
+canonical adapter: it recomputes the certificate, issues the interval
+observation, and for strict dominance binds a `decision_fitness` Witness and
+Derivation to the source Evidence. Undetermined certificates issue no
+decision-fitness claim. The final reconciliation removed the remaining display
+bypass: `fiscus budget --recommend` constructs
+`previewBudgetCapIssuance` before JSON or terminal presentation and renders the
+adapter-recomputed certificate plus its kernel Claim; the online budget
+controller likewise requires that canonical preview to yield a decision Claim
+before its separate DAL-3/control-policy gate can act. `--apply` persists the
+same bundle. The engine remains reusable mathematics, but no product path treats
+its bare return value as a stronger claim.
 
 ## What this map does not establish
 
@@ -178,9 +180,7 @@ It does not establish that the canonical boundaries are correct — only that th
 route through the kernel, where correctness is enforced by other tests. It does
 not establish that the `display_only` and `integrity_only` classifications are
 the right *design*, only that those files hold the authority they say they hold.
-And it does not close AII-036: the pure engine remains an unmigrated authority
-until every consequential certificate construction route is forced through the
-adapter. The adapter itself is not yet reachable from a product action surface.
+AII-036's issuance-frontier condition is closed: every mapped strengthening boundary now routes through the kernel contract. This map still does not prove the mathematical or evidential correctness of those boundaries; their domain tests and ledger legality checks carry that burden.
 
 Nor does closing the causal pair make any causal estimate more true. Issuance
 adds revocability and an auditable binding; the interval, the joint decision rule
