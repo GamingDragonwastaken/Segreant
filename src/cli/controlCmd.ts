@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Store } from '../store/db.ts';
 import { BudgetGuard } from '../budget/guard.ts';
-import { issueBudgetCapDecision } from '../budget/capDecision.ts';
+import { issueBudgetCapDecision, previewBudgetCapIssuance } from '../budget/capDecision.ts';
 import {
   appendBudgetControlAuditEvent,
   budgetControlPendingMutation,
@@ -199,10 +199,25 @@ export async function cmdBudgetControl(flags: Flags): Promise<void> {
     const advice = budgetAdvice(store, cfg, { windowDays: days, realizedSpendShare, frontier: frontierCells });
     const guard = new BudgetGuard(store, cfg.budget).evaluate();
     const state = loadState(policy, cfg.budget.dailyUsd, now);
+    const coverage = advice.economic?.coverage === 'exact'
+      ? 'complete'
+      : advice.economic?.coverage === 'partial'
+        ? 'partial'
+        : 'unknown';
+    const canonicalDecision = advice.decision === null ? null : previewBudgetCapIssuance(advice.decision, {
+      issuedAt: now,
+      windowDays: days,
+      spendBasis: advice.spendBasis,
+      monetaryBasis: 'list',
+      seriesCoverage: coverage,
+    });
+    // A bare engine certificate never reaches the autonomous planner. The
+    // canonical adapter must first be able to construct a legal decision-fitness
+    // Claim; the separate changes-spend assurance remains enforced in the plan.
     const plan = planBudgetControl({
       policy,
       state,
-      decision: advice.decision,
+      decision: canonicalDecision?.decision === null ? null : advice.decision,
       currentDailyUsd: cfg.budget.dailyUsd,
       runawayMaxUsd: cfg.budget.runawayMaxUsd,
       runawayTripped: guard.runaway.tripped,
@@ -227,11 +242,6 @@ export async function cmdBudgetControl(flags: Flags): Promise<void> {
       // Persist the certificate before changing the live cap. A failure here is
       // therefore a refusal, never an unaudited spend mutation.
       if (plan.action === 'apply_recommended' && advice.decision !== null) {
-        const coverage = advice.economic?.coverage === 'exact'
-          ? 'complete'
-          : advice.economic?.coverage === 'partial'
-            ? 'partial'
-            : 'unknown';
         const issued = issueBudgetCapDecision(store.epistemic(), advice.decision, {
           issuedAt: now,
           windowDays: days,
