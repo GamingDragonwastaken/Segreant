@@ -13,6 +13,8 @@ import {
   openCausalInferenceLedger,
   reportCausalStudyEstimate,
   summarizeInferenceMultiplicity,
+  validateCausalInferencePlan,
+  type CausalInferencePlan,
   type CausalInferenceLedger,
   type CausalStudyInferenceReport,
   type RecordedInferentialAct,
@@ -336,6 +338,52 @@ function loadProtocol(db: DatabaseSync, studyId: string): AnyCommittedCausalStud
     STORED_PROTOCOL_SELECT + 'FROM causal_protocols WHERE study_id = ?',
   ).get(studyId) as StoredProtocolRow | undefined;
   return row ? decodeStoredProtocolRow(row).protocol : null;
+}
+
+/**
+ * Persist the one plan that bounds a study's inferential family.
+ *
+ * A plan is not a mutable setting: once the first act exists, changing it
+ * would relabel already-spent error budget. Idempotent re-registration is
+ * allowed only for byte-identical content, so a restart or repeated setup call
+ * cannot create a second opinion about the same family.
+ */
+export function registerCausalInferencePlan(
+  db: DatabaseSync,
+  studyId: string,
+  plan: CausalInferencePlan,
+): 'created' | 'existing' {
+  const protocol = loadProtocol(db, studyId);
+  if (protocol === null) throw new Error('cannot register an inference plan for an unknown causal study');
+  validateCausalInferencePlan(plan);
+  const encoded = canonicalJson({ ...plan, sliceIds: [...plan.sliceIds] });
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const existing = db.prepare(
+      'SELECT protocol_hash, plan_json FROM causal_inference_plans WHERE study_id = ?',
+    ).get(studyId) as { protocol_hash: string; plan_json: string } | undefined;
+    if (existing) {
+      if (existing.protocol_hash === protocol.protocolHash && existing.plan_json === encoded) {
+        db.exec('COMMIT');
+        return 'existing';
+      }
+      throw new Error('inference plan is already recorded with different immutable content');
+    }
+    const acts = db.prepare(
+      'SELECT 1 AS present FROM causal_inference_acts WHERE study_id = ? LIMIT 1',
+    ).get(studyId) as { present: number } | undefined;
+    if (acts) {
+      throw new Error('cannot register an inference plan after an inferential act exists');
+    }
+    db.prepare(
+      'INSERT INTO causal_inference_plans (study_id, protocol_hash, declared_at_ms, plan_json) VALUES (?, ?, ?, ?)',
+    ).run(studyId, protocol.protocolHash, plan.declaredAtMs, encoded);
+    db.exec('COMMIT');
+    return 'created';
+  } catch (error) {
+    try { db.exec('ROLLBACK'); } catch { /* preserve the registration failure */ }
+    throw error;
+  }
 }
 
 function requireStoredProtocol(
@@ -1693,16 +1741,27 @@ export function saveCausalAnalysis(
  * break into a smaller look count, which is the failure this whole mechanism
  * exists to prevent.
  *
- * No plan is loaded because no surface registers one. That is not a gap being
- * hidden: a plan must be declared before the first act or it is not a plan, so
- * the honest basis today is `recorded_acts_only`, and the report says so.
+ * A plan is loaded only when the Store registration boundary wrote one before
+ * the first act. The protocol hash is checked at load time so a plan cannot be
+ * transplanted between studies or silently survive a protocol replacement.
  */
 export function causalInferenceLedger(
   db: DatabaseSync,
   studyId: string,
   protocolHash: string,
 ): CausalInferenceLedger {
-  const empty = openCausalInferenceLedger({ studyId, protocolHash, plan: null });
+  const planRow = db.prepare(
+    'SELECT protocol_hash, plan_json FROM causal_inference_plans WHERE study_id = ?',
+  ).get(studyId) as { protocol_hash: string; plan_json: string } | undefined;
+  let plan: CausalInferencePlan | null = null;
+  if (planRow) {
+    if (planRow.protocol_hash !== protocolHash) {
+      throw new Error('stored inference plan does not bind the requested causal protocol');
+    }
+    plan = parseJson<CausalInferencePlan>(planRow.plan_json, 'inference plan');
+    validateCausalInferencePlan(plan);
+  }
+  const empty = openCausalInferenceLedger({ studyId, protocolHash, plan });
   const rows = db.prepare(
     'SELECT act_json FROM causal_inference_acts WHERE study_id = ? ORDER BY sequence',
   ).all(studyId) as Array<{ act_json: string }>;

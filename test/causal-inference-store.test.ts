@@ -45,6 +45,7 @@ import {
 } from '../src/causal/types.ts';
 import { canonicalJson, commitCausalProtocol } from '../src/causal/protocol.ts';
 import { Store } from '../src/store/db.ts';
+import type { CausalInferencePlan } from '../src/causal/inference-ledger.ts';
 import { createRetainedCausalV1AssignmentFixture } from './support/causalV1Fixture.ts';
 import { repeatedCostQualityData } from './support/causalStudyFixture.ts';
 import type { AddressInfo } from 'node:net';
@@ -430,4 +431,82 @@ test('the CLI records its own look, twice', () => {
   } finally {
     rmSync(temp, { recursive: true, force: true });
   }
+});
+
+function registeredPlan(overrides: Partial<CausalInferencePlan> = {}): CausalInferencePlan {
+  return {
+    declaredAtMs: 1_700_000_000_900,
+    maxLooks: 2,
+    endpointsPerLook: 2,
+    sliceIds: ['slice:registered_population'],
+    targetFamilywiseErrorRate: 0.1,
+    ...overrides,
+  };
+}
+
+test('a pre-registered inference plan persists before the first look and changes the report basis', () => {
+  withStore((store) => {
+    const studyId = seedQualified(store);
+    const plan = registeredPlan();
+    assert.equal(store.registerCausalInferencePlan(studyId, plan), 'created');
+    const first = store.reportCausalStudy(studyId, 1_700_000_001_000);
+    assert.equal(first?.multiplicity.basis, 'pre_registered_plan');
+    assert.equal(first?.multiplicity.plan?.maxLooks, 2);
+    assert.equal(first?.multiplicity.plan?.plannedActs, 4);
+    assert.equal(first?.multiplicity.plan?.actAlphaMeetsPlan, true);
+    assert.match(first?.multiplicity.limitations.join('\n') ?? '', /pre-registered plan of 2 look/);
+  });
+});
+
+test('a pre-registered inference plan survives reopening and cannot be replaced after acts exist', () => {
+  const temp = mkdtempSync(join(tmpdir(), 'fiscus-causal-plan-'));
+  const file = join(temp, 'fiscus.db');
+  const plan = registeredPlan();
+  try {
+    const first = new Store(file);
+    try {
+      const studyId = seedQualified(first);
+      assert.equal(first.registerCausalInferencePlan(studyId, plan), 'created');
+      assert.equal(first.registerCausalInferencePlan(studyId, plan), 'existing');
+      assert.throws(
+        () => first.raw().prepare('UPDATE causal_inference_plans SET plan_json = ? WHERE study_id = ?').run('{}', studyId),
+        /append-only/i,
+      );
+      assert.throws(
+        () => first.raw().prepare('DELETE FROM causal_inference_plans WHERE study_id = ?').run(studyId),
+        /append-only/i,
+      );
+      first.reportCausalStudy(studyId, 1_700_000_001_000);
+      assert.throws(
+        () => first.registerCausalInferencePlan(studyId, registeredPlan({ maxLooks: 3 })),
+        /cannot register.*after.*inferential act|different immutable/i,
+      );
+    } finally {
+      first.close();
+    }
+    const reopened = new Store(file);
+    try {
+      const second = reopened.reportCausalStudy('study-model', 1_700_000_002_000);
+      assert.equal(second?.multiplicity.basis, 'pre_registered_plan');
+      assert.equal(second?.multiplicity.plan?.maxLooks, 2);
+    } finally {
+      reopened.close();
+    }
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
+});
+
+test('a plan cannot be registered for an unknown study or with an invalid shape', () => {
+  withStore((store) => {
+    assert.throws(
+      () => store.registerCausalInferencePlan('missing-study', registeredPlan()),
+      /registered causal protocol|unknown causal study/i,
+    );
+    const studyId = seedQualified(store);
+    assert.throws(
+      () => store.registerCausalInferencePlan(studyId, registeredPlan({ sliceIds: [] })),
+      /at least one non-empty slice/i,
+    );
+  });
 });

@@ -166,7 +166,7 @@ function positiveInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
 }
 
-function validatePlan(plan: CausalInferencePlan): void {
+export function validateCausalInferencePlan(plan: CausalInferencePlan): void {
   if (!positiveInteger(plan.maxLooks)) throw new Error('inference plan maxLooks must be a positive integer');
   if (!positiveInteger(plan.endpointsPerLook)) throw new Error('inference plan endpointsPerLook must be a positive integer');
   if (!Array.isArray(plan.sliceIds) || plan.sliceIds.length === 0
@@ -208,7 +208,7 @@ export function openCausalInferenceLedger(input: {
   plan?: CausalInferencePlan | null;
 }): CausalInferenceLedger {
   const plan = input.plan ?? null;
-  if (plan !== null) validatePlan(plan);
+  if (plan !== null) validateCausalInferencePlan(plan);
   const genesisDigest = digestOf('fiscus.causal.inference-ledger', {
     studyId: input.studyId,
     protocolHash: input.protocolHash,

@@ -50,7 +50,7 @@ import type { ExactAllocationRunRecord } from './allocation.ts';
 import * as exactAllocation from '../alloc/exact.ts';
 import * as billing from './billing.ts';
 import { buildCausalStudyKernelIssuance, type CausalStudyKernelIssuance } from '../causal/epistemic.ts';
-import type { CausalStudyInferenceReport } from '../causal/inference-ledger.ts';
+import type { CausalInferencePlan, CausalStudyInferenceReport } from '../causal/inference-ledger.ts';
 import * as causal from './causal.ts';
 import * as causalLineage from './causalLineage.ts';
 import * as causalProducer from './causalProducer.ts';
@@ -2835,6 +2835,11 @@ export class Store {
    */
   reportCausalStudy(studyId: string, reportedAtMs = Date.now()): CausalStudyInferenceReport | null {
     return causal.reportCausalStudy(this.db, studyId, reportedAtMs);
+  }
+
+  /** Register the immutable inferential family before its first reported look. */
+  registerCausalInferencePlan(studyId: string, plan: CausalInferencePlan): 'created' | 'existing' {
+    return causal.registerCausalInferencePlan(this.db, studyId, plan);
   }
 
   /**

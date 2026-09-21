@@ -558,6 +558,19 @@ CREATE TABLE IF NOT EXISTS causal_inference_acts (
 CREATE INDEX IF NOT EXISTS idx_causal_inference_acts_study
   ON causal_inference_acts(study_id, sequence);
 
+-- A pre-registered inference plan is its own immutable fact. It must be
+-- written before the first inferential act, so loading it from this table keeps a
+-- process restart from silently falling back to recorded-acts-only arithmetic.
+CREATE TABLE IF NOT EXISTS causal_inference_plans (
+  study_id        TEXT PRIMARY KEY NOT NULL,
+  protocol_hash   TEXT NOT NULL,
+  declared_at_ms  INTEGER NOT NULL,
+  plan_json       TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_causal_inference_plans_protocol
+  ON causal_inference_plans(protocol_hash);
+
 CREATE INDEX IF NOT EXISTS idx_causal_analysis_latest
   ON causal_analysis_snapshots(study_id, computed_at_ms DESC, analysis_id DESC);
 
@@ -1181,6 +1194,7 @@ function installCausalImmutability(db: DatabaseSync): void {
     'causal_executions',
     'causal_outcomes',
     'causal_analysis_snapshots',
+    'causal_inference_plans',
     'causal_assignment_plans_v2',
     'causal_decisions_v2',
     'causal_assignment_units_v2',
