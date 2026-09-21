@@ -1,6 +1,7 @@
 # J01/J02 dependency gates
 
-J01 is now `PARTIAL`; J02 remains `NOT_STARTED`. The authority directive
+J01 is now `COMPLETED` at the review-only OPE boundary; J02 remains
+`NOT_STARTED`. The authority directive
 permits implementation under bounded delegated policy, but a design note is
 not an implementation and an OPE estimator is not an online controller.
 
@@ -21,17 +22,18 @@ Required prerequisites before code:
 The current repository does not satisfy those prerequisites. Ordinary
 retrospective model comparisons remain observational comparisons, not OPE.
 
-The first repository-side J01 slice now exists in `src/causal/ope.ts`:
+The repository-side J01 implementation exists in `src/causal/ope.ts`:
 `evaluateOpe()` accepts only action-level logs with treatment identity,
 pre-treatment context timing, target/logging policy digests and probabilities;
 it implements unnormalized IPS, self-normalized IPS and doubly robust estimates
 with explicit overlap, clipping and tail-risk reports. RED-first coverage is
-9/9 in `test/causal-ope.test.ts`. The result is deliberately a pure evidence
+13/13 across the OPE, Store, CLI and dependency tests. The result is deliberately a pure evidence
 boundary: it does not infer an unrecorded propensity or authorize execution.
-The Store now owns an append-only `ope_action_observations` log with digest
-replay and idempotent writes. The remaining J01 work is binding that log to a
-real decision-boundary policy provenance, adding a bounded product consumer
-and extending replay/idempotence across evaluation records.
+The Store owns an append-only `ope_action_observations` log with digest replay
+and idempotent writes, `fiscus causal ope --options <file>` is the bounded
+review-only product consumer, and the typed exploration/budget/tail-risk policy
+declaration is bound to the target policy identity. Online action execution and
+routing remain outside J01 and belong to J02.
 
 ## J02 — constrained online control
 

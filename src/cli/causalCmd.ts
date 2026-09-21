@@ -13,6 +13,7 @@ import { Store } from '../store/db.ts';
 import type { Flags } from './flags.ts';
 import { printJson } from './ui.ts';
 import { readBoundedUtf8File, RESOURCE_LIMITS } from '../util/resource-limits.ts';
+import type { OpeEvaluationOptions } from '../causal/ope.ts';
 
 function requireStringFlag(flags: Flags, name: string): string {
   const value = flags[name];
@@ -62,7 +63,10 @@ function usage(): void {
   console.log('  fiscus causal status [--json]');
   console.log('  fiscus causal inspect <study-id> [--json]');
   console.log('  fiscus causal verify <study-id> [--json]');
+  console.log('  fiscus causal ope --options <file> [--json]');
   console.log('');
+  console.log('  OPE reads only the Store-owned append-only action log. It is review-only,');
+  console.log('  not a causal treatment effect and never authorizes policy execution.');
   console.log('  Public causal mutations and version-2 projection are deferred. This CLI');
   console.log('  exposes retained version-1 status, inspection, and replay verification only.');
   console.log('  No action here routes');
@@ -173,6 +177,24 @@ export function cmdCausal(flags: Flags): void {
           allocationHash: plan.allocationHash,
           errors: verifyBlockedAssignmentPlan(data.protocol, plan),
         })),
+      }, flags);
+      return;
+    }
+
+    if (action === 'ope') {
+      const optionsFile = requireStringFlag(flags, 'options');
+      const supplied = readJsonFile(optionsFile);
+      if (typeof supplied !== 'object' || supplied === null || Array.isArray(supplied)) {
+        throw new Error('causal ope options must be a JSON object');
+      }
+      if (Object.hasOwn(supplied, 'observations')) {
+        throw new Error('causal ope options must not contain observations; the Store-owned action log is authoritative');
+      }
+      const evaluation = store.evaluateOpe(supplied as OpeEvaluationOptions);
+      emit({
+        operation: 'ope_evaluation',
+        evaluation,
+        boundary: 'Review-only off-policy value estimate from retained action evidence; not a causal effect and not execution authority.',
       }, flags);
       return;
     }

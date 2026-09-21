@@ -50,7 +50,8 @@ function cmdHelp(): void {
                           --path-prefix). Default local_locked permits literal
                           loopback only; this is not a machine-wide firewall.
     causal                Retained randomized-study evidence: status, inspect,
-                          and replay verification. V1 is inspect-only; all causal
+                          replay verification, and review-only OPE from the
+                          Store-owned action log. V1 is inspect-only; all causal
                           mutations and v2 public projection remain deferred.
                           Ordinary value, Lift, and price scenarios cannot become
                           causal claims; this command never changes provider routing.

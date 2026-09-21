@@ -32,6 +32,14 @@ function input(overrides: Partial<OpeEvaluationInput> = {}): OpeEvaluationInput 
     observations: [observation()],
     rewardBounds: { low: 0, high: 1 },
     overlap: { minLoggingPropensity: 0.05, maxImportanceWeight: 20 },
+    policyConstraints: {
+      policy: { policyId: 'target', version: '1', digest: DIGEST_B },
+      mode: 'epsilon_greedy',
+      explorationRate: 0.1,
+      budgetUnitsPerObservationMax: 1,
+      maxImportanceWeight: 20,
+      maxTailContribution: 20,
+    },
     ...overrides,
   };
 }
@@ -146,5 +154,22 @@ test('doubly robust rows cannot mix outcome-model identities', () => {
   assert.throws(
     () => evaluateOpe(input({ estimator: 'doubly_robust', observations: [make('q-a', 'obs-a'), make('q-b', 'obs-b')] })),
     (error: unknown) => error instanceof OpeValidationError && error.code === 'OPE_MODEL_PROVENANCE_CONFLICT',
+  );
+});
+
+test('OPE binds a declared exploration/budget/tail policy to the target policy identity', () => {
+  const result = evaluateOpe(input());
+  assert.equal(result.policyConstraints.mode, 'epsilon_greedy');
+  assert.equal(result.policyConstraints.explorationRate, 0.1);
+  assert.equal(result.policyConstraints.maxImportanceWeight, 20);
+  assert.equal(result.policyConstraints.maxTailContribution, 20);
+  assert.throws(
+    () => evaluateOpe(input({
+      policyConstraints: {
+        ...input().policyConstraints,
+        policy: { policyId: 'different', version: '1', digest: DIGEST_B },
+      },
+    })),
+    (error: unknown) => error instanceof OpeValidationError && error.code === 'OPE_POLICY_CONFLICT',
   );
 });

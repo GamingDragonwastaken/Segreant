@@ -201,11 +201,11 @@ Highest value first, each stated as the boundary that is missing rather than as 
 - Do not mark WP-I04 `COMPLETED`: exact NVDA/JAWS/VoiceOver announcement
   behavior remains a genuine external gate. Do not start J02 before J01's
   causal-v3/policy-provenance foundations are durable.
-- J01 is now a bounded partial: `src/causal/ope.ts` plus the Store-owned
-  `ope_action_observations` table provide provenance-aware evaluation and
-  digest-authenticated append-only replay, with 11/11 RED-first focused tests.
-  There is still no real decision-boundary adapter or product consumer. Its
-  output is explicitly non-causal and non-authorizing. J02 stays
+- J01 is now `COMPLETED` at the review-only OPE boundary: `src/causal/ope.ts`,
+  the Store-owned `ope_action_observations` table, typed exploration/budget/
+  tail-risk constraints, and `fiscus causal ope --options <file>` provide
+  digest-authenticated append-only replay with 13/13 RED-first focused tests.
+  Its output remains explicitly non-causal and non-authorizing. J02 stays
   no-action/not-started until the runtime control adapter and safety evidence
   exist.
 - J05 and J06 are now repository-review `COMPLETED`: the market matrix was

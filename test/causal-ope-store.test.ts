@@ -1,8 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Store } from '../src/store/db.ts';
 import type { OpeEvaluationOptions, OpeObservation } from '../src/causal/ope.ts';
 
@@ -28,6 +31,14 @@ const options: OpeEvaluationOptions = {
   estimator: 'ips',
   rewardBounds: { low: 0, high: 1 },
   overlap: { minLoggingPropensity: 0.05, maxImportanceWeight: 20 },
+  policyConstraints: {
+    policy: { policyId: 'target', version: '1', digest: B },
+    mode: 'epsilon_greedy',
+    explorationRate: 0.1,
+    budgetUnitsPerObservationMax: 1,
+    maxImportanceWeight: 20,
+    maxTailContribution: 20,
+  },
 };
 
 test('Store-owned OPE observations are append-only, idempotent, and replayable', () => {
@@ -60,4 +71,30 @@ test('Store OPE replay fails closed when the retained observation digest is tamp
   store.raw().prepare("UPDATE ope_action_observations SET observation_json = '{\"observationId\":\"obs-1\"}' WHERE observation_id = 'obs-1'").run();
   assert.throws(() => store.opeObservations(), /digest|integrity|OPE/i);
   store.close();
+});
+
+test('the causal OPE CLI is a bounded Store-backed product consumer', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-ope-cli-'));
+  const dbPath = join(dir, 'fiscus.db');
+  const optionsPath = join(dir, 'ope-options.json');
+  const root = fileURLToPath(new URL('..', import.meta.url));
+  try {
+    const store = new Store(dbPath);
+    store.recordOpeObservation(row('obs-1', 0.8));
+    store.recordOpeObservation(row('obs-2', 0.2));
+    store.close();
+    writeFileSync(optionsPath, JSON.stringify(options));
+    const output = execFileSync(process.execPath, ['bin/fiscus.mjs', 'causal', 'ope', '--options', optionsPath, '--json'], {
+      cwd: root,
+      env: { ...process.env, FISCUS_HOME: dir },
+      encoding: 'utf8',
+    });
+    const payload = JSON.parse(output) as { operation: string; evaluation: { estimate: number; sampleSize: number; nonClaims: string[] } };
+    assert.equal(payload.operation, 'ope_evaluation');
+    assert.equal(payload.evaluation.estimate, 0.5);
+    assert.equal(payload.evaluation.sampleSize, 2);
+    assert.ok(payload.evaluation.nonClaims.some((claim) => /not a causal treatment effect/i.test(claim)));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

@@ -25,6 +25,23 @@ const OBSERVATION_DIGEST_DOMAIN = 'fiscus.ope.observation';
 const STRUCTURAL_BOUNDS = { low: -Number.MAX_SAFE_INTEGER, high: Number.MAX_SAFE_INTEGER } as const;
 const STRUCTURAL_OVERLAP = { minLoggingPropensity: Number.MIN_VALUE, maxImportanceWeight: Number.MAX_SAFE_INTEGER } as const;
 
+function structuralInput(observation: OpeObservation) {
+  return {
+    estimator: 'ips' as const,
+    observations: [observation],
+    rewardBounds: STRUCTURAL_BOUNDS,
+    overlap: STRUCTURAL_OVERLAP,
+    policyConstraints: {
+      policy: { ...observation.targetPolicy },
+      mode: 'fixed' as const,
+      explorationRate: 0,
+      budgetUnitsPerObservationMax: Number.MAX_SAFE_INTEGER,
+      maxImportanceWeight: Number.MAX_SAFE_INTEGER,
+      maxTailContribution: Number.MAX_SAFE_INTEGER,
+    },
+  };
+}
+
 function observationDigest(observation: OpeObservation): string {
   return sha256(`${OBSERVATION_DIGEST_DOMAIN}\n1\n${canonicalJson(observation)}`);
 }
@@ -46,22 +63,12 @@ function decodeRow(row: OpeObservationRow): OpeObservation {
       || observationDigest(observation) !== row.observation_digest) {
     throw new Error('OPE observation digest or retained identity is invalid');
   }
-  validateOpeInput({
-    estimator: 'ips',
-    observations: [observation],
-    rewardBounds: STRUCTURAL_BOUNDS,
-    overlap: STRUCTURAL_OVERLAP,
-  });
+  validateOpeInput(structuralInput(observation));
   return observation;
 }
 
 export function recordOpeObservation(db: DatabaseSync, observation: OpeObservation): 'created' | 'existing' {
-  validateOpeInput({
-    estimator: 'ips',
-    observations: [observation],
-    rewardBounds: STRUCTURAL_BOUNDS,
-    overlap: STRUCTURAL_OVERLAP,
-  });
+  validateOpeInput(structuralInput(observation));
   const encoded = canonicalJson(observation);
   const digest = observationDigest(observation);
   const existing = db.prepare(

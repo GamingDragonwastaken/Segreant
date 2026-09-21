@@ -21,7 +21,7 @@ At the time of this checkpoint:
 
 - Canonical branch: `gpt56/magnum-opus-reconstruction`
 - Canonical SHA: `5587b1872b7ed066142699f633aff71a70c72680` (docs checkpoint on green code head `024a2fe45c264d3610120910db660d9fbc53b874`; J01 provenance-aware OPE plus Store-owned append-only action observations, pushed to `origin/gpt56/magnum-opus-reconstruction`)
-- Durable packet register: 76 total, 62 completed, 8 partial, 1 not started, 1 blocked external, 4 superseded with reason.
+- Durable packet register: 76 total, 63 completed, 7 partial, 1 not started, 1 blocked external, 4 superseded with reason.
 - Exact-head CI: run `35634944716` concluded **success** across all nine configured jobs, including browser accessibility and the team-server matrix.
 - Canonical worktree: clean and synchronized with `origin/gpt56/magnum-opus-reconstruction`.
 - Local baseline: root suite exits 0 under the compact reporter after the J01 Store schema; focused OPE/Store/dependency tranche 12/12; plugin-host 9/9; runtime browser/axe 1/1; root/browser/team-server typechecks, build, and supply-chain audit pass.
@@ -39,7 +39,7 @@ These counts are not the full local execution state.
 | `WP-E04` | `CANONICAL_PARTIAL` | `a44007a`; per-arm missingness/attrition/interference disclosure and no-imputation policy; focused RED-first tests green | canonical checkout | Residual design obligations remain |
 | `WP-E05` | `CANONICAL_PARTIAL` | `bb5cfb2`; witnessed causal transport with target evidence and revocation propagation; focused transport/epistemic tests green | canonical checkout | Cross-study pooling/bridge workflow remains |
 | `WP-E06` | `CANONICAL_PARTIAL` | `4cf26c7`; durable pre-registration boundary and restart recovery; focused causal inference tests green | canonical checkout | Operator-facing setup, cross-study families, correlation adjustment and precision probability remain |
-| `WP-J01` | `CANONICAL_PARTIAL` | Current checkpoint `src/causal/ope.ts` + Store `ope_action_observations`; focused OPE/store coverage 11/11; root typecheck/build pass | canonical checkout | Append-only action log and digest replay are present; real decision-boundary provenance, evaluation-record replay/idempotence and a bounded consumer remain |
+| `WP-J01` | `CANONICAL_COMPLETED` | Current checkpoint `src/causal/ope.ts` + Store `ope_action_observations` + `fiscus causal ope`; typed exploration/budget/tail-risk constraints; focused coverage 13/13; root typecheck/build pass | canonical checkout | Review-only OPE boundary complete; online execution/routing authority remains J02 and is deliberately absent |
 | `WP-J05` | `CANONICAL_COMPLETED` | Current-source market matrix refreshed with OpenCost, IBM Kubecost and IBM watsonx.governance; contract test passes | canonical checkout | Refresh before future external positioning; no superiority/leadership/certification claim |
 | `WP-J06` | `CANONICAL_COMPLETED` | Independent scholarly/market substitution critique and pre-claim gate recorded; contract test passes | canonical checkout | Historical originality and market leadership remain unproven by design |
 | `WP-H03` | `CANONICAL_COMPLETED` | The canonical register and remote branch already include H03's bounded mutation/fuzz/fault-injection closure; local commits are historical duplicate evidence | `luna-next/wp-h03` | Already represented canonically; do not cherry-pick stale duplicate commits |

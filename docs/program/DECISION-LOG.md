@@ -3656,3 +3656,22 @@ boundary. This is closure of the current benchmark/review deliverables, not a
 certificate of market leadership, historical originality, superiority, customer
 outcomes or future freshness; those claims remain prohibited without a later
 refresh and independent evidence.
+
+## D-275 — J01 closes at the review-only OPE boundary; J02 remains the execution boundary
+
+**Problem.** J01’s implementation had the estimator, append-only action log and
+CLI consumer, but the packet still described exploration/budget/tail-risk
+constraints as absent. That made the register lag the actual contract.
+
+**Fix.** OPE evaluation now requires a typed policy-constraint declaration
+bound to the target policy identity: mode, exploration rate, budget units per
+observation, maximum importance weight and maximum tail contribution. The CLI
+consumer reads those constraints from a local options document, and focused OPE,
+Store and dependency coverage is 13/13. These are declared review constraints,
+not evidence that a runtime controller executed them.
+
+**Decision.** WP-J01 is `COMPLETED` at the review-only, provenance-aware OPE
+boundary. It refuses unsupported evidence, records policy provenance, persists
+the action log append-only, and returns no execution authority. WP-J02 remains
+`NOT_STARTED` as the separate online-control packet; no spend-changing or
+routing action is authorized by J01.

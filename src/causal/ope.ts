@@ -115,10 +115,20 @@ export interface OpeEvaluationInput {
   readonly observations: readonly OpeObservation[];
   readonly rewardBounds: OpeRewardBounds;
   readonly overlap: OpeOverlapConstraints;
+  readonly policyConstraints: OpePolicyConstraints;
   readonly clipping?: OpeClippingPolicy;
 }
 
 export type OpeEvaluationOptions = Omit<OpeEvaluationInput, 'observations'>;
+
+export interface OpePolicyConstraints {
+  readonly policy: OpePolicyReference;
+  readonly mode: 'fixed' | 'epsilon_greedy' | 'contextual';
+  readonly explorationRate: number;
+  readonly budgetUnitsPerObservationMax: number;
+  readonly maxImportanceWeight: number;
+  readonly maxTailContribution: number;
+}
 
 export interface OpeProvenance {
   readonly targetPolicy: OpePolicyReference;
@@ -154,6 +164,7 @@ export interface OpeEvaluation {
   readonly overlap: OpeOverlapReport;
   readonly maxImportanceWeight: number;
   readonly clipping: OpeClippingReport;
+  readonly policyConstraints: OpePolicyConstraints;
   readonly contributionRange: { readonly low: number; readonly high: number };
   readonly provenance: OpeProvenance;
   readonly assumptions: readonly string[];
@@ -195,6 +206,21 @@ function validateInput(input: OpeEvaluationInput): void {
       || input.overlap.minLoggingPropensity <= 0 || input.overlap.minLoggingPropensity > 1
       || !finite(input.overlap.maxImportanceWeight) || input.overlap.maxImportanceWeight <= 0) {
     fail('OPE_EVIDENCE_INVALID', 'overlap constraints are invalid');
+  }
+  policyReference(input.policyConstraints?.policy, 'policyConstraints.policy');
+  if (!['fixed', 'epsilon_greedy', 'contextual'].includes(input.policyConstraints.mode)) {
+    fail('OPE_EVIDENCE_INVALID', 'policyConstraints.mode is unsupported');
+  }
+  if (!finite(input.policyConstraints.explorationRate)
+      || input.policyConstraints.explorationRate < 0
+      || input.policyConstraints.explorationRate >= 1
+      || !finite(input.policyConstraints.budgetUnitsPerObservationMax)
+      || input.policyConstraints.budgetUnitsPerObservationMax < 0
+      || !finite(input.policyConstraints.maxImportanceWeight)
+      || input.policyConstraints.maxImportanceWeight <= 0
+      || !finite(input.policyConstraints.maxTailContribution)
+      || input.policyConstraints.maxTailContribution <= 0) {
+    fail('OPE_EVIDENCE_INVALID', 'policyConstraints contains an invalid exploration, budget or tail-risk bound');
   }
   if (input.clipping !== undefined
       && (!finite(input.clipping.maxWeight) || input.clipping.maxWeight <= 0
@@ -238,6 +264,11 @@ function validateInput(input: OpeEvaluationInput): void {
         || targetPolicy.version !== row.targetPolicy.version || targetPolicy.digest !== row.targetPolicy.digest) {
       fail('OPE_POLICY_CONFLICT', 'all rows in one evaluation must use one target policy identity');
     }
+    if (row.targetPolicy.policyId !== input.policyConstraints.policy.policyId
+        || row.targetPolicy.version !== input.policyConstraints.policy.version
+        || row.targetPolicy.digest !== input.policyConstraints.policy.digest) {
+      fail('OPE_POLICY_CONFLICT', 'policyConstraints.policy must identify the target policy being evaluated');
+    }
     if (row.targetPolicy.probability > 0) {
       supported += 1;
       if (row.loggingPolicy.propensity < input.overlap.minLoggingPropensity) {
@@ -246,6 +277,10 @@ function validateInput(input: OpeEvaluationInput): void {
       const weight = row.targetPolicy.probability / row.loggingPolicy.propensity;
       if (weight > input.overlap.maxImportanceWeight && input.clipping === undefined) {
         fail('OPE_TAIL_RISK_UNCONTROLLED', `${label} importance weight exceeds the declared tail-risk bound; provide explicit clipping`);
+      }
+      if (weight > input.policyConstraints.maxImportanceWeight
+          && (input.clipping === undefined || input.clipping.maxWeight > input.policyConstraints.maxImportanceWeight)) {
+        fail('OPE_TAIL_RISK_UNCONTROLLED', `${label} importance weight exceeds the exploration policy risk bound`);
       }
     }
 
@@ -370,12 +405,14 @@ export function evaluateOpe(input: OpeEvaluationInput): OpeEvaluation {
       : input.estimator === 'doubly_robust'
         ? 'The outcome model is pre-treatment and its policy/action identity is independently versioned; consistency or model correctness is not proven here.'
         : 'The IPS estimate is the unnormalized mean of importance-weighted observed rewards.',
+    `The declared policy constraint mode is ${input.policyConstraints.mode} with exploration rate ${input.policyConstraints.explorationRate}; these limits are recorded, not proof that a runtime controller obeyed them.`,
   ];
   const limitations = [
     'This is an off-policy value estimate under declared logging assumptions, not a causal treatment effect.',
     'The evaluation does not establish that the logging policy probabilities were honestly generated or that outcomes are independent.',
     'Context is represented by a digest and schema identity; raw prompts, source and credentials are intentionally absent.',
     ...(clippingApplied ? ['Clipping changes the estimand and its bias is not identified without a declared tail model.'] : []),
+    'Budget units are a caller-declared policy basis; this module does not convert them into provider money or execute a budget action.',
   ];
   return Object.freeze({
     type: OPE_TYPE,
@@ -393,6 +430,7 @@ export function evaluateOpe(input: OpeEvaluationInput): OpeEvaluation {
     },
     maxImportanceWeight: maximumImportanceWeight,
     clipping,
+    policyConstraints: Object.freeze({ ...input.policyConstraints, policy: { ...input.policyConstraints.policy } }),
     contributionRange: { low: sortedContributions[0] ?? 0, high: sortedContributions.at(-1) ?? 0 },
     provenance: {
       targetPolicy: { ...target },
