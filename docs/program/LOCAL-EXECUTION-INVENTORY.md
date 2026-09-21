@@ -20,11 +20,11 @@ register used for GitHub-facing integration decisions.
 At the time of this checkpoint:
 
 - Canonical branch: `gpt56/magnum-opus-reconstruction`
-- Canonical SHA: `bb5cfb2` (E02/E03/E04/E05 causal tranche integrated; exact-head CI pending)
-- Durable packet register: 76 total, 59 completed, 4 partial, 8 not started, 1 blocked external, 4 superseded with reason.
+- Canonical SHA: `836edee` (G04 standards map plus I02/J03 partial reconciliations integrated; exact-head CI pending)
+- Durable packet register: 76 total, 60 completed, 6 partial, 5 not started, 1 blocked external, 4 superseded with reason.
 - Exact-head CI: last verified run `35562385954` for predecessor `560eaa1`; the causal tranche head is pending its own exact-SHA run.
 - Canonical worktree: clean and synchronized with `origin/gpt56/magnum-opus-reconstruction`.
-- Local baseline: serial root suite `2,132 total / 2,128 pass / 0 fail / 4 skipped`; causal/epistemic tranche `279/279`; root/browser/team-server typechecks and build pass.
+- Local baseline: serial root suite `2,132 total / 2,128 pass / 0 fail / 4 skipped`; causal/epistemic tranche `279/279`; G04/J03/I02 focused tranche `12/12`; root/browser/team-server typechecks and build pass.
 
 These counts are not the full local execution state.
 
