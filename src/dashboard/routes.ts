@@ -68,6 +68,8 @@ import type { DashboardResponseFor } from './shared-types.ts';
 export interface ConfigPersistence {
   load: () => FiscusConfig;
   save: (config: FiscusConfig) => void;
+  /** Production supplies the shared read-modify-write transaction boundary. */
+  mutate?: (mutator: (current: FiscusConfig) => FiscusConfig | void) => FiscusConfig;
 }
 
 /** Everything a handler is allowed to reach for. Nothing else is in scope. */
@@ -1066,9 +1068,22 @@ export function handleSettingsUpdate({ req, res, store, config, version, configP
         chunks.push(chunk);
       }
       const patch = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') as SettingsPatch;
-      const current = configPersistence.load();
-      const next = applySettingsPatch(current, patch);
-      configPersistence.save(next);
+      let current: FiscusConfig;
+      let next: FiscusConfig;
+      if (configPersistence.mutate) {
+        let before: FiscusConfig | null = null;
+        next = configPersistence.mutate((latest) => {
+          before = structuredClone(latest);
+          return applySettingsPatch(latest, patch);
+        });
+        if (before === null) throw new Error('config mutation transaction did not execute');
+        current = before;
+      } else {
+        // Injectable test/back-compat seam. Production always supplies mutate().
+        current = configPersistence.load();
+        next = applySettingsPatch(current, patch);
+        configPersistence.save(next);
+      }
       if (current.retentionDays !== next.retentionDays) {
         store.recordRetentionPolicyChange('requests', current.retentionDays, next.retentionDays, Date.now(), 'dashboard-settings');
       }
