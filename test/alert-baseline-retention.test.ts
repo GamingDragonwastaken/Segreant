@@ -49,17 +49,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'fiscus-alert-retention-'));
+process.env.TZ = 'UTC';
 
 import { Store, type RequestRow } from '../src/store/db.ts';
 import { computeAlerts, computeAlertCoverage } from '../src/alerts/detect.ts';
 import { DEFAULT_CONFIG } from '../src/config.ts';
 
 const DAY = 24 * 60 * 60 * 1000;
-// Keep the synthetic "today" safely away from the local midnight boundary.
-// The request fixture places today's request one hour before NOW; running this
-// suite just after midnight otherwise makes that row belong to yesterday on
-// Cairo/Windows while CI's UTC workers see a different day.
-const NOW = Date.now() + 12 * 60 * 60 * 1000;
+// Fixed UTC noon: this test is about retention semantics, not the wall clock.
+// The previous Date.now()+12h fixture crossed midnight whenever CI happened to
+// run around UTC noon, turning the "today" row into a prior-day baseline row.
+const NOW = Date.UTC(2026, 8, 15, 12, 0, 0);
 const DARK_WITHOUT_HISTORY = 'no prior active day exists yet, so there is no baseline to exceed';
 
 function request(daysAgo: number, costUsd: number): RequestRow {
