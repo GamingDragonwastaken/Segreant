@@ -19,11 +19,11 @@ register used for GitHub-facing integration decisions.
 
 At the time of this checkpoint:
 
-- Canonical branch: `gpt56/magnum-opus-reconstruction`
-- Canonical SHA: `1130ca723342f60eea7db9fb27f5bb6faaeb9929` (repository-side packet closure checkpoint after retention-policy evidence and exact green matrix; pushed to `origin/gpt56/magnum-opus-reconstruction`; exact-head CI run `35656559576` success)
-- Durable packet register: 76 total, 70 completed, 0 partial, 0 not started, 2 blocked external, 4 superseded with reason.
+- Canonical branch: `gpt56/final-reconciliation`
+- Canonical SHA: `1130ca723342f60eea7db9fb27f5bb6faaeb9929` (repository-side packet closure checkpoint after retention-policy evidence and exact green matrix; pushed to `origin/gpt56/final-reconciliation`; exact-head CI run `35656559576` success)
+- Durable packet register: 76 total, 71 completed, 0 partial, 0 not started, 1 blocked external, 4 superseded with reason.
 - Exact-head CI: run `35656559576` concluded **success** across all configured jobs, including browser accessibility and the team-server matrix.
-- Canonical worktree: clean and synchronized with `origin/gpt56/magnum-opus-reconstruction`.
+- Canonical worktree: clean and synchronized with `origin/gpt56/final-reconciliation`.
 - Local baseline: root suite exits 0 under the compact reporter after the J01 Store schema; focused OPE/Store/dependency tranche 12/12; plugin-host 9/9; runtime browser/axe 1/1; root/browser/team-server typechecks, build, and supply-chain audit pass.
 
 These counts are not the full local execution state.
