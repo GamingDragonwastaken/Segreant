@@ -24,6 +24,7 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
   unlinkSync,
   writeSync,
 } from 'node:fs';
@@ -674,7 +675,87 @@ export function loadConfig(): FiscusConfig {
   return isDemo() ? withDemoDefaults(cfg) : cfg;
 }
 
-export function saveConfig(config: FiscusConfig): void {
+export interface ConfigMutationLock {
+  readonly path: string;
+  readonly token: string;
+  release(): void;
+}
+
+function configLockOwner(path: string): { token?: unknown } | null {
+  try {
+    const stat = statSync(path);
+    if (!stat.isFile() || stat.size > 4096) return null;
+    const parsed = JSON.parse(readFileSync(path, 'utf8')) as unknown;
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * One Fiscus writer at a time may replace config.json.
+ *
+ * The lock is deliberately fail-closed and is never stolen on a timer. A stale
+ * lock is an operator-visible recovery artifact, which is safer than allowing an
+ * autonomous controller and an interactive settings command to overwrite each
+ * other's generation.
+ */
+export function acquireConfigMutationLock(): ConfigMutationLock {
+  const home = ensureHome();
+  const path = join(home, 'config.lock');
+  const token = randomUUID();
+  let descriptor: number;
+  try {
+    descriptor = openSync(path, 'wx', 0o600);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === 'EEXIST') {
+      throw new ConfigValidationError(
+        `config mutation is already active or left a stale lock at ${path}; reconcile it before writing configuration`,
+      );
+    }
+    throw error;
+  }
+  try {
+    writeSync(
+      descriptor,
+      JSON.stringify({ pid: process.pid, token, startedAt: new Date().toISOString() }) + '\n',
+      undefined,
+      'utf8',
+    );
+    fsyncSync(descriptor);
+  } catch (error) {
+    try { closeSync(descriptor); } catch { /* preserve original error */ }
+    try { unlinkSync(path); } catch { /* stale owned lock is safer than another writer */ }
+    throw error;
+  }
+  closeSync(descriptor);
+
+  let released = false;
+  return Object.freeze({
+    path,
+    token,
+    release() {
+      if (released) return;
+      released = true;
+      const owner = configLockOwner(path);
+      if (owner?.token !== token) return;
+      try { unlinkSync(path); } catch { /* fail closed: leave the owned artifact visible */ }
+    },
+  });
+}
+
+function assertConfigMutationLock(lock: ConfigMutationLock): void {
+  const expected = join(ensureHome(), 'config.lock');
+  if (lock.path !== expected) {
+    throw new ConfigValidationError('config mutation lock belongs to a different Fiscus home');
+  }
+  const owner = configLockOwner(lock.path);
+  if (owner?.token !== lock.token) {
+    throw new ConfigValidationError('config mutation lock ownership cannot be proven');
+  }
+}
+
+function persistConfigUnlocked(config: FiscusConfig): void {
   ensureHome();
   validateBudgetConfig(config.budget);
   const path = configPath();
@@ -697,5 +778,20 @@ export function saveConfig(config: FiscusConfig): void {
     if (descriptor !== null) closeSync(descriptor);
     if (existsSync(tempPath)) unlinkSync(tempPath);
     throw new ConfigValidationError(`cannot persist ${path}; previous configuration was retained when possible (${error instanceof Error ? error.message : String(error)})`);
+  }
+}
+
+/** Persist while the caller owns the shared config mutation generation. */
+export function saveConfigWithLock(config: FiscusConfig, lock: ConfigMutationLock): void {
+  assertConfigMutationLock(lock);
+  persistConfigUnlocked(config);
+}
+
+export function saveConfig(config: FiscusConfig): void {
+  const lock = acquireConfigMutationLock();
+  try {
+    persistConfigUnlocked(config);
+  } finally {
+    lock.release();
   }
 }
