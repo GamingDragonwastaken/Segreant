@@ -242,3 +242,36 @@ test('J02: a durable pending mutation distinguishes complete, abort, and conflic
     /policy/i,
   );
 });
+
+
+test('J02: a new policy version may re-arm only at its declared safe baseline', () => {
+  const v1 = policy();
+  const v1State = initialBudgetControlState(v1, 100, '2026-09-22T00:01:00.000Z');
+  const rolled = planBudgetControl({
+    policy: v1,
+    state: planBudgetControl({
+      policy: v1,
+      state: v1State,
+      decision: CERTIFIED,
+      currentDailyUsd: 100,
+      runawayMaxUsd: 5,
+      runawayTripped: false,
+      now: '2026-09-22T00:02:00.000Z',
+    }).nextState,
+    decision: CERTIFIED,
+    currentDailyUsd: 10,
+    runawayMaxUsd: 5,
+    runawayTripped: true,
+    now: '2026-09-22T00:03:00.000Z',
+  }).nextState;
+  assert.equal(rolled.phase, 'rolled_back');
+
+  const v2 = policy({ version: 2, issuedAt: '2026-09-22T00:04:00.000Z' });
+  const rearmed = initialBudgetControlState(v2, 100, '2026-09-22T00:05:00.000Z');
+  assert.equal(rearmed.phase, 'armed');
+  assert.equal(rearmed.policyVersion, 2);
+  assert.throws(
+    () => initialBudgetControlState(v2, 90, '2026-09-22T00:05:00.000Z'),
+    /safe baseline/i,
+  );
+});
