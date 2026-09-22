@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, relative, extname } from 'node:path';
+import { join, relative, extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const PRODUCTION_ROOTS = ['src', 'bin', 'team-server/src'];
@@ -62,7 +62,7 @@ export function auditSecurityTree(root) {
 }
 
 const self = fileURLToPath(import.meta.url);
-if (process.argv[1] && fileURLToPath(new URL(`file://${process.argv[1].replaceAll('\\', '/')}`)) === self) {
+if (process.argv[1] && resolve(process.argv[1]) === self) {
   const root = process.cwd();
   const result = auditSecurityTree(root);
   if (result.filesScanned < 100) {
