@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { loadConfig, saveConfig } from '../src/config.ts';
+import { acquireConfigMutationLock, loadConfig, saveConfig, saveConfigWithLock } from '../src/config.ts';
 import { applySettingsPatch } from '../src/dashboard/settings.ts';
 import { DEFAULT_CONFIG } from '../src/config.ts';
 
@@ -62,6 +62,42 @@ test('saveConfig retains the last known-good file while replacing the active con
       [],
       'temporary config files must not survive a successful replacement',
     );
+  } finally {
+    if (previousHome === undefined) delete process.env.FISCUS_HOME;
+    else process.env.FISCUS_HOME = previousHome;
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+
+test('all Fiscus config writers share one fail-closed mutation lock', () => {
+  const previousHome = process.env.FISCUS_HOME;
+  const home = mkdtempSync(join(tmpdir(), 'fiscus-config-lock-'));
+  process.env.FISCUS_HOME = home;
+  try {
+    const first = structuredClone(DEFAULT_CONFIG);
+    first.budget.dailyUsd = 10;
+    saveConfig(first);
+
+    const lock = acquireConfigMutationLock();
+    try {
+      const second = structuredClone(first);
+      second.budget.dailyUsd = 20;
+      assert.throws(
+        () => saveConfig(second),
+        /config.*(?:active|lock)|mutation.*active|stale lock/i,
+        'a second Fiscus writer must not overwrite a config while another writer owns the mutation generation',
+      );
+      saveConfigWithLock(second, lock);
+      assert.equal(loadConfig().budget.dailyUsd, 20);
+    } finally {
+      lock.release();
+    }
+
+    const third = structuredClone(first);
+    third.budget.dailyUsd = 30;
+    saveConfig(third);
+    assert.equal(loadConfig().budget.dailyUsd, 30, 'the config lock must be reusable after release');
   } finally {
     if (previousHome === undefined) delete process.env.FISCUS_HOME;
     else process.env.FISCUS_HOME = previousHome;
