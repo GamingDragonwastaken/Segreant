@@ -1,174 +1,81 @@
-# WP-J03 Complexity Lab: Design and Precondition Audit Report
+# WP-J03 Complexity Lab: Research-Only Admission Report
 
-**Work Packet:** `WP-J03` — Complexity Lab
-**Status:** `COMPLETED` as a read-only research/admission boundary (no production complexity estimator admitted)
-**Controlling Authority:** `docs/TOKEN-GOVERNANCE-AND-COMPLEXITY-LAB.md` (§6, §12), `docs/ECONOMIC-CONTROL-FOUNDATION.md` (§3), `docs/program/FISCUS-REMAINING-WORK-AUDIT.md` (lines 478, 483).
+**Work Packet:** `WP-J03` — Complexity Lab  
+**Status:** `COMPLETED` at the research-only boundary; **not production-promoted**  
+**Controlling authority:** `docs/TOKEN-GOVERNANCE-AND-COMPLEXITY-LAB.md` and `docs/ECONOMIC-CONTROL-FOUNDATION.md`.
 
----
+## Current repository reality
 
-## 1. Executive Summary & Verification Findings
+Fiscus now contains the narrow foundation the packet permits:
+`src/research/complexity/profile.ts` defines an immutable, content-free
+`ComplexityProfile` over structural and execution observables. It deliberately
+does **not** expose a scalar complexity score, routing recommendation, budget
+mutation, causal claim, calibrated uncertainty estimate, or production API/CLI.
+The profile reports `uncalibrated_research`, null predictive/pool uncertainty,
+no predicted-compute distribution, no model-performance dispersion, and a
+digest-bound estimator identity. This is an admission surface for future
+research, not a production decision feature.
 
-This report audits the readiness of the Fiscus codebase for **WP-J03 Complexity Lab**. The task mission mandates:
-> Inspect WP-J03 Complexity Lab and implement one narrow, dependency-free foundation if the current code already exposes a measurable complexity surface; otherwise return a read-only design/precondition report rather than inventing a product.
+The production boundary is mechanically guarded. `src/cli.ts` does not dispatch
+`fiscus lab` or top-level `fiscus complexity`; dashboard contracts expose no
+complexity route; the production benchmark does not claim a complexity
+operation; and `src/value/frontier.ts` uses task type and changed-line size only
+as observational conditioning/confounder dimensions rather than collapsing them
+into a universal complexity scalar.
 
-### Core Audit Finding
-**The current codebase does NOT expose an operational complexity surface.**
-Specifically:
-1. **Source Surface:** There are zero (`0`) files in `src/` that compute, reference, or export complexity metrics. The proposed research directory `src/research/complexity/` does not exist.
-2. **CLI Surface:** `src/cli.ts` does not dispatch `fiscus lab` or `fiscus complexity`. In `test/documentation-commands.test.ts`, `fiscus lab complexity` is explicitly allowlisted under `PLANNED` with the verified reason:
-   > `docs/TOKEN-GOVERNANCE-AND-COMPLEXITY-LAB.md` introduces `fiscus lab complexity` under "Proposed product boundary" and lists "Build the Complexity Lab" as future work, so its own text tells the reader it does not exist.
-3. **Dashboard API Surface:** `src/dashboard/contracts.ts` declares nineteen (`19`) routes (`/api/health` through `/api/clear-proposals`); exactly zero (`0`) expose or consume complexity data.
-4. **Benchmark Surface:** `scripts/benchmark.mjs` measures synthetic ingestion, epistemic issuance, and read-model assembly; no complexity benchmark exists.
-5. **Economic & Frontier Alignment:** `src/value/frontier.ts` partitions work by `taskType` (from conventional commit descriptions) and reports unit size (`candidateMedianUnitLines`) purely as an observational confounder. This strictly honors `docs/ECONOMIC-CONTROL-FOUNDATION.md` §3:
-   > Task complexity can be a useful feature. It must not become the central decision rule... Complexity remains in `x`; it does not become the objective.
+## Structural complexity observables
 
-### Conclusion
-Because the existing codebase exposes no measurable complexity surface, attempting to implement an ad-hoc complexity scoring algorithm or mock router would constitute "inventing a product" and committing **complexity-theater**, violating the constitutional rules of `FISCUS-REMAINING-WORK-AUDIT.md`. Therefore, per the task contract, we return this read-only design and architecture specification while refusing production promotion until the prerequisites are met. That refusal is the packet's intended terminal boundary, not unfinished repository work.
+The research profile may record content-free structural features already
+available at decision/review time when supplied by its caller: added/deleted
+lines, files touched, context-token count, task type, and tool count. These are
+observables, not a claim that any one of them *is* task complexity.
 
----
+## Execution complexity observables
 
-## 2. Existing Measurable Observables in Fiscus
+The profile may also record request count, total/reasoning tokens, duration and
+retry count. Those values characterize an observed execution. Post-outcome
+execution features must not be leaked backward into pre-action routing or
+pretended to have been available at decision time.
 
-While no unified complexity surface exists, the repository captures several raw, content-free, and privacy-preserving observables across three operational domains that will serve as the empirical inputs to the Complexity Lab when initialized:
+## Promotion Rules
 
-### 2.1 Structural Observables (Git & WorkUnits)
-In `src/value/realization.ts`, `attributeCommits()` and `WorkUnit` records provide:
-- `linesAdded`, `linesDeleted`: Raw diff magnitude.
-- `filesChanged`: Scope of codebase modification.
-- `taskType`: Categorical classification (`feature`, `fix`, `refactor`, `test`, `docs`, `perf`, `chore`, `other`) derived deterministically via `classifyTaskType(commitSubject)` in `src/value/taskType.ts`.
-- `hadProposal`, `acceptance`: First-pass proposal capture and mean edit-distance acceptance.
-- `survivingLines`, `survivalRatio`: Longitudinal code durability via git blame scans.
+The packet is complete because the repository now has the narrow research
+foundation and a hard refusal boundary. **All ten production promotion rules
+remain unfulfilled; therefore the Complexity Lab is not a production estimator
+or routing/control authority.** Completion of WP-J03 must not be confused with
+production promotion.
 
-### 2.2 Execution Observables (Proxy & Request Ledger)
-In `src/store/db.ts` and `src/store/economicReadModel.ts`:
-- `inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`, `reasoningTokens`.
-- `durationMs`: Wall-clock request latency.
-- `statusCode`: HTTP failure, retry, or rate-limit indications.
-- `attributedRequests`: Multi-turn count behind a work unit.
-- `provider`, `model`: Dominant model assignment.
+| Rule | Requirement | Current state |
+|---|---|---|
+| Rule 1 | Target quantity precisely defined | **UNFULFILLED** — no production complexity estimand is established. |
+| Rule 2 | Temporal separation of training/evaluation | **UNFULFILLED** — no prospective or temporal holdout dataset establishes generalization. |
+| Rule 3 | Calibration error measured | **UNFULFILLED** — no calibrated prediction target/score exists. |
+| Rule 4 | Simple baselines included | **UNFULFILLED** — no estimator competition has been run against declared simple baselines. |
+| Rule 5 | Positive incremental decision value on held-out evaluation | **UNFULFILLED** — no held-out evidence shows complexity improves decisions. |
+| Rule 6 | Distribution-shift robustness and abstention | **UNFULFILLED** — no validated shift model/abstention contract exists for complexity. |
+| Rule 7 | Explicit privacy/data boundary | **UNFULFILLED for production promotion** — repository egress rules exist, but a promoted estimator would require its own declared feature/data contract. |
+| Rule 8 | Features proven available at decision time without leakage | **UNFULFILLED** — several tempting realization/execution signals are post-outcome. |
+| Rule 9 | Estimator uncertainty/coverage | **UNFULFILLED** — the research profile intentionally emits null uncertainty and `uncalibrated_research`. |
+| Rule 10 | Rollback/fallback for promoted use | **UNFULFILLED** — there is no production complexity-driven action to roll back from. |
 
-### 2.3 Epistemic Observables (Trusted Epistemic Kernel)
-In `src/epistemic/`:
-- Multi-axis profiles (`ClaimProfile` across integrity, authenticity, coverage, measurement, causality, finality).
-- Derivation depth and dependency fan-out in the epistemic DAG.
+These promotion gates remain deliberately closed. A future research tranche may
+define an estimand, prospective dataset, simple baselines, calibration and
+uncertainty contracts, and then test whether any estimator has incremental
+decision value. Until then, the correct production action is **no action**.
 
----
+## What would be required for future promotion
 
-## 3. Complexity Lab Architecture Specification
+Future promotion would require evidence, not merely more code: a precise target;
+temporally valid evaluation; calibrated uncertainty; comparison with simple
+baselines; positive held-out decision value; shift/abstention behavior; an
+explicit privacy/feature contract; proof of decision-time feature availability;
+and a rollback/fallback contract for any action consumer. Independent review of
+the research methodology would remain valuable even after those repository-side
+conditions exist.
 
-When work begins on WP-J03, implementation must adhere to the product boundary defined in `docs/TOKEN-GOVERNANCE-AND-COMPLEXITY-LAB.md` §6:
+## Terminal packet boundary
 
-```text
-src/research/complexity/        # pure experimental mathematics
-fiscus lab complexity ...       # read-only / local output
-```
-
-### 3.1 Guiding Invariants
-1. **Isolated Research Mathematics:** The lab lives under `src/research/complexity/`. It must have zero mutating dependencies on production routing, pricing, billing, or budget enforcement.
-2. **Explicitly Non-Decision-Making:** The lab outputs inspectable characterizations (`ComplexityProfile`), never automated routing mandates.
-3. **Multi-Estimator Pluralism:** No single scalar is canonized. The lab maintains multiple competing estimators (Structural, IRT, Nonlinear Interaction, Epistemic Uncertainty).
-4. **Provenance-Aware:** Every emitted profile identifies its feature extractor, model version, training/calibration snapshot, and input digest.
-
-### 3.2 Canonical `ComplexityProfile` Schema
-The canonical output of the lab is a composite profile rather than a collapsed scalar:
-
-```typescript
-export interface ComplexityProfile {
-  readonly schemaVersion: 1;
-  readonly profileId: string;
-  readonly evaluatedAt: string;
-  readonly subject: string; // project, workUnit, or request identifier
-
-  /** Structural complexity: content-free observable features */
-  readonly structural: {
-    readonly diffVolume: { added: number; deleted: number; files: number };
-    readonly contextTokens: number;
-    readonly taskType: string;
-    readonly toolCount: number;
-  };
-
-  /** Execution complexity: observed multi-turn dynamics */
-  readonly execution: {
-    readonly requestCount: number;
-    readonly totalTokens: number;
-    readonly reasoningTokens: number;
-    readonly durationMs: number;
-    readonly retryCount: number;
-  };
-
-  /** Epistemic complexity: model-conditioned predictive uncertainty */
-  readonly epistemic: {
-    readonly predictiveUncertainty: number | null; // U(x, a)
-    readonly poolUncertainty: number | null;        // C_epistemic(x)
-    readonly estimationMethod: string;
-  };
-
-  /** Model sensitivity: separation across candidate models */
-  readonly modelSensitivity: {
-    readonly performanceDispersion: number | null; // S_model(x)
-    readonly candidatePairwiseSeparation: Record<string, number>;
-  };
-
-  /** Predicted compute distribution: stochastic forecast */
-  readonly predictedCompute: {
-    readonly p50Tokens: number;
-    readonly p90Tokens: number;
-    readonly p99Tokens: number;
-    readonly cvarTokens: number;
-  } | null;
-
-  /** Quality and calibration bounds */
-  readonly confidence: {
-    readonly calibrationStatus: 'uncalibrated_research' | 'prospective_validated';
-    readonly coverageInterval: [number, number] | null;
-  };
-
-  /** Provenance metadata */
-  readonly provenance: {
-    readonly estimatorId: string;
-    readonly estimatorVersion: string;
-    readonly inputDigest: string;
-    readonly calibrationDatasetId: string | null;
-  };
-}
-```
-
----
-
-## 4. Promotion Rules Audit (Why production promotion is not yet eligible)
-
-Section 12 of `docs/TOKEN-GOVERNANCE-AND-COMPLEXITY-LAB.md` sets ten (`10`) strict promotion rules that must pass before any Complexity Lab estimator may advance into the production decision or control plane. Here is the evaluation against the current repository state:
-
-| Rule | Requirement | Current State | Audit Verdict |
-|---|---|---|---|
-| **Rule 1** | Target quantity precisely defined | "Complexity" has no mathematical consensus; no formal estimand is specified in code. | ❌ **OPEN** |
-| **Rule 2** | Temporal separation of training and evaluation | No historical train/eval split or prospective dataset exists. | ❌ **OPEN** |
-| **Rule 3** | Calibration error measured | No calibration error benchmarks or scoring rules (e.g. Brier score) exist. | ❌ **OPEN** |
-| **Rule 4** | Simple baselines included | No baseline models (e.g., diff size alone, linear token count) are registered for competition. | ❌ **OPEN** |
-| **Rule 5** | Positive incremental decision value on held-out evaluation | The decision engine (`src/decision/`) operates strictly on interval dominance and regret without complexity input. | ❌ **OPEN** |
-| **Rule 6** | Robustness under distribution shift & shift-based abstention | No shift detection or abstention mechanism exists in the codebase. | ❌ **OPEN** |
-| **Rule 7** | Explicit privacy & data boundaries | `docs/DATA-BOUNDARIES.md` defines egress rules, but content inspection policies for informational complexity are unbuilt. | ❌ **OPEN** |
-| **Rule 8** | Feature availability proven at decision time without outcome leakage | Post-hoc realization features (diff lines, test passes) are only known *after* execution; using them for pre-routing would be outcome leakage. | ❌ **OPEN** |
-| **Rule 9** | Model emits uncertainty & coverage | No conformal prediction or calibrated Bayesian intervals exist for complexity. | ❌ **OPEN** |
-| **Rule 10** | Rollback / fallback exists | Routing currently defaults to direct operator/client choice; no automated routing engine exists to roll back from. | ❌ **OPEN** |
-
-All ten promotion gates are unfulfilled. Promoting or building an uncalibrated complexity metric would directly violate the project's constitutional commitments; the packet is therefore complete as a research-only admission boundary while production promotion remains refused.
-
----
-
-## 5. Remaining Packet Scope & External Gates
-
-When the foundational prerequisites are established, the remaining scope of WP-J03 comprises:
-
-1. **Research Estimator Foundation:**
-   - Implement `src/research/complexity/profile.ts` declaring `ComplexityProfile`.
-   - Implement a baseline structural feature extractor over local, content-free git/request observables.
-   - Implement a basic Item Response Theory (2PL) task-difficulty estimator as an isolated mathematical model.
-2. **Read-Only CLI Surface:**
-   - Wire `fiscus lab complexity <target>` in `src/cli.ts` (once removed from `PLANNED` in `test/documentation-commands.test.ts`), outputting JSON or tabular diagnostic summaries only.
-3. **Research Harness Benchmarking:**
-   - Extend `scripts/benchmark.mjs` with calibration benchmarks comparing multi-feature estimators against single-variable baselines.
-4. **External Gates (Cannot Be Fabricated Locally):**
-   - Prospective developer-task datasets with empirical time and token outcomes.
-   - Independent peer review of proposed complexity estimators against established software-engineering metrics.
-   - Human validation that workload-normalized spend explanation correctly controls for task difficulty without penalizing high-SLA engineers.
+`WP-J03` is therefore `COMPLETED` as a **research-only admission boundary**.
+The production promotion rules are explicitly unfulfilled and no production
+surface may reinterpret that packet status as evidence that a complexity
+estimator is validated, causal, decision-useful, or safe to automate.
