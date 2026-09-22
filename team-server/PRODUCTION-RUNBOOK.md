@@ -20,6 +20,30 @@ passes unit tests. Promotion requires evidence for the deployment boundary.
 - Privacy: k-anonymity and per-developer opt-in remain enforced on the deployed
   dashboard endpoints.
 
+## Executable PostgreSQL probe
+
+Use a disposable PostgreSQL database; the probe intentionally applies the real
+schema and writes signed test rollups.
+
+```bash
+cd team-server
+DATABASE_URL='postgres://...' npm run test:postgres
+```
+
+PowerShell:
+
+```powershell
+cd team-server
+$env:DATABASE_URL='postgres://...'
+npm run test:postgres
+```
+
+The probe checks schema application, developer-key registration, signed-envelope
+insert, exact replay idempotency, restart persistence, aggregation, and transaction
+rollback when a child project row is rejected. A passing probe is database-adapter
+evidence only; it does not establish TLS, OIDC, backups, load, secret rotation or
+Internet-facing production fitness.
+
 ## Promotion criterion
 
 Record the exact Fiscus commit, infrastructure revision, database version, OIDC
