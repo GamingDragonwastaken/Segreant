@@ -1,39 +1,66 @@
 # Local Execution Inventory
 
-This file is a **historical execution overlay**, not an active queue.
-`docs/program/PACKET-INVENTORY.md` is the canonical 76-packet ledger and
-`docs/program/ACTIVE-EXECUTION.md` is the canonical post-merge state.
+This file is a **historical execution/retirement overlay**, not an active queue.
+`PACKET-INVENTORY.md` is the canonical 76-packet ledger and
+`ACTIVE-EXECUTION.md` is the canonical post-merge state.
 
 ## Final integration
 
 - Canonical branch: `main`.
-- Final reconciliation source head:
-  `0ef56701b5435e51ac8a15a4c19d4a75555c33cb`.
-- PR #20: merged by normal merge commit
-  `726ae7007bfb6abafdb7ad01e0156d424bce472e`.
-- Exact candidate CI: run `35743000421`, success.
-- Post-merge `main` CI: run `35743877958`, success.
-- Dossier state: 71 `COMPLETED`, 1 `BLOCKED_EXTERNAL`,
-  4 `SUPERSEDED_WITH_REASON`, 0 non-terminal.
+- Final reconciliation source: `0ef56701b5435e51ac8a15a4c19d4a75555c33cb`.
+- PR #20 merged normally at `726ae7007bfb6abafdb7ad01e0156d424bce472e`.
+- Exact candidate CI: `35743000421`, success.
+- Latest verified code-bearing main head: `924ed5aae65f70df8e23a8ed5657a875b92a6323`.
+- Latest code-bearing push CI: `35762764329`, success.
+- Dossier: 71 completed, 1 external, 4 superseded, 0 non-terminal.
 - Foundational Audit II: 36 terminal findings.
-- WP-J02: completed at the bounded `budget.dailyUsd` online-control boundary.
-- WP-I04: repository browser/axe work complete; exact
-  NVDA/JAWS/VoiceOver behavior remains external.
 
-## Historical worker-lane rule
+## Historical branch retirement classification
 
-Old `luna-next/*`, reconstruction, foundation, verification and alternate
-integration lanes are historical evidence only. Their useful work was integrated,
-superseded or independently reimplemented in the final tree. They are not alternate
-authorities and must not be cherry-picked into `main` merely because they contain
-commits.
+These branch refs are **not alternate authorities** and should not be merged:
 
-Any future executor needing historical packet/worker detail should read
-`DECISION-LOG.md` and `EVIDENCE-INDEX.md`; this file deliberately does not
-repeat stale worktree states.
+### Strictly represented by `main`
 
-## Current acceptance boundary
+- `codex/high-assurance-foundation` — strict ancestor of `main`.
+- `gpt56/magnum-opus-reconstruction` — strict ancestor of `main`.
+- `gpt56/final-reconciliation` — strict ancestor of `main`.
+- `gpt56/post-merge-cleanup` — was identical to the verified post-merge head
+  before record-only synchronization.
 
-The dossier/reconciliation phase is closed. New engineering begins from `main`.
-External field evidence remains in `EXTERNAL-GATES.md` and is not converted into
-repository completion.
+These are safe branch-retirement candidates once branch deletion is available.
+
+### Historical worker/alternate lanes
+
+- `luna-next/wp-d04` — the contribution benchmark exists in canonical `main`.
+- `luna-next/wp-h03` — the canonical tree contains the final fault-injection and
+  deterministic high-consequence fuzz assurance.
+- `luna-next/wp-f06` — intentionally **not** integrated as a second generic
+  policy authority; WP-F06 is superseded by the narrower J02 delegated online
+  control boundary.
+- `gpt56/sol-magnum-opus-integration` — divergent early integration/archive lane;
+  later canonical kernel/tests/program records supersede its runtime changes.
+- `codex/fiscus-local-working-tree-snapshot-2026-08-29` — one-commit historical
+  snapshot from before the reconstruction; canonical main is hundreds of commits
+  ahead.
+- `agent/truth-closure` — historical PR #1 lane; final reconstruction subsumes
+  or supersedes its correctness/trust work.
+- `research/economic-control-foundation` — historical research lane; the final
+  economic-control/Complexity-Lab architecture is represented in canonical
+  main/program records.
+
+Do not force-move these divergent refs to make the branch list cosmetically clean.
+Deleting a historical ref is preferable to rewriting it, after its retention value
+is no longer needed.
+
+## Tooling limitation
+
+The connected GitHub action set in the final cleanup session can update refs but
+does not expose branch-ref deletion. The authorized desktop that could run
+`git push origin --delete` is offline. Therefore branch refs are classified here
+rather than destructively rewritten. Closed PRs already have no integration
+authority; `main` is the sole implementation authority.
+
+## External boundary
+
+Repository execution is closed. External field evidence remains in
+`EXTERNAL-GATES.md`; it is not converted into repository completion.
