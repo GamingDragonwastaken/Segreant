@@ -26,6 +26,11 @@ export const RESOURCE_LIMITS = Object.freeze({
   judgeResponseBytes: 4 * 1024 * 1024,
   receiptBytes: 4 * 1024 * 1024,
   evidenceArtifactBytes: 1 * 1024 * 1024,
+  budgetControlPolicyBytes: 64 * 1024,
+  budgetControlStateBytes: 256 * 1024,
+  budgetControlPendingBytes: 256 * 1024,
+  budgetControlAuditBytes: 16 * 1024 * 1024,
+  budgetControlLockBytes: 4 * 1024,
   importFiles: 10_000,
   importDirectories: 50_000,
   importRows: 500_000,
@@ -53,7 +58,12 @@ export type ResourceLimitKind =
   | 'transcript_line_bytes'
   | 'json_document_bytes'
   | 'receipt_bytes'
-  | 'evidence_artifact_bytes';
+  | 'evidence_artifact_bytes'
+  | 'budget_control_policy_bytes'
+  | 'budget_control_state_bytes'
+  | 'budget_control_pending_bytes'
+  | 'budget_control_audit_bytes'
+  | 'budget_control_lock_bytes';
 
 export class ResourceLimitError extends Error {
   readonly code = 'resource_limit' as const;
