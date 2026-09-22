@@ -5,7 +5,7 @@
  */
 
 import { Store } from '../store/db.ts';
-import { loadConfig, saveConfig, dbPath, configPath, isDemo } from '../config.ts';
+import { loadConfig, mutateConfig, dbPath, configPath, isDemo } from '../config.ts';
 import { attributeCommits, isGitRepo } from '../git/correlate.ts';
 import { loadRealization } from '../value/realization.ts';
 import { buildGuide, type GuideFacts } from '../guide.ts';
@@ -24,16 +24,16 @@ export async function cmdAlerts(flags: Flags): Promise<void> {
 
   // Config-only sub-actions: set/clear the opt-in delivery webhook.
   if (typeof flags['set-webhook'] === 'string') {
-    const c = loadConfig();
-    c.alerts.webhookUrl = String(flags['set-webhook']);
-    saveConfig(c);
+    mutateConfig((c) => {
+      c.alerts.webhookUrl = String(flags['set-webhook']);
+    });
     console.log(color(tty, C.green, '  Alert webhook saved.') + color(tty, C.gray, ' Delivery sends ONLY alert metadata — never prompts, code, or keys.'));
     return;
   }
   if (flags['clear-webhook']) {
-    const c = loadConfig();
-    c.alerts.webhookUrl = null;
-    saveConfig(c);
+    mutateConfig((c) => {
+      c.alerts.webhookUrl = null;
+    });
     console.log(color(tty, C.gray, '  Alert webhook cleared.'));
     return;
   }
@@ -174,8 +174,7 @@ export async function cmdDoctor(): Promise<void> {
 }
 
 export function cmdInit(): void {
-  const cfg = loadConfig();
-  saveConfig(cfg);
+  const cfg = mutateConfig((current) => current);
   const tty = process.stdout.isTTY ?? false;
   console.log('');
   console.log(color(tty, C.bold, '  Fiscus initialized'));
