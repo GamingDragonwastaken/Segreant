@@ -19,7 +19,7 @@
 
 import http from 'node:http';
 import type { Store } from '../store/db.ts';
-import { loadConfig, saveConfig, type FiscusConfig } from '../config.ts';
+import { loadConfig, mutateConfig, saveConfig, type FiscusConfig } from '../config.ts';
 import { ROUTES, type ConfigPersistence, type Route } from './routes.ts';
 import { serveStatic } from './static.ts';
 
@@ -52,7 +52,7 @@ export interface DashboardDeps {
 }
 
 export function createDashboardServer(deps: DashboardDeps): http.Server {
-  const { store, config, version, configPersistence = { load: loadConfig, save: saveConfig } } = deps;
+  const { store, config, version, configPersistence = { load: loadConfig, save: saveConfig, mutate: mutateConfig } } = deps;
 
   return http.createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
