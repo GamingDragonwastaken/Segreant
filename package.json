@@ -37,7 +37,9 @@
     "predemo": "npm run build",
     "demo": "node --disable-warning=ExperimentalWarning bin/fiscus.mjs demo --serve",
     "prepack": "npm run build",
-    "prepublishOnly": "npm run typecheck:all && npm test && npm run test:team-server && npm run build"
+    "prepublishOnly": "npm run verify:security && npm run verify:supply-chain && npm run audit:runtime && npm run typecheck:all && npm test && npm run test:team-server && npm run build",
+    "verify:security": "node scripts/check-security.mjs",
+    "audit:runtime": "npm audit --omit=dev --audit-level=high && npm --prefix team-server audit --omit=dev --audit-level=high"
   },
   "files": [
     "bin",
