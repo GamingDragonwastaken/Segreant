@@ -300,8 +300,13 @@ export function reconcileBudgetControlState(
     validateState(policy, persisted);
     return persisted;
   }
-  if (persisted.policyId === policy.id && persisted.policyVersion > policy.version) {
-    throw new Error('budget control policy rollback refused: persisted state belongs to a newer policy version');
+  if (persisted.policyId === policy.id) {
+    if (persisted.policyVersion > policy.version) {
+      throw new Error('budget control policy rollback refused: persisted state belongs to a newer policy version');
+    }
+    if (persisted.policyVersion === policy.version) {
+      throw new Error('budget control policy version reused with different contents; increment the policy version before changing delegated authority');
+    }
   }
   return initialBudgetControlState(policy, currentDailyUsd, at);
 }
