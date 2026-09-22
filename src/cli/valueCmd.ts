@@ -8,7 +8,7 @@
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { Store } from '../store/db.ts';
-import { loadConfig, saveConfig, dbPath, isDemo } from '../config.ts';
+import { loadConfig, mutateConfig, dbPath, isDemo } from '../config.ts';
 import { isGitRepo, projectName, resolveCommit } from '../git/correlate.ts';
 import { computeArtifactPersistence } from '../git/quality.ts';
 import { contributionEvidenceLines, summarizeContributionEvidence } from '../git/contribution.ts';
@@ -685,9 +685,15 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
   // (D-248): generic contexts can be unlike work, and comparable model guidance
   // reaches the operator only through the gated frontier trial.
   if (flags.apply && applyPermitted && decision) {
-    cfg.budget.dailyUsd = dailyCap;
-    cfg.budget.dailySoftUsd = softCap;
-    saveConfig(cfg);
+    mutateConfig((latest) => {
+      if (JSON.stringify(latest) !== JSON.stringify(cfg)) {
+        throw new Error('configuration changed while budget advice was being computed; refusing to overwrite a newer generation — re-run the recommendation');
+      }
+      const next = structuredClone(latest);
+      next.budget.dailyUsd = dailyCap;
+      next.budget.dailySoftUsd = softCap;
+      return next;
+    });
     console.log('');
     console.log(color(tty, C.green, `  Applied: daily cap ${usd(dailyCap)}, soft ${usd(softCap)} written to config.`));
     // Persist the certificate the cap was set under (D-220): the record is never
