@@ -1,25 +1,27 @@
 # Dossier packet inventory
 
-Mechanically extracted from `FISCUS_EXECUTION_DOSSIER_III.md` — **76 packets**, not
-the fourteen a previous round reported. That error came from grepping
-`^## WP-[AB][0-9]{2}`, which filters to the A and B frontiers, and then reporting
-the filter's output as the dossier's contents. Regenerate rather than edit by hand:
+`FISCUS_EXECUTION_DOSSIER_III.md` contained 76 execution packets. This file is
+the repository-surviving packet ledger and is mechanically guarded by
+`test/program-terminal-state.test.ts`.
 
-```bash
-grep -cE '^## WP-[A-Z][0-9]{2}' FISCUS_EXECUTION_DOSSIER_III.md   # -> 76
-```
+States: `COMPLETED`, `BLOCKED_EXTERNAL`, `SUPERSEDED_WITH_REASON` at program
+closure. Non-terminal states remain part of the vocabulary for historical work
+but are forbidden in the closed inventory.
 
-States: `NOT_STARTED` `IN_PROGRESS` `PARTIAL` `COMPLETED` `BLOCKED_EXTERNAL`
-`SUPERSEDED_WITH_REASON`. Every packet carries exactly one.
+Final-reconciliation accounting: **71 COMPLETED, 0 PARTIAL, 0 NOT_STARTED,
+0 IN_PROGRESS, 1 BLOCKED_EXTERNAL, 4 SUPERSEDED_WITH_REASON — 76 total.**
 
-Latest reconciliation (2026-09-21): the synchronized remote tip is
-`481383638f1a2519891b923159301385d50c66ea` with exact-head CI run
-`35641090995` green across all nine jobs. J01 now has a bounded, persisted
-provenance-aware OPE foundation and remains `PARTIAL`; J02 remains an explicit
-no-action/not-started gate. The remaining C01 budget-window, legacy read-model,
-receipt/team reconciliation and provider-FX requirements remain as recorded in
-their packet rows.
+The one external packet is WP-I04: Chromium/axe runtime accessibility evidence
+is repository-complete, while exact NVDA/JAWS/VoiceOver behavior requires a real
+assistive-technology runtime and field execution. WP-J02 is no longer external:
+the owner delegated bounded autonomous action and the repository now implements
+the constrained `budget.dailyUsd` controller described in
+`docs/program/J01-J02-DEPENDENCY-GATES.md`.
 
+Packet state is not a substitute for the Foundational Audit II register or the
+final integration gate. A packet may be complete while a cross-cutting audit
+finding still needs reconciliation; `docs/program/AUDIT-REGISTER.md` and
+`docs/program/FINAL-GATE.md` are the controlling cross-checks.
 | Packet | Subject | State | Evidence / remainder |
 |---|---|---|---|
 | `WP-A01` | Make perfect-information VoI probabilistically coherent | `COMPLETED` | Checkpointed and remotely green at or before `896c093`; see DECISION-LOG and EVIDENCE-INDEX. |
