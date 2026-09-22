@@ -182,6 +182,11 @@ const CONSUMERS: ReadonlyArray<{ file: string; klass: Classification; why: strin
     why: 'compareEnforced throws "budget enforcement compares USD only" and the exact projection refuses non-USD; enforcement fails closed rather than translating',
   },
   {
+    file: 'src/budget/onlineControl.ts',
+    klass: 'c',
+    why: 'the controller is deliberately scoped to the USD-named budget.dailyUsd target; policy bounds, safe baseline and decision basis are all daily-USD fields, and it cannot accept or translate a second currency',
+  },
+  {
     file: 'src/billing/reconcile.ts',
     klass: 'c',
     why: 'refuses provider_reported_multiple_currencies and provider_currency_is_not_usd by name, and refuses a local exact amount that is not USD because this reconciliation has no FX policy',
