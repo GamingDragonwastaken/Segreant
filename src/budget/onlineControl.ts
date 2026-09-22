@@ -282,6 +282,30 @@ export function initialBudgetControlState(
   });
 }
 
+/**
+ * Reconcile persisted controller state with the operator-supplied policy.
+ * The same exact policy never re-arms itself: rolled_back remains terminal.
+ * A genuinely new version/digest may start a new authority epoch, but only when
+ * the live cap is already at the new policy's declared safe baseline.
+ */
+export function reconcileBudgetControlState(
+  policy: BudgetControlPolicy,
+  persisted: BudgetControlState,
+  currentDailyUsd: number | null,
+  at: string,
+): BudgetControlState {
+  if (persisted.policyId === policy.id
+      && persisted.policyVersion === policy.version
+      && persisted.policyDigest === policy.digest) {
+    validateState(policy, persisted);
+    return persisted;
+  }
+  if (persisted.policyId === policy.id && persisted.policyVersion > policy.version) {
+    throw new Error('budget control policy rollback refused: persisted state belongs to a newer policy version');
+  }
+  return initialBudgetControlState(policy, currentDailyUsd, at);
+}
+
 function validateState(policy: BudgetControlPolicy, state: BudgetControlState): void {
   if (state.policyId !== policy.id || state.policyVersion !== policy.version || state.policyDigest !== policy.digest) {
     throw new Error('budget control state does not belong to this exact policy version');
