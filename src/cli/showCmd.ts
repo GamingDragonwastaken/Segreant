@@ -6,7 +6,7 @@
 
 import { writeFileSync } from 'node:fs';
 import { Store } from '../store/db.ts';
-import { loadConfig, saveConfig, dbPath, configPath, fiscusHome, isDemo, type FiscusConfig } from '../config.ts';
+import { loadConfig, mutateConfig, dbPath, configPath, fiscusHome, isDemo, type FiscusConfig } from '../config.ts';
 import { startOfLocalDay } from '../budget/guard.ts';
 import { requestsToCsv } from '../export/csv.ts';
 import { economicRequestsToCsv, economicRequestsToJson } from '../export/economic.ts';
@@ -292,24 +292,25 @@ export function cmdConfig(flags: Flags): void {
 }
 
 export function cmdBudget(flags: Flags): void {
-  const cfg = loadConfig();
-  const next: FiscusConfig = { ...cfg, budget: { ...cfg.budget } };
-  const setNum = (key: 'dailyUsd' | 'dailySoftUsd' | 'sessionUsd' | 'runawayMaxUsd', flag: string) => {
-    if (flags[flag] !== undefined) {
-      const v = String(flags[flag]);
-      next.budget[key] = v === 'off' || v === 'none' ? null : Number(v);
+  const next = mutateConfig((cfg) => {
+    const updated: FiscusConfig = { ...cfg, budget: { ...cfg.budget } };
+    const setNum = (key: 'dailyUsd' | 'dailySoftUsd' | 'sessionUsd' | 'runawayMaxUsd', flag: string) => {
+      if (flags[flag] !== undefined) {
+        const v = String(flags[flag]);
+        updated.budget[key] = v === 'off' || v === 'none' ? null : Number(v);
+      }
+    };
+    setNum('dailyUsd', 'daily');
+    setNum('dailySoftUsd', 'soft');
+    setNum('sessionUsd', 'session');
+    setNum('runawayMaxUsd', 'runaway');
+    if (flags.window !== undefined) updated.budget.runawayWindowSec = Number(flags.window);
+    if (flags['include-imported'] !== undefined) {
+      const v = String(flags['include-imported']);
+      updated.budget.capIncludesImported = !(v === 'off' || v === 'false' || v === 'no');
     }
-  };
-  setNum('dailyUsd', 'daily');
-  setNum('dailySoftUsd', 'soft');
-  setNum('sessionUsd', 'session');
-  setNum('runawayMaxUsd', 'runaway');
-  if (flags.window !== undefined) next.budget.runawayWindowSec = Number(flags.window);
-  if (flags['include-imported'] !== undefined) {
-    const v = String(flags['include-imported']);
-    next.budget.capIncludesImported = !(v === 'off' || v === 'false' || v === 'no');
-  }
-  saveConfig(next);
+    return updated;
+  });
 
   console.log('');
   console.log('  Budget updated:');
