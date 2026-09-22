@@ -52,14 +52,6 @@ Do not force-move these divergent refs to make the branch list cosmetically clea
 Deleting a historical ref is preferable to rewriting it, after its retention value
 is no longer needed.
 
-## Tooling limitation
-
-The connected GitHub action set in the final cleanup session can update refs but
-does not expose branch-ref deletion. The authorized desktop that could run
-`git push origin --delete` is offline. Therefore branch refs are classified here
-rather than destructively rewritten. Closed PRs already have no integration
-authority; `main` is the sole implementation authority.
-
 ## External boundary
 
 Repository execution is closed. External field evidence remains in
