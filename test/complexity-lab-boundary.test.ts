@@ -94,8 +94,9 @@ test('WP-J03 design and precondition report exists and covers all 10 research pr
   assert.match(report, /Structural complexity/);
   assert.match(report, /Execution complexity/);
   assert.match(report, /Promotion Rules/);
-  assert.match(report, /\*\*Status:\*\*\s*`(?:NOT_STARTED|PARTIAL)`/);
+  assert.match(report, /\*\*Status:\*\*\s*`COMPLETED`[^\n]*research-only/i);
   assert.doesNotMatch(report, /\bBLOCKED\b/, 'the report must use the packet vocabulary and not invent BLOCKED');
+  assert.match(report, /promotion gates? remain|promotion rules.*unfulfilled|not.*production/i, 'completion must not be confused with production promotion');
   for (let rule = 1; rule <= 10; rule++) {
     assert.match(report, new RegExp(`Rule\\s+${rule}\\b`, 'i'), `Report must address promotion Rule ${rule}`);
   }
