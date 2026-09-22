@@ -2,70 +2,73 @@
 
 ## Current conclusion
 
-The Execution Dossier III repository program has no remaining `OPEN`, `PARTIAL`,
-`IN_PROGRESS`, or `NOT_STARTED` packet. Foundational Audit II likewise has no
-non-terminal finding. This document therefore records only work that cannot be
-truthfully completed by repository implementation alone, plus owner-reserved
-integration/release actions.
+Execution Dossier III and Foundational Audit II have no repository-internal
+`OPEN`, `PARTIAL`, `IN_PROGRESS`, or `NOT_STARTED` item. The completed
+reconciliation is merged into `main` through PR #20.
 
 Current controlling records:
 
 - `docs/program/PACKET-INVENTORY.md` — 76 dossier packets;
-- `docs/program/AUDIT-REGISTER.md` — 36 terminal Foundational Audit II findings;
-- `docs/program/ACTIVE-EXECUTION.md` — current integration lane and PR topology;
-- `docs/program/FINAL-GATE.md` — exact final repository acceptance;
-- `docs/program/EXTERNAL-GATES.md` — protocols that require real external evidence.
+- `docs/program/AUDIT-REGISTER.md` — 36 terminal Audit II findings;
+- `docs/program/ACTIVE-EXECUTION.md` — canonical post-merge state;
+- `docs/program/FINAL-GATE.md` — observed final repository acceptance;
+- `docs/program/EXTERNAL-GATES.md` — protocols requiring real external evidence.
 
 ## Repository-internal remainder
 
-None is accepted merely by assertion. `test/program-terminal-state.test.ts` fails
-if a dossier or Audit II item becomes non-terminal, and the final gate remains
-unchecked until the final exact-head and merge-candidate CI results are observed.
+None from the dossier/Audit II program. The frozen reconciliation head
+`0ef56701b5435e51ac8a15a4c19d4a75555c33cb` passed exact candidate CI run
+`35743000421`. PR #20 merged it into `main` as
+`726ae7007bfb6abafdb7ad01e0156d424bce472e`, and post-merge run
+`35743877958` passed the configured `main` matrix.
+
+A future defect discovered in ordinary development is new maintenance work; it does
+not make the historical dossier state retroactively non-terminal unless it
+specifically falsifies a recorded acceptance claim.
 
 ## Genuine external evidence gates
 
 The remaining evidence questions are external to source-code completion:
 
-1. provider-authoritative billing reconciliation with real scoped account/project/time evidence;
+1. provider-authoritative billing reconciliation with real scoped evidence;
 2. a real preregistered governed causal study;
-3. production team-service deployment evidence (IdP/Postgres/TLS/secrets/recovery/load);
+3. production team-service deployment evidence;
 4. independent security assessment;
 5. independent scholarly/methodological critique;
-6. field usability/accessibility, including real NVDA/JAWS/VoiceOver behavior;
+6. real-user and assistive-technology field validation;
 7. longitudinal design-partner value evidence.
 
-These are defined operationally in `docs/program/EXTERNAL-GATES.md`. They are not
-silently promoted to repository facts.
+These are defined in `docs/program/EXTERNAL-GATES.md` and are not promoted to
+repository facts.
 
 ## Dossier external packet
 
 `WP-I04` remains `BLOCKED_EXTERNAL` only for exact assistive-technology field
-behavior. Chromium/axe runtime accessibility and browser CI are implemented. DOM,
-axe and Chromium behavior cannot establish NVDA/JAWS/VoiceOver behavior by inference.
+behavior. Chromium/axe browser evidence is implemented and CI-verified. DOM, axe
+and Chromium behavior cannot establish NVDA/JAWS/VoiceOver announcements by
+inference.
 
-`WP-J02` is not an external gate. The owner delegated bounded autonomous action,
-and the final reconciliation implements the constrained daily-cap controller under
-the policy/assurance/circuit-breaker contract documented in
+`WP-J02` is not external. The owner delegated bounded autonomous action and the
+merged repository implements the constrained daily-cap controller under the
+policy/assurance/circuit-breaker contract in
 `docs/program/J01-J02-DEPENDENCY-GATES.md`.
 
-## Owner-reserved actions
+## Owner-reserved future actions
 
-The repository program does not itself authorize or perform:
+Repository completion does not itself authorize:
 
-- merge to `main`;
 - public release or npm publish;
 - license or project-name change;
 - internet-facing deployment;
 - creation/use of real production secrets or credentials;
 - paid/external commitments;
-- release signing/provenance identity that requires owner-granted publishing authority.
+- release signing/provenance identity requiring publishing authority.
 
-Those actions are not implementation defects and must not be fabricated merely to
-make a completion dashboard green.
+The dossier integration itself is already complete on `main`.
 
-## Final integration rule
+## Historical branches and PRs
 
-The only intended integration candidate is `gpt56/final-reconciliation` / PR #20.
-Historical reconstruction/foundation/verification PRs are reconciled as ancestors,
-verification-only lanes, or superseded alternatives. `main` stays untouched until
-the final gate is actually green and the owner chooses to merge.
+PRs #8, #9, #10 and #11 were reconciled and closed without separate merges. PR #20
+is the sole final integration and is merged. Historical branches are evidence
+sources only; do not cherry-pick them into `main` merely because they contain old
+commits.

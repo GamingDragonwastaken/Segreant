@@ -1,76 +1,66 @@
 # Active Execution
 
-**Current reconciliation state, not historical log.** Historical packet decisions and
-commit-bound evidence live in `docs/program/DECISION-LOG.md` and
-`docs/program/EVIDENCE-INDEX.md`.
+**Post-merge state, not historical log.** The Execution Dossier III reconstruction and
+final reconciliation are integrated into `main`. Historical decisions and
+commit-bound evidence remain in `DECISION-LOG.md` and `EVIDENCE-INDEX.md`.
 
-## Current lane
+## Canonical repository state
 
 | Field | State |
 |---|---|
-| Integration branch | `gpt56/final-reconciliation` |
-| Base candidate | `gpt56/magnum-opus-reconstruction` at the verified dossier head `254dd4c907668c5fe41d0e72f824cddcd44e34b8` |
-| Integration target | `main` through draft PR #20 only after final reconciliation |
-| Main mutation | Not performed by this reconciliation lane |
-| Force-push/release/deploy/secrets/paid commitments | Not performed |
+| Default branch | `main` |
+| Final reconciliation source head | `0ef56701b5435e51ac8a15a4c19d4a75555c33cb` |
+| Final integration PR | #20 — merged with a normal merge commit |
+| Merge commit | `726ae7007bfb6abafdb7ad01e0156d424bce472e` |
+| Exact candidate CI | GitHub Actions run `35743000421` — success |
+| Post-merge `main` CI | GitHub Actions run `35743877958` — success |
+| Open reconstruction/integration PRs | none |
+| Public release / npm publish / deployment | not performed |
+
+GitHub reports zero file differences between the frozen reconciliation tree and
+the merged `main` tree; `main` is ahead only by integration/history commits.
 
 Boundaries still classified `unmigrated_authority`: none.
 
-## What changed in final reconciliation
+## Program accounting
 
-- WP-J02 was incorrectly left `BLOCKED_EXTERNAL` even though the owner had already
-  delegated bounded autonomous action. The repository now has a real constrained
-  controller for `budget.dailyUsd`: versioned/digested policy, DAL-3 and preference
-  robustness gates, deterministic zero-exploration v1, runaway/tail-risk circuit
-  breaker, safe-baseline rollback, operator-override refusal, hash-chained audit
-  and write-ahead crash recovery.
-- The final budget advisor and online controller no longer treat the bare decision
-  engine certificate as product authority. Both pass through the canonical decision
-  adapter before a decision-fitness Claim can reach presentation or action logic.
-- Foundational Audit II has been reconciled to a terminal 36-row register. Two
-  proposed remedies are explicitly `SUPERSEDED`; no audit row is left OPEN/PARTIAL.
-- Repository-side supply-chain/security evidence now includes the existing pin/lock/
-  registry/install/publish checks, CycloneDX runtime SBOM, a zero-dependency
-  production credential/dynamic-code audit, and high-severity runtime dependency
-  audits. Signed release provenance remains an owner release action rather than a
-  pull-request permission.
-- Program closure is now mechanically guarded by
-  `test/program-terminal-state.test.ts`, which rejects non-terminal dossier/audit
-  states or unchecked final-gate conditions.
+Execution Dossier III: **76 packets — 71 `COMPLETED`, 1
+`BLOCKED_EXTERNAL`, 4 `SUPERSEDED_WITH_REASON`, 0 non-terminal.**
 
-## Packet accounting
+Foundational Audit II: **36 terminal findings**, no
+`OPEN/PARTIAL/IN_PROGRESS` row.
 
-76 packets: **71 `COMPLETED`, 1 `BLOCKED_EXTERNAL`, 4
-`SUPERSEDED_WITH_REASON`, 0 non-terminal.** The sole external packet is WP-I04:
-the repository has Chromium/axe evidence, but exact screen-reader behavior requires
-an NVDA/JAWS/VoiceOver runtime and real assistive-technology execution.
+The sole dossier external packet is WP-I04's exact assistive-technology field
+behavior. Chromium/axe runtime evidence is repository-complete; NVDA/JAWS/VoiceOver
+behavior requires a real assistive-technology runtime.
 
-## Final verification still required
+WP-J02 is implemented: bounded online control of `budget.dailyUsd` requires a
+separate delegated policy, canonical decision Claim/DAL gate, zero-exploration v1,
+tail-risk circuit breaker, safe-baseline rollback, operator override, append-only
+audit and crash-recoverable write-ahead state.
 
-The branch is not merge-ready merely because the registers are terminal. The final
-candidate must still prove all of the following at one exact head:
+## Verification interpretation
 
-1. root build/typecheck/test on Ubuntu, macOS and Windows;
-2. team-server typecheck/test on Ubuntu, macOS and Windows;
-3. package smoke and runtime SBOM;
-4. browser accessibility harness;
-5. repository security/supply-chain/runtime dependency gates;
-6. the exact candidate-head job and the synthetic merge-candidate matrix;
-7. final adversarial review of the resulting diff against `main`.
+The final candidate run `35743000421` is the exact-head + synthetic-merge
+acceptance evidence for source head `0ef56701...`. The post-merge push run
+`35743877958` independently passed the root Ubuntu/macOS/Windows matrix,
+team-server Ubuntu/macOS/Windows, package smoke, security and browser-accessibility
+jobs on merge commit `726ae700...`. Its `candidate-head` job is intentionally
+skipped on a push event; that is not a missing PR-head check because the exact
+candidate was already verified before merge.
 
-Do not mark `docs/program/FINAL-GATE.md` complete until those results have actually
-been observed. A queued or assumed-green run is `PENDING`, never evidence.
+## What remains
 
-## PR topology to reconcile after green CI
+No repository-internal dossier packet remains non-terminal. Remaining work is
+external evidence or ordinary future maintenance:
 
-- PR #20 is the only intended final integration candidate.
-- PR #10 is verification-only and must not be merged.
-- PR #9 is the completed reconstruction history underlying #20 and is superseded by
-  the reconciliation candidate for integration purposes.
-- PR #8 is an ancestor of #9 and therefore redundant as a separate merge.
-- PR #11 is a divergent historical lane; unique changes must be confirmed as
-  subsumed or intentionally rejected before closure.
+- provider-authoritative billing reconciliation;
+- a real governed causal study;
+- production deployment validation;
+- independent security and research review;
+- real assistive-technology / field usability testing;
+- longitudinal design-partner evidence;
+- future release/publish/deployment actions when explicitly authorized.
 
-Owner-reserved actions remain: merging `main`, public release, npm publish,
-license/name change, internet-facing deployment, real secrets/credentials, and paid
-external commitments.
+Do not reopen historical reconstruction branches as alternate authorities merely
+because they remain in Git history. `main` is now the canonical implementation.
