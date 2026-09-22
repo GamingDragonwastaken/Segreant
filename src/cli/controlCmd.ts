@@ -25,7 +25,15 @@ import {
   type BudgetControlPolicy,
   type BudgetControlState,
 } from '../budget/onlineControl.ts';
-import { dbPath, ensureHome, fiscusHome, loadConfig, saveConfig } from '../config.ts';
+import {
+  acquireConfigMutationLock,
+  dbPath,
+  ensureHome,
+  fiscusHome,
+  loadConfig,
+  saveConfigWithLock,
+  type ConfigMutationLock,
+} from '../config.ts';
 import { acquireBudgetControlLock } from '../budget/controlLock.ts';
 import { RESOURCE_LIMITS, readBoundedUtf8File } from '../util/resource-limits.ts';
 import { computeFrontier } from '../value/frontier.ts';
@@ -184,9 +192,18 @@ export async function cmdBudgetControl(flags: Flags): Promise<void> {
   const policy = policyFromFile(policyPath);
   const home = ensureHome();
   const controlLock = acquireBudgetControlLock(home);
+  let configLock: ConfigMutationLock | null = null;
   try {
+    if (flags.apply) {
+      // Hold the shared config generation from read through commit/recovery so
+      // an interactive Fiscus writer cannot be silently overwritten by an
+      // autonomous decision computed from an older configuration.
+      configLock = acquireConfigMutationLock();
+    } else if (loadPending() !== null) {
+      throw new Error('budget control has an interrupted pending mutation; preview is read-only, so re-run with --apply to reconcile it');
+    }
     const cfg = loadConfig();
-    recoverPending(policy, cfg.budget.dailyUsd);
+    if (flags.apply) recoverPending(policy, cfg.budget.dailyUsd);
     const store = new Store(dbPath());
     try {
     const now = new Date().toISOString();
@@ -272,7 +289,7 @@ export async function cmdBudgetControl(flags: Flags): Promise<void> {
         // reached the from-side or to-side and finish/abort idempotently.
         writePending(pending);
         cfg.budget.dailyUsd = plan.nextDailyUsd;
-        saveConfig(cfg);
+        saveConfigWithLock(cfg, configLock!);
         applied = true;
       }
 
@@ -329,6 +346,7 @@ export async function cmdBudgetControl(flags: Flags): Promise<void> {
       store.close();
     }
   } finally {
+    configLock?.release();
     controlLock.release();
   }
 }
