@@ -42,19 +42,27 @@ one exact head. External field evidence remains separately named in
 Frozen reconciliation head:
 `0ef56701b5435e51ac8a15a4c19d4a75555c33cb`.
 
-GitHub Actions run `35743000421`: **SUCCESS**. The configured PR matrix passed,
-including the exact `candidate-head` job, synthetic merge-candidate root
+GitHub Actions run `35743000421`: **SUCCESS**. The configured PR matrix
+passed, including the exact `candidate-head` job, synthetic merge-candidate root
 Ubuntu/macOS/Windows jobs, team-server Ubuntu/macOS/Windows jobs, package smoke,
 security/supply-chain/runtime-dependency audit and browser/axe accessibility.
 
 PR #20 was then merged by a normal merge commit:
 `726ae7007bfb6abafdb7ad01e0156d424bce472e`.
 
-GitHub reports zero file differences between the frozen reconciliation tree and
-the merged `main` tree. Post-merge push run `35743877958`: **SUCCESS** across
+Post-merge hardening continued on `main` rather than reopening historical
+reconstruction lanes. The latest **code-bearing** hardening head is
+`924ed5aae65f70df8e23a8ed5657a875b92a6323`, which adds the executable
+PostgreSQL production probe/runbook, deterministic high-consequence fuzz/fault
+injection, and the final production-assurance record repairs. GitHub Actions run
+`35762764329`: **SUCCESS** on that exact head across all ten configured jobs:
 root Ubuntu/macOS/Windows, team-server Ubuntu/macOS/Windows, package smoke,
-security and browser accessibility. Its `candidate-head` job is skipped by design
-on a push event; the exact candidate-head evidence is successful run `35743000421`.
+security, browser accessibility, with `candidate-head` skipped by design on a
+push event. The pre-merge exact-head evidence remains run `35743000421`.
+
+Subsequent descendants may contain program-record-only synchronization. Such
+documentation commits do not replace the code-bearing evidence above; they still
+run the normal push matrix before being treated as clean.
 
 ## External evidence deliberately not claimed
 
