@@ -5,6 +5,7 @@ import { join } from 'node:path';
 
 test('J01 and J02 expose separate evidence and bounded action boundaries', () => {
   const doc = readFileSync(join(import.meta.dirname, '..', 'docs', 'program', 'J01-J02-DEPENDENCY-GATES.md'), 'utf8');
+  const normalized = doc.replace(/\s+/g, ' ');
   for (const marker of [
     'propensity',
     'overlap',
@@ -17,7 +18,7 @@ test('J01 and J02 expose separate evidence and bounded action boundaries', () =>
     'operator/external override',
     'write-ahead',
   ]) {
-    assert.ok(doc.toLowerCase().includes(marker.toLowerCase()), `missing J01/J02 marker: ${marker}`);
+    assert.ok(normalized.toLowerCase().includes(marker.toLowerCase()), `missing J01/J02 marker: ${marker}`);
   }
   assert.doesNotMatch(doc, /J02.*BLOCKED_EXTERNAL/i);
   assert.match(doc, /J01 and J02 are now `COMPLETED`/i);
