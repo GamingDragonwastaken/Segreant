@@ -54,7 +54,7 @@ GitHub reports zero file differences between the frozen reconciliation tree and
 the merged `main` tree. Post-merge push run `35743877958`: **SUCCESS** across
 root Ubuntu/macOS/Windows, team-server Ubuntu/macOS/Windows, package smoke,
 security and browser accessibility. Its `candidate-head` job is skipped by design
-on a push event; the exact candidate-head evidence is run `35743000421`.
+on a push event; the exact candidate-head evidence is successful run `35743000421`.
 
 ## External evidence deliberately not claimed
 
