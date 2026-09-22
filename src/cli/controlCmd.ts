@@ -17,6 +17,7 @@ import {
   resolveBudgetControlPending,
   budgetControlPolicy,
   initialBudgetControlState,
+  reconcileBudgetControlState,
   planBudgetControl,
   verifyBudgetControlAudit,
   type BudgetControlAuditEvent,
@@ -94,7 +95,7 @@ function loadState(policy: BudgetControlPolicy, currentDailyUsd: number | null, 
     throw new Error('budget control state is unreadable; refusing autonomous action');
   }
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('budget control state is invalid');
-  return raw as BudgetControlState;
+  return reconcileBudgetControlState(policy, raw as BudgetControlState, currentDailyUsd, now);
 }
 
 function writeState(state: BudgetControlState): void {
