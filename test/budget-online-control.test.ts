@@ -245,6 +245,23 @@ test('J02: a durable pending mutation distinguishes complete, abort, and conflic
 });
 
 
+test('J02: the same policy id cannot change authority semantics without a version increment', () => {
+  const v1 = policy();
+  const state = initialBudgetControlState(v1, 100, '2026-09-22T00:01:00.000Z');
+  const sameVersionDifferentDigest = policy({ maxRelativeStep: 0.5 });
+  assert.equal(sameVersionDifferentDigest.version, v1.version);
+  assert.notEqual(sameVersionDifferentDigest.digest, v1.digest);
+  assert.throws(
+    () => reconcileBudgetControlState(
+      sameVersionDifferentDigest,
+      state,
+      100,
+      '2026-09-22T00:02:00.000Z',
+    ),
+    /version.*reused|increment.*version|same version/i,
+  );
+});
+
 test('J02: a new policy version may re-arm only at its declared safe baseline', () => {
   const v1 = policy();
   const v1State = initialBudgetControlState(v1, 100, '2026-09-22T00:01:00.000Z');
