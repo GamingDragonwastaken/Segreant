@@ -119,3 +119,27 @@ test('budget --control is a real fail-closed product route with durable policy s
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+
+test('budget --control rejects an oversized policy before parsing or mutation', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'fiscus-budget-control-policy-limit-'));
+  const home = join(root, 'home');
+  const db = join(root, 'fiscus.db');
+  const policyPath = join(root, 'oversized-policy.json');
+  mkdirSync(home, { recursive: true });
+  const config = structuredClone(DEFAULT_CONFIG);
+  config.budget.dailyUsd = 100;
+  writeFileSync(join(home, 'config.json'), JSON.stringify(config, null, 2) + '\n');
+  // Valid JSON whitespace after a tiny object: the resource limit, not parsing,
+  // must be the first boundary reached.
+  writeFileSync(policyPath, '{}' + ' '.repeat(70 * 1024));
+  try {
+    const result = await runCli(['budget', '--control', '--policy', policyPath, '--apply', '--json'], db, home, root);
+    assert.notEqual(result.code, 0);
+    assert.match(result.stderr, /resource limit|budget_control_policy_bytes/i);
+    const persisted = JSON.parse(readFileSync(join(home, 'config.json'), 'utf8') as string) as typeof config;
+    assert.equal(persisted.budget.dailyUsd, 100);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
