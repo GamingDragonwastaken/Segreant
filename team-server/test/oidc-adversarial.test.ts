@@ -323,6 +323,19 @@ test('adversarial/time-boundaries: a non-numeric exp (string) is rejected, not c
   }
 });
 
+test('adversarial/time-boundaries: invalid injected verification clock fails closed', async () => {
+  const idp = await startFakeIdp();
+  try {
+    const now = 1_800_000_000;
+    const token = idp.sign(validPayload(idp, { iat: now, exp: now + 3600 }));
+    const result = await verifyIdToken(token, cfg(idp), { nowEpochSeconds: () => Number.NaN });
+    assert.equal(result.valid, false);
+    if (!result.valid) assert.match(result.reason, /verification clock returned invalid epoch seconds/i);
+  } finally {
+    await idp.close();
+  }
+});
+
 test('adversarial/time-boundaries: iat exactly 60 seconds in the future is accepted (skew boundary)', async () => {
   const idp = await startFakeIdp();
   try {
