@@ -5,7 +5,7 @@
  * never probes a remote endpoint; a rule is reviewed as data before the
  * feature that needs it may make a request.
  */
-import { loadConfig, saveConfig, type EgressConfig, type EgressRule } from '../config.ts';
+import { loadConfig, mutateConfig, type EgressConfig, type EgressRule } from '../config.ts';
 import { validateEgressRule } from '../egress/policy.ts';
 import { egressReceiptPath, verifyEgressReceipts, type ReceiptVerification } from '../egress/receipts.ts';
 import type { Flags } from './flags.ts';
@@ -180,35 +180,60 @@ export function cmdEgress(flags: Flags): void {
       return;
     }
   }
-  const next: EgressConfig = {
-    mode: mode ?? current.egress.mode,
+  const nextEgress = (base: EgressConfig): EgressConfig => ({
+    mode: mode ?? base.mode,
     rules: candidate
-      ? [...current.egress.rules.filter((rule) => rule.id !== candidate.id), candidate].sort((a, b) => a.id.localeCompare(b.id))
-      : current.egress.rules,
+      ? [...base.rules.filter((rule) => rule.id !== candidate.id), candidate].sort((a, b) => a.id.localeCompare(b.id))
+      : base.rules,
+  });
+  const validateNext = (value: EgressConfig): void => {
+    if (value.mode === 'controlled_cloud' && value.rules.length === 0) {
+      throw new Error('controlled_cloud needs at least one exact rule; use local_locked to remove all remote permission');
+    }
   };
-  if (next.mode === 'controlled_cloud' && next.rules.length === 0) {
-    console.error('  controlled_cloud needs at least one exact rule; use local_locked to remove all remote permission');
+
+  const preview = nextEgress(current.egress);
+  try {
+    validateNext(preview);
+  } catch (error) {
+    console.error('  ' + (error instanceof Error ? error.message : String(error)));
     process.exitCode = 1;
     return;
   }
-  const payload = { wouldWrite: sub === 'apply' && flags.apply === true, mode: next.mode, rules: next.rules };
   if (sub === 'plan' || flags.apply !== true) {
+    const payload = { wouldWrite: false, mode: preview.mode, rules: preview.rules };
     if (flags.json) printJson(payload);
     else {
       console.log('');
       console.log(color(tty, C.yellow, '  Egress plan only — configuration unchanged.'));
-      console.log('  Mode: ' + next.mode + '; rules: ' + next.rules.map((rule) => rule.id).join(', '));
-      console.log(color(tty, C.gray, '  To persist this exact plan, rerun with: fiscus egress apply --apply ...'));
+      console.log('  Mode: ' + preview.mode + '; rules: ' + preview.rules.map((rule) => rule.id).join(', '));
+      console.log(color(tty, C.gray, '  Apply recomputes this requested change against the latest config generation under the shared mutation lock.'));
+      console.log(color(tty, C.gray, '  To persist it, rerun with: fiscus egress apply --apply ...'));
       console.log('');
     }
     return;
   }
-  saveConfig({ ...current, egress: next });
+
+  let persisted: EgressConfig | null = null;
+  try {
+    mutateConfig((latest) => {
+      const next = nextEgress(latest.egress);
+      validateNext(next);
+      latest.egress = next;
+      persisted = next;
+    });
+  } catch (error) {
+    console.error('  Egress configuration refused: ' + (error instanceof Error ? error.message : String(error)));
+    process.exitCode = 1;
+    return;
+  }
+  if (persisted === null) throw new Error('egress mutation completed without a persisted value');
+  const payload = { wouldWrite: true, mode: persisted.mode, rules: persisted.rules };
   if (flags.json) printJson(payload);
   else {
     console.log('');
     console.log(color(tty, C.green, '  Egress configuration saved.'));
-    console.log('  Mode: ' + next.mode + '; rules: ' + next.rules.map((rule) => rule.id).join(', '));
+    console.log('  Mode: ' + persisted.mode + '; rules: ' + persisted.rules.map((rule) => rule.id).join(', '));
     console.log(color(tty, C.gray, '  This changes only Fiscus-process transport; it does not impose a machine-wide network policy.'));
     console.log('');
   }
