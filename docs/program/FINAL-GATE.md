@@ -51,18 +51,16 @@ PR #20 was then merged by a normal merge commit:
 `726ae7007bfb6abafdb7ad01e0156d424bce472e`.
 
 Post-merge hardening continued on `main` rather than reopening historical
-reconstruction lanes. The latest **code-bearing** hardening head is
-`924ed5aae65f70df8e23a8ed5657a875b92a6323`, which adds the executable
+reconstruction lanes. The current canonical head is
+`4bc37d5891755fec4bd94b3e8dd8d4d359f57f45`. It contains the executable
 PostgreSQL production probe/runbook, deterministic high-consequence fuzz/fault
-injection, and the final production-assurance record repairs. GitHub Actions run
-`35762764329`: **SUCCESS** on that exact head across all ten configured jobs:
-root Ubuntu/macOS/Windows, team-server Ubuntu/macOS/Windows, package smoke,
-security, browser accessibility, with `candidate-head` skipped by design on a
-push event. The pre-merge exact-head evidence remains run `35743000421` — **SUCCESS**.
-
-Subsequent descendants may contain program-record-only synchronization. Such
-documentation commits do not replace the code-bearing evidence above; they still
-run the normal push matrix before being treated as clean.
+injection, the retained fail-closed OIDC clock regression, and program-record
+synchronization. GitHub Actions run `35765884653`: **SUCCESS** on that exact head
+for every job that executes on push: root Ubuntu/macOS/Windows, team-server
+Ubuntu/macOS/Windows, package smoke, security, and browser accessibility. The
+PR-only `candidate-head` job is correctly skipped on push events. The frozen
+pre-merge exact candidate-head evidence remains run `35743000421` — **SUCCESS**
+at `0ef56701b5435e51ac8a15a4c19d4a75555c33cb`.
 
 ## External evidence deliberately not claimed
 

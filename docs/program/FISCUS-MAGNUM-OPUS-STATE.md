@@ -24,7 +24,8 @@ Historical decisions/checkpoints remain in `DECISION-LOG.md` and
 - Final integration: PR #20, merged by normal merge commit
   `726ae7007bfb6abafdb7ad01e0156d424bce472e`
 - Exact candidate verification: GitHub Actions `35743000421`, success
-- Post-merge `main` verification: GitHub Actions `35743877958`, success
+- Current canonical `main` head: `4bc37d5891755fec4bd94b3e8dd8d4d359f57f45`
+- Current `main` push verification: GitHub Actions `35765884653`, success for every job that executes on push (root Ubuntu/macOS/Windows, team-server Ubuntu/macOS/Windows, package smoke, security, browser accessibility); PR-only `candidate-head` skipped by design
 - Historical foundation/reconstruction/verification PRs are closed and must not be
   merged separately.
 

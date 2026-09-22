@@ -14,8 +14,8 @@ integrated into `main`. Historical decisions and commit-bound evidence remain in
 | Final integration PR | #20 — merged with a normal merge commit |
 | Merge commit | `726ae7007bfb6abafdb7ad01e0156d424bce472e` |
 | Exact candidate CI | run `35743000421` — success |
-| Latest verified code-bearing `main` head | `924ed5aae65f70df8e23a8ed5657a875b92a6323` |
-| Latest code-bearing `main` CI | run `35762764329` — success across all ten configured jobs |
+| Latest verified canonical `main` head | `4bc37d5891755fec4bd94b3e8dd8d4d359f57f45` |
+| Latest canonical `main` CI | run `35765884653` — nine executed jobs succeeded; PR-only `candidate-head` correctly skipped on push |
 | Open pull requests | none |
 | Public release / npm publish / deployment | not performed |
 
@@ -46,8 +46,10 @@ that narrower delegated-controller architecture; it is not missing implementatio
 After PR #20, `main` gained only targeted assurance/operations work: the
 `@types/node` update, executable PostgreSQL production probe and runbook,
 real-provider reconciliation runbook, deterministic high-consequence fuzz/fault
-injection, and program-record repair. The last code-bearing head
-`924ed5aae...` is green on run `35762764329`.
+injection, and program-record repair. The current canonical head `4bc37d589...` includes those code/test changes plus
+record synchronization and is green on push run `35765884653`. The PR-only
+`candidate-head` job is intentionally skipped on push; exact-head evidence remains
+run `35743000421` for frozen reconciliation head `0ef56701...`.
 
 ## Remaining work
 
