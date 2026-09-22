@@ -118,6 +118,4 @@ finding still needs reconciliation; `docs/program/AUDIT-REGISTER.md` and
 - `WP-D06` now renders existing per-channel alert coverage and dark reasons on
   both modern Control and the classic Overview, scoped only to `today`; the
   other AII-002 negative claims remain open (D-204/D-218).
-- `WP-J03` remains `PARTIAL`, with its truthful read-only precondition audit
-  is now durable at `docs/program/WP-J03-COMPLEXITY-LAB-REPORT.md`; no production
-  complexity score or route is claimed.
+- At the 2026-09-16 checkpoint `WP-J03` was still `PARTIAL`; its truthful read-only precondition audit was made durable at `docs/program/WP-J03-COMPLEXITY-LAB-REPORT.md`. It was later closed as a research-only admission boundary without promoting a production complexity score or route.
