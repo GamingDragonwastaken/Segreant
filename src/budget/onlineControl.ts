@@ -12,6 +12,8 @@
 import { createHash } from 'node:crypto';
 import type { BudgetCapDecision } from './capDecision.ts';
 import { canonicalJson } from '../epistemic/serialization.ts';
+import { decimalStringFromNumber } from '../config.ts';
+import { compareMoney, money, type Money } from '../economics/money.ts';
 
 export interface BudgetControlPolicyInput {
   readonly id: string;
@@ -172,8 +174,35 @@ function sha256(value: unknown): string {
   return createHash('sha256').update(canonicalJson(value)).digest('hex');
 }
 
-function sameNumber(left: number | null, right: number | null): boolean {
-  return left === right;
+function exactUsd(value: number, label: string): Money {
+  return money(decimalStringFromNumber(value, label), 'USD', 'effective');
+}
+
+function sameAmount(left: number | null, right: number | null): boolean {
+  if (left === null || right === null) return left === right;
+  return compareMoney(exactUsd(left, 'left USD amount'), exactUsd(right, 'right USD amount')) === 0;
+}
+
+function compareAmount(left: number, right: number, label: string): -1 | 0 | 1 {
+  return compareMoney(exactUsd(left, `${label} left`), exactUsd(right, `${label} right`));
+}
+
+/**
+ * Exact comparison of |target-current| / current against a declared decimal
+ * step. No division or binary floating-point arithmetic participates in the
+ * authorization decision.
+ */
+function relativeStepExceeds(target: number, current: number, maxRelativeStep: number): boolean {
+  const t = exactUsd(target, 'target daily cap');
+  const cur = exactUsd(current, 'owned current daily cap');
+  const scale = Math.max(t.scale, cur.scale);
+  const tCoeff = t.coefficient * (10n ** BigInt(scale - t.scale));
+  const cCoeff = cur.coefficient * (10n ** BigInt(scale - cur.scale));
+  const delta = tCoeff >= cCoeff ? tCoeff - cCoeff : cCoeff - tCoeff;
+  const step = exactUsd(maxRelativeStep, 'maxRelativeStep');
+  // step is a dimensionless decimal carried through Money only to reuse the
+  // canonical decimal parser; cross-multiply before comparing.
+  return delta * (10n ** BigInt(step.scale)) > cCoeff * step.coefficient;
 }
 
 function stateFor(
@@ -205,7 +234,8 @@ export function budgetControlPolicy(input: BudgetControlPolicyInput): BudgetCont
   const safeBaselineDailyUsd = positive(input.safeBaselineDailyUsd, 'safeBaselineDailyUsd');
   const minDailyUsd = positive(input.minDailyUsd, 'minDailyUsd');
   const maxDailyUsd = positive(input.maxDailyUsd, 'maxDailyUsd');
-  if (minDailyUsd > safeBaselineDailyUsd || safeBaselineDailyUsd > maxDailyUsd) {
+  if (compareAmount(minDailyUsd, safeBaselineDailyUsd, 'policy minimum/baseline') > 0
+      || compareAmount(safeBaselineDailyUsd, maxDailyUsd, 'policy baseline/maximum') > 0) {
     throw new Error('safeBaselineDailyUsd must be inside [minDailyUsd, maxDailyUsd]');
   }
   const maxRelativeStep = positive(input.maxRelativeStep, 'maxRelativeStep');
@@ -237,7 +267,7 @@ export function initialBudgetControlState(
 ): BudgetControlState {
   const now = instant(at, 'budget control state at');
   const current = cap(currentDailyUsd, 'currentDailyUsd');
-  if (!sameNumber(current, policy.safeBaselineDailyUsd)) {
+  if (!sameAmount(current, policy.safeBaselineDailyUsd)) {
     throw new Error('controller can only arm when the live cap equals the declared safe baseline');
   }
   return Object.freeze({
@@ -258,7 +288,7 @@ function validateState(policy: BudgetControlPolicy, state: BudgetControlState): 
   }
   if (!Number.isSafeInteger(state.revision) || state.revision < 0) throw new Error('budget control state revision is invalid');
   if (!['armed', 'controlling', 'rolled_back'].includes(state.phase)) throw new Error('budget control state phase is invalid');
-  if (state.safeBaselineDailyUsd !== policy.safeBaselineDailyUsd) throw new Error('budget control state baseline does not match policy');
+  if (!sameAmount(state.safeBaselineDailyUsd, policy.safeBaselineDailyUsd)) throw new Error('budget control state baseline does not match policy');
   cap(state.lastAppliedDailyUsd, 'lastAppliedDailyUsd');
   instant(state.lastActionAt, 'budget control state lastActionAt');
 }
@@ -289,7 +319,7 @@ function rollback(
   if (state.phase !== 'controlling') return noAction(state, current, reasons, decisionId);
   // The controller may only undo its own last write. A manual edit is a human
   // override and terminates autonomous authority for this policy instance.
-  if (state.lastAppliedDailyUsd === null || !sameNumber(current, state.lastAppliedDailyUsd)) {
+  if (state.lastAppliedDailyUsd === null || !sameAmount(current, state.lastAppliedDailyUsd)) {
     return noAction(state, current, [...reasons, 'operator override detected; autonomous rollback refused'], decisionId);
   }
   return Object.freeze({
@@ -328,7 +358,7 @@ export function planBudgetControl(input: BudgetControlInput): BudgetControlPlan 
   if (runawayMax === null) {
     return rollback(policy, state, current, now, ['tail-risk circuit breaker is unavailable: runaway guard is disabled'], decisionId);
   }
-  if (runawayMax > policy.maxRunawayUsd) {
+  if (compareAmount(runawayMax, policy.maxRunawayUsd, 'runaway bound') > 0) {
     return rollback(policy, state, current, now, ['tail-risk circuit breaker is looser than the delegated policy'], decisionId);
   }
   if (input.runawayTripped) {
@@ -352,19 +382,19 @@ export function planBudgetControl(input: BudgetControlInput): BudgetControlPlan 
   }
 
   const target = positive(decision.basis.recommendedDailyUsd, 'recommendedDailyUsd');
-  if (target < policy.minDailyUsd || target > policy.maxDailyUsd) {
+  if (compareAmount(target, policy.minDailyUsd, 'recommended/minimum cap') < 0
+      || compareAmount(target, policy.maxDailyUsd, 'recommended/maximum cap') > 0) {
     return rollback(policy, state, current, now, ['recommended cap falls outside the delegated budget envelope'], decisionId);
   }
 
   const ownedCurrent = state.phase === 'controlling' ? state.lastAppliedDailyUsd : policy.safeBaselineDailyUsd;
-  if (!sameNumber(current, ownedCurrent)) {
+  if (!sameAmount(current, ownedCurrent)) {
     return noAction(state, current, ['operator override detected; autonomous action refused'], decisionId);
   }
-  const relativeStep = Math.abs(target - ownedCurrent!) / ownedCurrent!;
-  if (relativeStep > policy.maxRelativeStep) {
+  if (relativeStepExceeds(target, ownedCurrent!, policy.maxRelativeStep)) {
     return rollback(policy, state, current, now, ['recommended cap exceeds the delegated maximum step size'], decisionId);
   }
-  if (sameNumber(current, target)) {
+  if (sameAmount(current, target)) {
     return noAction(state, current, ['recommended cap already active'], decisionId);
   }
 
@@ -496,13 +526,13 @@ export function resolveBudgetControlPending(
     });
   }
   const current = cap(currentDailyUsd, 'currentDailyUsd');
-  if (sameNumber(current, pending.toDailyUsd)) {
+  if (sameAmount(current, pending.toDailyUsd)) {
     return Object.freeze({
       status: 'complete',
       reason: 'the config mutation committed; controller state and audit must be completed idempotently',
     });
   }
-  if (sameNumber(current, pending.fromDailyUsd)) {
+  if (sameAmount(current, pending.fromDailyUsd)) {
     return Object.freeze({
       status: 'abort',
       reason: 'the config mutation did not commit; restore the previous controller state and record a recovered no-action',
