@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { acquireConfigMutationLock, loadConfig, saveConfig, saveConfigWithLock } from '../src/config.ts';
+import { acquireConfigMutationLock, loadConfig, mutateConfig, saveConfig, saveConfigWithLock } from '../src/config.ts';
 import { applySettingsPatch } from '../src/dashboard/settings.ts';
 import { DEFAULT_CONFIG } from '../src/config.ts';
 
@@ -103,4 +103,56 @@ test('all Fiscus config writers share one fail-closed mutation lock', () => {
     else process.env.FISCUS_HOME = previousHome;
     rmSync(home, { recursive: true, force: true });
   }
+});
+
+
+test('transactional config mutations compose from the latest generation', () => {
+  const previousHome = process.env.FISCUS_HOME;
+  const home = mkdtempSync(join(tmpdir(), 'fiscus-config-transaction-'));
+  process.env.FISCUS_HOME = home;
+  try {
+    const initial = structuredClone(DEFAULT_CONFIG);
+    initial.budget.dailyUsd = 10;
+    saveConfig(initial);
+
+    mutateConfig((cfg) => {
+      cfg.alerts.webhookUrl = 'https://example.test/hook';
+    });
+    const after = mutateConfig((cfg) => {
+      cfg.budget.dailyUsd = 25;
+    });
+
+    assert.equal(after.alerts.webhookUrl, 'https://example.test/hook');
+    assert.equal(after.budget.dailyUsd, 25);
+    const disk = loadConfig();
+    assert.equal(disk.alerts.webhookUrl, 'https://example.test/hook');
+    assert.equal(disk.budget.dailyUsd, 25);
+  } finally {
+    if (previousHome === undefined) delete process.env.FISCUS_HOME;
+    else process.env.FISCUS_HOME = previousHome;
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('production read-modify-write paths cannot call saveConfig directly', () => {
+  const src = join(import.meta.dirname, '..', 'src');
+  const offenders: string[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(path);
+        continue;
+      }
+      if (!entry.name.endsWith('.ts') || path.endsWith(join('src', 'config.ts'))) continue;
+      const source = readFileSync(path, 'utf8');
+      if (/\bsaveConfig\s*\(/.test(source)) offenders.push(path.slice(src.length + 1).replaceAll('\\', '/'));
+    }
+  };
+  walk(src);
+  assert.deepEqual(
+    offenders,
+    [],
+    'product config mutations must use mutateConfig() or an explicitly held saveConfigWithLock() generation',
+  );
 });
