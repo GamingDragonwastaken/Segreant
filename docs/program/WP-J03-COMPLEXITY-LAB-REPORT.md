@@ -1,7 +1,7 @@
 # WP-J03 Complexity Lab: Design and Precondition Audit Report
 
 **Work Packet:** `WP-J03` — Complexity Lab
-**Status:** `PARTIAL` (Read-only Architecture & Precondition Audit; no production complexity implementation admitted)
+**Status:** `COMPLETED` as a read-only research/admission boundary (no production complexity estimator admitted)
 **Controlling Authority:** `docs/TOKEN-GOVERNANCE-AND-COMPLEXITY-LAB.md` (§6, §12), `docs/ECONOMIC-CONTROL-FOUNDATION.md` (§3), `docs/program/FISCUS-REMAINING-WORK-AUDIT.md` (lines 478, 483).
 
 ---
@@ -23,7 +23,7 @@ Specifically:
    > Task complexity can be a useful feature. It must not become the central decision rule... Complexity remains in `x`; it does not become the objective.
 
 ### Conclusion
-Because the existing codebase exposes no measurable complexity surface, attempting to implement an ad-hoc complexity scoring algorithm or mock router would constitute "inventing a product" and committing **complexity-theater**, violating the constitutional rules of `FISCUS-REMAINING-WORK-AUDIT.md`. Therefore, per the task contract, we return this read-only design and architecture specification while keeping the packet `PARTIAL` until the prerequisites are met.
+Because the existing codebase exposes no measurable complexity surface, attempting to implement an ad-hoc complexity scoring algorithm or mock router would constitute "inventing a product" and committing **complexity-theater**, violating the constitutional rules of `FISCUS-REMAINING-WORK-AUDIT.md`. Therefore, per the task contract, we return this read-only design and architecture specification while refusing production promotion until the prerequisites are met. That refusal is the packet's intended terminal boundary, not unfinished repository work.
 
 ---
 
@@ -152,7 +152,7 @@ Section 12 of `docs/TOKEN-GOVERNANCE-AND-COMPLEXITY-LAB.md` sets ten (`10`) stri
 | **Rule 9** | Model emits uncertainty & coverage | No conformal prediction or calibrated Bayesian intervals exist for complexity. | ❌ **OPEN** |
 | **Rule 10** | Rollback / fallback exists | Routing currently defaults to direct operator/client choice; no automated routing engine exists to roll back from. | ❌ **OPEN** |
 
-All ten promotion gates are unfulfilled. Promoting or building an uncalibrated complexity metric would directly violate the project's constitutional commitments; the packet therefore remains `PARTIAL`.
+All ten promotion gates are unfulfilled. Promoting or building an uncalibrated complexity metric would directly violate the project's constitutional commitments; the packet is therefore complete as a research-only admission boundary while production promotion remains refused.
 
 ---
 
