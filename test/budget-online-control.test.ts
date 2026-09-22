@@ -8,6 +8,7 @@ import {
   resolveBudgetControlPending,
   budgetControlPolicy,
   initialBudgetControlState,
+  reconcileBudgetControlState,
   planBudgetControl,
   verifyBudgetControlAudit,
 } from '../src/budget/onlineControl.ts';
@@ -267,11 +268,16 @@ test('J02: a new policy version may re-arm only at its declared safe baseline', 
   assert.equal(rolled.phase, 'rolled_back');
 
   const v2 = policy({ version: 2, issuedAt: '2026-09-22T00:04:00.000Z' });
-  const rearmed = initialBudgetControlState(v2, 100, '2026-09-22T00:05:00.000Z');
+  const rearmed = reconcileBudgetControlState(v2, rolled, 100, '2026-09-22T00:05:00.000Z');
   assert.equal(rearmed.phase, 'armed');
   assert.equal(rearmed.policyVersion, 2);
   assert.throws(
-    () => initialBudgetControlState(v2, 90, '2026-09-22T00:05:00.000Z'),
+    () => reconcileBudgetControlState(v2, rolled, 90, '2026-09-22T00:05:00.000Z'),
     /safe baseline/i,
+  );
+  assert.equal(
+    reconcileBudgetControlState(v1, rolled, 100, '2026-09-22T00:05:00.000Z'),
+    rolled,
+    'the same rolled-back policy version cannot silently re-arm',
   );
 });
