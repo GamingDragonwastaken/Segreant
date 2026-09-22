@@ -58,7 +58,7 @@ injection, and the final production-assurance record repairs. GitHub Actions run
 `35762764329`: **SUCCESS** on that exact head across all ten configured jobs:
 root Ubuntu/macOS/Windows, team-server Ubuntu/macOS/Windows, package smoke,
 security, browser accessibility, with `candidate-head` skipped by design on a
-push event. The pre-merge exact-head evidence remains run `35743000421`.
+push event. The pre-merge exact-head evidence remains run `35743000421` — **SUCCESS**.
 
 Subsequent descendants may contain program-record-only synchronization. Such
 documentation commits do not replace the code-bearing evidence above; they still
