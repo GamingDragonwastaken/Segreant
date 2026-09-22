@@ -325,8 +325,12 @@ export const IMPORTED_UNINVOKED_BOUNDARIES: readonly IssuanceBoundary[] = Object
 );
 
 /**
- * Boundaries that strengthen a claim outside the kernel today. Non-empty by
- * design: an empty list would mean AII-036 is closed, and it is not.
+ * Boundaries that still strengthen a claim outside the kernel contract.
+ *
+ * Program closure requires this list to remain empty. A future product path
+ * that creates stronger semantics beside the kernel must therefore appear here
+ * and make the issuance-map/program-terminal gates red until it is migrated or
+ * explicitly rejected.
  */
 export const UNMIGRATED_BOUNDARIES: readonly IssuanceBoundary[] = Object.freeze(
   ISSUANCE_MAP.filter((boundary) => boundary.issuanceClass === 'unmigrated_authority'),

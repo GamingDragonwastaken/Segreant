@@ -18,11 +18,12 @@ checks membership certifies the document's existence, not its content.**
 
 ## Why a map and not a review
 
-The kernel primitives are sound. Evidence, Claim, Derivation, Witness, the DAG
-and the persistence layer all enforce what they promise. The finding that stays
-`PARTIAL` is not about them.
+The kernel primitives are sound under their tested contracts. Evidence, Claim,
+Derivation, Witness, the DAG and persistence layer enforce the authority they
+declare. AII-036 is closed at the current reconciliation head because the map has
+no `unmigrated_authority` row; the continuing risk is regression.
 
-The risk is that a product path mints a stronger semantics *beside* the kernel.
+The risk is that a future product path mints a stronger semantics *beside* the kernel.
 That does not arrive as a bad Claim — a bad Claim gets refused. It arrives as
 one new file that is entirely correct in itself, computes something a consumer
 reasonably reads as established, and is on no list of things that are allowed to
@@ -74,10 +75,10 @@ were the unreached pair until D-220: `src/budget/capDecision.ts` now calls
 `fiscus budget --recommend` renders, and routes a certified cap through
 `issueDecisionToKernel` on `--apply`. `alloc.exactRun` is the
 middle case: `src/store/db.ts` imports it, and no product path calls the store
-method that would run it. None of this is dead code to delete on sight; each is
-a deliberate primitive without a consumer yet. But it changes the reading of the
-open boundaries below, and it changes their order — the exact allocation path
-was ranked first on the strength of a `product` that did not hold.
+method that would run it. None of this is dead code to delete on sight. The imported-but-uninvoked exact
+allocation boundary is a deliberate capability that is not currently an
+operator-facing authority. Its reach classification remains explicit so a future
+consumer cannot silently change its risk class.
 
 This paragraph had gone stale twice before D-188 — once when the second decision
 boundary was added and again when `alloc.exactRun` was reclassified — because
@@ -120,59 +121,30 @@ from the table directly below it.
 Each module states its own class in its own docblock, so a reader opening the
 file learns what authority it holds without having to find this page first.
 
-## The remaining open boundary, and what closing it requires
+## Closure state
 
-The remaining decision boundary is not currently producing a false result. Its
-pure engine is conservative in isolation, but its old output was not bound by a
-Derivation to the evidence underneath it — so **revoking a source could not
-invalidate anything downstream of it**, which is the property the kernel exists
-to provide and the reason "unchecked" is not the same as "fine".
+`UNMIGRATED_BOUNDARIES` is empty at the final reconciliation boundary, and the
+executable map tests keep the source declaration, readable projection, authority
+class and reach classification aligned.
 
-The causal pair is closed. `causal.qualification` and `causal.estimate` were
-the `product`-reaching pair, and `causal.issuance` carries their output into the
-kernel. The decision adapter is canonical and, since D-220, reached by the
-budget-cap consumer; what remains is that the display path reads the bare engine
-certificate rather than a kernel-checked claim.
+The causal estimators remain `kernel_primitive`: they decide whether a supported
+effect exists but issue nothing. `causal.issuance` performs the canonical
+Evidence/Claim/Witness/Derivation binding, so source revocation reaches downstream
+causal Claims.
 
-**`causal.qualification` and `causal.estimate` — CLOSED by `causal.issuance`.**
-The gates were never wrong; they refuse to derive causality from Lift, from a
-baseline, or from a historic model comparison, and prefer `collecting` /
-`inconclusive` / `invalid` to a flattering conclusion. What was missing was the
-binding. The adapter issues the observed arm difference as an OBSERVATIONAL
-claim and the effect as a RANDOMIZED one, with a Derivation between them, so
-`assessDerivationLegality` demands a `causal_identification` witness and
-`appendDerivation` refuses without it. The witness is grounded in the assignment
-Evidence alone, which is what puts the effect claim in that evidence's revocation
-closure — the property that did not exist before and is what "unchecked is not
-the same as fine" was pointing at. Both modules are now `kernel_primitive`: they
-decide whether an effect is supported, and issue nothing. See D-081.
+`decision.certificate` likewise remains pure decision mathematics. Product
+budget presentation constructs the canonical decision preview before showing a
+certificate, and the online controller requires the adapter-produced decision
+Claim plus its independent assurance/control-policy gates before any mutation.
 
-**`billing.countermodels` is on this map for the opposite reason to the rest.**
-Every other entry is here because it could make a claim stronger than its
-evidence. This one weakens: it states what the residual degrades to if a stated
-condition is false, and for four of the five conditions it states that nothing
-Fiscus has could tell. It earns a place because one of its outputs is not a
-weakening at all — `realized` is a positive assertion that a condition has
-BROKEN, and a negative residual raises it, because `R < 0` means `L > P >= T`
-and refutes `L <= T` outright. That assertion reaches an operator through
-`fiscus billing reconcile` with no kernel record behind it. It is tolerable
-because it is arithmetic on the run rather than judgement, and it is the first
-thing to migrate if these worlds ever acquire a source other than the run
-itself. See D-084.
+`billing.countermodels` remains a kernel primitive because its positive broken-
+condition state is arithmetic on the reconciliation run itself; if that state
+ever acquires an independent source of judgment, it must be migrated into a
+canonical issuance boundary rather than silently gaining authority.
 
-**`decision.certificate`** is now a pure decision-engine primitive rather
-than a claim-strengthening authority. `src/decision/epistemic.ts` is the
-canonical adapter: it recomputes the certificate, issues the interval
-observation, and for strict dominance binds a `decision_fitness` Witness and
-Derivation to the source Evidence. Undetermined certificates issue no
-decision-fitness claim. The final reconciliation removed the remaining display
-bypass: `fiscus budget --recommend` constructs
-`previewBudgetCapIssuance` before JSON or terminal presentation and renders the
-adapter-recomputed certificate plus its kernel Claim; the online budget
-controller likewise requires that canonical preview to yield a decision Claim
-before its separate DAL-3/control-policy gate can act. `--apply` persists the
-same bundle. The engine remains reusable mathematics, but no product path treats
-its bare return value as a stronger claim.
+The one `imported_uninvoked` boundary, `alloc.exactRun`, is not an AII-036 bypass:
+it is already canonical when invoked. Its classification records product reach,
+not epistemic legality.
 
 ## What this map does not establish
 
