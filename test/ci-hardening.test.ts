@@ -14,9 +14,14 @@ test('CI uses immutable action revisions, least privilege, and bounded jobs', ()
   // check is the script, so a workflow edit cannot keep the upload and drop the rule.
   assert.match(workflow, /npm run --silent sbom > fiscus-runtime\.cdx\.json/);
   assert.match(workflow, /node scripts\/check-sbom\.mjs fiscus-runtime\.cdx\.json/);
-  const jobCount = (workflow.match(/^  (?:test|package-smoke|team-server-test|candidate-head|browser-accessibility):\s*$/gm) ?? []).length;
-  const timeoutCount = (workflow.match(/^    timeout-minutes:\s+\d+\s*$/gm) ?? []).length;
-  assert.ok(jobCount >= 5, 'the workflow should retain candidate-head, test, package-smoke, team-server, and browser jobs');
+  const jobsBlock = workflow.split(/^jobs:\s*$/m)[1] ?? '';
+  const jobCount = (jobsBlock.match(/^  [a-z0-9-]+:\s*$/gm) ?? []).length;
+  const timeoutCount = (jobsBlock.match(/^    timeout-minutes:\s+\d+\s*$/gm) ?? []).length;
+  assert.ok(jobCount >= 6, 'the workflow should retain candidate-head, test, package-smoke, team-server, browser, and security jobs');
+  assert.match(workflow, /^  security:\s*$/m);
+  assert.match(workflow, /npm run verify:security/);
+  assert.match(workflow, /npm run verify:supply-chain/);
+  assert.match(workflow, /npm run audit:runtime/);
   assert.equal(timeoutCount, jobCount, 'every CI job needs a bounded timeout');
   assert.match(workflow, /candidate-head:\s*\n\s+if:\s+github\.event_name\s*==\s*'pull_request'/);
   assert.match(workflow, /ref:\s*\$\{\{\s*github\.event\.pull_request\.head\.sha\s*\}\}/);
