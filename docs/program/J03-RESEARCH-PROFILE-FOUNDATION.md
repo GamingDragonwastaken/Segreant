@@ -1,6 +1,6 @@
 # WP-J03 research profile foundation
 
-**Status:** `PARTIAL` — research-only foundation added; no production
+**Status:** `COMPLETED` as a research-only admission boundary — no production
 complexity decision surface is admitted.
 
 `src/research/complexity/profile.ts` implements the first narrow foundation
@@ -18,3 +18,8 @@ simple-baseline comparison, held-out decision value, shift abstention, privacy,
 decision-time availability, uncertainty coverage and rollback all require
 evidence not present in this repository.
 
+
+
+## Final reconciliation note
+
+`WP-J03` is complete because its accepted deliverable is the falsifiable research profile and promotion boundary, not an unvalidated production complexity score. The ten promotion gates remain deliberately unpassed; any future promoted estimator is new work and must satisfy them rather than retroactively changing this packet's closure.
