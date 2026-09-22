@@ -25,7 +25,9 @@ import {
   type BudgetControlPolicy,
   type BudgetControlState,
 } from '../budget/onlineControl.ts';
-import { dbPath, fiscusHome, loadConfig, saveConfig } from '../config.ts';
+import { dbPath, ensureHome, fiscusHome, loadConfig, saveConfig } from '../config.ts';
+import { acquireBudgetControlLock } from '../budget/controlLock.ts';
+import { RESOURCE_LIMITS, readBoundedUtf8File } from '../util/resource-limits.ts';
 import { computeFrontier } from '../value/frontier.ts';
 import { loadRealization } from '../value/realization.ts';
 import { budgetAdvice } from '../value/report.ts';
@@ -35,7 +37,7 @@ import { printJson } from './ui.ts';
 function policyFromFile(path: string): BudgetControlPolicy {
   let raw: unknown;
   try {
-    raw = JSON.parse(readFileSync(path, 'utf8')) as unknown;
+    raw = JSON.parse(readBoundedUtf8File(path, RESOURCE_LIMITS.budgetControlPolicyBytes, 'budget_control_policy_bytes')) as unknown;
   } catch (error) {
     throw new Error(`cannot read budget control policy ${path}: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -77,7 +79,7 @@ function durableAppend(path: string, text: string): void {
 function loadAudit(): readonly BudgetControlAuditEvent[] {
   const path = auditFile();
   if (!existsSync(path)) return [];
-  const text = readFileSync(path, 'utf8').trim();
+  const text = readBoundedUtf8File(path, RESOURCE_LIMITS.budgetControlAuditBytes, 'budget_control_audit_bytes').trim();
   if (text.length === 0) return [];
   const rows = text.split(/\r?\n/).map((line, index) => {
     try { return JSON.parse(line) as BudgetControlAuditEvent; } catch { throw new Error(`invalid budget control audit JSON at line ${index + 1}`); }
@@ -91,7 +93,7 @@ function loadState(policy: BudgetControlPolicy, currentDailyUsd: number | null, 
   const path = stateFile();
   if (!existsSync(path)) return initialBudgetControlState(policy, currentDailyUsd, now);
   let raw: unknown;
-  try { raw = JSON.parse(readFileSync(path, 'utf8')) as unknown; } catch {
+  try { raw = JSON.parse(readBoundedUtf8File(path, RESOURCE_LIMITS.budgetControlStateBytes, 'budget_control_state_bytes')) as unknown; } catch {
     throw new Error('budget control state is unreadable; refusing autonomous action');
   }
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('budget control state is invalid');
@@ -114,7 +116,7 @@ function loadPending(): BudgetControlPendingMutation | null {
   const path = pendingFile();
   if (!existsSync(path)) return null;
   try {
-    return JSON.parse(readFileSync(path, 'utf8')) as BudgetControlPendingMutation;
+    return JSON.parse(readBoundedUtf8File(path, RESOURCE_LIMITS.budgetControlPendingBytes, 'budget_control_pending_bytes')) as BudgetControlPendingMutation;
   } catch {
     throw new Error('budget control pending mutation is unreadable; refusing autonomous action');
   }
@@ -180,10 +182,13 @@ export async function cmdBudgetControl(flags: Flags): Promise<void> {
   }
 
   const policy = policyFromFile(policyPath);
-  const cfg = loadConfig();
-  recoverPending(policy, cfg.budget.dailyUsd);
-  const store = new Store(dbPath());
+  const home = ensureHome();
+  const controlLock = acquireBudgetControlLock(home);
   try {
+    const cfg = loadConfig();
+    recoverPending(policy, cfg.budget.dailyUsd);
+    const store = new Store(dbPath());
+    try {
     const now = new Date().toISOString();
     const days = flags.days ? Number(flags.days) : 30;
     if (!Number.isFinite(days) || days <= 0 || !Number.isInteger(days)) throw new Error('--days must be a positive integer');
@@ -320,7 +325,10 @@ export async function cmdBudgetControl(flags: Flags): Promise<void> {
     if (plan.reasons.length > 0) for (const reason of plan.reasons) console.log(`  · ${reason}`);
     if (!flags.apply) console.log('  Preview only; re-run with --apply to delegate this step.');
     console.log('');
+    } finally {
+      store.close();
+    }
   } finally {
-    store.close();
+    controlLock.release();
   }
 }
