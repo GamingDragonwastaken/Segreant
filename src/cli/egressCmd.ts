@@ -214,20 +214,19 @@ export function cmdEgress(flags: Flags): void {
     return;
   }
 
-  let persisted: EgressConfig | null = null;
+  let persisted: EgressConfig;
   try {
-    mutateConfig((latest) => {
+    const updated = mutateConfig((latest) => {
       const next = nextEgress(latest.egress);
       validateNext(next);
       latest.egress = next;
-      persisted = next;
     });
+    persisted = updated.egress;
   } catch (error) {
     console.error('  Egress configuration refused: ' + (error instanceof Error ? error.message : String(error)));
     process.exitCode = 1;
     return;
   }
-  if (persisted === null) throw new Error('egress mutation completed without a persisted value');
   const payload = { wouldWrite: true, mode: persisted.mode, rules: persisted.rules };
   if (flags.json) printJson(payload);
   else {
