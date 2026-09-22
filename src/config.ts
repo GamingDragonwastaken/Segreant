@@ -787,6 +787,33 @@ export function saveConfigWithLock(config: FiscusConfig, lock: ConfigMutationLoc
   persistConfigUnlocked(config);
 }
 
+/**
+ * Atomic Fiscus read-modify-write transaction.
+ *
+ * Product code that wants to change part of the configuration should use this
+ * instead of loading a snapshot and later calling saveConfig(): the latter can
+ * overwrite a newer generation even when the final rename itself is serialized.
+ */
+export function mutateConfig(
+  mutator: (current: FiscusConfig) => FiscusConfig | void,
+): FiscusConfig {
+  const lock = acquireConfigMutationLock();
+  try {
+    const current = loadConfig();
+    const working = structuredClone(current);
+    const result = mutator(working);
+    const next = result ?? working;
+    persistConfigUnlocked(next);
+    return next;
+  } finally {
+    lock.release();
+  }
+}
+
+/**
+ * Authoritative full replacement. Prefer mutateConfig() for product
+ * read-modify-write paths so the read participates in the same lock generation.
+ */
 export function saveConfig(config: FiscusConfig): void {
   const lock = acquireConfigMutationLock();
   try {
