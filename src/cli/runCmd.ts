@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { Store, type RepriceUpdate } from '../store/db.ts';
 import { createProxyServer } from '../proxy/server.ts';
 import { createDashboardServer } from '../dashboard/server.ts';
-import { loadConfig, saveConfig, dbPath, demoDbPath, isDemo, unlinkDemoDb, fiscusHome, type FiscusConfig } from '../config.ts';
+import { loadConfig, mutateConfig, dbPath, demoDbPath, isDemo, unlinkDemoDb, fiscusHome, type FiscusConfig } from '../config.ts';
 import { packageVersion } from '../version.ts';
 import { seedDemo } from '../demo/seed.ts';
 import { startOfLocalDay } from '../budget/guard.ts';
@@ -214,11 +214,11 @@ export async function cmdPricing(flags: Flags): Promise<void> {
   // file — nothing about the user). `--auto off` turns it back off.
   if (flags['auto'] !== undefined) {
     const enable = flags['auto'] !== 'off' && flags['auto'] !== 'false';
-    saveConfig({ ...cfg, pricing: { ...cfg.pricing, autoRefresh: enable } });
+    const updated = mutateConfig((latest) => ({ ...latest, pricing: { ...latest.pricing, autoRefresh: enable } }));
     console.log('');
     if (enable) {
       console.log(`  ${color(on, C.green, '✓')} Auto-refresh ON — "fiscus start" updates the rate card when it is older than ${cfg.pricing.maxAgeDays}d.`);
-      console.log(`  ${color(on, C.dim, `Source: ${cfg.pricing.manifestUrl ?? DEFAULT_MANIFEST_URL}`)}`);
+      console.log(`  ${color(on, C.dim, `Source: ${updated.pricing.manifestUrl ?? DEFAULT_MANIFEST_URL}`)}`);
       console.log(`  ${color(on, C.dim, 'The fetch is a GET of a public pricing file — it sends nothing about you. Turn off: fiscus pricing --auto off')}`);
     } else {
       console.log(`  ${color(on, C.green, '✓')} Auto-refresh OFF — the rate card only changes when you run "fiscus pricing --refresh".`);
