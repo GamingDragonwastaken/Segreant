@@ -22,6 +22,6 @@ test('J01 and J02 expose separate evidence and bounded action boundaries', () =>
   }
   assert.doesNotMatch(doc, /J02.*BLOCKED_EXTERNAL/i);
   assert.match(doc, /J01 and J02 are now `COMPLETED`/i);
-  assert.match(doc, /retrospective model comparisons.*observational/i);
-  assert.match(doc, /DecisionCertificate alone still cannot mutate/i);
+  assert.match(normalized, /retrospective model comparisons.*observational/i);
+  assert.match(normalized, /DecisionCertificate alone still cannot mutate/i);
 });
