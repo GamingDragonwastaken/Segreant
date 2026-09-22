@@ -7,6 +7,8 @@
 // re-exec ourselves once with --disable-warning to keep output clean. This is
 // the only knob that reliably suppresses it for `npx fiscus`.
 import { spawnSync } from 'node:child_process';
+import { acquirePublicationLock } from './publication-lock.mjs';
+import { createRuntimeSnapshot, reapOrphanRuntimeSnapshots } from './runtime-snapshot.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -30,8 +32,53 @@ if (!process.env.__FISCUS_CHILD) {
     ['--disable-warning=ExperimentalWarning', self, ...process.argv.slice(2)],
     { stdio: 'inherit', env: { ...process.env, __FISCUS_CHILD: '1' } },
   );
-  process.exit(result.status ?? 0);
+  if (result.error) {
+    console.error(`Fiscus could not start its runtime: ${result.error.message}`);
+    process.exit(1);
+  }
+  if (typeof result.status === 'number') process.exit(result.status);
+  console.error(`Fiscus runtime terminated by signal ${result.signal ?? 'unknown'}`);
+  process.exit(1);
 } else {
   const here = dirname(self);
-  await import(pathToFileURL(join(here, '..', 'dist', 'cli.js')).href);
+  // Collect snapshots whose owning process is gone before adding another one,
+  // so a killed `fiscus start` cannot make temp grow without bound.
+  reapOrphanRuntimeSnapshots();
+
+  // The launcher participates in the same exclusive gate as publication.
+  // Acquiring (rather than merely checking) the lock closes the race where a
+  // build starts immediately after a reader's old existsSync check. Lock
+  // failure is intentionally fatal: bypassing it would make a reader's artifact
+  // guarantee depend on an unverified filesystem assumption.
+  const release = acquirePublicationLock(join(here, '..'));
+  let snapshot;
+  try {
+    // Copy while the publisher is excluded. Once the lock is released all
+    // module resolution and resource reading happens inside this private tree,
+    // so no later build can replace a dependency half-way through the import
+    // graph — or half-way through a request served hours later.
+    snapshot = createRuntimeSnapshot(join(here, '..'));
+  } finally {
+    release?.();
+  }
+
+  // Registered before the import so a failed import still cleans up. The
+  // snapshot has to outlive the imported runtime, not merely the promise that
+  // runtime resolves when its deferred command work settles: `fiscus start`
+  // settles that promise as soon as its sockets are listening and then serves
+  // for hours. Process exit is the only point at which no copied module or
+  // resource can still be needed.
+  process.on('exit', snapshot.dispose);
+
+  // Direct imports of dist/* and tools such as npm pack do not participate in
+  // this gate; the atomic reader guarantee is intentionally limited to the
+  // supported bin launcher and the build protocol.
+  const runtime = await import(pathToFileURL(snapshot.entry).href);
+  // The production CLI schedules dispatch with setImmediate so the launcher can
+  // release the publication lock before command work begins. Awaiting the
+  // completion promise keeps the launcher's own frame alive for the whole of a
+  // short command; it is no longer what decides when the snapshot dies.
+  if (runtime.cliCompletion && typeof runtime.cliCompletion.then === 'function') {
+    await runtime.cliCompletion;
+  }
 }

@@ -1,36 +1,39 @@
 /**
  * Setup & health command cluster — alerts, doctor, init, guide, and audit.
  * Extracted verbatim from cli.ts in the per-command-module split;
- * gatherGuideFacts stays module-internal to cmdGuide.
+ * gatherGuideFacts is exported for the CLI/dashboard guidance contract tests.
  */
 
 import { Store } from '../store/db.ts';
-import { loadConfig, saveConfig, dbPath, configPath, isDemo } from '../config.ts';
+import { loadConfig, mutateConfig, dbPath, configPath, isDemo } from '../config.ts';
 import { attributeCommits, isGitRepo } from '../git/correlate.ts';
 import { loadRealization } from '../value/realization.ts';
 import { buildGuide, type GuideFacts } from '../guide.ts';
-import { computeAlerts } from '../alerts/detect.ts';
+import { computeAlertCoverage, computeAlerts } from '../alerts/detect.ts';
 import { notifyWebhook } from '../alerts/notify.ts';
 import { pricingStatus } from '../cost/pricing.ts';
 import { baselineManifestStatus } from '../value/liftBaseline.ts';
-import { C, color, usd, num, printNotAGitRepo } from './ui.ts';
+import { probeProxyState } from '../egress/proxyHealth.ts';
+import { C, color, usd, num, printNotAGitRepo, printJson } from './ui.ts';
 import { type Flags } from './flags.ts';
+
+export { probeProxyState };
 
 export async function cmdAlerts(flags: Flags): Promise<void> {
   const tty = process.stdout.isTTY ?? false;
 
   // Config-only sub-actions: set/clear the opt-in delivery webhook.
   if (typeof flags['set-webhook'] === 'string') {
-    const c = loadConfig();
-    c.alerts.webhookUrl = String(flags['set-webhook']);
-    saveConfig(c);
+    mutateConfig((c) => {
+      c.alerts.webhookUrl = String(flags['set-webhook']);
+    });
     console.log(color(tty, C.green, '  Alert webhook saved.') + color(tty, C.gray, ' Delivery sends ONLY alert metadata — never prompts, code, or keys.'));
     return;
   }
   if (flags['clear-webhook']) {
-    const c = loadConfig();
-    c.alerts.webhookUrl = null;
-    saveConfig(c);
+    mutateConfig((c) => {
+      c.alerts.webhookUrl = null;
+    });
     console.log(color(tty, C.gray, '  Alert webhook cleared.'));
     return;
   }
@@ -39,11 +42,11 @@ export async function cmdAlerts(flags: Flags): Promise<void> {
   const store = new Store(dbPath());
 
   // Include realized-value alerts only when a git repo is available to measure them.
-  let realizedValueRate: number | null = null;
+  let realizedSpendShare: number | null = null;
   const repo = flags.repo as string | undefined;
   const loadedValue = await loadRealization(store, repo, { persist: false });
-  if (loadedValue) realizedValueRate = loadedValue.report.matured.realizedValueRate;
-  const alerts = computeAlerts(store, cfg, { realizedValueRate });
+  if (loadedValue) realizedSpendShare = loadedValue.report.matured.realizedSpendShare;
+  const alerts = computeAlerts(store, cfg, { realizedSpendShare });
 
   // Deliver to the configured webhook (cron-friendly), then exit.
   if (flags.notify) {
@@ -61,6 +64,7 @@ export async function cmdAlerts(flags: Flags): Promise<void> {
       console.log(color(tty, C.green, `  Delivered ${r.posted} alert(s) to the webhook (HTTP ${r.status}).`) + color(tty, C.gray, ' Metadata only.'));
     } else {
       console.error(color(tty, C.red, `  Delivery failed (${r.error ?? 'HTTP ' + r.status}); ${r.posted} alert(s) not sent.`));
+      if (r.action) console.error(color(tty, C.gray, `  Action: ${r.action}`));
       process.exitCode = 1;
     }
     store.close();
@@ -68,7 +72,7 @@ export async function cmdAlerts(flags: Flags): Promise<void> {
   }
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify(alerts, null, 2) + '\n');
+    printJson(alerts);
     store.close();
     if (alerts.some((a) => a.severity === 'critical')) process.exitCode = 1;
     return;
@@ -108,13 +112,8 @@ export async function cmdDoctor(): Promise<void> {
   const alerts = computeAlerts(store, cfg, { now });
   const criticals = alerts.filter((a) => a.severity === 'critical').length;
 
-  let proxyUp = false;
-  try {
-    const r = await fetch(`http://localhost:${cfg.port}/__fiscus/health`, { signal: AbortSignal.timeout(800) });
-    proxyUp = r.ok;
-  } catch {
-    proxyUp = false;
-  }
+  const proxyStatus = await probeProxyState(cfg);
+  const proxyUp = proxyStatus.kind === 'up';
 
   const mark = (good: boolean) => (good ? color(tty, C.green, '✓') : color(tty, C.yellow, '!'));
   console.log('');
@@ -122,7 +121,12 @@ export async function cmdDoctor(): Promise<void> {
   console.log(color(tty, C.gray, '  ' + '─'.repeat(58)));
   console.log(`  ${mark(true)} Config      ${color(tty, C.gray, configPath())}`);
   console.log(`  ${mark(true)} Database    ${color(tty, C.gray, `${dbPath()}  (${num(sum30.requests)} req · ${usd(sum30.costUsd)} in 30d)`)}`);
-  console.log(`  ${mark(proxyUp)} Proxy       ${proxyUp ? color(tty, C.green, `running on :${cfg.port}`) : color(tty, C.yellow, `not reachable on :${cfg.port} — start with "fiscus start"`)}`);
+  const proxyMessage = proxyStatus.kind === 'up'
+    ? color(tty, C.green, `running on :${cfg.port}`)
+    : proxyStatus.kind === 'blocked_by_egress'
+      ? color(tty, C.yellow, `blocked by local egress (${proxyStatus.code}) — ${proxyStatus.action}`)
+      : color(tty, C.yellow, `not reachable on :${cfg.port} — start with "fiscus start"`);
+  console.log(`  ${mark(proxyUp)} Proxy       ${proxyMessage}`);
   console.log(`  ${mark(cfg.budget.dailyUsd !== null)} Daily cap   ${cfg.budget.dailyUsd !== null ? usd(cfg.budget.dailyUsd) : color(tty, C.yellow, 'none — metering only (set with "fiscus budget --daily N")')}`);
   console.log(`  ${mark(estShare <= 0.2)} Pricing     ${estShare > 0 ? `${Math.round(estShare * 100)}% of 30d spend used estimated rates` : 'all spend priced from the rate card'}`);
   const price = pricingStatus(cfg.pricing.maxAgeDays);
@@ -146,7 +150,22 @@ export async function cmdDoctor(): Promise<void> {
         : `${base.source === 'cache' ? 'refreshed' : 'bundled'}${baseAge} · ${base.taskTypeCount} task-types`
     }`,
   );
-  console.log(`  ${mark(criticals === 0)} Alerts      ${alerts.length ? `${num(alerts.length)} active (${criticals} critical) — see "fiscus alerts"` : color(tty, C.green, 'all clear')}`);
+  // NOT `all clear`. Caps are opt-in and a fresh ledger has no baseline, so on a
+  // default install not one of the six detectors can fire — and this line was
+  // printing a green tick over an empty array that recorded nothing being looked
+  // at. It now states coverage, which is what the evidence supports (D-141).
+  const coverage = computeAlertCoverage(store, cfg);
+  console.log(
+    `  ${mark(criticals === 0 && coverage.complete)} Alerts      ${
+      alerts.length
+        ? `${num(alerts.length)} active (${criticals} critical) — see "fiscus alerts"`
+        : color(tty, coverage.complete ? C.green : C.yellow, `no alerts · ${coverage.summary}`)
+    }`,
+  );
+  for (const channel of coverage.channels) {
+    if (channel.live) continue;
+    console.log(color(tty, C.gray, `              ${channel.channel}: ${channel.darkBecause}`));
+  }
   console.log('');
   console.log(color(tty, C.gray, '  Point your AI tools at the proxy:'));
   console.log(color(tty, C.gray, `    ANTHROPIC_BASE_URL=http://localhost:${cfg.port}   OPENAI_BASE_URL=http://localhost:${cfg.port}/v1`));
@@ -155,8 +174,7 @@ export async function cmdDoctor(): Promise<void> {
 }
 
 export function cmdInit(): void {
-  const cfg = loadConfig();
-  saveConfig(cfg);
+  const cfg = mutateConfig((current) => current);
   const tty = process.stdout.isTTY ?? false;
   console.log('');
   console.log(color(tty, C.bold, '  Fiscus initialized'));
@@ -182,7 +200,7 @@ export function cmdInit(): void {
  * from what the user ran before. Re-running `guide` after any action shows the
  * journey advance, which is the whole point: the tool teaches by reflecting state.
  */
-async function gatherGuideFacts(): Promise<GuideFacts> {
+export async function gatherGuideFacts(): Promise<GuideFacts> {
   const cfg = loadConfig();
   const store = new Store(dbPath());
   const now = Date.now();
@@ -191,22 +209,21 @@ async function gatherGuideFacts(): Promise<GuideFacts> {
   const sum30 = store.summary(now - 30 * day, now + 1000);
   const outcomeSignals = store.countSignals();
   const realizationUnits = store.countRealizationUnits();
+  // Read before the store closes: without it `requestsAllTime` is a count of
+  // survivors presented as a count of everything (D-170).
+  const requestsRetention = store.retentionFloor();
   store.close();
 
-  let proxyUp = false;
-  try {
-    const r = await fetch(`http://localhost:${cfg.port}/__fiscus/health`, { signal: AbortSignal.timeout(800) });
-    proxyUp = r.ok;
-  } catch {
-    proxyUp = false;
-  }
+  const proxyStatus = await probeProxyState(cfg);
 
   return {
     demo: isDemo(),
     port: cfg.port,
     dashboardPort: cfg.dashboardPort,
-    proxyUp,
+    proxyUp: proxyStatus.kind === 'up',
+    proxyStatus,
     requestsAllTime: all.requests,
+    requestsRetention,
     spend30dUsd: sum30.costUsd,
     dailyCapUsd: cfg.budget.dailyUsd,
     outcomeSignals,
@@ -218,7 +235,7 @@ async function gatherGuideFacts(): Promise<GuideFacts> {
 export async function cmdGuide(flags: Flags): Promise<void> {
   const report = buildGuide(await gatherGuideFacts());
   if (flags.json) {
-    process.stdout.write(JSON.stringify(report, null, 2) + '\n');
+    printJson(report);
     return;
   }
 
@@ -236,6 +253,7 @@ export async function cmdGuide(flags: Flags): Promise<void> {
     const title = step.done ? padded : isNext ? color(tty, C.cyan, padded) : color(tty, C.gray, padded);
     console.log(`  ${mark} ${title} ${color(tty, C.gray, step.state)}`);
     if (isNext) {
+      if (step.notice) console.log(color(tty, C.yellow, '      ' + step.notice));
       console.log(`      ${step.why}`);
       for (const c of step.commands) console.log(color(tty, C.cyan, `        ${c}`));
     }
@@ -258,7 +276,7 @@ export async function cmdAudit(flags: Flags): Promise<void> {
   const store = new Store(dbPath());
   const rows = await attributeCommits(store, repo, { limit, persist: true });
   if (flags.json) {
-    process.stdout.write(JSON.stringify(rows, null, 2) + '\n');
+    printJson(rows);
     store.close();
     return;
   }

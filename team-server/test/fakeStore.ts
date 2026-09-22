@@ -4,8 +4,9 @@
  * header comment for why the interface exists.
  */
 
-import type { RollupStore, RegisteredDeveloper, StoredRollup, InsertRollupResult, PeriodFilter, ProjectTotals, DeveloperTotals } from '../src/store.ts';
-import type { SignedRollup } from '../../src/team/rollup.ts';
+import type { RollupStore, RegisteredDeveloper, StoredRollup, InsertRollupResult, PeriodFilter, ProjectTotals, DeveloperTotals, ObservationWindow } from '../src/store.ts';
+import { normalizeScopeKinds } from '../src/store.ts';
+import { combineRollupCoverage, normalizeRollupCoverage, normalizeRollupScope, type SignedRollup } from '../../src/team/rollup.ts';
 
 /** True if [rollup's period_from, period_to) overlaps the requested [periodFrom, periodTo) window (open bounds = unbounded). */
 function overlapsWindow(periodFrom: string, periodTo: string, filter: PeriodFilter): boolean {
@@ -51,6 +52,43 @@ export class FakeRollupStore implements RollupStore {
     return rows.slice(0, opts.limit ?? 50);
   }
 
+  /** Mirrors PgRollupStore.observationWindows: the same latest-per-developer population, grouped by declared window. */
+  async observationWindows(filter: PeriodFilter = {}): Promise<ObservationWindow[]> {
+    const latest = this.latestPerDeveloper(filter);
+    const byWindow = new Map<string, { periodFrom: string; periodTo: string; developers: Set<string>; coverages: Set<ReturnType<typeof normalizeRollupCoverage>>; scopeKinds: Set<string> }>();
+    for (const r of latest) {
+      const key = `${r.periodFrom}\u0000${r.periodTo}`;
+      let entry = byWindow.get(key);
+      if (!entry) {
+        entry = { periodFrom: r.periodFrom, periodTo: r.periodTo, developers: new Set(), coverages: new Set(), scopeKinds: new Set() };
+        byWindow.set(key, entry);
+      }
+      entry.developers.add(r.keyId);
+      entry.coverages.add(normalizeRollupCoverage(r.body));
+      entry.scopeKinds.add(normalizeRollupScope(r.body).kind);
+    }
+    return [...byWindow.values()]
+      .map((entry) => ({
+        periodFrom: entry.periodFrom,
+        periodTo: entry.periodTo,
+        developerCount: entry.developers.size,
+        coverage: combineRollupCoverage([...entry.coverages]),
+        scopes: normalizeScopeKinds([...entry.scopeKinds]),
+      }))
+      .sort((a, b) => a.periodFrom.localeCompare(b.periodFrom) || a.periodTo.localeCompare(b.periodTo));
+  }
+
+  /** One developer, one rollup: the latest received among those overlapping the filter. */
+  private latestPerDeveloper(filter: PeriodFilter): StoredRollup[] {
+    const inWindow = this.rollups.filter((r) => overlapsWindow(r.periodFrom, r.periodTo, filter));
+    const latestPerDev = new Map<string, StoredRollup>();
+    for (const r of inWindow) {
+      const existing = latestPerDev.get(r.keyId);
+      if (!existing || r.receivedAt >= existing.receivedAt) latestPerDev.set(r.keyId, r);
+    }
+    return [...latestPerDev.values()];
+  }
+
   /** Mirrors PgRollupStore.aggregateProjects's weighting exactly — see store.ts's header comment on why realizationRate/avgRoiIndex can't be naive averages. */
   async aggregateProjects(filter: PeriodFilter = {}): Promise<ProjectTotals[]> {
     const inWindow = this.rollups.filter((r) => overlapsWindow(r.periodFrom, r.periodTo, filter));
@@ -74,8 +112,8 @@ export class FakeRollupStore implements RollupStore {
       rollups: Set<string>;
       totalUnits: number;
       totalCostUsd: number;
-      totalRealizedValueUsd: number;
-      totalNetRealizedValueUsd: number;
+      totalSpendOnRealizedUnitsUsd: number;
+      totalAcceptanceWeightedSpendUsd: number;
       realizationNumerator: number;
       roiNumerator: number;
       roiDenominator: number;
@@ -90,8 +128,8 @@ export class FakeRollupStore implements RollupStore {
             rollups: new Set(),
             totalUnits: 0,
             totalCostUsd: 0,
-            totalRealizedValueUsd: 0,
-            totalNetRealizedValueUsd: 0,
+            totalSpendOnRealizedUnitsUsd: 0,
+            totalAcceptanceWeightedSpendUsd: 0,
             realizationNumerator: 0,
             roiNumerator: 0,
             roiDenominator: 0,
@@ -102,8 +140,8 @@ export class FakeRollupStore implements RollupStore {
         acc.rollups.add(r.id);
         acc.totalUnits += p.units;
         acc.totalCostUsd += p.costUsd;
-        acc.totalRealizedValueUsd += p.realizedValueUsd;
-        acc.totalNetRealizedValueUsd += p.netRealizedValueUsd;
+        acc.totalSpendOnRealizedUnitsUsd += p.spendOnRealizedUnitsUsd;
+        acc.totalAcceptanceWeightedSpendUsd += p.acceptanceWeightedSpendUsd;
         acc.realizationNumerator += p.realizationRate * p.units;
         if (p.roiIndex !== null) {
           acc.roiNumerator += p.roiIndex * p.costUsd;
@@ -118,10 +156,10 @@ export class FakeRollupStore implements RollupStore {
         rollupCount: acc.rollups.size,
         totalUnits: acc.totalUnits,
         totalCostUsd: acc.totalCostUsd,
-        totalRealizedValueUsd: acc.totalRealizedValueUsd,
-        totalNetRealizedValueUsd: acc.totalNetRealizedValueUsd,
+        totalSpendOnRealizedUnitsUsd: acc.totalSpendOnRealizedUnitsUsd,
+        totalAcceptanceWeightedSpendUsd: acc.totalAcceptanceWeightedSpendUsd,
         realizationRate: acc.totalUnits > 0 ? acc.realizationNumerator / acc.totalUnits : null,
-        realizedValueRate: acc.totalCostUsd > 0 ? acc.totalRealizedValueUsd / acc.totalCostUsd : null,
+        realizedSpendShare: acc.totalCostUsd > 0 ? acc.totalSpendOnRealizedUnitsUsd / acc.totalCostUsd : null,
         avgRoiIndex: acc.roiDenominator > 0 ? acc.roiNumerator / acc.roiDenominator : null,
       }))
       .sort((a, b) => b.totalCostUsd - a.totalCostUsd);
@@ -137,18 +175,18 @@ export class FakeRollupStore implements RollupStore {
     return [...latestPerDev.values()]
       .map((r) => {
         let totalCostUsd = 0;
-        let totalRealizedValueUsd = 0;
+        let totalSpendOnRealizedUnitsUsd = 0;
         for (const p of r.body.projects) {
           totalCostUsd += p.costUsd;
-          totalRealizedValueUsd += p.realizedValueUsd;
+          totalSpendOnRealizedUnitsUsd += p.spendOnRealizedUnitsUsd;
         }
         return {
           keyId: r.keyId,
           label: this.developers.get(r.keyId)?.label ?? null,
           rollupCount: 1,
           totalCostUsd,
-          totalRealizedValueUsd,
-          realizedValueRate: totalCostUsd > 0 ? totalRealizedValueUsd / totalCostUsd : null,
+          totalSpendOnRealizedUnitsUsd,
+          realizedSpendShare: totalCostUsd > 0 ? totalSpendOnRealizedUnitsUsd / totalCostUsd : null,
           lastPushedAt: r.receivedAt,
         };
       })

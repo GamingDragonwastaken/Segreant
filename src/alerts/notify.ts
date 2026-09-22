@@ -12,6 +12,7 @@
  */
 
 import type { Alert, AlertSeverity } from './detect.ts';
+import { discardResponseBody, egressFetch, EgressError, type EgressErrorCode } from '../egress/transport.ts';
 
 const SEV_RANK: Record<AlertSeverity, number> = { info: 0, warn: 1, critical: 2 };
 
@@ -51,6 +52,17 @@ export interface NotifyResult {
   posted: number; // how many alerts met the severity threshold
   status?: number;
   error?: string;
+  /** Stable boundary category; never collapse receipt refusal into network failure. */
+  failureCode?: EgressErrorCode | 'network_error';
+  /** Safe operator action for a local receipt refusal. */
+  action?: string;
+}
+
+function egressRepairAction(code: EgressErrorCode): string | undefined {
+  if (code === 'receipt_integrity_failed' || code === 'receipt_persistence_failed') {
+    return 'restore or repair the local egress receipt history, then retry; if a lock is stale, confirm no Fiscus writer owns it and remove only that lock';
+  }
+  return undefined;
 }
 
 /**
@@ -65,14 +77,28 @@ export async function notifyWebhook(
   const payload = buildWebhookPayload(alerts, opts.minSeverity ?? 'warn', opts.now);
   if (payload.alerts.length === 0) return { delivered: false, posted: 0 };
   try {
-    const res = await fetch(url, {
+    const res = await egressFetch(url, {
+      purpose: 'alert_delivery',
+      dataClass: 'alert_metadata',
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(opts.timeoutMs ?? 4000),
     });
-    return { delivered: res.ok, posted: payload.alerts.length, status: res.status };
+    const delivered = res.ok;
+    const status = res.status;
+    await discardResponseBody(res);
+    return { delivered, posted: payload.alerts.length, status };
   } catch (e) {
-    return { delivered: false, posted: payload.alerts.length, error: String(e) };
+    if (e instanceof EgressError) {
+      return {
+        delivered: false,
+        posted: payload.alerts.length,
+        error: e.message,
+        failureCode: e.code,
+        action: egressRepairAction(e.code),
+      };
+    }
+    return { delivered: false, posted: payload.alerts.length, error: String(e), failureCode: 'network_error' };
   }
 }

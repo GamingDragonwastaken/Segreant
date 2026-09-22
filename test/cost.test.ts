@@ -10,6 +10,7 @@ import { join } from 'node:path';
 process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'fiscus-home-'));
 
 import { computeCost, rateFor } from '../src/cost/pricing.ts';
+import { formatMoneyAmount } from '../src/economics/money.ts';
 import { normalizeAnthropicUsage, normalizeOpenAIUsage } from '../src/proxy/usage.ts';
 
 test('Anthropic rate is exact for a known model', () => {
@@ -48,9 +49,11 @@ test('computeCost: Anthropic input+output+cacheWrite', () => {
     cacheReadTokens: 0,
     cacheWriteTtl: '5m' as const,
   };
-  const { costUsd } = computeCost('anthropic', 'claude-opus-4-8', usage);
+  const { costUsd, exact } = computeCost('anthropic', 'claude-opus-4-8', usage);
   // 2000*5 + 100*25 + 500*6.25 = 10000 + 2500 + 3125 (per 1e6) = 0.015625
   assert.ok(Math.abs(costUsd - 0.015625) < 1e-9, `got ${costUsd}`);
+  assert.equal(formatMoneyAmount(exact!.total), '0.015625');
+  assert.equal(formatMoneyAmount(exact!.components.cacheWrite), '0.003125');
 });
 
 test('computeCost: OpenAI uncached input excludes cached tokens', () => {

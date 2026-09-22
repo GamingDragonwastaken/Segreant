@@ -25,7 +25,8 @@
  * breakdown it needs no separate opt-in — only the per-row floor.
  */
 
-import type { ProjectTotals, DeveloperTotals } from './store.ts';
+import { combineRollupCoverage, type RollupCoverage, type RollupScopeKind } from '../../src/team/rollup.ts';
+import type { ProjectTotals, DeveloperTotals, ObservationWindow } from './store.ts';
 import { standardizedScore, type StandardizedScore } from '../../src/team/standardize.ts';
 
 export type ProjectAggregateRow =
@@ -37,10 +38,10 @@ export type ProjectAggregateRow =
       rollupCount: number;
       totalUnits: number;
       totalCostUsd: number;
-      totalRealizedValueUsd: number;
-      totalNetRealizedValueUsd: number;
+      totalSpendOnRealizedUnitsUsd: number;
+      totalAcceptanceWeightedSpendUsd: number;
       realizationRate: number | null;
-      realizedValueRate: number | null;
+      realizedSpendShare: number | null;
       avgRoiIndex: number | null;
     };
 
@@ -51,7 +52,7 @@ export interface TeamDeveloperDistribution {
   p25RealizedValueRate: number;
   p75RealizedValueRate: number;
   totalCostUsd: number;
-  totalRealizedValueUsd: number;
+  totalSpendOnRealizedUnitsUsd: number;
 }
 
 export interface TeamDeveloperReport {
@@ -66,6 +67,191 @@ export interface TeamAggregateConfig {
   minCohort: number;
   /** Opt-in: without this, the developer breakdown reports itself disabled (fails closed, like adminToken/oidc). */
   exposeDeveloperBreakdown: boolean;
+}
+
+export interface WindowCoverage {
+  /** How many DIFFERENT observation windows the summed rollups declared. */
+  distinctWindows: number;
+  contributingDevelopers: number;
+  /** True only when every contributing rollup declared the same window. */
+  uniform: boolean;
+  earliestFrom: string | null;
+  latestTo: string | null;
+  shortestWindowDays: number | null;
+  longestWindowDays: number | null;
+  /**
+   * Whether one instant exists that EVERY contributing window contains.
+   *
+   * Separate from `uniform`, which only asks whether there is one window, and
+   * from the length fields, which say nothing about position: two rollups can
+   * both declare thirty days and describe January and June. `earliestFrom`
+   * and `latestTo` are the union, and a union was being read as coverage.
+   *
+   * An empty set of windows reports `false` for the same reason it reports
+   * `uniform: false` -- nothing is not disjoint, it is nothing, and a reader
+   * must not take an empty team for an agreeing one in either direction.
+   */
+  overlap: boolean;
+  /** The intersection of every contributing window, or null when there is none. */
+  overlapFrom: string | null;
+  overlapTo: string | null;
+  /** Conservative combination of the signer-declared coverage states. */
+  status: RollupCoverage;
+  /**
+   * True only when EVERY contributing rollup declared it covered all of its
+   * machine's projects.
+   *
+   * `aggregateProjects` keeps one rollup per developer and reads it as that
+   * developer's whole window. That is an assumption about the payload, and
+   * until the signer began declaring its scope there was nothing to check it
+   * against: a total summed from one scoped rollup and one whole one reported
+   * exactly what a total summed from two whole ones reported. A scoped
+   * contributor does not merely understate a figure — the projects it omits
+   * leave every team total, `developerCount` falls with them, and
+   * `buildProjectReport` can then withhold a colleague's project behind a
+   * k-anonymity floor that has nothing to do with them.
+   *
+   * An empty set reports `false`, for the same reason the empty coverage
+   * reports `uniform: false`: nothing is not agreement. A contributor that did
+   * not say reports `unknown` and is never read as `all-projects`.
+   */
+  wholeSnapshot: boolean;
+  /** The distinct scope claims among the contributing rollups, sorted. */
+  scopeKinds: RollupScopeKind[];
+  /** What the totals beside this do, and do not, describe. */
+  note: string;
+}
+
+function windowDays(window: ObservationWindow): number {
+  const span = new Date(window.periodTo).getTime() - new Date(window.periodFrom).getTime();
+  return Math.round((span / 86_400_000) * 100) / 100;
+}
+
+/**
+ * State the coverage of a team total, because the rollups it sums need not
+ * cover the same period.
+ *
+ * THE FIGURE HAD NO PERIOD AT ALL. Each rollup declares its own observation
+ * window, chosen by whoever pushed it — `fiscus team push --window D` defaults
+ * to 30 and accepts anything — and `aggregateProjects` sums one rollup per
+ * developer whatever length each window is. A seven-day machine and a
+ * ninety-day machine added up to one `totalCostUsd` and the response said
+ * nothing about which period, if any, it described.
+ *
+ * THE ARGUMENT WAS ALREADY MADE ONE FUNCTION OVER. `parsePeriodFilter` refuses
+ * `periodFrom`/`periodTo` outright and states why: filtering a snapshot by an
+ * overlapping window "would present its *whole* total as though it belonged to
+ * that partial window". That is the same error in the other direction — there
+ * the query's window misdescribes the data, here the data's own windows
+ * misdescribe each other — and only one of the two was guarded.
+ *
+ * LENGTH IS NOT POSITION (D-164). Everything above is about how LONG each
+ * window is, and two rollups can both declare thirty days while describing
+ * January and June. `earliestFrom`/`latestTo` are the union of the windows,
+ * and on disjoint ones that union names months nobody observed while the
+ * length comparison finds nothing to report. `overlap` states the
+ * intersection instead: whether one instant exists that every contributing
+ * window contains, and which instants those are.
+ *
+ * NEITHER REFUSED NOR REWEIGHTED, DELIBERATELY. Normalising unequal windows to a
+ * common period would invent a rate the rollups do not carry, and refusing the
+ * sum would delete the core FinOps view over a difference that is often
+ * harmless. What is added is the basis: how many distinct windows fed the total,
+ * their span, and their shortest and longest length. Recorded at D-102.
+ */
+export function buildWindowCoverage(windows: ObservationWindow[]): WindowCoverage {
+  if (windows.length === 0) {
+    return {
+      distinctWindows: 0,
+      contributingDevelopers: 0,
+      // Nothing is not uniform; it is nothing. Reporting `true` here would let a
+      // reader take an empty team for an agreeing one.
+      uniform: false,
+      earliestFrom: null,
+      latestTo: null,
+      shortestWindowDays: null,
+      longestWindowDays: null,
+      overlap: false,
+      overlapFrom: null,
+      overlapTo: null,
+      status: 'unknown',
+      wholeSnapshot: false,
+      scopeKinds: [],
+      note: 'no rollups contributed to these totals, so there is no observation window to state',
+    };
+  }
+
+  const lengths = windows.map(windowDays);
+  const shortest = Math.min(...lengths);
+  const longest = Math.max(...lengths);
+  const earliestFrom = windows.map((w) => w.periodFrom).sort()[0]!;
+  const latestTo = windows.map((w) => w.periodTo).sort().at(-1)!;
+  const contributingDevelopers = windows.reduce((total, w) => total + w.developerCount, 0);
+  const uniform = windows.length === 1;
+  const status = combineRollupCoverage(windows.map((window) => window.coverage));
+
+  // A SECOND AXIS, KEPT SEPARATE FROM `status` DELIBERATELY. Folding scope into
+  // the coverage value would make two different absences -- rows retention
+  // deleted, and projects the signer never included -- render as one word, and a
+  // reader could no longer tell which one they were looking at. That collapse is
+  // the defect this whole block exists to answer, one level down.
+  const scopeKinds = [...new Set(windows.flatMap((window) => window.scopes ?? []))].sort() as RollupScopeKind[];
+  const wholeSnapshot = scopeKinds.length === 1 && scopeKinds[0] === 'all-projects';
+
+  // THE INTERSECTION, NOT A PAIRWISE CHECK. Two of three windows agreeing is
+  // not an agreement; a total is summed across all of them at once, so the
+  // question is whether ONE instant exists that every contributor was
+  // observing. Half-open, so windows that merely touch at an endpoint share
+  // nothing: reporting a zero-length overlap would be reporting an artefact of
+  // the boundary rather than a period anybody observed.
+  const overlapFromCandidate = windows.map((w) => w.periodFrom).sort().at(-1)!;
+  const overlapToCandidate = windows.map((w) => w.periodTo).sort()[0]!;
+  const overlap = Date.parse(overlapFromCandidate) < Date.parse(overlapToCandidate);
+  const overlapFrom = overlap ? overlapFromCandidate : null;
+  const overlapTo = overlap ? overlapToCandidate : null;
+
+  // The span sentence needed the overlap beside it. `spanning ${earliestFrom}
+  // to ${latestTo}` is the union, and on disjoint windows it names months
+  // nobody observed -- which reads as coverage unless the intersection is
+  // stated in the same breath.
+  const spread = overlap
+    ? `They do share a period: every contributing window covers ${overlapFrom} to ${overlapTo}.`
+    : 'They share no instant at all: no moment exists that every contributing window covers, so the span '
+      + 'above is a union and not a period anybody observed.';
+  const note = uniform
+    ? `every contributing rollup declares the same ${shortest}-day window, ${earliestFrom} to ${latestTo}; `
+      + 'the totals cover that period'
+    : `contributing rollups declare ${windows.length} different observation windows, the shortest ${shortest} `
+      + `days and the longest ${longest} days, spanning ${earliestFrom} to ${latestTo}. These totals are a sum `
+      + 'across periods of unequal length and do not describe any single window'
+      + `; a machine that observed for longer contributes more of it for that reason alone. ${spread}`;
+
+  // Appended rather than folded in, so the window sentence keeps saying exactly
+  // what it said and the scope sentence can be read on its own.
+  const scopeNote = wholeSnapshot
+    ? ' Every contributing rollup declares it covers all of its machine\'s projects.'
+    : scopeKinds.includes('project')
+      ? ' At least one contributing rollup declares it covers only ONE project on its machine, so these totals are'
+        + ' missing that machine\'s other projects entirely — not understated, absent.'
+      : ' At least one contributing rollup does not say whether it covers all of its machine\'s projects, so these'
+        + ' totals must not be read as a snapshot of the team.';
+
+  return {
+    distinctWindows: windows.length,
+    contributingDevelopers,
+    uniform,
+    earliestFrom,
+    latestTo,
+    shortestWindowDays: shortest,
+    longestWindowDays: longest,
+    overlap,
+    overlapFrom,
+    overlapTo,
+    status,
+    wholeSnapshot,
+    scopeKinds,
+    note: note + scopeNote,
+  };
 }
 
 /** Suppresses any project row with fewer than `minCohort` distinct contributing developers. */
@@ -86,10 +272,10 @@ export function buildProjectReport(totals: ProjectTotals[], minCohort: number): 
       rollupCount: t.rollupCount,
       totalUnits: t.totalUnits,
       totalCostUsd: t.totalCostUsd,
-      totalRealizedValueUsd: t.totalRealizedValueUsd,
-      totalNetRealizedValueUsd: t.totalNetRealizedValueUsd,
+      totalSpendOnRealizedUnitsUsd: t.totalSpendOnRealizedUnitsUsd,
+      totalAcceptanceWeightedSpendUsd: t.totalAcceptanceWeightedSpendUsd,
       realizationRate: t.realizationRate,
-      realizedValueRate: t.realizedValueRate,
+      realizedSpendShare: t.realizedSpendShare,
       avgRoiIndex: t.avgRoiIndex,
     };
   });
@@ -127,10 +313,10 @@ export function buildDeveloperReport(totals: DeveloperTotals[], config: TeamAggr
   const costs = totals.map((t) => t.totalCostUsd).sort((a, b) => a - b);
   // Rate is undefined (not zero) at $0 cost — exclude those rows from the rate
   // distribution rather than fold them in as 0, the same "unknown never
-  // penalizes" discipline realization.ts's netRealizedValueUsd uses.
+  // penalizes" discipline realization.ts's acceptanceWeightedSpendUsd uses.
   const rates = totals
-    .filter((t): t is DeveloperTotals & { realizedValueRate: number } => t.realizedValueRate !== null)
-    .map((t) => t.realizedValueRate)
+    .filter((t): t is DeveloperTotals & { realizedSpendShare: number } => t.realizedSpendShare !== null)
+    .map((t) => t.realizedSpendShare)
     .sort((a, b) => a - b);
   // The k-anonymity floor must hold for whatever population a statistic is
   // actually computed over — the rate axis is computed over a SMALLER,
@@ -155,7 +341,7 @@ export function buildDeveloperReport(totals: DeveloperTotals[], config: TeamAggr
       p25RealizedValueRate: quantile(rates, 0.25),
       p75RealizedValueRate: quantile(rates, 0.75),
       totalCostUsd: totals.reduce((s, t) => s + t.totalCostUsd, 0),
-      totalRealizedValueUsd: totals.reduce((s, t) => s + t.totalRealizedValueUsd, 0),
+      totalSpendOnRealizedUnitsUsd: totals.reduce((s, t) => s + t.totalSpendOnRealizedUnitsUsd, 0),
     },
   };
 }

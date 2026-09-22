@@ -26,7 +26,7 @@ import type { Store, RequestRow, RealizationUnitRecord } from '../store/db.ts';
 import { computeCost, syntheticPricingEvidence, unpricedPricingEvidence, type Provider } from '../cost/pricing.ts';
 import { startOfLocalDay } from '../budget/guard.ts';
 import type { WorkUnit } from '../value/realization.ts';
-import { GATE_LADDER, scoreFunnel, type Gate, type GateResult, type Verdict } from '../value/gates.ts';
+import { GATE_LADDER, gateResultFromVerdict, scoreFunnel, type Gate, type GateResult, type Verdict } from '../value/gates.ts';
 import { classifyTaskType } from '../value/taskType.ts';
 import { boundedLift } from '../value/lift.ts';
 
@@ -233,6 +233,7 @@ function addRequest(ctx: Ctx, spec: ReqSpec): void {
     cacheReadTokens,
     reasoningTokens: 0,
     costUsd: cost.costUsd,
+    economicAmount: calculated?.exact?.total,
     estimated: cost.estimated,
     pricing: calculated ? syntheticPricingEvidence(calculated) : cost.pricing,
     streamed: !blocked,
@@ -386,7 +387,12 @@ type Arch = 'realized' | 'realized_light' | 'churned' | 'rejected' | 'reverted' 
 // outcome (realized only if nothing failed AND survived+clean both pass).
 const ARCHETYPES: Record<Arch, { maturing: boolean; survival: number; verdicts: Partial<Record<Gate, Verdict>> }> = {
   realized:       { maturing: false, survival: 0.93, verdicts: { proposed: 'pass', accepted: 'pass', committed: 'pass', tested: 'pass', merged: 'pass', shipped: 'pass', survived: 'pass', clean: 'pass' } },
-  realized_light: { maturing: false, survival: 0.88, verdicts: { proposed: 'pass', accepted: 'pass', committed: 'pass', tested: 'pass', survived: 'pass', clean: 'pass' } },
+  // This is still a lighter *fixture narrative* (it omits no required gate).
+  // Strict realization now requires every gate in the coding contract, so the
+  // demo supplies explicit merged/shipped evidence rather than relying on the
+  // old unknown-as-pass shortcut. The distinction from `realized` is the
+  // authored survival/acceptance profile, not missing lifecycle evidence.
+  realized_light: { maturing: false, survival: 0.88, verdicts: { proposed: 'pass', accepted: 'pass', committed: 'pass', tested: 'pass', merged: 'pass', shipped: 'pass', survived: 'pass', clean: 'pass' } },
   churned:        { maturing: false, survival: 0.22, verdicts: { proposed: 'pass', accepted: 'pass', committed: 'pass', tested: 'pass', survived: 'fail', clean: 'pass' } },
   rejected:       { maturing: false, survival: 0.40, verdicts: { proposed: 'pass', accepted: 'fail', committed: 'pass' } },
   reverted:       { maturing: false, survival: 0.66, verdicts: { proposed: 'pass', accepted: 'pass', committed: 'pass', tested: 'pass', survived: 'pass', clean: 'fail' } },
@@ -446,7 +452,9 @@ function makeRealizationUnit(ctx: Ctx, now: number, spec: UnitSpec, hash: string
   const arch = ARCHETYPES[spec.arch];
   const tsEpochMs = now - Math.floor(spec.daysAgo * DAY_MS);
   const verdicts = {} as Record<Gate, GateResult>;
-  for (const g of GATE_LADDER) verdicts[g] = { gate: g, verdict: arch.verdicts[g] ?? 'unknown', detail: 'demo' };
+  // Demo archetypes are declared as legacy verdicts, so they come through the
+  // compatibility constructor and can never produce a conflicted gate.
+  for (const g of GATE_LADDER) verdicts[g] = gateResultFromVerdict(g, arch.verdicts[g] ?? 'unknown', 'demo');
   return {
     hash,
     tsEpochMs,
@@ -459,6 +467,11 @@ function makeRealizationUnit(ctx: Ctx, now: number, spec: UnitSpec, hash: string
     attributedCostUsd: spec.costUsd,
     attributedRequests: int(ctx.rng, 4, 22),
     attributedOutputTokens: int(ctx.rng, 1_500, 12_000),
+    // The demo ledger is synthesised whole and never pruned, so its attribution
+    // windows are intact by construction. Declaring it rather than defaulting
+    // keeps the demo from being the one place a truncation could hide (D-176).
+    spendWindowTruncated: false,
+    spendWindowPrunedBeforeMs: null,
     costPerHundredLines: spec.linesAdded > 0 ? (spec.costUsd / spec.linesAdded) * 100 : null,
     ageDays: spec.daysAgo,
     maturing: arch.maturing,

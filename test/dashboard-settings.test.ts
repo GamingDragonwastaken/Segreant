@@ -8,10 +8,23 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import type http from 'node:http';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { buildSettingsSnapshot, applySettingsPatch } from '../src/dashboard/settings.ts';
 import { DEFAULT_CONFIG } from '../src/config.ts';
 import { Store, type RequestRow } from '../src/store/db.ts';
 import { createDashboardServer } from '../src/dashboard/server.ts';
+
+const originalFiscusHome = process.env.FISCUS_HOME;
+const dashboardTestHome = mkdtempSync(join(tmpdir(), 'fiscus-dashboard-settings-home-'));
+process.env.FISCUS_HOME = dashboardTestHome;
+
+test.after(() => {
+  if (originalFiscusHome === undefined) delete process.env.FISCUS_HOME;
+  else process.env.FISCUS_HOME = originalFiscusHome;
+  rmSync(dashboardTestHome, { recursive: true, force: true });
+});
 
 function req(over: Partial<RequestRow>): RequestRow {
   return {
@@ -32,6 +45,10 @@ test('buildSettingsSnapshot reports config, paths, and recent connections', () =
   assert.equal(snap.metadataOnly, false);
   assert.equal(snap.proposalRetentionDays, 30);
   assert.equal(snap.retentionDays, 180);
+  assert.equal(snap.egress.mode, 'local_locked');
+  assert.deepEqual(snap.egress.rules, []);
+  assert.equal(snap.egress.receipts.ok, true);
+  assert.match(snap.egress.scope, /Fiscus-process/i);
   assert.equal(snap.connections.length, 1);
   assert.equal(snap.connections[0]!.provider, 'anthropic');
   store.close();
@@ -42,6 +59,24 @@ test('buildSettingsSnapshot reports no connections when no traffic is in the win
   const snap = buildSettingsSnapshot(store, structuredClone(DEFAULT_CONFIG), '0.1.0');
   assert.deepEqual(snap.connections, []);
   store.close();
+});
+
+test('dashboard settings action exposes corrupt receipt history and bounded repair guidance', () => {
+  const home = mkdtempSync(join(tmpdir(), 'fiscus-dashboard-receipt-refusal-'));
+  const previousHome = process.env.FISCUS_HOME;
+  process.env.FISCUS_HOME = home;
+  writeFileSync(join(home, 'egress-receipts.jsonl'), '{"version":1}\n', 'utf8');
+  const store = new Store(':memory:');
+  try {
+    const snapshot = buildSettingsSnapshot(store, structuredClone(DEFAULT_CONFIG), '0.1.0');
+    assert.equal(snapshot.egress.receipts.ok, false);
+    assert.match(snapshot.egress.receipts.errors.join(' '), /id|hash/i);
+  } finally {
+    store.close();
+    if (previousHome === undefined) delete process.env.FISCUS_HOME;
+    else process.env.FISCUS_HOME = previousHome;
+    rmSync(home, { recursive: true, force: true });
+  }
 });
 
 test('applySettingsPatch updates only the fields provided, never mutating the input', () => {
@@ -102,6 +137,7 @@ test('GET /api/settings returns a snapshot; POST is not allowed', async () => {
     assert.equal(body.version, 'test');
     assert.equal(body.metadataOnly, false);
     assert.ok(Array.isArray(body.connections));
+    assert.deepEqual((body.egress as { mode?: string }).mode, 'local_locked');
 
     const post = await fetch(`${srv.base}/api/settings`, { method: 'POST' });
     assert.equal(post.status, 405);
@@ -139,6 +175,44 @@ test('POST /api/settings/update applies a patch, persists it, and requires the l
     const after = await fetch(`${srv.base}/api/settings`);
     const afterBody = (await after.json()) as { metadataOnly: boolean };
     assert.equal(afterBody.metadataOnly, true);
+  } finally {
+    await srv.close();
+    store.close();
+  }
+});
+
+test('POST /api/settings/update rejects malformed budget values before persistence', async () => {
+  const store = new Store(':memory:');
+  const srv = await boot(store);
+  try {
+    const res = await fetch(`${srv.base}/api/settings/update`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-fiscus-local': '1' },
+      body: JSON.stringify({ budget: { dailyUsd: 'unlimited' } }),
+    });
+    assert.equal(res.status, 400);
+    const body = await res.json() as { error?: { code?: string } };
+    assert.equal(body.error?.code, 'SETTINGS_INVALID');
+    assert.equal(srv.readPersisted().budget.dailyUsd, null, 'invalid caps must never be persisted');
+  } finally {
+    await srv.close();
+    store.close();
+  }
+});
+
+test('POST /api/settings/update rejects an oversized body before parsing or persistence', async () => {
+  const store = new Store(':memory:');
+  const srv = await boot(store);
+  try {
+    const res = await fetch(`${srv.base}/api/settings/update`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-fiscus-local': '1' },
+      body: 'x'.repeat(16 * 1024 + 1),
+    });
+    assert.equal(res.status, 400);
+    const body = await res.json() as { error?: { code?: string } };
+    assert.equal(body.error?.code, 'SETTINGS_INVALID');
+    assert.equal(srv.readPersisted().metadataOnly, false, 'oversized input must not reach the writer');
   } finally {
     await srv.close();
     store.close();

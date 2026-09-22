@@ -3,7 +3,7 @@
  *
  * The primitives in this directory are already deep and already shared:
  * `loadRealization`, `resolveBaselineMinutesForRepo`, `liftOptionsFromStore`,
- * `moneyInputsFromStore`, `computeReturnOnIntelligence`, `goodhartStreams`,
+ * `moneyInputsFromStore`, `computeReturnOnIntelligence`, `rateDriftStreams`,
  * `timeReclaimedFromStore`, `computeFrontier`, `computeUsageRoI`,
  * `computeCohort`, `recommendBudget`. What was NOT shared was the SEQUENCE that
  * assembles them into a report — the dashboard's `/api/value` and the CLI's
@@ -15,17 +15,19 @@
  * invariant; it is a defect waiting for the next edit. This module IS that
  * invariant.
  *
- * THE ONE DISTINCTION THIS FILE MUST NOT COLLAPSE. Two different quantities are
- * both spelled `realizedValueUsd`, and they are different claims:
+ * THE ONE DISTINCTION THIS FILE MUST NOT COLLAPSE. Two different quantities sit
+ * next to each other in the payload, and they are different claims:
  *
- *   realization.matured.realizedValueUsd   attributed SPEND on units that
+ *   realization.matured.spendOnRealizedUnitsUsd   attributed SPEND on units that
  *                                          realized — a COST that landed well.
- *   roi.returnRatio.realizedValueUsd       manual-equivalent VALUE produced —
- *                                          what the work would have cost done
- *                                          by hand, net of rework.
+ *   roi.returnRatio.manualEquivalentValueUsd      manual-equivalent VALUE
+ *                                          produced — what the work would have
+ *                                          cost done by hand, net of rework.
  *
  * They come from different evidence and answer different questions. Neither is
  * ever renamed into the other, and neither is ever computed from the other.
+ * Until AII-012 they were BOTH spelled `realizedValueUsd`, which is how the
+ * value spine came to render a cost while every typecheck passed.
  *
  * Ordering matters and is load-bearing:
  *   1. realization  — the spine; everything downstream is a lens on it.
@@ -33,7 +35,8 @@
  *                     pre-AI git history shrunk toward a cited population prior
  *                     > the prior alone). Demo mode skips git entirely: the
  *                     seeded snapshots are not this checkout's real history.
- *   3. lift         — the counterfactual; its provenance travels with it.
+ *   3. lift         — an observational time/comparative lens; its provenance
+ *                     travels with it but it is not monetary causal credit.
  *   4. money        — priced from the SAME baseline the lens used, so the
  *                     dollar and the index can never disagree.
  *   5. RoI, drift, time reclaimed, frontier — all read (1)–(4), never the store
@@ -49,19 +52,23 @@ import {
   liftOptionsFromStore,
   moneyInputsFromStore,
   projectValueBreakdown,
+  proposalRetentionForUnits,
   type LoadedRealization,
   type ProjectValue,
 } from './realization.ts';
 import { resolveBaselineMinutesForRepo, type ResolvedBaseline } from './liftBaseline.ts';
 import { boundedLift } from './lift.ts';
 import { computeReturnOnIntelligence, type RoIOptions, type RoIResult } from './lenses.ts';
-import { goodhartStreams, type DriftReport, type NamedDriftReport } from './drift.ts';
-import { instrumentationPriority, type InstrumentationPriority } from './voi.ts';
+import { rateDriftStreams, type DriftReport, type NamedDriftReport } from './drift.ts';
+import { instrumentationPriority, type InstrumentationPriority } from './instrumentationSensitivity.ts';
 import { timeReclaimedFromStore, type TimeReclaimedReport } from './timeReclaimed.ts';
 import { computeFrontier, type FrontierReport } from './frontier.ts';
 import { computeUsageRoI, type UsageReport } from './usage.ts';
 import { computeCohort, type CohortReport } from './cohort.ts';
 import { recommendBudget, type BudgetRecommendation } from '../budget/recommend.ts';
+import { economicAttributionFromRows, type EconomicAttribution } from '../economics/attribution.ts';
+import { claimProfile } from '../epistemic/profile.ts';
+import type { DecisionAssuranceInput } from '../decision/assurance.ts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -131,7 +138,7 @@ export interface ValueSpine {
   /** Lift/baseline provenance, already unshifted onto `roi.notes`. */
   liftNotes: string[];
   roi: RoIResult;
-  /** The realization stream's Goodhart alarm — back-compat name for `driftStreams[realization]`. */
+  /** The realization stream's rate-drift alarm — back-compat name for `driftStreams[realization]`. */
   drift: DriftReport | null;
   /** All gaming-sensitive streams; each carries its own typical reading. */
   driftStreams: NamedDriftReport[];
@@ -223,7 +230,7 @@ export async function valueSpine(
 
   // Labor rate prices both the effort tax and the money number's denominator.
   // Falls back to config; in the demo we assume an illustrative rate so the
-  // dollar return is visible (clearly labeled), since the demo has no real org
+  // dollar scenario is visible (clearly labeled), since the demo has no real org
   // rate. Threaded ONLY into the headline RoI — never into `liftOptions` — so
   // the per-project breakdown is not handed a global numerator.
   let laborRate = opts.laborRatePerHour !== undefined ? opts.laborRatePerHour : config.lift.laborRatePerHour;
@@ -239,21 +246,23 @@ export async function valueSpine(
     grossRealizedValueUsd: money.grossRealizedValueUsd,
     supervisionMinutes: money.supervisionMinutes,
     riskAversion: opts.riskAversion ?? 0,
+    // Why the Acceptance lens went dark, when the store can say (D-179).
+    proposalRetention: proposalRetentionForUnits(store, report.units),
   });
   roi.notes.unshift(...liftNotes);
 
-  // Goodhart drift alarm (docs §11): is a rate being BENT? Anytime-valid
+  // Rate-drift alarm (docs §11): is a rate NOT CONSTANT? Anytime-valid
   // e-processes over mature units in time order — realization, acceptance, and
   // hard-gate coverage (each stream needs ≥10 observed points; silent below
   // that, honestly). The PATTERN across streams is the tell: acceptance rising
   // while realization stagnates = proposal inflation; hard-gate unknowns rising
   // while the headline holds = coverage suppression.
   const matureOrdered = report.units.filter((u) => !u.maturing).sort((a, b) => a.tsEpochMs - b.tsEpochMs);
-  const driftStreams = goodhartStreams(matureOrdered.map((u) => u.funnel));
+  const driftStreams = rateDriftStreams(matureOrdered.map((u) => u.funnel));
   // Back-compat: `drift` stays the realization stream's report, as before.
   const drift = driftStreams.find((s) => s.stream === 'realization')?.report ?? null;
 
-  // VoI (docs §12): which measurement to buy next — the un-instrumented lens
+  // Instrumentation sensitivity (docs §12): the un-instrumented lens
   // whose measurement would move the Index most, at a disclosed mid reference.
   const voi = instrumentationPriority(roi);
 
@@ -314,7 +323,53 @@ export type BudgetAdvice = BudgetRecommendation & {
   spendBasis: 'live_proxy' | 'all_observed';
   /** The observation window behind `observed`, in days. */
   windowDays: number;
+  /** Exact effective spend coverage behind the advisor's observed series. */
+  economic?: {
+    coverage: 'exact' | 'partial' | 'legacy_unknown';
+    total: EconomicAttribution | null;
+  };
 };
+
+/**
+ * The product's own kernel profiles for the cap decision's basis (D-220): the
+ * metered daily-spend series is always declared, since a cap is never proposed
+ * without one; the realized-value share is declared only when instrumented,
+ * since an absent lens is `undefined`/`null` rather than a fabricated zero.
+ *
+ * Stated honestly rather than optimistically: the request ledger is read, not
+ * digested (`integrity: 'unknown'`), the series prices at list rather than
+ * provider-billed cost (`monetaryBasis: 'list'`), and neither series carries a
+ * causal claim (`causality: 'none'`). The realized-value share is a ratio, not
+ * a dollar figure (`monetaryBasis: 'none'`), and rides on the same measurement
+ * axis as the funnel it comes from (`proxy_unvalidated`).
+ */
+function budgetCapDecisionInputs(
+  coverage: 'exact' | 'partial' | 'legacy_unknown',
+  realizedSpendShare: number | null,
+): readonly DecisionAssuranceInput[] {
+  const seriesCoverage = coverage === 'exact' ? 'complete' : coverage === 'partial' ? 'partial' : 'unknown';
+  const inputs: DecisionAssuranceInput[] = [
+    {
+      id: 'claim:budget:cap:input:metered_daily_spend',
+      profile: claimProfile({
+        epistemic: 'supported', integrity: 'unknown', authenticity: 'self_asserted', scope: 'conditional',
+        coverage: seriesCoverage, measurement: 'proxy_unvalidated', causality: 'none', monetaryBasis: 'list',
+        finality: 'provisional', decisionFitness: 'not_assessed',
+      }),
+    },
+  ];
+  if (realizedSpendShare !== null) {
+    inputs.push({
+      id: 'claim:budget:cap:input:realized_spend_share',
+      profile: claimProfile({
+        epistemic: 'supported', integrity: 'unknown', authenticity: 'self_asserted', scope: 'conditional',
+        coverage: seriesCoverage, measurement: 'proxy_unvalidated', causality: 'none', monetaryBasis: 'none',
+        finality: 'provisional', decisionFitness: 'not_assessed',
+      }),
+    });
+  }
+  return Object.freeze(inputs);
+}
 
 /**
  * A cap recommendation, on the same spend basis the `--apply` action will
@@ -328,22 +383,35 @@ export function budgetAdvice(
   opts: {
     windowDays?: number;
     nowMs?: number;
-    realizedValueRate?: number | null;
+    realizedSpendShare?: number | null;
     frontier?: BudgetInputsFrontier;
   } = {},
 ): BudgetAdvice {
   const now = opts.nowMs ?? Date.now();
   const days = opts.windowDays ?? DEFAULT_SPEND_WINDOW_DAYS;
   const liveOnly = !config.budget.capIncludesImported;
-  const series = store.series(now - days * DAY_MS, now + 1000, DAY_MS, liveOnly);
+  const startMs = now - days * DAY_MS;
+  const endMs = now + 1000;
+  const exactRows = store.economicRequestRowsInRange(startMs, endMs, { liveOnly });
+  const exact = economicAttributionFromRows(exactRows);
+  const series = store.economicSeries(startMs, endMs, DAY_MS, liveOnly);
+  const realizedSpendShare = opts.realizedSpendShare ?? null;
+  const coverage: 'exact' | 'partial' | 'legacy_unknown' =
+    exactRows.length === 0 ? 'legacy_unknown' : exact.complete ? 'exact' : 'partial';
   return {
     ...recommendBudget({
       dailySpends: series.map((s) => s.costUsd),
-      realizedValueRate: opts.realizedValueRate ?? null,
+      realizedSpendShare,
       frontier: opts.frontier ?? [],
+      currentDailyCapUsd: config.budget.dailyUsd,
+      decisionInputs: budgetCapDecisionInputs(coverage, realizedSpendShare),
     }),
     spendBasis: liveOnly ? 'live_proxy' : 'all_observed',
     windowDays: days,
+    economic: {
+      coverage,
+      total: exactRows.length === 0 ? null : exact,
+    },
   };
 }
 
@@ -413,7 +481,7 @@ export async function valueReport(
   const budget = budgetAdvice(store, config, {
     windowDays: spendWindowDays,
     nowMs: now,
-    realizedValueRate: spine?.loaded.report.matured.realizedValueRate ?? null,
+    realizedSpendShare: spine?.loaded.report.matured.realizedSpendShare ?? null,
     frontier: spine?.frontier.byModelAndTask ?? [],
   });
 

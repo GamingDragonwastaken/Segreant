@@ -1,0 +1,371 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { economicAttributionView } from '../src/economics/attribution.ts';
+import { money } from '../src/economics/money.ts';
+import { evidence } from '../src/epistemic/evidence.ts';
+import { GATE_LADDER, gateResultFromVerdict, scoreFunnel, type Gate, type GateResult } from '../src/value/gates.ts';
+import {
+  buildCodingRealizationKernelIssuance,
+  type CodingRealizationKernelInput,
+} from '../src/value/epistemic.ts';
+import { Store } from '../src/store/db.ts';
+
+const ALL_PASS = Object.fromEntries(
+  GATE_LADDER.map((gate) => [gate, gateResultFromVerdict(gate, 'pass', 'fixture evidence')]),
+) as Record<Gate, GateResult>;
+
+const ECONOMIC = economicAttributionView({
+  amount: money('1.25', 'USD', 'effective'),
+  eventIds: ['economic:request:value-kernel:charge'],
+  sourceBases: ['list'],
+  requestCount: 1,
+  unresolvedRequests: 0,
+});
+
+const CLEAN_COMPLETENESS = {
+  qualified: true,
+  requiredEventTypes: ['commit_reverted', 'linked_incident'],
+  qualifyingWitnessIds: ['complete-incident-source', 'complete-revert-scan'],
+  witnesses: [
+    {
+      id: 'complete-incident-source',
+      sourceId: 'incident-feed',
+      state: 'supported',
+      eventTypes: ['linked_incident'],
+      scope: { project: 'fiscus' },
+      period: { from: '1970-01-01T00:00:00.000Z', to: '1970-01-02T00:00:00.000Z' },
+    },
+    {
+      id: 'complete-revert-scan',
+      sourceId: 'git-history',
+      state: 'supported',
+      eventTypes: ['commit_reverted'],
+      scope: { project: 'fiscus' },
+      period: { from: '1970-01-01T00:00:00.000Z', to: '1970-01-02T00:00:00.000Z' },
+    },
+  ],
+} as const;
+
+function input(overrides: Partial<CodingRealizationKernelInput> = {}): CodingRealizationKernelInput {
+  const unit = {
+    hash: 'a'.repeat(40),
+    subject: 'feat: value kernel',
+    tsEpochMs: 2_000,
+    linesAdded: 12,
+    linesDeleted: 2,
+    filesChanged: 1,
+    windowStartMs: 500,
+    windowEndMs: 2_000,
+    taskType: 'feature',
+    acceptance: 0.9,
+    maturing: false,
+    costStale: false,
+    reverted: false,
+    survivalRatio: 1,
+    funnel: scoreFunnel(ALL_PASS),
+    cleanCompleteness: CLEAN_COMPLETENESS,
+    economic: ECONOMIC,
+  };
+  return {
+    commitHash: unit.hash,
+    project: 'fiscus',
+    tsEpochMs: unit.tsEpochMs,
+    computedAtMs: 3_000,
+    attributedCostUsd: 1.25,
+    maturing: false,
+    realized: true,
+    unitJson: JSON.stringify(unit),
+    costScope: 'project',
+    ...overrides,
+  };
+}
+
+test('coding realization kernel issuance emits a narrow exact lifecycle Claim', () => {
+  const issuance = buildCodingRealizationKernelIssuance(input());
+  assert.match(issuance.evidence.id, /^evidence:value:realization:sha256:[0-9a-f]{64}$/);
+  assert.match(issuance.claim.id, /^claim:value:realization:sha256:[0-9a-f]{64}$/);
+  assert.equal(issuance.evidence.evidenceType, 'value.realization');
+  assert.equal(issuance.evidence.completeness.status, 'complete');
+  assert.equal(issuance.evidence.monetaryBasis, 'effective');
+  assert.equal(issuance.claim.proposition.predicate, 'value.realization_recorded');
+  assert.equal(issuance.claim.profile.coverage, 'complete');
+  assert.equal(issuance.claim.profile.monetaryBasis, 'effective');
+  assert.equal(issuance.claim.profile.causality, 'none');
+  assert.equal(issuance.claim.profile.finality, 'provisional');
+  const value = issuance.claim.proposition.value as {
+    realized: boolean;
+    economic: { amountText: string; complete: boolean };
+    gates: Array<{ gate: Gate; verdict: string }>;
+  };
+  assert.equal(value.realized, true);
+  assert.equal(value.economic.amountText, '1.25');
+  assert.equal(value.economic.complete, true);
+  assert.equal((issuance.evidence.completeness.coveredEventTypes as string[]).includes('proposal_capture'), true);
+  assert.equal((value as { spendAttributionScope?: string }).spendAttributionScope, 'project');
+  assert.equal(value.gates.length, GATE_LADDER.length);
+  assert.ok(value.gates.every((gate) => gate.verdict === 'pass'));
+  assert.match(issuance.claim.assumptions.join(' '), /not a causal|business-value/i);
+});
+
+test('coding realization kernel refuses unresolved or contradictory lifecycle inputs', () => {
+  const base = JSON.parse(input().unitJson) as Record<string, unknown>;
+  const partialEconomic = economicAttributionView({
+    amount: money('1.25', 'USD', 'effective'),
+    eventIds: ['economic:request:value-kernel:charge'],
+    sourceBases: ['list'],
+    requestCount: 2,
+    unresolvedRequests: 1,
+  });
+  assert.throws(
+    () => buildCodingRealizationKernelIssuance(input({ unitJson: JSON.stringify({ ...base, economic: partialEconomic }) })),
+    /complete exact economic coverage/,
+  );
+  const unknown = { ...ALL_PASS, shipped: gateResultFromVerdict('shipped', 'unknown', 'not observed') };
+  assert.throws(
+    () => buildCodingRealizationKernelIssuance(input({ unitJson: JSON.stringify({ ...base, funnel: scoreFunnel(unknown) }) })),
+    /every legacy realization gate must be pass/,
+  );
+
+  // A gate two sources disagreed about is refused for its OWN reason (AII-003,
+  // WP-B03). Its verdict already projects to `fail`, so the check above would
+  // catch it too — but a caller reading that message would be told the gate
+  // FAILED, when what happened is that the evidence contradicted itself.
+  const conflicted = {
+    ...ALL_PASS,
+    tested: { gate: 'tested' as const, polarity: 'conflicted' as const, verdict: 'fail' as const, detail: 'two runs disagreed' },
+  };
+  assert.throws(
+    () => buildCodingRealizationKernelIssuance(input({ unitJson: JSON.stringify({ ...base, funnel: scoreFunnel(conflicted) }) })),
+    /refuses a conflicted gate: tested/,
+  );
+  assert.throws(() => buildCodingRealizationKernelIssuance(input({ maturing: true })), /mature/);
+  assert.throws(() => buildCodingRealizationKernelIssuance(input({ commitHash: 'b'.repeat(40) })), /hash does not match/);
+  const stale = { ...base, costStale: true };
+  assert.throws(() => buildCodingRealizationKernelIssuance(input({ unitJson: JSON.stringify(stale) })), /current mature/);
+  const withoutCompleteness = { ...base };
+  delete withoutCompleteness.cleanCompleteness;
+  assert.throws(
+    () => buildCodingRealizationKernelIssuance(input({ unitJson: JSON.stringify(withoutCompleteness) })),
+    /qualifying completeness witnesses/,
+  );
+  const forgedCompleteness = {
+    ...base,
+    cleanCompleteness: { ...CLEAN_COMPLETENESS, qualifyingWitnessIds: [] },
+  };
+  assert.throws(
+    () => buildCodingRealizationKernelIssuance(input({ unitJson: JSON.stringify(forgedCompleteness) })),
+    /witness identity is inconsistent/,
+  );
+});
+
+test('Store preserves a modern realized snapshot without clean completeness but does not issue a kernel Claim', () => {
+  const store = new Store(':memory:');
+  try {
+    const record = input();
+    const unit = JSON.parse(record.unitJson) as Record<string, unknown>;
+    delete unit.cleanCompleteness;
+    unit.funnel = {
+      ...(unit.funnel as Record<string, unknown>),
+      results: ((unit.funnel as Record<string, unknown>).results as Array<Record<string, unknown>>).map((result) => ({
+        ...result,
+        polarity: null,
+      })),
+    };
+    const incomplete = { ...record, unitJson: JSON.stringify(unit) };
+    store.saveRealizationUnits([incomplete]);
+    assert.equal((store.raw().prepare('SELECT COUNT(*) AS count FROM realization_units').get() as { count: number }).count, 1);
+    assert.equal((store.raw().prepare('SELECT COUNT(*) AS count FROM epistemic_claims').get() as { count: number }).count, 0);
+  } finally {
+    store.close();
+  }
+});
+
+test('Store canonical realization persistence issues the value Claim once and replays idempotently', () => {
+  const store = new Store(':memory:');
+  try {
+    const record = input();
+    store.insertRequest({
+      requestId: 'value-kernel', sessionId: null, tsEpochMs: 1_000, provider: 'anthropic', model: 'claude-opus-4-8',
+      project: 'fiscus', taskWeight: 1, inputTokens: 10, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0,
+      reasoningTokens: 0, costUsd: 1.25, economicAmount: money('1.25', 'USD', 'list'), estimated: false, streamed: false,
+      statusCode: 200, durationMs: 1, via: 'import',
+    });
+    store.saveRealizationUnits([record]);
+    const issuance = buildCodingRealizationKernelIssuance(record);
+    assert.ok(store.epistemic().readEvidence(issuance.evidence.id));
+    assert.ok(store.epistemic().readClaim(issuance.claim.id));
+    const replay = store.issueRealizationUnitToKernel(record);
+    assert.equal(replay.evidence.result, 'duplicate');
+    assert.equal(replay.claim.result, 'duplicate');
+  } finally {
+    store.close();
+  }
+});
+
+test('revised persisted realization claims form one typed latest chain without erasing historical replay', () => {
+  const store = new Store(':memory:');
+  try {
+    const firstRecord = input();
+    store.insertRequest({
+      requestId: 'value-kernel', sessionId: null, tsEpochMs: 1_000, provider: 'anthropic', model: 'claude-opus-4-8',
+      project: 'fiscus', taskWeight: 1, inputTokens: 10, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0,
+      reasoningTokens: 0, costUsd: 1.25, economicAmount: money('1.25', 'USD', 'list'), estimated: false, streamed: false,
+      statusCode: 200, durationMs: 1, via: 'import',
+    });
+    store.saveRealizationUnits([firstRecord]);
+    const first = buildCodingRealizationKernelIssuance(firstRecord);
+
+    // Recomputing the same mature unit later changes its observed/as-of claim
+    // identity while retaining the same value coordinate. The old claim must
+    // remain replayable, but it cannot remain an unlinked latest tip.
+    const revisedRecord = { ...firstRecord, computedAtMs: 4_000 };
+    store.saveRealizationUnits([revisedRecord]);
+    const revised = buildCodingRealizationKernelIssuance(revisedRecord);
+    const storedRevised = store.epistemic().readClaim(revised.claim.id);
+
+    assert.notEqual(first.claim.id, revised.claim.id);
+    assert.deepEqual(storedRevised?.supersedes, [first.claim.id]);
+    assert.deepEqual(
+      store.epistemic().latestClaims().map((item) => item.id),
+      [revised.claim.id],
+    );
+    assert.deepEqual(
+      store.epistemic().latestClaims(
+        store.epistemic().graph().nodes.find((node) => node.id === first.claim.id)!.availableAt,
+      ).map((item) => item.id),
+      [first.claim.id],
+    );
+    assert.deepEqual(store.epistemic().graph().edges.filter((edge) => edge.relation === 'supersedes'), [
+      { from: revised.claim.id, to: first.claim.id, relation: 'supersedes' },
+    ]);
+
+    // Exact replay of the revised snapshot must retain the same lifecycle edge,
+    // not try to append a second payload with different supersession metadata.
+    store.saveRealizationUnits([revisedRecord]);
+  } finally {
+    store.close();
+  }
+});
+
+test('value realization persistence refuses a legacy ambiguous latest coordinate instead of choosing a predecessor', () => {
+  const store = new Store(':memory:');
+  try {
+    const firstRecord = input();
+    const secondRecord = { ...firstRecord, computedAtMs: 4_000 };
+    store.insertRequest({
+      requestId: 'value-kernel', sessionId: null, tsEpochMs: 1_000, provider: 'anthropic', model: 'claude-opus-4-8',
+      project: 'fiscus', taskWeight: 1, inputTokens: 10, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0,
+      reasoningTokens: 0, costUsd: 1.25, economicAmount: money('1.25', 'USD', 'list'), estimated: false, streamed: false,
+      statusCode: 200, durationMs: 1, via: 'import',
+    });
+    // Simulate rows issued before the value boundary carried an explicit
+    // successor rule: the generic ledger retains both, so the value path must
+    // refuse to guess which one a new revision should supersede.
+    for (const record of [firstRecord, secondRecord]) {
+      const issuance = buildCodingRealizationKernelIssuance(record);
+      store.epistemic().appendEvidence(issuance.evidence);
+      store.epistemic().appendClaim(issuance.claim);
+    }
+
+    const thirdRecord = { ...firstRecord, computedAtMs: 5_000 };
+    assert.throws(
+      () => store.saveRealizationUnits([thirdRecord]),
+      /ambiguous.*latest|latest.*ambiguous/i,
+    );
+    assert.equal((store.raw().prepare('SELECT COUNT(*) AS count FROM realization_units').get() as { count: number }).count, 0);
+    assert.deepEqual(
+      store.epistemic().latestClaims().map((item) => item.id).sort(),
+      [
+        buildCodingRealizationKernelIssuance(firstRecord).claim.id,
+        buildCodingRealizationKernelIssuance(secondRecord).claim.id,
+      ].sort(),
+    );
+  } finally {
+    store.close();
+  }
+});
+
+test('Store re-derives exact attribution from its ledger and refuses fabricated lineage', () => {
+  const store = new Store(':memory:');
+  try {
+    const record = input();
+    store.insertRequest({
+      requestId: 'value-kernel-real', sessionId: null, tsEpochMs: 1_000, provider: 'anthropic', model: 'claude-opus-4-8',
+      project: 'fiscus', taskWeight: 1, inputTokens: 10, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0,
+      reasoningTokens: 0, costUsd: 1.25, economicAmount: money('1.25', 'USD', 'list'), estimated: false, streamed: false,
+      statusCode: 200, durationMs: 1, via: 'import',
+    });
+    const unit = JSON.parse(record.unitJson) as Record<string, unknown>;
+    const forgedEconomic = economicAttributionView({
+      amount: money('1.25', 'USD', 'effective'), eventIds: ['economic:unrelated'], sourceBases: ['list'], requestCount: 1, unresolvedRequests: 0,
+    });
+    const forged = { ...record, unitJson: JSON.stringify({ ...unit, economic: forgedEconomic }) };
+    assert.throws(() => store.saveRealizationUnits([forged]), /does not match the current effective ledger/);
+    assert.equal((store.raw().prepare('SELECT COUNT(*) AS count FROM realization_units').get() as { count: number }).count, 0);
+    assert.equal((store.raw().prepare('SELECT COUNT(*) AS count FROM epistemic_claims').get() as { count: number }).count, 0);
+  } finally {
+    store.close();
+  }
+});
+
+test('realization snapshot and kernel pair roll back together on an append conflict', () => {
+  const store = new Store(':memory:');
+  try {
+    const record = input();
+    store.insertRequest({
+      requestId: 'value-kernel', sessionId: null, tsEpochMs: 1_000, provider: 'anthropic', model: 'claude-opus-4-8',
+      project: 'fiscus', taskWeight: 1, inputTokens: 10, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0,
+      reasoningTokens: 0, costUsd: 1.25, economicAmount: money('1.25', 'USD', 'list'), estimated: false, streamed: false,
+      statusCode: 200, durationMs: 1, via: 'import',
+    });
+    const issuance = buildCodingRealizationKernelIssuance(record);
+    const divergentEvidence = evidence({
+      ...issuance.evidence,
+      payload: { ...(issuance.evidence.payload as Record<string, unknown>), subject: 'tampered-before-save' },
+    } as never);
+    store.epistemic().appendEvidence(divergentEvidence);
+    assert.throws(() => store.saveRealizationUnits([record]), /different evidence already exists/);
+    assert.equal((store.raw().prepare('SELECT COUNT(*) AS count FROM realization_units').get() as { count: number }).count, 0);
+    assert.equal(store.epistemic().readClaim(issuance.claim.id), null);
+    assert.equal(store.epistemic().readEvidence(issuance.evidence.id)!.payload && (store.epistemic().readEvidence(issuance.evidence.id)!.payload as Record<string, unknown>).subject, 'tampered-before-save');
+  } finally {
+    store.close();
+  }
+});
+
+test('direct value-kernel issuance requires an already persisted, non-stale snapshot', () => {
+  const store = new Store(':memory:');
+  try {
+    const record = input();
+    store.insertRequest({
+      requestId: 'value-kernel', sessionId: null, tsEpochMs: 1_000, provider: 'anthropic', model: 'claude-opus-4-8',
+      project: 'fiscus', taskWeight: 1, inputTokens: 10, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0,
+      reasoningTokens: 0, costUsd: 1.25, economicAmount: money('1.25', 'USD', 'list'), estimated: false, streamed: false,
+      statusCode: 200, durationMs: 1, via: 'import',
+    });
+    assert.throws(() => store.issueRealizationUnitToKernel(record), /not persisted/);
+  } finally {
+    store.close();
+  }
+});
+
+test('Store leaves partial and legacy realization snapshots outside the value kernel', () => {
+  const store = new Store(':memory:');
+  try {
+    const partial = economicAttributionView({
+      amount: money('1', 'USD', 'effective'), eventIds: ['economic:value:partial'], sourceBases: ['list'], requestCount: 2, unresolvedRequests: 1,
+    });
+    const base = JSON.parse(input().unitJson) as Record<string, unknown>;
+    store.saveRealizationUnits([
+      { ...input(), commitHash: 'b'.repeat(40), unitJson: JSON.stringify({ ...base, hash: 'b'.repeat(40), economic: partial }) },
+      { ...input(), commitHash: 'c'.repeat(40), unitJson: '{}', realized: true },
+    ]);
+    assert.equal(store.epistemic().readClaim('claim:value:realization:sha256:' + '0'.repeat(64)), null);
+    const count = (store.raw().prepare(
+      `SELECT COUNT(*) AS count FROM epistemic_claims WHERE claim_json LIKE '%value.realization_recorded%'`,
+    ).get() as { count: number }).count;
+    assert.equal(count, 0);
+  } finally {
+    store.close();
+  }
+});

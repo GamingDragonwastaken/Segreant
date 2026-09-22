@@ -1,0 +1,42 @@
+import { buildDiagnostics, redactDiagnosticPath, writeDiagnosticsBundle, type RedactedDiagnosticBundle } from '../diagnostics.ts';
+import type { Flags } from './flags.ts';
+import { C, color, printJson } from './ui.ts';
+
+const EGRESS_BASIS_LABEL: Record<RedactedDiagnosticBundle['egress']['basis'], string> = {
+  no_record: 'NO RECORD',
+  chain_intact: 'CHAIN INTACT',
+  chain_broken: 'CHAIN INVALID',
+  discontinuity: 'HISTORY REMOVED',
+};
+
+export function cmdDiagnostics(flags: Flags): void {
+  const bundle = buildDiagnostics();
+  let exported: string | null = null;
+  if (typeof flags.out === 'string' && flags.out.trim() !== '') {
+    try {
+      exported = writeDiagnosticsBundle(bundle, flags.out);
+    } catch (error) {
+      console.error(`  Diagnostics export refused: ${error instanceof Error ? error.constructor.name : 'Error'}`);
+      process.exitCode = 1;
+      return;
+    }
+  }
+  if (flags.json) {
+    printJson({ ...bundle, export: exported ? { ok: true, path: redactDiagnosticPath(exported) } : null });
+    return;
+  }
+  const tty = process.stdout.isTTY ?? false;
+  console.log('');
+  console.log(color(tty, C.bold, '  Fiscus — redacted diagnostics'));
+  console.log(`  Operation     ${bundle.operationId}`);
+  console.log(`  Config        ${bundle.config.valid ? 'valid' : 'INVALID'} (${bundle.config.path})`);
+  console.log(`  Database      ${bundle.database.status.toUpperCase()} (${bundle.database.bytes ?? 'unknown'} bytes)`);
+  // `OK (0 receipt(s))` was the same overclaim as the one `fiscus egress verify`
+  // printed: a chain that verified over nothing, reported as a clean result.
+  console.log(`  Egress        ${EGRESS_BASIS_LABEL[bundle.egress.basis]} (${bundle.egress.receiptCount} receipt(s))`);
+  console.log(`  External net  ${bundle.boundaries.externalNetworkAttempted ? 'attempted' : 'not attempted'}`);
+  console.log(`  Credentials   ${bundle.boundaries.credentialRead ? 'read' : 'not read'}`);
+  if (exported) console.log(color(tty, C.green, `  Exported      ${exported}`));
+  console.log(color(tty, C.gray, '  Bundle is redacted: no prompts, source, credentials, raw ledger rows, or absolute user paths.'));
+  console.log('');
+}

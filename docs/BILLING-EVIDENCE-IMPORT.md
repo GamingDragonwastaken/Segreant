@@ -231,6 +231,39 @@ not summed and no variance is calculated. The report stays
 off-path provider usage is not visible, provider finality is undocumented, and
 provider line items do not join to individual Fiscus requests/models.
 
+## Mapping imported lines to local accounting scope
+
+An imported provider line can be assigned to a Fiscus project and accounting
+account when an operator has the missing local context. This is deliberately an
+exact-record operation, not a model/date/amount matching heuristic:
+
+```text
+fiscus billing export --json                 # inspect immutable recordId values
+fiscus billing mapping set \
+  --record-id <record-id> \
+  --project <local-project> \
+  --account-ref <local-account>               # dry run
+fiscus billing mapping set ... --apply       # append one mapping version
+fiscus billing mapping status --json
+```
+
+Fiscus stores the source record identity, its SHA-256 digest, the first import
+anchor, the local project/account target, and a monotonically increasing mapping
+version. A changed target is a new version; prior versions are retained and the
+mapping evidence cannot be updated or deleted. Replaying an identical target is
+idempotent. A stale digest, missing source record, or conflicting version stays
+unmapped rather than being force-fitted.
+
+Mapping coverage reports mapped dollars and residual dollars separately, with
+`unmapped`, `stale_mapping`, and `ambiguous_mapping` counts. A complete set of
+operator mappings still has status
+`blocked_provider_scope_not_authoritative`: the declaration explains local
+accounting intent, but it does not verify that the provider account or project
+was the one that produced the line. Imported provider evidence and all mapping
+outputs therefore remain excluded from budget enforcement, RoI, and model
+recommendations until a future provider-verified scope boundary explicitly
+establishes that authority.
+
 ## Reconciliation requires more
 
 Reconciliation needs more than a report total. Fiscus must establish a verified

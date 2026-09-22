@@ -9,23 +9,105 @@
  */
 
 import { h } from '../core/dom.ts';
-import { signal, effect } from '../core/signal.ts';
-import { api, type BillingPayload } from '../core/api.ts';
-import { isPrecise, relative, basisWords, usd, count } from '../core/fmt.ts';
+import { signal, scopedEffect } from '../core/signal.ts';
+import { api, type BillingPayload, type KernelNodePayload } from '../core/api.ts';
+import { isPrecise, relative, basisWords, usd, usdFromMicros, count } from '../core/fmt.ts';
 import { actionCard } from './spend.ts';
+import { projectRenderedAxes } from '../core/claimTypes.ts';
 
-const STATUS_WORDS: Record<string, { plain: string; precise: string; pill: string }> = {
-  not_reconciled: {
+/**
+ * The headline of this card, keyed on the BILLED CLAIM's state.
+ *
+ * It used to be keyed on `evidence.reconciliationStatus`, which `handleBilling`
+ * sends as a constant `'not_reconciled'` describing the trust posture of the
+ * HELD IMPORTED RECORDS. Rendered under a card titled "Reconciliation status"
+ * with the gloss "no observation run recorded", it said that whenever any run
+ * existed — the screen contradicted the run it was describing four lines below.
+ *
+ * That is the same defect as the whole packet: a collapsed status field read as
+ * a claim's state. The claim's state is on the wire now, so read that.
+ */
+const CLAIM_WORDS: Record<string, { plain: string; precise: string; pill: string }> = {
+  unknown: {
     plain: 'Not checked against a provider bill yet.',
-    precise: 'not_reconciled — no observation run recorded',
+    precise: 'unknown — no reconciliation run has been recorded',
     pill: 'pill-unverified',
   },
-  reconciled_with_residual: {
+  conflicted: {
+    plain: 'Checked — and the check disagrees with itself.',
+    precise: 'conflicted — repeated provider observations of the same days disagree',
+    pill: 'pill-warn',
+  },
+  refuted: {
+    plain: 'Checked, and the evidence says no.',
+    precise: 'refuted — the recorded evidence contradicts the billed claim',
+    pill: 'pill-warn',
+  },
+  supported: {
     plain: 'Checked, with an unexplained remainder.',
-    precise: 'reconciled_with_residual — residual is an upper bound on off-path spend',
+    // The unconditional half of this sentence is deliberately gone. D-068
+    // established that the residual bounds off-path spend from above only while
+    // the local rate-card estimate stays at or under the true on-path billed
+    // cost, and a residual below zero refutes that condition outright. The CLI
+    // says so beneath the number; this screen said "residual is an upper bound
+    // on off-path spend" flatly, for every run, including the ones where it is
+    // not one. The condition is now read from the run itself, below.
+    precise: 'reconciled_with_residual — a residual, under the conditions recorded with the run',
     pill: 'pill-ok',
   },
 };
+
+/**
+ * What the recorded residual actually bounds, from the run's own `offPathBound`.
+ *
+ * Absent means a run written before the field existed. That is not a licence to
+ * assume the favourable branch: it says the condition was never recorded, which
+ * is the whole reason the field exists.
+ */
+type ResidualBound = NonNullable<
+  NonNullable<NonNullable<BillingPayload['reconciliation']>['runs']>[number]['result']['offPathBound']
+>;
+
+/**
+ * A `Record` rather than an if-chain, keyed by the wire's own union.
+ *
+ * That is the gate: adding a state to `offPathBound` in `shared-types.ts`
+ * without a rendering here fails the BROWSER typecheck. With an if-chain the
+ * new state fell through to the "older than the check" sentence below, which
+ * would have said a fresh run predates a field it carries — an unrecognised
+ * value rendered as an absent one, which is the defect class this screen keeps
+ * finding.
+ */
+const RESIDUAL_BOUND_WORDS: Readonly<Record<ResidualBound, { precise: string; plain: string }>> = {
+  none_local_estimate_exceeds_provider: {
+    precise: 'residual bounds nothing — the local estimate exceeds the provider total, so no upper bound on off-path spend survives',
+    plain: 'This remainder cannot tell you how much went outside Fiscus: our own estimate already came out higher than the provider’s bill.',
+  },
+  upper_bound_conditional: {
+    precise: 'residual is an upper bound on off-path spend while the local estimate does not exceed true on-path billed cost',
+    plain: 'At most this much could have gone outside Fiscus — assuming our own pricing did not overshoot what you were really charged.',
+  },
+  unknown_local_total_truncated_by_retention: {
+    precise: 'residual bounds nothing — retention deleted request rows from inside this period, so the local total is a known undercount by an unknown amount',
+    plain: 'This remainder cannot tell you how much went outside Fiscus: some of your own metered requests in this period were deleted by your retention setting, so part of the difference is traffic we did see.',
+  },
+};
+
+/** Whether the run's own bound state is bad news rather than a caveat. */
+function residualBoundIsError(bound: string | undefined): boolean {
+  return bound === 'none_local_estimate_exceeds_provider'
+    || bound === 'unknown_local_total_truncated_by_retention';
+}
+
+function residualBoundWords(bound: string | undefined, precise: boolean): string {
+  const words = bound === undefined ? undefined : RESIDUAL_BOUND_WORDS[bound as ResidualBound];
+  if (words === undefined) {
+    return precise
+      ? 'this run predates the recorded bound condition, so what the residual bounds is not established'
+      : 'This run is older than the check that says what the remainder means, so we cannot tell you.'
+  }
+  return precise ? words.precise : words.plain;
+}
 
 /**
  * What a reconciliation would actually match, stated before the credential.
@@ -36,13 +118,119 @@ const STATUS_WORDS: Record<string, { plain: string; precise: string; pill: strin
  * not be turned into a warning either. Silence is the honest rendering of "not
  * reported".
  */
+/**
+ * The kernel viewer (D-257, WP-I01): the billing claims the server has issued
+ * to the epistemic kernel, and for any one of them — or any node id typed in —
+ * the node as the ledger holds it: its record, what it rests on, what rests on
+ * it, the derivations and assumptions behind it, and whether revocation
+ * reaches it. An as-of boundary replays the ledger to that instant, so the
+ * answer is what was known then, not what is known now. A viewer only: nothing
+ * here writes, and a billing evidence payload is withheld with its hash shown.
+ */
+function kernelPanel(d: BillingPayload): Node | null {
+  const claims = [...(d.kernel?.claims ?? []), ...(d.kernel?.observedClaims ?? []), ...(d.kernel?.reconciliationClaims ?? [])];
+  const nodeId = signal<string>(claims[0]?.id ?? '');
+  const asOf = signal<string>(d.asOf ?? '');
+  const view = signal<KernelNodePayload | null>(null);
+  const failure = signal<string | null>(null);
+  const load = (): void => {
+    const id = nodeId().trim();
+    if (!id) return;
+    failure.set(null);
+    void api.kernel(id, asOf().trim() || undefined)
+      .then((payload) => view.set(payload))
+      .catch((e: unknown) => failure.set(e instanceof Error ? e.message : String(e)));
+  };
+  type Edge = KernelNodePayload['restsOn'][number];
+  const edgeList = (title: string, edges: Edge[], pick: (edge: Edge) => string): Node =>
+    h('div', { class: 'kernel-edges' },
+      h('h3', { class: 'drawer-h3', text: title + ' (' + edges.length + ')' }),
+      edges.length === 0
+        ? h('p', { class: 'drawer-muted', text: 'none recorded' })
+        : h('ul', { class: 'kernel-edge-list' }, ...edges.map((edge) => h('li', null,
+            h('span', { class: 'tag', text: edge.relation }), ' ',
+            h('button', { class: 'kernel-link', type: 'button', onclick: () => { nodeId.set(pick(edge)); load(); }, text: pick(edge) })))));
+  return h('div', { class: 'card', style: 'margin-top: var(--s5)' },
+    h('div', { class: 'card-head' },
+      h('h2', { class: 'card-title', text: () => (isPrecise() ? 'Kernel viewer' : 'What the ledger actually holds') }),
+      h('span', { class: 'tag tag-read', text: 'reads only' })),
+    h('p', { class: 'drawer-muted', text: () => (isPrecise()
+      ? claims.length + ' billing claim(s) issued to the kernel. Open a node to see its record, the edges into and out of it, the derivations and assumptions behind it, and whether revocation reaches it — live, or as of an instant.'
+      : claims.length + ' billing claim(s) have been written to the evidence ledger. Pick one to see exactly what it rests on and whether anything has since withdrawn it.') }),
+    h('div', { class: 'kernel-controls' },
+      h('label', { class: 'drawer-h3', for: 'kernel-node-id', text: 'Node id' }),
+      claims.length > 0
+        ? h('select', { id: 'kernel-node-select', class: 'drawer-input', 'aria-label': 'Issued billing claims', onchange: (event: Event) => { nodeId.set((event.target as HTMLSelectElement).value); load(); } },
+            ...claims.map((claim) => h('option', { value: claim.id, text: claim.id })))
+        : null,
+      h('input', { id: 'kernel-node-id', class: 'drawer-input', type: 'text', autocomplete: 'off', spellcheck: 'false', value: () => nodeId(), placeholder: 'claim:… or evidence:…',
+        oninput: (event: Event) => nodeId.set((event.target as HTMLInputElement).value) }),
+      h('label', { class: 'drawer-h3', for: 'kernel-as-of', text: 'As of (UTC instant, blank = live)' }),
+      h('input', { id: 'kernel-as-of', class: 'drawer-input', type: 'text', autocomplete: 'off', spellcheck: 'false', value: () => asOf(), placeholder: '2026-09-19T00:00:00.000Z',
+        oninput: (event: Event) => asOf.set((event.target as HTMLInputElement).value) }),
+      h('button', { class: 'btn-ghost', type: 'button', onclick: load, text: 'Open node' })),
+    () => {
+      const err = failure();
+      if (err) return h('p', { class: 'drawer-error', role: 'alert', text: err });
+      const v = view();
+      if (!v) return h('p', { class: 'drawer-muted', role: 'status', text: 'No node opened yet.' });
+      if (!v.found) {
+        return h('p', { class: 'drawer-muted', role: 'status', text: v.asOf
+          ? v.id + ' was not in the ledger as of ' + v.asOf + ' — it either never existed or was not yet available; the ledger held ' + v.graphSize.nodes + ' node(s) then.'
+          : v.id + ' is not in the ledger (' + v.graphSize.nodes + ' node(s) held).' });
+      }
+      const node = v.node!;
+      const record = v.record as { kind?: string; evidence?: { payloadWithheld?: boolean; payloadDigest?: string | null } } | null;
+      const row = (key: string, value: string): Node =>
+        h('div', { class: 'claim-profile-row' }, h('dt', { class: 'claim-key', text: key }), h('dd', { class: 'claim-val', text: value }));
+      return h('div', { class: 'kernel-node' },
+        h('dl', { class: 'claim-profile-rows' },
+          row('node', node.id + ' · ' + node.kind),
+          row('available at', node.availableAt),
+          row('epistemic', node.epistemic),
+          row('revoked', v.revoked ? 'yes — the revocation projection reaches this node' + (v.asOf ? ' as of ' + v.asOf : '') : 'no'),
+          row('boundary', v.asOf ? 'as of ' + v.asOf + ' (' + v.graphSize.nodes + ' nodes, ' + v.graphSize.edges + ' edges then)' : 'live (' + v.graphSize.nodes + ' nodes, ' + v.graphSize.edges + ' edges)')),
+        edgeList('Rests on', v.restsOn, (edge) => edge.from),
+        edgeList('Supports', v.supports, (edge) => edge.to),
+        h('div', { class: 'kernel-edges' },
+          h('h3', { class: 'drawer-h3', text: 'Derivations (' + v.derivations.length + ')' }),
+          v.derivations.length === 0
+            ? h('p', { class: 'drawer-muted', text: node.kind === 'claim' ? 'a direct claim: no derivation produced it' : 'not a claim' })
+            : h('ul', { class: 'kernel-edge-list' }, ...v.derivations.map((der) => h('li', null,
+                h('code', { text: der.id }), ' — ' + der.transformation + '; from ' + der.inputClaimIds.length + ' claim(s), ' + der.inputEvidenceIds.length + ' evidence, ' + der.witnessIds.length + ' witness(es)')))),
+        h('div', { class: 'kernel-edges' },
+          h('h3', { class: 'drawer-h3', text: 'Assumptions (' + v.assumptions.length + ')' }),
+          v.assumptions.length === 0
+            ? h('p', { class: 'drawer-muted', text: 'none stated on a derivation behind this node' })
+            : h('ul', { class: 'kernel-edge-list' }, ...v.assumptions.map((a) => h('li', { text: a })))),
+        h('div', { class: 'kernel-edges' },
+          h('h3', { class: 'drawer-h3', text: 'Record' }),
+          record?.kind === 'evidence' && record.evidence?.payloadWithheld
+            ? h('p', { class: 'drawer-muted', text: 'billing evidence payload withheld — operator-supplied exports can be confidential; canonical payload digest ' + (record.evidence.payloadDigest ?? 'not recorded') })
+            : null,
+          h('pre', { class: 'kernel-record', text: record ? JSON.stringify(record, null, 2) : 'no record body is stored for this node kind' })));
+    });
+}
+
 function readinessPanel(d: BillingPayload): Node | null {
   const r = d.readiness;
   if (!r) return null;
   const c = r.coverage;
-  // No OpenAI spend at all: nothing to warn about, and saying "0 would count"
-  // would read as a defect rather than as an empty ledger.
-  if (!c) return null;
+  // A deletion reaches this screen as `coverage === null`, exactly like a
+  // machine that never metered OpenAI -- and the null used to be rendered as
+  // silence on the strength of a comment that read "no OpenAI spend at all:
+  // nothing to warn about". That silence is the whole panel, so a prune turned
+  // the credential warning OFF (D-186). An emptied ledger says so instead.
+  const truncated = r.localLedgerRetention?.truncated === true;
+  if (!c) {
+    if (!truncated) return null;
+    const before = r.localLedgerRetention.prunedBeforeMs;
+    return h('div', { class: 'drawer-warning', style: 'margin-top: var(--s4)' },
+      h('strong', { text: 'This ledger was emptied by retention' }),
+      h('p', { text: () => (isPrecise()
+        ? `No OpenAI rows survive, and retention deleted rows before ${before === null ? 'an unrecorded boundary' : new Date(before).toISOString().slice(0, 10)}. Whether any OpenAI spend was metered here cannot be read from the ledger, so nothing about what a reconciliation would match is stated.`
+        : `Your older records were deleted, so there is no OpenAI spend left here to check. We cannot tell you whether there ever was any — only that it is gone.`) }));
+  }
   const uncountable = c.importedUsd + c.proxyOffScopeUsd;
   if (c.onDeclaredRouteUsd > 0 || uncountable <= 0) return null;
 
@@ -52,7 +240,14 @@ function readinessPanel(d: BillingPayload): Node | null {
       ? `${usd(c.importedUsd, { precise: true })} across ${count(c.importedRequests)} request(s) arrived by native import — model and cost recorded, no tie to a declared provider project`
       : `${usd(c.importedUsd)} came from reading your tools' own logs, which do not record which provider project the spend belongs to`) }));
   }
-  if (c.proxyOffScopeUsd > 0) {
+  if (c.proxyOffScopeUsd > 0 && c.declaredScopeId === null) {
+    // Right verdict, wrong reason if left unbranched: no scope is active, so
+    // nothing CAN be on a declared route, and that is not a fact about these
+    // rows (D-187).
+    lines.push(h('li', { text: () => (isPrecise()
+      ? `${usd(c.proxyOffScopeUsd, { precise: true })} across ${count(c.proxyOffScopeRequests)} proxy request(s) were metered while no scope is active — nothing can be on a declared route until one is`
+      : `${usd(c.proxyOffScopeUsd)} went through the proxy, but no project is declared right now, so there is nothing to match it against`) }));
+  } else if (c.proxyOffScopeUsd > 0) {
     lines.push(h('li', { text: () => (isPrecise()
       ? `${usd(c.proxyOffScopeUsd, { precise: true })} across ${count(c.proxyOffScopeRequests)} proxy request(s) predate the declaration or carry a different one`
       : `${usd(c.proxyOffScopeUsd)} went through the proxy before you declared the project, so it cannot be matched either`) }));
@@ -69,11 +264,63 @@ function readinessPanel(d: BillingPayload): Node | null {
       : 'Route your tools through Fiscus (fiscus start), let a few days pass, and this becomes checkable.') }));
 }
 
+/**
+ * Explain the exact-record mapping layer on the same Evidence surface as the
+ * provider report. Mapping is useful accounting preparation, not provider
+ * verification: even a fully mapped import remains excluded from money-
+ * consuming controls until a verified provider scope exists.
+ */
+function mappingPanel(d: BillingPayload): Node | null {
+  const m = d.mapping;
+  if (!m) return null;
+  const eligible = m.reconciliationStatus === 'eligible_for_authoritative_reconciliation';
+  const status = m.coverageStatus === 'no_records'
+    ? 'no imported records'
+    : m.coverageStatus.replace(/_/g, ' ');
+  const mapped = usdFromMicros(m.mappedMicros);
+  const total = usdFromMicros(m.totalMicros);
+  const residual = usdFromMicros(m.residualMicros);
+  const statusRows = Object.entries(m.byStatus)
+    .filter(([, value]) => value.recordCount > 0)
+    .map(([key, value]) => h('li', { text: () => (isPrecise()
+      ? `${key}: ${count(value.recordCount)} record(s), ${usdFromMicros(value.amountMicros, { precise: true })}`
+      : `${key.replace(/_/g, ' ')}: ${count(value.recordCount)} record(s), ${usdFromMicros(value.amountMicros)}`) }));
+  const targetRows = m.targets.slice(0, 8).map((target) => h('li', { text: () => (isPrecise()
+    ? `${target.targetAccountRef} / ${target.targetProject}: ${count(target.recordCount)} record(s), ${usdFromMicros(target.amountMicros, { precise: true })}`
+    : `${target.targetProject}: ${usdFromMicros(target.amountMicros)} across ${count(target.recordCount)} record(s)`) }));
+  if (m.targets.length > 8) {
+    targetRows.push(h('li', { class: 'drawer-muted', text: `${count(m.targets.length - 8)} more target(s) hidden` }));
+  }
+  return h('div', { class: 'card', style: 'margin-top: var(--s4)' },
+    h('div', { class: 'card-head' },
+      h('span', { class: 'card-title', text: 'Imported-record mapping' }),
+      h('span', { class: `pill ${eligible ? 'pill-ok' : 'pill-unverified'}`, text: status })),
+    h('p', { text: () => (isPrecise()
+      ? `${count(m.mappedRecordCount)} of ${count(m.totalRecordCount)} imported record(s) have an exact operator mapping; ${m.providerScopeAuthority} provider scope keeps reconciliation ${m.reconciliationStatus}.`
+      : `${count(m.mappedRecordCount)} of ${count(m.totalRecordCount)} imported records have an exact local target. ${m.reconciliationDetail}.`) }),
+    h('div', { class: 'stat' },
+      h('span', { text: () => `${mapped} mapped · ${residual} residual` })),
+    h('span', { class: 'basis', text: () => (isPrecise()
+      ? `total ${total}; mapping trust ${m.mappingTrust}`
+      : `of ${total} imported provider evidence; Fiscus does not guess a target`) }),
+    statusRows.length > 0
+      ? h('ul', { class: 'drawer-notes', style: 'margin-top: var(--s3)' }, ...statusRows)
+      : null,
+    targetRows.length > 0
+      ? h('div', { style: 'margin-top: var(--s3)' },
+          h('span', { class: 'basis', text: 'Exact local targets' }),
+          h('ul', { class: 'drawer-notes' }, ...targetRows))
+      : null,
+    h('p', { class: 'basis', style: 'margin-top: var(--s3)', text: () => (m.excludedFrom.length > 0
+      ? `Still excluded from: ${m.excludedFrom.join(', ')}.`
+      : 'Provider scope authority is present for this payload; review the recorded reconciliation before consuming the result.') }));
+}
+
 export function evidenceView(): Node {
   const data = signal<BillingPayload | null>(null);
   const error = signal<string | null>(null);
 
-  effect(() => {
+  scopedEffect(() => {
     void api.billing()
       .then((payload) => data.set(payload))
       .catch((e: unknown) => error.set(e instanceof Error ? e.message : String(e)));
@@ -88,12 +335,14 @@ export function evidenceView(): Node {
 
     () => {
       const err = error();
-      if (err) return h('div', { class: 'card' }, h('p', { class: 'drawer-error', text: err }));
+      if (err) return h('div', { class: 'card' }, h('p', { class: 'drawer-error', role: 'alert', 'aria-live': 'assertive', text: err }));
       const d = data();
-      if (!d) return h('div', { class: 'card' }, h('p', { class: 'drawer-muted', text: 'Loading…' }));
+      if (!d) return h('div', { class: 'card' }, h('p', { class: 'drawer-muted', role: 'status', 'aria-live': 'polite', 'aria-busy': 'true', text: 'Loading…' }));
 
-      const fallback = { plain: d.evidence.reconciliationStatus, precise: d.evidence.reconciliationStatus, pill: 'pill-unverified' };
-      const status = STATUS_WORDS[d.evidence.reconciliationStatus] ?? fallback;
+      // A payload with no stated support is a payload that said nothing, which
+      // is `unknown` — not a licence to fall back to the records' label.
+      const claimState = d.claimSupport ? projectRenderedAxes(d.claimSupport.profile).epistemic : 'unknown';
+      const status = CLAIM_WORDS[claimState] ?? CLAIM_WORDS.unknown!;
       // Newest recorded run, read from the immutable collection the server
       // sends. This used to read `reconciliation.latest`, a field that has
       // never been on the wire — so it was always null and this screen reported
@@ -104,12 +353,33 @@ export function evidenceView(): Node {
         h('div', { class: 'card' },
           h('div', { class: 'card-head' },
             h('span', { class: 'card-title', text: 'Reconciliation status' }),
-            h('span', { class: `pill ${status.pill}`, text: d.evidence.reconciliationStatus.replace(/_/g, ' ') })),
+            h('span', { class: `pill ${status.pill}`, text: claimState })),
           h('p', { text: () => (isPrecise() ? status.precise : status.plain) }),
+          // The server's own one-line reason, where it has one the payload does
+          // not otherwise show. Rendering it beats restating the axes here in
+          // different words, which is how two descriptions of one judgement come
+          // apart.
+          d.claimSupport?.note
+            ? h('p', { class: 'basis', text: d.claimSupport.note })
+            : null,
           latest
             ? h('div', null,
+                // What the residual bounds is a property of THIS run, not of the
+                // status word, and it is the sentence an operator acts on.
+                h('p', { class: residualBoundIsError(latest.result.offPathBound) ? 'drawer-error' : 'basis',
+                  text: () => residualBoundWords(latest.result.offPathBound, isPrecise()) }),
                 h('span', { class: 'basis', text: () => `provider side: ${basisWords(latest.result.providerSourceKind)}` }),
-                h('span', { class: 'basis', text: `last run ${relative(latest.computedAtMs)}` }))
+                latest.result.snapshotStability === 'changed_across_observations'
+                  ? h('span', { class: 'drawer-error', text: () => (isPrecise()
+                      ? `snapshot stability: changed across observations on ${(latest.result.unstableDayStartMs ?? []).length} day(s) — this reconciliation is contradicted, not established`
+                      : 'Careful: the provider reported different figures for the same days at different times. This check disagrees with itself.') })
+                  : null,
+                h('span', { class: 'basis', text: `last run ${relative(latest.computedAtMs)}` }),
+                // The constant the headline used to be built from, restored to
+                // its actual subject: the held import records, not the run.
+                h('span', { class: 'basis', text: () => (isPrecise()
+                  ? `held provider records: ${d.evidence.reconciliationStatus.replace(/_/g, ' ')}`
+                  : 'The provider records themselves are still operator-supplied and unverified.') }))
             : h('span', { class: 'basis', text: () => (isPrecise()
                 ? 'zero recorded observation runs'
                 : 'no check has been run on this machine yet') }),
@@ -125,6 +395,8 @@ export function evidenceView(): Node {
             : 'billing lines you have given us from your provider') })),
 
         readinessPanel(d),
+        mappingPanel(d),
+        kernelPanel(d),
 
         h('div', { style: 'margin-top: var(--s6)' },
           h('h2', { class: 'card-title', style: 'margin-bottom: var(--s3)', text: 'Start here' }),

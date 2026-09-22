@@ -21,6 +21,12 @@ import { runScript } from './schema.ts';
 import type { RequestPricingEvidence } from '../cost/pricing.ts';
 import { pricingEvidenceFromRecord } from './rows.ts';
 import type { SpendBucket } from './db.ts';
+import type { EconomicLedger } from '../economics/ledger.ts';
+import type { Money } from '../economics/money.ts';
+import { requestEconomicEventId } from '../economics/request.ts';
+import { priceCorrectionEvent } from '../economics/corrections.ts';
+import { economicAttributionFromRows, economicAttributionNumber } from '../economics/attribution.ts';
+import { canonicalModelAttribution, type EconomicModelUnit, type EffectiveRequestRow } from './economicReadModel.ts';
 
 /**
  * A persisted snapshot of one computed work unit. The store keeps these so
@@ -36,6 +42,14 @@ export interface RealizationUnitRecord {
   maturing: boolean;
   realized: boolean;
   unitJson: string; // serialized WorkUnit (funnel + attribution + taskType + dominantModel)
+  /**
+   * Optional causal-study unit identity captured outside `unitJson` by a
+   * causal-aware producer. The current realization pipeline has no source from
+   * which to derive this mapping, so a populated value is a producer assertion,
+   * not independent causal proof. Normal snapshots do not have this identity
+   * and remain ineligible for causal lineage qualification.
+   */
+  causalUnitIdDigest?: string | null;
   /**
    * Which spend basis produced this snapshot's dollars: `project` when the
    * window was scoped to the unit's own project family, `window` when it was the
@@ -72,6 +86,8 @@ export interface RepriceUpdate {
   requestId: string;
   costUsd: number;
   pricing: RequestPricingEvidence;
+  /** Exact replacement when the request already has canonical economic history. */
+  economicAmount?: Money;
 }
 
 /** One append-only price change, with the evidence on both sides of it. */
@@ -103,6 +119,12 @@ export interface RealizationDeps {
     endMs: number,
     project?: string,
   ) => Array<SpendBucket & { provider: string; cacheReadTokens: number; cacheWriteTokens: number }>;
+  /** Exact request rows used to keep persisted value snapshots in step. */
+  economicRequestRows?: (startMs: number, endMs: number, project?: string) => EffectiveRequestRow[];
+  /** Exact provider/model groups used to keep model-trial attribution in step. */
+  economicModelUnits?: (startMs: number, endMs: number, project?: string) => EconomicModelUnit[];
+  /** Shared economic ledger; exact reprices must append through this handle. */
+  economicLedger?: EconomicLedger;
 }
 
 export function saveReceipt(
@@ -138,12 +160,13 @@ export function saveRealizationUnits(db: DatabaseSync, records: RealizationUnitR
   const stmt = db.prepare(
     `INSERT INTO realization_units
          (commit_hash, project, ts_epoch_ms, computed_at_ms, attributed_cost_usd, maturing, realized, unit_json,
-          cost_scope, cost_stale)
-       VALUES (?,?,?,?,?,?,?,?,?,0)
+          causal_unit_id_digest, cost_scope, cost_stale)
+       VALUES (?,?,?,?,?,?,?,?,?,?,0)
        ON CONFLICT(commit_hash) DO UPDATE SET
          project=excluded.project, ts_epoch_ms=excluded.ts_epoch_ms, computed_at_ms=excluded.computed_at_ms,
          attributed_cost_usd=excluded.attributed_cost_usd, maturing=excluded.maturing,
          realized=excluded.realized, unit_json=excluded.unit_json,
+         causal_unit_id_digest=COALESCE(excluded.causal_unit_id_digest, realization_units.causal_unit_id_digest),
          cost_scope=excluded.cost_scope, cost_stale=0`,
   );
   for (const r of records) {
@@ -156,6 +179,7 @@ export function saveRealizationUnits(db: DatabaseSync, records: RealizationUnitR
       r.maturing ? 1 : 0,
       r.realized ? 1 : 0,
       r.unitJson,
+      r.causalUnitIdDigest ?? null,
       r.costScope,
     );
   }
@@ -287,6 +311,21 @@ export function applyRepricedCosts(
     for (const u of updates) {
       const old = prior.get(u.requestId) as Record<string, unknown> | undefined;
       if (!old || !Boolean(old.estimated)) continue;
+      const exactSource = deps.economicLedger?.read(requestEconomicEventId(u.requestId)) ?? null;
+      if (exactSource !== null) {
+        if (u.economicAmount === undefined) {
+          throw new Error(`exact reprice for request ${u.requestId} requires an exact replacement amount`);
+        }
+        const recordedAt = new Date(appliedAtMs).toISOString();
+        const correction = priceCorrectionEvent({
+          id: `economic:request:${u.requestId}:price-corrected`,
+          source: exactSource,
+          previousAmount: exactSource.amount!,
+          nextAmount: u.economicAmount,
+          recordedAt,
+        });
+        deps.economicLedger!.appendWithinTransaction(correction);
+      }
       const oldPricing = pricingEvidenceFromRecord(old);
       const written = update.run(
         u.costUsd,
@@ -405,22 +444,40 @@ function syncRealizationCosts(
     const scoped = scope === 'project' ? row.project : undefined;
     const spend = deps.summary(startMs, endMs, scoped);
     const modelSpend = deps.byModel(startMs, endMs, scoped);
-    const windowModelTotal = modelSpend.reduce((s, m) => s + m.costUsd, 0);
+    const economicRows = deps.economicRequestRows?.(startMs, endMs, scoped);
+    const economic = economicRows === undefined ? undefined : economicAttributionFromRows(economicRows);
+    const modelAuthority = economicRows === undefined ? undefined : canonicalModelAttribution(economicRows);
     const totalLines = Number(unit.linesAdded ?? 0) + Number(unit.linesDeleted ?? 0);
 
-    unit.attributedCostUsd = spend.costUsd;
+    const projectedCost = economic === undefined
+      ? spend.costUsd
+      : economicAttributionNumber(economic, spend.costUsd);
+    unit.attributedCostUsd = projectedCost;
     unit.attributedRequests = spend.requests;
     unit.attributedOutputTokens = spend.outputTokens;
-    unit.costPerHundredLines = totalLines > 0 ? (spend.costUsd / totalLines) * 100 : null;
-    unit.dominantModel = modelSpend.length > 0 ? modelSpend[0]!.label : null;
-    unit.dominantModelCostUsd = modelSpend.length > 0 ? modelSpend[0]!.costUsd : null;
-    unit.dominantModelCostShare =
-      modelSpend.length > 0 && windowModelTotal > 0 ? modelSpend[0]!.costUsd / windowModelTotal : null;
+    unit.costPerHundredLines = totalLines > 0 ? (projectedCost / totalLines) * 100 : null;
+    // The canonical exact projection owns the winner. Partial coverage has no
+    // winner; all-legacy snapshots keep only a display label and remain
+    // unpriceable in the frontier through null cost/share.
+    unit.dominantProvider = modelAuthority?.coverage === 'exact'
+      ? modelAuthority.dominant?.provider ?? null
+      : modelAuthority?.coverage === 'legacy_unknown'
+        ? modelSpend[0]?.provider ?? null
+        : null;
+    unit.dominantModel = modelAuthority?.coverage === 'exact'
+      ? modelAuthority.dominant?.model ?? null
+      : modelAuthority?.coverage === 'legacy_unknown'
+        ? modelSpend[0]?.label ?? null
+        : null;
+    unit.dominantModelCostUsd = modelAuthority?.coverage === 'exact' ? modelAuthority.dominantCostUsd : null;
+    unit.dominantModelCostShare = modelAuthority?.coverage === 'exact' ? modelAuthority.dominantShare : null;
+    if (modelAuthority?.coverage === 'exact' && modelAuthority.dominant !== null) unit.dominantModelEconomic = modelAuthority.dominant.economic;
+    if (economic !== undefined) unit.economic = economic;
 
-    writeBack.run(spend.costUsd, JSON.stringify(unit), row.commitHash);
+    writeBack.run(projectedCost, JSON.stringify(unit), row.commitHash);
     out.resynced += 1;
     out.costUsdBefore += row.attributedCostUsd;
-    out.costUsdAfter += spend.costUsd;
+    out.costUsdAfter += projectedCost;
   }
   return out;
 }

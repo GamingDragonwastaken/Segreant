@@ -17,12 +17,14 @@
  * ephemerally at judge time — still nothing persisted by Fiscus.
  */
 
-import type { RequestRow, ProposalRow } from '../store/db.ts';
+import type { ProposalCaptureCoverage, RequestRow, ProposalRow } from '../store/db.ts';
 
 export interface StructuralSessionSummary {
   sessionId: string;
   requestCount: number;
   proposalCount: number;
+  /** Completeness of the retained proposal capture; truncated data is not counted above. */
+  proposalCaptureCoverage?: ProposalCaptureCoverage;
   /** Gaps between consecutive requests in the session, in seconds, chronological. */
   interTurnGapsSec: number[];
   /** input+output tokens per request, chronological — the "shrinking → narrowing
@@ -43,7 +45,19 @@ export function buildStructuralSummary(
   sessionId: string,
 ): StructuralSessionSummary {
   const sessionRequests = requests.filter((r) => r.sessionId === sessionId).sort((a, b) => a.tsEpochMs - b.tsEpochMs);
-  const proposalCount = proposals.filter((p) => p.sessionId === sessionId).length;
+  const sessionProposals = proposals.filter((p) => p.sessionId === sessionId);
+  const proposalCount = sessionProposals.filter((proposal) =>
+    proposal.captureCoverage === undefined || proposal.captureCoverage === 'complete',
+  ).length;
+  const proposalCaptureCoverage: ProposalCaptureCoverage = sessionProposals.length === 0
+    ? 'unknown'
+    : sessionProposals.some((proposal) => proposal.captureCoverage === 'truncated')
+      ? 'truncated'
+      : sessionProposals.some((proposal) => proposal.captureCoverage === 'legacy_unknown')
+        ? 'legacy_unknown'
+        : sessionProposals.some((proposal) => proposal.captureCoverage === 'unknown')
+          ? 'unknown'
+          : 'complete';
 
   const interTurnGapsSec: number[] = [];
   for (let i = 1; i < sessionRequests.length; i++) {
@@ -56,5 +70,5 @@ export function buildStructuralSummary(
       ? (sessionRequests[sessionRequests.length - 1]!.tsEpochMs - sessionRequests[0]!.tsEpochMs) / 60_000
       : 0;
 
-  return { sessionId, requestCount: sessionRequests.length, proposalCount, interTurnGapsSec, requestSizeTrend, totalCostUsd, spanMinutes };
+  return { sessionId, requestCount: sessionRequests.length, proposalCount, proposalCaptureCoverage, interTurnGapsSec, requestSizeTrend, totalCostUsd, spanMinutes };
 }

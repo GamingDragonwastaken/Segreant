@@ -1,9 +1,10 @@
 /**
  * Local persistence — built on Node's bundled SQLite (node:sqlite).
  *
- * No native module, no build step, no external service. The whole point of the
- * product is that nothing leaves the machine, so the store is a single local
- * file under ~/.fiscus.
+ * The store has no native module or external database service dependency. A
+ * packaged distribution still has a build step; this module persists the local
+ * ledger under ~/.fiscus. Provider forwarding and optional outbound paths are
+ * governed by the declared Fiscus-process egress boundary elsewhere.
  *
  * Timestamps are stored twice: an ISO string for humans and an epoch-ms integer
  * for fast range/window queries. Day boundaries are computed in JS (local time)
@@ -12,20 +13,65 @@
 
 import '../util/quiet.ts';
 import { DatabaseSync } from 'node:sqlite';
-import { initializeSchema, runScript } from './schema.ts';
-import { dirname } from 'node:path';
-import { existsSync, mkdirSync } from 'node:fs';
-import { legacyPricingEvidence, type RequestPricingEvidence } from '../cost/pricing.ts';
-import { pricingEvidenceFromRecord } from './rows.ts';
+import { causalV2SchemaAttestation, configureDatabaseConnection, initializeSchema, runScript } from './schema.ts';
+import { dirname, resolve } from 'node:path';
+import {
+  closeSync,
+  existsSync,
+  fstatSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  realpathSync,
+} from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
+import { COST_BASES, RATE_CARD_SOURCE_KINDS, RATE_MATCH_KINDS, legacyPricingEvidence, pricingCardProvenance, type PricingCardProvenance, type RequestPricingEvidence } from '../cost/pricing.ts';
+import { pricingEvidenceFromRecord, vocabularyValue } from './rows.ts';
+import { addMoney, formatMoneyAmount, money, type EconomicBasis, type Money } from '../economics/money.ts';
+import { requestEconomicEvent, requestEconomicEventId } from '../economics/request.ts';
+import { serializeEconomicEvent } from '../economics/serialization.ts';
+import { economicEventRole, type EconomicEvent } from '../economics/events.ts';
+import { canonicalEconomicAttribution, economicAttributionFromRows } from '../economics/attribution.ts';
+import { canonicalJson } from '../epistemic/serialization.ts';
+import { RESOURCE_LIMITS } from '../util/resource-limits.ts';
 import type { ProviderScopeDeclaration, ScopeCaptureStatus } from '../billing/scope.ts';
 import { ATTRIBUTION_BASES, type AttributionBasis } from '../value/characterization.ts';
 import type { OpenAiCostsCaptureCoverage } from '../billing/openaiCostsCoverage.ts';
 import type { ReconciliationCoverage, ReconciliationResult, ReconciliationRun } from '../billing/reconcile.ts';
+import type { BillingMappingCoverage, BillingRecordMapping } from '../billing/mapping.ts';
 import type { AllocationRule, CostCentre } from '../alloc/rules.ts';
 import type { AllocationRunResult } from '../alloc/apply.ts';
+import type { ExactAllocationRunResult } from '../alloc/exact.ts';
+import { buildExactAllocationKernelIssuance, type ExactAllocationKernelPersistenceResult } from '../alloc/epistemic.ts';
+import { bindCodingRealizationSuccessor, buildCodingRealizationKernelIssuance, codingRealizationKernelEligible, type CodingRealizationKernelPersistenceResult } from '../value/epistemic.ts';
 import * as allocation from './allocation.ts';
+import type { ExactAllocationRunRecord } from './allocation.ts';
+import * as exactAllocation from '../alloc/exact.ts';
 import * as billing from './billing.ts';
+import { buildCausalStudyKernelIssuance, type CausalStudyKernelIssuance } from '../causal/epistemic.ts';
+import type { CausalInferencePlan, CausalStudyInferenceReport } from '../causal/inference-ledger.ts';
+import * as causal from './causal.ts';
+import * as causalLineage from './causalLineage.ts';
+import * as causalProducer from './causalProducer.ts';
+import * as ope from './ope.ts';
+import * as backup from './backup.ts';
 import * as realization from './realization.ts';
+import {
+  effectiveRequestRows,
+  groupEconomicSessions,
+  groupEconomicSessionUsers,
+  groupEconomicModels,
+  groupEconomicSeries,
+  type EffectiveRequestRow,
+  type EffectiveRequestOptions,
+  type EconomicSessionUnit,
+  type EconomicSessionUserUnit,
+  type EconomicModelUnit,
+  type EconomicSeriesPoint,
+} from './economicReadModel.ts';
+import { buildEconomicRequestExportRows, type EconomicRequestExportOptions, type EconomicRequestExportRow } from '../export/economic.ts';
+import { billingReconciliationClaim, buildBillingKernelIssuance, buildOpenAiCostsKernelIssuance, buildOpenAiReconciliationKernelIssuance, type BillingKernelPersistenceResult, type BillingReconciliationClaimInput, type OpenAiCostsKernelPersistenceResult, type OpenAiReconciliationKernelPersistenceResult } from '../billing/epistemic.ts';
 import type {
   RealizationCostSync,
   RealizationUnitRecord,
@@ -40,8 +86,20 @@ export type {
   RepriceUpdate,
   RequestPriceEvent,
 } from './realization.ts';
+export type { CodingRealizationKernelPersistenceResult } from '../value/epistemic.ts';
+export type {
+  EffectiveRequestRow,
+  EffectiveRequestOptions,
+  EconomicRequestUnresolvedReason,
+  EconomicSessionUnit,
+  EconomicSessionUserUnit,
+  EconomicModelUnit,
+  EconomicSeriesPoint,
+} from './economicReadModel.ts';
 import type {
   BillingEvidenceRecord,
+  BillingRecordMappingDeclarationInput,
+  BillingRecordMappingDeclarationResult,
   BillingImportInput,
   BillingImportResult,
   BillingImportRun,
@@ -52,6 +110,24 @@ import type {
   OpenAiCostsObservationRun,
   OpenAiCostsObservationStatus,
 } from './billing.ts';
+import type {
+  AnyCommittedCausalStudyProtocol,
+  CausalAssignmentManifestV2,
+  CausalAssignmentPlan,
+  CausalAssignmentRequestV2,
+  CausalAssignmentResultV2,
+  CausalExecutionRecord,
+  CausalOutcomeRecord,
+  CommittedCausalStudyProtocol,
+} from '../causal/types.ts';
+import { EpistemicLedger } from '../epistemic/ledger.ts';
+import type { Claim } from '../epistemic/claim.ts';
+import type { DagEdge, DagNode } from '../epistemic/dag.ts';
+import type { Evidence, JsonValue } from '../epistemic/evidence.ts';
+import type { Witness } from '../epistemic/witness.ts';
+import type { Instant } from '../epistemic/time.ts';
+import { EconomicLedger, type EconomicPeriodCloseStatus, type PeriodFinalizationInput, type PeriodFinalizationResult, type PeriodReopenInput, type PeriodReopenResult } from '../economics/ledger.ts';
+import { buildEconomicPeriodCloseKernelIssuance, type EconomicPeriodCloseKernelPersistenceResult } from '../economics/epistemic.ts';
 
 /**
  * Provider-side evidence shapes now live in ./billing.ts. They are re-exported
@@ -60,6 +136,8 @@ import type {
  */
 export type {
   BillingEvidenceRecord,
+  BillingRecordMappingDeclarationInput,
+  BillingRecordMappingDeclarationResult,
   BillingImportInput,
   BillingImportResult,
   BillingImportRun,
@@ -70,6 +148,42 @@ export type {
   OpenAiCostsObservationRun,
   OpenAiCostsObservationStatus,
 } from './billing.ts';
+export type { BillingMappingCoverage, BillingRecordMapping, ProviderScopeAuthority } from '../billing/mapping.ts';
+export type { BillingKernelPersistenceResult } from '../billing/epistemic.ts';
+export type { BillingReconciliationClaimInput } from '../billing/epistemic.ts';
+export type { OpenAiCostsKernelPersistenceResult } from '../billing/epistemic.ts';
+export type { OpenAiReconciliationKernelPersistenceResult } from '../billing/epistemic.ts';
+export type {
+  AnyCommittedCausalStudyProtocol,
+  CausalAssignmentManifestV2,
+  CausalAssignmentPlan,
+  CausalAssignmentRequestV2,
+  CausalAssignmentResultV2,
+  CausalExecutionRecord,
+  CausalOutcomeRecord,
+  CausalStudyData,
+  CausalStudyEstimate,
+  CommittedCausalStudyProtocol,
+} from '../causal/types.ts';
+export type { CausalAnalysisSnapshot, CausalStudySummary } from './causal.ts';
+export type {
+  OpeEvaluation,
+  OpeEvaluationOptions,
+  OpeObservation,
+} from '../causal/ope.ts';
+export type {
+  CausalLineageBindingLookupV2,
+  CausalLineageBindingValidationV2,
+  CausalLineageBindingV2,
+} from './causalLineage.ts';
+export type {
+  IndependentCausalProducerAssessmentV2,
+  IndependentCausalProducerEvidenceV2,
+  IndependentCausalProducerInputV2,
+  IndependentCausalProducerReasonCodeV2,
+} from './causalProducer.ts';
+export type { BackupInspection, BackupManifest, BackupResult } from './backup.ts';
+
 
 export interface RequestRow {
   requestId: string;
@@ -97,6 +211,12 @@ export interface RequestRow {
   cacheReadTokens: number;
   reasoningTokens: number;
   costUsd: number;
+  /**
+   * Optional exact monetary authority for a newly written request. When
+   * present, Store persists a corresponding immutable economic event in the
+   * same transaction; absent rows remain legacy numeric compatibility records.
+   */
+  economicAmount?: Money;
   estimated: boolean;
   streamed: boolean;
   statusCode: number | null;
@@ -119,6 +239,18 @@ export interface RequestRow {
    * label is a self-assertion. Missing only means a pre-lineage/legacy row.
    */
   attributionBasis?: AttributionBasis;
+  /** Coverage of response/token capture for this request; legacy rows are unknown. */
+  captureCoverage?: 'complete' | 'truncated' | 'unknown' | 'legacy_unknown';
+}
+
+/** Exact control projection for a request window. `effective` is a named
+ * budget-policy comparison basis, not a provider-billing assertion. */
+export interface ExactSpendProjection {
+  amount: Money;
+  eventIds: readonly string[];
+  sourceBases: readonly EconomicBasis[];
+  requestCount: number;
+  unresolvedRequests: number;
 }
 
 /**
@@ -140,6 +272,8 @@ export interface PricingEvidenceBucket {
   estimatedCostUsd: number;
   inputTokens: number;
   outputTokens: number;
+  /** Immutable card-sidecar metadata; null means the hash is historical/unresolved. */
+  rateCardProvenance: PricingCardProvenance | null;
 }
 
 /**
@@ -178,6 +312,8 @@ export interface Characterization {
   byUser: SpendBucket[];
 }
 
+export type ProposalCaptureCoverage = 'complete' | 'truncated' | 'unknown' | 'legacy_unknown';
+
 export interface ProposalRow {
   proposalId: string;
   requestId: string | null;
@@ -187,6 +323,8 @@ export interface ProposalRow {
   model: string;
   project: string;
   files: Array<{ path: string | null; addedLines: string[] }>;
+  /** Whether the upstream capture was complete; legacy rows remain unknown. */
+  captureCoverage?: ProposalCaptureCoverage;
 }
 
 /** A provider/model that has routed proxy traffic recently — dashboard connection status. */
@@ -195,6 +333,53 @@ export interface ProviderConnection {
   model: string;
   lastSeenMs: number;
   requestCount: number;
+}
+
+/**
+ * What retention has deleted, per stream, as recorded by `Store.prune`.
+ *
+ * `requestsPrunedBeforeMs === null` is a THIRD STATE: no prune is on record.
+ * It is not "nothing was pruned" -- a ledger pruned before `retention_prunes`
+ * existed reports null, and deriving a boundary from the oldest surviving row
+ * would invent the provenance this project refuses to infer.
+ */
+export interface RetentionFloor {
+  /** Newest boundary ever applied to `requests`, or null when none is recorded. */
+  requestsPrunedBeforeMs: number | null;
+  requestsRowsRemoved: number;
+  requestsPrunes: number;
+  requestsLastPrunedAtMs: number | null;
+  /** Proposals are pruned on their own, much shorter policy. */
+  proposalsPrunedBeforeMs: number | null;
+  proposalsRowsRemoved: number;
+  proposalsPrunes: number;
+}
+
+/** A durable, append-only change to a retention policy, separate from deletion. */
+export interface RetentionPolicyChange {
+  id: number;
+  stream: 'requests' | 'proposals';
+  previousDays: number;
+  nextDays: number;
+  changedAtMs: number;
+  source: string;
+}
+
+/**
+ * Whether a particular window reaches behind what retention deleted.
+ *
+ * `truncated` is a COMPARISON between the window and the recorded boundary, not
+ * a flag on the ledger. `truncated: false` alone does not mean the window is
+ * complete: read `prunedBeforeMs` with it, where null means no prune is on
+ * record rather than nothing pruned.
+ */
+export interface WindowRetentionCoverage {
+  /** The window starts strictly before a recorded deletion boundary. */
+  truncated: boolean;
+  /** The boundary, or null when no prune is on record. */
+  prunedBeforeMs: number | null;
+  /** Rows retention removed from `requests`, across every recorded prune. */
+  rowsRemoved: number;
 }
 
 export interface GateSignalRow {
@@ -226,6 +411,9 @@ export interface VerifiedGateEvidenceInput {
 
 export type VerifiedGateEvidenceWrite = 'inserted' | 'duplicate' | 'conflict';
 
+const SCOPE_CAPTURE_STATUSES = ['legacy_unknown', 'unscoped', 'declared_unverified', 'not_observed'] as const satisfies readonly ScopeCaptureStatus[];
+const CAPTURE_COVERAGES = ['complete', 'truncated', 'unknown', 'legacy_unknown'] as const;
+
 function requestRowFromRecord(record: Record<string, unknown>): RequestRow {
   const {
     costBasis,
@@ -241,19 +429,15 @@ function requestRowFromRecord(record: Record<string, unknown>): RequestRow {
     estimated: Boolean(record.estimated),
     streamed: Boolean(record.streamed),
     pricing: pricingEvidenceFromRecord(record),
-    scopeCaptureStatus: typeof record.scopeCaptureStatus === 'string'
-      ? record.scopeCaptureStatus as ScopeCaptureStatus
-      : 'legacy_unknown',
-    // An unrecognized value reads as legacy_unknown rather than being passed
-    // through: a label nobody can interpret must not look like a real basis.
-    attributionBasis:
-      typeof record.attributionBasis === 'string'
-        && (ATTRIBUTION_BASES as readonly string[]).includes(record.attributionBasis)
-        ? record.attributionBasis as AttributionBasis
-        : 'legacy_unknown',
+    // A missing value reads as legacy_unknown; a string outside the vocabulary
+    // refuses (D-251): no writer produces one, so it is damage, and a label
+    // nobody can interpret must neither pass through nor hide as "unknown".
+    scopeCaptureStatus: vocabularyValue(record.scopeCaptureStatus, SCOPE_CAPTURE_STATUSES, 'scopeCaptureStatus', 'legacy_unknown') as ScopeCaptureStatus,
+    attributionBasis: vocabularyValue(record.attributionBasis, ATTRIBUTION_BASES, 'attributionBasis', 'legacy_unknown') as AttributionBasis,
     providerScopeDeclarationId: typeof record.providerScopeDeclarationId === 'string'
       ? record.providerScopeDeclarationId
       : null,
+    captureCoverage: vocabularyValue(record.captureCoverage, CAPTURE_COVERAGES, 'captureCoverage', 'legacy_unknown'),
   };
 }
 
@@ -266,24 +450,344 @@ function scopeCaptureForInsert(row: RequestRow): { status: ScopeCaptureStatus; d
   return { status: row.via === 'import' ? 'not_observed' : 'unscoped', declarationId: null };
 }
 
+
+/**
+ * A kernel claim as a reader may present it, with the revocation projection applied.
+ *
+ * WHY THE READERS CANNOT JUST RETURN THE STORED PROFILE (WP-R07). Revocation
+ * closure is how withdrawn evidence stops supporting what was derived from it,
+ * and `revocationClosure` computes it correctly — the kernel knows. But the
+ * three kernel-claim readers are the ONLY product surface for these claims
+ * (`/api/billing` serves all three) and each returned `readClaim`'s profile
+ * verbatim. After the evidence under a claim was revoked, the projection listed
+ * the claim as revoked while the payload still said `epistemic: 'supported'`,
+ * `integrity: 'verified'`, with nothing in the response saying otherwise. Every
+ * consumer downstream then inherited a strength the evidence no longer licenses.
+ *
+ * WITHDRAWN, NOT DISAPPEARED. Omitting revoked claims would trade one dishonesty
+ * for another — the reader would assert an absence it has not established, and a
+ * page showing four claims where five exist says nothing about the fifth. The
+ * claim stays; what changes is that it can no longer read as supported.
+ *
+ * ONLY THE SUPPORT AXIS MOVES, AND THAT IS THE POINT. `epistemic` drops to
+ * `unknown`: revocation withdraws support, leaving neither support nor
+ * refutation, which is exactly what `unknown` means here. `integrity` is
+ * deliberately untouched — it says the RECORD was not tampered with, and that is
+ * still true of a record whose evidence was withdrawn. Collapsing the two would
+ * be the same conflation this product exists to prevent.
+ */
+export interface KernelClaimView extends Pick<Claim, 'id' | 'proposition' | 'profile' | 'evidenceIds' | 'issuedAt' | 'monetaryBasis' | 'finality'> {
+  /** True when the revocation projection reaches this claim. */
+  readonly revoked: boolean;
+}
+
+/** One kernel node with its neighbourhood, as `kernelNodeView` presents it (D-257). */
+export interface KernelNodeView {
+  readonly asOf: Instant | null;
+  readonly node: DagNode;
+  readonly revoked: boolean;
+  readonly record:
+    | { kind: 'evidence'; evidence: Omit<Evidence, 'payload'> & { payload?: JsonValue | null; payloadWithheld: boolean; payloadDigest: string | null } }
+    | { kind: 'claim'; claim: KernelClaimView }
+    | { kind: 'witness'; witness: Witness }
+    | null;
+  /** Edges into this node: what it rests on. */
+  readonly restsOn: readonly DagEdge[];
+  /** Edges out of this node: what rests on it. */
+  readonly supports: readonly DagEdge[];
+  /** The derivations that produced this claim (empty for any other kind). */
+  readonly derivations: ReadonlyArray<{
+    readonly id: string;
+    readonly transformation: string;
+    readonly inputEvidenceIds: readonly string[];
+    readonly inputClaimIds: readonly string[];
+    readonly witnessIds: readonly string[];
+    readonly assumptions: readonly string[];
+    readonly uncertaintyTransformation: string | null;
+  }>;
+  /** Assumptions of the derivations that produced this node, deduplicated. */
+  readonly assumptions: readonly string[];
+  readonly graphSize: { readonly nodes: number; readonly edges: number };
+}
+
+/**
+ * The boundary a kernel read answers at (D-230). Live: the current projection.
+ * As of an instant: only what the ledger had learned by then — events recorded
+ * later do not apply, and a node not yet available is not visible at all.
+ */
+interface KernelReadBoundary {
+  readonly revokedIds: ReadonlySet<string>;
+  /** `null` for a live read; otherwise the node ids available at the boundary. */
+  readonly visible: ReadonlySet<string> | null;
+}
+
+function presentKernelClaim(item: Claim, revokedIds: ReadonlySet<string>): KernelClaimView {
+  const revoked = revokedIds.has(item.id);
+  return Object.freeze({
+    id: item.id,
+    proposition: item.proposition,
+    profile: revoked ? Object.freeze({ ...item.profile, epistemic: 'unknown' as const }) : item.profile,
+    evidenceIds: item.evidenceIds,
+    issuedAt: item.issuedAt,
+    monetaryBasis: item.monetaryBasis,
+    finality: item.finality,
+    revoked,
+  });
+}
+
 export class Store {
   private db: DatabaseSync;
+  private readonly databasePath: string;
+  private epistemicLedger!: EpistemicLedger;
+  private economicLedger!: EconomicLedger;
+  private migrationBackupEvidence: { path: string; sha256: string } | null = null;
 
   constructor(path: string) {
-    if (path !== ':memory:') {
-      const dir = dirname(path);
+    const databasePath = path === ':memory:' ? path : resolve(path);
+    this.databasePath = databasePath;
+    const existingFile = databasePath !== ':memory:' && existsSync(databasePath);
+    if (databasePath !== ':memory:') {
+      const dir = dirname(databasePath);
       if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     }
-    this.db = new DatabaseSync(path);
-    // node:sqlite's DatabaseSync exposes only prepare() + a multi-statement
-    // runner; we run DDL/PRAGMA as individual prepared statements so the schema
-    // setup stays uniform and side-effect-free.
-    initializeSchema(this.db);
+    this.db = new DatabaseSync(databasePath);
+    let backupPath: string | null = null;
+    let backupVerified = false;
+    try {
+      configureDatabaseConnection(this.db);
+      this.db.prepare('PRAGMA busy_timeout = 5000').run();
+      // node:sqlite's DatabaseSync exposes only prepare() + a multi-statement
+      // runner; we run DDL/PRAGMA as individual prepared statements so the schema
+      // setup stays uniform and side-effect-free. Preflight belongs inside this
+      // guarded boundary because retained SQLite metadata is untrusted input.
+      const causalV2Preflight = causalV2SchemaAttestation(this.db);
+      if (existingFile) {
+        if (causalV2Preflight.state !== 'exact') {
+          backupPath = databasePath + '.pre-causal-v2-' + randomUUID() + '.sqlite';
+          if (existsSync(backupPath)) throw new Error('exclusive causal migration backup path already exists');
+          this.db.prepare('VACUUM INTO ?').run(backupPath);
+          backupPath = realpathSync.native(backupPath);
+          const pathBefore = lstatSync(backupPath);
+          if (!pathBefore.isFile() || pathBefore.isSymbolicLink()) {
+            throw new Error('causal migration backup is not a safe regular sibling file');
+          }
+          const descriptor = openSync(backupPath, 'r');
+          try {
+            const descriptorBefore = fstatSync(descriptor);
+            const verification = new DatabaseSync(backupPath, { readOnly: true });
+            try {
+              configureDatabaseConnection(verification);
+              const quickCheck = verification.prepare('PRAGMA quick_check').get() as { quick_check: string } | undefined;
+              if (quickCheck?.quick_check !== 'ok') throw new Error('backup quick_check did not return ok');
+            } finally {
+              verification.close();
+            }
+            const bytes = readFileSync(descriptor);
+            try {
+              const descriptorAfter = fstatSync(descriptor);
+              const pathAfter = lstatSync(backupPath);
+              const stable = descriptorBefore.dev === descriptorAfter.dev
+                && descriptorBefore.ino === descriptorAfter.ino
+                && descriptorBefore.size === descriptorAfter.size
+                && descriptorBefore.mtimeMs === descriptorAfter.mtimeMs
+                && descriptorBefore.dev === pathAfter.dev
+                && descriptorBefore.ino === pathAfter.ino
+                && descriptorBefore.size === pathAfter.size
+                && descriptorBefore.mtimeMs === pathAfter.mtimeMs
+                && pathAfter.isFile()
+                && !pathAfter.isSymbolicLink();
+              if (!stable) throw new Error('causal migration backup identity changed during verification');
+              this.migrationBackupEvidence = {
+                path: backupPath,
+                sha256: createHash('sha256').update(bytes).digest('hex'),
+              };
+            } finally {
+              // A database backup can contain retained private assignment entropy.
+              // Clear the owned JS copy even when identity verification fails.
+              bytes.fill(0);
+            }
+          } finally {
+            closeSync(descriptor);
+          }
+          backupVerified = true;
+        }
+      }
+      initializeSchema(this.db, {
+        expectedCausalV2State: causalV2Preflight.state,
+        migrationBackupVerified: backupVerified,
+        allowUnbackedCausalV2Create: !existingFile,
+      });
+      // The Trusted Epistemic Kernel uses the same SQLite connection so a
+      // caller can persist canonical evidence/claims alongside the operational
+      // ledger without introducing a second database or transaction boundary.
+      this.epistemicLedger = new EpistemicLedger(this.db);
+      this.economicLedger = new EconomicLedger(this.db);
+    } catch {
+      let closeConfirmed = true;
+      try {
+        this.db.close();
+      } catch {
+        closeConfirmed = false;
+      }
+      const closeGuidance = closeConfirmed
+        ? 'The failed Store handle was closed. '
+        : 'The failed Store handle could not be confirmed closed; stop using this database until operator recovery. ';
+      if (backupVerified && backupPath) {
+        throw new Error(
+          'CAUSAL_IO_FAILURE: causal v2 migration failed before an operational Store opened; ' +
+          'the retained database was not accepted. The verified backup remains readable at ' + backupPath + '. ' +
+          closeGuidance + 'Inspect the retained database and verified backup before recovery.',
+        );
+      }
+      if (existingFile) {
+        const candidateGuidance = backupPath
+          ? 'No verified backup was produced; an unverified backup candidate may exist at ' + backupPath + '. '
+          : 'No verified backup was produced. ';
+        throw new Error(
+          'CAUSAL_IO_FAILURE: causal v2 schema initialization failed before an operational Store opened; ' +
+          'the retained database was not accepted. ' + candidateGuidance + closeGuidance +
+          'Inspect the retained database before recovery.',
+        );
+      }
+      throw new Error(
+        'CAUSAL_IO_FAILURE: causal v2 schema initialization failed before an operational Store opened; ' +
+        'no retained database migration was performed. ' + closeGuidance +
+        'Inspect the database path before retrying.',
+      );
+    }
   }
 
   /** Transaction control and one-off DDL — see runScript in schema.ts. */
   private runScript(sql: string): void {
     runScript(this.db, sql);
+  }
+
+  private transaction<T>(work: () => T): T {
+    this.db.prepare('BEGIN IMMEDIATE').run();
+    try {
+      const result = work();
+      this.db.prepare('COMMIT').run();
+      return result;
+    } catch (error) {
+      try { this.db.prepare('ROLLBACK').run(); } catch { /* preserve original failure */ }
+      throw error;
+    }
+  }
+
+  /**
+   * The numeric request column remains a compatibility projection while an
+   * exact Money amount is authoritative for opted-in writes. Reject a lossy or
+   * contradictory projection instead of silently presenting a different cost.
+   */
+  private compatibilityCostUsd(row: RequestRow): number {
+    if (row.economicAmount === undefined) return row.costUsd;
+    if (row.economicAmount.currency !== 'USD') throw new Error('exact request economic amount must be USD');
+    const exactText = formatMoneyAmount(row.economicAmount);
+    const projected = Number(exactText);
+    if (!Number.isFinite(projected) || (row.economicAmount.coefficient !== 0n && projected === 0)) {
+      throw new Error('exact request economic amount cannot be represented by the numeric compatibility projection');
+    }
+    if (!Number.isFinite(row.costUsd)) throw new Error('request costUsd compatibility projection must be finite');
+    const tolerance = Math.max(1e-12, Math.abs(projected) * 1e-12);
+    if (Math.abs(row.costUsd - projected) > tolerance) {
+      throw new Error('request costUsd does not match its exact economic amount');
+    }
+    return projected;
+  }
+
+  private persistRequest(row: RequestRow, idempotent: boolean): boolean {
+    const pricing = row.pricing ?? legacyPricingEvidence();
+    const scope = scopeCaptureForInsert(row);
+    const costUsd = this.compatibilityCostUsd(row);
+    // The write boundary refuses a provenance label outside its vocabulary
+    // (D-251): a caller that could write one would make the read refusal look
+    // like data loss instead of the damage it detects.
+    vocabularyValue(row.attributionBasis, ATTRIBUTION_BASES, 'attributionBasis', 'legacy_unknown');
+    vocabularyValue(row.captureCoverage, CAPTURE_COVERAGES, 'captureCoverage', 'legacy_unknown');
+    vocabularyValue(scope.status, SCOPE_CAPTURE_STATUSES, 'scopeCaptureStatus', 'legacy_unknown');
+    vocabularyValue(pricing.costBasis, COST_BASES, 'costBasis', 'legacy_unknown');
+    vocabularyValue(pricing.rateCardSourceKind, RATE_CARD_SOURCE_KINDS, 'rateCardSourceKind', 'legacy_unknown');
+    vocabularyValue(pricing.rateMatchKind, RATE_MATCH_KINDS, 'rateMatchKind', 'legacy_unknown');
+    return this.transaction(() => {
+      const sql = `INSERT INTO requests (
+            request_id, session_id, ts_iso, ts_epoch_ms, provider, model, project,
+            task_weight, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens,
+            reasoning_tokens, cost_usd, estimated, streamed, status_code, duration_ms, user, source, cwd, via,
+            cost_basis, rate_card_sha256, rate_card_source_kind, rate_match_kind, rate_match_provider, rate_match_model,
+            scope_capture_status, provider_scope_declaration_id, attribution_basis, capture_coverage
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)${idempotent ? ' ON CONFLICT(request_id) DO NOTHING' : ''}`;
+      const info = this.db.prepare(sql).run(
+        row.requestId,
+        row.sessionId,
+        new Date(row.tsEpochMs).toISOString(),
+        row.tsEpochMs,
+        row.provider,
+        row.model,
+        row.project,
+        row.taskWeight,
+        row.inputTokens,
+        row.outputTokens,
+        row.cacheWriteTokens,
+        row.cacheReadTokens,
+        row.reasoningTokens,
+        costUsd,
+        row.estimated ? 1 : 0,
+        row.streamed ? 1 : 0,
+        row.statusCode,
+        row.durationMs,
+        row.user ?? null,
+        row.source ?? null,
+        row.cwd ?? null,
+        row.via ?? 'proxy',
+        pricing.costBasis,
+        pricing.rateCardSha256,
+        pricing.rateCardSourceKind,
+        pricing.rateMatchKind,
+        pricing.rateMatchProvider,
+        pricing.rateMatchModel,
+        scope.status,
+        scope.declarationId,
+        row.attributionBasis ?? 'legacy_unknown',
+        row.captureCoverage ?? 'complete',
+      );
+      const inserted = Number(info.changes ?? 0) > 0;
+      if (row.economicAmount !== undefined) {
+        if (inserted) {
+          const exactEvent = requestEconomicEvent({
+            requestId: row.requestId,
+            sessionId: row.sessionId,
+            tsEpochMs: row.tsEpochMs,
+            provider: row.provider,
+            model: row.model,
+            project: row.project,
+            amount: row.economicAmount,
+            via: row.via ?? 'proxy',
+            recordedAt: new Date().toISOString(),
+          });
+          this.economicLedger.appendWithinTransaction(exactEvent);
+        } else {
+          // A replay of an exact request must find the matching immutable event;
+          // silently filling a missing event would conceal a prior partial write.
+          const existing = this.economicLedger.read(requestEconomicEventId(row.requestId));
+          if (existing === null) throw new Error(`exact economic event is missing for existing request ${row.requestId}`);
+          const expected = requestEconomicEvent({
+            requestId: row.requestId,
+            sessionId: row.sessionId,
+            tsEpochMs: row.tsEpochMs,
+            provider: row.provider,
+            model: row.model,
+            project: row.project,
+            amount: row.economicAmount,
+            via: row.via ?? 'proxy',
+            recordedAt: existing.recordedAt,
+          });
+          if (serializeEconomicEvent(existing).body !== serializeEconomicEvent(expected).body) {
+            throw new Error(`different economic event already exists for request ${row.requestId}`);
+          }
+        }
+      }
+      return inserted;
+    });
   }
 
   /**
@@ -299,6 +803,9 @@ export class Store {
       canonicalProject: (name) => this.canonicalProject(name),
       summary: (startMs, endMs, project) => this.summary(startMs, endMs, project),
       byModel: (startMs, endMs, project) => this.byModel(startMs, endMs, project),
+      economicRequestRows: (startMs, endMs, project) => this.economicRequestRowsInRange(startMs, endMs, { project }),
+      economicModelUnits: (startMs, endMs, project) => this.economicModelUnits(startMs, endMs, project),
+      economicLedger: this.economicLedger,
     };
   }
 
@@ -308,6 +815,74 @@ export class Store {
 
   raw(): DatabaseSync {
     return this.db;
+  }
+
+  /** Canonical Evidence/Claim/Derivation ledger on this Store's SQLite handle. */
+  epistemic(): EpistemicLedger {
+    return this.epistemicLedger;
+  }
+
+  /** Exact-Money economic event ledger on this Store's SQLite handle. */
+  economic(): EconomicLedger {
+    return this.economicLedger;
+  }
+
+  /** Finalize one half-open economic period through the Store-owned ledger. */
+  finalizeEconomicPeriod(input: PeriodFinalizationInput): PeriodFinalizationResult {
+    return this.economicLedger.finalizePeriod(input);
+  }
+
+  /** Reopen one finalized economic period with an explicit operator reason. */
+  reopenEconomicPeriod(input: PeriodReopenInput): PeriodReopenResult {
+    return this.economicLedger.reopenPeriod(input);
+  }
+
+  /** Read period-close state at an optional recorded-time boundary. */
+  economicPeriodCloseStatus(startMs: number, endMs: number, asOf?: string): EconomicPeriodCloseStatus {
+    return this.economicLedger.periodCloseStatus(startMs, endMs, asOf);
+  }
+
+  /** Issue the active finalized period into the Trusted Epistemic Kernel. */
+  issueEconomicPeriodCloseToKernel(result: PeriodFinalizationResult): EconomicPeriodCloseKernelPersistenceResult {
+    const status = this.economicLedger.periodCloseStatus(result.periodStartMs, result.periodEndMs);
+    if (status.status !== 'finalized' || status.activeFinalizationId !== result.eventId) {
+      throw new Error('economic period finalization is not the active finalized state; kernel issuance refused');
+    }
+    const issuance = buildEconomicPeriodCloseKernelIssuance(result);
+    const evidenceResult = this.epistemicLedger.appendEvidence(issuance.evidence);
+    const claimResult = this.epistemicLedger.appendClaim(issuance.claim);
+    return Object.freeze({
+      evidenceId: issuance.evidence.id,
+      claimId: issuance.claim.id,
+      evidence: Object.freeze({ result: evidenceResult }),
+      claim: Object.freeze({ result: claimResult }),
+    });
+  }
+
+  /** Read the exact request charge when this row opted into economic issuance. */
+  economicAmountForRequest(requestId: string): Money | null {
+    const event = this.economicLedger.read(requestEconomicEventId(requestId));
+    return event?.amount ?? null;
+  }
+
+  /** Create a verified, non-destructive snapshot of this Store's ledger. */
+  backupTo(destinationPath: string): backup.BackupResult {
+    return backup.backupDatabase(this.db, this.databasePath, destinationPath);
+  }
+
+  /** Inspect a backup without opening or mutating the active Store. */
+  static inspectBackup(databasePath: string): backup.BackupResult {
+    return backup.inspectBackup(databasePath);
+  }
+
+  /** Restore a verified backup into a new path; never overwrites an active DB. */
+  static restoreBackup(sourcePath: string, destinationPath: string): backup.BackupResult {
+    return backup.restoreDatabase(sourcePath, destinationPath);
+  }
+
+  /** Evidence for the backup created immediately before this open migrated v2 tables. */
+  causalMigrationBackupEvidence(): { path: string; sha256: string } | null {
+    return this.migrationBackupEvidence ? { ...this.migrationBackupEvidence } : null;
   }
 
   /**
@@ -446,51 +1021,7 @@ export class Store {
   }
 
   insertRequest(r: RequestRow): void {
-    const pricing = r.pricing ?? legacyPricingEvidence();
-    const scope = scopeCaptureForInsert(r);
-    this.db
-      .prepare(
-        `INSERT INTO requests (
-            request_id, session_id, ts_iso, ts_epoch_ms, provider, model, project,
-            task_weight, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens,
-            reasoning_tokens, cost_usd, estimated, streamed, status_code, duration_ms, user, source, cwd, via,
-            cost_basis, rate_card_sha256, rate_card_source_kind, rate_match_kind, rate_match_provider, rate_match_model,
-            scope_capture_status, provider_scope_declaration_id, attribution_basis
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      )
-      .run(
-        r.requestId,
-        r.sessionId,
-        new Date(r.tsEpochMs).toISOString(),
-        r.tsEpochMs,
-        r.provider,
-        r.model,
-        r.project,
-        r.taskWeight,
-        r.inputTokens,
-        r.outputTokens,
-        r.cacheWriteTokens,
-        r.cacheReadTokens,
-        r.reasoningTokens,
-        r.costUsd,
-        r.estimated ? 1 : 0,
-        r.streamed ? 1 : 0,
-        r.statusCode,
-        r.durationMs,
-        r.user ?? null,
-        r.source ?? null,
-        r.cwd ?? null,
-        r.via ?? 'proxy',
-        pricing.costBasis,
-        pricing.rateCardSha256,
-        pricing.rateCardSourceKind,
-        pricing.rateMatchKind,
-        pricing.rateMatchProvider,
-        pricing.rateMatchModel,
-        scope.status,
-        scope.declarationId,
-        r.attributionBasis ?? 'legacy_unknown',
-      );
+    this.persistRequest(r, false);
   }
 
   /**
@@ -499,53 +1030,7 @@ export class Store {
    * Returns true when the row was actually new.
    */
   insertRequestIfNew(r: RequestRow): boolean {
-    const pricing = r.pricing ?? legacyPricingEvidence();
-    const scope = scopeCaptureForInsert(r);
-    const info = this.db
-      .prepare(
-        `INSERT INTO requests (
-            request_id, session_id, ts_iso, ts_epoch_ms, provider, model, project,
-            task_weight, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens,
-            reasoning_tokens, cost_usd, estimated, streamed, status_code, duration_ms, user, source, cwd, via,
-            cost_basis, rate_card_sha256, rate_card_source_kind, rate_match_kind, rate_match_provider, rate_match_model,
-            scope_capture_status, provider_scope_declaration_id, attribution_basis
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-         ON CONFLICT(request_id) DO NOTHING`,
-      )
-      .run(
-        r.requestId,
-        r.sessionId,
-        new Date(r.tsEpochMs).toISOString(),
-        r.tsEpochMs,
-        r.provider,
-        r.model,
-        r.project,
-        r.taskWeight,
-        r.inputTokens,
-        r.outputTokens,
-        r.cacheWriteTokens,
-        r.cacheReadTokens,
-        r.reasoningTokens,
-        r.costUsd,
-        r.estimated ? 1 : 0,
-        r.streamed ? 1 : 0,
-        r.statusCode,
-        r.durationMs,
-        r.user ?? null,
-        r.source ?? null,
-        r.cwd ?? null,
-        r.via ?? 'proxy',
-        pricing.costBasis,
-        pricing.rateCardSha256,
-        pricing.rateCardSourceKind,
-        pricing.rateMatchKind,
-        pricing.rateMatchProvider,
-        pricing.rateMatchModel,
-        scope.status,
-        scope.declarationId,
-        r.attributionBasis ?? 'legacy_unknown',
-      );
-    return Number(info.changes ?? 0) > 0;
+    return this.persistRequest(r, true);
   }
 
   // `liveOnly` restricts a spend reading to rows that arrived through the proxy —
@@ -585,6 +1070,118 @@ export class Store {
     return { costUsd: row.total, requests: row.n };
   }
 
+  private exactSpendFromRows(
+    rows: Array<{ requestId: string; tsEpochMs: number; via: string | null }>,
+    startMs: number,
+    endMs: number,
+    liveOnly: boolean,
+  ): ExactSpendProjection {
+    let amount = money('0', 'USD', 'effective');
+    const eventIds: string[] = [];
+    const sourceBases = new Set<EconomicBasis>();
+    const requestIds = new Set(rows.map((row) => row.requestId));
+    const rowById = new Map(rows.map((row) => [row.requestId, row]));
+    const byRequest = new Map<string, EconomicEvent>();
+    for (const event of this.economicLedger.eventsInOccurrenceRange(startMs, endMs)) {
+      if (economicEventRole(event.kind) !== 'charge' || event.amount === null) continue;
+      const metadata = event.metadata;
+      if (metadata === null || typeof metadata !== 'object' || Array.isArray(metadata)) continue;
+      const metadataRecord = metadata as Record<string, unknown>;
+      const requestId = metadataRecord.requestId;
+      if (typeof requestId !== 'string' || !requestIds.has(requestId)) continue;
+      const row = rowById.get(requestId)!;
+      const eventVia = metadataRecord.via;
+      if (eventVia !== undefined && eventVia !== 'proxy' && eventVia !== 'import') {
+        throw new Error(`economic request event ${event.id} has invalid via provenance`);
+      }
+      const rowVia = row.via ?? 'proxy';
+      if (eventVia !== undefined && eventVia !== rowVia) {
+        throw new Error(`economic request event ${event.id} via provenance disagrees with request ${requestId}`);
+      }
+      if (liveOnly && (eventVia ?? rowVia) !== 'proxy') continue;
+      if (byRequest.has(requestId)) throw new Error(`multiple economic charge events exist for request ${requestId}`);
+      byRequest.set(requestId, event);
+    }
+    const effectiveBySource = this.economicLedger.effectiveChargesFor([...byRequest.values()].map((event) => event.id));
+    let unresolvedRequests = 0;
+    for (const row of rows) {
+      const event = byRequest.get(row.requestId);
+      if (event === undefined) {
+        unresolvedRequests += 1;
+        continue;
+      }
+      const effective = effectiveBySource.get(event.id);
+      if (effective === undefined) {
+        unresolvedRequests += 1;
+        continue;
+      }
+      if (effective.amount.currency !== 'USD') throw new Error(`economic request event ${event.id} is not a USD charge`);
+      amount = addMoney(amount, effective.amount);
+      eventIds.push(...effective.eventIds);
+      for (const basis of effective.sourceBases) sourceBases.add(basis);
+    }
+    return Object.freeze({
+      amount,
+      eventIds: Object.freeze(eventIds.sort()),
+      sourceBases: Object.freeze([...sourceBases].sort()),
+      requestCount: rows.length,
+      unresolvedRequests,
+    });
+  }
+
+  /** Exact charge projection for requests in [startMs, endMs). */
+  exactSpendBetween(startMs: number, endMs: number, liveOnly = false): ExactSpendProjection {
+    const rows = this.db.prepare(
+      `SELECT request_id AS requestId, ts_epoch_ms AS tsEpochMs, via
+         FROM requests WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ?` + this.viaClause(liveOnly) + `
+         ORDER BY ts_epoch_ms ASC, request_id ASC`,
+    ).all(startMs, endMs) as Array<{ requestId: string; tsEpochMs: number; via: string | null }>;
+    return this.exactSpendFromRows(rows, startMs, endMs, liveOnly);
+  }
+
+  /**
+   * Exact charge projection for one project's alias family. Value attribution
+   * must use the same project scope as `summary(start,end,project)`; applying
+   * an exact projection to the project-blind request set would attach another
+   * project's evidence to this work unit.
+   */
+  exactSpendBetweenScoped(startMs: number, endMs: number, project: string, liveOnly = false): ExactSpendProjection {
+    const fam = this.familyFilter('r.project', project);
+    const rows = this.db.prepare(
+      `SELECT r.request_id AS requestId, r.ts_epoch_ms AS tsEpochMs, r.via
+         FROM requests r
+        WHERE r.ts_epoch_ms >= ? AND r.ts_epoch_ms < ?
+          AND ${fam.sql}` + this.viaClause(liveOnly) + `
+        ORDER BY r.ts_epoch_ms ASC, r.request_id ASC`,
+    ).all(startMs, endMs, ...fam.args) as Array<{ requestId: string; tsEpochMs: number; via: string | null }>;
+    return this.exactSpendFromRows(rows, startMs, endMs, liveOnly);
+  }
+
+  /** Exact charge projection for all requests belonging to one session. */
+  exactSpendForSession(sessionId: string, liveOnly = false): ExactSpendProjection {
+    const rows = this.db.prepare(
+      `SELECT request_id AS requestId, ts_epoch_ms AS tsEpochMs, via
+         FROM requests WHERE session_id = ?` + this.viaClause(liveOnly) + `
+         ORDER BY ts_epoch_ms ASC, request_id ASC`,
+    ).all(sessionId) as Array<{ requestId: string; tsEpochMs: number; via: string | null }>;
+    if (rows.length === 0) {
+      return Object.freeze({ amount: money('0', 'USD', 'effective'), eventIds: Object.freeze([]), sourceBases: Object.freeze([]), requestCount: 0, unresolvedRequests: 0 });
+    }
+    let startMs = rows[0]!.tsEpochMs;
+    let maxMs = rows[0]!.tsEpochMs;
+    for (const row of rows.slice(1)) {
+      if (row.tsEpochMs < startMs) startMs = row.tsEpochMs;
+      if (row.tsEpochMs > maxMs) maxMs = row.tsEpochMs;
+    }
+    return this.exactSpendFromRows(rows, startMs, maxMs === Number.MAX_SAFE_INTEGER ? maxMs : maxMs + 1, liveOnly);
+  }
+
+  /** Exact charge projection for the trailing runaway window. */
+  exactSpendInWindow(nowMs: number, windowMs: number, liveOnly = false): ExactSpendProjection {
+    const endMs = nowMs === Number.MAX_SAFE_INTEGER ? nowMs : nowMs + 1;
+    return this.exactSpendBetween(nowMs - windowMs, endMs, liveOnly);
+  }
+
   /** Health counts for governance alerts: blocked (429) requests and estimated-priced spend. */
   healthStats(startMs: number, endMs: number): { blocked: number; estimatedCostUsd: number; totalCostUsd: number } {
     const row = this.db
@@ -604,7 +1201,7 @@ export class Store {
    * call the current pricing table: rows retain their historical evidence.
    */
   pricingEvidenceByModel(startMs: number, endMs: number): PricingEvidenceBucket[] {
-    return this.db
+    const rows = this.db
       .prepare(
         `SELECT provider, model,
                 cost_basis AS costBasis, rate_card_sha256 AS rateCardSha256,
@@ -618,7 +1215,11 @@ export class Store {
                   rate_match_kind, rate_match_provider, rate_match_model
          ORDER BY costUsd DESC, requests DESC`,
       )
-      .all(startMs, endMs) as unknown as PricingEvidenceBucket[];
+      .all(startMs, endMs) as unknown as Array<Omit<PricingEvidenceBucket, 'rateCardProvenance'>>;
+    return rows.map((row) => ({
+      ...row,
+      rateCardProvenance: row.rateCardSha256 === null ? null : pricingCardProvenance(row.rateCardSha256),
+    }));
   }
 
   /**
@@ -842,7 +1443,7 @@ export class Store {
   }
 
   /**
-   * The pricing lineage behind ONE model's spend in a window: which cost bases
+   * The pricing lineage behind ONE provider/model's spend in a window: which cost bases
    * priced it, and which rate-card revisions produced those amounts.
    *
    * Model-vs-model comparison is a claim about price, so it can only mean
@@ -850,21 +1451,28 @@ export class Store {
    * pooling `local_list_price` rows with `fallback_estimate` guesses, or spanning
    * a rate-card refresh, is comparing eras and methods as much as models. Returns
    * distinct sorted values so the caller can collapse them to "one" or "mixed"
-   * without re-deriving the rule.
+   * without re-deriving the rule. The provider is optional for compatibility
+   * with older display callers, but exact WorkUnit attribution always supplies
+   * it so same-named models from different providers cannot be merged.
    */
   modelPricingBasis(
     startMs: number,
     endMs: number,
     model: string,
     project?: string,
+    provider?: string,
   ): { costBases: string[]; rateCardShas: string[] } {
     const fam = project !== undefined ? this.familyFilter('project', project) : null;
-    const args: Array<number | string> = fam ? [startMs, endMs, model, ...fam.args] : [startMs, endMs, model];
+    const args: Array<number | string> = [startMs, endMs, model];
+    if (provider !== undefined) args.push(provider);
+    if (fam) args.push(...fam.args);
     const rows = this.db
       .prepare(
         `SELECT DISTINCT cost_basis AS costBasis, rate_card_sha256 AS rateCardSha256
          FROM requests
-         WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ? AND model = ?` + (fam ? ` AND ${fam.sql}` : ``),
+         WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ? AND model = ?` +
+          (provider !== undefined ? ` AND provider = ?` : ``) +
+          (fam ? ` AND ${fam.sql}` : ``),
       )
       .all(...args) as Array<{ costBasis: string; rateCardSha256: string | null }>;
     const bases = new Set<string>();
@@ -1036,9 +1644,10 @@ export class Store {
                 cost_basis AS costBasis, rate_card_sha256 AS rateCardSha256,
                 rate_card_source_kind AS rateCardSourceKind, rate_match_kind AS rateMatchKind,
                 rate_match_provider AS rateMatchProvider, rate_match_model AS rateMatchModel,
-                scope_capture_status AS scopeCaptureStatus,
-                provider_scope_declaration_id AS providerScopeDeclarationId,
-                attribution_basis AS attributionBasis
+                 scope_capture_status AS scopeCaptureStatus,
+                 provider_scope_declaration_id AS providerScopeDeclarationId,
+                 attribution_basis AS attributionBasis,
+                 capture_coverage AS captureCoverage
          FROM requests ORDER BY ts_epoch_ms DESC LIMIT ?`,
       )
       .all(limit) as Array<Record<string, unknown>>;
@@ -1061,14 +1670,61 @@ export class Store {
                 cost_basis AS costBasis, rate_card_sha256 AS rateCardSha256,
                 rate_card_source_kind AS rateCardSourceKind, rate_match_kind AS rateMatchKind,
                 rate_match_provider AS rateMatchProvider, rate_match_model AS rateMatchModel,
-                scope_capture_status AS scopeCaptureStatus,
-                provider_scope_declaration_id AS providerScopeDeclarationId,
-                attribution_basis AS attributionBasis
+                 scope_capture_status AS scopeCaptureStatus,
+                 provider_scope_declaration_id AS providerScopeDeclarationId,
+                 attribution_basis AS attributionBasis,
+                 capture_coverage AS captureCoverage
          FROM requests r LEFT JOIN project_aliases a ON a.alias = r.project
          WHERE ts_epoch_ms >= ? AND ts_epoch_ms < ? ORDER BY ts_epoch_ms ASC`,
       )
       .all(startMs, endMs) as Array<Record<string, unknown>>;
     return rows.map(requestRowFromRecord);
+  }
+
+  /** Exact-safe request export rows with original/effective Money and lineage. */
+  economicRequestsInRange(
+    startMs: number,
+    endMs: number,
+    options: EconomicRequestExportOptions = {},
+  ): EconomicRequestExportRow[] {
+    return buildEconomicRequestExportRows(this.requestsInRange(startMs, endMs), this.economicLedger, options);
+  }
+
+  /**
+   * Exact request-level economic rows for value consumers. The optional project
+   * filter follows the alias family used by `summary()`; `liveOnly` preserves
+   * the budget distinction between proxy traffic and imported observations.
+   */
+  economicRequestRowsInRange(
+    startMs: number,
+    endMs: number,
+    options: EffectiveRequestOptions & { project?: string; liveOnly?: boolean } = {},
+  ): EffectiveRequestRow[] {
+    const rows = this.requestsInRange(startMs, endMs).filter((row) => {
+      if (options.project !== undefined && row.projectCanonical !== this.canonicalProject(options.project)) return false;
+      if (options.liveOnly === true && (row.via ?? 'proxy') !== 'proxy') return false;
+      return true;
+    });
+    return effectiveRequestRows(rows, this.economicLedger, options);
+  }
+
+  /**
+   * Reconciliation keeps the billing route and dimensions from the compatibility
+   * request index, but overlays the effective exact amount when the economic
+   * ledger has one. Missing exact coverage remains a legacy estimate and is
+   * disclosed by the reconciliation conditions rather than manufactured here.
+   */
+  private reconciliationRequestsInRange(startMs: number, endMs: number): RequestRow[] {
+    const rows = this.requestsInRange(startMs, endMs);
+    const effectiveByRequestId = new Map(
+      this.economicRequestRowsInRange(startMs, endMs)
+        .filter((row) => row.effectiveAmount !== null)
+        .map((row) => [row.requestId, row.effectiveAmount!] as const),
+    );
+    return rows.map((row) => {
+      const amount = effectiveByRequestId.get(row.requestId);
+      return amount === undefined ? row : { ...row, economicAmount: amount };
+    });
   }
 
   insertCommit(c: {
@@ -1132,13 +1788,35 @@ export class Store {
   }
 
   insertProposal(p: ProposalRow): void {
+    const captureCoverage = p.captureCoverage === undefined
+      ? 'complete'
+      : p.captureCoverage;
+    if (captureCoverage !== 'complete' && captureCoverage !== 'truncated' && captureCoverage !== 'unknown' && captureCoverage !== 'legacy_unknown') {
+      throw new Error('proposal capture coverage is invalid');
+    }
+    if (!Array.isArray(p.files)) throw new Error('proposal files must be an array');
+    if (captureCoverage === 'truncated' && p.files.length > 0) {
+      throw new Error('truncated proposal captures cannot retain file contents');
+    }
+    if (p.files.length > RESOURCE_LIMITS.proposalFiles) throw new Error('proposal file count exceeds resource limit');
+    let lineCount = 0;
+    for (const file of p.files) {
+      if (file === null || typeof file !== 'object' || !Array.isArray(file.addedLines)) throw new Error('proposal file shape is invalid');
+      if (file.path !== null && typeof file.path !== 'string') throw new Error('proposal path shape is invalid');
+      if (typeof file.path === 'string' && file.path.length > RESOURCE_LIMITS.metadataFieldChars) throw new Error('proposal path exceeds resource limit');
+      if (file.addedLines.some((line) => typeof line !== 'string')) throw new Error('proposal line shape is invalid');
+      lineCount += file.addedLines.length;
+      if (lineCount > RESOURCE_LIMITS.proposalLines) throw new Error('proposal line count exceeds resource limit');
+    }
+    const filesJson = JSON.stringify(p.files);
+    if (Buffer.byteLength(filesJson, 'utf8') > RESOURCE_LIMITS.proposalCaptureBytes) throw new Error('proposal capture exceeds resource limit');
     this.db
       .prepare(
-        `INSERT INTO proposals (proposal_id, request_id, session_id, ts_epoch_ms, provider, model, project, files_json)
-         VALUES (?,?,?,?,?,?,?,?)
+        `INSERT INTO proposals (proposal_id, request_id, session_id, ts_epoch_ms, provider, model, project, files_json, capture_coverage)
+         VALUES (?,?,?,?,?,?,?,?,?)
          ON CONFLICT(proposal_id) DO NOTHING`,
       )
-      .run(p.proposalId, p.requestId, p.sessionId, p.tsEpochMs, p.provider, p.model, p.project, JSON.stringify(p.files));
+      .run(p.proposalId, p.requestId, p.sessionId, p.tsEpochMs, p.provider, p.model, p.project, filesJson, captureCoverage);
   }
 
   /** Proposals logged for a project within [startMs, endMs). */
@@ -1147,7 +1825,8 @@ export class Store {
     const rows = this.db
       .prepare(
         `SELECT proposal_id AS proposalId, request_id AS requestId, session_id AS sessionId,
-                ts_epoch_ms AS tsEpochMs, provider, model, project, files_json AS filesJson
+        ts_epoch_ms AS tsEpochMs, provider, model, project, files_json AS filesJson,
+                capture_coverage AS captureCoverage
          FROM proposals WHERE ${fam.sql} AND ts_epoch_ms >= ? AND ts_epoch_ms < ?
          ORDER BY ts_epoch_ms ASC`,
       )
@@ -1161,6 +1840,13 @@ export class Store {
       model: r.model as string,
       project: r.project as string,
       files: JSON.parse((r.filesJson as string) || '[]'),
+      captureCoverage: r.captureCoverage === 'truncated'
+        ? 'truncated' as const
+        : r.captureCoverage === 'complete'
+          ? 'complete' as const
+          : r.captureCoverage === 'unknown'
+            ? 'unknown' as const
+            : 'legacy_unknown' as const,
     }));
   }
 
@@ -1286,6 +1972,35 @@ export class Store {
       .all(startMs, endMs) as Array<{ sessionId: string; user: string; costUsd: number }>;
   }
 
+  /** Exact effective session groups for non-coding value consumers. */
+  economicSessionUnits(startMs: number, endMs: number, liveOnly = false): EconomicSessionUnit[] {
+    const rows = this.economicRequestRowsInRange(startMs, endMs, { liveOnly });
+    const proposalRows = this.db
+      .prepare(`SELECT DISTINCT session_id AS sessionId FROM proposals WHERE session_id IS NOT NULL`)
+      .all() as Array<{ sessionId: string }>;
+    return groupEconomicSessions(rows, new Set(proposalRows.map((row) => row.sessionId)));
+  }
+
+  /** Exact effective (session,user) groups, excluding sessions with coding proposals. */
+  economicSessionUnitsByUser(startMs: number, endMs: number, liveOnly = false): EconomicSessionUserUnit[] {
+    const rows = this.economicRequestRowsInRange(startMs, endMs, { liveOnly });
+    const proposalRows = this.db
+      .prepare(`SELECT DISTINCT session_id AS sessionId FROM proposals WHERE session_id IS NOT NULL`)
+      .all() as Array<{ sessionId: string }>;
+    const proposalIds = new Set(proposalRows.map((row) => row.sessionId));
+    return groupEconomicSessionUsers(rows.filter((row) => row.sessionId !== null && !proposalIds.has(row.sessionId)));
+  }
+
+  /** Exact effective provider/model groups for frontier and model-trial consumers. */
+  economicModelUnits(startMs: number, endMs: number, project?: string, liveOnly = false): EconomicModelUnit[] {
+    return groupEconomicModels(this.economicRequestRowsInRange(startMs, endMs, { project, liveOnly }));
+  }
+
+  /** Exact effective time buckets for budget/advisor consumers. */
+  economicSeries(startMs: number, endMs: number, bucketMs: number, liveOnly = false): EconomicSeriesPoint[] {
+    return groupEconomicSeries(this.economicRequestRowsInRange(startMs, endMs, { liveOnly }), bucketMs);
+  }
+
   saveReceipt(r: { unit: string; project: string; tsEpochMs: number; realized: boolean; receiptJson: string }): void {
     realization.saveReceipt(this.db, r);
   }
@@ -1297,10 +2012,102 @@ export class Store {
   /**
    * Persist a snapshot of computed work units so realized value survives the
    * process that computed it. Keyed by commit hash, so re-running `realize`
-   * refreshes the snapshot rather than double-counting.
+   * refreshes the snapshot rather than double-counting. The canonical path
+   * automatically preflights and issues eligible exact/mature/realized units;
+   * synthetic, legacy and partial rows remain explicit compatibility records.
    */
   saveRealizationUnits(records: RealizationUnitRecord[]): void {
-    realization.saveRealizationUnits(this.db, records);
+    // Every reproducible exact/mature/realized record crosses the kernel on the
+    // canonical save path. Legacy, synthetic and partial snapshots remain
+    // compatibility records by explicit eligibility policy, not by a public
+    // opt-out that could silently bypass the trust boundary.
+    const kernelIssuances = records
+      .filter((record) => codingRealizationKernelEligible(record))
+      .map((record) => {
+        const issuance = buildCodingRealizationKernelIssuance(record);
+        this.assertRealizationEconomicLineage(record, issuance);
+        return { record, issuance };
+      });
+    if (kernelIssuances.length === 0) {
+      realization.saveRealizationUnits(this.db, records);
+      return;
+    }
+
+    this.epistemicLedger.runInTransaction(() => {
+      realization.saveRealizationUnits(this.db, records);
+      for (const { record, issuance } of kernelIssuances) {
+        // Re-derive inside the same write transaction as the snapshot and
+        // kernel pair. This closes the race where another handle changes the
+        // request/economic ledger after preflight but before publication.
+        this.assertRealizationEconomicLineage(record, issuance);
+        this.assertPersistedRealizationRow(record);
+        this.appendCodingRealizationKernel(bindCodingRealizationSuccessor(issuance, this.epistemicLedger));
+      }
+    });
+  }
+
+  /** Issue one persisted exact, mature and fully realized coding unit into the kernel. */
+  issueRealizationUnitToKernel(record: RealizationUnitRecord): CodingRealizationKernelPersistenceResult {
+    const issuance = buildCodingRealizationKernelIssuance(record);
+    this.assertRealizationEconomicLineage(record, issuance);
+    return this.epistemicLedger.runInTransaction(() => {
+      this.assertRealizationEconomicLineage(record, issuance);
+      this.assertPersistedRealizationRow(record);
+      return this.appendCodingRealizationKernel(issuance);
+    });
+  }
+
+
+  private appendCodingRealizationKernel(issuance: ReturnType<typeof buildCodingRealizationKernelIssuance>): CodingRealizationKernelPersistenceResult {
+    const evidenceResult = this.epistemicLedger.appendEvidenceWithinTransaction(issuance.evidence);
+    const claimResult = this.epistemicLedger.appendClaimWithinTransaction(issuance.claim);
+    return Object.freeze({
+      evidenceId: issuance.evidence.id,
+      claimId: issuance.claim.id,
+      evidence: Object.freeze({ result: evidenceResult }),
+      claim: Object.freeze({ result: claimResult }),
+    });
+  }
+
+  private assertPersistedRealizationRow(record: RealizationUnitRecord): void {
+    const row = this.db.prepare(
+      `SELECT project, ts_epoch_ms AS tsEpochMs, computed_at_ms AS computedAtMs,
+              unit_json AS unitJson, cost_scope AS costScope, cost_stale AS costStale
+         FROM realization_units WHERE commit_hash = ?`,
+    ).get(record.commitHash) as {
+      project: string; tsEpochMs: number; computedAtMs: number; unitJson: string; costScope: string; costStale: number;
+    } | undefined;
+    if (row === undefined) throw new Error(`realization unit ${record.commitHash} is not persisted; kernel issuance refused`);
+    if (row.project !== record.project || Number(row.tsEpochMs) !== record.tsEpochMs || Number(row.computedAtMs) !== record.computedAtMs
+      || row.unitJson !== record.unitJson || row.costScope !== record.costScope || Number(row.costStale) !== 0) {
+      throw new Error(`persisted realization unit ${record.commitHash} diverges from the kernel candidate`);
+    }
+  }
+
+  private assertRealizationEconomicLineage(
+    record: RealizationUnitRecord,
+    issuance: ReturnType<typeof buildCodingRealizationKernelIssuance>,
+  ): void {
+    const value = issuance.claim.proposition.value;
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error('coding realization kernel payload is not an object');
+    const payload = value as Record<string, unknown>;
+    const startMs = payload.windowStartMs;
+    const endMs = payload.windowEndMs;
+    const project = payload.project;
+    const spendScope = payload.spendAttributionScope;
+    if (!Number.isSafeInteger(startMs) || !Number.isSafeInteger(endMs) || typeof project !== 'string'
+      || (spendScope !== 'project' && spendScope !== 'window')) {
+      throw new Error('coding realization kernel payload has invalid economic coordinates');
+    }
+    const actual = canonicalEconomicAttribution(payload.economic);
+    const expected = economicAttributionFromRows(this.economicRequestRowsInRange(
+      startMs as number,
+      endMs as number,
+      spendScope === 'project' ? { project: record.project } : {},
+    ));
+    if (canonicalJson(actual) !== canonicalJson(expected)) {
+      throw new Error('coding realization economic attribution does not match the current effective ledger');
+    }
   }
 
   /**
@@ -1370,6 +2177,217 @@ export class Store {
     return billing.applyBillingImport(this.db, input, importedAtMs);
   }
 
+  /**
+   * Issue one imported provider export through the canonical kernel path.
+   * Legacy billing rows remain intact; this adapter is resumable and exact
+   * replay returns duplicates rather than creating a second financial claim.
+   */
+  issueBillingImportToKernel(importId: string): BillingKernelPersistenceResult {
+    if (typeof importId !== 'string' || importId.trim().length === 0) throw new Error('billing import id is required');
+    const run = this.billingImportRuns(500).find((candidate) => candidate.importId === importId);
+    if (run === undefined) throw new Error(`unknown billing import: ${importId}`);
+    const records = this.billingEvidenceRecords().filter((record) => record.firstImportId === importId);
+    const issuance = buildBillingKernelIssuance({ run, records });
+    let evidenceInserted = 0;
+    let evidenceDuplicate = 0;
+    for (const item of issuance.recordEvidence) {
+      const result = this.epistemic().appendEvidence(item);
+      if (result === 'inserted') evidenceInserted += 1;
+      else evidenceDuplicate += 1;
+    }
+    let claimInserted = 0;
+    let claimDuplicate = 0;
+    for (const item of issuance.recordClaims) {
+      const result = this.epistemic().appendClaim(item);
+      if (result === 'inserted') claimInserted += 1;
+      else claimDuplicate += 1;
+    }
+    const aggregateResult = this.epistemic().appendClaim(issuance.aggregateClaim);
+    return Object.freeze({
+      importId,
+      total: issuance.total,
+      recordEvidence: Object.freeze({ inserted: evidenceInserted, duplicate: evidenceDuplicate }),
+      recordClaims: Object.freeze({ inserted: claimInserted, duplicate: claimDuplicate }),
+      aggregateClaim: Object.freeze({ id: issuance.aggregateClaim.id, result: aggregateResult }),
+    });
+  }
+
+  /** Persist an explicit mixed-basis reconciliation Claim through the kernel. */
+  issueBillingReconciliationClaim(input: BillingReconciliationClaimInput): { claimId: string; result: 'inserted' | 'duplicate' } {
+    const item = billingReconciliationClaim(input);
+    const result = this.epistemic().appendClaim(item);
+    return Object.freeze({ claimId: item.id, result });
+  }
+
+  /** Issue one complete direct OpenAI Costs observation through the kernel. */
+  issueOpenAiCostsObservationToKernel(observationRunId: string): OpenAiCostsKernelPersistenceResult {
+    const snapshot = billing.openAiCostsObservationById(this.db, observationRunId);
+    if (snapshot === null) throw new Error(`unknown OpenAI Costs observation run: ${observationRunId}`);
+    const issuance = buildOpenAiCostsKernelIssuance(snapshot);
+    let evidenceInserted = 0;
+    let evidenceDuplicate = 0;
+    for (const item of issuance.observationEvidence) {
+      const result = this.epistemic().appendEvidence(item);
+      if (result === 'inserted') evidenceInserted += 1;
+      else evidenceDuplicate += 1;
+    }
+    let claimInserted = 0;
+    let claimDuplicate = 0;
+    for (const item of issuance.observationClaims) {
+      const result = this.epistemic().appendClaim(item);
+      if (result === 'inserted') claimInserted += 1;
+      else claimDuplicate += 1;
+    }
+    const aggregateResult = this.epistemic().appendClaim(issuance.aggregateClaim);
+    return Object.freeze({
+      observationRunId,
+      total: issuance.total,
+      observationEvidence: Object.freeze({ inserted: evidenceInserted, duplicate: evidenceDuplicate }),
+      observationClaims: Object.freeze({ inserted: claimInserted, duplicate: claimDuplicate }),
+      aggregateClaim: Object.freeze({ id: issuance.aggregateClaim.id, result: aggregateResult }),
+    });
+  }
+
+  /** Persist provider, local-capture, and residual Claims for one recorded reconciliation. */
+  issueOpenAiReconciliationToKernel(reconciliationRunId: string): OpenAiReconciliationKernelPersistenceResult {
+    if (typeof reconciliationRunId !== 'string' || reconciliationRunId.trim().length === 0) throw new Error('reconciliation run id is required');
+    const recorded = this.reconciliationRuns(500).find((candidate) => candidate.reconciliationRunId === reconciliationRunId);
+    if (recorded === undefined) throw new Error(`unknown reconciliation run: ${reconciliationRunId}`);
+    const snapshot = billing.openAiCostsObservationById(this.db, recorded.result.observationRunId);
+    if (snapshot === null) throw new Error(`unknown OpenAI Costs observation run: ${recorded.result.observationRunId}`);
+    if (!Number.isSafeInteger(recorded.computedAtMs)) throw new Error(`reconciliation run ${reconciliationRunId} has an invalid computed timestamp`);
+    const issuedAt = new Date(recorded.computedAtMs).toISOString();
+    const issuance = buildOpenAiReconciliationKernelIssuance({ observation: snapshot, reconciliation: recorded.result, reconciliationRunId, issuedAt });
+    let evidenceInserted = 0;
+    let evidenceDuplicate = 0;
+    for (const item of issuance.provider.observationEvidence) {
+      const result = this.epistemic().appendEvidence(item);
+      if (result === 'inserted') evidenceInserted += 1;
+      else evidenceDuplicate += 1;
+    }
+    let claimInserted = 0;
+    let claimDuplicate = 0;
+    for (const item of issuance.provider.observationClaims) {
+      const result = this.epistemic().appendClaim(item);
+      if (result === 'inserted') claimInserted += 1;
+      else claimDuplicate += 1;
+    }
+    const providerAggregateResult = this.epistemic().appendClaim(issuance.provider.aggregateClaim);
+    const localEvidenceResult = this.epistemic().appendEvidence(issuance.localEvidence);
+    const reconciliationClaimResult = this.epistemic().appendClaim(issuance.reconciliationClaim);
+    return Object.freeze({
+      reconciliationRunId,
+      provider: Object.freeze({
+        observationEvidence: { inserted: evidenceInserted, duplicate: evidenceDuplicate },
+        observationClaims: { inserted: claimInserted, duplicate: claimDuplicate },
+        aggregateClaim: { id: issuance.provider.aggregateClaim.id, result: providerAggregateResult },
+      }),
+      localEvidence: Object.freeze({ id: issuance.localEvidence.id, result: localEvidenceResult }),
+      reconciliationClaim: Object.freeze({ id: issuance.reconciliationClaim.id, result: reconciliationClaimResult }),
+    });
+  }
+
+  // Projected once per call, not per claim: the closure is over the whole
+  // graph, so asking it repeatedly would answer the same question N times.
+  private kernelReadBoundary(asOf: Instant | undefined): KernelReadBoundary {
+    if (asOf === undefined) {
+      return { revokedIds: new Set(this.epistemic().revocationProjection().revokedIds), visible: null };
+    }
+    const replay = this.epistemic().replayAsOf(asOf);
+    return {
+      revokedIds: new Set(replay.revocation.revokedIds),
+      visible: new Set(replay.graph.nodes.map((node) => node.id)),
+    };
+  }
+
+  private kernelClaimsAt(ids: readonly string[], boundary: KernelReadBoundary): readonly KernelClaimView[] {
+    const claims: KernelClaimView[] = [];
+    for (const id of ids) {
+      if (boundary.visible !== null && !boundary.visible.has(id)) continue;
+      const item = this.epistemic().readClaim(id);
+      if (item === null) continue;
+      claims.push(presentKernelClaim(item, boundary.revokedIds));
+    }
+    return Object.freeze(claims);
+  }
+
+  /**
+   * One kernel node with its neighbourhood, as the ledger had it at `asOf`
+   * (D-257): the record itself (evidence, claim, witness or derivation), the
+   * edges into and out of it, the assumptions of any derivation that produced
+   * it, and whether the revocation projection reaches it. `null` when the node
+   * does not exist or was not yet available at the boundary — the two are the
+   * same answer from a hindsight-safe read. Billing evidence payloads stay
+   * withheld (operator-supplied exports can be confidential); their hash is
+   * served instead, so the viewer shows what is known and says what is not.
+   */
+  /** How many nodes and edges the kernel had at `asOf` (live when omitted). */
+  kernelGraphSize(asOf?: Instant): { nodes: number; edges: number } {
+    const graph = asOf === undefined ? this.epistemic().graph() : this.epistemic().replayAsOf(asOf).graph;
+    return { nodes: graph.nodes.length, edges: graph.edges.length };
+  }
+
+  kernelNodeView(id: string, asOf?: Instant): KernelNodeView | null {
+    const ledger = this.epistemic();
+    const replay = asOf === undefined ? null : ledger.replayAsOf(asOf);
+    const graph = replay === null ? ledger.graph() : replay.graph;
+    const node = graph.nodes.find((candidate) => candidate.id === id);
+    if (node === undefined) return null;
+    const revokedIds = new Set(replay === null ? ledger.revocationProjection().revokedIds : replay.revocation.revokedIds);
+    const restsOn = graph.edges.filter((edge) => edge.to === id);
+    const supports = graph.edges.filter((edge) => edge.from === id);
+    let record: KernelNodeView['record'] = null;
+    if (node.kind === 'evidence') {
+      const item = ledger.readEvidence(id);
+      if (item !== null) {
+        const withheld = item.evidenceType.startsWith('billing.');
+        const { payload, ...rest } = item;
+        // A withheld payload is still identifiable: its canonical digest is
+        // served so the viewer can name what it is not showing.
+        const payloadDigest = payload === undefined ? null : createHash('sha256').update(canonicalJson(payload)).digest('hex');
+        record = { kind: 'evidence', evidence: { ...rest, ...(withheld ? {} : { payload: payload ?? null }), payloadWithheld: withheld && payload !== undefined, payloadDigest } };
+      }
+    } else if (node.kind === 'claim') {
+      const item = ledger.readClaim(id);
+      if (item !== null) record = { kind: 'claim', claim: presentKernelClaim(item, revokedIds) };
+    } else if (node.kind === 'witness') {
+      const item = ledger.readWitness(id);
+      if (item !== null) record = { kind: 'witness', witness: item };
+    }
+    // Derivations are not nodes: they are the records behind the edges into a
+    // claim, and the assumptions a claim was derived under live on them.
+    const derivations = node.kind === 'claim' ? ledger.derivationsForClaim(id) : [];
+    return Object.freeze({
+      asOf: asOf ?? null,
+      node,
+      revoked: revokedIds.has(id),
+      record,
+      restsOn: Object.freeze(restsOn),
+      supports: Object.freeze(supports),
+      derivations: Object.freeze(derivations.map((item) => ({ id: item.id, transformation: item.transformation, inputEvidenceIds: item.inputEvidenceIds, inputClaimIds: item.inputClaimIds, witnessIds: item.witnesses.map((w) => w.id), assumptions: item.assumptions, uncertaintyTransformation: item.uncertaintyTransformation }))),
+      assumptions: Object.freeze([...new Set(derivations.flatMap((item) => item.assumptions))]),
+      graphSize: { nodes: graph.nodes.length, edges: graph.edges.length },
+    });
+  }
+
+  /** Read canonical billed-period claims without exposing confidential raw payloads. */
+  billingKernelClaims(limit = 25, asOf?: Instant): readonly KernelClaimView[] {
+    const safeLimit = Math.max(1, Math.min(100, Math.floor(limit)));
+    return this.kernelClaimsAt(this.billingImportRuns(safeLimit).map((run) => `claim:billing:billed-total:${run.importId}`), this.kernelReadBoundary(asOf));
+  }
+
+  /** Read canonical provider-observed Claims issued from complete Costs snapshots. */
+  openAiCostsKernelClaims(limit = 25, asOf?: Instant): readonly KernelClaimView[] {
+    const safeLimit = Math.max(1, Math.min(100, Math.floor(limit)));
+    return this.kernelClaimsAt(this.openAiCostsObservationRuns(safeLimit).map((run) => `claim:billing:provider-observed-total:${run.observationRunId}`), this.kernelReadBoundary(asOf));
+  }
+
+  /** Read canonical mixed-basis Claims issued for recorded reconciliations. */
+  billingReconciliationKernelClaims(limit = 25, asOf?: Instant): readonly KernelClaimView[] {
+    const safeLimit = Math.max(1, Math.min(100, Math.floor(limit)));
+    return this.kernelClaimsAt(this.reconciliationRuns(safeLimit).map((run) => `claim:billing:reconciliation:${run.reconciliationRunId}`), this.kernelReadBoundary(asOf));
+  }
+
   /** Newest first, including empty/replay-only evidence runs for auditability. */
   billingImportRuns(limit = 50): BillingImportRun[] {
     return billing.billingImportRuns(this.db, limit);
@@ -1378,6 +2396,30 @@ export class Store {
   /** Immutable provider-declared lines, deliberately separate from requestsInRange(). */
   billingEvidenceRecords(): BillingEvidenceRecord[] {
     return billing.billingEvidenceRecords(this.db);
+  }
+
+  /** Every immutable operator-declared mapping version, oldest first per record. */
+  billingRecordMappings(recordId?: string): BillingRecordMapping[] {
+    return billing.billingRecordMappings(this.db, recordId);
+  }
+
+  /**
+   * Append an exact imported-record mapping to a local project/account. A
+   * repeated identical declaration is idempotent; a changed destination creates
+   * a new version and leaves the prior decision intact.
+   */
+  declareBillingRecordMapping(input: BillingRecordMappingDeclarationInput): BillingRecordMappingDeclarationResult {
+    return billing.declareBillingRecordMapping(this.db, input);
+  }
+
+  /**
+   * Report mapped coverage and residual reasons without changing provider or
+   * request evidence. The Store facade intentionally cannot assert
+   * provider_verified; that authority must arrive from a future verified
+   * connector boundary rather than an operator flag.
+   */
+  billingMappingCoverage(options: { importId?: string; asOfMs?: number } = {}): BillingMappingCoverage {
+    return billing.billingMappingCoverage(this.db, options);
   }
 
   /** Provider-declared USD total only. It is not a reconciliation or a request-ledger total. */
@@ -1436,7 +2478,11 @@ export class Store {
    * It deliberately returns no provider total and no variance.
    */
   openAiCostsCaptureCoverage(): OpenAiCostsCaptureCoverage | null {
-    return billing.openAiCostsCaptureCoverage(this.db, (startMs, endMs) => this.requestsInRange(startMs, endMs));
+    return billing.openAiCostsCaptureCoverage(
+      this.db,
+      (startMs, endMs) => this.requestsInRange(startMs, endMs),
+      this.retentionFloor().requestsPrunedBeforeMs,
+    );
   }
 
   /**
@@ -1455,7 +2501,16 @@ export class Store {
    * is a separate, explicit step.
    */
   reconcileOpenAiCosts(opts: { materialityUsd?: number; now?: number } = {}): ReconciliationResult | null {
-    return billing.reconcileOpenAiCosts(this.db, (startMs, endMs) => this.requestsInRange(startMs, endMs), opts);
+    return billing.reconcileOpenAiCosts(
+      this.db,
+      (startMs, endMs) => this.requestsInRange(startMs, endMs),
+      opts,
+      (startMs, endMs) => this.reconciliationRequestsInRange(startMs, endMs),
+      // What retention deleted. A reconciliation reads rows handed to it and
+      // cannot see the ones that are gone, so the boundary travels separately
+      // (D-173).
+      this.retentionFloor().requestsPrunedBeforeMs,
+    );
   }
 
   /** Persist a computed reconciliation as an immutable derived record. */
@@ -1514,7 +2569,77 @@ export class Store {
       periodStartMs,
       periodEndMs,
       runAtMs,
+      this.retentionFloor().requestsPrunedBeforeMs,
     );
+  }
+
+  /**
+   * Compute an exact-money allocation projection from effective economic
+   * charges. Legacy request rows remain explicitly unresolved and are omitted
+   * rather than coerced into numeric micros.
+   */
+  allocatePeriodExact(periodStartMs: number, periodEndMs: number, runAtMs = Date.now()): ExactAllocationRunResult {
+    const requests = this.requestsInRange(periodStartMs, periodEndMs);
+    const rows: exactAllocation.ExactAllocatableRow[] = [];
+    const unresolvedRequestIds: string[] = [];
+    for (const request of requests) {
+      const effective = this.economicLedger.effectiveChargeFor(requestEconomicEventId(request.requestId));
+      if (effective === null) {
+        unresolvedRequestIds.push(request.requestId);
+        continue;
+      }
+      rows.push({
+        sourceEventIds: effective.eventIds,
+        amount: effective.amount,
+        project: request.projectCanonical ?? request.project,
+        provider: request.provider,
+        model: request.model,
+        source: request.source ?? null,
+        user: request.user ?? null,
+        tsEpochMs: request.tsEpochMs,
+      });
+    }
+    const result = exactAllocation.applyExactAllocation({
+      rows,
+      rules: allocation.allocationRules(this.db),
+      costCentres: allocation.costCentres(this.db),
+      periodStartMs,
+      periodEndMs,
+      runAtMs,
+    });
+    return exactAllocation.withUnresolvedRequests(result, unresolvedRequestIds);
+  }
+
+  /** Persist an exact allocation projection as a canonical append-only record. */
+  saveExactAllocationRun(result: ExactAllocationRunResult, computedAtMs = Date.now()): string {
+    const allocationRunId = allocation.saveExactAllocationRun(this.db, result, computedAtMs);
+    const persisted = this.exactAllocationRun(allocationRunId);
+    if (persisted === null) throw new Error(`exact allocation run ${allocationRunId} disappeared before kernel issuance`);
+    this.issueExactAllocationToKernel(persisted);
+    return allocationRunId;
+  }
+
+  /** Read one exact allocation run after digest and normalized lineage verification. */
+  exactAllocationRun(allocationRunId: string): ExactAllocationRunRecord | null {
+    return allocation.exactAllocationRun(this.db, allocationRunId);
+  }
+
+  /** Read bounded exact allocation history, newest computation first. */
+  exactAllocationRuns(limit = 20): ExactAllocationRunRecord[] {
+    return allocation.exactAllocationRuns(this.db, limit);
+  }
+
+  /** Issue one persisted exact allocation run into the Trusted Epistemic Kernel. */
+  issueExactAllocationToKernel(record: ExactAllocationRunRecord): ExactAllocationKernelPersistenceResult {
+    const issuance = buildExactAllocationKernelIssuance(record.allocationRunId, record.result, record.computedAtMs);
+    const evidenceResult = this.epistemicLedger.appendEvidence(issuance.evidence);
+    const claimResult = this.epistemicLedger.appendClaim(issuance.claim);
+    return Object.freeze({
+      evidenceId: issuance.evidence.id,
+      claimId: issuance.claim.id,
+      evidence: Object.freeze({ result: evidenceResult }),
+      claim: Object.freeze({ result: claimResult }),
+    });
   }
 
   /**
@@ -1565,11 +2690,342 @@ export class Store {
     return billing.matchingOpenAiScope(this.db, upstreamBase);
   }
 
-  /** Maintenance: prune old requests and compact. Returns rows removed. */
+  /** Append one pre-treatment action observation for provenance-aware OPE. */
+  recordOpeObservation(observation: import('../causal/ope.ts').OpeObservation): 'created' | 'existing' {
+    return ope.recordOpeObservation(this.db, observation);
+  }
+
+  /** Read and re-authenticate the retained OPE action log. */
+  opeObservations(): import('../causal/ope.ts').OpeObservation[] {
+    return ope.opeObservations(this.db);
+  }
+
+  /** Evaluate only the append-only OPE log held by this Store. */
+  evaluateOpe(options: import('../causal/ope.ts').OpeEvaluationOptions): import('../causal/ope.ts').OpeEvaluation {
+    return ope.evaluatePersistedOpe(this.db, options);
+  }
+
+  /**
+   * Commit a validated causal-study protocol. Existing committed records are
+   * idempotent only when byte-for-byte equivalent; no update path exists.
+   */
+  registerCausalProtocol(protocol: unknown): 'created' | 'existing' {
+    return causal.registerCausalProtocol(this.db, protocol);
+  }
+
+  /** Persist a complete pre-exposure randomisation block and its decision ledger. */
+  saveCausalAssignmentPlan(plan: CausalAssignmentPlan): 'created' | 'existing' {
+    return causal.saveCausalAssignmentPlan(this.db, plan);
+  }
+
+  /**
+   * Atomically allocate and persist one v2 block. Sequence and cryptographic
+   * entropy are Store-owned and allocations are returned only after commit.
+   */
+  assignCausalBlockV2(request: CausalAssignmentRequestV2): CausalAssignmentResultV2 {
+    return causal.assignCausalBlockV2(this.db, request);
+  }
+
+  causalAssignmentManifestV2(studyId: string): CausalAssignmentManifestV2 | null {
+    return causal.causalAssignmentManifestV2(this.db, studyId);
+  }
+
+  /** Append actual execution lineage after a stored randomized decision. */
+  appendCausalExecution(record: CausalExecutionRecord): 'created' | 'existing' {
+    return causal.appendCausalExecution(this.db, record);
+  }
+
+  /** Store-internal v2 execution append; terminal outcomes are a later slice. */
+  appendCausalExecutionV2(record: unknown): 'created' | 'existing' {
+    return causal.appendCausalExecutionV2(this.db, record);
+  }
+
+  /** Store-internal v2 terminal outcome append; pending is represented by absence. */
+  appendCausalTerminalOutcomeV2(record: unknown): 'created' | 'existing' {
+    return causal.appendCausalTerminalOutcomeV2(this.db, record);
+  }
+
+  /** Store-internal T-069 scalar request-to-realization sidecar append. */
+  appendCausalLineageBindingV2(record: unknown): 'created' | 'existing' {
+    return causalLineage.appendCausalLineageBindingV2(this.db, record);
+  }
+
+  /** Prepare a Store-authenticated, independently-derived scalar unit binding. */
+  prepareIndependentCausalLineageBindingV2(
+    input: causalProducer.IndependentCausalProducerInputV2,
+  ): causalProducer.IndependentCausalProducerAssessmentV2 {
+    return causalProducer.prepareIndependentCausalLineageBindingV2(this.db, input);
+  }
+
+  /** Atomically retain the derived realization identity and append its binding. */
+  appendIndependentCausalLineageBindingV2(
+    input: causalProducer.IndependentCausalProducerInputV2,
+  ): causalProducer.IndependentCausalProducerAssessmentV2 {
+    return causalProducer.appendIndependentCausalLineageBindingV2(this.db, input);
+  }
+
+  /** Read only authenticated T-069 sidecar rows; prompts/source are absent. */
+  causalLineageBindingsV2(
+    studyId: string,
+    lookup: causalLineage.CausalLineageBindingLookupV2 = {},
+  ): causalLineage.CausalLineageBindingV2[] {
+    return causalLineage.causalLineageBindingsV2(this.db, studyId, lookup);
+  }
+
+  /** Append outcome lineage after a stored execution. */
+  appendCausalOutcome(record: CausalOutcomeRecord): 'created' | 'existing' {
+    return causal.appendCausalOutcome(this.db, record);
+  }
+
+  /** Load the local evidence objects required for deterministic qualification. */
+  causalStudyData(studyId: string): import('../causal/types.ts').CausalStudyData | null {
+    return causal.causalStudyData(this.db, studyId);
+  }
+
+  causalAssignmentPlans(studyId: string): CausalAssignmentPlan[] {
+    return causal.causalAssignmentPlans(this.db, studyId);
+  }
+
+  /**
+   * Persist one immutable local analysis snapshot. It never changes provider
+   * routing or budget configuration.
+   */
+  saveCausalAnalysis(
+    studyId: string,
+    analysisId: string,
+    computedAtMs = Date.now(),
+  ): causal.CausalAnalysisSnapshot {
+    return causal.saveCausalAnalysis(this.db, studyId, analysisId, computedAtMs);
+  }
+
+  /**
+   * Issue one analysed study into the Trusted Epistemic Kernel.
+   *
+   * This is the boundary AII-036 named. The estimate itself is unchanged: this
+   * appends the records that BIND it — the randomization Evidence, the observed
+   * arm difference as an observational Claim, and, only when the pre-registered
+   * rule already authorised claim language AND multiplicity has not withheld it,
+   * the identification Witness, the randomized Claim and the Derivation between
+   * them.
+   *
+   * ISSUANCE IS A LOOK, THE SAME AS A PREVIEW. It used to call
+   * `estimateCausalStudy` directly, which produced a look `reportCausalStudy`
+   * never counted — the inference ledger records every `analyze` preview and
+   * `causal inspect`/`verify` read, but the one path that mints a durable,
+   * revocation-bound kernel Claim skipped it entirely. A study that had already
+   * exhausted its registered family through repeated previews could still be
+   * issued as if this were the first and only look. This now routes through
+   * `reportCausalStudy` so the issuance itself is recorded, and gates the causal
+   * escalation on `claimAfterMultiplicity` rather than the raw single-look
+   * `allowedClaim`: when multiplicity withholds the conclusion, only the
+   * observational arm-difference Claim is issued, exactly as for a study that
+   * never earned claim language at all (D-254).
+   *
+   * All five append on ONE transaction, which is why the kernel grew
+   * `appendWitnessWithinTransaction` / `appendDerivationWithinTransaction`. The
+   * derivation is both the last record and the one the kernel can refuse; if it
+   * failed after the causal claim had been committed by its own transaction, the
+   * kernel would hold a causal conclusion with nothing binding it to the
+   * randomization — precisely the state the legality check exists to prevent,
+   * reached through the mechanism meant to prevent it.
+   *
+   * Returns null for a study this build cannot analyse, rather than throwing:
+   * version-2 projection is deferred, and a caller asking to issue a study that
+   * has no v1 analysis path has not made an error.
+   */
+  issueCausalStudyToKernel(studyId: string, issuedAtMs = Date.now()): CausalStudyKernelIssuance | null {
+    const report = causal.reportCausalStudy(this.db, studyId, issuedAtMs);
+    if (report === null) return null;
+    const data = causal.causalStudyData(this.db, studyId);
+    if (data === null) return null;
+    const gatedEstimate = report.claimAfterMultiplicity === report.estimate.allowedClaim
+      ? report.estimate
+      : { ...report.estimate, allowedClaim: report.claimAfterMultiplicity };
+    const issuance = buildCausalStudyKernelIssuance(data, gatedEstimate, issuedAtMs);
+    this.epistemicLedger.runInTransaction(() => {
+      this.epistemicLedger.appendEvidenceWithinTransaction(issuance.assignmentEvidence);
+      this.epistemicLedger.appendEvidenceWithinTransaction(issuance.outcomeEvidence);
+      this.epistemicLedger.appendClaimWithinTransaction(issuance.armDifference);
+      if (issuance.identification === null || issuance.effect === null || issuance.derivation === null) return;
+      this.epistemicLedger.appendWitnessWithinTransaction(issuance.identification);
+      this.epistemicLedger.appendClaimWithinTransaction(issuance.effect);
+      this.epistemicLedger.appendDerivationWithinTransaction(issuance.derivation);
+    });
+    return issuance;
+  }
+
+  /**
+   * Report one causal study, recording the look.
+   *
+   * The reporting boundary for every operator-facing surface. `estimateCausalStudy`
+   * is a pure function and cannot count its own invocations; this can, and the
+   * returned report carries the look count, the union-bound family-wise error
+   * and the conclusion AFTER multiplicity beside the single-look one. A caller
+   * that reaches past this to the estimator produces a look that, as the
+   * ledger's own assumptions say, is not counted and cannot be.
+   */
+  reportCausalStudy(studyId: string, reportedAtMs = Date.now()): CausalStudyInferenceReport | null {
+    return causal.reportCausalStudy(this.db, studyId, reportedAtMs);
+  }
+
+  /** Register the immutable inferential family before its first reported look. */
+  registerCausalInferencePlan(studyId: string, plan: CausalInferencePlan): 'created' | 'existing' {
+    return causal.registerCausalInferencePlan(this.db, studyId, plan);
+  }
+
+  /**
+   * The snapshot list with the reason it is the length it is. Prefer this over
+   * `causalAnalysisSnapshots` on any surface an operator reads: an empty list
+   * alone says "none has been saved" when the truth is "none can be".
+   */
+  causalAnalysisSnapshotBasis(studyId: string): causal.CausalAnalysisSnapshotBasis {
+    return causal.causalAnalysisSnapshotBasis(this.db, studyId);
+  }
+
+  causalAnalysisSnapshots(studyId: string): causal.CausalAnalysisSnapshot[] {
+    return causal.causalAnalysisSnapshots(this.db, studyId);
+  }
+
+  causalStudySummaries(): causal.CausalStudySummary[] {
+    return causal.causalStudySummaries(this.db);
+  }
+
+  /**
+   * Does a window starting at `startMs` reach behind what retention deleted?
+   *
+   * Strictly before, because `prune` removes rows with `ts_epoch_ms < before_ms`
+   * -- the boundary instant itself survived, so a window starting exactly there
+   * is intact. Erring the other way would put a warning on every report
+   * forever, which is how a disclosure becomes noise and stops being read.
+   */
+  windowCoverage(startMs: number): WindowRetentionCoverage {
+    const floor = this.retentionFloor();
+    return {
+      truncated: floor.requestsPrunedBeforeMs !== null && startMs < floor.requestsPrunedBeforeMs,
+      prunedBeforeMs: floor.requestsPrunedBeforeMs,
+      rowsRemoved: floor.requestsRowsRemoved,
+    };
+  }
+
+  /** The study list plus what it could not include; see `CausalStudyListBasis`. */
+  causalStudyListBasis(): causal.CausalStudyListBasis {
+    return causal.causalStudyListBasis(this.db);
+  }
+
+  /**
+   * Maintenance: prune old requests and compact. Returns rows removed.
+   *
+   * The boundary is RECORDED before the vacuum, whether or not it removed
+   * anything. Without that record a deleted history and a history that never
+   * happened are the same thing to every later reader -- see `retentionFloor`
+   * and `retention_prunes` in the schema (D-170).
+   *
+   * ATOMIC WITH THE RECORD (D-189). The delete and the record commit together
+   * or neither happens. Three unprotected statements could leave rows deleted
+   * with no boundary on record -- the exact D-170 state, reconstructed by a
+   * failure path instead of by a missing table. When the record cannot be
+   * written the DELETION is what gives way: an operator whose prune failed
+   * still has their data and an error to read, while one whose record failed
+   * silently has a ledger that can no longer say what it lost. VACUUM stays
+   * outside because SQLite refuses to run it inside a transaction, and a failed
+   * compaction leaves a larger file rather than a missing record.
+   */
   prune(beforeMs: number): number {
-    const info = this.db.prepare(`DELETE FROM requests WHERE ts_epoch_ms < ?`).run(beforeMs);
+    const removed = this.transaction(() => {
+      const info = this.db.prepare(`DELETE FROM requests WHERE ts_epoch_ms < ?`).run(beforeMs);
+      const rowsRemoved = Number(info.changes ?? 0);
+      this.recordPrune('requests', beforeMs, rowsRemoved);
+      return rowsRemoved;
+    });
     this.db.prepare('VACUUM').run();
-    return Number(info.changes ?? 0);
+    return removed;
+  }
+
+  private recordPrune(kind: 'requests' | 'proposals', beforeMs: number, rowsRemoved: number): void {
+    this.db
+      .prepare('INSERT INTO retention_prunes (kind, before_ms, rows_removed, pruned_at_ms) VALUES (?, ?, ?, ?)')
+      .run(kind, beforeMs, rowsRemoved, Date.now());
+  }
+
+  /**
+   * What retention has deleted, per stream.
+   *
+   * `prunedBeforeMs === null` means NO PRUNE IS ON RECORD. It does not mean
+   * nothing was pruned: every ledger pruned before this table existed reports
+   * null, and inferring a boundary from the oldest surviving row would be
+   * inventing the provenance this project refuses to infer. Callers that turn a
+   * count into a statement about whether something ever happened must read this
+   * and say which of the three states they are in.
+   */
+  retentionFloor(): RetentionFloor {
+    const read = (kind: 'requests' | 'proposals') => this.db
+      .prepare(
+        `SELECT MAX(before_ms) AS beforeMs, SUM(rows_removed) AS removed,
+                COUNT(*) AS prunes, MAX(pruned_at_ms) AS atMs
+         FROM retention_prunes WHERE kind = ?`,
+      )
+      .get(kind) as { beforeMs?: unknown; removed?: unknown; prunes?: unknown; atMs?: unknown } | undefined;
+
+    const requests = read('requests');
+    const proposals = read('proposals');
+    const int = (value: unknown): number => (typeof value === 'number' || typeof value === 'bigint' ? Number(value) : 0);
+    const maybe = (value: unknown): number | null => (
+      typeof value === 'number' || typeof value === 'bigint' ? Number(value) : null
+    );
+
+    return {
+      requestsPrunedBeforeMs: maybe(requests?.beforeMs),
+      requestsRowsRemoved: int(requests?.removed),
+      requestsPrunes: int(requests?.prunes),
+      requestsLastPrunedAtMs: maybe(requests?.atMs),
+      proposalsPrunedBeforeMs: maybe(proposals?.beforeMs),
+      proposalsRowsRemoved: int(proposals?.removed),
+      proposalsPrunes: int(proposals?.prunes),
+    };
+  }
+
+  /**
+   * Record a retention-policy edit separately from the rows it may later
+   * delete. This is the evidence that distinguishes a narrower policy from a
+   * quiet change in the meaning of an unchanged ledger.
+   */
+  recordRetentionPolicyChange(
+    stream: RetentionPolicyChange['stream'],
+    previousDays: number,
+    nextDays: number,
+    changedAtMs = Date.now(),
+    source = 'settings',
+  ): 'created' | 'existing' {
+    if (!Number.isSafeInteger(previousDays) || previousDays <= 0
+        || !Number.isSafeInteger(nextDays) || nextDays <= 0) {
+      throw new Error('retention policy days must be positive safe integers');
+    }
+    if (!Number.isSafeInteger(changedAtMs) || changedAtMs <= 0) {
+      throw new Error('retention policy changedAtMs must be a positive safe integer');
+    }
+    if (typeof source !== 'string' || source.trim() === '' || source.length > 128) {
+      throw new Error('retention policy source must be a bounded non-empty string');
+    }
+    const info = this.db.prepare(
+      `INSERT INTO retention_policy_changes (stream, previous_days, next_days, changed_at_ms, source)
+       VALUES (?, ?, ?, ?, ?) ON CONFLICT(stream, previous_days, next_days, changed_at_ms, source) DO NOTHING`,
+    ).run(stream, previousDays, nextDays, changedAtMs, source);
+    return Number(info.changes ?? 0) > 0 ? 'created' : 'existing';
+  }
+
+  /** Read policy changes in chronological order; absence is meaningful. */
+  retentionPolicyChanges(stream?: RetentionPolicyChange['stream']): RetentionPolicyChange[] {
+    const rows = (stream === undefined
+      ? this.db.prepare('SELECT id, stream, previous_days, next_days, changed_at_ms, source FROM retention_policy_changes ORDER BY changed_at_ms ASC, id ASC').all()
+      : this.db.prepare('SELECT id, stream, previous_days, next_days, changed_at_ms, source FROM retention_policy_changes WHERE stream = ? ORDER BY changed_at_ms ASC, id ASC').all(stream)) as Array<Record<string, unknown>>;
+    return rows.map((row) => ({
+      id: Number(row.id),
+      stream: row.stream as RetentionPolicyChange['stream'],
+      previousDays: Number(row.previous_days),
+      nextDays: Number(row.next_days),
+      changedAtMs: Number(row.changed_at_ms),
+      source: String(row.source),
+    }));
   }
 
   /**
@@ -1578,16 +3034,48 @@ export class Store {
    * retention need (the git-correlation window) than request/cost history.
    */
   pruneProposals(beforeMs: number): number {
-    const info = this.db.prepare(`DELETE FROM proposals WHERE ts_epoch_ms < ?`).run(beforeMs);
+    // Atomic with its record, for the reason stated on `prune` (D-189).
+    const removed = this.transaction(() => {
+      const info = this.db.prepare(`DELETE FROM proposals WHERE ts_epoch_ms < ?`).run(beforeMs);
+      const rowsRemoved = Number(info.changes ?? 0);
+      // Recorded under its own kind. Proposal retention is a much shorter policy
+      // and says nothing about request coverage; folding the two together would
+      // make a proposal prune look like a gap in the spend ledger.
+      this.recordPrune('proposals', beforeMs, rowsRemoved);
+      return rowsRemoved;
+    });
     this.db.prepare('VACUUM').run();
-    return Number(info.changes ?? 0);
+    return removed;
   }
 
-  /** Privacy control: delete every stored proposal immediately, regardless of age. */
+  /**
+   * Privacy control: delete every stored proposal immediately, regardless of age.
+   *
+   * RECORDED, like every other deletion (D-179). This is the most total erasure
+   * Fiscus offers, and until it was recorded it was the one erasure no consumer
+   * could see: `retentionFloor()` reported "no prune on record" for a ledger
+   * whose proposals had all been deleted, so the Acceptance lens told operators
+   * their proposals were never captured after Fiscus captured and deleted them.
+   *
+   * The boundary written is NOW, because that is what was deleted -- everything
+   * up to this moment. It is written ONLY when a row actually went: the boundary
+   * marks every past window truncated, so writing it for a no-op clear would
+   * manufacture a deletion claim over the whole ledger. Hiding a refutation is
+   * survivable; inventing one is not.
+   *
+   * ATOMIC WITH THAT RECORD (D-189), and this is the path where it matters
+   * most: an erasure that took every proposal and wrote no boundary is exactly
+   * the state D-179 was written to end.
+   */
   clearProposals(): number {
-    const info = this.db.prepare(`DELETE FROM proposals`).run();
+    const removed = this.transaction(() => {
+      const info = this.db.prepare(`DELETE FROM proposals`).run();
+      const rowsRemoved = Number(info.changes ?? 0);
+      if (rowsRemoved > 0) this.recordPrune('proposals', Date.now(), rowsRemoved);
+      return rowsRemoved;
+    });
     this.db.prepare('VACUUM').run();
-    return Number(info.changes ?? 0);
+    return removed;
   }
 
   /**

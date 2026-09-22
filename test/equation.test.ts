@@ -1,7 +1,10 @@
 /**
  * Properties of the Return-on-Intelligence equation (docs/RETURN-ON-INTELLIGENCE.md).
- * These are the mathematical claims the derivation rests on — if any fails, the
- * "forced, not chosen" argument breaks, so they are tested as first-class.
+ * These are the mathematical claims the derivation rests on. The derivation is
+ * conditional: GIVEN a quasi-arithmetic, multiplicative aggregator, the weighted
+ * geometric form follows. If any property below fails, that conditional breaks,
+ * so they are tested as first-class. The axioms themselves remain a declared
+ * modelling choice, and the weights remain disclosed preferences.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -18,7 +21,7 @@ function report(over: Partial<RealizationLike> = {}): RealizationLike {
   return {
     firstPassAcceptance: 0.8,
     units: [unit(true), unit(true), unit(false)],
-    matured: { realizationRate: 2 / 3, totalCostUsd: 10, realizedValueUsd: 6 },
+    matured: { realizationRate: 2 / 3, totalCostUsd: 10, spendOnRealizedUnitsUsd: 6 },
     ...over,
   };
 }
@@ -77,7 +80,7 @@ test('partial instrumentation is bounded honestly: the observed-only score is NO
 });
 
 test('a collapsed realization lens zeroes the whole Index — no axis can carry it', () => {
-  const dead = report({ matured: { realizationRate: 0, totalCostUsd: 10, realizedValueUsd: 0 } });
+  const dead = report({ matured: { realizationRate: 0, totalCostUsd: 10, spendOnRealizedUnitsUsd: 0 } });
   const r = computeReturnOnIntelligence(dead, { lift: 0.6 });
   assert.equal(r.roiIndex, 0);
   assert.ok(r.notes.some((n) => n.includes('collapsed')));

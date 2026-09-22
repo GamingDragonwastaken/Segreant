@@ -6,6 +6,8 @@
 
 - `src/store/db.ts` (read, and write on the mutating routes), `src/config.ts`.
 - The value, billing, alloc and cost modules for computed payloads.
+- `src/dashboard/shared-types.ts` for the canonical no-runtime payload declarations;
+  the build emits a hash-bound browser copy under `web/app/core/generated-types.ts`.
 - Nothing from the network. Not at build time, not at run time.
 
 ## Layout
@@ -26,7 +28,8 @@ web/
       signal.ts      reactive primitive (~80 lines, no framework)
       dom.ts         h() / render(); no HTML-parsing sink anywhere
       fmt.ts         money, dates, and the plain/precise REGISTER
-      api.ts         typed client for this server
+      api.ts         typed client for this server; consumes generated-types.ts
+      generated-types.ts  generated browser copy of shared-types.ts; never edit
       claimTypes.ts  Layer + ClaimInspection: the shape of a claim's evidence
       claimLayers.ts the four claims, DERIVED from payloads. Pure; tested.
       chain.ts       the I/O half: four independent reads, each degrading alone
@@ -44,9 +47,41 @@ web/
 - **The GUI reaches for CLI parity, and says where it has not.** `registry.ts` is
   the single source for navigation, action cards, and the parity table rendered
   in System. A capability with no screen is visible in the product as unbuilt.
+  A row's `coverage` VALUE is checked against the app source, not taken as a
+  claim (D-239, `test/dashboard-coverage-value.test.ts`): `full` or `partial`
+  needs an action builder keyed by the id, the id in a view, or a `guiEvidence`
+  pointer to a file and token the gate reads; rows with no surface may carry
+  none. This proves a live binding, not that the screen does the whole job.
+- **Progressive disclosure is a decision, and presentation follows the axes
+  (D-256, `test/dashboard-progressive-disclosure.test.ts`).** A first-run
+  operator sees the plain/precise choice and nothing routes until they choose;
+  `plain` rounds every figure and says its basis in words, `precise` states
+  the microdollar, the provenance label and the equivalent command; every
+  non-`read` consequence is rendered as a styled tag on its action card, and
+  the territory axis builds the operations bar and the System table. The
+  formatters are tested under both registers; the structural rules are read
+  from the shell and view sources.
+- **The Claim Inspector has a kernel behind it (D-257,
+  `test/dashboard-kernel-viewer.test.ts`).** `GET /api/kernel?node=<id>[&asOf=]`
+  serves one epistemic node with its record, the edges into and out of it, the
+  derivations and assumptions behind a claim, whether revocation reaches it,
+  and how much the ledger held — live, or replayed to `asOf` through the same
+  hindsight-safe boundary `/api/billing` uses, so a node not yet available
+  answers `found: false` exactly like one that never existed. The Evidence
+  view renders it as a reader (pick an issued billing claim or type an id,
+  follow an edge, set a boundary) with no action surface. Billing evidence
+  payloads are withheld and named by their canonical digest.
+- **The test prerequisite is explicit.** `npm test` performs a full build before
+  running tests because package-boundary checks inspect both browser and Node
+  artifacts in `dist/`. The build script's `--web` mode remains a targeted GUI
+  iteration tool, not the ordinary test contract.
 - **Nothing happens without a preview.** Every action opens the drawer, which
   states the consequence in words, shows the computed preview, prints the
   equivalent command, and only then offers the commit.
+- **Classic is an explicitly legacy compatibility view.** `/classic` preserves
+  the earlier single-file dashboard and its direct settings controls; it does
+  not provide the modern preview-first action flow and must not be presented as
+  GUI parity. The modern `/` surface is the preview/consequence/apply contract.
 - **Consequence tiers gate the commit**: `read` has none, `local` needs a loaded
   preview, `credential` and `egress` name what is read or sent, `destructive`
   requires typing the capability id.
@@ -91,7 +126,8 @@ web/
 - **A CLI/GUI parity claim is a shared function, never a comment.** Where a
   route answers the same question as a CLI verb, both call one module:
   `/api/value` and the value commands compose `src/value/report.ts`;
-  `/api/pricing` and `pricing --coverage` compose `src/cost/coverage.ts`. This
+  `/api/pricing` and `pricing --coverage` compose `src/cost/coverage.ts`;
+  `/api/economic` and `economic --json` compose `src/cli/economicCmd.ts`. This
   repo has already paid for the alternative — five comments in the dashboard
   asserting its arithmetic matched the CLI's, which is asserting, not enforcing.
   A new route that restates a CLI computation inline is the defect.
@@ -118,6 +154,11 @@ web/
 - **The browser app never imports node code, and the server never imports the
   browser app.** Enforced structurally: `app/tsconfig.json` has the DOM lib and
   no node types, and the root configs exclude `app/**`.
+- **Asynchronous evidence is announced.** Modern loading/error states expose
+  status/alert semantics, and the classic view exposes current navigation/range
+  state plus a text alternative for the spend chart. Source contracts improve
+  the baseline, but they do not replace exact-candidate browser and screen-reader
+  verification in the release gate.
 - **A claim's meaning is derived, not fetched.** `claimLayers.ts` turns four
   payloads into four claims as a PURE function; `chain.ts` only reads the
   endpoints. The claims are where this product commits itself, so they must be
@@ -143,7 +184,42 @@ web/
   and a phantom `reconciliation.latest` the Evidence view read forever. A field
   that is on the wire and undeclared is the same defect facing the other way —
   it forces a cast. Presence-checking contract tests do not cover this; the
-  shape does, against a record that actually exists.
+  shape and runtime primitive/array/record/interface/null-union types, against
+  records that actually exist. It is still a conformance gate, not a generated
+  single-source schema; the release gate keeps that distinction explicit.
+  Since D-243 the deep walk is ONE function, `checkInterfaceShape` in
+  `contracts.ts` (byte-copied into the browser): the client runs it on every
+  JSON response after the envelope check, against the generated field table of
+  `shared-types.ts`, and fails closed with a 502-class error naming the path;
+  the contract test runs the same function against live routes. Server and
+  browser therefore validate with the same walk and cannot drift apart. The
+  server does not validate its own responses at send time.
+- **Exact economic data has a read-only route and a typed client contract.**
+  `GET/HEAD /api/economic` serves the CLI's canonical report with exact Money
+  strings, source/effective request coverage, role-aware balances and bounded
+  time-window validation. Its `periodClose` field carries the canonical
+  half-open period's append-only finalization/reopen/conflict state and exact
+  projection digest; the route remains read-only and never mutates close
+  controls. It does not rewrite legacy value payloads or invent provider/billed
+  authority; a dedicated dashboard view remains a downstream consumer
+  migration rather than a second accounting implementation.
+- **Route, envelope and named payload types are shared and fail closed.** The no-node
+  dashboard contract drives API paths, methods, Allow headers, CSRF gates,
+  response bindings and browser-surface bindings; the build copies it into the
+  browser under the publication lock. Its top-level JSON/text payload contracts
+  are validated by seeded conformance and by the modern client before a typed
+  response is returned. The named payload interfaces now have one canonical
+  no-runtime source in `shared-types.ts`; the build generates both the browser
+  declaration copy and nested runtime metadata with the exact source hash under
+  the same publication lock. The realization route now has a named nested gate,
+  maturity, waste and exact-economic report contract; text/CSV and any future
+  payloads that are not yet named remain explicit boundaries, as do full
+  docs/claim/egress generation.
+- **Capability parity is an immutable contract.** `CAPABILITY_SPECS` augments
+  every GUI registry entry with input/preview/output schema classes, authority,
+  egress, credentials, reversibility, assurance and CLI/API/GUI/docs bindings.
+  Planned, read-only and destructive consequences are checked conservatively;
+  the System view renders the specs rather than a second capability list.
 - **Overlays mount once, on `body`, outside the shell's render root.** The shell
   effect re-runs on every register change and `render(root, …)` clears `#app`.
   Mounting inside it appended a fresh host and a never-disposed effect per
@@ -151,6 +227,11 @@ web/
   reads `isPrecise()` inside a host effect is rebuilt in place, so its listeners
   and focus traps release through `onCleanup` — which runs before the next run —
   and never through a nested effect watching for close.
+- **View effects are scoped to their rendered region.** View factories use
+  `scopedEffect`, which registers their disposer with the active render binding;
+  navigation therefore tears down fetch subscriptions. The Metered range fetch
+  also aborts/sequence-checks stale responses and rejects a payload whose
+  declared range differs from the selected range.
 - **The Claim Inspector reads and never acts.** The drawer owns everything that
   changes state. A panel that argues the evidence and offers the button in the
   same box is the shape of every tool this one exists to disagree with.
@@ -168,6 +249,7 @@ web/
 
 ```bash
 npm run build && npm test -- --test-name-pattern="dashboard|GUI"
+node --test --experimental-strip-types test/dashboard-progressive-disclosure.test.ts test/dashboard-kernel-viewer.test.ts
 ```
 
 The build must run first: three of these tests read the emitted `dist/` tree,

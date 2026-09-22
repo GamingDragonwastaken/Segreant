@@ -14,7 +14,7 @@ import { importClaudeCode, defaultClaudeCodeRoot } from '../connect/claudeCode.t
 import { importOpencode, defaultOpencodeDbPath } from '../connect/opencode.ts';
 import { importCodex, defaultCodexRoot } from '../connect/codex.ts';
 import { type ImportSummary } from '../connect/importShared.ts';
-import { C, color, usd, num } from './ui.ts';
+import { C, color, usd, num, printJson } from './ui.ts';
 import type { Flags } from './flags.ts';
 
 /**
@@ -143,6 +143,14 @@ function renderImportSummary(tty: boolean, id: string, location: string, sum: Im
   console.log(`  Consumption  ${color(tty, C.green, usd(sum.costUsd))}${sum.estimatedCostUsd > 0 ? color(tty, C.yellow, `  (~est ${usd(sum.estimatedCostUsd)})`) : ''}`);
   const models = Object.entries(sum.byModel).sort((a, b) => b[1].costUsd - a[1].costUsd).slice(0, 5);
   for (const [m, v] of models) console.log(`    ${m.padEnd(26)} ${usd(v.costUsd).padStart(10)}  ${color(tty, C.gray, `${num(v.requests)} req`)}`);
+  if (sum.captureCoverage === 'truncated') {
+    const details = [
+      sum.truncatedFiles ? `${num(sum.truncatedFiles)} files` : '',
+      sum.truncatedLines ? `${num(sum.truncatedLines)} lines` : '',
+      sum.truncatedRows ? `${num(sum.truncatedRows)} rows` : '',
+    ].filter(Boolean).join(', ');
+    console.log(color(tty, C.yellow, `  Coverage     TRUNCATED${details ? ` (${details})` : ''} — imported values are not a complete source capture.`));
+  }
   // Rows already in the ledger keep the label they were written with, so a
   // relabel means the same work now appears under two names. Say so and hand
   // over the merge — silently splitting a project's money is the worse failure.
@@ -203,7 +211,7 @@ export async function cmdImport(flags: Flags): Promise<void> {
   store.close();
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify(targets.length === 1 ? results[0]!.sum : Object.fromEntries(results.map((r) => [r.id, r.sum])), null, 2) + '\n');
+    printJson(targets.length === 1 ? results[0]!.sum : Object.fromEntries(results.map((r) => [r.id, r.sum])));
     return;
   }
 
@@ -240,7 +248,7 @@ export async function cmdDiscover(flags: Flags): Promise<void> {
   store.close();
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify({ discovered, projects }, null, 2) + '\n');
+    printJson({ discovered, projects });
     return;
   }
 
@@ -327,7 +335,7 @@ export async function cmdScan(flags: Flags): Promise<void> {
   const present = plan.tools.filter((t) => t.present);
 
   if (flags.json && !flags.setup) {
-    process.stdout.write(JSON.stringify({ ...plan, diff }, null, 2) + '\n');
+    printJson({ ...plan, diff });
     store.close();
     return;
   }
@@ -471,5 +479,5 @@ export async function cmdScan(flags: Flags): Promise<void> {
     console.log('');
   }
 
-  if (flags.json) process.stdout.write(JSON.stringify({ setup: true, totalNew, discovered }, null, 2) + '\n');
+  if (flags.json) printJson({ setup: true, totalNew, discovered });
 }

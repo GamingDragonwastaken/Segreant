@@ -4,6 +4,8 @@ This is the operational boundary between a verified local release candidate and
 an external release. Passing source tests is necessary but not a substitute for
 registry ownership, production infrastructure, or customer evidence.
 
+Every successful record below is historical evidence bound to its recorded candidate SHA and to the checklist/gate version in force at that time. A result cannot be inherited by a later SHA; a changed gate requires a fresh run. Superseded records remain unchanged as historical evidence rather than being rewritten into current authority.
+
 ## Local CLI and dashboard candidate
 
 Historical check counts and screenshots are not release authority. Before making
@@ -13,19 +15,147 @@ for this checklist against that source tree:
 | Requirement | Required proof |
 | --- | --- |
 | Candidate identity | `git rev-parse HEAD` and `git status --short` recorded before and after validation |
+| Capability/evidence contract | Review `docs/CAPABILITY-EVIDENCE-CONTRACT.md` against the exact candidate; record its revision/date, run `test/public-claims-contract.test.ts`, and confirm any new egress, pricing, performance, return, or recommendation claim names its scope, evidence tier, uncertainty, and revocation condition |
 | Source validation | `npm ci`, `npm run typecheck`, `npm test`, and `npm run build` with exact totals/results |
+| Budget fail-closed integrity | Exercise malformed budget configuration, invalid/oversized dashboard settings, ledger-read failure, and request-persistence failure. Invalid state must be refused before provider dial; after an unpersisted response, the supported proxy circuit must refuse subsequent requests until restart/recovery. |
 | Packed artifact | `npm pack`; record the tarball digest and inspect that `bin`, compiled `dist`, pricing, baselines, and dashboard HTML are present |
 | Clean installed CLI | Install the tarball with `--ignore-scripts` in a fresh directory and run `fiscus --help` |
 | Packaged dashboard/API | Use an isolated `FISCUS_HOME` (records below that predate the rename cite the pre-rename variable, which is what those runs actually used); seed labelled demo data; start the installed dashboard; probe health, overview, value, and HTML; terminate it cleanly |
 | Model-trial truthfulness | The packaged value payload must self-label `demo: true`; any seeded model switch must be `trial`, never evidence-supported; the **`/classic`** HTML must contain the labelled renderer. Check `/classic`, not `/`: `/` is the GUI shell and renders every figure in the browser, so fetching it proves only that a shell was served. Prove `/` separately by confirming it carries `id="app"` and its module entry, and that the entry resolves as JavaScript — a shell whose compiled app is missing from the tarball serves a 200 and a blank dashboard |
-| Billing-boundary truthfulness | `fiscus billing scope set --account-ref <test-ref> --json` must remain a no-write, `operator_declared_unverified` preview; packaged demo `/api/billing` must self-label `demo: true`, retain `not_reconciled`, and show zero fabricated billing records |
+| Causal-evidence integrity | Run `test/causal-core.test.ts`, `test/causal-store.test.ts`, `test/causal-cli.test.ts`, `test/causal-dashboard.test.ts`, and the Store-owned producer/ordinary-ledger cohort. In a clean installed artifact, prove `fiscus causal status --json` reports no publicly inspectable retained-v1 study/no causal result by default. Prove v1 registration and assignment preview/apply refuse with `CAUSAL_LEGACY_INSPECT_ONLY`; prove valid-v2 registration preview/apply refuse before Store open or mutation with `CAUSAL_V2_CLI_DEFERRED`; and prove Store-owned v2 assignment is atomic without implying that a v2 registration or assignment CLI exists. Retained v1 assignment replay still verifies. Current CLI/API/dashboard summaries expose retained v1 only; v2-only Store state remains bounded and non-500 rather than becoming the legacy projection. A no-outcome retained-v1 study remains `collecting`, not a causal claim. Verify `/api/causal` is GET/HEAD-only, redacts randomisation material, and exposes no mutation or automatic routing/budget action. This is release-gate evidence, not release approval. The branch now has a Store-owned independent scalar identity and ordinary-ledger adapter, but these are still internal local evidence, not a public result. Public v2 execution/outcome projection, qualification snapshots as a released result, export, and full v2 public projection remain deferred; cost-bearing internal qualification remains fail-closed unless the sidecar, independently derived identity, ordinary ledger evidence, provider/account scope where required, and every other causal gate are valid. |
+| Billing-boundary truthfulness | `fiscus billing scope set --account-ref <test-ref> --json` must remain a no-write, `operator_declared_unverified` preview; packaged demo `/api/billing` must self-label `demo: true`, retain `not_reconciled`, show zero fabricated billing records, and expose exact mapping coverage without promoting operator declarations to provider authority |
 | Direct-Costs connector boundary | A packaged local scope with `proj_…` must yield an OpenAI Costs **preview** with `networkAttempted: false` and `credentialRead: false`. It does not validate a provider account, authorize a live pull, or reconcile a provider amount. |
+| Egress disclosure | Reconcile every newly introduced outbound path with DATA-BOUNDARIES.md; distinguish Fiscus-process enforcement, proxy-routed traffic coverage, browser behaviour, and any separately validated OS/network control. Verify corrupt-history refusal, redirect `Location` stripping, checkpoint fallback/full-scan behavior, streaming full-history verification/line bounds, and response-body release for status-only callers. Do not project a process-level test into a workstation-wide or provider-privacy guarantee. |
+| Launcher/publication integrity | The supported launcher must propagate child spawn errors/signals and fail closed when the publication lock cannot be acquired; build/publication tests must exercise both conditions. Direct unmanaged `dist/*` readers and `npm pack` remain outside the supported reader lock unless separately proven. |
+| Backup and recovery integrity | Exercise `backup --out` and `restore --from/--out` against the exact candidate. The snapshot must be created with SQLite `VACUUM INTO`, pass quick/foreign-key checks, emit a hash/schema manifest without ledger rows, reject corrupt or symlinked artifacts, refuse existing destinations, and prove preview is read-only. This is local recovery evidence only—not encryption, disaster-recovery availability, provider billing, or an independent attestation. |
+| Reliability/performance observations | Run `npm run benchmark` on the candidate and retain the JSON plus machine profile. Cover small/current/10× and an explicit 100× stress case where meaningful; record startup, ingest, summary, value/frontier, API latency, memory, and compiled/package size observations. Do not turn a single local run into a universal SLA; choose a regression budget only after repeated runs on the intended release runner. |
+| Redacted diagnostics | Run `fiscus diagnostics --json` and, when support handoff needs a file, `--out <new-file>`. The bundle must carry a correlation operation ID, bounded durations/error classes, runtime/config/database/migration/egress/pricing observations, and explicit no-network/no-credential/no-prompt/source/ledger-row-export boundaries without absolute user paths. Export refuses overwrite and does not mutate the active DB/config. |
 | Intended CI | Inspect the CI jobs for the intended commit, not merely a workflow definition or an old run. If the candidate reached the remote inside a multi-commit push, CI ran on the tip; cite that run and record `git diff --stat <candidate> <tip>` so the delta is stated rather than assumed. A tip that differs only by this document does not need its own run — otherwise recording a result would forever require another commit |
-| Visual check | Inspect the non-empty labelled packaged dashboard in a browser as a supplement to, not a substitute for, the HTTP/API proof |
+| Visual check | Inspect the non-empty labelled packaged dashboard in a browser as a supplement to, not a substitute for, the HTTP/API proof; verify keyboard/focus, responsive, contrast, chart alternatives, and screen-reader status semantics on the exact candidate. Source/DOM contracts must not be reported as visual/WCAG runtime evidence. |
 
 This validates a local developer preview only. It does **not** validate a
 provider billing statement, production customer data, an npm publication, an
 external deployment, or the optional team service.
+
+**Current internal causal substrate.** The exact branch includes the
+Store-internal V2 execution, terminal-outcome, follow-up-policy,
+clock-authority, qualification, T-069 scalar lineage-validation, and
+Store-owned independent producer code at source revisions `e3cef41` and
+`0fc647c`, including the append-only `causal_lineage_bindings_v2` sidecar. The
+producer authenticates the retained protocol, assignment, execution, matured
+outcome, request set, declared scope, realization, and Git scalar rows; it
+derives the unit identity independently from retained Git metadata and verifies
+the exact local request ledger before an atomic append. The ordinary realization
+pipeline still does not invoke that adapter automatically. These records are not
+public CLI/API/dashboard evidence. Cost-bearing internal qualification remains
+fail-closed unless the sidecar is present and valid, ordinary ledger evidence is
+verified, provider/account scope is addressed where required, and every other
+causal gate passes.
+Commit `aa24764` enables recursive SQLite triggers for every operational and
+migration-verification connection, so the physical append-only triggers also
+cover `INSERT OR REPLACE` conflict resolution. The same branch also carries
+the token-safe build publication/launcher read hardening at `3516e5a`.
+The follow-up `4e8d387` records its exact supported-reader guarantee and the
+remaining unmanaged-reader boundary. That build protocol adds a source-generation
+fingerprint (captured before compilation and checked again inside the
+publication gate), one bounded retry on source drift, and an exclusive reader
+gate in the supported `bin/fiscus.mjs` launcher. Thus a build that started from
+an older source generation cannot publish after a newer generation merely
+because it finished compiling later, and the supported launcher cannot resolve
+the file-by-file publication while it is in progress.
+
+This guarantee is deliberately scoped. The package-compatible top-level
+`dist/*` paths remain ordinary files, because replacing the non-empty `dist`
+directory is not an atomic overwrite on Windows (and a POSIX remove/rename
+sequence would introduce a reader gap). Direct module imports of `dist/*` and
+tools such as `npm pack` do not acquire the Fiscus gate and therefore remain
+outside the whole-tree reader guarantee; changing that would require a
+generation-pointer or symlink/junction package-layout change that would break
+the existing `dist/cli.js`/deep-import and package-surface contract. The
+historical candidate rows below do not cover these later sources and must not
+be reused as exact-head release evidence.
+
+### Current local candidate record — source commit `12add59`, 2026-08-29
+
+This record supersedes the `a5d1121` record above without rewriting it. The
+exact candidate head is
+`12add59834087f0c936c91b561b4804ee4128c0d` in the isolated
+`codex/high-assurance-foundation` worktree. Its code-bearing parent is
+`a4b91a8`; `0cfd8f9` refreshes the measured performance documentation and
+`12add59` aligns the root handoff. The full source suite was run against the
+code-bearing tree, and the only deltas to this candidate are documentation.
+The source/package tree
+was clean before and after the exact-head package/runtime validation below.
+This remains a local developer candidate, not an external release: no push,
+exact-head CI run, registry publication, deployment, provider credential, or
+browser connector evidence exists.
+
+| Requirement | Result |
+| --- | --- |
+| Candidate identity | **Pass.** `git rev-parse HEAD` → `12add59834087f0c936c91b561b4804ee4128c0d`; the candidate worktree was clean before and after the exact-head package/runtime validation. |
+| Capability/evidence contract | **Pass.** The capability, causal-protocol, data-boundary, roadmap, handoff, and release-gate documents were reviewed against the candidate. The full suite includes public-claims, egress, causal, billing, backup, diagnostics, and package-surface contracts; no local estimate is promoted to provider billing, causal return, or automatic routing. |
+| Source validation | **Pass.** Root `npm ci --ignore-scripts` → 4 packages, 0 vulnerabilities; `team-server` `npm ci --ignore-scripts` → 19 packages, 0 vulnerabilities; root, browser-app, and team-server typechecks exit 0. Full `npm test` → **916 tests, 912 pass, 0 fail, 4 intentional platform skips** on the immediately preceding code-bearing tree (`a4b91a8`); `0cfd8f9` and `12add59` have no source/test delta. `npm run build` exit 0; `npm run build -- --web` exit 0 with the CLI SHA-256 unchanged; the exact code-bearing build and typecheck outputs are recorded in the Round 16 evidence file. |
+| Packed artifact | **Pass for the exact source/package evidence head `0cfd8f9`.** `npm pack --ignore-scripts` → **170 entries, 823,765 bytes**, SHA-256 `098A99C19AE6B42A2B0A23C35FAD925AFC1505ABEAE20F7B7EFCB1798E6E1A02`. Required launcher/publication-lock, compiled CLI/store/backup/diagnostics/dashboard, pricing, baselines, seal, and public docs are present; internal `.codex`/superpowers and research-only `dist/value/causalExperiment.js` paths are absent. The later handoff/release-record commit is documentation-only and the hash is explicitly bound to `0cfd8f9`. |
+| Clean installed CLI | **Pass.** The exact tarball was installed with scripts disabled into a fresh prefix. Packaged `fiscus --help` includes `backup` and `diagnostics`; isolated `demo --json`, active-ledger `today --json`, and `causal status --json` ran successfully. The causal status contained `studies: []`. |
+| Packaged dashboard/API | **Pass.** From the exact `0cfd8f9` tarball and isolated `FISCUS_HOME`, `start --demo --port 18390 --dashboard-port 18391` served HTTP 200 for `/api/health`, `/api/overview?range=all`, `/api/value?range=all`, `/api/causal`, `/api/billing`, `/`, `/classic`, and `/app/main.js`. Overview/value/causal/billing payloads self-labelled demo mode; `/` carried `id="app"`; `/classic` carried the labelled renderer; `/app/main.js` resolved as JavaScript; the process was stopped and both test ports were closed. The later `12add59` handoff change is root documentation-only. |
+| Model-trial truthfulness | **Pass for the local boundary.** Source and value/frontier contracts continue to require like-task evidence, minimum cohorts, and an anytime-valid separation before `evidence_supported`; the packaged demo remains synthetic and review-only (`trial`) with no automatic routing or provider-savings claim. |
+| Causal-evidence integrity | **Pass for the local boundary, not a causal result.** The exact 916-test suite covers append-only V1/V2 state, scalar lineage, recursive-trigger conflict protection, replay, and collecting/no-outcome precedence. Packaged status reports no retained public study. A governed prospective study, independent outcomes, provider/account scope, and public qualification remain absent. |
+| Billing-boundary truthfulness | **Pass.** Packaged `/api/billing` remains demo-labelled and `not_reconciled`. An isolated source run of `billing scope set --apply` preserved `operator_declared_unverified`; `billing openai-costs preview` returned `applied: false`, `networkAttempted: false`, and `credentialRead: false` for a `proj_gate_release` scope. No provider account or amount was validated. |
+| Direct-Costs connector boundary | **Pass for preview only.** The preview above read no credential and made no network request; live collection and reconciliation remain owner-authorized external gates. |
+| Egress disclosure | **Pass for the local process boundary.** Egress, redirect-`Location` stripping, response-body release, checkpoint, streaming full-history, bounded-error, and forged-checkpoint tests pass. New processes validate the full chain before appending; the persisted checkpoint is informational only. The documented scope remains Fiscus-process transport, not a machine-wide firewall or provider-retention guarantee. |
+| Launcher/publication integrity | **Pass.** Spawn/signalled-child errors and publication-lock failures are nonzero/fatal in the supported launcher; build-race/source-fingerprint tests pass. Direct unmanaged `dist/*` readers and `npm pack` remain explicitly outside the whole-tree reader lock. |
+| Backup and recovery integrity | **Pass.** The exact `0cfd8f9` packaged CLI created a `VACUUM INTO` snapshot with `integrity: ok`, SHA-256/schema fingerprint, required `requests`/`sessions` contract, restrictive file-mode handling where supported, and a redacted manifest; restore preview reported `applied: false`, and `--apply` restored into a new path. Corrupt/tampered/manifestless/existing-destination tests fail closed; no active ledger was overwritten. |
+| Reliability/performance observations | **Pass as measurement, not SLA.** The exact-head harness (`sourceRevision: a4b91a8`, isolatedHome `true`, Node `v24.18.0`, win32/x64, 12 CPUs) covered 100/1,000/10,000 rows with three samples and a 100,000-row one-sample stress case. The recorded medians are ingest 7.14/59.83/604.77/6,726.06 ms, overview 3.94/12.97/126.74/1,964.87 ms, frontier 0.67/1.93/21.86/510.64 ms, and API p95 8.17/16.94/147.87/1,961.76 ms; RSS deltas and compiled-dist size are recorded in `docs/RELIABILITY-PERFORMANCE.md`. No universal threshold is asserted. |
+| Redacted diagnostics | **Pass.** The exact `0cfd8f9` packaged command emitted a version-1 bundle and atomically exported it without leaking the isolated home path or a custom pricing URL. Source tests prove operation IDs, finite probe durations/error classes, read-only schema/migration inspection, egress/pricing observations, overwrite refusal, and no prompt/source/credential/ledger-row export. |
+| Intended CI | **Not satisfied.** No push was authorized and no CI run exists on this local candidate head. A workflow definition or historical run is not substituted for exact-head evidence. |
+| Visual check | **Not satisfied in this environment.** Source/DOM contracts and packaged HTTP probes pass, but no browser connector is installed here; screenshot, keyboard traversal, contrast, screen-reader tree, and WCAG runtime evidence remain unverified. |
+
+**What this candidate establishes.** This is a clean, locally verified,
+reviewable high-assurance implementation checkpoint with fail-closed budgets and
+egress, causal/evidence separation, exact billing provenance, accessible source
+semantics, non-destructive backup/restore, bounded receipt verification,
+reproducible performance observations, and a redacted support bundle. It does
+not establish provider invoice finality, a qualified causal financial result,
+machine-wide privacy, hosted team-server readiness, a production deployment, or
+an external publication.
+
+### Superseded record — source commit `a5d1121`, 2026-08-27
+
+The record below is bound to source commit
+`a5d112109b42872a206849cd4f8898743806b7c4` in the isolated
+`codex/high-assurance-foundation` worktree. The source tree was clean before and
+after validation. The release-gate document itself is the documentation-only
+follow-up commit that records this evidence; under the rule above, that change
+does not require rerunning source tests or inventing a new CI result. The local
+candidate is strong enough for a reviewable developer preview, but it is **not
+an external release**: no push was authorized, no exact-head CI run exists for
+this branch, and no browser connector is available for visual/keyboard/WCAG
+evidence.
+
+| Requirement | Result |
+| --- | --- |
+| Candidate identity | **Pass.** `git rev-parse HEAD` → `a5d112109b42872a206849cd4f8898743806b7c4`; `git status --short` was empty before and after the source/package validation. |
+| Capability/evidence contract | **Pass.** `docs/CAPABILITY-EVIDENCE-CONTRACT.md`, `docs/CAUSAL-EVIDENCE-PROTOCOL.md`, `docs/CAUSAL-PRODUCER-CONTRACT.md`, the AI FinOps roadmap, and the handoff were reviewed against this source. The full suite includes the public-claims and egress-boundary checks. New producer and mapping claims are explicitly local, operator-declared, residual-bearing, and excluded from provider billing, causal, budget, and routing claims. |
+| Source validation | **Pass.** `npm ci` → 4 packages, 0 vulnerabilities; root typecheck exit 0; browser-app typecheck exit 0; full `npm test` → **877 tests, 875 pass, 0 fail, 2 intentional platform skips**; `npm run build` exit 0; `npm run build -- --web` exit 0 with the CLI artifact hash unchanged. |
+| Packed artifact | **Pass for source commit `a5d1121`.** `npm pack --ignore-scripts` → **164 entries, 803,487 bytes**, SHA-256 `2CC9DF3D722E3E5BD9085176C2523DC605EDB50D8A53B720604A5C3ED7DCEA48`; the artifact contains `bin/fiscus.mjs`, `bin/publication-lock.mjs`, compiled causal producer/ledger/store/dashboard code, pricing, baselines, and the reviewed public docs. The subsequent gate-record commit changes only this document. |
+| Clean installed CLI | **Pass.** The tarball was installed offline with `--ignore-scripts` into a fresh prefix; packaged `fiscus --help`, `demo --json`, and `causal status --json` ran successfully. |
+| Packaged dashboard/API | **Pass.** From the installed tarball and isolated `FISCUS_HOME`, `start --demo` served HTTP 200 for `/api/health`, `/api/overview?range=all`, `/api/value?range=all`, `/api/causal`, `/api/billing`, `/`, `/classic`, and `/app/main.js`. Overview, value, causal, and billing payloads self-labelled demo mode; causal status contained no public study; `/classic` carried the labelled demo renderer; `/` carried `id="app"`; `/app/main.js` resolved as JavaScript; the dashboard process terminated and the port was closed. |
+| Model-trial truthfulness | **Pass.** The packaged value payload is demo-labelled and the synthetic same-task comparison remains review-only (`trial`), with no evidence-supported switch or automatic routing. The mapping panel is informational and has no write action. |
+| Causal-evidence integrity | **Pass for the local boundary, not a causal result.** The causal ledger/producer/store cohort and the full suite pass. The packaged status command reports no publicly inspectable retained study/result. The Store-owned producer derives and atomically persists a scalar identity only when exact local request evidence passes; public v2 registration, lifecycle, qualification projection, export, and any causal customer claim remain deferred. |
+| Billing-boundary truthfulness | **Pass.** Exact imported-record mapping is append-only and visible as mapped/residual coverage; demo `/api/billing` contains the mapping contract without fabricated provider records. An isolated packaged OpenAI scope was used only for the connector preview; the declaration remains `operator_declared_unverified` and imported/mapped evidence remains excluded from spend controls, RoI, and model advice. |
+| Direct-Costs connector boundary | **Pass.** Packaged `billing openai-costs preview --from 2026-01-01 --to 2026-01-02 --json` returned `applied: false`, `networkAttempted: false`, and `credentialRead: false` for an isolated `proj_gate_test` scope. No provider account was validated and no live pull occurred. |
+| Egress disclosure | **Pass.** The full egress and public-claims checks pass; the new mapping and producer paths perform no network calls. The documented process-scoped, rule-gated transport boundary and its non-claims remain unchanged. |
+| Intended CI | **Not satisfied.** No push was authorized and there is no CI run on this exact local head. A workflow definition or historical run is not substituted for current evidence. |
+| Visual check | **Not satisfied in this environment.** Source/DOM contract tests and packaged HTTP probes pass, but no browser connector is installed, so screenshot, keyboard interaction, and WCAG runtime evidence were not obtained. |
+
+**What this candidate establishes.** This is a locally verified, reviewable
+implementation checkpoint. The independent causal identity/ledger substrate and
+exact billing mapping coverage are now implemented and tested. They do not
+establish provider invoice finality, a qualified causal financial result,
+machine-wide privacy, hosted multi-tenant readiness, or automatic model/budget/
+routing actions. CI, browser interaction evidence, real PostgreSQL/OIDC/TLS/
+backup validation, owner-authorized push, and registry publication remain
+separate gates.
 
 ### Candidate record — commit `f2f3c9a`, 2026-08-21
 
@@ -496,6 +626,12 @@ Before it is exposed, complete all of the following in a disposable environment:
 5. Test a full client-to-server-to-dashboard flow with synthetic accounts and
    no real developer or financial data. Confirm the actual retention/deletion
    policy and incident response path.
+
+The source tier also now has bounded HTTPS/loopback-only OIDC discovery/JWKS
+retrieval with no redirects, same-origin discovery checks, bounded response
+bodies, generic async-route failure responses, a loopback listen default, and
+normalized empty admin-token handling. These source-level hardening checks do
+not replace the real infrastructure gate above.
 
 The local Fiscus product can advance independently. The team service remains a
 separately gated deployment, not hidden technical debt inside a “ready” claim.

@@ -22,9 +22,18 @@ import { cmdEvidence } from './cli/evidenceCmd.ts';
 import { cmdYield, cmdRealize, cmdReport, cmdExec, cmdUsage, cmdRoi, cmdSaved, cmdBudgetAdvisor, cmdFrontier } from './cli/valueCmd.ts';
 import { cmdTeam, cmdReceipt, cmdJudge, cmdTeamPush } from './cli/teamCmd.ts';
 import { cmdConnect } from './cli/connectCmd.ts';
+import { cmdEgress } from './cli/egressCmd.ts';
+import { cmdCausal } from './cli/causalCmd.ts';
+import { cmdCapital } from './cli/capitalCmd.ts';
 import { cmdAlerts, cmdDoctor, cmdInit, cmdGuide, cmdAudit } from './cli/opsCmd.ts';
 import { cmdShow, cmdSources, cmdExport, cmdConfig, cmdBudget, cmdPrune, cmdProject } from './cli/showCmd.ts';
 import { cmdStart, cmdDemo, cmdPricing, cmdBaseline, cmdReprice } from './cli/runCmd.ts';
+import { cmdBackup, cmdRestore } from './cli/backupCmd.ts';
+import { cmdDiagnostics } from './cli/diagnosticsCmd.ts';
+import { cmdPack } from './cli/packCmd.ts';
+import { cmdPlugin } from './cli/pluginCmd.ts';
+import { cmdEconomic } from './cli/economicCmd.ts';
+import { cmdBudgetControl } from './cli/controlCmd.ts';
 
 function cmdHelp(): void {
   console.log(`
@@ -36,7 +45,34 @@ function cmdHelp(): void {
     guide                 Where you are + the single next step, read from your
                           actual state — also what bare "fiscus" shows (--json)
     start                 Start the proxy + local dashboard
+    egress                Inspect/verify Fiscus-process egress; plan exact cloud
+                          rules without mutation, then persist only with:
+                          egress apply --apply --mode controlled_cloud
+                          (--id, --purpose, --data-class, --method, --origin,
+                          --path-prefix). Default local_locked permits literal
+                          loopback only; this is not a machine-wide firewall.
+    causal                Retained randomized-study evidence: status, inspect,
+                          replay verification, and review-only OPE from the
+                          Store-owned action log. V1 is inspect-only; all causal
+                          mutations and v2 public projection remain deferred.
+                          Ordinary value, Lift, and price scenarios cannot become
+                          causal claims; this command never changes provider routing.
+                          causal design --options <file> checks protocol-linked
+                          missingness, attrition, interference and exposure declarations;
+                          causal transport --options <file> checks explicit
+                          cross-study bridge assumptions and target evidence;
+                          causal family --options <file> plans cross-study error budgets.
+    capital evaluate      Review-only exact AI-capital decomposition from a bounded
+                          JSON snapshot (--options <file>, --json). Distinguishes
+                          commitment, consumption, showback, opportunity and
+                          policy-relative fairness; no chargeback or action.
     today | week | month  Show spend for a window      (--json)
+    economic              Inspect exact economic events, roles, bases, and legacy coverage
+                          (--days N | --all, --target-currency UNIT, --as-of <ISO>,
+                          --effective-at <ISO>, --json). Period controls use canonical
+                          UTC instants: --close-status|--finalize|--reopen
+                          --from <ISO> --to <ISO> [--recorded-at <ISO>]
+                          [--reason <text>] [--as-of <ISO>] [--json]
     sources               Spend by connected source — each AI tool routed here
                           (--all for all-time, --json)
     connect <tool>        Connect an AI tool as a source so its spend is metered:
@@ -88,8 +124,10 @@ function cmdHelp(): void {
                           value/RoI to a team server YOU run (Fiscus hosts
                           nothing). --dry-run to preview, --pubkey to publish
                           this machine's rollup identity, --watch to keep
-                          pushing on an interval (--window D, --project
-                          <name>, --every N, --json)
+                          pushing on an interval (--window D, --every N,
+                          --json). --project <name> previews one project with
+                          --dry-run; a scoped rollup is never sent, because the
+                          server reads your latest push as your whole window
     report --kind K       Wire an outcome: code --commit <hash>, non-code --session <id>
                           kinds: tested|merged|shipped|incident|used|resolved|published|…
     evidence github       Signed, offline CI evidence. 'emit' runs in a protected
@@ -103,20 +141,29 @@ function cmdHelp(): void {
     receipt --repo <path> Emit signed, verifiable value receipts (--unit <hash>, --json)
                           Publish identity:  receipt --pubkey
                           Verify + pin signer: receipt --verify <file> --key-id <id>
-    yield --repo <path>   AI Yield (survival lens): durable lines per $ — survival, churn
-                          (--window DAYS, --limit N, --json)
+                          Reconcile against this ledger: receipt --reconcile <file>
+                          [--as-of <instant>] — agrees / ledger moved / disagrees
+    yield --repo <path>   Artifact persistence (legacy yield lens): retained introduced
+                          lines per $ — retention and non-retention (--window DAYS,
+                          --limit N, --json)
     budget                Set caps: --daily N --soft N --session N --runaway N --window S
                           --include-imported on|off: whether imported subscription
                           spend counts toward cap ENFORCEMENT (default off — the
                           cap governs live proxy traffic, the spend it can block)
     budget --recommend    Suggest a value-aware budget from usage + realized value
                           (--repo <path> for value-based, --apply to write, --json)
+    budget --control      Evaluate one bounded autonomous daily-cap control step
+                          from a versioned JSON policy (--policy <file>, --repo <path>,
+                          --apply to delegate mutation, --json). Deterministic v1
+                          exploration is 0; unsafe/expired evidence falls back.
     alerts                Active governance alerts: spend spikes, throttling, runaway,
                           value craters (--repo <path> for value, --json; exits 1 if critical)
                           Deliver to your own webhook: --set-webhook <url>, then --notify
                           (cron it; sends ONLY alert metadata — never prompts/code/keys)
     export                Export the request ledger for BI/finance (--csv default | --json,
-                          --days N | --all, --out <file>; otherwise stdout)
+                          --economic for exact Money/lineage, --days N | --all,
+                          --target-currency UNIT, --as-of <ISO>, --effective-at <ISO>,
+                          --out <file>; otherwise stdout)
     init                  Write default config + print setup steps
     doctor                First-run health check: config, DB, proxy, caps, data quality
     config                Show config and file paths    (--json)
@@ -146,6 +193,22 @@ function cmdHelp(): void {
                           by the tool, inferred from its recorded path, or never
                           attributed at all — an assertion, never verified identity
     prune                 Prune old rows and compact the database
+    backup --out <file>   Create a verified, local SQLite ledger snapshot
+    restore --from <file> --out <file>
+                          Preview a backup, or create a new verified database
+                          with --apply. The active ledger is never overwritten.
+    pack export --out <file>
+                          Write the epistemic ledger as a .fiscuspack envelope:
+                          every record bound by digest, omissions and redactions
+                          stated in the manifest ([--sign <private-key.pem>])
+    pack verify <file>    Check a pack's bytes: integrity, authenticity (only with
+                          --trust <public-key>), truth never evaluated
+    pack inspect <file>   Print what a pack's manifest says, evaluating nothing
+    plugin run --manifest <file> --request <file> --exec <path> --scope k=v
+                          One bounded exchange with a plugin process; preview the
+                          kernel Evidence it would append, --apply to append it
+    diagnostics [--json]   Emit redacted local runtime/database/egress diagnostics
+                          (--out <file> writes an atomic bundle; no telemetry)
     demo                  Generate isolated, clearly-labeled synthetic data so every
                           surface populates without an API key (--serve to launch the
                           dashboard on it; --clear to remove). Add --demo to any read
@@ -154,10 +217,17 @@ function cmdHelp(): void {
     --version             Print the Fiscus version
 
   Setup
-    1) fiscus start
-    2) $env:ANTHROPIC_BASE_URL="http://localhost:8090"   (PowerShell)
+    1) If routing a cloud provider, review its exact rule first:
+       fiscus egress plan --mode controlled_cloud --id openai-inference
+         --purpose provider_inference --data-class provider_request --method POST
+         --origin https://api.openai.com --path-prefix /v1/
+       Persist the reviewed plan only with the same command as:
+         fiscus egress apply --apply ...
+       (Skip this for a local loopback-only model.)
+    2) fiscus start
+    3) $env:ANTHROPIC_BASE_URL="http://localhost:8090"   (PowerShell)
        $env:OPENAI_BASE_URL="http://localhost:8090/v1"
-    3) Run your AI tools as usual. Watch the dashboard.
+    4) Run your AI tools as usual. Watch the dashboard.
 
   Any OpenAI-compatible provider works through the OpenAI path — point your tool
   at http://localhost:8090/v1. Gemini, for example, via Google's free tier:
@@ -206,11 +276,25 @@ async function main(): Promise<void> {
     case 'month':
       cmdShow('month', flags);
       break;
+    case 'economic':
+    case 'economics':
+      cmdEconomic(flags);
+      break;
     case 'sources':
       cmdSources(flags);
       break;
     case 'connect':
       cmdConnect(flags);
+      break;
+    case 'egress':
+      cmdEgress(flags);
+      break;
+    case 'causal':
+    case 'study':
+      cmdCausal(flags);
+      break;
+    case 'capital':
+      cmdCapital(flags);
       break;
     case 'init':
       cmdInit();
@@ -219,7 +303,8 @@ async function main(): Promise<void> {
       cmdConfig(flags);
       break;
     case 'budget':
-      if (flags.recommend) await cmdBudgetAdvisor(flags);
+      if (flags.control) await cmdBudgetControl(flags);
+      else if (flags.recommend) await cmdBudgetAdvisor(flags);
       else cmdBudget(flags);
       break;
     case 'alerts':
@@ -308,6 +393,22 @@ async function main(): Promise<void> {
     case 'prune':
       cmdPrune();
       break;
+    case 'backup':
+      cmdBackup(flags);
+      break;
+    case 'restore':
+      cmdRestore(flags);
+      break;
+    case 'pack':
+      cmdPack(flags);
+      break;
+    case 'plugin':
+      await cmdPlugin(flags);
+      break;
+    case 'diagnostics':
+    case 'diagnostic':
+      cmdDiagnostics(flags);
+      break;
     case 'pricing':
       await cmdPricing(flags);
       break;
@@ -342,7 +443,16 @@ process.stdout.on('error', (err: NodeJS.ErrnoException) => {
   throw err;
 });
 
-main().catch((err) => {
-  console.error('  Fiscus error:', err);
-  process.exitCode = 1;
-});
+// Defer command dispatch until the launcher has finished importing the compiled
+// module and released its publication lock. Some commands (notably `demo`)
+// perform substantial synchronous work before their first `await`; invoking
+// them directly here would make every concurrent CLI reader hold the build gate
+// for the whole command and can starve a legitimate publication queue. The
+// modules are fully loaded before this callback runs, so publication can no
+// longer create a missing-dependency window for this process.
+export const cliCompletion = new Promise<void>((resolve) => setImmediate(() => {
+  main().catch((err) => {
+    console.error('  Fiscus error:', err);
+    process.exitCode = 1;
+  }).finally(resolve);
+}));

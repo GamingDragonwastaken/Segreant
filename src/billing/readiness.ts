@@ -56,9 +56,18 @@ export function reconciliationReadiness(store: Store): ReconciliationReadiness {
       ownerAction: true,
     });
   }
+  // Read once, beside the coverage it qualifies. `openAiReconciliationCoverage`
+  // returns null on an empty result set, and a deletion is one of the two ways
+  // to get there -- so a consumer that sees only the null cannot tell an
+  // emptied ledger from a machine that never metered OpenAI (D-186).
+  const requestsPrunedBeforeMs = store.retentionFloor().requestsPrunedBeforeMs;
   return {
     ready: missing.length === 0,
     missing,
     coverage: store.openAiReconciliationCoverage(scope?.declarationId ?? null),
+    localLedgerRetention: {
+      truncated: requestsPrunedBeforeMs !== null,
+      prunedBeforeMs: requestsPrunedBeforeMs,
+    },
   };
 }

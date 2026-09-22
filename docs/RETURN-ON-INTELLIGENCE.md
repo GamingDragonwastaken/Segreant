@@ -96,7 +96,7 @@ lens, normalized to [0,1], is a *conditional survival rate* along the chain
 | You'd have done it anyway | Lift (counterfactual) | λ |
 | It didn't matter | Impact | ι |
 
-### 4.1 Why they MULTIPLY (and why that is Goodhart-proof)
+### 4.1 Why they MULTIPLY (and what that does and does not resist)
 
 These are *necessary conditions in series*. The probability a unit of spend
 becomes real intelligence-value is the joint probability of clearing all of them,
@@ -108,9 +108,15 @@ the joint of a chain is the product:
 ```
 
 Same mathematics as manufacturing yield through sequential quality gates, or the
-reliability of a series system (R = ∏ Rᵢ). This *derives* Goodhart-resistance
-rather than asserting it: pumping one axis to 1.0 while another sits at 0.05
-leaves π ≤ 0.05 — **the score is hostage to its weakest link.** The arithmetic
+reliability of a series system (R = ∏ Rᵢ). What follows is a specific, bounded
+resistance — **resistance to SINGLE-AXIS gaming** — and it is derived rather than
+asserted: pumping one axis to 1.0 while another sits at 0.05 leaves π ≤ 0.05, so
+**the score is hostage to its weakest link.** That is not immunity to Goodhart's
+law. An optimizer who can move every lens, or who can move the MEASUREMENT of a
+lens rather than the thing it stands for, is not constrained by this structure at
+all; multiplicativity raises the cost of gaming, it does not close the door. The
+funnel chain-rule reading is itself a model of how value converts, not something
+this repository has measured. The arithmetic
 mean every dashboard uses, (ρ+α+λ+ι)/4, has no such floor — a single pumped axis
 lifts it regardless of a zero elsewhere. The product structure is *forced* by the
 requirement "no single axis can be gamed."
@@ -128,10 +134,15 @@ two-stage process equals the product of the stage indices, `M(x·y) = M(x)·M(y)
 > x,y — is **φ = log**, i.e. the (weighted) **geometric** form. Among *symmetric*
 > means it is the unique multiplicative one.
 
-So the **functional form is forced** — require quality to compose the way value
-composes and you must use a weighted geometric mean. Equivalently it is a
-**constant-returns-to-scale Cobb–Douglas** function whose exponents are the
-lenses' **output elasticities** wₖ:
+So the functional form **follows from those two axioms** — assume the aggregator
+is quasi-arithmetic and multiplicative, and it must be a weighted geometric mean.
+Both axioms are modelling choices. "Quality composes the way value composes along
+the funnel" is a stance this project adopts because a funnel multiplies through;
+it is not an economic result, and nothing here has tested it against outcomes.
+Algebraically the expression coincides with a constant-returns-to-scale
+**Cobb–Douglas form** — an analogy for the shape only. No production function has
+been estimated on this ledger, so wₖ are not measured output elasticities of any
+real output:
 
 ```
 RoI Index = 100 · ρ^wρ · α^wα · λ^wλ · ι^wι ,   Σ wₖ = 1   (Cobb–Douglas, CRS)
@@ -139,9 +150,12 @@ RoI Index = 100 · ρ^wρ · α^wα · λ^wλ · ι^wι ,   Σ wₖ = 1   (Cobb�
 
 Two things are **disclosed, not forced**, and we say so plainly:
 
-1. **The weights.** wₖ is the elasticity of the Index w.r.t. lens k —
-   `∂ln(Index)/∂ln(xₖ) = wₖ` — "a 1 % gain in lens k lifts the Index wₖ %." They
-   are calibrated from the literature (§7), normalized to sum to 1. The
+1. **The weights.** wₖ is the elasticity of **the Index** w.r.t. lens k —
+   `∂ln(Index)/∂ln(xₖ) = wₖ` — "a 1 % gain in lens k lifts the Index wₖ %."
+   That is an algebraic identity of this formula, and says nothing about output,
+   productivity or value: it describes how our own score responds, not how the
+   world does. The values are **disclosed preferences** informed by the
+   literature (§7), normalized to sum to 1. The
    implementation divides by Σw internally, so the raw defaults
    `{1.0, 0.7, 1.2, 1.0}` realize elasticities `{0.26, 0.18, 0.31, 0.26}`. Set
    them **equal** (0.25 each) and you recover the **symmetric axiomatic index** —
@@ -150,8 +164,9 @@ Two things are **disclosed, not forced**, and we say so plainly:
 2. **The substitution θ** (§4.3): θ = 0 (geometric) is the distinguished neutral
    point, but the whole CES family is exposed.
 
-What is *not* a taste choice is the multiplicativity itself: any zero lens
-collapses the Index, no matter the weights. Proof: GM(x·y) = ∏(xₖyₖ)^wₖ =
+Given multiplicativity, one consequence is not a further taste choice: any zero
+lens collapses the Index, no matter the weights. (Multiplicativity itself remains
+an assumption — see above.) Proof: GM(x·y) = ∏(xₖyₖ)^wₖ =
 ∏xₖ^wₖ · ∏yₖ^wₖ = GM(x)·GM(y); the arithmetic mean fails it,
 Σwₖxₖyₖ ≠ (Σwₖxₖ)(Σwₖyₖ). (Tested in `test/equation.test.ts`.)
 
@@ -162,8 +177,8 @@ classification near zero can flip a ranking. The composite-indicator
 literature's alternative is a hurdle decomposition — `Index = H · G₊`, a hard
 eligibility indicator times a smooth strictly-positive score (or a penalized
 geometric mean) — which keeps low compensability without the cliff. We keep
-the single-product form deliberately: the veto **is** the message ("no axis
-can be bought back"), and separating it would blunt exactly the property that
+the single-product form deliberately: the veto **is** the message (a collapsed
+lens cannot be scored away), and separating it would blunt exactly the property that
 makes the Index resistant to single-axis gaming. But the choice is a design
 stance, not a mathematical necessity, and an integrator who needs ranking
 stability near zero should use the hurdle form on top of the same lenses.
@@ -179,37 +194,37 @@ The geometric mean is the θ→0 case of the **CES / power mean**
 | **→ 0** | **geometric** | unit elasticity of substitution; scale-free; multiplicative |
 | → −∞ | minimum | Leontief, pure weakest-link |
 
-θ is the elasticity of substitution between lenses — how much surplus on one axis
-may compensate a deficit on another. Geometric (θ=0) is the distinguished neutral
-point; a buyer who wants it even harder to game slides θ<0 toward the min.
+θ is the CES **substitution parameter**, not the elasticity of substitution
+itself: the elasticity is `σ = 1/(1−θ)`, so θ=0 gives σ=1 (the unit-elasticity
+geometric case in the table above), θ=1 gives σ=∞, and θ→−∞ gives σ→0. σ is
+what governs how much surplus on one axis may compensate a deficit on another.
+Geometric (θ=0) is the distinguished neutral point; a buyer who wants it even
+harder to game slides θ<0 toward the min.
 
 ### 4.4 RoI is an INTERVAL, not a number (the honest core)
 
-Lift λ is causal: of the realized value, how much did the AI *cause* vs. what you
-would have done anyway? The fundamental problem of causal inference says you
-cannot observe both the with-AI and without-AI worlds for the same task, so **λ
-is not point-identified.** Pretending it is would be the vagueness this product
-exists to kill. The honest move is **partial identification** (Manski): bound it.
-Selection biases λ up; substitution and concurrency bias measured savings —
-yielding the ordering inequality `λ_old ≤ λ_value ≤ λ_new ≈ TSF`, hence an
-interval, never a point. Because λ enters π multiplicatively and the aggregator
-is monotone, the interval **propagates** — Return on Intelligence is itself
-interval-valued:
+Lift λ is a behavioral, partially identified lens: it asks how the observed
+workflow compares with a disclosed baseline, not whether AI caused the outcome.
+The fundamental problem of causal inference says you cannot observe both the
+with-AI and without-AI worlds for the same task, so **λ is not point-identified.**
+Selection, substitution, and concurrency can move the estimate in different
+directions. We therefore report a disclosed interval and sensitivity range, not a
+causal money credit. A separate registered randomized study is required before
+Fiscus can state a scoped causal effect or net benefit.
 
 ```
 RoI ∈ [RoI_low, RoI_high]      (point = interior estimate)
 ```
 
-The interval's width is set by (a) counterfactual uncertainty and (b)
-instrumentation coverage, and it **tightens monotonically as you wire more gates
-and run controlled comparisons.** This turns the metric into a roadmap: *here is
-your RoI bound, and here is exactly what to instrument to prove your spend's
-worth.* A second honesty result falls out: since every unobserved necessary
-condition is ≤ 1, a partially-instrumented Index is an **upper bound** on the
-true conversion (`indexIsUpperBound`) — so more measurement makes the number more
-honest (usually lower), never inflated. The exact opposite of the usual dashboard
-incentive. (Lenses you haven't wired are excluded and **coverage** is reported —
-unknown ≠ fault.)
+The interval's width is set by (a) baseline/counterfactual uncertainty and (b)
+instrumentation coverage. Additional valid evidence can narrow those assumptions,
+but the observed-only score may move up or down when a missing lens is measured.
+This turns the metric into a roadmap: *here is the observed result, its disclosed
+coverage, and exactly which evidence would reduce the remaining assumptions.*
+Unknown lenses are excluded from the observed-only score and are also represented
+in the full sensitivity interval; `indexIsUpperBound` is retained only as a false
+compatibility value so older consumers cannot mistake the observed score for a
+ceiling.
 
 The identification interval above is not the only width the Index carries. The
 lenses are also *estimated from finite data*, so a second, **statistical** width
@@ -234,19 +249,24 @@ The same evidence projects into two honest objects. The first is unitless and
 comparable; the second is dollars and decides whether to keep paying.
 
 **Face 1 — RoI Index (0–100 + coverage):** the weighted geometric mean above
-(§4.2). Unitless, universal, the dashboard hero. (`roiIndex` in `lenses.ts`.)
+(§4.2). Unitless and scope-limited to the connected lenses and evidence window;
+it is the dashboard hero, not a universal productivity or causal measure.
+(`roiIndex` in `lenses.ts`.)
 
-**Face 2 — RoI return (the money number).** A real, dimensionless ratio,
-computed *directly* as value ÷ cost (`returnRatio` in `lenses.ts`):
+**Face 2 — observed value scenario (the money view).** A descriptive,
+dimensionless ratio computed *directly* as manual-equivalent value ÷ honest cost
+under the disclosed assumptions (`returnRatio` in `lenses.ts`):
 
 ```
                 Σ_realized  baselineMin(u) · (wage/60) · acceptance(u)
-RoI_gross   =  ─────────────────────────────────────────────────────────
+ObservedScenario = ─────────────────────────────────────────────────────────
                   tokenCost   +   supervisionMin · (wage/60)
-
-RoI_causal  =  RoI_gross · λ            (λ = the Lift lens, applied ONCE)
-            ∈ [ RoI_gross·λ_low , RoI_gross·λ_high ]   (Manski interval, §4.4)
 ```
+
+`returnRatio.causalRatio`, `causalRange`, and `paysForItself` remain null on
+this ordinary value spine. A qualified causal-study result is a separate object
+with its own protocol identifier, cost source, outcome, quality guardrail, and
+conservative bound; it is never derived by multiplying this scenario by Lift.
 
 Every term is defended:
 
@@ -264,15 +284,24 @@ Every term is defended:
   evidence does (METR's ~1.4–2× value, not the ~3× raw speed). The metric
   **refuses to print a dollar return** until supervision time is measured — it
   will not invent the denominator (`basis: 'none'`).
-- **The counterfactual λ is applied exactly once.** `RoI_gross` is an honest
-  **upper bound** on the causal return (it does not subtract what you'd have done
-  anyway); multiplying by the Lift lens λ once yields `RoI_causal`. We do **not**
-  also fold the speedup into a separate "leverage" term — that would count the
-  time-savings twice (it already lives in the manual-vs-AI time ratio *and* in λ).
-  Keeping the money number independent of the Index is what avoids the
-  double-count. **RoI_causal ≥ 1 ⟺ the AI paid for itself**; METR's "19 % slower"
-  is the RoI < 1 case, which the metric flags. (The `breakEven` helper is the
-  RoI = 1 line.)
+- **Behavioural Lift is an observational lens, not a causal money credit.**
+  The historical `RoI_gross` / `RoI_causal` terminology describes a formula
+  from before Fiscus had a dedicated causal-evidence lane. Behavioural Lift, a
+  time-speed estimate, and a manual-equivalent valuation do not establish the
+  outcome that would have occurred without AI. The current product therefore
+  renders this money value only as an **observed/manual-equivalent value
+  scenario** and keeps the legacy causal fields null.
+
+  A future Fiscus causal net-benefit result is deliberately a separate object.
+  It requires the registered randomized-study conditions in
+  [CAUSAL-EVIDENCE-PROTOCOL.md](CAUSAL-EVIDENCE-PROTOCOL.md): frozen
+  intervention/control definitions, pre-exposure random assignment, completed
+  execution and outcome lineage, explicit cost-source classification, a
+  predeclared value or quality guardrail, and a conservative lower confidence
+  bound. A model-versus-model experiment can support a scoped comparative
+  claim; an AI-paid-for-itself claim additionally needs a no-AI or incumbent
+  control, full-cost accounting for both arms, a currency/measured-labour
+  outcome basis, and a positive lower bound on causal net benefit.
 
 The two faces differ by Jensen's inequality (value sums dollars per-unit; the
 Index composes lenses) — correct, because one is a sum of dollars and the other a
@@ -333,14 +362,16 @@ invention is the synthesis**, which has not been built:
    *derived* as the four independent ways raw output overstates value (§4), not a
    convenient list — and Lift is what makes it return on *intelligence*, not on
    spend.
-2. **Value-conversion as a necessary-condition chain ⟹ the aggregator is forced.**
-   The funnel chain-rule makes value multiplicative; multiplicative consistency
-   then forces the geometric mean via the Kolmogorov–Nagumo characterization
-   (§4.2). The Goodhart-resistance is a theorem, not a hope.
-3. **Interval-valued, honest-by-construction.** RoI is a bound, not a false
-   point: its width is set by counterfactual uncertainty + coverage, and it
-   tightens with evidence (§4.4). A partially-instrumented Index is an explicit
-   upper bound — more measurement, more honest, never inflated.
+2. **Value-conversion modelled as a necessary-condition chain ⟹ the aggregator
+   follows.** Modelling conversion as a chain of necessary conditions makes
+   value multiplicative; multiplicative consistency then gives the geometric
+   mean via the Kolmogorov–Nagumo characterization (§4.2). What is a theorem is
+   the resistance to SINGLE-AXIS gaming, conditional on that model. Immunity to
+   Goodhart's law is not claimed, and the model is a declared assumption.
+3. **Interval-valued, honest-by-construction.** RoI exposes a point together with
+   its stated baseline, coverage, and sensitivity range rather than a false
+   universal guarantee. Valid evidence may narrow uncertainty, while measuring a
+   missing lens can move the observed score in either direction (§4.4).
 4. **Cross-modality, measured from the wire.** The universal
    intent→acceptance→outcome spine measures value from *any* token spend (not just
    commits), from the proxy path — solving the "attribution blindness" DORA/SPACE
@@ -378,8 +409,9 @@ hand-wavy.
   signals) through the same proxy + `report` spine, so RoI covers all token use.
 
 Until a signal is wired, its lens reads `uninstrumented` and the index is honest
-about coverage. The path to a higher, more trusted number is to wire more — never
-to game one.
+about coverage. The path to a more trusted number is to instrument the next
+evidence source, inspect the sensitivity result, and preserve the possibility that
+the measured value moves either way — never to game one lens.
 
 ---
 
@@ -553,9 +585,16 @@ A raw rate lies with confidence on thin data: **2 of 2 realized (100%)** out-ran
 model" recommendations. This is the batting-average fallacy, and unaddressed it is
 the fastest way a skeptic discredits the whole tool.
 
-The fix is the **James–Stein** result: an estimator that shrinks each cell's rate
-toward the population mean strictly beats the raw rate in total squared error once
-there are ≥ 3 cells. We model realized/total as **Beta–Binomial** — each context's
+The response is **empirical-Bayes shrinkage**: pull each cell's rate toward the
+population mean in proportion to how little data backs it. The intuition is the
+one James–Stein made famous, but the theorem itself does **not** apply here.
+James–Stein dominance is a result about p ≥ 3 Gaussian means with *known*
+variance under total squared-error loss; this estimator is Beta–Binomial with a
+hyperprior *estimated from the same cells*, so no dominance guarantee carries
+over. Shrinkage here is a modelling choice that usually reduces error on thin
+cells — not a proof that it beats the raw rate. It also assumes the cells are
+**exchangeable**; where they are not, the pooled mean is the wrong target. We
+model realized/total as **Beta–Binomial** — each context's
 `k` of `n` outcomes has its own success probability drawn from a shared
 `Beta(α, β)` prior — and report each context's **reliable rate** as the posterior
 mean:
@@ -685,7 +724,14 @@ dependency — the Beta ratio is built by the exact recurrence
 `k/n`, so the interval falls out of bisection. (`src/value/anytime.ts`,
 `test/anytime.test.ts` — including the simulated-peeking coverage test.)
 
-## 11. The Goodhart alarm — detecting a bent metric
+## 11. The rate-drift alarm — detecting that a rate is not constant
+
+> **Named for what it observes.** This test rejects "one constant Bernoulli rate
+> generated this stream". Drift is a *necessary* signature of a metric being bent
+> under incentive pressure, which is why the alarm is worth having — it is not a
+> *sufficient* one. Calling a firing "Goodhart" would assert an incentive
+> mechanism the 0/1 stream carries no evidence about. Below, Goodhart is the
+> motivating hypothesis the alarm sends you to investigate, never its finding.
 
 Goodhart's law is the fate of every metric: once a number is a target, people
 optimize the number instead of the value it stood for. A gamed metric doesn't
@@ -710,7 +756,8 @@ sup-denominator only makes Eₙ smaller — so Ville's inequality bounds the fal
 alarm rate by α **over all of time, for every constant rate at once**. It is
 deterministic (no randomization, unlike conformal martingales on binary data).
 Measured: false alarms 0.2% against a 5% budget across three stable rates; an
-abrupt regime collapse caught 100/100; slow Goodhart-style creep caught 93/100.
+abrupt regime collapse caught 100/100; the slow creep a bent metric would produce
+caught 93/100.
 
 The honest framing travels with the output: the alarm detects that the rate
 **moved**, not *why*. A genuine regime change (new model, new workflow) and a
@@ -719,29 +766,40 @@ gamed metric both trip it. Its job is to force the question no dashboard asks �
 (`src/value/drift.ts`, `test/drift.test.ts`; the "Stability" line in
 `fiscus roi` and the dashboard.)
 
-## 12. Value of Information — which measurement to buy next
+## 12. Instrumentation sensitivity — which measurement moves the Index most
 
-The Index is an upper bound while lenses are missing (§5), but "wire more
-lenses" is not a decision — "wire **this** lens next" is. For each
-un-instrumented lens k, evaluate the composite with that lens hypothetically
-measured at a **disclosed neutral reference** v = 0.5 (a midpoint, not a
-prediction):
+> **Not value of information.** VoI needs a decision, a utility model, and a
+> distribution over what a measurement might reveal. This section has none of
+> them: it is a sensitivity ranking of the aggregator. The decision-theoretic
+> VoI lives in `src/decision/engine.ts` (§EVPI), where a scenario mixture supplies
+> the probabilistic model this ranking deliberately does not have.
+
+Missing lenses create unmeasured exposure, not a universal upper-bound theorem
+(§4.4). This output reports the largest sensitivity/measurement exposure; it is
+descriptive rather than an action-selection rule. For each un-instrumented lens
+k, evaluate the composite with that lens hypothetically measured at a
+**disclosed neutral reference** v = 0.5 (a midpoint, not a prediction):
 
 ```
 Index_k(v) = 100 · exp( (Σᵢ wᵢ ln xᵢ + w_k ln v) / (Σᵢ wᵢ + w_k) )
 ```
 
 and rank by the size of the move. The arithmetic is fully transparent — no
-hidden priors; a heavier, further-from-current lens moves the Index more, and
-measuring can only make the number more honest. This completes the decision
-calculus the instrument hands an organization:
+hidden priors. A heavier, further-from-current lens moves the Index more at this
+reference, but the actual measured value may move it either direction. This
+ranking has no acquisition-cost or utility model, so it reports exposure rather
+than whether a measurement merits spending. Formal decision-theoretic VoI is a
+separate calculation in `src/decision/engine.ts` (§EVPI): `valueOfInformation()`
+requires posterior scenario probabilities, action utilities, and a declared
+`measurementCost`, then reports gross and net utility. The two results should not
+be conflated:
 
 | Question | Answer | Section |
 |---|---|---|
 | Where does the next **dollar** go? | the shadow price μ | §9 |
-| Which **measurement** do I buy next? | instrumentation priority | §12 |
+| Which **measurement** has the largest sensitivity/measurement exposure? | instrumentation priority | §12 |
 | When do I actually **know**? | the anytime-valid interval | §10 |
-| Is the number being **bent**? | the Goodhart alarm | §11 |
+| Has the rate **moved**? | the drift alarm | §11 |
 
-(`src/value/voi.ts`, `test/voi.test.ts`; the "Instrument next" line in
+(`src/value/instrumentationSensitivity.ts`, `test/instrumentation-sensitivity.test.ts`; the "Largest exposure" line in
 `fiscus roi` / `usage`.)

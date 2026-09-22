@@ -17,12 +17,22 @@
 
 import type http from 'node:http';
 import { reconciliationReadiness } from '../billing/readiness.ts';
+import { CLAIM_USES } from '../epistemic/claim-uses.ts';
+import { EXACT_ALLOCATION_EXCLUDED_FLOOR } from '../alloc/exact.ts';
 import { existsSync, statSync } from 'node:fs';
 import type { Store } from '../store/db.ts';
+import {
+  allocatedClaimSupport,
+  billedClaimSupport,
+  meteredClaimSupport,
+  realizedClaimSupport,
+} from './claim-support.ts';
 import { isDemo, type FiscusConfig } from '../config.ts';
-import { buildSettingsSnapshot, applySettingsPatch, type SettingsPatch } from './settings.ts';
+import { probeProxyState } from '../egress/proxyHealth.ts';
+import { buildSettingsSnapshot, applySettingsPatch, SettingsValidationError, type SettingsPatch } from './settings.ts';
 import { serveHtml } from './static.ts';
-import { startOfLocalDay } from '../budget/guard.ts';
+import { resolveEnforcedSpend, startOfLocalDay } from '../budget/guard.ts';
+import { driftDetectability } from '../value/drift.ts';
 import { loadRealization, realizeDiscoveredProjects } from '../value/realization.ts';
 // The one composition of the value primitives, shared with the CLI — see the
 // '/api/value' handler below and src/value/report.ts for why it is not inline.
@@ -31,8 +41,10 @@ import { projectName } from '../git/correlate.ts';
 import { scanWithDiff, saveScan } from '../scan/scan.ts';
 import { describeSourceDepth } from '../value/sourceDepth.ts';
 import { buildGuide } from '../guide.ts';
-import { computeAlerts } from '../alerts/detect.ts';
+import { computeAlertCoverage, computeAlerts } from '../alerts/detect.ts';
 import { requestsToCsv } from '../export/csv.ts';
+import { economicRequestsToCsv } from '../export/economic.ts';
+import { instant, type Instant } from '../epistemic/time.ts';
 import { DIMENSIONS } from '../value/characterization.ts';
 import { IMPORTERS, emptyImportSummary, type ImportSummary } from '../connect/importShared.ts';
 import { importClaudeCode, defaultClaudeCodeRoot } from '../connect/claudeCode.ts';
@@ -42,6 +54,12 @@ import { judgeSessionFromStore } from '../judge/orchestrate.ts';
 import { resolveJudgeTier, hasHostedJudgeApiKey } from '../judge/tier.ts';
 import { pricingStatus } from '../cost/pricing.ts';
 import { pricingCoverage } from '../cost/coverage.ts';
+import { RESOURCE_LIMITS } from '../util/resource-limits.ts';
+import { buildEconomicReport } from '../cli/economicCmd.ts';
+import { verifyBlockedAssignmentPlan } from '../causal/assignment.ts';
+import { stringifyJson } from '../util/json.ts';
+import { dashboardApiContract, type DashboardApiContractId } from './contracts.ts';
+import type { DashboardResponseFor } from './shared-types.ts';
 
 /**
  * Config persistence is injectable so the dashboard can be exercised without
@@ -50,6 +68,8 @@ import { pricingCoverage } from '../cost/coverage.ts';
 export interface ConfigPersistence {
   load: () => FiscusConfig;
   save: (config: FiscusConfig) => void;
+  /** Production supplies the shared read-modify-write transaction boundary. */
+  mutate?: (mutator: (current: FiscusConfig) => FiscusConfig | void) => FiscusConfig;
 }
 
 /** Everything a handler is allowed to reach for. Nothing else is in scope. */
@@ -102,9 +122,24 @@ export interface Route {
   handler: (ctx: RouteContext) => void;
 }
 
+/** Declare an API route from the shared contract, never a second path/method literal. */
+function apiRoute(id: DashboardApiContractId, handler: Route['handler']): Route {
+  const contract = dashboardApiContract(id);
+  return {
+    path: contract.path,
+    methods: contract.methods,
+    ...(contract.allow === undefined ? {} : { allow: contract.allow }),
+    ...(contract.localOnly.length === 0 ? {} : { localOnly: contract.localOnly }),
+    handler,
+  };
+}
+
 export function json(res: http.ServerResponse, status: number, payload: unknown): void {
-  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
-  res.end(JSON.stringify(payload));
+  res.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    'cache-control': 'no-store',
+  });
+  res.end(stringifyJson(payload, 0));
 }
 
 /** Only honor a ?repo= that is an existing directory; otherwise the dashboard's cwd. */
@@ -135,22 +170,47 @@ function resolveRange(range: RangeKey, now: number): { startMs: number; endMs: n
   }
 }
 
-export function buildOverview(store: Store, config: FiscusConfig, range: RangeKey) {
+export function buildOverview(store: Store, config: FiscusConfig, range: RangeKey): DashboardResponseFor<'overview'> {
   const now = Date.now();
   const { startMs, endMs, bucketMs } = resolveRange(range, now);
 
   const dayStart = startOfLocalDay(now);
   // The budget panel reads the same basis the guard ENFORCES on (live proxy spend
   // unless capIncludesImported) — a bar that disagrees with the blocker is a lie.
+  // ...which means resolving it the same WAY, not merely over the same rows. The
+  // guard enforces on the exact effective projection whenever one is available;
+  // reading the raw float here made the bar disagree with the blocker by exactly
+  // the corrections the economic ledger had recorded (D-107).
   const liveOnly = !config.budget.capIncludesImported;
-  const todaySpend = store.spendBetween(dayStart, now + 1000, liveOnly);
-  const todayTotal = liveOnly ? store.spendBetween(dayStart, now + 1000) : todaySpend;
+  const exactDay = (from: number, to: number, live: boolean) =>
+    (typeof store.exactSpendBetween === 'function' ? store.exactSpendBetween(from, to, live) : null);
+  const todayResolved = resolveEnforcedSpend(
+    exactDay(dayStart, now + 1000, liveOnly),
+    store.spendBetween(dayStart, now + 1000, liveOnly),
+  );
+  const todaySpend = todayResolved.usd;
+  const todayTotal = liveOnly
+    ? resolveEnforcedSpend(exactDay(dayStart, now + 1000, false), store.spendBetween(dayStart, now + 1000)).usd
+    : todaySpend;
   const summary = store.summary(startMs, endMs);
   const pricingWindow = store.healthStats(startMs, endMs);
+  // What retention deleted from inside this window. Read from the ledger's own
+  // record, because an absence of rows is exactly what cannot distinguish a
+  // quiet window from a pruned one (D-175).
+  const retention = store.windowCoverage(startMs);
 
   return {
     range,
     demo: isDemo(),
+    // What this claim's evidence reaches, on named axes, stated by the side that
+    // holds the evidence. The GUI used to infer this from `estimatedSpendShare`
+    // in the browser, which answered `complete` for a window with no spend in it.
+    claimSupport: meteredClaimSupport({
+      totalCostUsd: pricingWindow.totalCostUsd,
+      estimatedCostUsd: pricingWindow.estimatedCostUsd,
+      retention,
+    }),
+    retention,
     generatedAt: new Date(now).toISOString(),
     budget: {
       dailyUsd: config.budget.dailyUsd,
@@ -159,6 +219,7 @@ export function buildOverview(store: Store, config: FiscusConfig, range: RangeKe
       todayImportedUsd: Math.max(0, todayTotal - todaySpend),
       capExcludesImported: liveOnly,
       remainingDailyUsd: config.budget.dailyUsd === null ? null : Math.max(0, config.budget.dailyUsd - todaySpend),
+      todaySpendBasis: todayResolved.basis,
     },
     summary,
     // Rate-card freshness and estimate share are local evidence about the
@@ -197,6 +258,10 @@ export function buildOverview(store: Store, config: FiscusConfig, range: RangeKe
     // Governance alerts refresh on the live poll. Realized-value alerts (git-gated)
     // are surfaced in /api/value; here we pass null so they're simply omitted.
     alerts: computeAlerts(store, config, { now }),
+    // Beside the alerts, not instead of them: an empty list is a finding only
+    // when the detectors could have produced an entry, and on a default install
+    // none of the six can (D-144).
+    alertCoverage: computeAlertCoverage(store, config, { now }),
   };
 }
 
@@ -382,10 +447,39 @@ export function handleOverview({ res, url, store, config }: RouteContext): void 
  * deliberately separate from /api/overview and /api/value so an imported
  * charge line cannot silently affect metering, budgets, ROI, or advice.
  */
-export function handleBilling({ res, store }: RouteContext): void {
+export function handleBilling({ res, url, store }: RouteContext): void {
   try {
+    // An optional knowledge boundary for the kernel claims (D-230): what the
+    // ledger had learned by `asOf`, not what it knows now. The recorded runs
+    // and summary below are not replayed — they are store rows, not kernel
+    // nodes — so the payload says which instant the claims answer at.
+    let asOf: Instant | undefined;
+    const rawAsOf = url.searchParams.get('asOf');
+    if (rawAsOf !== null) {
+      try {
+        asOf = instant(rawAsOf);
+      } catch (error) {
+        return json(res, 400, { error: `asOf must be a canonical UTC ISO-8601 instant: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    }
+    // Read once: the same recorded runs decide the claim's support and are
+    // served as the evidence behind it. Reading them twice would let the two
+    // disagree the moment a run landed between the calls.
+    const runs = store.reconciliationRuns(10);
+    const summary = store.billingSummary();
     return json(res, 200, {
       demo: isDemo(),
+      /** The boundary the kernel claims answer at; `null` is a live read. */
+      asOf: asOf ?? null,
+      // `conflicted` lives here and nowhere else in this payload. Repeated
+      // provider observations of the same days that disagree contradict the
+      // billed claim rather than establishing it, and the browser's count-based
+      // inference had no branch that could say so.
+      claimSupport: billedClaimSupport({
+        recordCount: summary.recordCount,
+        runCount: runs.length,
+        latest: runs[0]?.result ?? null,
+      }),
       generatedAt: new Date().toISOString(),
       evidence: {
         kind: 'provider_billing_evidence',
@@ -403,8 +497,14 @@ export function handleBilling({ res, store }: RouteContext): void {
           'model_recommendations',
         ],
       },
-      summary: store.billingSummary(),
+      summary,
       imports: store.billingImportRuns(25),
+      kernel: {
+        kind: 'trusted_epistemic_kernel_billing',
+        claims: store.billingKernelClaims(25, asOf),
+        observedClaims: store.openAiCostsKernelClaims(25, asOf),
+        reconciliationClaims: store.billingReconciliationKernelClaims(25, asOf),
+      },
       // Readiness is served BEFORE a credential is minted, which is the only
       // moment it is useful. `directOpenAiCosts.coverage` below is the
       // post-observation partition and is null until a snapshot exists, so on
@@ -412,6 +512,10 @@ export function handleBilling({ res, store }: RouteContext): void {
       // warning was written for — it says nothing at all. Same computation the
       // CLI prints, imported rather than reimplemented.
       readiness: reconciliationReadiness(store),
+      // Exact imported-record mapping coverage is a read-only accounting
+      // projection. Operator declarations stay visibly separate from provider
+      // authority and cannot enter request spend, budgets, RoI, or advice.
+      mapping: store.billingMappingCoverage(),
       // Explicit, read-only provider API observations use a different
       // source contract from imported operator reports. They remain a
       // separate snapshot/status surface and never become overview spend.
@@ -431,14 +535,18 @@ export function handleBilling({ res, store }: RouteContext): void {
       reconciliation: {
         kind: 'scope_conditional_reconciliation',
         grain: 'provider_project_day_total',
-        runs: store.reconciliationRuns(10),
-        excludedFrom: [
-          'request_metered_spend',
-          'budget_enforcement',
-          'outcome_attribution',
-          'roi',
-          'model_recommendations',
-        ],
+        runs,
+        // READ, NOT RESTATED. The comment above says this route serves recorded
+        // runs rather than computing them, so the page cannot disagree with the
+        // evidence — and the exclusion list beside them was hand-written, and
+        // disagreed: five names here against the four each record carries, with
+        // `outcome_attribution` appearing nowhere else under `src/` (WP-B05).
+        // The record is the evidence for its own exclusions too.
+        //
+        // With no runs there is no record to read, so the declared vocabulary
+        // stands in — every use, which is the conservative answer when there is
+        // nothing to be conservative about yet.
+        excludedFrom: runs.length > 0 ? [...runs[0]!.result.excludedFrom] : [...CLAIM_USES],
       },
     });
   } catch (err) {
@@ -462,22 +570,26 @@ export function handleBilling({ res, store }: RouteContext): void {
 export function handleAllocation({ res, store }: RouteContext): void {
   try {
     const reconciliationRuns = store.reconciliationRuns(1);
+    const costCentres = store.costCentres();
+    const allocationRuns = store.allocationRuns(10);
     return json(res, 200, {
       demo: isDemo(),
+      // Showback: cost centres with no recorded run are partial coverage of a
+      // claim that is still unknown, never a refuted one.
+      claimSupport: allocatedClaimSupport({
+        costCentreCount: costCentres.length,
+        runCount: allocationRuns.length,
+      }),
       generatedAt: new Date().toISOString(),
       kind: 'derived_cost_allocation',
       trust: 'derived_allocation_of_local_estimates',
       /** Showback, never chargeback: a chargeback implies a settlement this product does not have. */
       basis: 'showback_only',
-      excludedFrom: [
-        'request_metered_spend',
-        'budget_enforcement',
-        'roi',
-        'model_recommendations',
-      ],
-      costCentres: store.costCentres(),
+      // The surface-level floor; each run carries its own derived list (D-228).
+      excludedFrom: [...EXACT_ALLOCATION_EXCLUDED_FLOOR],
+      costCentres,
       rules: store.allocationRules(),
-      runs: store.allocationRuns(10),
+      runs: allocationRuns,
       // A cross-reference, not a computation. Whether ANY reconciliation has
       // been recorded decides whether the residual underneath every figure
       // on that page has been looked at — which is the difference between a
@@ -487,6 +599,65 @@ export function handleAllocation({ res, store }: RouteContext): void {
         latestComputedAtMs: reconciliationRuns[0]?.computedAtMs ?? null,
       },
     });
+  } catch (err) {
+    return json(res, 500, { error: String(err) });
+  }
+}
+
+/**
+ * Exact economic-ledger projection — the dashboard/API counterpart of
+ * `fiscus economic --json`. This is deliberately a read-only projection: it
+ * exposes the same source/effective coverage and role-aware balances as the
+ * CLI, without recomputing or mutating historical events.
+ *
+ * `all=1` (or `all=true`) takes precedence over `days`. An invalid window is a
+ * 400 rather than a silent fallback, because a caller must not mistake a
+ * different time range for the one it requested. The upper bound mirrors the
+ * CLI so an accidental multi-century query cannot turn a local dashboard poll
+ * into an unbounded replay.
+ */
+export function handleEconomic({ res, url, store }: RouteContext): void {
+  try {
+    const all = url.searchParams.get('all') === '1' || url.searchParams.get('all') === 'true';
+    const rawDays = url.searchParams.get('days');
+    const days = rawDays === null ? 30 : Number(rawDays);
+    if (!all && (!Number.isFinite(days) || days <= 0 || days > 3650)) {
+      return json(res, 400, { error: 'days must be a finite number between 0 and 3650 (or pass all=1)' });
+    }
+    const targetCurrency = url.searchParams.get('targetCurrency');
+    if (targetCurrency !== null && targetCurrency.trim().length === 0) {
+      return json(res, 400, { error: 'targetCurrency must be non-empty when supplied' });
+    }
+    let asOf: Instant | undefined;
+    const rawAsOf = url.searchParams.get('asOf');
+    if (rawAsOf !== null) {
+      try {
+        asOf = instant(rawAsOf);
+      } catch (error) {
+        return json(res, 400, { error: `asOf must be a canonical UTC ISO-8601 instant: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    }
+    let effectiveAt: Instant | undefined;
+    const rawEffectiveAt = url.searchParams.get('effectiveAt');
+    if (rawEffectiveAt !== null) {
+      try {
+        effectiveAt = instant(rawEffectiveAt);
+      } catch (error) {
+        return json(res, 400, { error: `effectiveAt must be a canonical UTC ISO-8601 instant: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    }
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    const startMs = all ? 0 : now - days * dayMs;
+    const endMs = now + 1000;
+    return json(res, 200, buildEconomicReport(store, {
+      startMs,
+      endMs,
+      demo: isDemo(),
+      ...(targetCurrency === null ? {} : { targetUnit: targetCurrency.trim() }),
+      ...(asOf === undefined ? {} : { asOf }),
+      ...(effectiveAt === undefined ? {} : { effectiveAt }),
+    }));
   } catch (err) {
     return json(res, 500, { error: String(err) });
   }
@@ -533,10 +704,30 @@ export function handleExportCsv({ res, url, store }: RouteContext): void {
   const safe = valid.includes(range) ? range : '30d';
   try {
     const { startMs, endMs } = resolveRange(safe, Date.now());
-    const csv = requestsToCsv(store.requestsInRange(startMs, endMs));
+    const economic = url.searchParams.get('economic') === '1' || url.searchParams.get('economic') === 'true';
+    const targetUnit = url.searchParams.get('targetCurrency');
+    const rawAsOf = url.searchParams.get('asOf');
+    if (targetUnit !== null && targetUnit.trim().length === 0) {
+      return json(res, 400, { error: 'targetCurrency must be non-empty when supplied' });
+    }
+    let asOf: string | undefined;
+    if (rawAsOf !== null) {
+      try {
+        asOf = instant(rawAsOf);
+      } catch (error) {
+        return json(res, 400, { error: `asOf must be a canonical UTC ISO-8601 instant: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    }
+    const csv = economic
+      ? economicRequestsToCsv(store.economicRequestsInRange(startMs, endMs, {
+        ...(targetUnit === null ? {} : { targetUnit }),
+        ...(asOf === undefined ? {} : { asOf }),
+      }))
+      : requestsToCsv(store.requestsInRange(startMs, endMs));
     res.writeHead(200, {
       'content-type': 'text/csv; charset=utf-8',
       'content-disposition': `attachment; filename="fiscus-${safe}.csv"`,
+      'cache-control': 'no-store',
     });
     res.end(csv);
   } catch (err) {
@@ -558,25 +749,52 @@ export function handleRealization({ res, url, store }: RouteContext): void {
   })();
 }
 
+/**
+ * A kernel node and its neighbourhood, read-only (D-257). The as-of boundary
+ * is the same hindsight-safe replay `/api/billing` uses for its claims; a node
+ * that did not exist yet answers `found: false` exactly like one that never
+ * existed. Nothing here writes, and the id is looked up, never pattern-matched.
+ */
+export function handleKernel({ res, url, store }: RouteContext): void {
+  try {
+    const id = url.searchParams.get('node');
+    if (id === null || id.length === 0 || id.length > 512) {
+      return json(res, 400, { error: 'node is required: the id of one kernel node, at most 512 characters' });
+    }
+    let asOf: Instant | undefined;
+    const rawAsOf = url.searchParams.get('asOf');
+    if (rawAsOf !== null) {
+      try {
+        asOf = instant(rawAsOf);
+      } catch (error) {
+        return json(res, 400, { error: `asOf must be a canonical UTC ISO-8601 instant: ${error instanceof Error ? error.message : String(error)}` });
+      }
+    }
+    const view = store.kernelNodeView(id, asOf);
+    if (view === null) {
+      return json(res, 200, { found: false, id, asOf: asOf ?? null, node: null, revoked: false, record: null, restsOn: [], supports: [], derivations: [], assumptions: [], graphSize: store.kernelGraphSize(asOf) });
+    }
+    return json(res, 200, { found: true, id, ...view });
+  } catch (err) {
+    return json(res, 500, { error: String(err) });
+  }
+}
+
 export function handleGuide({ res, store, config }: RouteContext): void {
   // Same journey engine as `fiscus guide` — one truth, two renderers.
   void (async () => {
     try {
       const now = Date.now();
       const day = 24 * 60 * 60 * 1000;
-      let proxyUp = false;
-      try {
-        const r = await fetch(`http://localhost:${config.port}/__fiscus/health`, { signal: AbortSignal.timeout(500) });
-        proxyUp = r.ok;
-      } catch {
-        proxyUp = false;
-      }
+      const proxyStatus = await probeProxyState(config);
       return json(res, 200, buildGuide({
         demo: isDemo(),
         port: config.port,
         dashboardPort: config.dashboardPort,
-        proxyUp,
+        proxyUp: proxyStatus.kind === 'up',
+        proxyStatus,
         requestsAllTime: store.summary(0, now + 1000).requests,
+        requestsRetention: store.retentionFloor(),
         spend30dUsd: store.summary(now - 30 * day, now + 1000).costUsd,
         dailyCapUsd: config.budget.dailyUsd,
         outcomeSignals: store.countSignals(),
@@ -601,7 +819,16 @@ export function handleJudge({ req, res, store, config }: RouteContext): void {
   void (async () => {
     try {
       const chunks: Buffer[] = [];
-      for await (const c of req) chunks.push(c as Buffer);
+      let bytes = 0;
+      for await (const c of req) {
+        const chunk = c as Buffer;
+        bytes += chunk.byteLength;
+        if (bytes > RESOURCE_LIMITS.dashboardRequestBytes) {
+          req.resume();
+          return json(res, 413, { error: { code: 'DASHBOARD_REQUEST_TOO_LARGE', message: 'judge request body exceeds the bounded dashboard limit' } });
+        }
+        chunks.push(chunk);
+      }
       let body: { project?: string; sessionId?: string; windowDays?: number } = {};
       try {
         body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
@@ -680,8 +907,24 @@ export function handleValue({ res, url, store, config }: RouteContext): void {
       // Cross-project allocation is not comparable/reliable enough to
       // recommend from raw RoI alone; per-project value stays descriptive.
       const projectAllocation = null;
+      // The money claim is `returnRatio.manualEquivalentValueUsd`, and only when
+      // the payload's own `basis` says it is priced. A dollar figure is never
+      // invented from a bare ratio.
+      const ratio = spine?.roi?.returnRatio ?? null;
+      const roiCoverage = spine?.roi?.coverage;
       return json(res, 200, {
         demo: value.demo,
+        // Contradicted gate evidence lands on COVERAGE here rather than on the
+        // epistemic axis, because mature units are different propositions and a
+        // population of contradictions is not a contradiction in the aggregate.
+        // See `src/dashboard/claim-support.ts`.
+        claimSupport: realizedClaimSupport({
+          maturedUnits: rep?.matured?.units ?? 0,
+          realizedUnits: rep?.matured?.realizedUnits ?? 0,
+          gateConflicts: rep?.matured?.gateConflicts ?? null,
+          roiCoverage: typeof roiCoverage === 'number' ? roiCoverage : null,
+          valued: ratio?.basis === 'usd' && typeof ratio.manualEquivalentValueUsd === 'number',
+        }),
         gitRepo: spine?.loaded.source === 'git',
         valueSource: spine?.loaded.source ?? null,
         // Whether the realized-value dollars came from spend SCOPED to this
@@ -699,13 +942,99 @@ export function handleValue({ res, url, store, config }: RouteContext): void {
         projectAllocation,
         usage: value.usage,
         team: value.team,
-        drift: spine?.drift ?? null,
+        drift: spine?.drift === null || spine?.drift === undefined
+          ? null
+          : { ...spine.drift, ...driftDetectability(spine.drift) },
         reclaimed: spine?.reclaimed ?? null,
       });
     } catch (err) {
       return json(res, 500, { error: String(err) });
     }
   })();
+}
+
+/**
+ * Read-only causal-study inspector. It intentionally omits randomisation
+ * material and raw record payloads: the dashboard gets the evidence state,
+ * protocol hash, counts, and replay verdict, while local CLI/export tooling
+ * remains the controlled surface for detailed evidence handling.
+ */
+export function handleCausal({ res, url, store }: RouteContext): void {
+  try {
+    const listBasis = store.causalStudyListBasis();
+    const summaries = listBasis.studies;
+    const requested = url.searchParams.get('study');
+    const selected = requested
+      ? summaries.find((summary) => summary.studyId === requested) ?? null
+      : summaries[0] ?? null;
+    if (requested && !selected) {
+      return json(res, 404, { error: 'causal study not found', studyId: requested });
+    }
+    if (!selected) {
+      return json(res, 200, {
+        demo: isDemo(),
+        generatedAt: new Date().toISOString(),
+        studies: [],
+        // Present on BOTH branches. A field a consumer sees only when a study
+        // exists is a field it cannot read, and this branch is exactly where a
+        // version-2-only Store lands -- the case with the most to omit.
+        studiesOmitted: listBasis.omitted,
+        study: null,
+        causalEvidence: 'No publicly inspectable retained version-1 causal study. Version-2 public projection is deferred. Value output remains an observed/manual-equivalent scenario.',
+        boundary: 'Read-only local status. This endpoint cannot change routing, budgets, or provider configuration.',
+      });
+    }
+    const data = store.causalStudyData(selected.studyId);
+    if (!data) throw new Error('causal summary exists without its local protocol');
+    // SERVING A STUDY IS A LOOK. This used to call `estimateCausalStudy`
+    // directly, so every refresh of this endpoint presented itself as the first
+    // reading of the study. Recording the act does not breach the read-only
+    // boundary this response declares: it changes no routing, no budget and no
+    // provider configuration, and it is an audit record of a report that has
+    // already been made rather than a change to the operator's data.
+    const report = store.reportCausalStudy(selected.studyId);
+    if (report === null) throw new Error('causal summary exists without its local protocol');
+    const estimate = report.estimate;
+    const assignmentReplay = store.causalAssignmentPlans(selected.studyId).map((plan) => ({
+      blockId: plan.blockId,
+      allocationHash: plan.allocationHash,
+      errors: verifyBlockedAssignmentPlan(data.protocol, plan),
+    }));
+    return json(res, 200, {
+      demo: isDemo(),
+      generatedAt: new Date().toISOString(),
+      studies: summaries,
+      studiesOmitted: listBasis.omitted,
+      study: {
+        studyId: selected.studyId,
+        protocolHash: data.protocol.protocolHash,
+        committedAtMs: data.protocol.committedAtMs,
+        question: data.protocol.question,
+        counts: {
+          decisions: data.decisions.length,
+          executions: data.executions.length,
+          outcomes: data.outcomes.length,
+        },
+        qualification: estimate.qualification,
+        allowedClaim: estimate.allowedClaim,
+        jointInference: estimate.jointInference,
+        assignmentReplay,
+        claimAfterMultiplicity: report.claimAfterMultiplicity,
+        claimAfterMultiplicityReason: report.claimAfterMultiplicityReason,
+        multiplicity: report.multiplicity,
+      },
+      causalEvidence: 'Local randomized-study evidence only. Ordinary Lift, pricing, and value scenarios cannot create a causal claim.',
+      boundary: 'Read-only local status. This endpoint cannot change routing, budgets, or provider configuration.',
+    });
+  } catch (err) {
+    if (typeof err === 'object' && err !== null && Reflect.get(err, 'code') === 'CAUSAL_INTEGRITY_FAILURE') {
+      return json(res, 409, {
+        error: 'CAUSAL_INTEGRITY_FAILURE',
+        causalEvidence: 'Stored causal evidence failed integrity verification. Public causal projection is unavailable until the local Store is repaired.',
+      });
+    }
+    return json(res, 500, { error: String(err) });
+  }
 }
 
 /**
@@ -728,11 +1057,39 @@ export function handleSettingsUpdate({ req, res, store, config, version, configP
   void (async () => {
     try {
       const chunks: Buffer[] = [];
-      for await (const c of req) chunks.push(c as Buffer);
+      let bytes = 0;
+      for await (const c of req) {
+        const chunk = c as Buffer;
+        bytes += chunk.byteLength;
+        if (bytes > RESOURCE_LIMITS.dashboardRequestBytes) {
+          req.resume();
+          throw new SettingsValidationError('request body exceeds the 16 KiB settings limit');
+        }
+        chunks.push(chunk);
+      }
       const patch = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') as SettingsPatch;
-      const current = configPersistence.load();
-      const next = applySettingsPatch(current, patch);
-      configPersistence.save(next);
+      let current: FiscusConfig;
+      let next: FiscusConfig;
+      if (configPersistence.mutate) {
+        let before: FiscusConfig | null = null;
+        next = configPersistence.mutate((latest) => {
+          before = structuredClone(latest);
+          return applySettingsPatch(latest, patch);
+        });
+        if (before === null) throw new Error('config mutation transaction did not execute');
+        current = before;
+      } else {
+        // Injectable test/back-compat seam. Production always supplies mutate().
+        current = configPersistence.load();
+        next = applySettingsPatch(current, patch);
+        configPersistence.save(next);
+      }
+      if (current.retentionDays !== next.retentionDays) {
+        store.recordRetentionPolicyChange('requests', current.retentionDays, next.retentionDays, Date.now(), 'dashboard-settings');
+      }
+      if (current.proposalRetentionDays !== next.proposalRetentionDays) {
+        store.recordRetentionPolicyChange('proposals', current.proposalRetentionDays, next.proposalRetentionDays, Date.now(), 'dashboard-settings');
+      }
       // Mutate the shared config object IN PLACE rather than rebinding it.
       // `fiscus start` hands this same object to the proxy, and the guard holds
       // it as a getter (`new BudgetGuard(store, () => config.budget)`) that is
@@ -747,7 +1104,13 @@ export function handleSettingsUpdate({ req, res, store, config, version, configP
       Object.assign(config, next);
       return json(res, 200, buildSettingsSnapshot(store, config, version));
     } catch (err) {
-      return json(res, 500, { error: String(err) });
+      if (err instanceof SettingsValidationError) {
+        return json(res, 400, { error: { code: err.code, message: err.message } });
+      }
+      if (err instanceof SyntaxError) {
+        return json(res, 400, { error: { code: 'SETTINGS_INVALID_JSON', message: 'settings request body must be valid JSON' } });
+      }
+      return json(res, 500, { error: { code: 'SETTINGS_UPDATE_FAILED', message: 'settings could not be persisted' } });
     }
   })();
 }
@@ -781,29 +1144,32 @@ export function handleHtmlEntry({ res, url }: RouteContext): void {
  * through to the static assets and then to 404.
  */
 export const ROUTES: readonly Route[] = [
-  { path: '/api/health', methods: ['GET', 'HEAD'], handler: handleHealth },
-  { path: '/api/importers', methods: ['GET', 'HEAD'], handler: handleImporters },
-  { path: '/api/import', methods: ['POST'], localOnly: ['POST'], handler: handleImport },
-  { path: '/api/discover', methods: ['POST'], localOnly: ['POST'], handler: handleDiscover },
+  apiRoute('health', handleHealth),
+  apiRoute('importers', handleImporters),
+  apiRoute('import', handleImport),
+  apiRoute('discover', handleDiscover),
   // GET previews (read-only), POST performs the import+correlate — so only the
   // POST carries the CSRF gate.
-  { path: '/api/scan', methods: ['GET', 'POST'], localOnly: ['POST'], handler: handleScan },
-  { path: '/api/overview', methods: ['GET', 'HEAD'], handler: handleOverview },
-  { path: '/api/billing', methods: ['GET'], handler: handleBilling },
-  { path: '/api/allocation', methods: ['GET'], handler: handleAllocation },
-  { path: '/api/pricing', methods: ['GET', 'HEAD'], handler: handlePricing },
-  { path: '/api/export.csv', methods: ['GET', 'HEAD'], handler: handleExportCsv },
-  { path: '/api/realization', methods: ['GET', 'HEAD'], handler: handleRealization },
-  { path: '/api/guide', methods: ['GET', 'HEAD'], handler: handleGuide },
-  { path: '/api/judge', methods: ['POST'], localOnly: ['POST'], handler: handleJudge },
-  { path: '/api/value', methods: ['GET', 'HEAD'], handler: handleValue },
+  apiRoute('scan', handleScan),
+  apiRoute('overview', handleOverview),
+  apiRoute('billing', handleBilling),
+  apiRoute('allocation', handleAllocation),
+  apiRoute('economic', handleEconomic),
+  apiRoute('pricing', handlePricing),
+  apiRoute('export-csv', handleExportCsv),
+  apiRoute('realization', handleRealization),
+  apiRoute('guide', handleGuide),
+  apiRoute('judge', handleJudge),
+  apiRoute('value', handleValue),
+  apiRoute('causal', handleCausal),
+  apiRoute('kernel', handleKernel),
   // Reads GET only, but has always advertised 'GET, POST' on the 405 — the
   // POST that Settings actually performs goes to /api/settings/update. The
   // header is preserved verbatim rather than "corrected": it is part of the
   // published response contract, and changing it is a behaviour change.
-  { path: '/api/settings', methods: ['GET'], allow: 'GET, POST', handler: handleSettings },
-  { path: '/api/settings/update', methods: ['POST'], localOnly: ['POST'], handler: handleSettingsUpdate },
-  { path: '/api/settings/clear-proposals', methods: ['POST'], localOnly: ['POST'], handler: handleClearProposals },
+  apiRoute('settings', handleSettings),
+  apiRoute('settings-update', handleSettingsUpdate),
+  apiRoute('clear-proposals', handleClearProposals),
   { path: '/', methods: ['GET', 'HEAD'], handler: handleHtmlEntry },
   { path: '/index.html', methods: ['GET', 'HEAD'], handler: handleHtmlEntry },
   { path: '/classic', methods: ['GET', 'HEAD'], handler: handleHtmlEntry },

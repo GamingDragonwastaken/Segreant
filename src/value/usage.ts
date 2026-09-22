@@ -1,75 +1,122 @@
 /**
  * Cross-modality RoI — value from NON-coding AI usage (chat, research, drafting).
  *
- * The universal spine (intent → output → acceptance → outcome) is modality-
- * agnostic, so the same RoI lenses apply. What changes is the outcome source:
- * coding uses git; non-coding uses *reported* outcomes (`fiscus report
- * --session <id> --kind used|resolved|published`). A non-coding unit is a
- * session; it "realizes" when it has a positive, no-incident outcome — the
- * direct analog of shipped+survived+clean for code.
+ * A non-coding unit is a session. Its outcome semantics are intentionally NOT
+ * the coding eight-gate lifecycle: a reported use/resolution/publication is a
+ * modality-specific outcome observation, not a fake commit/test/merge/deploy.
+ * The adapter therefore maps explicit positive/negative reports into a single
+ * `reported_outcome` epistemic predicate and evaluates that predicate through a
+ * domain-neutral OutcomeContract.
  *
  * DEPTH (not just realized/not): a reported outcome is also a direct Impact
- * observation for this non-coding adapter — `used`/`accepted` = kept, `resolved`
- * = task-level reach, `published`/`shipped` = external reach. Impact is averaged
- * CONDITIONALLY over realized sessions, so the realization rate is not counted
- * twice. The grade is exactly what the user reported, never inferred from text.
+ * observation for this non-coding adapter — `used`/`accepted` = kept,
+ * `resolved` = task-level reach, `published`/`shipped` = external reach. Impact
+ * is averaged CONDITIONALLY over confirmed reported outcomes, so the realization
+ * rate is not counted twice. The grade is exactly what the operator reported,
+ * never inferred from text.
  *
- * No prompt text is read or stored, so we never classify by content. Acceptance
- * (edit-distance) and survival-over-time don't apply to a one-shot answer, so they
- * stay `unknown` — never faked.
+ * No prompt text is read or stored, so Fiscus never classifies the content.
  */
 
-import type { Store } from '../store/db.ts';
-import { scoreFunnel, type Gate, type GateResult, type Verdict } from './gates.ts';
+import type { Store, WindowRetentionCoverage } from '../store/db.ts';
+import type { EpistemicState } from '../epistemic/state.ts';
+import { adaptOutcome, createWorkUnit, type OutcomeAdapter, type WorkUnit } from '../outcomes/work-unit.ts';
 import { computeReturnOnIntelligence, type RoIResult } from './lenses.ts';
 import { timeWithAiMinutes } from './lift.ts';
+import type { Gate } from './gates.ts';
+import { economicAttributionFromAttributions, economicAttributionNumber, type EconomicAttribution } from '../economics/attribution.ts';
 
 const POSITIVE_OUTCOMES = new Set(['used', 'resolved', 'published', 'shipped', 'accepted']);
 const NEGATIVE_OUTCOMES = new Set(['incident', 'redone', 'discarded']);
+const NON_CODING_OUTCOME_CONTRACT = Object.freeze({ id: 'non_coding_reported_outcome', requiredPredicates: ['reported_outcome'] as const });
+
+export interface SessionSignal {
+  readonly kind: string;
+  readonly verdict: string;
+}
+
+function sessionSignalsFromUnit(unit: WorkUnit): SessionSignal[] {
+  const raw = unit.context.signals;
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((value) => {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return [];
+    const signal = value as { kind?: unknown; verdict?: unknown };
+    return typeof signal.kind === 'string' && typeof signal.verdict === 'string'
+      ? [{ kind: signal.kind, verdict: signal.verdict }]
+      : [];
+  });
+}
+
+function sessionState(signals: readonly SessionSignal[]): EpistemicState {
+  const positive = signals.some((signal) => POSITIVE_OUTCOMES.has(signal.kind) && signal.verdict !== 'fail');
+  const negative = signals.some((signal) => NEGATIVE_OUTCOMES.has(signal.kind) || signal.verdict === 'fail');
+  return positive ? (negative ? 'conflicted' : 'supported') : negative ? 'refuted' : 'unknown';
+}
+
+/** Canonical adapter for explicit non-coding reported-outcome evidence. */
+export const NON_CODING_OUTCOME_ADAPTER: OutcomeAdapter = Object.freeze({
+  id: 'non-coding-reported-outcome-v1',
+  contract: NON_CODING_OUTCOME_CONTRACT,
+  resolve: (_predicate: string, unit: WorkUnit) => sessionState(sessionSignalsFromUnit(unit)),
+});
 
 /** How far a reported non-coding outcome reached — the Impact ladder, non-coding side. */
 export type Reach = 'shipped' | 'merged' | 'kept';
 
 /** The strongest reach implied by a session's reported positive outcomes (null = none). */
 function strongestReach(kinds: Set<string>): Reach | null {
-  if (kinds.has('published') || kinds.has('shipped')) return 'shipped'; // reached an external audience
-  if (kinds.has('resolved')) return 'merged'; // closed a task/ticket
-  if (kinds.has('used') || kinds.has('accepted')) return 'kept'; // used, but internal
+  if (kinds.has('published') || kinds.has('shipped')) return 'shipped';
+  if (kinds.has('resolved')) return 'merged';
+  if (kinds.has('used') || kinds.has('accepted')) return 'kept';
   return null;
 }
 
 export interface SessionOutcome {
-  reach: Reach | null; // graded strongest reported outcome; null = nothing reported
-  positive: boolean; // any positive, non-failed outcome
-  negative: boolean; // any incident/redone/discarded or failed verdict
-  realized: boolean; // positive and not negative — the honest "it mattered" bar
+  reach: Reach | null;
+  positive: boolean;
+  negative: boolean;
+  state: EpistemicState;
+  realized: boolean;
 }
 
 /**
- * Classify a session's reported signals into a graded outcome. This is the ONE
- * source of truth for "did this non-git session realize, and how far did it
- * reach" — reused by both the cross-modality report and per-user value so they
- * can never drift apart.
+ * Classify explicit session reports without borrowing coding lifecycle gates.
+ * Positive + negative reports are contradictory evidence (`conflicted`), not a
+ * last-write-wins boolean. A purely negative report refutes the outcome; no
+ * report is unknown.
  */
-export function classifySession(signals: Array<{ kind: string; verdict: string }>): SessionOutcome {
+export function classifySession(signals: readonly SessionSignal[]): SessionOutcome {
   const posKinds = new Set(signals.filter((x) => POSITIVE_OUTCOMES.has(x.kind) && x.verdict !== 'fail').map((x) => x.kind));
   const reach = strongestReach(posKinds);
   const positive = reach !== null;
   const negative = signals.some((x) => NEGATIVE_OUTCOMES.has(x.kind) || x.verdict === 'fail');
-  return { reach, positive, negative, realized: positive && !negative };
-}
-
-function gate(g: Gate, verdict: Verdict, detail: string): GateResult {
-  return { gate: g, verdict, detail };
+  const unit = createWorkUnit({
+    id: 'non-coding-session-classification',
+    kind: 'non_coding_session',
+    startedAtMs: 0,
+    endedAtMs: 0,
+    context: { signals: signals.map((signal) => ({ kind: signal.kind, verdict: signal.verdict })) },
+  });
+  const adapted = adaptOutcome(unit, NON_CODING_OUTCOME_ADAPTER);
+  const state: EpistemicState = adapted.evaluation.status === 'confirmed'
+    ? 'supported'
+    : adapted.evaluation.status === 'failed'
+      ? 'refuted'
+      : adapted.evaluation.status === 'conflicted'
+        ? 'conflicted'
+        : 'unknown';
+  return { reach, positive, negative, state, realized: adapted.evaluation.status === 'confirmed' };
 }
 
 export interface UsageUnit {
   sessionId: string;
   costUsd: number;
   requests: number;
+  /** Exact effective session economics; numeric costUsd is compatibility-only. */
+  economic?: EconomicAttribution;
   maturing: boolean;
   acceptance: number | null;
-  reach: Reach | null; // graded from the reported outcome; null = no outcome reported
+  reach: Reach | null;
   realized: boolean;
 }
 
@@ -77,82 +124,121 @@ export interface UsageReport {
   units: UsageUnit[];
   realizedUnits: number;
   totalCostUsd: number;
-  /** How reported outcomes broke down by reach — the richer non-coding picture. */
   outcomeMix: { published: number; resolved: number; used: number; none: number };
-  /** The money face's inputs, when priced (org-disclosed outcome baselines + labor rate). */
   money: { priced: boolean; grossRealizedValueUsd: number | null; supervisionMinutes: number | null };
   roi: RoIResult;
+  /** Exact effective usage coverage, separate from the legacy numeric ROI input. */
+  economic?: UsageEconomicRollup;
+  /**
+   * Whether this window reaches behind what retention deleted (D-174).
+   *
+   * Required, not optional. An empty `units` list means two different things --
+   * no session was tagged, or the tagged sessions were deleted -- and the
+   * surface that renders the list has to be able to tell them apart. An
+   * optional field would let a consumer be built that cannot, which is how the
+   * CLI came to instruct an operator to tag sessions they had already tagged.
+   */
+  retention: WindowRetentionCoverage;
+}
+
+export interface UsageEconomicRollup {
+  coverage: 'exact' | 'partial' | 'legacy_unknown';
+  total: EconomicAttribution | null;
+  realized: EconomicAttribution | null;
 }
 
 export interface UsageMoneyOptions {
-  /** Manual-equivalent minutes per realized outcome, by reach name (used/resolved/published). Org input, disclosed. */
   outcomeBaselineMinutes: Record<string, number>;
   laborRatePerHour: number | null;
 }
 
-/** The outcomeMix name a graded reach prices under (same mapping the breakdown uses). */
 function reachName(reach: Reach): 'published' | 'resolved' | 'used' {
   return reach === 'shipped' ? 'published' : reach === 'merged' ? 'resolved' : 'used';
 }
 
-export function computeUsageRoI(store: Store, opts: { startMs: number; endMs: number; money?: UsageMoneyOptions }): UsageReport {
-  // Non-coding usage = sessions that produced no code proposals.
-  const sessions = store.sessionUnits(opts.startMs, opts.endMs).filter((s) => !s.hasProposals);
+/**
+ * The DECLARED utility assigned to each reach category, for the Impact lens.
+ *
+ * Reach is an ordinal descriptor: published reached further than resolved,
+ * which reached further than used. Nothing observed says how much further, and
+ * the Impact lens needs a number in [0,1] to enter the composite. These three
+ * values are therefore a stated PREFERENCE about how much further each step
+ * counts — an outcome/utility model this project declares, never a measurement
+ * and never a universal cardinal scale. AII-011 exists because the previous
+ * inline `1 / 0.75 / 0.5` made that assignment invisible at the call site, so a
+ * workflow label arrived in the composite looking like an observation.
+ *
+ * An operator whose `published` work is worth far more than its `resolved` work
+ * should say so here; the Index will legitimately differ, and `impactHow` will
+ * carry the model that produced it.
+ */
+export const DECLARED_REACH_UTILITY: Readonly<Record<Reach, number>> = {
+  shipped: 1,
+  merged: 0.75,
+  kept: 0.5,
+} as const;
 
-  const lensUnits: Array<{ maturing: boolean; acceptance: number | null; funnel: ReturnType<typeof scoreFunnel> }> = [];
+function describeReachUtility(model: Readonly<Record<Reach, number>>): string {
+  const parts = (Object.keys(DECLARED_REACH_UTILITY) as Reach[])
+    .map((reach) => `${reachName(reach)}=${model[reach]}`)
+    .join(', ');
+  return `operator-reported outcome reach, conditional on confirmed reported-outcome sessions, scored by the DECLARED reach-utility model (${parts}) — a stated preference, not a measured cardinal impact`;
+}
+
+export function computeUsageRoI(
+  store: Store,
+  opts: { startMs: number; endMs: number; money?: UsageMoneyOptions; reachUtility?: Readonly<Record<Reach, number>> },
+): UsageReport {
+  const sessions = store.economicSessionUnits(opts.startMs, opts.endMs).filter((s) => !s.hasProposals);
+
+  // The legacy lens layer currently needs only `funnel.realized` plus an array of
+  // gate-shaped observations for Impact compatibility. Non-coding has no coding
+  // gates, so the array is deliberately empty rather than populated with fake
+  // unknown/pass lifecycle states. This adapter disappears when lenses migrate
+  // fully to OutcomeContract evidence.
+  const lensUnits: Array<{
+    maturing: boolean;
+    acceptance: number | null;
+    funnel: { realized: boolean; results: Array<{ gate: Gate; verdict: 'pass' | 'fail' | 'unknown' }> };
+  }> = [];
   const units: UsageUnit[] = [];
   const outcomeMix = { published: 0, resolved: 0, used: 0, none: 0 };
 
   for (const s of sessions) {
-    const signals = store.signalsForCommit(s.sessionId); // commit_hash column reused as a generic ref
-    const { reach, positive, negative } = classifySession(signals);
+    const signals = store.signalsForCommit(s.sessionId);
+    const outcome = classifySession(signals);
 
-    // Map the reported outcome onto the shared ladder, GRADED by reach so Impact
-    // differentiates a published deliverable from a one-off answer. Code-only gates
-    // (committed/tested) and unobservable ones (accepted/survival-over-time) stay
-    // `unknown` — never faked. "survived" here means "kept for the period", the
-    // reported analog of durability.
-    const verdicts: Record<Gate, GateResult> = {
-      proposed: gate('proposed', 'pass', 'AI produced output'),
-      accepted: gate('accepted', 'unknown', 'no diff to compare for non-code'),
-      committed: gate('committed', 'unknown', 'n/a for non-code usage'),
-      tested: gate('tested', 'unknown', 'n/a for non-code usage'),
-      merged: gate(
-        'merged',
-        reach === 'merged' || reach === 'shipped' ? 'pass' : 'unknown',
-        reach === 'merged' ? 'reported resolved' : reach === 'shipped' ? 'resolved en route to published' : 'no resolution reported',
-      ),
-      shipped: gate('shipped', reach === 'shipped' ? 'pass' : 'unknown', reach === 'shipped' ? 'reported published/shipped' : 'not reported as published'),
-      survived: gate('survived', positive ? 'pass' : 'unknown', positive ? 'kept for the period' : 'no outcome reported'),
-      clean: gate('clean', negative ? 'fail' : positive ? 'pass' : 'unknown', negative ? 'reported incident/redone' : positive ? 'no incident' : 'no outcome reported'),
-    };
-    const funnel = scoreFunnel(verdicts);
-
-    outcomeMix[reach === null ? 'none' : reachName(reach)] += 1;
+    outcomeMix[outcome.reach === null ? 'none' : reachName(outcome.reach)] += 1;
 
     units.push({
       sessionId: s.sessionId,
-      costUsd: s.costUsd,
+      costUsd: economicAttributionNumber(s.economic, s.costUsd),
       requests: s.requests,
-      maturing: false, // a non-coding outcome is the reported signal, not survival-over-time
+      economic: s.economic,
+      maturing: false,
       acceptance: null,
-      reach,
-      realized: funnel.realized,
+      reach: outcome.reach,
+      realized: outcome.realized,
     });
-    lensUnits.push({ maturing: false, acceptance: null, funnel });
+    lensUnits.push({ maturing: false, acceptance: null, funnel: { realized: outcome.realized, results: [] } });
   }
 
   const realized = units.filter((u) => u.realized);
   const totalCostUsd = units.reduce((s, u) => s + u.costUsd, 0);
-  // The efficiency lens keeps the honest FLOOR (realized value = the spend that
-  // realized), so it stays a 0..1 share regardless of pricing below.
-  const realizedValueUsd = realized.reduce((s, u) => s + u.costUsd, 0);
+  const spendOnRealizedUnitsUsd = realized.reduce((s, u) => s + u.costUsd, 0);
 
-  // The MONEY face (RoI Return): price realized outcomes by the org's disclosed
-  // manual-equivalent baselines — the exact pattern coding uses (baselineMinutes).
-  // Supervision time is measured the same way too: 10-min concurrency windowing
-  // over these sessions' own requests. Without baselines + a rate, the dollar
-  // stays honestly un-priced; nothing here feeds the Index or the lenses.
+  const exactValues = units.flatMap((unit) => unit.economic === undefined ? [] : [unit.economic]);
+  const realizedExactValues = realized.flatMap((unit) => unit.economic === undefined ? [] : [unit.economic]);
+  const economic: UsageEconomicRollup = {
+    coverage: exactValues.length === 0
+      ? 'legacy_unknown'
+      : exactValues.length === units.length && economicAttributionFromAttributions(exactValues).complete
+        ? 'exact'
+        : 'partial',
+    total: exactValues.length === 0 ? null : economicAttributionFromAttributions(exactValues),
+    realized: exactValues.length === 0 ? null : economicAttributionFromAttributions(realizedExactValues),
+  };
+
   const money: UsageReport['money'] = { priced: false, grossRealizedValueUsd: null, supervisionMinutes: null };
   const rate = opts.money?.laborRatePerHour ?? null;
   if (opts.money && rate !== null && rate > 0) {
@@ -179,29 +265,48 @@ export function computeUsageRoI(store: Store, opts: { startMs: number; endMs: nu
     }
   }
 
+  // Ordinal reach becomes a cardinal lens value only through the declared model
+  // above. Keeping the mapping named (rather than inline) is what stops a
+  // workflow label from entering the composite as if it were an observation.
+  const reachUtility = opts.reachUtility ?? DECLARED_REACH_UTILITY;
   const realizedImpact = realized.length === 0
     ? null
-    : realized.reduce((sum, u) => sum + (u.reach === 'shipped' ? 1 : u.reach === 'merged' ? 0.75 : 0.5), 0) / realized.length;
+    : realized.reduce((sum, u) => sum + (u.reach === null ? 0 : reachUtility[u.reach]), 0) / realized.length;
 
   const roi = computeReturnOnIntelligence(
     {
+      // Null by construction, not by absence of instrumentation: the population
+      // above is filtered to `!hasProposals`. `acceptanceOutOfScope` below is
+      // what stops that from being reported as a gap the reader could close.
       firstPassAcceptance: null,
       units: lensUnits,
       matured: {
         realizationRate: units.length > 0 ? realized.length / units.length : 0,
         totalCostUsd,
-        realizedValueUsd,
+        spendOnRealizedUnitsUsd,
       },
     },
     {
+      acceptanceOutOfScope: true,
       ...(money.priced
         ? { laborRatePerHour: rate, grossRealizedValueUsd: money.grossRealizedValueUsd, supervisionMinutes: money.supervisionMinutes }
         : {}),
       ...(realizedImpact === null
         ? {}
-        : { impact: realizedImpact, impactHow: 'operator-reported outcome reach, conditional on realized sessions' }),
+        : { impact: realizedImpact, impactHow: describeReachUtility(reachUtility) }),
     },
   );
 
-  return { units, realizedUnits: realized.length, totalCostUsd, outcomeMix, money, roi };
+  return {
+    units,
+    realizedUnits: realized.length,
+    totalCostUsd,
+    outcomeMix,
+    money,
+    roi,
+    economic,
+    // Read from the ledger's own record rather than inferred from the rows: an
+    // absence of rows is exactly what cannot distinguish these states.
+    retention: store.windowCoverage(opts.startMs),
+  };
 }

@@ -1,9 +1,21 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, existsSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { applyPricingManifest, loadPricing, MAX_PRICING_MANIFEST_BYTES, pricingStatus, rateFor, refreshPricing, transformLiteLLMManifest } from '../src/cost/pricing.ts';
+import {
+  applyPricingManifest,
+  computeCost,
+  loadPricing,
+  MAX_PRICING_MANIFEST_BYTES,
+  pricingStatus,
+  pricingCardProvenance,
+  rateFor,
+  refreshPricing,
+  refreshPricingFromResponses,
+  transformLiteLLMManifest,
+} from '../src/cost/pricing.ts';
+import { Store } from '../src/store/db.ts';
 
 // These exercise the refresh/override path against an isolated FISCUS_HOME so the
 // real ~/.fiscus is never touched. node's test runner isolates each FILE in
@@ -38,6 +50,12 @@ test('a valid manifest is cached and then OVERRIDES the bundled table', () => {
   const { rate, estimated } = rateFor('anthropic', 'claude-opus-4-8');
   assert.equal(rate.input, 999);
   assert.equal(estimated, false);
+  assert.equal(computeCost('anthropic', 'claude-opus-4-8', {
+    inputTokens: 1,
+    outputTokens: 1,
+    cacheWriteTokens: 0,
+    cacheReadTokens: 0,
+  }).exact, undefined, 'numeric-only refreshed cards must not be promoted into exact accounting');
   assert.equal(pricingStatus().source, 'cache');
 });
 
@@ -159,6 +177,85 @@ test('accepted cards retain a hash-addressed local archive and verified provenan
   assert.equal(status.cardSha256, result.cardSha256);
 });
 
+test('each accepted card retains immutable hash-bound provenance and coverage exposes it', () => {
+  const home = freshHome();
+  const first = applyPricingManifest(manifest(66), {
+    sourceUrl: 'https://pricing.example.test/models.json?private=never-display',
+    sourceKind: 'native_manifest',
+    fetchedAt: '2026-08-29T10:00:00.000Z',
+    etag: '"card-v1"',
+  });
+  assert.equal(first.ok, true);
+  const firstSha = first.cardSha256!;
+  const firstProvenance = pricingCardProvenance(firstSha);
+  assert.ok(firstProvenance);
+  assert.equal(firstProvenance!.cardSha256, firstSha);
+  assert.equal(firstProvenance!.sourceUrl, 'https://pricing.example.test/models.json');
+  assert.equal(firstProvenance!.sourceUrlSha256?.length, 64);
+  assert.equal(firstProvenance!.sourceKind, 'native_manifest');
+  assert.equal(firstProvenance!.fetchedAt, '2026-08-29T10:00:00.000Z');
+  assert.equal(firstProvenance!.etag, '"card-v1"');
+  assert.equal(existsSync(join(home, 'pricing', 'cards', firstSha + '.provenance.json')), true);
+
+  const second = applyPricingManifest(manifest(77), {
+    sourceUrl: 'https://pricing.example.test/models.json?private=never-display',
+    sourceKind: 'native_manifest',
+    fetchedAt: '2026-08-29T11:00:00.000Z',
+    etag: '"card-v2"',
+  });
+  assert.equal(second.ok, true);
+  assert.deepEqual(pricingCardProvenance(firstSha), firstProvenance, 'a later card must not rewrite an earlier card provenance record');
+  assert.equal(pricingCardProvenance(second.cardSha256!)!.etag, '"card-v2"');
+
+  const store = new Store(':memory:');
+  const cost = computeCost('anthropic', 'claude-opus-4-8', {
+    inputTokens: 1_000,
+    outputTokens: 100,
+    cacheWriteTokens: 0,
+    cacheReadTokens: 0,
+  });
+  store.insertRequest({
+    requestId: 'card-provenance-request',
+    sessionId: null,
+    tsEpochMs: Date.now(),
+    provider: 'anthropic',
+    model: 'claude-opus-4-8',
+    project: 'provenance',
+    taskWeight: 1,
+    inputTokens: 1_000,
+    outputTokens: 100,
+    cacheWriteTokens: 0,
+    cacheReadTokens: 0,
+    reasoningTokens: 0,
+    costUsd: cost.costUsd,
+    estimated: cost.estimated,
+    streamed: true,
+    statusCode: 200,
+    durationMs: 1,
+    pricing: cost.pricing,
+  });
+  const bucket = store.pricingEvidenceByModel(0, Date.now() + 1_000)[0]!;
+  assert.equal(bucket.rateCardSha256, second.cardSha256);
+  assert.equal(bucket.rateCardProvenance?.cardSha256, second.cardSha256);
+  assert.equal(bucket.rateCardProvenance?.fetchedAt, '2026-08-29T11:00:00.000Z');
+  store.close();
+});
+
+test('card provenance is rejected when its archive sidecar no longer matches the card identity', () => {
+  const home = freshHome();
+  const result = applyPricingManifest(manifest(88), {
+    sourceUrl: 'https://pricing.example.test/models.json',
+    sourceKind: 'native_manifest',
+    fetchedAt: '2026-08-29T12:00:00.000Z',
+  });
+  assert.equal(result.ok, true);
+  const sidecar = join(home, 'pricing', 'cards', result.cardSha256! + '.provenance.json');
+  const body = JSON.parse(readFileSync(sidecar, 'utf8')) as Record<string, unknown>;
+  body.cardSha256 = '0'.repeat(64);
+  writeFileSync(sidecar, JSON.stringify(body), 'utf8');
+  assert.equal(pricingCardProvenance(result.cardSha256!), null);
+});
+
 test('a mismatched active cache recovers only the provenance-named archived card', () => {
   const home = freshHome();
   const original = applyPricingManifest(manifest(55));
@@ -172,64 +269,75 @@ test('a mismatched active cache recovers only the provenance-named archived card
 
 test('remote refresh is HTTPS-only, records a redacted source identity, and revalidates unchanged cards with ETag', async () => {
   freshHome();
-  const originalFetch = globalThis.fetch;
   let conditionalEtag: string | null = null;
-  let redirectMode: string | undefined;
-  try {
-    globalThis.fetch = (async (_input, init) => {
-      redirectMode = init?.redirect;
-      return new Response(litellmFeed(), {
+  const target = 'https://pricing.example.test/models.json?private=never-display';
+  const first = await refreshPricingFromResponses({
+    url: target,
+    responses: [new Response(litellmFeed(), {
       status: 200,
       headers: { etag: '"price-v1"', 'last-modified': 'Wed, 12 Aug 2026 00:00:00 GMT' },
-      });
-    }) as typeof fetch;
-    const first = await refreshPricing('https://pricing.example.test/models.json?private=never-display');
-    assert.equal(first.ok, true);
-    assert.equal(first.sourceKind, 'litellm_transformed');
-    assert.equal(first.sourceUrl, 'https://pricing.example.test/models.json');
-    assert.equal(redirectMode, 'error', 'a pricing refresh cannot silently follow to another URL');
-    const before = pricingStatus();
-    assert.equal(before.sourceKind, 'litellm_transformed');
-    assert.equal(before.sourceUrl, 'https://pricing.example.test/models.json');
-    assert.equal(before.freshnessBasis, 'local_fetch');
+    })],
+    onRequest: (_url, init) => {
+      assert.equal(init.purpose, 'pricing_refresh');
+      assert.equal(init.dataClass, 'pricing_manifest');
+      assert.equal(init.method, undefined);
+    },
+  });
+  assert.equal(first.ok, true);
+  assert.equal(first.sourceKind, 'litellm_transformed');
+  assert.equal(first.sourceUrl, 'https://pricing.example.test/models.json');
+  const before = pricingStatus();
+  assert.equal(before.sourceKind, 'litellm_transformed');
+  assert.equal(before.sourceUrl, 'https://pricing.example.test/models.json');
+  assert.equal(before.freshnessBasis, 'local_fetch');
 
-    globalThis.fetch = (async (_input, init) => {
-      conditionalEtag = new Headers(init?.headers).get('if-none-match');
-      return new Response(null, { status: 304 });
-    }) as typeof fetch;
-    const second = await refreshPricing('https://pricing.example.test/models.json?private=never-display');
-    assert.equal(second.ok, true);
-    assert.equal(second.unchanged, true);
-    assert.equal(second.cardSha256, first.cardSha256, '304 never rewrites the active rate card');
-    assert.equal(conditionalEtag, '"price-v1"');
+  const second = await refreshPricingFromResponses({
+    url: target,
+    responses: [new Response(null, { status: 304 })],
+    onRequest: (_url, init) => { conditionalEtag = new Headers(init.headers).get('if-none-match'); },
+  });
+  assert.equal(second.ok, true);
+  assert.equal(second.unchanged, true);
+  assert.equal(second.cardSha256, first.cardSha256, '304 never rewrites the active rate card');
+  assert.equal(conditionalEtag, '"price-v1"');
 
-    let calls = 0;
-    globalThis.fetch = (async () => { calls += 1; return new Response('{}'); }) as typeof fetch;
-    const insecure = await refreshPricing('http://pricing.example.test/models.json');
-    assert.equal(insecure.ok, false);
-    assert.match(insecure.error ?? '', /https/i);
-    assert.equal(calls, 0, 'insecure URL is rejected before an outbound request');
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+  const insecure = await refreshPricingFromResponses({
+    url: 'http://pricing.example.test/models.json',
+    responses: [],
+  });
+  assert.equal(insecure.ok, false);
+  assert.match(insecure.error ?? '', /https/i);
 });
 
 test('an oversized remote manifest is refused before it can replace a verified card', async () => {
   freshHome();
   assert.equal(applyPricingManifest(manifest(73)).ok, true);
-  const originalFetch = globalThis.fetch;
-  try {
-    globalThis.fetch = (async () => new Response('{}', {
+  const result = await refreshPricingFromResponses({
+    url: 'https://pricing.example.test/too-large.json',
+    responses: [new Response('{}', {
       status: 200,
       headers: { 'content-length': String(MAX_PRICING_MANIFEST_BYTES + 1) },
-    })) as typeof fetch;
-    const result = await refreshPricing('https://pricing.example.test/too-large.json');
-    assert.equal(result.ok, false);
-    assert.match(result.error ?? '', /byte limit/i);
-    assert.equal(rateFor('anthropic', 'claude-opus-4-8').rate.input, 73);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+    })],
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.error ?? '', /byte limit/i);
+  assert.equal(rateFor('anthropic', 'claude-opus-4-8').rate.input, 73);
+});
+
+test('default local_locked mode refuses a remote pricing refresh before DNS or dial', async () => {
+  freshHome();
+  const result = await refreshPricing('https://pricing.example.test/models.json');
+  assert.equal(result.ok, false);
+  assert.match(result.error ?? '', /local_locked permits only literal loopback/i);
+});
+
+test('default pricing transport refuses corrupt receipt history before DNS or socket creation', async () => {
+  const home = freshHome();
+  writeFileSync(join(home, 'egress-receipts.jsonl'), '{"version":1}\n', 'utf8');
+  const result = await refreshPricing('https://pricing.example.test/models.json');
+  assert.equal(result.ok, false);
+  assert.equal(result.failureCode, 'egress_receipt_integrity_failed');
+  assert.match(result.error ?? '', /repair\/restore.*receipt/i);
 });
 
 test.after(() => {

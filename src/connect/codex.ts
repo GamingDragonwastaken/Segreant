@@ -13,7 +13,7 @@
  * across re-imports because rollout files are append-only and ordered.
  */
 
-import { createReadStream, readdirSync, statSync, existsSync } from 'node:fs';
+import { createReadStream, existsSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
@@ -27,7 +27,10 @@ import {
   recordInsert,
   createRepoResolver,
   noteRelabel,
+  boundedJsonlFiles,
+  markImportTruncated,
 } from './importShared.ts';
+import { RESOURCE_LIMITS } from '../util/resource-limits.ts';
 
 /** Codex home: ~/.codex (override with CODEX_HOME). null = not installed. */
 export function defaultCodexRoot(): string | null {
@@ -53,50 +56,58 @@ function totalsFrom(u: Record<string, number> | undefined): TokenTotals | null {
 }
 
 /** All rollout JSONL files under a Codex home (live sessions + archived). */
-export function codexRolloutFiles(root: string): string[] {
+export function codexRolloutFileScan(root: string): { files: string[]; truncated: boolean } {
   const dirs = [join(root, 'sessions'), join(root, 'archived_sessions')];
   const out: string[] = [];
+  let truncated = false;
   for (const dir of dirs) {
-    let names: string[] = [];
-    try {
-      names = readdirSync(dir, { recursive: true }) as string[];
-    } catch {
-      continue;
-    }
-    for (const n of names) {
-      if (!n.endsWith('.jsonl')) continue;
-      const p = join(dir, n);
-      try {
-        if (statSync(p).isFile()) out.push(p);
-      } catch {
-        /* vanished mid-scan — skip */
+    const scan = boundedJsonlFiles(dir);
+    for (const file of scan.files) {
+      if (out.length >= RESOURCE_LIMITS.importFiles) {
+        truncated = true;
+        break;
       }
+      out.push(file);
     }
+    truncated ||= scan.truncated;
+    if (truncated) break;
   }
-  return out;
+  return { files: out, truncated };
+}
+
+/** Compatibility adapter for transcript lookup and existing callers. */
+export function codexRolloutFiles(root: string): string[] {
+  return codexRolloutFileScan(root).files;
+}
+
+export interface CodexUsageRow {
+  requestId: string;
+  sessionId: string | null;
+  tsEpochMs: number;
+  provider: string;
+  model: string;
+  project: string;
+  /** Whether that project came from a real recorded cwd or the tool-name fallback. */
+  attributionBasis: AttributionBasis;
+  cwd: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  reasoningTokens: number;
+}
+
+export interface CodexParseOptions {
+  onRow?: (row: CodexUsageRow) => void | Promise<void>;
+  onTruncatedLine?: () => void;
+  onTruncatedRow?: () => void;
+  maxRows?: number;
 }
 
 /**
  * Parse one rollout file into per-turn usage rows (deltas of the cumulative
  * total). Pure over the file's lines; the importer handles I/O and insertion.
  */
-export async function parseCodexRollout(file: string): Promise<
-  Array<{
-    requestId: string;
-    sessionId: string | null;
-    tsEpochMs: number;
-    provider: string;
-    model: string;
-    project: string;
-    /** Whether that project came from a real recorded cwd or the tool-name fallback. */
-    attributionBasis: AttributionBasis;
-    cwd: string | null;
-    inputTokens: number;
-    outputTokens: number;
-    cacheReadTokens: number;
-    reasoningTokens: number;
-  }>
-> {
+export async function parseCodexRollout(file: string, options: CodexParseOptions = {}): Promise<CodexUsageRow[]> {
   const rl = createInterface({ input: createReadStream(file), crlfDelay: Infinity });
   let sessionId: string | null = null;
   let provider = 'openai';
@@ -108,11 +119,17 @@ export async function parseCodexRollout(file: string): Promise<
   let cwd: string | null = null;
   let ordinal = 0;
   let prev: TokenTotals = { input: 0, cachedInput: 0, output: 0, reasoning: 0 };
-  const rows: Awaited<ReturnType<typeof parseCodexRollout>> = [];
+  const rows: CodexUsageRow[] = [];
+  let emittedRows = 0;
+  const maxRows = options.maxRows ?? RESOURCE_LIMITS.importRows;
 
   const projFromCwd = (cwd: string) => projectKeyWithBasis(cwd, 'codex');
 
   for await (const line of rl) {
+    if (Buffer.byteLength(line, 'utf8') > RESOURCE_LIMITS.transcriptLineBytes) {
+      options.onTruncatedLine?.();
+      continue;
+    }
     let o: { type?: string; timestamp?: string; payload?: Record<string, unknown> };
     try {
       o = JSON.parse(line);
@@ -152,7 +169,11 @@ export async function parseCodexRollout(file: string): Promise<
       const ts = Date.parse(o.timestamp ?? '');
       if (Number.isNaN(ts)) continue;
       const uncachedIn = Math.max(0, dIn - dCached); // Codex counts cached inside input_tokens
-      rows.push({
+      if (emittedRows >= maxRows) {
+        options.onTruncatedRow?.();
+        break;
+      }
+      const row: CodexUsageRow = {
         requestId: `codex:${sessionId ?? 'unknown'}:${ordinal++}`,
         sessionId,
         tsEpochMs: ts,
@@ -165,7 +186,10 @@ export async function parseCodexRollout(file: string): Promise<
         outputTokens: dOut,
         cacheReadTokens: dCached,
         reasoningTokens: dReason,
-      });
+      };
+      emittedRows += 1;
+      if (options.onRow) await options.onRow(row);
+      else rows.push(row);
     }
   }
   return rows;
@@ -180,59 +204,64 @@ export async function importCodex(store: Store, opts: ImportOptions = {}): Promi
   const sinceMs = opts.sinceMs ?? 0;
   if (!root || !existsSync(root)) return emptyImportSummary(0);
 
-  const files = codexRolloutFiles(root);
+  const fileScan = codexRolloutFileScan(root);
+  const files = fileScan.files;
   const summary = emptyImportSummary(files.length);
+  if (fileScan.truncated) markImportTruncated(summary, 'files');
   // Same subdirectory/collision problem as the Claude Code transcripts: a rollout
   // records the cwd it ran in, which is often not the repository root.
   const resolveProject = createRepoResolver();
 
   for (const file of files) {
-    let rows: Awaited<ReturnType<typeof parseCodexRollout>>;
     try {
-      rows = await parseCodexRollout(file);
-    } catch {
-      continue; // unreadable file — skip, never abort the whole import
-    }
-    for (const ev of rows) {
-      if (ev.tsEpochMs < sinceMs) continue;
-      const attribution = await resolveProject(ev.cwd, 'codex');
-      noteRelabel(summary, attribution);
-      const prov = REPRICEABLE[ev.provider];
-      const c = prov
-        ? computeCost(prov, ev.model, {
+      await parseCodexRollout(file, {
+        onTruncatedLine: () => markImportTruncated(summary, 'lines'),
+        onTruncatedRow: () => markImportTruncated(summary, 'rows'),
+        onRow: async (ev) => {
+          if (ev.tsEpochMs < sinceMs) return;
+          const attribution = await resolveProject(ev.cwd, 'codex');
+          noteRelabel(summary, attribution);
+          const prov = REPRICEABLE[ev.provider];
+          const c = prov
+            ? computeCost(prov, ev.model, {
+                inputTokens: ev.inputTokens,
+                outputTokens: ev.outputTokens,
+                cacheWriteTokens: 0,
+                cacheReadTokens: ev.cacheReadTokens,
+              })
+            : { costUsd: 0, estimated: true, pricing: unpricedPricingEvidence(), exact: undefined };
+
+          const row: RequestRow = {
+            requestId: ev.requestId,
+            sessionId: ev.sessionId,
+            tsEpochMs: ev.tsEpochMs,
+            provider: ev.provider,
+            model: ev.model,
+            project: attribution.project,
+            attributionBasis: attribution.basis,
+            taskWeight: 1,
             inputTokens: ev.inputTokens,
             outputTokens: ev.outputTokens,
             cacheWriteTokens: 0,
             cacheReadTokens: ev.cacheReadTokens,
-          })
-        : { costUsd: 0, estimated: true, pricing: unpricedPricingEvidence() };
-
-      const row: RequestRow = {
-        requestId: ev.requestId,
-        sessionId: ev.sessionId,
-        tsEpochMs: ev.tsEpochMs,
-        provider: ev.provider,
-        model: ev.model,
-        project: attribution.project,
-        attributionBasis: attribution.basis,
-        taskWeight: 1,
-        inputTokens: ev.inputTokens,
-        outputTokens: ev.outputTokens,
-        cacheWriteTokens: 0,
-        cacheReadTokens: ev.cacheReadTokens,
-        reasoningTokens: ev.reasoningTokens,
-        costUsd: c.costUsd,
-        estimated: c.estimated,
-        pricing: c.pricing,
-        streamed: true,
-        statusCode: 200,
-        durationMs: null,
-        user: null,
-        source,
-        cwd: ev.cwd,
-      };
-      if (ev.sessionId) store.upsertSession(ev.sessionId, attribution.project, source, ev.tsEpochMs);
-      recordInsert(store, summary, row, c.estimated);
+            reasoningTokens: ev.reasoningTokens,
+            costUsd: c.costUsd,
+            economicAmount: prov ? c.exact?.total : undefined,
+            estimated: c.estimated,
+            pricing: c.pricing,
+            streamed: true,
+            statusCode: 200,
+            durationMs: null,
+            user: null,
+            source,
+            cwd: ev.cwd,
+          };
+          if (ev.sessionId) store.upsertSession(ev.sessionId, attribution.project, source, ev.tsEpochMs);
+          recordInsert(store, summary, row, c.estimated);
+        },
+      });
+    } catch {
+      continue; // unreadable file — skip, never abort the whole import
     }
   }
   return summary;

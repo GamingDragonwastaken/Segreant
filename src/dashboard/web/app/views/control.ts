@@ -29,7 +29,7 @@
  */
 
 import { h } from '../core/dom.ts';
-import { signal, effect } from '../core/signal.ts';
+import { signal, scopedEffect } from '../core/signal.ts';
 import { api, type SettingsSnapshot, type Overview, type ValuePayload, type AlertRow } from '../core/api.ts';
 import { usd, count, pct, isPrecise } from '../core/fmt.ts';
 import { actionCard } from './spend.ts';
@@ -40,7 +40,7 @@ export function controlView(): Node {
   const advice = signal<ValuePayload['budget'] | null>(null);
   const error = signal<string | null>(null);
 
-  effect(() => {
+  scopedEffect(() => {
     void Promise.allSettled([api.settings(), api.overview('today'), api.value()])
       .then(([s, o, v]) => {
         if (s.status === 'fulfilled') settings.set(s.value);
@@ -61,9 +61,9 @@ export function controlView(): Node {
 
     () => {
       const err = error();
-      if (err) return h('div', { class: 'card' }, h('p', { class: 'drawer-error', text: err }));
+      if (err) return h('div', { class: 'card' }, h('p', { class: 'drawer-error', role: 'alert', 'aria-live': 'assertive', text: err }));
       const s = settings();
-      if (!s) return h('div', { class: 'card' }, h('p', { class: 'drawer-muted', text: 'Loading…' }));
+      if (!s) return h('div', { class: 'card' }, h('p', { class: 'drawer-muted', role: 'status', 'aria-live': 'polite', 'aria-busy': 'true', text: 'Loading…' }));
 
       const budget = s.budget;
       const enforcement = s.enforcement;
@@ -73,8 +73,11 @@ export function controlView(): Node {
       const includesImported = budget?.capIncludesImported === true;
 
       const alerts = today()?.alerts ?? [];
+      const coverage = today()?.alertCoverage ?? null;
 
       return h('div', null,
+        coverage ? alertCoveragePanel(coverage, alerts.length) : null,
+
         // Live governance alerts, above the caps that produced them. The server
         // already computed these; until now no screen rendered them, so an
         // operator whose cap was exhausted had to infer it from a percentage.
@@ -181,6 +184,39 @@ export function controlView(): Node {
 }
 
 /**
+ * Alert absence is only a useful result when every detector was watching. Keep
+ * the producer's coverage summary beside the active alerts and enumerate every
+ * dark channel, including when another channel fired. A missing reason on a
+ * dark channel is itself unknown; it must not be rendered as though the
+ * detector observed traffic and found nothing.
+ */
+function alertCoveragePanel(
+  coverage: NonNullable<Overview['alertCoverage']>,
+  alertCount: number,
+): Node {
+  const dark = coverage.channels.filter((channel) => !channel.live);
+  const status = coverage.complete
+    ? alertCount === 0
+      ? 'No alerts fired while every channel was watching.'
+      : `${alertCount} active alert${alertCount === 1 ? '' : 's'}; every channel was watching.`
+    : coverage.summary;
+
+  return h('div', { class: 'card alert-coverage', role: 'region', 'aria-label': 'Alert coverage' },
+    h('div', { class: 'card-head' },
+      h('span', { class: 'card-title', text: () => (isPrecise() ? 'Alert coverage' : 'What alerts could see') }),
+      h('span', {
+        class: `pill ${coverage.complete ? 'pill-ok' : 'pill-unverified'}`,
+        text: coverage.complete ? 'complete' : 'partial',
+      })),
+    h('p', { class: 'basis', text: status }),
+    dark.length > 0
+      ? h('ul', { class: 'drawer-notes' }, ...dark.map((channel) => h('li', {
+          text: `${channel.channel}: ${channel.darkBecause ?? 'coverage reason is unknown; detector observation is not established'}`,
+        })))
+      : null);
+}
+
+/**
  * Alerts carry their own quantified evidence (`metric`), so each one is rendered
  * with the figure that triggered it rather than as a bare warning. A warning an
  * operator cannot check is a warning they learn to dismiss.
@@ -253,7 +289,7 @@ function recommendation(rec: NonNullable<ValuePayload['budget']>, currentCap: nu
       ? h('div', { class: 'waste-call' },
           h('span', { class: 'waste-fig', text: `${usd(rec.projectedMonthlyWasteUsd)}/mo` }),
           h('span', { class: 'waste-say', text: () => (isPrecise()
-            ? `projected spend not converting to kept outcomes, at the current realized-value rate (${pct(rec.realizedValueRate, 0)})`
+            ? `projected spend not converting to kept outcomes, at the current realized-value rate (${pct(rec.realizedSpendShare, 0)})`
             : `is heading for work that never gets used, if things carry on as they are`) }))
       : null,
 

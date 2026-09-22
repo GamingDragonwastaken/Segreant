@@ -29,6 +29,15 @@ import {
 import type { OpenAiCostObservation, OpenAiCostsFailureCode } from '../billing/openaiCosts.ts';
 import { buildOpenAiCostsCaptureCoverage, type OpenAiCostsCaptureCoverage } from '../billing/openaiCostsCoverage.ts';
 import {
+  billingMappingKey,
+  evaluateBillingMapping,
+  newBillingRecordMapping,
+  type BillingMappingCoverage,
+  type BillingRecordMapping,
+  type ImportedBillingRecordIdentity,
+  type ProviderScopeAuthority,
+} from '../billing/mapping.ts';
+import {
   reconcileOpenAiCosts as computeOpenAiReconciliation,
   type ProviderSourceKind,
   type ReconciliationCoverage,
@@ -100,6 +109,19 @@ export interface BillingEvidenceRecord {
   usageQuantity: string | null;
   costBasis: 'provider_reported';
   trust: 'operator_supplied_unverified';
+}
+
+export interface BillingRecordMappingDeclarationInput {
+  /** The immutable billing_evidence_records.record_id, not a fuzzy selector. */
+  recordId: string;
+  targetProject: string;
+  targetAccountRef: string;
+  declaredAtMs?: number;
+}
+
+export interface BillingRecordMappingDeclarationResult {
+  mapping: BillingRecordMapping;
+  created: boolean;
 }
 
 export interface BillingImportResult {
@@ -470,6 +492,180 @@ export function billingEvidenceRecords(db: DatabaseSync): BillingEvidenceRecord[
   return rows.map(billingRecordFromRecord);
 }
 
+function mappingFromRecord(row: Record<string, unknown>): BillingRecordMapping {
+  return {
+    mappingId: String(row.mappingId),
+    mappingKey: String(row.mappingKey),
+    mappingVersion: Number(row.mappingVersion),
+    schemaVersion: Number(row.schemaVersion) as 1,
+    sourceSystem: 'operator-export',
+    provider: 'openai',
+    billingAccountRef: String(row.billingAccountRef),
+    sourceRecordId: String(row.sourceRecordId),
+    sourceRecordSha256: String(row.sourceRecordSha256),
+    firstImportId: String(row.firstImportId),
+    targetProject: String(row.targetProject),
+    targetAccountRef: String(row.targetAccountRef),
+    declaredAtMs: Number(row.declaredAtMs),
+    trust: 'operator_declared_unverified',
+  };
+}
+
+const MAPPING_SELECT = `
+  SELECT mapping_id AS mappingId, mapping_key AS mappingKey, mapping_version AS mappingVersion,
+         schema_version AS schemaVersion, source_system AS sourceSystem, provider,
+         billing_account_ref AS billingAccountRef, source_record_id AS sourceRecordId,
+         source_record_sha256 AS sourceRecordSha256, first_import_id AS firstImportId,
+         target_project AS targetProject, target_account_ref AS targetAccountRef,
+         declared_at_ms AS declaredAtMs, trust
+    FROM billing_record_mapping_versions`;
+
+/** Every mapping version, oldest first per source record for audit/replay. */
+export function billingRecordMappings(db: DatabaseSync, recordId?: string): BillingRecordMapping[] {
+  let rows: Array<Record<string, unknown>>;
+  if (recordId !== undefined) {
+    const source = db.prepare(
+      `SELECT source_system AS sourceSystem, provider, billing_account_ref AS billingAccountRef,
+              source_record_id AS sourceRecordId
+         FROM billing_evidence_records WHERE record_id = ?`,
+    ).get(recordId) as Record<string, unknown> | undefined;
+    if (!source) return [];
+    const mappingKey = billingMappingKey({
+      sourceSystem: 'operator-export',
+      provider: 'openai',
+      billingAccountRef: String(source.billingAccountRef),
+      sourceRecordId: String(source.sourceRecordId),
+    });
+    rows = db.prepare(`${MAPPING_SELECT} WHERE mapping_key = ? ORDER BY mapping_key ASC, mapping_version ASC`).all(mappingKey) as Array<Record<string, unknown>>;
+  } else {
+    rows = db.prepare(`${MAPPING_SELECT} ORDER BY mapping_key ASC, mapping_version ASC`).all() as Array<Record<string, unknown>>;
+  }
+  return rows.map(mappingFromRecord);
+}
+
+/**
+ * Declare one exact imported record's local accounting/project destination.
+ *
+ * The source row is looked up first and its stored hash/import anchor is copied
+ * into the mapping. This makes a caller unable to map a guessed or subsequently
+ * changed record. Remapping is an append-only new version; the old decision is
+ * never updated or deleted.
+ */
+export function declareBillingRecordMapping(
+  db: DatabaseSync,
+  input: BillingRecordMappingDeclarationInput,
+): BillingRecordMappingDeclarationResult {
+  if (typeof input.recordId !== 'string' || !input.recordId.trim()) throw new Error('recordId is required');
+  const source = db.prepare(
+    `SELECT record_id AS recordId, source_system AS sourceSystem, provider,
+            billing_account_ref AS billingAccountRef, source_record_id AS sourceRecordId,
+            source_record_sha256 AS sourceRecordSha256, first_import_id AS firstImportId
+       FROM billing_evidence_records WHERE record_id = ?`,
+  ).get(input.recordId) as Record<string, unknown> | undefined;
+  if (!source) throw new Error(`no imported billing evidence record exists for recordId ${input.recordId}`);
+  if (source.sourceSystem !== 'operator-export' || source.provider !== 'openai') {
+    throw new Error('only OpenAI operator-export records can receive a billing mapping');
+  }
+  const identity = {
+    sourceSystem: 'operator-export' as const,
+    provider: 'openai' as const,
+    billingAccountRef: String(source.billingAccountRef),
+    sourceRecordId: String(source.sourceRecordId),
+  };
+  const mappingKey = billingMappingKey(identity);
+  const previous = db.prepare(
+    `${MAPPING_SELECT} WHERE mapping_key = ? ORDER BY mapping_version DESC LIMIT 1`,
+  ).get(mappingKey) as Record<string, unknown> | undefined;
+  const previousMapping = previous ? mappingFromRecord(previous) : null;
+  if (previousMapping
+      && previousMapping.sourceRecordSha256 === String(source.sourceRecordSha256)
+      && previousMapping.firstImportId === String(source.firstImportId)
+      && previousMapping.targetProject === input.targetProject
+      && previousMapping.targetAccountRef === input.targetAccountRef) {
+    return { mapping: previousMapping, created: false };
+  }
+  const declaredAtMs = input.declaredAtMs ?? Date.now();
+  if (previousMapping && declaredAtMs <= previousMapping.declaredAtMs) {
+    throw new Error('declaredAtMs must be later than the prior mapping version for this source record');
+  }
+  const mapping = newBillingRecordMapping({
+    sourceSystem: identity.sourceSystem,
+    provider: identity.provider,
+    billingAccountRef: identity.billingAccountRef,
+    sourceRecordId: identity.sourceRecordId,
+    sourceRecordSha256: String(source.sourceRecordSha256),
+    firstImportId: String(source.firstImportId),
+    targetProject: input.targetProject,
+    targetAccountRef: input.targetAccountRef,
+    mappingVersion: previousMapping ? previousMapping.mappingVersion + 1 : 1,
+    declaredAtMs,
+  });
+  runScript(db, 'BEGIN IMMEDIATE');
+  try {
+    // Re-check the version under the writer lock. Another handle may have
+    // authored a version between the read above and this transaction.
+    const locked = db.prepare(
+      `${MAPPING_SELECT} WHERE mapping_key = ? ORDER BY mapping_version DESC LIMIT 1`,
+    ).get(mappingKey) as Record<string, unknown> | undefined;
+    const lockedMapping = locked ? mappingFromRecord(locked) : null;
+    if (lockedMapping && lockedMapping.mappingVersion >= mapping.mappingVersion) {
+      runScript(db, 'ROLLBACK');
+      if (lockedMapping.sourceRecordSha256 === mapping.sourceRecordSha256
+          && lockedMapping.firstImportId === mapping.firstImportId
+          && lockedMapping.targetProject === mapping.targetProject
+          && lockedMapping.targetAccountRef === mapping.targetAccountRef) {
+        return { mapping: lockedMapping, created: false };
+      }
+      throw new Error('mapping version advanced concurrently; retry with a fresh declaration');
+    }
+    db.prepare(
+      `INSERT INTO billing_record_mapping_versions (
+         mapping_id, mapping_key, mapping_version, schema_version, source_system, provider,
+         billing_account_ref, source_record_id, source_record_sha256, first_import_id,
+         target_project, target_account_ref, declared_at_ms, trust
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      mapping.mappingId, mapping.mappingKey, mapping.mappingVersion, mapping.schemaVersion,
+      mapping.sourceSystem, mapping.provider, mapping.billingAccountRef, mapping.sourceRecordId,
+      mapping.sourceRecordSha256, mapping.firstImportId, mapping.targetProject, mapping.targetAccountRef,
+      mapping.declaredAtMs, mapping.trust,
+    );
+    runScript(db, 'COMMIT');
+  } catch (error) {
+    try { runScript(db, 'ROLLBACK'); } catch { /* preserve the insertion error */ }
+    throw error;
+  }
+  return { mapping, created: true };
+}
+
+/**
+ * Evaluate imported provider evidence against all retained mapping versions.
+ * No request rows are touched and no result is eligible for budgets, ROI, or
+ * model routing while provider scope remains unverified.
+ */
+export function billingMappingCoverage(
+  db: DatabaseSync,
+  options: { importId?: string; asOfMs?: number; providerScopeAuthority?: ProviderScopeAuthority } = {},
+): BillingMappingCoverage {
+  const records = billingEvidenceRecords(db).filter((record) => options.importId === undefined || record.firstImportId === options.importId);
+  const identities: ImportedBillingRecordIdentity[] = records.map((record) => ({
+    recordId: record.recordId,
+    sourceSystem: record.sourceSystem,
+    provider: record.provider,
+    billingAccountRef: record.billingAccountRef,
+    sourceRecordId: record.sourceRecordId,
+    sourceRecordSha256: record.sourceRecordSha256,
+    firstImportId: record.firstImportId,
+    amountMicros: record.amountMicros,
+  }));
+  return evaluateBillingMapping({
+    records: identities,
+    mappings: billingRecordMappings(db),
+    asOfMs: options.asOfMs,
+    providerScopeAuthority: options.providerScopeAuthority,
+  });
+}
+
 /** Provider-declared USD total only. It is not a reconciliation or a request-ledger total. */
 export function billingSummary(db: DatabaseSync): BillingSummary {
   const imports = db.prepare(
@@ -739,23 +935,48 @@ export function openAiReconciliationCoverage(
   db: DatabaseSync,
   declaredScopeId: string | null,
 ): ReconciliationCoverage | null {
+  // THE THIRD BUCKET IS WRITTEN AS `NOT (<the first>)`, AND THAT ONLY
+  // PARTITIONS WHILE THE PREDICATE IS TWO-VALUED (D-187).
+  //
+  // `provider_scope_declaration_id` is nullable and so is the bound parameter,
+  // and `x = NULL` is NULL rather than false. `TRUE AND NULL` is NULL, and
+  // `NOT NULL` is NULL, so a row whose declaration the query cannot compare
+  // falls out of the ON arm and out of the OFF arm at once while `COUNT(*)`
+  // still counts it. Measured on a cleared scope: ten proxy requests and
+  // $180.00 in the ledger, and all three buckets zero.
+  //
+  // `IS` is SQLite's NULL-safe equality and never yields NULL, and the explicit
+  // `IS NOT NULL` keeps a row that somehow carries `declared_unverified` with no
+  // declaration id from being counted as ON a route that does not exist.
+  // `COALESCE(via, 'proxy')` matches what every TypeScript reader of this column
+  // already does (`row.via ?? 'proxy'`), so a legacy NULL cannot escape the
+  // partition through the same door.
   const row = db.prepare(
     `SELECT
-         COALESCE(SUM(CASE WHEN via = 'proxy' AND scope_capture_status = 'declared_unverified'
-                            AND provider_scope_declaration_id = ? THEN cost_usd END), 0) AS onUsd,
-         COALESCE(SUM(CASE WHEN via = 'proxy' AND scope_capture_status = 'declared_unverified'
-                            AND provider_scope_declaration_id = ? THEN 1 END), 0) AS onReq,
-         COALESCE(SUM(CASE WHEN via = 'import' THEN cost_usd END), 0) AS importedUsd,
-         COALESCE(SUM(CASE WHEN via = 'import' THEN 1 END), 0) AS importedReq,
-         COALESCE(SUM(CASE WHEN via = 'proxy' AND NOT (scope_capture_status = 'declared_unverified'
-                            AND provider_scope_declaration_id = ?) THEN cost_usd END), 0) AS offUsd,
-         COALESCE(SUM(CASE WHEN via = 'proxy' AND NOT (scope_capture_status = 'declared_unverified'
-                            AND provider_scope_declaration_id = ?) THEN 1 END), 0) AS offReq,
+         COALESCE(SUM(CASE WHEN COALESCE(via, 'proxy') = 'proxy' AND scope_capture_status = 'declared_unverified'
+                            AND provider_scope_declaration_id IS NOT NULL
+                            AND provider_scope_declaration_id IS ? THEN cost_usd END), 0) AS onUsd,
+         COALESCE(SUM(CASE WHEN COALESCE(via, 'proxy') = 'proxy' AND scope_capture_status = 'declared_unverified'
+                            AND provider_scope_declaration_id IS NOT NULL
+                            AND provider_scope_declaration_id IS ? THEN 1 END), 0) AS onReq,
+         COALESCE(SUM(CASE WHEN COALESCE(via, 'proxy') = 'import' THEN cost_usd END), 0) AS importedUsd,
+         COALESCE(SUM(CASE WHEN COALESCE(via, 'proxy') = 'import' THEN 1 END), 0) AS importedReq,
+         COALESCE(SUM(CASE WHEN COALESCE(via, 'proxy') = 'proxy' AND NOT (scope_capture_status = 'declared_unverified'
+                            AND provider_scope_declaration_id IS NOT NULL
+                            AND provider_scope_declaration_id IS ?) THEN cost_usd END), 0) AS offUsd,
+         COALESCE(SUM(CASE WHEN COALESCE(via, 'proxy') = 'proxy' AND NOT (scope_capture_status = 'declared_unverified'
+                            AND provider_scope_declaration_id IS NOT NULL
+                            AND provider_scope_declaration_id IS ?) THEN 1 END), 0) AS offReq,
          COUNT(*) AS total
        FROM requests WHERE provider = 'openai'`,
   ).get(declaredScopeId, declaredScopeId, declaredScopeId, declaredScopeId) as Record<string, unknown>;
   if (Number(row.total) === 0) return null;
   return {
+    // The basis the split was made against. Without it a reader cannot tell
+    // "off-scope because these rows carry a different declaration" from
+    // "off-scope because no declaration is active", and those want different
+    // sentences -- the second is not the rows' fault.
+    declaredScopeId,
     onDeclaredRouteUsd: Number(row.onUsd),
     onDeclaredRouteRequests: Number(row.onReq),
     importedUsd: Number(row.importedUsd),
@@ -809,6 +1030,33 @@ export function latestCompleteOpenAiCostsObservation(
   return { run, observations: observations.map(openAiCostsLineFromRecord) };
 }
 
+/** Read one retained OpenAI Costs observation run and its immutable lines. */
+export function openAiCostsObservationById(
+  db: DatabaseSync,
+  observationRunId: string,
+): { run: OpenAiCostsObservationRun; observations: OpenAiCostsObservationLine[] } | null {
+  if (typeof observationRunId !== 'string' || observationRunId.trim().length === 0) throw new Error('OpenAI Costs observation run id is required');
+  const row = db.prepare(
+    `SELECT observation_run_id AS observationRunId, declared_scope_id AS declaredScopeId,
+             provider_project_ref AS providerProjectRef, period_start_ms AS periodStartMs, period_end_ms AS periodEndMs,
+             fetched_at_ms AS fetchedAtMs, pagination_complete AS paginationComplete, page_count AS pageCount,
+             page_digest_chain_sha256 AS pageDigestChainSha256, result_state AS resultState, failure_code AS failureCode,
+             provider_finality AS providerFinality, trust, raw_retention AS rawRetention,
+             observations_stored AS observationsStored, source_kind AS sourceKind
+        FROM openai_cost_observation_runs WHERE observation_run_id = ?`,
+  ).get(observationRunId) as Record<string, unknown> | undefined;
+  if (!row) return null;
+  const run = openAiCostsRunFromRecord(row);
+  const observations = db.prepare(
+    `SELECT observation_id AS observationId, observation_run_id AS observationRunId, declared_scope_id AS declaredScopeId,
+            provider_project_ref AS providerProjectRef, fetched_at_ms AS fetchedAtMs, bucket_start_ms AS bucketStartMs,
+            bucket_end_ms AS bucketEndMs, line_item AS lineItem, currency, amount_decimal AS amountDecimal
+       FROM openai_cost_observation_lines WHERE observation_run_id = ?
+      ORDER BY bucket_start_ms ASC, line_item ASC, currency ASC`,
+  ).all(observationRunId) as Array<Record<string, unknown>>;
+  return { run, observations: observations.map(openAiCostsLineFromRecord) };
+}
+
 /** Status has no financial total by design, so independent snapshots cannot be double counted. */
 export function openAiCostsObservationStatus(db: DatabaseSync): OpenAiCostsObservationStatus {
   const latest = openAiCostsObservationRuns(db, 1)[0] ?? null;
@@ -824,6 +1072,8 @@ export function openAiCostsObservationStatus(db: DatabaseSync): OpenAiCostsObser
 export function openAiCostsCaptureCoverage(
   db: DatabaseSync,
   requestsInRange: RequestsInRange,
+  /** Read by the caller, which owns the retention record (D-185). */
+  requestsPrunedBeforeMs: number | null = null,
 ): OpenAiCostsCaptureCoverage | null {
   const latest = latestCompleteOpenAiCostsObservation(db);
   if (!latest) return null;
@@ -831,6 +1081,7 @@ export function openAiCostsCaptureCoverage(
     run: latest.run,
     observations: latest.observations,
     requests: requestsInRange(latest.run.periodStartMs, latest.run.periodEndMs),
+    requestsPrunedBeforeMs,
   });
 }
 
@@ -883,13 +1134,24 @@ export function reconcileOpenAiCosts(
   db: DatabaseSync,
   requestsInRange: RequestsInRange,
   opts: { materialityUsd?: number; now?: number },
+  exactRequestsInRange: RequestsInRange,
+  /**
+   * The recorded retention boundary for `requests`, or null when no prune is on
+   * record. Passed in rather than read here because `retention_prunes` is the
+   * ledger's own record and `Store` owns it; the reconciliation needs it because
+   * rows deleted from inside the period silently understate the local total
+   * (D-173). Required, like the field it feeds: a default would let a caller
+   * reintroduce the defect by saying nothing.
+   */
+  requestsPrunedBeforeMs: number | null,
 ): ReconciliationResult | null {
   const latest = latestCompleteOpenAiCostsObservation(db);
   if (!latest) return null;
   return computeOpenAiReconciliation({
     run: latest.run,
     observations: latest.observations,
-    requests: requestsInRange(latest.run.periodStartMs, latest.run.periodEndMs),
+    requests: exactRequestsInRange(latest.run.periodStartMs, latest.run.periodEndMs),
+    requestsPrunedBeforeMs,
     priorDayTotals: priorOpenAiCostsDayTotals(
       db,
       latest.run.observationRunId,

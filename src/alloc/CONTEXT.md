@@ -18,6 +18,9 @@
 - Conservation is enforced to the microdollar; `saveAllocationRun` throws rather
   than persisting a run that does not balance.
 - Every line records the rule **version** and the cost basis it allocated.
+- The exact adapter in `exact.ts` projects canonical effective `Money` without
+  float-to-micro conversion, partitions currency/basis identities, retains all
+  source economic event IDs, and reports incomplete legacy request coverage.
 
 ## Invariants
 
@@ -31,6 +34,10 @@
   distributes across every directly-allocated centre.
 - Everything here allocates **local estimates**. No reconciliation has completed
   against a real provider bill, so accuracy is unknown and the surfaces say so.
+- Exact allocation runs persist through schema-owned canonical JSON/digest rows
+  and per-line append-only source links; replay recomputes identity, lineage and
+  conservation rather than trusting persisted flags. The legacy microdollar run
+  remains a separate compatibility record and is never relabelled as exact.
 
 ## Verify
 

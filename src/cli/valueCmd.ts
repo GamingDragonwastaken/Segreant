@@ -8,9 +8,10 @@
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { Store } from '../store/db.ts';
-import { loadConfig, saveConfig, dbPath, isDemo } from '../config.ts';
+import { loadConfig, mutateConfig, dbPath, isDemo } from '../config.ts';
 import { isGitRepo, projectName, resolveCommit } from '../git/correlate.ts';
-import { computeQuality } from '../git/quality.ts';
+import { computeArtifactPersistence } from '../git/quality.ts';
+import { contributionEvidenceLines, summarizeContributionEvidence } from '../git/contribution.ts';
 import { loadRealization } from '../value/realization.ts';
 import { WORK_WEEK_MINUTES } from '../value/timeReclaimed.ts';
 import { computeFrontier } from '../value/frontier.ts';
@@ -18,10 +19,18 @@ import { computeFrontier } from '../value/frontier.ts';
 // These commands used to sequence the same primitives themselves; the sequence
 // now has a single home, so the two surfaces cannot drift apart.
 import { valueSpine, usageValue, budgetAdvice } from '../value/report.ts';
-import { instrumentationPriority } from '../value/voi.ts';
+import {
+  issueBudgetCapDecision,
+  previewBudgetCapIssuance,
+  readBudgetCapCertificates,
+  renderBudgetCapDecision,
+} from '../budget/capDecision.ts';
+import { instrumentationPriority } from '../value/instrumentationSensitivity.ts';
 import { GATE_LADDER, GATE_META } from '../value/gates.ts';
-import { C, color, usd, num, pct, glyph, noteSource, printNotAGitRepo } from './ui.ts';
+import { describeDriftReading, driftReading } from '../value/drift.ts';
+import { C, color, usd, num, pct, gateGlyph, noteSource, printNotAGitRepo, printJson } from './ui.ts';
 import { type Flags } from './flags.ts';
+import { retentionNotice } from './retention.ts';
 
 export async function cmdYield(flags: Flags): Promise<void> {
   const repo = (flags.repo as string) ?? process.cwd();
@@ -33,10 +42,10 @@ export async function cmdYield(flags: Flags): Promise<void> {
     return;
   }
   const store = new Store(dbPath());
-  const report = await computeQuality(store, repo, { limit, windowDays, persist: true });
+  const report = await computeArtifactPersistence(store, repo, { limit, windowDays, persist: true });
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify(report, null, 2) + '\n');
+    printJson(report);
     store.close();
     return;
   }
@@ -44,31 +53,31 @@ export async function cmdYield(flags: Flags): Promise<void> {
   const tty = process.stdout.isTTY ?? false;
   const m = report.matured;
   console.log('');
-  console.log(color(tty, C.bold, '  AI Yield — durable output per dollar of AI spend'));
-  console.log(color(tty, C.gray, `  Survival measured to date · ${m.commits} matured commits (older than ${windowDays}d)`));
+  console.log(color(tty, C.bold, '  Artifact persistence — retained introduced lines by AI spend'));
+  console.log(color(tty, C.gray, `  Retention measured to date · ${m.commits} matured commits (older than ${windowDays}d)`));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
   if (m.commits === 0) {
-    console.log(color(tty, C.gray, `  No commits older than ${windowDays}d yet — yield needs time to mature.`));
-    console.log(color(tty, C.gray, '  Recent commits below are provisional (survival still settling).'));
+    console.log(color(tty, C.gray, `  No commits older than ${windowDays}d yet — retention needs time to mature.`));
+    console.log(color(tty, C.gray, '  Recent commits below are provisional (retention still settling).'));
   } else {
-    const yieldStr = m.aiYield === null ? 'n/a (no AI cost attributed)' : `${m.aiYield.toFixed(1)} surviving lines / $`;
-    console.log(`  ${color(tty, C.bold, 'AI Yield')}            ${color(tty, C.green, yieldStr)}`);
-    console.log(`  Effective spend     ${m.effectiveSpendRatio === null ? '—' : color(tty, m.effectiveSpendRatio > 0.5 ? C.green : C.yellow, pct(m.effectiveSpendRatio))}   ${color(tty, C.gray, 'of $ landed in durable code')}`);
-    console.log(`  Code survival       ${color(tty, m.survivalRatio > 0.7 ? C.green : C.yellow, pct(m.survivalRatio))}   ${color(tty, C.gray, `churn ${pct(m.churnRatio)}`)}`);
+    const yieldStr = m.aiYield === null ? 'n/a (no AI cost attributed)' : `${m.aiYield.toFixed(1)} retained lines / $`;
+    console.log(`  Retained lines / $  ${color(tty, C.green, yieldStr)}`);
+    console.log(`  Effective spend     ${m.effectiveSpendRatio === null ? '—' : color(tty, m.effectiveSpendRatio > 0.5 ? C.green : C.yellow, pct(m.effectiveSpendRatio))}   ${color(tty, C.gray, 'of $ associated with retained artifacts')}`);
+    console.log(`  Artifact retention   ${color(tty, m.survivalRatio > 0.7 ? C.green : C.yellow, pct(m.survivalRatio))}   ${color(tty, C.gray, `non-retained ${pct(m.churnRatio)}`)}`);
     console.log(`  Revert rate         ${color(tty, m.revertRate < 0.05 ? C.green : C.red, pct(m.revertRate))}`);
-    console.log(`  AI cost (matured)   ${usd(m.totalCostUsd)}   ${color(tty, C.gray, `${num(m.survivingLines)} surviving lines`)}`);
+    console.log(`  AI cost (matured)   ${usd(m.totalCostUsd)}   ${color(tty, C.gray, `${num(m.survivingLines)} retained lines`)}`);
     if (m.costPerSurvivingLine !== null) {
-      console.log(`  Cost / durable line ${usd(m.costPerSurvivingLine)}`);
+      console.log(`  Cost / retained line ${usd(m.costPerSurvivingLine)}`);
     }
   }
 
   console.log('');
   console.log(color(tty, C.bold, '  Per commit'));
-  console.log(color(tty, C.gray, '  commit    age    cost       +lines  survived   churn   yield   status'));
+  console.log(color(tty, C.gray, '  commit    age    cost       +lines  retained   churn   lines/$ status'));
   for (const c of report.commits.slice(0, 18)) {
     const short = c.hash.slice(0, 7);
     const age = c.ageDays < 1 ? `${Math.round(c.ageDays * 24)}h` : `${Math.round(c.ageDays)}d`;
-    const surv = `${c.survivingLines}/${c.linesAdded}`;
+    const surv = `${c.artifactPersistence.retainedLines}/${c.artifactPersistence.introducedLines}`;
     const churn = pct(c.churnRatio);
     const yld = c.aiYield === null ? '—' : c.aiYield.toFixed(0);
     const status = c.reverted
@@ -81,8 +90,8 @@ export async function cmdYield(flags: Flags): Promise<void> {
     );
   }
   console.log('');
-  console.log(color(tty, C.gray, '  Yield = surviving lines ÷ AI cost. A coaching signal, not a leaderboard —'));
-  console.log(color(tty, C.gray, '  read it as a team trend, never a per-developer ranking. (docs/RESEARCH-REVIEW.md)'));
+  console.log(color(tty, C.gray, '  Retained lines ÷ AI cost is an artifact-persistence lens, not code quality —'));
+  console.log(color(tty, C.gray, '  it does not establish correctness, maintainability, value, or contribution.'));
   console.log('');
   store.close();
 }
@@ -102,7 +111,7 @@ export async function cmdRealize(flags: Flags): Promise<void> {
   const report = loaded.report;
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify(report, null, 2) + '\n');
+    printJson(report);
     store.close();
     return;
   }
@@ -115,13 +124,14 @@ export async function cmdRealize(flags: Flags): Promise<void> {
   console.log(color(tty, C.bold, '  The Realization Standard — did AI spend become real outcomes?'));
   console.log(color(tty, C.gray, `  ${m.units} matured units (older than ${windowDays}d) · ${wiredGates} of ${GATE_LADDER.length} gates instrumented`));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
-  noteSource(tty, loaded.source, loaded.report.projectScoped, loaded.report.costStaleUnits);
+  noteSource(tty, loaded.source, loaded.report.projectScoped, loaded.report.costStaleUnits,
+    loaded.report.matured.spendWindowTruncatedUnits, loaded.report.matured.spendWindowUnknownUnits);
 
   if (m.units === 0) {
     console.log(color(tty, C.gray, `  No units older than ${windowDays}d yet — realization needs the window to elapse.`));
   } else {
     const rr = pct(m.realizationRate);
-    const rv = m.realizedValueRate === null ? '—' : pct(m.realizedValueRate);
+    const rv = m.realizedSpendShare === null ? '—' : pct(m.realizedSpendShare);
     console.log(`  ${color(tty, C.bold, 'Realization Rate')}    ${color(tty, m.realizationRate > 0.6 ? C.green : C.yellow, rr.padStart(4))}   ${color(tty, C.gray, 'production — units that reached verified durable value')}`);
     // The partial-ID interval: confirmed-realized up to not-observed-dead. Shown
     // whenever unobserved gates leave real width, so the confirmed rate is never
@@ -132,8 +142,11 @@ export async function cmdRealize(flags: Flags): Promise<void> {
     if (m.serial.sG !== null && m.serial.skipped.length > 0) {
       console.log(color(tty, C.gray, `                      survival chain ${pct(m.serial.sG)} over ${m.serial.included.length}/${GATE_LADDER.length} observed stages (unobserved: ${m.serial.skipped.join(', ')})`));
     }
-    console.log(`  Realized Value      ${color(tty, C.green, usd(m.realizedValueUsd))} / ${usd(m.totalCostUsd)}  ${color(tty, C.gray, `(${rv})  the money lens`)}`);
-    console.log(`  Net of rework       ${color(tty, C.green, usd(m.netRealizedValueUsd))}  ${color(tty, C.gray, 'realized value after first-pass acceptance — reworked output is worth less')}`);
+    // Both of these are SPEND, not value: the share of attributed cost that
+    // landed on units that realized. The value claim is the Value scenario
+    // below, priced from manual-equivalent baselines (AII-012).
+    console.log(`  Spend that realized ${color(tty, C.green, usd(m.spendOnRealizedUnitsUsd))} / ${usd(m.totalCostUsd)}  ${color(tty, C.gray, `(${rv})  cost that reached a kept outcome — not value`)}`);
+    console.log(`  Net of rework       ${color(tty, C.green, usd(m.acceptanceWeightedSpendUsd))}  ${color(tty, C.gray, 'that spend weighted by first-pass acceptance — reworked output cost more per kept line')}`);
   }
   const fpa = report.firstPassAcceptance;
   console.log(`  First-Pass Accept.  ${fpa === null ? color(tty, C.gray, 'n/a (no proposals captured)') : color(tty, fpa > 0.7 ? C.green : C.yellow, pct(fpa).padStart(4)) + color(tty, C.gray, '   collaboration — of AI-proposed lines, how much shipped')}`);
@@ -162,18 +175,33 @@ export async function cmdRealize(flags: Flags): Promise<void> {
 
   // Per unit
   console.log('');
-  console.log(color(tty, C.bold, '  Per unit') + color(tty, C.gray, `   funnel: ${GATE_LADDER.map((g) => g[0]).join(' ')}  (✓pass ✗fail ·unknown)`));
+  console.log(color(tty, C.bold, '  Per unit') + color(tty, C.gray, `   funnel: ${GATE_LADDER.map((g) => g[0]).join(' ')}  (✓pass ✗fail !conflicted ·unknown)`));
   for (const u of report.units.slice(0, 16)) {
     const short = u.hash.slice(0, 7);
     const age = u.ageDays < 1 ? `${Math.round(u.ageDays * 24)}h` : `${Math.round(u.ageDays)}d`;
     const acc = u.acceptance === null ? '  —' : pct(u.acceptance).padStart(3);
-    const funnel = u.funnel.results.map((r) => glyph(tty, r.verdict)).join(' ');
+    const funnel = u.funnel.results.map((r) => gateGlyph(tty, r)).join(' ');
+    // A unit stopped by a contradiction did not die at that gate — its evidence
+    // disagreed there. Reporting `died:tested` would state a refutation the
+    // evidence does not support, in the line an operator acts on.
     const status = u.maturing
       ? color(tty, C.yellow, 'maturing')
       : u.funnel.realized
         ? color(tty, C.green, 'REALIZED')
-        : color(tty, C.red, `died:${u.funnel.diedAt ?? '—'}`);
+        : u.funnel.conflicts.length > 0
+          ? color(tty, C.yellow, `conflicted:${u.funnel.conflicts[0]}`)
+          : color(tty, C.red, `died:${u.funnel.diedAt ?? '—'}`);
     console.log(`    ${short}  ${age.padStart(4)}  ${usd(u.attributedCostUsd).padStart(9)}  acc ${acc}  ${funnel}  ${status}`);
+  }
+
+  // Contribution evidence: how each unit's proposals relate to its commit.
+  // An association tally, printed with its non-claims; silent when no unit
+  // was assessed rather than reporting zeros as a finding (D-246).
+  const contribution = contributionEvidenceLines(summarizeContributionEvidence(report.units));
+  if (contribution.length > 0) {
+    console.log('');
+    console.log(color(tty, C.bold, '  Contribution evidence'));
+    for (const line of contribution) console.log(color(tty, C.gray, `    ${line}`));
   }
   console.log('');
   console.log(color(tty, C.gray, '  Production is dollar-free (Realization Rate); cost is a lens on top. See docs/THE-STANDARD.md'));
@@ -255,7 +283,7 @@ export async function cmdUsage(flags: Flags): Promise<void> {
   const rep = usageValue(store, cfg, { windowDays: days });
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify(rep, null, 2) + '\n');
+    printJson(rep);
     store.close();
     return;
   }
@@ -267,8 +295,18 @@ export async function cmdUsage(flags: Flags): Promise<void> {
   console.log(color(tty, C.gray, '  Scores sessions with no captured code proposals. A CODING session lands here too'));
   console.log(color(tty, C.gray, '  when its tool never reports diffs — route it through the proxy to move it to git RoI.'));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
+  const truncation = retentionNotice(rep.retention);
+  if (truncation !== null) console.log(color(tty, C.yellow, `  ● ${truncation}`));
   if (rep.units.length === 0) {
-    console.log(color(tty, C.gray, '  No sessions without code signals in range. Tag sessions with X-Fiscus-Session-Id to measure them.'));
+    // THE ERRAND IS ONLY HONEST WHEN THE EMPTINESS IS NOT A DELETION (D-174).
+    // Telling an operator to tag sessions they tagged, and whose measurements
+    // retention removed on their own policy, is worse than saying nothing: it
+    // sends them to do work already done and reads as evidence they never did
+    // it. The line above already states what happened; this one stops
+    // contradicting it.
+    console.log(color(tty, C.gray, rep.retention.truncated
+      ? '  No sessions without code signals SURVIVE in range — whether any were tagged before the deletion cannot be read from here.'
+      : '  No sessions without code signals in range. Tag sessions with X-Fiscus-Session-Id to measure them.'));
     console.log('');
     store.close();
     return;
@@ -283,8 +321,7 @@ export async function cmdUsage(flags: Flags): Promise<void> {
   // The money face — only when the org disclosed outcome baselines + a rate.
   const rr = rep.roi.returnRatio;
   if (rep.money.priced && rr.basis === 'usd' && rr.grossRatio !== null) {
-    const head = rr.causalRatio ?? rr.grossRatio;
-    console.log(`  RoI return          ${color(tty, head >= 1 ? C.green : C.red, head.toFixed(2) + '×')}   ${color(tty, C.gray, `${head >= 1 ? 'pays for itself' : 'below break-even'} — outcomes priced by your disclosed baselines${isDemo() ? ' (demo: illustrative baselines)' : ''}`)}`);
+    console.log(`  Value scenario       ${color(tty, C.yellow, rr.grossRatio.toFixed(2) + '×')}   ${color(tty, C.gray, 'observed/manual-equivalent, not a causal return' + (isDemo() ? ' (demo: illustrative baselines)' : ''))}`);
   } else if (rep.realizedUnits > 0) {
     console.log(color(tty, C.gray, '                      dollar return un-priced — set lift.outcomeBaselineMinutes + laborRatePerHour to price outcomes'));
   }
@@ -299,11 +336,12 @@ export async function cmdUsage(flags: Flags): Promise<void> {
     if (m.used > 0) parts.push(`${m.used} used`);
     console.log(`  Reach               ${parts.join(color(tty, C.gray, ' · '))}${m.none > 0 ? color(tty, C.gray, ` · ${m.none} no outcome yet`) : ''}`);
   }
-  // VoI: which measurement to buy next for this modality.
-  const usageVoi = instrumentationPriority(rep.roi);
-  if (usageVoi.length > 0 && rep.roi.roiIndex !== null) {
-    const top = usageVoi[0]!;
-    console.log(`  Instrument next     ${color(tty, C.cyan, top.lens)}   ${color(tty, C.gray, `largest unmeasured exposure — at a mid ${top.reference} the Index moves ${rep.roi.roiIndex.toFixed(0)} → ${top.indexAtReference.toFixed(0)}`)}`);
+  // Instrumentation sensitivity: report the largest sensitivity/measurement
+  // exposure without turning it into a cost or utility decision.
+  const usageSensitivity = instrumentationPriority(rep.roi);
+  if (usageSensitivity.length > 0 && rep.roi.roiIndex !== null) {
+    const top = usageSensitivity[0]!;
+    console.log(`  Largest exposure     ${color(tty, C.cyan, top.lens)}   ${color(tty, C.gray, `largest sensitivity/measurement exposure — at a mid ${top.reference} the Index moves ${rep.roi.roiIndex.toFixed(0)} → ${top.indexAtReference.toFixed(0)}`)}`);
   }
   console.log('');
   for (const n of rep.roi.notes) console.log(color(tty, C.gray, `  · ${n}`));
@@ -320,7 +358,7 @@ export async function cmdRoi(flags: Flags): Promise<void> {
   const cfg = loadConfig();
   const store = new Store(dbPath());
   // The whole composition — realization, this project's resolved baseline, the
-  // Lift source, the money inputs, RoI, the Goodhart streams, VoI — is one
+  // Lift source, the money inputs, RoI, the drift streams, sensitivity — is one
   // sequence in src/value/report.ts, shared with `/api/value`. The three inputs
   // below are this command's own flags; everything else the module decides, so
   // the CLI and the dashboard cannot disagree about what any of it means.
@@ -347,7 +385,7 @@ export async function cmdRoi(flags: Flags): Promise<void> {
   const { roi, drift, driftStreams, voi } = spine;
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify({ ...roi, drift, driftStreams, instrumentNext: voi }, null, 2) + '\n');
+    printJson({ ...roi, drift, driftStreams, instrumentNext: voi });
     store.close();
     return;
   }
@@ -357,32 +395,33 @@ export async function cmdRoi(flags: Flags): Promise<void> {
   console.log(color(tty, C.bold, '  Return on Intelligence — how much you actually got from the AI'));
   console.log(color(tty, C.gray, `  ${Math.round(roi.coverage * 4)} of 4 value lenses instrumented · docs/RETURN-ON-INTELLIGENCE.md`));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
-  noteSource(tty, loaded.source, loaded.report.projectScoped, loaded.report.costStaleUnits);
+  noteSource(tty, loaded.source, loaded.report.projectScoped, loaded.report.costStaleUnits,
+    loaded.report.matured.spendWindowTruncatedUnits, loaded.report.matured.spendWindowUnknownUnits);
 
   const idx = roi.roiIndex;
   const iv = roi.roiInterval;
   const hasBand = iv.low !== null && iv.high !== null && idx !== null && (iv.high - iv.low) > 0.5;
   const band = hasBand ? color(tty, C.gray, `  [${iv.low!.toFixed(0)}–${iv.high!.toFixed(0)}]`) : '';
   console.log(`  ${color(tty, C.bold, 'RoI Index')}           ${idx === null ? color(tty, C.gray, 'n/a (no lenses instrumented)') : color(tty, idx > 60 ? C.green : idx > 30 ? C.yellow : C.red, `${idx.toFixed(0)} / 100`)}${band}   ${color(tty, C.gray, hasBand ? 'point in a partially-identified interval' : 'geometric mean — no axis can carry it alone')}`);
-  if (roi.indexIsUpperBound && idx !== null) {
-    console.log(color(tty, C.gray, `  ${''.padEnd(20)}↑ upper bound — wiring more lenses can only lower it toward the truth`));
+  if (idx !== null && roi.coverage < 1) {
+    const observed = roi.instrumentationInterval.observed;
+    const low = roi.instrumentationInterval.low;
+    const high = roi.instrumentationInterval.high;
+    const sensitivity = observed !== null && low !== null && high !== null
+      ? `full-lens sensitivity ${low.toFixed(0)}–${high.toFixed(0)}`
+      : 'full-lens sensitivity not established';
+    console.log(color(tty, C.gray, `  ${''.padEnd(20)}${Math.round(roi.coverage * 4)}/4 lenses measured · ${sensitivity} — a measured lens may move the observed score up or down`));
   }
   const eff = roi.realizedEfficiency;
   console.log(`  Realized efficiency  ${eff === null ? '—' : color(tty, C.green, pct(eff))}   ${color(tty, C.gray, `of $${(roi.tokenCostUsd + roi.effortTaxUsd).toFixed(2)} spent (tokens${roi.effortTaxUsd > 0 ? ' + effort' : ''})`)}`);
 
-  // The money number — value ÷ cost, ≥1 ⟺ it paid for itself.
+  // The money number is an observed/manual-equivalent scenario until a separate
+  // qualified randomized study supplies an economic estimand.
   const rr = roi.returnRatio;
   if (rr.basis === 'usd' && rr.grossRatio !== null) {
-    const headline = rr.causalRatio ?? rr.grossRatio;
-    const col = headline >= 1 ? C.green : C.red;
-    const band =
-      rr.causalRange.low !== null && rr.causalRange.high !== null
-        ? color(tty, C.gray, ` [${rr.causalRange.low.toFixed(2)}–${rr.causalRange.high.toFixed(2)}×]`)
-        : '';
-    const tail = (headline >= 1 ? 'pays for itself' : 'below break-even') + (rr.causalRatio === null ? ' (gross — wire Lift to credit the counterfactual)' : '');
-    console.log(`  ${color(tty, C.bold, 'RoI return')}           ${color(tty, col, headline.toFixed(2) + '×')}${band}   ${color(tty, C.gray, tail)}`);
-    console.log(color(tty, C.gray, `  ${''.padEnd(20)}$${(rr.realizedValueUsd ?? 0).toFixed(0)} realized work (manual-equiv, net of rework) ÷ $${rr.costUsd.toFixed(2)} cost (tokens + your time)`));
-  } else if (rr.realizedValueUsd !== null && !rr.supervisionPriced) {
+    console.log(`  ${color(tty, C.bold, 'Value scenario')}       ${color(tty, C.yellow, rr.grossRatio.toFixed(2) + '×')}   ${color(tty, C.gray, 'observed/manual-equivalent; causal study required for break-even')}`);
+    console.log(color(tty, C.gray, `  ${''.padEnd(20)}$${(rr.manualEquivalentValueUsd ?? 0).toFixed(0)} realized work (manual-equiv, net of rework) ÷ $${rr.costUsd.toFixed(2)} cost (tokens + your time)`));
+  } else if (rr.manualEquivalentValueUsd !== null && !rr.supervisionPriced) {
     console.log(`  ${color(tty, C.bold, 'RoI return')}           ${color(tty, C.gray, 'un-priced — wire proxy traffic so your time-with-AI can be measured')}`);
   } else {
     console.log(`  ${color(tty, C.bold, 'RoI return')}           ${color(tty, C.gray, 'pass --labor-rate (or set lift.laborRatePerHour) to price the dollar return')}`);
@@ -407,9 +446,10 @@ export async function cmdRoi(flags: Flags): Promise<void> {
   lensRow('Lift', roi.lenses.lift);
   lensRow('Impact', roi.lenses.impact);
 
-  // Stability: the Goodhart alarms. Each detects that a rate MOVED, not why —
-  // gaming and a genuine regime change both trip them; their job is to force the
-  // question, and each firing stream carries its own typical reading.
+  // Stability: the rate-drift alarms. Each detects that a rate MOVED, not why —
+  // gaming and a genuine regime change both trip them, and this test cannot
+  // separate them; their job is to force the question, and each firing stream
+  // carries the reading that WOULD apply if the metric were being bent.
   if (driftStreams.length > 0) {
     console.log('');
     const firing = driftStreams.filter((s) => s.report.alarm);
@@ -419,21 +459,30 @@ export async function cmdRoi(flags: Flags): Promise<void> {
         console.log(color(tty, C.gray, `                       ${s.reading}`));
       }
     } else {
+      // NOT `stable`, and not green. An e-process bounds false alarms and not
+      // missed ones, so a silent watch is the absence of a result rather than a
+      // result: the most extreme drift a binary stream can hold does not fire it
+      // at n=20. Printing it as a verdict beside DRIFT DETECTED told the operator
+      // something no evidence here supports (D-140).
       const watched = driftStreams.map((s) => s.stream).join(', ');
-      console.log(`  ${color(tty, C.bold, 'Stability')}            ${color(tty, C.green, 'stable')}   ${color(tty, C.gray, `no drift across ${driftStreams.length} watched stream(s): ${watched} (anytime-valid)`)}`);
+      const quietest = driftStreams.reduce((fewest, s) => (s.report.n < fewest.report.n ? s : fewest), driftStreams[0]!);
+      console.log(`  ${color(tty, C.bold, 'Stability')}            ${color(tty, C.yellow, 'no alarm')}   ${color(tty, C.gray, `${driftStreams.length} watched stream(s): ${watched}`)}`);
+      console.log(color(tty, C.gray, `                       ${describeDriftReading(driftReading(quietest.report))}`));
     }
   }
 
-  // VoI: name the next measurement worth buying, with the exposure quantified.
+  // Sensitivity: report the largest sensitivity/measurement exposure. This
+  // ranking has no acquisition-cost or utility model and is not a purchase
+  // recommendation; formal decision VoI lives in src/decision/engine.ts.
   if (voi.length > 0 && roi.roiIndex !== null) {
     const top = voi[0]!;
     console.log('');
     console.log(
-      `  ${color(tty, C.bold, 'Instrument next')}      ${color(tty, C.cyan, top.lens)}   ` +
+      `  ${color(tty, C.bold, 'Largest exposure')}     ${color(tty, C.cyan, top.lens)}   ` +
         color(
           tty,
           C.gray,
-          `largest unmeasured exposure: measured at a mid ${top.reference}, the Index moves ${roi.roiIndex.toFixed(0)} → ${top.indexAtReference.toFixed(0)} — measuring only makes the number more honest`,
+          `largest sensitivity/measurement exposure: at a mid ${top.reference}, the observed Index moves ${roi.roiIndex.toFixed(0)} → ${top.indexAtReference.toFixed(0)} — direction is disclosed sensitivity, not a monotone promise`,
         ),
     );
   }
@@ -472,7 +521,7 @@ export async function cmdSaved(flags: Flags): Promise<void> {
   const rec = spine.reclaimed;
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify(rec, null, 2) + '\n');
+    printJson(rec);
     store.close();
     return;
   }
@@ -481,7 +530,8 @@ export async function cmdSaved(flags: Flags): Promise<void> {
   console.log('');
   console.log(color(tty, C.bold, `  Fiscus — time reclaimed · ${project}`));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
-  noteSource(tty, loaded.source, loaded.report.projectScoped, loaded.report.costStaleUnits);
+  noteSource(tty, loaded.source, loaded.report.projectScoped, loaded.report.costStaleUnits,
+    loaded.report.matured.spendWindowTruncatedUnits, loaded.report.matured.spendWindowUnknownUnits);
 
   if (rec.workWeeksSaved === null || rec.workWeeksRange === null) {
     console.log(color(tty, C.gray, '  Uninstrumented — needs realized work with a task baseline and measured AI time.'));
@@ -517,26 +567,88 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
   const store = new Store(dbPath());
   const days = flags.days ? Number(flags.days) : 30;
 
-  let realizedValueRate: number | null = null;
+  let realizedSpendShare: number | null = null;
   let frontierCells: ReturnType<typeof computeFrontier>['byModelAndTask'] = [];
   const repo = flags.repo as string | undefined;
   const loadedValue = await loadRealization(store, repo, { persist: false });
   if (loadedValue) {
-    realizedValueRate = loadedValue.report.matured.realizedValueRate;
+    realizedSpendShare = loadedValue.report.matured.realizedSpendShare;
     frontierCells = computeFrontier(loadedValue.report.units).byModelAndTask;
   }
 
   // The cap and its basis disclosure come from the shared composition, so this
   // command and `/api/value` recommend from the same spend series — and the
   // recommendation is always fitted to the spend its --apply action can govern.
-  const rec = budgetAdvice(store, cfg, { windowDays: days, realizedValueRate, frontier: frontierCells });
+  const rec = budgetAdvice(store, cfg, { windowDays: days, realizedSpendShare, frontier: frontierCells });
   const spendBasis = rec.spendBasis;
   // Raw RoI cells can mix unlike tasks. The actionable guidance is the
   // separately gated same-task model-switch trial, never a generic allocator.
   const allocation = null;
 
+  // The decision subsystem reaches this operator here (D-220): a cap that can
+  // be applied carries a decision problem, a certificate, the minimax-regret
+  // pick and the derived assurance level. `certificates` is every persisted
+  // bundle for THIS problem, revalidated as-of now — empty until the first
+  // certified --apply.
+  const nowIso = new Date().toISOString();
+  const decision = rec.decision;
+  const seriesCoverage = rec.economic?.coverage === 'exact' ? 'complete' : rec.economic?.coverage === 'partial' ? 'partial' : 'unknown';
+  // Product presentation and mutation eligibility consume the canonical adapter
+  // preview, not the bare engine certificate. The adapter recomputes the
+  // certificate from the intervals and binds a decision-fitness Claim when one
+  // is legally issuable. Persistence remains a separate --apply step.
+  const canonicalDecision = decision ? previewBudgetCapIssuance(decision, {
+    issuedAt: nowIso,
+    windowDays: days,
+    spendBasis,
+    monetaryBasis: 'list',
+    seriesCoverage,
+  }) : null;
+  const certificates = decision ? readBudgetCapCertificates(store.epistemic(), nowIso) : [];
+
+  // A heuristic cap changes spend behaviour (D-213). --apply is honoured only
+  // when the canonical adapter can issue decision fitness AND the separate
+  // changes-spend assurance reaches its required level.
+  const applyPermitted = decision !== null
+    && canonicalDecision?.decision !== null
+    && decision.standing.status !== 'review_only'
+    && decision.assurance.meetsRequirement;
+  if (flags.apply && !applyPermitted) {
+    const observed = decision ? decision.assurance.assessment.level : 'DAL-0';
+    const standing = decision ? decision.standing.status : 'no_decision';
+    const message = `Refused: --recommend --apply changes spend and requires a certified DecisionCertificate at ${decision?.assurance.requiredLevel ?? 'DAL-3'}; this recommendation stands at ${observed} with standing ${standing}.`;
+    if (flags.json) {
+      printJson({
+        applied: false,
+        error: 'decision_certificate_required',
+        consequence: 'changes_spend',
+        requiredAssurance: decision?.assurance.requiredLevel ?? 'DAL-3',
+        observedAssurance: observed,
+        standing,
+        reasons: decision ? decision.standing.reasons : [],
+        message,
+      });
+    } else {
+      console.error(`  ${message}`);
+      if (decision) for (const reason of decision.standing.reasons) console.error(`    · ${reason}`);
+    }
+    process.exitCode = 1;
+    store.close();
+    return;
+  }
+
   if (flags.json) {
-    process.stdout.write(JSON.stringify({ ...rec, allocation, shadowPrice: null }, null, 2) + '\n');
+    printJson({
+      ...rec,
+      decision: decision && canonicalDecision ? {
+        ...decision,
+        certificate: canonicalDecision.certificateBundle.dominance,
+        kernelClaim: canonicalDecision.decision,
+        certificates,
+      } : null,
+      allocation,
+      shadowPrice: null,
+    });
     store.close();
     return;
   }
@@ -557,55 +669,49 @@ export async function cmdBudgetAdvisor(flags: Flags): Promise<void> {
   const softCap = rec.recommendedSoftUsd;
   console.log(`  Recommended daily cap   ${color(tty, C.green, usd(dailyCap))}   ${color(tty, C.gray, `soft warn ${usd(softCap)}`)}`);
   console.log(`  Observed daily          median ${usd(rec.observed.medianDaily)} · p90 ${usd(rec.observed.p90Daily)} · max ${usd(rec.observed.maxDaily)}`);
-  if (rec.realizedValueRate !== null) {
-    console.log(`  Realized-value rate     ${color(tty, rec.realizedValueRate > 0.5 ? C.green : C.yellow, pct(rec.realizedValueRate))}`);
+  if (rec.realizedSpendShare !== null) {
+    console.log(`  Realized-value rate     ${color(tty, rec.realizedSpendShare > 0.5 ? C.green : C.yellow, pct(rec.realizedSpendShare))}`);
   }
   if (rec.projectedMonthlyWasteUsd !== null) {
     console.log(`  Projected monthly waste ${color(tty, C.red, usd(rec.projectedMonthlyWasteUsd))}   ${color(tty, C.gray, 'spend not turning into kept outcomes')}`);
   }
   console.log('');
   for (const r of rec.rationale) console.log(color(tty, C.gray, `  · ${r}`));
-  // Prefer the quantified allocation (concrete $ moves + projected value gain);
-  // fall back to the qualitative trim/grow when there isn't enough frontier data.
-  /*
-   * Raw allocation is intentionally withheld from the CLI. The retained helper
-   * is an offline `exploratory_raw` scenario only; generic contexts can be
-   * unlike work and its arithmetic is not a recommendation or forecast.
-  if (allocation && allocation.moves.length) {
-    const d2 = (n: number) => '$' + n.toFixed(2); // aggregate dollars read best at 2dp
+  if (decision) {
     console.log('');
-    console.log(
-      color(tty, C.bold, '  Exploratory raw allocation scenario') +
-        color(tty, C.gray, `   → raw arithmetic ${d2(allocation.rawRateScenarioGainUsd)} (not a recommendation)`),
-    );
-    for (const m of allocation.moves.slice(0, 5)) {
-      console.log(
-        `    ${color(tty, C.yellow, 'MOVE')} ${d2(m.amountUsd).padStart(8)}  ` +
-          `${color(tty, C.gray, `${m.fromKey} → ${m.toKey}`)}  ${color(tty, C.green, d2(m.rawRateScenarioGainUsd))}`,
-      );
-    }
-    for (const assumption of allocation.assumptions) {
-      console.log(color(tty, C.gray, `  ${assumption}`));
-    }
-  } else if (rec.reallocations.length) {
-    console.log('');
-    console.log(color(tty, C.bold, '  Reallocate'));
-    for (const re of rec.reallocations) {
-      const tag = re.action === 'grow' ? color(tty, C.green, 'GROW') : color(tty, C.yellow, 'TRIM');
-      console.log(`    ${tag}  ${re.context.padEnd(28)} ${color(tty, C.gray, re.reason)}`);
-    }
+    for (const line of renderBudgetCapDecision(decision, certificates, canonicalDecision!)) console.log(color(tty, C.gray, line));
   }
-  }
-  */
-  if (flags.apply) {
-    cfg.budget.dailyUsd = dailyCap;
-    cfg.budget.dailySoftUsd = softCap;
-    saveConfig(cfg);
+  // Raw allocation and frontier trim/grow hints are withheld from this surface
+  // (D-248): generic contexts can be unlike work, and comparable model guidance
+  // reaches the operator only through the gated frontier trial.
+  if (flags.apply && applyPermitted && decision) {
+    mutateConfig((latest) => {
+      if (JSON.stringify(latest) !== JSON.stringify(cfg)) {
+        throw new Error('configuration changed while budget advice was being computed; refusing to overwrite a newer generation — re-run the recommendation');
+      }
+      const next = structuredClone(latest);
+      next.budget.dailyUsd = dailyCap;
+      next.budget.dailySoftUsd = softCap;
+      return next;
+    });
     console.log('');
     console.log(color(tty, C.green, `  Applied: daily cap ${usd(dailyCap)}, soft ${usd(softCap)} written to config.`));
+    // Persist the certificate the cap was set under (D-220): the record is never
+    // authorization and never executes anything; it exists so a later
+    // withdrawal of the basis evidence is visible on read.
+    const issued = issueBudgetCapDecision(store.epistemic(), decision, {
+      issuedAt: nowIso,
+      windowDays: days,
+      spendBasis,
+      monetaryBasis: 'list',
+      seriesCoverage,
+    });
+    console.log(color(tty, C.gray, `  Recorded the decision certificate the cap was set under: ${issued.certificateBundle.id} — it does not authorize spend, route, or provider changes.`));
   } else {
     console.log('');
-    console.log(color(tty, C.gray, '  Re-run with --apply to write these to your config.'));
+    console.log(color(tty, C.gray, decision && applyPermitted
+      ? '  Re-run with --apply to write these to your config.'
+      : '  No cap written. Applying a recommendation requires a certified DecisionCertificate with DAL-3 assurance; the decision block above says what is missing.'));
   }
   console.log('');
   store.close();
@@ -626,7 +732,7 @@ export async function cmdFrontier(flags: Flags): Promise<void> {
   const fr = computeFrontier(report.units);
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify(fr, null, 2) + '\n');
+    printJson(fr);
     store.close();
     return;
   }
@@ -637,7 +743,8 @@ export async function cmdFrontier(flags: Flags): Promise<void> {
   console.log(color(tty, C.bold, '  The per-context frontier — what AI is worth it, for what'));
   console.log(color(tty, C.gray, '  RoI compared within like-for-like work · docs/RETURN-ON-INTELLIGENCE.md'));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(64)));
-  noteSource(tty, loaded.source, loaded.report.projectScoped, loaded.report.costStaleUnits);
+  noteSource(tty, loaded.source, loaded.report.projectScoped, loaded.report.costStaleUnits,
+    loaded.report.matured.spendWindowTruncatedUnits, loaded.report.matured.spendWindowUnknownUnits);
 
   console.log(color(tty, C.bold, '  By model'));
   console.log(color(tty, C.gray, '    model                        units   cost      realized   RoI'));

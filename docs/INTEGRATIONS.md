@@ -4,8 +4,11 @@ Fiscus meters and caps AI spend by sitting **in the path** as a local proxy.
 There is no per-tool plugin to install: any tool that (1) speaks the OpenAI or
 Anthropic HTTP API and (2) lets you set a **base URL** is wired by configuration
 alone. One running proxy meters *every* such tool at once — your IDE, your CLI
-agent, your scripts — and nothing about your prompts or code ever leaves the
-device.
+agent, and your scripts. The proxy forwards routed requests to the AI provider
+you configure, so those requests can contain prompts, source snippets, tool
+payloads, and provider credentials. Fiscus has no Fiscus-hosted telemetry by
+default; read [DATA-BOUNDARIES.md](DATA-BOUNDARIES.md) for the complete egress
+and local-retention contract.
 
 ```
 your tool ──(base URL)──▶ Fiscus :8090 ──price · cap · log──▶ provider
@@ -16,17 +19,38 @@ upstream at the provider.** That's the whole integration.
 
 ---
 
-## The two knobs
+## The three knobs
 
 | Knob | Where | What it does |
 |---|---|---|
 | Your tool's base URL | the tool's config / env | sends the tool's traffic to Fiscus instead of straight to the provider |
 | `upstreams.openai` / `upstreams.anthropic` | `~/.fiscus/config.json` | where Fiscus forwards, after metering |
+| `egress` rule | `fiscus egress apply --apply ...` | the exact cloud method/origin/path/data class Fiscus may forward |
 
-For native OpenAI or Anthropic, you only touch the first knob — the upstream
-defaults are already correct. You touch the second only to meter an
-OpenAI-*compatible* provider that isn't OpenAI (Gemini, OpenRouter, DeepSeek,
-Ollama, …).
+For native OpenAI or Anthropic, the upstream defaults are correct, but a fresh
+Fiscus install is `local_locked` and deliberately refuses cloud forwarding until
+you add an exact `provider_inference` egress rule. This is a second deliberate
+consent step: it records that a provider can receive the routed payload. You
+touch the upstream setting only to meter an OpenAI-*compatible* provider that
+isn't OpenAI (Gemini, OpenRouter, DeepSeek, Ollama, …).
+
+For example, before routing default OpenAI traffic:
+
+```bash
+fiscus egress apply --apply --mode controlled_cloud \
+  --id openai-inference --purpose provider_inference \
+  --data-class provider_request --method POST \
+  --origin https://api.openai.com --path-prefix /v1/
+```
+
+The receipt chain is local and redacted: `fiscus egress verify` checks its
+integrity. A genuinely absent file may establish genesis, but any present
+invalid/unreadable history or lock/persistence failure refuses the routed
+request before DNS or dial and is not reset automatically; repair or restore it
+before retrying. If the bounded lock wait reports a stale lock, confirm that no
+Fiscus writer is active, remove only that lock, and rerun receipt verification;
+the transport never auto-deletes it. Neither a rule nor a valid receipt guarantees another
+process's network behaviour or the provider's retention policy.
 
 ### The base-URL `/v1` rule (read this once)
 

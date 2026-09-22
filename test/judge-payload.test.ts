@@ -56,6 +56,17 @@ test('buildStructuralSummary: filters both requests and proposals to the given s
   const summary = buildStructuralSummary(requests, proposals, 's1');
   assert.equal(summary.requestCount, 2);
   assert.equal(summary.proposalCount, 2);
+  assert.equal(summary.proposalCaptureCoverage, 'complete');
+});
+
+test('buildStructuralSummary: truncated proposal capture is disclosed and cannot count as a complete proposal', () => {
+  const summary = buildStructuralSummary(
+    [req({ sessionId: 's1' })],
+    [prop({ captureCoverage: 'truncated' })],
+    's1',
+  );
+  assert.equal(summary.proposalCount, 0);
+  assert.equal(summary.proposalCaptureCoverage, 'truncated');
 });
 
 test('buildStructuralSummary: inter-turn gaps are chronological deltas in seconds, n-1 for n requests', () => {
@@ -110,6 +121,6 @@ test('buildStructuralSummary: the returned shape has no field capable of carryin
   const keys = Object.keys(summary);
   assert.deepEqual(
     keys.sort(),
-    ['interTurnGapsSec', 'proposalCount', 'requestCount', 'requestSizeTrend', 'sessionId', 'spanMinutes', 'totalCostUsd'].sort(),
+    ['interTurnGapsSec', 'proposalCaptureCoverage', 'proposalCount', 'requestCount', 'requestSizeTrend', 'sessionId', 'spanMinutes', 'totalCostUsd'].sort(),
   );
 });

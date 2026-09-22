@@ -68,7 +68,7 @@ const BUILDERS: Record<string, Builder> = {
           : `Reads usage that ${found.length} of your tools already recorded on this computer, and adds anything new to Fiscus.`,
         rows: found.map((i) => ({ label: i.label, value: 'found', note: i.blurb })),
         notes: [
-          'Nothing is sent anywhere. The files being read are already on this machine.',
+          'This import reads files already on this machine and does not invoke a Fiscus outbound path; provider/tool traffic is outside this read.',
           'Imported subscription usage is observed after the fact, so by default it does not count toward budget enforcement.',
         ],
       };
@@ -131,9 +131,9 @@ const BUILDERS: Record<string, Builder> = {
 
   /**
    * Set the daily cap. The only field-bearing action in the GUI, and the one
-   * place a number typed by an operator becomes enforcement configuration -- so
-   * the preview states the enforcement gap (the running proxy keeps the old
-   * value until restart) as a row of the preview, not as a footnote under it.
+   * place a number typed by an operator becomes enforcement configuration. The
+   * running proxy reads this config from the live settings object, so the
+   * preview states that the saved value is enforced immediately.
    */
   budget: (cap) => {
     const entered = signal<string>('');
@@ -152,9 +152,17 @@ const BUILDERS: Record<string, Builder> = {
           inputmode: 'decimal',
           autocomplete: 'off',
           placeholder: 'for example 5.00',
+          // Empty and `0` mean opposite things in this field — one changes
+          // nothing, the other blocks all spend — and the sentence saying so
+          // was a loose sibling paragraph. An operator who tabbed to the input
+          // heard the label alone ("New daily limit, in dollars") and never the
+          // half that carries the consequence. This is the only free-text field
+          // in the GUI and the only one whose empty value is not a no-op by
+          // accident, so the instruction has to reach the control it governs.
+          'aria-describedby': 'budget-cap-note',
           oninput: (event: Event) => entered.set((event.target as HTMLInputElement).value),
         }),
-        h('p', { class: 'drawer-note', text: 'Leave this empty to change nothing. Enter 0 to block all spend.' })),
+        h('p', { id: 'budget-cap-note', class: 'drawer-note', text: 'Leave this empty to change nothing. Enter 0 to block all spend.' })),
 
       preview: async (): Promise<PreviewResult> => {
         const [settings, value] = await Promise.all([api.settings(), api.value()]);
@@ -183,8 +191,8 @@ const BUILDERS: Record<string, Builder> = {
             },
             {
               label: 'Takes effect',
-              value: 'on proxy restart',
-              note: 'the running proxy keeps enforcing the previous value until it is restarted',
+              value: 'immediately',
+              note: 'the running proxy uses the saved cap for future requests',
             },
           ],
           notes: [
@@ -207,7 +215,7 @@ const BUILDERS: Record<string, Builder> = {
         const saved = next.budget?.dailyUsd ?? null;
         return {
           ok: true,
-          message: `Saved. The daily cap is now ${saved === null ? 'unlimited' : usd(saved)}. Restart Fiscus for the proxy to begin enforcing it.`,
+          message: `Saved. The daily cap is now ${saved === null ? 'unlimited' : usd(saved)}. The running proxy will enforce it for future requests immediately.`,
         };
       },
     };
@@ -222,7 +230,7 @@ const BUILDERS: Record<string, Builder> = {
         ? 'Streams the request ledger as CSV from this local server. One row per request, with the recorded attribution basis and pricing basis on each.'
         : 'Downloads every request we recorded as a spreadsheet file, including where each cost figure came from.',
       notes: [
-        'The file is generated on this machine and never leaves it unless you send it somewhere.',
+        'The file is generated locally; sharing it is an explicit operator export action. Fiscus egress rules do not make this machine-wide.',
         'Each row carries its own attribution and pricing basis, so the export can be checked the same way the screens can.',
       ],
     }),
@@ -237,12 +245,20 @@ const BUILDERS: Record<string, Builder> = {
         { label: 'Ledger', value: String(settings['dbPath'] ?? '—'), note: 'on this machine only' },
         { label: 'Proxy port', value: String(settings['proxyPort'] ?? '—') },
         { label: 'Dashboard port', value: String(settings['dashboardPort'] ?? '—') },
-        { label: 'Retention', value: `${String(settings['retentionDays'] ?? '—')} days` },
+        { label: 'Retention', value: String(settings['retentionDays'] ?? '—') + ' days' },
         { label: 'Metadata only', value: settings['metadataOnly'] ? 'yes' : 'no', note: 'prompt and response bodies are never stored when on' },
+        {
+          label: 'Egress mode',
+          value: settings.egress.mode === 'local_locked' ? 'local locked' : 'controlled cloud',
+          note: settings.egress.receipts.ok
+            ? settings.egress.rules.length + ' exact rule(s); ' + settings.egress.receipts.receiptCount + ' receipt(s); chain valid'
+            : 'receipt history INVALID; outbound requests refuse before dial until it is repaired. Restore the history; if the lock is stale, confirm no Fiscus writer is active, then remove only that lock and rerun verify: ' + (settings.egress.receipts.errors[0] ?? 'history could not be verified'),
+        },
+        { label: 'Egress scope', value: 'Fiscus process only', note: settings.egress.scope },
       ];
       return {
         applicable: false,
-        blockedReason: 'Editing settings from the GUI is not built yet.',
+        blockedReason: 'Use fiscus egress plan to review a cloud permission and fiscus egress apply --apply to persist it. The GUI exposes status and receipt-chain health only.',
         summary: isPrecise() ? 'Current local configuration.' : 'How Fiscus is set up on this machine right now.',
         rows,
       };

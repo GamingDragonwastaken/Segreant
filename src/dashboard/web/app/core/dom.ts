@@ -12,6 +12,10 @@
  */
 
 import { effect, onCleanup } from './signal.ts';
+import { captureFocus, restoreFocus, type FocusTarget } from './focus.ts';
+
+export { captureFocus, restoreFocus } from './focus.ts';
+export type { FocusTarget } from './focus.ts';
 
 export type Child = Node | string | number | null | undefined | false | (() => Child) | Child[];
 
@@ -144,7 +148,11 @@ export function trapFocus(container: HTMLElement): () => void {
     if (focusable.length === 0) return;
     const first = focusable[0]!;
     const last = focusable[focusable.length - 1]!;
-    if (event.shiftKey && document.activeElement === first) {
+    // The drawer and claim inspector intentionally land on their dialog
+    // container before the operator reads the evidence. Treat that container
+    // as the backward boundary too; otherwise the very first Shift+Tab can
+    // escape to the opener before the first child has ever received focus.
+    if (event.shiftKey && (document.activeElement === first || document.activeElement === container)) {
       event.preventDefault();
       last.focus();
     } else if (!event.shiftKey && document.activeElement === last) {

@@ -22,19 +22,29 @@
  * failure than for most.
  */
 
-import { h, render, trapFocus } from '../core/dom.ts';
+import { h, render, captureFocus, restoreFocus, trapFocus, type FocusTarget } from '../core/dom.ts';
 import { signal, effect, onCleanup } from '../core/signal.ts';
 import { usd, isPrecise } from '../core/fmt.ts';
-import type { Layer } from '../core/claimTypes.ts';
+import {
+  claimIsSupported,
+  claimProfileRows,
+  claimShowsFigure,
+  type Layer,
+} from '../core/claimTypes.ts';
 
 const active = signal<Layer | null>(null);
+let opener: FocusTarget | null = null;
 
 export function openClaimInspector(layer: Layer): void {
+  if (active.peek() === null) opener = captureFocus(document.activeElement as FocusTarget | null);
   active.set(layer);
 }
 
 export function closeClaimInspector(): void {
   active.set(null);
+  const previous = opener;
+  opener = null;
+  restoreFocus(previous);
 }
 
 function row(label: string, value: string): Node {
@@ -47,6 +57,28 @@ function list(title: string, items: string[], cls: string): Node {
   return h('div', { class: `claim-list ${cls}` },
     h('strong', { text: title }),
     h('ul', null, ...items.map((x) => h('li', { text: x.replace(/_/g, ' ') }))));
+}
+
+function profileCard(layer: Layer): Node {
+  return h('section', { class: 'claim-profile', 'aria-labelledby': 'claim-profile-title' },
+    h('h3', { id: 'claim-profile-title', class: 'claim-profile-title', text: isPrecise() ? 'ClaimProfile' : 'Evidence standing' }),
+    h('p', {
+      class: 'claim-profile-note',
+      text: isPrecise()
+        ? 'Kernel axes are shown as recorded; the figure row is a separate rendering decision.'
+        : 'These are the evidence labels behind this claim. A missing dollar figure is not the same as missing evidence.',
+    }),
+    h('dl', { class: 'claim-profile-rows' },
+      ...claimProfileRows(layer.support.profile, layer.support.figure).map((item) => h('div', {
+        class: 'claim-profile-row',
+        'data-axis': item.axis,
+        'data-value': item.value,
+      },
+        h('dt', { class: 'claim-key', text: item.label }),
+        h('dd', {
+          class: 'claim-val claim-profile-value',
+          text: () => (isPrecise() ? item.value : item.value.replaceAll('_', ' ')),
+        })) )));
 }
 
 export function mountClaimInspector(root: HTMLElement): void {
@@ -65,13 +97,30 @@ export function mountClaimInspector(root: HTMLElement): void {
   });
 }
 
+/**
+ * What the value slot says, and why. Each branch names a different situation
+ * that the old `established: boolean` reported identically.
+ */
+function figureText(layer: Layer): string {
+  switch (layer.support.figure) {
+    case 'shown':
+      return usd(layer.valueUsd);
+    case 'withheld_uncosted':
+      return isPrecise() ? 'supported; not priced' : 'happened, but not priced';
+    case 'not_a_money_claim':
+      return isPrecise() ? 'not a money claim' : 'not a dollar figure';
+    case 'withheld_unsupported':
+      return 'not established';
+  }
+}
+
 function panel(layer: Layer): Node {
   const i = layer.inspection;
 
   const scrim = h('div', { class: 'claim-scrim', onclick: () => closeClaimInspector() });
 
   const body = h('aside', {
-    class: `claim-panel${layer.established ? '' : ' claim-panel-open'}`,
+    class: `claim-panel${claimIsSupported(layer) ? '' : ' claim-panel-open'}`,
     role: 'dialog',
     'aria-modal': 'true',
     'aria-label': `Evidence for the ${layer.label.toLowerCase()} claim`,
@@ -81,14 +130,17 @@ function panel(layer: Layer): Node {
       h('h2', { class: 'claim-title', text: layer.claim }),
       h('button', { class: 'claim-close', 'aria-label': 'Close', onclick: () => closeClaimInspector() }, '×')),
 
-    // The figure repeats the band exactly, including its refusal to show one.
-    // An inspector that quietly resolved "not established" into a number would
-    // be the collapse this panel exists to document.
-    layer.established
-      ? h('div', { class: 'claim-figure', text: usd(layer.valueUsd) })
-      : h('div', { class: 'claim-figure claim-unset', text: 'not established' }),
+    // The figure repeats the band exactly, including its refusal to show one,
+    // and for the same stated reason. An inspector that quietly resolved a
+    // withheld figure into a number would be the collapse this panel exists to
+    // document; one that reported "not established" for a supported claim whose
+    // pricing input is missing would be a different collapse in the same place.
+    h('div', { class: `claim-figure${claimShowsFigure(layer) ? '' : ' claim-unset'}`,
+      text: figureText(layer) }),
 
     h('p', { class: 'claim-basis', text: layer.basis }),
+
+    profileCard(layer),
 
     h('dl', { class: 'claim-rows' },
       row(isPrecise() ? 'Provenance' : 'Where it came from', i.provenance),
@@ -108,7 +160,7 @@ function panel(layer: Layer): Node {
           ? 'No missing evidence is named for this claim.'
           : 'Nothing is missing for this one.' }),
 
-    !layer.established && layer.nextStep
+    layer.nextStep
       ? h('p', { class: 'claim-next', text: `Next action: ${layer.nextStep}` })
       : null);
 

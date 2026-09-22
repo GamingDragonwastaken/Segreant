@@ -1,13 +1,33 @@
 /**
- * The gate ladder — the spine of the Realization Standard (docs/THE-STANDARD.md).
+ * The gate ladder — the legacy coding adapter for the Realization Standard.
  *
- * A unit of work (a commit) travels down eight ordered gates. Each gate returns
- * pass / fail / unknown. `unknown` is first-class: a gate we cannot observe is
- * NOT a failure, and it never inflates or deflates the score. The realization
- * score is "of the checks we could make, how many passed".
+ * A unit of coding work (a commit) travels down eight ordered gates. `unknown`
+ * is first-class: a gate we cannot observe is NOT a failure, but it is equally
+ * NOT evidence of success. The realization score remains a progress statistic
+ * over observed gates; terminal realization is stricter and requires every gate
+ * declared by this legacy contract to be confirmed pass.
+ *
+ * WHY A GATE CARRIES TWO FIELDS (AII-003, WP-B03). `pass | fail | unknown` has
+ * no way to say that two sources disagreed. A gate fed by several signals — two
+ * CI runs, a deploy that reported success and a rollback that reported failure —
+ * used to resolve "any fail wins", which is a defensible decision recorded as
+ * though it were an observation. The fact that both were seen simply vanished.
+ *
+ * So `polarity` is the truth, in four values, and `verdict` is the projection
+ * the funnel and every legacy consumer still read. The projection is
+ * deliberately conservative and, above all, `conflicted` NEVER becomes `pass`:
+ * for the funnel's question — did this unit demonstrably clear this gate — a
+ * contradiction is not a demonstration. It projects to `fail`, which preserves
+ * exactly the decision the old code made while keeping the disagreement
+ * visible in `polarity` and in `FunnelOutcome.conflicts`, so nothing downstream
+ * has to infer back a fact that was thrown away.
  *
  * No enums (Node strip-only TS rejects them) — a const tuple + union instead.
  */
+
+import type { EpistemicState } from '../epistemic/state.ts';
+import { adaptOutcome, createWorkUnit, type OutcomeAdapter, type WorkUnit } from '../outcomes/work-unit.ts';
+import type { OutcomeContract, OutcomeEvaluation } from '../outcomes/contract.ts';
 
 export const GATE_LADDER = [
   'proposed',
@@ -21,12 +41,80 @@ export const GATE_LADDER = [
 ] as const;
 
 export type Gate = (typeof GATE_LADDER)[number];
+
+/** The legacy three-valued projection. Kept because everything downstream reads it. */
 export type Verdict = 'pass' | 'fail' | 'unknown';
 
 export interface GateResult {
   gate: Gate;
+  /**
+   * The four-valued truth: `conflicted` means this gate was both supported and
+   * refuted by the evidence available, which `verdict` cannot express.
+   */
+  polarity: EpistemicState;
+  /** The conservative projection of `polarity`. See `verdictFromPolarity`. */
   verdict: Verdict;
   detail: string;
+}
+
+/**
+ * Project four-valued polarity onto the legacy verdict at the compatibility
+ * edge, and nowhere else.
+ *
+ * `conflicted -> 'fail'` is the load-bearing line. It must never be `'pass'`
+ * (a contradiction is not a demonstration) and it is deliberately not
+ * `'unknown'` either, because that would launder an observed failure into an
+ * absence of evidence — the exact substitution the four-valued state exists to
+ * refuse, applied in the opposite direction.
+ */
+export function verdictFromPolarity(polarity: EpistemicState): Verdict {
+  switch (polarity) {
+    case 'supported': return 'pass';
+    case 'refuted': return 'fail';
+    case 'conflicted': return 'fail';
+    case 'unknown': return 'unknown';
+  }
+}
+
+/**
+ * Read four-valued polarity back out of a legacy three-valued verdict.
+ *
+ * This is the compatibility edge in the other direction: a row persisted or
+ * transmitted as `pass | fail | unknown` cannot express conflict, so it never
+ * yields `conflicted`. That is a real limit of the stored form, not a claim
+ * that no disagreement occurred — which is why new evidence goes through
+ * `aggregatePolarity` and only historical rows come through here.
+ */
+export function polarityFromVerdict(verdict: Verdict): EpistemicState {
+  switch (verdict) {
+    case 'pass': return 'supported';
+    case 'fail': return 'refuted';
+    case 'unknown': return 'unknown';
+  }
+}
+
+/** Build a `GateResult` from a legacy verdict, for fixtures and stored rows. */
+export function gateResultFromVerdict(gate: Gate, verdict: Verdict, detail: string): GateResult {
+  return { gate, polarity: polarityFromVerdict(verdict), verdict, detail };
+}
+
+/**
+ * Aggregate independent observations of one proposition into four-valued state.
+ *
+ * Both directions observed is `conflicted`, not "the bad one wins". Neither is
+ * `unknown`, not `false`.
+ */
+export function aggregatePolarity(observations: Iterable<boolean>): EpistemicState {
+  let sawSupport = false;
+  let sawRefutation = false;
+  for (const observation of observations) {
+    if (observation) sawSupport = true;
+    else sawRefutation = true;
+  }
+  if (sawSupport && sawRefutation) return 'conflicted';
+  if (sawRefutation) return 'refuted';
+  if (sawSupport) return 'supported';
+  return 'unknown';
 }
 
 export interface GateMeta {
@@ -52,7 +140,13 @@ export interface FunnelOutcome {
   reached: Gate | null;
   diedAt: Gate | null; // first FAIL on the ladder, null if none
   diedAtIndex: number | null;
-  realized: boolean; // no fail anywhere AND survived+clean both confirmed pass
+  realized: boolean; // every gate in this declared legacy contract is confirmed pass
+  /**
+   * Gates where the evidence both supported and refuted the proposition.
+   * Surfaced rather than resolved: a consumer that needs a single answer reads
+   * `verdict`, but nothing has to reconstruct the disagreement from it.
+   */
+  conflicts: Gate[];
   passes: number;
   fails: number;
   unknowns: number;
@@ -60,12 +154,57 @@ export interface FunnelOutcome {
   realizationScore: number; // passes / instrumented, 0 when nothing instrumented
 }
 
+const CODING_OUTCOME_CONTRACT: OutcomeContract = Object.freeze({
+  id: 'coding-gate-lifecycle',
+  requiredPredicates: GATE_LADDER,
+});
+
+/** Canonical adapter for coding's legacy gate contract. */
+export const CODING_OUTCOME_ADAPTER: OutcomeAdapter = Object.freeze({
+  id: 'coding-gate-lifecycle-v1',
+  contract: CODING_OUTCOME_CONTRACT,
+  resolve: (_predicate: string, unit: WorkUnit): EpistemicState => {
+    const states = unit.context.gateStates;
+    if (states === null || typeof states !== 'object' || Array.isArray(states)) return 'unknown';
+    const state = (states as Record<string, unknown>)[_predicate];
+    return state === 'supported' || state === 'refuted' || state === 'conflicted' || state === 'unknown'
+      ? state
+      : 'unknown';
+  },
+});
+
+/** Evaluate coding gates through the domain-neutral OutcomeAdapter contract. */
+export interface CodingOutcomeEvaluation extends OutcomeEvaluation {
+  /** The adapter that judged this evaluation — carried so a consumer can name the route, not infer it (D-247). */
+  readonly adapterId: string;
+  /** Compatibility projection retaining the coding funnel's ordered gate detail. */
+  readonly funnel: FunnelOutcome;
+}
+
+export function evaluateCodingOutcome(verdicts: Readonly<Record<Gate, GateResult>>): CodingOutcomeEvaluation {
+  const unit = createWorkUnit({
+    id: 'coding-outcome-evaluation',
+    kind: 'coding_commit',
+    startedAtMs: 0,
+    endedAtMs: 0,
+    context: {
+      gateStates: Object.fromEntries(GATE_LADDER.map((gateName) => [gateName, verdicts[gateName].polarity])),
+    },
+  });
+  const adapted = adaptOutcome(unit, CODING_OUTCOME_ADAPTER);
+  return Object.freeze({
+    ...adapted.evaluation,
+    adapterId: adapted.adapterId,
+    funnel: scoreFunnelProjection(verdicts, adapted.evaluation.status === 'confirmed'),
+  });
+}
+
 /**
  * Terminal realization BOUNDS over a set of (matured) funnel outcomes — the
  * partial-identification answer to "what share of this work is realized?" when
  * some gates are unobserved. Per-unit:
  *
- *   lower: confirmed realized (no fail anywhere AND durability confirmed pass)
+ *   lower: confirmed realized (every required legacy gate confirmed pass)
  *   upper: not observed dead (no fail at any observed gate)
  *
  * The truth is provably inside [lower, upper]; the width IS the unobserved
@@ -170,10 +309,14 @@ export function serialRealization(outcomes: ReadonlyArray<FunnelOutcome>): Seria
  * Score a unit's funnel from a verdict per gate. Funnel semantics:
  *  - the unit "reaches" the deepest gate that passed before the first failure;
  *  - `unknown` gates do not stop the funnel and do not count as reached;
- *  - it is "realized" only if nothing failed and the two durability gates
- *    (survived, clean) are confirmed pass — so maturing units are never realized.
+ *  - terminal `realized` means every gate this legacy coding contract declares
+ *    necessary is confirmed pass. An unknown gate is unresolved, not success.
  */
 export function scoreFunnel(verdicts: Record<Gate, GateResult>): FunnelOutcome {
+  return evaluateCodingOutcome(verdicts).funnel;
+}
+
+function scoreFunnelProjection(verdicts: Record<Gate, GateResult>, realized: boolean): FunnelOutcome {
   const results = GATE_LADDER.map((g) => verdicts[g]);
 
   let passes = 0;
@@ -201,8 +344,10 @@ export function scoreFunnel(verdicts: Record<Gate, GateResult>): FunnelOutcome {
     if (results[i]!.verdict === 'pass') reachedIndex = i;
   }
 
-  const realized =
-    diedAt === null && verdicts.survived.verdict === 'pass' && verdicts.clean.verdict === 'pass';
+  // The canonical coding adapter is the terminal-status authority. It consumes
+  // the four-valued gate states, so unknown and conflicted evidence cannot become
+  // confirmation through the legacy three-valued projection.
+  const conflicts = GATE_LADDER.filter((gateName) => verdicts[gateName].polarity === 'conflicted');
   const instrumented = passes + fails;
 
   // Realization score is MONOTONE along the necessary-condition chain: a unit
@@ -227,6 +372,7 @@ export function scoreFunnel(verdicts: Record<Gate, GateResult>): FunnelOutcome {
     diedAt,
     diedAtIndex,
     realized,
+    conflicts,
     passes,
     fails,
     unknowns,

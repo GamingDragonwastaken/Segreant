@@ -47,6 +47,7 @@ import { fiscusHome } from '../config.ts';
 import type { Store } from '../store/db.ts';
 import { readCommitsBefore } from '../git/correlate.ts';
 import { classifyTaskType, type TaskType } from './taskType.ts';
+import { egressFetch, EgressError } from '../egress/transport.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -106,7 +107,16 @@ export interface BaselineRefreshResult {
   curated?: string;
   taskTypeCount?: number;
   error?: string;
+  failureCode?: BaselineRefreshFailureCode;
 }
+
+export type BaselineRefreshFailureCode =
+  | 'egress_policy_denied'
+  | 'egress_dns_denied'
+  | 'egress_receipt_integrity_failed'
+  | 'egress_receipt_persistence_failed'
+  | 'egress_transport_failed'
+  | 'network_error';
 
 /**
  * Validate a baseline manifest (raw JSON text) and, if it passes, write it to the
@@ -151,14 +161,31 @@ export async function refreshBaselineManifest(url: string | null, timeoutMs = 20
       ok: false,
       error:
         'no default manifest source is configured for Lift baselines (unlike pricing, there is no established machine-readable feed for this) — pass an explicit URL you trust, or edit the cache file by hand',
+      failureCode: 'network_error',
     };
   }
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs), headers: { accept: 'application/json' } });
-    if (!res.ok) return { ok: false, error: `HTTP ${res.status} from ${url}` };
+    const res = await egressFetch(url, {
+      purpose: 'baseline_refresh',
+      dataClass: 'baseline_manifest',
+      signal: AbortSignal.timeout(timeoutMs),
+      headers: { accept: 'application/json' },
+    });
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status} from ${url}`, failureCode: 'network_error' };
     return applyBaselineManifest(await res.text());
   } catch (e) {
-    return { ok: false, error: `fetch failed: ${String(e)}` };
+    if (e instanceof EgressError) {
+      const failureCode = `egress_${e.code}` as BaselineRefreshFailureCode;
+      const repair = e.code === 'receipt_integrity_failed' || e.code === 'receipt_persistence_failed'
+        ? '; repair/restore the local receipt history before retrying'
+        : '';
+      return {
+        ok: false,
+        failureCode,
+        error: `Fiscus egress boundary refused the Lift baseline refresh (${e.code}): ${e.message}${repair}`,
+      };
+    }
+    return { ok: false, error: `fetch failed: ${String(e)}`, failureCode: 'network_error' };
   }
 }
 

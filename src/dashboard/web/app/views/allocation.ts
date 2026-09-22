@@ -16,7 +16,7 @@
  */
 
 import { h } from '../core/dom.ts';
-import { signal, effect } from '../core/signal.ts';
+import { signal, scopedEffect } from '../core/signal.ts';
 import { api, type AllocationPayload } from '../core/api.ts';
 import { isPrecise, relative, count } from '../core/fmt.ts';
 import { actionCard } from './spend.ts';
@@ -33,7 +33,7 @@ export function allocationView(): Node {
   const data = signal<AllocationPayload | null>(null);
   const error = signal<string | null>(null);
 
-  effect(() => {
+  scopedEffect(() => {
     void api.allocation()
       .then((payload) => data.set(payload))
       .catch((e: unknown) => error.set(e instanceof Error ? e.message : String(e)));
@@ -48,9 +48,9 @@ export function allocationView(): Node {
 
     () => {
       const err = error();
-      if (err) return h('div', { class: 'card' }, h('p', { class: 'drawer-error', text: err }));
+      if (err) return h('div', { class: 'card' }, h('p', { class: 'drawer-error', role: 'alert', 'aria-live': 'assertive', text: err }));
       const d = data();
-      if (!d) return h('div', { class: 'card' }, h('p', { class: 'drawer-muted', text: 'Loading…' }));
+      if (!d) return h('div', { class: 'card' }, h('p', { class: 'drawer-muted', role: 'status', 'aria-live': 'polite', 'aria-busy': 'true', text: 'Loading…' }));
 
       const centres = d.costCentres ?? [];
       const rules = d.rules ?? [];
@@ -120,7 +120,7 @@ export function allocationView(): Node {
                       ? 'Rules and centres exist, but no allocation run has been recorded.'
                       : 'You have set the rules up, but never run the split.') })))
           : h('div', { class: 'notyet', style: 'margin-top: var(--s5)' },
-              h('h3', { text: () => (isPrecise() ? 'No allocation model defined' : 'Nothing is being split yet') }),
+              h('h2', { text: () => (isPrecise() ? 'No allocation model defined' : 'Nothing is being split yet') }),
               h('p', { text: () => (isPrecise()
                 ? `${centres.length} cost centre${centres.length === 1 ? '' : 's'} and ${rules.length} rule${rules.length === 1 ? '' : 's'} recorded. Both are required before a run can produce a split.`
                 : 'To split spend across teams or projects, Fiscus needs at least one cost centre to attribute to, and one rule that decides what goes where.') })),

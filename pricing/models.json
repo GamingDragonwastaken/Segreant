@@ -17,41 +17,41 @@
       "verified": true,
       "source": "platform.claude.com/docs/en/pricing (cache 2026-06)",
       "models": {
-        "claude-fable-5":   { "input": 10.0, "output": 50.0, "cache_write_5m": 12.50, "cache_write_1h": 20.0, "cache_read": 1.00 },
-        "claude-opus-4-8":  { "input": 5.0,  "output": 25.0, "cache_write_5m": 6.25,  "cache_write_1h": 10.0, "cache_read": 0.50 },
-        "claude-opus-4-7":  { "input": 5.0,  "output": 25.0, "cache_write_5m": 6.25,  "cache_write_1h": 10.0, "cache_read": 0.50 },
-        "claude-opus-4-6":  { "input": 5.0,  "output": 25.0, "cache_write_5m": 6.25,  "cache_write_1h": 10.0, "cache_read": 0.50 },
-        "claude-opus-4-5":  { "input": 5.0,  "output": 25.0, "cache_write_5m": 6.25,  "cache_write_1h": 10.0, "cache_read": 0.50 },
-        "claude-sonnet-4-6":{ "input": 3.0,  "output": 15.0, "cache_write_5m": 3.75,  "cache_write_1h": 6.0,  "cache_read": 0.30 },
-        "claude-sonnet-4-5":{ "input": 3.0,  "output": 15.0, "cache_write_5m": 3.75,  "cache_write_1h": 6.0,  "cache_read": 0.30 },
-        "claude-haiku-4-5": { "input": 1.0,  "output": 5.0,  "cache_write_5m": 1.25,  "cache_write_1h": 2.0,  "cache_read": 0.10 }
+        "claude-fable-5":   { "input": 10.0, "output": 50.0, "cache_write_5m": 12.50, "cache_write_1h": 20.0, "cache_read": 1.00, "exact": { "input": "10", "output": "50", "cache_write_5m": "12.5", "cache_write_1h": "20", "cache_read": "1" } },
+        "claude-opus-4-8":  { "input": 5.0,  "output": 25.0, "cache_write_5m": 6.25,  "cache_write_1h": 10.0, "cache_read": 0.50, "exact": { "input": "5", "output": "25", "cache_write_5m": "6.25", "cache_write_1h": "10", "cache_read": "0.5" } },
+        "claude-opus-4-7":  { "input": 5.0,  "output": 25.0, "cache_write_5m": 6.25,  "cache_write_1h": 10.0, "cache_read": 0.50, "exact": { "input": "5", "output": "25", "cache_write_5m": "6.25", "cache_write_1h": "10", "cache_read": "0.5" } },
+        "claude-opus-4-6":  { "input": 5.0,  "output": 25.0, "cache_write_5m": 6.25,  "cache_write_1h": 10.0, "cache_read": 0.50, "exact": { "input": "5", "output": "25", "cache_write_5m": "6.25", "cache_write_1h": "10", "cache_read": "0.5" } },
+        "claude-opus-4-5":  { "input": 5.0,  "output": 25.0, "cache_write_5m": 6.25,  "cache_write_1h": 10.0, "cache_read": 0.50, "exact": { "input": "5", "output": "25", "cache_write_5m": "6.25", "cache_write_1h": "10", "cache_read": "0.5" } },
+        "claude-sonnet-4-6":{ "input": 3.0,  "output": 15.0, "cache_write_5m": 3.75,  "cache_write_1h": 6.0,  "cache_read": 0.30, "exact": { "input": "3", "output": "15", "cache_write_5m": "3.75", "cache_write_1h": "6", "cache_read": "0.3" } },
+        "claude-sonnet-4-5":{ "input": 3.0,  "output": 15.0, "cache_write_5m": 3.75,  "cache_write_1h": 6.0,  "cache_read": 0.30, "exact": { "input": "3", "output": "15", "cache_write_5m": "3.75", "cache_write_1h": "6", "cache_read": "0.3" } },
+        "claude-haiku-4-5": { "input": 1.0,  "output": 5.0,  "cache_write_5m": 1.25,  "cache_write_1h": 2.0,  "cache_read": 0.10, "exact": { "input": "1", "output": "5", "cache_write_5m": "1.25", "cache_write_1h": "2", "cache_read": "0.1" } }
       }
     },
     "openai": {
       "verified": false,
       "source": "community-maintained best-effort — re-verify before billing-grade use",
       "models": {
-        "gpt-4o":        { "input": 2.50, "output": 10.0, "cache_read": 1.25 },
-        "gpt-4o-mini":   { "input": 0.15, "output": 0.60, "cache_read": 0.075 },
-        "gpt-4.1":       { "input": 2.00, "output": 8.00, "cache_read": 0.50 },
-        "gpt-4.1-mini":  { "input": 0.40, "output": 1.60, "cache_read": 0.10 },
-        "gpt-4.1-nano":  { "input": 0.10, "output": 0.40, "cache_read": 0.025 },
-        "o3":            { "input": 2.00, "output": 8.00, "cache_read": 0.50 },
-        "o4-mini":       { "input": 1.10, "output": 4.40, "cache_read": 0.275 }
+        "gpt-4o":        { "input": 2.50, "output": 10.0, "cache_read": 1.25, "exact": { "input": "2.5", "output": "10", "cache_read": "1.25" } },
+        "gpt-4o-mini":   { "input": 0.15, "output": 0.60, "cache_read": 0.075, "exact": { "input": "0.15", "output": "0.6", "cache_read": "0.075" } },
+        "gpt-4.1":       { "input": 2.00, "output": 8.00, "cache_read": 0.50, "exact": { "input": "2", "output": "8", "cache_read": "0.5" } },
+        "gpt-4.1-mini":  { "input": 0.40, "output": 1.60, "cache_read": 0.10, "exact": { "input": "0.4", "output": "1.6", "cache_read": "0.1" } },
+        "gpt-4.1-nano":  { "input": 0.10, "output": 0.40, "cache_read": 0.025, "exact": { "input": "0.1", "output": "0.4", "cache_read": "0.025" } },
+        "o3":            { "input": 2.00, "output": 8.00, "cache_read": 0.50, "exact": { "input": "2", "output": "8", "cache_read": "0.5" } },
+        "o4-mini":       { "input": 1.10, "output": 4.40, "cache_read": 0.275, "exact": { "input": "1.1", "output": "4.4", "cache_read": "0.275" } }
       }
     },
     "google": {
       "verified": true,
       "source": "ai.google.dev/gemini-api/docs/pricing (2026-06)",
       "models": {
-        "gemini-2.5-pro":        { "input": 1.25, "output": 10.0, "cache_read": 0.125 },
-        "gemini-2.5-flash":      { "input": 0.30, "output": 2.50,  "cache_read": 0.03 },
-        "gemini-2.5-flash-lite": { "input": 0.10, "output": 0.40,  "cache_read": 0.01 }
+        "gemini-2.5-pro":        { "input": 1.25, "output": 10.0, "cache_read": 0.125, "exact": { "input": "1.25", "output": "10", "cache_read": "0.125" } },
+        "gemini-2.5-flash":      { "input": 0.30, "output": 2.50,  "cache_read": 0.03, "exact": { "input": "0.3", "output": "2.5", "cache_read": "0.03" } },
+        "gemini-2.5-flash-lite": { "input": 0.10, "output": 0.40,  "cache_read": 0.01, "exact": { "input": "0.1", "output": "0.4", "cache_read": "0.01" } }
       }
     }
   },
   "fallbacks": {
     "comment": "Used when a model name is unknown. Heuristic match by substring; otherwise the 'unknown' rate (conservative mid-tier) is applied and the request is flagged estimated=true.",
-    "unknown": { "input": 3.0, "output": 15.0, "cache_read": 0.30 }
+    "unknown": { "input": 3.0, "output": 15.0, "cache_read": 0.30, "exact": { "input": "3", "output": "15", "cache_read": "0.3" } }
   }
 }

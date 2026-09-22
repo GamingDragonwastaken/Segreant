@@ -1,15 +1,24 @@
 /**
- * Value of Information — which measurement to buy next.
+ * Instrumentation sensitivity — which un-instrumented lens moves the Index most.
  * (docs/RETURN-ON-INTELLIGENCE.md §12.)
  *
- * The Index is an upper bound while lenses are un-instrumented (§5): every
- * unmeasured necessary condition can only pull it DOWN. But "wire more lenses"
- * is not a decision — "wire THIS lens next" is. This module ranks the
- * un-instrumented lenses by how much the Index would move if each were measured,
- * completing the decision calculus:
+ * This is NOT value of information. VoI needs a decision, a utility model, a
+ * distribution over what the measurement might reveal, and a declared cost;
+ * this module has none of those. It reports how far the composite would move if
+ * a missing lens were measured at one disclosed reference value — the largest
+ * sensitivity/measurement exposure in the aggregator, not a claim about what
+ * that measurement is worth. Formal decision-theoretic VoI lives in
+ * `src/decision/engine.ts`, where `valueOfInformation()` combines posterior
+ * scenarios, action utilities, and a declared measurement cost.
+ *
+ * The observed Index is not generally a ceiling while lenses are un-instrumented:
+ * weight renormalization means a missing lens can move the score either direction.
+ * This module is an exposure diagnostic, not an action-selection rule. It ranks
+ * the un-instrumented lenses by how much the Index would move if each were
+ * measured, keeping the sensitivity result separate from formal decision VoI:
  *
  *   shadow price (§9)  — where does the next DOLLAR go?
- *   VoI (this)         — which MEASUREMENT do I buy next?
+ *   sensitivity (this) — which MEASUREMENT moves the composite most?
  *   anytime CS (§10)   — when do I actually KNOW?
  *
  * The arithmetic is transparent — no invented priors. If lens k (weight w_k)
@@ -21,7 +30,8 @@
  * reference (v = 0.5 by default — the midpoint, not a prediction) and rank by
  * the size of the move. The exposure is real regardless of the reference's
  * exact position: a heavier, further-from-current lens moves the Index more,
- * and measuring can only make the number more honest.
+ * and measuring can raise or lower the observed score. The direction is a
+ * disclosed sensitivity result, not a monotone promise.
  */
 
 import { DEFAULT_LENS_WEIGHTS, type RoIResult } from './lenses.ts';
@@ -30,11 +40,11 @@ export type LensName = 'realization' | 'acceptance' | 'lift' | 'impact';
 
 export interface InstrumentationPriority {
   lens: LensName;
-  /** The lens's output elasticity in the composite — its leverage. */
+  /** The lens's disclosed weight in the composite — its leverage there, never a fitted elasticity. */
   weight: number;
   /** The Index if this lens were measured at the reference value. */
   indexAtReference: number;
-  /** indexAtReference − current Index (usually negative: more measurement, more honest). */
+  /** indexAtReference − current Index; the direction can be positive or negative. */
   deltaAtReference: number;
   /** The disclosed reference the exposure was evaluated at. */
   reference: number;

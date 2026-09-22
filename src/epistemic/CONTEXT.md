@@ -1,0 +1,118 @@
+# epistemic — evidence state and dependency legality
+
+## Consumes
+
+- typed evidence/claim/decision node identities;
+- canonical immutable Evidence envelopes with explicit source, coordinate, trust, completeness and retention metadata;
+- canonical immutable Claim envelopes with typed propositions, profile aliases, uncertainty and derivation dependencies;
+- first-class immutable Assumption envelopes with scope/time, epistemic state and evidence dependencies;
+- canonical immutable, evidence-grounded Witness envelopes for derivation proof obligations;
+- canonical immutable Derivation records with explicit transformations, coordinate changes and witness identities;
+- immutable Evidence/Claim dependency DAG snapshots with as-of views, assumption/measurement queries, conflict paths, supersession links and revocation projections;
+- SQLite-backed append-only kernel ledger with canonical JSON/digest revalidation, atomic dependency writes and revocation-event replay;
+- a combined `replayAsOf` projection that applies node availability and event-recording boundaries in one immutable result;
+- `derivationsForClaim(claimId)` (D-257): the validated derivations whose output is a claim — derivations are not DAG nodes, they are the records behind the `derives`/`depends_on`/`witnesses` edges into their output, and a viewer that wants a claim's assumptions reads them here;
+- canonical JSON serialization/digest envelopes for Evidence, Claim, Assumption and Derivation records;
+- directed prerequisite-to-dependent edges;
+- revocation events supplied by an append-only store or protocol layer;
+- a declared map of every repository boundary that creates or strengthens a claim, with the class of authority each holds (`issuance-map.ts`).
+- whole derivation CHAINS, as a set of claims plus the derivations between them, for abstract interpretation over the axis lattice (`abstract.ts`).
+
+## Does not establish
+
+`abstract.ts` never says a proposition is TRUE, in the same sense as
+`PreservationAssessment.isProofOfTruth: false`; a bound is about what the
+evidence structure licenses.
+
+This paragraph described a hole that closed in two steps and stayed unedited
+through both, which is exactly the drift `module-contracts.test.ts` exists to
+catch. **Per step (D-152):** `assessDerivationLegality` originally iterated
+`PROFILE_STRENGTH_AXES`, which cannot include `monetaryBasis` because that axis
+has no ladder, so an `estimated -> billed` derivation was `allowed: true` with
+ZERO required witnesses. A `monetary_rebasing` witness kind and a requirement
+inside `assessDerivationLegality` now refuse that re-basing unwitnessed, at the
+boundary `appendDerivationWithinTransaction` runs. **Per chain (D-222):**
+`analyzeDerivationChain` bounded what a whole chain licenses from the day it was
+built and had no caller — `assertChainWithinBound` in `ledger.ts` now walks
+every stored derivation upstream of a candidate's input claims back to its
+leaves and refuses a conclusion the chain does not license, which per-step
+comparison against only the immediate predecessor could not catch: a `billed`
+leaf reaching `mixed` in one hop, or `estimated` reaching `billed` through an
+intermediate `mixed` step witnessed only for its own hop. A registered,
+`supported` `monetary_rebasing` witness lifts the chain for the pair it
+declares, same as it lifts the per-step rule, and no further. `BASIS_DERIVATIONS`
+is still deliberately empty, which means "nobody has declared a legitimate
+re-basing", not "none exist" — allocation is the obvious candidate and inventing
+it here to make a bound look useful would be the inflation the module refuses.
+
+The analysis takes each leaf at face value: it bounds what a CHAIN adds, and what
+a root may say about its own cited evidence is `assertClaimWithinItsEvidence` and
+`assessPreservation`, which it neither repeats nor replaces. A witness lifts its
+axis to that axis's top, exactly as the kernel's own rule does, so the
+abstraction is only as tight as the witness discipline it inherits: a witness
+that overstates its reach overstates this bound too.
+
+## Guarantees
+
+- revocation closure includes every transitive dependent and the original revoked node;
+- independent sibling branches remain valid unless they depend on a revoked node;
+- duplicate revocations are idempotent and cycles are traversed safely;
+- malformed and duplicate dependency edges fail closed;
+- closure computation never deletes or mutates historical nodes.
+- An Evidence/Claim `revocation` envelope's `eventId` and the `epistemic_revocations` table (`appendRevocation`'s own PRIMARY KEY namespace) are checked against each other in both directions: `appendRevocation` refuses an `eventId` a different node's envelope already claims, and appending an Evidence/Claim refuses a `revocation.eventId` the table already records against a different target. Neither direction requires the other side to exist first — only a target MISMATCH when the id is on record on either side is refused.
+- `RevocationProjection` carries an effective-time dimension: `revokedIds`/`trace` cover only revocations already in effect as of the caller's reference instant (the `asOf` boundary, or the real current instant for a live read), and `pendingIds` covers ones known but not yet effective — an envelope's `effectiveAt`, distinct from its node's availability. A table-recorded event has no separate effective time and is always immediately effective.
+- Evidence payloads are cloned/frozen and may be replaced by a hash/reference when raw content should not be retained.
+- Claims retain evidence IDs and derivation identity; a profile mismatch or absent evidence dependency fails closed.
+- A claim's `measurementModelRef`, when it names one, must be a reference at least one cited Evidence declares. `claim()` requires a reference to be WRITTEN once `profile.measurement` rises above `proxy_unvalidated`; the append boundary requires it to be one some record of the measurement made, so a measurement citation cannot appear at the claim layer out of nothing. This is a containment check and not a fourth ceiling: a model reference is an identity, not a rung, so no ordering is invented and the deliberate refusal to rank `monetaryBasis` is untouched. It does NOT establish, on the derivation path, that the reference resolves to a registered model — the evidence can name nothing just as the claim could.
+- On the DIRECT path it does resolve (D-224). `EpistemicLedger` takes an optional `measurementModels: MeasurementRegistry`; a direct claim above `proxy_unvalidated` must cite a reference that `assessMeasurementBacking` resolves to a registered model whose `targetConstruct` is the claim's proposition predicate — the envelope carries no other statement of what the claim is a measurement OF — and whose own declared validation reaches the asserted rung. Omitting the registry means the EMPTY registry, not no check: a ledger that knows no models resolves nothing and refuses every such claim, which is the ledger `Store` constructs. A derivation carrying a `measurement_validation` witness still legalizes the rung. The floor runs on INSERT only: a row persisted before it reads back as stored, is neither upgraded nor lowered nor backfilled, and an identical re-offer is `duplicate`.
+- Witnesses are first-class persisted nodes; every witness used by a stored derivation must match the registered kind, coordinates, detail and evidence IDs.
+- Derivation legality refuses unsupported strengthening of coordinates, epistemic state, coverage, measurement, causality, monetary finality, trust or decision fitness.
+- Every proposition predicate the product issues is classified by polarity (D-245, `test/negative-claim-audit.test.ts`): a predicate that asserts absence must name the completeness mechanism its issuer enforces, and the mechanism must be in that file; a new predicate fails until classified. Twelve issued today: one negative in effect (the coding `clean` gate inside `value.realization_recorded`), one typed bound (`billing.reconciled_with_residual`), ten positive.
+- `DIMENSION_ROLLUPS` in `grain.ts` is validated, not merely declared (D-244): `test/grain-rollup-validation.test.ts` requires every entry to name the producer that enforces its partition and to show that producer refusing a finer record outside its coarser unit; the table must stay acyclic and may name only dimensions some `grain([...])` in the product issues. An entry with no probe, a probe whose producer stops refusing, and a roll-up nobody produces all fail.
+- A registered witness discharges an obligation only while its own record reads `supported` (D-190) AND it contains what its kind obliges (D-201, `obligation.ts`): `causal_identification` must cite evidence the output claim also cites; `measurement_validation` must cite evidence collected under the `measurementModelRef` the output claim asserts a rung for; `monetary_rebasing` must carry a `basisChange` equal to the pair the step moves between, and `witness()` refuses the kind without one and every other kind with one. The remaining kinds are kind-only, and `WITNESS_OBLIGATIONS` says so by name with the reason — the records carry nothing typed to hold them to. Checked at the ledger against the REGISTERED record, per input claim; `assessDerivationLegality` alone still matches kind only. A failing witness is set aside, not erased, and the refusal names it and what it failed to contain.
+- Every product path that issues a kernel Claim is declared in `issuance-map.ts`, and a path that issues without appearing there fails a test rather than becoming a second authority.
+- `abstract.ts` bounds what a whole chain licenses, which no per-step check does: `assessDerivationLegality` compares one step against one input claim and `assessPreservation` compares one claim against its cited evidence, so a conclusion several merges downstream of its leaves was compared with its neighbours and nothing else. **`appendDerivationWithinTransaction` now calls it (D-222):** every derivation with at least one input claim is checked with `analyzeDerivationChain` against every stored derivation reachable upstream of those inputs back to their leaves, not just the immediate predecessor, so a conclusion the per-step rule allows but the chain does not license — a `billed` leaf relabelled `mixed` in one hop, or an `estimated` leaf reaching `billed` through a `mixed` hop witnessed only for its own step — is refused and nothing is stored. A step's registered, `supported` `monetary_rebasing` witness is passed to the analysis as the transition licensed for that step alone, never the whole chain, so a re-basing declared three steps downstream cannot lift a leaf it says nothing about.
+- The abstract domain reuses the split `admissibility.ts` already declares: ordered axes are bounded by a CEILING, and the two unordered axes — `monetaryBasis` and `epistemic` — by an ADMISSIBLE SET. `monetaryBasis` acquires no ordering here, and refusing to give it one is the point.
+- `assessPreservation` (`preservation.ts`) has no production caller and is not a second authority: it is the abstract statement of the direct-path rule, and `test/preservation-ledger-agreement.test.ts` holds the ledger to it over the whole evidence-comparable grid (every integrity x authenticity x coverage point, single records and pairs) — accept iff allow, disagreements named (D-235). Coverage does not compose: two `partial` records whose `coveredTime`s tile a period still bound a claim at `partial`, because producers write `coveredTime` as the extent of a partial capture, not a region of completeness; only a record declaring `complete` over the union supports `complete` (`test/coverage-non-composition.test.ts`).
+- `PROFILE_STRENGTH_AXES` is exported from `derivation.ts` and read rather than restated, so the per-step rule and its abstraction cannot drift apart.
+- Every choice in the abstraction NARROWS rather than widens: an unresolved input is BOTTOM and not "ignore it"; no inputs at all is BOTTOM and not "unconstrained"; disagreeing monetary bases become `mixed` rather than the stronger of the two; a conflicted epistemic join admits only `conflicted`. A bound that is too tight costs a caller an explicit witness; a bound that is too loose says a chain can establish something it cannot.
+- `minimalHittingSets`, exported from `dag.ts`, is the one hitting-set fold both `minimalCutSets` (this module) and `minimalInvalidatingAssumptionSets` (`countermodel.ts`, D-195) call, so the two questions cannot disagree by drifting apart the way they once did. The decision domain's own adapter, `decisionCertificationStructure` in `src/decision/countermodels.ts`, uses this fold but is not wired into any product surface.
+
+## Invariants
+
+- an edge `from -> to` means `to` depends on `from`;
+- revocation is a projected validity result, not destructive deletion;
+- conflict and unknown evidence states remain distinct in the wider kernel.
+- integrity, authenticity, completeness and truth are independent axes; no universal `trusted` boolean is emitted.
+- claim-level causal, monetary and finality aliases are copied from the profile and cannot diverge.
+- Coordinate witness kinds must match exact source/target coordinates; non-coordinate witnesses cannot smuggle coordinate changes.
+- Dependency edges are prerequisite-to-dependent and acyclic; supersession is lifecycle metadata, not a revocation dependency.
+- As-of views never expose nodes unavailable at the requested boundary; revocation returns traceable projections and never deletes history.
+- Revocation of witness evidence transitively reaches the witness and every claim whose derivation cites it.
+- Repeated as-of replay is deterministic across handles; later nodes and later-recorded revocations cannot appear in earlier projections.
+- Persistent inserts are exact-replay idempotent but divergent same-ID payloads and `INSERT OR REPLACE` attempts fail closed through database triggers.
+- Serialized records sort object keys, preserve array order, reject cycles/unsupported values, and verify both digest and canonical bytes before rehydration.
+- Claims may carry first-class `assumptionIds`; the Store links them as `assumes` edges so assumption revocation reaches dependent claims without treating display text as a trust source.
+- The issuance map's `unmigrated_authority` list is non-empty by construction while AII-036 is `PARTIAL`: emptying it requires closing the finding, not editing the list. **One** boundary strengthens claims outside the kernel today: decision certificates. Revoking their sources cannot invalidate what depends on them. This sentence said THREE for a long time, naming causal qualification and causal estimation beside it, and both had been migrated — `causal.issuance` mints its `causal_identification` witness only from a qualification returned as `qualified`, so an unsound study cannot produce a legal derivation. The count is now derivable rather than asserted: it is the number of `unmigrated_authority` entries in `src/epistemic/issuance-map.ts`, and that file is the authority. Corrected at D-198, found because nothing had ever compared this file to the code.
+
+## Verify
+
+```bash
+node --test --experimental-strip-types test/revocation-closure.test.ts test/epistemic-state.test.ts
+node --test --experimental-strip-types test/epistemic-evidence.test.ts
+node --test --experimental-strip-types test/epistemic-claim.test.ts
+node --test --experimental-strip-types test/epistemic-derivation-object.test.ts test/epistemic-derivation.test.ts
+node --test --experimental-strip-types test/epistemic-dag.test.ts
+node --test --experimental-strip-types test/epistemic-ledger.test.ts
+node --test --experimental-strip-types test/epistemic-assumption.test.ts
+node --test --experimental-strip-types test/epistemic-witness.test.ts
+node --test --experimental-strip-types test/witness-epistemic-discharge.test.ts test/witness-semantic-obligation.test.ts
+node --test --experimental-strip-types test/epistemic-replay-conformance.test.ts
+node --test --experimental-strip-types test/epistemic-serialization.test.ts
+node --test --experimental-strip-types test/issuance-map.test.ts
+node --test --experimental-strip-types test/epistemic-trust-non-escalation.test.ts
+node --test --experimental-strip-types test/preservation-ledger-agreement.test.ts test/coverage-non-composition.test.ts
+node --test --experimental-strip-types test/grain-rollup-validation.test.ts
+node --test --experimental-strip-types test/negative-claim-audit.test.ts
+node --test --experimental-strip-types test/epistemic-revocation-envelope.test.ts test/epistemic-revocation-event-linkage.test.ts test/epistemic-revocation-pending.test.ts
+```

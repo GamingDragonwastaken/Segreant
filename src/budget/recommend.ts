@@ -1,22 +1,52 @@
 /**
- * Value-aware budget recommendations.
+ * Value-aware budget SCENARIOS — a heuristic advisor, not an optimizer.
  *
- * The original budget caps are blunt dollar ceilings. This derives *accurate*
- * budgets from two things measurement now gives us:
- *   1. What you actually spend (so the cap fits real usage, not a guess).
- *   2. What that spend actually returns (so a low realized-value rate tightens
- *      the cap and surfaces projected waste — and the frontier says where to
- *      reallocate).
+ * The original budget caps are blunt dollar ceilings. This proposes a better-
+ * fitting one from two things measurement gives us:
+ *   1. What you actually spend (so the cap fits observed usage, not a guess).
+ *   2. What share of that spend reached a realized outcome (so a low rate
+ *      tightens the cap and surfaces projected waste — and the frontier says
+ *      where an operator might look to reallocate).
+ *
+ * WHAT THIS IS NOT (AII-026). It is not an optimization: no objective is stated,
+ * no constraint set is solved, and no alternative cap is evaluated against one.
+ * The headroom multiplier and the realized-rate tightening are disclosed
+ * heuristics chosen for plausibility, not derived from a utility model. The
+ * realized-value RATE it consumes is a lifecycle share of attributed spend, not
+ * evidence that the spend caused the outcome, so "projected waste" is a
+ * scenario under that share continuing — not a forecast and not a saving.
+ *
+ * A cap that materially changes behaviour is a decision, and decisions belong to
+ * `src/decision/engine.ts` and the assurance chain above it. Since D-220 a
+ * proposal that can be applied CARRIES that decision: `decision` states the
+ * objective, evaluates `apply_recommended` against `keep_current` as utility
+ * intervals, and reports the engine's certificate, the minimax-regret pick, the
+ * derived assurance level and the D-193 standing. The heuristic that picks the
+ * number is unchanged; what changed is that the number no longer travels
+ * without saying whether choosing it over the alternative is certified. The
+ * output stays advisory either way: `canApply` gates whether an operator may
+ * act on it, and `decision.standing` says whether acting is review-only.
  *
  * Pure function over precomputed inputs, so it is testable without a store.
  */
 
 import type { FrontierCell } from '../value/frontier.ts';
+import type { DecisionAssuranceInput } from '../decision/assurance.ts';
+import { decideBudgetCap, type BudgetCapDecision } from './capDecision.ts';
 
 export interface BudgetInputs {
   dailySpends: number[]; // recent per-day spend totals (USD)
-  realizedValueRate: number | null; // share of spend that realized (0..1)
-  frontier?: FrontierCell[]; // byModelAndTask cells, for reallocation hints
+  realizedSpendShare: number | null; // share of attributed SPEND that reached a kept outcome (0..1) — not a value rate
+  /** Accepted for compatibility; never read into an action (D-248). */
+  frontier?: FrontierCell[];
+  /** The cap the proxy runs today; `null`/absent means no daily cap. The decision's `keep_current` action. */
+  currentDailyCapUsd?: number | null;
+  /**
+   * Kernel profiles of the claims the cap decision rests on, declared by the
+   * caller that holds the evidence. Absent means undeclared, which the
+   * assurance gate reads as DAL-0 rather than as "nothing contrary was found".
+   */
+  decisionInputs?: readonly DecisionAssuranceInput[];
 }
 
 export interface Reallocation {
@@ -37,10 +67,17 @@ export interface BudgetRecommendation {
   observed: { medianDaily: number; p90Daily: number; maxDaily: number; avgDaily: number };
   recommendedDailyUsd: number | null; // null = not enough spend history to recommend a cap
   recommendedSoftUsd: number | null;
-  realizedValueRate: number | null;
+  realizedSpendShare: number | null;
   projectedMonthlyWasteUsd: number | null;
   rationale: string[];
+  /** Always empty since D-248: frontier ranking is not converted into an action. */
   reallocations: Reallocation[];
+  /**
+   * The cap as a decision problem (D-220): `null` exactly when there is no cap
+   * to apply (`recommendedDailyUsd === null`), never an invented problem over
+   * a cold-start or thin-history window.
+   */
+  decision: BudgetCapDecision | null;
 }
 
 function percentile(sorted: number[], p: number): number {
@@ -69,7 +106,7 @@ export function recommendBudget(
   const spends = inp.dailySpends.filter((x) => x > 0);
   const headroom = opts.headroom ?? 1.2;
   const minActiveDays = opts.minActiveDays ?? 7;
-  const rvr = inp.realizedValueRate;
+  const rvr = inp.realizedSpendShare;
 
   // Cold start: nothing real to base a cap on. Say so instead of recommending $0.
   if (spends.length === 0) {
@@ -81,10 +118,11 @@ export function recommendBudget(
       observed: { medianDaily: 0, p90Daily: 0, maxDaily: 0, avgDaily: 0 },
       recommendedDailyUsd: null,
       recommendedSoftUsd: null,
-      realizedValueRate: rvr,
+      realizedSpendShare: rvr,
       projectedMonthlyWasteUsd: null,
       rationale: ['Not enough spend history yet — keep metering. A value-aware cap appears once there are a few active days of real usage.'],
       reallocations: [],
+      decision: null,
     };
   }
 
@@ -97,12 +135,13 @@ export function recommendBudget(
       observed: { medianDaily: 0, p90Daily: 0, maxDaily: 0, avgDaily: 0 },
       recommendedDailyUsd: null,
       recommendedSoftUsd: null,
-      realizedValueRate: rvr,
+      realizedSpendShare: rvr,
       projectedMonthlyWasteUsd: null,
       rationale: [
         `Only ${spends.length} active day${spends.length === 1 ? '' : 's'} of real spend observed; keep metering until at least ${minActiveDays} active days exist before applying a cap.`,
       ],
       reallocations: [],
+      decision: null,
     };
   }
 
@@ -138,33 +177,23 @@ export function recommendBudget(
     rationale.push('Realized-value rate is uninstrumented; wire outcomes (git/`report`) to turn this into a value-based budget rather than a usage-based one.');
   }
 
+  // Frontier cells are accepted on the input for compatibility and never
+  // ranked into a trim/grow action: generic model×task cells can represent
+  // unlike work, and a ranking is not allocation-grade evidence. Comparable
+  // model guidance comes only from the within-task frontier trial, through the
+  // assurance gate (D-240, D-248). `reallocations` is therefore always empty.
   const reallocations: Reallocation[] = [];
-  // Do not convert raw frontier ranking into an action. Generic model×task cells
-  // can represent unlike work, and a two-unit threshold is not allocation-grade
-  // evidence. Comparable model guidance is emitted only by the within-task,
-  // review-only frontier trial contract instead.
-  const cells: FrontierCell[] = [];
-  if (cells.length >= 2) {
-    const byRoi = [...cells].sort((a, b) => (a.roiIndex ?? 0) - (b.roiIndex ?? 0));
-    const worst = byRoi[0]!;
-    const best = byRoi[byRoi.length - 1]!;
-    reallocations.push({
-      context: worst.key,
-      action: 'trim',
-      roiIndex: worst.roiIndex,
-      costUsd: worst.costUsd,
-      reason: `Lowest RoI (${worst.roiIndex!.toFixed(0)}) at ${fmt(worst.costUsd)} — spend here returns the least.`,
-    });
-    if (best.key !== worst.key) {
-      reallocations.push({
-        context: best.key,
-        action: 'grow',
-        roiIndex: best.roiIndex,
-        costUsd: best.costUsd,
-        reason: `Highest RoI (${best.roiIndex!.toFixed(0)}) — the safe place to lean spend in.`,
-      });
-    }
-  }
+
+  // The cap that can be applied is a decision with an alternative (keep the
+  // current cap) and a consequence (it changes which future spend the proxy
+  // admits). Stated here rather than left implicit, per D-220.
+  const decision = decideBudgetCap({
+    dailySpends: spends,
+    realizedSpendShare: rvr,
+    currentDailyCapUsd: inp.currentDailyCapUsd,
+    recommendedDailyUsd,
+    inputs: inp.decisionInputs,
+  });
 
   return {
     status: rvr === null ? 'usage_only' : 'review_ready',
@@ -174,10 +203,11 @@ export function recommendBudget(
     observed: { medianDaily, p90Daily, maxDaily, avgDaily },
     recommendedDailyUsd,
     recommendedSoftUsd,
-    realizedValueRate: rvr,
+    realizedSpendShare: rvr,
     projectedMonthlyWasteUsd,
     rationale,
     reallocations,
+    decision,
   };
 }
 

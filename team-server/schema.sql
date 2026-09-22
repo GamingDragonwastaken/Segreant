@@ -53,10 +53,26 @@ CREATE TABLE IF NOT EXISTS rollup_projects (
   units                  INTEGER NOT NULL,
   cost_usd               DOUBLE PRECISION NOT NULL,
   realization_rate       DOUBLE PRECISION NOT NULL,
-  realized_value_usd     DOUBLE PRECISION NOT NULL,
-  net_realized_value_usd DOUBLE PRECISION NOT NULL,
+  -- Both of these are COST, not value: attributed spend on units that reached a
+  -- kept outcome, and the same discounted by acceptance. They were called
+  -- `realized_value_usd` and `net_realized_value_usd` until AII-012, which is
+  -- the same name that let a cost render as realized value in the desktop GUI.
+  -- This file is applied with CREATE TABLE IF NOT EXISTS and there is no
+  -- migration runner, so a database created before the rename keeps the old
+  -- column names and the INSERT in store.ts will fail loudly against it. That
+  -- is the intended behaviour: no production team service is authorized
+  -- (external gate X-03), and a loud failure is preferable to writing spend
+  -- into a column an operator reads as value.
+  spend_on_realized_units_usd     DOUBLE PRECISION NOT NULL,
+  acceptance_weighted_spend_usd DOUBLE PRECISION NOT NULL,
   roi_index              DOUBLE PRECISION,
-  sources                JSONB NOT NULL
+  sources                JSONB NOT NULL,
+  -- Optional exact effective project economics. Numeric columns remain the
+  -- compatibility aggregate; this JSONB retains the signed v2 lineage so a
+  -- later exact dashboard can aggregate it without unpacking rollup bodies.
+  economic_json          JSONB
 );
 CREATE INDEX IF NOT EXISTS rollup_projects_rollup_id_idx ON rollup_projects (rollup_id);
 CREATE INDEX IF NOT EXISTS rollup_projects_project_idx ON rollup_projects (project);
+-- Additive migration for team databases created before exact rollup v2.
+ALTER TABLE rollup_projects ADD COLUMN IF NOT EXISTS economic_json JSONB;

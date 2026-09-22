@@ -4,21 +4,23 @@
  *
  * Two honest faces of the same per-unit evidence, kept distinct on purpose:
  *
- *   1. RoI INDEX (0..100, unitless) — the four lenses composed by a weighted
- *      GEOMETRIC mean. The geometric FORM is forced: value composes
- *      multiplicatively along the funnel, so the aggregator must satisfy
- *      M(x·y)=M(x)·M(y), and the weighted geometric mean is the
- *      constant-returns-to-scale Cobb–Douglas production function whose weights
- *      are the lenses' output ELASTICITIES (disclosed calibration, Σ=1; set them
- *      equal for the pure symmetric axiomatic index). Any lens at 0 collapses it
- *      — no single axis can compensate for a collapsed one.
+ *   1. RoI INDEX (0..100, unitless) — a DESCRIPTIVE, PREFERENCE-DEPENDENT
+ *      composite of the four lenses, aggregated by a weighted GEOMETRIC mean.
+ *      The geometric form follows from a stated axiom set, not from economics:
+ *      assume the aggregator is quasi-arithmetic and multiplicative
+ *      (M(x·y)=M(x)·M(y)), and the weighted geometric mean is what satisfies
+ *      both. Whether AI value in fact composes multiplicatively along the funnel
+ *      is a MODELLING CHOICE this repository has not tested. The weights are
+ *      disclosed preference parameters (Σ normalized to 1), NOT estimated output
+ *      elasticities — no production function has been fitted to this ledger. Any
+ *      lens at 0 collapses the composite, which is a property of this aggregator
+ *      (chosen so a collapsed lens cannot be scored away), not a finding that a
+ *      real shortfall on one axis cannot be made up elsewhere.
  *
- *   2. RoI RETURN (a dimensionless ratio, ≥1 ⟺ paid for itself) — realized,
- *      rework-discounted, manual-equivalent value over the HONEST cost of the
- *      intelligence (tokens + your measured time-with-AI), then discounted by the
- *      counterfactual credit (Lift). This is value÷cost computed DIRECTLY and is
- *      kept mathematically independent of the Index: the speedup must not be
- *      counted once in a "leverage" and again inside Lift.
+ *   2. RoI VALUE SCENARIO (a dimensionless observed/manual-equivalent ratio) —
+ *      realized, rework-discounted manual-equivalent value over the HONEST cost
+ *      of the intelligence (tokens + measured time-with-AI). It is useful
+ *      accounting under stated assumptions, not causal economic evidence.
  *
  * A lens with no signal is `uninstrumented` (value null), excluded from the mean,
  * and reflected in coverage — the same honesty rule as the gates: unknown ≠ fault.
@@ -42,8 +44,8 @@ export interface RealizationLike {
   matured: {
     realizationRate: number;
     totalCostUsd: number;
-    realizedValueUsd: number;
-    netRealizedValueUsd?: number; // realized value net of rework; falls back to gross when absent
+    spendOnRealizedUnitsUsd: number;
+    acceptanceWeightedSpendUsd?: number; // realized value net of rework; falls back to gross when absent
   };
 }
 
@@ -61,26 +63,33 @@ export interface RoIInterval {
 }
 
 /**
- * The money number — Return on Intelligence as a real, dimensionless ratio.
+ * The money number — an observed/manual-equivalent return scenario.
  *
  *   grossRatio  = realized manual-equivalent value (net of rework) ÷ honest cost
- *   causalRatio = grossRatio × counterfactual credit (the Lift lens, applied ONCE)
  *
- * `grossRatio` is an UPPER bound on the causal return (it does not subtract what
- * you'd have done anyway); `causalRatio` is the honest headline. ≥1 ⟺ the AI
- * returned more than it cost. The cost is tokens + your measured time-with-AI
- * priced at the labor rate — so the ratio can't be inflated by ignoring the human
- * supervision the literature says dominates. Interval-valued via Lift's Manski bound.
+ * `grossRatio` is not an identified treatment effect. A separate,
+ * pre-registered randomized study must estimate incremental net benefit directly
+ * before Fiscus may make an economic causal claim. The cost still includes tokens
+ * + measured time-with-AI at the disclosed labor rate, so it cannot be inflated
+ * by ignoring human supervision.
  */
 export interface RoIReturn {
-  grossRatio: number | null; // realized net value ÷ honest cost (upper bound on causal)
-  causalRatio: number | null; // grossRatio × counterfactual credit — the true return
-  causalRange: { low: number | null; high: number | null }; // from Lift's partial-ID interval
-  realizedValueUsd: number | null; // numerator: realized, rework-discounted, manual-equivalent $
+  grossRatio: number | null; // realized manual-equivalent value ÷ honest cost (observational scenario)
+  causalRatio: number | null; // reserved legacy field; ordinary value reports always return null
+  causalRange: { low: number | null; high: number | null }; // reserved legacy field; ordinary value reports are null
+  manualEquivalentValueUsd: number | null; // numerator: realized, rework-discounted, manual-equivalent $
   costUsd: number; // denominator: token cost + measured time-with-AI × labor rate
-  counterfactualCredit: number | null; // the Lift lens value applied (null → grossRatio only)
+  counterfactualCredit: number | null; // reserved legacy field; Lift is no longer used as economic credit
   supervisionPriced: boolean; // true when the denominator includes measured human time (not the rework proxy)
-  paysForItself: boolean | null; // (causalRatio ?? grossRatio) ≥ 1
+  // Break-even is a causal claim and is never established by this observational
+  // value scenario.
+  paysForItself: boolean | null; // always null on the ordinary value spine
+  /**
+   * The ordinary value spine has observed/manual-equivalent inputs only. A
+   * randomized study will eventually supply a distinct, direct incremental
+   * economic estimand; a Lift lens score is never promoted into one here.
+   */
+  evidenceState: 'unpriced' | 'observational_scenario';
   basis: 'usd' | 'none';
 }
 
@@ -150,11 +159,40 @@ export interface RoIOptions {
   impact?: number | null; // orthogonal outcome impact in [0,1]; absent => uninstrumented
   impactHow?: string; // provenance for Impact; never inferred from Realization gates
   weights?: { realization: number; acceptance: number; lift: number; impact: number };
-  theta?: number; // CES substitution parameter; 0 (default) = the forced geometric mean
+  theta?: number; // CES substitution parameter; 0 (default) = the weighted geometric mean
   // --- the money number (RoI return) ---
   grossRealizedValueUsd?: number | null; // Σ over realized units of baseline manual $ × acceptance (the numerator)
   supervisionMinutes?: number | null; // measured human time-with-AI; priced into the honest denominator
   riskAversion?: number; // γ ∈ [0,1] for the Index certainty-equivalent (0 = the point estimate)
+  /**
+   * What proposal retention deleted under this report's window (D-179).
+   *
+   * The Acceptance lens goes dark when no proposal could be matched, and its
+   * note used to give a CAUSE -- "no proposals captured (e.g. streaming-only)".
+   * That sentence is false on a ledger whose proposals Fiscus captured and then
+   * deleted on the operator's own retention policy, and it sends them to
+   * instrument what they had already instrumented.
+   *
+   * `truncated` is "a proposal prune boundary is known to cover this window".
+   * Absent or false is NOT "the window is intact": a ledger pruned before the
+   * retention record existed reports no boundary, and `prunedBeforeMs` carries
+   * that third state for a caller that needs it. The note only changes on a
+   * known deletion, because a caveat printed on every clean ledger stops being
+   * read.
+   */
+  proposalRetention?: { truncated: boolean; prunedBeforeMs: number | null };
+  /**
+   * Set when this report's POPULATION excludes proposal-bearing work by
+   * construction, so Acceptance is not applicable rather than unmeasured (D-179).
+   *
+   * `computeUsageRoI` filters to sessions with no captured proposals -- non-code
+   * work, which has no diff to compare -- and then printed "no proposals
+   * captured (e.g. streaming-only)" on every run. That is an absence reported as
+   * an instrumentation gap, followed by an instruction the reader cannot act on:
+   * capturing more proposals cannot change this number, because proposal-bearing
+   * sessions are excluded from this report on purpose.
+   */
+  acceptanceOutOfScope?: boolean;
 }
 
 /**
@@ -167,11 +205,14 @@ export interface RoIOptions {
  * service criticality, explicitly reported external reach, etc.) or stay unknown.
  */
 /**
- * Default lens weights, calibrated from the productivity literature
- * (docs/RETURN-ON-INTELLIGENCE.md §research): value/quality signals dominate,
- * raw acceptance is moderate. Lift (the counterfactual) carries the most weight
+ * Default lens weights — DISCLOSED PREFERENCES, informed by the productivity
+ * literature (docs/RETURN-ON-INTELLIGENCE.md §research), not parameters fitted
+ * to any ledger. They express which signals this project chooses to weight,
+ * never measured output elasticities: Lift (the counterfactual) carries the most
  * because it is the closest thing to "was it worth it"; survival-anchored
  * Realization and Impact are high; Acceptance is a faster but shallower signal.
+ * An operator with different priorities should set different weights, and the
+ * Index will legitimately differ. That is what a preference parameter means.
  */
 export const DEFAULT_LENS_WEIGHTS = { realization: 1.0, acceptance: 0.7, lift: 1.2, impact: 1.0 } as const;
 
@@ -180,18 +221,20 @@ export const DEFAULT_LENS_WEIGHTS = { realization: 1.0, acceptance: 0.7, lift: 1
  * generalizes the aggregator (docs/RETURN-ON-INTELLIGENCE.md §3–4):
  *
  *   θ → 0   weighted GEOMETRIC mean (the default). Among quasi-arithmetic means
- *           the log generator is the one whose FORM is multiplicative:
- *           M(x·y)=M(x)·M(y). That form is forced by requiring quality to compose
- *           the way value composes along the funnel; equivalently it is a
- *           constant-returns-to-scale Cobb–Douglas function whose weights are the
- *           lenses' output ELASTICITIES (Σ wₖ normalized to 1). The weights are a
- *           disclosed calibration, NOT forced — set them equal and you get the
- *           symmetric axiomatic index (the unique SYMMETRIC multiplicative mean).
+ *           the log generator is the one that is multiplicative:
+ *           M(x·y)=M(x)·M(y). GIVEN those two axioms the geometric form follows
+ *           — but they are assumptions about how we choose to compose lens
+ *           scores, not facts established about AI value. With equal weights it
+ *           is the symmetric member of that family.
  *   θ = 1   arithmetic mean (perfect substitutes — gameable; never the default).
  *   θ → −∞  minimum (Leontief, pure weakest-link).
  *
- * θ is the elasticity of substitution between lenses. For θ ≤ 0 any zero value
- * collapses the result — by design, no axis can be bought back.
+ * θ is the CES SUBSTITUTION PARAMETER, not the elasticity of substitution. The
+ * elasticity is σ = 1/(1−θ): θ=0 gives σ=1 (the geometric / unit-elasticity
+ * case), θ=1 gives σ=∞ (perfect substitutes), θ→−∞ gives σ→0 (Leontief). For
+ * θ ≤ 0 any zero value collapses the result — a deliberate property of this
+ * aggregator, so a collapsed lens cannot be scored away, and not a claim that
+ * the underlying shortfall is economically uncompensable.
  */
 export function weightedPowerMean(pairs: Array<{ value: number; weight: number }>, theta = 0): number {
   if (pairs.length === 0) return 0;
@@ -228,7 +271,18 @@ export function computeReturnOnIntelligence(report: RealizationLike, opts: RoIOp
     instrumented: report.firstPassAcceptance !== null,
     how: 'edit-distance between AI proposal and what shipped',
   };
-  if (!acceptance.instrumented) notes.push('Acceptance uninstrumented: no proposals captured (e.g. streaming-only).');
+  if (!acceptance.instrumented) {
+    // Three reasons the lens can be dark, and only one of them is an
+    // instrumentation gap the reader can close. Naming the wrong one sends an
+    // operator to do work that cannot change the number.
+    const deleted = opts.proposalRetention?.truncated === true;
+    const boundary = opts.proposalRetention?.prunedBeforeMs ?? null;
+    notes.push(opts.acceptanceOutOfScope === true
+      ? 'Acceptance n/a: this report covers sessions with no captured proposals by construction, so there is no diff to compare — capturing more proposals cannot move it.'
+      : deleted && boundary !== null
+        ? `Acceptance uninstrumented: proposals covering this window were deleted by retention (before ${new Date(boundary).toISOString().slice(0, 10)}). Whether any were captured cannot be read from here.`
+        : 'Acceptance uninstrumented: no proposals captured (e.g. streaming-only).');
+  }
 
   // --- Lens 3: Lift (counterfactual — worth it vs. not / vs. cheaper?) ---
   const lift: LensValue = {
@@ -249,12 +303,13 @@ export function computeReturnOnIntelligence(report: RealizationLike, opts: RoIOp
     notes.push('Impact uninstrumented: needs an outcome signal independent of the Realization funnel.');
   }
 
-  // --- Composite: the weighted geometric aggregator (CRS Cobb–Douglas, CES θ=0) ---
-  // docs/RETURN-ON-INTELLIGENCE.md §4 derives the FORM: value composes
-  // multiplicatively along the funnel, so the aggregator must satisfy
-  // M(x·y)=M(x)·M(y) — which forces the log generator (geometric form). The
-  // weights are the lenses' output elasticities (disclosed; equal → the symmetric
-  // axiomatic index), not part of what's forced.
+  // --- Composite: the weighted geometric aggregator (CES θ=0) ---
+  // docs/RETURN-ON-INTELLIGENCE.md §4 states the axioms this form follows from:
+  // assume a quasi-arithmetic, multiplicative aggregator (M(x·y)=M(x)·M(y)) and
+  // the log generator is what satisfies them. Those axioms are a declared
+  // modelling choice, not an established property of AI value. The weights are
+  // disclosed preference parameters (equal → the symmetric member), never fitted
+  // output elasticities.
   const all = [realization, acceptance, lift, impact];
   const w = opts.weights ?? DEFAULT_LENS_WEIGHTS;
   const theta = opts.theta ?? 0;
@@ -341,7 +396,7 @@ export function computeReturnOnIntelligence(report: RealizationLike, opts: RoIOp
   // Value-for-money uses realized value NET of rework (reworked output is worth
   // less); falls back to gross realized value when the net isn't supplied.
   const totalCost = tokenCostUsd + effortTaxUsd;
-  const realizedValueForEff = report.matured.netRealizedValueUsd ?? report.matured.realizedValueUsd;
+  const realizedValueForEff = report.matured.acceptanceWeightedSpendUsd ?? report.matured.spendOnRealizedUnitsUsd;
   const realizedEfficiency = totalCost > 0 ? realizedValueForEff / totalCost : null;
 
   // --- The money number: Return on Intelligence as a real ratio --------------
@@ -360,44 +415,45 @@ export function computeReturnOnIntelligence(report: RealizationLike, opts: RoIOp
   let returnRatio: RoIReturn;
   if (grossValue !== null && grossValue >= 0 && honestCostUsd > 0 && supervisionPriced) {
     const grossRatio = grossValue / honestCostUsd;
-    // The counterfactual credit (Lift) is applied exactly ONCE, here — never also
-    // as a separate "leverage", so the speedup is not double-counted. grossRatio
-    // is therefore an UPPER bound on the causal return.
-    const credit = lift.instrumented ? lift.value : null;
-    const causalRatio = credit !== null ? grossRatio * credit : null;
-    const loCredit = opts.liftRange?.low ?? credit;
-    const hiCredit = opts.liftRange?.high ?? credit;
+    // Lift remains a useful behavioral, partially-identified lens for the
+    // composite Index. It is NOT an identified economic counterfactual: a
+    // baseline-derived TSF or an injected `--tsf` has no pre-registered
+    // assignment, execution adherence, value outcome, or causal estimand. Do
+    // not multiply an index-scale lens score into a financial claim. Causal net
+    // benefit will be a separate result supplied only by a qualified study.
+    const credit = null;
+    const causalRatio = null;
     returnRatio = {
       grossRatio,
       causalRatio,
       causalRange: {
-        low: loCredit !== null && loCredit !== undefined ? grossRatio * loCredit : null,
-        high: hiCredit !== null && hiCredit !== undefined ? grossRatio * hiCredit : null,
+        low: null,
+        high: null,
       },
-      realizedValueUsd: grossValue,
+      manualEquivalentValueUsd: grossValue,
       costUsd: honestCostUsd,
       counterfactualCredit: credit,
       supervisionPriced,
-      paysForItself: (causalRatio ?? grossRatio) >= 1,
+      paysForItself: null,
+      evidenceState: 'observational_scenario',
       basis: 'usd',
     };
-    const headline = causalRatio ?? grossRatio;
     notes.push(
-      `RoI return ${headline.toFixed(2)}× — $${grossValue.toFixed(0)} of realized work (manual-equivalent, net of rework) ` +
-        `÷ $${honestCostUsd.toFixed(2)} cost (tokens + ${Math.round(supervisionMin!)} min of your time)` +
-        `${causalRatio !== null ? `, credited ×${credit!.toFixed(2)} for the counterfactual` : ' (gross — wire Lift to credit the counterfactual)'}. ` +
-        `${headline >= 1 ? 'It paid for itself.' : 'Below break-even.'}`,
+      `Observed/manual-equivalent return scenario ${grossRatio.toFixed(2)}× — $${grossValue.toFixed(0)} of realized work (manual-equivalent, net of rework) ` +
+        `÷ $${honestCostUsd.toFixed(2)} cost (tokens + ${Math.round(supervisionMin!)} min of your time). ` +
+        'Causal break-even is not established: a qualified randomized study needs pre-registered assignment, execution, and outcome evidence.',
     );
   } else {
     returnRatio = {
       grossRatio: null,
       causalRatio: null,
       causalRange: { low: null, high: null },
-      realizedValueUsd: grossValue,
+      manualEquivalentValueUsd: grossValue,
       costUsd: honestCostUsd,
       counterfactualCredit: lift.instrumented ? lift.value : null,
       supervisionPriced,
       paysForItself: null,
+      evidenceState: 'unpriced',
       basis: 'none',
     };
     if (grossValue !== null && !supervisionPriced) {

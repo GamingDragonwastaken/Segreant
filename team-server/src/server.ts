@@ -33,32 +33,81 @@
 
 import http from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
-import { verifyRollup, type SignedRollup } from '../../src/team/rollup.ts';
+import { rollupScopeError, validateRollupBody, verifyRollup, type SignedRollup } from '../../src/team/rollup.ts';
 import { keyIdForPem } from '../../src/value/receipt.ts';
 import type { RollupStore, PeriodFilter } from './store.ts';
 import { verifyIdToken, type OidcConfig } from './oidc.ts';
-import { buildProjectReport, buildDeveloperReport, type TeamAggregateConfig } from './aggregate.ts';
+import { buildProjectReport, buildDeveloperReport, buildWindowCoverage, type TeamAggregateConfig } from './aggregate.ts';
 
 function json(res: http.ServerResponse, status: number, payload: unknown): void {
-  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
+  res.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    'cache-control': 'no-store',
+  });
   res.end(JSON.stringify(payload));
 }
 
+class BodyTooLargeError extends Error {
+  readonly code = 'resource_limit' as const;
+  readonly limitBytes: number;
+
+  constructor(limitBytes: number) {
+    super('request body too large');
+    this.name = 'BodyTooLargeError';
+    this.limitBytes = limitBytes;
+  }
+}
+
 function readBody(req: http.IncomingMessage, maxBytes: number): Promise<Buffer> {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) throw new Error('max body bytes must be a positive safe integer');
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let total = 0;
+    let settled = false;
+    const declared = Number(req.headers['content-length'] ?? '');
+    if (Number.isSafeInteger(declared) && declared > maxBytes) {
+      settled = true;
+      req.resume();
+      reject(new BodyTooLargeError(maxBytes));
+      return;
+    }
     req.on('data', (c: Buffer) => {
+      if (settled) return;
       total += c.length;
       if (total > maxBytes) {
-        reject(new Error('request body too large'));
-        req.destroy();
+        settled = true;
+        // Drain for connection hygiene, but never retain or parse the excess.
+        // The typed rejection lets the route return a stable 413 envelope.
+        req.resume();
+        reject(new BodyTooLargeError(maxBytes));
         return;
       }
       chunks.push(c);
     });
-    req.on('end', () => resolve(Buffer.concat(chunks)));
-    req.on('error', reject);
+    req.on('end', () => {
+      if (settled) return;
+      settled = true;
+      resolve(Buffer.concat(chunks, total));
+    });
+    req.on('error', (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    });
+  });
+}
+
+/** Ensure every asynchronous route turns storage/auth failures into a response. */
+function runAsyncRoute(res: http.ServerResponse, route: () => Promise<void>): void {
+  void route().catch(() => {
+    // Never leak database/identity details through an unhandled rejection. If
+    // headers are already committed, close the stream; otherwise return a
+    // generic temporary-unavailable response that callers can retry.
+    if (res.headersSent || res.writableEnded) {
+      res.destroy();
+      return;
+    }
+    json(res, 503, { ok: false, error: 'team-server route unavailable' });
   });
 }
 
@@ -144,7 +193,7 @@ function isPlausibleSignedRollup(x: unknown): x is SignedRollup {
   if (typeof r['publicKey'] !== 'string' || typeof r['signature'] !== 'string') return false;
   if (typeof r['body'] !== 'object' || r['body'] === null) return false;
   const b = r['body'] as Record<string, unknown>;
-  if (b['v'] !== 1 || typeof b['keyId'] !== 'string' || typeof b['generatedAt'] !== 'string') return false;
+  if (b['v'] !== 1 && b['v'] !== 2 || typeof b['keyId'] !== 'string' || typeof b['generatedAt'] !== 'string') return false;
   if (typeof b['period'] !== 'object' || b['period'] === null) return false;
   if (!Array.isArray(b['projects'])) return false;
   return true;
@@ -194,6 +243,22 @@ function validateSources(value: unknown, label: string): string | null {
  * does not by itself make NaN-like values, duplicate project rows, or an
  * impossible time interval safe to aggregate later.
  */
+/**
+ * Is `value` above `bound` by more than float summation could explain?
+ *
+ * The three project dollar figures are nested sums over ONE unit set, computed
+ * by the producer as `reduce` over `mature`, over `realizedUnits` (a subset),
+ * and over that subset again weighted by a per-unit factor in [0,1]. In real
+ * arithmetic the containment is exact. In IEEE-754 a subset sum can land a few
+ * ulps above its superset purely from ordering, so a strict `>` would reject
+ * honest rollups. The tolerance is relative to the bound and never below one
+ * part in a billion of a dollar, which is far under any amount a person would
+ * notice and far over any rounding a sum of this size can produce.
+ */
+function exceedsBound(value: number, bound: number): boolean {
+  return value - bound > Math.max(Math.abs(bound), 1) * 1e-9;
+}
+
 function validateRollupSemantics(signed: SignedRollup): string | null {
   const body = signed.body as unknown as Record<string, unknown>;
   if (body['keyId'] !== signed.keyId) return 'body.keyId must equal the envelope keyId';
@@ -204,6 +269,18 @@ function validateRollupSemantics(signed: SignedRollup): string | null {
     return 'body.period must contain valid from and to timestamps';
   }
   if (Date.parse(period['from']) >= Date.parse(period['to'])) return 'body.period.from must be before body.period.to';
+
+  // SCOPE, CHECKED HERE FOR EVERY VERSION. `validateRollupBody` is called below
+  // only for v2 bodies, so a v1 body's scope would otherwise reach the store
+  // unvalidated and be read back by `observationWindows`. Absent is the
+  // older-client shape and normalizes to `unknown`; an explicit value that is
+  // not a scope is a malformed claim and is refused rather than silently
+  // downgraded, because a receiver quietly reinterpreting a claim is how a
+  // signer's statement stops being the signer's statement.
+  if (body['scope'] !== undefined) {
+    const scopeError = rollupScopeError(body['scope']);
+    if (scopeError !== null) return scopeError;
+  }
 
   const projects = body['projects'];
   if (!Array.isArray(projects) || projects.length > MAX_PROJECTS) return `body.projects must be an array of at most ${MAX_PROJECTS} project rows`;
@@ -216,13 +293,48 @@ function validateRollupSemantics(signed: SignedRollup): string | null {
     if (projectNames.has(project['project'])) return 'body.projects must not contain duplicate project names';
     projectNames.add(project['project']);
     if (!safeNonNegativeInteger(project['units'])) return `${label}.units must be a finite non-negative integer`;
-    if (!finiteNonNegative(project['costUsd']) || !finiteNonNegative(project['realizedValueUsd']) || !finiteNonNegative(project['netRealizedValueUsd'])) {
+    if (!finiteNonNegative(project['costUsd']) || !finiteNonNegative(project['spendOnRealizedUnitsUsd']) || !finiteNonNegative(project['acceptanceWeightedSpendUsd'])) {
       return `${label} dollar values must be finite and non-negative`;
     }
     if (!finiteNonNegative(project['realizationRate']) || (project['realizationRate'] as number) > 1) return `${label}.realizationRate must be between 0 and 1`;
+
+    // CONTAINMENT — THE RULE THE STRATA BLOCK BELOW ALREADY APPLIES (WP-C06).
+    //
+    // A stratum's `realizedUnits > units` is refused a few lines down. The
+    // project dollar figures are nested in exactly the same way and were not
+    // compared at all: each was merely required to be finite and non-negative.
+    // A correctly signed, self-consistent rollup could therefore declare
+    // costUsd 10 with spendOnRealizedUnitsUsd 1000, and /dashboard/projects
+    // published realizedSpendShare 100 — 10000% of spend reaching a kept
+    // outcome, and $1000 of realized spend inside $10 of total spend.
+    //
+    // The invariant is the producer's, not an opinion imposed on it:
+    // `costUsd` sums matured units, `spendOnRealizedUnitsUsd` sums the realized
+    // SUBSET of those, and `acceptanceWeightedSpendUsd` sums that subset again
+    // weighted per unit by an acceptance value the kernel bounds to [0,1]
+    // (`src/value/epistemic.ts` refuses anything else). So
+    // 0 <= acceptanceWeighted <= spendOnRealized <= cost, always.
+    //
+    // Checked HERE because this is untrusted input. A signature proves the
+    // numbers were not altered in transit; it says nothing about whether they
+    // could have been produced at all.
+    const cost = project['costUsd'] as number;
+    const realizedSpend = project['spendOnRealizedUnitsUsd'] as number;
+    const acceptanceSpend = project['acceptanceWeightedSpendUsd'] as number;
+    if (exceedsBound(realizedSpend, cost)) {
+      return `${label}.spendOnRealizedUnitsUsd must not exceed ${label}.costUsd`;
+    }
+    if (exceedsBound(acceptanceSpend, realizedSpend)) {
+      return `${label}.acceptanceWeightedSpendUsd must not exceed ${label}.spendOnRealizedUnitsUsd`;
+    }
     if (project['roiIndex'] !== null && (!finiteNonNegative(project['roiIndex']) || (project['roiIndex'] as number) > 100)) return `${label}.roiIndex must be null or between 0 and 100`;
     const sourceError = validateSources(project['sources'], label);
     if (sourceError) return sourceError;
+  }
+
+  if (body['v'] === 2) {
+    const exactError = validateRollupBody(signed.body);
+    if (exactError !== null) return exactError;
   }
 
   const strata = body['strata'];
@@ -289,7 +401,7 @@ export function createTeamServer(deps: TeamServerDeps): http.Server {
       if (!presented || !constantTimeEqual(presented, adminToken)) {
         return json(res, 401, { ok: false, error: 'missing or invalid admin bearer token' });
       }
-      void (async () => {
+      runAsyncRoute(res, async () => {
         try {
           const raw = await readBody(req, 64 * 1024);
           const parsed: unknown = JSON.parse(raw.toString('utf8'));
@@ -310,9 +422,10 @@ export function createTeamServer(deps: TeamServerDeps): http.Server {
           await store.registerDeveloper(keyId, publicKey, label);
           return json(res, 201, { ok: true, keyId });
         } catch (err) {
+          if (err instanceof BodyTooLargeError) return json(res, 413, { ok: false, error: 'request body too large', code: err.code, limitBytes: err.limitBytes });
           return json(res, 400, { ok: false, error: `bad request: ${String(err)}` });
         }
-      })();
+      });
       return;
     }
 
@@ -322,12 +435,13 @@ export function createTeamServer(deps: TeamServerDeps): http.Server {
         res.end('method not allowed');
         return;
       }
-      void (async () => {
+      runAsyncRoute(res, async () => {
         let parsed: unknown;
         try {
           const raw = await readBody(req, maxBodyBytes);
           parsed = JSON.parse(raw.toString('utf8'));
         } catch (err) {
+          if (err instanceof BodyTooLargeError) return json(res, 413, { ok: false, error: 'request body too large', code: err.code, limitBytes: err.limitBytes });
           return json(res, 400, { ok: false, error: `bad request: ${String(err)}` });
         }
         if (!isPlausibleSignedRollup(parsed)) {
@@ -359,7 +473,7 @@ export function createTeamServer(deps: TeamServerDeps): http.Server {
           console.error('team-server: insertRollup failed:', err);
           return json(res, 500, { ok: false, error: 'storage failure' });
         }
-      })();
+      });
       return;
     }
 
@@ -369,11 +483,11 @@ export function createTeamServer(deps: TeamServerDeps): http.Server {
         res.end('method not allowed');
         return;
       }
-      void (async () => {
+      runAsyncRoute(res, async () => {
         const subject = await requireOidcSubject(req, res, oidc);
         if (subject === null) return; // response already sent
         return json(res, 200, { ok: true, subject });
-      })();
+      });
       return;
     }
 
@@ -383,7 +497,7 @@ export function createTeamServer(deps: TeamServerDeps): http.Server {
         res.end('method not allowed');
         return;
       }
-      void (async () => {
+      runAsyncRoute(res, async () => {
         const subject = await requireDashboardSubject(req, res, oidc, dashboardAllowedSubjects);
         if (subject === null) return;
         const filter = parsePeriodFilter(url.searchParams);
@@ -391,8 +505,12 @@ export function createTeamServer(deps: TeamServerDeps): http.Server {
           return json(res, 400, { ok: false, error: 'periodFrom/periodTo are unavailable: cumulative rollup snapshots cannot support partial historical windows' });
         }
         const totals = await store.aggregateProjects(filter);
-        return json(res, 200, { ok: true, projects: buildProjectReport(totals, aggregate.minCohort) });
-      })();
+        // The totals and the windows they were summed from travel together: a
+        // team figure that names no period is the same collapse this endpoint
+        // already refuses in `parsePeriodFilter`, one direction over. D-102.
+        const coverage = buildWindowCoverage(await store.observationWindows(filter));
+        return json(res, 200, { ok: true, projects: buildProjectReport(totals, aggregate.minCohort), coverage });
+      });
       return;
     }
 
@@ -402,7 +520,7 @@ export function createTeamServer(deps: TeamServerDeps): http.Server {
         res.end('method not allowed');
         return;
       }
-      void (async () => {
+      runAsyncRoute(res, async () => {
         const subject = await requireDashboardSubject(req, res, oidc, dashboardAllowedSubjects);
         if (subject === null) return;
         const filter = parsePeriodFilter(url.searchParams);
@@ -411,11 +529,16 @@ export function createTeamServer(deps: TeamServerDeps): http.Server {
         }
         if (!aggregate.exposeDeveloperBreakdown) {
           // Skip the query entirely — the report would be suppressed anyway; no point paying for it.
+          // No coverage here, deliberately: the empty coverage says "no rollups
+          // contributed", and on this path rollups may well exist — the report
+          // is disabled, not empty. Reporting the wrong reason would be the
+          // defect D-102 repaired, in miniature.
           return json(res, 200, { ok: true, report: buildDeveloperReport([], aggregate) });
         }
         const totals = await store.aggregateDevelopers(filter);
-        return json(res, 200, { ok: true, report: buildDeveloperReport(totals, aggregate) });
-      })();
+        const coverage = buildWindowCoverage(await store.observationWindows(filter));
+        return json(res, 200, { ok: true, report: buildDeveloperReport(totals, aggregate), coverage });
+      });
       return;
     }
 

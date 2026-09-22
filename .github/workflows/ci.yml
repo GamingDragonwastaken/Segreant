@@ -6,20 +6,48 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   test:
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Assert integration checkout identity
+        shell: bash
+        env:
+          EXPECTED_INTEGRATION_SHA: ${{ github.sha }}
+        run: |
+          actual="$(git rev-parse HEAD)"
+          if [ "$actual" != "$EXPECTED_INTEGRATION_SHA" ]; then
+            echo "expected integration checkout $EXPECTED_INTEGRATION_SHA, got $actual" >&2
+            exit 1
+          fi
+          echo "integration checkout: $actual"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '24'
           cache: npm
-      - run: npm ci
+      # --ignore-scripts: the install itself must not execute a lifecycle script
+      # belonging to any dependency (preinstall/install/postinstall), nor this
+      # package's own `prepare`, which is how `npm ci` otherwise triggers a full
+      # build as an install side effect. Nothing in either lockfile carries an
+      # install script today; the gap was CI having no barrier against a future
+      # one. `npm run build` below is that same build, invoked explicitly -- a
+      # script this repository owns and reviews, never a dependency's.
+      - run: npm ci --ignore-scripts
+      # Explicit, even though `pretest` currently runs the full build too:
+      # `pretest` has been silently narrowed to `--web` once already, and a job
+      # whose dist/ depends on whichever definition it currently carries is one
+      # edit away from testing a stale tree. The build count is unchanged --
+      # before this, `prepare` built at install and `pretest` built again.
+      - run: npm run build
       - run: npm run typecheck
       - run: npm test
 
@@ -27,16 +55,49 @@ jobs:
   # Build the tarball, install it into a clean directory, and invoke its real
   # bin entrypoint without publishing anything.
   package-smoke:
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Assert integration checkout identity
+        shell: bash
+        env:
+          EXPECTED_INTEGRATION_SHA: ${{ github.sha }}
+        run: |
+          actual="$(git rev-parse HEAD)"
+          if [ "$actual" != "$EXPECTED_INTEGRATION_SHA" ]; then
+            echo "expected integration checkout $EXPECTED_INTEGRATION_SHA, got $actual" >&2
+            exit 1
+          fi
+          echo "integration checkout: $actual"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '24'
           cache: npm
-      - run: npm ci
+      # No explicit build step here even with --ignore-scripts: the tarball is
+      # produced by `npm pack` below, which runs this package's `prepack`
+      # (`npm run build`) as part of that separate command, unaffected by
+      # --ignore-scripts on this install.
+      - run: npm ci --ignore-scripts
       - run: mkdir -p ../fiscus-pack ../fiscus-install
       - run: npm pack --pack-destination ../fiscus-pack
+      # Software bill of materials for the RUNTIME tree, from npm's own
+      # generator (no dependency added to make one). The zero-runtime-dependency
+      # rule is asserted against the SBOM, not against a sentence: a runtime
+      # package appearing here fails the job. The SBOM is an unsigned build
+      # fact; signed provenance needs `id-token: write`, which is owner-reserved.
+      - name: Runtime SBOM (CycloneDX) and zero-dependency assertion
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run --silent sbom > fiscus-runtime.cdx.json
+          node scripts/check-sbom.mjs fiscus-runtime.cdx.json
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: fiscus-runtime-sbom
+          path: fiscus-runtime.cdx.json
+          if-no-files-found: error
+          retention-days: 30
       - working-directory: ../fiscus-install
         run: npm install --ignore-scripts --no-package-lock ../fiscus-pack/fiscus-*.tgz
       - working-directory: ../fiscus-install
@@ -94,10 +155,67 @@ jobs:
           if (!classic.includes('DEMO DATA') || !classic.includes('Cheaper model trials') || !classic.includes('NOT RECONCILED')) throw new Error('packaged classic dashboard missing labelled model-trial or billing renderer');
           NODE
 
+  # Repository-side security evidence that does not require release identity or
+  # write permissions: production-source credential/dynamic-code scan, supply-
+  # chain policy audit, and high-severity runtime dependency audit for both npm
+  # packages. Signed release provenance remains a release-time owner gate.
+  security:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Assert integration checkout identity
+        shell: bash
+        env:
+          EXPECTED_INTEGRATION_SHA: ${{ github.sha }}
+        run: |
+          actual="$(git rev-parse HEAD)"
+          if [ "$actual" != "$EXPECTED_INTEGRATION_SHA" ]; then
+            echo "expected integration checkout $EXPECTED_INTEGRATION_SHA, got $actual" >&2
+            exit 1
+          fi
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts
+        working-directory: team-server
+      - run: npm run verify:security
+      - run: npm run verify:supply-chain
+      - run: npm run audit:runtime
+
+  # Runtime accessibility is a browser property, not a source-text property.
+  # Keep the browser harness dev/test-only and separate from the ordinary
+  # zero-runtime-dependency package surface.
+  browser-accessibility:
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Assert integration checkout identity
+        shell: bash
+        env:
+          EXPECTED_INTEGRATION_SHA: ${{ github.sha }}
+        run: |
+          actual="$(git rev-parse HEAD)"
+          if [ "$actual" != "$EXPECTED_INTEGRATION_SHA" ]; then
+            echo "expected integration checkout $EXPECTED_INTEGRATION_SHA, got $actual" >&2
+            exit 1
+          fi
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+
   # team-server is a genuinely separate npm package (own package.json/lockfile,
   # `pg` as its only dependency) so it gets its own job rather than being folded
   # into `test` above — same OS matrix, run in parallel, never silently skipped.
   team-server-test:
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -107,12 +225,72 @@ jobs:
       run:
         working-directory: team-server
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Assert integration checkout identity
+        shell: bash
+        env:
+          EXPECTED_INTEGRATION_SHA: ${{ github.sha }}
+        run: |
+          actual="$(git rev-parse HEAD)"
+          if [ "$actual" != "$EXPECTED_INTEGRATION_SHA" ]; then
+            echo "expected integration checkout $EXPECTED_INTEGRATION_SHA, got $actual" >&2
+            exit 1
+          fi
+          echo "integration checkout: $actual"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '24'
           cache: npm
           cache-dependency-path: team-server/package-lock.json
-      - run: npm ci
+      # team-server has no prepare/prepack of its own -- start/test/typecheck run
+      # straight against source -- so there is nothing load-bearing here for
+      # --ignore-scripts to skip past.
+      - run: npm ci --ignore-scripts
       - run: npm run typecheck
       - run: npm test
+
+  # The pull_request event's default checkout is GitHub's synthetic merge ref.
+  # Keep this separate from the integration matrix and explicitly verify the
+  # candidate head so a green merge-ref run cannot be misreported as head proof.
+  candidate-head:
+    if: github.event_name == 'pull_request'
+    timeout-minutes: 25
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Assert candidate checkout identity
+        shell: bash
+        env:
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          actual="$(git rev-parse HEAD)"
+          if [ "$actual" != "$EXPECTED_HEAD_SHA" ]; then
+            echo "expected candidate head $EXPECTED_HEAD_SHA, got $actual" >&2
+            exit 1
+          fi
+          echo "candidate head checkout: $actual"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run verify:security
+      - run: npm run verify:supply-chain
+      - run: npm audit --omit=dev --audit-level=high
+      # Same reason as the `test` job: this is the run that speaks for the
+      # candidate head rather than the synthetic merge ref, so it must not be
+      # the one testing a stale or absent dist/.
+      - run: npm run build
+      - run: npm run typecheck
+      - run: node ./node_modules/typescript/bin/tsc --noEmit -p src/dashboard/web/app/tsconfig.json
+      - run: npm test
+      - run: npm ci --ignore-scripts
+        working-directory: team-server
+      - run: npm audit --omit=dev --audit-level=high
+        working-directory: team-server
+      - run: npm run typecheck
+        working-directory: team-server
+      - run: npm test
+        working-directory: team-server

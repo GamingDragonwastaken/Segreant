@@ -14,11 +14,13 @@ above this directory.
 | File | Owns |
 | --- | --- |
 | `db.ts` | the `Store` facade: connection, requests, sessions, projects/aliases, proposals, commits, gate signals, session units, maintenance |
-| `schema.ts` | every `CREATE TABLE`, every guarded `ALTER`, and `runScript` |
+| `schema.ts` | every `CREATE TABLE`, every guarded `ALTER`, kernel tables/triggers, and `runScript` |
 | `billing.ts` | provider evidence imports, OpenAI Costs observations, provider scope declarations, reconciliation |
 | `allocation.ts` | cost centres, the versioned rule book, allocation runs |
 | `realization.ts` | realized-value snapshots, receipts, repricing and its re-attribution |
+| `economicReadModel.ts` | request-level joins from compatibility dimensions to exact effective economic events |
 | `rows.ts` | row decoders shared by more than one domain |
+| `backup.ts` | verified SQLite snapshot/restore-to-new-path helpers; never replaces the active ledger |
 
 Domain modules take the `DatabaseSync` handle as their first argument and are
 stateless. Where a domain needs a read that belongs to another one — allocation
@@ -39,15 +41,126 @@ two domain callers goes in `rows.ts`.
 
 ## Guarantees
 
-- **Money is exact.** All amounts are integer microdollars. No float ever reaches
-  a column.
+- **Money is exact.** Exact amounts are arbitrary-precision decimals — a `bigint`
+  coefficient with a scale, tagged with the economic basis that gives the figure
+  its meaning — not integer microdollars, which is what this line claimed until
+  D-198. Nor is the store free of floats: `requests.cost_usd` is `REAL` and is a
+  deliberate compatibility projection of the exact charge event written beside it
+  in the same transaction, refused if the two disagree. The guarantee is that no
+  float is AUTHORITATIVE, not that none is stored.
 - **One writer.** Every table is created and migrated in `schema.ts`. No other
   module — inside this directory or outside it — issues DDL.
 - **Derived records are immutable.** `reconciliation runs`, `allocation_runs`,
   and `realization_units` are written once. Recompute by writing a new record.
+- **Deletion is recorded, and its absence is not read as coverage.** `prune()`,
+  `pruneProposals()` and `clearProposals()` write the boundary they applied, the
+  rows removed and the time into `retention_prunes` -- including a run that
+  removed nothing, because it still applied a boundary. `clearProposals()` is
+  the one exception and it runs the other way: its boundary is NOW, which marks
+  every past window truncated, so it records only when a row actually went
+  (D-179). Hiding a refutation is survivable; inventing one is not.
+  `retentionFloor()` and
+  `windowCoverage(startMs)` report it three-valued: a null boundary means NO
+  PRUNE IS ON RECORD, never "nothing was pruned", and is never inferred from
+  the oldest surviving row. `truncated` is a comparison against the window and
+  is false at the boundary instant, which `prune` retains (D-170, D-171).
+- **A damaged ledger refuses; it does not drift.** Byte-level fault injection
+  (D-251, `test/store-corruption-fault-injection.test.ts`) holds startup and the
+  read boundary to one oracle: a flipped byte is refused at open, refused at
+  read, or the rows read back exactly. Two classes it found are closed: the
+  retained schema text is validated before any idempotent DDL can repair over
+  it (a damaged column name used to be re-added with its default, resetting a
+  provenance column to the legacy sentinel on every row), and a selected
+  provenance column (`cost_basis`, `rate_card_source_kind`, `rate_match_kind`,
+  `scope_capture_status`, `attribution_basis`, `capture_coverage`) holding a
+  null or a string outside its vocabulary refuses with the column named instead
+  of reading as `legacy_unknown`. A flip inside a free-text or REAL payload
+  that stays a well-formed record is not seen — request rows carry no row
+  digest — and the sweep bounds that residue rather than hiding it.
 - **Recorded labels are never rewritten.** Alias resolution happens at query
   time (`projectCanonical` beside the recorded `project`), so an export and a
   rollup total identically without either mutating a row.
+- **Backups are additive and integrity-checked.** `Store.backupTo()` uses
+  `VACUUM INTO`, quick/foreign-key checks, a schema fingerprint, and a redacted
+  manifest bound to the SQLite application schema version when present. It also
+  revalidates retained economic and historical-FX payload digests, so a matching
+  outer file hash cannot launder an internally corrupted ledger. Legacy manifests
+  without the new version field remain readable from the authoritative database
+  value. `Store.restoreBackup()` refuses existing destinations and never
+  overwrites the active database path.
+- **A reported causal look is recorded.** `Store.reportCausalStudy()` is the
+  reporting boundary for every operator-facing surface: it rebuilds the study's
+  inference-act chain from `causal_inference_acts`, records this look, and
+  returns the conclusion after multiplicity beside the single-look one. A caller
+  that reaches past it to `estimateCausalStudy` produces a look that, as the
+  ledger's own assumptions say, is not counted and cannot be. A chain that does
+  not verify is never extended — the claim is withheld instead, because
+  appending would make a smaller look count look intact.
+- **The epistemic ledger shares this connection.** `Store.epistemic()` exposes
+  canonical Evidence/Claim/Derivation persistence on the same SQLite handle;
+  its schema and append-only triggers are still owned by `schema.ts`.
+- **The economic ledger shares this connection.** `Store.economic()` exposes
+  exact-Money immutable events and deterministic basis-separated projections;
+  event DDL and append-only triggers remain owned by `schema.ts`.
+- **Period close is Store-owned.** `finalizeEconomicPeriod()` records an
+  immutable exact snapshot for a canonical half-open period,
+  `reopenEconomicPeriod()` records an explicit additive lifecycle transition,
+  and `economicPeriodCloseStatus()` replays the control state at an optional
+  recording-time boundary. Late in-period evidence is blocked until an
+  explicit reopen; conflict never becomes an implicit approval.
+- **Finalized close statements cross the kernel boundary explicitly.**
+  `issueEconomicPeriodCloseToKernel()` revalidates that the supplied snapshot
+  is still the active finalized state, then appends one exact Evidence/Claim
+  pair carrying the source-event set, basis-separated balances and projection
+  digest. Replays are idempotent; forged snapshots and reopened/conflicted
+  periods are refused. External provider completeness and settlement finality
+  remain conditional.
+- **Exact request issuance is transactional.** A `RequestRow` carrying
+  `economicAmount` writes one deterministic economic charge event through the
+  same SQLite transaction. `economicAmountForRequest()` reads that exact event;
+  rows without it remain legacy numeric compatibility records and are never
+  silently reconstructed.
+- **Exact budget projections are coverage-aware.** `exactSpendBetween()`,
+  `exactSpendForSession()`, and `exactSpendInWindow()` sum charge-role events in
+  an explicit `effective` control basis while preserving source bases and
+  live/import scope. BudgetGuard uses them when coverage is complete and falls
+  back to numeric aggregates only for unresolved legacy rows.
+- **Exact allocation is source-traced and append-only.** `allocatePeriodExact()`
+  consumes effective charges without float coercion; exact runs persist through
+  canonical JSON/digests and foreign-keyed per-line lineage, while incomplete
+  legacy coverage stays explicit and the numeric allocation table remains a
+  separate compatibility record. `saveExactAllocationRun()` immediately issues
+  an idempotent kernel Evidence/Claim with allocated-showback semantics; the
+  source/effective bases remain in the result and provider settlement is never
+  implied.
+- **Exact economic export is explicit.** `economicRequestsInRange()` and the
+  `fiscus export --economic` mode expose original/effective Money, bases,
+  correction IDs and legacy coverage; `compatibilityCostUsd` is labelled as a
+  presentation projection rather than accounting authority.
+- **Value attribution has an exact read seam.**
+  `economicRequestRowsInRange()` applies the same alias-family and live/import
+  scope as numeric summaries, validates request/event dimensions, preserves
+  effective Money plus source/correction IDs, and marks legacy rows unresolved.
+  Coding realization attaches that JSON-safe coverage to each WorkUnit; its
+  legacy numeric fields remain compatibility projections until downstream value
+  consumers complete the migration. `economicSessionUnits()`,
+  `economicSessionUnitsByUser()`, `economicModelUnits()` and `economicSeries()`
+  are deterministic grouped facades over that same join, so usage/cohort/budget
+  consumers cannot quietly invent a second scope or pricing rule.
+- **Model attribution has one exact authority.** `canonicalModelAttribution()`
+  compares effective `Money` before any numeric projection, returns a
+  deterministic provider/model tie-break, computes purity from exact integer
+  coefficients, and withholds a winner for partial/legacy windows. Legacy
+  numeric labels may remain display-only, with null cost/share preventing entry
+  into high-assurance frontier comparisons.
+- **Billing kernel issuance is explicit and additive.** `issueBillingImportToKernel()`
+  translates a validated operator export through exact `Money` into canonical
+  Evidence and billed Claims; `issueOpenAiCostsObservationToKernel()` does the
+  same for complete direct provider observations with a distinct
+  `provider_observed` basis. Legacy billing rows remain the compatibility read
+  model; `issueOpenAiReconciliationToKernel()` adds the exact local-capture and
+  mixed residual Claim only after a reconciliation run is durably recorded, and
+  repeated issuance is idempotent.
 
 ## Invariants
 
@@ -72,6 +185,7 @@ two domain callers goes in `rows.ts`.
 
 ```bash
 npm test -- --test-name-pattern="store|migration|provenance"
+node --test --experimental-strip-types test/store-corruption-fault-injection.test.ts
 ```
 
 A schema change needs a test that fails against the pre-change behaviour, and a

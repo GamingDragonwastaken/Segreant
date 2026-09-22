@@ -34,6 +34,27 @@
 /** Mixture prior over the unknown rate. Jeffreys is the default (near-optimal width). */
 export type CsPrior = 'jeffreys' | 'uniform';
 
+/**
+ * The assumptions carried by the legacy primitive. This is intentionally not a
+ * universal sequential guarantee: sliding windows, clusters, changing outcome
+ * definitions, adaptive assignment, and post-selection are outside this domain.
+ */
+export interface AnytimeValidityDomain {
+  data: 'accumulated';
+  sampling: 'independent_bernoulli';
+  cluster: 'not_accounted';
+  selection: 'none';
+  adaptation: 'none';
+}
+
+export const ANYTIME_VALIDITY_DOMAIN: Readonly<AnytimeValidityDomain> = Object.freeze({
+  data: 'accumulated',
+  sampling: 'independent_bernoulli',
+  cluster: 'not_accounted',
+  selection: 'none',
+  adaptation: 'none',
+});
+
 export interface AnytimeInterval {
   low: number;
   high: number;
@@ -42,6 +63,8 @@ export interface AnytimeInterval {
   n: number;
   k: number;
   prior: CsPrior;
+  /** Explicit domain; callers must not reuse this interval for another stream. */
+  validityDomain: Readonly<AnytimeValidityDomain>;
 }
 
 /**
@@ -92,7 +115,7 @@ export function anytimeRateInterval(
 ): AnytimeInterval {
   const level = opts.level ?? 0.95;
   const prior = opts.prior ?? 'jeffreys';
-  if (n <= 0) return { low: 0, high: 1, level, n: 0, k: 0, prior }; // no evidence → the whole interval, honestly
+  if (n <= 0) return { low: 0, high: 1, level, n: 0, k: 0, prior, validityDomain: ANYTIME_VALIDITY_DOMAIN }; // no evidence → the whole interval, honestly
 
   const threshold = Math.log(1 / (1 - level));
   const lmr = logMarginalRatio(k, n, prior);
@@ -114,5 +137,5 @@ export function anytimeRateInterval(
   const eps = 1e-15;
   const low = k === 0 ? 0 : bisect(eps, pHat, true);
   const high = k === n ? 1 : bisect(pHat, 1 - eps, false);
-  return { low, high, level, n, k, prior };
+  return { low, high, level, n, k, prior, validityDomain: ANYTIME_VALIDITY_DOMAIN };
 }

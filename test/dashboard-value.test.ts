@@ -14,6 +14,8 @@ import { createDashboardServer } from '../src/dashboard/server.ts';
 import { seedDemo } from '../src/demo/seed.ts';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { ValuePayload as ServerValuePayload } from '../src/dashboard/shared-types.ts';
+import type { ValuePayload as BrowserValuePayload } from '../src/dashboard/web/app/core/generated-types.ts';
 
 function boot(store: Store): Promise<{ base: string; close: () => Promise<void> }> {
   const server: http.Server = createDashboardServer({ store, config: structuredClone(DEFAULT_CONFIG), version: 'test' });
@@ -78,4 +80,80 @@ test('value dashboard reveals the observed mature-unit and realization evidence 
   assert.match(html, /observed realization/);
   assert.match(html, /intervals overlap — keep this as a measured trial/);
   assert.match(html, /Fiscus does <b>not<\/b> change routing/);
+});
+
+test('modern Value view discloses exact economic coverage instead of leaving the numeric cost basis implicit', () => {
+  const source = readFileSync(join(import.meta.dirname, '..', 'src', 'dashboard', 'web', 'app', 'views', 'value.ts'), 'utf8');
+  assert.match(source, /Exact economic coverage/);
+  assert.match(source, /legacy_unknown/);
+  assert.match(source, /unresolvedRequests/);
+});
+
+test('classic Value view discloses exact economic coverage for every value-bearing section', () => {
+  const source = readFileSync(join(import.meta.dirname, '..', 'src', 'dashboard', 'web', 'classic.html'), 'utf8');
+  assert.match(source, /function economicCoverageHtml/);
+  assert.match(source, /d\.realization\?\.matured\?\.economic/);
+  assert.match(source, /d\.usage\?\.economic/);
+  assert.match(source, /d\.budget\?\.economic/);
+  assert.match(source, /p\.economic/);
+  assert.match(source, /team\?\.distribution\?\.economic/);
+  assert.match(source, /Exact economic coverage/);
+  assert.match(source, /unresolved legacy request/);
+  assert.match(source, /exact coverage was not reported/);
+});
+
+test('browser Value contract includes project exact economic coverage', () => {
+  const source = readFileSync(join(import.meta.dirname, '..', 'src', 'dashboard', 'shared-types.ts'), 'utf8');
+  assert.match(source, /export interface ValueProjectPayload/);
+  assert.match(source, /projects\?: ValueProjectPayload\[\]/);
+  assert.match(source, /economic\?: RealizationEconomicRollupPayload/);
+});
+
+/**
+ * These reads are deliberately typed from both sides of the boundary. A
+ * runtime payload can already carry a field while the browser compiler remains
+ * unable to read it; that is the exact mechanism behind the D-177 remainder.
+ */
+function readValueCoverage(payload: BrowserValuePayload): {
+  usageTruncated: boolean | undefined;
+  modelTruncated: number | undefined;
+  modelUnknown: number | undefined;
+} {
+  const recommendation = payload.frontier?.modelSwitches?.[0];
+  return {
+    usageTruncated: payload.usage?.retention.truncated,
+    modelTruncated: recommendation?.unitsExcludedTruncatedSpend,
+    modelUnknown: recommendation?.unitsUnknownSpendCoverage,
+  };
+}
+
+function readServerValueCoverage(payload: ServerValuePayload): {
+  usageTruncated: boolean | undefined;
+  modelTruncated: number | undefined;
+  modelUnknown: number | undefined;
+} {
+  const recommendation = payload.frontier?.modelSwitches?.[0];
+  return {
+    usageTruncated: payload.usage?.retention.truncated,
+    modelTruncated: recommendation?.unitsExcludedTruncatedSpend,
+    modelUnknown: recommendation?.unitsUnknownSpendCoverage,
+  };
+}
+
+test('shared and generated ValuePayload declarations expose emitted retention coverage', () => {
+  // The functions are not called: compiling the property reads is the RED/GREEN
+  // assertion. Keep a value-level reference so a future no-op edit cannot remove
+  // either compiler-facing contract without this test changing too.
+  assert.equal(typeof readValueCoverage, 'function');
+  assert.equal(typeof readServerValueCoverage, 'function');
+});
+
+test('both Value views read usage and model-switch retention coverage', () => {
+  const modern = readFileSync(join(import.meta.dirname, '..', 'src', 'dashboard', 'web', 'app', 'views', 'value.ts'), 'utf8');
+  const classic = readFileSync(join(import.meta.dirname, '..', 'src', 'dashboard', 'web', 'classic.html'), 'utf8');
+  for (const [name, source] of [['modern', modern], ['classic', classic]] as const) {
+    assert.match(source, /retention/, `${name} Value view must read usage retention coverage`);
+    assert.match(source, /unitsExcludedTruncatedSpend/, `${name} Value view must read D-177 truncated model units`);
+    assert.match(source, /unitsUnknownSpendCoverage/, `${name} Value view must read D-177 unknown model units`);
+  }
 });

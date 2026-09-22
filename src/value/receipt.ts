@@ -1,10 +1,22 @@
 /**
- * Value Receipts — what turns a private metric into a verifiable standard.
+ * ISSUANCE CLASS: integrity_only — see `src/epistemic/issuance-map.ts`.
  *
- * Each unit of work emits a canonical, ed25519-signed record of cost → gate
- * verdicts → outcome. Anyone with the public key can verify a receipt without
- * any access to the source code, so a buyer/auditor/another tool can trust the
- * claim without trusting us. See docs/THE-STANDARD.md §7.
+ * Value Receipts — a canonical, ed25519-signed record of cost → gate verdicts →
+ * outcome for one unit of work.
+ *
+ * WHAT A VERIFIED SIGNATURE ESTABLISHES: that this exact record was produced by
+ * the holder of that key, and that no byte of it has changed since. Anyone with
+ * the public key can check both without access to the source.
+ *
+ * WHAT IT DOES NOT ESTABLISH: that the gate verdicts inside are correct, that
+ * the attributed cost is the provider-billed cost, or that the outcome means
+ * what a reader wants it to mean. Those rest entirely on the boundary that
+ * produced them. Authenticity and integrity are not truth, correctness or
+ * completeness (AII-020) — a faithfully signed wrong number verifies perfectly.
+ * The semantic exact-coverage validation in this file is a separate check that
+ * inherits no strength from the signature.
+ *
+ * See docs/THE-STANDARD.md §7.
  */
 
 import {
@@ -19,8 +31,10 @@ import {
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Gate, Verdict, FunnelOutcome } from './gates.ts';
+import { assertAgreesWithUsdCompatibility, canonicalEconomicAttribution, type EconomicAttribution } from '../economics/attribution.ts';
+import { RESOURCE_LIMITS } from '../util/resource-limits.ts';
 
-export interface ReceiptBody {
+export interface ReceiptBodyV1 {
   v: 1;
   unit: string; // commit hash
   project: string;
@@ -34,6 +48,15 @@ export interface ReceiptBody {
   gates: Array<{ gate: Gate; verdict: Verdict }>;
 }
 
+/** Exact-economics receipt. The v1 body remains valid for legacy/partial units. */
+export interface ReceiptBodyV2 extends Omit<ReceiptBodyV1, 'v'> {
+  v: 2;
+  /** Complete effective request coverage; unresolved legacy rows are forbidden. */
+  economic: EconomicAttribution;
+}
+
+export type ReceiptBody = ReceiptBodyV1 | ReceiptBodyV2;
+
 export interface SignedReceipt {
   body: ReceiptBody;
   bodyHash: string; // sha256 of canonical body, hex
@@ -42,13 +65,42 @@ export interface SignedReceipt {
   signature: string; // base64
 }
 
-/** Deterministic JSON: object keys sorted recursively. */
+/** Deterministic JSON: object keys sorted recursively, with structural bounds. */
 export function canonical(value: unknown): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return '[' + value.map(canonical).join(',') + ']';
-  const obj = value as Record<string, unknown>;
-  const keys = Object.keys(obj).sort();
-  return '{' + keys.map((k) => JSON.stringify(k) + ':' + canonical(obj[k])).join(',') + '}';
+  const seen = new WeakSet<object>();
+  let nodes = 0;
+  const visit = (current: unknown, depth: number): string => {
+    if (depth > RESOURCE_LIMITS.canonicalDepth) throw new Error('canonical value exceeds maximum nesting depth');
+    nodes += 1;
+    if (nodes > RESOURCE_LIMITS.canonicalNodes) throw new Error('canonical value exceeds maximum node count');
+    if (current === null || typeof current !== 'object') {
+      const rendered = JSON.stringify(current);
+      if (rendered === undefined) throw new Error('canonical value must be JSON-compatible');
+      if (Buffer.byteLength(rendered, 'utf8') > RESOURCE_LIMITS.canonicalStringBytes) throw new Error('canonical value exceeds maximum string size');
+      return rendered;
+    }
+    if (seen.has(current)) throw new Error('canonical value must not contain a cycle');
+    seen.add(current);
+    let rendered: string;
+    if (Array.isArray(current)) {
+      if (current.length > RESOURCE_LIMITS.canonicalNodes) throw new Error('canonical array exceeds maximum item count');
+      const parts: string[] = [];
+      for (const item of current) parts.push(visit(item, depth + 1));
+      rendered = `[${parts.join(',')}]`;
+    } else {
+      const obj = current as Record<string, unknown>;
+      const parts: string[] = [];
+      for (const key of Object.keys(obj).sort()) {
+        if (key === '__proto__' || key === 'constructor' || key === 'prototype') throw new Error('canonical object contains a forbidden key');
+        parts.push(`${JSON.stringify(key)}:${visit(obj[key], depth + 1)}`);
+      }
+      rendered = `{${parts.join(',')}}`;
+    }
+    seen.delete(current);
+    if (Buffer.byteLength(rendered, 'utf8') > RESOURCE_LIMITS.canonicalBytes) throw new Error('canonical value exceeds maximum byte size');
+    return rendered;
+  };
+  return visit(value, 0);
 }
 
 function sha256Hex(s: string): string {
@@ -99,7 +151,7 @@ export function buildReceiptBody(
   costUsd: number,
   acceptance: number | null,
   funnel: FunnelOutcome,
-): ReceiptBody {
+): ReceiptBodyV1 {
   return {
     v: 1,
     unit,
@@ -113,6 +165,44 @@ export function buildReceiptBody(
     realizationScore: funnel.realizationScore,
     gates: funnel.results.map((r) => ({ gate: r.gate, verdict: r.verdict })),
   };
+}
+
+function canonicalEconomic(value: EconomicAttribution): EconomicAttribution {
+  return canonicalEconomicAttribution(value);
+}
+
+/** Build a strict v2 receipt for a WorkUnit with complete exact coverage. */
+export function buildEconomicReceiptBody(
+  unit: string,
+  project: string,
+  costUsd: number,
+  acceptance: number | null,
+  funnel: FunnelOutcome,
+  economic: EconomicAttribution,
+): ReceiptBodyV2 {
+  const canonical = canonicalEconomic(economic);
+  if (!canonical.complete || canonical.unresolvedRequests !== 0) throw new Error('economic receipt requires complete exact coverage');
+  assertAgreesWithUsdCompatibility(canonical, costUsd, 'economic receipt');
+  const legacy = buildReceiptBody(unit, project, costUsd, acceptance, funnel);
+  return Object.freeze({ ...legacy, v: 2, economic: canonical });
+}
+
+function receiptSemanticError(body: ReceiptBody): string | null {
+  if (body.v !== 2) return null;
+  try {
+    const economic = canonicalEconomic(body.economic);
+    if (!economic.complete || economic.unresolvedRequests !== 0) return 'economic receipt requires complete exact coverage';
+    // Its own try, so the precise reconciliation message survives instead of
+    // being wrapped as a generic "economic receipt invalid" by the outer catch.
+    try {
+      assertAgreesWithUsdCompatibility(economic, body.costUsd, 'economic receipt');
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+    return null;
+  } catch (error) {
+    return `economic receipt invalid: ${error instanceof Error ? error.message : String(error)}`;
+  }
 }
 
 export function signReceipt(body: ReceiptBody, keys: KeyPair): SignedReceipt {
@@ -176,6 +266,9 @@ export function verifyReceipt(receipt: SignedReceipt, opts: VerifyOptions = {}):
   }
   const ok = cryptoVerify(null, Buffer.from(c), publicKey, Buffer.from(receipt.signature, 'base64'));
   if (!ok) return { valid: false, reason: 'signature mismatch', keyId: embeddedKeyId, pinned: false };
+
+  const semanticError = receiptSemanticError(receipt.body);
+  if (semanticError !== null) return { valid: false, reason: semanticError, keyId: embeddedKeyId, pinned: false };
 
   // Integrity holds. Now the authenticity / trust-anchor check.
   let pinned = false;

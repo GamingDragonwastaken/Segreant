@@ -188,6 +188,14 @@ a showback figure cannot forget what it is made of.
 The run's trust label says so outright: `derived_allocation_of_local_estimates`.
 It does not upgrade itself on the strength of a well-written rule set.
 
+The exact allocation persistence path also issues a kernel Evidence/Claim
+(`economic.allocation_recorded`) after the immutable run is stored. That claim
+is a provisional, self-authenticated **allocated showback** statement: it
+retains the exact result digest, source-event lineage, currency/basis groups and
+unresolved legacy IDs, but it is not provider billing, settlement, chargeback or
+causal value. Replaying the same run is idempotent; a partial exact run remains
+`coverage: partial` in the kernel rather than being promoted to complete.
+
 **Reconcile before you charge anyone.** See
 [PROVIDER-RECONCILIATION.md](PROVIDER-RECONCILIATION.md) — a residual you have
 not looked at is a residual you would be spreading across cost centres with a
@@ -246,8 +254,10 @@ workflow that does not exist yet.
 - **No approval workflow.** Rules take effect when written. Versioning and
   reversal make that recoverable, but there is no second pair of eyes, and this
   is single-operator by design until the team tier is real.
-- **No closed-period lock.** Nothing prevents re-running a period after new
-  spend lands in it. Runs are immutable and timestamped, so the history is
-  visible, but "closed" is a convention here rather than an enforced state.
+- **No allocation-specific closed-period lock.** The economic ledger now has an
+  enforced period-close/reopen lifecycle, but the legacy allocation command
+  does not yet require an active close before a run. Exact allocation runs are
+  immutable and kernel-issued; binding allocation execution itself to close
+  state remains a separate control migration.
 - **No chargeback export.** Showback only. A chargeback format implies a
   settlement process this product does not have.

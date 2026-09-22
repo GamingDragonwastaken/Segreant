@@ -53,3 +53,35 @@ test('proposal retention: prune removes expired proposed code without touching t
     store.close();
   }
 });
+
+test('proposal capture coverage preserves explicit unknown instead of upgrading it to complete', () => {
+  const store = new Store(':memory:');
+  try {
+    store.insertProposal({
+      proposalId: 'unknown-capture', requestId: null, sessionId: null, tsEpochMs: Date.now(),
+      provider: 'anthropic', model: 'claude', project: 'coverage-test', files: [], captureCoverage: 'unknown',
+    });
+    const row = store.proposalsInWindow('coverage-test', 0, Date.now() + 1000)[0];
+    assert.equal(row?.captureCoverage, 'unknown');
+  } finally {
+    store.close();
+  }
+});
+
+test('proposal storage rejects oversized or partial file payloads before SQLite persistence', () => {
+  const store = new Store(':memory:');
+  try {
+    assert.throws(() => store.insertProposal({
+      proposalId: 'too-many-lines', requestId: null, sessionId: null, tsEpochMs: Date.now(),
+      provider: 'anthropic', model: 'claude', project: 'coverage-test',
+      files: [{ path: 'x.ts', addedLines: Array.from({ length: 200_001 }, () => 'x') }],
+    }), /line count|resource limit/);
+    assert.throws(() => store.insertProposal({
+      proposalId: 'partial-with-files', requestId: null, sessionId: null, tsEpochMs: Date.now(),
+      provider: 'anthropic', model: 'claude', project: 'coverage-test',
+      files: [{ path: 'x.ts', addedLines: ['x'] }], captureCoverage: 'truncated',
+    }), /truncated/);
+  } finally {
+    store.close();
+  }
+});

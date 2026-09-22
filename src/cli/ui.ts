@@ -5,7 +5,8 @@
  * every command module import from here so the CLI speaks with one voice.
  */
 
-import type { Verdict } from '../value/gates.ts';
+import type { GateResult, Verdict } from '../value/gates.ts';
+import { stringifyJson } from '../util/json.ts';
 
 // Night Vault brand colors on terminals that declare 24-bit support (molten
 // gold for value, sage for pass, signal red for alerts); the plain ANSI-16
@@ -43,6 +44,11 @@ export function pct(n: number): string {
   return `${(n * 100).toFixed(0)}%`;
 }
 
+/** Emit a Fiscus-owned JSON response with stable six-decimal USD fields. */
+export function printJson(value: unknown, space: number | string = 2): void {
+  process.stdout.write(stringifyJson(value, space) + '\n');
+}
+
 /** Actionable not-a-git-repo message: tell the user what to do, not just what's wrong. */
 export function printNotAGitRepo(repo: string): void {
   console.error(`  Not a git repository: ${repo}`);
@@ -56,7 +62,32 @@ export function printNotAGitRepo(repo: string): void {
  * native imports or tagged traffic) or fell back to the project-blind window sum
  * (untagged proxy). Discloses the basis so the number is never silently mixed.
  */
-export function noteSource(tty: boolean, source: 'git' | 'store', projectScoped?: boolean, costStaleUnits = 0): void {
+export function noteSource(
+  tty: boolean,
+  source: 'git' | 'store',
+  projectScoped?: boolean,
+  costStaleUnits = 0,
+  /** Mature units whose spend window lost rows to retention (D-176). */
+  spendWindowTruncatedUnits = 0,
+  /** Mature units persisted before that coverage was recorded: unknown, not intact. */
+  spendWindowUnknownUnits = 0,
+): void {
+  if (spendWindowTruncatedUnits > 0) {
+    // The cost totals below are DENOMINATORS. A commit whose attribution
+    // window retention emptied contributes $0.00 and still counts as a
+    // unit, so every ratio built on them is inflated by an unknown amount.
+    // Reported rather than corrected: nothing surviving records what was
+    // deleted, so a repaired total would be invented.
+    console.log(color(tty, C.yellow,
+      `  ● ${spendWindowTruncatedUnits} unit(s) had spend deleted by retention inside their attribution window — their cost reads lower than it was, so ratios below are flattering by an unknown amount.`));
+  }
+  if (spendWindowUnknownUnits > 0) {
+    // Distinct from zero truncated units on purpose: a snapshot written
+    // before the coverage was recorded cannot say, and reading that as
+    // intact is the inference this line exists to refuse.
+    console.log(color(tty, C.gray,
+      `  ● ${spendWindowUnknownUnits} unit(s) predate the retention-coverage record, so whether their spend window lost rows is unknown. Recompute with: fiscus realize`));
+  }
   if (costStaleUnits > 0) {
     // A reprice re-costed the request ledger. These units predate the recorded
     // cost basis, so they could not be re-attributed without guessing which basis
@@ -81,4 +112,17 @@ export function glyph(tty: boolean, v: Verdict): string {
   if (v === 'pass') return color(tty, C.green, '✓');
   if (v === 'fail') return color(tty, C.red, '✗');
   return color(tty, C.gray, '·');
+}
+
+/**
+ * A gate's glyph from its four-valued polarity (AII-003, WP-B03).
+ *
+ * A conflicted gate projects to `fail`, so rendering the verdict alone showed
+ * an operator a red ✗ — "the tests failed" — when what actually happened is
+ * that two runs disagreed and neither has been adjudicated. Those call for
+ * different actions, so they get different glyphs.
+ */
+export function gateGlyph(tty: boolean, result: GateResult): string {
+  if (result.polarity === 'conflicted') return color(tty, C.yellow, '!');
+  return glyph(tty, result.verdict);
 }

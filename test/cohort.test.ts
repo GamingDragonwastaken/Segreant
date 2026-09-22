@@ -8,7 +8,7 @@ import {
 } from '../src/value/cohort.ts';
 
 function row(user: string, sessions: number, realizedSessions: number, costUsd: number): UserValueRow {
-  return { user, sessions, realizedSessions, costUsd, realizedValueUsd: (realizedSessions / sessions) * costUsd };
+  return { user, sessions, realizedSessions, costUsd, spendOnRealizedUnitsUsd: (realizedSessions / sessions) * costUsd };
 }
 
 // A cohort of 6 identical-cost users with a spread of realized shares.
@@ -85,7 +85,7 @@ test('cohort: thin samples are shrunk toward the mean (nobody judged on 2 sessio
   const big = self('bigwin');
   const thin = self('thinwin');
   assert.ok(thin.extraction < big.extraction, 'the thin 100% is shrunk below the well-evidenced 100%');
-  assert.ok(thin.reliability < big.reliability, 'thin sample carries less reliability');
+  assert.ok(thin.localDataWeight < big.localDataWeight, 'a thin sample carries less of its own weight and more of the cohort prior');
 });
 
 test('cohort: selfView returns your own number always, but gates the peer comparison', () => {

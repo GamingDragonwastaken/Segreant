@@ -42,7 +42,7 @@
 export interface MarginalContext {
   key: string;
   costUsd: number; // current spend routed to this context
-  realizedValueUsd: number; // realized value it returned (net of rework upstream)
+  spendOnRealizedUnitsUsd: number; // realized value it returned (net of rework upstream)
 }
 
 /** One context observed in two windows — the raw material for estimating β. */
@@ -128,9 +128,9 @@ export interface ShadowPriceReport {
 }
 
 /** Marginal return of Vᵢ(s)=aᵢs^β at spend s: aᵢβs^{β−1} = β·Vᵢ/sᵢ evaluated at sᵢ. */
-function marginalAt(costUsd: number, realizedValueUsd: number, beta: number): number {
+function marginalAt(costUsd: number, spendOnRealizedUnitsUsd: number, beta: number): number {
   if (costUsd <= 0) return 0;
-  return (beta * realizedValueUsd) / costUsd;
+  return (beta * spendOnRealizedUnitsUsd) / costUsd;
 }
 
 /**
@@ -149,13 +149,13 @@ export function shadowPriceOfIntelligence(
     'The shape is assumed to hold at the margin — a planning estimate, not a guarantee. Re-measure after reallocating.',
   ];
   const budgetUsd = contexts.reduce((s, c) => s + Math.max(0, c.costUsd), 0);
-  const currentValueUsd = contexts.reduce((s, c) => s + Math.max(0, c.realizedValueUsd), 0);
+  const currentValueUsd = contexts.reduce((s, c) => s + Math.max(0, c.spendOnRealizedUnitsUsd), 0);
 
   // weight wᵢ = aᵢ^{1/(1−β)} = (Vᵢ / sᵢ^β)^{1/(1−β)} for contexts that have both spend and value.
   const exp = 1 / (1 - beta);
   const weighted = contexts.map((c) => {
     const s = Math.max(0, c.costUsd);
-    const v = Math.max(0, c.realizedValueUsd);
+    const v = Math.max(0, c.spendOnRealizedUnitsUsd);
     const a = s > 0 && v > 0 ? v / s ** beta : 0;
     return { c, w: a > 0 ? a ** exp : 0, a };
   });
@@ -182,7 +182,7 @@ export function shadowPriceOfIntelligence(
       currentUsd: c.costUsd,
       optimalUsd,
       deltaUsd: optimalUsd - c.costUsd,
-      marginalReturn: marginalAt(c.costUsd, c.realizedValueUsd, beta),
+      marginalReturn: marginalAt(c.costUsd, c.spendOnRealizedUnitsUsd, beta),
     };
   });
 

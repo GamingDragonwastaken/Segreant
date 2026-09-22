@@ -96,6 +96,24 @@ test('transcript: extracts user/assistant text chronologically, marks tool activ
   }
 });
 
+test('extractTranscriptTurns: giant JSONL lines are skipped before parsing and disclosed as truncated', async () => {
+  const root = makeRoot();
+  const file = join(root, 'giant.jsonl');
+  try {
+    writeFileSync(file,
+      JSON.stringify({ type: 'user', message: { content: 'x'.repeat(3 * 1024 * 1024) } }) + '\n' +
+      JSON.stringify({ type: 'assistant', message: { content: 'small response' } }) + '\n',
+    );
+    const ex = await extractTranscriptTurns(file, 's');
+    assert.equal(ex.turns.length, 1);
+    assert.equal(ex.turns[0]!.text, 'small response');
+    assert.equal(ex.captureCoverage, 'truncated');
+    assert.equal(ex.truncatedLines, 1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('transcript: per-turn and total caps are enforced and DISCLOSED — clipped and dropped turns are counted', async () => {
   const root = makeRoot();
   try {

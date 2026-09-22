@@ -20,24 +20,40 @@ export type JudgeTier = 'algorithmic' | 'local-structural' | 'local-full' | 'hos
 
 /**
  * Matches SessionJudgment.confidence (LIFT-AI-SIDE-JUDGE-DESIGN.md §3). Local
- * structural and local full share one tag on purpose: the trust boundary ("your
- * machine") is identical either way, so downstream consumers of `confidence`
- * only need the structural/full distinction where it changes WHERE data goes
- * (hosted), not where it merely changes what a same-machine process reads.
+ * structural and local full share one tag on purpose: the payload distinction is
+ * independent of the egress bit, which separately reports whether the configured
+ * endpoint is a validated loopback destination.
  */
 export type JudgeConfidence = 'algorithmic' | 'local-llm' | 'hosted-llm-structural' | 'hosted-llm-full';
 
 export interface JudgeTierDecision {
   tier: JudgeTier;
   confidence: JudgeConfidence;
-  /** True only for the two hosted tiers — the one bit a UI needs to decide
-   * whether to show an egress warning. */
+  /** True when the selected judge endpoint is not a validated loopback — the
+   * one bit a UI needs to decide whether to show an egress warning. */
   sendsContentOffDevice: boolean;
   notes: string[];
 }
 
 function isSet(s: string | null | undefined): boolean {
   return typeof s === 'string' && s.trim().length > 0;
+}
+
+/**
+ * A configured URL is treated as on-device only when its parsed host is literal
+ * loopback. A non-loopback or malformed URL remains an explicit local-tier
+ * selection, but its egress bit must warn that the endpoint is off-device.
+ */
+function isValidatedLoopbackEndpoint(value: string | null | undefined): boolean {
+  if (!isSet(value)) return false;
+  try {
+    const parsed = new URL(value!.trim());
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+    const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -48,14 +64,17 @@ function isSet(s: string | null | undefined): boolean {
  * (docs/LIFT-AI-SIDE-JUDGE-DESIGN.md §2). Never logged, never persisted to
  * config.json, never returned by this function — only whether it's set.
  */
-export function hasHostedJudgeApiKey(): boolean {
-  return isSet(process.env.FISCUS_JUDGE_API_KEY);
+export function hasHostedJudgeApiKey(
+  environment: { FISCUS_JUDGE_API_KEY?: string | null } = process.env,
+): boolean {
+  return isSet(environment.FISCUS_JUDGE_API_KEY);
 }
 
 /**
  * The trust-ladder gate. Precedence when BOTH local and hosted are fully
- * configured: local wins. It never leaves the machine, so it's the strictly
- * more conservative choice, and the loser is easy to switch (unset
+ * configured: local wins. It selects the configured local endpoint and does not
+ * select a hosted judge, so it is the strictly more conservative choice within
+ * the declared Fiscus-process egress boundary; the loser is easy to switch (unset
  * judge.localBaseUrl) — the alternative (silently preferring hosted) would mean
  * a config that types out to "local is available" can still send content off
  * the user's machine, which is exactly the silent-escalation shape
@@ -64,6 +83,7 @@ export function hasHostedJudgeApiKey(): boolean {
 export function resolveJudgeTier(cfg: JudgeConfig, hostedApiKeyPresent: boolean): JudgeTierDecision {
   const notes: string[] = [];
   const localOn = isSet(cfg.localBaseUrl);
+  const localLoopback = isValidatedLoopbackEndpoint(cfg.localBaseUrl);
   const hostedConsent = cfg.hostedEnabled && hostedApiKeyPresent;
   const hostedOperational = hostedConsent && isSet(cfg.hostedBaseUrl);
 
@@ -77,19 +97,29 @@ export function resolveJudgeTier(cfg: JudgeConfig, hostedApiKeyPresent: boolean)
 
   if (localOn && hostedOperational) {
     notes.push(
-      'Both local and hosted judge tiers are configured; using local — it never leaves the machine. ' +
+      'Both local and hosted judge tiers are configured; using local endpoint (configured) and no hosted judge call. ' +
         'Unset judge.localBaseUrl to use the hosted tier instead.',
     );
   }
 
   if (localOn) {
     const full = cfg.localSendFullContent;
+    if (!localLoopback) {
+      notes.push(
+        'Judge tier: configured local endpoint is not a validated loopback URL; report this destination as remote/off-device.',
+      );
+    }
     notes.push(
       full
-        ? 'Judge tier: local LLM, full session content (stays on this machine).'
-        : 'Judge tier: local LLM, structural summary only (stays on this machine).',
+        ? 'Judge tier: local LLM endpoint, full session content; hosted tier is not selected.'
+        : 'Judge tier: local LLM endpoint, structural summary only; hosted tier is not selected.',
     );
-    return { tier: full ? 'local-full' : 'local-structural', confidence: 'local-llm', sendsContentOffDevice: false, notes };
+    return {
+      tier: full ? 'local-full' : 'local-structural',
+      confidence: 'local-llm',
+      sendsContentOffDevice: !localLoopback,
+      notes,
+    };
   }
 
   if (hostedConsent && !isSet(cfg.hostedBaseUrl)) {

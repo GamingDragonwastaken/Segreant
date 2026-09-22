@@ -69,6 +69,24 @@ test('POST /api/judge: judges the newest real session algorithmically by default
   }
 });
 
+test('POST /api/judge rejects an oversized body before reading or judging it', async () => {
+  const store = new Store(':memory:');
+  const srv = await boot(store);
+  try {
+    const res = await fetch(`${srv.base}/api/judge`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-fiscus-local': '1' },
+      body: JSON.stringify({ project: 'test-project', padding: 'x'.repeat(20 * 1024) }),
+    });
+    assert.equal(res.status, 413);
+    const body = (await res.json()) as { error?: { code?: string } };
+    assert.equal(body.error?.code, 'DASHBOARD_REQUEST_TOO_LARGE');
+  } finally {
+    await srv.close();
+    store.close();
+  }
+});
+
 test('POST /api/judge: empty store → honest no-sessions shape; GET → 405; missing local header → 403', async () => {
   const store = new Store(':memory:');
   const srv = await boot(store);

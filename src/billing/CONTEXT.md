@@ -8,6 +8,15 @@
 - Operator-declared route scope (`scope.ts`) — a self-assertion, never verified.
 - Either an authorized OpenAI Costs pull (`openaiCosts.ts`) or an
   operator-supplied export adopted from an import (`Store.adoptOpenAiCostsFromImport`).
+- Exact imported-record mapping (`mapping.ts`) can attach a provider line to a
+  local project/account, but only as an operator declaration.
+- `epistemic.ts` issues the first vertical's provider-line Evidence and billed
+  Claims through exact `Money`, and can issue a mixed-basis reconciliation Claim
+  when both provider and local-capture evidence IDs are supplied. Complete
+  direct OpenAI Costs snapshots issue separate provider-observed Evidence and
+  Claims; they never become billed merely because the endpoint is authoritative.
+  A recorded reconciliation can persist the provider, local-capture and mixed
+  residual Claims as one resumable kernel issuance; CLI `--apply` uses that path.
 
 ## Guarantees
 
@@ -19,9 +28,22 @@
   `operator_supplied_export` / `legacy_unknown`) and its conditions. The
   operator-supplied route adds a fifth condition and is never presented as
   equivalent evidence to a pull.
+- A residual whose period lost request rows to retention **classifies nothing**.
+  Deletion understates the local total by an unknown amount, so an upper bound
+  on off-path spend is not established — while a NEGATIVE residual keeps its
+  refutation, because truncation can only hide one and never invent one. The
+  boundary travels into the reconciliation separately from the rows, because a
+  reader of rows cannot see the ones that are gone.
 - Refuses rather than softens: a period ending within 48h, non-USD or mixed
   currency, non-whole-UTC-day input, and out-of-project records are refused with
   the excluded money reported.
+- Mapping coverage is explicit: each imported line is `mapped_operator_declared`,
+  `unmapped`, `stale_mapping`, or `ambiguous_mapping`; residual dollars remain
+  visible and are never force-fitted.
+- Kernel issuance keeps provider billed amounts and local estimated amounts as
+  separate Money bases; a residual is a typed comparison, never a new basis or
+  an attributable cause. Repeating issuance is idempotent through the kernel
+  ledger.
 
 ## Invariants
 
@@ -29,6 +51,10 @@
   make no network request and read no credential; both facts are asserted in the
   release gate.
 - **A reconciled amount never reaches budgets, RoI, or model recommendations.**
+- **A mapped imported amount never reaches budgets, RoI, or model recommendations
+  while provider scope is operator-declared.** Mapping is versioned evidence, not
+  provider verification; only a future explicit provider-verified authority can
+  discharge this gate.
 - `isOnDeclaredRoute` counts only `provider === 'openai' && via === 'proxy'`
   carrying the declared scope id. **Imported rows are excluded and must stay
   excluded** — an imported row has the model and the cost but nothing tying it to
@@ -41,4 +67,5 @@
 
 ```bash
 npm test -- --test-name-pattern="reconcile|adopt|coverage|scope"
+node --test --experimental-strip-types test/billing-epistemic.test.ts
 ```

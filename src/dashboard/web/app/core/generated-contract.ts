@@ -1,0 +1,225 @@
+/**
+ * Canonical, runtime-safe dashboard API route contract.
+ *
+ * This module deliberately has no Node or DOM imports. The server consumes it
+ * directly, and the build copies the exact bytes into the browser app so route
+ * paths, methods and CSRF declarations cannot fork between the two runtimes.
+ * Named payload types live in the no-runtime shared-types source; responseType
+ * names here bind route metadata to those declarations without importing Node or
+ * DOM runtime code into either side of the boundary. All JSON routes now bind
+ * named shared response types; text/CSV and opaque nested payload details remain
+ * explicit until their full schemas are promoted.
+ */
+
+export type DashboardHttpMethod = 'GET' | 'HEAD' | 'POST';
+
+export interface DashboardApiContract {
+  readonly id: string;
+  readonly path: string;
+  readonly methods: readonly DashboardHttpMethod[];
+  readonly localOnly: readonly DashboardHttpMethod[];
+  readonly allow?: string;
+  /** Browser payload interface or an explicit inline response description. */
+  readonly responseType: string;
+  /** Which shipped browser surface binds this route, or `[]` when CLI/API-only. */
+  readonly browserBinding: readonly ('modern-api' | 'classic' | 'actions')[];
+}
+
+export const DASHBOARD_API_CONTRACTS = [
+  { id: 'health', path: '/api/health', methods: ['GET', 'HEAD'], localOnly: [], responseType: 'HealthPayload', browserBinding: ['modern-api'] },
+  { id: 'importers', path: '/api/importers', methods: ['GET', 'HEAD'], localOnly: [], responseType: 'ImportersPayload', browserBinding: ['modern-api', 'classic'] },
+  { id: 'import', path: '/api/import', methods: ['POST'], localOnly: ['POST'], responseType: 'ImportResult', browserBinding: ['modern-api', 'classic'] },
+  { id: 'discover', path: '/api/discover', methods: ['POST'], localOnly: ['POST'], responseType: 'DiscoverPayload', browserBinding: ['modern-api', 'classic'] },
+  { id: 'scan', path: '/api/scan', methods: ['GET', 'POST'], localOnly: ['POST'], responseType: 'ScanPayload', browserBinding: ['modern-api', 'classic'] },
+  { id: 'overview', path: '/api/overview', methods: ['GET', 'HEAD'], localOnly: [], responseType: 'Overview', browserBinding: ['modern-api', 'classic'] },
+  { id: 'billing', path: '/api/billing', methods: ['GET'], localOnly: [], responseType: 'BillingPayload', browserBinding: ['modern-api', 'classic'] },
+  { id: 'allocation', path: '/api/allocation', methods: ['GET'], localOnly: [], responseType: 'AllocationPayload', browserBinding: ['modern-api', 'classic'] },
+  { id: 'economic', path: '/api/economic', methods: ['GET', 'HEAD'], localOnly: [], responseType: 'EconomicPayload', browserBinding: ['modern-api'] },
+  { id: 'pricing', path: '/api/pricing', methods: ['GET', 'HEAD'], localOnly: [], responseType: 'PricingPayload', browserBinding: [] },
+  { id: 'export-csv', path: '/api/export.csv', methods: ['GET', 'HEAD'], localOnly: [], responseType: 'text/csv', browserBinding: ['classic', 'actions'] },
+  { id: 'realization', path: '/api/realization', methods: ['GET', 'HEAD'], localOnly: [], responseType: 'RealizationPayload', browserBinding: [] },
+  { id: 'guide', path: '/api/guide', methods: ['GET', 'HEAD'], localOnly: [], responseType: 'GuidePayload', browserBinding: ['modern-api', 'classic'] },
+  { id: 'judge', path: '/api/judge', methods: ['POST'], localOnly: ['POST'], responseType: 'JudgePayload', browserBinding: ['classic'] },
+  { id: 'value', path: '/api/value', methods: ['GET', 'HEAD'], localOnly: [], responseType: 'ValuePayload', browserBinding: ['modern-api', 'classic'] },
+  { id: 'causal', path: '/api/causal', methods: ['GET', 'HEAD'], localOnly: [], responseType: 'CausalPayload', browserBinding: ['modern-api'] },
+  { id: 'kernel', path: '/api/kernel', methods: ['GET', 'HEAD'], localOnly: [], responseType: 'KernelNodePayload', browserBinding: ['modern-api'] },
+  { id: 'settings', path: '/api/settings', methods: ['GET'], localOnly: [], allow: 'GET, POST', responseType: 'SettingsSnapshot', browserBinding: ['modern-api', 'classic'] },
+  { id: 'settings-update', path: '/api/settings/update', methods: ['POST'], localOnly: ['POST'], responseType: 'SettingsSnapshot', browserBinding: ['modern-api', 'classic'] },
+  { id: 'clear-proposals', path: '/api/settings/clear-proposals', methods: ['POST'], localOnly: ['POST'], responseType: 'ClearProposalsPayload', browserBinding: ['modern-api', 'classic'] },
+] as const satisfies readonly DashboardApiContract[];
+
+export type DashboardApiContractId = (typeof DASHBOARD_API_CONTRACTS)[number]['id'];
+
+export function dashboardApiContract(id: DashboardApiContractId): DashboardApiContract {
+  const contract = DASHBOARD_API_CONTRACTS.find((candidate) => candidate.id === id);
+  if (contract === undefined) throw new Error(`unknown dashboard API contract: ${id}`);
+  return contract;
+}
+
+export type DashboardPayloadValueKind = 'string' | 'number' | 'boolean' | 'object' | 'array';
+
+export interface DashboardPayloadField {
+  readonly name: string;
+  readonly kind: DashboardPayloadValueKind;
+  readonly nullable?: boolean;
+}
+
+export interface DashboardPayloadContract {
+  readonly routeId: DashboardApiContractId;
+  readonly method: DashboardHttpMethod;
+  readonly contentType: 'json' | 'text';
+  readonly responseType: string;
+  /** Required top-level envelope fields; nested shapes come from shared types. */
+  readonly required: readonly DashboardPayloadField[];
+}
+
+const field = (name: string, kind: DashboardPayloadValueKind, nullable = false): DashboardPayloadField => Object.freeze({
+  name,
+  kind,
+  ...(nullable ? { nullable: true } : {}),
+});
+
+/**
+ * Shared top-level envelopes for every dashboard API method. This is purposely
+ * narrower than a generated JSON Schema: it is the stable boundary that lets
+ * the runtime checker catch missing/wrong envelope fields while the detailed
+ * browser interfaces continue to describe the fields each view consumes.
+ */
+export const DASHBOARD_PAYLOAD_CONTRACTS = [
+  { routeId: 'health', method: 'GET', contentType: 'json', responseType: 'HealthPayload', required: [field('ok', 'boolean'), field('service', 'string')] },
+  { routeId: 'importers', method: 'GET', contentType: 'json', responseType: 'ImportersPayload', required: [field('importers', 'array')] },
+  { routeId: 'import', method: 'POST', contentType: 'json', responseType: 'ImportResult', required: [field('ok', 'boolean'), field('totalNew', 'number'), field('results', 'object')] },
+  { routeId: 'discover', method: 'POST', contentType: 'json', responseType: 'DiscoverPayload', required: [field('ok', 'boolean'), field('foundFolders', 'number'), field('correlated', 'number'), field('discovered', 'array')] },
+  { routeId: 'scan', method: 'GET', contentType: 'json', responseType: 'ScanPayload', required: [field('ok', 'boolean'), field('tools', 'array'), field('otherApps', 'array'), field('roots', 'array'), field('repoCount', 'number'), field('reposWithSpend', 'number'), field('hitBudget', 'boolean'), field('dirsVisited', 'number'), field('unreadableDirs', 'number'), field('diff', 'object')] },
+  { routeId: 'scan', method: 'POST', contentType: 'json', responseType: 'ScanSetupPayload', required: [field('ok', 'boolean'), field('totalNew', 'number'), field('imported', 'object'), field('correlated', 'number'), field('discovered', 'array')] },
+  { routeId: 'overview', method: 'GET', contentType: 'json', responseType: 'Overview', required: [field('claimSupport', 'object'), field('range', 'string'), field('demo', 'boolean'), field('generatedAt', 'string'), field('budget', 'object'), field('summary', 'object'), field('pricing', 'object'), field('byModel', 'array'), field('byProject', 'array'), field('attributionEvidence', 'array'), field('byUser', 'array'), field('bySource', 'array'), field('characterization', 'object'), field('dimensions', 'array'), field('series', 'array'), field('recent', 'array'), field('alerts', 'array'), field('alertCoverage', 'object')] },
+  { routeId: 'billing', method: 'GET', contentType: 'json', responseType: 'BillingPayload', required: [field('claimSupport', 'object'), field('demo', 'boolean'), field('generatedAt', 'string'), field('evidence', 'object'), field('summary', 'object'), field('imports', 'array'), field('kernel', 'object'), field('readiness', 'object'), field('mapping', 'object'), field('directOpenAiCosts', 'object'), field('reconciliation', 'object')] },
+  { routeId: 'allocation', method: 'GET', contentType: 'json', responseType: 'AllocationPayload', required: [field('claimSupport', 'object'), field('demo', 'boolean'), field('generatedAt', 'string'), field('kind', 'string'), field('trust', 'string'), field('basis', 'string'), field('excludedFrom', 'array'), field('costCentres', 'array'), field('rules', 'array'), field('runs', 'array'), field('reconciliation', 'object')] },
+  { routeId: 'economic', method: 'GET', contentType: 'json', responseType: 'EconomicPayload', required: [field('kind', 'string'), field('schemaVersion', 'number'), field('demo', 'boolean'), field('window', 'object'), field('translation', 'object', true), field('projection', 'object'), field('periodClose', 'object')] },
+  { routeId: 'pricing', method: 'GET', contentType: 'json', responseType: 'PricingPayload', required: [field('demo', 'boolean'), field('generatedAt', 'string'), field('window', 'object'), field('activeRateCard', 'object'), field('total', 'object'), field('provenance', 'array'), field('boundary', 'string')] },
+  { routeId: 'export-csv', method: 'GET', contentType: 'text', responseType: 'text/csv', required: [] },
+  { routeId: 'realization', method: 'GET', contentType: 'json', responseType: 'RealizationPayload', required: [field('available', 'boolean'), field('repo', 'string')] },
+  { routeId: 'guide', method: 'GET', contentType: 'json', responseType: 'GuidePayload', required: [field('stage', 'string'), field('headline', 'string'), field('steps', 'array'), field('next', 'object'), field('hint', 'object', true)] },
+  { routeId: 'judge', method: 'POST', contentType: 'json', responseType: 'JudgePayload', required: [] },
+  { routeId: 'kernel', method: 'GET', contentType: 'json', responseType: 'KernelNodePayload', required: [field('found', 'boolean'), field('id', 'string'), field('asOf', 'string', true), field('node', 'object', true)] },
+  { routeId: 'value', method: 'GET', contentType: 'json', responseType: 'ValuePayload', required: [field('claimSupport', 'object'), field('demo', 'boolean'), field('gitRepo', 'boolean'), field('valueSource', 'string', true), field('repo', 'string'), field('generatedAt', 'string'), field('realization', 'object', true), field('roi', 'object', true), field('frontier', 'object', true), field('budget', 'object', true), field('allocation', 'object', true), field('projects', 'array'), field('projectAllocation', 'object', true), field('usage', 'object', true), field('team', 'object', true), field('drift', 'object', true), field('reclaimed', 'object', true)] },
+  { routeId: 'causal', method: 'GET', contentType: 'json', responseType: 'CausalPayload', required: [field('demo', 'boolean'), field('generatedAt', 'string'), field('studies', 'array'), field('study', 'object', true), field('causalEvidence', 'string'), field('boundary', 'string')] },
+  { routeId: 'settings', method: 'GET', contentType: 'json', responseType: 'SettingsSnapshot', required: [field('version', 'string'), field('home', 'string'), field('configPath', 'string'), field('dbPath', 'string'), field('proxyPort', 'number'), field('dashboardPort', 'number'), field('retentionDays', 'number'), field('proposalRetentionDays', 'number'), field('metadataOnly', 'boolean'), field('budget', 'object'), field('enforcement', 'object'), field('egress', 'object'), field('connections', 'array')] },
+  { routeId: 'settings-update', method: 'POST', contentType: 'json', responseType: 'SettingsSnapshot', required: [field('version', 'string'), field('home', 'string'), field('configPath', 'string'), field('dbPath', 'string'), field('proxyPort', 'number'), field('dashboardPort', 'number'), field('retentionDays', 'number'), field('proposalRetentionDays', 'number'), field('metadataOnly', 'boolean'), field('budget', 'object'), field('enforcement', 'object'), field('egress', 'object'), field('connections', 'array')] },
+  { routeId: 'clear-proposals', method: 'POST', contentType: 'json', responseType: 'ClearProposalsPayload', required: [field('ok', 'boolean'), field('removed', 'number')] },
+] as const satisfies readonly DashboardPayloadContract[];
+
+export function dashboardPayloadContract(routeId: DashboardApiContractId, method: DashboardHttpMethod): DashboardPayloadContract {
+  const contract = DASHBOARD_PAYLOAD_CONTRACTS.find((candidate) => candidate.routeId === routeId && candidate.method === method);
+  if (contract === undefined) throw new Error(`unknown dashboard payload contract: ${routeId} ${method}`);
+  return contract;
+}
+
+function payloadKind(value: unknown): string {
+  if (Array.isArray(value)) return 'array';
+  if (value !== null && typeof value === 'object') return 'object';
+  return typeof value;
+}
+
+/** Fail-closed top-level payload validation shared by the browser and tests. */
+export function validateDashboardPayload(contract: DashboardPayloadContract, payload: unknown): void {
+  if (contract.contentType === 'text') return;
+  if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new Error(`${contract.routeId}.${contract.method} payload must be an object envelope`);
+  }
+  const object = payload as Record<string, unknown>;
+  for (const required of contract.required) {
+    if (!(required.name in object)) {
+      throw new Error(`${contract.routeId}.${contract.method}.${required.name} is required by the dashboard payload contract`);
+    }
+    const value = object[required.name];
+    if (value === null && required.nullable === true) continue;
+    if (payloadKind(value) !== required.kind) {
+      throw new Error(`${contract.routeId}.${contract.method}.${required.name} expected ${required.kind}${required.nullable ? ' or null' : ''}, got ${payloadKind(value)}`);
+    }
+  }
+}
+
+/**
+ * Deep interface check shared by the browser client and the contract test
+ * (WP-G01, D-243). `interfaces` is the generated field table of
+ * `shared-types.ts`; a payload is walked against the named response type,
+ * recursing into other declared interfaces, arrays and unions. Absent optional
+ * fields pass; absent REQUIRED fields and wrong primitive kinds are reported
+ * with their path. Inline object types, functions and `Record<...>` are not
+ * described by the table and pass by construction. The same function runs in
+ * the browser after the envelope check and in the test against live routes,
+ * so the two cannot disagree by drifting apart.
+ */
+export interface DashboardInterfaceField {
+  readonly name: string;
+  readonly optional: boolean;
+  readonly type: string;
+}
+export type DashboardInterfaceTable = Readonly<Record<string, readonly DashboardInterfaceField[]>>;
+
+export function checkInterfaceShape(typeName: string, value: unknown, interfaces: DashboardInterfaceTable, where: string): string[] {
+  const problems: string[] = [];
+  walkShape(typeName, value, interfaces, where, problems, new Set());
+  return problems;
+}
+
+function walkValue(type: string, value: unknown, where: string, interfaces: DashboardInterfaceTable, problems: string[], seen: Set<string>): void {
+  const normalized = type.replace(/\s+/g, ' ').trim();
+  const alternatives = normalized.split('|').map((part) => part.trim());
+  if (alternatives.length > 1) {
+    if (value === null && alternatives.includes('null')) return;
+    if (value === undefined && alternatives.includes('undefined')) return;
+    if (alternatives.some((alternative) => alternative !== 'null' && alternative !== 'undefined'
+      && valueMatches(alternative, value, where, interfaces, problems, seen))) return;
+    problems.push(`${where} — expected ${type}, got ${value === null ? 'null' : typeof value}`);
+    return;
+  }
+  if (value === undefined) return;
+  if (!valueMatches(normalized, value, where, interfaces, problems, seen)) {
+    problems.push(`${where} — expected ${type}, got ${value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value}`);
+  }
+}
+
+function valueMatches(type: string, value: unknown, where: string, interfaces: DashboardInterfaceTable, problems: string[], seen: Set<string>): boolean {
+  if (type === 'unknown' || type === 'any') return true;
+  if (type === 'string') return typeof value === 'string';
+  if (type === 'number') return typeof value === 'number' && Number.isFinite(value);
+  if (type === 'boolean') return typeof value === 'boolean';
+  if (type === 'null') return value === null;
+  if (type.endsWith('[]')) {
+    if (!Array.isArray(value)) return false;
+    const elementType = type.slice(0, -2).trim();
+    value.forEach((element, index) => walkValue(elementType, element, `${where}[${index}]`, interfaces, problems, seen));
+    return true;
+  }
+  if (type.startsWith('Record<')) return value !== null && typeof value === 'object' && !Array.isArray(value);
+  if (type.startsWith('{') || type.startsWith('(') || type.includes('=>')) return true;
+  const literal = /^['"](.+)['"]$/.exec(type);
+  if (literal) return typeof value === 'string' && value === literal[1];
+  const numeric = /^-?\d+(\.\d+)?$/.exec(type);
+  if (numeric) return typeof value === 'number' && value === Number(type);
+  const named = /^([A-Z]\w*)$/.exec(type);
+  if (named && Object.hasOwn(interfaces, named[1]!)) {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+    walkShape(named[1]!, value, interfaces, where, problems, seen);
+    return true;
+  }
+  return true;
+}
+
+function walkShape(typeName: string, value: unknown, interfaces: DashboardInterfaceTable, where: string, problems: string[], seen: Set<string>): void {
+  const fields = interfaces[typeName];
+  if (!fields || seen.has(typeName)) return;
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return;
+  const object = value as Record<string, unknown>;
+  for (const field of fields) {
+    if (!(field.name in object)) {
+      if (!field.optional) problems.push(`${where}.${field.name} — declared as required, absent from the payload`);
+      continue;
+    }
+    const next = new Set(seen);
+    next.add(typeName);
+    walkValue(field.type, object[field.name], `${where}.${field.name}`, interfaces, problems, next);
+  }
+}

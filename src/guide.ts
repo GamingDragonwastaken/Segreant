@@ -11,6 +11,13 @@
  * Pure: facts in, report out. No I/O here — that keeps it testable to the line.
  */
 
+import type { EgressErrorCode } from './egress/transport.ts';
+
+export type ProxyStatus =
+  | { kind: 'up' }
+  | { kind: 'down'; message?: string }
+  | { kind: 'blocked_by_egress'; code: EgressErrorCode; message: string; action: string };
+
 export interface GuideFacts {
   /** Rendering surfaces label demo data; the guide also swaps its hint. */
   demo: boolean;
@@ -18,7 +25,28 @@ export interface GuideFacts {
   dashboardPort: number;
   /** Probed (health endpoint), not assumed. */
   proxyUp: boolean;
+  /** Structured health result; proxyUp remains for compatibility with older callers. */
+  proxyStatus?: ProxyStatus;
+  /**
+   * Requests currently in the ledger.
+   *
+   * NOT a count of requests ever metered once `requestsRetention` records a
+   * boundary: prune deletes rows, and this number counts what survived. The
+   * field keeps its name because every existing caller passes it, and the
+   * correction is `requestsRetention` rather than a rename that would quietly
+   * change what old callers mean.
+   */
   requestsAllTime: number;
+  /**
+   * What retention has deleted from the request stream, when it is known.
+   *
+   * Optional and three-valued on purpose. Absent, or present with
+   * `requestsPrunedBeforeMs: null`, means NO PRUNE IS ON RECORD -- which is not
+   * "nothing was pruned". A caller that has a store should always pass this;
+   * one that cannot is in the unknown state and the guide says so by saying
+   * nothing extra, rather than by asserting completeness it has not got.
+   */
+  requestsRetention?: RetentionCoverage;
   spend30dUsd: number;
   dailyCapUsd: number | null;
   /** Outcome signals ever recorded — `report` and `exec` both write these. */
@@ -26,6 +54,19 @@ export interface GuideFacts {
   /** Scored realization units — proof `roi`/`realize` ran against real work. */
   realizationUnits: number;
   laborRateSet: boolean;
+}
+
+/**
+ * The retention facts this module reads, structurally matching
+ * `RetentionFloor` in `src/store/db.ts`.
+ *
+ * Declared here rather than imported so this module stays pure and free of a
+ * dependency on the store; the store's wider shape is a superset and satisfies
+ * it structurally.
+ */
+export interface RetentionCoverage {
+  readonly requestsPrunedBeforeMs: number | null;
+  readonly requestsRowsRemoved: number;
 }
 
 export type GuideStepId = 'meter' | 'cap' | 'outcome' | 'value' | 'price' | 'steward';
@@ -39,8 +80,10 @@ export interface GuideStep {
   state: string;
   /** The one-line reason this step exists — the product thesis, in order. */
   why: string;
-  /** Copy-pasteable commands, most direct first. */
+  /** Copy-pasteable commands, most direct first; prose belongs in notice. */
   commands: string[];
+  /** Human-readable context or recovery guidance, never an executable command. */
+  notice?: string;
 }
 
 export interface GuideReport {
@@ -59,26 +102,59 @@ function fmtInt(n: number): string {
 }
 
 export function buildGuide(f: GuideFacts): GuideReport {
-  const envHint = `$env:ANTHROPIC_BASE_URL="http://localhost:${f.port}"  ·  $env:OPENAI_BASE_URL="http://localhost:${f.port}/v1"`;
+  const envHints = [
+    '$env:ANTHROPIC_BASE_URL="http://localhost:' + f.port + '"',
+    '$env:OPENAI_BASE_URL="http://localhost:' + f.port + '/v1"',
+  ];
+  const proxyStatus: ProxyStatus = f.proxyStatus ?? (f.proxyUp ? { kind: 'up' } : { kind: 'down' });
+  const proxyUp = proxyStatus.kind === 'up';
+  const proxyBlocked = proxyStatus.kind === 'blocked_by_egress';
+
+  // RETENTION IS READ BEFORE THE COUNT IS INTERPRETED (D-170).
+  //
+  // `requestsAllTime` counts rows that SURVIVED. With a recorded prune boundary
+  // an empty ledger no longer means "no traffic yet": it means the evidence was
+  // deleted by policy, and telling an operator who metered for months to go and
+  // configure a proxy is the absence-as-result failure this program keeps
+  // finding. `done` follows: metering demonstrably happened if rows were
+  // removed, whether or not any survived.
+  //
+  // The three states are kept apart. No boundary on record is NOT a statement
+  // that nothing was pruned -- it is the unknown case, and it is left reading
+  // exactly as it did before, because softening an honest "no traffic yet" into
+  // a hedge would trade one wrong answer for another.
+  const pruned = f.requestsRetention ?? null;
+  const prunedBoundaryKnown = pruned !== null && pruned.requestsPrunedBeforeMs !== null;
+  const removedByRetention = prunedBoundaryKnown ? pruned.requestsRowsRemoved : 0;
+  const retentionNote = prunedBoundaryKnown
+    ? ` — ${fmtInt(removedByRetention)} older ${removedByRetention === 1 ? 'row' : 'rows'} deleted by retention on ${new Date(pruned.requestsPrunedBeforeMs!).toISOString().slice(0, 10)}, so this is not a count of everything metered`
+    : '';
 
   const meter: GuideStep = {
     id: 'meter',
     title: 'Meter the spend',
-    done: f.requestsAllTime > 0,
+    done: f.requestsAllTime > 0 || removedByRetention > 0,
     state:
       f.requestsAllTime > 0
-        ? `${fmtInt(f.requestsAllTime)} requests metered`
-        : f.proxyUp
-          ? `proxy running on :${f.port} — no traffic through it yet`
-          : 'no traffic yet',
+        ? `${fmtInt(f.requestsAllTime)} requests metered${retentionNote}`
+        : removedByRetention > 0
+          ? `no requests in the ledger — ${fmtInt(removedByRetention)} were metered and then deleted by retention. Metering happened; the record of it did not survive.`
+          : proxyUp
+            ? `proxy running on :${f.port} — no traffic through it yet`
+            : proxyBlocked
+              ? `proxy health check blocked by local egress (${proxyStatus.code})`
+            : 'no traffic yet',
     why: 'Nothing can be governed or valued until the spend is captured — imported from what your tools already log, or routed through the proxy.',
-    commands: f.proxyUp
-      ? [envHint, 'then run your AI tool as usual — watch requests appear']
-      : [
-          'fiscus scan --setup    (find your AI tools + repos, import everything — no wiring)',
-          'or fiscus start, then set the base URL to also CAP spend:',
-          envHint,
-        ],
+    notice: proxyBlocked
+      ? proxyStatus.code + ': ' + proxyStatus.message + ' ' + proxyStatus.action
+      : proxyUp
+        ? 'Then run your AI tool as usual and watch requests appear.'
+        : 'If you have not configured a tool, scan first; otherwise start the proxy before setting the base URL.',
+    commands: proxyBlocked
+      ? ['fiscus egress verify']
+      : proxyUp
+        ? envHints
+        : ['fiscus scan --setup', 'fiscus start', ...envHints],
   };
 
   const cap: GuideStep = {
@@ -87,9 +163,13 @@ export function buildGuide(f: GuideFacts): GuideReport {
     done: f.dailyCapUsd !== null,
     state: f.dailyCapUsd !== null ? `daily hard cap $${f.dailyCapUsd}` : 'metering only — no enforcement',
     why: 'Metering without enforcement is a report, not governance. The proxy can actually say no.',
+    notice:
+      f.spend30dUsd > 0
+        ? 'The recommendation uses your observed spend history.'
+        : 'Set a hard cap and optional soft threshold for governed spend.',
     commands:
       f.spend30dUsd > 0
-        ? ['fiscus budget --recommend        (suggests a cap from your own usage)', 'fiscus budget --daily 25 --soft 18']
+        ? ['fiscus budget --recommend', 'fiscus budget --daily 25 --soft 18']
         : ['fiscus budget --daily 25 --soft 18'],
   };
 
@@ -102,7 +182,8 @@ export function buildGuide(f: GuideFacts): GuideReport {
         ? `${fmtInt(f.outcomeSignals)} outcome signals recorded`
         : 'no outcomes yet — spend is a cost with no counterweight',
     why: 'Exit codes are outcomes. Wrap your test command once and every run reports itself.',
-    commands: ['fiscus exec -- npm test        (any command; its exit code is the outcome)', 'fiscus report --kind merged --commit <hash>'],
+    notice: 'Wrap any command whose exit code should become an outcome signal.',
+    commands: ['fiscus exec -- npm test', 'fiscus report --kind merged --commit HEAD'],
   };
 
   const value: GuideStep = {
@@ -114,7 +195,8 @@ export function buildGuide(f: GuideFacts): GuideReport {
         ? `${fmtInt(f.realizationUnits)} units of work scored`
         : 'outcomes recorded but never scored against the spend',
     why: 'Four lenses — did it stick, did you keep it, did it save time, did it matter — one honest index.',
-    commands: ['fiscus roi --repo .', 'fiscus usage        (sessions without code signals: chat, research, drafting)'],
+    notice: 'Use usage for sessions without code signals, such as chat, research, or drafting.',
+    commands: ['fiscus roi --repo .', 'fiscus usage'],
   };
 
   const price: GuideStep = {
@@ -123,7 +205,8 @@ export function buildGuide(f: GuideFacts): GuideReport {
     done: f.laborRateSet,
     state: f.laborRateSet ? 'labor rate set — returns priced in dollars' : 'index only — the dollar return stays honestly un-priced',
     why: 'One auditable org input turns the 0–100 index into a break-even answer: was the AI worth it.',
-    commands: ['fiscus roi --repo . --labor-rate 120', 'or set lift.laborRatePerHour in config for every surface'],
+    notice: 'The labor-rate option is a local disclosed input used by every value surface.',
+    commands: ['fiscus roi --repo . --labor-rate 120'],
   };
 
   const journeyDone = [meter, cap, outcome, value, price].every((s) => s.done);
@@ -135,10 +218,11 @@ export function buildGuide(f: GuideFacts): GuideReport {
       ? 'fully instrumented — the four questions are now answerable'
       : 'unlocks when the journey above is complete',
     why: 'Where does the next dollar go, what should you measure next, when do you actually know, and is the number being bent.',
+    notice: 'Review the value-aware cap, frontier, and return surfaces as the evidence grows.',
     commands: [
-      'fiscus budget --recommend --repo .   (value-aware cap)',
-      'fiscus frontier --repo .             (best model × task for YOU)',
-      'fiscus roi --repo .                  (watch Stability + Instrument next)',
+      'fiscus budget --recommend --repo .',
+      'fiscus frontier --repo .',
+      'fiscus roi --repo .',
     ],
   };
 

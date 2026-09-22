@@ -1,4 +1,9 @@
 /**
+ * ISSUANCE CLASS: display_only — see `src/epistemic/issuance-map.ts`. A judge
+ * verdict is one model's opinion under a declared trust tier. It is never
+ * converted into a supported quality Claim, and no canonical issuance boundary
+ * consumes it.
+ *
  * Ties the trust-ladder gate (tier.ts), the structural payload (payload.ts), and
  * the outbound call (call.ts) into one entry point: `judgeSession`. This is the
  * ONLY function anything else in the codebase should call to get a judgment —
@@ -49,6 +54,7 @@ export async function judgeSession(
   }
 
   const isLocal = decision.tier === 'local-structural' || decision.tier === 'local-full';
+  const localEndpointIsOnDevice = isLocal && !decision.sendsContentOffDevice;
   const baseUrl = isLocal ? cfg.localBaseUrl : cfg.hostedBaseUrl;
   const model = isLocal ? cfg.localModel : cfg.hostedModel;
   const apiKey = isLocal ? null : (process.env.FISCUS_JUDGE_API_KEY ?? null);
@@ -96,14 +102,16 @@ export async function judgeSession(
     }
     notes.push(
       isLocal
-        ? 'Judge tier: local LLM (full-content configured but no on-disk transcript found for this session — sent the structural summary; stays on this machine either way).'
+        ? localEndpointIsOnDevice
+          ? 'Judge tier: local LLM (full-content configured but no on-disk transcript found for this session — the structural-summary request targets the validated loopback endpoint; it stays within the configured loopback boundary).'
+          : 'Judge tier: local LLM (full-content configured but no on-disk transcript found for this session — the structural-summary request targets the configured endpoint; this destination is reported as remote/off-device).'
         : 'Judge tier: hosted API (full-content configured but no on-disk transcript found for this session — only a structural summary left this machine, never raw content).',
     );
   }
 
   const summary = buildStructuralSummary(requests, proposals, sessionId);
   try {
-    const judgment = await callJudgeApi(baseUrl!, model!, apiKey, summary, confidence, undefined, sendTranscript);
+    const judgment = await callJudgeApi(baseUrl!, model!, apiKey, summary, confidence, undefined, sendTranscript, isLocal ? 'local_judge' : 'hosted_judge');
     return notes.length ? { ...judgment, rationale: `${judgment.rationale} (${notes.join(' ')})` } : judgment;
   } catch (err) {
     const reason = err instanceof JudgeCallError ? err.message : String(err);

@@ -4,8 +4,10 @@
 
 Local-first **AI Financial Operations** layer: meter AI spend, control it,
 allocate it, reconcile it against provider billing where the evidence allows, and
-measure what it produced. Runs entirely on the operator's machine. Product truth
-is in [PRODUCT.md](PRODUCT.md); read it before designing anything user-facing.
+measure what it produced. The ledger and GUI are local by default; configured
+provider traffic and other declared egress paths are governed by the
+Fiscus-process boundary described in `docs/DATA-BOUNDARIES.md`. Product truth is
+in [PRODUCT.md](PRODUCT.md); read it before designing anything user-facing.
 
 ## The one distinction the whole product is built on
 
@@ -27,12 +29,19 @@ another.** Most defects in this repo have been a version of that collapse.
    result, before the user spends effort or a credential on it.
 4. **Read-only by default.** Compute and preview; `--apply` persists. Preserve
    preview-then-commit as a visible step in any new surface.
-5. **Nothing leaves the machine** without an explicit, informed action. No hidden
-   telemetry, no egress, no credential forwarding. The GUI makes **zero external
-   network requests** — no CDN, no fonts, no analytics.
-6. **Zero runtime dependencies.** `typescript` and `@types/node` are the only
+5. **Budget enforcement fails closed.** Invalid persisted budget/configuration
+   or an unreadable ledger must stop provider forwarding rather than silently
+   becoming an unlimited or unmetered path. Dashboard settings are strict,
+   bounded, and validated before persistence.
+6. **Fiscus's own outbound paths are declared and policy-gated.** There is no
+   hosted telemetry by default; configured provider forwarding, refreshes,
+   webhooks, hosted judging, and team rollups are separate egress paths with
+   explicit scope. The GUI talks to the local dashboard only — no CDN, fonts, or
+   analytics — but this is not a machine-wide firewall or provider-retention
+   guarantee.
+7. **Zero runtime dependencies.** `typescript` and `@types/node` are the only
    devDependencies. Adding a runtime dependency is a decision, not a convenience.
-7. **The repo is public.** Scan for credentials, personal data, and local
+8. **The repo is public.** Scan for credentials, personal data, and local
    filesystem paths before every push.
 
 ## Where the durable state lives
@@ -54,15 +63,26 @@ npm run typecheck # the NODE pass only — see below
 npm run build     # two compiler passes -> dist/, plus web assets
 ```
 
-**`npm run typecheck` does not check the GUI.** `tsconfig.json` excludes
-`src/dashboard/web/app/**`, because the browser app compiles under its own
-config. A dashboard change needs both passes, and green on the first says
-nothing about the second:
+**There are three compilation domains and `npm run typecheck` checks one.**
+`tsconfig.json` excludes `src/dashboard/web/app/**` (the browser app compiles
+under its own config), and it does not see `team-server/` at all — that is a
+separate npm project with its own `tsconfig.json`, its own `node_modules`, and
+its own suite. Green on the root pass says nothing about the other two:
 
 ```bash
 node ./node_modules/typescript/bin/tsc --noEmit -p tsconfig.json
 node ./node_modules/typescript/bin/tsc --noEmit -p src/dashboard/web/app/tsconfig.json
+cd team-server && node ./node_modules/typescript/bin/tsc --noEmit && npm test
 ```
+
+`team-server/` imports root source directly (`../../src/team/rollup.ts`,
+`../../src/value/receipt.ts`), so a rename anywhere in `src/team/` or
+`src/value/` can break it while every root gate stays green. That has now
+happened twice on CI — TS1294 at `31911cb`, sixteen TS2339/TS2353 errors at
+`c1f7ac5` — both times because the local check stopped at the root. **Run the
+team-server pass whenever you touch `src/value/`, `src/team/`, or anything they
+export.** CI runs it on three operating systems; you should not be finding out
+from CI.
 
 `npx tsc` fails on this checkout's space-containing path. Use the explicit
 `node ./node_modules/typescript/bin/tsc` form everywhere.
@@ -74,15 +94,22 @@ node --test --experimental-strip-types test/value.test.ts
 node --test --experimental-strip-types --test-name-pattern="realized" test/value.test.ts
 ```
 
-`npm test` runs `pretest` first (`scripts/build.mjs --web`, ~3s) because three
-GUI tests read the emitted `dist/` tree rather than the source. Invoking
-`node --test` on a single file skips that — rebuild first if it is one of them.
+`npm test` runs `pretest` first because three GUI tests read the emitted
+`dist/` tree rather than the source. Invoking `node --test` on a single file
+skips that — rebuild first if it is one of them.
+
+`pretest` is the **full** `node scripts/build.mjs`, not the `--web` shortcut it
+used to be (`d23245f` changed it). That matters more than it sounds: it means
+nothing in the ordinary workflow exercises `--web`, so `--web` broke at `e00f7f9`
+and stayed broken until somebody ran the command this paragraph used to claim
+`pretest` used. If you shorten a build path, check what still runs it.
 
 Exercising the CLI should not touch your own ledger:
 
 ```bash
-FISCUS_HOME=/tmp/scratch node bin/fiscus.mjs demo
-FISCUS_HOME=/tmp/scratch node bin/fiscus.mjs start --demo --dashboard-port 8621
+# npm lifecycle hooks rebuild the checked-out dist/ before launch
+FISCUS_HOME=/tmp/scratch npm run demo
+FISCUS_HOME=/tmp/scratch npm run start -- --demo --dashboard-port 8621
 ```
 
 `FISCUS_HOME`, `FISCUS_DB` and `FISCUS_DEMO` are the only overrides — there is

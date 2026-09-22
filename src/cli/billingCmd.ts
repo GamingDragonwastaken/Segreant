@@ -13,20 +13,32 @@ import {
   type OpenAiCostsPreview,
 } from '../billing/openaiCosts.ts';
 import { newOpenAiScopeDeclaration } from '../billing/scope.ts';
-import { displayUsd, signedUsd, type ReconciliationReadiness, type ReconciliationRun } from '../billing/reconcile.ts';
+import { assessAssumptionFragility } from '../epistemic/countermodel.ts';
+import { reconciliationCountermodels } from '../billing/countermodels.ts';
+import { describeOffPathBound, displayUsd, signedUsd, type ReconciliationReadiness, type ReconciliationRun } from '../billing/reconcile.ts';
 import { reconciliationReadiness } from '../billing/readiness.ts';
 import { formatUsdMicros } from '../billing/types.ts';
 import { readBillingImportFile } from '../billing/importer.ts';
 import { billingEvidenceToCsv } from '../export/billingCsv.ts';
 import { Store } from '../store/db.ts';
 import type { Flags } from './flags.ts';
+import { printJson } from './ui.ts';
+import { stringifyJson } from '../util/json.ts';
+import { moneyToJson } from '../economics/money.ts';
+
+function billingEgressRepairAction(failureCode: string): string | undefined {
+  return failureCode === 'egress_receipt_integrity_failed' || failureCode === 'egress_receipt_persistence_failed'
+    ? 'Repair or restore the local receipt history before retrying; if the lock is stale, confirm no Fiscus writer is active, then remove only that lock and rerun verify.'
+    : undefined;
+}
 
 function usage(): void {
-  console.error('  Usage: fiscus billing <import|status|export|scope|openai-costs|reconcile> [options]');
+  console.error('  Usage: fiscus billing <import|status|export|scope|mapping|openai-costs|reconcile> [options]');
   console.error('         fiscus billing import --file <evidence.json> [--apply] [--json]');
   console.error('         fiscus billing status [--json]');
   console.error('         fiscus billing export [--csv|--json] [--out <file>]');
   console.error('         fiscus billing scope <set|status|clear> [--account-ref <local-ref>] [--project-ref <local-ref>] [--apply] [--json]');
+  console.error('         fiscus billing mapping <set|status> [--record-id <id>] [--project <local-project>] [--account-ref <local-account>] [--apply] [--json]');
   console.error('         fiscus billing openai-costs <preview|pull> --from <YYYY-MM-DD> --to <YYYY-MM-DD> [--apply] [--json]');
   console.error('         fiscus billing openai-costs adopt --import-id <id> [--apply] [--json]   no credential needed');
   console.error('         fiscus billing openai-costs <status|coverage> [--json]');
@@ -67,6 +79,15 @@ function printCostsCoverage(coverage: NonNullable<ReturnType<Store['openAiCostsC
   console.log(`  Period        ${new Date(coverage.observation.periodStartMs).toISOString().slice(0, 10)} → ${new Date(coverage.observation.periodEndMs).toISOString().slice(0, 10)} (UTC, exclusive end)`);
   console.log(`  Provider rows ${coverage.observation.providerLineCount} (${coverage.observation.currencies.join(', ') || 'none'}); values intentionally not summed here`);
   console.log(`  Declared route ${captured.requestCount} live proxy request(s), $${formatLocalEstimate(captured.costUsd)} local rate-card estimate (${captured.estimatedRequestCount} estimated)`);
+  // Directly under the number it falsifies, and not in `Blockers`, which lists
+  // the conditions that hold always (D-185). A zero here is what an operator
+  // uses to decide whether minting an Admin credential is worth it.
+  if (coverage.localLedgerRetention.truncated) {
+    const before = new Date(coverage.localLedgerRetention.prunedBeforeMs ?? 0).toISOString().slice(0, 10);
+    console.log(`  Local ledger  TRUNCATED — retention deleted rows before ${before}, inside the period above.`);
+    console.log('                Every local count on this screen is what SURVIVES, so an empty declared');
+    console.log('                route here is not evidence that the route captured nothing.');
+  }
   console.log(`  Excluded      ${excluded.importedOrNative.requestCount} imported/native; ${excluded.unscopedOrLegacyOpenAiProxy.requestCount} unscoped/legacy OpenAI proxy; ${excluded.differentDeclaredOpenAiScope.requestCount} different OpenAI scope; ${excluded.otherProvider.requestCount} other provider`);
   console.log('  Comparison    blocked_not_reconciled — no provider/request variance is calculated.');
   console.log(`  Blockers      ${coverage.blockers.join(', ')}`);
@@ -80,6 +101,23 @@ function printReadiness(readiness: ReconciliationReadiness): void {
     console.log(`           ${item.detail}`);
   }
   const c = readiness.coverage;
+  // Said before the warning below, because on a pruned ledger the warning
+  // cannot fire: every branch here is gated on `c`, and a deletion sets it to
+  // null. A guard that goes quiet leaves nothing on the screen to be wrong,
+  // which is why the silence itself has to be reported (D-186).
+  if (readiness.localLedgerRetention.truncated) {
+    const before = new Date(readiness.localLedgerRetention.prunedBeforeMs ?? 0).toISOString().slice(0, 10);
+    console.log('');
+    if (c === null) {
+      console.log(`  NO OPENAI SPEND SURVIVES HERE, and retention deleted rows before ${before}.`);
+      console.log('  Whether this machine ever metered OpenAI spend cannot be read from the ledger');
+      console.log('  any more, so this screen will not tell you either way — and it cannot tell you');
+      console.log('  what a reconciliation would have matched over the deleted period.');
+    } else {
+      console.log(`  Retention deleted rows before ${before}. The three figures below are what`);
+      console.log('  SURVIVES, not what this machine spent.');
+    }
+  }
   if (c && c.onDeclaredRouteUsd === 0 && (c.importedUsd > 0 || c.proxyOffScopeUsd > 0)) {
     // The expensive mistake this exists to prevent: minting an Admin key, pulling
     // a real bill, and getting a local side of zero.
@@ -93,7 +131,17 @@ function printReadiness(readiness: ReconciliationReadiness): void {
       console.log('           attribution this layer exists to refuse. Reconciliation sees only');
       console.log('           traffic you route through the proxy.');
     }
-    if (c.proxyOffScopeUsd > 0) {
+    if (c.proxyOffScopeUsd > 0 && c.declaredScopeId === null) {
+      // The verdict above is right and its usual explanation would not be: these
+      // rows carry the declaration that was made, and it is the ROUTE that was
+      // withdrawn. Blaming the rows for a scope the operator cleared sends them
+      // to re-meter traffic that is already correctly attributed (D-187).
+      console.log(`    $${c.proxyOffScopeUsd.toFixed(2)} across ${c.proxyOffScopeRequests.toLocaleString()} proxy request(s) were metered, but NO SCOPE IS ACTIVE.`);
+      console.log('           Nothing can be on a declared route while there is no declared route, so');
+      console.log('           this is not a fact about those rows. Re-activate the scope first:');
+      console.log('           fiscus billing scope set --provider openai --base-url https://api.openai.com \\');
+      console.log('             --account-ref <org_…> --project-ref <proj_…> --apply');
+    } else if (c.proxyOffScopeUsd > 0) {
       console.log(`    $${c.proxyOffScopeUsd.toFixed(2)} across ${c.proxyOffScopeRequests.toLocaleString()} proxy request(s) predate your scope declaration`);
       console.log('           or carry a different one. Only rows metered AFTER the declaration count.');
     }
@@ -107,6 +155,54 @@ function printReadiness(readiness: ReconciliationReadiness): void {
   console.log('  request a provider credential on your behalf. See docs/PROVIDER-RECONCILIATION.md.');
 }
 
+/**
+ * What each condition means if it does NOT hold (WP-B04).
+ *
+ * The conditions line above names five limits and stops there, which leaves the
+ * reader to work out for themselves what the world looks like when one fails and
+ * whether anything they have could tell them apart. Both answers exist and
+ * neither is obvious: four of them cannot be ruled out by any observation Fiscus
+ * can make, so the residual is PERMANENTLY conditional rather than pending a
+ * check someone could go and do — and one of them stops being hypothetical
+ * entirely when the residual goes negative.
+ *
+ * Deliberately compact. The full worlds are in `src/billing/countermodels.ts`
+ * and travel in `--json`; what an operator needs at the terminal is which
+ * conditions are closable, which are not, and whether one has already broken.
+ */
+function printFragility(result: ReconciliationRun): void {
+  const assessment = assessAssumptionFragility([...result.conditions], reconciliationCountermodels(result));
+  console.log('');
+  console.log('  If a condition does not hold');
+  // Broken first. A condition the evidence has already refuted is not one of
+  // several things that might be true, and an operator who reads no further
+  // than the first line of this block must still see it.
+  for (const model of assessment.realized) {
+    for (const line of wrapText(`${model.violates} is ESTABLISHED, not merely possible. ${model.claimBecomes}`, 70)) {
+      console.log(`    ! ${line}`);
+    }
+  }
+  if (assessment.unexcludable.length > 0) {
+    // Counts the established ones too, and should: a world the evidence has
+    // settled against the claim is by definition one nothing excluded.
+    const text = `${assessment.unexcludable.length} of ${assessment.assumptions.length} cannot be ruled out by anything `
+      + 'Fiscus can observe, so this residual is permanently conditional rather than pending a check.';
+    for (const line of wrapText(text, 72)) console.log(`    ${line}`);
+  }
+  for (const model of assessment.live) {
+    if (model.excludedBy === null) continue;
+    for (const line of wrapText(`${model.violates} can be closed by ${model.excludedBy}`, 70)) {
+      console.log(`    > ${line}`);
+    }
+  }
+  if (!assessment.robustnessAssessed) {
+    // Cannot happen while the worlds cover every permanent condition, and it is
+    // printed rather than asserted because the alternative is silence about a
+    // condition nobody examined.
+    console.log(`    ? no world recorded for: ${assessment.uncoveredAssumptions.join(', ')}`);
+  }
+}
+
 function printReconciliation(result: ReconciliationRun, applied: boolean): void {
   const day = (ms: number) => new Date(ms).toISOString().slice(0, 10);
   console.log('');
@@ -118,6 +214,13 @@ function printReconciliation(result: ReconciliationRun, applied: boolean): void 
   console.log(`  Provider reported   $${displayUsd(result.providerReportedMicros)}`);
   console.log(`  Fiscus metered      $${displayUsd(result.localCapturedMicros)}  (local rate-card estimate)`);
   console.log(`  Unexplained         ${signedUsd(result.unexplainedVarianceMicros)}`);
+  // The residual invites exactly one wrong reading — "near zero, so nothing
+  // went off-path" — and that reading is an absence inference the arithmetic
+  // does not license (AII-002). Say what it bounds, next to the number, before
+  // an operator acts on it.
+  for (const line of wrapText(describeOffPathBound(result.offPathBound), 74)) {
+    console.log(`    ${line}`);
+  }
   console.log('');
   console.log(`  Coverage      ${result.coverage.daysWithBoth} day(s) with both sides · ${result.coverage.providerOnlyDays} provider-only · ${result.coverage.localOnlyDays} local-only`);
   console.log(`  Material      ${result.coverage.materialDays} day(s) differ by more than $${result.materialityUsd.toFixed(2)}`);
@@ -143,6 +246,7 @@ function printReconciliation(result: ReconciliationRun, applied: boolean): void 
   }
   console.log(`  Provider side ${result.providerSourceKind.replaceAll('_', ' ')}`);
   console.log(`  Conditions    ${result.conditions.join(', ')}`);
+  printFragility(result);
   console.log(`  Excluded from ${result.excludedFrom.join(', ')}`);
   console.log(applied ? '  Recorded as an immutable derived run.' : '  Not recorded. Persist it with: fiscus billing reconcile --apply');
 }
@@ -161,13 +265,13 @@ function cmdReconcile(flags: Flags): void {
     const result = readiness.ready ? store.reconcileOpenAiCosts({ materialityUsd }) : null;
 
     if (!result) {
-      if (flags.json) process.stdout.write(JSON.stringify({ status: 'not_ready', readiness }, null, 2) + '\n');
+      if (flags.json) printJson({ status: 'not_ready', readiness });
       else printReadiness(readiness);
       process.exitCode = 1;
       return;
     }
     if (result.status === 'refused') {
-      if (flags.json) process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+      if (flags.json) printJson(result);
       else {
         console.log('');
         console.log(`  Reconciliation refused: ${result.refusal.replaceAll('_', ' ')}`);
@@ -178,8 +282,27 @@ function cmdReconcile(flags: Flags): void {
     }
     const applied = Boolean(flags.apply);
     const reconciliationRunId = applied ? store.saveReconciliationRun(result) : null;
-    if (flags.json) process.stdout.write(JSON.stringify({ applied, reconciliationRunId, result }, null, 2) + '\n');
-    else printReconciliation(result, applied);
+    // A provider-day comparison with at least one provider day can cross the
+    // kernel only after the immutable run is recorded. Local-only periods have
+    // no provider Evidence and therefore remain a truthful non-claim.
+    const kernel = applied && reconciliationRunId !== null && result.coverage.providerDays > 0
+      ? store.issueOpenAiReconciliationToKernel(reconciliationRunId)
+      : null;
+    if (flags.json) {
+      printJson({
+        applied,
+        reconciliationRunId,
+        result,
+        kernel,
+        // The worlds in full, so a consumer parsing this does not have to
+        // reconstruct from the conditions list what the human output states.
+        fragility: assessAssumptionFragility([...result.conditions], reconciliationCountermodels(result)),
+      });
+    }
+    else {
+      printReconciliation(result, applied);
+      if (kernel) console.log(`  Canonical kernel: ${kernel.reconciliationClaim.result} mixed-basis Claim ${kernel.reconciliationClaim.id}.`);
+    }
   } finally {
     store.close();
   }
@@ -226,7 +349,7 @@ function cmdAdoptCosts(flags: Flags): void {
       providerProjectRef: scope.providerProjectRef,
     });
     if (!plan.adoptable) {
-      if (flags.json) process.stdout.write(JSON.stringify({ applied: false, plan }, null, 2) + '\n');
+      if (flags.json) printJson({ applied: false, plan });
       else {
         console.log('');
         console.log(`  Cannot adopt: ${plan.refusal.replaceAll('_', ' ')}`);
@@ -239,7 +362,7 @@ function cmdAdoptCosts(flags: Flags): void {
     const applied = Boolean(flags.apply);
     const run = applied ? store.adoptOpenAiCostsFromImport(plan) : null;
     if (flags.json) {
-      process.stdout.write(JSON.stringify({ applied, observationRunId: run?.observationRunId ?? null, plan, networkAttempted: false, credentialRead: false }, null, 2) + '\n');
+      printJson({ applied, observationRunId: run?.observationRunId ?? null, plan, networkAttempted: false, credentialRead: false });
       return;
     }
     const day = (ms: number) => new Date(ms).toISOString().slice(0, 10);
@@ -292,7 +415,7 @@ async function cmdOpenAiCosts(flags: Flags): Promise<void> {
         networkAttempted: false,
         credentialRead: false,
       };
-      if (flags.json) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+      if (flags.json) printJson(payload);
       else if (!coverage) console.log('  No fully paginated OpenAI Costs snapshot is available for a local capture-coverage report.');
       else printCostsCoverage(coverage);
     } finally {
@@ -306,7 +429,7 @@ async function cmdOpenAiCosts(flags: Flags): Promise<void> {
       const status = store.openAiCostsObservationStatus();
       const latestComplete = store.latestCompleteOpenAiCostsObservation();
       if (flags.json) {
-        process.stdout.write(JSON.stringify({ status, latestComplete }, null, 2) + '\n');
+        printJson({ status, latestComplete });
       } else {
         console.log('');
         console.log('  OpenAI Organization Costs observation status');
@@ -353,7 +476,7 @@ async function cmdOpenAiCosts(flags: Flags): Promise<void> {
           ? 'No data written. Add --apply to execute the fixed read-only request.'
           : 'No data written. Preview never reads a credential or makes a network request.',
       };
-      if (flags.json) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+      if (flags.json) printJson(payload);
       else printCostsPreview(preview);
       return;
     }
@@ -375,7 +498,7 @@ async function cmdOpenAiCosts(flags: Flags): Promise<void> {
         observations: [],
       });
       const payload = { applied: true, resultState: 'failed', run, error: 'OPENAI_ADMIN_API_KEY is required for pull --apply' };
-      if (flags.json) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+      if (flags.json) printJson(payload);
       else console.error('  OpenAI Costs pull was not attempted: OPENAI_ADMIN_API_KEY is required for pull --apply.');
       process.exitCode = 1;
       return;
@@ -395,10 +518,18 @@ async function cmdOpenAiCosts(flags: Flags): Promise<void> {
         failureCode: null,
         observations: collected.observations,
       });
-      const payload = { applied: true, resultState: 'succeeded', run, observationCount: collected.observations.length };
-      if (flags.json) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+      // A complete provider snapshot with lines crosses the explicit kernel
+      // adapter. An empty but successful snapshot remains a valid empty
+      // observation and therefore has no Claim to issue.
+      const kernel = collected.observations.length > 0
+        ? store.issueOpenAiCostsObservationToKernel(run.observationRunId)
+        : null;
+      const kernelJson = kernel === null ? null : { ...kernel, total: { ...moneyToJson(kernel.total) } };
+      const payload = { applied: true, resultState: 'succeeded', run, observationCount: collected.observations.length, kernel: kernelJson };
+      if (flags.json) printJson(payload);
       else {
         console.log(`  Recorded ${collected.observations.length} immutable OpenAI daily cost observation(s) in run ${run.observationRunId}.`);
+        if (kernel) console.log(`  Canonical kernel: ${kernel.observationEvidence.inserted} Evidence and ${kernel.observationClaims.inserted} provider-observed Claims issued; aggregate ${kernel.aggregateClaim.id}.`);
         console.log('  They remain unreconciled and are excluded from request spend, caps, RoI, and recommendations.');
       }
     } catch (error) {
@@ -425,9 +556,13 @@ async function cmdOpenAiCosts(flags: Flags): Promise<void> {
         failureCode: failed.failureCode,
         observations: [],
       });
-      const payload = { applied: true, resultState: 'failed', run, error: `OpenAI Costs pull failed (${failed.failureCode})` };
-      if (flags.json) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
-      else console.error(`  OpenAI Costs pull failed (${failed.failureCode}); the failed audit run was retained without a response body or credential.`);
+      const action = billingEgressRepairAction(failed.failureCode);
+      const payload = { applied: true, resultState: 'failed', run, error: `OpenAI Costs pull failed (${failed.failureCode})`, action };
+      if (flags.json) printJson(payload);
+      else {
+        console.error(`  OpenAI Costs pull failed (${failed.failureCode}); the failed audit run was retained without a response body or credential.`);
+        if (action) console.error(`  ${action}`);
+      }
       process.exitCode = 1;
     }
   } catch (error) {
@@ -468,7 +603,7 @@ function cmdScope(flags: Flags): void {
             reconciliationStatus: 'not_reconciled',
           },
         };
-        if (flags.json) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+        if (flags.json) printJson(payload);
         else {
           console.log(`  Scope preview  OpenAI → ${preview.upstreamDisplay}`);
           console.log(`  Account ref    ${preview.billingAccountRef}${preview.providerProjectRef ? ` / ${preview.providerProjectRef}` : ''}`);
@@ -481,7 +616,7 @@ function cmdScope(flags: Flags): void {
       try {
         const declaration = store.setOpenAiScope({ billingAccountRef: accountRef, providerProjectRef: projectRef, upstreamBase });
         const payload = { applied: true, declaration, reconciliationStatus: 'not_reconciled' };
-        if (flags.json) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+        if (flags.json) printJson(payload);
         else {
           console.log(`  Active local OpenAI scope ${declaration.declarationId}`);
           console.log(`  ${declaration.billingAccountRef} → ${declaration.upstreamDisplay}`);
@@ -501,7 +636,7 @@ function cmdScope(flags: Flags): void {
     if (action === 'status') {
       const active = store.activeOpenAiScope();
       const payload = { active, trust: 'operator_declared_unverified', reconciliationStatus: 'not_reconciled' };
-      if (flags.json) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+      if (flags.json) printJson(payload);
       else if (active) {
         console.log(`  Active local OpenAI scope: ${active.billingAccountRef} → ${active.upstreamDisplay}`);
         console.log('  Status: operator_declared_unverified; it applies only to future matching proxy traffic.');
@@ -512,12 +647,12 @@ function cmdScope(flags: Flags): void {
       const active = store.activeOpenAiScope();
       if (!flags.apply) {
         const payload = { applied: false, active, message: 'No data written; only future matching proxy rows would become unscoped.' };
-        if (flags.json) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+        if (flags.json) printJson(payload);
         else console.log(active ? `  Would clear local scope ${active.declarationId}; historical request snapshots remain unchanged.` : '  No active local OpenAI scope to clear.');
         return;
       }
       const cleared = store.clearOpenAiScope();
-      if (flags.json) process.stdout.write(JSON.stringify({ applied: true, cleared, reconciliationStatus: 'not_reconciled' }, null, 2) + '\n');
+      if (flags.json) printJson({ applied: true, cleared, reconciliationStatus: 'not_reconciled' });
       else console.log(cleared ? '  Cleared active local OpenAI scope. Future matching proxy rows are unscoped.' : '  No active local OpenAI scope to clear.');
       return;
     }
@@ -526,6 +661,113 @@ function cmdScope(flags: Flags): void {
   }
   scopeUsage();
   process.exitCode = 1;
+}
+
+function mappingUsage(): void {
+  console.error('  Usage: fiscus billing mapping set --record-id <imported-record-id> --project <local-project> --account-ref <local-account> [--apply] [--json]');
+  console.error('         fiscus billing mapping status [--json]');
+  console.error('  Mapping is exact-record, append-only operator evidence. It never rewrites provider lines or request rows.');
+  console.error('  Mapped imported dollars stay excluded from budgets, RoI, and model recommendations until provider scope is authoritative.');
+}
+
+function printMappingStatus(coverage: ReturnType<Store['billingMappingCoverage']>): void {
+  console.log('');
+  console.log('  Imported provider-record mapping coverage');
+  console.log(`  Coverage      ${coverage.coverageStatus}`);
+  console.log(`  Records       ${coverage.mappedRecordCount}/${coverage.totalRecordCount} mapped · ${coverage.unmappedRecordCount} unmapped · ${coverage.staleMappingRecordCount} stale · ${coverage.ambiguousMappingRecordCount} ambiguous`);
+  console.log(`  Amounts       mapped ${formatUsdMicros(coverage.mappedMicros)} USD · residual ${formatUsdMicros(coverage.residualMicros)} USD`);
+  console.log(`  Readiness     ${coverage.reconciliationStatus} — ${coverage.reconciliationDetail}`);
+  console.log(`  Authority     ${coverage.providerScopeAuthority}; mapping trust ${coverage.mappingTrust}`);
+  console.log(`  Excluded      ${coverage.excludedFrom.join(', ') || 'none (only with explicit provider-verified scope)'}`);
+  if (coverage.targets.length > 0) {
+    console.log('  Targets');
+    for (const target of coverage.targets) {
+      console.log(`    ${target.targetAccountRef} / ${target.targetProject}  ${target.recordCount} record(s)  ${formatUsdMicros(target.amountMicros)} USD`);
+    }
+  }
+}
+
+/** Declare an exact imported provider record's local project/account target. */
+function cmdMapping(flags: Flags): void {
+  const action = typeof flags._[1] === 'string' ? flags._[1] : 'status';
+  const store = new Store(dbPath());
+  try {
+    if (action === 'status') {
+      const coverage = store.billingMappingCoverage();
+      const payload = { coverage, mappings: store.billingRecordMappings() };
+      if (flags.json) printJson(payload);
+      else printMappingStatus(coverage);
+      return;
+    }
+    if (action !== 'set') {
+      mappingUsage();
+      process.exitCode = 1;
+      return;
+    }
+    const recordId = typeof flags['record-id'] === 'string' ? flags['record-id'] : null;
+    const targetProject = typeof flags.project === 'string' ? flags.project : null;
+    const targetAccountRef = typeof flags['account-ref'] === 'string' ? flags['account-ref'] : null;
+    if (!recordId || !targetProject || !targetAccountRef) {
+      mappingUsage();
+      process.exitCode = 1;
+      return;
+    }
+    const source = store.billingEvidenceRecords().find((record) => record.recordId === recordId);
+    if (!source) {
+      console.error(`  No imported billing evidence record exists for recordId ${recordId}.`);
+      console.error('  Use fiscus billing export --json to inspect exact record ids; Fiscus will not guess a selector.');
+      process.exitCode = 1;
+      return;
+    }
+    const prior = store.billingRecordMappings().filter((mapping) =>
+      mapping.sourceRecordId === source.sourceRecordId
+      && mapping.billingAccountRef === source.billingAccountRef,
+    ).sort((left, right) => right.mappingVersion - left.mappingVersion)[0] ?? null;
+    const plan = {
+      recordId: source.recordId,
+      sourceRecordId: source.sourceRecordId,
+      sourceRecordSha256: source.sourceRecordSha256,
+      firstImportId: source.firstImportId,
+      provider: source.provider,
+      billingAccountRef: source.billingAccountRef,
+      targetProject,
+      targetAccountRef,
+      nextMappingVersion: prior ? prior.mappingVersion + 1 : 1,
+      trust: 'operator_declared_unverified' as const,
+      excludedFrom: ['budget_enforcement', 'roi', 'model_recommendations'] as const,
+      message: 'Exact source-record mapping only; no provider verification and no request/budget/ROI/recommendation mutation.',
+    };
+    if (!flags.apply) {
+      if (flags.json) printJson({ applied: false, plan });
+      else {
+        console.log('');
+        console.log('  Imported provider-record mapping — dry run');
+        console.log(`  Record        ${plan.recordId} / ${plan.sourceRecordId}`);
+        console.log(`  Source hash   ${plan.sourceRecordSha256}`);
+        console.log(`  Target        ${plan.targetAccountRef} / ${plan.targetProject}`);
+        console.log(`  Version       ${plan.nextMappingVersion}`);
+        console.log('  Trust         operator_declared_unverified');
+        console.log('  No data written. Apply with: fiscus billing mapping set ... --apply');
+      }
+      return;
+    }
+    const result = store.declareBillingRecordMapping({ recordId, targetProject, targetAccountRef });
+    const payload = { applied: true, created: result.created, mapping: result.mapping, excludedFrom: ['budget_enforcement', 'roi', 'model_recommendations'] as const };
+    if (flags.json) printJson(payload);
+    else {
+      console.log(result.created
+        ? `  Recorded mapping version ${result.mapping.mappingVersion} for ${result.mapping.sourceRecordId}.`
+        : `  Identical mapping already recorded as version ${result.mapping.mappingVersion}.`);
+      console.log(`  Target        ${result.mapping.targetAccountRef} / ${result.mapping.targetProject}`);
+      console.log('  Trust         operator_declared_unverified');
+      console.log('  Excluded      budget_enforcement, roi, model_recommendations until provider scope is authoritative.');
+    }
+  } catch (error) {
+    console.error(`  Billing mapping failed: ${error instanceof Error ? error.message : String(error)}`);
+    process.exitCode = 1;
+  } finally {
+    store.close();
+  }
 }
 
 function writeOrPrint(value: string, out: unknown): void {
@@ -552,11 +794,28 @@ function renderPreview(preview: ReturnType<typeof readBillingImportFile>['previe
   console.log('  No data written. Apply with: fiscus billing import --file <evidence.json> --apply');
 }
 
+/** Wrap a sentence to a column, so a condition is readable next to the number it qualifies. */
+function wrapText(text: string, width: number): string[] {
+  const lines: string[] = [];
+  let current = '';
+  for (const word of text.split(/\s+/)) {
+    if (current.length === 0) current = word;
+    else if (current.length + 1 + word.length <= width) current += ` ${word}`;
+    else { lines.push(current); current = word; }
+  }
+  if (current.length > 0) lines.push(current);
+  return lines;
+}
+
 /** `fiscus billing` — immutable local provider-cost evidence, never an implicit reconciliation. */
 export async function cmdBilling(flags: Flags): Promise<void> {
   const action = typeof flags._[0] === 'string' ? flags._[0] : 'status';
   if (action === 'scope') {
     cmdScope(flags);
+    return;
+  }
+  if (action === 'mapping') {
+    cmdMapping(flags);
     return;
   }
   if (action === 'openai-costs') {
@@ -581,20 +840,32 @@ export async function cmdBilling(flags: Flags): Promise<void> {
     try {
       const parsed = readBillingImportFile(flags.file);
       if (!flags.apply) {
-        if (flags.json) process.stdout.write(JSON.stringify({ applied: false, preview: parsed.preview }, null, 2) + '\n');
+        if (flags.json) printJson({ applied: false, preview: parsed.preview });
         else renderPreview(parsed.preview);
         return;
       }
       const store = new Store(dbPath());
       try {
         const result = store.applyBillingImport(parsed.input);
-        const payload = { applied: true, duplicateFile: result.duplicateFile, preview: parsed.preview, run: result.run };
+        // Keep the legacy provider-evidence tables as a compatibility read
+        // model, but issue the same accepted import through the canonical
+        // Evidence/Claim path before reporting success. A failed kernel issue
+        // is surfaced as a failed command; the immutable import remains safely
+        // resumable on retry.
+        const kernel = store.issueBillingImportToKernel(result.run.importId);
+        // Money carries a BigInt coefficient in-process. Convert only the CLI
+        // envelope to the canonical string coefficient so JSON never coerces or
+        // loses accounting precision.
+        const kernelJson = { ...kernel, total: { ...moneyToJson(kernel.total) } };
+        const payload = { applied: true, duplicateFile: result.duplicateFile, preview: parsed.preview, run: result.run, kernel: kernelJson };
         if (flags.json) {
-          process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+          printJson(payload);
         } else if (result.duplicateFile) {
-          console.log(`  Identical billing evidence was already imported as ${result.run.importId}; no duplicate records written.`);
+          console.log(`  Identical billing evidence was already imported as ${result.run.importId}; no duplicate provider records written.`);
+          console.log(`  Canonical kernel replay: ${kernel.recordEvidence.duplicate} Evidence and ${kernel.recordClaims.duplicate} billed Claims already present.`);
         } else {
           console.log(`  Imported ${result.run.recordsInserted} provider-declared charge line(s); ${result.run.recordsDuplicate} already existed.`);
+          console.log(`  Canonical kernel: ${kernel.recordEvidence.inserted} Evidence and ${kernel.recordClaims.inserted} billed Claims issued; aggregate ${kernel.aggregateClaim.id}.`);
           console.log('  Status remains not_reconciled. Provider-reported totals are stored separately from local metered estimates.');
         }
       } finally {
@@ -613,7 +884,7 @@ export async function cmdBilling(flags: Flags): Promise<void> {
       const summary = store.billingSummary();
       const imports = store.billingImportRuns();
       if (flags.json) {
-        process.stdout.write(JSON.stringify({ summary, imports }, null, 2) + '\n');
+        printJson({ summary, imports });
       } else {
         console.log('');
         console.log('  Provider billing evidence');
@@ -631,7 +902,7 @@ export async function cmdBilling(flags: Flags): Promise<void> {
       const records = store.billingEvidenceRecords();
       const summary = store.billingSummary();
       if (flags.json) {
-        writeOrPrint(JSON.stringify({ summary, records }, null, 2) + '\n', flags.out);
+        writeOrPrint(stringifyJson({ summary, records }) + '\n', flags.out);
       } else {
         writeOrPrint(billingEvidenceToCsv(records), flags.out);
       }

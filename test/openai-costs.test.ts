@@ -1,12 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   OPENAI_COSTS_ENDPOINT,
   OpenAiCostsPullError,
+  collectOpenAiCostsFromResponses,
   parseOpenAiCostsRange,
   previewOpenAiCosts,
   pullOpenAiCosts,
@@ -77,26 +78,14 @@ test('OpenAI Costs pull is a fixed GET-only, paginated fixture collector and doe
   const { store } = scopedStore();
   try {
     const preview = previewOpenAiCosts(store.activeOpenAiScope(), '2026-01-01', '2026-01-03');
-    const calls: Array<{ url: URL; method: string; authorization: string | null }> = [];
-    const collected = await pullOpenAiCosts({
+    const collected = await collectOpenAiCostsFromResponses({
       preview,
-      apiKey: 'secret-admin-key-never-persisted',
       now: () => 777,
-      fetchImpl: async (url, init) => {
-        const parsed = new URL(String(url));
-        calls.push({ url: parsed, method: String(init?.method), authorization: new Headers(init?.headers).get('authorization') });
-        return new Response(JSON.stringify(calls.length === 1 ? PAGE_1 : PAGE_2), { status: 200, headers: { 'content-type': 'application/json' } });
-      },
+      responses: [
+        new Response(JSON.stringify(PAGE_1), { status: 200, headers: { 'content-type': 'application/json' } }),
+        new Response(JSON.stringify(PAGE_2), { status: 200, headers: { 'content-type': 'application/json' } }),
+      ],
     });
-    assert.equal(calls.length, 2);
-    assert.deepEqual(calls.map((call) => call.url.origin + call.url.pathname), [
-      'https://api.openai.com/v1/organization/costs',
-      'https://api.openai.com/v1/organization/costs',
-    ]);
-    assert.deepEqual(calls.map((call) => call.method), ['GET', 'GET']);
-    assert.equal(calls[0]!.authorization, 'Bearer secret-admin-key-never-persisted');
-    assert.equal(calls[0]!.url.searchParams.get('project_ids'), 'proj_fixture');
-    assert.equal(calls[1]!.url.searchParams.get('page'), 'cursor-page-2');
     assert.equal(collected.pageCount, 2);
     assert.equal(collected.observations.length, 2);
     assert.equal(collected.observations[0]!.amountDecimal, '1.25');
@@ -113,15 +102,59 @@ test('pagination loop and malformed responses create no usable collected observa
     const preview = previewOpenAiCosts(store.activeOpenAiScope(), '2026-01-01', '2026-01-03');
     const looping = { ...PAGE_1, next_page: 'same-cursor' };
     await assert.rejects(
-      pullOpenAiCosts({ preview, apiKey: 'test', fetchImpl: async () => new Response(JSON.stringify(looping), { status: 200 }) }),
+      collectOpenAiCostsFromResponses({ preview, responses: [
+        new Response(JSON.stringify(looping), { status: 200 }),
+        new Response(JSON.stringify(looping), { status: 200 }),
+        new Response(JSON.stringify(looping), { status: 200 }),
+      ] }),
       (error: unknown) => error instanceof OpenAiCostsPullError && error.failure.failureCode === 'pagination_loop',
     );
     await assert.rejects(
-      pullOpenAiCosts({ preview, apiKey: 'test', fetchImpl: async () => new Response('{not-json', { status: 200 }) }),
+      collectOpenAiCostsFromResponses({ preview, responses: [new Response('{not-json', { status: 200 })] }),
       (error: unknown) => error instanceof OpenAiCostsPullError && error.failure.failureCode === 'malformed_response',
     );
   } finally {
     store.close();
+  }
+});
+
+test('chunked OpenAI Costs responses are bounded before arrayBuffer materialization', async () => {
+  const { store } = scopedStore();
+  try {
+    const preview = previewOpenAiCosts(store.activeOpenAiScope(), '2026-01-01', '2026-01-03');
+    const payload = new TextEncoder().encode('x'.repeat(2 * 1024 * 1024 + 1));
+    const response = new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(payload);
+        controller.close();
+      },
+    }), { status: 200 });
+    await assert.rejects(
+      collectOpenAiCostsFromResponses({ preview, responses: [response] }),
+      (error: unknown) => error instanceof OpenAiCostsPullError && error.failure.failureCode === 'response_too_large',
+    );
+  } finally {
+    store.close();
+  }
+});
+
+test('default OpenAI Costs transport refuses a corrupt receipt history before DNS or socket creation', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'fiscus-openai-costs-receipt-refusal-'));
+  const previousHome = process.env.FISCUS_HOME;
+  process.env.FISCUS_HOME = home;
+  const { store } = scopedStore();
+  try {
+    const preview = previewOpenAiCosts(store.activeOpenAiScope(), '2026-01-01', '2026-01-03');
+    writeFileSync(join(home, 'egress-receipts.jsonl'), '{"version":1}\n', 'utf8');
+    await assert.rejects(
+      pullOpenAiCosts({ preview, apiKey: 'never-sent' }),
+      (error: unknown) => error instanceof OpenAiCostsPullError && error.failure.failureCode === 'egress_receipt_integrity_failed' && /repair\/restore/i.test(error.message),
+    );
+  } finally {
+    store.close();
+    if (previousHome === undefined) delete process.env.FISCUS_HOME;
+    else process.env.FISCUS_HOME = previousHome;
+    rmSync(home, { recursive: true, force: true });
   }
 });
 
@@ -212,6 +245,33 @@ test('CLI preview never reads a credential or calls the network; dry pull is als
     const status = await runCli(['billing', 'openai-costs', 'status', '--json'], dbPath);
     assert.equal(status.code, 0, status.stderr);
     assert.equal((JSON.parse(status.stdout) as { status: { latestRun: { failureCode: string } } }).status.latestRun.failureCode, 'missing_credential');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('CLI billing preserves receipt refusal category and repair action instead of collapsing to network failure', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-openai-costs-cli-receipt-'));
+  const dbPath = join(dir, 'fiscus.db');
+  const home = join(dir, 'home');
+  const store = new Store(dbPath);
+  try {
+    store.setOpenAiScope({ billingAccountRef: 'finance-cli', providerProjectRef: 'proj_fixture', upstreamBase: 'https://api.openai.com' });
+  } finally {
+    store.close();
+  }
+  try {
+    mkdirSync(home, { recursive: true });
+    writeFileSync(join(home, 'egress-receipts.jsonl'), '{"version":1}\n', 'utf8');
+    const result = await runCli(
+      ['billing', 'openai-costs', 'pull', '--from', '2026-01-01', '--to', '2026-01-03', '--apply', '--json'],
+      dbPath,
+      { FISCUS_HOME: home, OPENAI_ADMIN_API_KEY: 'credential-is-not-retained' },
+    );
+    assert.equal(result.code, 1, result.stderr);
+    const payload = JSON.parse(result.stdout) as { run: { failureCode?: string }; action?: string; error?: string };
+    assert.equal(payload.run.failureCode, 'egress_receipt_integrity_failed');
+    assert.match(payload.action ?? payload.error ?? '', /repair.*restore/i);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

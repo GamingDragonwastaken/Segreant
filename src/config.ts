@@ -14,7 +14,23 @@
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import {
+  closeSync,
+  copyFileSync,
+  existsSync,
+  fsyncSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  unlinkSync,
+  writeSync,
+} from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { validateEgressRule } from './egress/ruleValidation.ts';
+import { money, type EconomicBasis, type Money } from './economics/money.ts';
 
 export interface BudgetConfig {
   /** Hard daily cap in USD. Requests are blocked once exceeded. null = unlimited. */
@@ -35,6 +51,167 @@ export interface BudgetConfig {
    * the cap govern total observed AI spend instead of blockable spend.
    */
   capIncludesImported: boolean;
+}
+
+/** Highest USD value that can still round to an exact safe microdollar integer. */
+export const MAX_SAFE_USD = Number.MAX_SAFE_INTEGER / 1_000_000;
+export const MAX_RUNAWAY_WINDOW_SEC = 366 * 24 * 60 * 60;
+
+export class ConfigValidationError extends Error {
+  readonly code = 'CONFIG_INVALID';
+
+  constructor(message: string) {
+    super(`CONFIG_INVALID: ${message}`);
+    this.name = 'ConfigValidationError';
+  }
+}
+
+function validNullableUsd(value: unknown): value is number | null {
+  return value === null || (
+    typeof value === 'number'
+    && Number.isFinite(value)
+    && value >= 0
+    && value <= MAX_SAFE_USD
+  );
+}
+
+/** Validate the budget object before it can reach enforcement or persistence. */
+export function validateBudgetConfig(value: unknown): asserts value is BudgetConfig {
+  if (!isRecord(value)) throw new ConfigValidationError('budget must be an object');
+  for (const key of ['dailyUsd', 'dailySoftUsd', 'sessionUsd', 'runawayMaxUsd'] as const) {
+    if (!validNullableUsd(value[key])) {
+      throw new ConfigValidationError(`budget.${key} must be null or a finite non-negative USD value`);
+    }
+  }
+  if (typeof value.runawayWindowSec !== 'number'
+      || !Number.isFinite(value.runawayWindowSec)
+      || value.runawayWindowSec <= 0
+      || value.runawayWindowSec > MAX_RUNAWAY_WINDOW_SEC) {
+    throw new ConfigValidationError(`budget.runawayWindowSec must be a finite positive value no greater than ${MAX_RUNAWAY_WINDOW_SEC}`);
+  }
+  if (typeof value.capIncludesImported !== 'boolean') {
+    throw new ConfigValidationError('budget.capIncludesImported must be boolean');
+  }
+}
+
+/**
+ * The one place a JS number becomes an exact decimal string.
+ *
+ * A cap arrives from JSON as a binary double. The decimal it was WRITTEN to mean
+ * is its shortest round-trip representation — `String(0.1)` is `"0.1"`, the ten
+ * cents the operator typed, not the `0.1000000000000000055511151231257827` the
+ * double actually holds. That is the figure a cap states, so that is the figure
+ * enforcement must use.
+ *
+ * `String` emits exponent form outside a middle band (`1e-7`, `1e+21`), which is
+ * not a plain decimal, so it is expanded here digit-for-digit. The expansion is
+ * lossless and TOTAL over every finite number: a cap of `1e-7` is a legitimate
+ * configuration and must not become unreadable merely because of how JS prints
+ * it. Anything not finite has no decimal to state and throws — see
+ * `exactUsdCap`.
+ */
+export function decimalStringFromNumber(value: number, label: string): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new ConfigValidationError(`${label} must be a finite number, got ${String(value)}`);
+  }
+  const text = String(value);
+  const marker = text.indexOf('e');
+  if (marker === -1) return text;
+  const mantissa = text.slice(0, marker);
+  const exponent = Number(text.slice(marker + 1));
+  const negative = mantissa.startsWith('-');
+  const unsigned = negative ? mantissa.slice(1) : mantissa;
+  const [whole = '0', fraction = ''] = unsigned.split('.');
+  const digits = `${whole}${fraction}`;
+  const point = whole.length + exponent;
+  let plain: string;
+  if (point <= 0) plain = `0.${'0'.repeat(-point)}${digits}`;
+  else if (point >= digits.length) plain = `${digits}${'0'.repeat(point - digits.length)}`;
+  else plain = `${digits.slice(0, point)}.${digits.slice(point)}`;
+  return `${negative ? '-' : ''}${plain}`;
+}
+
+/**
+ * The economic basis stamped on a parsed cap.
+ *
+ * It is INERT. A cap is a policy threshold, not an economic observation — it has
+ * no basis of its own, and enforcement re-labels it to the basis of whichever
+ * figure it is compared against (see `compareEnforcedUsd` in
+ * src/budget/guard.ts), with `SpendBasis.enforcedAgainst` recording which basis
+ * actually bound the decision. `Money` requires the field, so caps carry the
+ * basis of the exact projection they most often bound.
+ */
+const CAP_BASIS: EconomicBasis = 'effective';
+
+/** Budget caps as exact `Money`, parsed once per configuration. `null` = that cap is off. */
+export interface ExactBudgetCaps {
+  readonly dailyUsd: Money | null;
+  readonly dailySoftUsd: Money | null;
+  readonly sessionUsd: Money | null;
+  readonly runawayMaxUsd: Money | null;
+}
+
+const CAP_KEYS = ['dailyUsd', 'dailySoftUsd', 'sessionUsd', 'runawayMaxUsd'] as const;
+
+/**
+ * Parse one cap, or refuse.
+ *
+ * There is deliberately no fallback. A cap that cannot be read as exact money is
+ * a CONFIGURATION FAILURE, and the only safe reading of a broken limit is that
+ * enforcement is unavailable — never that the limit is absent. Hard rule 5: an
+ * unparseable cap silently becoming "no limit" would turn the guard into an
+ * unmetered path, which is the failure the rule exists to prevent. The throw
+ * propagates out of `BudgetGuard.evaluate`, where the proxy latches its
+ * accounting-failure state and answers 503 `budget_enforcement_unavailable`
+ * without forwarding.
+ */
+function exactUsdCap(value: number | null, label: string): Money | null {
+  if (value === null) return null;
+  const decimal = decimalStringFromNumber(value, label);
+  let parsed: Money;
+  try {
+    parsed = money(decimal, 'USD', CAP_BASIS);
+  } catch (error) {
+    throw new ConfigValidationError(`${label} is not an exact USD amount: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (parsed.coefficient < 0n) throw new ConfigValidationError(`${label} must not be negative`);
+  return parsed;
+}
+
+/**
+ * Caps are parsed ONCE per configuration, not once per request.
+ *
+ * The proxy hands `BudgetGuard` a getter over the live config object so a saved
+ * cap takes effect without a restart, which means the guard re-reads the budget
+ * on every request. Re-deriving `Money` each time would put string and BigInt
+ * work on the hot path for a value that changes only when an operator changes
+ * it. The cache is keyed on the config object and re-validated against the four
+ * cap numbers, so both ways a cap can change — a settings save replacing the
+ * object, or a CLI writing into it in place — invalidate it. A cap that fails to
+ * parse is never cached; it throws again on every request, which is the point.
+ */
+interface CachedCaps {
+  readonly caps: ExactBudgetCaps;
+  readonly source: readonly (number | null)[];
+}
+
+const CAP_CACHE = new WeakMap<BudgetConfig, CachedCaps>();
+
+export function exactBudgetCaps(cfg: BudgetConfig): ExactBudgetCaps {
+  const source = CAP_KEYS.map((key) => cfg[key]);
+  const cached = CAP_CACHE.get(cfg);
+  if (cached && cached.source.length === source.length
+      && cached.source.every((value, index) => Object.is(value, source[index]))) {
+    return cached.caps;
+  }
+  const caps: ExactBudgetCaps = Object.freeze({
+    dailyUsd: exactUsdCap(cfg.dailyUsd, 'budget.dailyUsd'),
+    dailySoftUsd: exactUsdCap(cfg.dailySoftUsd, 'budget.dailySoftUsd'),
+    sessionUsd: exactUsdCap(cfg.sessionUsd, 'budget.sessionUsd'),
+    runawayMaxUsd: exactUsdCap(cfg.runawayMaxUsd, 'budget.runawayMaxUsd'),
+  });
+  CAP_CACHE.set(cfg, { caps, source });
+  return caps;
 }
 
 export interface AlertsConfig {
@@ -84,8 +261,9 @@ export interface PricingConfig {
   maxAgeDays: number;
   /**
    * When true, `fiscus start` refreshes pricing on launch if the cache is
-   * older than maxAgeDays. OFF by default to keep "zero external requests" true
-   * out of the box — the manual `fiscus pricing --refresh` always works.
+   * older than maxAgeDays. OFF by default so a normal local start has no
+   * optional manifest request. Any refresh still needs a matching controlled
+   * cloud egress rule; a denied refresh leaves the active local table intact.
    */
   autoRefresh: boolean;
 }
@@ -112,7 +290,9 @@ export interface JudgeConfig {
    * Local OpenAI-compatible inference server for the AI-side Lift judge (e.g. a
    * local Ollama). null = the local-LLM judge tier is off. A separate field from
    * upstreams.openai on purpose — judge calls are never metered proxy traffic and
-   * must never share a base URL with what's actually being measured.
+   * must never share a base URL with what's actually being measured. The tier's
+   * egress evidence treats only a validated loopback URL as on-device; another
+   * configured URL is reported as remote/off-device.
    */
   localBaseUrl: string | null;
   /**
@@ -157,6 +337,50 @@ export interface JudgeConfig {
   hostedSendFullContent: boolean;
 }
 
+/**
+ * A permission is specific to why Fiscus is sending a request and what class of
+ * data the request may carry. A rule never acts as a generic network wildcard.
+ */
+export type EgressPurpose =
+  | 'provider_inference'
+  | 'pricing_refresh'
+  | 'baseline_refresh'
+  | 'alert_delivery'
+  | 'provider_cost_observation'
+  | 'team_rollup'
+  | 'hosted_judge'
+  | 'local_judge'
+  | 'local_healthcheck';
+
+export type EgressDataClass =
+  | 'provider_request'
+  | 'pricing_manifest'
+  | 'baseline_manifest'
+  | 'alert_metadata'
+  | 'provider_cost_aggregate'
+  | 'team_rollup'
+  | 'judge_structural_summary'
+  | 'judge_transcript_excerpt'
+  | 'healthcheck';
+
+export interface EgressRule {
+  id: string;
+  enabled: boolean;
+  purpose: EgressPurpose;
+  dataClass: EgressDataClass;
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD';
+  /** Exact HTTPS origin only: no credential, query, fragment, or wildcard. */
+  origin: string;
+  /** Absolute leading path prefix only; query matching is never delegated to a rule. */
+  pathPrefix: string;
+}
+
+export interface EgressConfig {
+  /** Local mode refuses every non-loopback Fiscus HTTP(S) target before DNS. */
+  mode: 'local_locked' | 'controlled_cloud';
+  rules: EgressRule[];
+}
+
 export interface FiscusConfig {
   port: number;
   dashboardPort: number;
@@ -186,14 +410,15 @@ export interface FiscusConfig {
   judge: JudgeConfig;
   pricing: PricingConfig;
   perUser: PerUserConfig;
+  egress: EgressConfig;
   /** Prune request rows older than this many days during maintenance. */
   retentionDays: number;
   /**
    * When true, the proxy stores ONLY token/cost metadata and skips capturing
    * proposed-edit content. That turns OFF First-Pass Acceptance (the proposal⇄commit
    * diff needs the AI's proposed lines stored locally). Default false so the signal
-   * works out of the box. Either way nothing is ever sent off-device — this only
-   * controls what is persisted in the local DB.
+   * works out of the box. This only controls what is persisted in the local DB;
+   * provider traffic still follows the configured egress boundary.
    */
   metadataOnly: boolean;
   /**
@@ -261,6 +486,12 @@ export const DEFAULT_CONFIG: FiscusConfig = {
   perUser: {
     enabled: false,
     minCohort: 5,
+  },
+  // Strong default: local operation works immediately, while any cloud route
+  // needs a deliberate, inspectable exact rule created through `fiscus egress`.
+  egress: {
+    mode: 'local_locked',
+    rules: [],
   },
   retentionDays: 180,
   metadataOnly: false,
@@ -374,24 +605,220 @@ function deepMerge<T>(base: T, override: Partial<T>): T {
   return out as T;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/** TCP ports are finite, integral values in the IANA-assigned 1..65535 range. */
+function sanitizePort(value: unknown, fallback: number): number {
+  return typeof value === 'number'
+    && Number.isFinite(value)
+    && Number.isInteger(value)
+    && value >= 1
+    && value <= 65535
+    ? value
+    : fallback;
+}
+
+/**
+ * JSON configuration is an untrusted boundary. Deep merge is useful for the
+ * broad config surface, but it cannot decide whether an egress object is
+ * authorization data. An absent or ambiguous egress object therefore returns
+ * the local-locked default; a controlled-cloud object must have an exact mode,
+ * an array of exact rule shapes, and boolean enabled flags.
+ */
+function sanitizeEgressConfig(value: unknown): EgressConfig {
+  if (!isRecord(value)) return { mode: 'local_locked', rules: [] };
+  if (value.mode !== 'local_locked' && value.mode !== 'controlled_cloud') {
+    return { mode: 'local_locked', rules: [] };
+  }
+  const keys = Object.keys(value).sort();
+  if (keys.length !== 2 || keys[0] !== 'mode' || keys[1] !== 'rules') {
+    return { mode: 'local_locked', rules: [] };
+  }
+  if (!Array.isArray(value.rules) || !value.rules.every((rule) => validateEgressRule(rule).length === 0)) {
+    return { mode: 'local_locked', rules: [] };
+  }
+  return {
+    mode: value.mode as EgressConfig['mode'],
+    rules: value.rules.map((rule) => ({ ...rule } as EgressRule)),
+  };
+}
+
 export function loadConfig(): FiscusConfig {
   const path = configPath();
   let cfg: FiscusConfig;
   if (!existsSync(path)) {
     cfg = { ...DEFAULT_CONFIG };
   } else {
+    let raw: unknown;
     try {
-      const raw = JSON.parse(readFileSync(path, 'utf8')) as Partial<FiscusConfig>;
-      cfg = deepMerge(DEFAULT_CONFIG, raw);
-    } catch {
-      // A corrupt config should never take the daemon down. Fall back to defaults.
-      cfg = { ...DEFAULT_CONFIG };
+      raw = JSON.parse(readFileSync(path, 'utf8')) as unknown;
+    } catch (error) {
+      throw new ConfigValidationError(
+        `cannot parse ${path}; repair or restore ${path}.bak before starting Fiscus (${error instanceof Error ? error.message : String(error)})`,
+      );
     }
+    if (!isRecord(raw)) throw new ConfigValidationError(`configuration root in ${path} must be an object`);
+    cfg = deepMerge(DEFAULT_CONFIG, raw as Partial<FiscusConfig>);
+    cfg = { ...cfg, egress: sanitizeEgressConfig(raw.egress) };
   }
+  // Ports cross into URL, server, and copy-paste command construction. Never
+  // interpolate an untrusted JSON value into those surfaces: malformed values
+  // (including shell-like strings) fail closed to the known-good defaults.
+  cfg = {
+    ...cfg,
+    port: sanitizePort(cfg.port, DEFAULT_CONFIG.port),
+    dashboardPort: sanitizePort(cfg.dashboardPort, DEFAULT_CONFIG.dashboardPort),
+  };
+  validateBudgetConfig(cfg.budget);
   return isDemo() ? withDemoDefaults(cfg) : cfg;
 }
 
-export function saveConfig(config: FiscusConfig): void {
+export interface ConfigMutationLock {
+  readonly path: string;
+  readonly token: string;
+  release(): void;
+}
+
+function configLockOwner(path: string): { token?: unknown } | null {
+  try {
+    const stat = statSync(path);
+    if (!stat.isFile() || stat.size > 4096) return null;
+    const parsed = JSON.parse(readFileSync(path, 'utf8')) as unknown;
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * One Fiscus writer at a time may replace config.json.
+ *
+ * The lock is deliberately fail-closed and is never stolen on a timer. A stale
+ * lock is an operator-visible recovery artifact, which is safer than allowing an
+ * autonomous controller and an interactive settings command to overwrite each
+ * other's generation.
+ */
+export function acquireConfigMutationLock(): ConfigMutationLock {
+  const home = ensureHome();
+  const path = join(home, 'config.lock');
+  const token = randomUUID();
+  let descriptor: number;
+  try {
+    descriptor = openSync(path, 'wx', 0o600);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === 'EEXIST') {
+      throw new ConfigValidationError(
+        `config mutation is already active or left a stale lock at ${path}; reconcile it before writing configuration`,
+      );
+    }
+    throw error;
+  }
+  try {
+    writeSync(
+      descriptor,
+      JSON.stringify({ pid: process.pid, token, startedAt: new Date().toISOString() }) + '\n',
+      undefined,
+      'utf8',
+    );
+    fsyncSync(descriptor);
+  } catch (error) {
+    try { closeSync(descriptor); } catch { /* preserve original error */ }
+    try { unlinkSync(path); } catch { /* stale owned lock is safer than another writer */ }
+    throw error;
+  }
+  closeSync(descriptor);
+
+  let released = false;
+  return Object.freeze({
+    path,
+    token,
+    release() {
+      if (released) return;
+      released = true;
+      const owner = configLockOwner(path);
+      if (owner?.token !== token) return;
+      try { unlinkSync(path); } catch { /* fail closed: leave the owned artifact visible */ }
+    },
+  });
+}
+
+function assertConfigMutationLock(lock: ConfigMutationLock): void {
+  const expected = join(ensureHome(), 'config.lock');
+  if (lock.path !== expected) {
+    throw new ConfigValidationError('config mutation lock belongs to a different Fiscus home');
+  }
+  const owner = configLockOwner(lock.path);
+  if (owner?.token !== lock.token) {
+    throw new ConfigValidationError('config mutation lock ownership cannot be proven');
+  }
+}
+
+function persistConfigUnlocked(config: FiscusConfig): void {
   ensureHome();
-  writeFileSync(configPath(), JSON.stringify(config, null, 2) + '\n', 'utf8');
+  validateBudgetConfig(config.budget);
+  const path = configPath();
+  const tempPath = `${path}.tmp-${randomUUID()}`;
+  const backupPath = `${path}.bak`;
+  const text = JSON.stringify(config, null, 2) + '\n';
+  let descriptor: number | null = null;
+  try {
+    // Preserve the previous known-good config before replacing it. The target
+    // itself is replaced by a flushed sibling rename, so readers never observe
+    // a partially written JSON document on filesystems where rename replaces.
+    if (existsSync(path)) copyFileSync(path, backupPath);
+    descriptor = openSync(tempPath, 'wx', 0o600);
+    writeSync(descriptor, text, undefined, 'utf8');
+    fsyncSync(descriptor);
+    closeSync(descriptor);
+    descriptor = null;
+    renameSync(tempPath, path);
+  } catch (error) {
+    if (descriptor !== null) closeSync(descriptor);
+    if (existsSync(tempPath)) unlinkSync(tempPath);
+    throw new ConfigValidationError(`cannot persist ${path}; previous configuration was retained when possible (${error instanceof Error ? error.message : String(error)})`);
+  }
+}
+
+/** Persist while the caller owns the shared config mutation generation. */
+export function saveConfigWithLock(config: FiscusConfig, lock: ConfigMutationLock): void {
+  assertConfigMutationLock(lock);
+  persistConfigUnlocked(config);
+}
+
+/**
+ * Atomic Fiscus read-modify-write transaction.
+ *
+ * Product code that wants to change part of the configuration should use this
+ * instead of loading a snapshot and later calling saveConfig(): the latter can
+ * overwrite a newer generation even when the final rename itself is serialized.
+ */
+export function mutateConfig(
+  mutator: (current: FiscusConfig) => FiscusConfig | void,
+): FiscusConfig {
+  const lock = acquireConfigMutationLock();
+  try {
+    const current = loadConfig();
+    const working = structuredClone(current);
+    const result = mutator(working);
+    const next = result ?? working;
+    persistConfigUnlocked(next);
+    return next;
+  } finally {
+    lock.release();
+  }
+}
+
+/**
+ * Authoritative full replacement. Prefer mutateConfig() for product
+ * read-modify-write paths so the read participates in the same lock generation.
+ */
+export function saveConfig(config: FiscusConfig): void {
+  const lock = acquireConfigMutationLock();
+  try {
+    persistConfigUnlocked(config);
+  } finally {
+    lock.release();
+  }
 }

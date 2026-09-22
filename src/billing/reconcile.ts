@@ -35,6 +35,9 @@
  */
 
 import { usdMicros, formatUsdMicros } from './types.ts';
+import { formatMoneyAmount } from '../economics/money.ts';
+import { barredUses, type ClaimUse } from '../epistemic/claim-uses.ts';
+import { claimProfile, type ClaimProfile } from '../epistemic/profile.ts';
 import type { OpenAiCostsObservationLine, OpenAiCostsObservationRun, RequestRow } from '../store/db.ts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -54,7 +57,9 @@ export type ReconciliationRefusal =
   | 'no_provider_observation'
   | 'observation_period_may_still_accrue'
   | 'provider_currency_is_not_usd'
-  | 'provider_reported_multiple_currencies';
+  | 'provider_reported_multiple_currencies'
+  | 'local_exact_amount_is_not_usd'
+  | 'local_exact_amount_requires_explicit_quantization';
 
 /**
  * Why one day's two numbers differ. Structural only — this says what SHAPE the
@@ -107,17 +112,27 @@ export type ProviderSourceKind =
   | 'legacy_unknown';
 
 /**
- * The permanent limits of a reconciliation. Four always apply. The fifth applies
- * only when the provider side was operator-supplied, which is why this is a list
- * rather than a fixed tuple — a condition that appears and disappears with the
- * evidence is exactly the kind a reader must be able to see.
+ * The limits of a reconciliation. Four are permanent and always apply. The other
+ * two appear and disappear with the evidence, which is why this is a list rather
+ * than a fixed tuple — a condition that comes and goes is exactly the kind a
+ * reader must be able to see.
+ *
+ * `provider_report_is_operator_supplied_and_unverified` is present when a person
+ * handed Fiscus the provider's figures.
+ *
+ * `local_ledger_truncated_by_retention` is present when retention deleted
+ * request rows from inside this period. It is the only condition on this list
+ * that Fiscus itself CAUSED and RECORDED rather than merely being unable to
+ * exclude, which is why its countermodel is `realized` rather than `live`
+ * (D-173).
  */
 export type ReconciliationCondition =
   | 'local_route_scope_is_not_provider_verified'
   | 'off_path_provider_usage_is_not_observable'
   | 'provider_line_items_do_not_join_to_requests_or_models'
   | 'local_request_amounts_are_rate_card_estimates'
-  | 'provider_report_is_operator_supplied_and_unverified';
+  | 'provider_report_is_operator_supplied_and_unverified'
+  | 'local_ledger_truncated_by_retention';
 
 export const PERMANENT_CONDITIONS: readonly ReconciliationCondition[] = [
   'local_route_scope_is_not_provider_verified',
@@ -153,6 +168,13 @@ export interface ReconciliationRun {
     materialDays: number;
   };
   days: ReconciliationDayLine[];
+  /**
+   * What the residual bounds, and whether it bounds anything at all (AII-002).
+   * A residual near zero invites the reading "then nothing went off-path", and
+   * that reading is an absence inference the arithmetic does not license. See
+   * `offPathBoundFromResidual`.
+   */
+  offPathBound: OffPathBound;
   snapshotStability: SnapshotStability;
   /** Days whose provider total changed between independent observations. */
   unstableDayStartMs: number[];
@@ -165,7 +187,129 @@ export interface ReconciliationRun {
   /** Permanent limits of this result. They are conditions, not defects. */
   conditions: readonly ReconciliationCondition[];
   trust: 'scope_conditional_reconciliation';
-  excludedFrom: readonly ['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations'];
+  /** `barredUses(reconciliationClaimProfile(), RECONCILIATION_EXCLUDED_FLOOR)` (D-228). */
+  excludedFrom: readonly ClaimUse[];
+}
+
+/**
+ * The uses a reconciliation bars in writing. Its profile carries
+ * `monetaryBasis: mixed`, and the vocabulary ADMITS `mixed` to the two
+ * definitional uses because the metered path also emits it when some requests
+ * were estimated — so for this surface the floor is stricter than `admits`,
+ * and it stays: a billed-against-metered comparison is neither figure.
+ */
+export const RECONCILIATION_EXCLUDED_FLOOR: readonly ClaimUse[] = Object.freeze(['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations']);
+
+/**
+ * The profile `src/billing/epistemic.ts` issues for a reconciliation claim.
+ * Constant by construction: every reconciliation is a partial-coverage,
+ * mixed-basis comparison (D-115), so the derived exclusions are constant too.
+ */
+export function reconciliationClaimProfile(): ClaimProfile {
+  return claimProfile({
+    epistemic: 'supported', integrity: 'verified', authenticity: 'self_asserted', scope: 'conditional', coverage: 'partial', measurement: 'proxy_unvalidated',
+    causality: 'none', monetaryBasis: 'mixed', finality: 'provisional', decisionFitness: 'not_assessed',
+  });
+}
+
+/**
+ * What a residual can and cannot say about spend that never passed through
+ * Fiscus (AII-002).
+ *
+ * Write P for the provider's reported total on the declared scope, L for what
+ * Fiscus metered on it, T for the true billed cost of the traffic that DID pass
+ * through, and O for the true billed cost of the traffic that did not. The
+ * provider bills both, so P = T + O, and the residual is
+ *
+ *   R = P - L = O + (T - L)
+ *
+ * Therefore `O <= R` holds exactly when `L <= T`: when the local rate-card
+ * ESTIMATE does not exceed the true billed cost of on-path traffic. That is a
+ * condition, not a fact, and it is the reason a residual is an upper bound
+ * rather than a measurement.
+ *
+ * R < 0 is the interesting case. It says L > P = T + O >= T, which REFUTES the
+ * condition outright: the local estimate exceeds everything the provider billed
+ * on this scope. No upper bound on off-path spend survives, because local
+ * over-estimation has absorbed an unknown amount of it. Reporting "unexplained:
+ * -$3.10" and letting a reader conclude that nothing went off-path is inferring
+ * absence from an observation that specifically undermines the inference.
+ *
+ * RETENTION BREAKS THE ONE QUANTITY THIS CAN OBSERVE, AND ONLY IN ONE DIRECTION
+ * (D-173). `fiscus prune` deletes request rows on the operator's own policy. It
+ * changes neither P, T nor O — it changes what can be COMPUTED for L. The
+ * surviving ledger yields `L' = L - D` for a deleted on-path amount `D >= 0`
+ * that no surviving row records, so the computed residual is `R' = R + D`.
+ *
+ *   A REFUTATION SURVIVES IT. `R' < 0` implies `R = R' - D <= R' < 0`, so a
+ *   negative residual still establishes `L > T`. Truncation can only HIDE a
+ *   refutation, never manufacture one, and discarding a sound conclusion
+ *   because the ledger was pruned would be caution that costs information.
+ *
+ *   AN UPPER BOUND DOES NOT. `R' >= 0` says nothing about the sign of R,
+ *   because D is unknown. So the bound is not established, and reporting it is
+ *   an absence produced by deletion read as an absence of events — the exact
+ *   inference this type exists to refuse.
+ *
+ * Measured before it was written down: a provider total of $10.00 against two
+ * metered days of $6.00 gave `-$2.00` and `none_local_estimate_exceeds_provider`;
+ * deleting the first day gave `+$4.00` and `upper_bound_conditional`, with
+ * nothing anywhere in the run naming retention.
+ */
+export type OffPathBound =
+  /** `O <= R`, conditional on the route declaration and on `L <= T`. */
+  | 'upper_bound_conditional'
+  /** The local estimate exceeds the provider total, so no upper bound holds. */
+  | 'none_local_estimate_exceeds_provider'
+  /**
+   * Retention deleted request rows inside this period, so the local total is a
+   * known undercount by an unknown amount and the residual classifies nothing.
+   * A refusal to classify, not a weaker classification.
+   */
+  | 'unknown_local_total_truncated_by_retention';
+
+/**
+ * Classify what this residual bounds.
+ *
+ * A pure function of the two totals and one recorded fact: it introduces no
+ * threshold and no materiality, because the question is which inequality holds,
+ * not whether the gap is large. The truncation branch is deliberately SECOND —
+ * a negative residual is sound whether or not the ledger was pruned, and
+ * refusing it under truncation would throw away the stronger conclusion.
+ */
+export function offPathBoundFromResidual(
+  providerMicros: number,
+  localMicros: number,
+  localTruncatedByRetention: boolean,
+): OffPathBound {
+  if (providerMicros - localMicros < 0) return 'none_local_estimate_exceeds_provider';
+  return localTruncatedByRetention ? 'unknown_local_total_truncated_by_retention' : 'upper_bound_conditional';
+}
+
+/**
+ * One sentence an operator can act on, for each bound state.
+ *
+ * A `Record` keyed by the union rather than a chain of comparisons, so a state
+ * added to `OffPathBound` without a sentence fails to type-check. The keys are
+ * also the vocabulary — `OFF_PATH_BOUNDS` below is derived from them, so no
+ * second list can fall behind this one.
+ */
+const OFF_PATH_BOUND_WORDS: Readonly<Record<OffPathBound, string>> = Object.freeze({
+  upper_bound_conditional:
+    'Upper bound on spend that never passed through Fiscus — conditional on your route declaration and on the local rate-card estimate not exceeding the true on-path billed cost. Not a measurement of off-path spend.',
+  none_local_estimate_exceeds_provider:
+    'No upper bound on off-path spend: the local rate-card estimate exceeds the provider total for this scope, so over-estimation has absorbed an unknown amount of it. A residual at or below zero is not evidence that nothing went off-path.',
+  unknown_local_total_truncated_by_retention:
+    'This residual bounds nothing: retention deleted request rows from inside this period, so the local total is a known undercount by an unknown amount and the difference is inflated by traffic Fiscus metered and then deleted. Reconcile a period that starts at or after the retention boundary, or lengthen retention before relying on this figure.',
+});
+
+/** Every bound state, so a caller can sweep them without maintaining a second list. */
+export const OFF_PATH_BOUNDS = Object.freeze(
+  Object.keys(OFF_PATH_BOUND_WORDS) as OffPathBound[],
+) as readonly OffPathBound[];
+
+export function describeOffPathBound(bound: OffPathBound): string {
+  return OFF_PATH_BOUND_WORDS[bound];
 }
 
 export interface ReconciliationRefused {
@@ -225,6 +369,16 @@ export function reconcileOpenAiCosts(input: {
   run: OpenAiCostsObservationRun;
   observations: readonly OpenAiCostsObservationLine[];
   requests: readonly RequestRow[];
+  /**
+   * The recorded retention boundary for `requests`, or null when no prune is on
+   * record (D-170's third state: unknown, NOT "nothing was pruned").
+   *
+   * REQUIRED, and required on purpose. `requests` is handed in already read, so
+   * this function cannot see that rows are missing; an optional field would let
+   * a caller reintroduce the defect by saying nothing, which is the shape of
+   * the bug rather than a guard against it.
+   */
+  requestsPrunedBeforeMs: number | null;
   priorDayTotals?: ReadonlyMap<number, number> | null;
   materialityUsd?: number;
   now?: number;
@@ -235,6 +389,12 @@ export function reconcileOpenAiCosts(input: {
   // A run recorded before the distinction existed is `legacy_unknown`, never
   // assumed to be an API pull just because that was the only path at the time.
   const sourceKind: ProviderSourceKind = input.run.sourceKind ?? 'legacy_unknown';
+  // STRICTLY BEFORE. `prune` deletes rows with `ts_epoch_ms < before_ms`, so the
+  // boundary instant itself survived and a period starting exactly there is
+  // intact. A null boundary is "no prune on record" and licenses nothing in
+  // either direction, so it is not truncation either.
+  const truncatedByRetention = input.requestsPrunedBeforeMs !== null
+    && input.run.periodStartMs < input.requestsPrunedBeforeMs;
 
   if (input.run.resultState !== 'succeeded' || !input.run.paginationComplete) {
     return refuse('no_provider_observation', 'a reconciliation needs one complete, successful provider observation');
@@ -267,10 +427,31 @@ export function reconcileOpenAiCosts(input: {
     if (row.tsEpochMs < input.run.periodStartMs || row.tsEpochMs >= input.run.periodEndMs) continue;
     const key = utcDayStart(row.tsEpochMs);
     const bucket = localByDay.get(key) ?? { micros: 0, requests: 0 };
-    // Round per row, then sum as integers: accumulating floats and rounding
-    // once at the end drifts, and a reconciliation is the last place that is
-    // acceptable.
-    bucket.micros += Math.round(row.costUsd * 1_000_000);
+    let capturedMicros: number;
+    if (row.economicAmount !== undefined) {
+      if (row.economicAmount.currency !== 'USD') {
+        return refuse(
+          'local_exact_amount_is_not_usd',
+          `request ${row.requestId} has an exact local amount in ${row.economicAmount.currency}; this reconciliation has no FX policy`,
+        );
+      }
+      try {
+        // Preserve the canonical exact amount until the fixed-point boundary.
+        // If it cannot be represented in provider microdollars, refusing is safer
+        // than inventing a rounding mode for a consequential comparison.
+        capturedMicros = usdMicros(formatMoneyAmount(row.economicAmount), `request ${row.requestId} exact amount`);
+      } catch (error) {
+        return refuse(
+          'local_exact_amount_requires_explicit_quantization',
+          `request ${row.requestId} exact local amount cannot be represented in microdollars without an explicit quantization policy: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    } else {
+      // Legacy rows have no exact economic event. Retain their compatibility
+      // projection explicitly as the rate-card estimate documented by the result.
+      capturedMicros = Math.round(row.costUsd * 1_000_000);
+    }
+    bucket.micros += capturedMicros;
     bucket.requests += 1;
     localByDay.set(key, bucket);
   }
@@ -339,6 +520,7 @@ export function reconcileOpenAiCosts(input: {
     providerReportedMicros: providerTotal,
     localCapturedMicros: localTotal,
     unexplainedVarianceMicros: providerTotal - localTotal,
+    offPathBound: offPathBoundFromResidual(providerTotal, localTotal, truncatedByRetention),
     coverage: {
       providerDays: providerByDay.size,
       localDays: localByDay.size,
@@ -353,12 +535,15 @@ export function reconcileOpenAiCosts(input: {
     providerSourceKind: sourceKind,
     // The fifth condition appears only when it is true. A reader who sees four
     // is looking at figures Fiscus read from the provider; a reader who sees
-    // five is looking at figures a person handed it.
-    conditions: sourceKind === 'operator_supplied_export'
-      ? [...PERMANENT_CONDITIONS, 'provider_report_is_operator_supplied_and_unverified']
-      : PERMANENT_CONDITIONS,
+    // five is looking at figures a person handed it. The sixth appears only
+    // when retention deleted rows from inside the period.
+    conditions: [
+      ...PERMANENT_CONDITIONS,
+      ...(sourceKind === 'operator_supplied_export' ? ['provider_report_is_operator_supplied_and_unverified' as const] : []),
+      ...(truncatedByRetention ? ['local_ledger_truncated_by_retention' as const] : []),
+    ],
     trust: 'scope_conditional_reconciliation',
-    excludedFrom: ['request_metered_spend', 'budget_enforcement', 'roi', 'model_recommendations'],
+    excludedFrom: barredUses(reconciliationClaimProfile(), RECONCILIATION_EXCLUDED_FLOOR),
   };
 }
 
@@ -400,6 +585,16 @@ export function signedUsd(micros: number): string {
  * them too late. This is reported BEFORE the credential step.
  */
 export interface ReconciliationCoverage {
+  /**
+   * The declaration these three buckets were split against, or null when no
+   * route was active at the time (D-187).
+   *
+   * Hard rule 1: every figure carries its basis. Without this a null-basis
+   * split — where nothing CAN be on the declared route — is indistinguishable
+   * from a split where the rows genuinely carry some other declaration, and the
+   * two want different explanations.
+   */
+  declaredScopeId: string | null;
   /** Rows that would count: live proxy traffic carrying the declaration. */
   onDeclaredRouteUsd: number;
   onDeclaredRouteRequests: number;
@@ -414,6 +609,27 @@ export interface ReconciliationCoverage {
 export interface ReconciliationReadiness {
   ready: boolean;
   missing: Array<{ step: string; detail: string; ownerAction: boolean }>;
-  /** Null when no OpenAI spend exists at all, so there is nothing to warn about. */
+  /**
+   * The local buckets, or null when the query behind them found no OpenAI rows.
+   *
+   * A null used to be documented here as "no OpenAI spend exists at all, so
+   * there is nothing to warn about". A prune makes that false, so read it with
+   * `localLedgerRetention` and treat the pair as three states:
+   *
+   *   null, no prune on record  — this machine never metered OpenAI spend.
+   *   null, prune on record     — none SURVIVES. Whether any existed cannot be
+   *                               read from here, and must not be asserted.
+   *   non-null, truncated       — the figures are over surviving rows only.
+   */
   coverage: ReconciliationCoverage | null;
+  /**
+   * Whether a request prune is on record for this ledger (D-186).
+   *
+   * The predicate is deliberately not a window comparison. The query behind
+   * `coverage` sums the entire ledger with no period bound, so the only honest
+   * condition is whether ANY deletion has happened — including one that removed
+   * nothing, since a boundary was still applied and completeness is no longer
+   * something Fiscus can vouch for.
+   */
+  localLedgerRetention: { truncated: boolean; prunedBeforeMs: number | null };
 }

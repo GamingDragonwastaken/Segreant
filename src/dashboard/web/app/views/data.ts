@@ -19,7 +19,7 @@
  */
 
 import { h } from '../core/dom.ts';
-import { signal, effect } from '../core/signal.ts';
+import { signal, scopedEffect } from '../core/signal.ts';
 import { api, type Importer, type ScanPayload, type Overview } from '../core/api.ts';
 import { count, usd, isPrecise } from '../core/fmt.ts';
 import { actionCard } from './spend.ts';
@@ -32,7 +32,7 @@ export function dataView(): Node {
   const scanError = signal<string | null>(null);
   const error = signal<string | null>(null);
 
-  effect(() => {
+  scopedEffect(() => {
     void Promise.allSettled([api.importers(), api.overview('all')])
       .then(([i, o]) => {
         if (i.status === 'fulfilled') importers.set(i.value.importers);
@@ -59,9 +59,9 @@ export function dataView(): Node {
 
     () => {
       const err = error();
-      if (err) return h('div', { class: 'card' }, h('p', { class: 'drawer-error', text: err }));
+      if (err) return h('div', { class: 'card' }, h('p', { class: 'drawer-error', role: 'alert', 'aria-live': 'assertive', text: err }));
       const list = importers();
-      if (!list) return h('div', { class: 'card' }, h('p', { class: 'drawer-muted', text: 'Loading…' }));
+      if (!list) return h('div', { class: 'card' }, h('p', { class: 'drawer-muted', role: 'status', 'aria-live': 'polite', 'aria-busy': 'true', text: 'Loading…' }));
 
       const found = list.filter((i) => i.available);
       const missing = list.filter((i) => !i.available);
@@ -116,7 +116,7 @@ export function dataView(): Node {
           h('h2', { class: 'section-title', text: () => (isPrecise() ? 'Detect what is on this machine' : 'Look around this computer') }),
           h('p', { class: 'view-plain', text: () => (isPrecise()
             ? 'A bounded walk of your home directory for AI tools and git repositories. Imports nothing; records the result as the baseline for change reporting.'
-            : 'Fiscus can look through your files for AI tools and projects. It only looks — nothing is imported and nothing is sent anywhere.') }),
+            : 'Fiscus can look through your files for AI tools and projects. This detection reads local paths; local imports remain local, while provider requests follow the configured egress boundary.') }),
 
           h('div', { class: 'cmd-row' },
             h('button', {
@@ -127,9 +127,26 @@ export function dataView(): Node {
             }),
             h('code', { class: 'cmd', text: 'fiscus scan' })),
 
-          () => {
-            const e = scanError();
-            if (e) return h('p', { class: 'drawer-error', text: e });
+          // Detection is the one deliberate, operator-triggered read on this
+          // screen, and it reported nothing to anyone who was not watching the
+          // pixels. Only the failure path said anything; success landed four
+          // counts in a card the reactive region built from nothing, and a live
+          // region created in the same tick as its first message is not
+          // reliably spoken. This region is mounted with the screen, before the
+          // button can be pressed, so the wait and the result are both status
+          // messages. `aria-busy` holds the announcement until the walk is
+          // finished rather than reading a half-updated card.
+          //
+          // Failure stays a sibling `role="alert"`: an inserted alert node IS
+          // announced on insertion, and nesting one inside a status region gets
+          // it announced twice.
+          h('div', {
+            class: 'scan-result',
+            role: 'status',
+            'aria-live': 'polite',
+            'aria-busy': () => (scanning() ? 'true' : false),
+          }, () => {
+            if (scanError()) return null;
             const sc = scan();
             if (!sc) return null;
 
@@ -160,6 +177,11 @@ export function dataView(): Node {
                     ? `${count(sc.unreadableDirs)} directory/directories could not be read (permissions).`
                     : `${count(sc.unreadableDirs)} folders could not be opened, so anything inside them was missed.`) })
                 : null);
+          }),
+
+          () => {
+            const e = scanError();
+            return e ? h('p', { class: 'drawer-error', role: 'alert', 'aria-live': 'assertive', text: e }) : null;
           }),
 
         o && !empty

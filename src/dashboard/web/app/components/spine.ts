@@ -20,7 +20,16 @@
 
 import { h } from '../core/dom.ts';
 import { usd, isPrecise } from '../core/fmt.ts';
-import type { Layer, LayerId } from '../core/claimTypes.ts';
+import {
+  claimIsConflicted,
+  claimIsRefuted,
+  claimIsSupported,
+  claimIsSupportedButUncosted,
+  claimIsUnevidenced,
+  claimShowsFigure,
+  type Layer,
+  type LayerId,
+} from '../core/claimTypes.ts';
 
 /**
  * `Layer` and its evidence moved down to `core/claimTypes.ts` so that
@@ -73,10 +82,26 @@ function separator(): Node {
  * face opened a dialog would make the spine unusable as navigation, which is
  * the job it already had.
  */
+/** The value slot's text, named for the situation rather than for a bit. */
+function bandValue(layer: Layer): string {
+  switch (layer.support.figure) {
+    case 'shown':
+      return usd(layer.valueUsd);
+    case 'withheld_uncosted':
+      return isPrecise() ? 'supported; not priced' : 'happened, but not priced';
+    case 'not_a_money_claim':
+      return isPrecise() ? 'not a money claim' : 'not a dollar figure';
+    case 'withheld_unsupported':
+      return 'not established';
+  }
+}
+
 function band(layer: Layer, state: SpineState): Node {
   const active = state.active === layer.id;
 
-  return h('div', { class: `band${active ? ' band-active' : ''}${layer.established ? '' : ' band-open'}` },
+  const supported = claimIsSupported(layer);
+
+  return h('div', { class: `band${active ? ' band-active' : ''}${supported ? '' : ' band-open'}` },
     h('button', {
       class: 'band-hit',
       'aria-current': active ? 'page' : false,
@@ -84,13 +109,16 @@ function band(layer: Layer, state: SpineState): Node {
     },
       h('span', { class: 'band-label', text: layer.label }),
 
-      layer.established
-        ? h('span', { class: 'band-value', text: usd(layer.valueUsd) })
-        : h('span', { class: 'band-value band-unset', text: 'not established' }),
+      // Three distinct situations, three different words. `established` said
+      // "not established" for all of them, including a Billed band that had
+      // been reconciled (no dollar by design, so `usd(null)` rendered a bare
+      // em dash) and a Realized band whose units shipped but were never priced.
+      h('span', { class: `band-value${claimShowsFigure(layer) ? '' : ' band-unset'}`,
+        text: bandValue(layer) }),
 
       h('span', { class: 'band-basis', text: layer.basis }),
 
-      !layer.established && layer.nextStep
+      layer.nextStep
         ? h('span', { class: 'band-next', text: layer.nextStep })
         : null),
 
@@ -109,17 +137,55 @@ export function spine(state: SpineState): Node {
     if (state.layers[i + 1]) children.push(separator());
   });
 
-  const open = state.layers.filter((l) => !l.established);
-  const missing = open.map((l) => l.label.toLowerCase());
+  // A claim missing its evidence and a claim missing only its pricing input are
+  // different sentences. Counting the second as "unsubstantiated" told an
+  // operator whose units had shipped that nothing had been established.
+  //
+  // And a claim whose evidence CONTRADICTS ITSELF is a third sentence. The line
+  // below ends "an absence of evidence, never a measured zero", which is exactly
+  // false about a contradiction — so `unsubstantiated` is now scoped to the
+  // claims that really are unevidenced, and the other two states say their own
+  // thing. This became reachable when the axes moved to the wire: the browser's
+  // count-based inference had no branch that could produce either one.
+  const missing = state.layers.filter(claimIsUnevidenced).map((l) => l.label.toLowerCase());
+  const conflicted = state.layers.filter(claimIsConflicted).map((l) => l.label.toLowerCase());
+  const refuted = state.layers.filter(claimIsRefuted).map((l) => l.label.toLowerCase());
+  const settled = state.layers.every(claimIsSupported);
+  const uncosted = state.layers.filter(claimIsSupportedButUncosted).map((l) => l.label.toLowerCase());
+
+  const uncostedLine = uncosted.length === 0
+    ? null
+    : h('p', { class: 'spine-read spine-uncosted' }, isPrecise()
+        ? `${uncosted.join(' and ')} ${uncosted.length === 1 ? 'is' : 'are'} substantiated but unpriced: the evidence holds and an input needed to state a dollar figure is absent. That is a withheld figure, not an absent claim.`
+        : `We can see that ${uncosted.join(' and ')} happened — we just cannot put a number on ${uncosted.length === 1 ? 'it' : 'them'} yet.`);
+
+  const conflictedLine = conflicted.length === 0
+    ? null
+    : h('p', { class: 'spine-read spine-conflicted' }, isPrecise()
+        ? `${conflicted.join(' and ')} ${conflicted.length === 1 ? 'is' : 'are'} contradicted: two observations of the same thing disagree. That is unadjudicated evidence, not missing evidence, and resolving it is a different task from collecting more.`
+        : `Something about ${conflicted.join(' and ')} does not add up — two sources say different things. That is a disagreement to settle, not a gap to fill.`);
+
+  const refutedLine = refuted.length === 0
+    ? null
+    : h('p', { class: 'spine-read spine-refuted' }, isPrecise()
+        ? `${refuted.join(' and ')} ${refuted.length === 1 ? 'is' : 'are'} refuted: the evidence says no. That is a measured answer, and the only one of these states that is.`
+        : `The evidence actually says no for ${refuted.join(' and ')}. That is an answer, not a gap.`);
 
   return h('section', { class: 'spine', 'aria-label': 'The four claims' },
     h('div', { class: 'spine-rail' }, ...children),
     h('p', { class: 'spine-read' },
-      open.length === 0
+      settled
         ? (isPrecise()
             ? 'All four claims are substantiated on this machine, each on its own evidence.'
             : 'All four of these are backed by evidence on this machine.')
-        : (isPrecise()
-            ? `Four separate claims with four evidence standards; ${missing.join(' and ')} ${open.length === 1 ? 'is' : 'are'} unsubstantiated here. An unsubstantiated layer is an absence of evidence, never a measured zero.`
-            : `These are four different questions, not four versions of one number — and we cannot answer ${missing.join(' or ')} yet. That is missing evidence, not an answer of nothing.`)));
+        : missing.length === 0
+          ? (isPrecise()
+              ? 'Four separate claims with four evidence standards. None is simply unevidenced here; see below for the ones whose evidence is unsettled.'
+              : 'These are four different questions, not four versions of one number. None is simply missing — see below.')
+          : (isPrecise()
+              ? `Four separate claims with four evidence standards; ${missing.join(' and ')} ${missing.length === 1 ? 'is' : 'are'} unsubstantiated here. An unsubstantiated layer is an absence of evidence, never a measured zero.`
+              : `These are four different questions, not four versions of one number — and we cannot answer ${missing.join(' or ')} yet. That is missing evidence, not an answer of nothing.`)),
+    conflictedLine,
+    refutedLine,
+    uncostedLine);
 }

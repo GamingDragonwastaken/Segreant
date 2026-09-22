@@ -9,7 +9,7 @@
  */
 
 import { h } from '../core/dom.ts';
-import { CAPABILITIES, TERRITORIES, paritySummary } from '../core/registry.ts';
+import { CAPABILITY_SPECS, TERRITORIES, paritySummary } from '../core/registry.ts';
 import { isPrecise } from '../core/fmt.ts';
 import { actionCard } from './spend.ts';
 
@@ -17,6 +17,9 @@ const COVERAGE_WORDS: Record<string, string> = {
   full: 'in the GUI',
   partial: 'partly in the GUI',
   planned: 'command line only',
+  // Deliberately not "command line only": that phrasing tells the reader a
+  // screen has not been built, and here one cannot be.
+  not_applicable: 'cannot have a screen',
 };
 
 export function systemView(): Node {
@@ -41,24 +44,41 @@ export function systemView(): Node {
       h('div', { class: 'card' },
         h('div', { class: 'card-head' }, h('span', { class: 'card-title', text: 'Command line only' })),
         h('div', { class: 'stat', text: String(parity.planned) }),
-        h('span', { class: 'basis', text: 'no screen yet — the command is listed' }))),
+        h('span', { class: 'basis', text: 'no screen yet — the command is listed' })),
+      // The fourth state gets its own card rather than being folded into
+      // "command line only". A capability the GUI cannot offer is not a gap in
+      // the GUI, and counting it as one would make the parity fraction read
+      // worse than the truth -- while leaving it out of `total` altogether was
+      // the error this card exists to correct.
+      h('div', { class: 'card' },
+        h('div', { class: 'card-head' }, h('span', { class: 'card-title', text: 'Cannot have a screen' })),
+        h('div', { class: 'stat', text: String(parity.notApplicable) }),
+        h('span', { class: 'basis', text: 'structurally unavailable here — each row says why' }))),
 
     h('div', { class: 'card', style: 'margin-top: var(--s4)' },
       h('div', { class: 'card-head' }, h('span', { class: 'card-title', text: 'Parity map' })),
-      h('p', { class: 'view-plain', style: 'margin-bottom: var(--s4)', text: 'Every capability Fiscus has, where it lives, what it costs you to run it, and whether this interface covers it. Generated from the same registry the navigation uses, so it cannot drift from what the GUI actually does.' }),
+      h('p', { class: 'view-plain', style: 'margin-bottom: var(--s4)', text: 'Every capability Fiscus has, where it lives, what it costs you to run it, and whether this interface covers it. Generated from the same registry the navigation uses, and checked against the command line\u2019s own dispatch, so it cannot drift from what the GUI does or quietly leave a command out.' }),
       h('div', { class: 'table-wrap' },
-        h('table', null,
+        h('table', { 'aria-label': 'CLI/GUI parity map' },
           h('thead', null, h('tr', null,
-            h('th', { text: 'Capability' }),
-            h('th', { text: 'Section' }),
-            h('th', { text: 'Consequence' }),
-            h('th', { text: 'Here' }),
-            h('th', { text: 'Command' }))),
-          h('tbody', null, ...CAPABILITIES.map((c) => h('tr', null,
+            h('th', { scope: 'col', text: 'Capability' }),
+            h('th', { scope: 'col', text: 'Section' }),
+            h('th', { scope: 'col', text: 'Consequence' }),
+            h('th', { scope: 'col', text: 'Here' }),
+            h('th', { scope: 'col', text: 'Command' }))),
+          h('tbody', null, ...CAPABILITY_SPECS.map((c) => h('tr', null,
             h('td', null, h('strong', { text: c.label }), h('br'), h('span', { class: 'action-plain', text: c.plain })),
             h('td', { text: TERRITORIES.find((t) => t.id === c.territory)?.label ?? c.territory }),
             h('td', null, h('span', { class: `tag tag-${c.consequence}`, text: c.consequence === 'read' ? 'reads only' : c.consequence })),
-            h('td', null, h('span', { class: c.coverage === 'planned' ? 'tag tag-planned' : 'tag', text: COVERAGE_WORDS[c.coverage] ?? c.coverage })),
+            h('td', null,
+              h('span', {
+                class: c.coverage === 'planned' || c.coverage === 'not_applicable' ? 'tag tag-planned' : 'tag',
+                text: COVERAGE_WORDS[c.coverage] ?? c.coverage,
+              }),
+              // The reason travels with the state, in the same cell. A row that
+              // says the GUI cannot do something and does not say why is the
+              // assertion without its basis.
+              ...(c.coverageNote ? [h('br'), h('span', { class: 'action-plain', text: c.coverageNote })] : [])),
             h('td', null, h('code', { class: 'cmd', style: 'white-space: nowrap', text: c.command })))))))),
 
     h('div', { style: 'margin-top: var(--s6)' },

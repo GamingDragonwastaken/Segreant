@@ -10,7 +10,7 @@ goes to the AI provider you configure, and proposal capture is a local storage
 choice.
 
 > **Release status:** this checkout is not yet published to npm. Run commands
-> from a clone with `node bin/fiscus.mjs ...`. The `npx fiscus ...` examples below
+> from a clone with `npm run fiscus -- ...`. The `npx fiscus ...` examples below
 > describe the intended post-publication command and must not be treated as an
 > available package until the registry release is verified.
 
@@ -33,6 +33,30 @@ npx fiscus roi --demo       # the Return-on-Intelligence scorecard
 npx fiscus sources --demo   # spend by connected tool, at honest depth
 npx fiscus budget --recommend --demo   # a cap that fits + the shadow price
 ```
+
+For a local recovery checkpoint, create a verified snapshot and restore only
+into a new path:
+
+```bash
+npx fiscus backup --out ./backups/fiscus.sqlite --json
+npx fiscus restore --from ./backups/fiscus.sqlite --out ./recovered/fiscus.sqlite --json
+npx fiscus restore --from ./backups/fiscus.sqlite --out ./recovered/fiscus.sqlite --apply --json
+```
+
+Restore never overwrites the active ledger. The SQLite file and its manifest are
+sensitive local artifacts (they can include retained proposals or causal
+assignment material) and are not encrypted by Fiscus.
+
+If you need to hand a local run to another engineer, export a redacted bundle:
+
+```bash
+npx fiscus diagnostics --json --out ./support/fiscus-diagnostics.json
+```
+
+It contains runtime, schema, egress, pricing, and resource observations with
+correlation IDs and durations, but no prompts, source, credentials, raw ledger
+rows, or absolute user paths. The command is read-only and refuses to overwrite
+an existing export.
 
 ## 2. Meter your own AI usage
 

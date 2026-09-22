@@ -10,8 +10,21 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { callJudgeApi, JudgeCallError, JUDGE_MULTIPLIER_FLOOR, JUDGE_MULTIPLIER_CAP } from '../src/judge/call.ts';
 import type { StructuralSessionSummary } from '../src/judge/payload.ts';
+
+const originalFiscusHome = process.env.FISCUS_HOME;
+const judgeTestHome = mkdtempSync(join(tmpdir(), 'fiscus-judge-call-home-'));
+process.env.FISCUS_HOME = judgeTestHome;
+
+test.after(() => {
+  if (originalFiscusHome === undefined) delete process.env.FISCUS_HOME;
+  else process.env.FISCUS_HOME = originalFiscusHome;
+  rmSync(judgeTestHome, { recursive: true, force: true });
+});
 
 const summary: StructuralSessionSummary = {
   sessionId: 's1',
@@ -120,6 +133,20 @@ test('callJudgeApi: a non-JSON outer HTTP body throws malformed-response', async
   }
 });
 
+test('callJudgeApi: an oversized chunked response is rejected at the bounded reader', async () => {
+  const mock = await startMockJudge(() => ({ status: 200, body: 'x'.repeat(5 * 1024 * 1024) }));
+  try {
+    await assert.rejects(
+      () => callJudgeApi(mock.url, 'test-model', null, summary, 'local-llm'),
+      (err: unknown) => err instanceof JudgeCallError
+        && err.reason === 'malformed-response'
+        && /response.*limit/i.test(err.message),
+    );
+  } finally {
+    await mock.close();
+  }
+});
+
 test('callJudgeApi: a well-formed envelope missing choices[0].message.content throws malformed-response', async () => {
   const mock = await startMockJudge(() => ({ status: 200, body: { choices: [] } }));
   try {
@@ -162,6 +189,26 @@ test('callJudgeApi: an unreachable endpoint throws network, not a crash', async 
     () => callJudgeApi('http://127.0.0.1:1', 'test-model', null, summary, 'local-llm'),
     (err: unknown) => err instanceof JudgeCallError && err.reason === 'network',
   );
+});
+
+test('callJudgeApi: corrupt receipt history is a typed pre-dial boundary refusal with repair guidance', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'fiscus-judge-receipt-refusal-'));
+  const previousHome = process.env.FISCUS_HOME;
+  process.env.FISCUS_HOME = home;
+  writeFileSync(join(home, 'egress-receipts.jsonl'), '{"version":1}\n', 'utf8');
+  try {
+    await assert.rejects(
+      () => callJudgeApi('http://127.0.0.1:1', 'test-model', null, summary, 'local-llm'),
+      (err: unknown) => err instanceof JudgeCallError
+        && err.reason === 'egress-boundary'
+        && err.egressCode === 'receipt_integrity_failed'
+        && /repair\/restore.*receipt/i.test(err.message),
+    );
+  } finally {
+    if (previousHome === undefined) delete process.env.FISCUS_HOME;
+    else process.env.FISCUS_HOME = previousHome;
+    rmSync(home, { recursive: true, force: true });
+  }
 });
 
 test('callJudgeApi: a hung endpoint is aborted at the timeout and throws JudgeCallError(timeout)', async () => {

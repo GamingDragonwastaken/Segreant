@@ -14,7 +14,9 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadOrCreateKeyPair, type KeyPair } from '../../src/value/receipt.ts';
-import { buildRollupBody, signRollup, type SignedRollup } from '../../src/team/rollup.ts';
+import { buildEconomicRollupBody, buildRollupBody, signRollup, type EconomicProjectValue, type SignedRollup } from '../../src/team/rollup.ts';
+import { economicAttributionView } from '../../src/economics/attribution.ts';
+import { money } from '../../src/economics/money.ts';
 import type { ProjectValue } from '../../src/value/realization.ts';
 import { createTeamServer, type TeamServerDeps } from '../src/server.ts';
 import { FakeRollupStore } from './fakeStore.ts';
@@ -25,10 +27,17 @@ function projects(): ProjectValue[] {
     {
       project: 'fiscus',
       units: 12,
-      costUsd: 41.5,
+      // CONTAINED, BECAUSE THE PRODUCER CANNOT EMIT ANYTHING ELSE. These three
+      // are nested sums over one unit set: realized units are a subset of
+      // matured units, and the acceptance weighting is a per-unit factor in
+      // [0,1]. This fixture used to read costUsd 41.5 against
+      // spendOnRealizedUnitsUsd 300 — a project where seven times the money
+      // spent reached a kept outcome. Correcting it makes the fixture possible;
+      // it was never a case the server was entitled to accept.
+      costUsd: 415,
       realizationRate: 0.8,
-      realizedValueUsd: 300,
-      netRealizedValueUsd: 258.5,
+      spendOnRealizedUnitsUsd: 300,
+      acceptanceWeightedSpendUsd: 258.5,
       roiIndex: 3.2,
       sources: ['claude-code'],
     },
@@ -204,6 +213,49 @@ test('team-server: POST /rollups from a registered key with a valid signature is
   }
 });
 
+test('team-server: POST /rollups accepts exact economic v2 and retains its project lineage', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-server-economic-'));
+  try {
+    const dev: KeyPair = loadOrCreateKeyPair(join(dir, 'dev.json'));
+    const exact = economicAttributionView({
+      amount: money('1.234567', 'USD', 'effective'),
+      eventIds: ['economic:request:r1:charge'],
+      sourceBases: ['list'],
+      requestCount: 1,
+      unresolvedRequests: 0,
+    });
+    const project: EconomicProjectValue = {
+      // realizationRate 1 means every matured unit realized, so realized spend
+      // IS the total spend. The row previously read spendOnRealizedUnitsUsd 2
+      // against costUsd 1.234567 — more money reaching a kept outcome than the
+      // project spent — which the producer cannot emit and the server now
+      // refuses.
+      project: 'fiscus', units: 1, costUsd: 1.234567, realizationRate: 1,
+      spendOnRealizedUnitsUsd: 1.234567, acceptanceWeightedSpendUsd: 1.234567, roiIndex: 2, sources: ['codex'],
+      economic: { coverage: 'exact', total: exact, realized: exact },
+    };
+    const signed = signRollup(buildEconomicRollupBody(dev, [project], period), dev);
+    const store = new FakeRollupStore();
+    await store.registerDeveloper(dev.keyId, dev.publicPem, null);
+    const srv = await startTeamServer({ store, adminToken: null, oidc: null, aggregate: DEFAULT_TEST_AGGREGATE_CONFIG });
+    try {
+      const res = await fetch(`${srv.url}/rollups`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(signed),
+      });
+      assert.equal(res.status, 201);
+      const stored = (await store.listRollups({ keyId: dev.keyId }))[0]!;
+      assert.equal(stored.body.v, 2);
+      const storedProject = stored.body.projects[0]!;
+      assert.ok(storedProject.economic);
+      assert.equal(storedProject.economic.total?.amountText, '1.234567');
+    } finally {
+      await srv.close();
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('team-server: POST /rollups treats an exact signed retry as an idempotent replay without changing the recorded receipt', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'fiscus-team-server-'));
   try {
@@ -258,7 +310,32 @@ test('team-server: POST /rollups rejects self-consistently signed payloads with 
       const invalidStrata = buildRollupBody(dev, projects(), period, [
         { project: 'fiscus', taskType: 'bugfix', units: 1, realizedUnits: 2, costUsd: 1 },
       ]);
-      for (const candidate of [badKeyBody, badUnits, backwardsPeriod, duplicateProjects, duplicateSources, invalidStrata]) {
+      // THE SAME CONTAINMENT THE STRATA ROW ABOVE ALREADY ENFORCES, ONE FIELD
+      // OVER. `realizedUnits > units` is refused; the project dollar figures are
+      // nested in exactly the same way and were not checked at all, so a
+      // correctly signed rollup could claim more money reached a kept outcome
+      // than was ever spent.
+      //
+      // MUTATED AFTER BUILDING, DELIBERATELY. `buildRollupBody` now refuses to
+      // mint either of these (D-162), so constructing them through it would
+      // throw here and never reach the server. That refusal is a client-side
+      // floor and says nothing about what an arriving payload is held to --
+      // which is the entire point of this test, since a hostile client does not
+      // run our builder at all. Mutating the projects after the build and
+      // signing the result reproduces exactly what such a client sends: a
+      // correctly signed body whose numbers contradict themselves.
+      const realizedSpendExceedsCost = buildRollupBody(dev, projects(), period);
+      (realizedSpendExceedsCost.projects as ProjectValue[])[0] = {
+        ...projects()[0]!, costUsd: 10, spendOnRealizedUnitsUsd: 1000, acceptanceWeightedSpendUsd: 1000,
+      };
+      const acceptanceExceedsRealizedSpend = buildRollupBody(dev, projects(), period);
+      (acceptanceExceedsRealizedSpend.projects as ProjectValue[])[0] = {
+        ...projects()[0]!, costUsd: 100, spendOnRealizedUnitsUsd: 10, acceptanceWeightedSpendUsd: 50,
+      };
+      for (const candidate of [
+        badKeyBody, badUnits, backwardsPeriod, duplicateProjects, duplicateSources, invalidStrata,
+        realizedSpendExceedsCost, acceptanceExceedsRealizedSpend,
+      ]) {
         const res = await fetch(`${srv.url}/rollups`, {
           method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(signRollup(candidate, dev)),
         });
@@ -316,6 +393,27 @@ test('team-server: POST /rollups rejects malformed JSON and well-formed-but-wron
       body: JSON.stringify({ hello: 'world' }),
     });
     assert.equal(wrongShape.status, 400);
+  } finally {
+    await srv.close();
+  }
+});
+
+test('team-server: POST /rollups rejects an oversized body with a typed 413 before parsing', async () => {
+  const srv = await startTeamServer({
+    store: new FakeRollupStore(),
+    adminToken: null,
+    oidc: null,
+    aggregate: DEFAULT_TEST_AGGREGATE_CONFIG,
+    maxBodyBytes: 1024,
+  });
+  try {
+    const res = await fetch(`${srv.url}/rollups`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'x'.repeat(1025),
+    });
+    assert.equal(res.status, 413);
+    assert.deepEqual(await res.json(), { ok: false, error: 'request body too large', code: 'resource_limit', limitBytes: 1024 });
   } finally {
     await srv.close();
   }
@@ -443,7 +541,7 @@ test('team-server: GET /dashboard/projects weights realizationRate by units and 
         srv,
         store,
         a,
-        [{ project: 'shared', units: 10, costUsd: 100, realizationRate: 0.5, realizedValueUsd: 50, netRealizedValueUsd: 45, roiIndex: 2.0, sources: [] }],
+        [{ project: 'shared', units: 10, costUsd: 100, realizationRate: 0.5, spendOnRealizedUnitsUsd: 50, acceptanceWeightedSpendUsd: 45, roiIndex: 2.0, sources: [] }],
         period,
       );
       // B: 20 units @ 90% realized (18 realized), $300, RoI 4.0
@@ -451,7 +549,7 @@ test('team-server: GET /dashboard/projects weights realizationRate by units and 
         srv,
         store,
         b,
-        [{ project: 'shared', units: 20, costUsd: 300, realizationRate: 0.9, realizedValueUsd: 270, netRealizedValueUsd: 260, roiIndex: 4.0, sources: [] }],
+        [{ project: 'shared', units: 20, costUsd: 300, realizationRate: 0.9, spendOnRealizedUnitsUsd: 270, acceptanceWeightedSpendUsd: 260, roiIndex: 4.0, sources: [] }],
         period,
       );
       // C: 5 units @ 100% realized (5 realized), $50, RoI untested (null) — must not dilute avgRoiIndex's denominator.
@@ -459,7 +557,7 @@ test('team-server: GET /dashboard/projects weights realizationRate by units and 
         srv,
         store,
         c,
-        [{ project: 'shared', units: 5, costUsd: 50, realizationRate: 1.0, realizedValueUsd: 50, netRealizedValueUsd: 50, roiIndex: null, sources: [] }],
+        [{ project: 'shared', units: 5, costUsd: 50, realizationRate: 1.0, spendOnRealizedUnitsUsd: 50, acceptanceWeightedSpendUsd: 50, roiIndex: null, sources: [] }],
         period,
       );
 
@@ -475,16 +573,16 @@ test('team-server: GET /dashboard/projects weights realizationRate by units and 
       assert.equal(row['rollupCount'], 3);
       assert.equal(row['totalUnits'], 35);
       assert.equal(row['totalCostUsd'], 450);
-      assert.equal(row['totalRealizedValueUsd'], 370);
-      assert.equal(row['totalNetRealizedValueUsd'], 355);
+      assert.equal(row['totalSpendOnRealizedUnitsUsd'], 370);
+      assert.equal(row['totalAcceptanceWeightedSpendUsd'], 355);
       // SUM(realizedUnits)/SUM(units) = (5+18+5)/35 = 28/35 = 0.8 — NOT the naive
       // average of the three rates (0.5+0.9+1.0)/3 = 0.8 too by coincidence here,
       // so this alone wouldn't catch a naive-average bug — the assertion below does.
       assert.ok(Math.abs((row['realizationRate'] as number) - 28 / 35) < 1e-9);
-      // Dollar-weighted realizedValueRate (370/450 ≈ 0.822) deliberately differs from
+      // Dollar-weighted realizedSpendShare (370/450 ≈ 0.822) deliberately differs from
       // realizationRate (0.8) — proves the two metrics aren't accidentally the same field.
-      assert.ok(Math.abs((row['realizedValueRate'] as number) - 370 / 450) < 1e-9);
-      assert.notEqual(row['realizationRate'], row['realizedValueRate']);
+      assert.ok(Math.abs((row['realizedSpendShare'] as number) - 370 / 450) < 1e-9);
+      assert.notEqual(row['realizationRate'], row['realizedSpendShare']);
       // Cost-weighted average over A and B only: (2.0*100 + 4.0*300)/(100+300) = 3.5.
       // A naive unweighted average of all three (treating null as 0, or as 0-weight-but-counted)
       // would land on 2.0, 3.0, or 2.33 — none of which is 3.5.
@@ -495,6 +593,34 @@ test('team-server: GET /dashboard/projects weights realizationRate by units and 
   } finally {
     await idp.close();
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('team-server: aggregate storage rejection becomes a bounded 503 instead of an unhandled route rejection', async () => {
+  class FailingAggregateStore extends FakeRollupStore {
+    override async aggregateProjects(): Promise<never> {
+      throw new Error('database unavailable');
+    }
+  }
+  const idp = await startFakeIdp();
+  try {
+    const srv = await startTeamServer({
+      store: new FailingAggregateStore(),
+      adminToken: null,
+      oidc: { issuerUrl: idp.issuer, clientId: 'team-dashboard', jwksUrl: idp.jwksUrl },
+      aggregate: DEFAULT_TEST_AGGREGATE_CONFIG,
+    });
+    try {
+      const now = Math.floor(Date.now() / 1000);
+      const token = idp.sign({ iss: idp.issuer, aud: 'team-dashboard', sub: 'lead@example.com', iat: now, exp: now + 3600 });
+      const res = await fetch(`${srv.url}/dashboard/projects`, { headers: { authorization: `Bearer ${token}` } });
+      assert.equal(res.status, 503);
+      assert.deepEqual(await res.json(), { ok: false, error: 'team-server route unavailable' });
+    } finally {
+      await srv.close();
+    }
+  } finally {
+    await idp.close();
   }
 });
 
@@ -518,7 +644,7 @@ test('team-server: GET /dashboard/projects does not double-count when the same d
       const day1 = { from: '2026-06-04T00:00:00.000Z', to: '2026-07-04T00:00:00.000Z' };
       const day2 = { from: '2026-06-05T00:00:00.000Z', to: '2026-07-05T00:00:00.000Z' };
       const snapshot: ProjectValue[] = [
-        { project: 'fiscus', units: 10, costUsd: 100, realizationRate: 0.8, realizedValueUsd: 80, netRealizedValueUsd: 80, roiIndex: 1.0, sources: [] },
+        { project: 'fiscus', units: 10, costUsd: 100, realizationRate: 0.8, spendOnRealizedUnitsUsd: 80, acceptanceWeightedSpendUsd: 80, roiIndex: 1.0, sources: [] },
       ];
       await pushRollup(srv, store, dev, snapshot, day1);
       await pushRollup(srv, store, dev, snapshot, day2);
@@ -536,7 +662,7 @@ test('team-server: GET /dashboard/projects does not double-count when the same d
       // not double it.
       assert.equal(row['totalCostUsd'], 100);
       assert.equal(row['totalUnits'], 10);
-      assert.equal(row['totalRealizedValueUsd'], 80);
+      assert.equal(row['totalSpendOnRealizedUnitsUsd'], 80);
       assert.equal(row['developerCount'], 1);
       assert.equal(row['rollupCount'], 1);
     } finally {
@@ -565,7 +691,7 @@ test('team-server: GET /dashboard/projects suppresses a project below the k-anon
         srv,
         store,
         dev,
-        [{ project: 'solo-project', units: 10, costUsd: 12345, realizationRate: 1, realizedValueUsd: 12345, netRealizedValueUsd: 12345, roiIndex: 9, sources: [] }],
+        [{ project: 'solo-project', units: 10, costUsd: 12345, realizationRate: 1, spendOnRealizedUnitsUsd: 12345, acceptanceWeightedSpendUsd: 12345, roiIndex: 9, sources: [] }],
         period,
       );
 
@@ -607,14 +733,14 @@ test('team-server: GET /dashboard/projects rejects periodFrom/periodTo rather th
         srv,
         store,
         dev,
-        [{ project: 'january-project', units: 1, costUsd: 10, realizationRate: 1, realizedValueUsd: 10, netRealizedValueUsd: 10, roiIndex: 1, sources: [] }],
+        [{ project: 'january-project', units: 1, costUsd: 10, realizationRate: 1, spendOnRealizedUnitsUsd: 10, acceptanceWeightedSpendUsd: 10, roiIndex: 1, sources: [] }],
         januaryPeriod,
       );
       await pushRollup(
         srv,
         store,
         dev,
-        [{ project: 'june-project', units: 1, costUsd: 20, realizationRate: 1, realizedValueUsd: 20, netRealizedValueUsd: 20, roiIndex: 1, sources: [] }],
+        [{ project: 'june-project', units: 1, costUsd: 20, realizationRate: 1, spendOnRealizedUnitsUsd: 20, acceptanceWeightedSpendUsd: 20, roiIndex: 1, sources: [] }],
         period, // June, per the module-level `period` const
       );
 
@@ -684,9 +810,9 @@ test('team-server: GET /dashboard/developers returns a k-anonymized distribution
       aggregate: { minCohort: 3, exposeDeveloperBreakdown: true },
     });
     try {
-      await pushRollup(srv, store, a, [{ project: 'p', units: 1, costUsd: 100, realizationRate: 1, realizedValueUsd: 90, netRealizedValueUsd: 90, roiIndex: 1, sources: [] }], period);
-      await pushRollup(srv, store, b, [{ project: 'p', units: 1, costUsd: 200, realizationRate: 1, realizedValueUsd: 100, netRealizedValueUsd: 100, roiIndex: 1, sources: [] }], period);
-      await pushRollup(srv, store, c, [{ project: 'p', units: 1, costUsd: 300, realizationRate: 1, realizedValueUsd: 300, netRealizedValueUsd: 300, roiIndex: 1, sources: [] }], period);
+      await pushRollup(srv, store, a, [{ project: 'p', units: 1, costUsd: 100, realizationRate: 1, spendOnRealizedUnitsUsd: 90, acceptanceWeightedSpendUsd: 90, roiIndex: 1, sources: [] }], period);
+      await pushRollup(srv, store, b, [{ project: 'p', units: 1, costUsd: 200, realizationRate: 1, spendOnRealizedUnitsUsd: 100, acceptanceWeightedSpendUsd: 100, roiIndex: 1, sources: [] }], period);
+      await pushRollup(srv, store, c, [{ project: 'p', units: 1, costUsd: 300, realizationRate: 1, spendOnRealizedUnitsUsd: 300, acceptanceWeightedSpendUsd: 300, roiIndex: 1, sources: [] }], period);
 
       const now = Math.floor(Date.now() / 1000);
       const token = idp.sign({ iss: idp.issuer, aud: 'team-dashboard', sub: 'lead@example.com', iat: now, exp: now + 3600 });
@@ -700,14 +826,14 @@ test('team-server: GET /dashboard/developers returns a k-anonymized distribution
       assert.equal(raw.includes('keyId'), false);
       const payload = JSON.parse(raw) as {
         ok: boolean;
-        report: { enabled: boolean; suppressed: boolean; distribution: { cohortSize: number; medianCostUsd: number; totalCostUsd: number; totalRealizedValueUsd: number } };
+        report: { enabled: boolean; suppressed: boolean; distribution: { cohortSize: number; medianCostUsd: number; totalCostUsd: number; totalSpendOnRealizedUnitsUsd: number } };
       };
       assert.equal(payload.report.enabled, true);
       assert.equal(payload.report.suppressed, false);
       assert.equal(payload.report.distribution.cohortSize, 3);
       assert.equal(payload.report.distribution.medianCostUsd, 200);
       assert.equal(payload.report.distribution.totalCostUsd, 600);
-      assert.equal(payload.report.distribution.totalRealizedValueUsd, 490);
+      assert.equal(payload.report.distribution.totalSpendOnRealizedUnitsUsd, 490);
     } finally {
       await srv.close();
     }

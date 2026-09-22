@@ -8,8 +8,8 @@ import assert from 'node:assert/strict';
 import { recommendAllocation, type AllocationCell } from '../src/budget/allocate.ts';
 
 const cells = (): AllocationCell[] => [
-  { key: 'opus·feature', costUsd: 12, roiIndex: 97, realizedValueUsd: 12 }, // rvr 1.0
-  { key: 'gpt-4o·refactor', costUsd: 3, roiIndex: 0, realizedValueUsd: 0 }, // rvr 0
+  { key: 'opus·feature', costUsd: 12, roiIndex: 97, spendOnRealizedUnitsUsd: 12 }, // rvr 1.0
+  { key: 'gpt-4o·refactor', costUsd: 3, roiIndex: 0, spendOnRealizedUnitsUsd: 0 }, // rvr 0
 ];
 
 test('allocation: re-weights the same budget toward higher RoI, total conserved', () => {
@@ -49,8 +49,8 @@ test('allocation: labels raw trim→grow arithmetic as an exploratory, non-causa
 
 test('allocation: unscored (no-RoI) contexts are held at status quo', () => {
   const plan = recommendAllocation([
-    { key: 'a', costUsd: 10, roiIndex: 80, realizedValueUsd: 8 },
-    { key: 'unknown', costUsd: 5, roiIndex: null, realizedValueUsd: 0 },
+    { key: 'a', costUsd: 10, roiIndex: 80, spendOnRealizedUnitsUsd: 8 },
+    { key: 'unknown', costUsd: 5, roiIndex: null, spendOnRealizedUnitsUsd: 0 },
   ]);
   const unk = plan.items.find((i) => i.key === 'unknown')!;
   assert.equal(unk.deltaUsd, 0, 'no RoI → never reallocated');
@@ -60,7 +60,7 @@ test('allocation: unscored (no-RoI) contexts are held at status quo', () => {
 
 test('allocation: empty / all-unscored input is a safe status-quo plan', () => {
   assert.deepEqual(recommendAllocation([]).moves, []);
-  const allNull = recommendAllocation([{ key: 'x', costUsd: 5, roiIndex: null, realizedValueUsd: 0 }]);
+  const allNull = recommendAllocation([{ key: 'x', costUsd: 5, roiIndex: null, spendOnRealizedUnitsUsd: 0 }]);
   assert.equal(allNull.moves.length, 0);
   assert.equal(allNull.items[0]!.deltaUsd, 0);
 });

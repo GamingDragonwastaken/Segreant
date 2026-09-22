@@ -6,14 +6,18 @@
 
 import { writeFileSync } from 'node:fs';
 import { Store } from '../store/db.ts';
-import { loadConfig, saveConfig, dbPath, configPath, fiscusHome, isDemo, type FiscusConfig } from '../config.ts';
+import { loadConfig, mutateConfig, dbPath, configPath, fiscusHome, isDemo, type FiscusConfig } from '../config.ts';
 import { startOfLocalDay } from '../budget/guard.ts';
 import { requestsToCsv } from '../export/csv.ts';
-import { computeAlerts } from '../alerts/detect.ts';
+import { economicRequestsToCsv, economicRequestsToJson } from '../export/economic.ts';
+import { computeAlerts, computeAlertCoverage, type Alert, type AlertCoverage } from '../alerts/detect.ts';
 import { describeSourceDepth } from '../value/sourceDepth.ts';
 import { isDeclaredAttribution } from '../value/characterization.ts';
-import { C, color, usd, num, pct } from './ui.ts';
+import { C, color, usd, num, pct, printJson } from './ui.ts';
+import { stringifyJson } from '../util/json.ts';
 import { rangeFor, type Flags } from './flags.ts';
+import { retentionNotice } from './retention.ts';
+import { instant, type Instant } from '../epistemic/time.ts';
 
 export function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void {
   const cfg = loadConfig();
@@ -24,9 +28,29 @@ export function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void 
   const byProject = store.byProject(startMs, endMs);
   const byUser = store.byUser(startMs, endMs);
   const bySource = store.bySource(startMs, endMs);
+  // Read for every window, not only the long ones: retention is operator
+  // configurable and a seven-day policy reaches `month` (D-171).
+  const retention = store.windowCoverage(startMs);
+
+  // Alerts are evaluated for `today` only, as they always were. What changed is
+  // that the surface now reads COVERAGE beside them: on a default install every
+  // channel is dark -- caps opt-in, no baseline, value uninstrumented, nothing
+  // to price -- so an empty alert list records that nothing was looked at, not
+  // that nothing fired. `fiscus ops` and the dashboard already read this
+  // producer (D-141); `show` was the one surface still printing silence over
+  // it. Same producer, same sentences, so the three cannot disagree.
+  let alerts: Alert[] | null = null;
+  let coverage: AlertCoverage | null = null;
+  if (window === 'today') {
+    alerts = computeAlerts(store, cfg);
+    coverage = computeAlertCoverage(store, cfg);
+  }
 
   if (flags.json) {
-    process.stdout.write(JSON.stringify({ window, label, demo: isDemo(), summary, byModel, byProject, byUser, bySource }, null, 2) + '\n');
+    printJson({
+      window, label, demo: isDemo(), retention, summary, byModel, byProject, byUser, bySource,
+      ...(alerts === null || coverage === null ? {} : { alerts, alertCoverage: coverage }),
+    });
     store.close();
     return;
   }
@@ -37,20 +61,32 @@ export function cmdShow(window: 'today' | 'week' | 'month', flags: Flags): void 
   console.log(color(tty, C.bold, `  Fiscus — ${label}`));
   console.log(color(tty, C.gray, '  ' + '─'.repeat(46)));
   if (isDemo()) console.log(color(tty, C.yellow, '  ● DEMO DATA — synthetic, isolated in demo.db'));
+  const truncation = retentionNotice(retention);
+  if (truncation !== null) console.log(color(tty, C.yellow, `  ● ${truncation}`));
   console.log(`  Spend       ${color(tty, C.green, usd(summary.costUsd))}   ${color(tty, C.gray, `(${num(summary.requests)} requests)`)}`);
   console.log(`  Input       ${num(summary.inputTokens)} tokens`);
   console.log(`  Output      ${num(summary.outputTokens)} tokens`);
 
-  if (window === 'today') {
-    const alerts = computeAlerts(store, cfg);
+  if (alerts !== null && coverage !== null) {
+    console.log('');
     if (alerts.length) {
       const crit = alerts.filter((a) => a.severity === 'critical').length;
       const top = alerts[0]!;
       const sevColor = top.severity === 'critical' ? C.red : top.severity === 'warn' ? C.yellow : C.gray;
-      console.log('');
       console.log(
         `  ${color(tty, sevColor, `● ${alerts.length} ${alerts.length === 1 ? 'alert' : 'alerts'}`)}${crit ? color(tty, C.red, ` (${crit} critical)`) : ''}  ${color(tty, C.gray, `— ${top.title}. Run: fiscus alerts`)}`,
       );
+    } else {
+      // NOT silence. An empty list from six dark channels and an empty list
+      // from six watching ones are different findings, and only the summary
+      // can tell them apart.
+      console.log(`  ${color(tty, coverage.complete ? C.green : C.yellow, `● no alerts · ${coverage.summary}`)}`);
+    }
+    // A dark channel names the setting that would light it. Printed whether or
+    // not something else fired: one live channel does not vouch for the rest.
+    for (const channel of coverage.channels) {
+      if (channel.live) continue;
+      console.log(color(tty, C.gray, `    ${channel.channel}: ${channel.darkBecause}`));
     }
   }
 
@@ -130,9 +166,11 @@ export function cmdSources(flags: Flags): void {
     modelsBySource.set(m.source, list);
   }
 
+  const retention = store.windowCoverage(startMs);
+
   if (flags.json) {
     const enriched = bySource.map((s) => ({ ...s, models: modelsBySource.get(s.label) ?? [] }));
-    process.stdout.write(JSON.stringify({ window: all ? 'all' : '30d', demo: isDemo(), bySource: enriched }, null, 2) + '\n');
+    printJson({ window: all ? 'all' : '30d', demo: isDemo(), retention, bySource: enriched });
     store.close();
     return;
   }
@@ -143,6 +181,11 @@ export function cmdSources(flags: Flags): void {
   console.log(color(tty, C.gray, '  ' + '─'.repeat(46)));
   if (isDemo()) console.log(color(tty, C.yellow, '  ● DEMO DATA — synthetic, isolated in demo.db'));
   console.log(color(tty, C.gray, `  ${all ? 'all time' : 'last 30 days'} · spend grouped by the tool each request was routed from`));
+  // "all time" is the ledger's, not the world's, once retention has deleted
+  // anything -- so the line above is corrected in place rather than left to be
+  // read as a claim about everything ever metered.
+  const sourcesTruncation = retentionNotice(retention);
+  if (sourcesTruncation !== null) console.log(color(tty, C.yellow, `  ● ${sourcesTruncation}`));
   console.log('');
 
   if (!bySource.length) {
@@ -171,19 +214,62 @@ export function cmdSources(flags: Flags): void {
 }
 
 export function cmdExport(flags: Flags): void {
+  const rawTargetUnit = flags['target-currency'];
+  const targetUnit = rawTargetUnit === undefined
+    ? undefined
+    : (typeof rawTargetUnit === 'string' && rawTargetUnit.trim().length > 0
+      ? rawTargetUnit.trim()
+      : (() => { throw new Error('--target-currency must be a non-empty currency/unit'); })());
+  const rawAsOf = flags['as-of'];
+  const asOf = rawAsOf === undefined
+    ? undefined
+    : (typeof rawAsOf === 'string'
+      ? instant(rawAsOf)
+      : (() => { throw new Error('--as-of must be a canonical UTC ISO-8601 instant'); })());
+  const rawEffectiveAt = flags['effective-at'];
+  const effectiveAt: Instant | undefined = rawEffectiveAt === undefined
+    ? undefined
+    : (typeof rawEffectiveAt === 'string'
+      ? instant(rawEffectiveAt)
+      : (() => { throw new Error('--effective-at must be a canonical UTC ISO-8601 instant'); })());
+  if (effectiveAt !== undefined && targetUnit === undefined) {
+    throw new Error('--effective-at requires --target-currency');
+  }
+  const all = flags.all === true;
+  const rawDays = flags.days;
+  const days = rawDays === undefined
+    ? 30
+    : (typeof rawDays === 'string' && rawDays.trim().length > 0 ? Number(rawDays) : NaN);
+  if (!all && (!Number.isFinite(days) || days <= 0 || days > 3650)) {
+    throw new Error('--days must be a finite number between 0 and 3650 (or pass --all)');
+  }
   const store = new Store(dbPath());
   const now = Date.now();
   const dayMs = 24 * 60 * 60 * 1000;
-  const days = flags.days ? Number(flags.days) : 30;
-  const startMs = flags.all ? 0 : now - days * dayMs;
+  const startMs = all ? 0 : now - days * dayMs;
+  const economic = flags.economic === true || flags['exact-money'] === true || targetUnit !== undefined || asOf !== undefined;
   const rows = store.requestsInRange(startMs, now + 1000);
+  const economicRows = economic ? store.economicRequestsInRange(startMs, now + 1000, {
+    ...(targetUnit === undefined ? {} : { targetUnit }),
+    ...(asOf === undefined ? {} : { asOf }),
+    ...(effectiveAt === undefined ? {} : { effectiveAt }),
+  }) : null;
+  // STDERR, ALWAYS. `export` writes CSV or JSON to stdout for a pipe or a
+  // redirect; a disclosure line on stdout would corrupt every consumer of the
+  // export it exists to protect. It goes where `--out`'s own confirmation goes.
+  const exportTruncation = retentionNotice(store.windowCoverage(startMs));
+  if (exportTruncation !== null) {
+    console.error(color(process.stdout.isTTY ?? false, C.yellow, `  ● ${exportTruncation}`));
+  }
   const asJson = flags.json === true || flags.format === 'json';
-  const out = asJson ? JSON.stringify(rows, null, 2) + '\n' : requestsToCsv(rows);
+  const out = economic
+    ? (asJson ? economicRequestsToJson(economicRows!) : economicRequestsToCsv(economicRows!))
+    : (asJson ? `${stringifyJson(rows)}\n` : requestsToCsv(rows));
 
   if (typeof flags.out === 'string') {
     writeFileSync(flags.out, out);
     const tty = process.stdout.isTTY ?? false;
-    console.error(color(tty, C.green, `  Exported ${num(rows.length)} requests (${asJson ? 'json' : 'csv'}) → ${flags.out}`));
+    console.error(color(tty, C.green, `  Exported ${num(rows.length)} requests (${economic ? 'economic-' : ''}${asJson ? 'json' : 'csv'}) → ${flags.out}`));
   } else {
     process.stdout.write(out);
   }
@@ -193,7 +279,7 @@ export function cmdExport(flags: Flags): void {
 export function cmdConfig(flags: Flags): void {
   const cfg = loadConfig();
   if (flags.json) {
-    process.stdout.write(JSON.stringify({ home: fiscusHome(), configPath: configPath(), dbPath: dbPath(), config: cfg }, null, 2) + '\n');
+    printJson({ home: fiscusHome(), configPath: configPath(), dbPath: dbPath(), config: cfg });
     return;
   }
   console.log('');
@@ -201,29 +287,30 @@ export function cmdConfig(flags: Flags): void {
   console.log(`  Config: ${configPath()}`);
   console.log(`  DB:     ${dbPath()}`);
   console.log('');
-  console.log(JSON.stringify(cfg, null, 2));
+  console.log(stringifyJson(cfg));
   console.log('');
 }
 
 export function cmdBudget(flags: Flags): void {
-  const cfg = loadConfig();
-  const next: FiscusConfig = { ...cfg, budget: { ...cfg.budget } };
-  const setNum = (key: 'dailyUsd' | 'dailySoftUsd' | 'sessionUsd' | 'runawayMaxUsd', flag: string) => {
-    if (flags[flag] !== undefined) {
-      const v = String(flags[flag]);
-      next.budget[key] = v === 'off' || v === 'none' ? null : Number(v);
+  const next = mutateConfig((cfg) => {
+    const updated: FiscusConfig = { ...cfg, budget: { ...cfg.budget } };
+    const setNum = (key: 'dailyUsd' | 'dailySoftUsd' | 'sessionUsd' | 'runawayMaxUsd', flag: string) => {
+      if (flags[flag] !== undefined) {
+        const v = String(flags[flag]);
+        updated.budget[key] = v === 'off' || v === 'none' ? null : Number(v);
+      }
+    };
+    setNum('dailyUsd', 'daily');
+    setNum('dailySoftUsd', 'soft');
+    setNum('sessionUsd', 'session');
+    setNum('runawayMaxUsd', 'runaway');
+    if (flags.window !== undefined) updated.budget.runawayWindowSec = Number(flags.window);
+    if (flags['include-imported'] !== undefined) {
+      const v = String(flags['include-imported']);
+      updated.budget.capIncludesImported = !(v === 'off' || v === 'false' || v === 'no');
     }
-  };
-  setNum('dailyUsd', 'daily');
-  setNum('dailySoftUsd', 'soft');
-  setNum('sessionUsd', 'session');
-  setNum('runawayMaxUsd', 'runaway');
-  if (flags.window !== undefined) next.budget.runawayWindowSec = Number(flags.window);
-  if (flags['include-imported'] !== undefined) {
-    const v = String(flags['include-imported']);
-    next.budget.capIncludesImported = !(v === 'off' || v === 'false' || v === 'no');
-  }
-  saveConfig(next);
+    return updated;
+  });
 
   console.log('');
   console.log('  Budget updated:');
@@ -245,6 +332,9 @@ export function cmdPrune(): void {
   console.log(`  Pruned ${requestsRemoved} request rows older than ${cfg.retentionDays} days.`);
   console.log(`  Pruned ${proposalsRemoved} stored proposal rows older than ${cfg.proposalRetentionDays} days.`);
   console.log('  Database compacted.');
+  // The boundary is now on the record, which is what stops a later reader from
+  // mistaking the deletion for an absence (D-170).
+  console.log(`  Retention boundary recorded: requests before ${new Date(requestsBefore).toISOString()} are deleted and will not appear in any total.`);
   store.close();
 }
 
@@ -314,7 +404,7 @@ export function cmdProject(flags: Flags): void {
       const demoNote = 'DEMO DATA: these bases are DEPICTED by the seed, not observed. '
         + 'The coverage share below describes a scenario, not this machine.';
       if (flags.json) {
-        process.stdout.write(JSON.stringify({
+        printJson({
           window: { startMs: 0, endMs, label: 'all recorded time' },
           demo: isDemo(),
           total: { costUsd: total, declaredCostUsd: declared },
@@ -323,7 +413,7 @@ export function cmdProject(flags: Flags): void {
             'How each project label was obtained. A declared label is a self-assertion by the calling tool, '
             + 'never a verified identity, and this is not chargeback-grade attribution.'
             + (isDemo() ? ` ${demoNote}` : ''),
-        }, null, 2) + '\n');
+        });
         return;
       }
       console.log('');
@@ -349,7 +439,7 @@ export function cmdProject(flags: Flags): void {
     const byProject = store.byProject(0, Date.now() + 1000);
     const aliases = store.listProjectAliases();
     if (flags.json) {
-      process.stdout.write(JSON.stringify({ projects: byProject, aliases }, null, 2) + '\n');
+      printJson({ projects: byProject, aliases });
       return;
     }
     console.log('');

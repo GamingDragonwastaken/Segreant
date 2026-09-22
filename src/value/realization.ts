@@ -16,14 +16,15 @@
 
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import type { Store, GateSignalRow, RealizationUnitRecord } from '../store/db.ts';
+import type { Store, GateSignalRow, RealizationUnitRecord, ProposalCaptureCoverage } from '../store/db.ts';
 import { attributeCommits, isGitRepo, projectName, type CommitAttribution } from '../git/correlate.ts';
 import { isDemo } from '../config.ts';
-import { survivingLines, revertedHashes } from '../git/quality.ts';
+import { survivingLines, revertScan } from '../git/quality.ts';
+import { revertCompletenessWitness } from '../git/completeness.ts';
 import { acceptanceForCommit, type ProposedFile } from './proposals.ts';
+import type { EpistemicState } from '../epistemic/state.ts';
 import {
   GATE_LADDER,
-  scoreFunnel,
   terminalRealizationBounds,
   serialRealization,
   type Gate,
@@ -32,10 +33,29 @@ import {
   type FunnelOutcome,
   type TerminalRealizationBounds,
   type SerialRealization,
+  aggregatePolarity,
+  polarityFromVerdict,
+  verdictFromPolarity,
+  evaluateCodingOutcome,
 } from './gates.ts';
 import { classifyTaskType, type TaskType } from './taskType.ts';
 import { computeReturnOnIntelligence, type RoIOptions } from './lenses.ts';
 import { liftFromData, timeWithAiMinutes, type AiEvent, type DataLiftResult } from './lift.ts';
+import { economicAttributionFromAttributions, type EconomicAttribution } from '../economics/attribution.ts';
+import {
+  assessCompleteness,
+  CODING_CLEAN_COMPLETENESS_EVENT_TYPES,
+  type CompletenessWitness,
+} from '../measurement/completeness.ts';
+import { scope } from '../epistemic/scope.ts';
+import { interval } from '../epistemic/time.ts';
+import { canonicalModelAttribution } from '../store/economicReadModel.ts';
+import {
+  assessContributionEvidence,
+  assessContributionEvidenceForCandidates,
+  type ContributionArtifact,
+  type ContributionEvidenceResult,
+} from '../git/contribution.ts';
 
 const run = promisify(execFile);
 
@@ -77,14 +97,25 @@ function matchesCommitFile(proposalPath: string | null, committedPaths: string[]
 }
 
 /** Resolve a gate from ingested signals: any fail → fail, else any pass → pass, else unknown. */
-function signalVerdict(signals: GateSignalRow[], kind: string): Verdict {
-  let sawPass = false;
+/**
+ * Aggregate every recorded signal of one kind into four-valued polarity.
+ *
+ * This used to return on the first `fail`, which meant a gate with a passing CI
+ * run AND a failing one reported plain `fail` and lost the fact that both were
+ * observed. Two runs disagreeing is not the same evidential situation as one
+ * run failing, and the difference matters most exactly where it was being
+ * discarded: at the gate that decides whether work realized (AII-003, WP-B03).
+ */
+function signalPolarity(signals: GateSignalRow[], kind: string): EpistemicState {
+  const observations: boolean[] = [];
   for (const s of signals) {
     if (s.kind !== kind) continue;
-    if (s.verdict === 'fail') return 'fail';
-    if (s.verdict === 'pass') sawPass = true;
+    if (s.verdict === 'pass') observations.push(true);
+    else if (s.verdict === 'fail') observations.push(false);
+    // Anything else is an unobserved signal and contributes nothing, which is
+    // not the same as contributing a negative.
   }
-  return sawPass ? 'pass' : 'unknown';
+  return aggregatePolarity(observations);
 }
 
 export interface WorkUnit extends CommitAttribution {
@@ -95,6 +126,8 @@ export interface WorkUnit extends CommitAttribution {
   hadProposal: boolean;
   acceptance: number | null;
   taskType: TaskType; // the "context" axis of the frontier
+  /** Provider paired with the dominant model when exact model authority exists. */
+  dominantProvider?: string | null;
   dominantModel: string | null; // model that spent the most in this unit's window
   /**
    * The dominant model's OWN spend in this unit's window — not the window total.
@@ -114,6 +147,8 @@ export interface WorkUnit extends CommitAttribution {
    * spend was observed in the window.
    */
   dominantModelCostShare: number | null;
+  /** Exact effective spend for the dominant model, when request lineage exists. */
+  dominantModelEconomic?: EconomicAttribution;
   /**
    * True when this unit was rehydrated from a snapshot whose dollars predate a
    * reprice that touched its window and could not be re-attributed (its snapshot
@@ -143,6 +178,32 @@ export interface WorkUnit extends CommitAttribution {
    */
   dominantModelRateCard: string | null;
   funnel: FunnelOutcome;
+  /** Completeness evidence required before the negative clean predicate can pass. */
+  cleanCompleteness?: CleanCompleteness;
+  /** Coverage of the retained proposal capture used by the accepted gate. */
+  proposalCaptureCoverage?: ProposalCaptureCoverage;
+  /** Contribution association evidence; never an outcome, quality, or value verdict. */
+  contributionEvidence?: ContributionEvidenceResult;
+}
+
+export const CLEAN_COMPLETENESS_EVENT_TYPES = CODING_CLEAN_COMPLETENESS_EVENT_TYPES;
+export type CleanCompletenessEventType = (typeof CODING_CLEAN_COMPLETENESS_EVENT_TYPES)[number];
+
+export interface CleanCompletenessWitness {
+  readonly id: string;
+  readonly sourceId: string;
+  readonly state: string;
+  readonly eventTypes: readonly string[];
+  /** JSON-safe scope constraints supplied by the completeness source. */
+  readonly scope: Readonly<Record<string, string>>;
+  readonly period: { readonly from: string; readonly to: string };
+}
+
+export interface CleanCompleteness {
+  readonly qualified: boolean;
+  readonly requiredEventTypes: readonly CleanCompletenessEventType[];
+  readonly qualifyingWitnessIds: readonly string[];
+  readonly witnesses: readonly CleanCompletenessWitness[];
 }
 
 export interface WasteBucket {
@@ -169,16 +230,53 @@ export interface RealizationReport {
   // money numbers and the request ledger's totals are answering with different
   // prices — surfaced here so no surface has to imply agreement it does not have.
   costStaleUnits: number;
+  /**
+   * Units whose surviving-line count was NOT measured because the survival scan
+   * budget ran out (see `survivalBudgetMs`). Their `survived` gate is `unknown`,
+   * never a ratio — an unmeasured commit has not been shown to have churned.
+   *
+   * Non-zero means the survival and churn figures in this report describe fewer
+   * commits than the report covers, which is the kind of thing that has to be
+   * stated beside the number rather than discovered later.
+   */
+  survivalUnmeasuredUnits: number;
   matured: {
     units: number;
     realizedUnits: number;
     realizationRate: number;
     totalCostUsd: number;
-    realizedValueUsd: number;
-    netRealizedValueUsd: number; // realized value discounted by first-pass acceptance (reworked output is worth less)
-    realizedValueRate: number | null;
+    /**
+     * Mature units whose spend window lost rows to retention (D-176).
+     *
+     * The cost sums above are DENOMINATORS -- `realizedSpendShare` divides by
+     * one, and the Return-on-Intelligence ratio divides value by another. A
+     * commit whose attribution window retention emptied contributes $0.00 and
+     * still counts as a unit, so every ratio built on these totals is inflated
+     * by an unknown amount. Counted rather than corrected: nothing surviving
+     * records what was deleted, so the honest report is how many units are
+     * affected, not a repaired total.
+     */
+    spendWindowTruncatedUnits: number;
+    /**
+     * Mature units whose spend-window coverage is UNKNOWN -- persisted before
+     * the field existed. Distinct from zero truncated units, and reported
+     * beside it so "none affected" cannot be read off a report that simply
+     * could not tell.
+     */
+    spendWindowUnknownUnits: number;
+    spendOnRealizedUnitsUsd: number;
+    acceptanceWeightedSpendUsd: number; // realized value discounted by first-pass acceptance (reworked output is worth less)
+    realizedSpendShare: number | null;
     wasteByStage: WasteBucket[];
     instrumentation: Record<Gate, number>;
+    /**
+     * Mature units whose evidence for a gate both supported and refuted it
+     * (AII-003, WP-B03). Counted separately from `instrumentation` because a
+     * contradiction is not a measurement of the gate — it is a measurement of
+     * the sources disagreeing, and it calls for adjudication rather than for
+     * reading the projected verdict.
+     */
+    gateConflicts: Record<Gate, number>;
     // Partial-identification interval on the realization rate: lower = confirmed
     // realized (== realizationRate), upper = not observed dead. The truth is inside;
     // the width is exactly the unobserved region. Guards the per-unit progress score
@@ -188,19 +286,87 @@ export interface RealizationReport {
     // conditional pass rates, with uninstrumented gates disclosed in `skipped`
     // rather than silently assumed passed. See gates.ts.
     serial: SerialRealization;
+    /** Exact effective spend for mature units; numeric fields remain compatibility projections. */
+    economic?: RealizationEconomicRollup;
   };
+}
+
+export type RealizationEconomicCoverage = 'exact' | 'partial' | 'legacy_unknown';
+
+export interface RealizationEconomicRollup {
+  coverage: RealizationEconomicCoverage;
+  /** Resolved effective amount for all mature unit windows, when any exact lineage exists. */
+  total: EconomicAttribution | null;
+  /** Resolved effective amount for mature units whose funnel realized, when any exists. */
+  realized: EconomicAttribution | null;
 }
 
 export interface RealizationOptions {
   limit?: number;
+  /**
+   * Wall-clock ceiling on the per-unit git work, in milliseconds. `Infinity`
+   * removes the bound; zero exhausts it immediately. The default keeps a
+   * dashboard route answering instead of hanging. Commits the budget does not
+   * reach report `survived: unknown` rather than a ratio, so a smaller budget
+   * withholds evidence and never fabricates it.
+   */
+  gitScanBudgetMs?: number;
   windowDays?: number;
   acceptanceThreshold?: number;
   survivalThreshold?: number;
   persist?: boolean;
+  /** Supported completeness witnesses for the negative clean channels. */
+  completenessWitnesses?: readonly CompletenessWitness[];
 }
 
-function gate(g: Gate, verdict: Verdict, detail: string): GateResult {
-  return { gate: g, verdict, detail };
+/**
+ * Build a gate result from its four-valued polarity, deriving the legacy
+ * verdict rather than accepting one. The projection lives in exactly one place
+ * so that `conflicted` cannot become `pass` by a caller's oversight.
+ */
+function gate(g: Gate, polarity: EpistemicState, detail: string): GateResult {
+  return { gate: g, polarity, verdict: verdictFromPolarity(polarity), detail };
+}
+
+/** A gate whose evidence is boolean by construction and cannot disagree with itself. */
+function decided(value: boolean): EpistemicState {
+  return value ? 'supported' : 'refuted';
+}
+
+function cleanCompleteness(
+  project: string,
+  commitHash: string,
+  commitTsEpochMs: number,
+  observedAtMs: number,
+  witnesses: readonly CompletenessWitness[],
+): CleanCompleteness {
+  const requiredEventTypes = [...CLEAN_COMPLETENESS_EVENT_TYPES] as CleanCompletenessEventType[];
+  const storedWitnesses = witnesses.map((witness): CleanCompletenessWitness => ({
+    id: witness.id,
+    sourceId: witness.sourceId,
+    state: witness.state,
+    eventTypes: [...witness.eventTypes],
+    scope: Object.fromEntries(witness.scope.constraints.map((constraint) => [constraint.key, constraint.value])),
+    period: { from: witness.period.from, to: witness.period.to },
+  }));
+  if (observedAtMs <= commitTsEpochMs) {
+    return { qualified: false, requiredEventTypes, qualifyingWitnessIds: [], witnesses: storedWitnesses };
+  }
+  const target = {
+    scope: scope({ project, commit: commitHash }),
+    period: interval(new Date(commitTsEpochMs).toISOString(), new Date(observedAtMs).toISOString()),
+  };
+  const assessments = requiredEventTypes.map((eventType) => assessCompleteness(
+    { eventType, ...target },
+    witnesses,
+  ));
+  const qualifyingWitnessIds = [...new Set(assessments.flatMap((assessment) => assessment.qualifyingWitnessIds))].sort();
+  return {
+    qualified: assessments.every((assessment) => assessment.qualifiesAbsenceInference),
+    requiredEventTypes,
+    qualifyingWitnessIds,
+    witnesses: storedWitnesses,
+  };
 }
 
 export async function computeRealization(
@@ -210,6 +376,33 @@ export async function computeRealization(
 ): Promise<RealizationReport> {
   const limit = opts.limit ?? 30;
   const windowDays = opts.windowDays ?? 14;
+  // ONE budget across every commit's git work, not one per commit.
+  //
+  // THE MEASUREMENT, BECAUSE GUESSING WHICH CALL IS SLOW IS HOW THIS GOES
+  // WRONG. At `limit: 40` on this repository: `attributeCommits` 2.3s,
+  // `revertScan` 1.2s, the store reads 1.1s, `git show` for the per-file added
+  // lines 42s across the forty, and `git blame --line-porcelain HEAD` **20.3s
+  // for a SINGLE commit** — which extrapolates to the 416 seconds `/api/value`
+  // was measured taking end to end. A dashboard route with no timeout of its
+  // own spending seven minutes in git is a hang, not a slow answer.
+  //
+  // Bounding blame alone still left 126s, because the per-commit `git show`
+  // that follows it is a full diff and this repository's commits are large. So
+  // the deadline covers every per-unit git call, and the unit's git-derived
+  // gates go UNKNOWN past it rather than reporting a number gathered from
+  // nothing. A commit the scan did not reach has not been shown to have churned
+  // or to have shipped no proposal; reading its absence as a verdict is the
+  // exact collapse the epistemic standard exists to refuse, and it would make
+  // the aggregate worse the slower the machine is.
+  const gitBudgetMs = opts.gitScanBudgetMs ?? 20_000;
+  // `Infinity` removes the bound; ZERO exhausts it immediately, which is how a
+  // test reaches the unmeasured branch without owning a repository slow enough
+  // to reach it by waiting. A budget expressed as "greater than zero means
+  // bounded" would have made zero mean unbounded, which is the opposite of what
+  // anyone passing it intends.
+  let gitDeadlineMs: number | undefined;
+  const gitBudgetSpent = (): boolean => gitDeadlineMs !== undefined && Date.now() >= gitDeadlineMs;
+  let unmeasuredSurvival = 0;
   const acceptanceThreshold = opts.acceptanceThreshold ?? 0.6;
   const survivalThreshold = opts.survivalThreshold ?? 0.5;
   const now = Date.now();
@@ -227,28 +420,115 @@ export async function computeRealization(
     persist: opts.persist,
     scopeProject: projectScoped ? project : undefined,
   });
-  const reverted = await revertedHashes(repoPath, limit);
+  const scan = await revertScan(repoPath, limit);
+  const reverted = scan.reverted;
+  // The first completeness witness this product emits from real evidence.
+  // A caller-supplied set still wins outright: an operator who has wired a
+  // real incident feed knows more about their own coverage than this does,
+  // and silently merging would make the resulting assessment untraceable to
+  // either source.
+  const gitWitness = revertCompletenessWitness(project, scan, now);
+  const witnesses = opts.completenessWitnesses
+    ?? (gitWitness === null ? [] : [gitWitness]);
+
+  // Read ONCE. The proposal-retention boundary cannot change during this
+  // computation, and a per-commit read would be one query per unit for a
+  // constant. Null is NO PRUNE ON RECORD, never "nothing was pruned" (D-170).
+  const proposalsPrunedBeforeMs = store.retentionFloor().proposalsPrunedBeforeMs;
+
+  // The clock starts HERE, not at the top. `attributeCommits` and `revertScan`
+  // above are fixed setup that runs once regardless of how many units there are,
+  // and letting them consume a per-unit budget would mean a slow machine spent
+  // the whole allowance before measuring anything — turning a scheduling
+  // accident into forty unknown gates.
+  gitDeadlineMs = Number.isFinite(gitBudgetMs) ? Date.now() + gitBudgetMs : undefined;
 
   const units: WorkUnit[] = [];
   for (const a of attributions) {
     const ageDays = (now - a.tsEpochMs) / (24 * 60 * 60 * 1000);
     const maturing = now - a.tsEpochMs < windowMs;
-    const { added, surviving } = await survivingLines(repoPath, a.hash);
+    // Checked ONCE per unit and reused, so a unit is measured or unmeasured as a
+    // whole. Re-reading the clock between the two calls below would let a unit
+    // report a survival ratio with no proposal comparison, or the reverse, and
+    // an operator comparing two units would have no way to know which halves
+    // were gathered.
+    const scanned = !gitBudgetSpent();
+    const survival = scanned
+      ? await survivingLines(repoPath, a.hash, gitDeadlineMs)
+      : { added: 0, surviving: 0, measured: false };
+    const { added, surviving } = survival;
     const survivalRatio = added > 0 ? Math.min(1, surviving / added) : 0;
+    if (!survival.measured) unmeasuredSurvival += 1;
     const isReverted = reverted.has(a.hash) || reverted.has(a.hash.slice(0, 7));
 
     // proxy gates: proposals captured in this commit's attribution window
-    const addedByFile = await addedLinesByFile(repoPath, a.hash);
+    const addedByFile = scanned ? await addedLinesByFile(repoPath, a.hash) : new Map<string, string[]>();
     const committedPaths = [...addedByFile.keys()];
     const winProposals = store.proposalsInWindow(project, a.windowStartMs, a.windowEndMs);
+    const proposalCaptureCoverage: ProposalCaptureCoverage = !scanned || winProposals.length === 0
+      // Without this unit's committed paths there is nothing to match a proposal
+      // against, so capture coverage is unknown for the same reason an empty
+      // window is: nothing was compared.
+      ? 'unknown'
+      : winProposals.some((proposal) => proposal.captureCoverage === 'truncated')
+        ? 'truncated'
+        : winProposals.some((proposal) => proposal.captureCoverage === 'legacy_unknown')
+          ? 'legacy_unknown'
+          : 'complete';
     const matched: ProposedFile[] = [];
     for (const p of winProposals) {
+      if (p.captureCoverage !== undefined && p.captureCoverage !== 'complete') continue;
       for (const f of p.files) {
         if (matchesCommitFile(f.path, committedPaths)) matched.push(f);
       }
     }
-    const acceptance = acceptanceForCommit(matched, addedByFile);
+    const acceptance = proposalCaptureCoverage === 'complete' ? acceptanceForCommit(matched, addedByFile) : null;
     const hadProposal = acceptance !== null;
+    const contributionEvidence: ContributionEvidenceResult | undefined = scanned && winProposals.length > 0
+      ? (() => {
+        const candidates = winProposals.map((proposal): { source: ContributionArtifact; temporal: {
+          sourceObservedAtMs: number;
+          targetObservedAtMs: number;
+          windowStartMs: number;
+          windowEndMs: number;
+        } } => ({
+          source: {
+            id: proposal.proposalId,
+            // Tuple identity (D-241): a model name may carry ':'; the source of an
+            // attribution must not alias another provider/model pair.
+            sourceId: `proxy:${JSON.stringify([proposal.provider, proposal.model])}`,
+            files: proposal.files.map((file) => ({
+              path: file.path,
+              kind: 'text' as const,
+              addedLines: [...file.addedLines],
+            })),
+            patchIdentity: null,
+            ...(proposal.captureCoverage !== undefined && proposal.captureCoverage !== 'complete'
+              ? { confounders: ['partial_capture' as const] }
+              : {}),
+          },
+          temporal: {
+            sourceObservedAtMs: proposal.tsEpochMs,
+            targetObservedAtMs: a.tsEpochMs,
+            windowStartMs: a.windowStartMs,
+            windowEndMs: a.windowEndMs,
+          },
+        }));
+        const target: ContributionArtifact = {
+          id: a.hash,
+          sourceId: `git:${a.hash}`,
+          files: [...addedByFile.entries()].map(([path, addedLines]) => ({
+            path,
+            kind: 'text' as const,
+            addedLines: [...addedLines],
+          })),
+          patchIdentity: null,
+        };
+        return candidates.length === 1
+          ? assessContributionEvidence({ source: candidates[0]!.source, target, temporal: candidates[0]!.temporal })
+          : assessContributionEvidenceForCandidates({ target, candidates });
+      })()
+      : undefined;
 
     // signal gates
     // A coding lifecycle gate is evidence about one immutable commit. Legacy
@@ -256,54 +536,122 @@ export async function computeRealization(
     // an unrelated commit look tested, merged, shipped, or clean by timing.
     const signals = store.signalsForCommit(a.hash);
     const incidentFail = signals.some((s) => s.kind === 'incident');
+    const completeness = cleanCompleteness(project, a.hash, a.tsEpochMs, now, witnesses);
 
     const verdicts: Record<Gate, GateResult> = {
-      proposed: gate('proposed', hadProposal ? 'pass' : 'unknown', hadProposal ? 'AI proposal captured' : 'no proposal captured'),
+      proposed: gate(
+        'proposed',
+        hadProposal ? 'supported' : 'unknown',
+        hadProposal
+          ? 'AI proposal captured'
+          // Ordered most-specific first, and the order is load-bearing (D-180).
+          // The two branches above are claims about the CAPTURE and can both be
+          // true of a unit whose window also lost rows -- a boundary INSIDE the
+          // window deletes the earlier proposals and leaves the later ones. The
+          // sharper answer must win, so retention is checked last of the three.
+          : proposalCaptureCoverage === 'truncated'
+            ? 'proposal capture truncated; coverage incomplete'
+            : proposalCaptureCoverage === 'legacy_unknown'
+              ? 'proposal capture predates coverage tracking'
+              // Otherwise this rung would say "no complete proposal captured"
+              // about a proposal Fiscus captured and then deleted on the
+              // operator's own retention policy, sending them to fix
+              // instrumentation that was already working (D-179, D-180).
+              : proposalsPrunedBeforeMs !== null && a.windowStartMs < proposalsPrunedBeforeMs
+                ? 'proposals in this window were deleted by retention; whether one was captured cannot be read from here'
+                : 'no complete proposal captured',
+      ),
       accepted: gate(
         'accepted',
-        acceptance === null ? 'unknown' : acceptance >= acceptanceThreshold ? 'pass' : 'fail',
+        acceptance === null ? 'unknown' : decided(acceptance >= acceptanceThreshold),
         acceptance === null ? 'no proposal to compare' : `${Math.round(acceptance * 100)}% of proposal shipped`,
       ),
-      committed: gate('committed', 'pass', `${added} lines in ${committedPaths.length || a.filesChanged} files`),
-      tested: gate('tested', signalVerdict(signals, 'tested'), 'CI/test signal'),
-      merged: gate('merged', signalVerdict(signals, 'merged'), 'merge signal'),
-      shipped: gate('shipped', signalVerdict(signals, 'shipped'), 'deploy signal'),
+      // `committed` stays SUPPORTED past the budget: the commit exists in the
+      // history the attribution read, which is evidence gathered before any of
+      // this. Only the line and file counts come from the skipped calls, so the
+      // reason falls back to what the attribution already knew.
+      committed: gate(
+        'committed',
+        'supported',
+        scanned
+          ? `${added} lines in ${committedPaths.length || a.filesChanged} files`
+          : `${a.filesChanged} files; line counts unmeasured (scan budget exhausted)`,
+      ),
+      tested: gate('tested', signalPolarity(signals, 'tested'), 'CI/test signal'),
+      merged: gate('merged', signalPolarity(signals, 'merged'), 'merge signal'),
+      shipped: gate('shipped', signalPolarity(signals, 'shipped'), 'deploy signal'),
       survived: gate(
         'survived',
-        maturing ? 'unknown' : survivalRatio >= survivalThreshold ? 'pass' : 'fail',
-        maturing ? 'maturing' : `${Math.round(survivalRatio * 100)}% of lines survive`,
+        // UNMEASURED IS NOT ZERO. A commit whose blame did not run inside the
+        // scan budget has not been shown to have churned; reading its partial
+        // count as a ratio would turn "we ran out of time" into a quality
+        // verdict against it. Unknown is the same answer `maturing` gives, for
+        // the same reason: the evidence has not been gathered yet.
+        maturing || !survival.measured ? 'unknown' : decided(survivalRatio >= survivalThreshold),
+        maturing
+          ? 'maturing'
+          : survival.measured
+            ? `${Math.round(survivalRatio * 100)}% of lines survive`
+            : 'survival unmeasured: the blame budget was exhausted before this commit was covered',
       ),
       clean: gate(
         'clean',
-        isReverted || incidentFail ? 'fail' : maturing ? 'unknown' : 'pass',
-        isReverted ? 'reverted' : incidentFail ? 'linked incident' : maturing ? 'maturing' : 'no revert/incident',
+        isReverted || incidentFail ? 'refuted' : maturing ? 'unknown' : completeness.qualified ? 'supported' : 'unknown',
+        isReverted
+          ? 'reverted'
+          : incidentFail
+            ? 'linked incident'
+            : maturing
+              ? 'maturing'
+              : completeness.qualified
+                ? 'no revert/incident in completeness-covered sources'
+                : 'absence unresolved: completeness witness required for revert and incident channels',
       ),
     };
 
-    // Attribute the unit to the model that spent the most in its window. Scope the
-    // model read to the SAME project the dollars were scoped to, or the label could
-    // be taken from another project's concurrent traffic.
+    // Attribute the unit to the provider/model that spent the most in its window.
+    // Exact effective Money is the sole winner authority. Scope the model read to
+    // the SAME project the dollars were scoped to, or the label could be taken
+    // from another project's concurrent traffic. A partial exact window has no
+    // winner; a wholly legacy window retains a display-only compatibility label
+    // with null cost/share so the frontier cannot treat it as priceable evidence.
     const modelSpend = store.byModel(a.windowStartMs, a.windowEndMs, projectScoped ? project : undefined);
-    const dominantModel = modelSpend.length > 0 ? modelSpend[0]!.label : null;
+    const economicModelRows = store.economicRequestRowsInRange(a.windowStartMs, a.windowEndMs, {
+      project: projectScoped ? project : undefined,
+    });
+    const modelAuthority = canonicalModelAttribution(economicModelRows);
+    const dominantProvider = modelAuthority.coverage === 'exact'
+      ? modelAuthority.dominant?.provider ?? null
+      : modelAuthority.coverage === 'legacy_unknown'
+        ? modelSpend[0]?.provider ?? null
+        : null;
+    const dominantModel = modelAuthority.coverage === 'exact'
+      ? modelAuthority.dominant?.model ?? null
+      : modelAuthority.coverage === 'legacy_unknown'
+        ? modelSpend[0]?.label ?? null
+        : null;
     // Keep the dominant model's OWN spend and its share of the window separately
     // from the window total: the total is what the commit cost, the share is how
     // much of that is really attributable to this model. Model comparison needs
     // both, and conflating them books one model's dollars to another.
-    const windowModelTotal = modelSpend.reduce((s, m) => s + m.costUsd, 0);
-    const dominantModelCostUsd = modelSpend.length > 0 ? modelSpend[0]!.costUsd : null;
-    const dominantModelCostShare =
-      modelSpend.length > 0 && windowModelTotal > 0 ? modelSpend[0]!.costUsd / windowModelTotal : null;
+    const dominantModelRow = modelAuthority.coverage === 'exact' ? modelAuthority.dominant : undefined;
+    const dominantModelEconomic = dominantModelRow?.economic;
+    const dominantModelCostUsd = modelAuthority.coverage === 'exact'
+      ? modelAuthority.dominantCostUsd
+      : null;
+    const dominantModelCostShare = modelAuthority.coverage === 'exact' ? modelAuthority.dominantShare : null;
     // Record HOW that model's dollars were priced, not just how many there were.
     // Collapsed to one value or the sentinel 'mixed' here so every reader applies
     // the same rule; the raw sets stay in the ledger for `fiscus pricing --coverage`.
     let dominantModelCostBasis: string | null = null;
     let dominantModelRateCard: string | null = null;
-    if (dominantModel !== null) {
+    if (dominantProvider !== null && dominantModel !== null) {
       const lineage = store.modelPricingBasis(
         a.windowStartMs,
         a.windowEndMs,
         dominantModel,
         projectScoped ? project : undefined,
+        dominantProvider,
       );
       dominantModelCostBasis =
         lineage.costBases.length === 1 ? lineage.costBases[0]! : lineage.costBases.length > 1 ? 'mixed' : null;
@@ -320,13 +668,18 @@ export async function computeRealization(
       hadProposal,
       acceptance,
       taskType: classifyTaskType(a.subject),
+      dominantProvider,
       dominantModel,
       dominantModelCostUsd,
       dominantModelCostShare,
+      ...(dominantModelEconomic === undefined ? {} : { dominantModelEconomic }),
       dominantModelCostBasis,
       dominantModelRateCard,
       costStale: false, // priced from the ledger as it stands right now
-      funnel: scoreFunnel(verdicts),
+      funnel: evaluateCodingOutcome(verdicts).funnel,
+      cleanCompleteness: completeness,
+      proposalCaptureCoverage,
+      ...(contributionEvidence === undefined ? {} : { contributionEvidence }),
     });
   }
 
@@ -351,7 +704,14 @@ export async function computeRealization(
     );
   }
 
-  return rollupRealization(units, { generatedAt: now, windowDays, acceptanceThreshold, survivalThreshold, projectScoped });
+  return rollupRealization(units, {
+    generatedAt: now,
+    windowDays,
+    acceptanceThreshold,
+    survivalThreshold,
+    projectScoped,
+    survivalUnmeasuredUnits: unmeasuredSurvival,
+  });
 }
 
 /**
@@ -361,6 +721,18 @@ export async function computeRealization(
  * a live run. Reads every project by default (the team aggregate); pass a project
  * to scope it. `generatedAt` reflects the freshest snapshot in the set.
  */
+/**
+ * Fill four-valued gate fields on a snapshot that predates them, using only
+ * what the stored three-valued row can honestly support.
+ */
+function normalizeFunnelPolarity(funnel: FunnelOutcome): FunnelOutcome {
+  const results = funnel.results.map((result) =>
+    result.polarity === undefined || result.polarity === null
+      ? { ...result, polarity: polarityFromVerdict(result.verdict) }
+      : result);
+  return { ...funnel, results, conflicts: funnel.conflicts ?? [] };
+}
+
 export function realizationFromStore(
   store: Store,
   opts: { project?: string; windowDays?: number; acceptanceThreshold?: number; survivalThreshold?: number } = {},
@@ -375,8 +747,27 @@ export function realizationFromStore(
     const u = JSON.parse(r.unitJson) as WorkUnit;
     return {
       ...u,
+      // Snapshots persisted before four-valued gates carry neither `polarity`
+      // nor `conflicts` (AII-003, WP-B03), and both are required fields — a
+      // missing `conflicts` threw on `.length` in the waste rollup and the CLI
+      // status line the moment anything read a legacy row.
+      //
+      // A legacy verdict maps through `polarityFromVerdict`, which can never
+      // produce `conflicted`, so an empty `conflicts` is not an assertion that
+      // no disagreement occurred: it is the only thing a three-valued row can
+      // say, and it says it consistently with its own gates. This deliberately
+      // differs from `src/value/epistemic.ts`, which reads a missing polarity
+      // as null rather than deriving one — the kernel refuses to infer at all,
+      // while a compatibility read must satisfy the type it hands on.
+      funnel: normalizeFunnelPolarity(u.funnel),
+      dominantProvider: u.dominantProvider ?? null,
       dominantModelCostUsd: u.dominantModelCostUsd ?? null,
       dominantModelCostShare: u.dominantModelCostShare ?? null,
+      // Snapshots written before D-176 say nothing about whether their
+      // attribution window later lost rows to retention. `null` is that
+      // unknown; reading the absence as `false` would infer coverage from
+      // silence, which is the one inference this program keeps finding.
+      spendWindowTruncated: u.spendWindowTruncated ?? null,
       // Same normalization, same reason: a snapshot that predates pricing lineage
       // has genuinely unknown comparability, and `undefined` would read as "fine".
       dominantModelCostBasis: u.dominantModelCostBasis ?? null,
@@ -442,12 +833,14 @@ export interface ProjectValue {
   units: number;
   costUsd: number;
   realizationRate: number;
-  realizedValueUsd: number;
-  netRealizedValueUsd: number;
+  spendOnRealizedUnitsUsd: number;
+  acceptanceWeightedSpendUsd: number;
   roiIndex: number | null;
   // Which AI tools produced this project's spend (repo↔project↔tool interconnection).
   // Empty when the project has no cwd-tagged traffic (e.g. untagged proxy).
   sources: string[];
+  /** Exact effective spend coverage for this project's mature units, when available. */
+  economic?: RealizationEconomicRollup;
 }
 
 /**
@@ -459,6 +852,76 @@ export interface ProjectValue {
  * project is joined to the TOOLS that produced its spend, so the view answers not
  * just "did this project pay off" but "which tool coded it".
  */
+/**
+ * What proposal retention deleted under a set of work units (D-179).
+ *
+ * The same predicate D-176 uses for the spend window, one stream over: a window
+ * is truncated when its START lies strictly before a recorded prune boundary,
+ * because `pruneProposals` deletes rows strictly older than that boundary.
+ *
+ * `prunedBeforeMs === null` is NO PRUNE ON RECORD -- never "nothing was
+ * pruned". It is returned alongside rather than folded into `truncated` so a
+ * caller that must distinguish the third state can, and one that only needs to
+ * know whether to change a sentence does not have to.
+ */
+export function proposalRetentionForUnits(
+  store: Store,
+  units: ReadonlyArray<{ windowStartMs: number }>,
+): { truncated: boolean; prunedBeforeMs: number | null } {
+  const prunedBeforeMs = store.retentionFloor().proposalsPrunedBeforeMs;
+  return {
+    prunedBeforeMs,
+    truncated: prunedBeforeMs !== null && units.some((u) => u.windowStartMs < prunedBeforeMs),
+  };
+}
+
+/**
+ * What a set of realization rollups can honestly claim about its spend coverage
+ * (D-181), in the three values `RollupCoverage` already carries.
+ *
+ * The mapping is total and needs no new vocabulary, because this sweep has been
+ * carrying the same three states since D-170. Any unit KNOWN truncated makes
+ * the whole set `partial`; otherwise any unit whose coverage is UNKNOWN makes
+ * it `unknown`; only a set every one of whose units is known intact may say
+ * `complete`.
+ *
+ * Truncated outranks unknown deliberately: "some of this is missing" is a
+ * stronger and more useful statement to a receiver than "I cannot tell". And an
+ * ABSENT count is a report written before the counts existed, which is
+ * `unknown` and never zero -- reading `undefined` as "none affected" is the
+ * inference this line of work exists to refuse.
+ *
+ * Pure, and takes the rollups rather than the store, so the ordering is
+ * testable without a ledger and so a caller decides which projects are in
+ * scope. `fiscus team push` filters by project AFTER building the breakdown,
+ * and the coverage must describe the body that is actually signed.
+ */
+export function rollupSpendCoverage(
+  matured: ReadonlyArray<{ spendWindowTruncatedUnits?: number; spendWindowUnknownUnits?: number }>,
+): 'complete' | 'partial' | 'unknown' {
+  if (matured.some((m) => (m.spendWindowTruncatedUnits ?? 0) > 0)) return 'partial';
+  if (matured.some((m) => m.spendWindowTruncatedUnits === undefined || (m.spendWindowUnknownUnits ?? 0) > 0)) return 'unknown';
+  return 'complete';
+}
+
+/**
+ * The spend coverage of the named projects, read from the persisted rollups.
+ *
+ * A second `realizationFromStore` pass over projects `projectValueBreakdown`
+ * has already walked. That is deliberate: `ProjectValue` is the SIGNED rollup
+ * shape, so putting the counts on it to avoid the pass would change the
+ * canonical body and turn a defect fix into a protocol change.
+ */
+export function spendCoverageForProjects(
+  store: Store,
+  projects: ReadonlyArray<{ project: string }>,
+  opts: { windowDays?: number } = {},
+): 'complete' | 'partial' | 'unknown' {
+  return rollupSpendCoverage(
+    projects.map((p) => realizationFromStore(store, { project: p.project, windowDays: opts.windowDays }).matured),
+  );
+}
+
 export function projectValueBreakdown(
   store: Store,
   opts: { windowDays?: number; roiOptions?: RoIOptions } = {},
@@ -468,16 +931,23 @@ export function projectValueBreakdown(
   for (const project of store.realizationProjects()) {
     const rep = realizationFromStore(store, { project, windowDays: opts.windowDays });
     if (rep.matured.units === 0) continue;
-    const roi = computeReturnOnIntelligence(rep, opts.roiOptions ?? {});
+    // Per project, because a prune boundary can cover one project's window and
+    // not another's -- and because a note nothing computes is the second
+    // recurring class of this program (D-179).
+    const roi = computeReturnOnIntelligence(rep, {
+      ...(opts.roiOptions ?? {}),
+      proposalRetention: proposalRetentionForUnits(store, rep.units),
+    });
     out.push({
       project,
       units: rep.matured.units,
       costUsd: rep.matured.totalCostUsd,
       realizationRate: rep.matured.realizationRate,
-      realizedValueUsd: rep.matured.realizedValueUsd,
-      netRealizedValueUsd: rep.matured.netRealizedValueUsd,
+      spendOnRealizedUnitsUsd: rep.matured.spendOnRealizedUnitsUsd,
+      acceptanceWeightedSpendUsd: rep.matured.acceptanceWeightedSpendUsd,
       roiIndex: roi.roiIndex,
       sources: sourcesByProject.get(project) ?? [],
+      ...(rep.matured.economic === undefined ? {} : { economic: rep.matured.economic }),
     });
   }
   return out.sort((a, b) => b.costUsd - a.costUsd);
@@ -584,7 +1054,15 @@ export async function realizeDiscoveredProjects(
  */
 export function rollupRealization(
   units: WorkUnit[],
-  opts: { generatedAt?: number; windowDays: number; acceptanceThreshold: number; survivalThreshold: number; projectScoped?: boolean },
+  opts: {
+    generatedAt?: number;
+    windowDays: number;
+    acceptanceThreshold: number;
+    survivalThreshold: number;
+    projectScoped?: boolean;
+    /** Units the survival scan could not reach; see `RealizationReport`. */
+    survivalUnmeasuredUnits?: number;
+  },
 ): RealizationReport {
   const generatedMs = opts.generatedAt ?? Date.now();
 
@@ -597,15 +1075,23 @@ export function rollupRealization(
   const mature = units.filter((u) => !u.maturing);
   const realizedUnits = mature.filter((u) => u.funnel.realized);
   const totalCostUsd = mature.reduce((s, u) => s + u.attributedCostUsd, 0);
-  const realizedValueUsd = realizedUnits.reduce((s, u) => s + u.attributedCostUsd, 0);
+  const spendOnRealizedUnitsUsd = realizedUnits.reduce((s, u) => s + u.attributedCostUsd, 0);
   // Net of rework: each realized unit's dollars discounted by its first-pass
   // acceptance — output that had to be heavily rewritten delivered less value.
   // Unknown acceptance → full credit (the unknown-never-penalizes rule).
-  const netRealizedValueUsd = realizedUnits.reduce((s, u) => s + u.attributedCostUsd * (u.acceptance ?? 1), 0);
+  const acceptanceWeightedSpendUsd = realizedUnits.reduce((s, u) => s + u.attributedCostUsd * (u.acceptance ?? 1), 0);
 
   const wasteMap = new Map<string, WasteBucket>();
   for (const u of mature) {
-    const stage = u.funnel.realized ? 'realized' : u.funnel.diedAt ?? 'unverified';
+    // A unit stopped by a contradiction did not die at that gate. Bucketing it
+    // under the gate name would report a refutation the evidence does not
+    // support, and would put adjudicable work in the same column as work that
+    // demonstrably failed.
+    const stage = u.funnel.realized
+      ? 'realized'
+      : u.funnel.conflicts.length > 0
+        ? 'conflicted'
+        : u.funnel.diedAt ?? 'unverified';
     const b = wasteMap.get(stage) ?? { stage, units: 0, costUsd: 0 };
     b.units += 1;
     b.costUsd += u.attributedCostUsd;
@@ -613,9 +1099,27 @@ export function rollupRealization(
   }
 
   const instrumentation = Object.fromEntries(GATE_LADDER.map((g) => [g, 0])) as Record<Gate, number>;
+  const gateConflicts = Object.fromEntries(GATE_LADDER.map((g) => [g, 0])) as Record<Gate, number>;
   for (const u of mature) {
-    for (const r of u.funnel.results) if (r.verdict !== 'unknown') instrumentation[r.gate] += 1;
+    for (const r of u.funnel.results) {
+      if (r.verdict !== 'unknown') instrumentation[r.gate] += 1;
+      if (r.polarity === 'conflicted') gateConflicts[r.gate] += 1;
+    }
   }
+
+  const aggregateEconomic = (values: readonly EconomicAttribution[]): EconomicAttribution =>
+    economicAttributionFromAttributions(values);
+  const matureEconomic = mature.flatMap((unit) => unit.economic === undefined ? [] : [unit.economic]);
+  const realizedEconomic = realizedUnits.flatMap((unit) => unit.economic === undefined ? [] : [unit.economic]);
+  const economic: RealizationEconomicRollup = {
+    coverage: matureEconomic.length === 0
+      ? 'legacy_unknown'
+      : matureEconomic.length === mature.length && aggregateEconomic(matureEconomic).complete
+        ? 'exact'
+        : 'partial',
+    total: matureEconomic.length === 0 ? null : aggregateEconomic(matureEconomic),
+    realized: matureEconomic.length === 0 ? null : aggregateEconomic(realizedEconomic),
+  };
 
   return {
     generatedAt: new Date(generatedMs).toISOString(),
@@ -627,18 +1131,23 @@ export function rollupRealization(
     firstPassAcceptance,
     proposalCoverage: units.length > 0 ? withProposal.length / units.length : 0,
     costStaleUnits: units.filter((u) => u.costStale).length,
+    survivalUnmeasuredUnits: opts.survivalUnmeasuredUnits ?? 0,
     matured: {
       units: mature.length,
       realizedUnits: realizedUnits.length,
       realizationRate: mature.length > 0 ? realizedUnits.length / mature.length : 0,
       totalCostUsd,
-      realizedValueUsd,
-      netRealizedValueUsd,
-      realizedValueRate: totalCostUsd > 0 ? realizedValueUsd / totalCostUsd : null,
+      spendWindowTruncatedUnits: mature.filter((u) => u.spendWindowTruncated === true).length,
+      spendWindowUnknownUnits: mature.filter((u) => u.spendWindowTruncated === null).length,
+      spendOnRealizedUnitsUsd,
+      acceptanceWeightedSpendUsd,
+      realizedSpendShare: totalCostUsd > 0 ? spendOnRealizedUnitsUsd / totalCostUsd : null,
       wasteByStage: [...wasteMap.values()].sort((a, b) => b.costUsd - a.costUsd),
       instrumentation,
+      gateConflicts,
       realizationBounds: terminalRealizationBounds(mature.map((u) => u.funnel)),
       serial: serialRealization(mature.map((u) => u.funnel)),
+      economic,
     },
   };
 }

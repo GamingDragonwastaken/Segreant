@@ -1,0 +1,264 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
+import { EconomicLedger } from '../src/economics/ledger.ts';
+import { economicEvent, economicEventRole, type EconomicEventInput } from '../src/economics/events.ts';
+import { formatMoneyAmount, money } from '../src/economics/money.ts';
+import { deserializeEconomicEvent, serializeEconomicEvent } from '../src/economics/serialization.ts';
+import { canonicalJson } from '../src/epistemic/serialization.ts';
+import { Store } from '../src/store/db.ts';
+
+function event(overrides: Partial<EconomicEventInput> = {}): EconomicEventInput {
+  return {
+    id: 'event:bill:1',
+    kind: 'bill_observed',
+    subject: 'provider:openai:acct-1',
+    occurredAt: '2026-08-01T00:00:00.000Z',
+    recordedAt: '2026-08-02T00:00:00.000Z',
+    amount: money('12.34', 'USD', 'billed'),
+    sourceEventIds: [],
+    reversalOf: null,
+    metadata: { invoiceRef: 'invoice-1' },
+    schemaVersion: 1,
+    ...overrides,
+  };
+}
+
+function withBody(encoded: ReturnType<typeof serializeEconomicEvent>, body: string): ReturnType<typeof serializeEconomicEvent> {
+  return {
+    ...encoded,
+    body,
+    digest: `sha256:${createHash('sha256').update(body, 'utf8').digest('hex')}`,
+  };
+}
+
+test('economic events are immutable, typed, and preserve exact Money basis', () => {
+  const value = economicEvent(event());
+  assert.equal(value.kind, 'bill_observed');
+  assert.equal(value.amount?.basis, 'billed');
+  assert.equal(formatMoneyAmount(value.amount!), '12.34');
+  assert.equal(value.reversalOf, null);
+  assert.equal(Object.isFrozen(value), true);
+  assert.equal(Object.isFrozen(value.metadata), true);
+  assert.throws(() => economicEvent(event({ amount: null })), /requires an amount/);
+  assert.throws(() => economicEvent(event({ kind: 'allocation_reversed', amount: money('-1', 'USD', 'allocated'), reversalOf: null })), /reversalOf/);
+  assert.throws(() => economicEvent({ ...event(), trusted: true } as never), /unknown field: trusted/);
+  assert.equal(economicEventRole('bill_observed'), 'charge');
+  assert.equal(economicEventRole('credit_applied'), 'adjustment');
+  assert.throws(
+    () => economicEvent(event({ kind: 'bill_observed', amount: money('1', 'USD', 'list') })),
+    /compatible.*basis|basis.*list/i,
+  );
+});
+
+test('economic serialization canonicalizes Money without BigInt or float coercion', () => {
+  const value = economicEvent(event({ kind: 'provider_charge_observed', amount: money('0.000001', 'USD', 'provider_observed') }));
+  const encoded = serializeEconomicEvent(value);
+  assert.equal(encoded.kind, 'economic_event');
+  assert.match(encoded.digest, /^sha256:[a-f0-9]{64}$/);
+  assert.deepEqual(deserializeEconomicEvent(encoded), value);
+  assert.equal(encoded.body.includes('BigInt'), false);
+  assert.throws(() => deserializeEconomicEvent({ ...encoded, digest: 'sha256:' + '0'.repeat(64) }), /digest/);
+});
+
+test('economic deserialization refuses non-canonical Money and incomplete event bodies', () => {
+  const encoded = serializeEconomicEvent(economicEvent(event()));
+  const extraMoney = JSON.parse(encoded.body) as Record<string, unknown>;
+  extraMoney.amount = { ...(extraMoney.amount as Record<string, unknown>), extra: 'smuggled' };
+  assert.throws(
+    () => deserializeEconomicEvent(withBody(encoded, canonicalJson(extraMoney))),
+    /unknown.*Money|Money.*unknown/i,
+  );
+
+  const nonNormalized = JSON.parse(encoded.body) as Record<string, unknown>;
+  nonNormalized.amount = { ...(nonNormalized.amount as Record<string, unknown>), coefficient: '100', scale: 2 };
+  assert.throws(
+    () => deserializeEconomicEvent(withBody(encoded, canonicalJson(nonNormalized))),
+    /canonical|normalized/i,
+  );
+
+  const incomplete = JSON.parse(encoded.body) as Record<string, unknown>;
+  delete incomplete.sourceEventIds;
+  assert.throws(
+    () => deserializeEconomicEvent(withBody(encoded, canonicalJson(incomplete))),
+    /missing.*sourceEventIds|required/i,
+  );
+
+  const missingEnvelopeField = { ...encoded } as Record<string, unknown>;
+  delete missingEnvelopeField.digest;
+  assert.throws(
+    () => deserializeEconomicEvent(missingEnvelopeField as never),
+    /missing.*digest|required/i,
+  );
+});
+
+test('economic ledger is append-only, idempotent, and projects each monetary basis separately', () => {
+  const db = new DatabaseSync(':memory:');
+  const ledger = new EconomicLedger(db);
+  const bill = economicEvent(event());
+  const credit = economicEvent(event({ id: 'event:credit:1', kind: 'credit_applied', amount: money('-1.00', 'USD', 'billed'), sourceEventIds: [bill.id], reversalOf: bill.id, recordedAt: '2026-08-03T00:00:00.000Z' }));
+  const estimate = economicEvent(event({ id: 'event:estimate:1', kind: 'charge_estimated', amount: money('3.00', 'USD', 'estimated'), recordedAt: '2026-08-04T00:00:00.000Z' }));
+  assert.equal(ledger.append(bill), 'inserted');
+  assert.equal(ledger.append(bill), 'duplicate');
+  assert.equal(ledger.append(credit), 'inserted');
+  assert.equal(ledger.append(estimate), 'inserted');
+  assert.deepEqual(
+    (db.prepare('SELECT event_id AS eventId, source_event_id AS sourceEventId FROM economic_event_sources ORDER BY event_id, source_event_id').all() as Array<{ eventId: string; sourceEventId: string }>).map((row) => ({ eventId: row.eventId, sourceEventId: row.sourceEventId })),
+    [{ eventId: credit.id, sourceEventId: bill.id }],
+  );
+  assert.throws(() => db.prepare('UPDATE economic_event_sources SET source_event_id = ? WHERE event_id = ?').run('other', credit.id), /append-only/i);
+  assert.throws(() => db.prepare('DELETE FROM economic_event_sources WHERE event_id = ?').run(credit.id), /append-only/i);
+  assert.throws(() => ledger.append(economicEvent(event({ amount: money('99.00', 'USD', 'billed') }))), /different economic event/);
+  assert.deepEqual(ledger.project().balances.map((balance) => ({ role: balance.role, basis: balance.amount.basis, amount: formatMoneyAmount(balance.amount) })), [
+    { role: 'adjustment', basis: 'billed', amount: '-1' },
+    { role: 'charge', basis: 'billed', amount: '12.34' },
+    { role: 'charge', basis: 'estimated', amount: '3' },
+  ]);
+  assert.deepEqual(ledger.project('2026-08-02T12:00:00.000Z').balances.map((balance) => ({ role: balance.role, basis: balance.amount.basis, amount: formatMoneyAmount(balance.amount) })), [
+    { role: 'charge', basis: 'billed', amount: '12.34' },
+  ]);
+  assert.throws(() => db.prepare("UPDATE economic_events SET event_json = '{}' WHERE event_id = ?").run(bill.id), /append-only/);
+  assert.throws(() => db.prepare("DELETE FROM economic_events WHERE event_id = ?").run(bill.id), /append-only/);
+  assert.throws(() => db.prepare("INSERT OR REPLACE INTO economic_events (event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest) VALUES (?, ?, ?, ?, ?, ?, ?)").run(bill.id, 'bill_observed', 'x', bill.occurredAt, bill.recordedAt, '{}', 'tampered'), /append-only/);
+  db.close();
+});
+
+test('economic projection replay is deterministic and rejects cross-currency or cross-basis summation', () => {
+  const db = new DatabaseSync(':memory:');
+  const ledger = new EconomicLedger(db);
+  ledger.append(economicEvent(event({ amount: money('1.00', 'EUR', 'billed'), id: 'event:eur:1' })));
+  ledger.append(economicEvent(event({ amount: money('1.00', 'USD', 'billed'), id: 'event:usd:1' })));
+  const first = ledger.project();
+  const second = ledger.project();
+  assert.deepEqual(second, first);
+  assert.deepEqual(first.balances.map((balance) => `${balance.amount.currency}:${balance.amount.basis}`), ['EUR:billed', 'USD:billed']);
+  db.close();
+});
+
+test('economic replay fails closed on persisted dangling source references', () => {
+  const db = new DatabaseSync(':memory:');
+  const ledger = new EconomicLedger(db);
+  const dangling = economicEvent(event({ id: 'event:dangling', sourceEventIds: ['event:missing'] }));
+  const encoded = serializeEconomicEvent(dangling);
+  db.prepare(
+    'INSERT INTO economic_events (event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest) VALUES (?, ?, ?, ?, ?, ?, ?)',
+  ).run(dangling.id, dangling.kind, dangling.subject, dangling.occurredAt, dangling.recordedAt, encoded.body, encoded.digest);
+  assert.throws(() => ledger.read(dangling.id), /unknown source economic event|dangling/i);
+  assert.throws(() => ledger.events(), /unknown source economic event|dangling/i);
+  db.close();
+});
+
+test('economic replay fails closed when a persisted source link is omitted', () => {
+  const db = new DatabaseSync(':memory:');
+  const ledger = new EconomicLedger(db);
+  const bill = economicEvent(event({ id: 'event:linked-bill' }));
+  ledger.append(bill);
+  const unlinked = economicEvent(event({ id: 'event:unlinked', sourceEventIds: [bill.id] }));
+  const encoded = serializeEconomicEvent(unlinked);
+  db.prepare(
+    'INSERT INTO economic_events (event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest) VALUES (?, ?, ?, ?, ?, ?, ?)',
+  ).run(unlinked.id, unlinked.kind, unlinked.subject, unlinked.occurredAt, unlinked.recordedAt, encoded.body, encoded.digest);
+  assert.throws(() => ledger.read(unlinked.id), /source.*link|reference/i);
+  db.close();
+});
+
+test('economic schema upgrade backfills normalized source links without rewriting events', () => {
+  const db = new DatabaseSync(':memory:');
+  db.exec(`
+    PRAGMA foreign_keys = ON;
+    CREATE TABLE economic_events (
+      event_id TEXT PRIMARY KEY,
+      event_kind TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      occurred_at TEXT NOT NULL,
+      recorded_at TEXT NOT NULL,
+      event_json TEXT NOT NULL,
+      event_digest TEXT NOT NULL
+    );
+  `);
+  const bill = economicEvent(event({ id: 'event:pre-link-bill' }));
+  const credit = economicEvent(event({ id: 'event:pre-link-credit', kind: 'credit_applied', amount: money('-1', 'USD', 'billed'), sourceEventIds: [bill.id], reversalOf: bill.id }));
+  for (const item of [bill, credit]) {
+    const encoded = serializeEconomicEvent(item);
+    db.prepare(
+      'INSERT INTO economic_events (event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    ).run(item.id, item.kind, item.subject, item.occurredAt, item.recordedAt, encoded.body, encoded.digest);
+  }
+  const before = db.prepare('SELECT event_json, event_digest FROM economic_events ORDER BY event_id').all();
+  const ledger = new EconomicLedger(db);
+  assert.deepEqual(
+    (db.prepare('SELECT event_id AS eventId, source_event_id AS sourceEventId FROM economic_event_sources').all() as Array<{ eventId: string; sourceEventId: string }>).map((row) => ({ eventId: row.eventId, sourceEventId: row.sourceEventId })),
+    [{ eventId: credit.id, sourceEventId: bill.id }],
+  );
+  assert.deepEqual(db.prepare('SELECT event_json, event_digest FROM economic_events ORDER BY event_id').all(), before);
+  assert.equal(ledger.read(credit.id)?.reversalOf, bill.id);
+  db.close();
+});
+
+test('economic replay fails closed on persisted reversal links that are not source references', () => {
+  const db = new DatabaseSync(':memory:');
+  const ledger = new EconomicLedger(db);
+  const invalid = economicEvent(event({ id: 'event:invalid-reversal', reversalOf: 'event:missing-source' }));
+  const encoded = serializeEconomicEvent(invalid);
+  db.prepare(
+    'INSERT INTO economic_events (event_id, event_kind, subject, occurred_at, recorded_at, event_json, event_digest) VALUES (?, ?, ?, ?, ?, ?, ?)',
+  ).run(invalid.id, invalid.kind, invalid.subject, invalid.occurredAt, invalid.recordedAt, encoded.body, encoded.digest);
+  assert.throws(() => ledger.read(invalid.id), /reversalOf.*sourceEventIds/i);
+  db.close();
+});
+
+test('economic allocation reversals require a compatible, conserving allocation source', () => {
+  const db = new DatabaseSync(':memory:');
+  const ledger = new EconomicLedger(db);
+  const allocation = economicEvent(event({
+    id: 'event:allocation:1',
+    kind: 'cost_allocated',
+    subject: 'allocation:run-1',
+    amount: money('5', 'USD', 'allocated'),
+  }));
+  const bill = economicEvent(event());
+  ledger.append(bill);
+  ledger.append(allocation);
+  const wrongKind = economicEvent(event({
+    id: 'event:allocation-reversal:wrong-kind',
+    kind: 'allocation_reversed',
+    subject: allocation.subject,
+    amount: money('-1', 'USD', 'allocated'),
+    sourceEventIds: [bill.id],
+    reversalOf: bill.id,
+  }));
+  assert.throws(() => ledger.append(wrongKind), /cost_allocated|allocation/i);
+  assert.throws(() => economicEvent(event({
+    id: 'event:allocation-reversal:wrong-basis',
+    kind: 'allocation_reversed',
+    subject: allocation.subject,
+    amount: money('-1', 'USD', 'billed'),
+    sourceEventIds: [allocation.id],
+    reversalOf: allocation.id,
+  })), /currency|basis|compatible/i);
+  const over = economicEvent(event({
+    id: 'event:allocation-reversal:over',
+    kind: 'allocation_reversed',
+    subject: allocation.subject,
+    amount: money('-6', 'USD', 'allocated'),
+    sourceEventIds: [allocation.id],
+    reversalOf: allocation.id,
+  }));
+  assert.throws(() => ledger.append(over), /conserv|exceed|revers/i);
+  db.close();
+});
+
+test('Store exposes the economic ledger on the same SQLite handle without changing operational totals', () => {
+  const store = new Store(':memory:');
+  try {
+    const bill = economicEvent(event({ id: 'event:store:bill', amount: money('2.50', 'USD', 'billed') }));
+    assert.equal(store.economic().append(bill), 'inserted');
+    assert.deepEqual(store.economic().project().balances.map((balance) => ({ basis: balance.amount.basis, amount: formatMoneyAmount(balance.amount) })), [
+      { basis: 'billed', amount: '2.5' },
+    ]);
+    assert.equal(store.summary(0, Date.parse('2026-08-03T00:00:00.000Z')).costUsd, 0);
+  } finally {
+    store.close();
+  }
+});

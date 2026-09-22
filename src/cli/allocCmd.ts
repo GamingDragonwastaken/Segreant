@@ -14,7 +14,7 @@ import { formatUsdMicros } from '../billing/types.ts';
 import { displayUsd } from '../billing/reconcile.ts';
 import { MATCH_FIELDS, type AllocationMatch, type AllocationMethod, type AllocationTarget } from '../alloc/rules.ts';
 import type { AllocationRunResult } from '../alloc/apply.ts';
-import { color, C } from './ui.ts';
+import { color, C, printJson } from './ui.ts';
 import type { Flags } from './flags.ts';
 
 function usage(): void {
@@ -77,8 +77,14 @@ function printRun(result: AllocationRunResult, applied: boolean, tty: boolean): 
   console.log(color(tty, C.dim, `  ${day(result.periodStartMs)} → ${day(result.periodEndMs)} (exclusive end)`));
   console.log('');
 
+  // A period whose rows retention deleted is not a period in which nothing
+  // reached a cost centre; the two must not print the same sentence (D-183).
+  const lost = result.retention?.truncated === true ? result.retention : null;
   if (result.byCostCentre.length === 0) {
-    console.log(color(tty, C.gray, '  No spend reached a cost centre in this period.'));
+    console.log(color(tty, C.gray, lost
+      ? '  No spend that SURVIVES in this period reached a cost centre — rows before '
+        + `${day(lost.prunedBeforeMs ?? 0)} were deleted by retention, and whether they did cannot be read from here.`
+      : '  No spend reached a cost centre in this period.'));
   } else {
     for (const centre of result.byCostCentre) {
       console.log(
@@ -93,6 +99,15 @@ function printRun(result: AllocationRunResult, applied: boolean, tty: boolean): 
   const unallocatedColor = result.unallocatedMicros > 0 ? C.yellow : C.gray;
   console.log(color(tty, unallocatedColor, `  ${('$' + displayUsd(result.unallocatedMicros)).padStart(13)}  ${pct(result.unallocatedMicros, result.totalMicros).padStart(6)}  unallocated`));
   console.log(color(tty, C.dim, `  ${('$' + displayUsd(result.totalMicros)).padStart(13)}          ledger total for the period`));
+  if (lost) {
+    // The percentages above divide by that total. Deleting the oldest rows
+    // removes whatever share of them no rule matched, so the allocated
+    // percentage moves for a reason that has nothing to do with the rules --
+    // measured at 76.2% becoming 100.0% on a period 95% of whose spend went.
+    console.log(color(tty, C.yellow, '  Retention deleted request rows from inside this period '
+      + `(before ${day(lost.prunedBeforeMs ?? 0)}), so the total above is what SURVIVES and the`));
+    console.log(color(tty, C.yellow, '  percentages beside it are shares of that, not of what the period cost.'));
+  }
 
   if (result.unallocated.length > 0) {
     console.log('');
@@ -113,7 +128,14 @@ function printRun(result: AllocationRunResult, applied: boolean, tty: boolean): 
   console.log(color(tty, C.dim, '                None of these is a provider-reported or reconciled amount — every'));
   console.log(color(tty, C.dim, '                figure above is a local estimate. Allocating an estimate is legitimate;'));
   console.log(color(tty, C.dim, '                presenting it as settled cost is not. Reconcile before you charge anyone.'));
-  console.log(color(tty, C.dim, `  Conservation  ${result.conserves ? 'exact — allocated + unallocated = ledger total' : 'FAILED'}`));
+  // The strongest reassurance on this screen, and the one most likely to be
+  // misread over a truncated period: it conserves what SURVIVES, and it was
+  // never able to detect a missing input (D-183).
+  console.log(color(tty, C.dim, `  Conservation  ${result.conserves
+    ? (lost
+        ? 'exact over the SURVIVING rows — allocated + unallocated = the total above; it cannot see what was deleted'
+        : 'exact — allocated + unallocated = ledger total')
+    : 'FAILED'}`));
   console.log(color(tty, C.dim, `  Excluded from ${result.excludedFrom.join(', ')}`));
   console.log(applied ? color(tty, C.green, '  Recorded as an immutable derived run.') : '  Not recorded. Persist it with: fiscus alloc run … --apply');
 }
@@ -125,7 +147,7 @@ export function cmdAlloc(flags: Flags): void {
   try {
     if (action === 'centres') {
       const centres = store.costCentres();
-      if (flags.json) return void process.stdout.write(JSON.stringify({ costCentres: centres }, null, 2) + '\n');
+      if (flags.json) return void printJson({ costCentres: centres });
       console.log('');
       if (centres.length === 0) console.log(color(tty, C.gray, '  No cost centres. Add one: fiscus alloc centre eng --name "Engineering"'));
       for (const c of centres) {
@@ -154,7 +176,7 @@ export function cmdAlloc(flags: Flags): void {
 
     if (action === 'rules') {
       const rules = store.allocationRules();
-      if (flags.json) return void process.stdout.write(JSON.stringify({ rules }, null, 2) + '\n');
+      if (flags.json) return void printJson({ rules });
       console.log('');
       if (rules.length === 0) console.log(color(tty, C.gray, '  No allocation rules. Spend allocates to nothing until one exists.'));
       for (const r of rules) {
@@ -229,7 +251,7 @@ export function cmdAlloc(flags: Flags): void {
       }
       const applied = Boolean(flags.apply);
       const allocationRunId = applied ? store.saveAllocationRun(result) : null;
-      if (flags.json) process.stdout.write(JSON.stringify({ applied, allocationRunId, result }, null, 2) + '\n');
+      if (flags.json) printJson({ applied, allocationRunId, result });
       else printRun(result, applied, tty);
       return;
     }

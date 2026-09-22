@@ -1,0 +1,891 @@
+/**
+ * T-069: Store-internal causal request/realization lineage.
+ *
+ * These tests intentionally exercise only metadata and scalar evidence.  A
+ * binding must never contain prompts, source text, or realization unit_json.
+ */
+
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { causalExecutionV2EventHash, causalTerminalOutcomeV2EventHash, decodeCausalExecutionV2, ordinaryLedgerVerifierHash } from '../src/causal/records.ts';
+import { canonicalJson, commitCausalProtocol } from '../src/causal/protocol.ts';
+import {
+  appendCausalLineageBindingV2,
+  causalRequestPricingDigestV2,
+  validateCausalLineageBindingV2,
+  causalLineageBindingDigestV2,
+  causalRealizationSnapshotDigestV2,
+  type CausalLineageBindingV2,
+} from '../src/store/causalLineage.ts';
+import { type CausalExecutionRecordV2, type CausalStudyProtocolDraftV2, type CommittedCausalStudyProtocolV2 } from '../src/causal/types.ts';
+import { Store, type RequestRow } from '../src/store/db.ts';
+import { causalQualificationV2 } from '../src/store/causal.ts';
+
+const H = (char: string): string => char.repeat(64);
+const D = (char: string): string => 'sha256:' + H(char);
+const COMMIT = 'a'.repeat(40);
+
+function protocol(studyId: string): CommittedCausalStudyProtocolV2 {
+  const draft: CausalStudyProtocolDraftV2 = {
+    type: 'fiscus.causal-study',
+    version: 2,
+    studyId,
+    seriesId: 'series:' + studyId.slice(studyId.indexOf(':') + 1),
+    studyVersion: 1,
+    ownerId: 'owner:test',
+    scopeId: 'scope:test',
+    createdAtMs: 1_700_000_000_000,
+    question: 'model_cost_quality',
+    eligibility: {
+      cohortId: 'cohort:test',
+      contextSchemaId: 'schema:test',
+      unitOfAssignment: 'task',
+      inclusionRuleIds: ['rule:include'],
+      exclusionRuleIds: [],
+    },
+    studyWindow: { startsAtMs: 1_700_000_001_000, endsAtMs: null },
+    stoppingRule: { kind: 'fixed_enrollment', maxAssignments: 4 },
+    arms: [
+      { armId: 'arm:test', role: 'candidate', executionPlanDigest: D('1'), providerId: 'provider:openai', modelId: 'model:test' },
+      { armId: 'arm:control', role: 'control', executionPlanDigest: D('2'), providerId: 'provider:openai', modelId: 'model:control' },
+    ],
+    allocation: { method: 'blocked_randomized_equal_allocation', probabilityPerArm: 0.5, blockSize: 4 },
+    costOutcome: {
+      metricId: 'metric:direct-cost-usd',
+      currency: 'USD',
+      boundsUsd: { low: 0, high: 100 },
+      acceptedSourceClasses: ['actual_observed'],
+      priceLineageRule: 'every_included_cost_has_retained_sha256_lineage',
+    },
+    qualityOutcome: {
+      metricId: 'metric:quality',
+      collectionMethodId: 'method:deterministic',
+      bounds: { low: 0, high: 1 },
+      evidenceClass: 'deterministic',
+      nonInferiorityMargin: 0.05,
+    },
+    economicOutcome: null,
+    analysis: {
+      estimand: 'intention_to_treat',
+      confidenceLevel: 0.95,
+      minCompletedPerArm: 1,
+      maxMissingFractionPerArm: 0.25,
+      exclusionPolicyId: 'policy:fixed',
+    },
+    dataGovernance: {
+      minimizedSourceIds: ['source:ledger-metadata'],
+      retentionClassId: 'retention:causal-minimal',
+      egressReceiptDigests: [],
+    },
+    claimTemplateIds: {
+      qualified: 'claim:qualified',
+      inconclusive: 'claim:inconclusive',
+      invalid: 'claim:invalid',
+    },
+  };
+  return commitCausalProtocol(draft, 1_700_000_000_500) as CommittedCausalStudyProtocolV2;
+}
+
+function requestRow(
+  requestId: string,
+  tsEpochMs: number,
+  declarationId: string,
+  provider: string,
+  model: string,
+  costUsd = 1,
+): RequestRow {
+  return {
+    requestId,
+    sessionId: 'session:lineage',
+    tsEpochMs,
+    provider,
+    model,
+    project: 'project:lineage',
+    taskWeight: 1,
+    inputTokens: 10,
+    outputTokens: 20,
+    cacheWriteTokens: 0,
+    cacheReadTokens: 0,
+    reasoningTokens: 0,
+    costUsd,
+    estimated: false,
+    streamed: false,
+    statusCode: 200,
+    durationMs: 10,
+    via: 'proxy',
+    pricing: {
+      costBasis: 'tool_reported_unverified',
+      rateCardSha256: null,
+      rateCardSourceKind: 'none',
+      rateMatchKind: 'reported',
+      rateMatchProvider: null,
+      rateMatchModel: null,
+    },
+    scopeCaptureStatus: 'declared_unverified',
+    providerScopeDeclarationId: declarationId,
+    attributionBasis: 'client_declared',
+  };
+}
+
+function appendFixture(store: Store, studyId: string): {
+  protocol: CommittedCausalStudyProtocolV2;
+  execution: CausalExecutionRecordV2;
+  binding: CausalLineageBindingV2;
+} {
+  const committed = protocol(studyId);
+  assert.equal(store.registerCausalProtocol(committed), 'created');
+  const declaration = store.setOpenAiScope({
+    billingAccountRef: 'acct:lineage',
+    providerProjectRef: 'project:lineage',
+    upstreamBase: 'https://api.openai.com/v1',
+    declaredAtMs: 1_700_000_001_000,
+    activatedAtMs: 1_700_000_001_000,
+  });
+  const assignment = store.assignCausalBlockV2({
+    studyId,
+    blockId: 'block:lineage',
+    createdAtMs: 1_700_000_001_001,
+    unitIdDigests: [D('3'), D('4'), D('5'), D('6')],
+  });
+  const decision = assignment.block.decisions[0]!;
+  const assignedArm = committed.arms.find((arm) => arm.armId === decision.assignedArmId)!;
+  const verifierMaterial = {
+    type: 'fiscus.causal-ordinary-ledger-verifier' as const,
+    version: 2 as const,
+    state: 'unresolved' as const,
+    checkedAtMs: null,
+    requestCount: 0 as const,
+    evidenceManifestHash: null,
+    reasonCodes: ['task4_not_implemented' as const],
+  };
+  const executionMaterial: Omit<CausalExecutionRecordV2, 'eventHash'> = {
+    type: 'fiscus.causal-execution',
+    version: 2,
+    executionId: 'execution:lineage',
+    decisionId: decision.decisionId,
+    studyId,
+    protocolHash: committed.protocolHash,
+    startedAtMs: decision.assignedAtMs + 1,
+    completedAtMs: decision.assignedAtMs + 5,
+    assignedExecutionPlanDigest: assignedArm.executionPlanDigest,
+    actualExecutionPlanDigest: assignedArm.executionPlanDigest,
+    adherence: 'confirmed',
+    requestIds: ['request:lineage'],
+    directAiCostUsd: 1,
+    directCostSourceClass: 'actual_observed',
+    priceLineageDigests: [causalRequestPricingDigestV2({
+      requestId: 'request:lineage',
+      tsEpochMs: decision.assignedAtMs + 2,
+      provider: assignedArm.providerId!,
+      model: assignedArm.modelId!,
+      project: 'project:lineage',
+      costMicros: 1_000_000,
+      costBasis: 'tool_reported_unverified',
+      rateCardSha256: null,
+      rateCardSourceKind: 'none',
+      rateMatchKind: 'reported',
+      rateMatchProvider: null,
+      rateMatchModel: null,
+      scopeCaptureStatus: 'declared_unverified',
+      providerScopeDeclarationId: declaration.declarationId,
+    })],
+    fullArmCostUsd: null,
+    fullCostSourceClass: 'incomplete_or_unknown',
+    ordinaryLedgerVerifier: {
+      ...verifierMaterial,
+      resultHash: ordinaryLedgerVerifierHash(verifierMaterial),
+    },
+    previousEventHash: decision.eventHash,
+  };
+  const execution: CausalExecutionRecordV2 = {
+    ...executionMaterial,
+    eventHash: causalExecutionV2EventHash(executionMaterial),
+  };
+  decodeCausalExecutionV2(execution);
+  assert.equal(store.appendCausalExecutionV2(execution), 'created');
+  const outcomeMaterial = {
+    type: 'fiscus.causal-terminal-outcome' as const,
+    version: 2 as const,
+    outcomeId: 'outcome:lineage',
+    decisionId: decision.decisionId,
+    studyId,
+    protocolHash: committed.protocolHash,
+    observedAtMs: execution.completedAtMs + 1,
+    maturity: 'matured' as const,
+    qualityValue: 0.9,
+    qualityEvidenceClass: 'deterministic' as const,
+    economicValueUsd: null,
+    economicEvidenceClass: null,
+    outcomeEvidenceDigests: [D('8')],
+    censoredReason: null,
+    invalidReason: null,
+    previousEventHash: execution.eventHash,
+  };
+  assert.equal(store.appendCausalTerminalOutcomeV2({ ...outcomeMaterial, eventHash: causalTerminalOutcomeV2EventHash(outcomeMaterial) }), 'created');
+  store.insertRequest(requestRow(
+    'request:lineage',
+    execution.startedAtMs + 1,
+    declaration.declarationId,
+    assignedArm.providerId!,
+    assignedArm.modelId!,
+  ));
+  store.raw().prepare(
+    `INSERT INTO realization_units
+       (commit_hash, project, ts_epoch_ms, computed_at_ms, attributed_cost_usd, maturing, realized, unit_json,
+        causal_unit_id_digest, cost_scope, cost_stale)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(COMMIT, 'project:lineage', execution.completedAtMs + 2, execution.completedAtMs + 3, 1, 0, 1, '{}', decision.unitIdDigest, 'project', 0);
+  const realizationSnapshotDigest = causalRealizationSnapshotDigestV2({
+    commitHash: COMMIT,
+    project: 'project:lineage',
+    tsEpochMs: execution.completedAtMs + 2,
+    computedAtMs: execution.completedAtMs + 3,
+    attributedCostUsd: 1,
+    maturing: false,
+    realized: true,
+    costScope: 'project',
+    costStale: false,
+  });
+  const bindingMaterial = {
+    type: 'fiscus.causal-lineage-binding' as const,
+    version: 2 as const,
+    bindingId: 'lineage:lineage',
+    studyId,
+    protocolHash: committed.protocolHash,
+    decisionId: decision.decisionId,
+    executionId: execution.executionId,
+    outcomeId: 'outcome:lineage',
+    unitIdDigest: decision.unitIdDigest,
+    requestIds: [...execution.requestIds],
+    realizationCommitHash: COMMIT,
+    realizationSnapshotDigest,
+  };
+  const binding: CausalLineageBindingV2 = {
+    ...bindingMaterial,
+    bindingDigest: causalLineageBindingDigestV2(bindingMaterial),
+  };
+  return { protocol: committed, execution, binding };
+}
+
+/** Fill the remaining randomized decisions so qualification reaches its
+ * inconclusive gate instead of the earlier collecting state. */
+function completeRemainingFixture(store: Store, committed: CommittedCausalStudyProtocolV2): void {
+  const declaration = store.raw().prepare(
+    'SELECT declaration_id AS declarationId FROM provider_scope_declarations ORDER BY declared_at_ms LIMIT 1',
+  ).get() as { declarationId: string };
+  const decisions = store.raw().prepare(
+    `SELECT decision_json AS decisionJson FROM causal_decisions_v2
+       WHERE study_id = ? ORDER BY block_sequence, decision_index`,
+  ).all(committed.studyId) as Array<{ decisionJson: string }>;
+  for (const [index, row] of decisions.entries()) {
+    if (index === 0) continue;
+    const decision = JSON.parse(row.decisionJson) as {
+      decisionId: string;
+      assignedArmId: string;
+      assignedAtMs: number;
+      eventHash: string;
+      unitIdDigest: string;
+    };
+    const arm = committed.arms.find((candidate) => candidate.armId === decision.assignedArmId)!;
+    const verifierMaterial = {
+      type: 'fiscus.causal-ordinary-ledger-verifier' as const,
+      version: 2 as const,
+      state: 'unresolved' as const,
+      checkedAtMs: null,
+      requestCount: 0 as const,
+      evidenceManifestHash: null,
+      reasonCodes: ['task4_not_implemented' as const],
+    };
+    const executionMaterial: Omit<CausalExecutionRecordV2, 'eventHash'> = {
+      type: 'fiscus.causal-execution',
+      version: 2,
+      executionId: `execution:lineage-${index}`,
+      decisionId: decision.decisionId,
+      studyId: committed.studyId,
+      protocolHash: committed.protocolHash,
+      startedAtMs: decision.assignedAtMs + 1,
+      completedAtMs: decision.assignedAtMs + 5,
+      assignedExecutionPlanDigest: arm.executionPlanDigest,
+      actualExecutionPlanDigest: arm.executionPlanDigest,
+      adherence: 'confirmed',
+      requestIds: [`request:lineage-${index}`],
+      directAiCostUsd: 1,
+      directCostSourceClass: 'actual_observed',
+      priceLineageDigests: [causalRequestPricingDigestV2({
+        requestId: `request:lineage-${index}`,
+        tsEpochMs: decision.assignedAtMs + 2,
+        provider: arm.providerId!,
+        model: arm.modelId!,
+        project: 'project:lineage',
+        costMicros: 1_000_000,
+        costBasis: 'tool_reported_unverified',
+        rateCardSha256: null,
+        rateCardSourceKind: 'none',
+        rateMatchKind: 'reported',
+        rateMatchProvider: null,
+        rateMatchModel: null,
+        scopeCaptureStatus: 'declared_unverified',
+        providerScopeDeclarationId: declaration.declarationId,
+      })],
+      fullArmCostUsd: null,
+      fullCostSourceClass: 'incomplete_or_unknown',
+      ordinaryLedgerVerifier: {
+        ...verifierMaterial,
+        resultHash: ordinaryLedgerVerifierHash(verifierMaterial),
+      },
+      previousEventHash: decision.eventHash,
+    };
+    const execution = { ...executionMaterial, eventHash: causalExecutionV2EventHash(executionMaterial) };
+    decodeCausalExecutionV2(execution);
+    assert.equal(store.appendCausalExecutionV2(execution), 'created');
+    const outcomeMaterial = {
+      type: 'fiscus.causal-terminal-outcome' as const,
+      version: 2 as const,
+      outcomeId: `outcome:lineage-${index}`,
+      decisionId: decision.decisionId,
+      studyId: committed.studyId,
+      protocolHash: committed.protocolHash,
+      observedAtMs: execution.completedAtMs + 1,
+      maturity: 'matured' as const,
+      qualityValue: 0.9,
+      qualityEvidenceClass: 'deterministic' as const,
+      economicValueUsd: null,
+      economicEvidenceClass: null,
+      outcomeEvidenceDigests: [D('8')],
+      censoredReason: null,
+      invalidReason: null,
+      previousEventHash: execution.eventHash,
+    };
+    assert.equal(store.appendCausalTerminalOutcomeV2({
+      ...outcomeMaterial,
+      eventHash: causalTerminalOutcomeV2EventHash(outcomeMaterial),
+    }), 'created');
+    store.insertRequest(requestRow(
+      `request:lineage-${index}`,
+      execution.startedAtMs + 1,
+      declaration.declarationId,
+      arm.providerId!,
+      arm.modelId!,
+    ));
+    const realizationCommitHash = ['b', 'c', 'd'][index - 1]!.repeat(40);
+    const realizationTsEpochMs = execution.completedAtMs + 2;
+    const realizationComputedAtMs = execution.completedAtMs + 3;
+    store.raw().prepare(
+      `INSERT INTO realization_units
+         (commit_hash, project, ts_epoch_ms, computed_at_ms, attributed_cost_usd, maturing, realized,
+          unit_json, causal_unit_id_digest, cost_scope, cost_stale)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      realizationCommitHash,
+      'project:lineage',
+      realizationTsEpochMs,
+      realizationComputedAtMs,
+      1,
+      0,
+      1,
+      '{}',
+      decision.unitIdDigest,
+      'project',
+      0,
+    );
+    const realizationSnapshotDigest = causalRealizationSnapshotDigestV2({
+      commitHash: realizationCommitHash,
+      project: 'project:lineage',
+      tsEpochMs: realizationTsEpochMs,
+      computedAtMs: realizationComputedAtMs,
+      attributedCostUsd: 1,
+      maturing: false,
+      realized: true,
+      costScope: 'project',
+      costStale: false,
+    });
+    const bindingMaterial = {
+      type: 'fiscus.causal-lineage-binding' as const,
+      version: 2 as const,
+      bindingId: `lineage:lineage-${index}`,
+      studyId: committed.studyId,
+      protocolHash: committed.protocolHash,
+      decisionId: decision.decisionId,
+      executionId: execution.executionId,
+      outcomeId: `outcome:lineage-${index}`,
+      unitIdDigest: decision.unitIdDigest,
+      requestIds: [...execution.requestIds],
+      realizationCommitHash,
+      realizationSnapshotDigest,
+    };
+    assert.equal(store.appendCausalLineageBindingV2({
+      ...bindingMaterial,
+      bindingDigest: causalLineageBindingDigestV2(bindingMaterial),
+    }), 'created');
+  }
+}
+
+test('T-069 RED/GREEN contract: unresolved ordinary ledger evidence cannot validate a lineage binding', () => {
+  const store = new Store(':memory:');
+  try {
+    const fixture = appendFixture(store, 'study:lineage-unresolved');
+    const result = validateCausalLineageBindingV2(store.raw(), fixture.binding);
+    assert.equal(result.state, 'invalid');
+    assert.ok(result.reasonCodes.includes('ledger_verification_unresolved'), result.reasonCodes.join(','));
+    assert.equal(result.bindingDigest, fixture.binding.bindingDigest);
+    assert.equal(result.requestCount, 1);
+    assert.equal(result.actualCostUsd, null);
+  } finally {
+    store.close();
+  }
+});
+
+test('T-069 appends one scalar sidecar, authenticates idempotent reload, and preserves the unresolved ledger gate', () => {
+  const store = new Store(':memory:');
+  try {
+    const fixture = appendFixture(store, 'study:lineage-sidecar');
+    assert.equal(store.appendCausalLineageBindingV2(fixture.binding), 'created');
+    assert.equal(store.appendCausalLineageBindingV2(fixture.binding), 'existing');
+    assert.deepEqual(store.causalLineageBindingsV2(fixture.protocol.studyId), [fixture.binding]);
+
+    const row = store.raw().prepare(
+      `SELECT request_ids_json AS requestIdsJson, binding_json AS bindingJson
+         FROM causal_lineage_bindings_v2 WHERE binding_id = ?`,
+    ).get(fixture.binding.bindingId) as { requestIdsJson: string; bindingJson: string };
+    assert.equal(row.requestIdsJson, '["request:lineage"]');
+    assert.doesNotMatch(row.bindingJson, /prompt|source|unit_json/i);
+    const validation = validateCausalLineageBindingV2(store.raw(), fixture.binding);
+    assert.equal(validation.state, 'invalid');
+    assert.deepEqual(validation.reasonCodes, [
+      'ledger_verification_unresolved',
+      'realization_unit_identity_unverified',
+    ]);
+  } finally {
+    store.close();
+  }
+});
+
+test('T-069 sidecar update and delete are refused by physical append-only triggers', () => {
+  const store = new Store(':memory:');
+  try {
+    const fixture = appendFixture(store, 'study:lineage-immutable');
+    assert.equal(appendCausalLineageBindingV2(store.raw(), fixture.binding), 'created');
+    assert.throws(
+      () => store.raw().prepare(
+        'UPDATE causal_lineage_bindings_v2 SET binding_json = binding_json WHERE binding_id = ?',
+      ).run(fixture.binding.bindingId),
+      /causal evidence is append-only/i,
+    );
+    assert.throws(
+      () => store.raw().prepare(
+        'DELETE FROM causal_lineage_bindings_v2 WHERE binding_id = ?',
+      ).run(fixture.binding.bindingId),
+      /causal evidence is append-only/i,
+    );
+    assert.equal(
+      (store.raw().prepare('SELECT COUNT(*) AS count FROM causal_lineage_bindings_v2').get() as { count: number }).count,
+      1,
+    );
+  } finally {
+    store.close();
+  }
+});
+
+test('T-069 every causal evidence table rejects INSERT OR REPLACE and retains its original row', () => {
+  const store = new Store(':memory:');
+  try {
+    const db = store.raw();
+    const tables = [
+      'causal_protocols',
+      'causal_assignment_plans',
+      'causal_decisions',
+      'causal_executions',
+      'causal_outcomes',
+      'causal_analysis_snapshots',
+      'causal_assignment_plans_v2',
+      'causal_decisions_v2',
+      'causal_assignment_units_v2',
+      'causal_assignment_manifests_v2',
+      'causal_executions_v2',
+      'causal_terminal_outcomes_v2',
+      'causal_lineage_bindings_v2',
+    ];
+    const quoteIdentifier = (value: string): string => '"' + value.replaceAll('"', '""') + '"';
+
+    for (const [tableIndex, table] of tables.entries()) {
+      const columns = db.prepare('PRAGMA table_info(' + quoteIdentifier(table) + ')').all() as Array<{
+        name: string;
+        type: string;
+        pk: number;
+      }>;
+      assert.ok(columns.length > 0, table + ' must exist before the replacement probe');
+      const columnSql = columns.map((column) => quoteIdentifier(column.name)).join(', ');
+      const placeholders = columns.map(() => '?').join(', ');
+      const originalValues = columns.map((column, columnIndex) => {
+        if (/BLOB/i.test(column.type)) return Buffer.from(`causal-replace:${table}:${column.name}:original`);
+        if (/INT/i.test(column.type)) return tableIndex * 100 + columnIndex + 1;
+        return `causal-replace:${table}:${column.name}:original`;
+      });
+      db.prepare(
+        'INSERT INTO ' + quoteIdentifier(table) + ' (' + columnSql + ') VALUES (' + placeholders + ')',
+      ).run(...originalValues);
+
+      const primaryKeyColumns = columns
+        .filter((column) => column.pk > 0)
+        .sort((left, right) => left.pk - right.pk);
+      assert.ok(primaryKeyColumns.length > 0, table + ' must have a primary key for the replacement probe');
+      const primaryKeyValues = primaryKeyColumns.map((column) => originalValues[columns.indexOf(column)]!);
+      const selectByPrimaryKey = 'SELECT * FROM ' + quoteIdentifier(table) + ' WHERE ' + primaryKeyColumns
+        .map((column) => quoteIdentifier(column.name) + ' = ?').join(' AND ');
+      const originalRows = db.prepare(selectByPrimaryKey).all(...primaryKeyValues);
+      assert.equal(originalRows.length, 1, table + ' replacement probe must seed exactly one row');
+
+      const mutableColumnIndex = columns.findIndex((column) => column.pk === 0);
+      assert.notEqual(mutableColumnIndex, -1, table + ' replacement probe needs a non-key column');
+      const replacementValues = [...originalValues];
+      const mutableColumn = columns[mutableColumnIndex]!;
+      if (/BLOB/i.test(mutableColumn.type)) {
+        replacementValues[mutableColumnIndex] = Buffer.from(`causal-replace:${table}:${mutableColumn.name}:replacement`);
+      } else if (/INT/i.test(mutableColumn.type)) {
+        replacementValues[mutableColumnIndex] = (replacementValues[mutableColumnIndex] as number) + 1;
+      } else {
+        replacementValues[mutableColumnIndex] = String(replacementValues[mutableColumnIndex]) + ':replacement';
+      }
+
+      assert.throws(
+        () => db.prepare(
+          'INSERT OR REPLACE INTO ' + quoteIdentifier(table) + ' (' + columnSql + ') VALUES (' + placeholders + ')',
+        ).run(...replacementValues),
+        /causal evidence is append-only/i,
+        table + ' must reject replacement through Store.raw()',
+      );
+      assert.deepEqual(
+        db.prepare(selectByPrimaryKey).all(...primaryKeyValues),
+        originalRows,
+        table + ' must retain the original row after a rejected replacement',
+      );
+    }
+
+    const recursiveTriggers = db.prepare('PRAGMA recursive_triggers').get() as { recursive_triggers: number };
+    assert.equal(recursiveTriggers.recursive_triggers, 1, 'Store connections must enable recursive SQLite triggers');
+  } finally {
+    store.close();
+  }
+});
+
+test('T-069 sidecar reload fails closed when canonical JSON is tampered behind a restored trigger', () => {
+  const store = new Store(':memory:');
+  try {
+    const fixture = appendFixture(store, 'study:lineage-tamper');
+    assert.equal(appendCausalLineageBindingV2(store.raw(), fixture.binding), 'created');
+    const row = store.raw().prepare(
+      'SELECT binding_json AS bindingJson FROM causal_lineage_bindings_v2 WHERE binding_id = ?',
+    ).get(fixture.binding.bindingId) as { bindingJson: string };
+    const altered = row.bindingJson.replace('lineage:lineage', 'lineage:tampered');
+    assert.notEqual(altered, row.bindingJson);
+    store.raw().prepare('DROP TRIGGER causal_no_update_causal_lineage_bindings_v2').run();
+    store.raw().prepare(
+      'UPDATE causal_lineage_bindings_v2 SET binding_json = ? WHERE binding_id = ?',
+    ).run(altered, fixture.binding.bindingId);
+    store.raw().prepare(
+      `CREATE TRIGGER causal_no_update_causal_lineage_bindings_v2
+         BEFORE UPDATE ON causal_lineage_bindings_v2
+         BEGIN SELECT RAISE(ABORT, 'causal evidence is append-only'); END`,
+    ).run();
+    assert.throws(
+      () => store.causalLineageBindingsV2(fixture.protocol.studyId),
+      (error: unknown) => error instanceof Error
+        && 'code' in error
+        && (error as { code?: unknown }).code === 'CAUSAL_INTEGRITY_FAILURE',
+    );
+  } finally {
+    store.close();
+  }
+});
+
+test('T-069 realization lineage requires an independently retained scalar unit identity', () => {
+  const cases: Array<{
+    name: string;
+    causalUnitIdDigest: string | null;
+    unitJson: string;
+    reason: 'realization_unit_identity_missing' | 'realization_unit_identity_mismatch';
+  }> = [
+    {
+      name: 'arbitrary unit_json cannot stand in for the scalar identity',
+      causalUnitIdDigest: null,
+      unitJson: JSON.stringify({ unitIdDigest: D('3') }),
+      reason: 'realization_unit_identity_missing',
+    },
+    {
+      name: 'missing scalar identity remains unqualified',
+      causalUnitIdDigest: null,
+      unitJson: '{}',
+      reason: 'realization_unit_identity_missing',
+    },
+    {
+      name: 'mismatched scalar identity is rejected',
+      causalUnitIdDigest: D('f'),
+      unitJson: '{}',
+      reason: 'realization_unit_identity_mismatch',
+    },
+  ];
+  for (const [index, candidate] of cases.entries()) {
+    const store = new Store(':memory:');
+    try {
+      const fixture = appendFixture(store, `study:lineage-unit-identity-${index}`);
+      store.raw().prepare(
+        'UPDATE realization_units SET causal_unit_id_digest = ?, unit_json = ? WHERE commit_hash = ?',
+      ).run(candidate.causalUnitIdDigest, candidate.unitJson, COMMIT);
+      const result = validateCausalLineageBindingV2(store.raw(), fixture.binding);
+      assert.equal(result.state, 'invalid', candidate.name);
+      assert.ok(result.reasonCodes.includes(candidate.reason), result.reasonCodes.join(','));
+    } finally {
+      store.close();
+    }
+  }
+});
+
+test('T-069 realization store persists the optional scalar identity and leaves ordinary rows null', () => {
+  const store = new Store(':memory:');
+  try {
+    store.saveRealizationUnits([
+      {
+        commitHash: 'b'.repeat(40),
+        project: 'project:lineage-store',
+        tsEpochMs: 1_700_000_002_000,
+        computedAtMs: 1_700_000_003_000,
+        attributedCostUsd: 1,
+        maturing: false,
+        realized: true,
+        unitJson: '{}',
+        causalUnitIdDigest: D('1'),
+        costScope: 'project',
+      },
+      {
+        commitHash: 'c'.repeat(40),
+        project: 'project:ordinary',
+        tsEpochMs: 1_700_000_002_000,
+        computedAtMs: 1_700_000_003_000,
+        attributedCostUsd: 1,
+        maturing: false,
+        realized: true,
+        unitJson: '{}',
+        costScope: 'window',
+      },
+    ]);
+    const columns = store.raw().prepare('PRAGMA table_info(realization_units)').all() as Array<{ name: string }>;
+    assert.ok(columns.some((column) => column.name === 'causal_unit_id_digest'));
+    const rows = store.raw().prepare(
+      `SELECT commit_hash AS commitHash, causal_unit_id_digest AS causalUnitIdDigest
+         FROM realization_units ORDER BY commit_hash`,
+    ).all().map((row) => ({ ...row })) as Array<{ commitHash: string; causalUnitIdDigest: string | null }>;
+    assert.deepEqual(rows, [
+      { commitHash: 'b'.repeat(40), causalUnitIdDigest: D('1') },
+      { commitHash: 'c'.repeat(40), causalUnitIdDigest: null },
+    ]);
+  } finally {
+    store.close();
+  }
+});
+
+test('T-069 realization timestamps cannot precede execution completion', () => {
+  const store = new Store(':memory:');
+  try {
+    const fixture = appendFixture(store, 'study:lineage-realization-clock');
+    store.raw().prepare(
+      'UPDATE realization_units SET ts_epoch_ms = ?, computed_at_ms = ? WHERE commit_hash = ?',
+    ).run(fixture.execution.completedAtMs - 1, fixture.execution.completedAtMs - 1, COMMIT);
+    const result = validateCausalLineageBindingV2(store.raw(), fixture.binding);
+    assert.equal(result.state, 'invalid');
+    assert.ok(result.reasonCodes.includes('realization_scope_invalid'), result.reasonCodes.join(','));
+  } finally {
+    store.close();
+  }
+});
+
+test('T-069 validation rejects noncanonical retained execution and terminal-outcome JSON', () => {
+  const executionStore = new Store(':memory:');
+  try {
+    const fixture = appendFixture(executionStore, 'study:lineage-noncanonical-execution');
+    const row = executionStore.raw().prepare(
+      'SELECT execution_json AS executionJson FROM causal_executions_v2 WHERE execution_id = ?',
+    ).get(fixture.execution.executionId) as { executionJson: string };
+    executionStore.raw().prepare('DROP TRIGGER causal_no_update_causal_executions_v2').run();
+    executionStore.raw().prepare(
+      'UPDATE causal_executions_v2 SET execution_json = ? WHERE execution_id = ?',
+    ).run(' ' + row.executionJson, fixture.execution.executionId);
+    executionStore.raw().prepare(
+      `CREATE TRIGGER causal_no_update_causal_executions_v2
+         BEFORE UPDATE ON causal_executions_v2
+         BEGIN SELECT RAISE(ABORT, 'causal evidence is append-only'); END`,
+    ).run();
+    const result = validateCausalLineageBindingV2(executionStore.raw(), fixture.binding);
+    assert.equal(result.state, 'invalid');
+    assert.ok(result.reasonCodes.includes('execution_identity_mismatch'), result.reasonCodes.join(','));
+  } finally {
+    executionStore.close();
+  }
+
+  const outcomeStore = new Store(':memory:');
+  try {
+    const fixture = appendFixture(outcomeStore, 'study:lineage-noncanonical-outcome');
+    const row = outcomeStore.raw().prepare(
+      'SELECT terminal_outcome_json AS terminalOutcomeJson FROM causal_terminal_outcomes_v2 WHERE outcome_id = ?',
+    ).get('outcome:lineage') as { terminalOutcomeJson: string };
+    outcomeStore.raw().prepare('DROP TRIGGER causal_no_update_causal_terminal_outcomes_v2').run();
+    outcomeStore.raw().prepare(
+      'UPDATE causal_terminal_outcomes_v2 SET terminal_outcome_json = ? WHERE outcome_id = ?',
+    ).run(' ' + row.terminalOutcomeJson, 'outcome:lineage');
+    outcomeStore.raw().prepare(
+      `CREATE TRIGGER causal_no_update_causal_terminal_outcomes_v2
+         BEFORE UPDATE ON causal_terminal_outcomes_v2
+         BEGIN SELECT RAISE(ABORT, 'causal evidence is append-only'); END`,
+    ).run();
+    const result = validateCausalLineageBindingV2(outcomeStore.raw(), fixture.binding);
+    assert.equal(result.state, 'invalid');
+    assert.ok(result.reasonCodes.includes('outcome_identity_mismatch'), result.reasonCodes.join(','));
+  } finally {
+    outcomeStore.close();
+  }
+});
+
+test('T-069 sidecar reload recomputes the envelope binding digest', () => {
+  const store = new Store(':memory:');
+  try {
+    const fixture = appendFixture(store, 'study:lineage-sidecar-digest');
+    assert.equal(store.appendCausalLineageBindingV2(fixture.binding), 'created');
+    const row = store.raw().prepare(
+      'SELECT binding_json AS bindingJson FROM causal_lineage_bindings_v2 WHERE binding_id = ?',
+    ).get(fixture.binding.bindingId) as { bindingJson: string };
+    const alteredBinding = JSON.parse(row.bindingJson) as Record<string, unknown>;
+    alteredBinding.bindingDigest = D('f');
+    const alteredJson = canonicalJson(alteredBinding);
+    store.raw().prepare('DROP TRIGGER causal_no_update_causal_lineage_bindings_v2').run();
+    store.raw().prepare(
+      'UPDATE causal_lineage_bindings_v2 SET binding_digest = ?, binding_json = ? WHERE binding_id = ?',
+    ).run(D('f'), alteredJson, fixture.binding.bindingId);
+    store.raw().prepare(
+      `CREATE TRIGGER causal_no_update_causal_lineage_bindings_v2
+         BEFORE UPDATE ON causal_lineage_bindings_v2
+         BEGIN SELECT RAISE(ABORT, 'causal evidence is append-only'); END`,
+    ).run();
+    assert.throws(
+      () => store.causalLineageBindingsV2(fixture.protocol.studyId),
+      (error: unknown) => error instanceof Error
+        && 'code' in error
+        && (error as { code?: unknown }).code === 'CAUSAL_INTEGRITY_FAILURE',
+    );
+  } finally {
+    store.close();
+  }
+});
+
+test('T-069 qualification rejects a semantically invalid persisted sidecar before pending evidence can hide it', () => {
+  const store = new Store(':memory:');
+  try {
+    const fixture = appendFixture(store, 'study:lineage-qualification-tamper');
+    assert.equal(store.appendCausalLineageBindingV2(fixture.binding), 'created');
+    store.raw().prepare(
+      `UPDATE requests SET via = 'import', estimated = 1, cost_basis = 'local_list_price',
+         rate_card_source_kind = 'bundled', rate_match_kind = 'exact_provider',
+         scope_capture_status = 'unscoped', provider_scope_declaration_id = NULL
+       WHERE request_id = ?`,
+    ).run('request:lineage');
+    const result = causalQualificationV2(store.raw(), fixture.protocol.studyId);
+    assert.equal(result.state, 'invalid');
+    assert.ok(result.reasons.includes('V2 request-to-realization lineage binding failed validation'));
+  } finally {
+    store.close();
+  }
+});
+
+test('T-069 rejects imported, modeled, unpriced, or scope-unresolved request rows', () => {
+  const store = new Store(':memory:');
+  try {
+    const fixture = appendFixture(store, 'study:lineage-request-gates');
+    const request = store.raw().prepare('SELECT request_id FROM requests WHERE request_id = ?').get('request:lineage') as { request_id: string };
+    assert.equal(request.request_id, 'request:lineage');
+    store.raw().prepare(
+      `UPDATE requests SET via = 'import', estimated = 1, cost_basis = 'local_list_price',
+         rate_card_source_kind = 'bundled', rate_match_kind = 'exact_provider',
+         scope_capture_status = 'unscoped', provider_scope_declaration_id = NULL
+       WHERE request_id = ?`,
+    ).run('request:lineage');
+    const result = validateCausalLineageBindingV2(store.raw(), fixture.binding);
+    assert.equal(result.state, 'invalid');
+    assert.ok(result.reasonCodes.includes('request_cost_evidence_unaccepted'), result.reasonCodes.join(','));
+    assert.ok(result.reasonCodes.includes('request_scope_unresolved'));
+  } finally {
+    store.close();
+  }
+});
+
+test('T-069 binding shape rejects raw prompts/source/unit_json and realization snapshots fail closed on mutation', () => {
+  const store = new Store(':memory:');
+  try {
+    const fixture = appendFixture(store, 'study:lineage-minimal');
+    const forbidden = { ...fixture.binding, prompt: 'secret' } as unknown;
+    const rejected = validateCausalLineageBindingV2(store.raw(), forbidden);
+    assert.equal(rejected.state, 'invalid');
+    assert.ok(rejected.reasonCodes.includes('binding_shape_invalid'));
+    assert.deepEqual(Object.keys(fixture.binding).sort(), [
+      'bindingDigest', 'bindingId', 'decisionId', 'executionId', 'outcomeId',
+      'protocolHash', 'realizationCommitHash', 'realizationSnapshotDigest',
+      'requestIds', 'studyId', 'type', 'unitIdDigest', 'version',
+    ]);
+    store.raw().prepare('UPDATE realization_units SET realized = 0 WHERE commit_hash = ?').run(COMMIT);
+    const mutated = validateCausalLineageBindingV2(store.raw(), fixture.binding);
+    assert.equal(mutated.state, 'invalid');
+    assert.ok(mutated.reasonCodes.includes('realization_not_mature'), mutated.reasonCodes.join(','));
+    assert.ok(mutated.reasonCodes.includes('realization_snapshot_digest_mismatch'));
+  } finally {
+    store.close();
+  }
+});
+
+test('T-069 binding validation contains hostile proxy and symbol shapes', () => {
+  const store = new Store(':memory:');
+  try {
+    const throwing = new Proxy({}, {
+      get() {
+        throw new Error('binding getter must not escape');
+      },
+      ownKeys() {
+        throw new Error('binding keys must not escape');
+      },
+    });
+    assert.doesNotThrow(() => validateCausalLineageBindingV2(store.raw(), throwing));
+    assert.equal(validateCausalLineageBindingV2(store.raw(), throwing).reasonCodes[0], 'binding_shape_invalid');
+
+    const symbolBinding = { [Symbol('unexpected')]: true };
+    assert.doesNotThrow(() => validateCausalLineageBindingV2(store.raw(), symbolBinding));
+    assert.equal(validateCausalLineageBindingV2(store.raw(), symbolBinding).reasonCodes[0], 'binding_shape_invalid');
+  } finally {
+    store.close();
+  }
+});
+
+test('T-069 qualification remains inconclusive until the append-only lineage binding exists', () => {
+  const store = new Store(':memory:');
+  try {
+    const fixture = appendFixture(store, 'study:lineage-qualification');
+    completeRemainingFixture(store, fixture.protocol);
+    const result = causalQualificationV2(store.raw(), fixture.protocol.studyId);
+    assert.equal(result.state, 'inconclusive');
+    assert.ok(result.reasons.includes('V2 request-to-realization lineage binding is not persisted'));
+  } finally {
+    store.close();
+  }
+});
+
+test('T-069 asserted realization identity remains inconclusive and never qualifies', () => {
+  const store = new Store(':memory:');
+  try {
+    const fixture = appendFixture(store, 'study:lineage-asserted-unqualified');
+    assert.equal(store.appendCausalLineageBindingV2(fixture.binding), 'created');
+    completeRemainingFixture(store, fixture.protocol);
+    const result = causalQualificationV2(store.raw(), fixture.protocol.studyId);
+    assert.equal(result.state, 'inconclusive');
+    assert.ok(
+      result.reasons.includes('V2 realization-to-unit identity is asserted but not independently verified'),
+      result.reasons.join(','),
+    );
+  } finally {
+    store.close();
+  }
+});

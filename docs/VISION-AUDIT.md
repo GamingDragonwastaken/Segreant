@@ -13,11 +13,12 @@ of writing.
 > as written.
 
 This document applies the product's own rule to the product's own plans: an
-important claim should be inspectable through evidence. `PRODUCT_BRIEF.md` and
+important claim should be inspectable through evidence. PRODUCT.md and
 [AI-FINANCIAL-OPERATIONS-ROADMAP.md](AI-FINANCIAL-OPERATIONS-ROADMAP.md) say
-what Fiscus is meant to be. This says what it currently **is**, clause by
-clause, with a file to check for each answer, and where each missing piece
-belongs if it gets built.
+what Fiscus is meant to be. This historical audit says what it was at the
+audited revision, clause by clause, with a file to check for each answer and
+where each missing piece belonged. For the live capability/evidence contract,
+use [CAPABILITY-EVIDENCE-CONTRACT.md](CAPABILITY-EVIDENCE-CONTRACT.md).
 
 It is an audit, not a plan. It does not schedule anything, and it does not
 authorize anything — several gaps below are blocked on an owner decision rather
@@ -35,9 +36,9 @@ Four sources describe it, and they agree:
   Explicitly **not** AI financial advice, not software for performing financial
   services with AI, not a Vanta clone, not a governance/GRC product. The Vanta
   lesson is only *make important claims inspectable through evidence*.
-- **`PRODUCT_BRIEF.md`:** the four questions Fiscus answers (what did it cost,
-  can it be stopped, did the work become durable software, and what is too
-  weakly instrumented to support a decision).
+- **[PRODUCT.md](../PRODUCT.md):** the four questions Fiscus answers (what did
+  it cost, can it be stopped, did the work become durable software, and what is
+  too weakly instrumented to support a decision).
 - **[AI-FINANCIAL-OPERATIONS-ROADMAP.md](AI-FINANCIAL-OPERATIONS-ROADMAP.md):**
   the six-capability platform (Capture, Reconcile, Attribute, Govern, Allocate,
   Evidence) and the staged build order.

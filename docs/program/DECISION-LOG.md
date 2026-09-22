@@ -1,0 +1,3872 @@
+# Decision Log
+## D-001 — Reconstruction branch
+**Decision:** Build on `gpt56/magnum-opus-reconstruction`, starting exactly from `31577d5...`.
+**Reason:** Preserve PR #8/Luna work as a reviewed foundation while allowing constitutional migration without rewriting shared history.
+
+## D-002 — Capability non-retreat
+**Decision:** Existing competitor/standard capability is a benchmark/interoperability target, not an abandonment trigger.
+**Reason:** Fiscus is intended as enduring, broadly useful public-interest software rather than a differentiation-minimized startup product.
+
+## D-003 — Small truth core, broad capability edge
+**Decision:** Introduce a Trusted Epistemic Kernel controlling evidence/claim/money/measurement/derivation/decision semantics. Feature modules remain broad but cannot mint stronger truth independently.
+**Reason:** Prevent semantic debt from allowing respectable modules to compose into unsupported economic conclusions.
+
+## D-004 — OIDC failure repair
+**Decision:** Inject a verifier clock and test exact temporal boundaries against fixed time. Do not widen `nbf` test threshold as the primary repair.
+**Reason:** Root cause is wall-clock drift during async JWKS work; deterministic time removes environmental nondeterminism and makes the 60-second contract testable.
+
+## D-005 — Conservative decision primitives
+**Decision:** Keep strict interval dominance as the only proof-level selection, and expose minimax regret and perfect-information VOI as explicitly named decision rules with assumptions and measurement cost. Overlap, missing competitors, invalid intervals, and malformed scenario sets remain non-certifiable.
+**Reason:** A recommendation must not be relabelled as objective truth merely because an optimizer returned an action. The decision engine therefore separates proof (`proven_dominant`) from rule-based selection and preserves the uncertainty model in its output.
+
+## D-006 — Revocation is additive graph closure
+**Decision:** Represent revocation as a projected transitive closure over prerequisite-to-dependent edges; retain node history and independent siblings, tolerate cycles during traversal, reject duplicate edges, and make repeated revocation idempotent.
+**Reason:** Deleting or last-write-wins replacement would erase the evidence path that explains why a descendant is no longer certifiable. The pure closure is the first executable kernel primitive; persistent DAG/event storage remains a later M1 slice.
+
+## D-007 — Strict realization fixtures carry explicit lifecycle evidence
+**Decision:** Update synthetic and integration fixtures to provide every declared coding predicate (`merged` and `shipped` included) when they claim terminal realization. Keep maturing/uninstrumented fixtures unresolved and preserve the strict production lower bound.
+**Reason:** The old fixtures depended on unknown-as-pass. Making unknown gates pass would reverse the Audit II correction; supplying truthful synthetic evidence exercises the same production funnel without weakening it.
+
+## D-008 — Evidence is an immutable envelope, not a trust bit
+**Decision:** Canonical Evidence requires explicit source identity/class, scope/grain, acquisition time, separate integrity/authenticity/completeness, and schema/version metadata. Raw payloads are cloned/frozen JSON when retained; hash/reference-only evidence is supported for sensitive content. Unknown top-level fields, including `trusted`, are refused.
+**Reason:** A well-formed or signed record can establish integrity without establishing authenticity, completeness, or proposition truth. The envelope makes those axes inspectable and prevents accidental field drift at the kernel boundary.
+
+## D-009 — Claims retain their derivation and profile context
+**Decision:** Canonical Claims require typed propositions, at least one evidence dependency, a derivation rule/version, explicit coordinates/time/uncertainty, and matching epistemic/causal profile axes. Monetary basis and finality aliases are copied from the profile and cannot diverge.
+**Reason:** Claim consumers need a stable issued object without allowing `established:boolean` or duplicate semantic fields to erase uncertainty, provenance, or economic meaning. Persistence, derivation legality, and as-of replay are subsequent kernel slices.
+
+## D-010 — Derivation strengthening is witness-gated
+**Decision:** A canonical Derivation binds input/output claim identities and propositions, records coordinate changes and reproducibility metadata, and refuses any increase in grain, scope status, coverage, construct validity, causality, monetary finality, integrity, authenticity, epistemic information, or decision fitness without the corresponding witness kind.
+**Reason:** Coordinate geometry and profile labels describe a change but do not authorize it. Keeping the legality assessment explicit makes unsupported semantic escalation machine-checkable and explainable.
+
+## D-011 — DAG snapshots are immutable projections
+**Decision:** Evidence/Claim/Assumption/Measurement/Decision dependencies are represented as validated immutable snapshots. Dependency edges are acyclic; supersession is not a dependency; as-of and revocation are projections with trace paths, never destructive updates.
+**Reason:** The kernel must answer what was knowable and why a descendant became non-certifiable without erasing history. A pure snapshot API is safe to compose now; append-only persistence and event replay follow as a separate slice.
+
+## D-012 — Kernel persistence stays under the Store schema authority
+**Decision:** Persist canonical Evidence, Claim, Derivation, DAG nodes/edges and revocation events in append-only SQLite tables created and protected by `src/store/schema.ts`; `Store.epistemic()` exposes the same connection, while `ledger.ts` performs validated DML and replay checks only.
+**Reason:** A second database or domain-owned DDL would split transaction and migration authority. Schema-owned triggers prevent update/delete/`INSERT OR REPLACE` bypasses, and exact JSON/digest replay keeps corrections additive and auditable.
+
+## D-013 — Assumptions are named dependencies, not prose confidence
+**Decision:** Add immutable Assumption nodes and optional `Claim.assumptionIds`; preserve existing human-readable assumption strings for compatibility, but only ID-linked assumptions enter the dependency graph and revocation closure.
+**Reason:** A decision cannot explain or invalidate an opaque text list. Named nodes make assumptions queryable, scoped, time-qualified, evidence-linked and independently revocable without pretending they are a global confidence score.
+
+## D-014 — Historical revocation is event-time bounded
+**Decision:** Current revocation uses all retained events; an as-of projection includes only events recorded by the requested boundary and only nodes visible at that boundary.
+**Reason:** Later knowledge must not leak backward into a historical decision replay. The rule preserves present correction while keeping “what did we know then?” reproducible.
+
+## D-015 — Canonical bytes are part of the kernel contract
+**Decision:** Evidence, Claim, Assumption and Derivation records serialize through sorted-key canonical JSON with SHA-256 envelopes; deserialization verifies kind, identity, schema/version, digest and canonical bytes before invoking the domain factory.
+**Reason:** Hashing incidental object insertion order would make equivalent records incomparable and weaken replay/audit evidence. Unsupported values and cycles fail closed rather than being coerced.
+
+## D-016 — Witnesses are first-class evidence-grounded registry records
+**Decision:** A derivation witness is issued as an immutable, versioned Witness node with explicit kind, coordinates where applicable, grounding evidence IDs, issuance time and epistemic state. Stored Derivations must reference a matching registry record; the ledger persists evidence-to-witness and witness-to-claim edges and includes them in revocation/as-of projections.
+**Reason:** An inline witness label can otherwise be invented, changed, or detached from the evidence that supposedly authorizes semantic strengthening. A first-class registry makes proof obligations replayable, revocable and inspectable without collapsing them into a trust bit or allowing a hidden bypass.
+
+## D-017 — Billing enters the kernel through an explicit exact-money adapter
+**Decision:** The validated operator billing import remains a compatibility read model, but its accepted lines can be issued as canonical provider Evidence and billed Claims through exact `Money`. Reconciliation claims preserve billed and local-estimate bases separately and represent the residual as a conservation-checked comparison; no provider line is allowed to affect request spend, budgets, RoI or recommendations.
+**Reason:** The first product vertical must prove the kernel can carry useful financial semantics without silently converting legacy microdollar numbers, inventing provider authority, or collapsing unlike monetary bases. An explicit adapter makes migration resumable, observable and reversible at the compatibility boundary while leaving full provider-observation and subledger work visible.
+
+## D-018 — Reconciliation claims are bound to their immutable run and basis
+**Decision:** A persisted reconciliation Claim carries a unique reconciliation-run identity. Provider-side Money is `provider_observed` for a Costs snapshot and `billed` only for an explicitly imported billed line; local capture remains `estimated`, and the residual is a typed comparison that must satisfy exact provider-minus-local conservation.
+**Reason:** Reusing an observation identity would make later recalculations collide with earlier decisions, while calling every provider number “billed” would erase the distinction between a Costs observation and an invoice. Explicit run identity and basis-aware arithmetic keep corrections additive and auditable.
+
+## D-019 — Economic records must be semantically canonical on reload
+**Decision:** Exact Money JSON and economic-event envelopes reject unknown/missing fields, non-normalized coefficient/scale pairs, coercible currencies, hostile exact-value sizes, and persisted reference/reversal corruption. Every economic read revalidates its source-reference closure; bounded replay filters by recorded time in SQLite.
+**Reason:** A valid digest authenticates bytes, not an intended semantic object. Canonical rehydration and reload-time reference checks prevent direct SQLite writes or malformed interchange from becoming trusted financial history.
+
+## D-020 — Exact pricing is an explicit decimal boundary
+**Decision:** Accounting-facing pricing accepts canonical decimal rate strings and safe integer token counts only. It derives cache multipliers with exact rational arithmetic and returns Money; legacy numeric pricing remains a compatibility estimator until a canonical exact rate source is wired into live request/import paths.
+**Reason:** Converting a binary floating-point cost after calculation cannot prove exactness. Keeping the new boundary explicit allows progressive migration without relabelling legacy numbers or weakening existing product behavior.
+
+## D-021 — Exact request charges commit atomically with request rows
+**Decision:** An opted-in request row may carry one exact USD Money amount. Store writes its deterministic `charge_estimated`, `provider_charge_observed`, or `bill_observed` event on the same SQLite transaction; duplicate replays verify the immutable event, conflicts roll back the request, and legacy rows remain without invented exact evidence.
+**Reason:** A request and its economic history cannot diverge at a failure boundary. One deterministic event per request avoids usage/charge double counting while leaving quantity-event semantics for a later typed extension.
+
+## D-022 — Bundled exact rates are explicit companions, not numeric coercions
+**Decision:** The shipped pricing card may carry canonical decimal companions alongside its legacy numeric presentation rates. `computeCost` emits an exact Money breakdown only when those companions validate; live proxy/import/demo writers pass that exact total to the atomic request adapter. A refreshed numeric-only card continues to operate as a compatibility estimator without exact issuance.
+**Reason:** The product can move its shipped path onto exact accounting without claiming that an arbitrary external JSON number has an exact decimal provenance. The companion makes the authority visible and keeps refresh/source limitations honest.
+
+## D-023 — Economic projections keep event roles separate
+**Decision:** Economic events retain their immutable envelope but map to explicit projection roles. Balances group by currency, basis, and role; charge/bill/provider-observation and adjustment/allocation flows cannot be collapsed by a coincidental shared USD basis. Kind-specific basis checks and compatible, bounded allocation reversals fail closed.
+**Reason:** Exact arithmetic alone cannot prevent semantic double counting. Role separation preserves a usable balance projection while making the caller choose when a cross-role comparison or conservation proof is justified.
+
+## D-024 — Economic source references have a normalized immutable projection
+**Decision:** Persist every `sourceEventIds` edge in `economic_event_sources` with foreign keys and append-only triggers. The ledger backfills links from canonical pre-link event bytes during upgrade and refuses any reload where normalized links diverge from the event JSON.
+**Reason:** JSON-only references cannot be enforced by SQLite and can be bypassed by direct writes. A normalized side table gives the database a referential-integrity boundary while retaining the canonical event envelope as the semantic source.
+
+## D-025 — Budget enforcement uses a declared effective control projection
+**Decision:** When every request in a governed window has one valid charge-role economic event, BudgetGuard sums exact Money after an explicit `effective` control projection that retains source bases and live/import scope. If any legacy request is unresolved, it falls back to the existing numeric compatibility aggregate; it never silently treats incomplete exact coverage as zero.
+**Reason:** Budget caps are operational controls over local observed/estimated spend, not provider-billing claims. A named policy projection makes the cross-basis comparison explicit while preserving safe behavior for pre-migration rows.
+
+## D-026 — Economic inspection is a CLI-first, JSON-safe surface
+**Decision:** Expose the economic ledger first through `fiscus economic`, with canonical Money strings, event roles, source bases, event IDs and unresolved legacy coverage. Keep the initial surface read-only and CLI-first; add API/dashboard bindings only after a shared contract is defined.
+**Reason:** Operators need inspectable evidence immediately, but adding a second browser schema before the canonical contract exists would recreate the documented server/UI drift risk.
+
+## D-027 — Local repricing corrections are bounded additive events
+**Decision:** `price_corrected` targets exactly one `charge_estimated` source whose basis is `list` or `estimated`. It records the typed previous and replacement Money values, emits only their exact signed delta, must be recorded no earlier than its source, and a source may have at most one such correction. Provider-observed and billed restatements require distinct adjustment/reconciliation semantics.
+**Reason:** Reusing the original source for multiple independent restatements would sum deltas and overstate the effective amount; allowing a provider or invoice observation to masquerade as local repricing would erase its authority boundary. A deliberately bounded one-correction rule is conservative until a versioned correction-chain projection is specified.
+
+## D-028 — Historical FX is a source-bound exact derivative
+**Decision:** `fx_translated` must reference exactly one monetary source, retain its source basis, and carry a positive exact rational source-to-target rate, source identity, rate provenance, effective time, `source-to-target` convention and explicit `none` rounding. The translated amount must be exactly reproducible, use a different currency, share the source occurrence, and be recorded no earlier than the source. Non-terminating conversions and current-rate lookups are refused until a quantization policy is specified.
+**Reason:** A translated number without historical rate lineage can silently rewrite past economics with today’s FX or invented rounding. Keeping translation additive and independently inspectable preserves the original amount and makes future effective-projection and provider-policy work composable without erasing uncertainty.
+
+## D-029 — Effective request charges converge exact and legacy reprice paths
+**Decision:** The effective request-charge projection starts from the immutable exact charge and applies any validated one-source local price correction on the `effective` basis. The legacy `reprice --apply` path must append that canonical correction in the same SQLite transaction when exact history exists; a numeric-only update against an exact row is refused. Legacy numeric rows without exact history remain compatibility projections and are not backfilled by coercion.
+**Reason:** A correction-aware budget path cannot be authoritative if an existing supported writer can mutate only `requests.cost_usd`. Transactional convergence keeps the old read model usable while making the exact event graph the source of truth and preserving an explicit unresolved boundary for rows that cannot be reconstructed exactly.
+
+## D-030 — Exact allocation is a read-only, source-traced projection until persistence is exact
+**Decision:** Exact allocation consumes effective economic charges without converting them to numeric microdollars. It partitions each currency/basis identity, carries all source event IDs, uses exact rational ratios, refuses non-terminating proportional shares without an explicit quantization policy, and marks legacy requests unresolved. It remains read-only while the legacy allocation schema stores numeric micros and cannot preserve the exact event graph.
+**Reason:** The existing showback engine is useful but assumes USD integer micros and cannot represent arbitrary precision, multiple currencies, or source lineage. A parallel exact projection provides a truthful migration seam without overwriting or relabelling historical numeric allocation runs as exact accounting.
+
+## D-031 — Exact allocation persistence retains source lineage without relabelling legacy runs
+**Decision:** Persist exact allocation results as canonical JSON/digest records with digest-derived immutable IDs. Store every line and unallocated item's source economic event IDs in a foreign-keyed, append-only lineage table; verify physical rows and links against the canonical result on replay. Allow incomplete results to remain explicitly incomplete, but reject non-conserving results and never overwrite the legacy numeric allocation schema.
+**Reason:** A read-only exact projection is not reviewable across process restarts, while the existing numeric run table cannot carry arbitrary precision, currency/basis identity or event provenance. A separate immutable schema creates a durable migration checkpoint without conflating exact economic evidence with historical compatibility data.
+
+## D-032 — Exact allocation replay recomputes its truth boundary
+**Decision:** Exact allocation serialization and replay reject unknown/missing fields, unsupported bases, invalid ratios, incomplete status, non-conserving flags and lineage divergence. Identity totals and allocated/unallocated conservation are recomputed before persistence or trust; result ordering includes source-event tie breakers. Proportional pools ignore archived placeholder targets in both exact and legacy allocation paths.
+**Reason:** An unkeyed digest authenticates bytes but cannot make a malformed result true, and input-order-dependent output makes an idempotent run identity unstable. The same rule semantics must hold across the migration seam, including the fact that proportional targets are placeholders rather than archived destinations.
+
+## D-033 — Exact economic export is an explicit compatibility-safe surface
+**Decision:** Expose exact request economics through `Store.economicRequestsInRange()` and `fiscus export --economic`. Each row carries canonical original/effective Money, bases, source and correction IDs, and an explicit `legacy_unknown` coverage marker; `compatibilityCostUsd` is retained only as a labelled presentation projection. The existing export mode remains unchanged until all consumers migrate.
+**Reason:** Export is a consequential handoff to finance/BI users. Omitting exact event lineage or silently replacing numeric history would either lose auditability or break existing consumers. A parallel exact-safe contract makes the boundary inspectable and lets value/API/dashboard adapters converge without claiming that legacy rows were reconstructed.
+
+## D-034 — Exact economic dashboard/API is a read-only shared projection
+**Decision:** Expose the same JSON-safe report used by `fiscus economic --json` at `GET/HEAD /api/economic`, with an explicit `economic_projection` discriminator, exact Money strings/coefficient metadata, request coverage, role-aware balances, bounded `days` windows and fail-closed invalid-window responses. Bind the browser client to the payload shape, while leaving the existing numeric/value dashboard surfaces unchanged until their economic migration is complete.
+**Reason:** A dashboard route that recomputed or silently coerced legacy numbers would create a second accounting authority. Reusing the CLI report keeps the API and CLI identical at the economic boundary, and a typed client contract makes browser/server drift observable without pretending that legacy value consumers are exact.
+
+## D-035 — Coding value consumes exact effective request lineage additively
+**Decision:** Join coding attribution windows to a Store-owned effective request read model that preserves raw/canonical project, session, provider, model, source, user and via dimensions; attach JSON-safe effective Money/source-event coverage to WorkUnits; aggregate exact mature/realized rollups separately from legacy numeric compatibility fields; and refresh that lineage during reprice synchronization. Missing exact events remain unresolved, and existing usage, cohort, frontier, receipt and team-rollup number contracts are not silently relabelled.
+**Reason:** Replacing `requests.cost_usd` globally would alter budget, overview, billing, causal, receipt and team semantics at once. The additive coding seam raises the value path to the exact effective projection while preserving explicit compatibility boundaries and creating a stable basis for the remaining consumer migrations.
+
+## D-036 — Grouped value consumers use one exact request read model
+**Decision:** Build deterministic exact effective session, `(session,user)`, `(provider,model)` and fixed-width series groups from the same request-level adapter. Usage, cohort and budget advice consume those groups; complete groups may safely project to legacy numeric fields, while partial groups retain their compatibility totals plus explicit unresolved coverage. Coding outcome gates, cohort privacy controls, live/import scope and existing public contracts remain unchanged.
+**Reason:** A single exact total cannot answer the grouped questions required by non-coding value and model-cost advice. Reusing one dimension-validated adapter prevents project/model/session drift and makes coverage loss visible instead of converting missing historical events into zero or a fabricated exact claim.
+
+## D-037 — Frontier and time-reclaimed views retain exact coverage additively
+**Decision:** Carry the exact effective attribution object into frontier model/task cells, model-switch cost calculations and time-reclaimed task strata; derive existing numeric fields from complete exact amounts when finite, otherwise retain the compatibility projection and disclose `partial`/`legacy_unknown`. The modern Value view renders that status and unresolved request count beside the spend figure without changing the separate manual-equivalent value claim.
+**Reason:** A recommendation or time-savings display can be numerically plausible while its underlying spend is incomplete or stale. Exact lineage must travel to the decision-adjacent surfaces, but signed receipt/team compatibility contracts and the classic dashboard require separate versioned migrations rather than an unreviewed wire break.
+
+## D-038 — Exact-covered value receipts use a strict v2 protocol
+**Decision:** Keep the existing signed receipt v1 body for legacy, incomplete or numerically unrepresentable units. For a complete exact-covered WorkUnit whose effective amount has a finite numeric compatibility projection, emit v2 with canonical effective Money/source/correction lineage and require semantic validation (canonical fields, sorted unique event/source lists, zero unresolved requests and cost agreement) after cryptographic verification. Do not call v1 integrity or v2 signature validity provider authority or causal truth.
+**Reason:** A signed numeric receipt can prove only that a key signed bytes; replacing its cost field without lineage would make a correction or missing legacy row look exact. Versioning lets exact evidence travel to auditors now while leaving the remote team-rollup schema and trust-anchor governance as explicit future gates.
+
+## D-039 — Exact team rollups use a versioned additive transport boundary
+**Decision:** Keep team-rollup v1 as the numeric compatibility body for legacy or incomplete clients. Emit v2 when every project carries a validated JSON-safe economic attribution object; sign the canonical v2 body, validate its exact lineage after cryptographic verification, retain the complete signed body in `rollups.body`, and persist `economic_json` as an additive project read model. Do not replace the existing numeric columns or infer provider truth from a developer signature.
+**Reason:** Team transport is a separate trust and compatibility boundary from local value calculation. A versioned body carries exact effective/source lineage without breaking old servers, while additive storage lets future exact dashboards query project records without unpacking signed payloads. The local fake-store/HTTP tests prove protocol behavior; live Postgres migration/execution and trust-anchor governance remain external gates.
+
+## D-040 — Classic Value parity is additive and fail-closed
+**Decision:** Keep the classic dashboard’s numeric compatibility presentation, but render the same exact/partial/legacy economic coverage objects already exposed by the modern Value view for mature, usage, budget, project and team sections. Missing or malformed coverage is shown as `legacy_unknown`; exact amounts and source bases are escaped, and the browser contract explicitly types project lineage. Do not claim that this bounded parity closes the universal generated dashboard/schema contract.
+**Reason:** Two renderers showing the same dollars with different evidence labels would create a trust boundary at the UI layer. A shared defensive disclosure rule makes missing exact evidence visible without breaking older local payloads, while retaining numeric compatibility and leaving broader contract generation as an explicit next gate.
+
+## D-041 — Pricing-card provenance is immutable, hash-bound and non-authoritative
+**Decision:** Archive each newly accepted pricing card under its content hash with a first-acceptance provenance sidecar containing the redacted source identity, source kind, acceptance time, declared upstream date, model count and conditional metadata. Validate the sidecar against the archived card hash and model count on every read; expose it on pricing-evidence cohorts, active status, CLI output and the classic health card. Never reconstruct missing historical metadata from the current card, and never treat a local rate-card record as provider billing or reconciliation evidence.
+**Reason:** A request’s retained card hash was enough to distinguish pricing eras but not enough to explain where an old card came from after refresh. Immutable per-card metadata makes historical estimates reviewable without rewriting requests; explicit unavailable status preserves the unknown boundary for pre-sidecar or tampered files.
+
+## D-042 — Dashboard conformance validates runtime types without inventing a single source
+**Decision:** Keep the browser API declarations explicit and reviewable, and extend their seeded endpoint conformance check to validate primitive values, arrays, records, named interfaces and nullable unions at runtime. Treat `unknown`, inline objects and compatibility fields as deliberate escape hatches; do not call this generated single-source schema parity until route, CLI, browser and documentation contracts are mechanically generated or fully conformance-checked.
+**Reason:** Presence-only checks miss a dangerous class of drift: a server can return a field with the wrong type and the browser will silently render an honest-looking absence. Runtime type checks catch that defect with the existing local server and fixtures, while retaining the project’s explicit compatibility boundary instead of pretending hand-written interfaces are generated.
+
+## D-043 — Period close is an exact, append-only, conflict-preserving control projection
+**Decision:** Model close as immutable `close_finalized` and `close_reopened` economic control events over canonical half-open UTC periods. A finalization binds every non-control event in the period visible at its recording boundary, sorted source IDs, event count, and a SHA-256 projection digest over basis-separated exact balances; status replays at an optional recording-time boundary. Reopening records a non-empty operator reason and references exactly the active finalization without deleting or rewriting history. Competing or malformed transitions are `conflicted`, and new in-period evidence is refused until an explicit reopen. Expose the same status through the JSON-safe `fiscus economic` lifecycle commands and the read-only `/api/economic` payload; keep close controls amount-less and separate from monetary balances.
+**Reason:** A period-close label that merely flips a mutable flag would allow late or competing evidence to silently change a financial statement. Binding the exact event set and projection digest makes the snapshot reviewable and replayable, while an additive reopen preserves the original statement and makes the operator's correction path explicit. A conflict state is safer than choosing a winner, and the CLI/API parity prevents a dashboard from presenting a different close state than the local ledger.
+
+## D-044 — Dashboard route metadata is one generated, browser-safe contract
+**Decision:** Keep a no-node `DASHBOARD_API_CONTRACTS` descriptor as the canonical source for every dashboard API path, served method set, historical `Allow` header, CSRF-gated method, response binding and declared browser-surface binding. The server route table derives its API rows from that descriptor; the build copies the exact bytes into the browser app under the publication lock; conformance checks compare the canonical source, generated copy, route table and modern/classic/action references. This closes route/method/guard drift without claiming that payload-field schemas or CapabilitySpec documentation are generated yet.
+**Reason:** Hand-maintained route literals had three independent opportunities to diverge: a server path/method change, a browser client reference, or a generated artifact. A shared no-runtime-dependency descriptor plus locked generation makes the highest-risk routing/security metadata one auditable object, while the explicit remaining schema/CapabilitySpec boundary prevents a route contract from being mistaken for full payload truth.
+
+## D-046 — FOCUS interoperability is a bounded compatibility projection
+**Decision:** Add a pure, read-only `billingEvidenceToFocus()` adapter shaped to the FOCUS v1.4 Cost and Usage vocabulary. Map only provider-declared billing fields to `BillingAccountId`, periods, `ChargeCategory`, service/SKU, currency and `BilledCost`; keep `EffectiveCost` and `AllocatedCost` null and explicitly marked `unmapped`, and preserve exact source lineage. Refuse unsupported monetary bases and charge types. Do not claim FOCUS conformance, invoice validation, reconciliation, allocation, or provider authority beyond the source record.
+**Reason:** FOCUS distinguishes billed, effective and allocated cost semantics. A compatibility handoff is useful only if it carries the provider-billed distinction without converting local estimates, allocations, epistemic status or causal/decision semantics into FOCUS fields.
+
+## D-045 — Dashboard payload envelopes fail closed at the shared client boundary
+**Decision:** Define a versioned top-level `DASHBOARD_PAYLOAD_CONTRACTS` descriptor for every dashboard API method, including method-specific setup responses and the CSV content type. Each JSON contract names required envelope fields and primitive/container kinds. Seeded conformance validates every JSON response, and the modern browser request helper validates its decoded payload before returning the typed generic; a mismatch is surfaced as a typed 502 boundary error. Nested field contracts remain in the browser interface checker until they can be generated from one canonical source.
+**Reason:** TypeScript interfaces are erased and cannot stop a server from returning a string where the browser expects a number or omitting a required envelope. A top-level shared contract catches the failure in tests and in the running client without coercing data or replacing the existing detailed interface checks with a weaker assertion.
+
+## D-046 — CapabilitySpec makes GUI parity and consequence metadata explicit
+**Decision:** Treat the GUI parity registry as an immutable `CapabilitySpec` contract. Every capability carries schema classes for input/preview/output, authority, Fiscus-process egress, credential class, reversibility, assurance level, and CLI/API/GUI/docs bindings. Defaults are conservative and risk-sensitive overrides name provider pulls, team-server sends, local imports, and destructive operations explicitly. The System view and parity summaries consume the specs; planned capabilities cannot claim GUI/output coverage, reads cannot claim action assurance, and destructive capabilities cannot claim reversibility.
+**Reason:** A parity label without consequence and authority metadata cannot tell an operator what a click can change or what evidence it rests on. Making the registry an immutable, tested contract gives future generators and policy gates a stable source while preserving the honest boundary that nested schemas, docs generation and universal kernel issuance are not yet complete.
+
+## D-047 — Nested dashboard interface metadata is generated and source-hash bound
+**Decision:** Generate browser-safe nested interface metadata from `src/dashboard/web/app/core/api.ts` rather than reparsing TypeScript inside tests. The generator flattens declared interface inheritance, emits deterministic field/type/optional metadata, records the exact source SHA-256, and runs under the existing publication lock; seeded conformance consumes the generated artifact and fails when the source hash is stale. Keep the hand-written declarations as the current source input and do not call this a single generated/shared type source until runtime types, docs, claims and all browser/server consumers are generated or jointly validated.
+**Reason:** Test-time parsing was a second, unreviewed parser that could drift independently from the build and hide changes in inherited fields. A deterministic artifact makes the nested contract inspectable and reproducible while preserving a clear boundary around the larger migration instead of replacing typed declarations with an under-specified schema.
+
+## D-048 — Economic period close crosses into the kernel without claiming provider finality
+**Decision:** An active finalized economic period may be issued through a Store-owned adapter as one immutable Evidence/Claim pair. The pair carries the exact close projection digest, sorted source-event set, event count and basis-separated Money balances; the claim uses `supported` epistemic state, self-authenticated integrity, conditional scope, complete local-ledger coverage, `proxy_unvalidated` measurement, and provisional finality. Issuance is idempotent, requires the supplied result to remain the active finalized state, and refuses forged digests, reopened states or conflicts. The supported CLI finalize path performs issuance; external provider completeness, account scope and settlement finality stay explicit assumptions.
+**Reason:** A local close that never reaches the Trusted Epistemic Kernel cannot participate in claim-relative revocation, replay or downstream decision gating. Conversely, labeling a local snapshot as billed/final would launder an internal projection into provider authority. The adapter raises the kernel boundary while preserving the exact distinction between local statement integrity and external financial truth.
+
+## D-049 — Exact allocation crosses into the kernel as allocated showback only
+**Decision:** After an exact allocation run is durably persisted and revalidated, the Store issues one deterministic Evidence/Claim pair keyed by the digest-derived allocation-run ID. The Evidence preserves the canonical result, source-event lineage, currency/basis groups, conservation status and unresolved legacy IDs; the Claim asserts only `economic.allocation_recorded` with allocated monetary basis, local self-authentication, provisional finality and complete/partial coverage matching the run. Replaying the same run is idempotent. The bridge does not relabel allocation as provider billing, settlement, chargeback, causal value or a closed-period statement, and the legacy numeric run remains a compatibility surface.
+**Reason:** A persisted exact showback result that never enters the kernel cannot participate in the same revocation, as-of and downstream-gating model as the economic close. Issuing the narrowest truthful claim raises the kernel boundary without laundering an allocation projection into a financial settlement or value claim; binding allocation execution to period-close state is a separate control migration.
+
+## D-050 — Coding realization crosses into the kernel only as local lifecycle evidence
+**Decision:** The canonical realization snapshot writer automatically and atomically issues one digest-bound Evidence/Claim pair for each mature, current, fully realized coding unit whose eight declared legacy gates are observed `pass`, acceptance/revert/survival fields are internally consistent, and exact effective USD request attribution re-derives byte-for-byte from the Store on the recorded project or project-blind window basis. The Evidence names git, proposal capture, gate signals, revert scanning and economic requests; the Claim is `value.realization_recorded` with self-authenticated integrity, conditional scope, local bounded completeness, proxy-unvalidated measurement, no causality, provisional finality and `not_assessed` decision fitness. Partial, maturing, stale, synthetic-demo and legacy snapshots remain compatibility records. The claim carries spend-scope provenance and explicitly does not assert business value, provider billing, settlement, causal effect or project-specific cost for a project-blind window.
+**Reason:** A terminal coding unit that never reaches the kernel cannot participate in the same append-only revocation, replay and downstream-gating model as economic evidence. Making the bridge automatic and atomic closes the canonical path while retaining the Realization Standard’s distinction between lifecycle realization, spend attribution, causal increment and business utility; revised snapshots still require an explicit supersession/latest-as-of policy.
+
+## D-051 — Named dashboard payloads have one generated shared source
+**Decision:** Keep the 39 browser-consumed payload interfaces, `Range`, and the named response map in the no-runtime `src/dashboard/shared-types.ts` source. The locked build generator emits both the browser `generated-types.ts` declaration copy and nested runtime metadata with the exact canonical source hash; `api.ts` imports/re-exports the generated copy, server `buildOverview` is typed through the shared response map, and conformance tests hash the canonical source rather than a duplicate browser declaration. Inline route responses remain explicit until they receive named shared types, and docs/claim/egress generation remains a separate boundary.
+**Reason:** A hand-written browser-only declaration could typecheck while the server changed underneath it. A single source plus generated browser artifact removes that duplicate authority without importing Node or DOM runtime code across the compiler boundary, while preserving a visible and testable migration path for the remaining inline contracts.
+
+## D-052 — Every JSON dashboard route uses a named shared response contract
+**Decision:** Name the remaining JSON responses in the canonical route and payload descriptors (`ImportersPayload`, `DiscoverPayload`, `ScanSetupPayload`, `PricingPayload`, `RealizationPayload`, `GuidePayload`, `JudgePayload`, and `ClearProposalsPayload`) and use those names in the browser client where the route is actionable. Keep `/api/export.csv` as an explicit text contract, keep the realization report’s deep nested detail opaque until its full schema is promoted, and reject any reintroduction of inline JSON or `Record<string, unknown>` response descriptions in contract tests.
+**Reason:** An inline response literal was a second schema authority that could drift from the named shared payload source even when route metadata was generated. Naming the boundary makes route coverage mechanically searchable and gives future docs, claim and egress generators stable identifiers without pretending that an opaque nested report has already been fully typed.
+
+## D-053 — Realization report detail is named without widening its claim
+**Decision:** Promote the read-only realization report’s nested gate results, maturity/currentness flags, waste buckets, serial realization bounds, work-unit lineage and exact-economic coverage into the canonical shared type source and generated browser metadata. Keep the report observational and compatibility-safe: numeric spend remains a presentation projection, `unknown` gates remain visible, and no nested type implies causal effect, business value or provider settlement.
+**Reason:** A `Record<string, unknown>` report erased the very evidence profile the Value and Claim Inspector surfaces need to render. Naming the existing fields removes runtime drift while preserving the Realization Standard’s separation between lifecycle realization, spend attribution, causal increment and utility.
+
+## D-054 — Perfect-information VoI has one probabilistic authority
+**Decision:** Compute prior expected utility exclusively from the probability-weighted posterior scenario mixture. Keep `currentExpectedUtilities` as an optional compatibility assertion that must agree action-by-action within a documented tolerance; omit it when callers do not have a separately materialized prior. Validate identical finite action sets, exhaustive probabilities, safe utility magnitudes, finite intermediate expectations, and non-negative gross EVPI before subtracting measurement cost. Expose the derived prior in the result so the authority is inspectable.
+**Reason:** Treating current expectations and posterior scenarios as independent authorities allowed incoherent inputs to produce a mathematically invalid or even negative gross EVPI. A single mixture preserves the EVPI identity, rejects contradictory caller state instead of silently choosing one representation, and keeps net VoI distinct from measurement cost.
+
+## D-055 — Coding clean is completeness-gated open-world evidence
+**Decision:** A mature coding unit receives `clean: pass` only when supported completeness witnesses cover both negative event channels—`commit_reverted` and `linked_incident`—for the commit scope and the full observation interval. Direct revert or incident evidence remains `fail`; without qualifying coverage the result is `unknown`. `computeRealization` accepts canonical witnesses explicitly, stores a JSON-safe provenance projection on the WorkUnit, and the kernel adapter reconstructs and rechecks those witnesses before issuing a lifecycle Evidence/Claim. Missing, partial, or contradictory completeness remains compatibility-only and cannot silently issue a stronger claim.
+**Reason:** “No row was observed” is not evidence that no adverse event occurred. The previous mature fallback promoted an empty revert/incident observation into a supported negative claim. Reusing the existing `CompletenessWitness`/`assessCompleteness` primitive preserves the Trusted Epistemic Kernel’s non-escalation rule without inventing a second completeness system or claiming provider-wide incident coverage.
+
+## D-056 — Resource limits are one shared contract and truncation is epistemic state
+**Decision:** Centralize externally influenced byte, element, fragment, line, file, node and nesting limits in `src/util/resource-limits.ts`. Apply bounded incremental readers to proxy ingress and upstream/judge/cost responses; apply intrinsic limits to SSE usage/proposal capture, proposal extraction/storage, native transcript/import paths, team-server rollups, and canonical receipt/kernel serialization. A hard response/request limit rejects with a typed boundary error; a capture/import limit may continue only where forwarding or unrelated rows remain safe, and records `truncated` coverage. Truncated proposals retain no file fragments and cannot satisfy the acceptance gate; legacy rows remain `legacy_unknown`. Do not claim AII-031 fully closed while the future `.fiscuspack` format and its streaming verifier are still undesigned.
+**Reason:** A post-hoc length check can already have allocated the hostile object it was meant to contain, and an incomplete capture cannot be allowed to look complete merely because a useful prefix survived. One policy makes bounds reviewable and portable; explicit coverage preserves the distinction between “some data observed” and “the source was completely observed,” while keeping the product’s ambition intact and leaving the portable evidence-pack design as a named dependency rather than silently inventing it.
+
+## D-057 — Exact effective Money is the sole dominant-model authority
+**Decision:** Rank provider/model groups through `canonicalModelAttribution()` over one effective request-row snapshot. Compare exact effective `Money` coefficients before any JavaScript-number projection, resolve equal totals deterministically by provider then model, compute dominant purity from exact integer coefficients, and expose a finite numeric cost only at the compatibility edge. If any request in the window lacks an exact effective event, do not combine exact and legacy dollars into a winner: partial coverage has no dominant identity; an all-legacy window may retain a display-only legacy label with null price/share so frontier/model-trial eligibility remains false. Persisted repricing uses the same projection, and frontier/model-switch cells key on provider/model identity rather than display-name collisions.
+**Reason:** A legacy float group could choose model A while a correction changed the exact effective winner to model B, leaving a coherent-looking but false model comparison. One authority removes that dual-ledger contradiction, preserves rankability for amounts beyond safe integers, and keeps unresolved/compatibility observations visible without laundering them into high-assurance routing advice.
+
+## D-058 — Legacy value semantics are corrected in place, not deleted or renamed away
+**Decision:** WP-A07 keeps every legacy RoI/frontier/reliability calculation and corrects the claims made about it. The RoI Index is retyped as a descriptive, preference-dependent composite: the weighted geometric form is presented as following from two declared axioms (quasi-arithmetic and multiplicative), not as economically forced; the lens weights are disclosed preference parameters, not fitted output elasticities of any production function; θ is named as the CES substitution parameter with σ = 1/(1−θ) stated, correcting a genuine mathematical error; and zero-collapse is described as a property of this aggregator rather than proof that a real shortfall cannot be compensated. `src/value/voi.ts` becomes `src/value/instrumentationSensitivity.ts` and states that it is not value of information, pointing at `src/decision/engine.ts` for the decision-theoretic version. The frontier's `confidence` value `evidence_supported` becomes `observational_separation`, with `trial` retained unchanged; `reliability()` becomes `localDataWeight()` and the CLI's "Confidence" row becomes "Own-data weight". James–Stein dominance language is removed from the shrinkage estimator, and the exchangeability assumption is stated where the estimator lives. The prohibitions are enforced by pattern in the existing `public-claims-contract` sweep over the value modules, which are added to its surface list.
+**Reason:** Each of these was a correct calculation under a noun that claimed more than it established — the failure mode this repository exists to prevent, occurring in its own value layer. Correcting the language rather than deleting the surface preserves capability (dossier §7.10) while removing the mythology. Two choices are deliberately narrower than the dossier's default shape: `trial` is kept because it never overclaimed, which also keeps the packaged CI assertion and the historical release-gate rows meaningful; and the eleven `evidence_supported` occurrences in `docs/RELEASE-GATE.md` are scoped as an exact-count exception rather than rewritten, because those rows record what the packaged artifact carried at a specific commit and editing them would falsify the evidence they exist to preserve.
+
+## D-059 — An arbitrary constant becomes a declared model, not a deleted feature
+**Decision:** Where a value surface needed a number that no observation supplied, the constant is promoted to a named, documented, overridable model and its provenance travels with the result — rather than either leaving it inline or deleting the surface. Three instances: the reach-to-utility mapping behind the Impact lens becomes `DECLARED_REACH_UTILITY` with a `reachUtility` override, and `impactHow` states the model in force; `boundedLift` reports `lowBasis`/`highBasis` so a floor from an observed old-task lift is distinguishable from `DECLARED_LIFT_FLOOR_FRACTION`, and only the former may be described as partial identification; `recommendBudget` is documented as a heuristic scenario advisor with no objective, constraint set or evaluated alternative. Separately, `goodhartStreams` becomes `rateDriftStreams`, and every surface names the test for what it observes — a rate that is not constant — with Goodhart retained only as the explicitly labelled motivating hypothesis it cannot confirm.
+**Reason:** Each of these was an invisible assumption doing visible work. An inline `1 / 0.75 / 0.5` put a workflow label into the composite looking like an observation; an inline `point * 0.7` made a chosen haircut look like a Manski bound; "the Goodhart alarm" asserted an incentive mechanism a 0/1 stream carries no evidence about. Naming the assumption preserves the capability (dossier §7.10) while making the claim falsifiable and the alternative choosable, which deleting the surface would not. Where the number remains a default preference rather than a measured quantity, the audit row stays PARTIAL: naming an assumption is not the same as having evidence for it.
+
+## D-060 — The two realized-value quantities get different names, and the old ones are banned
+**Decision:** Split `realizedValueUsd` into `spendOnRealizedUnitsUsd` (the attributed cost of units that reached a kept outcome) and `manualEquivalentValueUsd` (what that work would have cost done by hand, net of rework), with `netRealizedValueUsd` → `acceptanceWeightedSpendUsd`, `totalRealizedValueUsd` → `totalSpendOnRealizedUnitsUsd`, and `realizedValueRate` → `realizedSpendShare`. Migrate every layer rather than aliasing: shared types, the generated browser contract, both dashboards, the CLI, and the tests. Correct the CLI rows that printed a spend under the words "Realized Value". Add a repository-wide test that bans both old identifiers from `src/`, permitting them only inside backticks in prose that explains why the split exists. `docs/program/` keeps its historical wording.
+**Reason:** These were two different claims from different evidence sharing one identifier, and the product's own value spine once shipped rendering the cost as the value band — with every typecheck green, because both fields were real, numeric and identically named. A comment was the only thing standing between a reader and that substitution, and it did not hold. Distinct identifiers make the substitution a type error; the ban test keeps the ambiguity from being reintroduced by someone working from memory. No compatibility alias is kept: the payload is consumed by this repository's own GUI and CLI, so a deprecated duplicate would preserve exactly the ambiguity the split exists to remove.
+
+## D-061 — A cited CI run must state its outcome, and PENDING is an outcome
+**Decision:** Every GitHub Actions run identifier appearing in `docs/program/` or `docs/RELEASE-GATE.md` must carry a stated outcome within 200 characters on either side: `success`, `failure`, `cancelled`, or an explicit `PENDING`. `test/program-evidence-contract.test.ts` enforces this and separately forbids predictive phrasing ("will pass", "expected to pass", "presumed green"). Where a historical record cited a run and only implied its result — "run `X` validates the checkpoint" — the outcome was read from the API and written in; every one of those was in fact success, so no claim changed, only its explicitness.
+**Reason:** Twice this program recorded a run identifier and described the gate in the future tense — "was queued for this exact head", "remains an external gate until its conclusion is read" — and never returned to read it. Both runs had concluded FAILURE. Neither record lied; each left a hole shaped exactly like a passing gate, and the next reader filled it in from context, which is the same inference-from-absence this product exists to refuse, committed against its own evidence. The checker closes the half that is mechanizable. It cannot tell whether a `PENDING` was ever revisited, and it cannot verify that a stated outcome is the true one — so the discipline in CLAUDE.md still governs, but the outstanding debt is now visible to `grep -rn PENDING docs/`.
+
+## D-062 — team-server is the third compilation domain, and a rename must cross it
+**Decision:** Extend the AII-012 value/cost split through `team-server/` — TypeScript fields, SQL aliases, and the two stored `rollup_projects` columns (`realized_value_usd` → `spend_on_realized_units_usd`, `net_realized_value_usd` → `acceptance_weighted_spend_usd`) — and extend the identifier-ban test to walk `team-server/src` and `team-server/test`. Record in `CLAUDE.md` that this repository has three compilation domains, not two, and that touching `src/value/` or `src/team/` obliges the team-server pass locally. The stored columns are renamed rather than dual-written: `schema.sql` is applied with `CREATE TABLE IF NOT EXISTS` and there is no migration runner, so a pre-existing database keeps the old names and the INSERT fails loudly against it.
+**Reason:** `team-server/` is a separate npm project with its own tsconfig that the root typecheck cannot see, and it imports `ProjectValue` directly from `src/team/rollup.ts`. A rename confined to `src/` therefore passes every root gate — typecheck, browser typecheck, 1,159 tests, build, pack, and a live wire probe — and still fails to compile, which is exactly what happened at `c1f7ac5` (sixteen TS2339/TS2353 errors on three operating systems) and, one packet earlier, at `7678b7b` (TS1294). Two red heads from one unwritten fact is enough to write it down. The loud-failure choice on the columns follows the same rule as the rename itself: external gate X-03 authorizes no production team service, so no operator data is at risk, and a schema whose column says "value" while holding a cost is the defect this entire finding is about — worth a startup error, not a compatibility alias.
+
+## D-063 — The issuance map is code, and an unmapped issuer is a test failure
+**Decision:** Declare every boundary at which this repository creates or strengthens a claim in `src/epistemic/issuance-map.ts`, each with one of five classes of authority — `canonical`, `kernel_primitive`, `integrity_only`, `display_only`, `unmigrated_authority` — and check the declaration against the source tree in `test/issuance-map.test.ts`. A `canonical` boundary that stops calling the kernel fails; a non-canonical boundary that starts calling it fails; any file under `src/` that calls `claim({...})` while absent from the map fails. Each module also states its own class in its own docblock, so a reader learns what authority a file holds without finding the map first. The `unmigrated_authority` list is asserted non-empty while AII-036 is `PARTIAL`, so emptying it requires closing the finding rather than editing a list.
+**Reason:** The kernel primitives already refuse illegal strengthening; the risk AII-036 names is a product path that mints stronger semantics beside them. That does not arrive as a bad Claim — a bad Claim gets refused. It arrives as one new file, correct in itself, computing something a consumer reasonably reads as established, on no list of things allowed to do that. A map in a document drifts within one packet; a map the tests read cannot. Three boundaries are classified `unmigrated_authority` rather than quietly accepted: causal qualification, causal estimation and decision certificates each decide outside the kernel, and while none is currently producing a false result, none binds its conclusion to its evidence by a Derivation — so revoking a source cannot invalidate what depends on it, which is precisely the property the kernel exists to provide. Naming them as defects with a queue position is the honest classification; calling them `display_only` would have made the map green and false.
+
+## D-064 — A verified signature is not a verified claim, in the docstring too
+**Decision:** Rewrite the `src/value/receipt.ts` header to separate what a verified signature establishes — that this exact record came from the holder of that key and no byte has changed — from what it does not: that the gate verdicts are correct, that the attributed cost is the provider-billed cost, or that the outcome means what a reader wants. Classify the boundary `integrity_only` on the issuance map, and state that the module's semantic exact-coverage validation inherits no strength from the signature.
+**Reason:** The header said a buyer or auditor could "trust the claim without trusting us". That is AII-020 stated as a feature, in the file that implements it, in a docstring that also appears in the public standard. Signing proves provenance and fixes bytes; a faithfully signed wrong number verifies perfectly. The correction costs no capability — the receipt still does everything it did — and removes an overclaim from the surface most likely to be quoted by someone deciding whether to rely on it.
+
+## D-065 — A claim layer states its support on axes, and no score replaces the boolean
+**Decision:** Replace the GUI's `established: boolean` with `LayerSupport`, carrying four named axes: `epistemic` (four-valued, mirroring `src/epistemic/state.ts`), `coverage` and `monetaryBasis` (mirroring `src/epistemic/profile.ts`), and `figure` — which says why the value slot shows what it shows, as a question separate from whether the claim holds. Call sites ask named predicates: `claimIsSupported`, `claimShowsFigure`, `claimIsSupportedButUncosted`. The browser cannot import node source, so the axis unions are hand-written mirrors; `test/claim-support-axes.test.ts` reads both files as text and fails on any drift in members or order. No numeric confidence score is introduced, and the test asserts none appears.
+**Reason:** `src/epistemic/profile.ts` opens by saying a claim is never reduced to `established: boolean`, and the claim spine was doing exactly that — one bit standing for three different questions: is the claim supported, is there a figure, and should a next step be shown. It got at least two of them wrong in ways an operator would see. A Realized band with forty matured, shipped units and no labour rate set rendered "not established", which reads as "your work produced nothing" — an inference drawn from a missing input, in the band whose entire job is to keep realized value distinct from the three cost claims. A Billed band that had been reconciled rendered `usd(null)`, a bare em dash, because the boolean said established while the layer deliberately carries no dollar. And "412 provider records held, none reconciled" was indistinguishable from no provider evidence at all. Splitting the axes fixes all three at once and makes the spine's "open claims" sentence count only claims that are actually unsupported, with a separate, quieter line for claims that hold but cannot be priced. The mirror-drift test exists because a hand-written browser declaration that does not match its source type-checks perfectly and fails silently — this repository has already paid for that once, when `reconciliation.runs` was declared a number while the server sent an array.
+
+## D-066 — A gate carries four-valued polarity, and one projection owns the collapse
+**Decision:** `GateResult` gains `polarity` (`unknown | supported | refuted | conflicted`, the kernel's own vocabulary) beside the legacy `verdict`. `signalVerdict` becomes `signalPolarity` and aggregates every recorded signal of a kind through `aggregatePolarity`, so both directions observed is `conflicted` rather than "the first fail wins". `verdictFromPolarity` is the only place the collapse happens: `conflicted -> 'fail'`, never `'pass'` and deliberately not `'unknown'`. `FunnelOutcome.conflicts` lists the gates that disagreed; `realized` is blocked by that list independently of the projection, so a later change to the projection cannot open a path to terminal realization through a contradiction. Kernel issuance refuses a conflicted gate with its own message rather than inheriting the generic "must be pass". The CLI renders `!` and `conflicted:<gate>` instead of `✗` and `died:<gate>`; the waste rollup buckets contradictions apart from failures; the GUI names them in the funnel card. Legacy three-valued rows come back through `polarityFromVerdict` and can never yield `conflicted`; a persisted row with no polarity is read as null rather than inferred.
+**Reason:** Two CI runs disagreeing about one commit is a different evidential situation from one run failing, and the old aggregator threw the difference away at the gate that decides whether work realized — a decision recorded as though it were an observation. The three consequences were all visible to an operator: the CLI said `died:tested`, asserting a refutation the evidence does not support; the waste rollup put adjudicable work in the same column as demonstrably failed work; and the kernel refused issuance with a message naming the wrong reason. Projecting to `fail` rather than `unknown` is the conservative choice in both directions at once — a contradiction is not a demonstration, so it cannot be `pass`, and an observed failure must not be laundered into an absence of evidence, so it cannot be `unknown`. The scope is deliberately the coding gate ladder: `classifySession` and the outcome contract were checked and were already conflict-preserving, and forcing four-valued ceremony onto facts that cannot conflict by construction would add noise without adding truth. What stays open is history rather than the schema. Checking this rather than assuming it changed the finding: polarity and `conflicts` DO survive persistence, verified by writing a conflicted unit through `computeRealization(persist)` and reading it back from a real store. What cannot express a conflict is a snapshot written before WP-B03 — and reading one crashed the waste rollup and the CLI status line on `conflicts.length`, because the new field is required and the stored row has none. Such rows are now normalized at rehydration through `polarityFromVerdict`, which deliberately differs from the kernel path in `src/value/epistemic.ts`: the kernel reads a missing polarity as null and refuses to infer at all, while a compatibility read must satisfy the type it hands on. An empty `conflicts` on a legacy row is the only thing a three-valued row can honestly say, not a finding that no disagreement occurred. AII-003 stays `PARTIAL` for that reason and because lanes outside coding realization have not all been assessed.
+
+## D-067 — Contested completeness does not license an absence inference, and the two directions do not inherit alike
+**Decision:** `assessCompleteness` gains `conflictingWitnessIds` and a four-valued `state`. A witness whose state is `refuted` or `conflicted` now bears against the target when its own scope and period sit INSIDE the target's, and any such witness makes the assessment `conflicted` (or `refuted`, with no support), which does not qualify an absence inference. Support and refutation deliberately use opposite containment tests: a supporting witness qualifies a target it CONTAINS, because completeness inherits downward; a refuting witness bears on a target that CONTAINS it, because incompleteness inherits upward. Both directions are pinned by test, including the case that must NOT refute — a gap somewhere in a broad window says nothing about a narrow one inside it.
+**Reason:** `witnessCovers` began `if (witness.state !== 'supported') return false`, so a witness explicitly asserting that a source did NOT completely cover a scope was discarded by the same line that discarded a witness about an unrelated event type. A target with one supporting and one refuting witness therefore qualified on the supporter alone: a contradiction resolved silently, in the most permissive direction available, at the gate that decides whether "no incident was observed" may become "no incident occurred". That is AII-002 and AII-003 meeting in one function, and it sits directly under the coding `clean` predicate. The asymmetry matters as much as the fix: treating refutation as the mirror image of support is the more obvious code and would refuse absence inferences the evidence does not actually contradict, trading a false permission for a false denial. Reporting `conflicted` rather than `refuted` keeps the distinction the four-valued state exists for — the sources disagree, which is not the same as their agreeing that the source was incomplete.
+
+## D-068 — The reconciliation residual states what it bounds, and says when it bounds nothing
+**Decision:** A `ReconciliationRun` carries `offPathBound`, computed by `offPathBoundFromResidual` from the two totals alone with no threshold and no materiality: `upper_bound_conditional` when the provider total is at or above the local total, `none_local_estimate_exceeds_provider` when it is below. `describeOffPathBound` gives each state one sentence an operator can act on, printed by the CLI directly beneath the residual and shown by the classic dashboard, which also adds a `RESIDUAL BOUNDS NOTHING` marker to the state line in the second case.
+**Reason:** Write P for the provider's reported total on the declared scope, L for what Fiscus metered on it, T for the true billed cost of the traffic that did pass through, and O for the traffic that did not. The provider bills both, so P = T + O and the residual R = P − L = O + (T − L). Therefore `O ≤ R` holds exactly when `L ≤ T` — when the local rate-card ESTIMATE does not exceed the true on-path billed cost. That is a condition, not a fact, and it is precisely why a residual is an upper bound rather than a measurement. R < 0 is the case worth naming: it says L > P = T + O ≥ T, which refutes the condition outright, so no upper bound on off-path spend survives — local over-estimation has absorbed an unknown amount of it. The old CLI printed `Unexplained -$3.10` and stopped, and a small or negative number invites exactly one reading: "then nothing went off-path". That is inferring absence from an observation which specifically undermines the inference, which is AII-002 on the product's headline reconciliation surface. The GUI tooltip already carried the upper-bound framing; the CLI carried none, and neither distinguished the case where the bound does not hold at all. Stating the condition next to the number, before the operator acts, is the same rule the rest of this repository follows for every other figure. The bound also travels inside the issued `billing.reconciled_with_residual` Claim: a persisted claim carrying the residual and not the condition would reopen at the kernel exactly the gap being closed at the surfaces.
+
+## D-069 — Git witnesses its own revert coverage, and only that
+**Decision:** `revertScan` reports what it read — the count, the oldest commit examined, and whether it stopped at its window rather than at the beginning of available history — alongside what it found. `revertCompletenessWitness` turns that into a `supported` completeness witness for the `commit_reverted` channel over `[oldestExaminedMs, observedAt]`, scoped to the project, with an identity keyed on the coverage boundary rather than on the moment of the scan. `computeRealization` emits it when the caller supplies no witnesses of its own; a caller-supplied set wins outright rather than being merged. A scan that read nothing returns null, not a refuting witness.
+**Reason:** `completenessWitnesses` was an option nothing but a test ever passed, so the machinery that lets absence become a negative claim was correct and entirely unexercised, and the coding `clean` gate could only ever be `unknown` in real use. That was the right default and not a resting place: a source that CAN report its own coverage should. Git can, and the argument is exact — a revert of a commit is necessarily NEWER than that commit, so a scan that walked back from HEAD as far as a given commit has by construction seen every revert of it that exists in this history. The boundary is therefore the oldest commit actually read, which makes two things fall out that are easy to get backwards: a shallow clone does NOT impair revert detection, because shallowness truncates old history while reverts are newer than what they revert; and a truncated scan window DOES, because a commit older than the oldest one read is outside the witnessed period — handled by the containment test in `assessCompleteness` without any special case here. Returning null rather than a refuting witness for an empty scan keeps "we did not look" as unknown, since a refuting witness asserts that the source IS incomplete, which is a stronger and different claim. The witness deliberately covers one channel: `linked_incident` has no local source, so `clean` still cannot pass on git evidence alone. This packet supplies real evidence for one channel; it does not loosen a gate.
+
+## D-070 — The server states its own claims' support, and the axes reach the wire
+**Decision:** Each of `/api/overview`, `/api/billing`, `/api/allocation` and `/api/value` carries a required `claimSupport` — epistemic state, coverage, monetary basis, figure, and an optional one-line `note` — derived in `src/dashboard/claim-support.ts` from the evidence the server holds. `core/claimLayers.ts` renders those axes instead of inferring them and keeps only the prose plus the one judgement a server cannot make about itself: what a claim's support is when its endpoint did not answer. `core/claimTypes.ts` stops hand-writing the axis unions and re-exports the generated wire copy, leaving `src/dashboard/shared-types.ts` as the single mirror of the kernel vocabularies, which `test/claim-support-axes.test.ts` now checks. `ReconciliationRunRecord.result` declares `snapshotStability`, `unstableDayStartMs` and `offPathBound`, all of which the server has been sending and none of which the browser could read. The four claims stay four claims: `dashboard.claimSupport` is on the issuance map as `display_only`.
+**Reason:** WP-B02 replaced the GUI's `established: boolean` with four named axes and left the JUDGEMENT in the browser, inferred from whatever collapsed field a payload happened to carry — a count of runs, a share of estimated spend, whether a ratio said `usd`. Every one of those derivations was a two-branch ternary, so the four-valued axis could reach exactly two of its values, and three defects followed. A reconciliation whose provider snapshots CHANGED between observations rendered exactly like one whose snapshots agreed: two observations of one proposition that disagree, reported as established. A window with no spend in it reported COMPLETE pricing coverage, because `estimatedSpendShare` is zero when there is nothing to price — a completeness claim with no evidence behind it, which is what D-067 and D-069 exist to refuse. And a residual that bounds no off-path spend at all (D-068) reported complete coverage of what the provider charged. Nothing outside the browser got an answer at all: the CLI, a script, anything reading `/api/*` had to repeat the guesswork with nothing holding the versions in agreement.
+
+Two consequences of the fix are worth recording because they are the interesting part. First, a POPULATION of contradictions is not a contradiction in the aggregate. `informationJoin` combines two observations of ONE proposition; twelve mature units whose gate evidence contradicted itself are twelve different propositions, and a conflicted unit does not realize at all, so the figure is sound for what it covers and the aggregate under-counts by an unadjudicated amount. That is coverage, not epistemic state. So the billing conflict lands on `epistemic` and the realization conflict lands on `coverage`, and the asymmetry is the point rather than an inconsistency. Second, making `conflicted` reachable made two existing sentences false. The spine's summary ends "an absence of evidence, never a measured zero", which is true of an unevidenced claim and false of a contradicted one, and it was built from a `!claimIsSupported` partition that put both in it; it is now scoped to `claimIsUnevidenced`, with `claimIsConflicted` and `claimIsRefuted` getting their own lines and their own colour. And the Evidence screen's "Reconciliation status" card was keyed on `evidence.reconciliationStatus` — a CONSTANT `not_reconciled` describing the trust posture of the held import records — glossed as "no observation run recorded", so it said that while describing a recorded run four lines below. Both are the same defect as the packet itself: a collapsed status field read as a claim's state. The claim's state is on the wire now, so both read that.
+
+Verified by probing rather than by reasoning: a contradicted run seeded into a scratch ledger, served by the compiled binary, produced `conflicted` on the wire, a conflicted band with a next step, the separate coral summary line in the rendered GUI, and an Evidence card whose headline agrees with the run it describes.
+
+## D-071 — Contention on the lock path is not acquisition failing
+**Decision:** `acquirePublicationLock` treats a filesystem error on the canonical path as "not acquired yet" rather than as a fatal error, in all three forms the condition takes: `EEXIST` from `mkdir` while the directory is there, `EPERM` from `mkdir` while it sits in pending-delete, `ENOENT` from the owner write once it is gone, and `EPERM` from the owner rename when it goes mid-publish. A transient code that persists past `PATH_CONTENTION_MS` is reported as itself rather than as a wait timeout, so a read-only parent still fails fast and precisely. When the owner record fails to land, the catch no longer quarantines the lock directory by pathname. `scripts/generate-dashboard-payload-contract.mjs` publishes both generated files by same-directory rename instead of a plain write.
+**Reason:** GitHub Actions run `33502986214` at `afca277` concluded failure on `test (windows-latest)` — seven of eight jobs green — with `ENOENT ... open '.fiscus-build.lock\.owner-<uuid>.tmp'` thrown out of `acquirePublicationLock` and out of `bin/fiscus.mjs`, killing `fiscus --help` while two builds were publishing. The cause was not in that commit's work.
+
+The lock is made in two steps: `mkdir` the directory, then write an owner record into it. Between them the directory exists carrying no owner, which is indistinguishable from one an interrupted process abandoned. A contender that removes it in that window leaves the legitimate creator's write failing — and on Windows the same removal answers differently depending on exactly where in the directory's lifetime a call lands, which is why one condition wore three error codes. Only `EEXIST` was recognised; the other two were rethrown.
+
+The second half matters more than the first. The old catch, seeing that it had created the directory, quarantined it BY PATHNAME to tidy up after itself. At that point the owner record never landed, so nothing proves the directory now at that path is still the one this process made: the cleanup could take a fresh lock away from another process inside ITS own owner-write window and propagate the same failure onward, one lost race cascading through every contender. There is now no cleanup on that path at all. A directory genuinely abandoned carries no owner and is recovered by the stale path, which exists for exactly that.
+
+`existsSync` cannot distinguish a pending-delete directory from an absent one — `stat` fails for both — so the state is recognised by persistence rather than by a probe: absorbed while it clears, reported as itself when it does not.
+
+**Evidence:** `test/publication-lock-race.test.ts` manufactures the condition directly, with a second process deleting the canonical lock in a tight loop while contenders acquire and release. It reproduces the CI stack trace exactly on the unrepaired code — same error, same line — failing 5 of 5 runs, and passes 20 of 20 after. What it does NOT establish is the interleaving that produced a vanished directory under two concurrent builders in CI: that was never observed, only its signature in the log. This covers the RESPONSE to the condition.
+
+The atomic generated-file publication is a smaller, separate window: `dashboard-script.test.ts` walks `src/dashboard/web/app` while `build-race.test.ts` runs two builds that rewrite generated files in that same tree, and a plain write leaves a moment in which the walker reads a truncated file or none. One full-suite run failed there and four paired re-runs did not reproduce it, so this is recorded as an explicable window closed, not as a diagnosed failure.
+
+## D-072 — The lock decides by position, not by errno
+**Decision:** D-071's repair is superseded where it enumerated error codes. Once `acquirePublicationLock` has created the lock directory, ANY failure to publish the owner record is a lost race, whatever the failure is called; the branch no longer inspects `error.code` at all. A failure that persists past `PATH_CONTENTION_MS` of consecutive laps is rethrown as itself, so a genuine permanent fault is still reported precisely rather than as a wait timeout. `mkdir` keeps two special cases that are about position rather than platform: `EEXIST` means someone holds the lock and stays on the unbounded wait, and `ENOENT` means the parent directory is missing and throws at once. `test/publication-lock-race.test.ts` pins the shape: the created branch must not branch on the code, must be bounded, and must rethrow.
+**Reason:** D-071 listed the three codes Windows produces — `EEXIST`, `EPERM`, `ENOENT` — and run `33505785655` at `4d0fec1` then went green on Windows and red on macOS with a fourth: `EINVAL` from writing into an unlinked directory. That is the fix telling us its shape was wrong. The list is a property of whichever kernel the job happens to run on, and the next platform adds another entry; patching in `EINVAL` would have been the same mistake with one more element.
+
+What does not vary is WHERE the failure happened. The owner record is what makes the lock ours, so a process that created the directory and failed to publish one holds nothing — there is no error in that position that means "you hold the lock". Asking where rather than what removes the platform dependence entirely, and the bound keeps the diagnostic: contention clears in milliseconds, a full disk or a read-only tree never does.
+
+This is the second incomplete repair of the same defect in two commits, and both were incomplete in the same way — reasoning from the error the log happened to show rather than from the invariant. The regression test now pins the invariant instead of the symptom.
+
+## D-073 — Reach is the issuance map's second axis
+**Decision:** `IssuanceBoundary` carries `reach: 'product' | 'unreached'`, declared in `src/epistemic/issuance-map.ts` and CHECKED by `test/issuance-map.test.ts`, which walks the transitive import closure of `src/cli.ts` and the team-server entry rather than trusting the field. Thirteen of fourteen boundaries are `product`; `decision.certificate` is not. `LIVE_BOUNDARIES` and `UNREACHED_BOUNDARIES` join the existing selectors, and the doc carries the column.
+**Reason:** Authority class says what a boundary does when it runs. It says nothing about whether anything runs it, and the difference decides which defect to fix first. Reading `src/decision/engine.ts` for a countermodel packet turned up that nothing imports it: the two modules naming it (`src/budget/recommend.ts`, `src/value/instrumentationSensitivity.ts`) do so in comments describing where it is intended to go. So the map's note — that this boundary "produces a stronger claim outside the kernel today" and that revoking a source cannot invalidate what depends on it — was true in principle and vacuous in practice, because nothing depends on it.
+
+That changes the migration order rather than the finding. `causal.qualification` and `causal.estimate` are on paths the CLI reaches and can put an unbacked strengthening in front of an operator today; `decision.certificate` cannot reach anyone. Lower urgency, not lower priority: an unwired boundary is precisely the one that gets wired by somebody who never opened the map.
+
+The field is declared rather than computed at runtime so the map stays a no-dependency data file, and checked rather than trusted because a hand-maintained reachability claim would drift within one packet — the same reason the class declarations are checked. A boundary that gains or loses a consumer now fails the suite until the map is corrected, which is the moment to reconsider its queue position.
+
+**What this does not establish:** reach is a claim about the import graph and nothing more. `unreached` does not mean harmless, and `product` does not mean wrong — only that if it were wrong, someone would see it. The walk is exact for this repository because nothing here imports a computed specifier, which the test re-checks rather than assumes.
+
+## D-074 — A lock you created and could not publish is yours to reclaim, and only yours
+**Decision:** Once `acquirePublicationLock` has created the lock directory and failed to publish its owner record, it reclaims that directory if and only if the directory carries ITS OWN token — `ownedByToken(inspectLock(buildLock), token)` — and never otherwise. The same test guards the wait: a contender that meets a lock bearing its own token quarantines it instead of waiting on it. Separately, `OWNERLESS_LOCK_STALE_MS` (10s) replaces `LOCK_STALE_MS` (10min) for the one case the timer actually governs, because the old value exceeded `LOCK_WAIT_MS` and so could park every contender until each timed out. `LOCK_STALE_MS` stays, now belonging to the runtime-snapshot reaper, which shares the shape but not the cost.
+**Reason:** D-072 was right that cleaning up by PATHNAME is unsound — our record never landed, so the directory at that path may already belong to someone else. It concluded that the created branch should therefore clean up nothing. That conclusion was wrong, and CI run `33507233437` said so within one commit: `test (windows-latest)` turned green while ubuntu, macOS and candidate-head went red with `timed out waiting for another Fiscus build (300000ms)`.
+
+Nothing else held the lock. `inspectLock` deliberately recovers an owner from a `.owner-<token>.tmp`, because an interrupted creator's lock should be recoverable by PID rather than forced to serve the full stale age. So a publish that failed between the write and the rename leaves OUR token-bearing temp in OUR directory; the next lap reads it, finds an owner whose process is alive — it is this process — and waits five minutes for itself. Eight contenders did that simultaneously.
+
+Pathname and absence were the wrong identities in opposite directions. The token is the right one: a directory carrying our token is ours whatever state it is in, and one carrying another token, or none, is not ours to touch. `quarantineKnownLock` already re-verifies the record after each move and restores a generation that changed underneath, so reclamation by token cannot take a live lock from anyone.
+
+That is three incomplete repairs of one defect in three commits — pathname cleanup, then errno enumeration, then no cleanup at all — and this is the first that names an invariant rather than a symptom. `test/publication-lock-race.test.ts` now reproduces the deadlock deterministically by planting a DIRECTORY at `owner.json`, which is the only way to make the publishing rename fail while the temp survives; it fails at the kill window on the unrepaired code and passes in ~2s on the repaired one.
+
+**What this does not establish:** the reproduction manufactures the state rather than the interleaving that produced it, exactly as the earlier one did. And the wait loop is only as sound as `inspectLock`'s notion of identity: if a fourth kind of partially-published record is ever introduced without teaching `inspectLock` to read its token, this class of self-wait returns.
+
+## D-075 — A test that measures the filesystem is not measuring its own claim
+**Decision:** `ordinary contention leaves no lock residue` is bounded by wall clock rather than by a cycle count: eight workers acquire and release for a fixed five-second budget, and the test asserts a floor on completed laps so that a budget satisfied by doing nothing cannot make the residue assertion vacuous. Every child spawned by this file is now killed at a window well below `LOCK_WAIT_MS`, so a self-wait fails fast and legibly instead of after five minutes.
+**Reason:** The fixed count was eight workers times twenty-five acquisitions, and acquisitions are serialized, so the test's duration was two hundred times the cost of one critical section. Instrumenting the module showed where that goes: `renameForQuarantine` measured a 115ms median and a 763ms maximum under this contention, accounting for ~4s of a ~34s run, while the quarantine reaper and the recursive delete never once exceeded 50ms. The cost is the release protocol's atomicity — rename the owner record aside, rename the directory to a quarantine, delete it — which is the property that makes release safe rather than a defect to remove. The same shape measured 21.5s at `896c093`, before any of this round's lock work, so it is not a regression.
+
+Idle that was 17-22s; inside the full suite it exceeded a minute and failed. A duration that depends on how loaded the machine is is not something this test is entitled to assert. Its claim is that nothing is LEFT BEHIND, and that claim needs contention, not a particular number of laps.
+
+The kill window matters more than the budget. Every failure mode in this file ends in the lock waiting, and its own bound is five minutes, so a deadlocked worker reported `timed out waiting for another Fiscus build` — naming a build that never existed. That is how the failure in run `33507233437` described a self-deadlock, and reading it cost a CI round.
+
+**What this does not establish:** fewer laps on a slow machine is genuinely less sampling of a rare race, and the lap floor sets only the point below which the test refuses to claim anything. The measurement also does not clear the repository-root lock contention it sits next to: `test/build-race.test.ts` runs real builds at the repo root holding that lock while four other files spawn `bin/fiscus.mjs` and wait on it, which is why those tests fail under load in varying combinations. That is pre-existing and untouched here.
+
+## D-076 — The build path nothing runs is the one that is broken
+**Decision:** `sourceFingerprint` refuses an absolute input path by name instead of joining it onto the root, and `scripts/build.mjs` derives the absolute `sharedDashboardTypes` from a relative `sharedDashboardTypesPath` so the two cannot drift. `test/build-input-paths.test.ts` pins both halves: an absolute input is refused, and a relative one still fingerprints stably.
+**Reason:** `node scripts/build.mjs --web` has failed on every platform since `e00f7f9` (2026-08-31). That commit added the ABSOLUTE `sharedDashboardTypes` to the `--web` input list beside four relative siblings, and `sourceFingerprint` joins each input onto the root, so the build asked the filesystem for `<root>/<root>/src/dashboard/shared-types.ts` and died with an ENOENT naming a path nobody had written.
+
+It survived three weeks of green CI because nothing runs it. `d23245f` had already moved `pretest` from `--web` to the full build, and `build`, `prepare`, `prepack` and `prestart` are all the full build too. The only mode that broke is the only one the workflow never takes. It was found by running the command `CLAUDE.md` claimed `pretest` used — that claim was itself stale, and is now corrected along with the reason it matters.
+
+The guard belongs in `sourceFingerprint` rather than at the one call site that broke, because the defect is a property of the interface: the function's contract is "paths relative to a root I am given", and it had no way to say so. Every caller now gets a named error instead of a doubled path, which is the difference between a five-minute diagnosis and reading a stack trace about a path that exists nowhere.
+
+**What this does not establish:** the test pins the guard, not the `--web` build. Running the real `--web` build would be the direct regression and was deliberately not added: it takes the repository-root publication lock, and this suite already has `test/build-race.test.ts` running real builds at that root while four other files queue behind it for the CLI (see D-075). A sixth contender to catch a path-shape bug is the wrong trade. `--web` was verified by hand at this commit — exit 0 — and the guard is what stops the class recurring.
+
+## D-077 — A release that cannot move the lock removes it, because giving up leaves it held
+**Decision:** When `releasePublicationLock` fails to rename the lock directory aside, it removes the directory in place instead of returning. That path is reached only after the owner record has been renamed to `.owner-quarantine.json` AND re-read to confirm it still carries our token, which is the protocol's own proof that this generation is exclusively ours — the same proof the directory move relies on. The move buys speed, not safety, and losing the speed is not a reason to keep the lock.
+**Reason:** The line was `if (!renameForQuarantine(buildLock, quarantine)) return;`, and returning there does not leave the lock alone — it leaves it HELD. By that point `owner.json` is gone, renamed to the quarantine name. `inspectLock` reads that record as an owner; `lockIsStale` asks whether its PID is alive; the PID is the releasing process, still running. So the lock is abandoned in a state nothing can recover, and every contender waits out `LOCK_WAIT_MS` and then reports `timed out waiting for another Fiscus build` — naming a build that moved on minutes earlier.
+
+This was observed, not inferred. Verifying an unrelated fix, `test/build-race.test.ts` failed at 369s with that exact message while running ALONE, so it was not cross-file contention. The repository root then held a lock directory containing only `.owner-quarantine.json`, naming a live PID, unchanged across a full minute of polling — far beyond the five-second `RENAME_RETRY_MS` window any legitimate release occupies.
+
+The directory rename fails for reasons unrelated to ownership: on Windows one open handle anywhere inside the directory is enough, and a competing contender's `readdirSync`, an indexer or a scanner all supply one.
+
+**This is the defect the last three commits were chasing.** D-071, D-072 and D-074 each read a CI log showing `timed out waiting for another Fiscus build` or an errno from the acquire path, and each repaired something real on that path — the errno enumeration, the pathname cleanup, the self-wait. All three were genuine. None of them was this, because this one is on the RELEASE path and presents as a symptom on the acquire path. Four commits in, the lesson is the one the file keeps teaching: the process reporting the timeout is never the process that caused it.
+
+**A second correction fell out of the same run.** `ordinary contention leaves no lock residue` asserted that NOTHING beginning with `.fiscus-build.lock` survived — canonical directory or quarantine. The design never promised that. `removeQuarantine` swallows a failed recursive delete on purpose, because on Windows a delete loses to an open handle exactly as a rename does, and `reapOrphanQuarantines` runs at the top of every acquisition precisely to collect what it leaves. The promise is that an abandoned generation is reaped by the NEXT acquisition, not that one never survives its own cleanup. The old assertion passed only because the delete usually wins the race; under real contention it left three quarantines, two from ordinary releases and one from a reclamation. The test now asserts the canonical path is free IMMEDIATELY — that one is strict, because a directory left there is a held lock — and then performs one sweeping acquisition before asserting no quarantine remains. A quarantine that survives its own reaper is a real leak; one that survives only until the next acquisition is documented behaviour.
+
+**What this does not establish:** the regression test is source-level, pinning that the branch removes rather than returns. Reaching it behaviourally needs the directory rename to fail while the removal that follows still succeeds, and the real cause is a transient Windows handle that cannot be held to a schedule — deliberately holding one blocks the removal too and manufactures a different state. `ordinary contention leaves no lock residue` remains the end-to-end guard, and it is what caught this. Nor does the fix recover a lock ALREADY leaked by an older build: such a directory names a live PID and stays unrecoverable until that process exits. Treating a long-lived quarantined-owner state as stale regardless of liveness would close that too, and is deliberately not done here — this file has been repaired four times in one session and a fifth timer-based rule, written in the same sitting, is exactly how the previous three went wrong.
+
+## D-078 — The errno list was in the rename helper too, and it killed the launcher
+**Decision:** `renameForQuarantine` no longer enumerates platform error codes. It answers one question — did this rename claim the object? — and returns `false` for every failure that is not `ENOENT` or `EEXIST`, after the `RENAME_RETRY_MS` budget. Those two are still distinguished, and not because of what they are called: both mean another process has already settled the claim, so retrying cannot change the answer. Nothing in the lock's rename path throws an errno at a caller any more.
+**Reason:** D-072 removed an enumeration of platform error codes from the acquire loop, on the grounds that the list is a property of whichever kernel the job runs on and the next platform adds an entry. It did not remove this one, three functions away, and CI run `33561854121` supplied the entry: `test (macos-latest)` **failed** with `EINVAL: invalid argument, rename` thrown from `renameForQuarantine` through `releasePublicationLock` and out of `bin/fiscus.mjs`. macOS answers `EINVAL` when renaming inside a directory a contender has just unlinked. It was not on the list — `EACCES`, `EBUSY`, `EPERM` were — so it was rethrown, and a CLI that had merely lost a race died.
+
+The position argument is identical to D-072's. Every caller of this helper handles `false` by carrying on, and there is no failure in a rename that means "you claimed it", so no failure here needs to be fatal.
+
+**What this costs, stated rather than hidden:** a permanently broken filesystem — a read-only tree, a full disk — now returns `false` after five seconds instead of throwing its exact errno, so the precise cause is no longer in the stack trace. Acquisition still surfaces a persistent fault through `PATH_CONTENTION_MS`, which reports the error itself. That is a real loss of diagnostic precision, accepted because no lock helper should be able to kill the launcher over an errno nobody thought to enumerate.
+
+**This is the fifth repair to one file in one session, and the pattern is now the finding.** D-071 enumerated errnos; D-072 replaced the enumeration with position, on the acquire path only; D-074 fixed the self-wait D-072 introduced; D-077 found the release path abandoning locks held; D-078 finds D-072's own principle unapplied in the helper both paths call. Each repair was correct and each was local. What none of them did was ask where else the same mistake lived. That question — not another fix — is what this file needs next.
+
+## D-079 — A contention test must not encode how fast the machine is
+**Decision:** `ordinary contention leaves no lock residue` spawns four workers, not eight, and each is given a DURATION it applies from its own start rather than a deadline the parent computed before spawning. The kill window for every child in the file is 180s, still well under `LOCK_WAIT_MS` so a genuine self-wait fails fast and legibly.
+**Reason:** Run `33561854121` **failed** `test (ubuntu-latest)` with a worker killed at the 90s window without exiting. Two causes, both mine, both the same shape as the lap floor D-075 already corrected. Eight processes acquiring at maximum rate for five seconds is a thundering herd, not the "ordinary contention" the test is named for; on a two-core runner the backlog it builds outlasted the window, because each worker must still finish the acquire it is inside when its budget expires. And an absolute deadline fixed before spawning means a slow child can spend its entire budget starting up — completing zero laps and failing the per-worker floor for a reason that has nothing to do with the lock.
+
+A duration timed from the child's own start guarantees at least one full lap regardless of startup skew, which is what makes the floor a claim about contention rather than about scheduling.
+
+**What this does not establish:** four workers sample the residue race less than eight did. The trade is deliberate: a test that cannot finish on the hardware CI actually provides is not measuring anything, and this one has now failed twice for reasons that were about the machine rather than the lock.
+
+## D-080 — Release loops against the invariant instead of returning at each step, and the last resort is degrading the lock, not keeping it
+**Decision:** `releasePublicationLock` is now a loop whose only exits are (a) the lock is provably not ours and (b) the lock is gone because we removed it. The atomic hand-back moved into `releaseOwnedGeneration`, which returns `false` for "could not finish this time" and never decides to give up — that decision belongs to the caller, against the invariant. After `RELEASE_BUDGET_MS` (15s) of failing laps, `abandonOwnedGeneration` removes the directory, and if the removal is swallowed it unlinks every token-bearing record inside it so the lock degrades to owner-less and clears on the 10s timer. Both acts are licensed by `ownedByToken` re-read immediately before: the token is a UUID minted in this process, so the generation is demonstrably ours.
+**Reason:** D-077 fixed ONE of four give-up paths in release and did not ask about its siblings. Three remained — the owner-record rename failing, the post-move identity check failing, the post-quarantine identity check failing — and each returned with the canonical directory still present, still carrying our token, still naming our live PID. That is the same defect D-077 described, three more times, and it is exactly the mistake D-078 had just finished naming: a correct local fix that leaves the class standing next door.
+
+Writing the protocol out as a state machine (`docs/program/PUBLICATION-LOCK-STATE-MODEL.md`) is what made the class visible rather than the instance. Every recovery rule in the module keys on the owner being DEAD. Nothing keys on the owner being ALIVE AND NO LONGER ACTING. So a lock released badly by a running process sits in a state with no outgoing transition at all — not stale by PID, not on any timer, unrecoverable until that process exits. It cannot be fixed by adding a recovery rule, because there is nothing for a recoverer to observe. It can only be made unreachable at the source, which is what the loop and the fallback do.
+
+**Removing a lock directory by pathname is precisely what D-072 forbade, and it is correct here for the reason D-072 gave.** D-072's objection was that a pathname proves nothing about whose directory it now is. A token does, and this path has one. While this process is alive no other can have taken our generation either: a contender only touches a live lock it does not own after judging the owner dead, and `processIsAlive` says otherwise about us.
+
+**The second attempt exists because the first can be swallowed.** `removeQuarantine` absorbs a failed recursive delete by design, so a partial removal that left `owner.json` behind would put us straight back into the permanently-held state. Stripping the record instead leaves an owner-less directory, which `lockIsStale` clears after `OWNERLESS_LOCK_STALE_MS`. Recoverable-in-ten-seconds is a real outcome; held-until-this-process-exits is not an outcome at all.
+
+**The regression test is behavioural now, not source-level.** D-077's test asserted the SHAPE of one branch, which is why the restructure broke it — and a test that breaks when the defect is fixed properly was pinning the wrong thing. `a release that cannot hand the lock back never returns still holding it` plants a non-empty DIRECTORY at `.owner-quarantine.json`, which makes the first rename fail permanently on every platform, then has the worker release and immediately re-acquire in the same process. Its own PID is alive, so nothing can rescue it by staleness. Verified RED against `da3c7ff`: the worker was killed at 120s having entered the five-minute wait. GREEN at 17s, which is the 15s budget plus a re-acquire.
+
+**What this does not establish:** the planted directory is a stand-in for the real cause — a transient open handle from an indexer or a competing scan — chosen because it is permanent and therefore deterministic, where the real one cannot be held to a schedule. So the test establishes that release cannot return holding the lock; it does not reproduce the interleaving that made release fail on CI. The state model also records two transitions with no direct test (`rmSync` of a quarantine, and restoring one), and assumes POSIX/NTFS same-directory rename semantics throughout — it is not evidence about NFS, a container overlay, or a Windows share.
+
+## D-081 — The causal boundary issues through the kernel, and the split into two claims is what makes the kernel able to refuse
+**Decision:** `src/causal/epistemic.ts` issues, for every analysed study, an assignment Evidence, an outcome Evidence, and the observed arm difference as a claim with `causality: 'observational'`. When and only when the pre-registered rule already authorised claim language, it also issues a `causal_identification` Witness grounded in the assignment Evidence, a second claim with `causality: 'randomized'`, and a Derivation between the two. `Store.issueCausalStudyToKernel` appends all of it on ONE kernel transaction, and `fiscus causal analyze --apply` calls it. `causal.qualification` and `causal.estimate` move from `unmigrated_authority` to `kernel_primitive`; `causal.issuance` joins the map as `canonical`.
+**Reason:** AII-036 named the observational-to-causal boundary as the single largest strengthening in the product, decided outside the Trusted Epistemic Kernel. The complaint was never that the arithmetic was wrong — `qualifyCausalStudy` refuses to derive causality from Lift, a baseline or a historic model comparison, and `estimateCausalStudy` withholds claim language whenever the joint interval rule is not met. The complaint was that the conclusion was bound to nothing: **revoking the randomization evidence changed no downstream record, because there was no downstream record to change.**
+
+**Two claims rather than one, and this is the whole mechanism.** The kernel checks STRENGTHENING, not absolute values — a single claim asserting `causality: 'randomized'` is perfectly legal on its own, and issuing one would have rebuilt the defect in kernel types while looking like a migration. It is the gap between `observational` and `randomized` across a Derivation that makes `assessDerivationLegality` demand a `causal_identification` witness and `appendDerivation` refuse without it. The regression test asserts exactly that: the same derivation, witness removed, must throw naming `causal_identification`. If that ever passes, the split is decoration.
+
+**The witness is grounded in the assignment Evidence and nothing else.** That is what puts the effect claim in that evidence's revocation closure, verified through `revocationProjectionAsOf` — the surface a consumer actually has — rather than by calling `revocationClosure` on raw edges, which would have been wrong: the kernel de-duplicates parallel edges first, and a claim that both lists an evidence ID and is the output of a derivation naming the same one produces exactly such a pair. The outcome Evidence stays outside the closure, because outcomes were observed regardless of how units were assigned.
+
+**Two smaller repairs fell out of it.** The kernel had `appendEvidenceWithinTransaction` and `appendClaimWithinTransaction` but no equivalent for witnesses or derivations, so a boundary issuing all four had to use four separate transactions — and the derivation, the last record and the only one the kernel can refuse, would then fail with the claim it was meant to legalise already committed. That is the forbidden state reached through the mechanism meant to forbid it. Both `WithinTransaction` variants now exist. And `claim()` refuses `proxy_validated` without a `measurementModelRef`, correctly: a measurement is validated against something, and a claim that cannot name it is asserting the validation rather than carrying it. The reference is the protocol's declared quality metric, pinned to the protocol hash so it cannot survive a change to the thing it names.
+
+**`fiscus causal analyze --apply` could not succeed for any input.** It called `saveCausalAnalysis`, which refuses a version-1 protocol as inspect-only and then asks `causalStudyData` for a version-2 study — which that function returns `null` for by design. So every path threw, and the version-2 path threw `causal study was not found` about a study the operator had just inspected: an error naming absence where the truth was deferral. `--apply` now issues into the kernel, which was always the substantive thing that step should do; a study with no version-1 analysis path is told that version-2 projection is deferred.
+
+**What this does not establish.** It does not make any estimate more true, and the module says so in its own docblock: the interval, the joint decision rule and the qualification gates are unchanged and remain the only things deciding whether an effect is supported. A study that earned no claim language before earns none now — it issues its observed difference and no causal claim at all. Nor is this a full TDD cycle: the adapter was written before its tests, and the RED that would have preceded it is not a RED I ran. What the tests do establish is checked against a real `EpistemicLedger` over a real database, not against the shape of the records the adapter returns. Version-2 studies remain unreachable from this path — `causalStudyData` is version-1 only — so the migration covers the boundary the product actually reaches today and not the one it is being built towards. `decision.certificate` is still `unmigrated_authority` and still `unreached`, so AII-036 stays PARTIAL.
+
+## D-082 — The wire carries the whole claim profile, and the spine reads a projection of it rather than a second opinion
+**Decision:** `ClaimSupportPayload` now carries `profile: ClaimProfilePayload` — every one of the ten axes `src/epistemic/profile.ts` names — and the three fields the spine renders are copied from it by a single `projectClaimSupport`. `figure` stays outside the profile because it is a rendering decision and the kernel has no axis for it. `test/claim-support-axes.test.ts` checks all ten wire unions against the kernel's, asserts the count matches so a dropped pair cannot shrink the coverage silently, and pins the copy identity across eight sampled claim states.
+**Reason:** WP-B02's remainder, recorded in the WP-B02 evidence row as "the wire carries four of `ClaimProfile`'s nine axes — the four the GUI reads — so integrity, authenticity, measurement, causality and finality still reach no consumer." The four were chosen because they were the four that VARY between the product's claims. That is exactly backwards as a reason to omit the rest: the seven constant ones say that no figure on the page is causal, that nothing is final, and that nothing has been assessed for decision fitness — which are the assumptions a FinOps reader is most likely to make and least likely to have checked. Constancy is a reason to state them, not to drop them.
+
+There was also nothing holding the display-only projection and the canonical kernel boundaries in agreement. `src/billing/epistemic.ts`, `src/value/epistemic.ts`, `src/alloc/epistemic.ts` and `src/economics/epistemic.ts` each declare a full profile for the same claim the dashboard describes, and the dashboard declared four axes with no profile behind them, so the two could not be inconsistent because there was nothing to be inconsistent with. `PRODUCT_CLAIM_AXES` is now that shared statement, and the per-claim divergences are deliberate and commented: metered carries `integrity: 'unknown'` because it alone has no canonical boundary — it is a read of the request ledger and nothing digests those rows — and billed, allocated and realized carry `verified` only once the immutable, digest-identified record they describe exists.
+
+**No score, no second boolean.** The projection is a copy on three axes and a display decision on the fourth field. A "trust score" over ten axes would be the same collapse WP-B02 removed, with a decimal point; a derived `established` would be it with a different name.
+
+**What this does not establish:** persisted records still carry collapsed status fields and no migration exists, which is the rest of AII-014. The seven constant axes are constant because the boundaries declare them so, and this change does not check that any of those declarations is CORRECT — only that the dashboard repeats the same ones rather than inventing its own. The browser's unreachable-endpoint profile fills `measurement`, `causality` and `decisionFitness` with the weakest member of each union because those three unions have no `unknown` member at all; that is a limitation of the vocabulary, not a statement about the claim, and the code says so where it happens.
+
+## D-083 — A survival scan that runs out of time reports unknown, and the route stops hanging
+**Decision:** `survivingLines` takes a wall-clock deadline and returns `measured`. `computeRealization` takes `gitScanBudgetMs` (default 20s, `Infinity` to remove the bound, `0` exhausted immediately) and applies ONE deadline across every unit's git work, started after the fixed setup rather than at the top. Past it, a unit's `survived`, `proposed` and `accepted` gates are `unknown` with a reason naming the budget; `committed` stays supported because the commit's existence came from the attribution, which ran before any of the skipped calls. The report carries `survivalUnmeasuredUnits`.
+**Reason:** `/api/value` was measured at **416,167ms** on this repository. Not slow — hanging: the route has no timeout of its own, and `test/dashboard-contract.test.ts` eventually failed with a fetch headers timeout at 576s. The cause was instrumented rather than guessed, which mattered: at `limit: 40`, `attributeCommits` cost 2.3s, `revertScan` 1.2s, the store reads 1.1s, the per-commit `git show` 42s across all forty, and `git blame --line-porcelain HEAD` **20.3 seconds for a single commit**. Bounding blame alone still left 126s. Bounding every per-unit git call brought it to 36s.
+
+CI is structurally blind to this: `actions/checkout` is shallow, so the runner's history is a fraction of a developer's and the blame is correspondingly cheap. A defect that only appears on a full clone will never be caught by a job that does not have one.
+
+**THE BOUND INTRODUCES A WORSE HAZARD THAN THE DELAY, AND THAT IS THE WHOLE DESIGN.** A commit whose blame never ran has not been shown to have zero surviving lines. A scan that simply stopped and let the arithmetic continue would contribute a 0% survival ratio for every unmeasured commit, refute their `survived` gate, and state a churn figure that no evidence supports — worse on a slower machine, and silently. So the skipped work becomes `unknown`, which is the same answer `maturing` already gives for the same reason: the evidence has not been gathered yet. The budget check is read ONCE per unit and reused, so a unit is measured or unmeasured as a whole; re-reading the clock between the blame and the diff would let a unit report a survival ratio with no proposal comparison, and an operator comparing two units would have no way to know which halves were gathered.
+
+Zero means "already exhausted" rather than "unbounded" specifically so a test can reach the unmeasured branch. A fixture repository fast enough to be a test is by construction never slow enough to exhaust a real budget by waiting, and a branch no test can reach is a branch that is not tested.
+
+**What this does not establish:** it bounds the work, it does not make it fast. On this repository a 20-second budget measures roughly one commit of forty, so the value surfaces here report almost entirely unknown survival — which is the honest state of the evidence at that budget, not a fix. Caching survival per commit hash is the real answer and is deliberately not attempted in the same change. Nor does this touch the second cause: `safeRepo(null)` still falls back to the dashboard's launch directory, so `/api/value` mines whatever repository the dashboard was started in regardless of what the ledger contains.
+
+## D-084 — A condition that nothing can close is a different fact from a condition nobody has checked, and the residual now says which
+**Decision:** `src/epistemic/countermodel.ts` gives a claim's prose assumptions a checkable structure: a countermodel names the assumption it violates, the world in which that assumption is false, what the claim degrades TO in that world, and the observation that would rule the world out — or `null`, when nothing available can. `assessAssumptionFragility` reports `unexcludable` (unexcluded AND unexcludable), `uncoveredAssumptions`, `claimHoldsAsStated` and `robustnessAssessed`. `src/billing/countermodels.ts` writes the five worlds of the reconciliation residual, keyed by `ReconciliationCondition` so a new condition without a world fails to compile, and `fiscus billing reconcile` prints the assessment beneath the conditions line and carries it in `--json`.
+**Reason:** `ReconciliationRun.conditions` listed five permanent limits as bare identifiers and `describeOffPathBound` stated in one sentence what the residual licenses. Both were honest; neither was actionable. A reader was told the conclusion rests on a condition and left to work out for themselves what the world looks like if it does not hold, and — the part that actually decides what to do next — whether anything they have could tell the two apart. The answer for four of the five is nothing can, which makes the residual **permanently conditional rather than pending a check an operator could go and do**. That is not a gap in the analysis; it is the finding, and an operator who works through the conditions list expecting to arrive at an unconditional number is going to spend effort discovering it one check at a time.
+
+**The four fields exist because leaving any one out is a specific way of being useless.** A countermodel not tied to a stated assumption is free-floating doubt, which nothing can discharge — and is equally the signature of an assumption the claim relies on and failed to declare, so `assessAssumptionFragility` rejects it rather than ignoring it. "The data might be wrong" is not a world. And `claimBecomes` is never "false": a bound that stops bounding is a different failure from a figure off by a known sign, and the operator's next move differs.
+
+**Absence of a countermodel is not robustness.** An assessment returning "nothing is fragile" for a claim nobody wrote countermodels for would be this repository's recurring completeness failure in new clothes — reading "we did not look" as "there is nothing there" — so `robustnessAssessed` is false while any stated assumption is uncovered, and an empty `fragileAssumptions` means nothing at all until it is true. It is the rule `src/measurement/completeness.ts` applies to absence inference, one level up. The mirror hazard is guarded structurally: `excluded` requires an `excludedBy`, because marking every world ruled out and recording no reason is the cheapest way to manufacture robustness.
+
+**`realized` is what keeps this from being a doubt register.** When the residual is negative, `L > P >= T`, which REFUTES `L <= T` outright — the rate-card over-pricing world is not an unexcluded possibility, it is established, and `claimHoldsAsStated` goes false with it. That is D-068's finding — a residual at or below zero bounds nothing — restated as a property of the claim's assumptions rather than as a sentence beneath the number, and it is driven by arithmetic on the run rather than by judgement. The first draft of the billing worlds instead marked the operator-supplied condition `excluded` when Fiscus fetched the report itself; that branch was unreachable, because the condition only appears on runs where the report was NOT fetched. A vacuous branch dressed as evidence-sensitivity is worse than uniform pessimism, and the docblock that had claimed the machinery was non-vacuous for that reason was corrected with it.
+
+**There is deliberately no probability anywhere in this module.** Attaching one would replace a structural statement with a number nobody can source, which is the collapse `src/epistemic/profile.ts` exists to refuse. A live countermodel does not mean the claim is unlikely. It means the evidence at hand does not distinguish the claim's world from that one.
+
+**It is on the issuance map for the opposite reason to every other entry.** The rest are listed because they could make a claim STRONGER than its evidence; this one weakens. It earns a place because `realized` is a positive assertion that a condition has broken, and it reaches an operator through `fiscus billing reconcile` with no kernel record behind it. That is tolerable only while these worlds are derived from arithmetic on the run; it is the first thing to migrate if they ever acquire another source. `src/epistemic/countermodel.ts` itself is NOT mapped — it sits inside the kernel beside `claim.ts`, and the map covers boundaries that reason about claims from outside it.
+
+**What this does not establish.** It does not make the residual more trustworthy — it makes the residual's conditionality legible, which is close to the opposite. It says nothing about whether the worlds are the RIGHT five: they are prose, written by hand, and the compile-time `Record` keying only guarantees that every condition has one, never that the one it has is complete or well-chosen. `assessAssumptionFragility` reaches no other claim in the repository — the ten-axis profiles, the value gates and the allocation runs all still carry assumptions as inert prose. And the fragility assessment is deliberately NOT written into the persisted reconciliation claim: the worlds will be revised, and a stored claim that disagreed with a recomputation would be a worse defect than the one this closes.
+
+## D-085 — A lock that names this process is never something this process may wait for
+**Decision:** The acquire loop tests `ownedByThisProcess` — the owner record's PID against `process.pid` — instead of `ownedByToken`, and splits on a new module-level `heldTokens` set. A token we are not holding means our own orphan, reclaimed by `quarantineKnownLock` and, past `RELEASE_BUDGET_MS`, by the same terminal `abandonOwnedGeneration` the release path uses. A token we ARE holding means a re-entrant acquisition, which throws at the call. `lockIsStale` now asks `ownerCanStillAct`, which is the same question `reapOrphanQuarantines` asks, stated once.
+**Reason:** CI run `33630894290` failed on ubuntu, macOS and candidate-head with one test — `ordinary contention leaves no lock residue` — killed at the harness's 180s window. `LOCK_WAIT_MS` is 300s, so the worker was still waiting rather than having given up, and every other worker had exited seconds earlier. That arithmetic leaves exactly one process alive that could have owned the lock it was waiting for: itself.
+
+**D-080 closed one route into `HELD_BY_ABANDONER` and the state came back through the door next to it.** The acquire loop already knew that waiting on its own generation never ends — `lockIsStale` asks whether the owner's PID is alive, and for our own PID the answer is permanently yes — and it guarded that with `ownedByToken`. But **the token is minted per CALL.** A generation left behind by an earlier `acquirePublicationLock` in the same process carries a token this call has never heard of: not ours by that test, not stale by this one, waited on for five minutes. The guard was exactly one call wide.
+
+**The generation was the wrong granularity; the actor is the right one.** What made waiting futile was never which token the record carried. It was that the PID being waited on is the PID doing the waiting. A record naming our PID was written either by this process or by a dead process whose PID we inherited, and reclaiming is correct under both readings — in the first it is our own orphan, in the second its owner is demonstrably gone. `heldTokens` isolates the one case where it is not: a lock we are still standing in, where reclaiming would hand one lock to two holders and waiting is a deadlock with a five-minute fuse that then blames another build for it. Nothing in this repository acquires re-entrantly; if something starts to, it now finds out at the call rather than in CI.
+
+**And it corrected a claim in the state model that was too strong.** `PUBLICATION-LOCK-STATE-MODEL.md` said this state "cannot be fixed by recovery, because there is nothing for a recoverer to key on". True for a contender, which can observe only liveness. False for the abandoner, which knows something a contender cannot: whether it is still standing in that generation. `ownerCanStillAct` is that knowledge, and it is used by both the acquire path and `reapOrphanQuarantines` — the reaper asks the identical question, and answering it two different ways in two places is the shape of D-078 exactly, where an errno list was removed in one place and left standing in the helper next door.
+
+**Verified RED first, and deterministically.** Both regression tests plant the state directly rather than racing for it: an owner record naming this process under an unheld token, and a genuine second acquisition while the first is held. Before the repair both children were killed at their 60s window; after it they pass in under 100ms. Racing for the state would have reproduced CI's flakiness along with its defect, and how the orphan came to exist is not what the repair turns on.
+
+**Corroboration the diagnosis is right, not just the symptom gone.** `ordinary contention leaves no lock residue` fell from the ~17-22s recorded in its own comment to 4.4s. The time it used to spend was real waiting, and it was self-inflicted.
+
+**What this does not establish.** It does not establish that `HELD_BY_ABANDONER` is unreachable — two routes into it are closed and the model is derived from the source, not proved over it. It says nothing about the interleaving CI actually hit; the tests manufacture the state. `reapOrphanQuarantines` now collects this process's own released quarantines, which is strictly more informed than the previous rule but changes collection timing, and no test pins that difference directly. And the module still assumes POSIX/NTFS same-directory rename semantics throughout: it is not evidence about NFS, a container overlay, or a Windows share.
+
+## D-086 — Strength is relative to a use, and two claims that satisfy different things are incomparable rather than ranked
+**Decision:** `src/epistemic/admissibility.ts` states a bar as a set of per-axis requirements over a `ClaimProfile` — `atLeast` on an axis whose declared constant is an ordering, `oneOf` on one that is a set of alternatives — and `compareForUse` orders two profiles for ONE use, returning `incomparable` when each satisfies something the other does not. `src/epistemic/claim-uses.ts` declares `CLAIM_USES`, the single vocabulary, and `USE_REQUIREMENTS`. `src/dashboard/routes.ts` now reads a reconciliation record's own `excludedFrom` instead of hand-writing one beside it.
+**Reason:** Four surfaces bar a figure from downstream uses and every one did it with a hand-written array literal — `src/alloc/exact.ts`, `src/billing/reconcile.ts` and `src/billing/openaiCosts.ts` with four names, `src/billing/mapping.ts` with three, `src/dashboard/routes.ts` with five, twice, where the extra `outcome_attribution` appeared nowhere else under `src/`. **Three vocabularies for one question, each pinned by a passing test, with nothing comparing them.** That is what an inert list does: it cannot be wrong, because there is nothing it has to agree with.
+
+**The sharpest instance is the one the route argues against in its own comment.** `/api/billing` serves recorded reconciliation runs rather than computing them, and says so explicitly — "serving a freshly computed variance from a GET would make the dashboard disagree with the recorded runs the moment a new snapshot landed, and the recorded runs are the evidence" — and then printed an exclusion list beside those records that contradicted the one each record carried. The RED test is exactly that: the page said five, the record it was displaying said four. The record is the evidence for its own exclusions too.
+
+**NO SCORE, AND NO LADDER.** `mergeClaimProfiles` already refuses to rank monetary bases, because `billed` and `allocated` name different economic semantics rather than two rungs of one quantity. This module is that refusal generalised: "is this claim strong enough?" has no answer, and "strong enough to gate traffic?" has one that differs from "strong enough for a finance report" with neither being the stronger claim. `atLeast` on `monetaryBasis` is rejected at construction, because accepting it would smuggle the missing ordering in where nobody would look for it, and `compareForUse` returns `incomparable` rather than inventing a tiebreak. The value of a partial order is the pairs it declines to order.
+
+**THREE OF THE FIVE USES HAVE NO STATED BAR, AND THAT IS RECORDED RATHER THAN FILLED IN.** Only two are grounded in something this repository already establishes: `request_metered_spend` is definitional — it IS the metered rate-card read, and `claim-support.ts`'s metered builder is the only one producing a `list` or `mixed` basis — and `budget_enforcement` adds the fail-closed rule to it, refusing a figure whose own sources disagree, which `billedClaimSupport` already reports as `conflicted`. For `outcome_attribution`, `roi` and `model_recommendations` I could not state a bar without asserting product policy as though it were derived, so `admits` reports them as `stated: false` and refuses to return `admitted: true`. An unasked question is not a passed test — the same rule D-084 applies to an unexamined assumption, and the reason the hand-written lists remain authoritative for those three.
+
+**A discovery that bounded the design.** Across the four dashboard claims only `epistemic`, `integrity`, `coverage` and `monetaryBasis` vary at all; `PRODUCT_CLAIM_AXES` fixes the other six to the same value for every one of them. Any requirement written over those six would be decoration — satisfied or failed identically by every claim on the page — which is most of why three bars went unstated rather than invented.
+
+**What this does not establish.** The persisted `excludedFrom` tuples are unchanged, and `src/alloc/exact.ts` still validates an exact four on read, so this adds one vocabulary and does not migrate the records to it. It does not decide whether `outcome_attribution` belongs in the reconciliation record's list — a defensible case exists, and making it is a schema change with a migration, not a display fix. `compareForUse` has no product consumer yet; its consumers here are tests, which is honest but means the partial order is available rather than in use. And the vocabulary check is behavioural — it reads what the live surfaces emit — so it covers the surfaces the fixture reaches and says nothing about a list built somewhere the dashboard does not serve.
+
+## D-087 — WP-C01: the exact-Money migration is real, and what remains is that exactness is a parallel authority rather than the authority
+**Decision:** Recorded as an audit result, not a code change. WP-C01 ("end-to-end accounting-number authority audit") maps to AII-017, whose remainder is stated as "migrate remaining legacy request/DB/receipt/team authoritative paths and remove accounting-number authority". I audited six money-bearing areas by reading the source. Three of the four paths that note names are **already migrated**, and the note is stale about them. AII-017 stays PARTIAL for a different and more precise reason than the one written down.
+**Reason:** "Accounting-number authority" means a float `number` is the authoritative accounting value — persisted as the record of record, decided from, presented with nothing exact behind it, or accumulated so error compounds. Checking each:
+
+**The request path is a checked projection, not independent authority.** `requests.cost_usd` is a SQLite `REAL` column and there is no exact amount column beside it, which looks damning until you read `Store.compatibilityCostUsd`: when a row carries an `economicAmount`, `cost_usd` is *derived* from it by `Number(formatMoneyAmount(...))` and the write is **refused** if that projection is lossy or collapses a non-zero to zero. The exact amount goes to the economic ledger as an immutable charge event in the same transaction. All three production writers — the proxy (`src/proxy/server.ts:741`), the demo seed, and the three connectors behind `recordInsert` — supply it.
+
+**Budget enforcement, receipts and realization each read the exact authority first.** `BudgetGuard.evaluate` prefers `exactSpendBetween` and falls back to the float sum only when `unresolvedRequests !== 0` — and that fallback is a *complete* float total, not a partial one, so it degrades precision without degrading coverage. `src/value/receipt.ts` carries the float `costUsd` only as a compatibility field and **validates it against the exact `amountText`**, throwing when they disagree beyond 1e-12. `src/value/realization.ts:530` reads the float `byModel` only when `modelAuthority.coverage === 'legacy_unknown'`, and in that case forces `dominantModelCostUsd` and `dominantModelCostShare` to `null` so the frontier cannot treat a legacy label as priceable.
+
+**So the remaining defect is structural rather than local: exact Money is a PARALLEL authority.** `fiscus economic` and `/api/economic` are the exact surface, separate from the default surfaces that still answer from `SUM(cost_usd)` — thirteen such read paths, of which only three (`spendBetween`, `spendForSession`, `spendInWindow`) have exact siblings. Every migration so far has re-implemented the exact-vs-float preference **locally and differently**: the guard tests `unresolvedRequests === 0`, realization tests `coverage === 'exact'`, the receipt compares against a 1e-12 tolerance. Three answers to one question, in three files, which is the D-078 defect class this session already repaired twice in the publication lock — a rule corrected in one place and left standing next door.
+
+**Two smaller findings, reported at the severity the evidence supports rather than the severity that would sound better.** `exactNumber()` in `src/budget/guard.ts:44` projects exact Money back to a float to compare against `cfg.dailyUsd`, which is itself a float from configuration — so migrating the spend side alone **cannot** make the enforcement comparison exact, and nobody should expect it to. And money is accumulated with naive `+=` over doubles in `src/connect/importShared.ts:142-146` and `src/value/realization.ts:814,907,908,912,927`, which is a genuine departure from exact discipline with **no reachable counterexample**: those totals are displayed to cents, and it would take on the order of 1e14 rows for the accumulated error to move one.
+
+**A finding I withdrew, and why it is recorded here.** I first believed `src/alerts/detect.ts:158` was a live defect: it reads the float `spendBetween` under a comment demanding it "read the same basis the guard ENFORCES on", while the guard reads the exact projection. I wrote the failing test. It failed for two reasons that were both mine — I asserted the wrong alert id (`soft-cap`; it is `budget-soft`), and my counterexample assumed naive float summation where **SQLite's `SUM()` uses compensated (Kahan-Babuška) addition**. Probing the two surfaces directly showed both read `1` and both trip. The alert and the guard cannot drift, because `cost_usd` is derived from the exact amount per row and summed exactly. The test was deleted rather than weakened into something that would pass.
+
+**What this audit does NOT establish.** It did not cover `team-server/`, the export path, or FX — three of the areas a complete C01 must reach, and two of them (`team`, export) are named in AII-017's own remainder. It did not trace consumers for all thirteen `SUM(cost_usd)` sites; it traced the ones with non-display callers. It is a source audit, so it establishes what the code says and not what a migration would cost. And it does not move AII-017 off PARTIAL: the parallel-authority finding above is unfixed, and the areas I did not reach cannot be assumed clean because the ones I did reach were.
+
+## D-088 — Correcting D-087: the "three answers to one question" finding was overstated
+**Decision:** D-087 recorded, as WP-C01's headline structural finding, that the guard, realization and the receipt each "re-implement the exact-vs-float preference locally and differently — three answers to one question, in three files". Reading further weakens that claim, and it is corrected here rather than left standing.
+**Reason:** `canonicalModelAttribution` (`src/store/economicReadModel.ts:277`) derives its coverage enum from `total.unresolvedRequests` — **the same field** `BudgetGuard.evaluate` tests. They are one rule in two vocabularies, not two rules. The enum is strictly more informative, distinguishing `partial` (some rows unresolved) from `legacy_unknown` (all of them); the guard collapses both to the float fallback, and that collapse is **correct for its purpose**, because an exact sum over only the resolved subset would undercount, and undercounting a cap is fail-open. The receipt's 1e-12 tolerance is a different question again — whether a projection faithfully represents an exact amount — and consolidating it with the other two would merge two unrelated checks.
+
+`src/store/economicReadModel.ts` also already implements the pattern D-087 implied was missing: `groupEconomicSeries` computes both an exact attribution and a compatibility sum and resolves them through `economicAttributionNumber(economic, compatibility)`, which is the exact-else-projection rule stated in one place.
+
+**What survives of the finding.** The genuine residue is smaller and duller than what D-087 wrote: a shared coverage classifier would let the guard see `partial` versus `legacy_unknown` if it ever needed to, and thirteen `SUM(cost_usd)` read paths still answer the default surfaces while `/api/economic` is the exact one. The parallel-authority observation stands. The "three files disagree" framing does not.
+
+**Why this is recorded rather than edited away.** D-087 is pushed and CI-verified; a program record that quietly improves its own past findings is worth less than one that shows where it was wrong. This is the second correction in this round — the first withdrew a defect claim about `src/alerts/detect.ts` that turned out to rest on two errors of mine — and both came from the same habit: naming a defect class from a strong first instance before reading the siblings. §10 of the directive asks for exactly that reading; I did it late twice.
+
+## D-089 — WP-C02: an adjustment must be able to net against the charge it adjusts
+**Decision:** `validateEventBasis` now refuses an economic event whose role is `adjustment` and whose amount carries a basis no charge kind can hold. The permitted set — `list`, `estimated`, `provider_observed`, `billed` — is read off the per-kind rules already in that function rather than restated as policy.
+**Reason:** The function constrained the basis of five of the seventeen event kinds. The other twelve fell through a `: true` default, and six of those twelve are the adjustment kinds: `credit_applied`, `discount_applied`, `commitment_recognized`, `tax_recognized`, `true_up`, `write_off`. An adjustment exists to move a charge, so its basis is not free.
+
+**The consequence is a pair of true numbers that mislead together.** `closeBalances` groups by `currency + basis + role` and sums only within a group. That refusal is CORRECT — bases name different economic semantics, and adding across them is the collapse this product exists to prevent. But it means a credit carrying a basis no charge uses nets against nothing: it does not error and it does not go missing, it becomes its own balance row while the bill it was meant to reduce still reads at its full amount. A reader sees an uncredited bill and an unattached credit, each individually accurate.
+
+**Issuance is the only place this can be stopped.** By projection time the refusal to add across bases is right and the bad record already exists; there is no later boundary at which the two could be safely combined. So the rule sits at `economicEvent`, which every write goes through.
+
+**Derived, not invented.** `effective`, `allocated` and `full_cost` are computed or downstream bases that no charge kind is permitted to hold — that is already true of the code before this change — so an adjustment carrying one adjusts nothing that exists. The rule adds no new economic opinion; it stops a record whose own semantics are unsatisfiable.
+
+**Two kinds deliberately left open, and this is a decision rather than an omission.** `price_corrected` carries a DELTA whose basis is inherited from the amount it corrects, and `src/economics/corrections.ts` already requires previous and next to share currency and basis — pinning it would break a correction against a billed charge. `fx_translated` preserves the source basis on purpose (`applyExactRate(source.amount, rate, source.amount.basis)`), so fixing it to any single basis would break every non-list translation. The control kinds need no rule: `close_finalized` and `close_reopened` already refuse to carry an amount at all.
+
+**Verified RED first.** The refusal test — six adjustment kinds against three unnettable bases — failed against the unfixed kernel while the permitted-path test passed, so the change is a refusal being added rather than a feature being destroyed. The adjustment set is read from `economicEventRole` rather than listed, so a kind that stops being an adjustment fails the sweep instead of silently shrinking it to nothing. 51 economics tests green.
+
+**What this does not establish.** All six kinds are latent — none has a production constructor today, so this closes a gap before it is reached rather than fixing an observed corruption. It says nothing about whether an adjustment's basis MATCHES the specific charge it names in `sourceEventIds`; that is a stronger per-link rule this does not attempt. `usage_observed` is still unconstrained and can carry a money amount despite usage being tokens. And C02's remaining surface — whether every kind's role assignment is right, and whether `effectiveChargesFor` nets adjustments the way a close expects — was not audited here.
+
+## D-090 — WP-C03: a charge may be translated into a currency once, and the ledger is what knows it
+**Decision:** `validateReferenceClosure` now refuses an `fx_translated` event whose source already carries a translation into the same target currency. The rule is keyed on the PAIR — source event and target currency — not on the source alone.
+**Reason:** A translation is a derivative: it restates one charge in a second currency without the charge ceasing to be true. `closeBalances` groups by `currency + basis + role` and sums within a group, so two translations of one charge into one currency landed in the same group and were added.
+
+**Measured, not reasoned about.** A $10.00 USD bill translated at 0.9 and then again at 0.8 closed at `translation EUR billed 17` — neither of the two honest answers, and a figure no rate produces. Both events were individually well-formed and each passed every existing check.
+
+**The store is the only thing that can see it.** `fxTranslationEvent` is handed its source and nothing else; it cannot know a translation already exists, so no amount of hardening at the constructor would reach this. Uniqueness of a derivative is a property of the collection, which makes the persistence boundary the only place the refusal can live.
+
+**Inside the closure check rather than in `append` alone.** `validateReferenceClosure` runs on read as well as on write, so a database that already holds such a pair now fails closed instead of quietly projecting their sum. That is the same fail-closed posture the budget path takes, applied to a corrupt projection rather than a corrupt budget.
+
+**This is a missing sibling, not a new rule.** `price_corrected` — the only other kind built as a single-source derivative — has carried exactly this guard since it was written (`price correction source ... already has a correction`, the `priorCorrections` query). The two kinds were given the same shape and only one was given the constraint. The regression test runs one scenario against BOTH kinds, so the asymmetry cannot reopen on either side.
+
+**Keyed on the pair, because the wider rule would destroy a real capability.** Translating one charge into EUR and into GBP is not double counting: those are separate balance groups and are never summed. A guard keyed on the source alone would have passed the refusal test and silently removed multi-currency reporting, so the permitted path is asserted alongside the refusal.
+
+**Placed last in the block on purpose.** An existing test appends a second EUR translation of one source that is malformed in its metadata and asserts it fails for THAT reason. A uniqueness check placed earlier would have stolen that test's error and weakened an unrelated assertion into a tautology. Ordering here is load-bearing.
+
+**Verified RED first.** Four of five tests failed against the unfixed ledger, including the projection test reporting `actual: '17', expected: '9'` on the real `finalizePeriod` surface. The fifth — one charge translated into two different currencies — passed before and after, which is what shows a refusal was added rather than a feature removed.
+
+**What this does not establish.** It gives a corrected rate NO way to supersede a recorded translation. That is a real limitation, and it is the same limitation `price_corrected` already has — one correction per charge — so this matches the repository's standing stance rather than widening it; a supersession mechanism for either kind remains unbuilt and is not something this change should have invented. `fx_translated` still has no production constructor, so this closes a gap before it is reached rather than repairing observed data. It says nothing about whether translating an already-corrected charge picks up the correction: `effectiveChargesFor` applies `price_corrected` deltas and FX translation reads the raw source amount, and whether those two compose is unexamined. And C03's remaining surface — historical rate selection, as-of rate provenance, and whether `closeBalances` should net `translation` against `charge` at all — was not audited here.
+
+## D-091 — WP-C04: allocation reversals conserve as a set, and a test that measured the harness now measures the code
+**Decision:** Two changes with one root. `validateReferenceClosure` now bounds the TOTAL of an allocation's reversals against the allocation, not each reversal separately. And `test/build-race.test.ts` no longer asserts that the repository lock is absent; it asserts that this test's own processes did not touch it.
+**Reason:** Both were the same mistake in different clothes — a claim about a SET checked against a single member.
+
+**The allocation defect, measured.** The existing bound refused an `allocation_reversed` event whose amount exceeded the allocation it names. That check is per event, so it is defeated by splitting: two reversals of $8.00 against a $10.00 allocation are each under the bound and jointly $6.00 over it. Probed directly, the period closed at `allocation USD allocated -6` — more money taken back than was ever allocated, which is not a quantity that can exist.
+
+**The intent was already in the code.** This is not a new economic opinion. The existing check, its `exceeds its source amount` message, and the existing test named `... a compatible, CONSERVING allocation source` all say the ledger means to conserve. What was missing is that conservation is a property of the set of reversals, and only the store can see the set. Identical in shape to D-090: a constructor is handed one event and its source and cannot know what else already points there.
+
+**The single-event check stays, and the cumulative one is added after it.** A lone oversized reversal still fails for its own more precise reason, which an existing test asserts by message. Only a split over-reversal reaches the new refusal.
+
+**Keyed on the target.** A rule that summed every reversal in the ledger rather than the reversals of THIS allocation would have passed the refusal test and refused honest work; that is asserted separately, as is partial reversal down to exactly zero, because a bound that allowed only one reversal per allocation would also have passed.
+
+**The build-race assertion was never about the build.** `assert.equal(existsSync(ROOT/'.fiscus-build.lock'), false)` asked whether any other test file was holding the repository lock at that instant. As that file's own header comment records, every test that spawns `bin/fiscus.mjs` takes the repository lock as a READER, and `node --test` runs files in parallel — so the line answered a question about the harness schedule. It passed in isolation in 6.4s and failed inside a full local run at 45.5s with `true !== false`, and the lock it saw was a real reader legitimately holding a real lock.
+
+**It was strengthened rather than deleted.** Removing a behavioural assertion to make a run green is the move this program forbids. The claim — the isolated build did not escape into the checkout — is now checked in two halves a concurrent reader cannot forge: the repository's own `dist/cli.js` mtime did not move (an escaped build would have republished it, and nothing else in the suite builds at ROOT because `pretest` finishes first), and no lock at ROOT is owned by a pid this test spawned (all of ours have exited, so a lock naming one of them is our residue and a lock naming anything else is somebody else's). Both failure modes of a real escape are covered: a clean escape moves the artifact, a crashed one leaves our pid on the lock.
+
+**Verified RED first, both halves.** The allocation tests failed 3 of 6 against the unfixed ledger, including `actual: '-6', expected: '2'` on the real `finalizePeriod` surface; the 3 that passed are the guard-rails — partial reversal, per-target keying, and the existing single-event message — which is what shows a refusal was added rather than a capability removed. The build-race defect was established by the differential itself: green alone, red in a full run, same code.
+
+**What this does not establish.** The bound is against ONE allocation event. Nothing ties allocations to the charges they allocate, so a $10.00 bill may still be allocated $7.00 to each of two teams — that is a stronger conservation rule this does not attempt. Adjustments remain unbounded: a `credit_applied` may still exceed the bill it credits. And the build-race repair fixes the one instance of its class found by search; `test/publication-lock-race.test.ts` was checked and operates entirely on isolated temporary directories, and the two other ROOT-scoped `existsSync` calls in the suite read static files that no test writes.
+
+## D-092 — the publication lock's last errno list, and why adding ENOTEMPTY would have been the same mistake
+**Decision:** `restoreQuarantinedLock` no longer enumerates tolerable filesystem error codes. It returns `false` on any failure and never throws.
+**Reason:** Exact-head CI run `33730517441` for `e32e94a` failed `candidate-head` on Ubuntu while `test (ubuntu-latest)` — the same suite on the same OS — passed. The failing test was `ordinary contention leaves no lock residue`, and the worker died with a raw error out of the acquire path:
+
+```
+Error: ENOTEMPTY: directory not empty, rename
+  '.../.fiscus-build.lock.quarantine-7086-63ed67ff' -> '.../.fiscus-build.lock'
+    at restoreQuarantinedLock (bin/publication-lock.mjs:333)
+    at quarantineUnknownLock (bin/publication-lock.mjs:353)
+    at quarantineStaleLock  (bin/publication-lock.mjs:400)
+    at acquirePublicationLock (bin/publication-lock.mjs:674)
+```
+
+**The repository had already written this lesson down, twice, and this function was the place it had not been applied.** The header of `test/publication-lock-race.test.ts` says "ENUMERATING ERRNOS WAS THE WRONG SHAPE OF FIX... because the list is a property of the kernel it happens to run on". The comment on `renameForQuarantine` says D-072 removed such an enumeration and then adds, in its own words, that it "did not remove this one". `restoreQuarantinedLock` still carried `['ENOENT','EACCES','EBUSY','EPERM','EEXIST']` and rethrew everything else. Renaming a directory onto an existing NON-EMPTY directory answers `EEXIST` on Windows and `ENOTEMPTY` on Linux — POSIX permits either — so the list was complete on the platform it was written on and wrong on the platform CI runs. That is also why the local Windows suite was green on the same commit.
+
+**Adding `ENOTEMPTY` would have been D-080 all over again.** The reason no failure here may be fatal is structural rather than a matter of which names to accept: once `renameForQuarantine` has moved the lock aside, THE CANONICAL PATH IS ABSENT, and any contender may claim it immediately. Restoration is therefore best-effort by construction, and a failure means only that somebody else got there first — the ordinary outcome of a race this protocol is designed to lose. Both call sites already discard the return value and return `false` regardless, so there was never a failure here that meant "you restored it".
+
+**What is preserved.** A failed restore still refuses to delete the quarantine to make the error go away. The generation is left intact for `reapOrphanQuarantines`, which collects it once its owner is demonstrably dead — by owner token, never by pathname. The residue assertion in the contention test is unaffected because that test already sweeps with a real acquisition before asserting.
+
+**Diagnostic loss, stated.** A permanently broken filesystem now returns `false` here instead of surfacing its exact code. That is the same trade `renameForQuarantine` documents: acquisition still surfaces a persistent fault through `PATH_CONTENTION_MS` and `LOCK_WAIT_MS`, and no lock helper should be able to kill the launcher over an errno nobody enumerated.
+
+**The regression test, and what it cannot do.** Both call sites are reachable only through a genuine interleaving — an owner record appearing between the inspection that said "unknown" and the re-read after the rename — so no single planted state drives them. The new test makes the window common instead: a thief re-creates the canonical path as a NON-EMPTY directory (a valid owner record naming a process that has already exited) every time it observes that path go absent, which is precisely the moment a quarantine is outstanding. The dead owner keeps the lock immediately reclaimable so workers still make progress. It asserts the class — no filesystem errno reaches the caller — rather than this run's code, because naming the code would rebuild the list the change deletes. It also asserts laps were completed, so it cannot pass vacuously.
+
+It CANNOT go RED on Windows, where the occupied-target rename answers `EPERM` or `EEXIST`, both of which the old list already tolerated. The defect is visible only where the kernel answers with a code nobody enumerated. The reproduction is therefore the CI stack trace above rather than a local failure, and Ubuntu CI is the authoritative gate for this repair.
+
+**What this does not establish.** It does not prove the interleaving that produced the state in CI; only that the response to it is no longer fatal. It says nothing about whether `quarantineUnknownLock` should be reachable as often as it is. And it leaves one asymmetry found while reading and NOT repaired here: `inspectLock` treats a `.owner-<token>.tmp` record as a lock identity, while the post-rename re-read inside `quarantineUnknownLock` checks only `owner.json` and the owner-quarantine names. A generation whose only identity is a temp record could therefore be judged unknown after the rename and deleted, where the inspection that led there would have called it recoverable. Reaching that requires the same kind of race and was not observed; it is recorded here rather than repaired blind.
+
+## D-093 — both C03/C04 guards were keyed on a label, and both were reachable around
+**Decision:** FX translation uniqueness is now keyed on the ROOT charge of the translation ancestry rather than the immediate source, and any event that points `reversalOf` at a `cost_allocated` target must be recorded as `allocation_reversed`.
+**Reason:** A parallel read-only audit of six frontiers, with every finding required to carry a probe-reproduced counterexample, found that both guards committed one commit earlier could be walked around by relabelling. Both were independently reproduced here before being acted on; an agent's report is a lead, not a fact.
+
+**FX: the immediate source is not the thing being restated.** D-090 refused a second translation of the same SOURCE event, which stops `bill -> GBP` twice. It does nothing about `bill -> GBP` recorded alongside `bill -> EUR -> GBP`, because the chain's immediate source is the EUR translation and no rule connected it back to the bill. Both land in the same `GBP + list + translation` group and `closeBalances` sums them:
+
+```
+BALANCE translation GBP list 12.5 ["economic:fx:gbp-direct","economic:fx:gbp-via-eur"]
+BALANCE charge      USD list 10   ["economic:fx:bill"]
+```
+
+GBP 12.50 for a USD 10.00 charge — neither the direct rate's 8.00 nor the chained rate's 4.50, and hashed into the `close_finalized` projection digest. A translation restates the underlying CHARGE however many hops away, so the charge is what the key has to be. `translationRoot` walks `sourceEventIds` up through `fx_translated` links to the first non-translation event.
+
+**Chaining itself stays legal, and that is a decision.** With no direct USD->GBP rate to hand, restating the EUR translation in GBP is the honest way to reach GBP. A guard that refused every translation-of-a-translation would have passed the refusal test while deleting triangulation, so the permitted path is asserted separately: a chain into a currency the root has NOT reached is accepted and projects 4.50.
+
+**Allocation: the bound was keyed on the kind string.** Every conservation check from D-091 sits inside `if (value.kind === 'allocation_reversed')`. An event that does exactly what a reversal does — `reversalOf` pointing at a `cost_allocated` event, negative `allocated` amount — but labelled `cost_allocated` walked past all of them:
+
+```
+A cost_allocated +10:        inserted
+B allocation_reversed -8:    inserted
+second allocation_reversed:  REFUSED (reversals total 16 exceeds the 10 allocated)
+C cost_allocated -8 reversalOf A: inserted
+BALANCE allocation USD allocated -6
+```
+
+`allocated -6` is bit for bit the state D-091 called "not a quantity that can exist", reached by changing one string. A single disguised event of -100.00 against a +10.00 allocation projected -90.
+
+**Refused at the boundary rather than bounded in more places.** Adding the same checks to a second kind would leave a third. Reversing an allocation is spelled `allocation_reversed`; every other kind pointing `reversalOf` at one is refused, so the bounds cannot be reached around instead of merely being harder to reach around. The cumulative query also stopped filtering on `event_kind` and now sums every event whose `reversalOf` names the target, which is correct independently of the refusal above.
+
+**The meta-lesson, which is the reusable part.** Both defects are the same error one level up from the defect class D-090 and D-091 named. Those two fixed guards that checked a member instead of a set; these two fixed guards that identified the thing being guarded by its LABEL — the kind string, the nearest link — rather than by what it does or what it is derived from. A guard keyed on a name is bypassed by choosing a different name.
+
+**Verified RED first.** Three new tests failed against the just-committed implementation — two allocation, one FX — while the twelve existing ones and the new triangulation guard-rail passed, which is what shows refusals were added rather than capability removed. 41 economics tests green, root typecheck clean, and the original probe now reports GBP 8 and allocated +2.
+
+**What this does not establish.** The FX root walk assumes each translation has exactly one source, which `validateReferenceClosure` already enforces for `fx_translated`; it says nothing about a future multi-source derivative. Nothing still ties allocation totals to the charges they allocate, and adjustments remain unbounded against the charge they adjust. The audit that found these also reported seven further probe-reproduced findings — team-server rollup containment, scoped-push snapshot replacement, unequal observation windows, EUR accepted into a `cost_usd` column, kernel claims ignoring the revocation projection, `minimalCutSets` contradicting `revocationClosure`, and a revocation envelope the ledger stores but never projects — none of which are addressed here and none of which had their adversarial verifier complete.
+
+## D-094 — WP-R07: the kernel knew the claim was revoked and the read boundary served it as supported
+**Decision:** `billingKernelClaims`, `openAiCostsKernelClaims` and `billingReconciliationKernelClaims` now apply the revocation projection. A revoked claim is still returned, carries `revoked: true`, and its `epistemic` axis reads `unknown` rather than `supported`.
+**Reason:** All three readers called `readClaim` and returned the stored profile verbatim. They are the only product surface for kernel claims — `/api/billing` serves all three at `src/dashboard/routes.ts:461-463` — so after the evidence beneath a claim was revoked, the kernel's own projection listed the claim as revoked while the payload still reported `epistemic: 'supported'` and `integrity: 'verified'`, with no field anywhere in the response saying otherwise.
+
+**The kernel was already right, which is what makes this the sharp case.** `revocationClosure` computes the closure correctly and `revocationProjection().revokedIds` contained the claim; the regression test asserts that as a PREMISE before asserting the defect, so the failure is located at the read boundary rather than in the closure. That is the worst place for it: every consumer downstream of the payload inherits a strength the evidence no longer licenses, and none of them can tell.
+
+**Withdrawn, not disappeared.** Dropping revoked claims from the list would trade one dishonesty for another. The reader would then assert an absence it has not established, and a page showing four claims where five exist says nothing about the fifth. The claim is still served; what changes is that it can no longer read as supported.
+
+**Only the support axis moves, and that is a deliberate line.** `epistemic` drops to `unknown` — revocation withdraws support, leaving neither support nor refutation, which is precisely what `unknown` means in this kernel. `integrity` is untouched, because it says the RECORD was not tampered with and that remains true of a record whose evidence was withdrawn. Collapsing integrity into support would be the same conflation this product exists to prevent, in the opposite direction.
+
+**One helper, three readers.** `presentKernelClaim` is shared so the three cannot diverge, and the projection is computed once per call rather than once per claim, since the closure is over the whole graph.
+
+**Verified RED first.** The test failed against the unfixed readers on `revoked` being absent entirely, then passed with the premise assertion — that the projection already knew — holding throughout. The third test asserts an UNREVOKED claim is returned untouched, with `supported`, `verified` and `billed` intact, so a reader that blanked everything would fail rather than pass. Root, browser and team-server typechecks clean; team-server 62/62.
+
+**What this does not establish, stated rather than implied.** Only ONE of the three readers is exercised end to end. `openAiCostsKernelClaims` and `billingReconciliationKernelClaims` take the identical repair through the shared helper but are not asserted here: both look up claims keyed on a persisted costs-observation or reconciliation run, and seeding one is a materially larger fixture than this defect needs. A fixture producing zero rows would have passed every assertion while proving nothing, which is worse than an admitted gap.
+
+It also says nothing about as-of reads. `revocationProjectionAsOf` exists and these readers take no boundary at all, so a caller cannot ask what was known at a past instant, and a revocation recorded today changes how every past read renders. That is a real hindsight leak in the opposite direction from the one the kernel guards against, and it is not repaired here.
+
+Finally, this addresses one of the ten findings a parallel audit produced. Still open and recorded at D-093: team-server rollup containment (a realized-spend sub-total exceeding the total it is part of, publishing a 10000% share), scoped-push snapshot replacement, unequal observation windows summed into one figure, EUR accepted into a `cost_usd` column, `minimalCutSets` contradicting `revocationClosure`, and a revocation envelope the ledger stores but never projects. None had an adversarial verifier complete, so each needs independent reproduction before it is acted on — as this one did.
+
+## D-095 — WP-C06: the team server checked each rollup number and never checked them against each other
+**Decision:** `validateRollupSemantics` now enforces `acceptanceWeightedSpendUsd <= spendOnRealizedUnitsUsd <= costUsd` on every project row, with a relative tolerance for float summation error. Two test fixtures that violated the invariant were corrected.
+**Reason:** Each dollar figure was required to be finite and non-negative and nothing compared them. A correctly signed, self-consistent rollup could declare `costUsd 10` alongside `spendOnRealizedUnitsUsd 1000`, and `/dashboard/projects` published `realizedSpendShare: 100` — 10000% of spend reaching a kept outcome, and $1000 of realized spend inside $10 of total spend.
+
+**The rule was already in the same function, one field over.** The `strata` block refuses a row whose `realizedUnits` exceeds its `units`. The project dollar figures are nested in exactly the same way and were not compared at all. This is the missing-sibling shape again — the third time this round, after D-090's `price_corrected`/`fx_translated` pair and D-093's two label-keyed guards.
+
+**The invariant is the producer's, not an opinion imposed on it.** `costUsd` maps from `matured.totalCostUsd`, a sum over matured units; `spendOnRealizedUnitsUsd` sums the realized SUBSET of those same units; `acceptanceWeightedSpendUsd` sums that subset again, weighted per unit by an acceptance value `src/value/epistemic.ts` refuses unless it lies in [0,1]. So the chain holds by construction, and a rollup that breaks it could not have been produced by Fiscus.
+
+**Checked at ingestion, because that is where untrusted input arrives.** A signature proves the numbers were not altered in transit. It says nothing about whether they could have been produced at all — which is the whole of "integrity is not truth", the packet's own title. The check sits in the projects loop so it covers v1 and v2 alike, where the exact-economic validation only runs for v2.
+
+**A tolerance rather than a strict comparison.** These are float compatibility fields, and in IEEE-754 a subset sum can land a few ulps above its superset purely from ordering. The bound is relative and never below one part in a billion of a dollar: far under anything a person would notice, far over any rounding a sum of this size produces. A strict `>` would have rejected honest rollups.
+
+**Two fixtures were corrected, and that is not a weakened test.** The shared `projects()` helper declared `costUsd 41.5` against `spendOnRealizedUnitsUsd 300` — seven times the money spent reaching a kept outcome. The exact-economic v2 fixture declared `spendOnRealizedUnitsUsd 2` inside `costUsd 1.234567` while also declaring `realizationRate 1`, which is self-contradictory on its own terms. Neither is a case the server was ever entitled to accept, and both were invented numbers rather than encoded behaviour; the v2 row is now coherent with its own realization rate. Every other rollup fixture in the suite already satisfied the containment.
+
+**Verified RED first.** Two new candidates were added to the existing unsafe-semantic-shapes sweep — realized spend above cost, and acceptance-weighted spend above realized spend — and both were accepted with 201 before the change. team-server 62/62 green after, with its typecheck clean.
+
+**What this does not establish.** The check is at ingestion only. `validateRollupBody` in `src/team/rollup.ts` still does not apply it, so `fiscus team push` will sign and send an impossible rollup and learn about it from a 400 rather than refusing to emit one; that is defence in depth rather than this defect, and it is deliberately not expanded into here. Nothing checks a rollup's figures against the ledger they claim to summarise. And the remaining open findings from the same audit are untouched: scoped-push snapshot replacement, unequal observation windows summed into one figure, EUR accepted into a `costUsd` field, `minimalCutSets` contradicting `revocationClosure`, and an Evidence revocation envelope the ledger stores but never projects.
+
+## D-096 — WP-R06: a number is not a quantity, and three of four reconciliations forgot the unit
+**Decision:** One shared `assertAgreesWithUsdCompatibility` now reconciles an exact `EconomicAttribution` against the USD-named float beside it, and the three sites that open-coded that comparison use it.
+**Reason:** `src/team/rollup.ts`, `buildEconomicReceiptBody` and `receiptSemanticError` each compared `Math.abs(costUsd - Number(amountText))` against a tolerance and stopped. `canonicalEconomicAttribution` — documented as the shared validator both artifact protocols apply — checks that the basis is `effective` and never looks at the currency, and `moneyFromJson` accepts any `/^[A-Z]{3}$/` code. So an exact EUR 100.00 attribution "agreed with" `costUsd: 100`: the receipt verified, the rollup was accepted, and the team server summed it into a column its own schema names `total_cost_usd`. EUR added to USD and labelled USD, on rows whose declared coverage is `exact`.
+
+**The magnitude check reads as sufficient and is not.** It looks like a conservation check, and against a float projection of the same amount it is one. What it cannot see is that a number is not a quantity: 100 EUR and 100 USD have equal magnitude and are not the same money. This is the product's own central distinction — a figure carries its basis AND its unit — failing at one of the few boundaries that exists to enforce it.
+
+**The fourth site already had the rule, which is how the class was found.** `src/value/epistemic.ts` refuses a coding-realization issuance whose exact amount is not USD: `supports USD effective spend only`. Grepping for the shared error string turned it up beside the three that lacked it. That is the fourth missing-sibling defect this round, after `price_corrected`/`fx_translated` (D-090), the two label-keyed guards (D-093), and rollup containment against the strata rule (D-095).
+
+**The rule is not "amounts must be USD".** An exact amount in another currency is a legitimate object and `canonicalEconomicAttribution` still accepts one. What is refused is RECONCILING it against a field whose NAME asserts a unit the amount does not carry. Putting the check inside the attribution validator would have banned non-USD accounting outright, which is a different and much worse change.
+
+**Verified RED first.** Two refusal tests failed against the unfixed code — EUR 100.00 accepted as agreement with `costUsd: 100` on both the rollup and the receipt path — while three guard-rails passed throughout: USD is still accepted on both surfaces, and a USD amount beside `costUsd: 5` is still caught as a magnitude disagreement. A change that only compared units would have passed the refusals and lost the arithmetic. Root and team-server typechecks clean; team-server 62/62.
+
+**What this does not establish.** It does not give Fiscus multi-currency receipts or rollups; it refuses to misrepresent one, which is a different thing. The compatibility field is still a float named for a currency, and the honest repair is to carry the unit on the wire rather than in the field name — not attempted here. Nothing reconciles a receipt or rollup against the ledger it claims to summarise. And `src/value/epistemic.ts` keeps its own copy of the comparison rather than routing through the helper, so four sites became one plus one rather than one.
+
+## D-097 — the quarantine reaper borrowed a grace period that belongs to the canonical path
+**Decision:** `reapOrphanQuarantines` now asks its own predicate, `quarantineIsCollectable`, instead of `lockIsStale`. An owner-bearing quarantine is still judged by `ownerCanStillAct`; an owner-LESS quarantine is collected immediately rather than after `OWNERLESS_LOCK_STALE_MS`.
+**Reason:** `lockIsStale` answers a different question — may I take this canonical lock? — and only half of its answer transfers. The owner half does, and is still answered by the one shared helper so the reaper and the acquire path cannot drift apart (D-078). The owner-less half does not: `lockIsStale` gives an owner-less directory ten seconds for the reason its own comment states, that the creator may have died "between `mkdir` and its first write", so the timer protects a live process about to write its record into a directory it has just made. **No such process can exist at a quarantine pathname.** A quarantine is only ever created by RENAMING an existing directory aside; nothing is ever `mkdir`ed there, and no creator will ever come back for a name it does not know. The timer protected nobody and delayed collection of a directory that was already garbage.
+
+**How the window is reached, which is the defect rather than the tidiness point.** `quarantineKnownLock` renames whatever is at the canonical path at the instant it acts, which need not be the generation it inspected: a contender can quarantine and remove that generation while a third process `mkdir`s a fresh empty one. The mismatch IS detected — that is what the re-read of the owner record after the rename is for — restoration is attempted, and when the canonical path has already been re-claimed restoration loses the race D-092 recorded. What is left behind is an EMPTY quarantine: a directory whose creator can no longer find it and whose record was never written. Run `33760552077` failed on `test (windows-latest)` and `candidate-head` alike, three residues on Windows and one on Ubuntu, because a sweeping acquisition could not collect them for ten seconds.
+
+**The defect class, stated as a class.** A predicate calibrated for one state was reused for a different state because the two callers shared a function. `lockIsStale` is sound at the canonical path and unsound at a quarantine pathname, and nothing in its name says which one it is for. `lockIsStale` has exactly two callers and the other one — the acquire loop at the canonical path — is the one it was written for; the reaper was the borrowed use, and it is now the only site with its own rule.
+
+**Reproduced before it was diagnosed.** An adversarial probe of the same interleaving produced an empty surviving quarantine within four attempts locally and dumped its contents: no `owner.json`, no `.owner-quarantine.json`, no temp record, age 872ms. That ruled out the liveness half and named the timer. After the change the same probe ran ten times with zero residue.
+
+**Verified RED first, as a transition test rather than the race.** Three planted-state tests were added: an owner-less quarantine must be collected at once (RED before the change, and the only one of the three that was), a quarantine whose owner can still act must be preserved — the guard-rail against reintroducing the pathname-based deletion D-072 removed — and a quarantine whose owner is demonstrably gone must still be collected by liveness, so the reaper cannot later be narrowed to the owner-less case. A planted state is deterministic on every platform where the interleaving that produces it is not, which is the directive's own preference for a state-machine test over a reproduction.
+
+**What this does not establish.** It does not stop `quarantineKnownLock` from moving a directory it never inspected. That path still steals a live contender's freshly created generation, and the contender still loses a lap and retries; the repair for that is a quarantine rename that can prove it moved the object it inspected, which the POSIX rename interface does not offer directly and which is not attempted here. Nor is the residue assertion in the race test a proof on Windows: the errno class it guards was already tolerated there, so that test remains authoritative on Ubuntu only.
+
+## D-098 — WP-R07: two readings of one edge, and the cut sets overstated how hard a claim is to refute
+**Decision:** `minimalSupportingSets` now reads dependency edges the way `revocationClosure` reads them — as prerequisites, jointly necessary — so it returns one inclusion-minimal supporting set rather than one singleton per root. `minimalCutSets` is unchanged and consequently answers singletons, which is what the closure does.
+**Reason:** `src/epistemic/dag.ts` held two incompatible readings of the same edge relation and they disagreed openly on the two-root graph. Probed before diagnosis: `minimalSupportingSets(c)` returned `[['e1'],['e2']]`, `minimalCutSets(c)` returned `[['e1','e2']]`, and `projectRevocation(['e1'])` returned `['c','e1']`. Supporting sets asserted the roots were ALTERNATIVES; the closure asserted each was a PREREQUISITE. The module header settles it — "Dependency edges point from a prerequisite to its dependent" — and the closure is the reading the product consults, through `Store.epistemic().revocationProjection()` (D-094).
+
+**The error had a direction, which is why this is soundness and not consistency.** The cut sets made the claim look HARDER to refute than it is: they said an auditor must revoke both invoices to cut the billed claim, when revoking either one already cuts it. Overstating a figure's own robustness is the failure this codebase exists to refuse, and "withhold rather than inflate" decides the tie without appeal to taste.
+
+**What is not being claimed.** Alternative (disjunctive) support is a real thing that this graph cannot express: `DAG_EDGE_RELATIONS` has no disjunction, and the old docstring admitted the gap — "conjunction semantics can be added by a future relation registry". So the disjunctive reading was not one defensible interpretation among two; it was information the data does not carry. When a registry adds it, the two functions and the closure change together.
+
+**Verified RED first, as properties over the closure rather than as fixed values.** `test/epistemic-support-cut-agreement.test.ts` states three: a cut set cuts (held before the change, and kept, because a fix that shrank cut sets could satisfy minimality with sets that cut nothing); no proper subset of a cut set cuts (RED); revoking everything outside one supporting set leaves the claim standing (RED). Each is checked over four graph shapes — two roots, a chain, a diamond, mixed relations — because the defect belonged to the reading rather than to a fixture. The existing assertion in `test/epistemic-dag.test.ts` encoded the old values; its stated subject was determinism, which is unchanged, and its values were updated with the reason recorded in place.
+
+**What this does not establish.** Neither function has a caller in `src/` outside its own module, so no product surface was publishing the overstated cut sets — this repairs a contradiction in the kernel, not a wrong number on a screen, and finding no caller is itself the third instance this round of kernel logic that nothing consults. Nothing yet reports cut sets to a user, and the closure still has no effective-time dimension.
+
+## D-099 — WP-R07: the ledger stored a revocation on the record's own face and never projected it
+**Decision:** `EpistemicLedger.revocationEvents()` now unions the `epistemic_revocations` table with revocations declared by stored records about themselves — the `revocation` envelope that `Evidence` and `Claim` both carry.
+**Reason:** Both types accept an optional `{ eventId, effectiveAt, reason }`, validated by their canonical constructors and persisted verbatim. Nothing read it. Probed before diagnosis: appending a provider statement whose envelope said "this was withdrawn, event `revocation:provider:1`, effective 2026-08-05, because the provider withdrew it" returned `inserted`, `readEvidence().revocation` returned the envelope in full, and `revocationProjection().revokedIds` returned `[]`. The statement was live, and so was every claim derived from it.
+
+**The same shape a third time.** `assessDerivationLegality` was correct, tested, and had no caller in `src/` at all until this ledger consulted it — the comment recording that is still in `appendDerivationWithinTransaction`. D-094 was the read boundary serving a claim the projection already knew was revoked. This is the projection itself ignoring a revocation the ledger already stores. In all three the kernel held the information and the layer that needed it did not ask.
+
+**Where the repair goes, and the two places it could have gone instead.** Refusing the envelope at append would delete a legitimate capability — a withdrawn provider statement is a fact worth recording. Requiring the envelope to reference an existing revocation event deadlocks: `appendRevocation` refuses an unknown target, so the event cannot precede its own node and the envelope cannot follow it. So the projection changes, and it now reflects everything the ledger stores. The event table is untouched and still authoritative for a revocation recorded after the fact; the envelope is the same fact arriving with the record instead of after it.
+
+**The envelope's knowledge time is its node's availability, and `effectiveAt` is deliberately not consulted.** `replayAsOf` filters by the time a revocation was RECORDED. An envelope carries no recorded time and needs none: it is part of its node's immutable payload, so the ledger learns it exactly when the node becomes available. `effectiveAt` is an EFFECTIVE time and `RevocationProjection` has no effective-time dimension at all; using one as the other is the collapse this product is built to refuse. The consequence is declared rather than hidden — a node carrying a future-dated revocation reads as revoked from the moment it exists, which errs toward withholding.
+
+**Verified RED first.** Five of six new tests failed against the unfixed ledger: evidence and claim envelopes projected as revoked, the closure carrying an envelope revocation downstream with its trace path, envelope and event revocations reaching one state, and the as-of boundary. The sixth is the guard-rail and passed throughout: a record carrying no envelope is not revoked, since both constructors normalise a missing envelope to an explicit `null` and a repair reading the field's PRESENCE would have revoked the entire ledger.
+
+**What this does not establish.** `RevocationProjection` still has no effective-time dimension, so a future-dated revocation cannot be represented as pending; that is a schema change, not this fix. Nothing checks that an envelope's `eventId` agrees with a same-named event in the table, so a record may name an event that does not exist or contradict one that does — the referential integrity is unenforced in both directions. `Assumption`, `Witness` and `Derivation` carry no envelope, so this covers the whole of the field as it exists today and nothing more.
+
+## D-100 — WP-C02: a reopened period could accept an event that bricked the ledger for good
+**Decision:** `assertPeriodOpenForEvent` now enforces a second rule alongside the current-state one: an in-period event may not be recorded at or before the latest `recordedAt` among the closes that period has had. Backdating a recording across a close is refused with a message naming the instant and the alternative.
+**Reason:** `validateCloseEvent` re-derives what a stored `close_finalized` should have bound — every in-period event whose `recordedAt` is at or before the close's own — and requires that to equal what it did bind. That is a genuine integrity check; it is how a deleted or forged in-period row is caught. But the append guard only asked about the period's CURRENT state, refusing in-period events while `finalized` or `conflicted` and letting them through once `reopened`, while the check applies to every close event ever recorded. **The guard's domain was narrower than the check's, and the reopened state was the gap.**
+
+**The consequence is terminal, and reachable through the documented API.** Finalize a period, reopen it, append an in-period event recorded before the close. Probed before diagnosis: `append` returned `inserted`, and then `events()`, `periodCloseStatus`, `finalizePeriod` and `reopenPeriod` every one threw `economic close finalization must bind every in-period event exactly once`. `events()` re-validates every stored event and every economic projection is built on it. The ledger is append-only: nothing removes the event, nothing supersedes the close. Under this project's own rule that budget enforcement fails closed on an unreadable ledger, this stopped provider forwarding permanently — a durable denial of service, not a cosmetic error.
+
+**Why the refusal is at append and not in the check.** Comparing a stored close against its own recorded snapshot instead of against the live population would make the symptom disappear and delete the tamper detection with it: a close is exactly the claim that these were all the in-period events, and asking only whether it agrees with itself cannot notice that one of them is gone. The invariant worth keeping is that a recorded close stays verifiable, so the append that would retroactively falsify one is what must be refused.
+
+**The floor is the latest close, not the active one.** Each stored close carries its own binding and each has to stay verifiable, so a rule written against `activeFinalizationId` — which a reopen sets to `null` — or against the earliest close would leave a later one falsifiable. The regression test drives two finalize/reopen cycles and refuses a recording that lands between them.
+
+**Nothing legitimate is refused, which is why the rule costs nothing.** A reopen happens after the close, and evidence recorded after that carries a later `recordedAt`; the existing reopen test in `test/economic-close.test.ts` passed throughout for exactly that reason. `occurredAt` is untouched and may sit anywhere inside the period — that is what a reopen exists for. It is `recordedAt`, the time Fiscus recorded the event, that may not be backdated across a close.
+
+**Verified RED first.** Three of five tests failed against the unfixed ledger: the refusal itself, the ledger staying readable after it, and the two-cycle floor. Two were guard-rails and passed throughout: an ordinary late append after a reopen is still accepted and still re-finalizes, and an event that occurred OUTSIDE the closed period may still be recorded at any time, because it falsifies nothing.
+
+**The defect class, again.** This is D-097's shape in the economic ledger rather than the publication lock: a rule that is correct about one state applied to — or withheld from — another, because the two places that needed it did not agree on the domain. That is now four instances this round, counting D-093's two label-keyed guards.
+
+**What this does not establish.** A ledger already in the bricked state has no recovery path, and this change does not give it one: there is no control event that invalidates a close, and adding one is a schema and product decision rather than a defect fix. The guard trusts `recordedAt` as supplied by the caller, so it bounds what a caller may record and not what a caller may claim about when it observed something. And nothing here reconciles a close's projection digest against a later re-finalization of the same period.
+
+## D-101 — WP-C06: a rollup scoped to one project is not a snapshot, and the server reads it as one
+**Decision:** `fiscus team push --project <name>` no longer sends. The refusal is in `signAndPushRollup`, so the one-shot and `--watch` paths stay in lockstep, and `--watch --project` is refused before the loop starts rather than once per tick. `--project` with `--dry-run` still previews one project locally, and the help text in both `src/cli.ts` and the command's own usage block now says so.
+**Reason:** `aggregateProjects` keeps only `latest_rollup_per_dev` — `SELECT DISTINCT ON (r.key_id) ... ORDER BY r.key_id, r.received_at DESC` — and treats that single rollup as the developer's complete window. A scoped push therefore silently erased every other project on that machine from every team total.
+
+**It is worse than a missing row.** `developerCount` for the vanished projects falls with them, and `buildProjectReport` suppresses any project below `minCohort` distinct contributors — so a colleague's project can disappear entirely behind a k-anonymity notice that has nothing to do with them. And the totals that remain are wrong in the direction that looks fine: a smaller, cheaper team. Nothing anywhere reports that a figure lost a contributor.
+
+**Why the client refuses rather than the server rejecting.** Nothing on the wire distinguishes a scoped rollup from a complete one, so the server cannot tell. Putting the coverage into the signed body is the honest repair — a rollup carrying the basis of its own completeness, which is this project's first rule applied to a shared figure — and it is a signed-protocol change with a compatibility story, not a defect fix. Until it exists, the only sound position is that a rollup no receiver can consume correctly must not be sent. **The capability is refused, not deleted:** `--dry-run --project` prints the scoped rollup and reaches no socket.
+
+**Ordered after the empty check, deliberately, and before signing.** A window with nothing in it has no rollup to corrupt a total with, so "nothing to push" stays the truer answer; and a rollup that may not be sent is never minted or signed.
+
+**Verified RED first.** One refusal test failed against the unfixed CLI — a scoped push reached the loopback server and reported success — while three guard-rails passed throughout: an unscoped push still sends both seeded projects, a scoped `--dry-run` still previews exactly the one, and a scoped push with an empty window still reports nothing to push. The refusal test also asserts the server saw zero connections, so the refusal is proved to precede the dial rather than follow it.
+
+**What this does not establish.** Team totals still have no coverage on the wire, so a rollup produced by any other client, or by a future flag, can misrepresent completeness the same way and nothing would catch it. Member rollups with self-chosen, unequal observation windows are still summed into one figure that states no window — the remaining finding from the same audit. `validateRollupBody` still does not apply the containment `validateRollupSemantics` enforces (D-095), so an impossible rollup is refused by the server rather than never emitted. And nothing reconciles a rollup against the ledger it claims to summarise.
+
+## D-102 — WP-C06: a team total summed across unequal observation windows and named no period
+**Decision:** `/dashboard/projects` and `/dashboard/developers` now return a `coverage` object beside their totals: how many distinct observation windows fed the sum, how many developers contributed, the span, the shortest and longest window length, and a note saying what the totals do and do not describe. A new `RollupStore.observationWindows(filter)` supplies the windows; `buildWindowCoverage` in the pure `aggregate.ts` decides what to say about them.
+**Reason:** Every rollup declares its own window, chosen by whoever pushed it — `fiscus team push --window D` defaults to 30 and accepts anything — and `aggregateProjects` sums one rollup per developer whatever length each window is. A seven-day machine and a ninety-day machine added up to one `totalCostUsd`, and the response said nothing about which period, if any, it described.
+
+**The server had already made the argument, one function over.** `parsePeriodFilter` refuses `periodFrom`/`periodTo` outright and states why: filtering a snapshot by an overlapping window "would present its *whole* total as though it belonged to that partial window". That is the same error in the other direction — there the query's window misdescribes the data, here the data's own windows misdescribe each other — and only one of the two was guarded. The missing-sibling shape, now the sixth instance across this round.
+
+**Neither refused nor reweighted, deliberately.** Normalising unequal windows to a common period would invent a rate the rollups do not carry — a rollup reports totals, not a time series, so there is nothing to prorate honestly. Refusing the sum would delete the core FinOps view over a difference that is often harmless. What is added is the basis, which is the project's first rule applied to a shared figure.
+
+**The disabled developer breakdown carries no coverage at all.** That path skips the query on purpose, and an empty coverage would say "no rollups contributed" when rollups may well exist and the report is merely disabled — the same defect this entry repairs, in miniature. The report already states that it is disabled.
+
+**An empty team reports `uniform: false`, not `true`.** Nothing is not uniform; it is nothing, and reporting agreement would let a reader take an empty team for an agreeing one. The note says there is no window to state.
+
+**A separate query rather than another column on the totals.** The totals are per project and a window is per developer, so folding one into the other would either duplicate windows across project rows or silently pick one of them. `observationWindows` reuses the same `latest_rollup_per_dev` CTE, so the population it describes is exactly the population that was summed.
+
+**Verified RED first.** All three tests failed against the unfixed server, which returned `{ ok: true, projects: [...] }` with no coverage at all: the unequal case (7 days beside 90, `totalCostUsd` 200, two distinct windows), the uniform case, and the empty case. Two of the three are guard-rails against over-warning — a note that only ever warned would be noise, and a reader would learn nothing from its presence. team-server 65/65 with its typecheck clean.
+
+**What this does not establish, and one part of it matters.** The Postgres implementation of `observationWindows` is **not exercised by any test**: the team-server suite runs against `FakeRollupStore`, as its own header records, and this addition inherits that gap rather than creating it — the fake and the SQL are two hand-written statements of one query and nothing compares them. Beyond that: the coverage describes the windows and not their overlap, so two disjoint windows and two nested ones read alike; nothing weights or apportions the totals; a `--watch` push that re-declares a rolling window changes the coverage without changing what was measured; and the rollup body still carries no completeness claim, so D-101's client-side refusal remains the only thing preventing a scoped rollup from being summed as a whole snapshot.
+
+## D-103 — the adversarial lock test hung its own CI job, and a wall clock was why
+**Decision:** `a restore that loses the canonical path is a lost race, not a fatal errno` now drives bounded work on both sides — five laps per worker, four hundred thief attempts with a two-millisecond yield between them — instead of two wall-clock loops. The behavioural assertion is unchanged, and the non-vacuity check is stronger.
+**Reason:** The test drove three workers and a thief with `while (Date.now() < until)`. That makes the thief a busy spin on a failing `mkdir`, and four such processes on a two-core runner starve one another; worse, a worker that enters one more acquisition just before its own deadline then waits inside it against a five-minute `LOCK_WAIT_MS` while the harness kills at three. Run `33776671068` on `89fd501` failed exactly there: `candidate-head` red, seven other jobs green, one worker killed at 180s with `-1 !== 0` and no information in it. **The job failed for want of a scheduler, not for a defect** — and a gate that reports a scheduler as a defect is not a gate.
+
+**Not a weakened assertion, which the directive forbids.** The behavioural claim is untouched: no member of the errno CLASS may escape `acquirePublicationLock`, checked as a class rather than as this platform's code. What changed is the harness around it. The non-vacuity check got stronger in the process: it used to accept any single completed lap across three workers, and now requires every worker to complete all five AND the thief to have claimed the canonical path at least once — which is the fact that proves the path went absent underneath a contender, the interleaving the test exists to drive.
+
+**Verified by repetition, since a liveness failure has no single RED.** The bounded form ran five consecutive times at 6.5s each, against a three-minute kill window; the previous form had run 2.5s of wall clock per side and taken 180s on a loaded runner. The full lock file is 13/13.
+
+**What this does not establish.** Timing tests remain probabilistic: this bounds the work, it does not prove the scenario cannot starve on a slower machine. The test still cannot go RED on Windows, for the reason D-092 records. And the interleaving it drives is still incidental rather than forced — the deterministic statement of that rule is the three planted-state tests added at D-097.
+
+## D-104 — direct claims cannot strengthen assurance beyond their cited evidence
+**Decision:** `EpistemicLedger.appendClaimWithinTransaction` now enforces a
+weakest-cited-evidence ceiling for integrity, authenticity, and completeness.
+The check is at the persistence boundary, not an optional helper, so a caller
+cannot bypass it by constructing a Claim directly. A claim may remain weaker
+than its evidence, and exact replays remain idempotent.
+
+**Reason:** Derivations already required explicit witnesses for profile-axis
+strengthening, but direct claim persistence checked only that evidence IDs
+existed and were Evidence nodes. That allowed an `unknown`/self-asserted/
+partial source to be stored as a verified, provider-authenticated, complete
+claim. The weakest citation is the correct ceiling because every cited
+Evidence is a prerequisite; taking the strongest citation would launder a weak
+prerequisite through a strong one.
+
+**Boundary:** Integrity and authenticity are shared ordered ladders. Evidence
+completeness is mapped to Claim coverage because both are coverage assertions;
+this is conservative and does not infer scope, construct validity, causality,
+finality, or decision fitness from unrelated fields. Monetary basis is excluded
+deliberately: `billed`, `allocated`, and other bases are economic semantics,
+not rungs of one trust ladder, and derivations may legitimately change basis
+only with their own typed rule and evidence.
+
+**Verified RED/GREEN:** six focused adversarial tests now pass, including
+refusal of integrity, authenticity, and coverage escalation, weakest-evidence
+conjunction, permitted weaker claims, and exact replay. Root and browser
+typechecks pass, and the epistemic/issuance-map suite passes 84/84 under Node
+24. **Since committed at `e7f2b79` and remotely green:** run `33782314672` is a
+success on all eight jobs.
+
+**What this does not establish.** Direct claim issuance still needs explicit
+typed policies for measurement, causality, finality, and decision fitness. It
+does not close WP-R05 or AII-036 by itself, and it does not repair the latent
+`decision.certificate` boundary.
+
+**One limitation stated above is withdrawn.** This entry recorded claims with no
+cited Evidence as a separate open issuance-policy question. There is no such
+case: `claim()` refuses an empty `evidenceIds` outright, so no evidence-free
+claim can be constructed, let alone reach the ceiling. The early return guarding
+that case was dead code and is gone; the refusal is now asserted by test rather
+than assumed. Corrected at D-106.
+
+## D-105 — a strict decision certificate is now bound to the kernel
+**Decision:** `src/decision/epistemic.ts` is the canonical issuance adapter for
+strict interval dominance. It recomputes the certificate from the supplied
+intervals, persists an interval Evidence record and observational Claim, then
+issues a `decision_fitness` Witness and Derivation-backed decision Claim only
+for `proven_dominant`. An undetermined comparison issues the observation only.
+
+**Reason:** `certifyDecision` was conservative but returned a plain object with
+no evidence lineage, so revoking the evidence used to construct its intervals
+could not affect a downstream decision record. The adapter accepts explicit
+Evidence bindings, rejects certificate/action or binding mismatches, and writes
+all records in one ledger transaction. The direct Claim trust ceiling from D-104
+also prevents the adapter from bypassing assurance limits.
+
+**Verified:** five focused decision-issuance tests pass: atomic issuance,
+undetermined refusal, mismatch/missing-binding refusal, exact replay plus
+transitive revocation, and explicit ID/record consistency. The issuance map now
+classifies the adapter as canonical while retaining `unreached` until a reviewed
+product policy consumer exists.
+
+**What this does not establish.** A strict interval certificate proves only the
+declared dominance proposition under its interval assumptions; it is not causal
+evidence, provider billing truth, or authorization to change a budget/model.
+Minimax regret, policy approval, and an action consumer remain future work.
+
+## D-106 — WP-R03: a claim could report detail its evidence never observed
+**Decision:** `EpistemicLedger` now refuses a claim whose grain strictly refines a cited evidence when NO cited evidence carries the claim's dimensions — checked in the same pass that enforces D-104's trust ceilings. The method is renamed `assertClaimWithinItsEvidence` to say what it now checks.
+**Reason:** `grainRelation` is a complete, tested answer to how two grains compare — `equal`, `finer`, `coarser`, and an explicit `incomparable` when neither dimension set contains the other — and it had exactly one caller in `src/`: `requiredCoordinateWitnesses` in `derivation.ts`, which demands a `grain_refinement`, `grain_aggregation` or `grain_bridge` witness for a derivation that changes grain. `appendClaimWithinTransaction` never asked. Probed before diagnosis: evidence at grain `[day]` — a daily provider total — supported a stored claim at `[day, project, request]`, per-request resolution invented from a daily total and carried as observed.
+
+**The same shape as D-104, one axis over.** There the derivation path consulted `assessDerivationLegality` while the direct path stored whatever profile a claim declared; here the derivation path consults `grainRelation` while the direct path stored whatever grain a claim declared. That is the seventh instance this round of a rule the kernel holds and the boundary that needs it does not ask for — and the second time the SAME boundary was the one not asking.
+
+**The obvious rule was implemented first and the product refuted it.** "Equal or coarser than EVERY cited evidence" is the rule this entry originally recorded. The full suite returned eleven failures across four real issuance paths, and both causes are information the model does not carry:
+
+- `[billing_record]` → `[billing_period]` (six failures) and `[provider_project_day_line_item]` → `[provider_project_period]` (three) are honest roll-ups that `grainRelation` reports as `incomparable`, because a `Grain` is a flat dimension SET with no hierarchy — nothing declares that a record sits inside a period. `incomparable` therefore cannot be refused without refusing the honest roll-up along with the invented axis.
+- A decision-fitness claim at `[decision, action]` (two failures) cites the interval evidence supplying the action detail AND caller evidence at `[decision]` supplying context. Citations carry no ROLES in this graph, so "every citation must independently support the full resolution" is a rule about a different graph than the one that exists.
+
+**An exception was tried first, and is withdrawn.** Before narrowing, the stricter rule was preserved by excepting one product path in the kernel: a claim whose `derivationRule` began `billing.` and whose grain named `billing_period` over evidence naming `billing_record` was waved through. It failed twice over. It did not cover the OpenAI Costs roll-up `[provider_project_day_line_item]` → `[provider_project_period]` at all, and it did not in fact cover the billing path it was written for — `test/dashboard-billing.test.ts` still failed with it in place. It also put product dimension names and a derivation-rule prefix inside the epistemic kernel, which is the layering the kernel exists to prevent. **A kernel rule that needs a list of product exceptions to be true is not a rule; it is a description of the exceptions.** The commit that introduced it, `9771ead`, carried a docblock arguing for the narrow rule above code implementing the strict one — prose and behaviour disagreeing in the same function — and left the root suite red. This entry supersedes it.
+
+Narrowing was the correct response and not a weakened test: the rule as first written asserted knowledge the data does not contain, and three real counterexamples are three refutations. The rule that survives refuses only what the model can actually witness — some citation strictly `finer`, which is positive evidence that the claim added dimensions, and no citation `equal` or `coarser`, so nothing cited could have supplied them.
+
+**The quantifier is the opposite of D-104's, deliberately.** Trust takes the WEAKEST citation because weakness propagates: withdrawing any cited evidence withdraws the claim, so one verified invoice cannot launder an unverified note. Resolution is SUPPLIED rather than propagated — citing a daily total beside a per-request log does not erase the log's detail — so one citation carrying the dimensions is enough. Both readings rest on the same prerequisite semantics D-098 settled; they differ because the two quantities behave differently under it.
+
+**Coarsening is not laundering and stays permitted.** Aggregating a day's per-request rows into a daily figure discards resolution rather than inventing it, and it is what nearly every claim does to its evidence. Refusing every grain change would satisfy the refusals above and make the kernel unusable.
+
+**One pass, because `readEvidence` re-validates.** It reparses and re-checks the whole canonical payload on every call, so a second loop would double the cost of every claim append to keep two decisions cosmetically separate. They stay separately named in the error text and separately recorded here and at D-104.
+
+**A limitation recorded at D-104 is withdrawn.** That entry stated claims with no cited Evidence as an open issuance-policy question outside its ceiling. There is no such case: `claim()` refuses an empty `evidenceIds` outright, so no evidence-free claim can be constructed. The early return guarding it was dead code and is removed, and the constructor's refusal is now asserted by a test rather than assumed. **A stated limitation that is not real is a defect in the record**, and this round has been spending its credibility on those statements being exact.
+
+**Verified RED first.** Two refusals failed against the unfixed ledger — invented per-request detail over a single daily total, and the same invention over two coarse citations — with the guard-rails passing throughout: aggregation to a coarser grain and reporting at the same one are both still accepted.
+
+The final direct boundary uses an explicit `grainSupplied` rule: a claim is
+refused only when it refines every cited grain (including incomparable grains);
+one citation carrying the declared dimensions supplies resolution. Product
+rollups remain responsible for their own typed bridge.
+
+**What this does not establish, and one item is larger than the rest.** `incomparable` is NOT refused, so a claim naming a dimension no cited evidence ever had is still accepted whenever it drops one of theirs — `[day]` evidence supports a `[model]` claim. Closing that needs a declared dimension hierarchy that can separate a roll-up from an invented axis, which is a model change, not a stricter comparison; the gap is asserted by a test so it cannot be mistaken for coverage. Beyond it: grain is compared by dimension-set containment only, so nothing checks that a dimension NAME means the same thing in two records; scope is not bounded the same way, and a claim may still declare a scope its evidence does not cover; and the rule binds the direct claim path, leaving grain arriving through a Derivation to the witness requirement in `derivation.ts`.
+
+## D-108 — WP-R03: the domain witness `grainRelation` says it needs
+**Decision:** `grain.ts` now carries `DIMENSION_ROLLUPS`, a directed, acyclic table declaring that one dimension is contained in another, and `grainIsSupportedBy` replaces the relation test at the claim-persistence boundary: every dimension a claim names must be present in its cited evidence or be a declared coarsening of one that is. The inline `explicitAggregate` exception is removed.
+
+**Reason: `incomparable` was the whole difficulty, and picking a side could not work.** A `Grain` is a flat dimension SET, so `grainRelation` returns `incomparable` for `[billing_record]` → `[billing_period]` — an honest roll-up the product performs — and returns the identical verdict for `[day]` → `[model]`, which invents an axis outright. Refusing the verdict broke eleven tests across four real issuance paths. Allowing it (D-106) was green and honest about the blind spot, but left the invention standing and was recorded there as the substantive remaining gap. Two intermediate repairs were tried and neither was a rule:
+
+- An `explicitAggregate` exception naming `billing_period` over `billing_record` inline in the ledger. It covered one of the product's two roll-ups, missed `[provider_project_day_line_item]` → `[provider_project_period]`, and left three `test` jobs red on every head pushed after `91082b4`. An earlier form of it also tested `derivationRule.startsWith('billing.')` — a rule about WHO is calling, wearing the shape of a rule about evidence.
+- Blanket permission for `incomparable`, which is a declared blind spot rather than a check.
+
+`grain.ts` had already named what was missing: *"Incomparable grains cannot be ordered without a domain witness."* The witness is now declared rather than inferred, which is the one move that keeps both the product's roll-ups and the refusal.
+
+**A declaration is a claim about the world, not a permission for a caller.** An entry asserts a real partition — every `billing_record` falls inside exactly one `billing_period` — so it is true or false of the domain, auditable as data, and covers every caller that aggregates those dimensions including ones not yet written. That is the property the exception lacked and the reason it kept missing paths.
+
+**The relation is directed and asserted acyclic.** Reading it symmetrically would license a per-record claim off a period total, which is precisely the laundering this packet is named for. A test iterates the table and asserts irreflexivity and the absence of a two-cycle, so a later entry cannot quietly reopen it.
+
+**The exception was hiding a second defect.** `[billing_period, model]` over `[billing_record]` was ACCEPTED by it: the check asked only whether both dimension names appeared anywhere, so an invented `model` rode along beside a legitimate aggregation. The per-dimension rule refuses it, and it is one of the two behaviourally RED assertions.
+
+**And one claim was mislabelled, visible only once the boundary began asking.** The reconciliation claim declared `grain(['billing_period'])` while its subject is `provider-project:<ref>`, its scope names that provider project, and both cited evidences sit at `provider_project_period` or roll up into it. `billing_period` is the partition of the imported billing-document path. It now declares the grain it actually has — a figure covering one project inside a billing period was labelled as covering the period.
+
+**Verified RED first.** Two assertions failed against the previous rule: the two-roll-up acceptance and the `[billing_period, model]` refusal. Five guard-rails passed throughout — the undeclared incomparable refusal, the reverse-direction refusal, aggregating a dimension away, and the equal/coarser/finer verdicts set containment already answered, which the declaration must not disturb.
+
+**What this does not establish.** The table is hand-maintained and the kernel cannot check that an entry is true; an untrue entry makes every aggregation it licenses unsound with nothing to catch it. Nothing checks that a dimension NAME denotes the same partition across two records. Roll-up is not transitive — only declared pairs are consulted — because no product path needs a chain yet. Scope is still not bounded the same way, so a claim may declare a scope its evidence does not cover. And grain arriving through a Derivation remains governed by the separate witness requirement in `derivation.ts`.
+
+## D-109 — Negative claims require complete cited Evidence at the persistence boundary
+**Decision:** A negative Claim must cite at least one complete Evidence record whose event type, target scope, and entire claim interval cover the negative proposition. As-of-only, incomplete, wrong-event, wrong-scope, and partial-interval Evidence are refused at construction and again by `EpistemicLedger.appendClaimWithinTransaction`; broader complete Evidence remains admissible and exact replay remains idempotent.
+
+**Reason:** A witness ID or a successful query is not proof that the absence proposition was observed over the required coordinates. A negative result over an as-of point cannot support a claim over an interval, and Evidence for another event type or scope cannot be silently repurposed. The check belongs at persistence so direct record construction cannot bypass it.
+
+**Verified:** `test/negative-claim-contract.test.ts` covers complete acceptance, broader complete coverage, as-of-only refusal, incomplete refusal, wrong-event refusal, wrong-scope refusal, interval under-coverage, and replay. The focused epistemic tranche passed 47/47.
+
+**What this does not establish.** This is a cited-Evidence completeness boundary, not universal completeness-witness production. Other negative product paths still need explicit audits and typed witnesses; absence remains unknown when no qualifying complete Evidence exists.
+
+## D-110 — Economic derivative sources are typed and role-constrained
+**Decision:** `price_corrected` may derive only from a local estimated/list charge, and `fx_translated` may derive only from a charge or prior FX translation. Cross-chaining, correction-of-translation, translation-of-correction, allocation/usage/adjustment sources, and unrelated monetary roles are refused at the economic ledger boundary; source lineage remains explicit and exact.
+
+**Reason:** A monetary amount is not made a valid source merely by having a currency and coefficient. Treating a correction delta as a charge or translating an allocation would create an unsupported economic authority and permit double counting. The role relation is typed rather than inferred from coincidental fields.
+
+**Verified:** `test/economic-source-link-guard.test.ts` covers correction/translation cross-use, non-charge translation sources, and correction-of-translation refusal; the affected economic suite passed 84/84 in the later allocation tranche, with the earlier source-link checks included.
+
+**What this does not establish.** Per-link basis agreement for every adjustment kind and complete economic consumer migration remain open. This decision does not provide rate supersession or a universal monetary-conservation proof.
+
+## D-111 — One canonical randomized ITT estimand identity
+**Decision:** Supported randomized ITT causal outputs and kernel issuance carry an immutable registry reference containing population, assignment, treatment/control contrast, outcome, horizon, and missing-data policy. Unsupported estimands and non-v1 protocol shapes carry no registry reference and are refused for causal issuance rather than mapped by guesswork; legacy estimand/hash fields remain compatible.
+
+**Reason:** A display label such as “ITT” is not enough to identify what population, treatment version, outcome horizon, or missing-data rule was estimated. One canonical identity prevents protocol, estimator, and issued-claim paths from silently describing different effects while preserving old fields until migration is complete.
+
+**Verified:** causal core and issuance tests cover registered output identity, unsupported/null registry references, issuance refusal, and legacy hash compatibility; the focused causal tranche passed 72/72.
+
+**What this does not establish.** This is not a universal estimator/design registry and does not complete CACE/LATE, noncompliance, missingness, interference, transportability, or all causal migration.
+
+## D-112 — Git artifact persistence and contribution evidence do not overclaim quality
+**Decision:** Artifact survival is represented as literal persistence evidence with explicit observed inputs, retention/churn quantities, and coverage; contribution records preserve method, provenance, confidence, and unresolved state. Neither is treated as proof of code quality, maintainability, impact, business value, or causal contribution.
+
+**Reason:** A line that remains in a repository can be evidence of persistence without being evidence that the line is good or valuable. Temporal association and similarity can support attribution hypotheses but cannot establish authorship or outcome success by themselves. Separating the observable from the construct prevents proxy laundering.
+
+**Verified:** artifact-persistence and contribution tests pass in the published `72986ad` tranche; the implementation and focused coverage are bounded and additive.
+
+**What this does not establish.** Full MeasurementModel migration, adversarial attribution benchmarks, generated-code handling, and product-wide contribution integration remain open.
+
+## D-113 — SQLite append-only integrity is protected by schema-owned triggers
+**Decision:** Append-only economic/kernel persistence retains schema-owned trigger protections against update, delete, and replacement bypasses; the H03 mutation harness includes a deterministic trigger-removal mutation and fails when the invariant disappears.
+
+**Reason:** Application-level discipline is not a database integrity boundary. Direct SQLite writes and `INSERT OR REPLACE` must not rewrite immutable evidence or lineage. The mutation test makes the protection non-vacuous without claiming full corruption or recovery assurance.
+
+**Verified:** focused interoperability/preservation/H03 tranche passed 23/23, including the trigger mutation oracle.
+
+**What this does not establish.** Full pragma, migration, corruption, backup/recovery, and supply-chain review remain open; the mutation set is intentionally bounded.
+
+## D-114 — Team observations expose windows and coverage instead of implying completeness
+**Decision:** Team/economic rollup payloads carry observation-window and coverage state, and unequal or incomplete source observations are not presented as one complete period total. Exact currency/basis mismatches remain refused; signed transport authenticates bytes but does not add truth.
+
+**Reason:** Summing self-chosen or unequal windows without naming them creates a number whose period cannot be reconstructed. A signature cannot repair missing coverage or make a partial observation complete. Coverage must travel with the aggregate so consumers can withhold stronger interpretations.
+
+**Verified:** root/team affected tests and team-server observation-window tests passed in the published tranche; team-server TypeScript and the broader affected root tranche passed.
+
+**What this does not establish.** Live Postgres execution, overlap identity, full rollup-to-ledger reconciliation, and universal completeness claims remain open.
+
+## D-115 — Exact allocation source conservation is enforced before persistence and on read
+**Decision:** Exact allocation persistence proves that each cited source event is a charge root or a cited local price-correction event, rejects non-charge and fabricated lineage, recomputes exact currency/basis totals from the recorded source set, and applies the same check to idempotent replay and re-read. Historical runs are validated against their own cited correction set; later corrections do not rewrite them.
+
+**Reason:** Internal allocation conservation only proves that a result agrees with its own declared lines. Without a source-side check, a caller could declare a larger total and cite an unrelated event, or allocate a correction delta as if it were a charge. The validator is attached to the Store boundary so callers cannot bypass it by constructing a result directly.
+
+**Verified:** RED-first exact-allocation persistence tests cover fabricated totals, non-charge sources, valid corrected-charge lineage, rollback, and compatibility forms. The affected economic/allocation tranche passed 84/84; root/browser/team-server TypeScript and `npm run build` exited 0. Code checkpoint `110b3dc` matches the remote branch; CI run `33854265175` concluded `success` across all eight jobs, read 2026-09-04.
+
+**What this does not establish.** Adjustment-to-charge conservation, supersession/latest-as-of semantics, allocation-specific close binding, and receipt/team reconciliation remain open. The `110b3dc` CI result is deliberately not predicted here.
+
+## D-116 — Exact allocation runs require an immutable finalized-close binding
+**Decision:** `saveExactAllocationRun()` may persist a new exact allocation result only when the Store observes an active, non-conflicted `close_finalized` event for the exact half-open allocation period. The persisted run keeps an append-only binding to that event's finalization ID, projection digest, event count and period, and every cited source ID must be present in the close snapshot. Idempotent historical reads and saves validate the bound close event directly, so reopening a period rejects new runs without erasing valid historical runs; missing or tampered bindings fail closed.
+
+**Reason:** Exact source conservation proves that an allocation agrees with its own cited events, but it does not prove that those events were part of a finalized economic statement. Binding at the Store boundary prevents callers from bypassing close legality by constructing records directly, preserves the immutable close snapshot through reopen, and refuses open, mismatched, conflicted or source-outside-snapshot persistence without changing the canonical allocation digest.
+
+**Verified:** RED-first close-binding tests cover open-period refusal, matching-close retention/idempotence, mismatched and conflicted periods, source-outside-snapshot refusal, reopen preservation, historical idempotence, and append-only update/delete guards. The close-binding/exact-allocation tranche passed 18/18; root/browser TypeScript, `npm run build`, and `git diff --check` exited 0. Code checkpoint `c3e00345e442905cb7f3f07315784afe4aa043ba` matches the remote branch; CI run `33871721123` concluded `success` across all eight jobs, read 2026-09-04.
+
+**What this does not establish.** Adjustment-to-charge conservation, correction/FX supersession, latest-as-of projection selection, receipt/team reconciliation, or full WP-C04 completion. The binding validates the immutable close event; it does not make a close event itself provider-billed truth or solve later correction policy.
+
+## D-117 — Claim supersession is typed and latest selection is as-of safe
+**Decision:** A persisted Claim may supersede only an existing Claim with the same predicate/negative kind, subject, scope, grain and valid interval, and it must be issued strictly later. Each claim has at most one successor; the lifecycle edge is persisted separately from dependency edges. `latestClaims(asOf?)` filters node availability before selecting visible chain tips, so a later revision cannot rewrite an earlier replay and no branch is silently chosen.
+
+**Reason:** The Claim envelope already carried `supersedes`, but the persistence boundary accepted Evidence or semantically unrelated targets, stored no lifecycle edge, and had no deterministic current/latest projection. Treating supersession as an explicit, linear lifecycle relation preserves the old immutable value, makes revisions auditable, and prevents identifier order or insertion timing from becoming an undocumented winner rule.
+
+**Verified:** RED-first tests cover a valid revision, idempotent replay, typed target refusal, coordinate mismatch, non-later issuance, branch refusal, persisted supersedes edge, and latest selection before/at the revision boundary. The supersession file passed 2/2 and the epistemic family passed 96/96; root/browser TypeScript, `npm run build`, and `git diff --check` exited 0. Code checkpoint `e2b1fa0bb0b30c49e969c7fe89eae8fb642f579a` matches the remote branch; CI run `33873403151` concluded `success` across all eight jobs, read 2026-09-04.
+
+**What this does not establish.** Economic `price_corrected`/`fx_translated` supersession, rate provenance, adjustment-to-charge conservation, receipt/team reconciliation, or full WP-C04 completion. The selector is a generic Claim projection and does not convert a later value into provider-billed truth.
+
+## D-118 — Coding realization consumes the domain-neutral OutcomeAdapter
+**Decision:** The coding realization path constructs its existing eight-gate evidence and evaluates it through the versioned `coding-gate-lifecycle-v1` `OutcomeAdapter`; the adapter's generic `OutcomeEvaluation` is authoritative for terminal status, while the legacy ordered `FunnelOutcome` remains a compatibility projection. The existing non-coding session path continues to use its own versioned adapter rather than borrowing coding gates.
+
+**Reason:** A generic WorkUnit/OutcomeAdapter contract has no architectural value if the principal coding path continues to call the Git-specific funnel directly. Routing the path through the adapter removes that bypass without pretending a coding lifecycle is universal, and preserves existing ordered-gate detail, conflict visibility, and downstream report compatibility.
+
+**Verified:** The adapter integration and affected value surface passed 98/98, including supported, refuted, unresolved and conflicted states; root/browser TypeScript, `npm run build`, and `git diff --check` exited 0. Code checkpoint `0d5236525e09243bd0e9d32fa60a31ea4bbd117b` matches the remote branch; CI run `33874869158` concluded `success` across all eight jobs, read 2026-09-04.
+
+**What this does not establish.** A durable adapter registry, serialized/plugin adapter loading, full CLI/API/GUI migration, or the closure of WP-D01; the packet remains `PARTIAL` until those broader integration surfaces are addressed.
+
+## D-119 — Economic replay compares recorded knowledge without rewriting close history
+**Decision:** Preserve economic corrections as additive recorded-time events and pin their replay ordering with a deterministic property test. The test compares a correction known before finalization with the same correction learned after close → reopen → reclose: the final close keeps the same exact digest, event count and sorted source set, while the earlier finalized record remains immutable. Ordinary role-aware as-of projection keeps the original charge and separate price delta; only the explicit effective-charge projection applies the delta after its recorded boundary.
+
+**Reason:** A correction discovered late must change the current effective view without making a historical close claim that the correction was known when that close was issued. Comparing the two legal orderings at the actual ledger boundary catches accidental dependence on insertion order, close control events, or destructive history edits while preserving the product's distinction between raw role-aware balances and an explicitly effective consumer.
+
+**Verified:** `test/economic-replay-property.test.ts` passes the direct-before-close and close/reopen/reclose permutations, including as-of boundaries, immutable first-close retention, exact effective amount/event lineage, and final close digest/source-set equality. The full economic glob passed 76/76; root/browser TypeScript, `npm run build`, and `git diff --check` exited 0. Code checkpoint `cba15357c42b0c83a836d147b37a01ede4945d92` matches the remote branch; CI run `33876114608` concluded `success` across all eight jobs, read 2026-09-04.
+
+**What this does not establish.** Economic correction or FX rate supersession, multi-step correction chains, historical rate selection, adjustment-to-charge conservation, receipt/team reconciliation, or full WP-C04 completion. The property proves order preservation for the existing one-correction model; it does not choose a future supersession policy.
+
+## D-120 — Usage observations cannot become monetary charges by carrying an amount
+**Decision:** Treat `usage_observed` as a non-monetary usage/evidence event. Canonical event validation refuses a Money amount on that kind, and exact allocation source validation refuses a usage observation as a charge basis even when it is otherwise a valid ledger event. Monetary charge, correction and translation roles remain explicit; the event kind alone must not collapse metered usage into provider-billed cost.
+
+**Reason:** Fiscus distinguishes metered usage from provider-billed cost and allocated cost. Allowing a usage observation to carry a monetary amount creates an ambiguous basis that can silently enter allocation and conservation paths. Refusing it at construction and at the allocation boundary keeps the distinction fail-closed rather than relying on callers to interpret the field correctly.
+
+**Verified:** RED-first assertions in `test/economic-basis-legality.test.ts`, `test/economic-adjustment-conservation.test.ts`, and `test/economic-source-link-guard.test.ts` pass 16/16; the full economic glob passes 78/78. Root lifecycle passes 1,426 total (1,422 pass/0 fail/4 skips), team-server passes 67/67, root/browser TypeScript and `npm run build` pass, and `git diff --check` exits 0. The initial implementation head `c023e913e1bd177297549fb0b2479b7525426b99` failed cross-platform CI run `33878221674` because an exact-allocation fixture still supplied a monetary usage amount; corrective fixture head `320bf0649853013b8ace03f2fdddc69d16489916` matches the remote branch and CI run `33879081745` concluded `success` across the configured jobs, read 2026-09-04.
+
+**What this does not establish.** Complete economic role auditing, per-link basis agreement, correction/FX supersession, historical rate provenance, multi-step correction chains, broader adjustment-to-charge conservation, receipt/team reconciliation, or final WP-C02/WP-C04 completion.
+
+## D-121 — Economic price corrections form an append-only typed chain
+**Decision:** A local `price_corrected` event may cite either a `charge_estimated` source or the immediately preceding `price_corrected` event for that source. Each link carries typed previous/replacement Money, emits only the exact signed delta from that link, must be recorded no earlier than its predecessor, and a predecessor may have at most one successor. The ledger validates the predecessor metadata and chain closure on both append and replay, while effective projection follows the linked chain rather than insertion order.
+
+**Reason:** The former one-correction rule could represent only one local repricing. A second correction either had to be refused or risked summing a new replacement against the original amount without proving what it replaced. An explicit linear edge preserves every replacement, makes each delta independently auditable, and prevents branching, cycles, tampered predecessor metadata, and as-of hindsight from silently changing the effective amount.
+
+**Verified:** RED-first chain tests initially failed against the one-correction implementation. The corrected chain and raw-event tamper boundary pass `test/economic-correction-chain.test.ts` 2/2; the full economic glob passes 80/80; root lifecycle passes 1,428 total (1,424 pass/0 fail/4 skips), team-server passes 67/67, root/browser TypeScript, `npm run build`, and `git diff --check` pass. Code checkpoint `7cb630d8cc97d1de286147594aeca1aead629efb` matches the remote branch; GitHub Actions run `33890709112` concluded **success** across all configured jobs, read 2026-09-04.
+
+**What this does not establish.** FX-rate provenance or rate supersession, per-link basis agreement for every adjustment kind, corrected-charge-to-FX composition, finalized-close policy for later corrections, receipt/team reconciliation, or full WP-C02/WP-C03/WP-C04 completion.
+
+## D-122 — FX rate validity is preserved as lineage, not inferred selection
+**Decision:** `ExactRate` accepts an optional canonical half-open `validTime` interval. FX translation metadata copies that interval without rewriting the source amount or consulting a current-rate source, and the economic ledger accepts the optional field only when its shape, timestamps and exact rate remain valid on append and replay.
+
+**Reason:** The rate contract already exposed an optional validity period, but FX canonicalization rejected it and then omitted it from the historical derivative. That refusal/loss would erase a rate's declared effective period at precisely the boundary where historical provenance must survive. Preserving the interval is the narrow repair; it does not invent a rate registry, choose among overlapping rates, or treat validity metadata as proof of provider authority.
+
+**Verified:** RED-first FX coverage initially failed because the constructor rejected the optional field. After the repair, `test/economic-fx.test.ts` passes 5/5, including constructor and ledger round-trip preservation plus malformed-interval refusal; the full economic glob passes 82/82; root lifecycle passes 1,430 total (1,426 pass/0 fail/4 skips); team-server passes 67/67; root/browser TypeScript, `npm run build`, and `git diff --check` pass. Code checkpoint `560f3927bf4962a6ffad6ee6a16b95287aa9bf53` matches the remote branch; GitHub Actions run `33893736748` concluded **success** across all eight jobs, read 2026-09-04.
+
+**What this does not establish.** FX rate selection or supersession, corrected-charge-to-FX composition, provider FX authority, mixed-currency comparability, finalized-close/allocation/team/export integration beyond the existing bounded consumers, adjustment-to-charge conservation, or full WP-C03 completion.
+
+## D-123 — FX effective time must be covered by retained rate validity
+**Decision:** When an `ExactRate` carries `validTime`, an `fx_translated` event is legal only when its canonical `effectiveAt` lies in the half-open interval `[validTime.from, validTime.to)`. The constructor and the independent economic-ledger validator enforce the same containment rule, including on replay of a canonical event that bypassed the convenience constructor.
+
+**Reason:** Retaining a validity interval without checking the translation time would preserve a formally shaped but semantically false historical lineage: the event would cite a rate outside the period in which that rate was valid. The half-open rule matches the repository's interval contract, keeps boundary instants deterministic, and refuses rather than infers a nearby rate or silently rewrites the event.
+
+**Verified:** The RED-first constructor and persistence-boundary tests initially accepted an effective time outside the supplied interval. After the boundary checks, `test/economic-fx.test.ts` passes 7/7, the full economic glob passes 84/84, root lifecycle passes 1,432 total (1,428 pass/0 fail/4 skips), team-server passes 67/67, and root/browser TypeScript, `npm run build`, and `git diff --check` pass. Code checkpoint `ef9cf00a6cca32779a14cc31f9ab60f69b449c45` matches the remote branch; GitHub Actions run `33896326633` concluded **success** across all eight jobs, read 2026-09-04.
+
+**What this does not establish.** FX rate selection or supersession, corrected-charge-to-FX composition, provider FX authority, mixed-currency comparability, finalized-close/allocation/team/export integration beyond the existing bounded consumers, adjustment-to-charge conservation, or full WP-C03 completion.
+
+## D-124 — Historical FX selection is bitemporal and ambiguity-refusing
+**Decision:** A `HistoricalRateBook` contains immutable exact-rate observations with a required canonical half-open validity interval, explicit rate source, recording time and optional typed supersession. `selectHistoricalRate()` filters by source/target units, effective-time containment and an optional recorded-time `asOf` boundary; it selects the one visible supersession-chain tip, refuses overlapping independent candidates, and is independent of observation insertion order. Rate-book translation defaults its knowledge boundary to the translation `recordedAt` and refuses a boundary after that recording.
+
+**Reason:** Retaining a rate's validity interval is not enough to answer which rate was knowable for a historical translation. Choosing the last inserted or latest observed rate would leak later knowledge into earlier replay and would make overlapping independent observations silently arbitrary. Explicit typed lineage plus bitemporal filtering makes the selection rule inspectable and fails closed when the evidence does not identify one rate.
+
+**Verified:** RED-first `test/economic-rate-selection.test.ts` covers reversed insertion order before/after supersession, translation-time knowledge boundaries, non-positive-rate refusal, exact JSON provenance round-trip and tamper refusal. The rate-selection/corrected-FX-close focused tranche passes 5/5; the full economic glob passes 89/89; root lifecycle passes 1,437 total (1,433 pass/0 fail/4 skips); team-server passes 67/67; root/browser TypeScript, `npm run build`, and `git diff --check` pass. Code checkpoint `657140f8dea01b3cbc0f12b2e0e039eb8a1c6141` matches the remote branch; GitHub Actions run `33899895572` concluded **success** across all configured jobs, read 2026-09-04.
+
+**What this does not establish.** A persisted or provider-authoritative FX rate registry, complete correction/supersession lifecycle outside the caller-supplied rate book, export-wide/read-model adoption, mixed-currency comparability, or full WP-C03 completion.
+
+## D-125 — Corrected-charge FX is an explicit replay-bound read model
+**Decision:** Translate a corrected local charge through `translateEffectiveChargeFromRateBook()` only as an explicit `EffectiveFxChargeProjection`. The projection retains the raw source amount, effective corrected amount, translated exact amount, correction event IDs, source bases, selected rate/provenance and rate boundary. It does not emit a replacement `fx_translated` event, mutate the raw charge/correction history, or alter a finalized-close digest; unsupported source bases and malformed lineage are refused at the projection boundary.
+
+**Reason:** A raw FX derivative cites one immutable monetary source and therefore cannot truthfully be rewritten to contain a later local price correction. Reusing the raw event would collapse recorded-time accounting with an effective consumer view and could make a finalized close appear to have known later information. A named read model preserves both truths and gives downstream consumers an explicit place to ask for corrected, translated values.
+
+**Verified:** `test/economic-correction-fx-close.test.ts` passes the corrected-charge/FX/finalized-close interaction, including close-boundary selection of the original rate, later-rate selection after the recording boundary, correction event lineage, exact translated amounts, invalid source-basis refusal and unchanged close digest. Combined rate-selection/correction-FX-close coverage is 5/5; the full economic glob passes 89/89; root lifecycle passes 1,437 total (1,433 pass/0 fail/4 skips); team-server passes 67/67; root/browser TypeScript, `npm run build`, and `git diff --check` pass. Code checkpoint `657140f8dea01b3cbc0f12b2e0e039eb8a1c6141` matches the remote branch; GitHub Actions run `33899895572` concluded **success** across all configured jobs, read 2026-09-04.
+
+**What this does not establish.** Persisted rate-book ownership, provider FX authority, automatic integration into every export/dashboard/team consumer, adjustment-to-charge conservation, or full WP-C02/WP-C03/WP-C04/R06 completion.
+
+## D-126 — Historical rate observations persist as append-only local evidence
+**Decision:** Persist canonical historical FX observations as immutable local economic evidence with digest identity, explicit validity interval, source/target units, recording time and optional typed supersession. The ledger validates observations at the persistence boundary and reconstructs a `HistoricalRateBook` from stored rows; read-model, export, dashboard and CLI consumers must receive explicit target-currency, rate-book and temporal context rather than silently selecting a current rate. Persistence records local provenance and does not promote it to provider authority.
+
+**Reason:** A caller-supplied rate book can demonstrate deterministic selection in one computation but cannot support replay, process restart or audit once the caller disappears. Storing the exact observation and its provenance makes the historical choice reproducible while preserving the distinction between a locally retained rate and provider-billed truth. Explicit consumer context prevents an absent or partial rate set from becoming an inferred conversion.
+
+**Verified:** RED-first historical-rate persistence, consumer propagation, dashboard `/api/economic`/`/api/export.csv`, and CLI economic-report tests pass; root lifecycle passes 1,446 total (1,442 pass / 0 fail / 4 skips), team-server passes 67/67, root/browser TypeScript, `npm run build`, and `git diff --check` pass. Code checkpoint `81e0041f833752a3489d2a553bba7bc70f5e8881` matches the remote branch; GitHub Actions run `33907284590` concluded `success` across all eight jobs, read 2026-09-04.
+
+**What this does not establish.** Provider-authoritative FX ingestion, universal migration of every read/export/team consumer, mixed-currency comparability, complete correction/close lifecycle semantics, receipt/team reconciliation, or full WP-C03/C04/R06 completion.
+
+## D-127 — Exact allocation resolves complete validated price-correction chains
+**Decision:** When an exact allocation cites a local `price_corrected` event, the Store boundary walks its validated predecessor links until the charge root. Every predecessor and the root must be present in the run's declared source set; missing links, non-charge roots and malformed chains fail closed. Existing exact Money recomputation, source identity/lineage, idempotence and immutable finalized-close binding remain authoritative.
+
+**Reason:** `effectiveChargeFor()` intentionally returns the full correction lineage, not only the first correction. Treating each correction as if it directly named a charge made a valid second correction impossible to persist and created a mismatch between economic replay and allocation persistence. Resolving through the typed chain preserves late recorded knowledge without weakening the Store boundary or allowing a caller to omit evidence from the persisted source set.
+
+**Verified:** A RED-first exact-allocation regression with a charge plus two valid corrections failed on the prior boundary with `does not resolve to a charge root`; after the fix, the affected economic/close/allocation set passes 49/49. Root lifecycle passes 1,446 total (1,442 pass / 0 fail / 4 skips), team-server passes 67/67, root/browser TypeScript, `npm run build`, and `git diff --check` pass. Code checkpoint `1a4e406b8aef09876220da84da584897a833c2fc` matches the remote branch; GitHub Actions run `33909224912` concluded `success` across all eight jobs, read 2026-09-04.
+
+**What this does not establish.** Per-link basis agreement for every adjustment kind, correction occurrence/close policy, economic supersession beyond the linear price-correction chain, provider FX authority, receipt/team reconciliation, or full WP-C02/WP-C04/R06 completion.
+
+## D-128 — Price corrections preserve modeled occurrence while retaining late knowledge
+**Decision:** A `price_corrected` derivative must carry the same `occurredAt` as its source charge or prior correction. Its `recordedAt` may be later, subject to the existing append-only recorded-time order. The constructor and the economic ledger replay/append boundary enforce the same rule.
+
+**Reason:** A correction is a later observation about the source charge, not a new economic occurrence. Allowing an independent occurrence would move the derivative into another close or allocation period while its lineage still described the original charge, making period projection and finalized-close behavior contradictory. Separating `occurredAt` from `recordedAt` preserves both modeled time and late knowledge without relying on insertion order.
+
+**Verified:** The RED-first adversarial occurrence-domain test failed 1/1 against the prior constructor. The repaired focused correction/close/replay set passes 18/18 and the full economic glob passes 97/97. The implementation is included in the pushed `1698ed24102197a37cc89a30147b06c7cec6c783` history; combined CI run `33919980843` concluded `success` across all eight jobs, read 2026-09-04.
+
+**What this does not establish.** Correction close policy for later recorded corrections, provider-authoritative FX, per-link basis agreement across all adjustment kinds, complete adjustment conservation, receipt/team reconciliation, or final WP-C02/WP-C04 completion.
+
+## D-129 — Bounded adapter, value, database and exact-billing safeguards remain explicit foundations
+**Decision:** Keep the canonical value module as the only coding Claim-construction authority while allowing Store persistence to bind typed Claim successors. Persist only allowlisted OutcomeAdapter descriptors with digest verification; refuse unapproved capability, credential and direct-egress invocation. Validate critical append-only database trigger authority at startup. When exact local Money reaches billing reconciliation, use it before compatibility floats and refuse non-USD or sub-micro values requiring an undeclared quantization policy.
+
+**Reason:** The fan-out exposed several real bypass classes: Store-side Claim construction escaped the issuance map, executable adapter callbacks could be confused with durable descriptors, database append-only guarantees could be assumed without checking trigger state, and fixed-point billing could silently round canonical Money. These are separate boundaries with distinct evidence; combining them in one “trusted integration” claim would repeat the product’s central error.
+
+**Verified:** Focused adapter-registry/invocation, value-supersession, database-integrity, issuance-map and exact-reconciliation coverage passes 44/44 after repairing the child fixtures; the Store exact-Money integration and full root lifecycle pass 1,464 total (1,460 pass / 0 fail / 4 skips). Root/browser TypeScript, team-server TypeScript/tests 67/67, `npm run build`, and `git diff --check` pass. Commits `817a51140d1d4a41e3ad0dc88565f372c17313a5` and `1698ed24102197a37cc89a30147b06c7cec6c783` are covered by CI run `33919980843` (**success**, all eight jobs), read 2026-09-04.
+
+**What this does not establish.** Full D01 durable Store/plugin host integration, OS sandboxing or signed production `.fiscuspack` execution, universal issuance migration, provider billing authority, complete economic lifecycle reconciliation, receipt/team dependency truth, or closure of any packet beyond its bounded evidence.
+
+## D-130 — Preference robustness must expose sensitivity rather than choose a preference
+**Decision:** When a decision has an explicitly declared finite admissible set of preference scenarios, evaluate each scenario over one common finite action set, preserve per-preference ties, and expose only the intersection of optimal actions as `robustOptimalActions`. If that intersection is empty, return `preference_sensitive` with no forced action.
+
+**Reason:** A single composite utility vector hides how much a recommendation depends on unexamined preference assumptions. The intersection rule identifies actions stable across all declared preferences without assigning probabilities, inventing a universal preference ordering, or turning a robustness diagnostic into authorization. Empty intersection is evidence of preference sensitivity, not permission to select an arbitrary compromise.
+
+**Verified:** RED-first decision tests initially failed because no preference-set API existed. The bounded implementation and adversarial tie/duplicate/action-set cases pass `test/decision-engine.test.ts` 16/16; root lifecycle passes 1,468 total (1,464 pass / 0 fail / 4 skips); team-server passes 67/67; root/browser TypeScript, `npm run build`, and `git diff --check` pass. Code checkpoint `5478e964b7ee510d922eb67feee758475d1204f7` matches the remote branch; GitHub Actions run `33922742649` concluded `success` across all eight jobs, read 2026-09-04.
+
+**What this does not establish.** Value-of-waiting or option-value analysis, preference constraints/reversibility, Decision Assurance Levels, approved policy integration, action authorization/execution, causal identification, or final WP-F03 completion.
+
+## D-131 — Policy control remains an observation-only, fail-closed lifecycle
+**Decision:** Model policy rollout as immutable `shadow → simulated_effect → canary → monitored_expansion → full_rollout` transitions with explicit preview-then-commit revision checks and a terminal, idempotent `rolled_back` state. A transition falls back when required evidence is missing, stale, revoked, conflicted, incomplete, unobservable, or outside the declared treatment/model/pricing/environment regime; completeness, measurement, outcome harm, and policy TTL are independent fail-closed conditions. The module persists no state and performs no external action.
+
+**Reason:** A control surface that jumps directly from a recommendation to execution would turn decision uncertainty into operational authority. The state machine makes rollout sequencing and rollback observable while preserving the project boundary: a green observation is not authorization, and an in-memory preview is not durable control evidence.
+
+**Verified:** RED-first tests cover sequential phase progression, unsafe jumps, stale evidence, TTL expiry, unknown/revoked/harmful observations, stale proposal revisions, terminal rollback, and bounded policy construction. `test/decision-control.test.ts` passes 6/6; root lifecycle passes 1,474 total (1,470 pass / 0 fail / 4 skips); root TypeScript, `npm run build`, and `git diff --check` pass. Commit `5c8c21778f731e7409dea33936a958ec49fff170` matches the remote branch; GitHub Actions run `33951767030` concluded `success` across all eight jobs, read 2026-09-05.
+
+## D-132 — Bricked close recovery must be append-only and independently revalidated
+**Decision:** Represent recovery of a historical close whose population binding is no longer verifiable as a typed `close_invalidated` control event. Issue it only through `EconomicLedger.recoverBrickedPeriod()`, retain the original close unchanged, and revalidate the complete event graph in the same transaction. Direct append, recovery of a still-verifiable close, wrong-period recovery, and forged invalidation laundering must fail closed.
+
+**Reason:** Rewriting a finalized close would destroy the evidence needed to explain how the ledger became unreadable. An explicit recovery event preserves the original bytes and makes the exceptional state inspectable, while independent rebinding checks prevent a forged row from turning a valid close into an apparently recovered one.
+
+**Verified:** RED-first role/recovery coverage passes 6/6; the full economic test glob passes 103/103; the root lifecycle passes 1,480 total (1,476 pass / 0 fail / 4 skips); root TypeScript, build and diff check pass; team-server checks are green in CI run `33953350770` (**success**, all eight jobs), read 2026-09-05. Commit `b7716f129766040a103ae81add9c46fc4f82494e` matches the remote branch.
+
+**What this does not establish.** Durable persistence, Decision Assurance Levels, recommendation/proposal/approval/action workflow, real ControlTarget execution, authorization, provider action, or final WP-F07 completion.
+
+**What this does not establish.** Complete C02 period-close, allocation, correction/supersession, receipts/team reconciliation, provider billing, or final packet completion.
+
+## D-133 — Signed bundle integrity must remain separate from authenticity and truth
+**Decision:** Represent a production `.fiscuspack` signature as canonical Ed25519 metadata over the unsigned manifest digest. Validate the manifest and attachment digests before accepting a pack; verify an embedded public key when present, but treat that result as cryptographic integrity only. Establish `authenticity: verified` only when the caller supplies a matching trusted public key. Keep unsigned/metadata-only signatures and incomplete attachment sets explicit, and leave semantic truth `not_evaluated`.
+
+**Reason:** A public key carried inside an artifact proves at most that the artifact is internally consistent with that key; it does not prove that the key belongs to Fiscus or to an authorized producer. Likewise, a valid signature cannot turn incomplete attachments or unexamined claims into truth. Separating integrity, authenticity, completeness and truth prevents a portable bundle from becoming an accidental authority boundary.
+
+**Verified:** `signFiscusPack()`/`verifyFiscusPack()` and the public pack export pass RED-first production, tamper, wrong-trust-anchor, key-identity and partial-attachment coverage 12/12. The root lifecycle passes 1,486 total (1,482 pass / 0 fail / 4 skips); root TypeScript, `npm run build`, and `git diff --check` pass. Code commit `34033843aefa305dcaffe65deff59a4916191b3b` matches the remote branch; GitHub Actions run `33955176173` concluded `success` across all eight jobs, read 2026-09-05.
+
+**What this does not establish.** An independent verifier implementation, executable cross-runtime interoperability, hosted production-bundle execution, CLI/API integration, authorization of a producer key, semantic truth of bundle claims, or final WP-G05 completion.
+
+## D-134 — Countermodel coverage must not be mistaken for certification
+**Decision:** Extend the countermodel assessment with an explicit `certified` outcome. It may be true only when at least one stated assumption is covered, every stated assumption is covered, and every recorded countermodel is explicitly excluded. Keep uncovered assumptions, live/pending worlds, and realized contradictions visible and non-certifying. For interval decisions, generate one named actionable live witness per assumption already declared by the existing certificate; do not turn those witnesses into a recommendation.
+
+**Reason:** An empty fragile set can mean either that a claim is robust or that nobody looked. A fully enumerated set can still contain a live alternative or an evidence-established contradiction. Those states require different operator actions, so a boolean inferred from the absence of live rows would collapse incompleteness and refutation into false reassurance. The decision adapter closes the required proof-domain seam without inventing evidence for value, allocation, profile, or theorem-search domains.
+
+**Verified:** RED-first countermodel-domain coverage passes 29/29, including uncovered/live/excluded/realized certification, complete billing witnesses, negative-residual realization, and interval-decision witnesses. Root lifecycle passes 1,489 total (1,485 pass / 0 fail / 4 skips); root TypeScript, `npm run build`, and `git diff --check` pass. Code commit `571e5fa53b3935b9ecff9dbd283f49e69e1751bd` matches the remote branch; GitHub Actions run `33956325591` concluded `success` across all eight jobs, read 2026-09-05.
+
+**What this does not establish.** Value-gate, allocation, profile, minimal cut/support-set, or generalized countermodel search coverage; formal theorem-prover completeness; decision authorization/execution; or final WP-B04 completion.
+
+## D-135 — Sequential validity must be bound to a registered analysis lane
+**Decision:** Add a standalone sequential-inference lane for accumulated independent Bernoulli observations. A committed protocol must declare its outcome definition, look schedule, stopping rule, multiplicity, assumptions, adaptation boundary and provenance; analysis is allowed only at a registered look with the exact retained observation count. Rehydrated results must validate their nested validity domain, stopping/provenance cross-fields and recalculated anytime interval before an interval is used.
+
+**Reason:** An anytime-valid primitive does not make sliding windows, clusters, adaptive assignment, changing outcomes or post-hoc model selection valid. A digest proves retained bytes, not that the bytes are a coherent statistical result. The lane therefore refuses unsupported designs and separates statistical validity from causal truth, persistence, and product authorization.
+
+**Verified:** RED-first anytime/sequential/causal/drift coverage passes 71/71, including rehashed semantic tampering, forged interval bounds and unsupported nested provenance values. Root lifecycle passes 1,497 total (1,493 pass / 0 fail / 4 skips); root TypeScript, `npm run build`, and `git diff --check` pass. Code commit `7562671685ce401224296f7e1836556a51dc1f77` matches the remote branch; GitHub Actions run `33957557346` concluded `success` across all eight jobs, read 2026-09-05.
+
+**What this does not establish.** Store/CLI/dashboard integration or durable sequential-result persistence; cluster-aware or adaptive methods; an independent causal design; universal truth, provider billing, or final WP-E07 completion.
+
+## D-136 — A plugin process boundary must not be called a sandbox
+**Decision:** Add a real host-mediated plugin execution path that launches one explicitly authorized absolute executable with `shell: false`, scrubbed environment, bounded newline-delimited stdio, request/output/stderr limits, timeout termination, evidence-only response parsing, and active request-ID binding. Refuse OS-level isolation requirements, direct egress, credential forwarding, and capabilities whose controls this standard-library host cannot enforce.
+
+**Reason:** A declared isolation policy is not enforcement, but pretending that a separate process blocks filesystem, network, credentials, CPU, memory, or descriptor access would create a security boundary Fiscus cannot provide. The host therefore enforces only its actual transport/resource/identity controls and reports the unsupported controls explicitly.
+
+**Verified:** RED-first plugin contract/invocation/isolation/host coverage passes 24/24, including real child execution, output/timeout bounds, environment scrubbing, unsupported-capability refusal, and stale request-ID refusal. Root lifecycle passes 1,506 total (1,502 pass / 0 fail / 4 skips); root TypeScript, `npm run build`, and `git diff --check` pass. Code commit `74c53bb47ee876381158f821000e7ff7018fd4c2` matches the remote branch; GitHub Actions run `33958662348` concluded `success` across all eight jobs, read 2026-09-05.
+
+**What this does not establish.** OS-level sandboxing or hard filesystem/network/credential/CPU/memory/descriptor enforcement; durable Store/CLI/dashboard plugin execution; external effects; independent security review; or final WP-G03 completion.
+
+## D-137 — Contribution association must remain weaker than outcome and value
+**Decision:** Add a bounded contribution-evidence layer with explicit precedence: exact patch identity or generated lineage, collector-provided hunk/AST identity, unique normalized text/path overlap, then declared temporal association. Preserve confounders, pathless/generated uncertainty, and competing source candidates as unresolved; expose the result additively on `WorkUnit` without feeding outcome, quality, or value gates.
+
+**Reason:** Similarity and temporal ordering can associate artifacts without proving authorship, correctness, success, survival, or realized value. A candidate set cannot be resolved by selecting the strongest-looking row, and generated output cannot be text-compared without lineage. The bridge therefore retains evidence and limitations while withholding stronger claims.
+
+**Verified:** RED-first contribution engine/consumer coverage passes 15/15, including generated lineage, hunk/AST precedence, pathless/bounded inputs, confounders, competing-source refusal, and realization-path non-laundering. Root lifecycle passes 1,514 total (1,510 pass / 0 fail / 4 skips); root TypeScript, `npm run build`, and `git diff --check` pass. Code commit `34c82d0a0b50b0d32bcb8ff97a7d964667f733e9` matches the remote branch; GitHub Actions run `33960160991` concluded `success` across all eight jobs, read 2026-09-05.
+
+**What this does not establish.** Universal language/AST coverage, independent attribution validation, complete benchmark performance, authorship, outcome success, code quality, realized value, or final WP-D03 completion.
+
+## D-138 — Backup integrity must cover both artifact and retained payload
+**Decision:** Bind a SQLite application schema generation into new backup manifests, reject explicit future generations, preserve legacy manifests that omit the field using the database’s authoritative version, advance supported old schemas during Store initialization, and validate canonical economic-event and historical-FX payload digests before accepting an outer file hash. Restore remains preview-first, destination-exclusive, and non-destructive to the source.
+
+**Reason:** A matching file hash can describe a database whose append-only payload was altered by a lower-level writer, while a schema fingerprint alone does not state whether this build can migrate the artifact. Conversely, rejecting every old manifest would turn a metadata extension into data loss. The boundary therefore checks the database and its canonical envelopes, refuses unsupported future state, and retains compatible legacy artifacts without inventing schema provenance.
+
+**Verified:** RED-first backup/recovery coverage passes 10/10 executable cases with two documented Windows capability skips, including manifest-consistent economic tampering, future schema refusal, old-schema migration, legacy-manifest compatibility, and no-publish-on-failure. Root lifecycle passes 1,518 total (1,514 pass / 0 fail / 4 skips); root TypeScript, `npm run build`, and `git diff --check` pass. Code commit `2e594ab8f6ace83b8d069406aa9a75911724b7a6` matches the remote branch; GitHub Actions run `33961629681` concluded `success` across all eight jobs, read 2026-09-05.
+
+**What this does not establish.** Epistemic payload replay, complete crash/interruption fault injection, backup confidentiality, external disaster recovery, or final WP-H04 completion.
+
+## D-139 — Database integrity must fail closed before repair or backup publication
+**Decision:** Expose the configured SQLite connection safeguards and a reusable integrity assertion. Store startup now checks `foreign_keys`, recursive triggers, busy timeout, journal mode and synchronous mode, then validates SQLite integrity, foreign-key violations and supported append-only trigger authority before idempotent schema repair and again after initialization. Backup source and copied-artifact inspection use the same structural and trigger-authority boundary; raw legacy backup callers are not rejected merely for lacking Store-specific connection PRAGMAs.
+
+**Reason:** A missing or altered append-only trigger can otherwise be silently recreated by startup or copied into a backup, while a raw legacy `DatabaseSync` is a supported backup API seam and cannot be treated as a malformed Store connection. The boundary therefore checks the invariants that are authoritative at each seam, preserves the existing migration/legacy behavior, and refuses tampered state rather than inferring safety from file existence or an outer hash.
+
+**Verified:** RED-first H01 integrity coverage passes 7/7, including configured pragmas, foreign-key corruption, deleted epistemic/economic trigger refusal, backup refusal and Windows-safe cleanup. The parent integrity/backup focus passes 19 total (17 pass / 0 fail / 2 platform skips); root lifecycle passes 1,522 total (1,518 pass / 0 fail / 4 platform skips); root TypeScript, `npm run build`, and `git diff --check` pass. Code commit `fd6a336c4a98d1aa1144fb5b4f16191fc74904de` is reconciled on the reconstruction branch. GitHub Actions run `33964619546` concluded **success** across all eight jobs for pushed head `69d6521367a8f9b1ea38eef03bc9e493e769047b`, read 2026-09-05.
+
+**What this does not establish.** An `epistemic_derivations` foreign key or raw orphan-derivation rejection (the current schema does not declare that relationship), complete migration-interruption/corruption/fault-injection recovery, epistemic payload replay, backup confidentiality, external disaster recovery, or final WP-H01 completion.
+
+## D-140 — WP-D06: a silent drift alarm was reported as an absence of drift
+**Decision:** `driftReading` and `describeDriftReading` in `src/value/drift.ts` turn a `DriftReport` into a reading whose state is `unknown` when the alarm did not fire, never `refuted`. `fiscus value` prints that reading instead of a green `stable — no drift across N watched stream(s)`.
+
+**Reason.** `driftEProcess` is a genuine anytime-valid e-process: if the rate really is constant, the probability that E ever reaches `1/α` is at most α. That guarantee is one-sided. It bounds FALSE alarms and says nothing about missed ones, because an e-process carries no power guarantee — so a silent alarm is the absence of a result, not a result. The CLI printed it in green beside `DRIFT DETECTED` in red, as though the two were symmetric verdicts of one test, and stated no `n`, so a reader could not tell a quiet thousand-unit history from a stream that had barely begun.
+
+**The counterexample was measured, not argued.** `rateDriftStreams` emits a stream once it has `minN` observations, defaulting to 10. The most extreme drift a binary stream can hold — rate 0 for the first half, rate 1 for the second — through the same estimator the product uses:
+
+| n | alarm | peak log E | threshold |
+| --- | --- | --- | --- |
+| 10 | false | −0.693 | 2.996 |
+| 20 | false | −0.693 | 2.996 |
+| 40 | true | 5.018 | 2.996 |
+
+At n=10 and n=20 the evidence does not reach zero, let alone the threshold. Across the whole range where the watch first speaks, a TOTAL regime change is invisible to it, and the operator was being told "stable".
+
+**This is the completeness rule one module over.** `assessCompleteness` exists so that "no incident was observed" may not become "no incident occurred" without positive evidence that the source could have seen one. The coding `clean` gate honours it. This surface made the same inference from the same kind of absence and asked for nothing.
+
+**No power number is offered, deliberately.** The obvious repair is to report the `n` at which detection becomes possible. The analytic bound available here — `log E ≤ n(log((w+0.5)/(w+1)) + log 2)` — admits a crossing at n=20, which the measurement above shows is unreachable in practice. A bound that overstates detectability would restore the same false comfort with a number attached to it. What travels instead is what was observed: how many units, at what α, over what window, and how far the evidence actually got as a fraction of the threshold, floored at zero because a negative log E is not a small amount of drift.
+
+**Verified RED first.** Six behavioural assertions failed against the unfixed module, with the counterexample itself and the firing-alarm guard-rail passing throughout.
+
+**What this does not establish.** The dashboard still renders its own sentence — `The rate is holding steady — no sign it is drifting.` in plain-language mode, which is the worse instance of the same defect — and is deliberately left for the browser-app tranche rather than edited concurrently. Nothing here improves the estimator's power; short streams remain undetectable and are now merely honest about it. And the reading covers the quietest stream in the watch, not each stream separately.
+
+## D-141 — WP-D06: "all clear" from six detectors that could not fire
+**Decision:** `alertCoverage` and `computeAlertCoverage` in `src/alerts/detect.ts` report, per channel, whether a detector could have produced an alert and what setting would light it. `fiscus ops` prints that coverage instead of a green `all clear`, and its tick now requires complete coverage as well as zero criticals. `AlertInputs` gains `pricedWindowSpendUsd`.
+
+**Reason.** `detectAlerts` returns an array and the surface read an empty one as a finding. Two different situations produce it: six detectors examined real traffic and none tripped, or the detectors were structurally unable to fire and the empty array records that nothing was looked at.
+
+**The counterexample is the default install, which makes it the common case.** Caps are opt-in, so `dailyUsd`, `dailySoftUsd` and `runawayMaxUsd` are all null until an operator sets one:
+
+| channel | why it cannot fire on a fresh install |
+| --- | --- |
+| `budget-cap` | both thresholds null, so the branch is unreachable |
+| `runaway-loop` | `runaway` is null, so the branch is unreachable |
+| `throttling` | nothing is configured that blocks, so `blocked24h` cannot exceed zero |
+| `spend-spike` | no prior active day, so the p90 baseline is 0 and the detector requires `base > 0` |
+| `value-crater` | `realizedSpendShare` is null while uninstrumented |
+| `pricing-trust` | no priced spend in the window, so the share is 0 by construction |
+
+Six channels, six dark, zero alerts, and a green tick — a new user told their setup is clear on the strength of no evidence at all.
+
+**The denominator had to be passed in.** `estimatedShare` arrives already divided, so a share of zero cannot distinguish "none of $50 was estimated" from "there was no spend to price". `AlertInputs` now carries the window total, and a caller that omits it leaves the channel DARK rather than live: unknown stays unknown, and the fail-closed direction is to claim less coverage rather than more.
+
+**A dark channel names the setting that would light it**, because a report that only said "dark" would be a second way of saying nothing.
+
+**Verified RED first.** Six assertions failed against the unfixed module. The guard-rail — a fully configured install with history reporting all six channels live — is what stops the repair from degenerating into a permanently pessimistic report as uninformative as the verdict it replaced.
+
+**What this does not establish.** Coverage says a detector COULD fire, not that it would catch what it is named for; a live `spend-spike` channel with one prior active day has a baseline of essentially nothing. The six channels are the ones that exist, not the ones that ought to. `computeAlerts` still returns a bare array for its other callers, so the dashboard alerts surface carries no coverage yet.
+
+## D-142 — WP-H05: the supply-chain rules were stated and enforced by nobody
+**Decision:** `scripts/check-supply-chain.mjs` exposes `auditSupplyChain`, a pure function over already-read inputs, and `npm run verify:supply-chain` runs it as a sub-second gate. `test/supply-chain-assurance.test.ts` drives the same function with mutated copies of the real files, so every rule is exercised twice: once against the checkout expecting no violations, once against an injected bad state expecting a named one.
+
+**Reason.** The checkout was in a good state and nothing held it there. `actions/checkout` and `actions/setup-node` were already SHA-pinned, `permissions: contents: read` was set, `npm ci` was used, and all 23 root and 39 team-server lock entries resolved to `registry.npmjs.org` over https with `sha512` integrity. Every one of those properties could be removed in a pull request with every existing gate staying green. Five verified counterexamples:
+
+- **The zero-runtime-dependency rule had no enforcement at all.** Adding `"dependencies": {"left-pad": "^1.3.0"}` left the typecheck and the two adjacent tests passing. The rule now rejects `dependencies`, `optionalDependencies`, `peerDependencies` and both spellings of bundled dependencies, and holds `devDependencies` to an exact allowlist in BOTH directions — adding `eslint` fails, and so does deleting `typescript`, so the rule bounds more than growth.
+- **Action pinning was an allowlist of exactly two names.** `test/ci-hardening.test.ts` regexes for `actions/checkout@<sha>` and `actions/setup-node@<sha>` specifically, so inserting `uses: some-org/publish-action@v1` gave an arbitrary third party code execution in CI with that test still green. Every `uses:` line in every workflow now needs a full 40-hex sha — a 7-character abbreviation is a prefix, not a pin — plus a trailing `# vN` comment so the pin stays human-reviewable. Local `./` and `docker://` refs are exempt.
+- **The lockfile was entirely unconstrained.** `npm ci` verifies each tarball against the lockfile's OWN integrity field, so a lockfile edited in a pull request is trusted completely: change `resolved` and `integrity` together and npm installs attacker bytes without complaint. Repointing `typescript` at `evil.example.com` with a matching fake hash passed every existing gate. Entries must now resolve over https to `registry.npmjs.org` and carry `sha512-` integrity, with root entries additionally `dev: true` — an entry not marked dev ships to users whatever `package.json` says. Lock/manifest drift is checked statically. `team-server/package-lock.json` gets the hygiene rules but is exempt from the zero-dependency rule, because `pg` there is a deliberate decision.
+- **`files` overrides `.gitignore`, and `.codex/` would really ship.** `.codex/` is gitignored, which stops git and not npm: the `files` allowlist takes precedence during `npm pack`. Appending `.codex` to `files` packed 261 files including 17 internal operations records, with `test/package-surface.test.ts` still green. Entries may no longer be hidden or dotted, name `.codex`/`docs/planning`/`node_modules`/`.github`/`.git`/`.env`, traverse, or be absolute or machine-local — the last because the repository is public and a developer's filesystem layout is not shippable.
+- **Nothing stopped a workflow resolving fresh or executing downloaded code.** Swapping one `npm ci` for `npm install` and appending a `curl | sh` step passed. The rule keys on whether a POSITIONAL package argument is present rather than banning the verb, because `package-smoke` legitimately runs `npm install --ignore-scripts --no-package-lock ../fiscus-pack/fiscus-*.tgz` — an install of one named local artifact, not a fresh resolve. A test pins that case clean so the rule cannot later be tightened into something that kills the only packaging proof in CI.
+
+**No workflow was modified.** `.github/workflows/ci.yml` is byte-identical to the previous head, so CI job names and topology are unchanged. The gate needs no workflow edit: `npm test` globs `test/*.test.ts`, so the new file is already enforced by the `test` job on all three operating systems and by `candidate-head`.
+
+**Non-vacuity is structural, not asserted.** Separating `readSupplyChainInputs` from `auditSupplyChain` is what lets the tests mutate the REAL files rather than hand-built fixtures that drift out of date. One test asserts the workflow enumeration is non-empty, so the checker cannot pass by finding no workflows, and the pin counterexamples derive the current shas by regex rather than naming them, so a routine action bump does not turn a mutation into a silent no-op.
+
+**What this does not establish.** It reads declarations, not an installed tree, so it says nothing about what transitively ships. A pinned sha is immutable and labelled, not trustworthy. A pinned hash bounds where a package came from and what it was verified against, never what it contains. The `files` rule reads the allowlist statically; `test/package-surface.test.ts` remains the pack-based check. And three real gaps are flagged rather than closed: `npm ci` still runs dependency lifecycle scripts in CI (`--ignore-scripts` would break the load-bearing `prepare` → `npm run build`, which is the topology change this packet was scoped away from), `prepublishOnly` still runs only the root typecheck rather than all three compilation domains, and there is no SBOM or signed provenance for the published tarball — both need either a dependency or `id-token: write`.
+
+## D-143 — WP-I04: the keyboard-only control was the one that lost your screen
+**Decision:** Four accessibility defects in the dashboard browser app are repaired and pinned in `test/dashboard-accessibility-contract.test.ts`. No dependency was added, no styling changed, and no existing assertion was weakened.
+
+**The skip link navigated the app away from the screen you were on.** `main.ts` rendered a plain `<a class="skip" href="#main">`. The shell routes on the hash — `hashchange` → `readRoute()` → whitelist against `ALL_ROUTES` — and `main` is not a route, so it fell back to `spend`. Following the link wrote `#main` into `location.hash` and moved the operator to Metered; on Realized, Tab-then-Enter cost you the screen. The only control in the shell that exists purely for keyboard and screen-reader users was the only one that could do that. `onclick` now calls `preventDefault` and focuses `#main`, which already carries `tabindex="-1"`. The `href` stays, because it is what makes this a link and what the browser shows in the status bar, but it is never applied. The test extracts the `ALL_ROUTES` literal and asserts `main` is absent from it, so the counterexample itself is pinned rather than described.
+
+**A drawer commit's outcome was never announced, at the moment focus was dropped.** The footer rendered the result as a bare `<p>` created at the instant `result` was set. The same signal disables the commit button, so the operator's focus was dropped from a control that had just become `disabled`, and the only report of what happened had no role and no live region. A commit is the only thing in this GUI that changes state, and its outcome was the one message nothing spoke. A `div.drawer-result` with `role="status" aria-live="polite" aria-atomic="true"` is now mounted WITH the drawer and wraps the reactive result, because a region built in the same tick as its first message is not reliably spoken. Spacing is byte-identical in both states: `.drawer-foot` is a flex column with a gap, so the permanently present child carries a negative margin the message paragraph re-adds — layout compensation for an accessibility structure, not styling.
+
+**Running detection on Data reported nothing to anyone not watching the pixels.** "Look around" is the one deliberate operator-triggered read on the screen, and only its failure path carried `role="alert"`. Success landed four counts in a card the reactive region built from nothing, and the wait was silent. A `div.scan-result` with `role="status" aria-live="polite"` is now mounted with the screen, with `aria-busy` bound to the real `scanning()` signal so the announcement is held until the walk finishes rather than reading a half-updated card. The failure paragraph moved out to a SIBLING keeping its own `role="alert"`, because an inserted alert is announced on insertion and nesting one inside a status region gets it announced twice.
+
+**The daily-cap field's consequence was not programmatically associated with it.** It is the only free-text input in the GUI and the only one where empty and `0` mean opposite things — change nothing, or block all spend. The sentence saying so was a loose sibling with no `aria-describedby`, so an operator tabbing to the input heard "New daily limit, in dollars" and never the half carrying the consequence.
+
+**Verified RED first**, including the fourth defect against a deliberately wide 1200-character match window, so the fix and not the window is what turned it green. Browser-app typecheck passes; the accessibility contract is 6/6, dashboard-contract and dashboard-script 14/14, and the twelve other test files that read the browser app are 64/64.
+
+**What this does not establish.** Nothing here executes a DOM. The tests read source, so they prove the handler exists and the route whitelist still excludes `main`, not that focus lands in a browser; they establish that a live region exists before the state change and that `aria-busy` is bound to the real signal, not that any screen reader announced it. The daily-cap description is now reachable from the control rather than merely adjacent to it, which is not the same as being understood before the destructive value is typed.
+
+**Five further defects were found and deliberately left**, each needing scope this packet did not have. `app.css` hides `.ledger-head` under the narrow-width media query, so at mobile widths the `columnheader` spans leave the accessibility tree and `role="table"` is left with rows of cells and no headers — silently undoing semantics an existing test pins. The "Where value is lost" ledger in `value.ts` reuses the spend grid with no table semantics at all: four columns of figures with no column identity. Heading order skips `h1` → `h3` in the `notyet` blocks of `value.ts` and `allocation.ts`. The drawer's disabled commit button carries its blocking reason in a `title` attribute, and a disabled button is not focusable, so keyboard and AT users can never reach the explanation — the fix is `aria-disabled` plus a guarded handler, a real behaviour change to the commit path. The parity table in `system.ts` has no accessible name and no `scope` on its header cells.
+
+## D-144 — WP-D06: the browser half of the two absence claims
+**Decision:** `views/value.ts` no longer reports the quiet drift branch as a finding; `driftDetectability` in `src/value/drift.ts` supplies the measurement that makes an honest wording possible; and the overview payload carries `alertCoverage` beside `alerts`.
+
+**Reason.** Both defects repaired at D-140/D-141 had two surfaces, and only the CLI half was fixed there — the browser half was deliberately left rather than edited while another packet held the app. The worse of the two phrasings was the one left standing: plain-language mode rendered `The rate is holding steady — no sign it is drifting.` with no `n` at all, and precise mode named `n` but still led with `No drift detected`, which is a finding.
+
+**The wire could not have carried an honest answer either.** `drift` was declared `{ n, alarm, recentRate?, overallRate? }`. Nothing on it distinguishes a quiet watch from a blind one, so repairing the sentence alone would have hidden the gap rather than closed it. Both halves move together.
+
+**`driftDetectability` is the measurement D-140 declined to approximate.** That entry rejected the analytic bound `log E ≤ n(log((w+0.5)/(w+1)) + log 2)` because it admits a crossing at n=20 that measurement shows is unreachable, and a bound overstating detectability restores false comfort with a number attached. This runs the SAME e-process over a reference stream of the same length and window — rate 0 for the first half, rate 1 for the second — and reports whether that would have crossed. Exact, reproducible, and named for the reference rather than for power, because it is a necessary condition and not a sufficient one: `referenceDriftWouldFire: false` establishes the watch is blind at this length, while true does not establish that any smaller movement would be caught.
+
+**The alerts panel had the same shape as `fiscus ops`.** An empty array was forwarded with no statement of how many detectors could have produced an entry, when on a default install all six are dark. The payload declaration takes `AlertCoverage` structurally and `routes.ts` assigns the producer's own value into it, so the two cannot drift apart without a type error — the same discipline that settled the budget basis, and the guard against this app's most expensive failure mode, where a browser declaration that does not match the wire type-checks perfectly and fails silently at runtime.
+
+**Verified RED first**, five assertions. One asserts both new fields survived into the generated browser copy, since a field the browser cannot see is a field no view can be honest with; the hash binding that copy to its source is already pinned by `test/dashboard-shared-types.test.ts` and is deliberately not duplicated.
+
+**What this does not establish.** The reference probe is one stream shape, and nothing here claims a total flip maximises this predictor's evidence over all streams of that length. Neither surface renders the per-channel dark reasons yet — the coverage is on the wire and the panel shows only the summary count. The tests read source rather than a rendered DOM, so they establish the wording and the payload, not what an operator saw.
+
+## D-145 — WP-E06: the tenth look read exactly like the first
+**Decision:** `src/causal/inference-ledger.ts` adds a reporting boundary that records inferential acts and appends their multiplicity arithmetic to an estimate's own limitations. `src/causal/precision.ts` prices interval width before evidence is acquired. `src/causal/estimate.ts` changes by two extractions only, with no behaviour change.
+
+**Reason.** `estimateCausalStudy` is a pure function of the evidence handed to it, so it cannot know how many times it has been asked. Ten successive looks at one accumulating study, truncating whole assignment repeats at n/arm = 50 … 500 on the existing `repeatedCostQualityData` fixture:
+
+| look | state | claim | qualityLower |
+| --- | --- | --- | --- |
+| 1 | qualified | `not_established` | −0.350563 |
+| 9 | qualified | `not_established` | −0.050188 |
+| 10 | qualified | `comparative_cost_quality_supported` | −0.042481 |
+
+The tenth look crosses the pre-registered decision rule the ninth refused, its disclosure text is byte-identical to the first's, and nothing on it says nine looks preceded it — so its stated 97.50% endpoint confidence reads as though it were the only question ever asked. Twenty acts at α = 0.025 each means simultaneous confidence of at most 50%.
+
+**Four design points carry the epistemics.** No corrected interval, ever: the single-look decision is reported unchanged and `claimAfterMultiplicity` is a SEPARATE field that withholds rather than restating at an adjusted level. A union bound rather than Bonferroni by default, because the union bound assumes no independence and successive looks at accumulating data are maximally dependent; a Bonferroni guarantee needs a plan registered before the first act, and without one the basis is `recorded_acts_only` and the disclosure says so. An identical re-read spends no budget — same estimand, endpoint, slice and evidence digest is a deterministic re-read, not a second chance to be wrong — while a new slice or one more unit always does, and non-estimating reads are recorded but budget-free because looking during collection is how optional stopping happens and no interval was reported. Acts are hash-chained from a genesis digest, so a removed act is detectable and degrades the claim; an unrecorded one is not, and the module says so.
+
+**The planner cannot drift from the estimator.** `hoeffdingArmRadius` was extracted bit-identical from `boundedDifference` for exactly that reason, and a test pins a projection against a half-width the estimator actually returned to within 1e-12. Passing an inference plan reduces the per-act α to `target / plannedActs` and widens the projection: planning ten looks and costing precision as though there would be one is how a study gets funded for evidence it cannot report at the level promised.
+
+**A second RED during implementation changed a test rather than the code.** A projection did not equal a realized half-width because the cost interval hits its pre-declared bound and is clamped. That is correct estimator behaviour, so the test now pins the clamp direction: the projection is an upper bound on width, never optimistic.
+
+**Verified RED first**, 19 tests across two new files, with the whole causal suite at 199 pass / 0 fail.
+
+**What this does not establish.** It does not restore the nominal coverage of any reported interval — the interval is exactly what it was, and only the disclosure changed. It cannot see an act taken outside it, so every count is a LOWER bound on the inference performed; `estimateCausalStudy` is still exported and still called directly by the CLI, dashboard and store, so this is an available discipline and not an enforced one. The ledger is not persisted, so it cannot bound looks across sessions. A slice is a caller-supplied string that nothing validates against a pre-registered subgroup, so a caller reusing one id for two subgroups under-counts multiplicity. Multiplicity is counted, not adjusted for correlation, so two near-identical endpoints consume two units of budget — conservative, erring toward withholding, but not a sharp bound. Precision planning states interval width and never the probability of reaching a decision, because that requires assuming the effect; `requiredObservedDifference` is a necessary condition on the observed difference, not a forecast, and the planner prices evidence in units and deliberately not in dollars, which would collapse metered usage into a projection. The Hoeffding basis is inherited, so wrong declared bounds make interval and projection wrong in the same way, and the projection assumes equal completed units per arm. And `claimAfterMultiplicity` is a conservative Fiscus policy choice rather than an established statistical procedure.
+
+## D-146 — WP-D05: naming a measurement model and having one were the same act
+**Decision:** `assessMeasurementFitness` now checks the whole validation ladder against the strength the caller intends to assert, and `src/measurement/registry.ts` resolves a `measurementModelRef` to the model it names, refusing a reference that resolves to nothing or to a model measuring something else.
+
+**Two holes, one shape: a strength granted because a field was populated rather than because it was checked.**
+
+*The fitness gate tested only the bottom rung.* Its single condition was `model.validation === 'proxy_unvalidated'`, so every other value passed — including a value that is not a validation at all. A model reconstituted from a stored row, a payload, or an interface-shaped literal (which is every model that crosses a boundary, since the structural type is satisfied by anything with the right field names) could carry a typo, a legacy spelling, or an empty string and be declared construct-fit on the strength of not matching one string. An unrecognized validation is now the same answer as an unvalidated one, because a model that cannot state how it was validated has not told us it was.
+
+*And it collapsed the top two rungs.* `proxy_validated` means a surrogate whose relationship to the construct has been checked; `validated` means the construct itself was measured. The gate returned an unqualified yes for both, so a caller intending to stamp `measurement: 'validated'` on a claim was told a validated surrogate would do. That is construct laundering in the kernel's own vocabulary — a survival ratio reported as value, a token count reported as effort. `MeasurementFitnessRequirement` now carries `requiredValidation`, and omitting it asks the strongest question rather than the weakest, because the permissive default is the one that lets a surrogate be reported as the target. `MEASUREMENT_VALIDATIONS` is exported as an ordered tuple and the rank derived from it, so the gate and `mergeClaimProfiles` — which already treats the identical `MEASUREMENT` axis as a ladder — cannot disagree about what these words mean.
+
+*The reference was worse, because it looked like provenance.* `claim()` requires `measurementModelRef` to be non-null once `profile.measurement` rises above `proxy_unvalidated`. That rule checks a reference was WRITTEN. Nothing checked it pointed anywhere, so `measurementModelRef: 'no-such-model'` and a reference to a real, validated, construct-matching model were indistinguishable to every consumer — and so was a reference to a real model measuring something else. The most valuable reference to forge is a true one: Fiscus's only declared measurement model is Git line retention, which its own author marked `artifact_persistence` and `proxy_unvalidated`; cited behind a "developer productivity, validated" figure it would have read as citation rather than as the contradiction it is.
+
+**Three design points.** The registry is an immutable value built from an explicit list, not a mutable global that boundaries write into as they load — a registry a caller can add to at will is the same hole one indirection further out, since whoever needs a reference to resolve could make it resolve. Every entry is re-run through `measurementModel()` rather than trusted as given, for the same reason the fitness gate now rejects unrecognized values. And a null reference stays admissible for `proxy_unvalidated` only, matching the rule `claim()` already enforces: a claim asserting nothing on the measurement axis is not reporting one construct as another, and refusing it would force every honest weak boundary to invent a model in order to keep working — which points the laundering incentive the wrong way.
+
+**Verified RED first** — fourteen tests across `test/measurement-construct-fitness.test.ts` (5) and `test/measurement-model-registry.test.ts` (9), and the counterexamples were re-verified in the integrating tree by restoring `src/measurement/model.ts` to its `0d56566` content and removing the registry: three named fitness assertions fail and the registry file cannot load at all, taking its nine with it; all fourteen pass with the change restored. The default-strengthening of `assessMeasurementFitness` changes no existing behaviour in this repository, because a grep for callers finds none outside the module and its tests — the gate had been written and never wired.
+
+**What this does not establish.** That any registered model's procedure actually measures the construct written on it. Construct validity is an argument made by whoever declared the model, and neither function can check it; they only refuse to let a declaration be read as stronger than it is, or as being about something else. Nor is either function yet enforced at a boundary: `claim()` still accepts any non-null string, no production call site resolves a reference through the registry, and no registry of Fiscus's own models is assembled anywhere. This is the mechanism that makes enforcement possible, not the enforcement.
+
+## D-147 — WP-I05: the boundary document was a summary, and deleting evidence cost nothing
+**Decision:** `docs/DATA-BOUNDARIES.md` gains a complete declared-egress-path table and an individual naming of the five retained columns that can carry a person's own material; `src/egress/receipts.ts` refuses to report genesis when the receipt history is absent but its checkpoint sidecar survives.
+
+**A boundary claim is worth the enumeration behind it.** The repository is public and this document is what a reader trusts instead of reading the source, but its egress section was prose about kinds of traffic. The authorization vocabulary an operator actually writes into `egress.rules` and reads back from `fiscus egress status` is a purpose token and a data-class token, and neither list appeared. The table now names all nine purposes with their data classes, what may cross on each, and the command that reaches it — including that `provider_inference` carries prompts, source snippets and the caller's credential, and that `provider_cost_observation` sends `OPENAI_ADMIN_API_KEY` from the process environment. `test/data-inventory-boundary-declaration.test.ts` pins the table against `EGRESS_PURPOSES` and `EGRESS_DATA_CLASSES` in both directions, so a new outbound path cannot be added without appearing on the page, and a path cannot be documented that the code could not authorize.
+
+**"Labels" was too comfortable a word for five columns.** `requests.cwd` holds a full working-directory path, which routinely carries client, employer or project names and discloses account and directory layout; `requests.user` holds an operator label verbatim; `git_commits.subject` holds commit message first lines as written; `proposals.files_json` holds captured proposed code lines with their paths, which is the case `metadataOnly: true` exists to switch off; `scan_snapshots.repos_json` holds discovered repository locations. All local, and none of them on any declared egress path — but a reader could not previously learn that from the document, and a test now fails if a named column stops being named.
+
+**Deleting evidence has to change what can be claimed.** The egress receipt history is the only local record that Fiscus can say what it sent. Absence of the history alone previously decided genesis, so an operator — or anything running as them — could delete the history and have `fiscus egress verify` report a valid chain and a receipt count, with no surviving trace that a longer history had existed. A checkpoint sidecar is only ever published after a receipt was appended, so a surviving checkpoint beside an absent history is local proof that records were removed, and genesis is precisely the claim that nothing preceded this chain. `inspectReceiptHistory` and `inspectReceiptHistoryForAppend` now share `absentHistoryInspection()`, which reports a discontinuity in that case and names the repair: restore the history, or archive the checkpoint alongside it.
+
+**Reading the checkpoint to REFUSE is not trusting it to AUTHORIZE**, which the rest of that file deliberately never does. A forged sidecar can cost an operator an egress refusal it can repair; it can never buy an attacker a chosen predecessor hash.
+
+**Verified RED first** — nine tests across `test/data-inventory-boundary-declaration.test.ts` (6) and `test/retention-evidence-consequence.test.ts` (3), re-verified in the integrating tree by restoring `docs/DATA-BOUNDARIES.md` and `src/egress/receipts.ts` to their `0d56566` content: five boundary assertions and the discontinuity assertion fail, and all nine pass with the change restored. The two remaining retention tests — that a genuinely fresh home still establishes genesis, and that archiving history together with checkpoint is the documented repair — pass before and after by design, since they pin what must NOT change.
+
+**What this does not establish.** The table is a declaration checked against the tokens the code accepts, not against observed network traffic; it establishes that no undeclared purpose or data class can be authorized, not that a provider retains nothing, and `docs/DATA-BOUNDARIES.md` remains explicit that this is not a machine-wide firewall. The column list is hand-maintained against the schema — the test pins the five that are named, so it cannot catch a sixth sensitive column added later without also being updated. And the discontinuity check detects deletion of the history while the checkpoint survives; deleting both is still indistinguishable from a fresh home, which is the case that needs an off-machine anchor this packet does not have.
+
+## D-148 — WP-I05/WP-D06: a chain that verified over nothing, printed in green
+**Decision:** `verifyEgressReceipts` returns an epistemic state, a basis, the window it covers, and both halves of what it is worth; `fiscus egress verify`, `fiscus egress status` and `fiscus diagnostics` render that instead of a boolean.
+
+**The counterexample was measured, not argued.** On a home that had never sent anything:
+
+```
+  Receipt chain valid
+  Receipts: 0
+```
+
+in green, exit 0. `fiscus diagnostics` said `Egress OK (0 receipt(s))`. The check was correct and the reading it invited was not: a hash chain over an empty set verifies vacuously, so the most reassuring output this command can produce was printed exactly when Fiscus knew least. An operator asking the one question the command exists to answer — did anything leave this machine, and is there a record of it — reads green and stops.
+
+**Same class as D-140, D-141 and D-144, one subsystem over,** and the exact shape AII-002 names: a negative claim inferred from missing observations with no positive evidence that the source could have seen the thing. Four instances now — a quiet drift e-process, six structurally dark alert channels, an unrecognized validation string, and an empty receipt file — which is why the search was for the class and not the case, and why the diagnostics line was repaired in the same commit rather than left to reappear as a fifth.
+
+**Here the honest answer is more than nothing, which is why this is a repair and not a deletion.** Every declared egress path goes through one chokepoint, `egressFetch`, which appends a receipt BEFORE forwarding and refuses the request if the append fails. That premise is what upgrades a non-empty chain from an integrity claim to a coverage claim over its window — so the premise is asserted rather than assumed: the test walks `src/` and fails if any module outside `src/egress/` reaches the network directly. It passes today, and it is the only test in the new file that was green before the change, which is the correct result for an assertion whose job is to pin an existing property rather than to drive a repair.
+
+**Four bases, and `unknown` is deliberately not red.** `no_record` is yellow: nothing is wrong, nothing is known, and dressing an absence of evidence as a fault is the same collapse in the other direction. `chain_intact` is the only green. `chain_broken` and `discontinuity` — the latter being D-147's case — are red and say different things, because "a record was altered" and "records were removed" are not the same finding.
+
+**A verification that could not RUN reports `unknown`, not `refuted`.** A local filesystem fault is not a finding about the chain.
+
+**One dead field went with it.** `ReceiptHistoryInspection.records` was `Array<EgressReceipt | null>` and every construction site set it to `[]` — a field that could only ever answer "nothing", which is the same shape as the defect being fixed. The streaming reader is deliberately bounded (AII-031), so retaining receipts to recover a first and last timestamp would have traded a real memory bound for a reporting convenience; two O(1) strings filled during the same pass replace it, and the inspection type no longer extends the published verification.
+
+**Verified RED first** — nine tests, eight of which fail against the unfixed tree (verified by restoring all four changed source files to their committed content and re-running), the ninth being the premise check described above.
+
+**What this does not establish.** The coverage claim is bounded by what Fiscus recorded, not by what the machine sent: a call that appended no receipt leaves no trace here, and nothing outside this process is observed at all. It says nothing about what a provider retained. A valid chain is not a judgement that the traffic it records was authorized — only that the record of it is intact. The window is the span of retained receipts, so a retention policy that pruned older ones would narrow it silently; no such policy exists yet, and that absence is itself unrecorded. The chokepoint premise is checked by a source walk for `fetch(` and `http.request(`, which a sufficiently indirect call could evade. And the three CLI assertions read source rather than executing the command, so they establish the wording, not what an operator saw.
+
+## D-149 — WP-D07: `proxy_validated` said a relationship had been checked, and nothing recorded the check
+**Decision:** `src/measurement/surrogate.ts` adds the surrogate bridge — a declared record of what licenses reading a surrogate as its target — and `assessBridgedMeasurementBacking` treats it as a ceiling on that reading. `src/measurement/CONTEXT.md` gives the module the contract it had been operating without, and the routing table names it.
+
+**The counterexample.** `proxy_validated` is the middle rung of the measurement ladder and reads, in words, as *this surrogate's relationship to the construct has been checked*. Measured against the tree before this module existed, a `proxy_validated` model cited for its target construct was admissible with **zero reasons**, and no field anywhere held what had been checked, against what, in which direction, or how strongly. The rung was granted because the string was written.
+
+**Third instance of one shape, and the last in this subsystem.** D-146 closed a reference that pointed nowhere and a validation string nobody recognised. This closes a relationship nobody stated. All three are the same defect: a measurement strength granted because a field was populated rather than because it was checked.
+
+**Four judgements carry the epistemics, and the second is the load-bearing one.**
+
+*A bridge is a ceiling, never a promotion.* `assessBridgedMeasurementBacking` can only lower the rung a model's own author declared. The worst it can do to an honest caller is withhold; the best it can do to a dishonest one is refuse.
+
+*Pre-registration is not validation.* Fixing a metric before collection defends against choosing it after seeing the data; it says nothing about whether the metric measures the construct. `src/causal/epistemic.ts` offers exactly that basis for its two `proxy_validated` claims, so calling it validation would have laundered this repository's own strongest surrogate claims through the module on the day it was written. Only `empirical_association` can license `proxy_validated`, and only when its reference measurement resolves, is itself `validated`, and targets the same construct — a surrogate validated against another surrogate is still unvalidated.
+
+*No bridge ever reaches `validated`.* That rung means the construct itself was measured, and a surrogate that became the construct would no longer be a surrogate. A test enumerates all twenty-seven combinations of basis, status and direction and asserts none reaches it.
+
+*A bridge with no stated failure modes has not been examined.* Every real surrogate has a regime where it stops tracking, and an author who cannot name one has not looked. A non-`supported` status must say what contests it, and a `supported` one may not carry a contest at all.
+
+**`unknown_direction` is capped rather than refused**, deliberately: refusing it would push an author toward guessing a direction, and a stated ignorance about direction is worth more than a fabricated arrow.
+
+**Verified RED first** — twenty-seven tests, twenty-four of which fail against the declaration-only baseline that delegates to the pre-fix rule; the whole measurement suite is 41/41 with the implementation in place. The three that passed against the baseline are the ones asserting behaviour that was already correct, which is the right result for assertions whose job is to pin rather than to drive.
+
+**Provenance note.** The test file and the delegating baseline were produced by a delegated lane that was cut off before implementing; the implementation, the RED verification against that baseline, the module contract and the routing entry are the integrator's. Nothing here rests on a lane's report — the RED was re-run in this tree.
+
+**What this does not establish.** That a bridge's argument is true. An `empirical_association` bridge is checked for the SHAPE of its evidence and never for the strength, sign, or reproducibility of the association it asserts: a registered bridge whose sample is three observations and whose association is noise passes every gate here. Nothing is enforced at a product boundary — `claim()` still accepts any non-null `measurementModelRef`, no production call site resolves one through either registry, no bridge is declared for Fiscus's own two `proxy_validated` claims, and no registry of Fiscus's own models is assembled anywhere. `validTime` is carried on a bridge and never consulted, so a bridge whose validity window has closed is treated as current. And the module cannot see a surrogate reported as its target by a path that never asks it.
+
+## D-150 — WP-F05: the observational label existed, and the gate did not
+**Decision:** `src/decision/assurance.ts` derives a Decision Assurance Level from the kernel profiles of a decision's declared inputs and from its dominance certificate, and `buildDecisionKernelIssuance` refuses to issue when a declared consequence class requires more than the inputs reach.
+
+**The counterexample, measured.** `computeFrontier` on 8/8 candidate versus 2/40 incumbent units returns `confidence: 'observational_separation'` with no confounders. Its per-unit saving, turned into two action intervals, makes `certifyDecision` return `proven_dominant` for `switch_default_model`. That certificate then persisted `claim:decision:fitness:switch-default-model` with `decisionFitness: 'sufficient'` and `causality: 'none'` without refusing. **Models were never assigned. Nothing on that path asked.** AII-025 had already recorded that the label was honest and the gate did not exist; this is the gate.
+
+**A level is derived, never asserted.** There is no field a caller can put one in. A caller supplies input claim identities and the ten-axis `ClaimProfile` the kernel already holds for each; the level falls out of an axis ladder plus the certificate's own result. `decisionFitness` is deliberately excluded from the ladder — it is the axis being assessed, and reading it as an input would let a claim assert its own decision fitness and have that assertion raise the level governing it. The exclusion is recorded in the assessment's `assumptions` rather than left implicit.
+
+**Two rows carry the two audit findings.** `causality: 'randomized'` is required for DAL-3, because `observational` and `quasi_experimental` both mean the thing being compared was not assigned, so the separation is a property of the observed comparison and not of the alternatives being decided between — AII-025. And a certificate whose problem contains fewer than two actions is capped at the floor, because a proposal with no alternative evaluated against it is not a decision whatever number is attached to it — AII-026.
+
+**Every cap is the weakest declared input, never an average, and there is no compensation between axes:** a randomized estimand does not buy back missing coverage, because they answer different questions. `authorizesAction` is permanently `false` — meeting a level says an evidence requirement was met, never that Fiscus may act.
+
+**Fail closed in three places.** No declared inputs is DAL-0 and not "nothing contrary was found". An undeclared consequence is held to the strictest requirement rather than the loosest. And a `mixed` monetary basis blocks every level above the floor, because it means an input already collapsed two of the four claims Fiscus refuses to conflate.
+
+**Verified RED first** — the two refusal tests both fail against the tree before the wiring existed and pass after. Three further tests were added as guard rails and were green when written, which is the correct result for assertions whose job is to stop a later change turning the gate into a blanket refusal: a gate that refused everything would satisfy both RED tests while making the surface useless, and withholding a decision the evidence actually earned is its own epistemic failure. They pin that a randomized, directly measured, completely covered input reaches DAL-3 and issues; that an issuance declaring no consequence reports `assurance: null` meaning NOT ASSESSED; and that a claim asserting `decisionFitness: 'sufficient'` on otherwise observational evidence is still refused. Five tests total, the whole decision family 30/30, and `src/decision/CONTEXT.md` carries the guarantees, the invariants and a new "Does not establish" section stating the unreached-boundary limit.
+
+**Provenance.** `assurance.ts` and the test file came from a delegated lane cut off before it wired the gate into the issuance boundary; the wiring, the RED verification and this record are the integrator's.
+
+**What this does not establish, and the limit is larger than the fix.** The gate refuses only when a caller declares a consequence; `assurance` is an optional field, and an issuance without it runs exactly as before, with `assurance: null` on the result meaning NOT ASSESSED rather than assessed and fine. Making it mandatory means migrating every existing caller, which this packet did not test.
+
+**And there are no existing callers to migrate, which is the more important half.** A grep for `issueDecisionToKernel` and `buildDecisionKernelIssuance` across `src/` finds none: the only callers are tests. `decision.certificate` is precisely the boundary AII-036 classifies `unreached`. So the gate now sits at the one place that persists a decision certificate, and that place is not yet reachable from any product path — which means **AII-025 is not closed.** No surface refuses an observational separation, because no surface consumes a decision certificate at all. What changed is that the refusal now exists and is checked; what has not changed is that `recommendBudget`, the frontier, and every other advisory surface still reach an operator without passing through it.
+
+Nothing here evaluates whether a declared input set is COMPLETE — an undeclared input cannot lower the level it was left out of, and that assumption is stated in the assessment rather than checked. The levels are a Fiscus policy ladder and not a standard: DAL-3's specific rows are a defensible reading of what supports changing spend, not a derived threshold.
+
+## D-151 — WP-R01: nothing bounded a chain, and the money axis had no rule at all
+**Decision:** `src/epistemic/abstract.ts` adds an abstract interpretation over the claim lattice — `claimBound` as abstraction, `derivedBound` as transfer function, `analyzeDerivationChain` as the fold over a derivation DAG — and `PROFILE_STRENGTH_AXES` is exported from `derivation.ts` so the abstraction reads the per-step rule rather than restating it.
+
+**The first finding touches the distinction the whole product rests on, and it was measured.** `assessDerivationLegality` requires a witness for every axis a derivation strengthens, but it iterates `PROFILE_STRENGTH_AXES`, and `monetaryBasis` is not in that list. It cannot be: the axis has no ladder, so there is no `stronger()` comparison to make. The consequence is that the rule places no constraint on it at all:
+
+```
+input  monetaryBasis : estimated
+output monetaryBasis : billed
+allowed              : true
+requiredWitnesses    : []
+missingWitnesses     : []
+```
+
+Zero required witnesses. And `appendDerivationWithinTransaction` checks every input claim — its own comment says so — against a rule that never looks at the money axis, so the kernel stores it. `metered usage != provider-billed cost` is the first line of this repository's contract; a local rate-card estimate can be re-declared as a provider-billed amount by a derivation the kernel accepts without complaint. That is the collapse performed inside the component that exists to prevent it.
+
+**The second is structural.** `assessDerivationLegality` checks one step against one input claim, `assessPreservation` checks one claim against its cited evidence, and nothing bounded what a whole chain licenses — so a conclusion several merges downstream of its leaves was compared with its neighbours and nothing else.
+
+**The domain reuses a split the kernel already declares.** `admissibility.ts` separates `ORDERED_AXES` from `UNORDERED_AXES`, so an ordered axis is bounded by a ceiling and the two unordered ones — `monetaryBasis` and `epistemic` — by an admissible set. `monetaryBasis` acquires no ordering here, and refusing to give it one is the point rather than an omission.
+
+**Every choice narrows rather than widens, and the direction is the whole design.** No inputs is BOTTOM and not TOP, because reading an empty requirement as unconstrained is how it becomes a passed one. An unresolved input claim is BOTTOM and not "ignore it". Two inputs MEET at the weaker of them — the same quantifier `assertClaimWithinItsEvidence` settled on, and for the same reason: every input is a prerequisite, so a maximum would let one strong input launder the others. Disagreeing bases become `mixed`, never the stronger of the two, and `mixed` is not a rung above `billed`. A conflicted epistemic join admits only `conflicted`. A bound that is too tight costs a caller an explicit witness; a bound that is too loose says a chain can establish something it cannot.
+
+**`BASIS_DERIVATIONS` is deliberately empty, in the style of `DIMENSION_ROLLUPS`.** Allocation is the obvious candidate — `ledger.ts` says in as many words that a claim whose basis differs from its evidence is often a legitimate derivation — but which bases allocate into which is a statement about this product's economics, and inventing one to make the bound look useful would be the exact inflation this module refuses. An empty register means "nobody has declared one", not "none exist"; a caller declares its own per analysis, visible at the call site rather than buried in a default.
+
+**RED verified two ways.** With the module absent the whole file fails to load. With the transfer function neutered to return TOP, six named assertions fail while eight — the meet semantics and the structural refusals, which live in `meetClaimBounds` and `analyzeDerivationChain` rather than in `derivedBound` — still pass, which is the correct split and better evidence than a blanket import failure. Fourteen tests.
+
+**Provenance.** `abstract.ts` came from a delegated lane cut off before it wrote any test at all. The counterexample was measured by the integrator against the committed tree, the tests are the integrator's, and the RED was verified here; nothing rests on the lane's report.
+
+**What this does not establish.** It never says a proposition is TRUE, in the same sense as `PreservationAssessment.isProofOfTruth: false`. And it does not close the hole it covers, because **nothing calls it** — no ledger path, no product path. The estimated-to-billed re-basing is still accepted by the kernel exactly as before; what exists now is a function that would refuse it, and the honest description of this packet is that it built the rule and not the enforcement. The analysis takes each leaf at face value: it bounds what a chain ADDS, and what a root may say about its own cited evidence stays with `assertClaimWithinItsEvidence` and `assessPreservation`. A witness lifts its axis to that axis's top, exactly as the kernel's rule does, so the abstraction is only as tight as the witness discipline it inherits — a witness that overstates its reach overstates this bound too.
+
+
+## D-152 — WP-R01: wiring the money-axis rule the previous entry only wrote down
+**Decision:** `DERIVATION_WITNESS_KINDS` gains `monetary_rebasing`, and `assessDerivationLegality` requires it when a derivation changes `monetaryBasis` other than by weakening. `appendDerivationWithinTransaction` therefore refuses to persist an unwitnessed re-basing.
+
+**This is the first wiring rather than another mechanism, and that is the point of the entry.** D-151 measured the defect and built `abstract.ts`, which refuses it. Nothing called `abstract.ts`, so the kernel still accepted `estimated → billed` with `allowed: true` and an empty required-witness list. Six packets in this round have now built rules that nothing runs; this one moves a rule into the boundary that persists.
+
+**Why the axis had no rule.** `assessDerivationLegality` guards eight axes by comparing rungs in `PROFILE_STRENGTH_AXES`, and `monetaryBasis` cannot appear there because it is not a ladder — `mixed` is the honest label for disagreement, not a rung above `billed`. The absence was structural rather than an oversight, which is why it survived so long, and it meant `appendDerivationWithinTransaction` — which does check every input claim — checked them against a rule that never looked at the money axis.
+
+**A new witness kind, not a reused one.** `monetary_finality` guards `finality`, provisional to final. Reusing it would have made one witness answer two unrelated questions, so a caller attesting that a figure is final would silently also have attested that its basis changed legitimately. A test pins that the wrong witness does not satisfy the requirement.
+
+**A witness rather than a refusal.** Re-basing is often legitimate — `ledger.ts` already states that a claim whose basis differs from its evidence is often a legitimate derivation, and that allocation is exactly that. A blanket refusal would make an honest allocation inexpressible and push the work outside the kernel, which is worse than the hole. A witness makes the re-basing a declared, evidence-bound act instead of a silent one.
+
+**Two moves stay free, and both are weakenings.** Keeping the basis asserts nothing new; dropping to `none` discards the economic quantity, and a claim that no longer names one cannot misreport it; declaring the output `mixed` is what `mergeClaimProfiles` produces from disagreement, so it withholds. Everything else needs the witness **including `mixed` → anything**, because resolving a mixture into one basis is a claim that the disagreement was settled.
+
+**Verified RED first** — six tests, five failing against the committed rule; the sixth asserts the two free moves stay free and correctly passes before and after. The ledger test does both halves: an unwitnessed re-basing throws inside the transaction, and the same chain with the witness persists, so the gate refuses the unwitnessed act rather than the act.
+
+**One existing assertion was inverted, and it did its job.** `test/epistemic-abstract.test.ts` recorded the hole — `allowed: true`, empty witness list — with a comment saying that if `assessDerivationLegality` ever DID require a witness here, the assertion would fail and the reason for `abstract.ts` would have changed. It failed, exactly as written. It is inverted rather than deleted, and now checks that the per-step rule and the chain abstraction agree about the same derivation instead of one refusing what the other allows.
+
+**What this does not establish.** The witness is a declaration, not a proof: nothing checks that a `monetary_rebasing` witness's evidence actually supports the re-basing it licenses, only that someone recorded one. `BASIS_DERIVATIONS` is still empty, so neither rule knows which re-basings are sound — they agree on refusing and on nothing else. No existing Fiscus derivation re-bases, so nothing in the product exercises the new path: this closes a hole rather than enabling a feature, and its value is that the hole cannot be walked through later. And `analyzeDerivationChain` is still called by nothing, so chain-level bounds remain unenforced; only this one axis moved from the abstraction into the boundary.
+
+
+## D-153 — WP-D07: the causal claims called their quality metric validated, and nothing had checked it
+**Decision:** `src/causal/measurement.ts` declares the measurement model and surrogate bridge behind the causal quality metric; `src/causal/epistemic.ts` cites them and takes its `measurement` rung from what they earn. Both issued claims move from `proxy_validated` to `proxy_unvalidated`.
+
+**The counterexample, measured against the committed tree.** Both claims carried a hard-coded `measurement: 'proxy_validated'` and a `measurementModelRef` of `causal:quality-metric:verified_quality@d96fa6e4…` — a string synthesized at the point of issuance from the metric id and the protocol hash. No `MeasurementModel` with that id existed anywhere, so a reader who tried to check what had been validated found no record of a validation to check. That is the same defect class as the receipt chain that verified over nothing: an absence reported as a result. The rung was constant as well, identical across all four quality evidence classes the protocol admits, which differ from one another in exactly the respect the measurement axis is about.
+
+**The rung is wrong, not merely unbacked, and D-149 is what makes that decidable.** `bridgeCeiling` licenses `proxy_validated` only from an `empirical_association` — the surrogate compared against an independent measurement of the target. A causal protocol supplies pre-registration, and that basis's own docblock says it rules out choosing the metric after seeing the data and does not rule the metric in. Nothing in this repository records an empirical association between any quality metric and any quality construct, so the honest rung is `proxy_unvalidated` and the claims now carry it. This is D-149's rule applied to the repository's own strongest surrogate claims, which is what that packet was written for and did not do.
+
+**Reconstructible from the protocol and nothing else.** The model and the bridge are derived from the committed protocol, so a reader of a stored claim can resolve the reference it carries without a service or a stored registry. Both stay pinned to the protocol hash, for the reason the old string already gave and was right about: a reference that survives a change to the protocol names something that no longer exists.
+
+**The evidence class records and moves nothing, deliberately.** `deterministic`, `independent_operational`, `structured_human` and `operator_attested` differ in how the observed value was produced — a question about integrity and about independence from the assigned arm. Construct validity is a different question and none of the four answers it. A ladder across them would assert exactly the validity none of them establishes, so the class is written into the model's procedure and into a named failure mode, where it can be asked about, and the rung does not move.
+
+**`assessBridgedMeasurementBacking`, not the asserting form.** `admissible` there means "there was nothing at all to say", so a pre-registered bridge used honestly at its own ceiling still reports `admissible: false`, and the refusing form would refuse this caller for being right. What is wanted at this boundary is the ceiling and not a refusal: the causal claim is still issuable, at the rung its evidence supports.
+
+**RED verified twice.** With the module absent the test file fails to load. With the module present and `epistemic.ts` unwired, exactly one test fails — the one asserting the issued rung — which is the correct split and better evidence than a load failure. The resolution test is honest about being module-side: the reference string is unchanged, and what changed is that a registry now contains it.
+
+**What this does not establish.** The metric still is not a validated proxy for quality; this stops the code from saying it is. Reaching `proxy_validated` needs someone to compare the metric against an independent measurement of the construct and register that reference, which nobody here has done. `src/decision/assurance.ts` requires at least `proxy_validated` for DAL2, so a causal study now fails that rule on measurement grounds — the gate has no production caller so nothing changes in the running system, but the honest reading is that **DAL2 is currently unreachable for any quality-based claim**, and the register says so rather than waiting to be surprised by it. The bridge's three failure modes are declared, not tested for: nothing checks at analysis time whether an arm could act on the metric directly. And `measurementRegistry` still has no other production caller — this is one boundary resolving its own reference, not a repository-wide model registry.
+
+
+## D-154 — the intermittent suite failure was one file, and "local contention" was a description rather than a diagnosis
+**Decision:** `test/plugins-host.test.ts` raises its shared fixture's process deadlines from 250ms/500ms to 15s/15s. The dedicated timeout test keeps its own 100ms budget.
+
+**It was reproduced rather than reasoned about.** Every intermittent full-suite failure observed in this program has been this file, and each time it was set aside as machine load. Under twelve concurrent CPU-bound processes it fails on demand — three runs at 2, 4 and 2 failures — with `process host executes the plugin as a real child and returns bounded evidence` reporting `status: 'timed_out'` where it asserts `'completed'`.
+
+**The root cause is the fixture, not the host.** These tests spawn a real `node` child. 250ms of startup is comfortable on an idle machine and not on a loaded one, and a full suite compiles and runs many files at once, so the suite was competing with itself for exactly that margin. The host's timeouts are a real policy feature and behave correctly; the defect is a fixture choosing a load-sensitive deadline for tests that are not about deadlines.
+
+**No assertion was weakened, and the distinction is the whole point.** The tests on the shared fixture assert the happy path — a well-formed request reaches a real child and returns bounded evidence — and the deadline is incidental to that claim. Timeout behaviour has its own test, against a child that deliberately never answers, with its own 100ms budget; that test is about the deadline and is untouched. The refusal tests refuse before spawning and never reach a timer.
+
+**Generous rather than merely larger.** A tight-but-larger budget is the same defect with a longer fuse. At 15s a genuinely hung child surfaces as a test-runner timeout with a clear message, instead of as a plausible-looking `timed_out` status that reads like a real finding — which is the failure mode that made this take three sightings to diagnose.
+
+**The class was searched for, not assumed unique.** The other two test files with wall-clock deadlines, `test/alerts.test.ts` and `test/build-race.test.ts`, were run under identical load and pass, so this was the only instance.
+
+**What this does not establish.** It does not make the suite immune to load; it removes the one margin narrow enough to be crossed by ordinary concurrency. It is a test-fixture change, so nothing about the plugin host's production behaviour or its real default timeouts is affected.
+
+
+## D-155 — two tests in the suite contradicted each other about the repository artifact
+**Decision:** `test/egress-guidance-launcher.test.ts` runs its npm launcher smoke command with `--ignore-scripts`, and the false premise in `test/build-race.test.ts` is replaced by a record of the counterexample.
+
+**The contradiction.** `build-race.test.ts` asserts, as the isolation half of its claim, that an isolated build does not republish this checkout's `dist/cli.js`: it reads the artifact's mtime before spawning its builders and compares it after. The comment defending that assertion said nothing else in the suite builds at ROOT because `pretest` finishes before any test starts. `egress-guidance-launcher.test.ts` ran `npm run fiscus -- egress status`, and `prefiscus` is `npm run build` — a fact asserted by that same file two tests earlier. So it rebuilt the repository's `dist/` mid-suite and moved the mtime the other test reads.
+
+**It is not a flake, it is a permanent disagreement with an intermittent symptom.** Running the two files together fails every time, with no artificial load; a full run under six CPU-bound processes failed the same way. The only thing making it look intermittent is that `node --test` usually happens not to overlap them — the same dependence on harness scheduling that this file's own comment records having removed from this assertion once already, in a different form. That is the second time this one assertion has been protected by a premise about the schedule rather than about the code.
+
+**The fix keeps both claims.** The smoke test's claim is about the command — that the npm launcher path stays local and bounded — and `dist/` is already built by `pretest` before any test runs, so nothing it checks depends on the hook firing. The hook's existence is a separate claim with its own separate assertion. `--ignore-scripts` therefore removes the collision and weakens neither test, and build-race's premise becomes true rather than merely asserted.
+
+**The class was searched for.** `test/package-surface.test.ts` is the only other test that shells out to npm at ROOT, and it already passes `--ignore-scripts`.
+
+**What this does not establish.** It removes one contradiction between two tests; it does not prove no other pair disagrees about shared repository state. The general hazard remains that a test invoking an npm script silently inherits that script's lifecycle hooks, and nothing enforces the discipline this applies by hand.
+
+
+## D-156 — WP-D07: keeping the last literal measurement rung from coming back
+**Decision:** `test/issuance-map.test.ts` sweeps every claim-issuing file under `src/` and refuses a `measurement` rung above `proxy_unvalidated` written as a literal.
+
+**The systemic half of D-153.** That entry removed the only hard-coded `measurement: 'proxy_validated'` in the repository. This keeps it removed, because the kernel cannot: `claim()` requires a non-null `measurementModelRef` above the bottom rung and never resolves it, so any non-empty string satisfies it. That is exactly how a reference synthesized at the point of issuance, resolving to nothing, sat behind two `proxy_validated` claims for as long as it did. A literal rung at an issuance boundary is the shape of that defect.
+
+**Measured before it was written.** After D-153, `src/causal/epistemic.ts` was the only boundary in the repository issuing above `proxy_unvalidated`; every other issuance site hard-codes `proxy_unvalidated`, which needs no model. So the sweep guards a property that currently holds everywhere rather than papering over live violations.
+
+**RED against the defect, not against an absence.** With the two lines in `src/causal/epistemic.ts` reverted to the literal, the sweep names that file and states the reason. Restored, thirteen tests pass. A second test pins that the sweep is not vacuous — it matches a known-bad line, rejects the computed one, and asserts the walk found claim-issuing files at all, which is the failure mode the rest of that file already guards against.
+
+**What this does not establish.** It is a source-text sweep, so it catches the shape of the defect and not every route to it: a boundary could still compute a rung from something that is not a real record, and `claim()` still resolves no reference at all. Making the kernel itself resolve the reference would need a registry the ledger does not have, and that remains open.
+
+
+## D-157 — WP-E06: every look at a causal study was invisible, and now it is counted
+**Decision:** a `causal_inference_acts` table, `Store.reportCausalStudy()` as the reporting boundary, and both operator-facing causal surfaces routed through it.
+
+**The counterexample.** WP-E06 built a ledger that records each reported interval as an inferential act, chains the acts so a removed one is detectable, and puts the look count, the union-bound family-wise error and the simultaneous confidence on the reported result's own limitations. Measured against the committed tree, `openCausalInferenceLedger`, `recordInferentialActs` and `reportCausalStudyEstimate` had **no caller anywhere in `src/`** — not the CLI, not the dashboard, not the store — and no table held an act. The two surfaces an operator reaches, `fiscus causal inspect`/`verify` and `GET /api/causal`, each called `estimateCausalStudy` directly, so the same study could be read twenty times and every answer presented itself as the first. The module's own assumption line had already named the hazard: every act is assumed to have been recorded through this ledger, and an estimate produced outside it is not counted and cannot be. Every estimate in the product was produced outside it.
+
+**Why a read path writes.** Fiscus is read-only by default and `--apply` persists, and this does not breach that. An inferential act changes no routing, no budget, no provider configuration and none of the operator's data — it is an audit record of a report that has already been made, in the same category as an egress receipt, which is appended before the request it describes and whose failure stops that request. `reportCausalStudyEstimate`'s own docblock is explicit that reporting IS the act. Declining to record it would not leave the count unchanged; it would leave it wrong. The dashboard's "Read-only local status" boundary line stays true and a test asserts it still appears.
+
+**A broken chain is not extended.** If the stored acts no longer verify, the sequence a new act would take is already wrong, and appending would produce a chain that verifies forward from a forged start — a smaller look count wearing the appearance of an intact one. The report is still returned and already carries the right answer: `chainIntact` is false and the claim is withheld as `not_established` because the number of looks behind it is unknown. Withholding is the point; repairing would be the defect.
+
+**No plan is loaded, and that is not a gap being hidden.** A plan must be declared before the first act or it is not a plan, and no surface declares one, so the honest basis is `recorded_acts_only` and every report says so in as many words.
+
+**Evidence.** Ten tests, RED 0/10 against the committed tree and GREEN 10/10 after. Two drive the real surfaces — the HTTP endpoint and the packaged CLI — rather than treating a Store method as proof the lifecycle is wired. The load-bearing one is that a second look at grown evidence withholds the conclusion the first look supported: the first look supports `comparative_cost_quality_supported` and the second, after new units arrive, withholds it. A separate test pins the other half — re-reading unchanged evidence is a look that spends no budget — because a rule charging for deterministic re-reads would push operators away from looking, which is the opposite of what this is for.
+
+**What this does not establish.** It counts the looks that pass through this boundary and cannot count any other. `src/store/db.ts` still calls `estimateCausalStudy` directly inside `issueCausalStudyToKernel`, which is an issuance rather than a report, and `saveCausalAnalysis` still does too — that path cannot currently succeed for any input, which is a separate defect recorded here and not fixed. Nothing registers a pre-registered plan, so no family-wise GUARANTEE is available from any surface, only a union bound over the acts recorded. And the ledger is per-study: two studies asking the same underlying question are separate families and nothing here notices.
+
+
+## D-158 — the analysis-snapshot path could not succeed, and said so by naming the wrong thing
+**Decision:** a `CAUSAL_V2_ANALYSIS_DEFERRED` refusal that names the study, and `causalAnalysisSnapshotBasis`, which returns the snapshot list with the reason it is that length. `causal inspect` emits the basis instead of a bare list.
+
+**The counterexample.** `saveCausalAnalysis` refuses a version-1 protocol as inspect-only, then asks `causalStudyData` for the study — which returns null for anything that is not version 1, by design. Every input therefore fails, and a registered version-2 study failed with `causal study was not found`, about a study that exists, whose protocol is registered, which `causal inspect` describes in full and which every summary surface lists. The message named an absence that was not the reason, sending an operator to look for a missing row.
+
+**And the absence was then reported as a result.** Because no snapshot can be written, `latestSnapshots` on the CLI summary was always `[]`, which reads as "no analysis has been saved" when the truth is "no analysis can be saved by this build". Seventh instance of the class, and the first with two surfaces sharing one cause.
+
+**Three empty lists, three reasons.** Not registered, retained-and-inspect-only, and version-2-deferred all produce an empty list, and a test asserts all three reasons differ — collapsing them into one sentence would be the same defect at a lower resolution. The ordering inside `saveCausalAnalysis` matters for the same reason: a study that genuinely is not there must still say so, or fixing the message would only move the misdescription to the other case.
+
+**The capability is not removed.** Immutable analysis snapshots are useful and the table stays. What is unreachable is the version-1 analysis path for a version-2 study, which is a deferred projection rather than an abandoned feature. Deleting the method would have discarded a capability to make dead code go away.
+
+**Evidence.** Five tests, RED 2/5 against the committed tree — the version-2 naming and the basis — while the two controls that must keep working passed before and after, which is the correct split. One drives the packaged CLI rather than the Store method.
+
+**What this does not establish.** `available` is false for every study this build can hold, so nothing yet exercises a true branch; that arrives with the version-2 analysis projection and not before. `latestAnalysis` on the dashboard study rows is still a bare null with no basis beside it — the same defect on the other surface, recorded rather than fixed, because that payload contract change belongs with the projection work.
+
+
+## D-159 — a surrogate bridge carried a validity window that nothing read
+**Decision:** `BridgedMeasurementRequest` takes an optional `asOf`, and `assessBridgedMeasurementBacking` reads the declared `validTime` of the measurement model, the bridge, and the bridge's empirical reference measurement against it. `interval()` canonicalises a window at construction, so one that ends before it begins is refused.
+
+**The counterexample, measured against the committed tree.** `MeasurementModelInput` and `SurrogateBridgeInput` both declare an optional `validTime`. `measurementModel()` copied it onto the frozen model, `surrogateBridge()` carried it through a spread, and `grep validTime` found no other occurrence in the module. Nothing read it. A bridge whose declared validity window closed in 2020 resolved today, passed every check, and licensed exactly the same rung as one declared valid now. The field was a comment with a type.
+
+**Why a missing `asOf` withholds rather than ignores.** A bridge that declares a window and is then asked "does this still hold?" with no instant supplied has been asked a question it cannot answer. The permissive reading — treat the absent time as "now, presumably fine" — is how the field came to be decorative in the first place, and it is the same absence-as-result move this repository refuses everywhere else. So a time-bounded citation with no `asOf` ceilings at `proxy_unvalidated` and says why.
+
+**Declaring no window is a different claim from having an unknown one.** A model or bridge with no `validTime` is unbounded in time BY DECLARATION, and is unaffected with or without `asOf`. That is why nothing existing churns: `causalQualitySurrogateBridge` declares no window, and the control test asserts the unwindowed case reads identically before and after.
+
+**Three windows, not one.** The bridge can expire; the surrogate model can expire independently of it, and a model whose calibration window has closed is not made current by a bridge that is still open; and the empirical reference measurement can expire, which is the same failure as a reference that was never `validated` with a clock on it. Each lowers on its own and names itself in the reason.
+
+**Evidence.** Seven tests, RED 5/7 against the committed tree. The two that passed are the controls — the unwindowed case and the in-window case — which is the correct split. Full suite 1,690/1,686/0 fail.
+
+**What this does not establish.** No caller passes `asOf` yet, so the withholding branch is reachable by any consumer that supplies one and is currently exercised only by tests. Nothing decides what instant a given surface should ask about; that is a per-surface judgement and is not made here.
+
+
+## D-160 — the plan stopped bounding the family for the right reason and said the wrong one
+**Decision:** `summarizeInferenceMultiplicity` emits a distinct limitation per condition, the retained plan line no longer opens with `Basis:` when the plan no longer applies, and `recordInferentialActs` refuses an act with no slice identity.
+
+**What I expected to find, and did not.** `plannedInferenceActs` sizes the whole error budget from the plan's registered `sliceIds`, so reporting on an unregistered slice would spend budget from a denominator computed without it. I went looking for a family-wise guarantee surviving that. It is not there: `actsExceedPlan` already includes the unregistered-slice test, and the basis correctly falls to `recorded_acts_only`. The arithmetic was sound, and the test file records that it is — a test that goes looking for a hole and finds none has still established something worth keeping. The framing I started with was wrong and the commit says so.
+
+**What was actually wrong.** `actsExceedPlan` is the union of three distinct conditions — too many budgeted acts, too many looks, and an act on an unregistered slice — and exactly one message was emitted for all three: "The recorded acts exceeded the pre-registered plan". On a plan of four looks by two endpoints by one slice, with ONE act recorded on an unregistered slice, that is what the operator was told. Nothing was exceeded. One act against a plan of eight, and the reader was sent looking for extra looks that do not exist while the real reason was named nowhere. Same class as D-158: a correct refusal that names the wrong reason.
+
+**And the two basis lines contradicted each other.** The limitations carried "Basis: recorded acts only" and "Basis: a pre-registered plan of 4 look(s) x ..." one after the other, with nothing marking the second as the plan that no longer applies, and the stronger-sounding one came second.
+
+**The slice id was unvalidated at the reporting boundary.** `validatePlan` refuses an empty slice id inside a plan; `recordInferentialActs` accepted one. Since `actKey` includes the slice, a blank one is not a harmless default — it is an identity two unrelated acts can share.
+
+**Evidence.** Nine tests, RED 4/9. The five that passed are the control, the already-correct basis fall, the act still being recorded, the plan-less case, and the genuine-overrun case — which is what makes the four failures the defect rather than the fixture. Full suite 1,699/1,695/0 fail.
+
+**What this does not establish.** Still no surface registers a plan, so `pre_registered_plan` remains a basis only tests reach. The messages are now condition-specific; nothing checks that an operator reading them takes the right action.
+
+
+## D-161 — closing the effective-time hole opened a quieter one
+**Decision:** `DecisionCertificateBundleRead` gains `pendingInvalidationBy`, computed from the projection's `pendingIds`, alongside `invalidatedBy` and in the same object.
+
+**What changed upstream.** WP-R07 gave `RevocationProjection` an effective-time dimension. Before it, a revocation envelope declaring `effectiveAt: 2026-09-09` made its node read as fully revoked from the instant the node became known — treating knowledge time as effective time, the collapse this codebase exists to refuse. Known-but-not-yet-effective nodes now land in a separate `pendingIds` set.
+
+**What that cost, measured.** `readDecisionCertificateBundle` is one of only two consumers of a revocation projection in `src/`, and it read `revokedIds` alone. So a certificate resting on evidence with a withdrawal already booked moved from `status: 'invalidated', invalidatedBy: [source]` to `status: 'valid', invalidatedBy: []`, with the booked withdrawal appearing nowhere in the read. The old reading was wrong about WHEN; the new one was silent about WHETHER, and a reader could no longer tell a certificate with nothing against it from one already scheduled for withdrawal. Ninth instance of the absence-reported-as-a-result class, arriving by way of a mechanism built and left unwired — which is the other recurring class, so this is one defect standing in both.
+
+**The repair is disclosure, not re-breaking.** `status` stays `valid`, because at the instant asked it is valid and changing that would restore the error just fixed. `revoked` wins where both hold, so a node already withdrawn is not also listed as awaiting withdrawal.
+
+**Why the three kernel claim readers are untouched.** `Store.billingKernelClaims` and its two siblings are the other consumer, and `pendingIds` is unreachable from them: every node they serve is issued by Fiscus's own issuance path, which never attaches a revocation envelope, and an operator revocation goes through `appendRevocation`, which has no effective time and is effective when recorded. A test measures that rather than asserting it. A permanently-empty field there would repeat the unwired-mechanism defect in a new place.
+
+**Evidence.** Six tests, RED 4/6. The two that passed are the premise (the projection already held the fact) and the measured basis for the omission above. The containment test asserts the pending list against the invalidated list at the effective instant rather than against a list typed out by hand, so it cannot be wider or narrower than the withdrawal will actually reach. Full suite 1,721/1,717/0 fail.
+
+**What this does not establish.** Nothing renders `pendingInvalidationBy` yet — no CLI or dashboard surface reads a certificate bundle at all — so this closes the API-level silence and not a user-visible one. Whether an operator should be warned earlier than the effective instant is a product question this does not answer.
+
+
+## D-162 — the builder minted and signed rollups the receiver would refuse
+**Decision:** `buildRollupBody` and `buildEconomicRollupBody` run `validateRollupBody` before returning, and throw rather than return a body that fails it.
+
+**The disagreement, measured.** `validateRollupBody` refuses a project whose `spendOnRealizedUnitsUsd` exceeds its `costUsd`, and `team-server/src/server.ts` calls it on every arriving rollup and answers HTTP 400. The builders called it on nothing. So the sequence build, sign, POST minted a signed artifact carrying a contradiction, sent it across the network, and learned it was malformed from a remote 400 — with the developer's own key already committed to it.
+
+**At minting and not at sending.** The obvious repair is a check in the CLI push path just before `signRollup`. That leaves the builder still able to return a body no receiver will accept, so every future caller re-inherits the hole and the guard has to be remembered at each new call site. Refusing at construction means the malformed body never exists to be signed. A signature is a commitment; committing to a self-contradiction and retracting it on a 400 is worse than never committing.
+
+**Two tests changed construction route, and neither assertion moved.** `test/team-rollup.test.ts` used `buildRollupBody` as a convenient constructor for the very body it now refuses; it builds the candidate as a literal instead. `team-server/test/server.test.ts` did the same for its hostile-shape cases; it now mutates the projects after building and signs the result — which is a more faithful model of a client that never ran our builder at all, and is the only thing that test was ever about.
+
+**Not reachable from the CLI today, stated rather than implied.** `fiscus team push` derives its projects from `src/value/realization.ts`, where realized spend is a subset of total spend, so no user input reaches the violating state through that path. The guard is against an internal inconsistency — which is exactly the failure a signature would otherwise launder into an authenticated one. That is why it is asserted at the builder rather than through the CLI harness: a CLI test would have had to fabricate the state it claims to catch.
+
+**Evidence.** Six tests, RED 3/6. The three that passed are the premise (the receiver really does refuse this body) and two controls (a sound rollup and an explicitly partial one are minted unchanged). Root suite 1,727/1,723/0 fail, team-server 67/67.
+
+**What this does not establish.** It is an internal-consistency floor, not a claim the numbers are right. `coverage` remains the signer's own non-authoritative claim, combined conservatively by `combineRollupCoverage`.
+
+
+## D-163 — the publish gate checked one compilation domain of three, and CI ran dependency install hooks
+**Decision:** `prepublishOnly` runs `typecheck:all` plus team-server's own suite; every workflow install passes `--ignore-scripts`, enforced by `scripts/check-supply-chain.mjs`; both jobs that run `npm test` build explicitly.
+
+**The gate.** `prepublishOnly` was `npm run typecheck && npm test && npm run build`, and `npm run typecheck` is `tsc --noEmit` with no `-p`: it resolves the root tsconfig alone, whose own `exclude` carves out the browser app and which never mentions `team-server/`. The last gate before `npm publish` checked one domain of three. Not hypothetical: `team-server/` imports root source directly, and a rename in `src/team/` or `src/value/` has already reached CI twice with every root gate green — TS1294 at `31911cb`, sixteen TS2339/TS2353 errors at `c1f7ac5`.
+
+**The install.** Every `npm ci` ran without `--ignore-scripts`, so a dependency's `preinstall`/`install`/`postinstall` would execute unattended in CI with the job's token in the environment. Neither lockfile carries one today; the gap is the absence of a barrier against a future one.
+
+**Where the flag rule went, and why not into a workflow-shaped test.** `scripts/check-supply-chain.mjs` already owns where a workflow's bytes come from. What an install may execute is that question's other half, it reads every workflow file rather than one filename, and a second sweep in a test would have been two mechanisms answering one question and drifting apart the day a third workflow appears. The rule covers `npm install` too, including the packed-tarball install the lockfile rule deliberately exempts: that exemption is about provenance, and this rule is about execution — and those hooks would belong to the very artifact CI is examining.
+
+**The consequence needed its own coverage.** Removing the automatic `prepare` build means each job that runs `npm test` must produce `dist/` itself, in that order. Explicit even though `pretest` currently runs the full build anyway: it has been silently narrowed to `--web` once already, and a job that depends on whichever definition it currently carries is one edit away from testing a stale tree. The build count is unchanged — `prepare` built at install, `pretest` built again.
+
+**A test caught its own vacuity.** The lockfile rule's counterexample replaced the literal `- run: npm ci`, which stopped matching once the flag was part of that line, so the audit saw an unmutated file and the assertion failed rather than passing on nothing. That is the counterexample discipline in `test/supply-chain-assurance.test.ts` working exactly as designed, and it is why that file was the right home for the new rule.
+
+**Evidence.** RED verified in this tree rather than taken from a lane report: 4 of 12 failing across the two gate files, with the eight passing ones being controls and vacuity checks; then 1 of 13 for the auditor rule. Root suite 1,738/1,734/0 fail, team-server 67/67, `npm run typecheck:all` clean across all three domains, `npm run verify:supply-chain` reports no violations.
+
+**What this does not establish.** `prepublishOnly` is pinned by composition, not by execution: the test reads `package.json` as data and expands `npm run` indirection, because a functional run would make the root suite depend on a `team-server/node_modules` that root `npm ci` does not install. And `--ignore-scripts` protects CI; it says nothing about a developer's own machine, where `npm ci` still runs whatever the tree carries.
+
+
+## D-164 — length is not position: equal-length windows can describe different months
+**Decision:** `WindowCoverage` gains `overlap`, `overlapFrom` and `overlapTo` — the intersection of every contributing observation window — and the note states it.
+
+**What D-102 left.** That entry gave a team total its windows: how many, their shortest and longest length, and the span they fall inside. Every one of those fields is about LENGTH. `uniform` answers only whether there is one window. Nothing asked whether the windows intersect.
+
+**The counterexample.** Two rollups both declaring thirty days, one in January and one in June, produced: "2 different observation windows, the shortest 30 days and the longest 30 days, spanning 2026-01-01 to 2026-06-30". The length comparison finds nothing to report because both are 30, and "spanning" names six months of which sixty days were observed — the four in the middle appear as span and were seen by nobody. The reader is told the totals "do not describe any single window", which is true and far weaker than the fact: no instant exists at which both machines were being observed at all. `totalCostUsd` sums two separate observations of the world, and the cost-weighted `avgRoiIndex` beside it weights January against June as one population.
+
+**An intersection, not a pairwise check.** A total is summed across every contributor at once, so two of three windows agreeing is not an agreement; a report saying `overlap: true` because some pair agreed would name an agreement that does not exist. Half-open, so windows that merely touch at an endpoint share nothing — a zero-length overlap is an artefact of the boundary, not a period anybody observed. The empty set reports `false` for the same reason it already reports `uniform: false`: nothing is not disjoint, it is nothing.
+
+**The span fields are untouched.** `earliestFrom` and `latestTo` were never wrong. The union is a real fact that was being asked to carry a meaning it does not have, and the repair is to put the intersection beside it, not to delete it.
+
+**Evidence.** Seven tests, RED 6/7; the one that passed is the control asserting the span fields still read as they did. team-server suite 74/74, team-server typecheck clean.
+
+**What this does not establish.** `buildWindowCoverage` is pure and takes the windows it is given, so this exercises the reporting and not the SQL that collects them; `PgRollupStore` remains untested here for the reason recorded throughout this file — there is no live Postgres in this environment, and faking one would be inventing the coverage. And it does not decide whether summing across disjoint windows is ever the right thing to look at. It makes the reader able to see that it happened.
+
+
+## D-165 — the causal study list dropped studies silently and gave every row a null that meant something else
+**Decision:** `CausalStudySummary` carries `analysisBasis`, `CausalPayload` carries `studiesOmitted`, and both branches of `/api/causal` emit it.
+
+**Two silences on one payload, and the class D-158 already closed on the CLI.**
+
+**The list drops rows.** `causalStudySummaries()` filters version-2 protocols out of its result, deliberately — their public projection is deferred, and inventing one would be the worse error — and it did so silently. With ONLY version-2 studies registered, the response says the projection is deferred in as many words. Add one version-1 study and that sentence is replaced by "Local randomized-study evidence only", `studies` has a single row, and the registered version-2 studies are reported nowhere at all. A list of one is then indistinguishable from a store that holds exactly one study. `studiesOmitted` gives the count and the reason, and is present on the no-study branch too: a field a consumer sees only when a study exists is a field it cannot read, and that branch is exactly where a version-2-only Store lands — the case with the most to omit.
+
+**Every row's `latestAnalysis: null` meant something it did not say.** For every row this build can produce, the list holds a retained version-1 study, and retained version-1 evidence is inspect-only, so no analysis snapshot CAN be written. Null reads as "none has been saved"; the truth is "none can be". D-158 separated those on `fiscus causal inspect` and recorded this surface as open. `analysisBasis` closes it.
+
+**On the row, not on the response.** The reason is per study — not registered, version-1 inspect-only, and version-2 deferred are three different sentences — and this repository's first rule is that a figure carries its basis, not that a basis exists somewhere else in the same document. Putting it on the summary also means `causal status` gets it without a second mechanism.
+
+**The field is not a restatement of `latestAnalysis === null`.** `test/causal-store.test.ts` holds the case that shows it: a retained snapshot EXISTS on that study and no new one can be written, so the value is present and the basis is still `available: false`.
+
+**Evidence.** Five tests, RED 5/5 verified by stashing the source and re-running. The first RED attempt was wrong and is worth recording: three of its failures were fixture errors, because `registerCausalProtocol` refuses a version-1 protocol outright and a version-1 row can only exist as retained legacy data — which is the same fact `analysisBasis` exists to state. A RED that fails for the wrong reason proves nothing, and this one had to be redone. Root suite 1,743/1,739/0 fail, both typecheck domains clean, payload contract regenerated.
+
+**What this does not establish.** Version-2 studies are still not inspectable; the projection is still deferred and the rows are still omitted. What changed is that the omission is now stated with its size. And `analysisBasis.available` is false for every study this build can hold, so nothing yet exercises a true branch — that arrives with the version-2 analysis projection, exactly as D-158 recorded.
+
+
+## D-166 — WP-I06: nothing read a documented command against the CLI that has to run it
+**Decision:** `test/documentation-commands.test.ts` holds every `fiscus <action>`, flag, `npm run` script and port named inside a code fence or inline span in `README.md` and `docs/**` to the CLI's own dispatch, `package.json` and `DEFAULT_CONFIG`.
+
+**Why documentation is a control surface.** `docs/GETTING-STARTED.md` is a sequence of commands somebody types before they have any way to tell a live command from a stale one. A dead command there is the same failure this repository refuses everywhere else — a claim with no basis — except that it fails in the reader's terminal instead of in a number. Nothing in the suite read the two against each other, so they could drift silently and had no reason not to.
+
+**The measurement, which found almost nothing in the docs.** 244 invocations across README and the 25 operator-facing files in `docs/`, covering 40 distinct commands and 49 distinct flags. Every flag occurs in `src/`, every `npm run` script resolves, every documented port matches `DEFAULT_CONFIG`, and two command names did not resolve. So this is a gate over a property that already held rather than a repair of a broken one — the same shape as D-156's literal-rung sweep and worth the same amount: it cannot drift back without failing.
+
+**Two unresolved names, handled differently on purpose.** `fiscus lab complexity` is introduced by its own document under "Proposed product boundary" and listed as future work, so the text already tells the reader it does not exist; it is allowlisted with that reason recorded, and a meta-test checks the cited document really is where it appears. `fiscus lift` was set in code formatting inside two sentences about an open item, reading as though the command were there to hook into; those two lines are corrected instead. That sets the rule the whole scope rests on: **code formatting means "type this", so a command that does not exist must not be set as code even in a sentence saying it does not exist.**
+
+**Scope is a boundary, not an exception list.** Only fenced blocks and inline spans are read, so "The fiscus for your AI spend" in `DESIGN-DIRECTION.md` and a device mockup's URL bar on the landing page stay out without teaching the sweep to ignore particular phrases — which is how an allowlist grows until it means nothing. `docs/RELEASE-GATE.md` is excluded because it is a commit-bound record of what was observed at particular candidate SHAs; its deliberately isolated ports (`--port 18390`) are observations, not instructions, and holding a record to today's defaults would be asking it to change.
+
+**The sweep found a defect in itself, and that is the part worth carrying.** Its first working version matched ZERO fenced blocks in `README.md`. That file has CRLF line endings, and the fence pattern required a bare `\n` after the language tag, so the language tag consumed `bash` and the newline was then asked to match `\r`. The sweep reported no violations over the repository's most important operator document without having read a line of it — the absence-reported-as-a-result class, occurring inside the tool built to catch it, which is the twelfth instance and the second this round to be created rather than merely found. The only thing that noticed was the invocation-count assertion in the vacuity test. **A sweep without a corpus-size assertion is indistinguishable from a sweep that matches nothing**, and that assertion is now backed by an explicit README-in-scope check as well.
+
+**Evidence.** Seven tests. RED re-verified by stashing the two doc corrections: 1 of 7 fails, naming both files. GREEN 7/7. Root suite 1,750/1,746/0 fail, root typecheck clean.
+
+**What this does not establish.** That any documented command WORKS — only that its name reaches a dispatch case and its flags exist somewhere in `src/`. Nothing is executed; a flag is not checked against the specific command it is documented under, because the CLI does not declare its flags per action and inventing that mapping here would be a second opinion about what the CLI accepts rather than a reading of it; and nothing checks that output shown beside a command is what that command still prints. Those are the rest of WP-I06 and are not claimed.
+
+
+## D-167 — WP-I03: the parity map's coverage fraction was computed over a population it chose
+**Decision:** `test/dashboard-parity-population.test.ts` holds `src/dashboard/web/app/core/registry.ts` to `src/cli.ts`'s own dispatch, six missing capability rows are added, and `Coverage` gains a fourth state, `not_applicable`, which must carry a `coverageNote`.
+
+**The registry made the claim and nothing checked it.** The file opens by arguing that "a claim like that is worth nothing unless it is checkable, and this product's whole argument is that important claims should be inspectable — so parity is a data structure, not a promise in a README", and closes the same docblock with "Adding a CLI verb without adding its row is the one change this file exists to make awkward." It was not awkward. Nothing in the suite read the two files against each other, so a verb could be added with no row and the parity denominator would simply not count it.
+
+**The measurement.** `src/cli.ts` dispatches 45 `switch` groups, 43 of which are capabilities (`help` and `version` are not). Six reached a `case` with no row here: `start`, `init`, `economic`/`economics`, `backup`, `restore`, `diagnostics`/`diagnostic`. The System view renders "N of 47 capabilities" from `paritySummary()`, and 47 was the size of the list rather than the size of the CLI. The converse was measured too and is clean: every registry row's verb does reach a dispatch case, so there are no phantom rows — the error was omission only. It is gated anyway rather than merely reported, because a row for a renamed or removed command would go on being counted in the denominator and rendered with a command nobody can run.
+
+**The error ran in both directions at once, which is why it is not a rounding problem.** `backup`, `restore`, `diagnostics` and `init` have no GUI surface, so leaving them out made the parity fraction look BETTER than the truth — a capability with no GUI cannot drag a ratio down if it is not in the denominator. `economic` is surfaced by the modern app (`/api/economic` is a declared route), so leaving it out made the fraction look worse. A denominator wrong in both directions is a figure with no basis, which is the one thing this repository refuses.
+
+**`not_applicable` is a claim about the world, not a fourth way of saying `planned`.** `fiscus start` is the command that serves the GUI; by the time there is a page to click it has already run. Filing it `planned` would assert a surface that is not coming, and `full` or `partial` would be worse. So the state says the GUI cannot offer it and is REQUIRED to say why — `coverageNote` is mandatory there and refused everywhere else, so the state cannot become the place anything awkward gets filed. The note travels into the GUI in the same table cell as the tag, because a row that says the GUI cannot do something without saying why is the assertion without its basis. It is counted in its own summary card rather than folded into "command line only": the GUI structurally not offering something is not a gap in the GUI, and `total` now partitions across four states instead of three.
+
+**Each of the six states was a separate reading of the command, not a default.** `cmdRestore` refuses a source that is the active database and writes nothing without `--apply`, so `local` — preview then commit — is what it already does; `cmdBackup` writes only where `--out` names, so `local` as well. `cmdDiagnostics` prints and writes a bundle only when asked, which is exactly `export`'s shape, so it takes `export`'s `read`. `cmdEconomic` reads. **`cmdInit` is the one that does not fit, and it is recorded rather than smoothed over:** it calls `saveConfig` and the file is on disk afterwards, with no preview and no `--apply` — the only command in this list that persists that way, and in tension with the hard rule that reading is the default. It is filed `local`, which is the tier any future GUI surface must honour; changing what `fiscus init` does at the CLI is a product decision and is not made here.
+
+**The drawer was deliberately NOT taught the new state, and the alternative to building it was not silence.** `core/actions.ts` has a fallback blocked reason reading "This does not have a screen yet", which is false for `not_applicable`. Adding a branch for the new state would have been a mechanism with no caller -- `actionCard()` is invoked with explicit ids in the six views and none of the six commands added here is among them -- which is this program's second recurring defect class. Instead the eighth test refuses an action card for any `not_applicable` capability, so the day a view surfaces one the wrong message is a failing test rather than a sentence an operator reads and believes. The note itself is not hidden: it renders in the parity table cell beside the state, which every capability reaches.
+
+**Evidence.** Eight tests. RED re-verified in this tree by reverting `registry.ts` alone: the population test names all six missing groups. GREEN 8/8. Root suite and both other typecheck domains clean; the browser-app pass is the one that matters here and is run explicitly.
+
+**What this does not establish.** That any row's `coverage` value is CORRECT — only that every CLI capability has a row, that a row claiming `not_applicable` explains itself, and that no row claims a GUI surface it does not have. Whether `economic` is really `partial` rather than `full` is a judgement about the GUI's economic surface that no test makes, and the same is true of every other row: the parity map remains a set of honest human claims, now over the right population. Nothing checks that a row's `command` string is spelled the way the CLI would accept it beyond its first word, and nothing renders the GUI to confirm the surface a `full` row claims.
+
+
+## D-168 — WP-D05: a claim could cite a measurement model none of its evidence carried
+**Decision:** `assertClaimWithinItsEvidence` refuses a claim whose `measurementModelRef` is not declared by at least one cited Evidence, and `src/causal/epistemic.ts`'s outcome record now declares the quality model both its claims cite.
+
+**What the kernel already did, and what it did not.** `claim()` refuses a null `measurementModelRef` once `profile.measurement` rises above `proxy_unvalidated`. That checks a reference was WRITTEN. `src/measurement/registry.ts` states exactly what is wrong with stopping there — "naming a model and having one were the same act" — and provides `assessMeasurementBacking` to resolve one. It had one production caller, inside the causal adapter, against a registry that adapter assembles for itself. The kernel that persists every claim in the product resolved nothing, so `measurementModelRef: 'no-such-model'` and a real construct-matching reference were indistinguishable to every reader of a stored claim.
+
+**Why the fix is not "resolve it in `claim()`", which is what the frontier had assumed.** There is no repository-wide registry of Fiscus's measurement models, and there cannot straightforwardly be one. The only reference the product actually writes is `causal:quality-metric:<metric>@<protocolHash>`, which names a model SYNTHESIZED from a stored protocol; a static list could never contain it, and a resolver that reaches the protocol table would put the kernel's pure constructor behind a database. That is a finding about the frontier item rather than a reason not to do it.
+
+**The rule that needs no registry, and that the boundary was already making four times over.** `assertClaimWithinItsEvidence` already refuses a claim declaring more integrity, more authenticity or more coverage than the weakest evidence it cites, and a grain or scope no cited evidence carries. A measurement backing is the same kind of field and was the one such field unchecked. So the reference must be carried by at least one cited Evidence. Decidable from what the ledger already stores; no registry; and it moves the citation from an assertion made at the claim layer to one some record of the measurement declared.
+
+**This is not the fourth ceiling that method deliberately refuses.** The same docblock says it stops at three axes on purpose: `monetaryBasis` is not a ladder, `mergeClaimProfiles` refuses to rank `billed` against `allocated`, and a claim whose basis differs from its evidence is often a legitimate derivation — allocation is exactly that — so refusing it would need the derivation registry rather than a comparison. That reasoning was checked against this change and does not apply. A model reference is an identity, not a rung: there is no ordering to invent and no derivation transforms one model reference into another. A containment check, not a ceiling; the `monetaryBasis` question stays where it was, in `BASIS_DERIVATIONS`, still empty.
+
+**At least one cited evidence, deliberately, not all of them.** The causal claims cite the assignment record and the outcome record, and only the outcome record observes the quality metric. Requiring every cited evidence to carry the reference would force the assignment record to declare a quality model it has nothing to do with — the same laundering pointed the other way.
+
+**The production instance, which is what makes this a repair rather than a gate over a property that held.** Both causal claims set `measurementModelRef` to the protocol's quality model while BOTH cited evidence records carried `measurementModelRef: null`. The outcome record is the observation of the pre-registered metric, so it now declares the model it was collected under; the assignment record keeps `null`.
+
+**One existing test file's fixture was refused, and its assertions were not touched.** `test/negative-claim-contract.test.ts` asserts `measurement: 'validated'`, so its claim must name a model, and its completeness evidence named none. The incident feed is what `model:ops-v1` measures, so the evidence declares it. Nothing about the negative contract depends on that field; leaving it null would have meant every assertion in the file was reached through a different refusal — which is the failure mode, not the fix.
+
+**Evidence.** Eight tests. RED re-verified against the unfixed tree: 3 of 8 fail — both gate counterexamples and the production instance. GREEN 8/8. Full suite 1,766 / 1,762 / 0 fail / 4 skipped. Root typecheck clean.
+
+**What this does not establish.** That the reference RESOLVES to a registered model. The evidence can name nothing just as the claim could; what is closed is the claim inventing a backing its evidence never made. Registry resolution at a boundary is still open, and so is the measurement AXIS: `Evidence` records `measurementModelRef` but no validation strength, so there is no evidence-side ceiling for `profile.measurement` the way there is for the other three. Nothing checks that a model's procedure measures the construct written on it, which `registry.ts` already says is not mechanically checkable.
+
+
+## D-169 — the program's own records were two closures stale on its highest-priority audit item
+**Decision:** `AUDIT-REGISTER.md` and `ACTIVE-EXECUTION.md` each carry one fixed, visible line naming the boundaries still classified `unmigrated_authority`, and `test/program-record-issuance-classes.test.ts` checks both against `src/epistemic/issuance-map.ts`.
+
+**The measurement.** The register said of AII-036 that "three boundaries are named `unmigrated_authority`" and its residual table named them: `causal.qualification`, `causal.estimate`, `decision.certificate`. `ACTIVE-EXECUTION.md` carried the same three as frontier item 4, ordered by an argument that two of them were reachable by the product. In the map, the two causal boundaries have been `kernel_primitive` since `causal.issuance` was written — their own map notes say when and why — and one boundary is in that class, the one nothing reaches. The register also said "thirteen of fourteen are in the CLI/team-server import closure"; the map now declares seventeen boundaries, fifteen of them reached.
+
+**Why this is a defect and not untidiness.** Frontier item 4 was an instruction to the next executor to do work that was already done, with a priority order derived from a fact that had stopped being true. This program's own directive says to complete the frontier rather than audit it; a frontier that names closed work spends the round on nothing. It was found only because the item was picked up and the map read before starting.
+
+**The asymmetry that produced it, which is general.** The map is gated: `test/issuance-map.test.ts` reads it against the source tree and walks the import graph from the CLI entry point, so a boundary that changes class or gains a consumer fails until the declaration is corrected. The prose was gated by nothing. **When one half of a paired description moves under a test and the other does not, the ungated half is where the falsehood accumulates** — and here the ungated half is the document that decides what gets worked on next.
+
+**A sweep was written first, worked, and was rejected.** Its rule was: a state-of-the-world record may not name a boundary within four hundred characters of the class word unless the map agrees. It named all four real violations exactly. It then failed on the CORRECTED text, because a record that repairs a misclassification has to say which boundaries moved, and "X was `unmigrated_authority` and is now `kernel_primitive`" is a true sentence indistinguishable at that distance from the false one. Teaching it tense would be building a natural-language parser to avoid drawing a line; widening the window until the correction passed would have left it unable to catch the original. So the fact is stated once per record in a fixed form and that is what is checked, leaving the prose free to explain the history.
+
+**Visible rather than a hidden marker.** The declaration renders in the document a person reads. A machine-readable comment invisible to the reader would let the gated assertion and the human-visible account drift apart — the same defect wearing a different hat.
+
+**Totals are fixed by removing them.** The stale "thirteen of fourteen" is not replaced with a checked count; both records now state no total and name the map as the source. A number nobody asserts cannot go stale, and a test that checked every number in prose would be brittle in proportion to how well it worked.
+
+**Evidence.** Three tests. RED re-verified by restoring the register's original set — `causal.qualification`, `causal.estimate`, `decision.certificate` — which fails naming the file and the disagreement. GREEN 3/3.
+
+**What this does not establish.** That the records are otherwise accurate. One fact about one authority class is now checked in two files; every other sentence in them is prose that nothing reads. It also does not close AII-036: `decision.certificate` remains `unmigrated_authority`, and what it needs is recorded below rather than done here.
+
+**What the correction revealed, and why it was not then done.** With the two causal boundaries closed, AII-036's issuance remainder, AII-025's missing gate and AII-026's unrouted proposals are all the same piece of work: **a product path that consumes a decision certificate.** It is not a missing line. The gate that path would enforce requires `causality: 'randomized'` for a `changes_spend` consequence, and D-153 moved Fiscus's own claims to `proxy_unvalidated` observational because that is what their evidence earns — so wiring it as written would refuse every budget recommendation the product makes. The executable question is which consequence class an advisory surface belongs to, and whether an advisory that changes no spend by itself is `changes_spend` at all. That changes what the product refuses to print, which is a decision for the owner rather than for an executor, and it is flagged in `ACTIVE-EXECUTION.md` rather than taken.
+
+
+## D-170 — WP-I05: pruning the ledger left no trace, so a deleted history read as one that never happened
+**Decision:** `Store.prune` and `pruneProposals` record the boundary they applied into a new `retention_prunes` table, `Store.retentionFloor()` reports it as a three-valued fact, and `buildGuide` reads it before turning a request count into a statement about whether metering ever happened.
+
+**What `fiscus prune` did.** One `DELETE FROM requests WHERE ts_epoch_ms < ?`, a `VACUUM`, and a row count printed once and then gone. Nothing durable recorded that a boundary had ever been applied. Retention defaults to 180 days and the operator can set it to anything, so the deletion is policy working as intended — the defect is that afterwards nothing could tell a period Fiscus never observed from a period Fiscus observed and then deleted.
+
+**The operator-facing instance, and it is the sharpest one this program has found.** `GuideFacts.requestsAllTime` comes from `store.summary(0, now)`, and `buildGuide` read it as `f.requestsAllTime > 0 ? "N requests metered" : "no traffic yet"`, setting the metering step's `done` from the same comparison. Prune a ledger past every row it holds and `fiscus guide` — and `/api/guide`, which builds from the same function — told the operator they had **no traffic yet** and sent them off to configure a proxy they configured months ago. The most confident thing the surface can say arrived exactly when Fiscus knew least. **Thirteenth instance of the class**, and a new shape of it: not an empty list rendered as a clean bill, but a journey step marked NOT DONE because the evidence that it was done had been deleted.
+
+**Three states, and the third is the one that matters.** A prune now writes its boundary, its row count and its time; the retention floor is the newest boundary ever applied. A ledger with no such row reports `requestsPrunedBeforeMs: null`, and that means **no prune is on record** — not "nothing was pruned". Every ledger pruned before this packet is in exactly that state. Backfilling a boundary from the oldest surviving row would be inventing provenance, which this repository's second hard rule forbids by name, so the null stays null and the guide's reading of it is left exactly as it was: an honest "no traffic yet", because softening that into a hedge would trade one wrong answer for another.
+
+**A zero-row prune is still recorded.** It applied a boundary. That it deleted nothing on that run is a fact about the data, not about the policy in force, and a later reader still needs to know the boundary was applied. Recorded per prune rather than per stream for the same reason, and the floor is `MAX(before_ms)`, so an older boundary applied later cannot move the floor backwards — the newer deletion has already happened.
+
+**`done` moves, and that is the substantive behaviour change.** The metering step is now done if rows survived **or** if retention removed any, because metering demonstrably happened either way. The state line says which: a surviving count carries the boundary and the note that it is not a count of everything metered; an empty ledger behind a boundary says the rows were metered and then deleted, and that the record did not survive rather than the traffic.
+
+**No refuting completeness witness is emitted, and that is deliberate.** AII-002's remainder asks for one, and a prune is the first thing in this repository that could honestly produce it: it establishes that a source did NOT completely cover a period, which is the `refuted` state `assessCompleteness` already handles and nothing has ever produced. It is not emitted because a completeness witness exists to qualify a NEGATIVE CLAIM, and no negative claim is made over the request stream — `src/epistemic/claim.ts`'s `negativeClaim` has no production caller anywhere. Emitting one would be another mechanism with no consumer, which is this program's other recurring class. The disclosure went where the reading actually happens instead. **That `negativeClaim` has no production caller at all is itself worth recording, since AII-002's row reads as though the contract were in use; what is in use is `src/measurement/completeness.ts`, a different mechanism with the same subject.**
+
+**Evidence.** Eight tests. RED re-verified against the unfixed tree: 7 of 8 fail. The one that passed is the preserved case — a genuinely empty ledger with no prune on record still reads "no traffic yet" — and it is in the file precisely so the fix cannot be obtained by softening every empty answer. GREEN 8/8. All three typecheck domains clean.
+
+**One defect was created and caught during implementation, and it is the same class as always.** The SQL comment introducing the new table was written with backticked identifiers inside a template literal, which terminated the string; `node --test` reported it as a TypeScript syntax error in `schema.ts` rather than as anything to do with SQL. Caught immediately because the tests ran. Worth one line: **prose written inside a template literal is code.**
+
+**What this does not establish.** That every surface reading `requests` discloses truncation. This covers the prune record, the floor, and the guide — the one place that turns a count into a claim about whether something ever happened. `fiscus today/week/month`, `report`, `usage` and `export` still print window totals with no coverage line; their windows are recent enough that the default 180-day floor rarely reaches them, which is a reason to do them next and not a reason they are correct. Proposal prunes are recorded but no surface reads their floor. And nothing here reduces what pruning deletes or makes it recoverable: the record says the rows are gone, which is the honest thing to say about them.
+
+
+## D-171 — WP-I05: the window surfaces printed totals over a range the ledger no longer covers
+**Decision:** `Store.windowCoverage(startMs)` answers whether a window reaches behind the recorded retention boundary, `src/cli/retention.ts` holds the one sentence that says so, and `fiscus today/week/month`, `fiscus sources` and `fiscus export` read it.
+
+**The remainder D-170 named, and why it was worth taking next.** D-170 recorded the boundary and taught `fiscus guide` to read it, because that is the one surface turning a count into a claim about whether something ever happened. It left the window surfaces and said so. `fiscus sources --all` sets its window start to 0 and prints the words "all time"; `fiscus export --all` does the same and emits every surviving row; `export --days N` accepts up to 3650. "All time" over a pruned ledger is the ledger's all time, not the world's.
+
+**The disclosure sits on the window path, not on the commands that happen to be long.** `today`/`week`/`month` are bounded to a month and the default 180-day retention cannot reach them — but retention is operator configurable and nothing stops a seven-day policy, so all three read the coverage. A rule that holds only for the current default is a rule that breaks silently when the default is changed by the person it protects.
+
+**Truncation is a comparison, and its edge is deliberate.** A window is truncated when a boundary is on record AND the window starts STRICTLY before it. `prune` deletes rows with `ts_epoch_ms < before_ms`, so the boundary instant itself survived and a window starting exactly there is intact. Erring the safe way would put a warning on every report forever, and a disclosure that always appears is noise that stops being read — which is a way of losing the information rather than a conservative way of keeping it. A test holds the untruncated case for exactly that reason.
+
+**Not truncated is still not complete.** `windowCoverage` returns `truncated` and `prunedBeforeMs` together, and the second carries the meaning: null is no prune ON RECORD, not nothing pruned. The CLI says nothing extra in that state rather than asserting coverage it has not got, and `retentionNotice` writes that silence once so three commands cannot each decide it differently.
+
+**The export notice goes to stderr, and that is load-bearing rather than tidy.** `fiscus export` writes CSV or JSON to stdout for a pipe or a redirect. A disclosure line on stdout would corrupt every consumer of the export it exists to protect — the fix would break the thing it was fixing. It goes where `--out`'s own confirmation already goes, and a test parses stdout to prove the data stream stayed clean.
+
+**Evidence.** Six tests, three unit and three driving the real CLI through `bin/fiscus.mjs` against an isolated `FISCUS_DB`. RED re-verified against the unfixed tree: 5 of 6 fail; the one that passed is the untruncated case, which is in the file so the fix cannot be obtained by warning on everything. GREEN 6/6. All three typecheck domains clean.
+
+**What this does not establish.** That the dashboard discloses truncation: `/api/overview` and the browser views still read window summaries with no coverage field, which is a payload-contract change across three compilation domains and is not made here. `fiscus report`, `usage` and the value surfaces read their own windows and are not covered. Nor does any of this say anything about traffic that never reached Fiscus — that is the separate and permanent limit of a local meter, and a retained window is not thereby a complete one.
+
+
+## D-172 — the build-race failure is diagnosed and closed: a build rewrote source files a concurrent build was compiling
+**Decision:** `scripts/build.mjs` and `scripts/generate-dashboard-payload-contract.mjs` write their three generated files into `src/` only when the bytes would actually change.
+
+**The failure, captured at last.** `test/build-race.test.ts`'s "concurrent builds keep the compiled CLI runnable throughout publication" has failed intermittently since it was written. D-155 fixed two real defects around it; a third instance was observed, could not be reproduced, and was recorded as an OPEN finding with no diagnosis because the output scrolled away every time — three further full local runs this session did not reproduce it either. It then reproduced on CI at `cc8ef35`, on `test (windows-latest)` alone, with the message kept:
+
+```
+AssertionError: build failed: browser app
+2 !== 0    at test/build-race.test.ts:94
+```
+
+One of the two concurrent builders exited 2 while compiling the browser app.
+
+**The mechanism.** Each build compiles into its own private staging directory, so two builders never write the same OUTPUT. They share their INPUT, and three of those inputs are GENERATED INTO `src/`: `syncSharedDashboardContract()` copies `src/dashboard/contracts.ts` over `generated-contract.ts`, and `generate-dashboard-payload-contract.mjs` writes `generated-payload-contract.ts` and `generated-types.ts`. That runs under the publication lock, which serializes the two WRITES against each other — and not against the other builder's `tsc`, which reads the same files holding no lock at all, because compiling deliberately holds none. So builder B rewrites a source file while builder A's browser-app `tsc` has it open. On Windows that is a sharing violation or a truncated read; the identical window exists on POSIX and is far more forgiving, which is exactly why it failed on one runner out of three and stayed invisible locally.
+
+**The fix is that the write was never necessary.** Both builders derive byte-identical content from the same sources — that is what "generated" means. Writing bytes that are already present is a no-op semantically and is not a no-op on the filesystem. All three writers now compare first. The race closes for every case where the source has not moved, which is every concurrent build of one tree, and the build gets marginally faster as a side effect rather than as the point.
+
+**Why the lock was not simply extended over the compile instead.** A build holds the publication lock for tens of seconds, and every process that spawns `bin/fiscus.mjs` queues behind it as a reader — that is what made `test/fiscus-home-cli.test.ts` time out at its own 180-second budget and report the wrong thing entirely, recorded in `test/support/buildWorkspace.ts`. Serializing whole compiles would have re-created that at a larger scale to fix a window that can be removed outright.
+
+**What this does NOT fix, stated rather than implied.** A build running while somebody EDITS `src/dashboard/shared-types.ts` still rewrites the generated files, and a concurrent compile can still read one mid-write. That window is real and remains. `sourceFingerprint` already refuses to PUBLISH a mixed source generation, so the outcome there is a refusal rather than a corrupt artifact — but the build FAILURE it does not prevent is still possible. The claim is deliberately narrower than "the race is gone": **a build no longer perturbs the source tree when nothing has changed**, which is the case that was failing.
+
+**Evidence.** Three tests. RED re-verified against the unfixed tree: 2 of 3 fail, including one that runs the real `scripts/build.mjs --web` twice and reads the mtimes. The third — that a genuinely drifted generated file IS rewritten — passes before and after, and is in the file because the fix could otherwise have been "never write". GREEN 3/3, and `test/build-race.test.ts` 9/9 locally. Full suite and all three typecheck domains clean.
+
+**The reason it took this long is worth keeping.** Every earlier attempt reproduced it locally, on a machine where the forgiving filesystem hides it, and treated a red run as load. It was diagnosed the moment the failure landed somewhere the output was retained. `ACTIVE-EXECUTION.md`'s rule — a red run is a finding, and must also be READ — is what turned this from noise into a defect, and CI's retained logs are what made the reading possible.
+
+
+## D-173 — a deletion restored a money claim the surviving evidence refutes
+**Decision:** a reconciliation reads the recorded retention boundary alongside the request rows, and a period that lost rows to retention classifies its residual as `unknown_local_total_truncated_by_retention` rather than as an upper bound on off-path spend.
+
+**The counterexample, measured before it was written down.** A provider reported $10.00 over two days. Fiscus had metered $6.00 on each, so the residual was **-$2.00** and the run said `none_local_estimate_exceeds_provider`: the local rate-card estimate exceeds everything the provider billed on this scope, so no upper bound on off-path spend survives. That is the alarming, honest state D-068 exists to make visible. Then `fiscus prune` deleted the first day's request on the operator's own retention policy. The same reconciliation, over the same period, against the same provider report, now said **+$4.00** and `upper_bound_conditional`. A deletion had restored a bound the evidence refutes and re-labelled $6.00 of Fiscus's own metered traffic as spend the provider charged for and Fiscus never saw. Nothing anywhere in the run mentioned retention.
+
+**Why the arithmetic does it.** With P the provider total, L what Fiscus metered on the scope, T the true billed cost of on-path traffic and O of off-path: `P = T + O`, `R = P - L = O + (T - L)`, so `O <= R` holds exactly when `L <= T`. Retention changes none of P, T or O. It changes what can be COMPUTED for L: the surviving ledger yields `L' = L - D` for a deleted on-path amount `D >= 0` that no surviving row records, so the computed residual is `R' = R + D`.
+
+**The rule that follows is asymmetric, and the asymmetry is the whole fix.** `R' < 0` implies `R = R' - D <= R' < 0`, so a negative residual still establishes `L > T` -- truncation can only HIDE a refutation, never manufacture one, and refusing it under truncation would discard a sound conclusion as caution. `R' >= 0` implies nothing about the sign of R, because D is unknown. So the upper bound is not established and the third state is a REFUSAL TO CLASSIFY rather than a weaker classification. A test holds the surviving refutation for exactly that reason: the fix could otherwise have been "refuse every pruned run", which would have been simpler and would have lost information.
+
+**Where it is said, and why in three places.** The bound state is the classification. A sixth `ReconciliationCondition`, `local_ledger_truncated_by_retention`, travels in the list a reader already scans -- and it is the FIRST condition on that list Fiscus itself caused and recorded rather than merely being unable to exclude, so its countermodel is `realized` rather than `live`. Reporting a recorded deletion as an unexcluded possibility would understate what is known. `excludedBy` is null: nothing undoes a deletion, and no surviving row says what was removed.
+
+**The boundary travels separately from the rows, because a reader of rows cannot see the ones that are gone.** `reconcileOpenAiCosts` is handed `requests` already read, so `requestsPrunedBeforeMs` is a REQUIRED field on its input and a required parameter on the store-level wrapper. An optional one would let a caller reintroduce the defect by saying nothing, which is the shape of the bug rather than a guard against it. The compiler then enumerated every caller, which is how the twenty call sites in `test/reconcile.test.ts` were found rather than guessed at.
+
+**Three of D-170's states are preserved exactly.** Truncation is `prunedBeforeMs !== null && periodStartMs < prunedBeforeMs` -- STRICTLY before, because `prune` deletes rows with `ts_epoch_ms < before_ms` and the boundary instant itself survived. No prune ON RECORD stays unknown and says nothing; inferring a boundary from the oldest surviving row would invent the provenance this project refuses to infer. Two tests hold that a clean ledger stays quiet, because a disclosure on every report is noise and noise stops being read.
+
+**Two compilers now hold the surfaces, and that is stronger than a test would have been.** `src/dashboard/routes.ts` assigns the run's bound into the payload, so a `shared-types.ts` union missing the state fails the ROOT typecheck. The browser renders through `RESIDUAL_BOUND_WORDS`, a `Record` keyed by the wire's own union, so a missing rendering fails the BROWSER typecheck -- and that replacement is itself a fix: the old if-chain fell through to "this run predates the recorded bound condition", so a new state would have been rendered as an ABSENT one, which is this program's most-found defect class arriving inside the change meant to close an instance of it. `describeOffPathBound` became the same shape, and `OFF_PATH_BOUNDS` is derived from its keys so no second list can fall behind it.
+
+**Evidence.** Seven tests driving the real `Store` through an adopted operator export. RED re-verified against the unfixed tree at 4 of 7; the three that passed are the guards -- the surviving refutation, the intact period, and the no-record silence -- and they are in the file so the fix cannot be obtained by warning on everything. GREEN 7/7. All three typecheck domains clean.
+
+**What this does not establish.** That the residual is otherwise trustworthy: five conditions still say otherwise and none is closed here. Nor that D is small -- it is unknown by construction, which is the point. Nor that any other window surface reading `requests` is covered: `report`, `usage` and the value surfaces still read their own windows with no coverage field, and the dashboard's own window summaries still carry none. And a reconciliation is not the only claim a deletion can move; it is the one where the claim is about money.
+
+
+## D-174 — `fiscus usage` told an operator to do the thing they had already done
+**Decision:** `UsageReport` carries the window's retention coverage as a REQUIRED field, and `fiscus usage` states truncation beside its figures and withdraws its empty-state errand when the emptiness was produced by a deletion.
+
+**The counterexample, measured first.** Two requests tagged with a session id, sixty days old. `computeUsageRoI` over a ninety-day window returned one unit and $2.00. `fiscus prune` then deleted them on the operator's own retention policy, and the same call over the same window returned zero units and $0.00 -- at which point `fiscus usage --days 90` printed *"No sessions without code signals in range. Tag sessions with X-Fiscus-Session-Id to measure them."* The first sentence is a claim about the world that is false. The second is an INSTRUCTION to do what the operator already did and Fiscus already measured.
+
+**This is D-170 with an errand attached, and the errand is what makes it worse.** There, the metering journey step was marked NOT DONE for someone who had done it. Here the surface goes further and tells them how to start -- so the false absence is not merely displayed, it is acted on. An operator who follows it re-instruments a system that was already instrumented and concludes, when the numbers stay empty, that the instrumentation does not work.
+
+**Why the window can reach behind the boundary at all.** `--days` is the operator's and defaults to 30; `valueReport` passes its own spend window through the same function. Nothing bounds either to the retention policy, and retention is configurable. A rule that holds only because the current default is 180 days is a rule that breaks silently when the person it protects changes the default -- the same reasoning that put the disclosure on the shared window path at D-171 rather than on the commands that happen to be long.
+
+**The field is required, and that is the load-bearing part.** An empty `units` list means two different things -- no session was tagged, or the tagged sessions were deleted -- and the surface that renders the list has to be able to tell them apart. An optional field would let a consumer be built that cannot, which is exactly how this defect existed: the report had no way to say it, so the CLI had no way to read it. It is read from the ledger's own `retention_prunes` record rather than inferred from the rows, because an absence of rows is precisely what cannot distinguish the two states.
+
+**What the fix is NOT.** It is not "stop saying the list is empty": the list IS empty, and only surviving evidence is ever counted. The figures do not move -- a test asserts exactly that, with one deleted session and one surviving one -- and a sentence appears beside them. The empty-state line changes to *"No sessions without code signals SURVIVE in range -- whether any were tagged before the deletion cannot be read from here"*, which states the limit instead of an errand.
+
+**Three states, preserved (D-170).** A window inside the retained period says nothing extra. A ledger with NO prune on record says nothing extra either, and that is a DIFFERENT state -- unknown, not "nothing was pruned" -- which is why the coverage carries `prunedBeforeMs` beside `truncated`. A test holds that a clean ledger keeps the tagging instruction, because a disclosure printed on every run is noise and noise stops being read, and because the errand is genuinely right for someone who has not tagged anything.
+
+**Evidence.** Six tests, three unit and three driving the real CLI through `bin/fiscus.mjs` against an isolated `FISCUS_DB`. RED re-verified against the unfixed tree at 5 of 6; the one that passed is the intact-ledger case that keeps the instruction. GREEN 6/6. All three typecheck domains clean.
+
+**What this does not establish.** That the dashboard discloses it: `/api/value` assembles its own payload and does not carry the field, so the GUI is still silent and that remains open. Nor that `fiscus team push` is covered, and that is the next thing to MEASURE rather than a finding: `signAndPushRollup` takes `projectValueBreakdown(store, { windowDays })`, whose unit counts come from `realizationFromStore` -- proposals and receipts, which `prune` does not delete -- while the cost attributed to those units reads `requests`, which it does. So the plausible failure is a rollup whose UNITS are intact and whose SPEND is understated, pushed to a shared total whose receiver cannot tell, which is the failure mode D-101 refused a scoped push for arriving through a different cause. That mechanism is READ, not reproduced, and the record says so; the honest repair, if it holds, is either a client refusal or a coverage field in the SIGNED body, and the second is a protocol change with a compatibility story.
+
+
+## D-175 — the server told the dashboard a window had complete coverage after deleting rows from it
+**Decision:** `meteredClaimSupport` takes the window's retention coverage as a REQUIRED input, reports `coverage: 'partial'` for a window retention truncated, says why in its note, and `/api/overview` carries the coverage so the Metered screen states it beside the total rather than one drawer away.
+
+**The counterexample.** A thirty-day window with two priced requests reports `coverage: 'complete'`. Delete one of them with `fiscus prune` and it still reports `complete` — over a window Fiscus itself removed a row from, and whose total is lower by exactly that row. The axis is the server's own statement of what the metered claim's evidence reaches, so this is not a missing caption: it is the product asserting completeness about evidence it deleted.
+
+**Why the old answer was defensible until D-170 and is not after.** The axis's docblock said coverage "says nothing about whether the ledger sees every request the organisation made, which no local evidence can establish." That sentence is TRUE of traffic which never reached Fiscus — the permanent limit of a local meter — and FALSE of rows Fiscus deleted itself. Since D-170 the ledger records its own retention boundary, so there is exactly one case where local evidence does establish that the ledger no longer sees requests it once saw. **A narrowing that was honest when the evidence did not exist becomes an overclaim the moment it does**, and nothing re-reads a docblock when a new record lands. That is the general lesson: when you add a record, search for the sentences that were true only because it was missing.
+
+**Why the coverage axis and not a field beside it.** Coverage asks how completely the evidence covers the claim's own scope, and the claim is metered spend OVER THIS WINDOW. Rows priced from an estimate and rows deleted from inside the window are two answers to that one question. Putting the second somewhere else would leave the axis asserting `complete` next to a sentence saying rows were deleted — the collapse this project refuses, pointed the other way.
+
+**And deliberately NOT the monetary basis.** A deletion says nothing about how the surviving rows were priced. Moving both axes on one fact would be overreach dressed as caution, and a test holds `monetaryBasis: 'list'` and `figure: 'shown'` through a truncation: this is a caveat, not a withholding.
+
+**The empty case is the sharper half.** An unpriced window already carried a note saying pricing coverage is unevidenced rather than complete, which is right about pricing and silent about deletion — so an operator reading it concludes nothing was spent. A truncated window is `partial` whatever the pricing says, and both notes travel: an emptiness known to have lost rows is a known gap, not an unknown.
+
+**Two surfaces, one fact, and the second is why the payload field exists.** The note already reaches the browser: `core/claimLayers.ts` renders `claimSupport.note` as the Metered layer's coverage line in the Claim Inspector. That is a drawer. The number a reader acts on is on the Metered screen, and the CLI puts its retention sentence directly under the header (D-171), so `Overview.retention` is on the wire and the spend view renders the same sentence in the same place. **Adding the field WITHOUT rendering it would have been an instance of the second recurring class** — a mechanism built and never wired — inside a fix for the first.
+
+**Three states, preserved (D-170).** Truncation is `prunedBeforeMs !== null && windowStart < prunedBeforeMs`, strictly before, because `prune` deletes rows older than the boundary and the boundary instant survived. No prune on record stays unknown and asserts nothing. Two tests hold both silences, including one that would otherwise pass for the wrong reason — a `today` window with no spend in it reports `unknown` coverage for pricing reasons, so the fixture puts a priced request inside the day to make the edge actually exercised.
+
+**Evidence.** Six tests: four on the axis, two driving `buildOverview` against a real `Store`. RED re-verified against the unfixed tree at 4 of 6; the two that passed are the guards — the monetary basis staying put, and the no-prune silence. GREEN 6/6. All three typecheck domains clean, and the required field made the compiler enumerate the nine fixture call sites rather than leaving them to be found by hand.
+
+**What this does not establish.** That every dashboard surface discloses truncation: `/api/value` still assembles its own payload without the field, so the value screens are silent; `computeUsageRoI` carries it since D-174 but nothing on the wire reads that. Nor that a window not truncated is COMPLETE in any larger sense — the axis still speaks only about this ledger, and traffic that never reached Fiscus remains outside what any of this can see.
+
+
+## D-176 — retention made a commit that cost $6.00 look free, and every ratio built on it look better
+**Decision:** a commit attribution carries whether retention deleted rows from inside its window, `costPerHundredLines` refuses over a truncated window, the realization rollup counts truncated and UNKNOWN spend windows separately, and `fiscus roi` / `saved` state both.
+
+**The counterexample, measured.** A repository with one commit and $6.00 of metered spend an hour before it -- inside the eight-hour window `attributeCommits` uses. The commit reported `attributedCostUsd: 6`. `fiscus prune` then deleted the requests on the operator's own retention policy, and the same call over the same repository reported the same commit with `attributedCostUsd: 0`. The unit did not disappear: work units come from git history, which retention does not touch. Only its cost did.
+
+**Why this is the sharpest instance of the class so far.** The number is a DENOMINATOR. `costPerHundredLines` divides by it; `realizedSpendShare` divides by it; the Return-on-Intelligence ratio divides value by it. So a deletion does not merely hide spend -- **it makes AI look free, and then makes the return on it look better.** Every previous instance in this program misreported coverage, a bound, or an absence. This one moves a headline number in the flattering direction, silently, as a side effect of a privacy setting.
+
+**How it was found, and the two wrong turns on the way.** It was not reported; it was reached by asking where else a deletion could move a claim. The first probe put spend 60 days before a commit made today and saw no change -- the window is `[commit - 8h, commit]`, so distant spend never counted. The second backdated the commit but put the spend AFTER it, and `windowEndMs = commit.tsEpochMs` excluded it; attributed cost was 0 before the prune as well, which is a fixture that proves nothing and would have been easy to read as a refutation. Only the third -- backdated commit, spend one hour BEFORE it -- reproduced. **A probe that does not move the number before the change is not evidence of absence; it is a fixture that did not reach the code.**
+
+**What is fixed and what deliberately is not.** `attributedCostUsd` keeps reporting the SURVIVING spend, because that is honestly what it is, and because nulling a number a dozen sums read would trade one silent wrong answer for a scattering of them. What changes is that the window says whether it was truncated, and the DERIVED claim refuses: `costPerHundredLines` is null over a truncated window, in the same position as its existing null for a commit with no line changes.
+
+**The third state is carried, not flattened, and it cost a type change.** `spendWindowTruncated` is `boolean | null`. A realization snapshot persisted before this field existed says NOTHING about its window, and `realizationFromStore` normalizes the absence to null -- exactly the way and for exactly the reason the same function already normalizes legacy model attribution. So the rollup reports TWO counts: units observed truncated, and units whose coverage is unknown. Folding the second into the first would report "none affected" from a report that could not tell, which is the inference this whole line of work exists to refuse.
+
+**The count is wired, not merely computed.** `noteSource` -- which already prints the pre-reprice cost caveat in the same shape -- prints both counts, and all four value commands that call it pass them. A count nothing reads would have been the second recurring class inside a fix for the first, which has now happened twice in this program and was avoided deliberately both times.
+
+**Evidence.** Five tests: four driving `attributeCommits` against a real git repository with a backdated commit, one on the pure `rollupRealization` covering the three-state counting. RED verified against the unfixed tree at 4 of 4 for the attribution tests. **They are all RED for the same reason -- the field does not exist -- so this file has no "guard that passed before", unlike D-171 through D-175.** The guarding is done by the two cases inside them: a commit whose window starts after the boundary keeps its cost-per-work figure, and a ledger with no prune on record reports null rather than false. GREEN 5/5, three typecheck domains clean.
+
+**What this does not establish.** That the RoI figure is otherwise sound: the lenses carry their own conditions and none is closed here. That the dashboard says any of it: `/api/value` carries no coverage field and the value screens remain silent, which is the open remainder named at D-175. That the counts are visible anywhere but the CLI. And nothing about spend that never reached Fiscus, which is the permanent limit of a local meter and a different claim entirely.
+
+
+## D-177 — retention could make Fiscus RECOMMEND a model on the strength of dollars it deleted
+**Decision:** `isPriceable` refuses a unit whose spend window retention truncated, the frontier reports the exclusion in the same `unitsExcluded*` family it already uses, and units whose coverage is UNKNOWN stay eligible and are counted separately.
+
+**Taken by following D-176's own ranking rule.** That record ends with "when hunting this class, rank the candidates by whether the absent number is a DIVISOR". `makeSwitchCell` computes `costPerUnit = modelCostUsd / units`, and `buildModelSwitchRecommendations` picks the incumbent as the highest `costPerUnit` and the candidate as a cheaper one. So the divisor rule pointed straight at the one surface in this program that gives ADVICE rather than reporting a figure.
+
+**The obvious counterexample was already refused, and that matters.** A model whose spend was deleted OUTRIGHT produces a zero-cost cell, and `costPerUnit > 0` has always filtered those out. Writing the test that way produced a PASS against the unfixed tree — a test that would have shipped as evidence of a fix while exercising nothing. The live defect is PARTIAL contamination: some of a model's units keep their spend and some lost it, which yields a positive per-unit cost lower than the model's real one by exactly the deleted amount. Measured: eight units at $3.50 plus four whose spend retention deleted reported **$2.33 per unit**, against a true $3.50, roughly doubling the headroom Fiscus would report for switching away from a $4.00 incumbent.
+
+**The gate already existed and already had the right reason written on it.** `isPriceable` refuses a unit whose price "has been superseded by a reprice", because a model comparison is a price difference and a wrong price on one side moves the headroom for reasons that have nothing to do with the models. A price that is a known undercount is the same objection with a different cause, so it belongs in the same predicate, is partitioned in the same place, and is reported in the same family rather than shrinking the sample silently. Nothing new had to be invented; the existing rule had simply never met this cause.
+
+**The unknown state is not excluded, and that is a judgement rather than an omission.** `spendWindowTruncated` is null on every realization snapshot written before D-176. Excluding those would empty the frontier on every existing store, which is a large behavioural change made on no evidence about those units. Including them silently would read unknown as intact. So they are compared and COUNTED: `unitsUnknownSpendCoverage` says how much of a comparison rests on coverage nobody recorded, counted over the units the comparison actually used rather than over everything seen. The predicate is `!== true` and not `=== false` for exactly that reason.
+
+**Evidence.** Four tests on the pure `computeFrontier`. RED verified against the unfixed tree at 4 of 4 after the counterexample was corrected — the first version of the first test passed, and finding that is the reason the record above can say which case is live. GREEN 4/4. Three typecheck domains clean.
+
+**What this does not establish.** That the frontier is otherwise sound: the Bonferroni correction, the 0.8 purity bar and the anytime-valid intervals carry their own conditions and none is closed here. That the dashboard reports the counts: `/api/value` exposes `frontier.modelSwitches` and the browser reads only `confidence`, so neither new count reaches a screen — the same open remainder named at D-175. And nothing about spend that never reached Fiscus.
+
+
+## D-178 — the wire carried the retention counts for two packets and no screen could read them
+**Decision:** `Matured` declares `spendWindowTruncatedUnits` and `spendWindowUnknownUnits`, and the value screen renders both beside the return they qualify.
+
+**This is the second recurring class produced by the fix for the first, and it was named as open before it was closed.** D-176 put the counts on the realization rollup and wired them into `noteSource`, so `fiscus roi` and `fiscus saved` have said since then that their cost totals are understated by an unknown amount. `/api/value` sends `rep.matured` WHOLE, so the counts have been on the wire from the moment they existed. `Matured` in `shared-types.ts` never declared them, and the browser app compiles against that declaration rather than against the wire -- so the GUI could not read a fact the server had been sending it for two packets. `ACTIVE-EXECUTION.md` has carried "a field on the report that no wire reads is the second recurring class, and it is open right now" since D-175; this closes the half of it that concerns the realization slice.
+
+**The RED had to be taken at the compiler, and saying so is the point.** The runtime test written first -- boot the real dashboard against a pruned store, fetch `/api/value`, assert both counts are numbers -- **PASSED against the unfixed tree**, because the fields really are in the JSON. That is the exact shape of this defect class: nothing is missing at runtime, and the failure is that no consumer is permitted to see it. So the counterexample was taken where the defect lives. The rendering in `views/value.ts` was written FIRST and the browser typecheck produced six `TS2339: Property 'spendWindowTruncatedUnits' does not exist on type 'Matured'` (and the same for the unknown count) at the six sites that read them. That compiler run is the RED evidence; the runtime test is a guard against a later regression that removes the fields from the payload, and is kept for that and labelled as that.
+
+**Why the browser typecheck is a real gate here and not a formality.** `reconciliation.runs` was once declared a number while the server sent an array, so `runs > 0` coerced through `NaN` and the Billed band of the spine could never light up. Both halves of that failure are the same mechanism as this one: the declaration is the only thing the browser sees, and a declaration that does not match the wire fails silently. The fix is checked against the wire -- the runtime test asserts `typeof === 'number'` on a booted server -- not against another declaration.
+
+**Both counts are rendered, and they are rendered differently.** The truncated count is an ERROR-styled `role="status"` line: the return above it reads high, and by how much cannot be said. The unknown count is a basis line in the ordinary style: nothing is known to be wrong, and the report cannot tell. Rendering only the first would have said "none affected" on every store written before D-176, which is the collapse the pair exists to prevent one level down. Both are hidden at zero, because a caveat printed on every clean ledger stops being read.
+
+**Evidence.** Two runtime tests (both passing before the change, and recorded as such above), six `TS2339` errors as the RED at the browser compiler, all three typecheck domains clean afterwards, full suite green.
+
+**What this does not establish.** That the rest of this payload is declared: `/api/value` also sends `usage` whole, and `ValuePayload` has no `usage` field at all -- so `UsageReport.retention`, added at D-174, still reaches no screen through this route. That remains open and is now the narrower named remainder of frontier item 11(a). Nor that the frontier's two D-177 counts are readable: `ValuePayload.frontier` declares `modelSwitches: Array<{ confidence: string }>` and nothing else, which is the same defect one field over. Nor anything about how the counts render in a browser -- there is no preview path in this checkout that can be pointed at a scratch ledger, and asserting a rendering nobody ran would be the failure this whole program is about.
+
+
+## D-179 — Fiscus told operators their proposals were never captured, after capturing and deleting them
+**Decision:** the Acceptance lens stops naming a cause it cannot see; `clearProposals()` records the deletion it performs; the proposal half of the retention record acquires its first production reader.
+
+**The counterexample, measured.** A repository with one commit and a captured proposal an hour before it whose added lines are what shipped. `valueSpine` reported `firstPassAcceptance: 1`, the Acceptance lens was instrumented, and no note was printed. `fiscus prune` then deleted the PROPOSAL rows on the operator's own (much shorter) proposal-retention policy, and the same call over the same repository reported `firstPassAcceptance: null` and printed **"Acceptance uninstrumented: no proposals captured (e.g. streaming-only)."** Both halves are false. The proposals were captured -- Fiscus captured them -- and the suggested cause is not the cause. The operator is sent to instrument what they had already instrumented, which is the D-174 failure reached through a second stream.
+
+**The store already knew, and nothing read it.** `retentionFloor()` has returned `proposalsPrunedBeforeMs`, `proposalsRowsRemoved` and `proposalsPrunes` since the retention record was built. The only reader of any of the three anywhere in the repository was one assertion inside `retention-truncation-disclosure.test.ts`. **The proposal half of the retention record was built and never wired** -- the second recurring class sitting directly underneath an instance of the first, for the third packet running.
+
+**The most total deletion available recorded nothing at all.** `clearProposals()` is a dashboard privacy control -- delete every stored proposal immediately -- and it wrote no `retention_prunes` row, so the deletion it performs was invisible to every consumer of the retention floor. It now records, with a boundary of NOW, because that is honestly what it deleted. It records ONLY when a row actually went: that boundary marks every past window truncated, so writing it for a no-op clear would manufacture a deletion claim over the whole ledger. **A refutation may be hidden by a deletion; it must never be invented by one.** The store contract named `prune()` and `pruneProposals()` and did not name `clearProposals()`, which is the defect's own fingerprint, and now names all three.
+
+**The same sentence was wrong in a second place, and looking for that is the point of the rule.** `computeUsageRoI` filters its population to sessions with NO captured proposals -- non-code work, which has no diff to compare -- and then passed `firstPassAcceptance: null` and printed the identical note on every single run. `fiscus usage` prints those notes verbatim. So the report gave an instruction the reader cannot act on: capturing proposals cannot move a number computed over a population that excludes proposal-bearing sessions by construction. **An empty list that also gives an instruction is the worst form of this class, and an instruction that CANNOT be acted on is the worst form of that.** It now says acceptance is n/a by construction and why. The third caller, `computeFrontier`, builds an RoI and discards its notes entirely -- checked, not assumed, and therefore no claim there to be wrong.
+
+**Three states, two notes, and the reason that is not laziness.** A proposal prune whose boundary covers the analysed window is a known deletion and is named. A prune whose boundary lies before every window start left the window intact, and the plain note is sound. NO prune on record is unknown -- and exactly as D-176 settled for the spend window, `truncated` stays false there rather than hedging every clean ledger, with `prunedBeforeMs` carried alongside for a caller that must distinguish the third state. A caveat printed always is a caveat nobody reads, and this program has spent five packets making sure these ones get read.
+
+**Evidence.** Seven tests. RED verified against the unfixed tree at 2 of 5 on the first run and 1 of 2 on the second (verified by stashing only `lenses.ts` and `usage.ts`, so the failure is the change and not the fixture). **Three of the seven passed before AND after, deliberately**: they are the silences -- a prune before the window, no prune on record, and the coding path where the instrumentation gap is real -- and a fix that broke any of them would have replaced one wrong sentence with another. GREEN 7/7. Root suite green, team-server 74/74, all three typecheck domains clean.
+
+**What this does not establish.** That the Acceptance lens is otherwise sound: edit-distance acceptance carries its own conditions and none is closed here. That the note reaches the GUI: `roi.notes` is a CLI surface and `/api/value` has never carried it, which is a disclosure difference the routes file already records and this packet does not change. And nothing about proposals that were never captured in the first place, which is the honest version of the sentence being repaired.
+
+
+## D-180 — the gate ladder said "no complete proposal captured" about a proposal Fiscus deleted
+**Decision:** the `proposed` rung's detail names retention as the cause when a proposal prune covers the unit's window, checked after the two capture-specific causes and never instead of them.
+
+**Found by taking D-179's own ranking rule and applying it to the same stream one layer in.** D-179 removed the false cause from the Acceptance lens note. The identical claim survived on the first rung of the realization funnel -- the structure an operator reads when asking why a unit did not realize. Measured on the same fixture: before the prune, `polarity=supported verdict=pass detail="AI proposal captured"`; after, `polarity=unknown verdict=unknown detail="no complete proposal captured"`.
+
+**The verdict was already right, and that is exactly what hid it.** The rung goes to `unknown`, which is correct -- the evidence is gone and the gate says so. Only the human-readable detail asserts a cause, and it asserts the one cause that is false here. Every epistemic review of this ladder would pass: the polarity is sound, the projection is sound, the `unknown` is sound. **An epistemically correct verdict can carry an epistemically false explanation, and the verdict being right is what stops anyone from reading the sentence.** That is a new place to look, and it generalizes past retention: wherever a state is correct and a string explains it, the string is unreviewed.
+
+**A guard test passed for a reason that made it vacuous, and finding that changed a claim in the record.** The ordering guard -- a unit whose capture was genuinely truncated must keep saying so rather than being overwritten by the vaguer retention message -- passed against the unfixed tree on its first fixture. It passed because the fixture could not produce the state it claimed to guard: a prune boundary OUTSIDE the window deletes every proposal in that window, truncated ones included, so the two causes could never be live together and there was nothing to order. The overlap requires a boundary INSIDE the window, which deletes the earlier rows and leaves the later ones. **A guard that passes may be guarding an impossible state rather than a real one -- and a guard over an impossible state is worse than no guard, because it certifies an ordering nothing ever exercises.** With the fixture corrected the two causes coexist, the ordering is real, and the guard is now worth its line.
+
+**Evidence.** Four tests. RED verified at 1 of 4 -- the counterexample -- with the other three passing before and after by design: the corrected ordering guard, a prune whose boundary precedes the window, and no prune on record. GREEN 4/4, three typecheck domains clean, full suite green.
+
+**What this does not establish, with the candidates ranked by whether anything reads them.** `proposalCoverage` on the realization report is a ratio whose numerator a prune empties while its denominator, coming from git, survives -- the D-176 divisor shape one stream over -- and it is deliberately NOT fixed here because it is rendered by no view and no CLI surface. It is on the wire and declared, and that is all: latent, not live, and the distinction is the point of ranking. The `judge` payload reports `proposalCaptureCoverage: 'unknown'` for a session whose proposals are gone, which is the correct sentinel rather than a false claim, and is left alone -- checked, not assumed. The contribution-evidence path builds candidates only when `winProposals.length > 0` and so produces `undefined` rather than an unknown -- also latent, and by the strictest measure: `contributionEvidence` has NO consumer anywhere in the repository, not even a declaration on a payload. **So after this packet the proposal stream has no LIVE instance left that has been found, and two latent ones that are named** -- which is a different and weaker statement than saying the stream is swept, and is the honest one. And nothing here is about proposals that were never captured, which remains the honest reading of the sentence being repaired.
+
+
+## D-181 — a SIGNED team rollup declared complete coverage over spend Fiscus had deleted
+**Decision:** `signAndPushRollup` REQUIRES a coverage value, both push paths compute it from the units' own D-176 retention flags, and the mapping onto `RollupCoverage`'s three states is a pure function with its ordering under test.
+
+**The counterexample, measured, and it takes two steps.** A repository with one commit and $6.00 of spend inside its attribution window. `computeRealization(..., { persist: true })` wrote the snapshot and `fiscus team push --dry-run --json` minted `units: 1, costUsd: 6`. `fiscus prune` then deleted the request rows -- **and nothing changed**, because a prune does not rewrite persisted snapshots. That is the trap: the defect is invisible at the moment of deletion. The NEXT `computeRealization(..., { persist: true })` -- which `fiscus realize` and the dashboard both perform -- re-derives the unit against the pruned ledger and persists `attributedCostUsd: 0` with `spendWindowTruncated: true`. The rollup then reads `v=2 coverage=complete projects=1 costUsd=0 units=1`: one intact work unit, at $0.00, that cost $6.00, in a SIGNED artifact declaring itself complete, pushed to a server that sums it beside other developers' numbers. **A deletion whose consequence only lands on the next recomputation is a defect with a fuse on it, and looking only at the moment of deletion misses it.**
+
+**This is D-175 on an artifact that leaves the machine.** The overview carried `coverage: 'complete'` for a window it had deleted rows from; this carries the same word, signed, to a receiver whose whole reason for asking is that it cannot see the ledger itself.
+
+**The mechanism was already built, already validated, already read -- and nothing set it.** `RollupBodyV1.coverage` has been in the signed body all along; `validateRollupBody` checks it, `normalizeRollupCoverage` reads legacy absence as `unknown`, `verifyRollup` returns it to the receiver. Both mint helpers default it, both call sites in `teamCmd.ts` omitted the argument, and **the default is `'complete'`.** So this is the second recurring class in its worst possible shape: **a mechanism built and never wired whose unwired default is the most confident value the field can take.** Nothing about the protocol changed here -- no new field, no compatibility story, no receiver change. The parameter is now REQUIRED of `signAndPushRollup` rather than defaulted, so a future third call site cannot repeat the omission silently.
+
+**The unit already carried the answer, too.** D-176 put `spendWindowTruncated` on every work unit and the counts `spendWindowTruncatedUnits` / `spendWindowUnknownUnits` on every rollup. The team path read neither. That is now the input.
+
+**Three states onto three states, and the ordering is a judgement.** `RollupCoverage` is exactly `complete | partial | unknown`, the same shape this sweep has carried since D-170, so the mapping needs no new vocabulary: any unit known truncated makes the body `partial`; otherwise any unit whose coverage is unknown makes it `unknown`; only a body every one of whose units is known intact may say `complete`. Truncated outranks unknown because "some of this is missing" is stronger and more useful to a receiver than "I cannot tell", and an ABSENT count is `unknown` rather than zero. Coverage is computed AFTER the project filter, because it describes the body that is signed and not the window it was drawn from, and it is re-read on every tick of `--watch`, because a prune between ticks changes what the next body may claim.
+
+**Evidence.** Three tests: two driving the real `fiscus team push --dry-run --json` through a spawned CLI against a seeded ledger, one pure over the coverage mapping. RED 1 of 3 -- the counterexample -- with both other tests passing before and after by design. The intact-ledger guard first failed for a fixture reason worth recording: without `economicAmount` beside the float cost, the v2 mint guard refuses the body outright (`compatibility cost disagrees with exact amount`). That was the guard working correctly on an internally inconsistent fixture, not a finding, and the fixture now carries Exact Money the way real proxy traffic does. GREEN 3/3, root suite green, team-server 74/74, three typecheck domains clean.
+
+**What this does not establish.** That the receiver ACTS on the flag: `coverage` is explicitly non-authoritative and what a team server does with a `partial` body is that project's question. That the numbers are otherwise right -- coverage states what the signer INCLUDED, never that what was included is true or provider-billed. That the strata travelling beside the projects are qualified AT THEIR OWN GRAIN. They are not unqualified -- they ride in the same signed body, so the body-level `partial` covers them, and the receiver combines it into the aggregate status. What a receiver cannot do is tell WHICH stratum lost spend, so a fixed-basket comparison is distorted in a direction it cannot locate. That is a precision gap, not a false claim, and stating it as a false claim would have been this program's own failure mode applied to its own record. And nothing about spend that never reached Fiscus.
+
+
+## D-182 — the surface built to say WHY a channel is dark gave the wrong reason
+**Decision:** the spend-spike coverage row names retention when the baseline was deleted, and the spike alert states what its p90 was computed over when retention narrowed it.
+
+**The counterexample, measured, and its location is the point.** `alertCoverage` exists for exactly one purpose: to say, per channel, why it could not have fired, so that an empty alert list means something. Its spend-spike row read **"no prior active day exists yet, so there is no baseline to exceed."** On a ledger with twenty-six consecutive active days, `fiscus prune` on the operator's own policy turns the row `live: false` with that sentence intact. The word "yet" is a claim about the operator's history and it is false: they metered for a month, and Fiscus deleted it. **This is the false-cause defect on the one surface in the product whose entire job is to give causes**, which makes it the worst possible place for it and the most valuable one to have found.
+
+**And the quieter half, also measured.** `gatherAlertInputs` takes the p90 over the prior thirty days, so a shorter retention narrows the population without narrowing the sentence. Same ledger pruned to three days: the baseline moved from **$3.16 over twenty-five samples to $3.39 over two**, and the alert still said "your p90 day". A p90 over two points is very nearly a maximum. Frontier item 11(c) had predicted this half and predicted it needed "a different remedy from a disclosure line" -- it did not predict the first half at all, and the first half is the sharper one.
+
+**The alert still fires, and that is D-173's rule rather than a compromise.** Suppressing a spike warning because retention narrowed its baseline would withhold a live overspend signal on account of a privacy setting. D-173 settled the shape: withdraw the half of a claim that deletion undermines, not the whole claim. What deletion undermines is the baseline's claim to represent a typical month; it does not undermine the observation that today is far above what survives. So the alert fires, the detail says it is compared against N surviving active days, and **no direction is asserted** -- deleting the oldest days can move a p90 either way, and naming a direction would be inventing a fact to make the disclosure sound sharper.
+
+**Why the flag is optional on the input and what that costs.** `AlertInputs` is constructed by hand in tests and by `gatherAlertInputs` in the product. `baselineTruncated?: boolean` absent reads as "not known truncated" -- the same convention D-176 settled for the spend window, and explicitly NOT a claim that the window is intact. The boundary is carried beside it for a caller that needs the third state.
+
+**Evidence.** Four tests over the real `computeAlerts` / `computeAlertCoverage` against a seeded ledger. RED verified at 2 of 4. The other two pass before and after by design and are the ones that keep this fix from replacing one wrong reason with another: a genuinely new ledger must still say the history has not accumulated, and a prune whose boundary predates the baseline window must change nothing. GREEN 4/4, three typecheck domains clean, full suite green.
+
+**What this does not establish.** That the other alert channels are swept. Budget-cap, runaway, throttling and pricing-trust read today's and this week's rows, which a retention policy long enough to be plausible does not reach -- that is an ARGUMENT and not a measurement, and it is named here rather than counted as done. Nor that a p90 over few points is otherwise sound: this packet makes the sample size visible, it does not make it adequate, and a percentile over two observations remains a weak statistic honestly labelled.
+
+
+## D-183 — allocation reported 100% of a period allocated, over a period 95% of whose spend it had deleted
+**Decision:** an allocation run carries whether retention deleted rows from inside its period, the coverage travels in the PERSISTED result and not only in the printed output, and the conservation line says what it conserves.
+
+**The counterexample, measured, and the direction is what makes it serious.** A sixty-day period holding $42.00: $32.00 that a rule routes to a cost centre and $10.00 that nothing matches. `fiscus alloc` reported `total=$42.00 allocated=$32.00 (76.2%) unallocated=$10.00`. A prune whose boundary sits INSIDE that period, and the same call over the same period reported **`total=$2.00 allocated=$2.00 (100.0%) unallocated=$0.00`**. An operator reading "100.0% allocated, $0.00 unallocated" concludes their rules cover everything; they cover 76% of it. **The deleted part was the evidence AGAINST the rules, so the coverage figure moved 24 points in the flattering direction as a side effect of a privacy setting.** This is the D-176 denominator shape with a sharper edge: it is not only that the divisor shrank, it is that what was removed was disproportionately the part that would have argued the other way.
+
+**`conserves` stayed TRUE, and that is the finding worth keeping.** The run's own integrity check -- allocated + unallocated must equal the ledger total to the microdollar, and the CLI refuses to print or record a run that fails it -- passes over the truncated input, because it conserves what SURVIVES. **A correct invariant over a truncated input certifies a wrong number.** The guard is not changed here; it is doing exactly its job, which was never to detect a missing input. What changed is that the screen no longer prints "Conservation exact" as the last word under a truncated total: it now says it is exact over the surviving rows and cannot see what was deleted. **The strongest reassurance on a screen is the one most worth qualifying, because it is the one a reader stops at.**
+
+**The record outlives the run, so the coverage lives in the record.** `fiscus alloc --apply` persists the result as `result_json` and the run is issued into the epistemic kernel. Before this packet that record asserted a period total which was a post-deletion remnant, immutably, with nothing for a later reader to go on. `retention` is now part of the persisted result -- no schema change, because the row already stores the whole result as JSON -- and it is optional precisely so that a run written before this field existed reads as UNKNOWN rather than intact.
+
+**Evidence.** Five tests on the real `Store.allocatePeriod` and `saveAllocationRun`, plus an end-to-end run of `fiscus alloc run` against a seeded scratch ledger to confirm the operator actually sees it. **RED at 5 of 5, and this file therefore has no guard that passed before** -- the same situation D-176 recorded and for the same reason: every assertion names a field that did not exist, so even the two tests that ARE guards in content (a period entirely after the boundary; no prune on record) fail against the unfixed tree. The guarding is done by what those two assert, not by their having passed. GREEN 5/5, root suite green, team-server 74/74, three typecheck domains clean.
+
+**What this does not establish.** That the EXACT allocation path is covered: `allocatePeriodExact` builds `ExactAllocationRunResult`, whose `complete` flag is about basis resolution and says nothing about retention, and it is untouched -- named, not fixed, and it is the path that carries Exact Money. That the dashboard says any of it, though the reason is narrower than "no screen exists" and was checked rather than assumed. There IS an allocation screen: `views/allocation.ts` reads `/api/allocation`. It renders the cost centres, the rules and a COUNT of recorded runs -- `AllocationRunRecord.result` is typed `Record<string, unknown>` and no total, percentage or conservation line is rendered from it -- so the flattered coverage figure does not currently reach a browser at all. That is why this packet does not touch the GUI, and it is also the reason the persisted `retention` matters more than the printed one: the day that screen renders a run's totals, the limit is already in the record it renders from. Separately, `/api/value` still carries `allocation: unknown`, undeclared, which is the D-178 remainder and not this one. That allocation is otherwise sound: rules, proportional pools and archived-centre handling carry their own conditions. And nothing about spend that never reached Fiscus.
+
+
+## D-184 — the map that exists to be honest about authority overstated what its own check establishes
+**Decision:** `IssuanceReach` gains `imported_uninvoked`, boundaries declare the entry point a product path must name, and the test asserts out loud how many have been traced.
+
+**The counterexample, and it is the file's own words against its own check.** `src/epistemic/issuance-map.ts` says authority class "says nothing about whether anything RUNS it" and hands that question to `reach`. The check underneath walks the IMPORT graph. Those are different questions. `alloc.exactRun` was declared `reach: 'product'` and passed, because `src/store/db.ts` imports `src/alloc/epistemic.ts` -- while the only mentions of `saveExactAllocationRun` anywhere in `src/` are its own definition in `src/store/allocation.ts` and the forwarder in `db.ts`. No CLI command, no dashboard route and no other module calls it. **The exact allocation issuance boundary -- on the Exact Money path AII-017 and AII-018 are migrating everything toward -- was declared live in the product and is invoked by nothing.**
+
+**Why this is worse than an ordinary stale field.** `reach` decides QUEUE POSITION: the map's own prose says an `unmigrated_authority` the CLI reaches can put an unbacked conclusion in front of an operator today, while one nothing reaches cannot, and that "calling them the same risk misdirects the work". An overstated `reach` therefore misdirects exactly the work this file exists to direct, and it did: D-183's frontier note ranked `allocatePeriodExact` FIRST on the strength of "read and unswept", which was read off this field and was wrong. The correction is recorded in the same breath as the finding because the two are the same mistake made twice.
+
+**Three states, because two could not express it.** A module in the closure that no product path invokes is shipped and unreachable at once. It cannot put a wrong conclusion in front of an operator today, so it is not `product`; it is not latent the way an unimported module is either, because it is already inside everything that ships and one call site away from running. Reading it as `product` overstates the urgency; reading it as `unreached` understates the exposure.
+
+**The check is deliberately the weak half of the pair, and says so.** It looks for the declared symbol in the product closure outside the modules that define or forward it. **A mention is not a call, so it can prove that nothing invokes a boundary and never that something does.** That asymmetry is the right way round for a gate: it fails only when nothing in the product so much as names the entry point, which cannot be a false alarm. Building a real call graph by hand would be the alternative, and a flaky gate is worse than an honest partial one.
+
+**Four of seventeen, stated out loud.** Tracing seventeen call chains is real work and four are done. The test asserts `declared.length === 4` and separately asserts that it is less than `ISSUANCE_MAP.length`, which is D-166's rule applied to this sweep: **a sweep without a corpus-size assertion is indistinguishable from a sweep that matches nothing**, and one that covers four of seventeen without saying so reads as coverage.
+
+**Evidence.** One new test, RED against the unfixed tree (no boundary declared an entry point, so the corpus assertion failed at 0 of 4) and RED again in the intended way once the declarations landed with `alloc.exactRun` still marked `product`. The existing reach test was narrowed to the import axis it actually measures and kept. A third partition constant was added because the old two-way split silently stopped covering the map. GREEN 14/14 in that file, root suite green, three typecheck domains clean.
+
+**What this does not establish.** That the other thirteen boundaries are invoked -- they are untraced, which is what the count says. That a declared boundary is genuinely CALLED rather than merely named. That `alloc.exactRun` should be wired: it should not be wired casually, because doing so would start issuing canonical Claims from a path no product surface has ever exercised, which is the shape AII-025 warns about one subsystem over. And nothing about boundaries that have not been mapped at all, which the pre-existing sweep already covers by a different route.
+
+
+## D-185 — the report that decides whether to buy a credential said the local side was empty, over a period it had deleted
+**Decision:** `OpenAiCostsCaptureCoverage` carries whether retention truncated the OBSERVED period, the CLI states it directly under the number it falsifies, and it is deliberately NOT a sixth blocker.
+
+**The counterexample, measured.** A fully paginated OpenAI Costs observation over a past month, and ten live proxy requests on the declared route inside it totalling $180.00. `fiscus billing costs coverage` reported `Declared route 10 live proxy request(s), $180.00`. A prune whose boundary fell inside that period, and the same report read **`Declared route 0 live proxy request(s), $0.00`** -- with the blocker list byte-for-byte identical. Not one of the five named a deletion.
+
+**The class attached to the most expensive errand in the product.** Capture coverage exists to answer one question before an operator spends anything: is the local side ready, or would a reconciliation come back empty? The same command prints *"READ THIS BEFORE GETTING A CREDENTIAL. You have OpenAI spend, and none of it would count toward a reconciliation."* So the D-174 shape -- an emptiness with an errand attached -- reaches its most expensive form here: the errand is minting an Admin credential against a real billing account, and the number it is derived from is one retention emptied. **Rank the instances of this class by what the advice COSTS to follow, and this one is the top of the list.**
+
+**Not a sixth blocker, and the reasoning is the packet's second contribution.** `blockers` is a fixed-length tuple of five conditions that hold ALWAYS -- unverified scope, unobservable off-path usage, undocumented finality, line items that do not join, rate-card estimates. Retention truncation holds SOMETIMES. Appending it would either make a conditional fact read as permanent or make the tuple's promise false, and both are the collapse this program exists to refuse, one level up from the numbers. It is a field beside them, exactly as D-173 kept `local_ledger_truncated_by_retention` separate from the permanent reconciliation conditions. **A list whose meaning is "these always hold" is not a place to put something that sometimes holds, however convenient the rendering.** A test guards that the tuple stays exactly those five.
+
+**Frontier item 12(b) asked for per-sentence tracing, and that is what found this.** The item listed three absence sentences on `fiscus billing` and warned that some are about IMPORT records rather than request rows, so the family could not be judged as one. Traced: `'No direct provider observation runs recorded.'` reads `openai_cost_observation_runs` and `'No OpenAI billing export has been imported.'` reads the import tables; **no `DELETE` anywhere in the store touches either**, so both are retention-sound and are left alone. The third sentence, `'No fully paginated OpenAI Costs snapshot is available...'`, is also sound -- but it GUARDS a report that is not, and the defect was in the report rather than in any of the three sentences. **Tracing per sentence did not confirm the sentences; it found the thing behind one of them.**
+
+**Evidence.** Four tests on the real `Store.openAiCostsCaptureCoverage`. RED 3 of 4; the fourth is the design guard on the blocker tuple and passes before and after, which is the point of it. GREEN 4/4, root suite green, three typecheck domains clean.
+
+**What this does not establish.** That the reconciliation itself is affected -- D-173 closed that path, and this is the READINESS report that runs before it. That the provider side is complete: `providerFinality` stays `undocumented`. That `printReadiness`'s own coverage figures are covered: it reads a different structure (`ReconciliationReadiness.coverage`) and was not traced here, which is the next thing to trace on this command. And nothing about spend that never reached Fiscus.
+
+
+## D-186 — a deletion turned OFF the warning that exists to stop the most expensive mistake in the product
+**Decision:** `ReconciliationReadiness` carries `localLedgerRetention`, both docblocks state the three states a null coverage can mean, and both surfaces — CLI and browser — say the ledger was emptied instead of rendering nothing.
+
+**The counterexample, measured.** A ledger with $180.00 of OpenAI spend on the declared route reported that coverage. After `fiscus prune`, `reconciliationReadiness().coverage` returned **null**. And null is exactly what a machine that never metered a single OpenAI request returns.
+
+**This is the class in its strongest form, because the false reading was WRITTEN DOWN as the intended one.** Two docblocks named the inference: `src/billing/reconcile.ts` said *"Null when no OpenAI spend exists at all, so there is nothing to warn about"*, and `src/dashboard/shared-types.ts` said *"Null when the ledger holds no OpenAI spend at all — 'no data', not 'no coverage'."* Every earlier instance in this sweep had a comment that was SILENT about what an absence licensed; here the licence was explicit, and a prune falsified it. **When a docblock tells a reader what an absence means, it is a claim about the world and takes the same scrutiny as a printed number** — and it is more dangerous than one, because a consumer writes a branch against it and never re-reads it.
+
+**And the consequence is a suppressed WARNING, not a wrong number.** Both consumers gate the entire *"READ THIS BEFORE GETTING A CREDENTIAL"* block on `coverage` being non-null: `printReadiness` at `src/cli/billingCmd.ts`, and `readinessPanel` in the browser, whose own comment read *"No OpenAI spend at all: nothing to warn about"* before `return null`. So a deletion turns the guard OFF at the moment the thing it guards against became certain — the local side is now empty for sure. **A deletion that silences a warning is worse than one that moves a number, because nothing on the screen is wrong; there is simply nothing there, and an operator reads the absence of a warning as an all-clear.** D-185 ranked this class by what the advice COSTS to follow and put minting an Admin credential at the top; this is the same errand, reached by having no advice at all.
+
+**The predicate here is not a window, and that is the packet's second contribution.** Every other packet in this sweep compares a window start against the prune boundary. `openAiReconciliationCoverage` runs `FROM requests WHERE provider = 'openai'` with **no period bound at all**, so the honest condition is simply whether a request prune is ON RECORD — including one that deleted nothing, since a boundary was still applied and completeness is no longer something Fiscus can vouch for. **Borrowing the form of the previous fix would have been the mistake: the predicate has to be derived from the query, not from the family.**
+
+**Evidence.** Four tests on the real `reconciliationReadiness`. RED 4/4 against the unfixed tree; GREEN 4/4. Root suite 1,848 total / 1,844 pass / 0 fail / 4 skipped, team-server 74/74, all three typecheck domains clean. The field is DECLARED in `src/dashboard/shared-types.ts` and the payload contract regenerated, per D-178's lesson that a server-side field the browser cannot see is half a fix.
+
+**What this does not establish.** That the reconciliation itself is affected (D-173) or that capture coverage is (D-185) — separate reports, separately closed. That an operator who sees the new disclosure acts on it. That the browser panel was verified in a running GUI: it is verified by typecheck and by the shared type, not by a rendered screen. And nothing about OpenAI spend that never reached Fiscus, which no local evidence can establish.
+
+
+## D-187 — $180.00 left the report through the gap between a predicate and its own negation
+**Decision:** the coverage query is NULL-safe and partitions every OpenAI row; `ReconciliationCoverage` carries `declaredScopeId` as the basis of the split; and both surfaces stop blaming the rows for a route the operator withdrew.
+
+**How it was found — by enumerating the DELETIONS rather than the surfaces.** The retention sweep had been run over `prune` and `clearProposals`. `grep "DELETE FROM" src/` returns **five** statements, and only three of them had ever been swept. Of the remaining two, `DELETE FROM project_aliases` was traced and is sound — aliases fix LABELS at query time, raw rows are never rewritten, and the module says so — and `DELETE FROM active_provider_scope_routes` is this packet. **A sweep is only as complete as the enumeration it was run over, and "retention" was the wrong enumeration: the class is DELETION, and retention is one caller of it.**
+
+**The counterexample, measured.** Ten proxy requests carrying the declaration, $180.00, reported as `on $180.00/10 req`. After `fiscus billing scope clear`:
+
+```
+on $0.00/0 req   imported $0.00   off-scope $0.00/0 req
+```
+
+Ten rows and $180.00 still in the ledger, and every bucket empty.
+
+**The mechanism is SQL three-valued logic, and it is a new defect class.** The third bucket is written as `NOT (<the first>)`, which reads as a partition. `provider_scope_declaration_id` is nullable and so is the bound parameter, and `x = NULL` is NULL, not false. So `TRUE AND NULL` is NULL, `NOT NULL` is NULL, and the row falls out of the ON arm and the OFF arm at once while `COUNT(*)` still counts it. **A predicate and its negation stop partitioning the moment either can be NULL, and SQL reports this as a smaller number rather than as an error.** Searched: `NOT (` appears in exactly two places in `src/store/`, both in this one query. The TypeScript-side split in `openaiCostsCoverage.ts` was CHECKED rather than assumed — it compares a non-null `declaredScopeId` from the observation run with `!==`, which is two-valued, and it is sound. `COALESCE(via, 'proxy')` now matches what every TypeScript reader of that column already does, closing the same door on a legacy NULL.
+
+**The deletion's own command states the guarantee this broke, and the other callers were checked.** `fiscus billing scope clear` prints *"historical request snapshots remain unchanged"* (`src/cli/billingCmd.ts`), and `clearOpenAiScope`'s docblock says the same: *"Historical rows are immutable."* Both were true of the STORE and false of the report a few functions downstream, which read those unchanged rows and produced zeroes. **When an operation states a guarantee, check the readers the guarantee is about — the promise is kept in the place that makes it and broken in the place that matters.** The other three callers of `activeOpenAiScope()` were enumerated and are sound: `scope status` says "New proxy rows remain unscoped", which is scoped to new rows; `scope clear`'s own preview is accurate; and `billing adopt` refuses with an instruction that is correct when no scope is active.
+
+**It silences the same guard D-186 restored, by the opposite route.** "READ THIS BEFORE GETTING A CREDENTIAL" fires when nothing is on the declared route AND uncountable spend exists. Here the uncountable spend was deleted from its own bucket, so the condition cannot hold. **D-186 turned the warning off by emptying the report; this turns it off while the report still looks populated, which is the harder one to notice** — and a cleared scope is precisely the state in which an operator should not go and mint an Admin key.
+
+**The second half: the basis was not on the figure.** Three numbers computed relative to one declaration id, and the type carried no trace of which. So "off-scope because these rows carry a different declaration" and "off-scope because there is no declaration to be on" were the same value, and both surfaces printed the first — which after a clear is false. The rows carry exactly the declaration that was made; it is the ROUTE that was withdrawn. **An epistemically correct verdict carried an epistemically false explanation, and the verdict being right is what stops the sentence being read** (D-182). `declaredScopeId` is hard rule 1 applied to a figure that had been exempt from it.
+
+**Evidence.** Four tests on the real `Store.openAiReconciliationCoverage` and `reconciliationReadiness`, including a stated partition invariant asserted in every state. RED 4/4 against the unfixed tree, and the second failed on the substantive assertion — the credential warning did not fire — rather than on the new field. GREEN 4/4. Root suite 1,852 total / 1,848 pass / 0 fail / 4 skipped; team-server 74/74; three typecheck domains clean.
+
+**What this does not establish.** That any row's attribution changed: the ledger is untouched and the declaration is still on record. That reconciliation can run after a clear — it cannot, which is what the off-scope bucket now says. That other nullable comparisons in the store are safe: only the negated-predicate form was swept exhaustively, and `= ?` against a nullable column is the general shape, of which this is one instance.
+
+
+## D-188 — the sweep that cleared sixteen boundaries found the seventeenth had rotted in the document
+**Decision:** every issuance boundary declares an invocation entry point and the map's published projection is checked cell by cell, not by membership.
+
+**The sweep, and its result is a NEGATIVE one.** D-184 traced four of seventeen boundaries and stated that count out loud so the gap would not read as coverage. The remaining thirteen were traced here by hand — each boundary's entry point followed to a CLI command, a dashboard route, or a product module that invokes it — and **every `product` declaration held.** Both `unreached` boundaries were confirmed unreached by the same check, from the other direction. There is no second `alloc.exactRun`.
+
+**Recording a negative result is the point, not a formality.** The reason to distrust `reach` was one measured instance, not a general suspicion; the sweep that clears the other sixteen is what turns that instance into a closed question rather than a standing doubt over every queue position on the map. And it changes the shape of the assertion: `four of seventeen` was the honest statement of a partial sweep, and **a partial sweep's count is a placeholder for a gate.** `invocation` is now required on every boundary, so a new boundary cannot arrive with its reach inferred from the import graph the way that one did.
+
+**And then the completed sweep found what the partial one had caused.** D-184 corrected `alloc.exactRun` to `imported_uninvoked` in the code and left `docs/program/ISSUANCE-MAP.md` publishing it as **`product`** — the exact field that correction existed to stop overstating. The document says of itself *"this page is the readable projection of it, and the test fails if the two disagree in either direction"*; the test compared the SET OF IDS, so Class and Reach could drift freely. **A projection test that checks membership certifies the document's existence, not its content, and the columns nobody checks are where a corrected record goes to rot.**
+
+**The prose above the table had gone stale twice, through two different acts.** *"Fifteen of the sixteen boundaries are `product`"* was written for a map of sixteen with one unreached; adding `decision.certificate.issuance` made it wrong once, and D-184 made it wrong again in a second way. Neither was visible to any test. This is **D-175's rule turned on the program's own documents: when you change a record, search for the sentences that were true only before the change** — and D-184 changed a field without sweeping its own projection. The same sweep found the same rot in this program's records: the AII-036 register row and the ACTIVE-EXECUTION narrative both still said "four of seventeen", and both are corrected here.
+
+**The irony is instructive rather than embarrassing.** The AII-036 row already carries the lesson — *"This row states no boundary totals on purpose; the earlier version said 'three boundaries' and 'thirteen of fourteen' and both were stale (D-169)"* — and then stated a total two sentences later. **A rule recorded in the same paragraph it is broken in is the strongest possible evidence that prose discipline is not a substitute for a check.** The per-row cells are now checked. A prose count still is not, which is why the corrected paragraph is written to be re-derivable from the table directly beneath it.
+
+**Evidence.** Two gates. The invocation gate went RED naming exactly the thirteen undeclared boundaries and GREEN with all seventeen declared. The projection gate went RED naming exactly `alloc.exactRun: document does not state reach imported_uninvoked` — one disagreement, which is also the measure of how far the two had drifted — and GREEN after the document was corrected. Root suite green; three typecheck domains clean.
+
+**What this does not establish.** That any boundary is invoked: the check looks for the declared symbol in the product closure outside the files that define or forward it, and **a mention is not a call**, so it proves absence of invocation and never presence. That asymmetry is deliberate and unchanged. Nor that the map's `note` fields, or any prose count anywhere, agree with the code — only Class and Reach are checked, and a note is still free to rot.
+
+
+## D-189 — the deletion and the record of it were three statements with nothing binding them
+**Decision:** `prune`, `pruneProposals` and `clearProposals` commit the DELETE and its `retention_prunes` row as one transaction; VACUUM runs after the commit; and when the record cannot be written it is the deletion that gives way.
+
+**The counterexample, and it is the whole sweep's foundation.** `retention_prunes` exists for exactly one reason (D-170): a deleted history and a history that never happened are indistinguishable to every later reader unless the boundary is on record. Eight packets in this program — D-171, D-173, D-176, D-182, D-183, D-185, D-186 and D-187 — read that record and are worth precisely what it is worth. And `prune` wrote it in three unprotected statements: `DELETE FROM requests`, then `recordPrune`, then `VACUUM`. Nothing binds the first two. Made to fail deterministically — a trigger raising ABORT on any insert into `retention_prunes` — the measured state was **one surviving request row out of three, and `retentionFloor().requestsPrunedBeforeMs` still null.** Two rows deleted, no boundary on record. `pruneProposals` lost one of two the same way, and `clearProposals` — the most total erasure the product offers — took **both** proposals and recorded nothing.
+
+**This is the D-170 defect reconstructed by a failure path rather than by an absent table.** Every earlier packet in the sweep asked what a surface says when a boundary IS on record. This one asks whether the boundary gets on record at all, and the answer was: only if the second of three statements happens to succeed. **A defect that a schema was added to prevent can return through the code that writes to it, and the schema will look untouched.** The disclosure machinery downstream is all correctly conditional on `retentionFloor()`; none of it can detect a floor that was never written.
+
+**Which half gives way is the decision, not an implementation detail.** When the record cannot be written there are only two honest outcomes: delete nothing, or delete and lose the boundary. The second is the state this program refuses — an operator whose prune failed still has their data and an error to read, while one whose record failed silently has a ledger that can no longer say what it lost, and every subsequent report reads as complete. So the deletion is what is refused. That is hard rule 2 applied to a failure path: **unknown stays unknown means the code must not be able to CREATE an unknown it cannot label.**
+
+**VACUUM stays outside, and the reason is worth stating rather than apologising for.** SQLite refuses to VACUUM inside a transaction, so the atomic unit is DELETE + record. That is the correct boundary independently: a failed compaction leaves a larger file, and a file size is not a claim about anything. The private `transaction` helper (BEGIN IMMEDIATE, COMMIT, ROLLBACK-on-throw) already existed and had exactly one caller; this packet adds three, which is the first time it is load-bearing.
+
+**Evidence.** Five tests on the real `Store`, driving the failure through the raw `DatabaseSync` handle because the step being broken has no public seam and should not acquire one. **RED 3 of 5**, each failing on the substantive assertion — 1 request row where 3 must survive, 1 proposal where 2 must, 0 where 2 must — not on a missing symbol. The other two are guards that pass before and after: an ordinary prune must still delete and still record, and a zero-row prune must still write its boundary, because turning "delete nothing on failure" into "delete nothing when nothing matched" would be a second defect wearing the first one's fix. GREEN 5/5. Root suite **1,858 total / 1,854 pass / 0 fail / 4 skipped**; team-server 74/74; three typecheck domains clean.
+
+**What this does not establish.** That a mid-transaction process kill is survivable — that is SQLite's journal, not this code, and it is not tested here. That other multi-statement store writes are atomic: only the deletion paths were swept. The other two deletions D-187 enumerated, `DELETE FROM project_aliases` and `DELETE FROM active_provider_scope_routes`, are single statements with no companion record and are out of this class by construction rather than by inspection. That a prune's `rows_removed` is accurate for any other reason. And nothing about what the deleted rows contained, which is gone either way.
+
+
+## D-190 — a REFUTED witness discharged the obligation it had been refuted about
+**Decision:** a registered `Witness` discharges a derivation obligation only while its own `epistemic` reads `supported`; the refusal names the witness and its state, and stays distinct from the refusal for an absent witness.
+
+**The counterexample, measured.** A `Witness` with kind `causal_identification` and `epistemic: 'refuted'`, registered in the ledger; a Derivation from an `observational` claim to a `randomized` one citing it. `appendDerivation` **succeeded**, and the kernel stored a randomized-causal claim on the strength of a proof its own record says does not hold. The same for `conflicted` and for `unknown`.
+
+**The mechanism, and it is a gap between two types rather than a mistake in either.** `assessDerivationLegality` matches a required obligation against the derivation's inline references through `hasWitness`, which compares `kind` and nothing else. `DerivationWitness` — the inline reference — carries `id`, `kind`, `from`, `to`, `evidenceIds` and `detail`, and **no epistemic state at all**. Only the registered `Witness` node has one. The ledger then checks the reference against the registered record on five fields via `sameWitnessReference`: id, kind, evidenceIds, detail, coordinates. Every field except the sixth. **Neither component is wrong on its own; the obligation simply fell through the seam between the object that declares it and the object that records whether it holds.**
+
+**Why this is worse than the axis gaps this program has already closed.** D-151 built a rule the kernel did not call. D-152 found a money axis with no rule of any kind. Both were absences. This is a rule that was CALLED, that RAN, and that returned `allowed: true` — satisfied by an object the kernel had already recorded as refuted. **A gate that accepts its own counterexample as a pass is worse than no gate, because the record it produces now reads as witnessed.** Nothing downstream — replay, revocation projection, the issuance map — can tell that claim from one whose proof held.
+
+**Three states refused, for three different reasons, and not by analogy.** `refuted` means the proof was checked and failed. `conflicted` means it was checked and both polarities are present, which is a live disagreement; resolving it by taking the supporting half is the overwrite `state.ts` was written to refuse. `unknown` means nothing is known about it, which is hard rule 2 in its narrowest form — nothing known is not assent. One refusal, three reasons, and the error names the id and the state so a reader can tell which they are in. It is also kept distinct from the pre-existing missing-witness refusal, because the operator's next move differs: register a proof, or resolve the one already on record.
+
+**The unsupported witness is SET ASIDE, not erased.** Legality is assessed against the discharging subset; the citation stays in the stored payload and in the DAG. The record still shows which proof was offered and why it did not count, which is more informative than a derivation that never cited it.
+
+**Scoped to the append path on purpose.** `readWitness` resolves a witness in three places. This is the one that assesses legality. `graph()`'s stored-derivation pass is a structural integrity check and is left alone: turning a later revocation into a read-time throw would make the whole ledger unreadable rather than reporting the withdrawal, which is what `revocationProjection` exists for. `ensureBundleDependencies` in `src/decision/epistemic.ts` checks that a certificate's witness dependency EXISTS — a different obligation, where depending on a refuted witness may be exactly what a certificate should record — and is untouched.
+
+**Evidence.** Six tests on the real `EpistemicLedger`, fixtures copied from `test/epistemic-monetary-rebasing.test.ts` rather than invented. **RED 3 of 6**, each failing as `Missing expected exception` — the append genuinely succeeded. Three guards passed before and after and are what keep the fix from removing a capability: a supported witness still discharges, an absent witness still refuses for the missing kind, and descending the causality ladder still needs no witness at all. GREEN 6/6. Root suite **1,864 total / 1,860 pass / 0 fail / 4 skipped**; team-server 74/74; three typecheck domains clean.
+
+**What this does not establish, and it is the larger half.** That a `supported` witness proves anything about its own CONTENT. The kernel still does not check that a `causal_identification` witness describes an identification strategy, that its evidence supports that strategy, or that the strategy fits the claims either side of the derivation — `detail` is a free string. This packet closes only the case where the kernel's own record contradicts the discharge; **what a witness must CONTAIN is a design question about per-kind obligations, and answering it casually here would have been the same mistake in the other direction.** Nor that a witness refuted after a derivation was stored invalidates that derivation — revocation, not legality. Nor that any product path currently registers a non-supported witness: none does, which makes this a latent hole in the kernel rather than a live defect on a screen, and the kernel is exactly where a latent hole is worth closing.
+
+
+## D-191 — an upper bound of zero percent, computed from zero observations
+**Decision:** `outcomeBounds([])` returns the uninformative interval `[0, 1]`, the docblock says why, and the empty case is asserted to agree with `anytimeRateInterval`.
+
+**The counterexample, measured.** `outcomeBounds([])` returned `{lower: 0, upper: 0, n: 0}`. **An upper bound of 0 is the strongest negative claim this function can make** — no more than zero percent of these outcomes realized, and no evidence could raise it. That is what an all-refuted sample looks like, and this packet asserts that case alongside it so the two are visibly the same number reached from opposite epistemic positions. One is a measurement. The other was the absence of one.
+
+**`n: 0` was always there, and that is the point rather than the defence.** A careful consumer could read the count and infer the bounds were vacuous. This program has refused that shape repeatedly: **a figure whose meaning depends on a second field the reader has to know to check is a figure that will be read wrong.** Hard rule 1 says every figure carries its basis; it is not satisfied by the basis being available nearby, in a sibling field, for a reader who already suspects the answer.
+
+**THE SAME QUESTION ALREADY HAD THE RIGHT ANSWER ONE MODULE OVER, AND THAT IS THE FINDING.** `anytimeRateInterval` in `src/value/anytime.ts` handles `n <= 0` by returning `[0, 1]` with the comment *"no evidence -> the whole interval, honestly"*. Two functions in one repository computing an interval over a realized share, disagreeing on the one input where the answer is not a matter of taste. **Consistency here is not tidiness: a consumer reading both and finding them disagreeing about an empty sample has no convention to follow, and would reasonably conclude the difference was deliberate.** The agreement is now asserted in a test rather than left to whoever reads both files next.
+
+**LATENT, AND FIXED ANYWAY.** `outcomeBounds` has no caller in `src/` at all — `src/causal/precision.ts` uses a differently-typed field of the same name, which was checked rather than assumed. So nothing today can reach the defect. This kernel exists to refuse the collapse between "no evidence" and "evidence of none"; **a kernel that would commit that collapse on its first empty input is not doing its job merely because nobody has called it yet.** The alternative — waiting for a caller — is the position that a defect becomes real when it becomes visible, which is the opposite of what a kernel is for.
+
+**Evidence.** Five tests. **RED 2 of 5**: the empty case returned `upper: 0` where `1` was required, and the cross-module agreement failed at `0 !== 1`. Three guards passed before and after, and they are what make the widening safe: the four-evaluation example from `test/outcome-contract.test.ts` reproduced value for value, a single confirmed evaluation still pinning both bounds at exactly 1, and the all-refuted sample that shows what an upper bound of zero is entitled to mean. GREEN 5/5. Root suite **1,869 total / 1,865 pass / 0 fail / 4 skipped**; team-server 74/74; three typecheck domains clean.
+
+**What this does not establish.** That the non-empty bounds are calibrated for any other reason — they are exact counts over terminal status, which is what partial identification means here and all it means. That a small non-empty sample is adequate: `n: 3` still yields a narrow interval from three observations, and this function offers no anytime-valid coverage guarantee the way `anytimeRateInterval` does, so the two agree at zero and are not interchangeable above it. That other vacuous-boundary cases in `src/` are swept: only this one was measured, and the class — a degenerate input returning a confident-looking answer — is named here rather than counted as closed. And nothing about outcomes that were never evaluated, which is the same permanent limit every local measure has.
+
+## D-192 — A direct claim could assert what only a Derivation is allowed to conclude
+
+**Decision.** At the ledger's commit boundary, a claim appended without a
+Derivation producing it inside the same transaction may not exceed a stated
+floor on the ordered profile axes that Evidence cannot bound: `causality` at
+most `observational`, `decisionFitness` at most `insufficient`, `finality`
+`final` only when every cited evidence carries `finalizedAt`, and `measurement`
+above `proxy_unvalidated` only when some cited evidence declares a
+`measurementModelRef`. A claim that exceeds a floor and is not the output claim
+of a legal Derivation appended in the same transaction rolls the transaction
+back. `monetaryBasis` is deliberately not covered: it is not a ladder, so there
+is no "above" to refuse.
+
+**Counterexample.** One piece of Evidence with `integrity: 'unknown'`,
+`authenticity: 'self_asserted'`, `completeness: partial`, and one Claim citing
+it with `profile.causality: 'randomized'`. `appendClaim` returned `'inserted'`
+and `readClaim` returned the stored randomized causal claim. No assignment
+procedure, no witness and no derivation existed anywhere in that ledger. The
+same held for `decisionFitness: 'sufficient'` — a claim declaring itself fit to
+act on — and for `finality: 'final'` over evidence that carried no
+`finalizedAt`.
+
+**Root cause.** The kernel has two append boundaries and they guarded disjoint
+sets of axes. `appendDerivationWithinTransaction` consults
+`assessDerivationLegality`, which guards eight ordered axes via
+`PROFILE_STRENGTH_AXES` and demands the matching witness for each upward move.
+`appendClaimWithinTransaction` consults `assertClaimWithinItsEvidence`, which
+guards integrity, authenticity and coverage — the three axes `Evidence` carries
+a comparable field for — plus grain, scope and the measurement-model reference
+(D-104, D-106, D-108, D-168). Three ordered axes sat between the two lists and
+were guarded by neither. Because the direct path was unguarded, the entire
+derivation registry was optional: any conclusion a Derivation would have needed
+a witness for could be reached by declaring it on a claim instead. The registry
+refused the front door and there was no lock on the back one.
+
+**Fix.** `EpistemicLedger.directClaimObligation` states the floor and returns
+the phrase naming which one a claim exceeded; `appendClaimWithinTransaction`
+records that phrase against the claim id on the INSERT path only, so idempotent
+replay of an already-stored claim raises nothing.
+`appendDerivationWithinTransaction` marks its `outputClaimId` legalized once
+every input claim has been assessed and allowed — and only when the derivation
+names at least one input claim, since a derivation over evidence alone runs the
+legality loop zero times and would otherwise hand the bypass back by another
+door. `EpistemicLedger.transaction` opens a frame per transaction and calls
+`assertStrengtheningDischarged` immediately before `COMMIT`, so an outstanding
+obligation rolls the whole transaction back.
+
+The check is at COMMIT rather than at the append because
+`appendDerivationWithinTransaction` reads its output claim back out of the
+ledger: the claim a derivation legalizes is necessarily persisted before the
+derivation is offered. Refusing at append time would refuse the only ordering
+the kernel permits, which is the ordering `issueCausalStudyToKernel` and
+`issueDecisionToKernel` both already write.
+
+**Two calibrations, both made against measured behaviour rather than by
+analogy.**
+
+`decisionFitness` is floored at `insufficient`, not at `not_assessed`. The
+`DECISION_FITNESS` ladder orders INFORMATION, not permission: `sufficient` is
+the only rung that licenses acting, and a claim declaring a decision unfit to
+act on cannot inflate anything by saying so. Flooring at `not_assessed` was
+implemented and measured first: it refused
+`claim:decision:utility:decision-1`, the observation claim
+`buildDecisionKernelIssuance` issues directly at `insufficient` beside the
+`sufficient` claim its derivation produces, and took two tests in
+`test/decision-issuance.test.ts` with it. Making withholding the expensive path
+— a boundary having to mint a derivation in order to say "do not act on this" —
+is the opposite of hard rule 3.
+
+A derivation with no input claims legalizes nothing, because
+`assessDerivationLegality` runs once per input claim and such a derivation runs
+it zero times.
+
+**Evidence.**
+
+RED, against the unfixed tree, `test/ledger-strengthening-obligation.test.ts`:
+four failures, all `Missing expected exception`:
+
+- `a direct claim cannot assert a causal reading no derivation identified`
+- `a direct claim cannot assert decision fitness no derivation established`
+- `a direct claim cannot declare final while cited evidence is not finalized`
+- `every cited evidence must be finalized, not merely one of them`
+
+Both guards passed RED unchanged, which is what makes the four failures a
+finding rather than a broken fixture:
+
+- `GUARD: the same strengthened claim is accepted when a legal derivation legalizes it in the transaction`
+- `GUARD: an ordinary claim within its evidence still needs no derivation at all`
+
+GREEN: 8/8 in that file, including the two calibration cases added after the
+measurement above — `a direct claim may still declare a decision UNFIT to act
+on` and `a derivation over evidence alone legalizes nothing`.
+
+Full suite: 1,881 tests, 1,876 pass, 4 skipped.
+
+**What this does not establish.**
+
+- That a derivation's witness is TRUE. D-190 settled that a witness discharges
+  only while its own record reads `supported`; nothing here checks that a
+  `causal_identification` witness describes an identification strategy, or that
+  the strategy fits the claims either side of it. `detail` is still a free
+  string.
+- That the measurement RUNG is bounded by anything. `Evidence` records which
+  model a record was collected under and never how well validated that model
+  is, so the measurement floor only refuses a rung with no model reference
+  behind it at all. That case is in fact already unreachable — `claim()`
+  refuses a null ref above `proxy_unvalidated` and D-168 refuses a ref no cited
+  evidence declares — and the floor is stated anyway so the rule is one
+  readable statement rather than a consequence of two others that could move
+  independently.
+- Anything about `monetaryBasis` on the direct path. It has no ladder and no
+  floor here; the derivation path guards it with `monetary_rebasing` (D-152)
+  and the direct path does not guard it at all.
+- That a strengthened claim stays legal AFTER commit. The obligation is
+  discharged once, at the transaction that stores the claim. A derivation
+  revoked later leaves the claim behind, which is what `revocationProjection`
+  reports rather than what this rule prevents.
+
+## D-193 — State the bars on two of the three unexamined claim uses, and say why the third has none
+
+**Decision.** `outcome_attribution` and `model_recommendations` now carry stated,
+per-axis bars in `src/epistemic/claim-uses.ts`. `roi` stays unstated, and its
+placeholder reason is replaced by a specific one naming the structural obstacle.
+`outcome_attribution` is admissible at `causality: 'none'`, deliberately and in
+writing.
+
+## The counterexample
+
+`USE_REQUIREMENTS` declared five doors. Three of them —
+`outcome_attribution`, `roi`, `model_recommendations` — carried `requires: []`
+and the *same* sentence of prose:
+
+```
+No bar has been stated for this use. The surfaces that bar figures from it do
+so by hand-written list, and until the requirement is written here that list is
+the authority — an unstated requirement is not a satisfied one.
+```
+
+`admits` reported all three as `stated: false`, which was honest. What nothing
+checked was whether anyone had ever looked. One sentence serving three doors is
+the tell: a reason that is genuinely about `roi` cannot also be the reason about
+`model_recommendations`, so identical prose across two entries is prose about
+neither. The registry could have sat at three-of-five unexamined indefinitely
+with every test green, because no test could distinguish "examined and found to
+have no expressible bar" from "never opened".
+
+## Root cause
+
+Two different things were being recorded with one representation. `requires: []`
+means "no bar applies here as far as anyone has said", and it is the correct
+value in both of the above cases — but the *reason* field was the only place the
+difference could live, and it was filled with boilerplate. WP-B05 built the
+machinery for stating bars and stopped before stating them, and the placeholder
+made stopping indistinguishable from finishing.
+
+## The fix
+
+Three entries rewritten, each from what its consumer does with the claim.
+
+**`outcome_attribution`** — `epistemic: oneOf ['supported']`,
+`scope: atLeast 'conditional'`, `coverage: atLeast 'complete'`.
+
+- *epistemic.* `src/outcomes/CONTEXT.md` already states the invariant: unknown
+  evidence never becomes confirmation, conflict never becomes confirmation.
+  Attribution is the step that turns an outcome into credit, so it inherits that
+  rather than restating it.
+- *scope.* Attribution is a claim over a named population. At `scope: 'unknown'`
+  it attributes to nothing in particular; at `'incomplete'` the outcome may
+  belong to a member the recorded scope does not contain.
+- *coverage.* Half of "this work realized" is a negative claim — not reverted,
+  no linked incident. `src/measurement/completeness.ts` states that absence in an
+  observation stream is not evidence of absence without positive evidence of
+  completeness, and `REALIZATION_ASSUMPTIONS[3]` says the same in the issuing
+  boundary's own words. On partial coverage "no revert was observed" silently
+  becomes "no revert occurred", and the attributed outcome may already have been
+  undone. This is the inflating direction, which is the direction a bar is for.
+- *causality is deliberately absent, and that is the finding.* Attribution is a
+  scope claim; causation is a claim about what produced the outcome. The
+  repository's only outcome attribution, `claim:value:realization:*` in
+  `src/value/epistemic.ts`, is issued at `causality: 'none'` carrying an
+  assumption that says in words it is not a causal claim. A causality rung would
+  bar the realization ledger from the use it exists for and would redefine
+  attribution as causation in the one place nobody would look.
+- *measurement is deliberately absent too*, for the opposite conclusion from the
+  next entry: the realization funnel is `proxy_unvalidated` and ships as this
+  product's attribution surface, so a bridged-surrogate requirement would bar the
+  thing the door is for.
+
+**`model_recommendations`** — `measurement: atLeast 'proxy_validated'`,
+`decisionFitness: atLeast 'sufficient'`.
+
+- The consequence that sets the bar: a model recommendation is *acted on*. It
+  moves future work, and therefore future spend, to a different model. That is
+  the one use in this vocabulary where being wrong costs money going forward
+  rather than misdescribing money already spent.
+- *decisionFitness.* `sufficient` is issued in exactly one place —
+  `src/decision/epistemic.ts`, on a certificate proving strict interval dominance
+  over every rival action. `insufficient` means the intervals were checked and
+  overlapped; `not_assessed` means nobody asked. Recommending on either is
+  recommending noise.
+- *measurement.* Dominance **on a surrogate** is dominance on the surrogate.
+  `src/measurement/surrogate.ts` exists precisely to say when a surrogate may be
+  read as its target and tops out at `proxy_validated`, so this rung is the
+  strongest a surrogate can reach, not an unreachable one. Without it, "model B
+  leads on realization rate" becomes "use model B" — Goodhart with a routing
+  change attached.
+- The two do not substitute for one another, which is `admissibility.ts`'s
+  founding rule: `decision/epistemic.ts` issues `sufficient` at
+  `proxy_unvalidated`, and `causal/epistemic.ts` issues `proxy_validated` at
+  `not_assessed`. Each real claim in the tree clears one half and not the other.
+- *No monetary bar, and that is a finding.* The only claim reaching
+  `decisionFitness: 'sufficient'` carries `monetaryBasis: 'none'` — its dominance
+  is over declared utility intervals, not a dollar figure — so a membership bar
+  on that axis would refuse the only claim shape capable of clearing the door.
+  The four hand-written lists barring allocated, billed and provider-observed
+  figures remain the authority there.
+- This is why `src/value/frontier.ts`'s model comparison is review-only and never
+  changes provider routing. The bar makes that comment a checkable property.
+
+**`roi`** — still `requires: []`, with a specific reason.
+
+RoI divides a realized-value claim by a cost claim, and the two are deliberately
+different quantities: `realizedClaimSupport` issues the value side at
+`monetaryBasis: 'estimated'`, and the cost side is `list`, `estimated` or
+`effective`. A `UseRequirement` bars **one** profile, and merging the two sides
+collapses `monetaryBasis` to `mixed` — the same sentinel a metered figure carries
+when some requests were estimated, and the same one it would carry if a billed
+total had been folded in. So a membership bar admitting `mixed` admits the
+contamination it exists to catch, and one refusing `mixed` refuses the ordinary
+case. `atLeast` cannot help: it is rejected at construction on `monetaryBasis`
+for the reason `mergeClaimProfiles` gives.
+
+Stating the axes that *do* fit — coverage, finality — was considered and refused.
+It would set `stated: true` for a door whose deciding axis is untested, and it
+would make `compareForUse` start ordering billed against metered *for RoI* on
+axes the use does not turn on. That is the collapse the module exists to prevent,
+one level up.
+
+**What would have to be true to state it:** either a `UseRequirement` would have
+to range over a numerator and a denominator by name, or a `ClaimProfile` would
+have to carry its constituent monetary bases instead of collapsing disagreement
+to `mixed`.
+
+## Evidence
+
+New file `test/claim-use-bars.test.ts`, eight tests.
+
+RED, against the unfixed tree — the gate names exactly the three doors:
+
+```
+✖ no door is left with a bar nobody stated AND a reason nobody wrote
+  AssertionError: these uses state no bar and give no reason of their own:
+  model_recommendations, outcome_attribution, roi
+  + [ 'model_recommendations', 'outcome_attribution', 'roi' ]
+  - []
+ℹ tests 8   ℹ pass 0   ℹ fail 8
+```
+
+The gate reads "generic" two independent ways, because either alone is
+escapable: a reason held by more than one use is not a reason about either of
+them, and the original placeholder's own signature phrase must not appear under a
+new name.
+
+GREEN, per-test:
+
+- `no door is left with a bar nobody stated AND a reason nobody wrote`
+- `a door left unstated says what would have to be true to state it`
+- `outcome attribution is admissible with no causal identification at all`
+- `outcome attribution refuses an absence nobody established`
+- `outcome attribution refuses a contradicted outcome and an unnamed population`
+- `a model recommendation needs a proven decision AND a surrogate that was bridged`
+- `a model recommendation states no monetary basis, and that is the finding`
+- `roi is still unexamined, and reports itself as unexamined rather than passed`
+
+`ℹ tests 8  ℹ pass 8  ℹ fail 0`. The fixtures are the profiles this repository
+actually issues — `claim:value:realization:*`, `decision.fitness_sufficient`,
+`claim:causal:effect:*` — not profiles invented to clear the bar.
+
+Root typecheck clean. Full suite `1888 tests, 1884 pass, 0 fail, 4 skipped`.
+
+## What this does not establish
+
+- **That anything currently clears `model_recommendations`.** Nothing does: no
+  claim in the tree carries both `proxy_validated` and `decisionFitness:
+  'sufficient'`. The bar states what would have to be true, and matches what
+  `src/value/frontier.ts` already says about itself. It is not a claim that the
+  shipped model comparison is wrong, only that it is review-only.
+- **That the bars are wired into any surface.** `admits` is still consulted by
+  nothing outside the tests. The hand-written `excludedFrom` literals in
+  `src/alloc/exact.ts`, `src/billing/reconcile.ts`, `src/billing/openaiCosts.ts`,
+  `src/billing/mapping.ts` and `src/dashboard/routes.ts` remain the operative
+  authority on every surface. This packet states bars; it does not enforce them.
+- **That `coverage: 'complete'` distinguishes the three ways attribution coverage
+  can be partial.** The axis conflates unseen outcomes (which under-attributes,
+  conservatively), unseen work (which over-attributes), and unseen
+  revert/incident channels (which over-attributes). The bar is set for the
+  inflating cases and is stricter than necessary for the conservative one.
+- **That `roi` has no bar.** Only that none is expressible in the vocabulary
+  `UseRequirement` currently offers, and that the obstacle is named rather than
+  papered over.
+- **That the two stated bars are complete.** They are the axes that follow from
+  what each consumer does. An axis nobody could tie to a consequence was left
+  out rather than added for symmetry.
+
+## D-194 — The wire carries the claim; the view is a named function of it (AII-014 / WP-B02 remainder)
+
+**Decision.** `ClaimSupportPayload` transports the canonical ten-axis
+`ClaimProfilePayload` and nothing that restates it. The three axes the spine
+renders are produced in the browser by `projectRenderedAxes`, applied to the
+transported profile at the point of render, next to a named list of the seven
+axes it drops and a statement that dropping them is a rendering choice rather
+than a claim about the claim.
+
+**The counterexample.** D-082 put all ten kernel axes on the wire and kept the
+three-field flat copy the GUI had been reading, with a comment calling the
+copy "a stated projection of it, not a second opinion". The wire therefore
+carried a view of the claim beside the claim, and the browser believed the
+view: every spine predicate, the Evidence headline, and the Billed next-step
+read `claimSupport.epistemic`, never `claimSupport.profile.epistemic`. A server
+that projected wrongly — copied `profile.coverage` into the flat `epistemic`,
+say — would have rendered a wrong claim while the canonical profile sat correct
+one field away, and nothing downstream was in a position to notice. The
+identity was asserted only over eight hand-built samples in
+`test/claim-support-axes.test.ts`; the four live routes were checked with
+`typeof support[axis] === 'string'` over four field names, which is the exact
+shape of assertion CLAUDE.md records as insufficient (`reconciliation.runs` was
+present, and a number, and wrong).
+
+Two of the three copied axes reached no renderer at all. `coverage` and
+`monetaryBasis` were transported flat, declared in the browser, and read by
+nothing: the inspector's "Coverage" row is prose assembled in `claimLayers.ts`
+from `roi.coverage` and the server's `note`. So the payload was shaped by what
+a reader was believed to read, and the belief was already out of date.
+
+**Root cause.** A projection whose narrowing happens on the far side of the
+boundary cannot be checked against the thing it narrows. Once the profile and
+the view travel together, "which one is the claim" is a convention rather than
+a structure, and conventions in this repo have consistently been the thing that
+drifts. The fix is not a better assertion over the two copies; it is removing
+the second copy, so that there is exactly one statement of the judgement and
+exactly one function that narrows it.
+
+**The fix.**
+- `src/dashboard/shared-types.ts`: `ClaimSupportPayload` is `{ profile, figure,
+  note? }`. `figure` stays — whether a band shows a number is a display
+  decision with no kernel axis behind it, which is why it is not projected from
+  one.
+- `src/dashboard/claim-support.ts`: `projectClaimSupport` becomes
+  `claimSupportPayload` and copies nothing. The server states the profile.
+- `src/dashboard/web/app/core/claimTypes.ts`: `RENDERED_PROFILE_AXES`,
+  `DROPPED_PROFILE_AXES` and `projectRenderedAxes`. The two lists are declared
+  by name so that a new kernel axis fails a test rather than being omitted by
+  the same reflex a second time. Every spine predicate goes through the
+  projection.
+- `claimLayers.ts` and `views/evidence.ts` read the transported profile through
+  the projection instead of the flat copy.
+- `src/dashboard/web/app/core/generated-types.ts` and
+  `generated-payload-contract.ts` are regenerated by
+  `scripts/generate-dashboard-payload-contract.mjs`, which the build runs; they
+  are not hand-edited.
+
+**Evidence.**
+RED, against the unfixed tree, in `test/claim-profile-projection.test.ts`:
+- `the rendered view is a named projection that drops exactly the axes it
+  declares` — *the browser declares no RENDERED_PROFILE_AXES: the projection is
+  unnamed*.
+- `the payload transports the profile once, not a view-shaped flattening beside
+  it` — *the payload flattens 3 profile axis/axes beside the profile:
+  epistemic, coverage, monetaryBasis*.
+- `every claim route transports every kernel axis, and every value is a member
+  of that axis's ladder` passed on the unfixed tree. That is the honest
+  result and it is reported as one: the ten axes had already reached the wire
+  at D-082, and this test is the regression guard that was missing — it reads
+  every axis of `claimSupport.profile` on all four claim routes, `value`
+  included, back against `EPISTEMIC_STATES` and the nine ladders imported from
+  `src/epistemic/profile.ts` at runtime rather than against the wire's own
+  mirror of them.
+
+GREEN: those three, plus the five updated tests in
+`test/claim-support-axes.test.ts` (notably `the payload the spine reads is a
+projection of the claim profile, not a second opinion`, whose identity check now
+runs through `projectRenderedAxes` and therefore over the real render path, and
+`the Evidence headline is keyed on the claim, not on a records-level constant`),
+`test/claim-support.test.ts`, `test/claim-layers.test.ts` and
+`test/metered-coverage-retention.test.ts` — 39/39 on those five files. Root
+typecheck clean; browser typecheck clean (the domain this packet is about, and
+the one `npm run typecheck` does not see); team-server typecheck clean and 74/74,
+though it imports nothing from `src/dashboard/` and was never at risk. Full
+suite 1888 tests, 1884 pass, 0 fail, 4 skipped.
+
+**What this does not establish.** The rest of AII-014 stands: PERSISTED records
+still carry collapsed status fields, a stored realization snapshot or
+reconciliation row is not re-read through the axes, and no migration exists.
+The seven dropped axes are still constant across every dashboard claim, and
+nothing here checks that any boundary's declaration of them is CORRECT — only
+that the dashboard repeats them and that a reader can now obtain them. No
+screen renders them yet, so this makes the axes reachable rather than read: an
+operator still cannot see from the GUI that no figure on the page is causal or
+final. `projectRenderedAxes` is a rendering decision recorded in one place, not
+an argument that three axes are the right three. And the browser's
+unreachable-endpoint profile still fills `measurement`, `causality` and
+`decisionFitness` with the floor of each union because those unions have no
+`unknown` member — a limitation of the vocabulary, unchanged by this packet.
+
+## D-195 — Name the assumption sets that would remove a certification, and say where the search stopped
+
+## Decision
+
+`minimalInvalidatingAssumptionSets` is implemented in `src/epistemic/countermodel.ts`
+as a **bounded** search over an explicitly declared support structure, computed by
+the single hitting-set fold now exported from `src/epistemic/dag.ts` as
+`minimalHittingSets`. `minimalCutSets` was rewritten to call that same fold, so
+the two questions that have already disagreed once in this repository cannot
+disagree again by drifting apart. The decision domain gets an adapter,
+`decisionCertificationStructure` / `decisionInvalidatingAssumptionSets`, and
+nothing else. The decision engine is **not** wired into any product surface here.
+
+## The counterexample
+
+A `Claim` and a `DecisionCertificate` both carry `assumptions` as a flat list of
+prose. `assessAssumptionFragility` can say which of them have live countermodels,
+but nothing could answer the question an operator actually asks of a certificate:
+*what would have to be false for this to stop being certified?* The list is flat,
+so every assumption reads as equally load-bearing.
+
+For the strict-interval-dominance certificate that reading is wrong in a
+checkable way. `certifyDecision` compares one action's `low` against the largest
+rival `high`. Assumption [0] (the intervals bound the utility in every admissible
+world) and assumption [2] (strict dominance requires a positive lower-bound
+margin) are what carry it. Assumption [1] — *the interval uncertainty set is
+rectangular for regret calculations* — does no work at all: strict interval
+dominance never requires the actions to vary independently. Rectangularity is a
+`minimaxRegret` assumption. The flat list presented an inert assumption and two
+load-bearing ones as three of a kind.
+
+## Root cause
+
+Two gaps, one structural and one about honesty of scale.
+
+The structural gap: a certificate declared *that* it had assumptions but never
+declared *how* they carry it. Without a support structure there is no difference
+between an assumption whose failure alone decertifies, a pair that only
+decertifies jointly, and an assumption whose failure changes nothing — so a
+reader who wants that difference has to reconstruct it from source each time,
+and will sometimes reconstruct it differently.
+
+The scale gap: the number of minimal invalidating sets is exponential in the
+number of alternative supports (a family of `k` disjoint pairs has `2^k`), and
+nothing about the input announces that in advance. A function that enumerated
+them and returned an array would, on a large structure, silently return a prefix.
+A capped answer reported as a complete one is this program's most-recorded defect
+class, and it would have been rebuilt here in a new place.
+
+## The fix
+
+`CertificationStructure` — `{ assumptions, certified, supports }` — is where a
+domain records its judgement about what carries a certification, in one place
+that can be read and disputed. A `support` is a set of assumptions that carries
+the certification on its own; certification survives exactly while one support
+survives intact. That is the same edge reading `dag.ts` settled at D-098:
+conjunctive within a support, alternative across supports.
+
+`minimalInvalidatingAssumptionSets(structure, { limit })` returns
+`MinimalInvalidatingSets`:
+
+- `sets` — inclusion-minimal sets of assumption names whose joint failure removes
+  the certification, smallest first. Names, never a score: a ranked fragility
+  number would be unsourceable in the way `profile.ts` refuses, and it would not
+  tell an operator what to go and check.
+- `inertAssumptions` — assumptions appearing in no minimal set. **`null` means
+  NOT DETERMINED**, and the other fields say why: either the search was capped,
+  or `emptyBecause` is set. A capped search cannot tell "in no minimal set" from
+  "in a set the search never reached", so it refuses to name inert assumptions
+  rather than report a prefix as the whole answer.
+- `truncated` / `limit` — the bound is part of the return value, not a comment.
+  Default `DEFAULT_INVALIDATING_SET_LIMIT = 256`, applied to the candidate
+  frontier carried between folds and therefore to both the work and the result.
+- `emptyBecause` — `'certification_not_in_force'` and `'no_supports_declared'`
+  are different reasons for an empty `sets`, and an empty array alone would let a
+  caller read either as robustness.
+
+Refusals, rather than quiet shrinkage: a support naming an assumption the
+certificate does not state, a support naming nothing at all (which would make the
+certification unfalsifiable by assumption failure), and a non-positive limit.
+
+`decisionCertificationStructure` declares the one support `[[bound, criterion]]`
+and reports rectangularity as inert, with the reasoning in the docblock beside it
+and a note on why this does not contradict `decisionCountermodels`' second world
+(which says the decision is not certified *by rectangular interval reasoning* —
+a route becoming unavailable, not this certificate falling).
+
+## Evidence
+
+New file `test/countermodel-invalidating-sets.test.ts`, 7 tests.
+
+RED, against the unfixed tree, at commit `e1fd90d`:
+
+```
+SyntaxError: The requested module '../src/decision/countermodels.ts' does not
+provide an export named 'decisionCertificationStructure'
+ℹ tests 1  ℹ pass 0  ℹ fail 1
+```
+
+GREEN test names:
+
+- `a minimal invalidating set is a singleton, a joint pair, or nothing at all` —
+  one structure carries all three cases: `A` alone decertifies; `B` and `C` only
+  jointly; `D` appears in no set.
+- `the enumeration bound is reported by the return value, never applied silently`
+  — 16 sets under `limit: 64`, 4 sets and `truncated: true` and
+  `inertAssumptions: null` under `limit: 4`.
+- `an unstated or empty support is refused rather than quietly shrinking the answer`
+- `no certification and no declared support are distinct emptinesses`
+- `the proven dominance certificate rests on two assumptions and not on the third`
+- `an undetermined certificate has no certification to invalidate`
+- `invalidating sets and minimal cut sets are one hitting-set algorithm, not two`
+
+Existing `minimalCutSets` behaviour held by `test/epistemic-dag.test.ts` and
+`test/epistemic-support-cut-agreement.test.ts` (28 pass) after the refactor.
+
+## What this does not establish
+
+- **No completeness.** This is a bounded search over the supports it was handed,
+  not a theorem prover. An assumption a domain failed to declare as load-bearing
+  comes back inert, and that is a statement about the declaration, not the world.
+  The support structure is a judgement recorded in source; it can be wrong, and
+  the point of putting it in one named place is that a wrong one is arguable.
+- **No reach.** Nothing outside `src/decision/` imports `engine.ts` or
+  `countermodels.ts`. `decision.certificate` and `decision.certificate.issuance`
+  are `unreached` in `src/epistemic/issuance-map.ts`, and this commit verified
+  that classification is correct rather than changing it. This is a mechanism
+  built and not wired, and it stays that way here: wiring it is an architecture
+  and product-behaviour change reserved for the owner.
+- **Only one domain can currently show an operator a "why not certified?"
+  witness**, and it is the reconciliation domain, through
+  `src/billing/countermodels.ts` into `fiscus billing reconcile`. The value domain
+  emits no countermodels at all — `src/value/` does not import `countermodel.ts` —
+  so it cannot produce one, and no `CertificationStructure` exists for it.
+- **No ranking and no score.** There is deliberately no ordering of countermodels
+  by severity and no fragility number. Sets are ordered by size only, which is a
+  fact about the sets and not a claim about likelihood.
+- **A truncated result is not a minimal one.** When `truncated` is true the
+  returned sets are invalidating sets but are not certified inclusion-minimal: a
+  smaller set may have been dropped from the frontier before it could subsume
+  them. The flag says so; a caller that ignores it is making the claim the flag
+  exists to block.
+
+## D-196 — Budget enforcement compares in Money, and an unreadable cap blocks
+
+**Decision.** `BudgetGuard` decides on exact `Money`. The four caps
+(`dailyUsd`, `dailySoftUsd`, `sessionUsd`, `runawayMaxUsd`) are parsed once per
+configuration into `Money` through their shortest round-trip decimal string, the
+rate-card float column is read the same way, and every threshold test and the
+incomplete-coverage maximum are exact comparisons. A cap that cannot be read as
+exact money is a configuration failure that BLOCKS; it never falls back to a
+float comparison and never becomes "no limit". `exactNumber()` survives, demoted
+in its docblock to reporting only.
+
+## The counterexample
+
+Three requests in a day, each charged one third of a $25 batch at the ledger's
+scale — $8.333333333333333. Their exact sum is $24.999999999999999, one part in
+10^15 under a $25 daily cap. Adjacent binary doubles near 25 are 2^-48 apart
+(~3.55e-15), so that sum is nearer to 25.0 than to the double below it and
+`Number('24.999999999999999')` is exactly 25. The old guard projected the exact
+ledger sum onto that double, compared `25 >= 25`, and stopped the developer's
+work on a day its own ledger said was under the cap.
+
+The same collapse corrupted the guard's account of itself. With $0.29999999999999999
+of resolved effective charges, one request still unpriced, and a rate-card float
+of $0.30, the exact floor is strictly smaller than the float floor — so the float
+is what bounds the window. Both project onto the same double, the old code took
+its equality branch, and `SpendBasis.enforcedAgainst` reported `exact_effective`:
+the guard told the operator the economic ledger stopped their work when the
+ledger's own figure was lower than the number enforced.
+
+And the cap side failed open outright. `BudgetGuard` accepts a `BudgetConfig`
+handed to it directly, so a configuration that reached it unvalidated could carry
+`dailyUsd: NaN`. `daySpend >= NaN` is `false`. A broken cap was not an error; it
+was an unmetered path, with $1,000 of spend answered `allow`.
+
+## Root cause
+
+`SpendBasis` described the SOURCE of the figure honestly while the COMPARISON was
+not exact. The guard's record of what it enforced against was more precise than
+the act of enforcing. This was the only place left in the money path holding
+exact `Money` with no `Money`-typed counterpart to compare it to — and the one
+place where the comparison is a control action rather than a report.
+
+## The fix
+
+- `src/config.ts` gains `decimalStringFromNumber` — the one total, lossless
+  conversion from a JS number to a plain decimal string, expanding the exponent
+  form `String` emits outside its middle band so that a legitimate `1e-7` cap
+  stays readable — and `exactBudgetCaps`, which parses the four caps into `Money`
+  once per configuration (cached on the config object, re-validated against the
+  four cap numbers so both a settings save and an in-place CLI edit invalidate
+  it). A cap that will not parse throws `ConfigValidationError`; it is never
+  cached, so it throws again on every request.
+- `src/budget/guard.ts` compares through `compareEnforcedUsd`, which re-labels
+  the right-hand side to the left-hand basis for the ordering only and defers to
+  `compareMoney`. Enforcement has two deliberate cross-basis orderings — the
+  max-of-two-floors and every cap test, since a cap is a policy threshold with no
+  economic basis of its own — and in both the winning value keeps the basis it
+  arrived with, which `enforcedAgainst` reports. `resolveEnforcedSpend` now also
+  returns the enforced `Money`; `remainingDailyUsd` is subtracted exactly and
+  projected afterwards.
+- Fail-closed is unchanged in shape: the throw propagates out of
+  `guard.evaluate()`, `handle()` in `src/proxy/server.ts` latches
+  `state.accountingFailure`, and the answer is 503
+  `budget_enforcement_unavailable` with nothing forwarded.
+
+## Evidence
+
+RED at `e1fd90d`, `test/budget-exact-comparison.test.ts`, 3 of 6 failing:
+
+- `exact comparison: the ledger sum, not its float projection, decides a day below the cap`
+  — `'block' !== 'allow'`
+- `exact comparison: a cap that cannot be read as exact money BLOCKS, it does not become "no limit"`
+  — `'allow' !== 'threw'` (daily cap NaN)
+- `exact comparison: enforcedAgainst names the side that actually bound the decision`
+  — `'exact_effective'` where `'rate_card_float'` was owed
+
+Three passed on the unfixed tree and are recorded as preservation pins rather
+than defects: `the same day one thousandth of a cent over the cap still blocks`,
+`a spend exactly equal to the cap trips every one of the four thresholds`, and
+`the incomplete-coverage maximum of two floors is unchanged`.
+
+GREEN: 6/6 in that file. `tsc --noEmit` clean on all three compilation domains
+(root, browser app, team-server). Full suite 1,901 tests / 1,897 pass / 0 fail /
+4 skipped, against a 1,888 / 1,884 / 0 / 4 baseline plus this packet's 6 and 7
+from work another agent landed concurrently. team-server 74/74.
+
+## What this does not establish
+
+- **The float comparison could not fail OPEN, and never did.** Rounding to
+  nearest is monotone and the cap is read through its own shortest round-trip
+  decimal, so an exact spend at or above the cap could never project onto a
+  double below the cap's. The demonstrated defect is over-blocking — a developer
+  stopped on a figure the ledger says is under the limit — plus a false
+  `enforcedAgainst`. The reverse direction is pinned by test, not repaired,
+  because it was never open. The one genuine fail-open here was the unreadable
+  cap, which is a different mechanism.
+- **It does not make an unvalidated configuration safe.** It makes an unreadable
+  cap stop traffic. `validateBudgetConfig` remains the boundary that keeps a
+  nonsense cap off disk and out of a load.
+- **It says nothing about `runawayWindowSec`.** That is a duration, not a cap; a
+  nonsense window still reaches the store unexamined. Out of scope here and
+  unaddressed.
+- **It does not make the wire payload exact.** `GuardDecision.daySpendUsd`,
+  `sessionSpendUsd`, `runaway.windowCostUsd` and `remainingDailyUsd` are still
+  doubles, and the 429 text is still `toFixed(2)`. Nothing decides on them, but
+  a consumer that re-derives a decision from the payload is back on floats.
+- **It does not audit the other consumers of `resolveEnforcedSpend`.**
+  `src/dashboard/routes.ts` reads `.usd` and was deliberately left alone.
+
+## D-197 findings note — packet I (WP-C02 remainder, law-level property tests)
+
+**No defect found. This is a findings note, not a decision record.** Every law
+implemented passed. A passing sweep is worth its enumeration and nothing more,
+so the enumeration is the substance of this note.
+
+## Step 0 enumeration
+
+`ECONOMIC_BASES` (`src/economics/money.ts`) — seven, in declared order:
+`list`, `estimated`, `provider_observed`, `billed`, `effective`, `allocated`,
+`full_cost`. 42 ordered distinct pairs, all now swept, derived from the exported
+array rather than hand-listed.
+
+`ECONOMIC_EVENT_ROLES` (`src/economics/events.ts`) — seven: `usage`, `charge`,
+`price`, `adjustment`, `translation`, `allocation`, `control`, over 18 kinds.
+Two roles never carry money and therefore never reach a balance: `usage`
+(`economicEvent` refuses an amount on `usage_observed`) and `control` (all three
+close kinds refuse an amount). The five that can reach a balance are `charge`,
+`price`, `adjustment`, `translation`, `allocation`. Asserted, not assumed.
+
+Dossier transformation → representation:
+
+| transformation | representation | distinct kind? |
+| --- | --- | --- |
+| correction | `price_corrected`, role `price`, constructor `priceCorrectionEvent`; carries a signed DELTA plus typed `previousAmount`/`nextAmount` metadata | yes |
+| reversal | the `reversalOf` FIELD plus a signed negative amount — a structural property, not a kind — except for allocations, which must be `allocation_reversed` | field, plus one kind |
+| credit | `credit_applied`, role `adjustment` | yes |
+| discount | `discount_applied`, role `adjustment` | yes |
+| tax | `tax_recognized`, role `adjustment` | yes |
+| allocation | `cost_allocated`, role `allocation` | yes |
+| reallocation | **no distinct kind** — a reversal followed by a fresh `cost_allocated` | no |
+| true-up | `true_up`, role `adjustment` | yes |
+| close / reopen | `close_finalized`, `close_reopened` (plus `close_invalidated`), role `control` | yes |
+| FX translation | `fx_translated`, role `translation`, constructor `fxTranslationEvent` | yes |
+
+Also present and not on the dossier list: `write_off` and
+`commitment_recognized` (both `adjustment`), `price_asserted` (`price`),
+`charge_estimated` / `provider_charge_observed` / `bill_observed` (`charge`).
+
+**The one absence is `reallocation`, and it looks deliberate.** It is a
+composition, not a primitive, and the ledger already forces the composition to be
+spelled correctly: `validateReferenceClosure` refuses any event that points
+`reversalOf` at a `cost_allocated` unless its kind is `allocation_reversed`
+("A REVERSAL IS AN ACT, NOT A LABEL"). A `reallocation` kind would add a second
+way to say the same thing and a second place for the conservation bounds to be
+walked around. Consistent with the dossier's instruction not to grow a giant enum
+for a long vocabulary.
+
+Invariants the existing tests already assert (so these are laws, not duplicates):
+
+- `economic-adjustment-conservation.test.ts` — negative adjustments against ONE
+  fixed $10 bill cannot exceed it when split; adjustment sources must be charges;
+  multi-source negatives need an explicit target. All example-based.
+- `economic-allocation-conservation.test.ts` — reversals against ONE fixed $10
+  allocation cannot exceed it when split; a stored over-reversal fails closed on
+  read; a disguised reversal is refused. All example-based.
+- `economic-basis-legality.test.ts` — adjustment kinds may not carry a basis no
+  charge can hold. Already derives `ADJUSTMENT_KINDS` from the kernel; it does
+  NOT sweep basis pairs through the arithmetic.
+- `economic-replay-property.test.ts` — one hand-built pair of histories (direct
+  vs. reopened) with equal close digests. One case, not a sweep.
+- `exact-money.test.ts` — examples: `0.1 + 0.2`, beyond-safe-integer, currency and
+  basis refusal, hostile sizes. No algebraic law.
+
+Nothing already asserts associativity, commutativity, total order, translation
+invariance, round-trip identity, per-group conservation over generated sets, or
+insertion-order independence of the close digest.
+
+## What was added
+
+- `test/support/deterministicGenerator.ts` — mulberry32 PRNG, per-law seed
+  derivation, amount generators over seven named families, greedy shrinker. No
+  `Math.random()`. No dependency.
+- `test/economic-money-laws.test.ts` — 11 tests.
+- `test/economic-conservation-laws.test.ts` — 7 tests.
+
+Base seed `253516802` (`0x0f1c5c02`), printed on every failure alongside the
+per-law derived seed and the case index.
+
+## Laws, seeds, case counts — all GREEN
+
+Money (`test/economic-money-laws.test.ts`), 500 generated cases each unless noted:
+
+| law | derived seed | cases |
+| --- | --- | --- |
+| `addMoney(a,b) === addMoney(b,a)` | 325128419 | 500 |
+| `addMoney(addMoney(a,b),c) === addMoney(a,addMoney(b,c))` | 3043120074 | 500 |
+| zero is the two-sided additive identity, at every basis | 978862305 | 500 |
+| `subtractMoney(a,a)` and `addMoney(a,negateMoney(a))` are exactly zero (coefficient `0n` AND scale `0`); `negateMoney` is an involution | 2294915865 | 500 |
+| `compareMoney` is reflexive, antisymmetric, transitive, sign-consistent with `subtractMoney`, and translation-invariant under `addMoney` | 3147807042 | 500 (6 checks each) |
+| `money()` returns a frozen, fully normalized value | 1588006078 | 500 |
+| `money(formatMoneyAmount(a), …) === a` | 1496013349 | 500 |
+| `moneyFromJson(moneyToJson(a)) === a`, directly and through JSON text, preserving scale, basis and currency | 2637946692 | 500 |
+| adding/subtracting/comparing across any two distinct bases is refused | 1818204865 | 42 ordered pairs × 3 operations |
+| adding/comparing across two distinct currencies is refused at every basis | 3540614266 | 7 bases × 12 ordered pairs × 2 operations |
+| the coefficient ceiling is a real boundary | — | 1 explicit, not generated |
+
+4,000 generated money cases plus 126 basis-pair and 168 currency-pair refusals.
+Exactness is string equality of the full normal form — coefficient, scale,
+currency, basis — everywhere. No float tolerance anywhere.
+
+Conservation (`test/economic-conservation-laws.test.ts`):
+
+| law | derived seed | cases |
+| --- | --- | --- |
+| the role vocabulary swept is the kernel vocabulary | — | enumeration assertion |
+| every projected balance is the exact sum of its own group and of nothing else | 890434876 | 40 scenarios |
+| insertion order changes neither the projection nor the close projection digest | 3521987009 | 40 scenarios × 2 topological orders = 80 ledgers |
+| the projection is a function of recorded time, not of insertion order | 3362569651 | 40 scenarios × every distinct `recordedAt` boundary |
+| negative adjustments never total more than the charge, in any arrival order | 377790701 | 60 cases × 3 arrival orders = 180 ledgers |
+| allocation reversals never total more than the allocation, in any arrival order | 1141615740 | 60 cases × 3 arrival orders = 180 ledgers |
+| a close fixes what was visible, so an event cannot be inserted behind it | 2638621406 | 12 scenarios |
+
+Each generated scenario is 12–17 events and touches every money-bearing role:
+`bill_observed`, `provider_charge_observed`, `charge_estimated`, a
+`priceCorrectionEvent` correction, 1–4 negative adjustments drawn from the six
+adjustment kinds, a positive `tax_recognized`, `cost_allocated`, 1–3
+`allocation_reversed` reversals, an `fx_translated` USD→EUR translation, and a
+`usage_observed` that must never become money.
+
+## Where ordering does and does not matter (asserted, not assumed)
+
+- **Insertion order is free.** Same event set, any topological insertion order →
+  byte-identical projection and identical close projection digest.
+- **Recorded time is load-bearing and supposed to be.** `project(asOf)` is a
+  function of `recordedAt`; two boundaries give two both-true answers.
+- **Admission order matters when a set over-credits.** The bound is enforced
+  greedily against what is already recorded, so which events survive depends on
+  arrival order. The law is therefore stated over the invariant that holds in
+  every order — the ledger never records more credit than the charge — and not
+  over the surviving subset. Acceptance of a CONSERVING set *is* order-
+  independent, and that is asserted: a set of negative adjustments whose
+  aggregate fits is admitted in full in every order, because a running total of
+  negative amounts only grows and the bound is checked against the whole set.
+- **A close pins the instant it speaks for.** An in-period event recorded at or
+  before a recorded close is refused, before and after a reopen. That refusal is
+  the reason insertion order can be free elsewhere.
+
+## No law was deleted or relaxed
+
+One law was *stated* rather than generated, and it is worth naming because the
+easy alternative would have been to hide it. `addMoney` aligns scales by
+multiplying a coefficient by a power of ten, and `normalize` refuses a
+coefficient wider than `MAX_MONEY_COEFFICIENT_DIGITS`. So addition is **partial**
+near the ceiling and associativity is not a theorem there: an intermediate sum
+can exceed the limit while a differently-associated one does not. That is a real
+property of a resource-limited exact type. It is asserted directly as a boundary
+test (`addMoney` of a 16,384-digit coefficient and `0.01` is refused, not
+truncated), and the generators stay inside a declared alignment budget which
+`deterministicGenerator.ts` fails loudly if it is ever exceeded. The laws are not
+weakened; the domain on which they are total is stated.
+
+## The sweep has teeth — mutation evidence
+
+A passing sweep proves nothing unless it can fail, so three mutants were run
+against copies outside the tracked tree (all deleted; working tree verified
+clean):
+
+1. `compareMoney` comparing raw coefficients without scale alignment →
+   *`compareMoney` is a total order* failed at case index 0, minimizing
+   `"1688842316936", "128210.2945416199818275124", "-175013.55"` down to
+   `"1", "1.2", "-175"` with `compare(a, b) = -1 but sign(a - b) = 1`.
+2. `normalize` not stripping trailing zeros → *canonical normal form* failed,
+   minimizing a 1,206-digit generated value to `"7.195690"` with
+   `scale carries a representation-only trailing zero`.
+3. the cumulative adjustment bound in `validateReferenceClosure` dropped (the
+   exact WP-C02/C04 splitting defect) → *negative adjustments never total more
+   than the charge* failed at case index 1: charge `596.0376`, adjustments
+   `-349.9739, -121.6461, -89.6127, -11.386, -30.7847`,
+   `net billed position went negative at -7.3658`.
+
+## Verification
+
+- `node ./node_modules/typescript/bin/tsc --noEmit -p tsconfig.json` — clean.
+- `test/economic-money-laws.test.ts` alone — 11/11 pass, 0.60s.
+- `test/economic-conservation-laws.test.ts` alone — 7/7 pass, 10.8s.
+- Full `npm test` baseline with the three new files moved out of the tree:
+  **1901 tests, 1897 pass, 0 fail, 4 skipped** (working tree at `1b34083`; the
+  packet's stated starting commit `43ed28f` had since been advanced by two other
+  agents' commits, `daf867c` and `1b34083`).
+- Full `npm test` with them in: **1919 tests, 1915 pass, 0 fail, 4 skipped**.
+  Delta +18 = 11 + 7, exactly the tests added. No pre-existing test changed
+  state.
+
+`src/team/` and `src/value/` were not touched, so the team-server pass is not
+implicated by this packet.
+
+## D-198 — the contracts a newcomer reads first were the one projection nothing checked, and three of them were false
+
+**Decision.** `test/module-contracts.test.ts` checks the fifteen `src/*/CONTEXT.md` module contracts against the code they describe, in the claim forms that can be checked mechanically, and **states how much of each contract it did not check**. Three false claims found by reading were verified against the code and corrected.
+
+**The counterexample, and it is three of them.** `src/epistemic/CONTEXT.md` said *"Three boundaries — causal qualification, causal estimation and decision certificates — strengthen claims outside the kernel today"*. `src/epistemic/issuance-map.ts` carries exactly **one** `unmigrated_authority` entry, `decision.certificate`, and the map's own note records that causal qualification stopped being one when its adapter landed. `src/measurement/CONTEXT.md` said *"no production call site resolves one through `measurementRegistry`"*; `src/causal/measurement.ts:163` does, and a closure probe confirms that file is inside the product import closure. `src/store/CONTEXT.md` guaranteed *"All amounts are integer microdollars. No float ever reaches a column"*; exact amounts are arbitrary-precision `bigint` coefficients with a scale and a basis, and `requests.cost_usd` is declared `REAL NOT NULL` in `schema.ts`. The store guarantee was wrong in both of its sentences.
+
+**Root cause is one sentence: nothing read these files.** This is D-188's finding at a different address. `ISSUANCE-MAP.md` called itself the readable projection of the map and drifted in every column the test did not compare; a module contract is a projection of its module in exactly that sense, and it had no test at all. The contracts are also the interface a newcomer meets first — increasingly an agent, which will read a contract and believe it — so a false contract does not merely misinform, it propagates into work.
+
+**The fix, and what it deliberately refuses to do.** The gate checks three forms: every backticked file reference resolves to a tracked file; every backticked `symbol()` still appears in the source; and every sentence claiming nothing calls a named module is checked against the real import graph — using the walker extracted from `test/issuance-map.test.ts` into `test/support/importGraph.ts`, unchanged, so a contract and the map cannot disagree about reachability because they counted differently (D-098's rule). It does **not** parse prose. All three false claims above are ordinary English and would need a check that fires on rewording, which the next engineer would weaken rather than obey.
+
+**So the gate states its own coverage, and that is the load-bearing part.** It reports `15 files, 103 claims checked, 329 code spans and all prose sentences UNCHECKED and free to rot`, and asserts the checked count cannot fall below its current floor, because a regex that stops matching fails silently. A check that quietly examines three sentences out of two hundred and passes is the class this program has recorded twenty-one times and written up in `docs/program/METHOD-ABSENCE-AS-RESULT.md`. A gate that does not declare its enumeration is another instance of the defect it was built to prevent.
+
+**Evidence, including a near-miss that is the most useful thing here.** The first draft of the file check went RED on five references in `src/dashboard/CONTEXT.md` — and **every one was a false positive.** The checker resolved a bare name against the contract's own directory and anything containing a slash against the repository root, but `web/app/core/generated-types.ts` is written relative to the module and `dom.ts` lives in a subdirectory. Had that red been trusted, four true sentences would have been edited to match a broken checker. References are now matched by suffix against `git ls-files`. **In a gate over documentation a false positive is worse than a miss**, because the engineer who hits one weakens the gate instead of the contract. GREEN: 4/4 in the new file, 19/19 with `test/issuance-map.test.ts`, which behaves identically before and after the walker moved.
+
+**What this does not establish.**
+- **That the mechanical checks found the defects. They did not.** All three false claims were found by reading and corrected by hand; the gate passed over the corpus containing them both before and after. What the gate secures is that file references, named symbols and reach claims cannot rot from here — a much narrower guarantee than "the contracts are true".
+- That the unchecked prose is true. 329 code spans and every English sentence remain unverified, and the three corrected claims can rot again tomorrow by the same mechanism.
+- **That silence is checked in the other direction.** A module that gains an export its contract never mentions triggers nothing — which is exactly the state `src/epistemic/CONTEXT.md` and `src/decision/CONTEXT.md` are in with respect to `minimalHittingSets`, `minimalInvalidatingAssumptionSets` and `decisionInvalidatingAssumptionSets` (D-195). Contract omission is a live, unchecked class.
+- That the symbol check is strong. It requires only that an identifier appear somewhere under `src/`; a symbol moved between modules still passes. The stricter rule fires on the many contracts that legitimately name a neighbour's function, and a gate that cries wolf is a gate someone deletes.
+
+## D-199 — a team rollup carried no scope claim, and containment was enforced only where the client could not be trusted
+**Problem.** A rollup's payload said nothing about its own scope; D-101's client-side refusal was the only thing stopping a `--project` push being read as a whole snapshot. Containment (D-095) ran at ingest only, so an over-claiming rollup was emitted and then refused by the server.
+**Counterexample.** A project-scoped push with no scope field is indistinguishable on the wire from an all-projects snapshot; `test/team-rollup-scope-claim.test.ts` RED. A rollup over a pruned window claimed coverage the retention floor could not support.
+**Fix.** `RollupScope` travels on the payload with an explicit `unknown` sentinel (never omitted, never inferred); `assertMintable` applies containment at emit against `RollupLedgerEvidence` — the unfiltered population of every project the ledger holds — and derives coverage from `retentionFloor()`. The server check stays, deliberately duplicated: a server cannot trust a client.
+**Verification.** `test/team-rollup-scope-claim.test.ts`, `test/team-rollup-ledger-basis.test.ts`, `team-server/test/rollup-scope-coverage.test.ts`; team-server 78/78; three typecheck domains clean. Commit `ceeb4b6`.
+**Limitation.** Postgres paths remain untested — no live Postgres here, and faking that coverage would be inventing it. Receipt-vs-ledger reconciliation (the other half of WP-R06) is not addressed.
+
+## D-200 — every reader of a monetary figure, enumerated, and three that projected a unit
+**Problem.** WP-C03/C04 carried "universal mixed-currency consumer coverage" as a remainder with no enumeration of which readers were covered.
+**Counterexample.** `economicAttributionNumber` returned the number 100 from an exact EUR 100.00 and assigned it to `costUsd` on session, model and time-bucket units. `economicAttributionFromRows`/`FromAttributions` were USD-anchored only as a side effect of `addMoney` and reported a mismatch naming neither the aggregate nor the route out. `buildExactAllocationKernelIssuance` declared `monetaryBasis: 'effective'` for a run spanning USD and EUR.
+**Fix.** All three refuse rather than translate; a multi-currency run declares no single basis (null, as a multi-basis run already did). `test/economic-fx-consumer-sweep.test.ts` derives the corpus from source — 29 files, 169 read sites — classifies each (7 routed, 2 repaired, 20 single-currency by construction, 2 classified by reading), states its size, and fails when a new reader arrives unclassified.
+**Verification.** Sweep test + economic files green; commit `c9651a0`.
+**Limitation.** `src/team/**` excluded from the sweep (D-199 covers it); field reads invisible to the regex; single-currency files are not checked to actually refuse. **Provider FX authority deliberately not decided** — five sites enumerated where that policy would land. **The C04 "adjustments unbounded" remainder is NOT stale:** D-197's generator produced one charge per ledger with every adjustment naming it; sourceless adjustments are ungated and the bound compares against the raw not corrected charge — both now a packet of their own.
+
+## D-201 — a `supported` witness of the right KIND proved nothing about its own content
+**Decision:** three witness kinds now carry a typed, checkable content obligation, enforced at the ledger against the REGISTERED record per input claim; the other ten are declared kind-only by name, with the reason, in `src/epistemic/obligation.ts` (`WITNESS_OBLIGATIONS`). `monetary_rebasing` witnesses must carry a `basisChange: { from, to }`, and `witness()` refuses the kind without one and every other kind with one.
+
+**The counterexample, measured (RED 5 of 8, each `Missing expected exception`).** A `causal_identification` witness with `epistemic: 'supported'` grounded ONLY in `evidence:some-other-study`, cited by a derivation from an `observational` claim to a `randomized` one whose evidence is `evidence:this-study`: `appendDerivation` succeeded. A `measurement_validation` witness grounded in a record whose `measurementModelRef` is `model:…:other`, licensing a `proxy_validated` rung the output claim asserts for `model:…:this`: succeeded. A `monetary_rebasing` witness whose `detail` read "allocation from the declared rate-card estimate" — a `list -> allocated` move — cited on `estimated -> billed`: succeeded. `metered usage != provider-billed cost` is the first line of the contract, and the witness D-152 added to guard the axis named neither side of the move it licensed.
+
+**The mechanism.** D-190 recorded this as the larger half it did not close. `hasWitness` compares `kind`; `sameWitnessReference` compares identity (id, kind, evidenceIds, detail, coordinates); the D-190 check compares the registered `epistemic`. None asks whether the witness is ABOUT the claims it bridges. `detail` is prose and cannot be checked.
+
+**The fix.** `obligation.ts`: `assessWitnessObligation(registered, { source, output, evidence })` returns discharges/reason. `causal_identification`: must cite ≥1 evidence id the output claim also cites (an identification is an identification OF the study whose effect it licenses). `measurement_validation`: must cite ≥1 evidence whose `measurementModelRef` equals the output claim's `measurementModelRef`. `monetary_rebasing`: registered `basisChange` must equal `(source.profile.monetaryBasis, output.profile.monetaryBasis)`. `appendDerivationWithinTransaction` folds a failing witness into the same set-aside map D-190 uses for unsupported ones, assesses legality on the discharging subset, and the refusal reads `without a discharging <kind> witness: <id> <what it failed to contain>`. Checked per input claim, because the rebasing pair depends on the source. Coordinate kinds are declared `checked: true` but enforced where they always were (`assessCoordinateDerivation`), not duplicated.
+
+**Why the registered record and not the inline reference.** Same seam D-190 chose: `DerivationWitness` carries neither epistemic state nor `basisChange`, and the pure rule cannot resolve evidence. `assessDerivationLegality` alone stays kind-only and its `hasWitness` docblock now says so; `epistemic-derivation-object.test.ts` relies on that (inline references with only id and kind).
+
+**Kinds left kind-only, and why each.** `epistemic_resolution` (no typed field says which conflict, or how), `coverage_witness` (coverage is a corpus property; `Evidence.completeness` describes one record), `scope_validation` (the establishment rung has no typed referent; coordinate scope is already guarded), `monetary_finality` (no typed period/invoice reference), `integrity_attestation` / `authenticity_attestation` (method, provider, signature named in prose), `decision_fitness` (no typed use identifier on the witness to compare with `claim-uses.ts`). A fabricated obligation reads as verified; an unstated one reads as unstated.
+
+**Production path.** `buildCausalStudyKernelIssuance` (`src/causal/epistemic.ts`, reached via `issueCausalStudyToKernel`) grounds its `causal_identification` in `assignmentEvidence.id`, which the effect claim also cites — the obligation is satisfied without change. No production path mints `measurement_validation` or `monetary_rebasing`; the one test fixture that did (`test/epistemic-monetary-rebasing.test.ts`) now carries `basisChange: { from: 'estimated', to: 'billed' }`, matching the step it licenses.
+
+**Verification.** RED 5/8 on unfixed code; GREEN 8/8. Epistemic + causal + witness files 187/187. Root suite **1,931 / 1,927 / 0 / 4** (baseline 1,923 / 1,919 + 8). Root tsc clean. `causal-issuance.test.ts`, `causal-inference-ledger.test.ts` green. Browser and team-server passes not run: nothing under `src/team/`, `src/value/`, or the browser app was touched.
+
+**Limitation.** The obligations are containment checks on typed fields, not proofs: a `causal_identification` that cites the right evidence may still describe the wrong strategy; a `measurement_validation` citing a record made under the right model says nothing about how well that model is validated (`Evidence` does not carry it); a `basisChange` that matches the step is a declaration, not a reconciliation. Nor does this touch stored derivations (`graph()`'s pass is structural, as at D-190) or the direct claim path. `src/epistemic/CONTEXT.md` still carries a stale "Does not establish" paragraph saying the money axis has no per-step rule, written before D-152; not corrected here because it is out of packet scope and worth its own line.
+
+## D-204 — `fiscus today` said nothing about alerts on a default install, and silence beside a spend figure reads as "nothing fired"
+**Problem.** `showCmd` printed an alerts line only when `computeAlerts` returned a non-empty array. On a fresh install all six channels are dark (caps opt-in, no baseline, value uninstrumented), so the first command a new operator types made the negative claim D-141 removed from `fiscus ops`.
+**Counterexample.** Fresh `FISCUS_HOME`, `fiscus today`: spend rendered, no alert sentence at all; `--json` carried no `alertCoverage`.
+**Fix.** Wiring only: `show` reads `computeAlertCoverage` — the producer `ops` and the dashboard already read — beside the alerts and prints the per-channel `darkBecause` sentences, text and `--json` (`alerts`, `alertCoverage`), for `today` only; `week`/`month` print no coverage they did not compute. Dark channels are listed whether or not another fired.
+**Verification.** `test/show-alert-coverage.test.ts` RED 3/4 at `ceeb4b6`, GREEN 4/4; `alerts-coverage.test.ts` unchanged. Commit `0fcfc3d` (cherry-picked from worktree `e90b89e`).
+**Limitation.** Closes the `show` surface of WP-D06; the dashboard still renders no per-channel dark reasons, and the other AII-002 negative claims (no provider charge, no duplicate, no policy violation) are untouched.
+
+## D-205 — the parity check read one word of each command, and the one row it let through was destructive
+**Problem.** Both directions of `test/dashboard-parity-population.test.ts` compared `command.split(' ')[0]` with the CLI dispatch. Any subcommand path or flag after the verb was unchecked.
+**Counterexample.** `fiscus config --clear-proposals` — offered in the drawer with a copy button as the shortcut for deleting every captured proposal — does not exist: `cmdConfig` reads no such flag, and the string appears in no CLI source at any commit. The command printed the config and exited 0. Vacuous for exactly 1 of 47 rows.
+**Fix.** The check parses verb, subcommand words and flags; each subcommand word must be a string literal in the handler's `case` body or the module `src/cli.ts` imports it from; each flag must be READ there. A `command` without the `fiscus ` prefix is now the statement "GUI-only, no CLI claim": empty CLI binding, must name a declared route. The row was corrected to `POST /api/settings/clear-proposals`; building the flag would have added a destructive CLI path nobody decided to build.
+**Verification.** RED 2/11 at `ceeb4b6` naming exactly that row; GREEN; `dashboard-capability-spec` and `documentation-commands` unchanged in outcome. Commit `33b5ad9` (from worktree `e6aeba5`).
+**Limitation.** Flags are pinned to the module that would read them, not the function (the CLI declares no per-action schema). Progressive disclosure and `coverage` VALUE checks remain open on WP-I03.
+
+## D-206 — an adjustment naming no charge was outside every bound, and the bound compared the charge as asserted, not as corrected
+**Problem.** Two shapes D-197's generator never produced (every adjustment it built named its bill; it corrected nothing), found at D-200 by reading the bound.
+**Counterexample.** Three sourceless `write_off -8.00` projected `adjustment/billed -24` against `charge/billed 10` and survived into an immutable close. A $10.00 charge corrected to $1.00 still accepted a $10.00 credit: `charge 10, price -9, adjustment -10`, three true rows summing to a negative position.
+**Fix.** `economicEvent()` refuses an adjustment with empty `sourceEventIds`, and closure validation refuses again so a row written around the constructor fails closed on read. The credit bound compares against the charge net of its `price_corrected` chain (`correctedChargeAmount`, linear by construction, a second successor is refused as corrupt); the correction side refuses to restate a charge below what is already credited against it, so the set is refused in either arrival order (D-197's order-independence law).
+**Verification.** Two new laws RED 2/9 against the prior implementation, GREEN 9/9; `test/economic-*.test.ts` + `test/team-*.test.ts` 184/184; root tsc clean. Commit `d4ec82e` (from worktree `f9e0e31`).
+**Limitation.** Positive adjustments (a `true_up` upward) remain unbounded above — no law says what bounds them; provider FX authority still undecided (D-200).
+
+## D-207 — the nullable-equality sweep found no live partition defect
+
+**Decision (2026-09-15):** Treat item 12's general `= ?` search as a completed
+read-only sweep with no production predicate change. The corpus contains 198
+lexical `= ?` matches, 14 update assignments, 184 predicates in `src/`, and
+four PostgreSQL equality predicates in `team-server/`. Fourteen source
+locations (18 physical instances after the dynamic epistemic payload table
+expansion) touch nullable columns; each is an identity lookup whose contract
+requires a concrete non-null identifier, so SQL `NULL` non-matching is the
+correct result. The sole nullable partitioning query (`openAiReconciliationCoverage`)
+already uses SQLite's NULL-safe `IS ?` form from D-187.
+
+**What this establishes:** No live user-facing claim currently depends on
+`NULL = NULL`, and replacing these identity lookups with `IS ?` would be a
+regression because malformed null-identity rows would become discoverable.
+
+**What remains:** The older SQLite identity tables declare `TEXT PRIMARY KEY`
+without explicit `NOT NULL`; that is a latent schema-hardening concern, not a
+predicate bug. Any future repair needs a migration/quarantine contract and a
+RED test for direct null-identity insertion rather than a blanket SQL rewrite.
+
+## D-208 — unreadable runaway windows fail before budget reads
+
+**Decision (2026-09-15):** `BudgetGuard.evaluate()` rejects a non-finite,
+non-positive, or over-limit `runawayWindowSec` before constructing any exact or
+legacy Store query. It reuses the canonical `MAX_RUNAWAY_WINDOW_SEC` bound from
+configuration so a runtime config supplier cannot turn an invalid window into a
+NaN timestamp range or silently bypass the runaway control. The explicit manual
+budget path and all valid-window behavior are unchanged.
+
+**Evidence:** `test/cap-basis.test.ts` exercises the invalid-window refusal;
+the focused cap suite passes 8/8, root/browser/team typechecks and build pass,
+and the implementation is checkpointed locally at `236cd9d`. The test was
+first observed RED against the unguarded path (the Store threw only after it
+received an invalid range), then GREEN after the guard moved the validation to
+the decision boundary.
+
+**Limitation:** This closes the last named `runawayWindowSec` validation gap in
+the C01 budget remainder only. Reporting projections remain numeric by design,
+and the many legacy read paths are not thereby exact.
+
+## D-209 — strict JOSE metadata and encoding are part of the verification boundary
+
+**Decision (2026-09-15):** Keep the dependency-free OIDC verifier, but make its
+wire checks strict before key lookup or signature verification. JWT header,
+payload and signature segments now require canonical unpadded base64url with
+zero discarded bits. A selected JWK must reconcile `alg`, `kty`, `use`,
+`key_ops` and (for ES256) `crv` with the requested algorithm; conflicting
+metadata is refused rather than treated as decoration.
+
+**Evidence:** The direct OIDC suite is 33/33 and the full team-server suite is
+87/87; exact-head GitHub Actions run `34949530088` concluded **success** on all
+eight jobs. The changes are in `89961c2`.
+
+**Limitation:** This is a bounded custom-JOSE hardening, not a production
+provider decision, independent library comparison, deployment validation or
+trust-policy approval.
+
+## D-210 — value retention metadata was present on the wire and absent from the views
+
+**Decision (2026-09-15):** Treat retention coverage as required consumer data,
+not optional decoration. `UsagePayload.retention` is required, frontier
+model-switch coverage is typed end to end, and modern/classic value surfaces
+render exclusions, unknown counts and the observational/non-routing boundary.
+
+**Evidence:** Value/dashboard focused coverage is 12/12; root/browser/team
+typechecks and build pass. GitHub Actions run `34948776719` for `57055cb`
+concluded **success** on all eight jobs.
+
+**Limitation:** Dashboard alert dark-reason rendering and the other AII-002
+negative claims remain open; retention metadata still describes what Fiscus
+recorded, not traffic that never reached it.
+
+## D-211 — instrumentation sensitivity is an exposure ranking, not a purchase decision
+
+**Decision (2026-09-15):** Preserve the existing five-field sensitivity API and
+rename its user-facing interpretation to “largest sensitivity/measurement
+exposure.” It carries no utility, probability, decision or acquisition-cost
+model. Formal `valueOfInformation()` remains the separate decision-theoretic
+calculation with explicit `measurementCost`.
+
+**Evidence:** Focused instrumentation/contract coverage is 5/5 and
+`test/value.test.ts` is 63/63. GitHub Actions run `34949530088` for `e18da69`
+concluded **success** on all eight jobs.
+
+**Limitation:** No product acquisition workflow or decision-certificate route
+exists yet; the legacy JSON field `instrumentNext` remains for compatibility.
+
+## D-212 — an independent FiscusPack verifier must not import its producer
+
+**Decision (2026-09-15):** Ship a dependency-free standalone Node verifier and
+fixed conformance vectors. `standalone/fiscuspack-verifier.mjs` accepts parsed
+JSON or UTF-8 bytes, checks canonical manifest/attachment integrity, resource
+limits, Ed25519 signatures, embedded-key identity and optional trust-anchor
+pinning, and leaves `truth` as `not_evaluated`. The `fiscuspack-verify` binary
+and `verify:fiscuspack` script are included in the package surface.
+
+**Evidence:** Standalone conformance is 6/6 and producer/standalone pack
+coverage is 16/16; root typecheck/build and package dry-run pass. GitHub
+Actions run `34950279202` for `c1dcb88` concluded **success** on all eight jobs.
+
+**Limitation:** This is an executable interoperability foundation, not a
+second implementation in another runtime, hosted production execution, API
+integration or trust-anchor governance.
+
+## D-213 — heuristic budget-cap application is an action that changes spend
+
+**Decision (2026-09-15):** `fiscus budget --recommend --apply` now fails closed
+before configuration mutation. Text and JSON identify the `changes_spend`
+consequence and require a ledger-backed `DecisionCertificate` at `DAL-3`.
+Read-only recommendations and explicit manual cap configuration remain
+available.
+
+**Evidence:** The old path was observed RED (it wrote the suggested caps and
+returned success); the focused regression is 1/1, root typecheck passes, and
+GitHub Actions run `34950378100` for `7d46552` concluded **success** on all
+eight jobs.
+
+**Limitation:** No production path currently accepts or verifies a DAL-3
+certificate, so recommendation application is intentionally unavailable until
+the owner-defined certificate inputs and action semantics exist.
+
+## D-214 — benchmark truth-boundary quality must be non-vacuous
+
+**Decision (2026-09-15):** Extend the deterministic benchmark with an
+`epistemicIssuance` operation that constructs Evidence/Claim pairs at each
+scale and publishes counts for requested records, issued records, linkage,
+immutability and one invalid-Claim refusal. The contract fails if any count is
+empty or diverges from the requested workload. This measures canonical
+construction/validation only; it does not claim persistence or latency budgets.
+
+**Evidence:** The pre-change contract was RED because the operation was absent;
+the focused contract passes 1/1, current-tier quality counts are 1,000/1,000
+for records, Evidence, Claims, links and immutability with one refusal, and
+root typecheck/build pass. GitHub Actions run `34950922535` for `e5a841f`
+concluded **success** on all eight jobs.
+
+**Limitation:** Persistent ledger append/replay/as-of, revocation closure,
+exact-economic and allocation workloads, FiscusPack verification, dashboard
+contracts and proxy streaming still need separate benchmark surfaces and
+measured budgets.
+
+## D-215 — direct monetary-basis strengthening cannot bypass the witness floor
+
+**Decision (2026-09-16):** The direct Claim append boundary now detects an
+estimated or mixed cited monetary basis being asserted as billed or allocated.
+That transition creates a transaction-local obligation which only a supported
+registered `monetary_rebasing` Witness with the exact typed basis pair can
+discharge. Legal weakening, unchanged bases and billed/allocated comparison
+remain admissible; no global ordering is introduced.
+
+**Evidence:** RED estimated-to-billed and mixed-to-allocated regressions failed
+before the guard; the direct strengthening suite is 15/15 and the focused
+epistemic/ledger tranche is 302/302. Canonical integration is `c83746b`.
+
+**Limitation:** Other direct cross-basis combinations remain outside this narrow
+floor, and witness content is still a declaration rather than independent
+financial reconciliation.
+
+## D-216 — the Claim Inspector exposes the transported profile without creating an action surface
+
+**Decision (2026-09-16):** The existing read-only inspector now renders all ten
+transported ClaimProfile axes and a separate figure-status row. Unknown,
+conflicted, refuted, supported-but-uncosted and unsupported states remain
+distinct; the projection adds no new claim, Evidence, derivation or action.
+
+**Evidence:** RED profile/mount regressions were observed before implementation;
+focused Claim Inspector coverage is 2/2, the dashboard/kernel tranche is 58/58,
+and root/browser/team typechecks plus build pass. Canonical integration is
+`3472d08`.
+
+**Limitation:** Derivation DAG, assumptions, raw Evidence and historical as-of
+inspection remain outside this first viewer slice.
+
+## D-217 — provider/model tuple identity must be injective
+
+**Decision (2026-09-16):** Frontier and exact economic model grouping now use a
+collision-free two-field JSON tuple key instead of delimiter concatenation.
+Provider/model names containing the delimiter remain distinct observational
+comparison identities.
+
+**Evidence:** The preserved collision fixture was RED at two assertions and is
+GREEN at 2/2; surrounding value/economic coverage is 80/80 and root typecheck
+and build pass. Canonical integration is `b09570c`.
+
+**Limitation:** This closes only the two affected grouping paths; unrelated
+composite-key constructions and any routing or causal-superiority decision stay
+outside the change.
+
+## D-218 — classic alert coverage must match the modern today-only boundary
+
+**Decision (2026-09-16):** The classic Overview now renders the existing
+`alertCoverage` summary, complete/partial state and every dark channel reason,
+but clears the panel for 7d/30d/All because the producer does not compute those
+windows. HTML channel/reason text is escaped before rendering.
+
+**Evidence:** Focused alert-coverage tests are 3/3, classic dashboard interaction
+coverage is 17/17, root/web typechecks and build pass. Canonical integration is
+`df37dc4`.
+
+**Limitation:** This completes the dashboard alert-coverage surfaces only; the
+other AII-002 negative claims remain open.
+
+## D-219 — Complexity Lab remains unstarted until its promotion gates are real
+
+**Decision (2026-09-16):** Preserve a durable read-only WP-J03 report and keep
+the packet `NOT_STARTED`. The current repository exposes no operational
+complexity surface: no production source metric, CLI dispatch, dashboard route
+or benchmark operation exists. Adding an ad-hoc scalar or route would create
+complexity theater and could leak an uncalibrated routing objective into the
+FinOps product.
+
+**Evidence:** The report enumerates the zero surface and all ten promotion
+prerequisites from the token-governance document. Focused complexity coverage is
+6/6 after a strict TypeScript capture-narrowing repair; root/browser/team
+typechecks and build pass. Canonical integration is `41baf80` plus `760f507`.
+
+**Limitation:** This is a continuity and precondition artifact, not a Complexity
+Lab implementation, calibration result, decision feature or production route.
+
+## D-220 — the decision engine reached no operator, so the budget cap became its first decision
+**Problem.** `certifyDecision`, `minimaxRegret`, the countermodels, the kernel adapter and the assurance gate were each built and reached by nothing (WP-F05/F02/R08/R07/B04). `recommendBudget` proposed a cap beside a comment saying decisions belong to `src/decision/`.
+**Counterexample.** `fiscus budget --recommend` printed a cap with no statement of the alternative, the objective, or whether choosing it was certified; `--apply` was refused wholesale (D-213) with no way to become permitted.
+**Fix.** `src/budget/capDecision.ts`: `apply_recommended` vs `keep_current` under one declared objective (net well-landed spend), utility intervals that refuse to assume which days' spend realized, the certificate, the regret pick (rendered as a selection rule, never dominance), the invalidating assumption sets, and the derived DAL. `--apply` is honoured only for a certified decision at the required level and otherwise refused with the observed level, standing and reasons; a certified apply persists a `no_action` bundle so a later withdrawal shows on read via `pendingInvalidationBy`. Issuance map: both decision boundaries `unreached` → `product`.
+**Verification.** Focused 14/14; decision/budget/value/contract neighbourhood 151/151; root and browser tsc. Commit `6dbb05a`.
+**Limitation.** The display path reads the bare certificate, not a kernel-checked claim (engine row stays `unmigrated_authority`); the frontier and other advisory surfaces still bypass the module; nothing evaluates whether the declared input set is complete.
+
+## D-221 — the decision adapter wrote axes its cited evidence could not support
+**Problem.** `src/decision/epistemic.ts` wrote `verified` / `self_asserted` / `complete` on both of its claims regardless of the evidence cited.
+**Counterexample.** A preview over `integrity: 'unknown'` source evidence built records the ledger's weakest-cited-evidence ceiling (R05) then refused at commit — preview and commit disagreed. RED 2/3.
+**Fix.** The adapter computes the same ceiling where the records are built (`evidenceBoundedAxes`); nothing is raised. GREEN 3/3. Commit `6dbb05a`.
+**Limitation.** The ceiling is the ledger's rule applied early, not a new rule.
+
+## D-222 — a derivation was checked against its neighbour and never against its leaves
+**Problem.** `analyzeDerivationChain` (D-151) bounded what a whole chain licenses and had no caller; `appendDerivationWithinTransaction` ran only the per-step legality check.
+**Counterexample.** `estimated → mixed → billed` in two hops needed only a witness naming `mixed → billed`; `claim-uses.ts` admits `mixed` to `request_metered_spend`, so a provider-billed figure walked into the use built to keep it out. RED 3/7.
+**Fix.** The append walks every stored derivation upstream of the candidate's inputs back to the leaves and checks the whole chain; a step's registered supported `monetary_rebasing` witness is passed as the transition licensed for that step alone; a stored step that does not hold taints everything downstream and the refusal names it. `src/epistemic/CONTEXT.md` corrected (pre-D-152 paragraph; D-195 exports). GREEN 7/7; epistemic/causal/decision neighbourhood 465/465. Commit `41d9b6b`.
+**Limitation.** Leaves are taken at face value; a witness lifts its axis to the top, so the bound is only as tight as the witness discipline.
+
+## D-223 — jose verifies the signature; parsing, keys and claims stay local and are tested adversarially
+**Problem.** WP-H02's production decision between the hand-rolled verifier and a mature library was open; the owner authorized `jose` inside team-server only.
+**Counterexample.** The adversarial matrix, run against the pre-packet verifier, failed 4/43: an RSA modulus below 2048 bits verified a genuine signature; a present-but-empty or non-string `kid` was coerced to "no kid" and widened the candidate set to every key; the discovery document's own `issuer` was never compared with the configured one.
+**Fix.** `compactVerify` + `importJWK` (jose 6.2.12, exact-pinned, registry.npmjs.org, sha512, zero transitive deps) replace the node:crypto loop; canonical base64url, the RS256/ES256 allowlist, JWKS discovery (issuer must match), caching and cooldown, JWK metadata reconciliation (D-209), every-candidate-tried, and all claim rules stay in `oidc.ts`; the three defects are closed. `test/oidc-adversarial.test.ts`: 43 tests, one per dossier bullet minimum, each stating RED/old or its mutant. Team-server 130/130. Commit `5300826`.
+**Limitation.** Provider validation against a live IdP and deployment policy are operational, outside the repository.
+
+## D-224 — a measurement model reference was checked for presence, never for resolution
+**Problem.** `claim()` refuses a null `measurementModelRef` above `proxy_unvalidated` and D-168 refuses a ref no cited evidence declares; neither checks the reference names a model (WP-D05/D07).
+**Counterexample.** A direct claim asserting `proxy_validated` citing `model:does-not-exist`, or a model validated for another construct, or one whose declared validation is below the rung: accepted. RED 4/8.
+**Fix.** `EpistemicLedger` takes a `MeasurementRegistry`; the direct-claim floor resolves through `assessMeasurementBacking` (registered, `targetConstruct` = proposition predicate, validation ≥ asserted rung). No registry means the empty one, which refuses every direct claim above the bottom rung — the ledger `Store` builds today; no production issuer writes such a claim. INSERT-only; nothing is upgraded or backfilled. GREEN 8/8; neighbourhood 604/604. Commit `71ae55f`.
+**Limitation.** `Evidence` still records which model, never how validated, so there is no evidence-side ceiling; no caller supplies `asOf` to the D07 bridge window yet.
+
+## D-225 — the repository-side launch set exists and what it points at is checked
+**Decision.** CONTRIBUTING, GOVERNANCE, SECURITY (no address; reporting via GitHub private reporting or the maintainer), THREAT-MODEL, RELEASE-PROCESS, COMPATIBILITY, SUPPORT, NEUTRALITY and a dated NAME-COLLISION-REVIEW (bare name already on npm as `fiscus@0.0.0`, 2026-07-23; five near names free; 101 GitHub repositories, none above single-digit stars; no rename recommendation — owner-reserved). `test/launch-readiness-docs.test.ts` checks existence, every path reference by suffix against `git ls-files`, every `fiscus <verb>` against dispatch, no e-mail in SECURITY.md, README links; shown able to fail. `documentation-commands` caught `npm view fiscus time --json` as a copyable `fiscus time`; the span was reworded. Commit `431eba9`.
+**Limitation.** Prose claims are unchecked; release, publish, tag, rename, license and brand remain owner actions (WP-J07 repository side only).
+
+## D-226 — eight PARTIAL rows whose remainder was a design statement, a stale sentence, or an owner decision
+**Problem.** Directive §13: a PARTIAL row is worth re-reading against the code, because later work closes remainders nobody returns to record. Eight rows were re-read; each closure below names what was checked, not what was assumed.
+**B01.** The six kind-only witness obligations are kind-only because no typed referent exists for them (D-201 lists each reason); an obligation invented for them would read as verified. That is the design, not a remainder. COMPLETED; the D-201 limitation stands.
+**B02.** "No screen renders the other seven axes" is false since D-216 (the Claim Inspector renders all ten). "Persisted records carry collapsed status fields with no migration": the four claim routes derive `claimSupport` server-side on read (D-070/D-082/D-194); a stored snapshot's collapsed field is an input the reader no longer projects from, and a migration that rewrote it would backfill provenance the row never had (hard rule 2). COMPLETED.
+**C01.** "team-server, export and FX were NOT audited" predates D-199 (team rollup reads) and D-200 (169 read sites including `src/export/economic.ts` and `src/economics/fx.ts`, corpus derived from source). Reporting floats are compatibility fields by design (D-196). COMPLETED.
+**C02.** The remaining sentences describe the money type's own bounded arithmetic (D-197) and a deliberate absence of a `reallocation` kind. COMPLETED.
+**C04.** Positive adjustments have no upper law because a `true_up` may legitimately exceed the charge it corrects; the conservation invariant bounds what can be taken back, not what can be owed. Provider FX authority is C03's row. COMPLETED.
+**D06.** "The dashboard renders no per-channel dark reasons" is false since D-218 (`views/control.ts` renders `darkBecause` per channel; `classic.html` shows coverage). The other AII-002 negative claims are R04's remainder and are named there. COMPLETED.
+**G06.** Staged approach steps 1–2 are done (`standalone/fiscuspack-verifier.mjs`, no producer import, committed vectors, D-212); step 3 is "if the value justifies it" and cross-runtime/hosted/independent review are external. COMPLETED.
+**I04.** The enumerated defect list is closed; runtime accessibility needs a DOM, and the zero-dependency rule (hard rule 7) refuses jsdom even as a devDependency without an owner decision. BLOCKED_EXTERNAL: owner decision on a devDependency exception, or an external audit.
+**Verification.** Row-by-row grep against `src/` and the cited decisions; no code changed. Commit noted in the records commit.
+
+## D-227 — the model window was read only by the bridge path, so the ledger's direct floor asked a model without saying when
+**Problem.** D-159 made `validTime` a read field on the bridged path and D-224 made the direct floor resolve a model, but the floor passed no instant: `assessMeasurementBacking` had no `asOf` at all, so a model with a closed window backed a direct claim and nothing decided which instant a surface asks about.
+**Counterexample.** A model valid 2026-07-01..07-15 backed a `proxy_validated` claim with `asOf` 2026-08-02; a windowed model backed a claim whose `time.asOf` was null. RED 2/3 (the in-window guard passed as control).
+**Fix.** `MeasurementBackingRequest.asOf`; `windowReason` moved from the surrogate module into the registry and exported; the direct floor in `src/epistemic/ledger.ts` passes the claim's own `time.asOf` (absent stays absent — a windowed model asked with none is refused, never read as now); `assessBridgedMeasurementBacking` still withholds `asOf` from the base call and lowers rather than refuses, as before; `causalQualityMeasurementBacking` takes the issuance instant. GREEN 3/3; measurement 65/65; epistemic/causal neighbourhood 472/472; root tsc.
+**Limitation.** Only `asOf` is checked, not the claim's `validTime` interval; the causal model and bridge declare no window, so that caller's instant changes nothing until one does.
+
+## D-228 — the use vocabulary is consulted by the surfaces that bar figures; a partial run bars attribution
+**Problem.** WP-B05's remainder: `admits`/`compareForUse` were consulted by nothing outside their tests, and the hand-written `excludedFrom` literals were the operative authority on every surface.
+**Counterexample.** A reconciliation record (profile `coverage: partial`, `monetaryBasis: mixed`) did not bar `outcome_attribution`, which requires `complete`; and `Store.exactAllocation` spread `{ ...result, complete: false }` for a run with unresolved legacy requests, keeping the complete run's list. RED 1/4 on the new gate (import failure first, then the reconciliation assertion); two existing tests then exposed the store path.
+**Fix.** `excludedUsesFor(profile)` and `barredUses(profile, floor)` in `src/epistemic/claim-uses.ts` — the floor a surface bars in writing united with what the vocabulary refuses the profile its kernel adapter issues, vocabulary-ordered, never removing. Exact allocation (`exactAllocationClaimProfile`, `EXACT_ALLOCATION_EXCLUDED_FLOOR`, `withUnresolvedRequests` as the one way to mark a run incomplete; the validator re-derives and refuses a disagreeing row), reconciliation (`reconciliationClaimProfile`, `RECONCILIATION_EXCLUDED_FLOOR`; the floor is stricter than `admits` because the vocabulary admits `mixed` to the two definitional uses, and it stays), OpenAI Costs (`openAiCostsClaimProfile`, floor gated ⊇ refused), the allocation payload floor. The kernel adapters issue the same profile the record's list was derived from. `test/claim-uses-operative.test.ts`. Neighbourhood 182/182; root and browser tsc.
+**Limitation.** `compareForUse` still has no production caller — no surface ranks two claims for a use; the billing-mapping and CLI mapping literals (three uses, no kernel profile) are gated for vocabulary membership only.
+
+## D-229 — the pack module has a producer: the epistemic ledger, through `fiscus pack`
+**Problem.** WP-G05's remainder: `src/pack/` (manifest, canonical bytes, Ed25519 signing, conservative verifier, D-212's standalone verifier) was reachable from no product path; no command exported, verified or inspected a pack.
+**Fix.** `src/pack/export.ts` `exportLedgerPack`: every ledger graph node bound in `includedRecords` by `sha256:` of its canonical JSON as stored; payloads carried as one `records.json` attachment bound by digest; a byte budget turns the tail into a stated omission (ids, reason) rather than a truncated attachment; `confidential`/`restricted` evidence travels with `payload: null` and a redaction entry; optional signing. `src/cli/packCmd.ts`: `pack export --out` (refuses an existing path, writes nothing without `--out`), `pack verify [--trust]` (integrity / authenticity / truth printed as three outcomes; authenticity only with the anchor), `pack inspect` (reads the manifest, evaluates nothing). `src/pack/CONTEXT.md` and the routing row; README and DATA-BOUNDARIES say what travels. `test/fiscuspack-ledger-export.test.ts`: in-tree and standalone verifiers, stored-record digests, redaction, omission, trust anchor; two mutations shown red. CLI exercised end to end on a scratch home (export → inspect → verify → overwrite refused).
+**Limitation.** Only the epistemic ledger is packed; the recipient checks bytes and signature, not the kernel's admission rules; cross-runtime, hosted and external review remain outside the repository.
+
+## D-230 — the kernel readers take a knowledge boundary, so a revocation recorded today no longer rewrites every past read
+**Problem.** WP-R07's remainder: the three store readers behind `/api/billing` projected revocation live only; there was no way to ask what the ledger knew at T through the surface that serves billing claims.
+**Counterexample.** After a revocation recorded 2026-08-11, a read as of 2026-08-10 returned the claim `revoked: true`; a read as of an instant before the claim was available returned it at all. RED 3/5.
+**Fix.** `billingKernelClaims`, `openAiCostsKernelClaims`, `billingReconciliationKernelClaims` take an optional `asOf` and answer from `replayAsOf`: events not yet recorded do not apply and nodes not yet available are not served; live reads are unchanged. `/api/billing?asOf=` parses like the economic route (400 on a malformed instant) and echoes the boundary as `asOf` (`null` live); `BillingPayload.asOf` declared on the shared type. GREEN 5/5; neighbourhood 178/178; root and browser tsc.
+**Limitation.** The recorded runs and summary in the same payload are store rows, not kernel nodes, and are not replayed; `pendingInvalidationBy` still renders only on `fiscus budget --recommend` (D-220), because no other surface reads a certificate bundle; `minimalSupportingSets`/cut sets still reach no user.
+
+## D-231 — a receipt is reconciled against the ledger it summarises
+**Problem.** WP-R06/C06's remainder: a v2 receipt carried exact lineage that nothing read back against the economic ledger, so a holder could verify the signature and never learn whether the ledger still said the same.
+**Fix.** `src/value/receiptReconciliation.ts` `reconcileReceiptWithLedger(body, ledger, asOf?)`: resolves the named events at the boundary, projects the sources through `effectiveChargesFor`, and answers `agrees` / `ledger_moved` (unseen corrections retained since signing; as of the signing instant it agrees) / `disagrees` (a missing source, or the same lineage and a different amount) / `not_reconcilable` (v1, or none of the events are this ledger's); `requestCount` and the signature are named as not checked. `fiscus receipt --reconcile <file> [--as-of]` prints the outcome separately from `--verify` and exits 1 unless it agrees. Tests 4/4 (one mutation red); CLI exercised on a scratch home; team-server tsc unaffected.
+**Limitation.** Rollups are checked at emit against the unfiltered ledger population (D-199) and not re-read against a ledger on receipt; the Postgres implementations stay untested without a live Postgres (standing judgement).
+
+## D-232 — backup inspection revalidates the kernel's own payload digests before restore publishes anything
+**Problem.** WP-H04's remainder: `storedPayloadIntegrity` revalidated economic and historical-FX payload digests and never the five epistemic tables, so a backup whose `evidence_json` was rewritten under a stale digest, with its manifest re-emitted to match the file, restored cleanly; the kernel found out on the first read of that node.
+**Counterexample.** Exactly that fixture restored with `ok: true`. RED 1/2 (the replay control passed).
+**Fix.** The five epistemic payload tables are checked row by row — digest over the stored JSON as `nodePayload` recomputes it, and the payload's `id` against the row key — inside the same pre-restore inspection, so the refusal names the node and no destination is published. A second test restores a backup carrying a kernel node and replays it through the kernel readers (graph identical, payload intact, re-offering the node is `duplicate`). Backup suite 12/12; CLI backup and diagnostics gates 15/15.
+**Limitation.** Migration-interruption coverage (shared with WP-H01) is still open: nothing injects a fault mid-migration.
+
+## D-233 — a migration interrupted at any statement leaves the database as it found it
+**Problem.** WP-H01/H04: `initializeSchema` wraps the schema, the kernel and economic schemas, the guarded migrations and the immutability triggers in one `BEGIN IMMEDIATE` with rollback on error, and nothing had thrown from inside it to see whether that held.
+**Fix.** `test/migration-interruption.test.ts` injects a fault at the N-th DDL statement by shadowing `prepare` on the connection (154 DDL statements in a full migration; seven sweep points from the first to the last) against a legacy two-table database, and after each checks the user_version is still legacy, the table set is exactly the legacy pair, and the legacy row is intact; a clean open then migrates completely. Mutation: with BEGIN/COMMIT removed the table-set assertion fails at sweep point 42 (the two earliest points create nothing yet). 1/1.
+**Limitation.** The fault is a thrown error, not a process kill or a power loss; SQLite's journal is what makes those equivalent, and that equivalence is SQLite's claim, not this test's. Confidentiality and recovery review (WP-H01) remain.
+
+## D-234 — the plugin host has a first-party consumer: plugin evidence becomes kernel Evidence and nothing more
+**Problem.** WP-G02/G03: the contract and the process host were reachable from no product path (directive §21).
+**Fix.** `src/plugins/intake.ts`: `planPluginIntake` turns each hosted record into an `Evidence` envelope under `plugin:<id>@<version>` with the only axes a host can honestly write — `integrity` `verified` iff a carried `payloadHash` matches the payload (else `unknown`, record kept, axis not raised), `authenticity` `self_asserted`, `completeness` `unknown`; an output whose pluginId or category is not the manifest's refuses the batch. `applyPluginIntake` appends and reports inserted/duplicate. `fiscus plugin run --manifest --request --exec --scope` previews by default and appends with `--apply`; parity-map row; README. Running the CLI twice found the first draft's wall-clock `recordedAt` made a re-run "different evidence" mid-batch: the envelope is now a pure function of the output, a re-run is `duplicate`, and a record changed under the same id is a named conflict that writes nothing. Tests 4/4 with two mutations red; chain exercised end to end (plugin → kernel → `fiscus pack export` sees the node).
+**Limitation.** The host is a separate process, not an OS sandbox (unchanged, printed on every run); the scope and grain are the operator's declarations; no plugin ships in the repository.
+
+## D-235 — four "remaining" items closed by decision and pinned by test, not by more machinery
+**Problem.** WP-R05, WP-R02, WP-I06 and WP-D02 each carried a residual that read as unfinished work. Read against the code, each was either already true, or a design refusal that had never been asserted.
+**Fix.** R05: "coverage cannot compose" is the rule — `src/billing/epistemic.ts` writes `partial` with `coveredTime: validTime`, the EXTENT of a partial capture, so two tiling partials say nothing about wholeness; `test/coverage-non-composition.test.ts` pins refusal of the tiled pair, acceptance of `partial`, and acceptance of one `complete` witness over the union (mutation red with the ceiling removed). R02: the product-wide rule IS the ledger (direct ceilings, per-step legality, chain analysis); `assessPreservation` had no caller and was held to nothing — `test/preservation-ledger-agreement.test.ts` checks accept-iff-allow over the full 36x36 single-record grid and all 1296 evidence pairs against the top claim, naming any disagreement (181 named with the coverage ceiling removed). I06: a per-export "contract omission" gate was measured and rejected — nearly every export of every module is unmentioned by its contract, so the gate would be a false-positive machine; prose truth is not mechanically checkable and the row now says so as its terminal state. D02: no quality-score vocabulary survives in `src/` (`src/git/quality.ts` names only `artifact_persistence` and lists the words it must not be read as); `fiscus value` prints retained/introduced lines with the "not code quality" sentence beside them; the dashboard does not project it and that is scope, not omission.
+**Limitation.** The agreement grid covers the three axes an Evidence record carries; the other five ordered axes are compared claim-to-claim on the derivation path only, which the grid does not reach. `src/git/quality.ts` keeps its file name.
+
+## D-236 — the realized exact amount is reconciled too, the team module joins the FX sweep, and R06's "unit in the name" is answered by the v2 wire
+**Problem.** WP-R06's remainder: the compatibility field carries its unit in its name; mixed-currency consumer coverage excluded `src/team/**`. Reading `canonicalEconomicProject` for the second: `economic.total` was reconciled against `costUsd` (D-096) and `economic.realized` — the figure a receiver reads as value — travelled unreconciled beside `spendOnRealizedUnitsUsd`. RED: an exact realized 40 USD beside a float 100 signed.
+**Fix.** `src/team/rollup.ts` reconciles `realized` with the same helper (a fixture in `test/economic-team-rollup.test.ts` had carried exactly that drift and is corrected). `test/economic-fx-consumer-sweep.test.ts` drops the `src/team/**` exclusion, classifies `rollup.ts` (c), corpus 31 files / 184 sites, floors raised to 30/171. The "unit in the name" item: a v2 body already carries the unit on the wire as `amount.currency` on both exact attributions, reconciled to the floats; the v1 floats are the frozen legacy layout (`legacy v1 bodies … remain signable without changing their bytes`), so renaming them is a wire-format break, not a repair. Root 3 files green; team-server tsc + 130/130.
+**Limitation.** Provider-authoritative FX policy stays with WP-C03 as an undecided owner policy; the sweep still finds call sites, not wrong sums.
+
+## D-237 — the zero-dependency rule becomes a checked SBOM fact; provider FX authority is recorded as the owner's policy, not an open packet
+**Problem.** WP-H05 named "no SBOM" as a remaining gap that needed a runtime dependency. It does not: `npm sbom` is built into npm and emits CycloneDX for the production tree. WP-C03's only remainder was provider-authoritative FX policy, "deliberately undecided" — an owner product policy, not repository work.
+**Fix.** `npm run sbom` and `scripts/check-sbom.mjs` (`npm run verify:sbom`): root purl must be this package and the runtime component list must be empty, and `package.json` must declare no `dependencies`. Mutation: an injected `left-pad` component fails it. CI's package-smoke job generates the SBOM, runs the check, and uploads `fiscus-runtime-sbom` via `actions/upload-artifact` pinned to a 40-char sha with a version comment (the supply-chain rule); `test/ci-hardening.test.ts` pins the upload AND the check line so neither can be dropped alone. README states what the SBOM is and is not. C03: the five sites where a precedence rule would live stay enumerated in the FX sweep; the current behaviour at each is a refusal that names itself; the row's terminal state is the policy decision, recorded as owner-reserved.
+**Limitation.** The SBOM is unsigned; SLSA-style provenance needs `id-token: write` (owner-reserved). npm's generator describes the installed tree, so it is only as true as the lockfile-driven `npm ci` that preceded it.
+
+## D-238 — revocation closure and `.fiscuspack` round-trip join the benchmark harness, with quality blocks that can fail
+**Problem.** WP-H06 listed six unbenchmarked surfaces. Two of them — revocation closure and pack verification — are kernel reads with a natural correctness oracle and were cheap to add honestly; the rest are not.
+**Fix.** `scripts/benchmark.mjs`: one fan-out ledger per scale (shared root + per-claim leaf), two revocations, `revocationProjection()` timed as `revocationClosure`, export→serialize→verify timed as `fiscuspackRoundTrip`; quality blocks assert closure reach (`pairs + 2` nodes, every claim), no pending, whole graph packed, verifier `ok`/`integrity: verified` (first draft read a `.valid` field that does not exist and the quality check failed — fixed against the real result shape). `test/benchmark-contract.test.ts` requires both observations and their quality blocks at small scale (51 packed records, 27 revoked nodes). `docs/RELIABILITY-PERFORMANCE.md` states the four surfaces still outside the harness by name.
+**Limitation.** No latency budget is asserted anywhere (unchanged policy: budgets come from repeated runs on the release machine). Exact projections, allocation runs, dashboard contract validation and proxy streaming remain unbenchmarked.
+
+## D-239 — a parity row's coverage value is checked against the GUI source; twelve rows were claims with nothing behind them
+**Problem.** WP-I03's remainder: "no row's `coverage` VALUE is checked against the GUI". Measured: of the rows claiming `full` or `partial`, twelve were referenced by no action builder, no view literal and no API call — `guide` and `discover` were `full` with a binding in `core/api.ts` that nothing calls.
+**Fix.** `test/dashboard-coverage-value.test.ts`: every `full`/`partial` row must be a `BUILDERS` key in `core/actions.ts`, appear as `'id'` in a view or `main.ts`, or carry `guiEvidence: { file, token }` whose file exists under the app and contains the token; `planned`/`not_applicable` rows may carry none; all three routes must be exercised and the corpus stated. RED 2/2 on the unfixed registry. Rows corrected by reading each surface: `week` (range picker `7d`) stays `full`; `month` becomes `partial` (30 days is not the calendar month); `causal`, `economic`, `egress`, `pricing` keep `partial` with checked pointers; `guide`, `discover`, `project-alias`, `receipt`, `audit`, `yield` become `planned`. The parity table in System now understates rather than overstates. Web tsc, root typecheck, rebuilt dist, dashboard/GUI tests 128/128.
+**Limitation.** A source check proves a binding is live, not that the screen does the whole job; `full` versus `partial` remains a reading. Progressive disclosure — what a first-run operator sees before asking for depth — is still undecided and untested.
+
+## D-240 — the frontier passes through the decision assurance gate; every model-switch recommendation carries a derived level
+**Problem.** WP-F05's remainder, in the decision contract's own words: the frontier reached an operator without passing through `assurance.ts`, so an observational separation was refused by the budget advisor and nowhere else. A recommendation carried a `confidence` word and no assurance.
+**Fix.** `src/value/frontier.ts`: per comparison, `certifyDecision` over the two anytime-valid realization intervals (keep vs switch) and `gateDecisionForConsequence` for `advisory_only` and `changes_spend`, with the comparison's own derived profile — `causality` `observational` only when the separation held, `coverage` `partial` when any unit was excluded, `monetaryBasis` `estimated`, `measurement` `proxy_unvalidated`. `ModelSwitchRecommendation.assurance` carries level, label, input profile and both gates; the CLI sentence states the level and "not for changing spend"; the Value view renders a level pill and a status line; `shared-types.ts` declares the wire shape and the payload contract is regenerated. `test/frontier-assurance-gate.test.ts` RED first: a clean separation is DAL-1 (advice met, spend change refused on `causality`), a trial is DAL-0 with the `dominance` shortfall named on both gates, `authorizesAction` false everywhere. Rebuilt dist; frontier/decision/dashboard/value neighbourhood 301/301; root, browser typecheck.
+**Limitation.** The budget advisor's frontier cells, usage and cohort advice still bypass the gate; declared-input completeness is still assumed, not evaluated.
+
+## D-241 — the composite-key audit: four delimiter-joined identities could alias, all are tuples now, and the corpus is gated
+**Problem.** WP-R10 left "other composite-key audits" open after D-217. Sweeping every identity-shaped delimiter join under `src/` found four that could alias two distinct inputs: `pluginEvidenceId` (D-234's own code — `safeIdentifier` admits ':' in requestId and evidenceId, so an untrusted plugin could make `r:1`+`e` and `r`+`1:e` one record; RED with a real plan); the causal lineage `bindingId` (`ID_RE` admits ':'); the proxy attribution `sourceId` and the reprice summary key (model names are free text and may carry ':' or '/').
+**Fix.** All four are JSON tuples, the D-217 idiom; the reprice JSON now reports `provider` and `model` as separate fields. `test/composite-key-audit.test.ts` enumerates the identity-shaped sites (8 matched; floor asserted), requires each to be classified `tuple` / `constrained` (UUID, numeric or charset-limited earlier parts) / `numeric_tail`, refuses a newcomer, and refuses a classification whose text is no longer in the source — so the four repairs stay pinned after they stop matching the join pattern. Neighbourhood 340/340; root typecheck.
+**Limitation.** Display strings are outside the corpus by design. "Model-quality pluralism" is not a remaining item: Fiscus scores no model quality (`src/git/quality.ts` names the words it refuses), and "routing policy" is a product refusal (Fiscus never changes provider routing), so WP-R10 closes on the audit.
+
+## D-242 — minimal evidence acquisition is the gate's remedy, not a value-of-information number; F04 is superseded by it
+**Problem.** WP-R09's remainder was "a product acquisition workflow and decision-certificate route"; WP-F04 ("true VoI → evidence-debt planner") was NOT_STARTED. `valueOfInformation()` needs a finite posterior scenario mixture with probabilities. The product holds interval bounds and no prior, and inventing one to rank acquisitions is the collapse rule one exists to refuse.
+**Fix.** The acquisition workflow that is honest is the assurance gate's own `remedy`: each shortfall names the next evidence (separate the intervals, assign the alternatives, price on one basis, close the coverage gap). It already reached the budget advisor (D-213); D-240 attached the gate to every frontier recommendation, and this record surfaces the first remedy in the one-line CLI recommendation as "next evidence" whenever the advice bar is not met (`test/frontier-assurance-gate.test.ts`, which also asserts no probability language). The decision-certificate route is the gate itself.
+**Limitation.** No expected value is attached to an acquisition, so remedies are ordered by the ladder, not by return; `valueOfInformation()` stays available to a caller who can declare a posterior with its basis.
+
+## D-243 — the browser runs the same deep interface walk the contract test runs; validation parity by construction
+**Problem.** WP-G01's remainder: server/browser validation parity. The browser validated only the top-level envelope (`validateDashboardPayload`); the deep walk against the generated field table of `shared-types.ts` lived in `test/dashboard-contract.test.ts` alone, so the class of defect the dashboard contract names — a declaration the wire does not honour — was caught at test time on GET routes and nowhere at runtime.
+**Fix.** `checkInterfaceShape` moves into `src/dashboard/contracts.ts` (no node or DOM imports; the build byte-copies it into the browser); `api.ts` runs it on every JSON response with a named type and throws a 502-class `ApiError` naming up to three problem paths; the contract test deletes its private walker and calls the shared one, and now also walks the `clear-proposals` POST envelope (the POST routes that read the machine or write configuration are named as out of scope rather than implied covered). Numeric literal types (`schemaVersion: 1`) are matched, which the private walker let through. Rebuilt dist; dashboard/GUI suite 129/129; both typechecks; verified in the running demo dashboard: every route loads with no console error and the Value view renders the D-240 assurance card.
+**Limitation.** Inline object types, functions and `Record<...>` pass by construction; the server does not validate its own responses at send time; `discover`, `scan`, `import`, `settings-update` and `judge` POST envelopes are validated only in the browser.
+
+## D-244 — declared roll-ups are validated against the producers that make them true
+**Problem.** WP-R03's remainder: "rollup/scope declarations are hand-maintained and not independently validated". `DIMENSION_ROLLUPS` licenses aggregation through `grainIsSupportedBy`, and nothing asked whether the partition each entry asserts holds anywhere.
+**Fix.** `test/grain-rollup-validation.test.ts`: the two declared roll-ups are each bound to the producer whose containment check makes the partition true (`validateRecord` refuses a billing record whose charge period leaves the import period; `validateOpenAiObservation` refuses a day bucket outside the observation period), with a contained input accepted and a displaced one refused; the declared set must equal the validated set; the table must be acyclic; every dimension it names must be issued by some `grain([...])` in `src/`. Mutations RED: the billing containment check disabled (1 fail); a phantom roll-up declared (2 fails). Epistemic contract updated.
+**Limitation.** Containment is one half of a partition; the other half (a record counted in two coarser units) rests on the producers' duplicate-id refusals, named but not re-proved here. Scope hierarchies remain structural in `scope.ts`; derivation transformations keep their typed witness path — which is the design, not a gap.
+
+## D-245 — the negative-claim boundary audit is an enumeration: twelve predicates, one absence claim, one typed bound, and a gate for the next one
+**Problem.** WP-R04's remainder: "other negative claims need the same boundary audit". Which claims those were had never been enumerated.
+**Fix.** `test/negative-claim-audit.test.ts` derives every `predicate: '…'` issued under `src/` (twelve; floor asserted) and requires each to be classified `positive`, `bound` or `negative`, with a `negative` entry naming a completeness mechanism string that must be present in the issuing file. Result: the only absence claim in the product is the coding `clean` gate carried by `value.realization_recorded`, already withheld without supported witnesses for both channels (D-109); `billing.reconciled_with_residual` is a typed bound, not an absence; the other ten assert observations or computations. A predicate added without a classification fails; a classification the source no longer issues fails. Epistemic contract updated.
+**Limitation.** Coding `clean` remains unresolved on a machine whose only completeness source is the git revert scan, because nothing local witnesses incidents; the audit records that as the rule holding, not as work remaining. Polarity is a reading of each predicate, stated with its reason, not derived from the proposition schema.
+
+## D-246 — contribution evidence reaches the operator, as a tally with its non-claims attached
+**Problem.** WP-D03's remainder: `WorkUnit.contributionEvidence` (D-193) rode on every matured unit and into the JSON of `fiscus realize`, but the human output printed nothing, so a terminal reader could not learn whether an association was exact, structural, temporal or unresolved, nor that a confounder had been declared.
+**Fix.** `summarizeContributionEvidence(units)` and `contributionEvidenceLines(summary)` in `src/git/contribution.ts` (pure, language-agnostic); `fiscus realize` prints a "Contribution evidence" block after the per-unit funnel: assessed-of-total with unassessed counted apart from `unresolved`, counts by status and by method, units with a declared confounder, and the sentence "proposal↔commit association only — never AI authorship, code quality, outcome success, or realized value" built from the union of the units' own `nonClaims`. Nothing is printed when no unit was assessed. `test/contribution-surface.test.ts` (3 tests, RED first: the exports did not exist and the CLI did not call them); contribution neighbourhood 18/18; all three typechecks; team-server 130/130; the CLI exercised against a scratch `FISCUS_HOME` — no proposals, so the block is correctly absent.
+**Limitation.** "Broader language coverage" is not a remainder: the engine compares normalized text, hunks and AST fingerprints the collector supplies, and declares `unsupported` file kinds rather than guessing — a new language is a collector concern. Independent attribution validation is WP-D04's external evidence, not this packet's. The dashboard does not yet show the tally; the JSON and CLI do.
+
+## D-247 — the outcome adapter's reach is gated; WP-D01 closes on evidence
+**Problem.** WP-D01 listed "full Store persistence, executable plugin hosting, and CLI/API/GUI migration" as remaining. Read against the code: adapter descriptors are serialized and digest-verified under an allowlist (D-129) and executable adapters are refused from storage by design, so there is no registry table to add; plugin hosting is D-234's separate-process host; and every CLI, API and GUI value surface already reaches its terminal outcome through `computeRealization`/`usageValue`, which call the two canonical adapters. What no record proved was that nothing evaluates an outcome beside them.
+**Fix.** `test/outcome-adapter-reach.test.ts`: `adaptOutcome` is called from exactly `src/outcomes/work-unit.ts`, `src/value/gates.ts` and `src/value/usage.ts` (a third site fails until declared); the coding evaluation now carries `adapterId` (additive field on `CodingOutcomeEvaluation`, nothing outside `src/outcomes` read `contractId` before); the registry refuses a non-allowlisted identity. Outcomes contract updated. Value/outcome/contribution/gates neighbourhood 174/174.
+**Limitation.** The adapter identity is carried on the evaluation object, not yet on persisted realization snapshots or the dashboard payload; consumers that need it there add it as a field with its own contract row. Persisting an executable adapter remains refused, which is the D-129 boundary holding, not a gap.
+
+## D-248 — every advice producer is gated, withheld, or a refusing consumer; the frontier reallocation hint is removed rather than disabled
+**Problem.** WP-F05's remainder after D-240: "usage/cohort advice and the budget advisor's frontier cells bypass the gate; declared-input completeness unevaluated". Read against the code: the usage path issues no advice (its "largest exposure" line already says it is not a purchase recommendation); the advisor's frontier trim/grow branch had been disabled by an empty constant (`const cells: FrontierCell[] = []`) while the `frontier` input and a commented-out CLI block still suggested the hint could return.
+**Fix.** `test/advice-assurance-reach.test.ts` enumerates every `export function` under `src/` named for recommending or advising (four; floor asserted) and requires each to be classified with a probe that holds: `recommendBudget` (gated — its decision carries `assurance.requiredLevel` DAL-3 and `authorizesAction: false`; two frontier cells with a hundredfold RoI gap yield no reallocation), `budgetAdvice` (declares the cap's inputs), `recommendAllocation` (withheld — no caller in `src/`, checked on the import graph), `cmdBudgetAdvisor` (refuses `--apply` without a certified DAL-3 certificate). A second test pins that `recommendBudget` does not read its `frontier` input and that the dead branch is gone (RED before the removal). The dead branch and the commented CLI block are deleted; the field stays, documented as always empty. Decision contract updated. Budget/value neighbourhood 91/91; typecheck.
+**Limitation.** Whether a caller declared every input its decision rests on is not evaluated: the gate reads the declared set, and completeness of that set is the evidence holder's claim — a review item, not a computed property. `reallocations` remains in the shape as an always-empty compatibility field.
+
+## D-249 — the cap decision is the product's utility problem: normalized through the engine's representation layer and checked against a declared admissible preference set
+**Problem.** WP-F01 and WP-F03 each ended with "product consumers remain": `buildUtilityIntervalProblem` and `preferenceRobustness` were reached by nothing outside their tests, while `decideBudgetCap` built the same intervals by hand and evaluated one objective.
+**Fix.** `decideBudgetCap` now builds `utilityProblem` via `buildUtilityIntervalProblem` (representation `explicit_intervals`, carried on the decision) and runs `preferenceRobustness` over `BUDGET_CAP_ADMISSIBLE_PREFERENCES`: six declared members — the objective's realized weight (2), break-even (1) and value-heavy (4), each at both ends of the realized-admitted interval so no midpoint the evidence does not support is scored. The result is `decision.preference`, rendered as "Preference <status>: … a robustness diagnostic, not a recommendation"; it never moves standing. Two tests RED first (13/13 after); typecheck, browser tsc, dashboard/decision/value neighbourhood 241/241. Decision contract updated.
+**Limitation.** The admissible set is a Fiscus policy declaration, not elicited from the operator; constraints, reversibility and value-of-waiting (the rest of F01/F03's headings) are not modelled — the cap decision has no waiting action because the evidence does not accrue on a schedule it controls.
+
+## D-250 — F07 and E07 are superseded with the reason: the product's own mechanisms already occupy their place
+**Problem.** WP-F07 (control lifecycle) and WP-E07 (registered-look sequential lane) each held a complete, tested module with no product consumer and a remainder reading "persistence, authorization, integration".
+**Decision.** Both are `SUPERSEDED_WITH_REASON`. F07: the one spend-changing action has its shadow phase as the replay inside `decideBudgetCap` (admitted/blocked over the observed window), refuses authorization by construction (no certificate authorizes), and has no external target in a local-first product; persisting a lifecycle nothing advances is the unwired-mechanism state D-220 ended. E07: the product's continuous-monitoring inference is the anytime-valid confidence sequence in `src/value/anytime.ts`, valid under unrestricted peeking and consumed by the realization headline and the frontier trial; a registered-look schedule answers the same operator question with a stronger precondition and no new evidence, so wiring it would add a second inference route to one number. Both modules stay as reference implementations with their tests; both contracts now carry a gate-checked "nothing calls" claim (`test/module-contracts.test.ts`), so a consumer added later fails the gate until the contract says so.
+**Limitation.** Cluster-aware and adaptive methods remain refused in the lane and unimplemented in the product; a future action with a genuine rollout (a routing policy) would reopen F07 as a wire, not a build.
+
+## D-251 — byte-level fault injection finds two silent-drift classes in the ledger and closes them
+**Problem.** WP-H01/WP-H03's remainder: corruption beyond payload-digest and trigger tampering. Flipping single bytes across a real ledger (13,229 faults at stride 61 in the exploratory sweep) gave 866 refusals, 12,303 exact reads, 4 read failures — and 56 silent drifts: `captureCoverage` reading `complete` → `legacy_unknown`, `pricing.costBasis` reading `legac�_unknown` (garbage passed through), `costUsd` 0.01875 → 0.0193336 (a figure changed), a provider string mangled. Two of those were product defects: (1) a damaged byte inside a column name in the retained DDL leaves every page valid for `integrity_check`, the column becomes unreachable, and the idempotent migration re-adds it with its default — resetting a provenance column to the legacy sentinel on every row, silently; (2) the read decoders accepted any string for six provenance columns and read a non-string as the sentinel.
+**Fix.** `validateRetainedSchemaText` in `assertDatabaseIntegrity` refuses any `sqlite_master` name or `table_info` column outside ASCII snake_case before any DDL runs; `vocabularyValue` in `src/store/rows.ts` (with `COST_BASES`, `RATE_CARD_SOURCE_KINDS`, `RATE_MATCH_KINDS` now runtime vocabularies in `src/cost/pricing.ts`) refuses a null or out-of-vocabulary value in a selected provenance column with the column named, and reads the sentinel only when the query did not select the column. `test/store-corruption-fault-injection.test.ts`: header magic refused at open; a byte inside a stored `unscoped` label refused at read naming `scopeCaptureStatus` (RED before: drift); a byte inside the live DDL column name refused at open (RED before: opened, `captureCoverage` reset); a 322-fault stride sweep in which no provenance column drifts and silent payload drift stays under a stated 2% bound. Store/backup/schema/causal/dashboard neighbourhood 115/115; typecheck.
+**Limitation.** A flip inside a REAL or free-text payload that remains a well-formed record is invisible to `integrity_check` and request rows carry no row digest, so a figure can still drift under damage that stays inside a valid record; the sweep bounds that residue and names it as the remaining H01 item. Startup wraps the refusal in the typed redacted `CAUSAL_IO_FAILURE` message (D-139), so the operator sees "not accepted", not the column.
+
+## D-252 — there is no approved-policy object: the operator's `--apply` under a certificate is the whole action chain, by construction
+**Problem.** WP-F02's remainder pointed at WP-F06 ("recommendation → policy proposal → approval → action"), and F06 was NOT_STARTED. Read against the code: the chain exists for the one spend-changing action and every link is tested — `budgetAdvice` recommends; `decideBudgetCap` certifies and gates at `changes_spend`; `fiscus budget --recommend` renders review-only standing and refuses `--apply` below DAL-3 (`decision_certificate_required`, CLI test); a certified `--apply` writes the configuration and persists the certificate through `issueDecisionToKernel`; `readBudgetCapCertificates` returns it with withdrawal state and `canAutoAct: false`. What F06 adds beyond that is an approved-policy record from which the product would act — and `DecisionCertificateActionSemantics` is `{ mode: 'no_action', permitted: false }` by type, which is D-220's rule, not a gap.
+**Decision.** WP-F06 is `SUPERSEDED_WITH_REASON` and WP-F02 closes: the approval is the operator's act on advisory output, recorded with the certificate's state at the time; a policy object that lets the product act autonomously is refused as product policy (owner-reserved to change), and the type system carries the refusal. Decision contract states the chain.
+**Limitation.** With the product's own input profiles (`list` money, `proxy_unvalidated` measurement) no cap decision reaches DAL-3 today, so the certified `--apply` path is exercised at library level (DAL-3 fixture inputs) and refused at CLI level; the day a validated measurement and billed money exist, the CLI path opens with no code change.
+
+## D-253 — exact projections, allocation runs and the browser's contract walk are benchmarked with quality blocks; H06 closes on its stated boundary
+**Problem.** WP-H06's remainder: exact projections, allocation runs, dashboard contract validation and proxy streaming unbenchmarked; no latency budgets.
+**Fix.** `scripts/benchmark.mjs` observes `exactProjection` (`economicRequestRowsInRange` → `economicAttributionFromRows`), `allocationRun` (`applyAllocation` under one direct rule per project) and `dashboardContractWalk` (`checkInterfaceShape('Overview', …)` over the assembled overview), each with a quality block from the same data; benchmark rows now carry an exact `economicAmount` so the projection resolves every row. `test/benchmark-contract.test.ts` requires the three observations and pins the quality: 100 rows resolved, `complete: true`, amount `0.2785`; 8 cost centres, conserving, nothing unallocated; `Overview` walked with zero problems. `docs/RELIABILITY-PERFORMANCE.md` gains the section. Small scale: projection ≈45 ms median over 100 rows on this machine (an observation, not a budget).
+**Limitation.** Proxy streaming stays unbenchmarked by contract (the harness attempts no network); latency budgets are release-owner policy from repeated runs on the release machine and are not asserted anywhere. During the same round the full suite exposed one test that had asserted the pre-D-251 laundering behaviour (`totally_made_up` → `legacy_unknown`); it now asserts the refusal at write and at read, and `persistRequest` validates the six provenance vocabularies at the write boundary so the read refusal can only ever mean damage.
+
+## D-254 — kernel issuance is a look too: `issueCausalStudyToKernel` now shares the multiplicity ledger with `reportCausalStudy`
+**Problem.** WP-E06's stated remainder: "`issueCausalStudyToKernel` still calls the estimator directly, which is an issuance rather than a report." Measured against the committed tree (`af0cd11`): `Store.issueCausalStudyToKernel` called `estimateCausalStudy` directly and gated the causal escalation on the raw single-look `allowedClaim`, never reaching `causal_inference_acts`. A study previewed past its registered family's error budget via `fiscus causal analyze` (correctly withheld by `reportCausalStudy`) could still be issued into the kernel by `fiscus causal analyze --apply` as if it were a fresh first look — the durable, revocation-bound Claim path was exactly the one boundary the multiplicity ledger never covered.
+**Fix.** `issueCausalStudyToKernel` now calls `causal.reportCausalStudy` first, so issuance records its own act in the same family a preview would; the estimate passed to `buildCausalStudyKernelIssuance` has `allowedClaim` overridden to `report.claimAfterMultiplicity` when multiplicity withholds the single-look conclusion, so `causalClaimIsEarned` refuses the identification Witness, the randomized Claim and the Derivation exactly as it already does for a study that never earned claim language — the observational arm-difference Claim still issues. Two RED-first tests in `test/causal-inference-store.test.ts`: a fresh single look still earns and persists the causal claim; a study previewed once, then extended and issued once more, has the causal escalation withheld at issuance and the issuance call itself counts as the family's second look (verified via a following `reportCausalStudy` read).
+**Limitation.** `estimateCausalStudy` remains directly reachable by any future caller that does not route through `Store`; this closes the two product surfaces (`analyze --apply` and any other `issueCausalStudyToKernel` caller), not the pure function itself, which is deliberate — the ledger boundary belongs at the Store, not inside a pure estimator. The rest of WP-E06's remainder (no registered plan on any surface, per-study rather than per-question families, multiplicity counted rather than adjusted for correlation) is unchanged.
+
+## D-255 — WP-I05's remainder is read against the code and found mostly already closed; the one genuine gap it named is documented
+**Problem.** WP-I05's stated remainder claimed: (1) "`/api/overview` and the browser views still read [windowed summaries] with no coverage field"; (2) "`report`, `usage` and the value surfaces read their own windows and are not covered"; (3) "proposal prunes are recorded but nothing reads their floor"; (4) "no retention period, deletion command, or subject-access path is specified anywhere". Read against the current tree, (1)–(3) are false: `buildOverview` has called `store.windowCoverage(startMs)` and returned it as `retention` since `3472d08`, and `src/dashboard/web/app/views/spend.ts` reads `d.retention` and renders the truncation notice; `src/value/usage.ts` and `src/value/report.ts`'s composed `UsageReport` already carry `retention`; `src/value/realization.ts` already reads `store.retentionFloor().proposalsPrunedBeforeMs` in two places. Claim (4) was half right: `fiscus prune`, `proposalRetentionDays` (30 days) and the Settings/`fiscus prune` deletion path were documented in `docs/DATA-BOUNDARIES.md`, but the request ledger's own, separately-configured `retentionDays` (180 days default, in `src/config.ts`) was never named there at all — an operator reading the public boundary document could not learn that a request-row retention period exists, what it defaults to, or that it is not auto-pruned on `fiscus start` the way proposals are.
+**Fix.** No code changed. `docs/DATA-BOUNDARIES.md` gains a paragraph beside the existing proposal-retention one, naming `retentionDays` (180 days default), that it is configurable in Settings/config, that `fiscus prune` (not `fiscus start`) is what deletes request rows against it, and pointing to `Store.windowCoverage`/`Store.retentionFloor` as the disclosure mechanism and `fiscus pack export` as the local subject-access path (there being no hosted copy to request). `test/data-inventory-boundary-declaration.test.ts` (6/6) is unaffected by the addition, confirmed by direct run.
+**Limitation.** The genuinely open items in WP-I05's remainder are unchanged by this decision: no refuting completeness witness is emitted (no negative claim is made over the request stream to consume one), the coverage claim bounds what Fiscus recorded rather than what the machine sent, a retention-period *change* still narrows a window's coverage without any notification distinct from the existing disclosure, and the "one chokepoint" premise is checked by a source walk a sufficiently indirect call could evade. None of these are cheap closures; each is either a genuine design question (a negative-claim mechanism, a policy-change notification) or an accepted structural limit already named once (the source-walk boundary, shared with the egress chokepoint check). WP-I05 stays `PARTIAL`.
+## D-256 — progressive disclosure is decided, and presentation is held to the axes
+**Problem.** WP-I03's remainder: "nothing decides or tests what a first-run operator is shown before they have asked for depth, and the territory/consequence axes drive presentation without any test that presentation follows them." The design existed — a first-run register gate, plain/precise formatters, consequence tags, territory-built navigation — but as behaviour nobody had stated as a rule or gated.
+**Fix.** The rule, stated and tested in `test/dashboard-progressive-disclosure.test.ts`: (1) a first-run operator is shown the plain/precise choice and the shell renders nothing else until `registerChosen()` (source-read: `render(root, firstRun()); return;` precedes the shell), and the first screen states the local-only boundary; (2) `usd`, `usdFromMicros` and `basisWords` are exercised under both registers — `$59.16` / "the tool told us" against `$59.163468` / `client_declared — self-asserted header, unverified`, and plain never shows a raw sentinel; (3) `actionCard` renders `tag-<consequence>` for every non-read consequence, the command only under precise, the registry declares every non-read consequence at least once, and each tag has a style; (4) the operations bar and the System table are built from the territory axis and every capability sits in a declared territory. Dashboard contract updated.
+**Limitation.** No browser is rendered: the formatters are tested as functions and the structural rules are read from source; the interaction tests hold the modal's focus policy. Which capabilities a first-run operator sees FIRST beyond the register choice is the territory order, a design choice recorded, not derived.
+
+## D-257 — the Claim Inspector has a kernel behind it: one node, its neighbourhood, its derivations, as of an instant
+**Problem.** WP-I01's remainder: "derivation DAG, assumptions, raw Evidence and as-of reconstruction". The kernel had `replayAsOf`, readers for every record kind and a revocation projection; the GUI rendered none of it — `BillingPayload.kernel` was on the wire and read by no view.
+**Fix.** `Store.kernelNodeView(id, asOf?)` (with `kernelGraphSize`) and `EpistemicLedger.derivationsForClaim`; `GET /api/kernel?node=<id>[&asOf=]` (`KernelNodePayload`, contract row, payload contract, Allow pin, route dispatch and contract-walk tests taught the required query); `api.kernel` in the browser client; a "Kernel viewer" card in the Evidence view: pick an issued billing claim or type any id, open it live or as of an instant, read its record, the edges into it ("rests on") and out of it ("supports") with each endpoint a link to its own node, the derivations and their assumptions, whether revocation reaches it, and how much the ledger held at that boundary. Billing evidence payloads are withheld with their canonical SHA-256 shown. `test/dashboard-kernel-viewer.test.ts` (3 tests, RED first): a billed-total claim rests on its import evidence and the evidence supports it; the payload is withheld and digested; a boundary before the import answers `found: false` while a live not-found still states the ledger's size; 400 on a missing id or malformed instant; GET/HEAD only, loopback-guarded; the view binds the route and offers no action. Verified in the running demo dashboard: the card renders under Evidence, a not-found node reads "not in the ledger (0 node(s) held)", no console errors (the demo issues no kernel claims, so the populated path is held by the test's billing import). Dashboard/GUI/epistemic/store neighbourhood 302/302; idempotence 3/3; all three typechecks. Working-copy CRLF introduced by earlier patch scripts was normalized to the repository's `eol=lf` before the generated copies were rebuilt.
+**Limitation.** The neighbourhood is one hop; a full DAG drawing is not attempted, and `replayAsOf` materializes the whole graph per request, which is fine for a local ledger and would need paging for a large one. The Claim Inspector overlay itself still opens on a spine `Layer`, which carries no kernel id; the viewer is reached from the Evidence view and by id. Payload withholding is by evidence type prefix (`billing.`), a stated policy rather than a per-field classification.
+
+## D-258 — the canonical estimand registry is complete for every valid causal estimate
+**Problem.** WP-E01's remainder was not merely a registry object: the object omitted treatment/control versioning, outcome construct and measurement model, assignment mechanism, interference, transport, identification assumptions, and estimator version; valid protocol estimates also left the canonical estimand reference null outside the retained v1 path.
+**Fix.** The immutable randomized ITT registry now carries every dossier-required semantic dimension while retaining the earlier vocabulary aliases. Valid v1 and v2 protocol estimates and kernel issuance resolve the same registry definition; invalid or unsupported protocol shapes remain unresolved and cannot invent an estimand. RED-first completeness coverage and the causal core/issuance suite pass 60/60; the serial root suite passes 2,097 total / 2,093 pass / 0 fail / 4 skips; root/browser/team typechecks and build pass.
+**Limitation.** The registry currently contains one supported randomized ITT definition. Adding another estimand remains a deliberate registry change requiring its own protocol, estimator, and evidence contracts; this closure does not imply that per-protocol, CACE/LATE, transport, or adaptive estimands exist.
+
+## D-259 — WP-D04 closes the contribution benchmark boundary without laundering association into authorship
+
+**Problem.** The contribution engine had a typed association-only result, but no reproducible adversarial corpus demonstrated that it refused the traps named by the dossier: renames and moves, formatting-only edits, generated output, partial retention, semantic rewrites, copied boilerplate, concurrent human edits, multiple AI sources, revert/reapply, unsupported or binary artifacts, and evidence removal. Without that corpus, a happy-path score could be mistaken for attribution validation.
+
+**Fix.** Commit `9519aaa` adds a 42-case synthetic corpus, a deterministic benchmark runner, and a machine-readable `benchmark:contribution` command. The corpus includes explicit oracle rationale and synthetic provenance; the runner clones evaluator inputs, deep-freezes report output, hashes the canonical corpus, reports category and confusion counts, records limitations/non-claims, and fails closed on empty, duplicate, or non-synthetic cases. The focused RED-first suite is 7/7. A deliberately wrong evaluator is detected, and baseline pooled-retention/simple-diff scores are retained only as diagnostic comparisons, never as verdicts.
+
+**Decision.** WP-D04 is `COMPLETED`, and AII-007 is `COMPLETED` on its stated benchmark boundary. The result remains association evidence only: it does not establish AI authorship, outcome success, code quality, or realized value, and the synthetic oracle is not independent field validation. Any production claim must still preserve the engine's unresolved and confounder states and carry its own evidence boundary.
+
+## D-260 — pre-registering an inference plan becomes a durable Store boundary
+
+**Problem.** WP-E06 already recorded inferential acts and computed a conservative union bound, but no product boundary could persist the plan that fixed the family before the first look. Every report therefore defaulted to `recorded_acts_only`, even when a caller had a valid pre-registered design in hand; a process restart could not recover a plan, and a plan could not be attached after looks had been spent.
+
+**Fix.** `causal_inference_plans` is an immutable local table keyed by study and bound to the committed protocol hash. `Store.registerCausalInferencePlan()` validates the plan, takes an immediate transaction lock, rejects unknown studies and any post-act registration, permits only byte-identical idempotent retries, and persists the canonical plan. Update/delete triggers protect the record. `causalInferenceLedger()` validates and loads the plan on every report, so the plan basis survives process restart and protocol mismatch fails closed. RED-first store coverage proves first-look plan basis, restart recovery, idempotence, conflict refusal, append-only protection, unknown-study refusal, and invalid-shape refusal (15/15 focused store tests; causal inference tranche 49/49; typecheck/build green).
+
+**Limitation.** This closes durable plan registration, not the whole E06 packet. No CLI/API setup surface creates plans yet; families remain per-study rather than question-level; multiplicity remains a union-bound count rather than a correlation-adjusted method; precision planning reports interval width and deliberately does not invent a probability of reaching a decision; and `claimAfterMultiplicity` remains a conservative Fiscus policy rather than a theorem.
+
+## D-261 — retained causal estimation is ITT-primary and block-aware
+
+**Problem.** The registered protocol declared blocked equal randomization, but the estimator pooled assigned-arm means and rejected any execution whose observed plan deviated. That neither used the registered block structure nor represented the intention-to-treat question honestly when a unit received a different plan.
+
+**Fix.** Qualification now verifies block identity/allocation consistency, refuses incomplete or unbalanced retained blocks, and accepts a deviated execution only when the assigned and actual plan identities remain verifiable. The estimator computes assignment-count-weighted within-block contrasts with the same predeclared bounded-outcome radius, keeps the unit in its assigned arm, and states that per-protocol/CACE/LATE effects are not estimated. RED-first coverage includes noncompliance, incomplete/conflicting blocks, permutation invariance, and malformed evidence; the causal core/ledger/issuance tranche is green.
+
+**Limitation.** The local lineage cannot prove that an entire block or eligible population was never omitted, and no per-protocol or interference-adjusted estimand is being invented.
+
+## D-262 — missingness and interference are disclosed at the estimator boundary
+
+**Problem.** A missing outcome could otherwise be read as a smaller denominator or an attrition rate of zero, while complete retained data could be mistaken for evidence that units did not interfere.
+
+**Fix.** Every causal estimate now carries per-arm retained-assignment and completed-pair counts, names zero-assignment missingness as unknown, refuses imputation/reweighting/complete-case reinterpretation, and states that attrition and the missingness mechanism remain unknown. The estimator explicitly says interference is not assessed. RED-first tests cover missing outcomes, empty assignment support, and the complete-data non-claim.
+
+**Limitation.** Protocol-level missingness indicators/reasons, attrition bounds or sensitivity sets, cluster/interference declarations, exposure mappings, and estimand-specific qualification remain open; the packet is therefore `PARTIAL`.
+
+## D-263 — treatment transport across claim coordinates requires witnessed target evidence
+
+**Problem.** A coordinate witness could make a causal claim appear to move across subject, time, measurement-model, or treatment context without proving that the target population/regime had any supporting evidence. Treatment identity was named in the protocol but transportability was not a typed obligation.
+
+**Fix.** `causal_transport` is a typed witness kind with explicit source/target claim identities and a retained target evidence requirement distinct from source evidence. Derivation legality requires it for causal coordinate changes; the persistent ledger checks witness identity, target backing, payload presence, epistemic support, and revocation propagation. Focused transport/issuance/epistemic coverage is green.
+
+**Limitation.** Cross-study pooling and bridge selection remain unimplemented, no operator-facing transport declaration workflow exists, and local target evidence does not establish external transport validity; WP-E05 remains `PARTIAL`.
+
+## D-264 — causal design and estimator identities are routed through one registry
+
+**Problem.** The causal subsystem contained a randomized ITT estimator alongside a deferred v2 protocol, an archived paired-return experiment, and a standalone sequential-rate lane. Without an explicit authority, future callers could treat any of them as interchangeable causal truth.
+
+**Fix.** `DESIGN_ESTIMATOR_REGISTRY` names every lane and its status. Only the retained blocked ITT v1 resolves for estimation; v2/deferred, archived, and noncausal entries resolve to no causal estimator. The estimate carries `designEstimatorId`, kernel issuance requires that identity, and legacy snapshots project `null` without rewriting their stored bytes. RED-first registry/issuance/snapshot coverage is 4/4; typecheck/build pass.
+
+**Limitation.** This is an authority/routing closure, not implementation of the deferred v2 analysis or the archived/noncausal methods.
+
+## D-265 — standards are adapters and evidence vocabularies, not a replacement epistemic kernel
+
+**Problem.** The dossier required an implementation-time comparison with current interoperability standards. Treating a standards name as a feature would either duplicate mature cost/telemetry/provenance protocols or overclaim that a conformant envelope proves Fiscus's financial, causal, or decision semantics.
+
+**Fix.** `docs/program/STANDARDS-INTEROPERABILITY.md` records primary-source mappings for OpenTelemetry GenAI conventions, FOCUS Cost and Usage, W3C PROV, W3C VC/Data Integrity, in-toto/SLSA, and draft-only SCITT. Each row states the direction of interchange, maturity/version, omitted-field and exactness handling, and the semantic boundary that remains Fiscus-owned. A RED-first contract test checks the source links and non-equivalence rules.
+
+**Decision.** WP-G04 is `COMPLETED` on its research/mapping boundary. Fiscus will adapt outward from its exact local ledger and Trusted Epistemic Kernel; imported standard records require source/version/digest/coverage/basis evidence and cannot mint stronger Claims. OTel, VC/Data Integrity, and in-toto/SLSA are optional adapter surfaces; SCITT is research-only until a future threat-model and external-authority decision.
+
+## D-266 — WP-J03 is a truthful partial precondition audit, not a fabricated complexity feature
+
+**Problem.** The Complexity Lab packet is intended to keep advanced mathematics honest, but the repository currently has no production complexity surface, benchmark operation, or route that could be calibrated. Marking the packet complete would reward complexity theatre; leaving the durable audit as wholly unstarted would hide useful work that already constrains future admission.
+
+**Decision.** WP-J03 is `PARTIAL`. The read-only report and ten promotion gates remain authoritative: precise target, separated evaluation, calibration, simple baseline, held-out decision value, shift abstention, privacy, no outcome leakage, uncertainty/coverage, and rollback. No complexity score, CLI route, dashboard surface, or production algorithm is added until a real candidate and baseline exist and those gates are measured.
+
+**Limitation.** The packet has no admitted implementation yet. A future candidate must earn promotion with independent evidence and a reversible fallback; a report or design is not a benchmark result.
+
+## D-269 — J04 preserves showback foundations while refusing premature AI-capital authority
+
+**Problem.** Fiscus already has exact allocation/showback and marginal-return primitives, but the dossier's AI-capital workstream also needs commitments, capacity, spend decomposition, opportunity gaps and fairness. Treating the existing showback split as a capital account or chargeback would overclaim.
+
+**Decision.** WP-J04 is `PARTIAL`. `docs/program/J04-AI-CAPITAL-SHOWBACK-BOUNDARY.md` records the proven showback/marginal foundations and the typed schemas/conservation obligations still required. Allocation remains showback-only and non-causal; no provider commitment authority, chargeback settlement, autonomous capital action, or business-value claim is introduced.
+
+## D-270 — J01/J02 remain not-started dependency gates
+
+**Problem.** Adaptive OPE and online control are consequential mechanisms, not ordinary dashboard features. Starting them before treatment/policy logging, causal-v3, action authority, rollback, and safe-baseline foundations exist would create an unsafe controller or call retrospective comparisons OPE.
+
+**Decision.** WP-J01 and WP-J02 remain `NOT_STARTED`. `docs/program/J01-J02-DEPENDENCY-GATES.md` records the exact prerequisites and the current evidence that is absent. The current decision/control modules remain review-only/no-action foundations; no propensity estimator, online policy, spend-changing action, or routing controller is fabricated.
+
+**Re-entry condition.** Re-open J01 only after causal-v3 and policy-provenance records are durable; re-open J02 only after an owner-approved control target and runtime action/rollback boundary are evidenced. The gate is an explicit safety decision, not an execution failure.
+
+## D-267 — I02 remains partial because existing epistemic readers do not cover every dossier surface
+
+**Problem.** The repository already has a Claim Inspector/kernel viewer, as-of graph replay, progressive disclosure, and preference/decision primitives, but that is not the same as implementing every additional epistemic UX surface named by the dossier.
+
+**Decision.** WP-I02 is `PARTIAL`. The current read-only kernel viewer and progressive-disclosure contract are retained as evidence for Prove-a-Claim and What-Did-We-Know-Then foundations. No new action surface is invented merely to fill a packet row.
+
+**Remaining.** A dedicated Trace-the-Dollar traversal through exact economic events/corrections/allocation, minimal support-set/countermodel presentation, decision-theoretic What-Should-We-Measure-Next planning, and Preference Map rendering still need end-to-end route/UI evidence. The existing primitives do not close those claims by implication.
+
+## D-268 — current-market and originality reviews constrain, rather than inflate, Fiscus claims
+
+**Problem.** Fiscus cannot responsibly position itself as a world-first system without checking mature observability, FinOps, GRC, provenance, and standards ecosystems and asking whether each mechanism is replaceable by an existing standard.
+
+**Fix.** `docs/program/MARKET-CAPABILITY-MATRIX.md` records current primary-source capabilities for Langfuse, Datadog Agent Observability, Vanta, FOCUS, and OpenTelemetry, then chooses build/interoperate/refuse per capability. `docs/program/ORIGINALITY-SUBSTITUTION-REVIEW.md` classifies standardized primitives, Fiscus-specific semantics, potentially distinctive combinations, and unproven claims. RED-first contract coverage is 2/2.
+
+**Decision.** WP-J05 and WP-J06 are `PARTIAL`. The defensible product distinction is the composition of exact local AI-finance accounting, epistemic/revocation semantics, causal/decision gates, and standards-compatible exports—not a novel theorem, generic trace platform, GRC suite, or signed envelope. Independent scholarly/market critique remains an external future gate.
+
+## D-271 — runtime accessibility is a repository-tested browser property, with assistive technology kept as an external gate
+
+**Problem.** The earlier WCAG tranche repaired source and contract defects, but its checks did not render the dashboard. A DOM/axe check cannot honestly establish what NVDA, JAWS, or VoiceOver announces, while refusing all browser tooling would leave keyboard, responsive-layout, console, and request-boundary behavior untested.
+
+**Fix.** `test/dashboard-runtime-accessibility.browser.mjs` runs the built dashboard in real Chromium over loopback and checks the required first-run choice and focus return, Escape behavior, skip-link focus without router navigation, accessible control names, responsive no-overflow, loopback-only requests, page/console errors, and axe WCAG 2A/2AA violations. Playwright and `@axe-core/playwright` are dev/test-only and are explicitly allowlisted by the supply-chain checker; CI has a separately pinned `browser-accessibility` job. Native Edge was also exercised against the loopback dashboard during this checkpoint. The local browser gate passed 1/1.
+
+**Boundary.** WP-I04 remains `BLOCKED_EXTERNAL`: this closes the repository/runtime gate, not exact assistive-technology announcement behavior. No screen-reader result is inferred from axe or from the browser accessibility tree.
+
+## D-272 — bounded plugin-host shutdown treats asynchronous request-pipe EPIPE as a lifecycle event
+
+**Problem.** On macOS, the existing bounded-output regression could fail the whole process with an asynchronous `EPIPE` from the child's request stdin after the host had already terminated the child for exceeding its output bound. The synchronous `stdin.end()` try/catch could not observe that later stream error.
+
+**Fix.** The process host now attaches a one-shot stdin error listener and routes it through the existing single-settlement `forceStop`/`close` path. A stronger refusal or timeout wins; an unhandled pipe error cannot turn an expected bounded shutdown into a CI crash. The focused plugin-host regression passes 9/9 locally.
+
+**Boundary.** This is lifecycle hardening, not a relaxation of output limits, capability refusal, egress policy, or credential isolation.
+
+## D-273 — J01 gains a pure provenance-aware OPE boundary while J02 stays no-action
+
+**Problem.** The authority directive permits the adaptive experimentation lane,
+but retrospective model comparisons must not acquire the name OPE and a
+missing logging propensity, treatment identity or overlap support must not be
+converted into a number.
+
+**Fix.** `src/causal/ope.ts`, `src/store/ope.ts`, `test/causal-ope.test.ts`
+and `test/causal-ope-store.test.ts` add a bounded J01
+foundation. Each action observation carries explicit treatment identity,
+pre-treatment context timing, logging propensity, target-policy identity/version
+and digests, outcome timing and (for doubly robust evaluation) a pre-treatment
+outcome-model identity. The evaluator implements ordinary IPS,
+self-normalized IPS and doubly robust estimates; refuses missing evidence,
+post-treatment leakage, unsupported overlap, uncontrolled importance tails and
+model-provenance conflicts; and reports effective sample size, clipping,
+tail-risk/bias status, assumptions, limitations and a provenance digest. RED-first
+focused coverage passes 11/11, with root typecheck/build green. The Store
+persists observations in an append-only, digest-authenticated table and
+replays them through the same evaluator.
+
+**Boundary.** WP-J01 is `PARTIAL`, not complete: no real decision-boundary
+policy adapter, bounded product consumer or evaluation-record replay path
+exists yet. The module never authorizes or executes a policy and explicitly
+states that its estimate is not a causal treatment effect. WP-J02 remains
+`NOT_STARTED` until the runtime action adapter, safe baseline, rollback and
+circuit-breaker evidence are wired.
+
+## D-274 — J05/J06 close on broadened primary-source and adversarial review evidence
+
+**Problem.** The earlier market/originality review covered Langfuse, Datadog,
+Vanta, FOCUS and OpenTelemetry, but its own remainder required additional
+FinOps/AI-governance substitutes and an independent critique before external
+positioning. Leaving the rows `PARTIAL` after collecting that evidence would
+make the durable register lag the actual review; marking them complete without
+the critique would overstate originality.
+
+**Fix.** The market matrix now includes current primary-source observations for
+OpenCost, IBM Kubecost and IBM watsonx.governance, and records explicit
+build/interoperate/refuse decisions. The originality review adds an adverse
+methodological critique from the doubly-robust OPE literature plus direct
+substitution findings from those systems, and installs a pre-claim gate that
+requires a primary-source refresh, direct and standards substitutes, relevant
+scholarship and a strongest counterargument before field-leading language.
+The matrix/originality contract test passes with the broadened corpus.
+
+**Decision.** WP-J05 and WP-J06 are `COMPLETED` at the repository-review
+boundary. This is closure of the current benchmark/review deliverables, not a
+certificate of market leadership, historical originality, superiority, customer
+outcomes or future freshness; those claims remain prohibited without a later
+refresh and independent evidence.
+
+## D-275 — J01 closes at the review-only OPE boundary; J02 remains the execution boundary
+
+**Problem.** J01’s implementation had the estimator, append-only action log and
+CLI consumer, but the packet still described exploration/budget/tail-risk
+constraints as absent. That made the register lag the actual contract.
+
+**Fix.** OPE evaluation now requires a typed policy-constraint declaration
+bound to the target policy identity: mode, exploration rate, budget units per
+observation, maximum importance weight and maximum tail contribution. The CLI
+consumer reads those constraints from a local options document, and focused OPE,
+Store and dependency coverage is 13/13. These are declared review constraints,
+not evidence that a runtime controller executed them.
+
+**Decision.** WP-J01 is `COMPLETED` at the review-only, provenance-aware OPE
+boundary. It refuses unsupported evidence, records policy provenance, persists
+the action log append-only, and returns no execution authority. WP-J02 remains
+`NOT_STARTED` as the separate online-control packet; no spend-changing or
+routing action is authorized by J01.
+
+## D-276 — J04 closes at a typed, exact, review-only AI-capital boundary
+
+**Problem.** Existing allocation/showback and marginal-return primitives were
+useful but did not distinguish committed capacity from consumption, did not
+conserve direct/allocated/realized spend, and could be relabelled into a
+chargeback, opportunity, fairness, or business-value claim by a caller.
+
+**Fix.** `src/capital.ts` adds a versioned `CapitalAccountInput` and
+`CapitalAccountResult` over exact `Money`. The evaluator validates bounded
+half-open observations, currency/basis identity, committed-versus-consumed-
+versus-reserved capacity, unused commitment, direct/allocated/full/realized/
+avoidable spend, and marginal scenarios that are kept outside realized spend.
+It refuses negative amounts, duplicate observations, capacity violations, and
+direct-plus-allocated totals that differ from realized cash. Coverage is an
+explicit field rather than an inference from row count. A declared target
+produces a `counterfactual_only` opportunity gap; a declared group policy
+produces a `policy_relative`/`descriptive_only` fairness spread. The bounded
+`fiscus capital evaluate --options <file> --json` consumer is review-only and
+cannot write a Store row, change a budget, route a request, settle chargeback,
+or authorize payment.
+
+**Decision.** WP-J04 is `COMPLETED` at this repository-side review boundary.
+The evaluator does not claim provider commitment authority, invoice/request
+reconciliation, causal effect, or business value. A future durable capital
+ledger requires an owner-approved source identity, retention policy, and
+reconciliation contract rather than a more permissive interpretation of this
+snapshot evaluator. Focused coverage is 5/5; root typecheck and build pass.
+
+## D-277 — E04 closes at a protocol-linked missingness/interference design boundary
+
+**Problem.** The causal estimator disclosed per-arm missingness and refused to
+impute or reweight, but the durable program still had no typed place to declare
+missingness indicators/reasons, attrition sensitivity, cluster identity,
+interference assumptions, or exposure mappings for estimands that require them.
+
+**Fix.** `src/causal/design.ts` adds a versioned `CausalDesignPlan` bound to the
+committed protocol hash and a fail-closed `assessCausalDesign()` result. The
+plan names the target population, missingness mechanism and reason vocabulary,
+an attrition-sensitivity range, interference assumption, optional cluster
+source, exposure-map digest and explicit estimand set. Cluster and exposure
+estimands are withheld without the corresponding cluster/mapping declaration;
+unknown missingness is retained as unknown; and `none_declared` interference
+is labelled an assumption rather than evidence of absence. The bounded
+`fiscus causal design --options <file> --json` consumer has six RED-first tests
+including the packaged CLI path.
+
+**Decision.** WP-E04 is `COMPLETED` at this repository-side design boundary.
+The declaration does not observe attrition, validate an exposure mapping in the
+world, establish interference absence, or issue a causal effect. Governed study
+records and external evidence remain required for those claims; the existing
+estimator's no-imputation/no-reweighting boundary is unchanged.
+
+## D-278 — E05 closes at an explicit bridge and cross-study pooling boundary
+
+**Problem.** Kernel transport witnesses already protected causal coordinate
+changes, but an operator still had no typed declaration for target-population
+evidence and no generic guard against pooling studies whose population,
+treatment, measurement model, or time horizon differed.
+
+**Fix.** `src/causal/transport.ts` adds `CausalTransportDeclaration` and
+`assessTransportBridge()`, requiring distinct source/target protocol hashes,
+all four coordinates, target evidence, and named
+consistency/exchangeability/positivity assumptions. The assessment reports
+changed coordinates and withholds missing evidence or assumptions.
+`assessStudyPooling()` produces a coordinate key only when every study agrees
+on population, treatment identity, measurement model and time horizon;
+otherwise it refuses pooling with the mismatched coordinate named. The bounded
+`fiscus causal transport --options <file> --json` consumer is review-only.
+
+**Decision.** WP-E05 is `COMPLETED` at this repository-side bridge/pooling
+boundary. Target evidence is identified but not semantically audited; a
+supported-for-review bridge is not proof of exchangeability, causal transport,
+target validity, business value, or routing authority. The kernel witness and
+governed-study/external validity gates remain required for stronger claims.
+
+## D-284 — repository-side packet closure distinguishes durable boundaries from external gates
+
+**Problem.** The remaining packet rows mixed three different states: repository
+work that had now reached a truthful terminal boundary, methods that still had
+explicit research limits, and actions that could not be implemented without
+owner authority or external runtime evidence. Treating all three as `PARTIAL`
+or silently marking them complete would make the inventory less truthful.
+
+**Decision.** Close the repository-side boundaries for E06, I05 and J03 at the
+levels now implemented and verified: E06 has immutable plan setup, explicit
+cross-study family/dependence planning and a stated no-power/no-validated-
+correlation limit; I05 has the egress/data/retention evidence boundary plus
+append-only retention-policy history; J03 has the isolated research profile
+and a hard no-promotion boundary. Their remaining research/external limits are
+terminally documented, not erased.
+
+Move J02 from `NOT_STARTED` to `BLOCKED_EXTERNAL`: the repository has a
+review-only/no-action foundation and a precise re-entry contract, but no
+owner-approved target or runtime authority exists. I04 remains
+`BLOCKED_EXTERNAL` for assistive-technology evidence. No online controller,
+production deployment, or screen-reader result is fabricated.
+
+The resulting inventory is 70 `COMPLETED`, 0 `PARTIAL`, 0 `NOT_STARTED`, 2
+`BLOCKED_EXTERNAL`, and 4 `SUPERSEDED_WITH_REASON`. This is repository-side
+closure with explicit external gates, not a claim that those external gates
+have passed.
+
+## D-283 — I05 makes retention-policy narrowing durable evidence
+
+**Problem.** The ledger already recorded deletions, but changing
+`retentionDays` or `proposalRetentionDays` narrowed future coverage without a
+durable event saying that the policy itself had changed. A later reader could
+see a smaller window without distinguishing deletion from policy edit.
+
+**Fix.** `retention_policy_changes` is a separate append-only Store table with
+stream, previous days, next days, timestamp and source. Dashboard Settings
+updates record request/proposal policy edits after persistence; the Store
+exposes `retentionPolicyChanges()` in chronological order, and update/delete
+triggers plus integrity authority protect the history. RED-first retention and
+settings coverage is green.
+
+**Boundary.** WP-I05 remains `PARTIAL`: the history does not establish traffic
+that never reached Fiscus, cannot distinguish total local erasure from a fresh
+install without an off-machine anchor, does not issue a negative completeness
+witness, and retains the source-walk/indirect-call limitation.
+
+## D-282 — E06 makes cross-study families and dependence modes explicit
+
+**Problem.** E06's immutable per-study plan setup still left cross-study looks
+outside any named family, and a future contributor could apply a correlation
+adjustment without a validated dependence method.
+
+**Fix.** `src/causal/family.ts` and `fiscus causal family --options <file>`
+validate a named family and total planned acts. Arbitrary dependence receives a
+Bonferroni per-act alpha; a Šidák allocation is available only under an explicit
+independence declaration; and `declared_correlation` is refused until a
+validated matrix procedure exists. Four focused tests cover the boundary.
+
+**Boundary.** WP-E06 remains `PARTIAL`: no pooled causal estimate is emitted,
+correlation is not inferred, and precision planning still reports width rather
+than power or probability of reaching a decision.
+
+## D-281 — J03 gains a research-only complexity profile foundation without production admission
+
+**Problem.** WP-J03 had a truthful precondition report but no executable
+research artifact. Leaving the research lane entirely empty made the next
+experiment harder to reproduce; adding a score or routing hook would violate
+the ten promotion gates and create complexity theatre.
+
+**Fix.** `src/research/complexity/profile.ts` records a deterministic,
+provenance-bearing vector over content-free structural and execution
+observables. It carries explicit nulls for epistemic/model sensitivity and
+predicted compute, labels calibration `uncalibrated_research`, and emits no
+scalar score, routing, budget, causal, CLI or dashboard authority. Focused
+profile/boundary coverage is 6/6.
+
+**Decision.** WP-J03 remains `PARTIAL`. Prospective calibration, simple
+baseline/held-out decision value, shift abstention, privacy, decision-time
+availability, uncertainty coverage and rollback evidence remain required before
+any complexity estimator can enter the product decision/control plane.
+
+## D-280 — I02 closes at a single structured, read-only epistemic UX boundary
+
+**Problem.** The Claim Inspector and progressive-disclosure rules existed, but
+the additional epistemic surfaces had no one semantic authority: Trace-the-
+Dollar, support/countermodel sets, measure-next planning, and preference maps
+could each drift or silently turn missing evidence into a recommendation.
+
+**Fix.** `src/epistemic/ux.ts` composes exact-money lineage, the bounded
+minimal-invalidating-set algorithm, qualitative evidence-gap planning, and
+`preferenceRobustness` into one immutable bundle. Missing trace predecessors
+withhold the path; countermodel truncation and empty reasons are preserved;
+measure-next has no invented prior/probability/cost/VoI; and preference ties
+remain `preference_sensitive`. `fiscus evidence ux --options <file> --json`
+is a review-only consumer with four focused tests.
+
+**Decision.** WP-I02 is `COMPLETED` at the structured semantic UX boundary.
+The bundle is the sole authority a future browser presentation may bind to; no
+browser-specific second support/trace/preference model is introduced. It does
+not claim completeness beyond supplied local nodes/declarations or authorize
+an action.
+
+## D-279 — E06 gains an explicit preview/apply inference-plan setup surface
+
+**Problem.** The Store already enforced immutable pre-registration before the
+first inferential act, but no operator-facing command could preview or create a
+plan. A reader had to reach into the Store API, and the packet consequently
+still named setup as open.
+
+**Fix.** `fiscus causal plan --study <study-id> --options <file> [--apply]`
+validates a `CausalInferencePlan`, reports planned acts and required per-act
+alpha in preview mode without opening or mutating a Store, and calls the
+existing immutable Store registration only with `--apply`. Focused CLI
+coverage is 1/1; the existing Store/inference tranche remains green.
+
+**Boundary.** WP-E06 remains `PARTIAL`. The ledger is still per-study, with no
+cross-study family or correlation-adjusted multiplicity model, and precision
+planning still reports width rather than probability/power. The command does
+not weaken the pre-registration or no-action semantics.

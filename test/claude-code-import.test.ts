@@ -94,6 +94,9 @@ test('import: one API request streamed as many lines lands ONCE, and re-import a
   assert.equal(sum.requests, 2);
   const bySource = store.bySource(0, Date.now());
   assert.equal(bySource[0]!.label, 'claude-code');
+  const economicEvents = store.economic().events().filter((event) => event.id.startsWith('economic:request:req_'));
+  assert.equal(economicEvents.length, 2, 'bundled exact rates issue one economic charge per imported request');
+  assert.ok(economicEvents.every((event) => event.amount?.basis === 'list'));
   store.close();
 });
 
@@ -102,6 +105,18 @@ test('import: missing transcripts directory is an honest empty result, not a cra
   const store = new Store(db);
   const sum = await importClaudeCode(store, { root: join(tmpdir(), 'definitely-not-a-real-dir-xyz') });
   assert.deepEqual([sum.files, sum.eventsSeen, sum.inserted], [0, 0, 0]);
+  store.close();
+});
+
+test('import: an oversized JSONL line is skipped before parsing and disclosed as incomplete coverage', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-large-line-'));
+  const oversized = JSON.stringify({ type: 'assistant', message: { model: 'claude-opus-4-8', usage: {}, content: 'x'.repeat(2 * 1024 * 1024) } });
+  writeFileSync(join(root, 'oversized.jsonl'), oversized, 'utf8');
+  const store = new Store(join(mkdtempSync(join(tmpdir(), 'cc-large-db-')), 'test.db'));
+  const sum = await importClaudeCode(store, { root });
+  assert.equal(sum.eventsSeen, 0);
+  assert.equal(sum.captureCoverage, 'truncated');
+  assert.equal(sum.truncatedLines, 1);
   store.close();
 });
 

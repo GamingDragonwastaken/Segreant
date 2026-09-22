@@ -35,6 +35,26 @@ pre-lineage historical rows are separately labelled. These are local pricing
 evidence labels, not provider invoice, discount, credit, tax, or reconciliation
 data. The ledger does not intentionally store provider API keys.
 
+"Labels" is too comfortable a word for five of those columns, so they are named
+individually. Each holds material a person produced rather than a metering
+figure, and each stays on the machine under the Fiscus home:
+
+- `requests.cwd` — the full working-directory path a request was made from,
+  when the calling tool sends one. Directory names routinely carry client,
+  employer, or project names, and the path itself discloses account and
+  directory layout. It is stored to attribute spend to a project and to build
+  the project/path mapping the GUI shows.
+- `requests.user` — the operator label a calling tool reported, unmodified.
+- `git_commits.subject` — the first line of each correlated commit message, as
+  written. Fiscus reads it from the local repository; it never sends it.
+- `proposals.files_json` — captured proposed code lines with their file paths,
+  which is the case `metadataOnly: true` exists to switch off entirely.
+- `scan_snapshots.repos_json` — repository locations discovered by a local
+  scan, so the same disclosure applies as for `requests.cwd`.
+
+Everything above is local. Only the declared egress paths below leave the
+Fiscus process, and none of them carries these columns.
+
 When an operator explicitly runs `fiscus billing import --file ... --apply`,
 Fiscus also stores an immutable, provider-declared billing-evidence ledger. V1
 accepts only a strict local OpenAI evidence JSON contract. It retains the file
@@ -70,6 +90,75 @@ unreconciled collection, not request spend, and do not affect caps, RoI, or
 recommendations. Failed/partial pulls retain failure metadata with no usable
 provider observations.
 
+All Fiscus-process HTTP(S) transport is now governed by the egress boundary.
+The default `egress.mode: "local_locked"` permits literal loopback targets only
+and refuses non-loopback targets before DNS. A cloud operation needs
+`controlled_cloud` mode plus one enabled exact rule for its purpose, data class,
+method, HTTPS origin, and leading path. Before an allowed request is dialled,
+Fiscus persists redacted local receipts for policy preflight and dial start; it
+adds a response or failure receipt afterwards. The receipt chain contains
+hashes, rule identifiers, event metadata, byte counts, and status only—not
+request bodies, query strings, API keys, headers, raw origins, or response
+bodies. A missing receipt file is the only genesis case. If the path is present
+but empty, malformed, truncated, hash-invalid, unreadable, or cannot be safely
+locked/extended, Fiscus refuses before DNS/socket creation; it never treats that
+state as a fresh chain. `fiscus egress status` and `fiscus egress verify` expose
+the configured scope, exact failure reason, and local chain health so the
+operator can repair or restore the retained history before retrying. A bounded
+stale-lock refusal requires confirming that no Fiscus writer is active before
+the operator removes only that lock; abandoned locks are never auto-deleted.
+Receipt writes are synchronous, but Fiscus does not claim `fsync` or power-loss
+durability for this local ledger.
+
+The append path keeps a redacted, hash-checked checkpoint in
+`egress-receipts.checkpoint.json` containing only the last verified file
+identity, count, and chain hash. The persisted sidecar is informational and is
+never trusted to authorize a new process: each process performs one complete
+chain validation before it earns an in-memory append state, then reuses that
+state only while the file identity remains stable. A changed identity or an
+invalid chain fails closed, and `fiscus egress verify` always scans the complete
+history. Verification streams the history in bounded chunks rather than
+materializing every parsed receipt; an individual line above the supported
+1 MiB limit is refused, and retained error diagnostics are capped with an
+omitted-error count. The history itself is retained until an operator explicitly
+preserves/archives it—Fiscus does not silently delete audit receipts. Checkpoint
+or state persistence failure fails closed. Status-only egress callers cancel
+the returned response body so repeated health, webhook, and team operations do
+not retain unused response streams. As with the rest of this local boundary,
+an administrator who can rewrite both the receipt file and the running process
+is outside the guarantee.
+
+When the proxy receives an upstream redirect, it preserves the status/body for
+diagnosis but strips `Location` before returning the response. A downstream
+client therefore cannot silently follow a provider redirect to a destination
+outside the configured Fiscus-process egress policy.
+
+## Declared egress paths
+
+A rule authorizes an exact purpose and data class, so these two tokens are the
+whole authorization vocabulary an operator writes into `egress.rules` and reads
+back from `fiscus egress status`. This table is the complete list: the code
+refuses any purpose or data class not named here, and a test pins the table
+against the constants in both directions, so a new outbound path cannot be
+added without appearing on this page.
+
+| Purpose | Data class | What may cross | Reached by |
+| --- | --- | --- | --- |
+| `provider_inference` | `provider_request` | prompts, source snippets, tool payloads, and the caller's provider credential, exactly as the provider API requires | any tool pointed at the Fiscus proxy |
+| `pricing_refresh` | `pricing_manifest` | nothing about you — a plain GET for a public pricing manifest | `fiscus pricing --refresh`, or `pricing.autoRefresh` |
+| `baseline_refresh` | `baseline_manifest` | nothing about you — a plain GET for the manifest at an operator-supplied URL | `fiscus baseline --refresh --url ...` |
+| `alert_delivery` | `alert_metadata` | configured alert summaries; never prompts, source, or credentials | `fiscus alerts --set-webhook ...` |
+| `provider_cost_observation` | `provider_cost_aggregate` | a read-only day-range query, plus `OPENAI_ADMIN_API_KEY` read from the process environment for that one request | `fiscus billing openai-costs pull ... --apply` |
+| `team_rollup` | `team_rollup` | a signed numeric rollup to an operator-run team server | `fiscus team push --url ...` |
+| `hosted_judge` | `judge_structural_summary`, `judge_transcript_excerpt` | the bounded session excerpt the selected judge tier describes, to the configured judge provider | an explicitly configured hosted judge |
+| `local_judge` | `judge_structural_summary`, `judge_transcript_excerpt` | the same payload shapes, to a literal loopback target that does not leave the machine | the local judge tier |
+| `local_healthcheck` | `healthcheck` | nothing beyond the request itself, to literal IPv4 loopback | the proxy status checks in the CLI and dashboard |
+
+Two of these purposes are loopback-only in normal operation. `local_judge` and
+`local_healthcheck` still travel the same policy, DNS-pinning, and receipt path
+as the rest; naming them here is not a claim that they contact a network
+service.
+
 With the default `metadataOnly: false`, Fiscus may also retain parsed proposed
 code lines locally to measure whether an AI proposal later appeared in a Git
 commit. This is a local-only convenience signal, not a claim that source never
@@ -82,6 +171,19 @@ with the Settings action or `fiscus prune`. If Fiscus is not running, no
 background process is active to delete data; run one of those controls when an
 immediate deletion deadline matters.
 
+The request ledger itself has its own, separate period: `retentionDays` (180
+days by default), configurable in Settings or the config file. Unlike
+proposals, request rows are **not** pruned automatically when `fiscus start`
+begins — only an explicit `fiscus prune` deletes request rows older than
+`retentionDays`. A window that reaches behind whatever boundary is actually on
+record is disclosed on the figures themselves (`retention` in `/api/overview`
+and the CLI's own windowed reports) rather than silently narrowed; see
+`Store.windowCoverage` and `Store.retentionFloor` in `src/store/db.ts`. To get
+your own data out before pruning it, `fiscus pack export --out <file>` writes
+the local epistemic ledger's records to disk (described above); there is no
+separate hosted subject-access request path because there is no hosted copy of
+this data to request in the first place.
+
 ## Optional outbound paths
 
 These paths are off unless an operator deliberately invokes or configures them:
@@ -89,23 +191,38 @@ These paths are off unless an operator deliberately invokes or configures them:
 - `fiscus pricing --refresh`, or `pricing.autoRefresh` with a configured manifest,
   downloads a public pricing manifest from the selected HTTPS URL. The request is
   a plain GET with no usage, prompt, or customer data; the accepted normalized
-  card and redacted source provenance remain local under the Fiscus home.
+  card and redacted source provenance remain local under the Fiscus home. It
+  additionally needs an exact `pricing_refresh` egress rule in controlled-cloud
+  mode.
 - `fiscus baseline --refresh --url ...` downloads a baseline manifest from the
-  URL supplied by the operator.
+  URL supplied by the operator and needs an exact `baseline_refresh` rule.
 - `fiscus alerts --set-webhook ...` sends configured alert summaries to the
-  operator's webhook. It is not for prompts, source, or credentials.
+  operator's webhook. It is not for prompts, source, or credentials, and needs
+  an exact `alert_delivery` rule.
 - A hosted judge is an explicit configuration choice. It can send the bounded
   session excerpt described by the selected judge tier to that configured judge
-  provider. The local judge tier remains on-device.
+  provider and needs an exact `hosted_judge` rule. The local judge tier remains
+  on-device through a literal loopback target.
 - `fiscus team push --url ...` sends a signed, numeric rollup to an operator-run
-  team server. It is opt-in and separate from the local product. Fiscus refuses
-  a non-loopback `http://` endpoint for this command; use HTTPS in deployment,
-  or `http://localhost`, `http://127.0.0.1`, or `http://[::1]` only for local
+  team server. It is opt-in and separate from the local product. It needs an
+  exact `team_rollup` rule for a cloud endpoint; literal loopback development
+  targets are permitted without a cloud rule. Fiscus refuses a non-loopback
+  `http://` endpoint for this command; use HTTPS in deployment, or
+  `http://localhost`, `http://127.0.0.1`, or `http://[::1]` only for local
   development.
 
 The signed GitHub Actions outcome importer is offline: it reads an artifact from
 disk, verifies it against a locally pinned public key and explicit policy flags,
 then retains the verified envelope in the local ledger. It does not call GitHub.
+
+`fiscus pack export --out <file>` writes the epistemic ledger's records as a
+`.fiscuspack` file on local disk and sends nothing anywhere; what you then do
+with the file is an egress you choose. The manifest binds every record by
+digest and states what was left out. Evidence classed `confidential` or
+`restricted` travels with its `payload` removed and a redaction entry naming
+it; `internal` and `public` evidence travels whole, so read
+`fiscus pack inspect` before sharing a pack. A pack proves integrity and,
+with an out-of-band key, authenticity — never whether its claims are true.
 
 ## What this page does not promise
 
@@ -114,3 +231,9 @@ security terms. Review the provider and any optional endpoint you choose before
 routing sensitive material. Fiscus's privacy promise is about its own local
 operation and the explicit controls above, not a guarantee about every service
 you configure around it.
+
+The egress boundary is also not a machine-wide firewall: it cannot stop a
+client from bypassing Fiscus, another process, the operating-system resolver,
+VPN/firewall policy, a machine administrator, or a provider after Fiscus has
+deliberately forwarded a permitted request. Those guarantees need independently
+managed operating-system, network, identity, and provider controls.

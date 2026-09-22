@@ -17,9 +17,19 @@ This document records what Fiscus is, how it's built, and — just as important 
 
 ### Non-functional
 - **Latency**: negligible relative to the upstream call it wraps. The proxy adds one in-process hop; the dominant cost is the provider round-trip (hundreds of ms to tens of seconds). Sub-millisecond bookkeeping is a non-goal dressed up as a requirement — see §5.
-- **Privacy**: no prompt text, source code, or credentials ever leave the device. Provider API keys pass through to the provider untouched and are never stored.
-- **Footprint**: a single command to run. No build step, no native modules, no external services.
-- **Reliability**: a failure in tracking must never break a developer's session. Tracking degrades to transparent passthrough.
+- **Privacy**: Fiscus is local-first for its ledger and UI, stores no provider API keys, and has no Fiscus-hosted
+  telemetry by default. A request intentionally routed through the proxy is
+  forwarded to the configured provider, which may receive prompt text, source
+  snippets, tool payloads, and the provider credential it requires.
+- **Footprint**: a single local command to run after the distributable is built.
+  The runtime uses Node's bundled SQLite and has no native module or external
+  database service dependency. Provider forwarding and optional refresh,
+  webhook, judge, cost-observation, and team paths use the declared Fiscus-process
+  egress boundary; they are not hidden services.
+- **Reliability**: ordinary metering/DB failures degrade to transparent
+  passthrough, but the declared egress policy and pre-dial receipt-integrity
+  gate are intentionally load-bearing. A present receipt history that cannot be
+  validated or extended refuses the outbound request before DNS/socket creation.
 
 ### Constraints
 - One developer, zero-dollar infra budget, must run today on Windows/macOS/Linux.
@@ -112,10 +122,18 @@ in the GUI is not a compile error, and reading an absent field yields `undefined
 which renders as whatever a screen shows for "absent": usually a legitimate,
 honest-looking state. That failure mode shipped three times (a breakdown table of
 em-dashes; "no cap set" on a machine with a $30 cap enforcing; a silently
-discarded settings patch). `test/dashboard-contract.test.ts` now derives the
-endpoint→interface pairings from the API client itself, fetches every read
-endpoint against a real server, and asserts every required field actually
-arrives.
+discarded settings patch). The no-node route/envelope descriptor in
+`src/dashboard/contracts.ts` is copied byte-for-byte into the browser build
+under the publication lock; the server route table and modern client consume its
+paths/methods/guards, and its top-level payload contracts fail closed at runtime.
+`test/dashboard-contract.test.ts` derives endpoint→interface pairings from the
+canonical descriptor, fetches every JSON read envelope against a real server,
+and asserts every required field and primitive/container kind actually arrives.
+Nested browser-interface metadata is generated with an exact `api.ts` source
+hash, while the hand-written declarations and classic inline HTML remain
+explicit follow-on migration surfaces. The GUI parity registry additionally
+exposes immutable `CapabilitySpec` metadata for consequence, authority,
+egress, credentials, reversibility, assurance, and surface bindings.
 
 ### Component responsibilities
 
@@ -129,8 +147,8 @@ arrives.
 | Alerts | `src/alerts/detect.ts` | Detect governance conditions (budget, spike, runaway, throttling, value crater, est. pricing); pure detector + store-backed wrapper |
 | Export | `src/export/csv.ts` | Serialize the request ledger to CSV (RFC-4180 quoting) / JSON for BI; CLI `export` + dashboard `/api/export.csv` |
 | Git correlation | `src/git/correlate.ts` | Read commits via `git`, attribute spend in the window before each |
-| Quality / Yield | `src/git/quality.ts` | Survival lens: code survival (blame at HEAD), revert detection, AI Yield, churn |
-| Realization | `src/value/realization.ts` | Assembles each commit's gate funnel; Realization Rate, Realized Value, acceptance |
+| Artifact persistence / Yield | `src/git/quality.ts` | Artifact-retention observation (blame at HEAD), revert detection, and compatibility yield/churn projections; not code quality |
+| Realization | `src/value/realization.ts`, `src/value/epistemic.ts` | Assembles each commit's gate funnel; Realization Rate, Realized Value, acceptance; automatically issues exact mature lifecycle Evidence/Claims on persistence |
 | Gate ladder | `src/value/gates.ts` | The eight gates + pass/fail/unknown funnel scoring |
 | Proposals | `src/value/proposals.ts` | Extract proposed edits from responses; edit-distance acceptance |
 | Lift baseline | `src/value/liftBaseline.ts` | Resolve manual-minutes-per-task-type: cited/refreshable population prior + personal pre-tracking git history, combined by continuous-data empirical-Bayes shrinkage |
@@ -138,6 +156,7 @@ arrives.
 | System scan | `src/scan/scan.ts`, `src/scan/knownApps.ts` | Proactive, read-only discovery: the 3 importable tools, repos under a root, and a wider best-effort inventory of other AI coding tools detected (never a claim of import capability) |
 | Config | `src/config.ts` | Load/save `~/.fiscus/config.json`, resolve paths |
 | Dashboard API | `src/dashboard/server.ts` | JSON API over the store, plus six CSRF-guarded mutating routes (`/api/import`, `/api/discover`, `POST /api/scan`, `/api/judge`, `/api/settings/update`, `/api/settings/clear-proposals`) |
+| Dashboard contracts/types | `src/dashboard/contracts.ts`, `src/dashboard/shared-types.ts`, `scripts/generate-dashboard-payload-contract.mjs` | One no-runtime source for named payload interfaces plus route/method/envelope metadata; locked generation emits the browser copy and nested runtime contract hash |
 | Web GUI | `src/dashboard/web/` | The browser application: four-claim spine, seven routes, preview-then-commit drawer. Built, not inlined — see §2.1 |
 | CLI | `src/cli.ts` + `src/cli/` | Thin dispatcher (`src/cli.ts`: help, version, main) over per-command modules — `showCmd`, `valueCmd`, `teamCmd`, `importCmd`, `connectCmd`, `opsCmd`, `runCmd`, with shared `ui`/`flags` helpers |
 
@@ -206,7 +225,7 @@ Cost = `input·R_in + output·R_out + cacheWrite·R_cw + cacheRead·R_cr`. The r
 You can't know a request's cost before it runs (output is unknown). So the guard blocks on *already-crossed* daily/session caps and on spend velocity inside a sliding window (the runaway-loop signature). This is what's actually enforceable, framed honestly.
 
 ### D5 — The Realization Standard: production measured as verified outcome, with the dollar as one lens
-The product's positive thesis is a real *unit of account* for AI-assisted work — defined in full in **[THE-STANDARD.md](THE-STANDARD.md)**. It supersedes two earlier attempts that were both rebuilt, not shipped: the research's subjective "AI Efficiency Score", and our own first pass (**AI Yield = surviving lines ÷ cost**, which was lines-of-code with a price tag — it rewards verbosity, ignores correctness, and stapled two existing tools together).
+The product's positive thesis is a real *unit of account* for AI-assisted work — defined in full in **[THE-STANDARD.md](THE-STANDARD.md)**. It supersedes two earlier attempts that were both rebuilt, not shipped: the research's subjective "AI Efficiency Score", and our own first pass (a retained-lines-per-dollar lens that was too easy to read as a quality measure because it put a price on lines without measuring correctness).
 
 The Standard instead scores each commit through a **funnel of eight objective gates** (`src/value/`): Proposed → Accepted → Committed → Tested → Merged → Shipped → Survived → Clean. Three headline numbers fall out:
 
@@ -217,11 +236,43 @@ The Standard instead scores each commit through a **funnel of eight objective ga
 Design properties that make it a standard rather than a dashboard:
 - **`unknown` is first-class, never `fail`** (`src/value/gates.ts`). A gate you haven't wired stays `unknown` and the report shows instrumentation coverage. The model spans the whole lifecycle; the engine fills in what it observes; gaps are explicit and pluggable via `fiscus report` (ingests test/merge/ship/incident signals into `gate_signals`).
 - **Maturity holds the line on honesty**: Survived and Clean are `unknown` until the window elapses, so no unit is called realized prematurely.
-- **Value Receipts** (`src/value/receipt.ts`): each unit emits an ed25519-signed, canonical record of cost → gate verdicts → outcome. Verification separates two guarantees: **integrity** (body unaltered, signature valid, claimed keyId honestly fingerprints the embedded key) always holds from the receipt alone; **authenticity** (signed by the expected party) requires an out-of-band trust anchor — the verifier pins the publisher's keyId (`receipt --verify <file> --key-id <id>`, publish yours with `receipt --pubkey`). Without a pin, a self-consistent forgery would read as intact, so the CLI flags unpinned checks explicitly. This is what turns a private number into a portable, auditable unit of account.
+- **Value Receipts** (`src/value/receipt.ts`): each unit emits an ed25519-signed, canonical record of cost → gate verdicts → outcome. Verification separates two guarantees: **integrity** (body unaltered, signature valid, claimed keyId honestly fingerprints the embedded key) always holds from the receipt alone; **authenticity** (signed by the expected party) requires an out-of-band trust anchor — the verifier pins the publisher's keyId (`receipt --verify <file> --key-id <id>`, publish yours with `receipt --pubkey`). Without a pin, a self-consistent forgery would read as intact, so the CLI flags unpinned checks explicitly. A third question is asked separately from both (D-231): whether the ledger the receipt was signed over still says the same — `receipt --reconcile <file> [--as-of <instant>]` reads the v2 lineage against the local economic ledger and answers `agrees`, `ledger_moved` (a correction retained after signing), `disagrees`, or `not_reconcilable` (a v1 body, or another ledger's events). This is what turns a private number into a portable, auditable unit of account.
+- **Realization kernel bridge** (`src/value/epistemic.ts`): the canonical persisted realization path automatically and atomically issues one idempotent `value.realization_recorded` Evidence/Claim per mature unit whose eight declared gates are all observed `pass` and whose effective request-lineage attribution is complete and re-derived from the Store ledger. The payload retains commit/window/gate/economic provenance and a digest-bound identity. Its profile is provisional, self-authenticated and non-causal; it does not assert business value, provider billing, settlement or project-specific cost when the source scope is the project-blind window basis. Partial, maturing, stale, synthetic-demo and legacy snapshots remain outside this bridge.
 - **Honest scope**: proposal capture covers **both streaming (SSE tool-call reassembly, `src/proxy/stream-proposals.ts`) and non-streaming** responses through identical extraction; Tested/Merged/Shipped depend on ingested signals; Survived/Clean are "to date". None of these are faked — unobserved gates read `unknown`. (Full reasoning in RESEARCH-REVIEW §3.)
 
-### D6 — Fail open
-DB write failure, parse failure, or any internal error falls through to passthrough. A budget *block* is the only thing that intentionally stops a request. Tracking is never load-bearing for the developer's work.
+### D6 — Fail open for measurement, fail closed for declared egress integrity
+DB write failure, parse failure, or another ordinary measurement error falls
+through to passthrough. The egress boundary is different: a policy denial,
+present-invalid receipt history, unreadable history, or lock/persistence failure
+intentionally stops the outbound request before DNS resolution. When an allowed
+target is resolved, a DNS denial is raised after that resolution attempt and
+before socket creation; no DNS-denied target is dialled.
+For controlled-cloud DNS results, IPv4 and IPv6 validation use numeric,
+registry-shaped globally-reachable boundaries and fail closed on multicast,
+unspecified, loopback, private, link-local, documentation, benchmark, and
+reserved ranges. The IPv6 snapshot retains the IANA 2001::/23 parent denial
+while allowing only its encoded globally-reachable exceptions:
+2001:1::1/128, ::2/128, ::3/128, 2001:3::/32, 2001:4:112::/48,
+2001:20::/28, and 2001:30::/28. Teredo, 2001:2::/48, unallocated
+remainder, documentation, 2002::/16, and 3fff::/20 remain denied. The IPv4
+snapshot denies documentation 198.51.100.0/24 and 203.0.113.0/24,
+192.88.99.0/24, and 192.0.0.0/24 except globally-reachable 192.0.0.9/.10;
+ordinary 192.0.1.0/24 and IANA-globally-reachable AS112/AMT ranges
+192.31.196.0/24, 192.52.193.0/24, and 192.175.48.0/24 remain eligible. The
+selected eligible address is pinned into the one socket request; the OS resolver
+is not asked to choose a different address afterward.
+Only a genuinely absent receipt path may establish a genesis predecessor, and a
+present invalid path is never silently reset. Loaded JSON egress configuration
+also accepts only the two declared modes and exact rule field types; ambiguous
+mode/enabled values return to local-locked behavior rather than authorizing a
+cloud rule. Loaded rules use the same exact semantic validator as CLI-authored
+rules: canonical HTTPS origin, non-empty safe path prefix, valid identifiers,
+and no unexpected fields. A bounded stale-lock refusal is
+operator-repairable only after confirming no Fiscus writer is active; the lock
+is never auto-deleted. A budget *block* is another
+intentional request stop. Receipt persistence is synchronous, but it is not an
+`fsync` or power-loss durability guarantee; the boundary is process-scoped and
+does not defeat a machine administrator who can replace local files.
 
 ---
 
@@ -231,7 +282,13 @@ This is single-user, single-process, local. "Scale" means a busy developer's age
 
 - **Throughput**: bounded by upstream latency; concurrency is Node's event loop. SQLite writes are tiny and happen after the response is sent to the client.
 - **Storage growth**: `prune` removes rows past `retentionDays` and `VACUUM`s. A heavy multi-agent month is megabytes, not gigabytes.
-- **Failure modes**: corrupt config → defaults; DB locked/unwritable → passthrough; upstream error → forwarded verbatim to the client.
+- **Failure modes**: corrupt/invalid config → startup refusal; a budget read or
+  request-record failure → provider forwarding refusal until repair/restart;
+  invalid/unreadable/unlockable egress receipt history → refusal; publication
+  lock or child-runtime failures → nonzero launcher failure, never a silent
+  success or lock bypass
+  before dial with an actionable local error; upstream error → forwarded
+  verbatim to the client.
 - **Observability**: the daemon prints a per-request line; the dashboard polls every 4s; `today --json` is scriptable.
 
 ---
@@ -293,7 +350,8 @@ genuinely open:
    client↔server wire format matches, for both the accept and the
    unregistered-key-reject paths.
    **OIDC/JWT verification is now built too:** `team-server/src/oidc.ts`'s
-   `verifyIdToken`, `node:crypto` only (no `jsonwebtoken`/`jose` dependency),
+   `verifyIdToken`, JWS verification via `jose` (team-server's only dependency
+   besides `pg`; D-223) with parsing, key management and claim policy kept local,
    gating a real route (`GET /me`) rather than left untested in isolation.
    Algorithm whitelisted to RS256/ES256 — rejects `alg: "none"` (a real
    historical JWT vulnerability) and HS256 (would allow an algorithm-confusion
@@ -371,8 +429,12 @@ genuinely open:
    the store still never stores prompt/response text), and `fiscus judge`
    judges real sessions looked up from the store (`--session <id>` to pick).
    See [docs/LIFT-AI-SIDE-JUDGE-DESIGN.md](LIFT-AI-SIDE-JUDGE-DESIGN.md) §2's
-   boxed note. Genuinely still open: a real controlled A/B and automatic
-   invocation from `fiscus lift`.
+   boxed note. Genuinely still open: a real controlled A/B, and automatic
+   invocation from the Lift surface. There is no fiscus lift command to
+   invoke it from -- named here without code formatting on purpose, since
+   formatting it as a command is what would imply it can be typed -- and
+   inventing the trigger before the command would be deciding the surface
+   by accident.
 4. **Rust core** — only if Fiscus becomes a shared gateway under real concurrency.
    Until then it's premature.
 

@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { computeReturnOnIntelligence } from '../src/value/lenses.ts';
-import { instrumentationPriority } from '../src/value/voi.ts';
-import { scoreFunnel, type Gate, type GateResult, type Verdict } from '../src/value/gates.ts';
+import { instrumentationPriority } from '../src/value/instrumentationSensitivity.ts';
+import { gateResultFromVerdict, scoreFunnel, type Gate, type GateResult, type Verdict } from '../src/value/gates.ts';
 
 function gate(g: Gate, verdict: Verdict): GateResult {
-  return { gate: g, verdict, detail: '' };
+  return gateResultFromVerdict(g, verdict, '');
 }
 
 /** Matured units instrument Realization; Impact is supplied separately when known. */
@@ -27,11 +27,11 @@ function roiWithMissingLenses() {
   return computeReturnOnIntelligence({
     firstPassAcceptance: null,
     units: units(7, 3),
-    matured: { realizationRate: 0.7, totalCostUsd: 10, realizedValueUsd: 7 },
+    matured: { realizationRate: 0.7, totalCostUsd: 10, spendOnRealizedUnitsUsd: 7 },
   }, { impact: 0.7, impactHow: 'fixture outcome signal' });
 }
 
-test('voi: ranks the heavier missing lens first, with the exposure quantified transparently', () => {
+test('sensitivity: ranks the heavier missing lens first, with the exposure quantified transparently', () => {
   const roi = roiWithMissingLenses();
   const pri = instrumentationPriority(roi);
   assert.equal(pri.length, 2, 'exactly the un-instrumented lenses');
@@ -47,20 +47,20 @@ test('voi: ranks the heavier missing lens first, with the exposure quantified tr
   assert.ok(Math.abs(p.indexAtReference - expected) < 1e-9, 'transparent arithmetic, no hidden priors');
 });
 
-test('voi: measuring at a mid reference moves the Index DOWN when current lenses are strong — more honest, never inflated', () => {
+test("sensitivity: measuring at a mid reference moves this strong-lens fixture's Index down", () => {
   const roi = roiWithMissingLenses();
   for (const p of instrumentationPriority(roi)) {
-    assert.ok(p.deltaAtReference < 0, `${p.lens}: a mid-range measurement can only lower a strong Index`);
+    assert.ok(p.deltaAtReference < 0, `${p.lens}: this fixture's disclosed midpoint sensitivity lowers a strong observed Index`);
   }
 });
 
-test('voi: nothing to buy when fully instrumented; nothing to move from when nothing is', () => {
+test('sensitivity: nothing to buy when fully instrumented; nothing to move from when nothing is', () => {
   const full = computeReturnOnIntelligence(
-    { firstPassAcceptance: 0.8, units: units(7, 3), matured: { realizationRate: 0.7, totalCostUsd: 10, realizedValueUsd: 7 } },
+    { firstPassAcceptance: 0.8, units: units(7, 3), matured: { realizationRate: 0.7, totalCostUsd: 10, spendOnRealizedUnitsUsd: 7 } },
     { lift: 0.6, impact: 0.7, impactHow: 'fixture outcome signal' },
   );
   assert.equal(instrumentationPriority(full).length, 0, 'all four instrumented → empty');
 
-  const none = computeReturnOnIntelligence({ firstPassAcceptance: null, units: [], matured: { realizationRate: 0, totalCostUsd: 0, realizedValueUsd: 0 } });
+  const none = computeReturnOnIntelligence({ firstPassAcceptance: null, units: [], matured: { realizationRate: 0, totalCostUsd: 0, spendOnRealizedUnitsUsd: 0 } });
   assert.equal(instrumentationPriority(none).length, 0, 'no Index → no base to move from');
 });

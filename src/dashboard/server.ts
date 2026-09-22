@@ -3,7 +3,9 @@
  *
  * A small read-only HTTP server over the same Store the proxy writes to. It
  * exposes a JSON API and serves a single self-contained HTML page. Bound to
- * localhost only — like everything else, nothing leaves the machine.
+ * localhost only for the dashboard API. Local storage and UI reads stay in the
+ * Fiscus process; provider forwarding and optional refresh, webhook, judge, cost,
+ * or team paths use the declared Fiscus-process egress boundary elsewhere.
  *
  * This file is the ENTRY and the GUARD, and nothing else. It answers three
  * questions in order — is the caller local, which route is this, may this
@@ -17,7 +19,7 @@
 
 import http from 'node:http';
 import type { Store } from '../store/db.ts';
-import { loadConfig, saveConfig, type FiscusConfig } from '../config.ts';
+import { loadConfig, mutateConfig, saveConfig, type FiscusConfig } from '../config.ts';
 import { ROUTES, type ConfigPersistence, type Route } from './routes.ts';
 import { serveStatic } from './static.ts';
 
@@ -50,7 +52,7 @@ export interface DashboardDeps {
 }
 
 export function createDashboardServer(deps: DashboardDeps): http.Server {
-  const { store, config, version, configPersistence = { load: loadConfig, save: saveConfig } } = deps;
+  const { store, config, version, configPersistence = { load: loadConfig, save: saveConfig, mutate: mutateConfig } } = deps;
 
   return http.createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost');

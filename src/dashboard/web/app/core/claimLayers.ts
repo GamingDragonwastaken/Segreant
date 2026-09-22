@@ -1,11 +1,22 @@
 /**
- * Derives the four claims, and their evidence, from the live payloads.
+ * Renders the four claims, and their evidence, from the live payloads.
  *
- * The rule this module exists to enforce: a layer is `established` only when
- * evidence actually substantiates it. Not when the API returned a number, not
- * when the number is zero, not when a related feature exists. An unestablished
- * layer reports what is missing and what would close the gap — because the most
- * useful thing this product can tell an operator is where their evidence stops.
+ * The rule this module exists to enforce: a layer reports what is missing and
+ * what would close the gap, because the most useful thing this product can tell
+ * an operator is where their evidence stops.
+ *
+ * WHAT MOVED (AII-014). The support AXES are no longer derived here. Each
+ * payload now carries its own `claimSupport`, stated by the side that holds the
+ * evidence — see `src/dashboard/claim-support.ts` for why, and for the three
+ * defects that inferring them in the browser produced. What remains here is the
+ * PROSE: the one-line basis, the next step, and the six inspection dimensions,
+ * which belong next to the pixels that show them. Where the server attaches a
+ * `note`, this module renders it rather than restating the axes in its own
+ * words — two descriptions of one judgement is how they come apart.
+ *
+ * The one judgement still made here is what a claim's support is when its
+ * endpoint did not answer. A server cannot state that about a payload it never
+ * sent.
  *
  * This is a PURE function of four payloads. The fetching lives in `chain.ts`,
  * which is the half that can fail per-endpoint; the split exists so that the
@@ -16,7 +27,7 @@
  */
 
 import type { Overview, BillingPayload, AllocationPayload, ValuePayload } from './api.ts';
-import type { Layer } from './claimTypes.ts';
+import { projectRenderedAxes, unreachableSupport, type Layer } from './claimTypes.ts';
 
 export interface ClaimInputs {
   overview: Overview | null;
@@ -42,7 +53,11 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
     label: 'Metered',
     claim: 'what we observed',
     valueUsd: o?.summary.costUsd ?? null,
-    established: o !== null,
+    // Metered is the one layer whose figure IS the claim: if the ledger read,
+    // there is a priced count. Coverage is partial whenever any row was priced
+    // from an estimate rather than a matched rate card — the figure exists, but
+    // it does not wholly reach what it claims to measure.
+    support: o?.claimSupport ?? unreachableSupport('withheld_unsupported'),
     basis: o === null
       ? 'could not read the ledger'
       : 'counted from requests, priced from a rate card',
@@ -51,9 +66,10 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
       provenance: 'local request ledger + recorded pricing basis',
       scope: o ? `${range}; ${o.summary.requests} recorded request(s)` : range,
       freshness: o?.generatedAt ?? 'not established',
-      coverage: estimatedShare === null
-        ? 'pricing coverage unavailable'
-        : `${Math.round((1 - estimatedShare) * 100)}% of spend priced from a matched rate card, not estimated`,
+      coverage: o?.claimSupport?.note
+        ?? (estimatedShare === null
+          ? 'pricing coverage unavailable'
+          : `${Math.round((1 - estimatedShare) * 100)}% of spend priced from a matched rate card, not estimated`),
       // The distinction the whole product is built on, stated where someone is
       // most likely to reach for the metered figure as if it were the bill.
       enforceability: 'observation claim; local caps can govern future in-path requests, but metered cost does not become billed cost',
@@ -76,18 +92,39 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
   // read "not established" even with reconciliations recorded.
   const latestRun = b?.reconciliation?.runs?.[0] ?? null;
   const runs = b?.reconciliation?.runs?.length ?? 0;
+  const billedNote = b?.claimSupport?.note ?? null;
   const billed: Layer = {
     id: 'billed',
     label: 'Billed',
     claim: 'what the provider charged',
     valueUsd: null,
-    established: runs > 0,
-    basis: runs > 0
-      ? 'reconciled against a provider report, with a residual'
-      : b && b.summary.recordCount > 0
-        ? `${b.summary.recordCount} provider records held, none reconciled yet`
-        : 'no provider bill has been compared against this ledger',
-    nextStep: runs > 0 ? undefined : 'Check readiness in Evidence before spending a credential on it.',
+    // Holding provider records and having reconciled them are different states,
+    // and the old boolean reported both as false. `unknown` covers no evidence
+    // at all; records held but never compared is still `unknown` about the
+    // BILLED claim while being visibly non-empty in coverage — which is what
+    // the operator needs to see in order to know the next step is theirs.
+    // The band deliberately carries no dollar in any branch: this is an evidence
+    // claim about whether a comparison happened, not a second cost figure.
+    support: b?.claimSupport ?? unreachableSupport('not_a_money_claim'),
+    basis: billedNote
+      // A reconciliation whose provider snapshots contradicted each other is not
+      // a reconciliation that established anything, and saying "reconciled" here
+      // while the axis says `conflicted` is the disagreement this line exists to
+      // avoid.
+      ? `reconciled against a provider report, but ${billedNote}`
+      : runs > 0
+        ? 'reconciled against a provider report, with a residual'
+        : b && b.summary.recordCount > 0
+          ? `${b.summary.recordCount} provider records held, none reconciled yet`
+          : 'no provider bill has been compared against this ledger',
+    // A contradiction with no next action leaves an operator looking at a
+    // problem they are not told how to work on. Resolving a disagreement is a
+    // different task from collecting more evidence, so it gets its own sentence.
+    nextStep: b?.claimSupport && projectRenderedAxes(b.claimSupport.profile).epistemic === 'conflicted'
+      ? 'Re-observe the disagreeing days before relying on this reconciliation.'
+      : runs > 0
+        ? undefined
+        : 'Check readiness in Evidence before spending a credential on it.',
     inspection: {
       provenance: latestRun?.result.providerSourceKind
         ?? (b && b.summary.recordCount > 0 ? 'operator-supplied provider evidence, unreconciled' : 'none'),
@@ -115,7 +152,12 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
     label: 'Allocated',
     claim: 'whose cost it is',
     valueUsd: null,
-    established: allocRuns > 0,
+    // Cost centres defined with no run recorded is partial coverage of a claim
+    // that is still unknown, not a refuted one: nothing has been apportioned,
+    // and nothing says it cannot be.
+    // Showback: the claim is whose cost it is, not how much, so the band never
+    // carries a dollar.
+    support: a?.claimSupport ?? unreachableSupport('not_a_money_claim'),
     basis: allocRuns > 0
       ? 'apportioned by recorded rules — showback only'
       : centres > 0
@@ -160,27 +202,40 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
   // that was accepted but never survived is not value; conflating the two is the
   // headline number every other tool in this category reports.
   //
-  // The FIGURE, though, must be the value claim rather than a cost. The payload
-  // carries two fields spelled `realizedValueUsd`: `matured.realizedValueUsd` is
-  // the attributed SPEND on units that realized, and `roi.returnRatio
-  // .realizedValueUsd` is the manual-equivalent VALUE those units produced. This
-  // band sat on the first one, so the fourth claim in
+  // The FIGURE, though, must be the value claim rather than a cost.
+  // `matured.spendOnRealizedUnitsUsd` is the attributed SPEND on units that
+  // realized; `roi.returnRatio.manualEquivalentValueUsd` is the VALUE those
+  // units produced. This band sat on the first one, so the fourth claim in
   // `metered != billed != allocated != realized value` was rendering a cost --
   // the precise collapse the spine exists to refuse, committed by the spine.
+  // Both fields were then spelled `realizedValueUsd`, which is why nothing
+  // caught it; they are distinct identifiers now (AII-012).
   const matured = v?.realization?.matured;
   const realizedUnits = matured?.realizedUnits ?? 0;
   const ret = v?.roi?.returnRatio ?? null;
   // `basis: 'usd'` is the payload's own statement that the value figure is
   // priced. Without it there is a ratio but no dollars, and a dollar figure must
   // not be invented from one.
-  const valued = ret?.basis === 'usd' && typeof ret.realizedValueUsd === 'number';
+  const valued = ret?.basis === 'usd' && typeof ret.manualEquivalentValueUsd === 'number';
 
   const realized: Layer = {
     id: 'realized',
     label: 'Realized',
     claim: 'what it produced',
-    valueUsd: valued ? (ret?.realizedValueUsd ?? null) : null,
-    established: realizedUnits > 0 && valued,
+    valueUsd: valued ? (ret?.manualEquivalentValueUsd ?? null) : null,
+    // THE CASE THE OLD BOOLEAN COLLAPSED (AII-014). `realizedUnits > 0 && valued`
+    // returned false for two unrelated situations:
+    //
+    //   no matured units          there is no outcome evidence; the claim is
+    //                             genuinely unsupported.
+    //   matured but unpriced      forty units shipped and survived, and no
+    //                             labour rate is set. The claim is SUPPORTED.
+    //                             Only the dollar figure is missing.
+    //
+    // Both rendered as "not established", which an operator reads as "your work
+    // produced nothing" — an inference from a missing input, in the band whose
+    // entire job is to keep realized value distinct from the three cost claims.
+    support: v?.claimSupport ?? unreachableSupport('withheld_unsupported'),
     basis: realizedUnits === 0
       ? 'no work units have matured into verified outcomes'
       : valued
@@ -201,9 +256,15 @@ export function buildClaimLayers(input: ClaimInputs, range: string): Layer[] {
       freshness: v
         ? (v.gitRepo ? 'derived from live repository history on read' : 'derived from persisted outcome evidence on read')
         : 'not established',
-      coverage: typeof v?.roi?.coverage === 'number'
-        ? `${Math.round(v.roi.coverage * 100)}% RoI lens coverage`
-        : 'RoI lens coverage not established',
+      // Two different holes reach this one axis, and they stay separate here even
+      // though they merge into `partial` above: the RoI lens may not reach every
+      // unit, and some mature units may hold contradicted gate evidence.
+      coverage: [
+        typeof v?.roi?.coverage === 'number'
+          ? `${Math.round(v.roi.coverage * 100)}% RoI lens coverage`
+          : 'RoI lens coverage not established',
+        v?.claimSupport?.note,
+      ].filter(Boolean).join('; '),
       enforceability: 'outcome/value claim; it is never evidence that a provider bill or a local budget was enforced',
       evidenceSource: v?.gitRepo
         ? 'repository history + recorded outcome signals'

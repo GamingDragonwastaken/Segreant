@@ -53,7 +53,8 @@ architecture puts privacy and latency ahead of analytics, always.
 New here? Start with **[docs/GETTING-STARTED.md](docs/GETTING-STARTED.md)**. For the
 measurement in plain language (the CFO version) see
 **[docs/METHODOLOGY.md](docs/METHODOLOGY.md)**; common questions are in
-**[docs/FAQ.md](docs/FAQ.md)**.
+**[docs/FAQ.md](docs/FAQ.md)**. The current support/evidence boundary is in
+**[docs/CAPABILITY-EVIDENCE-CONTRACT.md](docs/CAPABILITY-EVIDENCE-CONTRACT.md)**.
 
 Requires **Node.js >= 24**. A cloned checkout builds the distributable runtime
 during `npm install`; the packaged runtime needs no build at use time and uses
@@ -63,8 +64,14 @@ only Node's built-in SQLite.
 
 ```bash
 npm install        # compiles the local CLI; Fiscus has zero runtime dependencies
-npm run demo       # seeds labelled synthetic data and starts the local dashboard
+npm run demo       # rebuilds, seeds labelled synthetic data, and starts the local dashboard
 ```
+
+"Zero runtime dependencies" is checked, not asserted: `npm run sbom` emits a
+CycloneDX bill of materials for the runtime tree from npm's own generator, and
+`npm run verify:sbom` (run by CI on every package build, SBOM uploaded as an
+artifact) fails if that tree contains any component but Fiscus itself. The SBOM
+is unsigned; signed build provenance is not published.
 
 That lights up spend, governance alerts, the RoI index and its four value
 lenses, the model-by-task frontier, budget controls, and a review-only synthetic
@@ -81,8 +88,8 @@ surfaces say so while the demo store is active.
 **Then meter your real traffic:**
 
 ```bash
-# from a clone
-node bin/fiscus.mjs start
+# from a clone; the lifecycle hook rebuilds before launch
+npm run start
 # or, once published
 npx fiscus start
 ```
@@ -100,6 +107,43 @@ $env:OPENAI_BASE_URL="http://localhost:8090/v1"
 export ANTHROPIC_BASE_URL="http://localhost:8090"
 export OPENAI_BASE_URL="http://localhost:8090/v1"
 ```
+
+Fiscus starts in **local-locked** mode. Before a cloud provider can receive
+routed traffic, grant only the exact route you intend to use. For the default
+OpenAI Responses/Chat API path:
+
+```bash
+fiscus egress apply --apply --mode controlled_cloud \
+  --id openai-inference --purpose provider_inference \
+  --data-class provider_request --method POST \
+  --origin https://api.openai.com --path-prefix /v1/
+```
+
+For Anthropic, add a second exact rule (this preserves the OpenAI rule):
+
+```bash
+fiscus egress apply --apply --mode controlled_cloud \
+  --id anthropic-inference --purpose provider_inference \
+  --data-class provider_request --method POST \
+  --origin https://api.anthropic.com --path-prefix /v1/
+```
+
+Use `fiscus egress status` to inspect the active mode/rules and
+`fiscus egress verify` to verify the local receipt chain. Return to
+`local_locked` with `fiscus egress apply --apply --mode local_locked`. These
+controls govern Fiscus's own HTTP(S) transport; they are not a machine-wide
+firewall or a provider-data-retention guarantee. A genuinely absent receipt
+file may establish the first genesis record; a present empty, malformed,
+truncated, hash-invalid, unreadable, or lock-failed history blocks the request
+before DNS or dial and is never silently reset with a null predecessor. Repair
+or restore the history, then rerun `fiscus egress verify`. If a lock is stale,
+first confirm that no Fiscus writer is active, then remove only that lock; Fiscus
+never auto-deletes an abandoned lock or restarts the history as genesis.
+
+When working from a checkout, `npm start` and `npm run fiscus` rebuild the full
+Node/browser output before launching `bin/fiscus.mjs`; this keeps an ignored,
+stale `dist/` tree from silently running older source. Published package
+`prepare`/`prepack` builds remain unchanged.
 
 Run your agents as usual. Watch spend accrue in the terminal and at
 **http://localhost:8091**.
@@ -141,6 +185,9 @@ Metering, governance, and value:
 
 ```
 fiscus start                 Start the proxy (:8090) + dashboard (:8091)
+fiscus egress status         Inspect Fiscus-process egress mode, exact cloud rules,
+                                and local receipt-chain health. `egress plan`
+                                previews a change; `egress apply --apply` persists it.
 fiscus today | week | month  Show spend for a window        (--json)
 fiscus roi --repo <path>     Return on Intelligence — four value lenses composed
                                 into one index (--labor-rate $/hr, --tsf X, --json)
@@ -180,7 +227,7 @@ fiscus exec -- <command>     AMBIENT outcome capture — wrap a command once (e.
                                 `npm test`); every run reports its own exit code
 fiscus receipt --repo <path> Emit signed value receipts (--pubkey to publish your
                                 identity; --verify <file> --key-id <id> to verify + pin)
-fiscus yield --repo <path>   AI Yield (survival lens) — durable lines per $
+fiscus yield --repo <path>   Artifact persistence (legacy yield lens) — retained introduced lines per $
 fiscus budget ...            Set caps (see below)
 fiscus audit --repo <path>   Cost per commit from git history (--limit N, --json)
 ```
@@ -210,6 +257,21 @@ fiscus project               Spend by project with aliases applied (--json). Too
                                 each label was obtained — declared, path-inferred,
                                 or never attributed at all
 fiscus prune                 Prune old rows and compact the DB
+fiscus backup --out <file>  Create a verified local SQLite ledger snapshot
+fiscus pack export --out <file>
+                                Write the epistemic ledger as a .fiscuspack: every
+                                record bound by digest, omissions and redactions
+                                stated ([--sign <private-key.pem>]); pack verify
+                                <file> [--trust <key>] and pack inspect <file>
+                                check the bytes and read the manifest — truth is
+                                never evaluated
+fiscus plugin run --manifest <file> --request <file> --exec <path> --scope k=v
+                                One bounded exchange with a plugin process; preview
+                                the kernel Evidence it would append (self-asserted,
+                                completeness unknown), --apply to append it
+fiscus restore --from <file> --out <file>
+                                Preview a snapshot, or create a new verified
+                                database with --apply (never overwrites the active ledger)
 fiscus demo                  Seed isolated, labeled synthetic data so every surface
                                 populates with no API key (--serve starts the dashboard
                                 on it; --clear removes it). Append --demo to today,
@@ -254,7 +316,8 @@ X-Fiscus-Task-Weight: 1.5
 
 Spend then rolls up by user in `fiscus today`, the dashboard's "By user"
 card, and the CSV export. Unset → reported as `unassigned`. These headers are
-stripped before the request is forwarded upstream — they never leave the device.
+stripped before the request is forwarded upstream; the provider receives the
+request without Fiscus's local attribution labels.
 
 **These labels are assertions, not verified identity.** Anything on this machine
 that can reach the proxy can set them, so Fiscus records *how* each project label
@@ -312,10 +375,12 @@ which Fiscus does not have.
 
 Capping waste is the floor. The question that matters is **how much you actually
 get from the AI** — and neither "tokens consumed" nor "lines of code" ever
-answered it. Fiscus's core is **Return on Intelligence (RoI)**: a measure of
-realized AI value that works across *any* token usage (not just coding), is
-measured from the request path instead of surveys, and composes four value
-lenses into one index that can't be gamed on a single axis.
+answered it. Fiscus's core is **Return on Intelligence (RoI)**: an
+evidence-limited measurement of realized AI value. The current implementation
+and evidence are strongest for instrumented coding-agent workflows; the
+underlying accounting model is intended to extend to broader AI usage, but that
+intention is not a claim of present coverage. It composes four value lenses so a
+strong observed lens cannot compensate for a weak necessary lens.
 
 > **RoI Index** = geometric mean of **Realization · Acceptance · Lift · Impact** —
 > if any one lens collapses, the index collapses. The denominator is **tokens +
@@ -327,22 +392,31 @@ one weak lens drags the whole number down. But a budget owner also asks a blunte
 question: **did it pay for itself, in dollars?** So RoI has a second, independent
 face:
 
-> **RoI Return** ℛ = **realized value ÷ honest cost**. Value is the manual time
-> the realized work would otherwise have taken, priced at your labor rate and
-> discounted by first-pass acceptance; cost is **tokens + the measured supervision
-> time** it took to get there. **ℛ ≥ 1 ⟺ the spend paid for itself.** It's
-> reported as an *interval*, because the counterfactual — "how much faster than
-> doing it without AI?" — is honestly a range, not a point.
+> **Observed value scenario** ℛ = **realized manual-equivalent value ÷ honest
+> cost**. Value is the manual time the realized work would otherwise have taken,
+> priced at your labour rate and discounted by first-pass acceptance; cost is
+> **tokens + measured supervision time**. This scenario describes the recorded
+> workflow under stated baseline, labour-rate, realization, and supervision-time
+> assumptions. It cannot establish what the same eligible work would have
+> produced without AI, so it is not a causal break-even result.
 
-The two faces are deliberately **never multiplied**. The dollar return already
-*is* a speedup, and so is the Lift lens inside the index — combining them would
-square the same effect. The index tells you *how well* the intelligence works; the
-return tells you *whether it was worth it*. And because the measured supervision
-time sits in the denominator, the return lands in the **empirically-documented
-~1–2× range** for real coding work — not the fantasy 100× you get from counting
-tokens alone. Fiscus refuses to print a dollar return at all until it has
-measured supervision time to divide by; an honest "not yet" beats a flattering
-lie.
+The two faces are deliberately **never multiplied**. The dollar scenario and
+the Lift lens answer distinct but observational questions; multiplying them
+would turn an index-scale lens into a financial causal claim. A
+supervision-time denominator prevents a token-only calculation from presenting
+an implausible scenario as evidence. Fiscus refuses to print a dollar scenario
+until it has measured supervision time to divide by. A causal net benefit result
+requires a registered randomized study with a frozen protocol, pre-exposure
+assignment, execution/outcome lineage, a predeclared quality guardrail, and a
+conservative confidence bound. The initial local study protocol is documented
+in [CAUSAL-EVIDENCE-PROTOCOL.md](docs/CAUSAL-EVIDENCE-PROTOCOL.md).
+
+The README and both dashboard registers keep these claims separate: the ordinary
+**Observed value scenario** is manual-equivalent value under recorded assumptions;
+it is not a causal return or a claim that AI paid for itself. A qualified causal
+net benefit result appears only when the separate registered-study lane clears its
+protocol, cost, outcome, quality, and conservative-bound gates. Until then the
+causal card says **not established** and points to the next evidence step.
 
 The four lenses, each answering a different real question (full definitions in
 **[docs/RETURN-ON-INTELLIGENCE.md](docs/RETURN-ON-INTELLIGENCE.md)**):
@@ -389,10 +463,12 @@ fiscus receipt --repo .            # emit signed value receipts
 ```
 
 The full model is in **[docs/THE-STANDARD.md](docs/THE-STANDARD.md)**. The older
-**AI Yield** (`fiscus yield`) survives as one *lens* — durable lines per
-dollar — but the Standard, not Yield, is the headline. The honest account of why
-the research's "AI Efficiency Score" and our own first Yield-only attempt were
-both rebuilt is in [docs/RESEARCH-REVIEW.md §3](docs/RESEARCH-REVIEW.md).
+**AI Yield** (`fiscus yield`) remains as a compatibility command for one
+*artifact-persistence lens* — retained introduced lines per dollar. It is not a
+quality grade and does not establish correctness, maintainability, business
+value, or AI/human contribution. The Standard, not this lens, is the headline.
+The historical account of why the research's "AI Efficiency Score" and our own
+first Yield-only attempt were rebuilt is in [docs/RESEARCH-REVIEW.md §3](docs/RESEARCH-REVIEW.md).
 
 ## Budget controls and model trials
 
@@ -432,10 +508,12 @@ product surfaces because model/task and project cells can be unlike work. -->
   attribution window it worked in: a unit whose window is more than 20% other
   models cannot price a single model, so it is excluded — and the excluded count
   is reported alongside the result rather than quietly shrinking the sample.
-  A result is labelled **evidence-supported** only when the anytime-valid outcome
-  bounds separate *and* that separation survives one outcome flipping the wrong
-  way on each side; anything resting on a single observation stays a **trial**,
-  not a proven switch. It never changes routing.
+  A result is labelled **observational separation** only when the anytime-valid
+  outcome bounds separate *and* that separation survives one outcome flipping the
+  wrong way on each side; anything resting on a single observation stays a
+  **trial**, not a proven switch. Neither label is causal evidence — models are
+  not assigned, so a separation describes the observed comparison, not the
+  models. It never changes routing.
 - **It says when a comparison is confounded.** Cost-per-unit is blind to how big
   each unit was, so if the two models' median changed lines differ by more than
   2×, "cheaper" may just mean "smaller work" — that is named on the result and
@@ -735,6 +813,7 @@ number.
   transmitted anywhere. Set `metadataOnly: true` in your config to disable
   this and store only token/cost metadata (Acceptance tracking turns off).
   `fiscus prune`, or the dashboard Settings page, purges it early on demand.
+
 - All cost computation happens on-device against a local pricing table.
 - The dashboard itself makes no third-party browser requests: no web fonts, CDNs,
   or Fiscus analytics. This does not remove the explicit provider and
@@ -747,6 +826,51 @@ number.
   *your* endpoint. By construction it sends nothing else: no prompts, no code, no
   keys. Off by default.
 
+## Backup and recovery
+
+Create a consistent, integrity-checked snapshot without stopping the local
+service:
+
+```text
+fiscus backup --out .\backups\fiscus-2026-08-28.sqlite --json
+```
+
+The command uses SQLite `VACUUM INTO`, verifies quick/foreign-key integrity, and
+writes a redacted `.manifest.json` containing the artifact hash and schema
+fingerprint. Backups may contain retained local proposals or causal assignment
+material; they are sensitive local files and are not encrypted by Fiscus.
+
+Inspect a backup without writing anything, then restore it into a new path:
+
+```text
+fiscus restore --from .\backups\fiscus-2026-08-28.sqlite --out .\recovered\fiscus.sqlite --json
+fiscus restore --from .\backups\fiscus-2026-08-28.sqlite --out .\recovered\fiscus.sqlite --apply --json
+```
+
+Restore accepts only a verified Fiscus-created backup artifact with its
+integrity manifest, refuses an existing destination, and never overwrites the
+active ledger.
+Point a later isolated run at the recovered file with `FISCUS_DB` only after
+inspecting the verification result. This is a local recovery artifact, not an
+independent audit attestation or provider-billing record.
+
+## Diagnostics and support bundles
+
+When a local run needs to be handed off for review, generate a redacted,
+read-only diagnostic bundle:
+
+```text
+fiscus diagnostics --json
+fiscus diagnostics --json --out .\support\fiscus-diagnostics.json
+```
+
+The bundle includes a correlation operation ID, probe durations and error
+classes, runtime/configuration/schema/egress/pricing health, and resource
+observations. It replaces the Fiscus home with `<FISCUS_HOME>/…` and excludes
+prompts, source, credentials, raw ledger rows, and provider response bodies.
+The export is atomic and refuses to overwrite an existing file; it never sends
+telemetry or mutates the active ledger/configuration.
+
 ---
 
 ## Development
@@ -756,6 +880,7 @@ npm install          # dev-only: typescript + @types/node
 npm run build        # compile the distributable runtime into dist/
 npm test             # node --test (cost, usage, proxy, budget, git)
 npm run typecheck    # tsc --noEmit (strict)
+npm run benchmark    # synthetic performance observations (never user data)
 ```
 
 Runtime dependencies: **none.** The `node_modules` directory holds only the dev
@@ -770,7 +895,7 @@ CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs `typecheck` +
 
 > **Active local development candidate:** Fiscus is not verified as published
 > to npm, externally deployed, or reconciled against provider invoices. Use a
-> cloned checkout (`node bin/fiscus.mjs ...`) or a locally packed tarball until
+> cloned checkout (`npm run fiscus -- ...`) or a locally packed tarball until
 > an authorized registry release and registry clean-install check have completed.
 > See [RELEASE-GATE.md](docs/RELEASE-GATE.md) for the current evidence boundary.
 
@@ -792,3 +917,15 @@ it is not approved for an internet-facing production deployment. See
 and do not prove.
 
 MIT licensed.
+
+## For contributors and reviewers
+
+[CONTRIBUTING.md](CONTRIBUTING.md) is how work is verified here; [GOVERNANCE.md](GOVERNANCE.md)
+says who decides what and where decisions are recorded; [SECURITY.md](SECURITY.md)
+is the reporting policy. The trust boundaries and what the append-only ledger and
+signatures do and do not guarantee are in [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md);
+what stays stable across releases is in [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md);
+how a release is gated is in [docs/RELEASE-PROCESS.md](docs/RELEASE-PROCESS.md);
+support expectations are in [docs/SUPPORT.md](docs/SUPPORT.md); and
+[docs/NEUTRALITY.md](docs/NEUTRALITY.md) states that the core needs no hosted
+service, account, subscription or donation to be useful.

@@ -19,11 +19,12 @@ process.env.FISCUS_HOME = mkdtempSync(join(tmpdir(), 'fiscus-home-'));
 import { DatabaseSync } from 'node:sqlite';
 import { Store, type RequestRow, type RepriceUpdate, type CostScope } from '../src/store/db.ts';
 import { computeCost, type Provider } from '../src/cost/pricing.ts';
+import { formatMoneyAmount, money, moneyToJson } from '../src/economics/money.ts';
 import { realizationFromStore } from '../src/value/realization.ts';
 import { computeFrontier } from '../src/value/frontier.ts';
 
 const WINDOW_START = 1_000;
-const WINDOW_END = 5_000;
+const WINDOW_END = 3_000;
 
 function req(over: Partial<RequestRow>): RequestRow {
   return {
@@ -66,7 +67,7 @@ function saveUnit(store: Store, costScope: CostScope, over: Record<string, unkno
   const json = unitJson(over);
   const u = JSON.parse(json) as { hash: string; tsEpochMs: number; attributedCostUsd: number; maturing: boolean };
   store.saveRealizationUnits([{
-    commitHash: u.hash, project, tsEpochMs: u.tsEpochMs, computedAtMs: 0,
+    commitHash: u.hash, project, tsEpochMs: u.tsEpochMs, computedAtMs: WINDOW_END,
     attributedCostUsd: u.attributedCostUsd, maturing: u.maturing, realized: true, unitJson: json, costScope,
   }]);
 }
@@ -110,9 +111,47 @@ test('reprice: a snapshot whose window was repriced is re-attributed, not left o
   // Per-model attribution is re-derived too, or the model trial would keep
   // comparing prices that no longer exist.
   const unit = rep.units[0]!;
-  assert.ok(Math.abs(unit.dominantModelCostUsd! - expected) < 1e-9);
-  assert.equal(unit.dominantModelCostShare, 1);
+  assert.equal(unit.dominantModelCostUsd, null, 'legacy numeric repricing is not an exact model-cost authority');
+  assert.equal(unit.dominantModelCostShare, null, 'unknown exact coverage cannot claim model purity');
   assert.ok(Math.abs(unit.costPerHundredLines! - (expected / 100) * 100) < 1e-9);
+  store.close();
+});
+
+test('reprice: an exact realization snapshot follows the effective correction lineage', () => {
+  const store = new Store(':memory:');
+  const sourceAmount = money('3', 'USD', 'estimated');
+  store.insertRequest(req({ economicAmount: sourceAmount }));
+  saveUnit(store, 'project', {
+    acceptance: 1,
+    economic: {
+      amount: { coefficient: '3', scale: 0, currency: 'USD', basis: 'effective' },
+      amountText: '3',
+      eventIds: ['economic:request:r1:charge'],
+      sourceBases: ['estimated'],
+      requestCount: 1,
+      unresolvedRequests: 0,
+      complete: true,
+    },
+  });
+
+  const exact = computeCost('anthropic' as Provider, 'claude-opus-4-8', {
+    inputTokens: 1_000_000, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0,
+  }).exact;
+  assert.ok(exact, 'the fixture model must have a canonical exact rate');
+  const update = updatesFor(store)[0];
+  assert.ok(update, 'the estimated request must be a reprice candidate');
+  const replacement = money(formatMoneyAmount(exact.total), 'USD', 'estimated');
+  store.applyRepricedCosts([{ ...update, economicAmount: replacement }]);
+
+  const after = realizationFromStore(store).units[0]!;
+  assert.equal(after.economic?.amountText, formatMoneyAmount(replacement));
+  assert.deepEqual(after.economic?.amount, moneyToJson(money(formatMoneyAmount(replacement), 'USD', 'effective')));
+  assert.deepEqual(after.economic?.eventIds, [
+    'economic:request:r1:charge',
+    'economic:request:r1:price-corrected',
+  ]);
+  assert.equal(after.economic?.sourceBases.includes('estimated'), true);
+  assert.equal(after.economic?.complete, true);
   store.close();
 });
 
@@ -289,6 +328,8 @@ test('reprice: a pre-migration snapshot table gains the columns without inventin
   legacy.close();
 
   const store = new Store(file);
+  const migratedColumns = store.raw().prepare('PRAGMA table_info(realization_units)').all() as Array<{ name: string }>;
+  assert.ok(migratedColumns.some((column) => column.name === 'causal_unit_id_digest'));
   const rep = realizationFromStore(store);
   assert.equal(rep.matured.totalCostUsd, 3, 'the legacy dollars are preserved exactly');
   assert.equal(rep.costStaleUnits, 0, 'a reprice we have no record of is not asserted to have happened');

@@ -96,7 +96,7 @@ easy to stand up; the enterprise's job is everything downstream of `docker run`.
 > check as `GET /me`. Getting the SQL right took more care than expected:
 > `ProjectValue.realizationRate` (the metric shown everywhere else in this
 > codebase) is a *unit-count* ratio (`realizedUnits/units`), not a dollar
-> ratio — a naive `SUM(realizedValueUsd)/SUM(costUsd)` at the team level would
+> ratio — a naive `SUM(spendOnRealizedUnitsUsd)/SUM(costUsd)` at the team level would
 > have silently redefined what "realization rate" means between the
 > single-machine dashboard and the team view, exactly the class of bug
 > `docs/`'s earlier "value-math consistency" work existed to catch. The fix:
@@ -260,9 +260,9 @@ used elsewhere in this project (the METR citation instead of an invented number,
 LiteLLM community pricing feed instead of a bespoke one) — apply it to auth too.
 
 > **What actually shipped (this session):** exactly this, as `team-server/src/
-> oidc.ts`'s `verifyIdToken`, using `node:crypto` only (no `jsonwebtoken`/`jose`
-> dependency — resolves the technical concern raised when this build was
-> scoped). Config is `{issuerUrl, clientId, jwksUrl?}`, matching this doc's own
+> oidc.ts`'s `verifyIdToken`. It shipped on `node:crypto` alone; since D-223 the
+> JWS step is `jose`'s (team-server-only dependency), with parsing, JWKS
+> handling and claim policy still local and adversarially tested. Config is `{issuerUrl, clientId, jwksUrl?}`, matching this doc's own
 > §4 sketch exactly; `jwksUrl` is optional — when omitted, discovery hits
 > `<issuer>/.well-known/openid-configuration` to find it, with the JWKS itself
 > cached (default 10 min TTL) so steady-state verification doesn't refetch per

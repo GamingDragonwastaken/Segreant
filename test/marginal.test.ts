@@ -8,8 +8,8 @@ import { shadowPriceOfIntelligence } from '../src/value/marginal.ts';
 
 test('symmetric contexts ⟹ equal optimal split and (near) zero reallocation uplift', () => {
   const r = shadowPriceOfIntelligence([
-    { key: 'a', costUsd: 10, realizedValueUsd: 6 },
-    { key: 'b', costUsd: 10, realizedValueUsd: 6 },
+    { key: 'a', costUsd: 10, spendOnRealizedUnitsUsd: 6 },
+    { key: 'b', costUsd: 10, spendOnRealizedUnitsUsd: 6 },
   ]);
   const a = r.items.find((i) => i.key === 'a')!;
   const b = r.items.find((i) => i.key === 'b')!;
@@ -20,8 +20,8 @@ test('symmetric contexts ⟹ equal optimal split and (near) zero reallocation up
 test('concavity forbids winner-take-all: the better context gets more budget, never all of it', () => {
   const r = shadowPriceOfIntelligence(
     [
-      { key: 'good', costUsd: 10, realizedValueUsd: 9 },
-      { key: 'weak', costUsd: 10, realizedValueUsd: 3 },
+      { key: 'good', costUsd: 10, spendOnRealizedUnitsUsd: 9 },
+      { key: 'weak', costUsd: 10, spendOnRealizedUnitsUsd: 3 },
     ],
     { beta: 0.5 },
   );
@@ -35,9 +35,9 @@ test('concavity forbids winner-take-all: the better context gets more budget, ne
 
 test('reallocating the SAME budget optimally never lowers modeled value (V* ≥ V0)', () => {
   const r = shadowPriceOfIntelligence([
-    { key: 'a', costUsd: 5, realizedValueUsd: 4 },
-    { key: 'b', costUsd: 15, realizedValueUsd: 3 },
-    { key: 'c', costUsd: 8, realizedValueUsd: 7 },
+    { key: 'a', costUsd: 5, spendOnRealizedUnitsUsd: 4 },
+    { key: 'b', costUsd: 15, spendOnRealizedUnitsUsd: 3 },
+    { key: 'c', costUsd: 8, spendOnRealizedUnitsUsd: 7 },
   ]);
   assert.ok(r.optimalValueUsd >= r.currentValueUsd - 1e-9, `${r.optimalValueUsd} ≥ ${r.currentValueUsd}`);
   assert.ok(r.upliftUsd >= -1e-9);
@@ -45,8 +45,8 @@ test('reallocating the SAME budget optimally never lowers modeled value (V* ≥ 
 
 test('the shadow price obeys μ = β·V*/B and sets paysAtMargin', () => {
   const r = shadowPriceOfIntelligence([
-    { key: 'a', costUsd: 10, realizedValueUsd: 20 },
-    { key: 'b', costUsd: 10, realizedValueUsd: 15 },
+    { key: 'a', costUsd: 10, spendOnRealizedUnitsUsd: 20 },
+    { key: 'b', costUsd: 10, spendOnRealizedUnitsUsd: 15 },
   ], { beta: 0.6 });
   assert.ok(Math.abs(r.shadowPriceUsd - (0.6 * r.optimalValueUsd) / r.budgetUsd) < 1e-9);
   assert.equal(r.paysAtMargin, r.shadowPriceUsd >= 1);
@@ -54,8 +54,8 @@ test('the shadow price obeys μ = β·V*/B and sets paysAtMargin', () => {
 
 test('higher β (weaker diminishing returns) concentrates budget harder on the best context', () => {
   const cells = [
-    { key: 'good', costUsd: 10, realizedValueUsd: 9 },
-    { key: 'weak', costUsd: 10, realizedValueUsd: 3 },
+    { key: 'good', costUsd: 10, spendOnRealizedUnitsUsd: 9 },
+    { key: 'weak', costUsd: 10, spendOnRealizedUnitsUsd: 3 },
   ];
   const low = shadowPriceOfIntelligence(cells, { beta: 0.3 });
   const high = shadowPriceOfIntelligence(cells, { beta: 0.8 });
@@ -65,8 +65,8 @@ test('higher β (weaker diminishing returns) concentrates budget harder on the b
 
 test('degenerate input (no realized value anywhere) ⟹ status quo, shadow price 0', () => {
   const r = shadowPriceOfIntelligence([
-    { key: 'a', costUsd: 10, realizedValueUsd: 0 },
-    { key: 'b', costUsd: 5, realizedValueUsd: 0 },
+    { key: 'a', costUsd: 10, spendOnRealizedUnitsUsd: 0 },
+    { key: 'b', costUsd: 5, spendOnRealizedUnitsUsd: 0 },
   ]);
   assert.equal(r.shadowPriceUsd, 0);
   assert.equal(r.upliftUsd, 0);
@@ -142,8 +142,8 @@ test('estimateBeta: an estimated β threads into the shadow price with its prove
   assert.ok(est.beta !== null);
   const r = shadowPriceOfIntelligence(
     [
-      { key: 'x', costUsd: 10, realizedValueUsd: 8 },
-      { key: 'y', costUsd: 10, realizedValueUsd: 4 },
+      { key: 'x', costUsd: 10, spendOnRealizedUnitsUsd: 8 },
+      { key: 'y', costUsd: 10, spendOnRealizedUnitsUsd: 4 },
     ],
     { beta: est.beta, betaHow: est.how },
   );

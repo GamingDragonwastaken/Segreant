@@ -1,0 +1,344 @@
+/**
+ * ISSUANCE CLASS: display_only — see `src/epistemic/issuance-map.ts`. This
+ * states, on named axes, what the payload-building code already knows about its
+ * own evidence. It issues nothing and must never be the first place a stronger
+ * claim appears; where it cannot tell, it says `unknown`.
+ *
+ * WHY THIS IS SERVER-SIDE (AII-014, WP-B02's remainder).
+ *
+ * WP-B02 gave the GUI four named support axes in place of one
+ * `established: boolean`. It did not move the JUDGEMENT: the browser went on
+ * inferring the axes from whatever collapsed field the payload happened to
+ * carry — a count of runs, a share of estimated spend, whether a ratio said
+ * `usd`. The axes reached the projection and not the wire, and the server, which
+ * holds the evidence, said nothing at all about its own claims.
+ *
+ * Three consequences, each found by reading the payload against the derivation
+ * rather than by reasoning about it:
+ *
+ *   THE INFERENCE COULD NOT REACH `conflicted`. Every browser derivation was a
+ *   two-branch ternary over a count. A reconciliation whose provider snapshots
+ *   changed between observations — `changed_across_observations`, disclosed by
+ *   `reconcileOpenAiCosts` and printed by the CLI — rendered on the spine
+ *   exactly like one whose snapshots agreed. The field was on the wire and
+ *   undeclared, so the browser could not have read it if it had wanted to.
+ *
+ *   AN EMPTY LEDGER REPORTED COMPLETE PRICING COVERAGE. `estimatedSpendShare`
+ *   is 0 when there is no spend to price, so `share > 0 ? partial : complete`
+ *   answered `complete` for a window with nothing in it. A completeness claim
+ *   with no evidence behind it is the defect D-067 and D-069 exist to refuse,
+ *   one axis over.
+ *
+ *   NOTHING BUT THE BROWSER GOT AN ANSWER. The CLI, a script, anything reading
+ *   `/api/*` had to repeat the guesswork with nothing holding the two versions
+ *   in agreement.
+ *
+ * WHAT THIS MODULE DELIBERATELY DOES NOT DO. It does not decide whether the
+ * endpoint answered. A server cannot state the support of a payload it never
+ * sent, so "unreachable" stays a browser-side fact, and `core/claimLayers.ts`
+ * supplies it. Nor does it write the operator-facing prose: the basis line, the
+ * next step and the inspection stay where they can be read next to the pixels.
+ *
+ * A POPULATION OF CONTRADICTIONS IS NOT A CONTRADICTION IN THE AGGREGATE. This
+ * distinction decides two of the four claims below and is worth stating once.
+ * `informationJoin` combines two observations OF ONE PROPOSITION: the provider
+ * said $8 for Tuesday and later said $10, so the claim about Tuesday is
+ * `conflicted`. Twelve mature units whose gate evidence contradicted itself is
+ * not that. Those are twelve different propositions, and joining them would
+ * paint the aggregate with a state none of its parts asserts about it. The
+ * honest reading is that the aggregate is SUPPORTED by the units that
+ * adjudicated and does not REACH the ones that did not — coverage, not
+ * epistemic state. So billing conflict lands on `epistemic` and realization
+ * conflict lands on `coverage`, and the difference is the point rather than an
+ * inconsistency.
+ */
+
+import type { ClaimProfilePayload, ClaimSupportPayload } from './shared-types.ts';
+import type { WindowRetentionCoverage } from '../store/db.ts';
+
+/**
+ * The seven axes that do not vary, and why stating them is the point.
+ *
+ * Every canonical boundary under `src/` declares the same values on these axes
+ * for every claim it issues: locally verified arithmetic and lineage, a Fiscus
+ * assertion rather than a provider-authenticated one, a scope conditional on
+ * this ledger, a measurement model never validated against a provider
+ * statement, no causal identification, nothing final, and no decision-fitness
+ * assessment. The dashboard's claims are those same claims, so they carry the
+ * same values.
+ *
+ * Constancy is the reason to SEND them, not a reason to omit them. An operator
+ * reading a cost spine has no way to discover from four varying axes that no
+ * figure on the page is causal or final, and those are the two things a FinOps
+ * reader most reliably assumes. The moment one of them does vary -- the causal
+ * lane already issues `randomized` through `src/causal/epistemic.ts` -- the
+ * difference has somewhere to appear instead of being flattened on the wire.
+ */
+const PRODUCT_CLAIM_AXES = {
+  authenticity: 'self_asserted',
+  scope: 'conditional',
+  measurement: 'proxy_unvalidated',
+  causality: 'none',
+  finality: 'provisional',
+  decisionFitness: 'not_assessed',
+} as const;
+
+/**
+ * Build the payload from the profile.
+ *
+ * THE SERVER PROJECTS NOTHING. This function used to copy the three axes the
+ * spine rendered onto the payload beside the profile, and the identity between
+ * them was called the contract. It was the wrong contract: a payload that
+ * carries a view of the claim next to the claim has two places to state one
+ * judgement, and the browser read the flat copy — so the profile could have
+ * been right while the rendered claim was wrong, with nothing downstream in a
+ * position to notice. Which axes a screen shows is a rendering decision and now
+ * lives where the rendering does, in `projectRenderedAxes`. What crosses the
+ * boundary is the whole profile.
+ *
+ * `figure` is passed separately because it is a rendering decision -- whether
+ * the band shows a number -- and the kernel has no axis for that. Folding it
+ * into the profile would be a display concern claiming epistemic authority.
+ */
+function claimSupportPayload(
+  profile: ClaimProfilePayload,
+  figure: ClaimSupportPayload['figure'],
+  note?: string,
+): ClaimSupportPayload {
+  return {
+    profile,
+    figure,
+    ...(note === undefined ? {} : { note }),
+  };
+}
+
+export interface MeteredSupportInput {
+  /** Cost priced from a rate card the matcher actually matched, plus estimates. */
+  readonly totalCostUsd: number;
+  readonly estimatedCostUsd: number;
+  /**
+   * Whether retention deleted request rows from inside this window (D-175).
+   *
+   * Required, because the axis it feeds cannot be computed without it and an
+   * optional field would silently answer `complete` for a window that lost
+   * rows -- which is the defect, not a guard against it.
+   */
+  readonly retention: WindowRetentionCoverage;
+}
+
+/**
+ * Metered is the one claim whose figure IS the claim: if the ledger read, there
+ * is a priced count.
+ *
+ * COVERAGE ASKS HOW COMPLETELY THE EVIDENCE COVERS THE CLAIM'S OWN SCOPE, and
+ * the claim is metered spend OVER THIS WINDOW. Two different facts make that
+ * partial, and both are answers to the same question:
+ *
+ *   PRICING. How much of the surviving spend was priced from a rate card the
+ *   matcher actually matched, rather than estimated.
+ *
+ *   DELETION. Whether retention removed request rows from inside the window
+ *   (D-175). This used to be excluded by a sentence here saying coverage "says
+ *   nothing about whether the ledger sees every request the organisation made,
+ *   which no local evidence can establish". That is TRUE of traffic which never
+ *   reached Fiscus and FALSE of rows Fiscus deleted itself: since D-170 the
+ *   ledger records its own retention boundary, so this is the one case where
+ *   local evidence does establish it, and answering `complete` over a pruned
+ *   window states something the evidence contradicts.
+ *
+ * Deletion does NOT touch the monetary basis. How the surviving rows were
+ * priced is a separate question, and moving both axes on one fact would be the
+ * collapse this file exists to refuse.
+ */
+export function meteredClaimSupport(input: MeteredSupportInput): ClaimSupportPayload {
+  const priced = input.totalCostUsd > 0;
+  const estimatedShare = priced ? input.estimatedCostUsd / input.totalCostUsd : null;
+  const truncated = input.retention.truncated;
+  const pricingCoverage = estimatedShare === null ? 'unknown' : estimatedShare > 0 ? 'partial' : 'complete';
+  const notes: string[] = [];
+  if (!priced) notes.push('no priced spend in this window, so pricing coverage is unevidenced rather than complete');
+  if (truncated) {
+    const removed = input.retention.rowsRemoved === 1 ? '1 request row' : `${input.retention.rowsRemoved} request rows`;
+    notes.push(
+      `retention deleted ${removed} from before ${new Date(input.retention.prunedBeforeMs ?? 0).toISOString()}, `
+      + 'so this window covers what survived rather than everything metered in it',
+    );
+  }
+  return claimSupportPayload(
+    {
+      ...PRODUCT_CLAIM_AXES,
+      epistemic: 'supported',
+      // Alone among the four, metered has no canonical kernel boundary behind
+      // it: it is a read of the request ledger, and nothing digests those rows
+      // or re-reads them to confirm they are unaltered. `verified` here would be
+      // borrowed from the boundaries that earned it.
+      integrity: 'unknown',
+      // No priced spend means no pricing evidence, not complete pricing. The
+      // share-based test this replaces answered `complete` for an empty window.
+      // A truncated window is partial whatever the pricing says, including when
+      // pricing evidence is absent: an empty window known to have lost rows is
+      // not an unknown, it is a known gap.
+      coverage: truncated ? 'partial' : pricingCoverage,
+      monetaryBasis: estimatedShare === null ? 'none' : estimatedShare > 0 ? 'mixed' : 'list',
+    },
+    'shown',
+    notes.length === 0 ? undefined : notes.join('; '),
+  );
+}
+
+export interface BilledSupportInput {
+  readonly recordCount: number;
+  readonly runCount: number;
+  /** The newest recorded run, or null. Runs are immutable: evidence, not a computation. */
+  readonly latest: {
+    readonly snapshotStability?: string;
+    readonly unstableDayStartMs?: readonly number[];
+    readonly offPathBound?: string;
+  } | null;
+}
+
+/**
+ * Billed is established by a recorded reconciliation run, never by holding a
+ * provider bill: an imported file nobody compared against anything proves only
+ * that a file was read.
+ *
+ * The `conflicted` branch is the one that could not previously be expressed.
+ * Repeated observations of the same provider days that disagree are two
+ * observations of one proposition, so the claim is contradicted rather than
+ * established — and reporting it as `supported` is the collapse WP-B03 removed
+ * from the gate ladder, still standing on the billing claim.
+ */
+export function billedClaimSupport(input: BilledSupportInput): ClaimSupportPayload {
+  if (input.runCount <= 0) {
+    return claimSupportPayload(
+      {
+        ...PRODUCT_CLAIM_AXES,
+        epistemic: 'unknown',
+        // No run means no immutable, digest-identified record to verify.
+        integrity: 'unknown',
+        // Records held but never compared is visible non-emptiness about a claim
+        // that is still unknown — which is what tells an operator the next step
+        // is theirs, rather than that there is nothing to work with.
+        coverage: input.recordCount > 0 ? 'partial' : 'unknown',
+        monetaryBasis: 'none',
+      },
+      'not_a_money_claim',
+    );
+  }
+
+  const unstable = input.latest?.snapshotStability === 'changed_across_observations';
+  const days = input.latest?.unstableDayStartMs ?? [];
+  // D-068: a residual below zero refutes the condition under which it bounds
+  // off-path spend at all, so the reconciled scope is not established to reach
+  // what the provider charged. D-173: a period whose request rows were partly
+  // deleted by retention bounds nothing either, for a different reason -- the
+  // local total is a known undercount by an unknown amount. Both are "this
+  // residual establishes no bound", which is what this variable feeds.
+  const boundsNothing = input.latest?.offPathBound === 'none_local_estimate_exceeds_provider'
+    || input.latest?.offPathBound === 'unknown_local_total_truncated_by_retention';
+
+  return claimSupportPayload(
+    {
+      ...PRODUCT_CLAIM_AXES,
+      epistemic: unstable ? 'conflicted' : 'supported',
+      // Matches the canonical billing reconciliation boundary: the run is
+      // immutable and identified by the digest of the result it describes, so it
+      // cannot outlive a change to that result.
+      integrity: 'verified',
+      coverage: boundsNothing ? 'partial' : 'complete',
+      monetaryBasis: 'billed',
+    },
+    // An evidence claim about whether a comparison happened, not a second cost
+    // figure. The band carries no dollar in any branch.
+    'not_a_money_claim',
+    unstable
+      ? `provider snapshots disagreed on ${days.length} day(s) of this scope`
+      : boundsNothing
+        ? 'the local estimate exceeds the provider total, so the residual bounds no off-path spend'
+        : undefined,
+  );
+}
+
+export interface AllocatedSupportInput {
+  readonly costCentreCount: number;
+  readonly runCount: number;
+}
+
+/**
+ * Allocation is showback: the claim is whose cost it is, not how much, so the
+ * band never carries a dollar. Cost centres defined with no run recorded is
+ * partial coverage of a claim that is still unknown — nothing has been
+ * apportioned, and nothing says it cannot be.
+ */
+export function allocatedClaimSupport(input: AllocatedSupportInput): ClaimSupportPayload {
+  const run = input.runCount > 0;
+  return claimSupportPayload(
+    {
+      ...PRODUCT_CLAIM_AXES,
+      epistemic: run ? 'supported' : 'unknown',
+      // Matches the canonical exact-allocation boundary, whose run identity is
+      // digest-derived -- but only once a run exists. Cost centres verify
+      // nothing on their own.
+      integrity: run ? 'verified' : 'unknown',
+      coverage: run ? 'complete' : input.costCentreCount > 0 ? 'partial' : 'unknown',
+      monetaryBasis: run ? 'allocated' : 'none',
+    },
+    'not_a_money_claim',
+  );
+}
+
+export interface RealizedSupportInput {
+  readonly maturedUnits: number;
+  readonly realizedUnits: number;
+  /** Per-gate count of mature units whose evidence contradicted itself (AII-003). */
+  readonly gateConflicts: Readonly<Record<string, number>> | null;
+  /** RoI lens coverage, or null when it could not be computed. */
+  readonly roiCoverage: number | null;
+  /** Whether a priced value figure exists — `basis: 'usd'` and a number with it. */
+  readonly valued: boolean;
+}
+
+/**
+ * Realized value counts only MATURED units that actually shipped, and its figure
+ * is the VALUE produced rather than the spend attributed to it.
+ *
+ * Two separate holes land on `coverage` here, and they stay separate in the
+ * prose the browser writes: the RoI lens may not reach every unit, and some
+ * mature units may hold contradicted gate evidence. A conflicted unit does not
+ * realize — `serialRealization` requires an empty conflict set independently of
+ * the three-valued projection — so contradictions do not corrupt the figure.
+ * They mean the aggregate under-counts by an unadjudicated amount, which is a
+ * claim that does not reach everything it covers rather than a claim its own
+ * evidence contradicts. See the module comment.
+ */
+export function realizedClaimSupport(input: RealizedSupportInput): ClaimSupportPayload {
+  const conflicted = Object.entries(input.gateConflicts ?? {}).filter(([, n]) => n > 0);
+  const conflictedUnits = conflicted.reduce((sum, [, n]) => sum + n, 0);
+  const supported = input.realizedUnits > 0;
+
+  return claimSupportPayload(
+    {
+      ...PRODUCT_CLAIM_AXES,
+      epistemic: supported ? 'supported' : 'unknown',
+      // Matches the canonical coding-realization boundary once a unit has
+      // realized; with none, there is no issued record whose lineage was
+      // verified.
+      integrity: supported ? 'verified' : 'unknown',
+      coverage:
+        conflicted.length > 0
+          ? 'partial'
+          : typeof input.roiCoverage !== 'number'
+            ? 'unknown'
+            : input.roiCoverage >= 1
+              ? 'complete'
+              : 'partial',
+      monetaryBasis: input.valued ? 'estimated' : 'none',
+    },
+    !supported ? 'withheld_unsupported' : input.valued ? 'shown' : 'withheld_uncosted',
+    conflicted.length > 0
+      ? `${conflictedUnits} mature unit(s) hold contradicted gate evidence at ${conflicted
+        .map(([gate]) => gate)
+        .join(', ')} and are unadjudicated rather than refuted`
+      : undefined,
+  );
+}

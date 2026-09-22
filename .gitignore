@@ -6,6 +6,9 @@ node_modules/
 *.db-shm
 .fiscus/
 .fiscus-home/
+.fiscus-build.lock/
+.fiscus-build-*/
+.fiscus-ws-*/
 dist/
 .DS_Store
 .env
@@ -27,3 +30,9 @@ docs/planning/
 # Local Codex orchestration control plane. Promote selected records deliberately;
 # do not publish task history or internal decision notes by accident.
 .codex/
+
+# Local agent-lane worktree copies. Orchestration scratch, never a release input.
+.agent-worktrees/
+
+# Local SBOM output (`npm run sbom > fiscus-runtime.cdx.json`); CI uploads its own copy as an artifact.
+*.cdx.json

@@ -13,22 +13,26 @@ import {
   type Gate,
   type GateResult,
   type Verdict,
+  gateResultFromVerdict,
 } from '../src/value/gates.ts';
-import { extractProposals, acceptanceRatio, acceptanceForCommit } from '../src/value/proposals.ts';
-import { loadOrCreateKeyPair, buildReceiptBody, signReceipt, verifyReceipt } from '../src/value/receipt.ts';
+import { extractProposals, extractProposalsWithCoverage, acceptanceRatio, acceptanceForCommit } from '../src/value/proposals.ts';
+import { canonical, loadOrCreateKeyPair, buildReceiptBody, signReceipt, verifyReceipt } from '../src/value/receipt.ts';
 import { computeRealization } from '../src/value/realization.ts';
 import { computeReturnOnIntelligence, lensRedundancy, type RealizationLike } from '../src/value/lenses.ts';
-import { timeWithAiMinutes, boundedLift, breakEven, liftFromData } from '../src/value/lift.ts';
+import { timeWithAiMinutes, boundedLift, breakEven, liftFromData, DECLARED_LIFT_FLOOR_FRACTION } from '../src/value/lift.ts';
 import { classifyTaskType, type TaskType } from '../src/value/taskType.ts';
 import { computeFrontier, type FrontierCell } from '../src/value/frontier.ts';
 import { recommendBudget } from '../src/budget/recommend.ts';
-import { computeUsageRoI } from '../src/value/usage.ts';
+import { computeUsageRoI, DECLARED_REACH_UTILITY } from '../src/value/usage.ts';
 import type { WorkUnit } from '../src/value/realization.ts';
 import { projectName, resolveCommit } from '../src/git/correlate.ts';
+import { completenessWitness } from '../src/measurement/completeness.ts';
+import { scope } from '../src/epistemic/scope.ts';
+import { interval } from '../src/epistemic/time.ts';
 
 function vr(map: Partial<Record<Gate, Verdict>>): Record<Gate, GateResult> {
   const out = {} as Record<Gate, GateResult>;
-  for (const g of GATE_LADDER) out[g] = { gate: g, verdict: map[g] ?? 'unknown', detail: '' };
+  for (const g of GATE_LADDER) out[g] = gateResultFromVerdict(g, map[g] ?? 'unknown', '');
   return out;
 }
 
@@ -144,6 +148,32 @@ test('extractProposals: Anthropic tool_use, OpenAI tool_calls, fenced fallback',
   assert.ok(fenced[0]!.addedLines.includes('code1'));
 });
 
+test('extractProposals: hostile tool arguments and fenced floods truncate before line-array expansion', () => {
+  const oversizedArgument = JSON.stringify({
+    path: 'x.ts',
+    content: `x\n${'a'.repeat(2 * 1024 * 1024)}`,
+  });
+  const argumentResult = extractProposalsWithCoverage('openai', {
+    choices: [{ message: { tool_calls: [{ function: { name: 'write_file', arguments: oversizedArgument } }] } }],
+  });
+  assert.equal(argumentResult.captureCoverage, 'truncated');
+  assert.deepEqual(argumentResult.files, []);
+
+  const fencedFlood = '```ts\n' + 'x\n'.repeat(200_005) + '```';
+  const fencedResult = extractProposalsWithCoverage('anthropic', {
+    content: [{ type: 'text', text: fencedFlood }],
+  });
+  assert.equal(fencedResult.captureCoverage, 'truncated');
+  assert.deepEqual(fencedResult.files, []);
+});
+
+test('receipt canonicalization rejects cycles and oversized values before signing', () => {
+  const cyclic: Record<string, unknown> = {};
+  cyclic.self = cyclic;
+  assert.throws(() => canonical(cyclic), /cycle/);
+  assert.throws(() => canonical({ payload: 'x'.repeat(2 * 1024 * 1024 + 1) }), /string size/);
+});
+
 test('acceptanceForCommit returns null when nothing was proposed (→ gate unknown)', () => {
   const committed = new Map<string, string[]>([['a.ts', ['x', 'y']]]);
   assert.equal(acceptanceForCommit([], committed), null);
@@ -226,7 +256,7 @@ test('RoI: geometric mean collapses to 0 if any lens is 0 (no axis can carry the
   const report: RealizationLike = {
     firstPassAcceptance: 0, // kept nothing first-try
     units: [ru({ realized: true, acceptance: 0 })],
-    matured: { realizationRate: 0.8, totalCostUsd: 10, realizedValueUsd: 8 },
+    matured: { realizationRate: 0.8, totalCostUsd: 10, spendOnRealizedUnitsUsd: 8 },
   };
   const r = computeReturnOnIntelligence(report);
   assert.equal(r.roiIndex, 0, 'one collapsed lens collapses the index');
@@ -239,7 +269,7 @@ test('RoI: injected lift widens coverage; index is the geometric mean of instrum
   const report: RealizationLike = {
     firstPassAcceptance: 0.9,
     units: [ru({ realized: true, acceptance: 0.9, shipped: true })],
-    matured: { realizationRate: 0.8, totalCostUsd: 10, realizedValueUsd: 8 },
+    matured: { realizationRate: 0.8, totalCostUsd: 10, spendOnRealizedUnitsUsd: 8 },
   };
   const r = computeReturnOnIntelligence(report, { lift: 0.5, impact: 0.8, impactHow: 'external outcome signal' });
   assert.equal(r.coverage, 1, 'all four lenses instrumented only when Impact is supplied independently');
@@ -250,7 +280,7 @@ test('RoI composite interval: statistical width (realization CS) enters even wit
   const report: RealizationLike = {
     firstPassAcceptance: 0.9,
     units: [ru({ realized: true, acceptance: 0.9, shipped: true }), ru({ realized: false, acceptance: 0.9 })],
-    matured: { realizationRate: 0.5, totalCostUsd: 10, realizedValueUsd: 5 },
+    matured: { realizationRate: 0.5, totalCostUsd: 10, spendOnRealizedUnitsUsd: 5 },
   };
   const r = computeReturnOnIntelligence(report, { lift: 0.5 });
   const ci = r.compositeInterval;
@@ -267,7 +297,7 @@ test('RoI composite interval: identification (Lift range) and statistical (CS) w
   const report: RealizationLike = {
     firstPassAcceptance: 0.9,
     units: [ru({ realized: true, acceptance: 0.9, shipped: true }), ru({ realized: false, acceptance: 0.9 })],
-    matured: { realizationRate: 0.5, totalCostUsd: 10, realizedValueUsd: 5 },
+    matured: { realizationRate: 0.5, totalCostUsd: 10, spendOnRealizedUnitsUsd: 5 },
   };
   const r = computeReturnOnIntelligence(report, { lift: 0.5, liftRange: { low: 0.4, high: 0.7 } });
   const ci = r.compositeInterval!;
@@ -309,7 +339,7 @@ test('RoI: effort tax raises the denominator, lowering realized efficiency', () 
   const report: RealizationLike = {
     firstPassAcceptance: 0.5,
     units: [ru({ realized: true, acceptance: 0.5 })],
-    matured: { realizationRate: 1, totalCostUsd: 10, realizedValueUsd: 10 },
+    matured: { realizationRate: 1, totalCostUsd: 10, spendOnRealizedUnitsUsd: 10 },
   };
   const tokenOnly = computeReturnOnIntelligence(report);
   const withLabor = computeReturnOnIntelligence(report, { laborRatePerHour: 120, minutesPerUnitRework: 10 });
@@ -322,7 +352,7 @@ test('RoI: Impact is independently supplied and can diverge from raw realization
   const report: RealizationLike = {
     firstPassAcceptance: null,
     units: [ru({ realized: true, acceptance: null, shipped: true }), ru({ realized: false, acceptance: null })],
-    matured: { realizationRate: 0.5, totalCostUsd: 5, realizedValueUsd: 3 },
+    matured: { realizationRate: 0.5, totalCostUsd: 5, spendOnRealizedUnitsUsd: 3 },
   };
   const absent = computeReturnOnIntelligence(report);
   assert.equal(absent.lenses.impact.value, null);
@@ -356,6 +386,31 @@ test('Lift: TSF is discounted to a bounded value estimate; no baseline → unins
   const none = boundedLift({ tsfUpperBound: null });
   assert.equal(none.lensScore, null);
   assert.ok(none.notes.some((n) => n.includes('uninstrumented')));
+});
+
+test('Lift: a declared fallback floor is never presented as an identified bound', () => {
+  // AII-010. Both calls return a band, and the bands look alike. Only one of
+  // them is a partially identified set: without an observed old-task lift the
+  // floor is a chosen fraction of the point estimate, which rules nothing out —
+  // the true counterfactual may be zero or negative. The two cases must be
+  // distinguishable by a consumer, not merely by whoever reads the source.
+  const fallback = boundedLift({ tsfUpperBound: 5 });
+  assert.equal(fallback.lowBasis, 'declared_fallback_fraction');
+  assert.equal(fallback.highBasis, 'tsf_upper_bound');
+  assert.ok(Math.abs(fallback.low! - fallback.point! * DECLARED_LIFT_FLOOR_FRACTION) < 1e-9);
+  assert.ok(
+    fallback.notes.some((n) => /DECLARED floor/.test(n) && /not an identified set/.test(n)),
+    'the fallback band must say it is a scenario band',
+  );
+  assert.ok(!fallback.notes.some((n) => /partially identified set/.test(n) && !/not an identified set/.test(n)));
+
+  const observed = boundedLift({ tsfUpperBound: 5, oldTaskLift: 0.9 });
+  assert.equal(observed.lowBasis, 'observed_old_task_lift');
+  assert.equal(observed.low, 0.9);
+  assert.ok(
+    observed.notes.some((n) => /OBSERVED old-task lift/.test(n) && /partially identified set/.test(n)),
+    'an observed floor may be described as identification under the stated design',
+  );
 });
 
 test('Lift: baseline-interval propagation — a band straddling break-even reaches the lens as real width, never a false point', () => {
@@ -428,13 +483,13 @@ function wu(
     // both of which are separate confounders with their own tests. 7919 and 997
     // are coprime, so seq → day is injective and reproducible.
     hash: `wu${wuSeq}`, tsEpochMs: ((wuSeq * 7919) % 997) * 24 * 60 * 60 * 1000, subject: '', linesAdded: 10, linesDeleted: 0, filesChanged: 1,
-    windowStartMs: 0, windowEndMs: 0, attributedCostUsd: cost, attributedRequests: 1, attributedOutputTokens: 0, costPerHundredLines: null,
+    windowStartMs: 0, windowEndMs: 0, attributedCostUsd: cost, attributedRequests: 1, attributedOutputTokens: 0, costPerHundredLines: null, spendWindowTruncated: false, spendWindowPrunedBeforeMs: null,
     ageDays: 30, maturing: false, survivalRatio: 1, reverted: false, hadProposal: false, acceptance: null,
     taskType, dominantModel: model, dominantModelCostUsd: modelCost, dominantModelCostShare: share, costStale,
     // A comparably-priced baseline: one basis, one rate card on both sides. Tests
     // for the pricing-comparability gate override these.
     dominantModelCostBasis: 'local_list_price', dominantModelRateCard: 'card-a',
-    funnel: { realized, results: [{ gate: 'shipped', verdict: 'unknown', detail: '' }], reachedIndex: 0, reached: null, diedAt: null, diedAtIndex: null, passes: 0, fails: 0, unknowns: 0, instrumented: 0, realizationScore: 0 },
+    funnel: { realized, results: [gateResultFromVerdict('shipped', 'unknown', '')], conflicts: [], reachedIndex: 0, reached: null, diedAt: null, diedAtIndex: null, passes: 0, fails: 0, unknowns: 0, instrumented: 0, realizationScore: 0 },
   } as WorkUnit;
 }
 
@@ -460,6 +515,18 @@ test('frontier: recommends routing a task-type to the model that returns more pe
   assert.equal(trial!.costBasis, 'dominant_model_attributed', 'the per-unit cost is the model\'s own spend');
   assert.equal(trial!.unitsExcludedMixedAttribution, 0);
   assert.equal(trial!.unitsExcludedUnknownAttribution, 0);
+});
+
+test('frontier: same model names from different providers remain separate comparison identities', () => {
+  const anthropic = Array.from({ length: 3 }, () => ({ ...wu('feature', 'same-model', true, 4), dominantProvider: 'anthropic' }));
+  const openai = Array.from({ length: 3 }, () => ({ ...wu('feature', 'same-model', true, 1), dominantProvider: 'openai' }));
+  const report = computeFrontier([...anthropic, ...openai]);
+  assert.equal(report.byModel.length, 2);
+  assert.equal(report.byModelAndTask.filter((cell) => cell.model === 'same-model').length, 2);
+  assert.equal(report.modelSwitches.length, 1, 'provider/model pairs, not display-name collisions, are compared');
+  const trial = report.modelSwitches[0]!;
+  assert.equal(trial.candidateProvider, 'openai');
+  assert.equal(trial.incumbentProvider, 'anthropic');
 });
 
 // ---- Cheaper-model trial: the refusals ----
@@ -553,7 +620,7 @@ test('model switch: a perfect 3-unit streak is NOT evidence — the separation m
   assert.match(trial!.rationale, /does not survive a single flipped outcome/);
 });
 
-test('model switch: a large, robust separation IS evidence-supported', () => {
+test('model switch: a large, robust separation is an OBSERVATIONAL separation, never causal evidence', () => {
   // 8/8 candidate vs 2/40 incumbent survives a flip on each side.
   const units: WorkUnit[] = [
     ...Array.from({ length: 8 }, () => wu('feature', 'claude-haiku-4-5', true, 1)),
@@ -562,8 +629,15 @@ test('model switch: a large, robust separation IS evidence-supported', () => {
   ];
   const trial = computeFrontier(units).modelSwitches.find((r) => r.taskType === 'feature');
   assert.ok(trial);
-  assert.equal(trial!.confidence, 'evidence_supported');
+  assert.equal(trial!.confidence, 'observational_separation');
   assert.match(trial!.rationale, /still does if one outcome flips/);
+  // AII-025. The strongest result this procedure can reach must still say what
+  // it is. Nothing on the payload may read as a treatment effect: models were
+  // never assigned, so the separation is a property of the observed comparison.
+  assert.match(trial!.rationale, /observational procedure/);
+  assert.match(trial!.rationale, /not a treatment effect/);
+  const serialized = JSON.stringify(computeFrontier(units));
+  assert.doesNotMatch(serialized, /evidence_supported|evidence-supported/, 'the observational lane cannot label itself evidence-supported');
 });
 
 /** A unit with explicit size and timestamp, for the confounder gates. */
@@ -656,7 +730,7 @@ test('model switch: a saving that survives per-line normalization keeps its evid
   ];
   const rec = computeFrontier(units).modelSwitches.find((r) => r.taskType === 'feature');
   assert.ok(rec);
-  assert.equal(rec!.confidence, 'evidence_supported');
+  assert.equal(rec!.confidence, 'observational_separation');
   assert.deepEqual(rec!.confounders, []);
   assert.equal(rec!.candidateCostPerHundredLinesUsd, 1);
   assert.equal(rec!.incumbentCostPerHundredLinesUsd, 4);
@@ -803,7 +877,7 @@ test('model switch: does not compare across different task types', () => {
 
 test('budget advisor: cap fits usage; low realized value tightens it and projects waste', () => {
   const daily = [2, 3, 4, 5, 2, 3, 10, 4, 3, 5];
-  const usageOnly = recommendBudget({ dailySpends: daily, realizedValueRate: null });
+  const usageOnly = recommendBudget({ dailySpends: daily, realizedSpendShare: null });
   assert.ok(usageOnly.recommendedDailyUsd != null && usageOnly.recommendedDailyUsd > 0);
   assert.ok(
     usageOnly.recommendedSoftUsd != null &&
@@ -812,41 +886,41 @@ test('budget advisor: cap fits usage; low realized value tightens it and project
   );
   assert.equal(usageOnly.projectedMonthlyWasteUsd, null);
 
-  const lowValue = recommendBudget({ dailySpends: daily, realizedValueRate: 0.3 });
+  const lowValue = recommendBudget({ dailySpends: daily, realizedSpendShare: 0.3 });
   assert.ok(lowValue.projectedMonthlyWasteUsd !== null && lowValue.projectedMonthlyWasteUsd > 0);
   assert.ok(lowValue.rationale.some((r) => /low/i.test(r)));
 });
 
 test('budget advisor: raw frontier cells do not create cross-context trim/grow actions', () => {
   const cells: FrontierCell[] = [
-    { key: 'feature · opus', model: 'opus', taskType: 'feature', units: 3, costUsd: 12, realizedValueUsd: 4, netRealizedValueUsd: 4, realizationRate: 0.33, acceptance: null, costPerUnit: 4, roiIndex: 40, impact: 0.33 },
-    { key: 'fix · haiku', model: 'haiku', taskType: 'fix', units: 3, costUsd: 3, realizedValueUsd: 3, netRealizedValueUsd: 3, realizationRate: 1, acceptance: null, costPerUnit: 1, roiIndex: 95, impact: 1 },
+    { key: 'feature · opus', model: 'opus', taskType: 'feature', units: 3, costUsd: 12, spendOnRealizedUnitsUsd: 4, acceptanceWeightedSpendUsd: 4, realizationRate: 0.33, acceptance: null, costPerUnit: 4, roiIndex: 40, impact: 0.33 },
+    { key: 'fix · haiku', model: 'haiku', taskType: 'fix', units: 3, costUsd: 3, spendOnRealizedUnitsUsd: 3, acceptanceWeightedSpendUsd: 3, realizationRate: 1, acceptance: null, costPerUnit: 1, roiIndex: 95, impact: 1 },
   ];
-  const rec = recommendBudget({ dailySpends: [5, 5, 5, 5, 5, 5, 5], realizedValueRate: 0.6, frontier: cells });
+  const rec = recommendBudget({ dailySpends: [5, 5, 5, 5, 5, 5, 5], realizedSpendShare: 0.6, frontier: cells });
   assert.deepEqual(rec.reallocations, [], 'generic task/model cells are not comparable enough for an actionable allocation');
 });
 
 test('budget advisor: cold start is honest — no spend history yields no cap, not $0', () => {
-  const empty = recommendBudget({ dailySpends: [], realizedValueRate: null });
+  const empty = recommendBudget({ dailySpends: [], realizedSpendShare: null });
   assert.equal(empty.recommendedDailyUsd, null);
   assert.equal(empty.recommendedSoftUsd, null);
   assert.equal(empty.basisDays, 0);
   assert.ok(empty.rationale.some((r) => /not enough/i.test(r)));
 
   // Zero-cost-only days (e.g. all-blocked) are not "active days" and don't fabricate a cap.
-  const zeros = recommendBudget({ dailySpends: [0, 0, 0], realizedValueRate: null });
+  const zeros = recommendBudget({ dailySpends: [0, 0, 0], realizedSpendShare: null });
   assert.equal(zeros.recommendedDailyUsd, null);
   assert.equal(zeros.basisDays, 0);
 });
 
 test('budget advisor: thin history stays review-only and cannot be applied', () => {
-  const thin = recommendBudget({ dailySpends: [3, 4, 5], realizedValueRate: null });
+  const thin = recommendBudget({ dailySpends: [3, 4, 5], realizedSpendShare: null });
   assert.equal(thin.status, 'insufficient_history');
   assert.equal(thin.canApply, false);
   assert.equal(thin.recommendedDailyUsd, null);
   assert.match(thin.rationale[0]!, /at least 7 active days/i);
 
-  const ready = recommendBudget({ dailySpends: [3, 4, 5, 3, 4, 5, 4], realizedValueRate: null });
+  const ready = recommendBudget({ dailySpends: [3, 4, 5, 3, 4, 5, 4], realizedSpendShare: null });
   assert.equal(ready.status, 'usage_only');
   assert.equal(ready.canApply, true);
   assert.ok(ready.recommendedDailyUsd !== null);
@@ -917,6 +991,48 @@ test('cross-modality: outcome is GRADED — realizing a further-reaching outcome
   assert.equal(used.outcomeMix.used, 4);
 });
 
+test('cross-modality: reach becomes cardinal Impact only through a DECLARED utility model', () => {
+  // AII-011. Reach is ordinal: published outreaches resolved outreaches kept.
+  // Nothing observed says by how much, so the [0,1] the Impact lens needs comes
+  // from a stated preference. It used to be an inline 1/0.75/0.5 at the call
+  // site, which is how a workflow label arrived in the composite looking like a
+  // measurement. Two things must now hold: the model is what produces the
+  // number, and the number says so wherever it is displayed.
+  const build = (reachUtility?: Readonly<Record<'shipped' | 'merged' | 'kept', number>>) => {
+    const store = new Store(':memory:');
+    try {
+      const t = Date.parse('2026-06-01T10:00:00Z');
+      for (let i = 0; i < 4; i++) {
+        store.insertRequest({
+          requestId: `r${i}`, sessionId: `s${i}`, tsEpochMs: t, provider: 'anthropic', model: 'claude-opus-4-8', project: 'p', taskWeight: 1,
+          inputTokens: 0, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0, reasoningTokens: 0,
+          costUsd: 2, estimated: false, streamed: false, statusCode: 200, durationMs: 1,
+        });
+        store.insertSignal({ signalId: `g${i}`, kind: 'resolved', commitHash: `s${i}`, project: 'p', tsEpochMs: t + 1000, verdict: 'pass', detail: null });
+      }
+      return computeUsageRoI(store, { startMs: t - 1000, endMs: t + 10_000, ...(reachUtility ? { reachUtility } : {}) });
+    } finally {
+      store.close();
+    }
+  };
+
+  const declared = build();
+  assert.equal(declared.roi.lenses.impact.value, DECLARED_REACH_UTILITY.merged, 'the declared model is what sets the cardinal value');
+
+  // A different declared preference must produce a different Impact. If it did
+  // not, the number would be coming from somewhere other than the stated model.
+  const reweighted = build({ shipped: 1, merged: 0.2, kept: 0.1 });
+  assert.equal(reweighted.roi.lenses.impact.value, 0.2, 'a different declared preference must move Impact');
+  assert.notEqual(reweighted.roi.lenses.impact.value, declared.roi.lenses.impact.value);
+
+  // The provenance string travels with the lens, so no surface can present this
+  // as an observed cardinal impact.
+  const how = declared.roi.lenses.impact.how;
+  assert.match(how, /DECLARED reach-utility model/);
+  assert.match(how, /stated preference, not a measured cardinal impact/);
+  assert.match(how, /resolved=0\.75/, 'the actual model in force must appear, not a generic caveat');
+});
+
 test('cross-modality: outcome baselines price the dollar face — and never touch the efficiency lens', () => {
   const store = new Store(':memory:');
   try {
@@ -967,7 +1083,7 @@ function commit(dir: string, file: string, content: string, msg: string, iso: st
   g(dir, ['commit', '-qm', msg, `--date=${iso}`], { GIT_COMMITTER_DATE: iso });
 }
 
-test('realization: accepted proposal + tested signal + survival → REALIZED; churned commit dies at survived', async () => {
+test('realization: complete lifecycle evidence + survival → REALIZED; churned commit dies at survived', async () => {
   const dir = makeRepo();
   const store = new Store(':memory:');
   try {
@@ -986,15 +1102,37 @@ test('realization: accepted proposal + tested signal + survival → REALIZED; ch
       provider: 'anthropic', model: 'claude-opus-4-8', project,
       files: [{ path: 'work.txt', addedLines: Array.from({ length: 10 }, (_, i) => `L${i}`) }],
     });
-    // Outcome signals wired for A.
+    // Outcome signals wired for A. Strict realization requires every declared
+    // coding lifecycle predicate, including merge; an absent signal must remain
+    // unresolved rather than being treated as an implicit pass.
     store.insertSignal({ signalId: 's1', kind: 'tested', commitHash: hashA, project, tsEpochMs: Date.now(), verdict: 'pass', detail: null });
     store.insertSignal({ signalId: 's2', kind: 'shipped', commitHash: hashA, project, tsEpochMs: Date.now(), verdict: 'pass', detail: null });
+    store.insertSignal({ signalId: 's3', kind: 'merged', commitHash: hashA, project, tsEpochMs: Date.now(), verdict: 'pass', detail: null });
+
+    const cleanCompleteness = [
+      completenessWitness({
+        id: 'realization-test-incident-source',
+        sourceId: 'incident-feed',
+        state: 'supported',
+        eventTypes: ['linked_incident'],
+        scope: scope({ project }),
+        period: interval('2025-01-01T00:00:00.000Z', '2027-01-01T00:00:00.000Z'),
+      }),
+      completenessWitness({
+        id: 'realization-test-revert-scan',
+        sourceId: 'git-history',
+        state: 'supported',
+        eventTypes: ['commit_reverted'],
+        scope: scope({ project }),
+        period: interval('2025-01-01T00:00:00.000Z', '2027-01-01T00:00:00.000Z'),
+      }),
+    ];
 
     // Commit B then C: C rewrites 3 of B's 4 lines → B survival 0.25 < 0.5 → dies at survived.
     commit(dir, 'churn.txt', 'c1\nc2\nc3\nc4\n', 'feat: churn base', '2026-01-03T10:00:00+00:00');
     commit(dir, 'churn.txt', 'c1\nx2\nx3\nx4\n', 'fix: rewrite three', '2026-01-04T10:00:00+00:00');
 
-    const report = await computeRealization(store, dir, { limit: 10, windowDays: 14 });
+    const report = await computeRealization(store, dir, { limit: 10, windowDays: 14, completenessWitnesses: cleanCompleteness });
 
     const a = report.units.find((u) => u.subject === 'feat: ten')!;
     assert.ok(a, 'commit A present');

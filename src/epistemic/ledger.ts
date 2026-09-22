@@ -1,0 +1,1593 @@
+/**
+ * SQLite persistence for the Trusted Epistemic Kernel's immutable objects.
+ *
+ * This is intentionally a small kernel ledger, separate from Fiscus's existing
+ * operational Store tables. Every accepted object is retained as canonical JSON
+ * plus a digest; nodes, dependency edges, and revocation events are append-only
+ * and protected by database triggers. Exact replays are idempotent, while a
+ * different payload for an existing identity is an integrity error.
+ */
+
+import { createHash } from 'node:crypto';
+import type { DatabaseSync } from 'node:sqlite';
+import { initializeEpistemicSchema } from '../store/schema.ts';
+import { claim, type Claim } from './claim.ts';
+import { assumption, type Assumption } from './assumption.ts';
+import { evidence, type Evidence, type RevocationMetadata } from './evidence.ts';
+import {
+  DAG_NODE_KINDS,
+  asOfGraph,
+  createEpistemicDag,
+  projectRevocation,
+  type DagEdge,
+  type DagEdgeInput,
+  type DagNode,
+  type DagNodeInput,
+  type EpistemicDag,
+  type RevocationProjection,
+} from './dag.ts';
+import { EPISTEMIC_STATES, type EpistemicState } from './state.ts';
+import { AUTHENTICITY, CAUSALITY, COVERAGE, DECISION_FITNESS, INTEGRITY, MEASUREMENT } from './profile.ts';
+import { grainIsSupportedBy } from './grain.ts';
+import { scopeIsSupportedBy, scopeRelation } from './scope.ts';
+import {
+  assessDerivationLegality,
+  derivation,
+  type Derivation,
+  type DerivationInput,
+  type DerivationWitness,
+} from './derivation.ts';
+import { canonicalJson } from './serialization.ts';
+import { instant, intervalRelation, type Instant } from './time.ts';
+import { witness, type Witness } from './witness.ts';
+import { assessWitnessObligation } from './obligation.ts';
+import { analyzeDerivationChain } from './abstract.ts';
+import type { MonetaryBasisStatus } from './profile.ts';
+import { assessMeasurementBacking, measurementRegistry, type MeasurementRegistry } from '../measurement/registry.ts';
+
+export type AppendResult = 'inserted' | 'duplicate';
+
+export interface RevocationEventInput {
+  readonly eventId: string;
+  readonly targetId: string;
+  readonly recordedAt: Instant;
+  readonly reason: string;
+}
+
+/** A single, hindsight-safe projection of the kernel at an observation boundary. */
+export interface EpistemicReplay {
+  readonly asOf: Instant;
+  readonly graph: EpistemicDag;
+  readonly revocation: RevocationProjection;
+}
+
+interface StoredNodeRow {
+  node_id: string;
+  node_kind: string;
+  available_at: string;
+  epistemic: string;
+  supersedes_json: string;
+}
+
+interface StoredPayloadRow {
+  json: string;
+  digest: string;
+}
+
+/**
+ * Claims appended in the current transaction that exceed the direct-claim
+ * floor, and the output claims a legal derivation has produced within it.
+ *
+ * The obligation is discharged at COMMIT rather than at the append, because
+ * the derivation that legalizes a strengthened claim necessarily arrives
+ * AFTER it: `appendDerivationWithinTransaction` reads the output claim back
+ * out of the ledger, so the claim must already be persisted when the
+ * derivation is offered. Checking at append time would refuse the only
+ * ordering the kernel permits.
+ */
+interface StrengtheningFrame {
+  /** Claim id -> the phrase naming which floor it exceeded. */
+  readonly pending: Map<string, string>;
+  /** Output claim ids of derivations this transaction accepted as legal. */
+  readonly legalized: Set<string>;
+  /** Direct monetary floor obligations, kept separate from the other floors. */
+  readonly monetaryPending: Map<string, MonetaryStrengtheningObligation>;
+  /** Output claim ids with a matching monetary rebasing witness. */
+  readonly monetaryLegalized: Set<string>;
+}
+
+interface MonetaryStrengtheningObligation {
+  readonly sourceBasis: 'estimated' | 'mixed';
+  readonly targetBasis: 'billed' | 'allocated';
+  readonly reason: string;
+}
+
+/** The four columns `epistemic_revocations` actually stores. No effective-time column exists. */
+interface RawEventRow {
+  event_id: string;
+  target_id: string;
+  recorded_at: string;
+  reason: string;
+}
+
+/**
+ * A revocation the ledger knows about, enriched with an effective time.
+ *
+ * `effective_at` is NOT a stored column of `epistemic_revocations` — that
+ * table has no effective-time concept, because an operator-recorded
+ * revocation is effective the instant it is recorded. For a table row,
+ * `effective_at` is set equal to `recorded_at`. For an envelope-declared
+ * revocation (`Evidence`/`Claim`'s own `revocation.effectiveAt`), the two can
+ * legitimately differ, and that difference is the whole point of GAP 3
+ * (WP-R07): `recorded_at` is when the ledger LEARNED of the revocation,
+ * `effective_at` is when it TAKES EFFECT, and collapsing the two is exactly
+ * what let a future-dated envelope read as revoked from the moment it existed.
+ */
+interface StoredEventRow extends RawEventRow {
+  effective_at: string;
+}
+
+interface StoredEdgeRow {
+  from_id: string;
+  to_id: string;
+  relation: string;
+}
+
+function nonEmpty(value: unknown, label: string): string {
+  if (typeof value !== 'string') throw new Error(`${label} must be non-empty`);
+  const normalized = value.trim();
+  if (normalized.length === 0) throw new Error(`${label} must be non-empty`);
+  return normalized;
+}
+
+function canonicalInstant(value: unknown, label: string): Instant {
+  if (typeof value !== 'string') throw new Error(`${label} must be canonical UTC ISO-8601`);
+  try {
+    return instant(value);
+  } catch (error) {
+    throw new Error(`${label}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function nodeIdList(value: unknown, label: string): readonly string[] {
+  if (value === undefined) return Object.freeze([]);
+  if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
+  const seen = new Set<string>();
+  const output = value.map((item, index) => {
+    const id = nonEmpty(item, `${label}[${index}]`);
+    if (seen.has(id)) throw new Error(`duplicate ${label} entry: ${id}`);
+    seen.add(id);
+    return id;
+  });
+  return Object.freeze(output);
+}
+
+function normalizeNodeForLedger(input: DagNodeInput): DagNode {
+  const id = nonEmpty(input.id, 'DAG node id');
+  if (typeof input.kind !== 'string' || !DAG_NODE_KINDS.includes(input.kind as DagNode['kind'])) throw new Error(`invalid DAG node kind: ${String(input.kind)}`);
+  const availableAt = canonicalInstant(input.availableAt, `DAG node ${id} availableAt`);
+  const epistemic = input.epistemic === undefined ? 'unknown' : input.epistemic;
+  if (typeof epistemic !== 'string' || !EPISTEMIC_STATES.includes(epistemic as DagNode['epistemic'])) throw new Error(`invalid DAG node epistemic state: ${String(epistemic)}`);
+  return Object.freeze({ id, kind: input.kind as DagNode['kind'], availableAt, epistemic: epistemic as DagNode['epistemic'], supersedes: nodeIdList(input.supersedes, `DAG node ${id} supersedes`) });
+}
+
+function json(value: unknown, label: string): string {
+  try { return canonicalJson(value); }
+  catch (error) { throw new Error(`${label} is not serializable: ${error instanceof Error ? error.message : String(error)}`); }
+}
+
+function digest(value: string): string {
+  return createHash('sha256').update(value, 'utf8').digest('hex');
+}
+
+function sameStoredPayload(row: StoredPayloadRow, encoded: string): boolean {
+  return row.digest === digest(encoded) && row.json === encoded;
+}
+
+function sameNodeIdentity(a: DagNode, b: DagNode): boolean {
+  return a.id === b.id
+    && a.kind === b.kind
+    && a.availableAt === b.availableAt
+    && a.epistemic === b.epistemic
+    && JSON.stringify(a.supersedes) === JSON.stringify(b.supersedes);
+}
+
+function claimCoordinateKey(value: Claim): string {
+  return canonicalJson({
+    predicate: value.proposition.predicate,
+    negativeEventType: value.negativeClaim?.eventType ?? null,
+    subject: value.subject,
+    scope: value.scope,
+    grain: value.grain,
+    validTime: value.time.validTime,
+  });
+}
+
+function sameWitnessReference(reference: DerivationWitness, registered: Witness): boolean {
+  return reference.id === registered.id
+    && reference.kind === registered.kind
+    && canonicalJson(reference.evidenceIds ?? []) === canonicalJson(registered.evidenceIds)
+    && (reference.detail ?? null) === registered.detail
+    && canonicalJson(reference.from ?? null) === canonicalJson(registered.from ?? null)
+    && canonicalJson(reference.to ?? null) === canonicalJson(registered.to ?? null);
+}
+
+function row<T>(value: unknown): T | null {
+  return value === undefined ? null : value as T;
+}
+
+/**
+ * Refuse at COMMIT every claim this transaction strengthened past the direct
+ * floor without a derivation producing it.
+ *
+ * The refusal names EVERY outstanding claim, ordered by id so the same
+ * transaction refuses the same way twice. A caller shown one at a time would
+ * repair it, rerun, and be refused again by the next.
+ */
+function assertStrengtheningDischarged(frame: StrengtheningFrame): void {
+  const ids = new Set([...frame.pending.keys(), ...frame.monetaryPending.keys()]);
+  const outstanding = [...ids]
+    .sort((a, b) => a.localeCompare(b))
+    .map((id) => {
+      const reasons: string[] = [];
+      const floor = frame.pending.get(id);
+      if (floor !== undefined && !frame.legalized.has(id)) reasons.push(floor);
+      const monetary = frame.monetaryPending.get(id);
+      if (monetary !== undefined && !frame.monetaryLegalized.has(id)) reasons.push(monetary.reason);
+      return [id, reasons.join('; ')] as const;
+    })
+    .filter(([, reason]) => reason.length > 0);
+  if (outstanding.length === 0) return;
+  const detail = outstanding.map(([id, reason]) => `claim ${id} ${reason}`).join('; ');
+  throw new Error(
+    `${detail}. No derivation in this transaction produced ${outstanding.length === 1 ? 'it' : 'them'}, `
+    + 'so the strengthening has no witness',
+  );
+}
+
+export interface EpistemicLedgerOptions {
+  /**
+   * The measurement models a DIRECT claim above `proxy_unvalidated` may cite.
+   * Omitted means the EMPTY registry — this ledger knows no models and can
+   * resolve nothing — not "do not check". See `directClaimObligation`.
+   */
+  readonly measurementModels?: MeasurementRegistry;
+}
+
+export class EpistemicLedger {
+  private readonly db: DatabaseSync;
+  private readonly measurementModels: MeasurementRegistry;
+
+  /** Non-null exactly while `transaction` owns an open SQLite transaction. */
+  private strengthening: StrengtheningFrame | null = null;
+
+  public constructor(db: DatabaseSync, options: EpistemicLedgerOptions = {}) {
+    this.db = db;
+    this.measurementModels = options.measurementModels ?? measurementRegistry([]);
+    initializeEpistemicSchema(this.db);
+  }
+
+  private transaction<T>(work: () => T): T {
+    this.db.exec('BEGIN IMMEDIATE');
+    const outer = this.strengthening;
+    const frame: StrengtheningFrame = {
+      pending: new Map(),
+      legalized: new Set(),
+      monetaryPending: new Map(),
+      monetaryLegalized: new Set(),
+    };
+    this.strengthening = frame;
+    try {
+      const result = work();
+      assertStrengtheningDischarged(frame);
+      this.db.exec('COMMIT');
+      return result;
+    } catch (error) {
+      try { this.db.exec('ROLLBACK'); } catch { /* preserve the original failure */ }
+      throw error;
+    } finally {
+      this.strengthening = outer;
+    }
+  }
+
+  /** Run work on this SQLite handle inside the kernel transaction boundary. */
+  runInTransaction<T>(work: () => T): T {
+    return this.transaction(work);
+  }
+
+  private node(id: string): DagNode | null {
+    const stored = row<StoredNodeRow>(this.db.prepare(
+      'SELECT node_id, node_kind, available_at, epistemic, supersedes_json FROM epistemic_nodes WHERE node_id = ?',
+    ).get(id));
+    if (stored === null) return null;
+    let supersedes: unknown;
+    try { supersedes = JSON.parse(stored.supersedes_json); } catch { throw new Error(`stored node ${id} has invalid supersession metadata`); }
+    if (!Array.isArray(supersedes) || !supersedes.every((item) => typeof item === 'string')) throw new Error(`stored node ${id} has invalid supersession metadata`);
+    return Object.freeze({
+      id: stored.node_id,
+      kind: stored.node_kind as DagNode['kind'],
+      availableAt: canonicalInstant(stored.available_at, `stored node ${id} availableAt`),
+      epistemic: stored.epistemic as DagNode['epistemic'],
+      supersedes: Object.freeze(supersedes),
+    });
+  }
+
+  private nodePayload(id: string, table: 'epistemic_evidence' | 'epistemic_claims' | 'epistemic_assumptions' | 'epistemic_witnesses' | 'epistemic_derivations', key: string, label: string): StoredPayloadRow | null {
+    const projection = table === 'epistemic_evidence'
+      ? 'evidence_json AS json, evidence_digest AS digest'
+      : table === 'epistemic_claims'
+        ? 'claim_json AS json, claim_digest AS digest'
+        : table === 'epistemic_assumptions'
+          ? 'assumption_json AS json, assumption_digest AS digest'
+          : table === 'epistemic_witnesses'
+            ? 'witness_json AS json, witness_digest AS digest'
+            : 'derivation_json AS json, derivation_digest AS digest';
+    const stored = row<StoredPayloadRow>(this.db.prepare(`SELECT ${key} AS id, ${projection} FROM ${table} WHERE ${key} = ?`).get(id));
+    if (stored === null) return null;
+    if (typeof stored.json !== 'string' || typeof stored.digest !== 'string' || stored.digest !== digest(stored.json)) {
+      throw new Error(`stored ${label} ${id} failed digest verification`);
+    }
+    return stored;
+  }
+
+  private insertNode(node: DagNodeInput): AppendResult {
+    const current = this.node(node.id);
+    const candidate = normalizeNodeForLedger(node);
+    if (current !== null) {
+      if (!sameNodeIdentity(current, candidate)) throw new Error(`different DAG node already exists for ${node.id}`);
+      return 'duplicate';
+    }
+    this.db.prepare(
+      'INSERT INTO epistemic_nodes (node_id, node_kind, available_at, epistemic, supersedes_json) VALUES (?, ?, ?, ?, ?)',
+    ).run(candidate.id, candidate.kind, candidate.availableAt, candidate.epistemic, json(candidate.supersedes, 'DAG node supersedes'));
+    return 'inserted';
+  }
+
+  appendNode(input: DagNodeInput): AppendResult {
+    const id = nonEmpty(input.id, 'DAG node id');
+    if (input.kind === 'evidence' || input.kind === 'claim' || input.kind === 'assumption') {
+      throw new Error(`use appendEvidence, appendClaim, or appendAssumption for canonical ${input.kind} nodes`);
+    }
+    return this.transaction(() => {
+      const current = this.graph();
+      const normalized = normalizeNodeForLedger(input);
+      const existing = current.nodes.find((node) => node.id === id);
+      if (existing !== undefined) {
+        if (!sameNodeIdentity(existing, normalized)) throw new Error(`different DAG node already exists for ${id}`);
+        return 'duplicate';
+      }
+      createEpistemicDag([...current.nodes, normalized], current.edges);
+      return this.insertNode(normalized);
+    });
+  }
+
+  /**
+   * The reverse half of the envelope/event linkage (WP-R07). `envelopeRevocations`
+   * has always read a node's own `revocation.eventId` and trusted it; nothing
+   * checked it against `epistemic_revocations`, the table `appendRevocation`
+   * writes and where `event_id` is the ledger's own `PRIMARY KEY` for "one
+   * event". So the same `eventId` string could mean two contradictory things:
+   * one node's envelope claims it, and the table separately and validly
+   * records that id revoking a DIFFERENT node — and nothing caught the
+   * collision.
+   *
+   * THIS DOES NOT REQUIRE THE EVENT TO EXIST. D-099 already refused that,
+   * because `appendRevocation` refuses an unknown target and an envelope can
+   * arrive on a node's very first append — requiring existence would deadlock
+   * exactly the case that comment describes. An envelope naming an id nobody
+   * has recorded yet still passes through unchanged. This only refuses the
+   * narrower case where the id IS already on record, for someone else.
+   */
+  private assertRevocationEnvelopeLinksConsistently(id: string, envelope: RevocationMetadata | null): void {
+    if (envelope === null) return;
+    const existing = row<RawEventRow>(this.db.prepare(
+      'SELECT event_id, target_id, recorded_at, reason FROM epistemic_revocations WHERE event_id = ?',
+    ).get(envelope.eventId));
+    if (existing !== null && existing.target_id !== id) {
+      throw new Error(
+        `revocation envelope on ${id} names event ${envelope.eventId}, which the ledger's revocation table `
+        + `already records as revoking ${existing.target_id}`,
+      );
+    }
+  }
+
+  appendEvidence(value: Evidence): AppendResult {
+    return this.transaction(() => this.appendEvidenceWithinTransaction(value));
+  }
+
+  /** Append Evidence while the caller owns the surrounding SQLite transaction. */
+  appendEvidenceWithinTransaction(value: Evidence): AppendResult {
+    const item = evidence(value);
+    this.assertRevocationEnvelopeLinksConsistently(item.id, item.revocation);
+    const availableAt = item.observedAt ?? item.recordedAt ?? item.assertedAt;
+    if (availableAt === null) throw new Error(`evidence ${item.id} has no acquisition timestamp`);
+    const encoded = json(item, 'evidence');
+    const current = this.graph();
+    const normalized = normalizeNodeForLedger({
+      id: item.id, kind: 'evidence', availableAt, supersedes: item.supersedes,
+    });
+    const existing = current.nodes.find((node) => node.id === item.id);
+    let nodeResult: AppendResult;
+    if (existing !== undefined) {
+      if (!sameNodeIdentity(existing, normalized)) throw new Error(`different DAG node already exists for ${item.id}`);
+      nodeResult = 'duplicate';
+    } else {
+      createEpistemicDag([...current.nodes, normalized], current.edges);
+      nodeResult = this.insertNode(normalized);
+    }
+    const stored = this.nodePayload(item.id, 'epistemic_evidence', 'evidence_id', 'evidence');
+    if (stored !== null) {
+      if (!sameStoredPayload(stored, encoded)) throw new Error(`different evidence already exists for ${item.id}`);
+      return 'duplicate';
+    }
+    this.db.prepare('INSERT INTO epistemic_evidence (evidence_id, evidence_json, evidence_digest) VALUES (?, ?, ?)').run(item.id, encoded, digest(encoded));
+    return nodeResult === 'duplicate' ? 'inserted' : nodeResult;
+  }
+
+  private assertClaimSupersession(item: Claim, currentNodes: readonly DagNode[]): void {
+    for (const supersededId of item.supersedes) {
+      const targetNode = currentNodes.find((node) => node.id === supersededId);
+      if (targetNode === undefined) throw new Error(`unknown supersession target: ${supersededId}`);
+      if (targetNode.kind !== 'claim') throw new Error(`supersession target must be a claim: ${supersededId}`);
+      const target = this.readClaim(supersededId);
+      if (target === null) throw new Error(`supersession target has no claim payload: ${supersededId}`);
+      if (claimCoordinateKey(target) !== claimCoordinateKey(item)) {
+        throw new Error(`superseded claim coordinates do not match: ${supersededId}`);
+      }
+      if (Date.parse(item.issuedAt) <= Date.parse(target.issuedAt)) {
+        throw new Error(`superseding claim must be issued later than ${supersededId}`);
+      }
+      const successor = currentNodes.find((node) => node.kind === 'claim' && node.supersedes.includes(supersededId));
+      if (successor !== undefined) {
+        throw new Error(`claim ${supersededId} already has a successor: ${successor.id}`);
+      }
+    }
+  }
+
+  appendClaim(value: Claim): AppendResult {
+    return this.transaction(() => this.appendClaimWithinTransaction(value));
+  }
+
+  /** Append Claim while the caller owns the surrounding SQLite transaction. */
+  appendClaimWithinTransaction(value: Claim): AppendResult {
+    const item = claim(value);
+    this.assertRevocationEnvelopeLinksConsistently(item.id, item.revocation);
+    const encoded = json(item, 'claim');
+    if (item.negativeClaim !== undefined) {
+      // The generic claim envelope does not persist a second witness table. A
+      // negative contract therefore names completeness records among the
+      // claim's ordinary evidence dependencies; the append boundary verifies
+      // those IDs exist and are evidence nodes before accepting the claim.
+      for (const witnessId of item.negativeClaim.completenessWitnessIds) {
+        if (!item.evidenceIds.includes(witnessId)) {
+          throw new Error(`negative claim completeness witness must be cited in evidenceIds: ${witnessId}`);
+        }
+      }
+    }
+    this.ensureKinds(item.evidenceIds, 'evidence');
+    this.ensureKinds(item.assumptionIds, 'assumption');
+    this.assertClaimWithinItsEvidence(item);
+    const current = this.graph();
+    const normalized = normalizeNodeForLedger({
+      id: item.id, kind: 'claim', availableAt: item.issuedAt, epistemic: item.epistemic, supersedes: item.supersedes,
+    });
+    const existing = current.nodes.find((node) => node.id === item.id);
+    let nodeResult: AppendResult;
+    if (existing !== undefined) {
+      if (!sameNodeIdentity(existing, normalized)) throw new Error(`different DAG node already exists for ${item.id}`);
+      nodeResult = 'duplicate';
+    } else {
+      this.assertClaimSupersession(item, current.nodes);
+      createEpistemicDag([...current.nodes, normalized], current.edges);
+      nodeResult = this.insertNode(normalized);
+    }
+    const stored = this.nodePayload(item.id, 'epistemic_claims', 'claim_id', 'claim');
+    if (stored !== null) {
+      if (!sameStoredPayload(stored, encoded)) throw new Error(`different claim already exists for ${item.id}`);
+      return 'duplicate';
+    }
+    this.db.prepare('INSERT INTO epistemic_claims (claim_id, claim_json, claim_digest) VALUES (?, ?, ?)').run(item.id, encoded, digest(encoded));
+    // Recorded only on the INSERT path. A replay that finds an identical
+    // payload already stored returned `duplicate` above and never reaches
+    // here, so re-offering a claim some earlier transaction legalized does
+    // not re-raise an obligation its derivation is no longer present to
+    // discharge. Idempotent replay was a property of this ledger before this
+    // rule and stays one.
+    const obligation = this.directClaimObligation(item);
+    if (obligation !== null) this.strengthening?.pending.set(item.id, obligation);
+    const monetaryObligation = this.directClaimMonetaryObligation(item);
+    if (monetaryObligation !== null) this.strengthening?.monetaryPending.set(item.id, monetaryObligation);
+    for (const supersededId of item.supersedes) this.insertEdge({ from: item.id, to: supersededId, relation: 'supersedes' });
+    for (const evidenceId of item.evidenceIds) this.insertEdge({ from: evidenceId, to: item.id, relation: 'supports' });
+    for (const assumptionId of item.assumptionIds) this.insertEdge({ from: assumptionId, to: item.id, relation: 'assumes' });
+    return nodeResult === 'duplicate' ? 'inserted' : nodeResult;
+  }
+
+  appendAssumption(value: Assumption): AppendResult {
+    const item = assumption(value);
+    const encoded = json(item, 'assumption');
+    return this.transaction(() => {
+      this.ensureKinds(item.evidenceIds, 'evidence');
+      const current = this.graph();
+      const normalized = normalizeNodeForLedger({
+        id: item.id, kind: 'assumption', availableAt: item.issuedAt, epistemic: item.epistemic, supersedes: item.supersedes,
+      });
+      const existing = current.nodes.find((node) => node.id === item.id);
+      let nodeResult: AppendResult;
+      if (existing !== undefined) {
+        if (!sameNodeIdentity(existing, normalized)) throw new Error(`different DAG node already exists for ${item.id}`);
+        nodeResult = 'duplicate';
+      } else {
+        createEpistemicDag([...current.nodes, normalized], current.edges);
+        nodeResult = this.insertNode(normalized);
+      }
+      const stored = this.nodePayload(item.id, 'epistemic_assumptions', 'assumption_id', 'assumption');
+      if (stored !== null) {
+        if (!sameStoredPayload(stored, encoded)) throw new Error(`different assumption already exists for ${item.id}`);
+        return 'duplicate';
+      }
+      this.db.prepare('INSERT INTO epistemic_assumptions (assumption_id, assumption_json, assumption_digest) VALUES (?, ?, ?)').run(item.id, encoded, digest(encoded));
+      for (const evidenceId of item.evidenceIds) this.insertEdge({ from: evidenceId, to: item.id, relation: 'supports' });
+      return nodeResult === 'duplicate' ? 'inserted' : nodeResult;
+    });
+  }
+
+  appendWitness(value: Witness): AppendResult {
+    return this.transaction(() => this.appendWitnessWithinTransaction(value));
+  }
+
+  /**
+   * Append a witness on a transaction the CALLER already opened.
+   *
+   * Evidence and claims have had this split since the coding-realization
+   * adapter needed to issue a pair atomically. Witnesses and derivations did
+   * not, so a boundary issuing all four had to append them as four separate
+   * transactions — and the derivation, which is the last and the most likely to
+   * be refused, would then fail with the claim it was supposed to legalise
+   * already persisted. That leaves a causal claim in the kernel with nothing
+   * binding it to its evidence, which is the exact state the legality check
+   * exists to prevent.
+   */
+  appendWitnessWithinTransaction(value: Witness): AppendResult {
+    const item = witness(value);
+    const encoded = json(item, 'witness');
+    this.ensureKinds(item.evidenceIds, 'evidence');
+    const current = this.graph();
+    const normalized = normalizeNodeForLedger({
+      id: item.id, kind: 'witness', availableAt: item.issuedAt, epistemic: item.epistemic,
+    });
+    const existing = current.nodes.find((node) => node.id === item.id);
+    let nodeResult: AppendResult;
+    if (existing !== undefined) {
+      if (!sameNodeIdentity(existing, normalized)) throw new Error(`different DAG node already exists for ${item.id}`);
+      if (existing.kind !== 'witness') throw new Error(`${item.id} is not a witness node`);
+      nodeResult = 'duplicate';
+    } else {
+      createEpistemicDag([...current.nodes, normalized], current.edges);
+      nodeResult = this.insertNode(normalized);
+    }
+    const stored = this.nodePayload(item.id, 'epistemic_witnesses', 'witness_id', 'witness');
+    if (stored !== null) {
+      if (!sameStoredPayload(stored, encoded)) throw new Error(`different witness already exists for ${item.id}`);
+      return 'duplicate';
+    }
+    this.db.prepare('INSERT INTO epistemic_witnesses (witness_id, witness_json, witness_digest) VALUES (?, ?, ?)').run(item.id, encoded, digest(encoded));
+    for (const evidenceId of item.evidenceIds) this.insertEdge({ from: evidenceId, to: item.id, relation: 'supports' });
+    return nodeResult === 'duplicate' ? 'inserted' : nodeResult;
+  }
+
+  appendDerivation(value: Derivation): AppendResult {
+    return this.transaction(() => this.appendDerivationWithinTransaction(value));
+  }
+
+  /** Append a derivation on a transaction the caller already opened. */
+  appendDerivationWithinTransaction(value: Derivation): AppendResult {
+    const item = derivation(value);
+    const encoded = json(item, 'derivation');
+    this.ensureKinds(item.inputEvidenceIds, 'evidence');
+    this.ensureKinds(item.inputClaimIds, 'claim');
+    this.ensureKinds(item.witnesses.map((candidate) => candidate.id), 'witness');
+    // A WITNESS DISCHARGES ONLY WHILE THE KERNEL ITSELF SUPPORTS IT (D-190).
+    // `assessDerivationLegality` matches a required obligation against the
+    // derivation's inline references by KIND alone, and `DerivationWitness`
+    // carries no epistemic state -- only the registered `Witness` node does. So
+    // a witness whose own record read `refuted` satisfied the obligation it had
+    // been refuted about, and this ledger stored the strengthened claim. A gate
+    // that accepts its own counterexample as a pass is weaker than no gate,
+    // because the record then reads as witnessed.
+    //
+    // `conflicted` and `unknown` are refused for their own reasons rather than
+    // by analogy: a conflict is a live disagreement, and nothing known is not
+    // assent. Only `supported` discharges; the rest are set aside here and the
+    // refusal below names the witness and the state it is in.
+    const registeredWitnesses = new Map<string, Witness>();
+    const unsupported = new Map<string, EpistemicState>();
+    for (const reference of item.witnesses) {
+      const registered = this.readWitness(reference.id);
+      if (registered === null) throw new Error(`unknown witness: ${reference.id}`);
+      if (!sameWitnessReference(reference, registered)) {
+        throw new Error(`derivation witness ${reference.id} does not match the registered witness`);
+      }
+      registeredWitnesses.set(reference.id, registered);
+      if (registered.epistemic !== 'supported') unsupported.set(reference.id, registered.epistemic);
+    }
+    const output = this.readClaim(item.outputClaimId);
+    if (output === null) throw new Error(`unknown output claim: ${item.outputClaimId}`);
+    if (JSON.stringify(output.proposition) !== JSON.stringify(item.outputProposition)) throw new Error(`derivation output proposition does not match ${item.outputClaimId}`);
+
+    // LEGALITY IS CHECKED HERE OR NOWHERE. `assessDerivationLegality` decides
+    // whether a derivation may strengthen a claim on any profile axis without
+    // the matching witness — the refusal that separates a claim bound to its
+    // evidence from one asserted beside it. It was correct, tested, and had no
+    // caller in `src/` at all: this ledger is the only place a Derivation can
+    // be persisted, and it did not consult it. So a derivation could take an
+    // observational input claim and emit a randomized-causal output, and the
+    // kernel would store it.
+    //
+    // Every input claim is assessed, not just the first. A derivation declares
+    // ONE `coordinateChange`, so its inputs share coordinates by construction;
+    // an input that does not match is a malformed record, and the assessment
+    // throws for it rather than returning a refusal, which is the right
+    // distinction — a mismatch is a broken derivation, an unwitnessed
+    // strengthening is a refused one.
+    const transportRevocations = item.witnesses.some((entry) => entry.kind === 'causal_transport')
+      ? new Set(this.revocationProjectionAsOf(output.issuedAt).revokedIds)
+      : new Set<string>();
+    const directMoney = this.strengthening?.monetaryPending.get(item.outputClaimId);
+    let monetaryDischarged = false;
+    for (const sourceId of item.inputClaimIds) {
+      const source = this.readClaim(sourceId);
+      if (source === null) throw new Error(`unknown input claim: ${sourceId}`);
+      // A WITNESS DISCHARGES ONLY WHEN IT CONTAINS WHAT ITS KIND OBLIGES (D-201).
+      // D-190 asked whether the registered record still holds; this asks
+      // whether it is ABOUT this step. `assessDerivationLegality` matches kind
+      // and `sameWitnessReference` matches identity, and neither can tell a
+      // `causal_identification` grounded in some other study's evidence from
+      // one grounded in this study's. The obligations live in `obligation.ts`,
+      // per kind, and most kinds have none the records can decide -- that
+      // file says which by name. The check is per input claim because a
+      // re-basing witness must name the bases THIS source and output move
+      // between, and a derivation may have several inputs.
+      //
+      // Set aside, not erased, exactly as an unsupported witness is: legality
+      // is assessed against the discharging subset, the citation stays in the
+      // stored payload and the DAG, and the refusal below says why it did not
+      // count. `setAside` maps each witness id to that reason.
+      const setAside = new Map<string, string>();
+      for (const [id, state] of unsupported) setAside.set(id, `${id} is ${state}`);
+      for (const [id, registered] of registeredWitnesses) {
+        if (setAside.has(id)) continue;
+        if (registered.kind === 'causal_transport'
+            && (transportRevocations.has(id) || transportRevocations.has(source.id)
+              || registered.evidenceIds.some((evidenceId) => transportRevocations.has(evidenceId)))) {
+          setAside.set(id, `${id} depends on revoked transport evidence or source claim`);
+          continue;
+        }
+        const verdict = assessWitnessObligation(registered, { source, output, evidence: (evidenceId) => this.readEvidence(evidenceId) });
+        if (!verdict.discharges) setAside.set(id, verdict.reason ?? `${id} does not discharge its obligation`);
+      }
+      const discharging: Derivation = setAside.size === 0
+        ? item
+        : { ...item, witnesses: Object.freeze(item.witnesses.filter((entry) => !setAside.has(entry.id))) };
+      const legality = assessDerivationLegality(source, output, discharging);
+      if (!legality.allowed) {
+        // An obligation with no witness at all and one whose witness does not
+        // hold are different states, and the operator's next move differs:
+        // register a proof, or resolve the one already on record. Collapsing
+        // them would send someone to create a witness they already have.
+        const blocked = item.witnesses
+          .filter((entry) => setAside.has(entry.id) && legality.missingWitnesses.includes(entry.kind))
+          .map((entry) => setAside.get(entry.id) as string);
+        if (blocked.length > 0) {
+          throw new Error(
+            `derivation ${item.id} strengthens ${sourceId} into ${output.id} without a discharging `
+            + `${legality.missingWitnesses.join(', ')} witness: ${blocked.join('; ')}`,
+          );
+        }
+        throw new Error(
+          `derivation ${item.id} strengthens ${sourceId} into ${output.id} without `
+          + `${legality.missingWitnesses.join(', ')}`,
+        );
+      }
+      if (directMoney !== undefined && [...registeredWitnesses.values()].some((candidate) =>
+        !setAside.has(candidate.id)
+        && candidate.kind === 'monetary_rebasing'
+        && candidate.basisChange?.from === directMoney.sourceBasis
+        && candidate.basisChange.to === directMoney.targetBasis
+      )) {
+        monetaryDischarged = true;
+      }
+    }
+
+    // THE CHAIN IS CHECKED HERE, AGAINST ITS LEAVES (D-222). The loop above
+    // compares each hop with its neighbour and nothing else, and on the money
+    // axis that reading is loose in one measured direction: `billed -> mixed`
+    // is a "free weakening" per step, and `claim-uses.ts` admits `mixed` to
+    // `request_metered_spend` because the metered builder writes it for "some
+    // list, some estimated" -- so a provider-billed figure re-labelled by a
+    // one-input derivation walked into the use built to keep it out. In two
+    // hops, `estimated -> mixed -> billed` needed only a witness naming
+    // `mixed -> billed`, which `witness()` accepts. `analyzeDerivationChain`
+    // was built for exactly this at D-151 and nothing called it; now every
+    // derivation is checked with the stored chain upstream of its inputs.
+    // What the leaf may say about its own evidence stays with
+    // `assertClaimWithinItsEvidence`; this bounds only what the chain ADDS.
+    if (item.inputClaimIds.length > 0) {
+      const chainWitnesses = unsupported.size === 0
+        ? item
+        : { ...item, witnesses: Object.freeze(item.witnesses.filter((entry) => !unsupported.has(entry.id))) };
+      this.assertChainWithinBound(chainWitnesses, output);
+    }
+
+    // THE OBLIGATION RAISED BY A DIRECT APPEND IS DISCHARGED HERE (D-192).
+    // Every input claim has just been assessed and allowed, so the output
+    // claim is the product of a legal derivation and may carry a profile no
+    // direct claim could. Only a derivation with at least one INPUT CLAIM
+    // discharges anything: the loop above is the whole legality check, and a
+    // derivation over evidence alone runs none of it, so treating its output
+    // as legalized would hand back the bypass this rule closes.
+    if (item.inputClaimIds.length > 0) {
+      this.strengthening?.legalized.add(item.outputClaimId);
+      if (monetaryDischarged) this.strengthening?.monetaryLegalized.add(item.outputClaimId);
+    }
+
+    const graph = this.graph();
+    const extraEdges: DagEdgeInput[] = [
+      ...item.inputEvidenceIds.map((from) => ({ from, to: item.outputClaimId, relation: 'depends_on' as const })),
+      ...item.inputClaimIds.map((from) => ({ from, to: item.outputClaimId, relation: 'derives' as const })),
+      ...item.witnesses.map((from) => ({ from: from.id, to: item.outputClaimId, relation: 'witnesses' as const })),
+    ];
+    const stored = this.nodePayload(item.id, 'epistemic_derivations', 'derivation_id', 'derivation');
+    if (stored !== null) {
+      if (!sameStoredPayload(stored, encoded)) throw new Error(`different derivation already exists for ${item.id}`);
+      for (const edge of extraEdges) {
+        if (!graph.edges.some((existing) => existing.from === edge.from && existing.to === edge.to && existing.relation === edge.relation)) {
+          throw new Error(`stored derivation ${item.id} is missing dependency edge ${edge.from} -> ${edge.to}`);
+        }
+      }
+      return 'duplicate';
+    }
+    createEpistemicDag(graph.nodes, [...graph.edges, ...extraEdges]);
+    this.db.prepare('INSERT INTO epistemic_derivations (derivation_id, derivation_json, derivation_digest) VALUES (?, ?, ?)').run(item.id, encoded, digest(encoded));
+    for (const edge of extraEdges) this.insertEdge(edge);
+    return 'inserted';
+  }
+
+  appendDependency(edge: DagEdgeInput): AppendResult {
+    const from = nonEmpty(edge.from, 'dependency edge from');
+    const to = nonEmpty(edge.to, 'dependency edge to');
+    const candidate = { from, to, relation: edge.relation };
+    return this.transaction(() => {
+      const existing = row<StoredEdgeRow>(this.db.prepare('SELECT from_id, to_id, relation FROM epistemic_edges WHERE from_id = ? AND to_id = ? AND relation = ?').get(from, to, edge.relation));
+      if (existing !== null) return 'duplicate';
+      const graph = this.graph();
+      createEpistemicDag(graph.nodes, [...graph.edges, candidate]);
+      return this.insertEdge(candidate);
+    });
+  }
+
+  appendRevocation(input: RevocationEventInput): AppendResult {
+    const eventId = nonEmpty(input.eventId, 'revocation eventId');
+    const targetId = nonEmpty(input.targetId, 'revocation targetId');
+    const recordedAt = canonicalInstant(input.recordedAt, 'revocation recordedAt');
+    const reason = nonEmpty(input.reason, 'revocation reason');
+    return this.transaction(() => {
+      if (this.node(targetId) === null) throw new Error(`unknown target for revocation: ${targetId}`);
+      const existing = row<RawEventRow>(this.db.prepare('SELECT event_id, target_id, recorded_at, reason FROM epistemic_revocations WHERE event_id = ?').get(eventId));
+      if (existing !== null) {
+        if (existing.target_id !== targetId || existing.recorded_at !== recordedAt || existing.reason !== reason) throw new Error(`different revocation already exists for ${eventId}`);
+        return 'duplicate';
+      }
+      // THE FORWARD HALF OF THE SAME LINKAGE (WP-R07). A node's own envelope can
+      // claim this eventId before any `appendRevocation` call names it — that is
+      // the D-099 capability `assertRevocationEnvelopeLinksConsistently` must not
+      // break. But if some OTHER node's envelope already claims it, this event
+      // would silently reuse the ledger's own event identity for two different
+      // facts, which the reverse check on the append side cannot see because the
+      // envelope was persisted first.
+      const conflictingEnvelope = this.envelopeRevocations().find(
+        (declared) => declared.event_id === eventId && declared.target_id !== targetId,
+      );
+      if (conflictingEnvelope !== undefined) {
+        throw new Error(
+          `revocation event ${eventId} is already declared by ${conflictingEnvelope.target_id}'s own revocation `
+          + `envelope, and cannot also target ${targetId}`,
+        );
+      }
+      this.db.prepare('INSERT INTO epistemic_revocations (event_id, target_id, recorded_at, reason) VALUES (?, ?, ?, ?)').run(eventId, targetId, recordedAt, reason);
+      return 'inserted';
+    });
+  }
+
+  readEvidence(id: string): Evidence | null {
+    const stored = this.nodePayload(id, 'epistemic_evidence', 'evidence_id', 'evidence');
+    if (stored === null) return null;
+    try {
+      const item = evidence(JSON.parse(stored.json) as Evidence);
+      if (item.id !== id) throw new Error('physical identity does not match the requested ID');
+      return item;
+    } catch (error) {
+      throw new Error(`stored evidence ${id} failed canonical validation: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  readClaim(id: string): Claim | null {
+    const stored = this.nodePayload(id, 'epistemic_claims', 'claim_id', 'claim');
+    if (stored === null) return null;
+    try {
+      const item = claim(JSON.parse(stored.json) as Claim);
+      if (item.id !== id) throw new Error('physical identity does not match the requested ID');
+      return item;
+    } catch (error) {
+      throw new Error(`stored claim ${id} failed canonical validation: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  readAssumption(id: string): Assumption | null {
+    const stored = this.nodePayload(id, 'epistemic_assumptions', 'assumption_id', 'assumption');
+    if (stored === null) return null;
+    try {
+      const item = assumption(JSON.parse(stored.json) as Assumption);
+      if (item.id !== id) throw new Error('physical identity does not match the requested ID');
+      return item;
+    } catch (error) {
+      throw new Error(`stored assumption ${id} failed canonical validation: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  readWitness(id: string): Witness | null {
+    const stored = this.nodePayload(id, 'epistemic_witnesses', 'witness_id', 'witness');
+    if (stored === null) return null;
+    try {
+      const item = witness(JSON.parse(stored.json) as Witness);
+      if (item.id !== id) throw new Error('physical identity does not match the requested ID');
+      return item;
+    } catch (error) {
+      throw new Error(`stored witness ${id} failed canonical validation: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  readDerivation(id: string): Derivation | null {
+    const stored = this.nodePayload(id, 'epistemic_derivations', 'derivation_id', 'derivation');
+    if (stored === null) return null;
+    try {
+      const item = derivation(JSON.parse(stored.json) as Derivation);
+      if (item.id !== id) throw new Error('physical identity does not match the requested ID');
+      return item;
+    } catch (error) {
+      throw new Error(`stored derivation ${id} failed canonical validation: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * Every derivation whose output is `claimId`, validated on read (D-257). A
+   * derivation is not a DAG node — it is the record behind the `derives`,
+   * `depends_on` and `witnesses` edges into its output — so a viewer that
+   * wants the assumptions a claim was derived under reads them here.
+   */
+  derivationsForClaim(claimId: string): readonly Derivation[] {
+    const rows = this.db
+      .prepare("SELECT derivation_id AS id FROM epistemic_derivations WHERE json_extract(derivation_json, '$.outputClaimId') = ? ORDER BY derivation_id")
+      .all(claimId) as Array<{ id: string }>;
+    return Object.freeze(rows.map((row) => this.readDerivation(row.id)).filter((item): item is Derivation => item !== null));
+  }
+
+  graph(): EpistemicDag {
+    const nodes = (this.db.prepare('SELECT node_id, node_kind, available_at, epistemic, supersedes_json FROM epistemic_nodes ORDER BY node_id').all() as unknown as StoredNodeRow[]).map((stored) => {
+      let supersedes: unknown;
+      try { supersedes = JSON.parse(stored.supersedes_json); } catch { throw new Error(`stored node ${stored.node_id} has invalid supersession metadata`); }
+      if (!Array.isArray(supersedes) || !supersedes.every((item) => typeof item === 'string')) throw new Error(`stored node ${stored.node_id} has invalid supersession metadata`);
+      return { id: stored.node_id, kind: stored.node_kind as DagNode['kind'], availableAt: canonicalInstant(stored.available_at, `stored node ${stored.node_id} availableAt`), epistemic: stored.epistemic as DagNode['epistemic'], supersedes };
+    });
+    const edges = (this.db.prepare('SELECT from_id, to_id, relation FROM epistemic_edges ORDER BY from_id, to_id, relation').all() as unknown as StoredEdgeRow[]).map((edge) => ({ from: edge.from_id, to: edge.to_id, relation: edge.relation as DagEdge['relation'] }));
+    // Re-parse every payload while constructing the graph so a tampered child
+    // row cannot hide behind otherwise-valid node metadata.
+    for (const node of nodes) {
+      if (node.kind === 'evidence' && this.readEvidence(node.id) === null) throw new Error(`stored evidence node ${node.id} has no payload`);
+      if (node.kind === 'claim') {
+        const item = this.readClaim(node.id);
+        if (item === null) throw new Error(`stored claim node ${node.id} has no payload`);
+        this.ensureKinds(item.evidenceIds, 'evidence');
+        this.ensureKinds(item.assumptionIds, 'assumption');
+      }
+      if (node.kind === 'assumption') {
+        const item = this.readAssumption(node.id);
+        if (item === null) throw new Error(`stored assumption node ${node.id} has no payload`);
+        this.ensureKinds(item.evidenceIds, 'evidence');
+      }
+      if (node.kind === 'witness') {
+        const item = this.readWitness(node.id);
+        if (item === null) throw new Error(`stored witness node ${node.id} has no payload`);
+        this.ensureKinds(item.evidenceIds, 'evidence');
+      }
+    }
+    const derivationRows = this.db.prepare('SELECT derivation_id FROM epistemic_derivations ORDER BY derivation_id').all() as unknown as Array<{ derivation_id: string }>;
+    for (const stored of derivationRows) {
+      const item = this.readDerivation(stored.derivation_id);
+      if (item === null) throw new Error(`stored derivation ${stored.derivation_id} has no payload`);
+      if (this.node(item.outputClaimId)?.kind !== 'claim') throw new Error(`stored derivation ${stored.derivation_id} has an unknown output claim`);
+      this.ensureKinds(item.inputEvidenceIds, 'evidence');
+      this.ensureKinds(item.inputClaimIds, 'claim');
+      this.ensureKinds(item.witnesses.map((candidate) => candidate.id), 'witness');
+      for (const reference of item.witnesses) {
+        const registered = this.readWitness(reference.id);
+        if (registered === null || !sameWitnessReference(reference, registered)) {
+          throw new Error(`stored derivation ${stored.derivation_id} has an unregistered or divergent witness ${reference.id}`);
+        }
+        const witnessEdge = this.db.prepare(
+          'SELECT 1 AS present FROM epistemic_edges WHERE from_id = ? AND to_id = ? AND relation = ?',
+        ).get(reference.id, item.outputClaimId, 'witnesses');
+        if (witnessEdge === undefined) throw new Error(`stored derivation ${stored.derivation_id} is missing witness edge ${reference.id} -> ${item.outputClaimId}`);
+      }
+    }
+    return createEpistemicDag(nodes, edges);
+  }
+
+  asOf(asOf: Instant): EpistemicDag {
+    return this.replayAsOf(asOf).graph;
+  }
+
+  /**
+   * Return the visible tip of every claim supersession chain.
+   *
+   * The optional boundary is applied before successor selection: a claim that
+   * was not available at the boundary cannot hide the older claim. Branching
+   * is refused at append time, so this projection never chooses a winner by
+   * identifier, insertion order, or wall-clock timing.
+   */
+  latestClaims(asOf?: Instant): readonly Claim[] {
+    const graph = asOf === undefined ? this.graph() : this.asOf(asOf);
+    const supersededIds = new Set<string>();
+    for (const node of graph.nodes) {
+      if (node.kind !== 'claim') continue;
+      for (const supersededId of node.supersedes) supersededIds.add(supersededId);
+    }
+    const latest = graph.nodes
+      .filter((node) => node.kind === 'claim' && !supersededIds.has(node.id))
+      .map((node) => {
+        const item = this.readClaim(node.id);
+        if (item === null) throw new Error(`stored claim node ${node.id} has no payload`);
+        return item;
+      });
+    return Object.freeze(latest);
+  }
+
+  /**
+   * Return the visible latest Claim at one exact semantic coordinate.
+   *
+   * Coordinate equality deliberately excludes `asOf`: a later-issued Claim may
+   * revise the same valid-time proposition. The optional boundary is applied by
+   * `latestClaims` before this method compares coordinates, so historical reads
+   * cannot select a successor that was not yet available. More than one visible
+   * tip is legacy ambiguity, not a tie to resolve by identifier or insertion
+   * order, and therefore fails closed.
+   */
+  latestClaimAtCoordinate(value: Claim, asOf?: Instant): Claim | null {
+    const coordinate = claimCoordinateKey(value);
+    const matches = this.latestClaims(asOf).filter((candidate) => claimCoordinateKey(candidate) === coordinate);
+    if (matches.length > 1) throw new Error(`ambiguous latest claims at coordinate for ${value.id}`);
+    return matches[0] ?? null;
+  }
+
+  /**
+   * Reconstruct every currently modeled kernel projection at one boundary.
+   * Node availability and revocation event time are filtered independently;
+   * later observations or corrections cannot leak into the historical view.
+   */
+  replayAsOf(asOf: Instant): EpistemicReplay {
+    const boundary = canonicalInstant(asOf, 'epistemic replay asOf');
+    const graph = asOfGraph(this.graph(), boundary);
+    const visible = new Set(graph.nodes.map((node) => node.id));
+    const events = this.revocationEvents().filter((event) =>
+      Date.parse(event.recorded_at) <= Date.parse(boundary) && visible.has(event.target_id),
+    );
+    // `recorded_at`/knowledge-time filtering above is unchanged from D-099:
+    // an event this boundary has not yet learned about cannot appear at all.
+    // Splitting the KNOWN events by `effective_at` against the same boundary
+    // is GAP 3's fix (WP-R07): a known-but-not-yet-effective envelope
+    // revocation is pending as of this boundary, not revoked by it.
+    const { effective, pending } = this.splitByEffectiveness(events, boundary);
+    return Object.freeze({
+      asOf: boundary,
+      graph,
+      revocation: this.projectRevocationWithPending(graph, effective, pending),
+    });
+  }
+
+  revocationProjection(): RevocationProjection {
+    const graph = this.graph();
+    const events = this.revocationEvents();
+    // A live (non-as-of) read uses the actual current instant as the
+    // effective-time boundary: the same envelope becomes revoked, not
+    // pending, the moment real time reaches its declared `effectiveAt`,
+    // with no new append required.
+    const now = instant(new Date().toISOString());
+    const { effective, pending } = this.splitByEffectiveness(events, now);
+    return this.projectRevocationWithPending(graph, effective, pending);
+  }
+
+  /** Reconstruct revocation state using only events recorded by the boundary. */
+  revocationProjectionAsOf(asOf: Instant): RevocationProjection {
+    return this.replayAsOf(asOf).revocation;
+  }
+
+  /**
+   * Every revocation this ledger knows about, from both places it records one.
+   *
+   * THE TABLE WAS ONLY HALF OF WHAT IS STORED. `Evidence` and `Claim` each carry
+   * an optional `revocation` envelope — `{ eventId, effectiveAt, reason }`,
+   * validated by their canonical constructors and persisted verbatim in the
+   * payload — and nothing read it. So a provider statement that said on its face
+   * "this was withdrawn, effective 2026-08-05, because the provider withdrew it"
+   * was appended, stored, read back with the envelope intact, and reported by
+   * `revocationProjection()` as live, along with every claim derived from it.
+   *
+   * THE SAME SHAPE AS `assessDerivationLegality`, whose comment is still in
+   * `appendDerivationWithinTransaction`: correct, tested, and with no caller at
+   * all until the ledger consulted it. And the same shape as D-094, where the
+   * projection knew a claim was revoked and the read boundary served it as
+   * supported. In each case the kernel held the information and the layer that
+   * needed it did not ask.
+   *
+   * WHY HERE RATHER THAN AT APPEND. Refusing an envelope would delete a real
+   * capability: a withdrawn provider statement is a fact worth recording.
+   * Requiring the envelope to name an existing revocation event deadlocks —
+   * `appendRevocation` refuses an unknown target, so the event cannot precede
+   * its own node and the envelope cannot follow it. The projection is therefore
+   * what changes, and it now reflects everything the ledger stores.
+   *
+   * THE ENVELOPE'S KNOWLEDGE TIME IS ITS NODE'S AVAILABILITY, WHICH IS STILL
+   * NOT ITS `effectiveAt`. `replayAsOf` filters by the time a revocation was
+   * RECORDED — an envelope carries no recorded time and needs none, since it
+   * is part of its node's immutable payload and is learned exactly when the
+   * node becomes available. That knowledge-time filtering is unchanged.
+   * Recorded at D-099.
+   *
+   * `effectiveAt` ITSELF IS NOW CONSULTED, SEPARATELY. D-099 originally
+   * recorded that `RevocationProjection` had no effective-time dimension at
+   * all, so a future-dated envelope read as revoked the instant it became
+   * known — collapsing "the ledger knows about this revocation" into "this
+   * revocation is in effect." That is now split: `splitByEffectiveness`
+   * compares each known event's `effective_at` against the caller's
+   * reference instant (the `asOf` boundary, or the real current instant for
+   * a live `revocationProjection()`), and `projectRevocationWithPending`
+   * keeps a not-yet-effective root and its closure out of `revokedIds`,
+   * surfacing them in `RevocationProjection.pendingIds` instead. A
+   * table-recorded event is untouched by this: `revocationEvents` sets its
+   * `effective_at` equal to `recorded_at`, since `appendRevocation` carries
+   * no separate effective time and an operator-recorded revocation is
+   * effective the moment it is recorded. GAP 3 closed; withdrawn from
+   * D-099's stated limitation.
+   */
+  private revocationEvents(): StoredEventRow[] {
+    const rows = this.db.prepare('SELECT event_id, target_id, recorded_at, reason FROM epistemic_revocations ORDER BY event_id').all() as unknown as RawEventRow[];
+    const recorded = rows.map((event) => {
+      const recordedAt = canonicalInstant(event.recorded_at, `stored revocation ${event.event_id} recordedAt`);
+      return {
+        event_id: nonEmpty(event.event_id, 'stored revocation eventId'),
+        target_id: nonEmpty(event.target_id, 'stored revocation targetId'),
+        recorded_at: recordedAt,
+        // The table has no effective-time column: an operator-recorded
+        // revocation is effective the instant it is recorded.
+        effective_at: recordedAt,
+        reason: nonEmpty(event.reason, `stored revocation ${event.event_id} reason`),
+      };
+    });
+    return [...recorded, ...this.envelopeRevocations()]
+      .sort((left, right) => left.event_id.localeCompare(right.event_id) || left.target_id.localeCompare(right.target_id));
+  }
+
+  /** Revocations declared by a stored record about itself. */
+  private envelopeRevocations(): StoredEventRow[] {
+    const nodes = this.db.prepare(
+      "SELECT node_id, node_kind, available_at FROM epistemic_nodes WHERE node_kind IN ('evidence', 'claim') ORDER BY node_id",
+    ).all() as unknown as Array<{ node_id: string; node_kind: string; available_at: string }>;
+    const declared: StoredEventRow[] = [];
+    for (const node of nodes) {
+      const item = node.node_kind === 'evidence' ? this.readEvidence(node.node_id) : this.readClaim(node.node_id);
+      const envelope = item?.revocation ?? null;
+      if (envelope === null) continue;
+      declared.push({
+        event_id: nonEmpty(envelope.eventId, `stored ${node.node_kind} ${node.node_id} revocation eventId`),
+        target_id: node.node_id,
+        recorded_at: canonicalInstant(node.available_at, `stored node ${node.node_id} availableAt`),
+        effective_at: canonicalInstant(envelope.effectiveAt, `stored ${node.node_kind} ${node.node_id} revocation effectiveAt`),
+        reason: nonEmpty(envelope.reason, `stored ${node.node_kind} ${node.node_id} revocation reason`),
+      });
+    }
+    return declared;
+  }
+
+  /**
+   * Split known revocation events into ones already in effect and ones known
+   * but not yet effective, relative to `referenceInstant`.
+   *
+   * A table-recorded event always lands in `effective` here, because
+   * `revocationEvents` sets its `effective_at` equal to `recorded_at` — this
+   * split only ever moves an envelope-declared revocation into `pending`.
+   */
+  private splitByEffectiveness(
+    events: readonly StoredEventRow[],
+    referenceInstant: Instant,
+  ): { effective: string[]; pending: string[] } {
+    const boundary = Date.parse(referenceInstant);
+    const effective: string[] = [];
+    const pending: string[] = [];
+    for (const event of events) {
+      if (Date.parse(event.effective_at) <= boundary) effective.push(event.target_id);
+      else pending.push(event.target_id);
+    }
+    return { effective, pending };
+  }
+
+  /**
+   * Combine the revoked-now and known-but-pending closures into one
+   * projection. A node reachable from BOTH an effective root and a pending
+   * root is revoked, not pending — pending never demotes an already-revoked
+   * node, it only adds nodes reachable from NO effective root.
+   */
+  private projectRevocationWithPending(
+    graph: EpistemicDag,
+    effectiveTargets: readonly string[],
+    pendingTargets: readonly string[],
+  ): RevocationProjection {
+    const revoked = projectRevocation(graph, effectiveTargets);
+    if (pendingTargets.length === 0) return revoked;
+    const combined = projectRevocation(graph, [...new Set([...effectiveTargets, ...pendingTargets])]);
+    const revokedSet = new Set(revoked.revokedIds);
+    const pendingIds = combined.revokedIds.filter((id) => !revokedSet.has(id)).sort((a, b) => a.localeCompare(b));
+    return Object.freeze({ revokedIds: revoked.revokedIds, trace: revoked.trace, pendingIds: Object.freeze(pendingIds) });
+  }
+
+  /**
+   * A claim may not be more verified than the evidence it cites.
+   *
+   * THE DERIVATION PATH HAD THIS AND THE DIRECT PATH DID NOT.
+   * `appendDerivationWithinTransaction` consults `assessDerivationLegality`,
+   * which refuses a derivation that strengthens a claim on any profile axis
+   * without the matching witness. `appendClaim` checked that each cited
+   * evidence id exists and is an evidence node, and then stored whatever
+   * profile the claim declared. So one piece of evidence with
+   * `integrity: unknown` and `authenticity: self_asserted` supported a stored
+   * claim reading `verified` and `provider_authenticated`: nothing verified
+   * anything, and the record said verified.
+   *
+   * THE CEILING IS THE WEAKEST CITED EVIDENCE, NOT THE STRONGEST. Every cited
+   * evidence is a PREREQUISITE — what the dependency edge means, settled for
+   * `minimalSupportingSets` at D-098 after the same question had two answers in
+   * one file — so a claim resting on a verified invoice and an unverified note
+   * is only as verified as the note, because withdrawing the note withdraws the
+   * claim. A maximum would let one strong citation launder any number of weak
+   * ones.
+   *
+   * THREE CONSERVATIVE AXES, AND DELIBERATELY NOT A FOURTH. `INTEGRITY`,
+   * `AUTHENTICITY`, and `COVERAGE` are declared ladders in `profile.ts`, with
+   * Evidence completeness mapped only to Claim coverage. `monetaryBasis` is
+   * not a ladder: `mergeClaimProfiles` refuses to rank `billed` against
+   * `allocated` because they are different economic semantics rather than two
+   * rungs of one quantity, and `admissibility.ts` rejects an `atLeast`
+   * requirement on it at construction. A claim whose basis differs from its
+   * evidence is often a legitimate derivation — allocation is exactly that —
+   * and refusing it here would need the derivation registry rather than a
+   * comparison.
+   *
+   * THERE IS NO EVIDENCE-FREE CLAIM UNDER THIS CEILING. D-104 first recorded
+   * that case as an unbounded gap. It is not one: `claim()` refuses an empty
+   * `evidenceIds` outright, so no such claim can be constructed, let alone
+   * persisted, and every claim reaching here has something to be measured
+   * against. The limitation was overstated and is withdrawn at D-106.
+   *
+   * AND THE SAME PASS ENFORCES GRAIN (WP-R03, D-106, D-108). `grainRelation`
+   * answers how two grains compare, with an explicit `incomparable` when
+   * neither dimension set contains the other, and it had exactly one caller in
+   * `src/`: `requiredCoordinateWitnesses` in `derivation.ts`. The direct path
+   * never asked, so evidence at grain `[day]` supported a stored claim at
+   * `[day, project, request]` — per-request resolution invented from a daily
+   * total, and carried as observed.
+   *
+   * `incomparable` WAS THE WHOLE DIFFICULTY, AND THE ANSWER WAS TO REMOVE IT
+   * RATHER THAN CHOOSE A SIDE. A `Grain` is a flat dimension SET, so
+   * `[billing_record]` → `[billing_period]` — an honest roll-up the product
+   * performs — lands on the identical `incomparable` verdict as `[day]` →
+   * `[model]`, which invents an axis outright. Refusing `incomparable` refused
+   * the product; allowing it left the invention. Two repairs were tried and
+   * neither was a rule: an inline `explicitAggregate` exception, which named one
+   * of the two roll-ups and left the suite red, and blanket permission, which
+   * was a declared blind spot. `grain.ts` already said what was missing —
+   * "incomparable grains cannot be ordered without a domain witness" — so the
+   * witness is now declared as data in `DIMENSION_ROLLUPS`, and the check is
+   * `grainIsSupportedBy`: every dimension the claim names is present in the
+   * evidence or is a declared coarsening of one that is.
+   *
+   * THE QUANTIFIER IS THE OPPOSITE OF THE TRUST CEILINGS ABOVE, DELIBERATELY.
+   * Trust takes the WEAKEST citation because weakness PROPAGATES: withdrawing
+   * any cited evidence withdraws the claim, so one verified invoice cannot
+   * launder an unverified note. Resolution is SUPPLIED rather than propagated,
+   * so ONE citation carrying the dimensions is enough — citing a daily total
+   * beside a per-request log does not erase the log's detail. A decision-fitness
+   * claim at `[decision, action]` relies on exactly that: it draws action detail
+   * from interval evidence and context from caller evidence at `[decision]`,
+   * and citations carry no roles that could tell them apart.
+   *
+   * BOTH RULES SHARE ONE PASS BECAUSE `readEvidence` RE-VALIDATES. It reparses
+   * and re-checks the whole canonical payload on every call, so a second loop
+   * would double the cost of every claim append to keep two decisions
+   * cosmetically separate. They stay separately named in the errors and
+   * separately recorded at D-104 and D-106.
+   */
+  private assertClaimWithinItsEvidence(item: Claim): void {
+    let integrityCeiling = INTEGRITY.length - 1;
+    let authenticityCeiling = AUTHENTICITY.length - 1;
+    let coverageCeiling = COVERAGE.length - 1;
+    let grainSupplied = false;
+    let scopeSupplied = false;
+    const refinedOver: Evidence[] = [];
+    const narrowedOrChanged: Evidence[] = [];
+    const negativeSources = new Map<string, Evidence>();
+    // Every measurement model the cited evidence declares. A claim may name one
+    // of these and no others: see the check after the loop.
+    const declaredMeasurementModels: string[] = [];
+    for (const evidenceId of item.evidenceIds) {
+      const source = this.readEvidence(evidenceId);
+      if (source === null) throw new Error(`unknown evidence: ${evidenceId}`);
+      if (item.negativeClaim?.completenessWitnessIds.includes(source.id) === true) {
+        negativeSources.set(source.id, source);
+      }
+      integrityCeiling = Math.min(integrityCeiling, INTEGRITY.indexOf(source.integrity));
+      authenticityCeiling = Math.min(authenticityCeiling, AUTHENTICITY.indexOf(source.authenticity));
+      coverageCeiling = Math.min(coverageCeiling, COVERAGE.indexOf(source.completeness.status));
+      // `grainIsSupportedBy` subsumes `equal` and `coarser` — both mean every
+      // claimed dimension is present in the evidence — and additionally accepts a
+      // DECLARED roll-up, which set containment reports as `incomparable`
+      // indistinguishably from an invented axis. Anything else is a dimension
+      // the evidence could not have made, whether `finer` or undeclared.
+      if (grainIsSupportedBy(item.grain, source.grain)) grainSupplied = true;
+      else refinedOver.push(source);
+      if (scopeIsSupportedBy(item.scope, source.scope)) scopeSupplied = true;
+      else narrowedOrChanged.push(source);
+      if (source.measurementModelRef !== null) declaredMeasurementModels.push(source.measurementModelRef);
+    }
+    // A MEASUREMENT CITATION CANNOT APPEAR AT THE CLAIM LAYER.
+    //
+    // `claim()` refuses a null ref once `profile.measurement` rises above
+    // `proxy_unvalidated`, which checks that a reference was WRITTEN. Nothing
+    // checked it was one any evidence had made, so a claim could name a model
+    // that no record of the measurement declared and every reader would see
+    // provenance. This is the same bound the three ceilings below apply, on the
+    // one field of the same kind that was not bounded.
+    //
+    // AT LEAST ONE, not all: a claim cites the assignment record and the
+    // outcome record, and only the outcome record observed the metric.
+    // Requiring every cited evidence to carry the reference would force a
+    // record that measured something else to declare a model it has nothing to
+    // do with, which is the same laundering pointed the other way.
+    //
+    // This does NOT establish that the reference resolves to a registered
+    // model. The evidence can name nothing just as the claim could; what is
+    // closed is the claim inventing a backing its evidence never made.
+    if (item.measurementModelRef !== null && !declaredMeasurementModels.includes(item.measurementModelRef)) {
+      const declared = declaredMeasurementModels.length === 0
+        ? 'no cited evidence declares a measurement model'
+        : `cited evidence declares ${[...new Set(declaredMeasurementModels)].sort().join(', ')}`;
+      throw new Error(
+        `claim ${item.id} cites measurement model ${item.measurementModelRef}, and ${declared}`,
+      );
+    }
+    if (!grainSupplied && refinedOver.length > 0) {
+      const cited = refinedOver[0]!;
+      throw new Error(
+        `claim ${item.id} declares grain [${item.grain.dimensions.join(', ')}], which refines the `
+        + `[${cited.grain.dimensions.join(', ')}] of evidence ${cited.id} it cites, and no cited evidence `
+        + 'carries those dimensions',
+      );
+    }
+    if (!scopeSupplied && narrowedOrChanged.length > 0) {
+      const cited = narrowedOrChanged[0]!;
+      throw new Error(
+        `claim ${item.id} declares scope that narrows or changes the scope of evidence ${cited.id}, `
+        + 'and no cited evidence carries or covers that scope',
+      );
+    }
+    if (item.negativeClaim !== undefined) {
+      if (item.time.validTime === null) {
+        throw new Error(`negative claim ${item.id} requires validTime to define its absence period`);
+      }
+      for (const witnessId of item.negativeClaim.completenessWitnessIds) {
+        const source = negativeSources.get(witnessId);
+        if (source === undefined) {
+          throw new Error(`negative claim completeness witness must resolve to cited evidence: ${witnessId}`);
+        }
+        if (source.completeness.status !== 'complete') {
+          throw new Error(`negative claim completeness witness ${source.id} must declare complete coverage`);
+        }
+        if (!source.completeness.coveredEventTypes.includes(item.negativeClaim.eventType)) {
+          throw new Error(
+            `negative claim completeness witness ${source.id} does not cover event type ${item.negativeClaim.eventType}`,
+          );
+        }
+        const coveredScope = source.completeness.coveredScope;
+        if (coveredScope === null || (scopeRelation(coveredScope, item.scope) !== 'equal' && scopeRelation(coveredScope, item.scope) !== 'broader')) {
+          throw new Error(`negative claim completeness witness ${source.id} does not cover the claim scope`);
+        }
+        const coveredTime = source.completeness.coveredTime;
+        if (coveredTime === null) {
+          throw new Error(`negative claim completeness witness ${source.id} does not declare a covered period`);
+        }
+        const timeRelation = intervalRelation(coveredTime, item.time.validTime);
+        if (timeRelation !== 'equal' && timeRelation !== 'contains') {
+          throw new Error(`negative claim completeness witness ${source.id} does not cover the claim period`);
+        }
+      }
+    }
+    if (INTEGRITY.indexOf(item.profile.integrity) > integrityCeiling) {
+      throw new Error(
+        `claim ${item.id} declares integrity ${item.profile.integrity}, above the `
+        + `${INTEGRITY[integrityCeiling]} of the weakest evidence it cites`,
+      );
+    }
+    if (AUTHENTICITY.indexOf(item.profile.authenticity) > authenticityCeiling) {
+      throw new Error(
+        `claim ${item.id} declares authenticity ${item.profile.authenticity}, above the `
+        + `${AUTHENTICITY[authenticityCeiling]} of the weakest evidence it cites`,
+      );
+    }
+    if (COVERAGE.indexOf(item.profile.coverage) > coverageCeiling) {
+      throw new Error(
+        `claim ${item.id} declares coverage ${item.profile.coverage}, above the `
+        + `${COVERAGE[coverageCeiling]} of the weakest evidence it cites`,
+      );
+    }
+  }
+
+  /**
+   * What a claim may conclude with NO derivation behind it (WP-B01, D-192).
+   *
+   * THE ASYMMETRY THIS CLOSES. `assessDerivationLegality` guards eight ordered
+   * profile axes: moving up any of them needs the matching witness. That rule
+   * runs on the derivation path and only there.
+   * `assertClaimWithinItsEvidence` guards the direct path, and it bounds the
+   * axes evidence can actually be compared against — integrity, authenticity,
+   * coverage — plus grain, scope and the measurement-model reference. Three
+   * ordered axes sat between the two lists and were guarded by neither, so the
+   * entire derivation registry could be bypassed by not using it: one
+   * `integrity: 'unknown'` local observation, one claim declaring
+   * `causality: 'randomized'`, and the kernel stored a randomized causal claim
+   * whose only support was its own declaration.
+   *
+   * WHY THIS IS A FLOOR AND NOT A FOURTH CEILING. The three existing ceilings
+   * read a field off the Evidence and take the weakest. `Evidence` has no
+   * causality field, no decision-fitness field, and no measurement rung — and
+   * cannot: randomization is a property of the ASSIGNMENT PROCEDURE, which is
+   * what a `causal_identification` witness records, and decision fitness is a
+   * property of a DOMINANCE ARGUMENT, which is what a `decision_fitness`
+   * witness records. There is nothing to compare against, so the rule states
+   * what a claim may reach unaided instead.
+   *
+   * THE EXACT RULE, AXIS BY AXIS:
+   *
+   * - `causality` at most `observational`. An observation is the strongest
+   *   causal reading a record of what happened can carry. `quasi_experimental`
+   *   and `randomized` are claims about how exposure was assigned, and the
+   *   derivation path already demands `causal_identification` for them.
+   *
+   * - `decisionFitness` at most `insufficient`. `sufficient` is the only rung
+   *   that licenses acting, and it is what `decision_fitness` witnesses.
+   *   `insufficient` is deliberately NOT refused here even though
+   *   `DECISION_FITNESS` ranks it above `not_assessed`: that ladder orders
+   *   INFORMATION, not permission, and a claim declaring a decision unfit to
+   *   act on cannot inflate anything by saying so. Withholding is the
+   *   behaviour this repository asks for, so the floor must not make it the
+   *   expensive path. `buildDecisionKernelIssuance` writes exactly this shape —
+   *   an observation claim at `insufficient` with no derivation, beside a
+   *   decision claim at `sufficient` that its derivation produces — and the
+   *   two are treated differently here on purpose.
+   *
+   * - `finality` `final` only when EVERY cited evidence carries `finalizedAt`.
+   *   This is the one axis of the three that CAN be read off the evidence, and
+   *   the quantifier matches the trust ceilings rather than the grain rule:
+   *   every citation is a prerequisite, so withdrawing one open record
+   *   reopens the claim, and `final` over a mixture would let one closed
+   *   invoice close an unclosed one.
+   *
+   * - `measurement` above `proxy_unvalidated` only when some cited evidence
+   *   declares a `measurementModelRef` AND that reference RESOLVES (D-224).
+   *   The first half is implied by two other rules — `claim()` refuses a null
+   *   ref above the bottom rung and D-168 refuses a ref no cited evidence
+   *   declares — and is stated so the floor is one readable rule. The second
+   *   half is what those rules stopped short of: they checked a reference was
+   *   WRITTEN and CARRIED, never that it named a model. It is resolved against
+   *   `measurementModels`, the registry this ledger was constructed with,
+   *   through `assessMeasurementBacking`: the reference must name a registered
+   *   model whose `targetConstruct` is the claim's proposition predicate — the
+   *   envelope has no other field saying what the claim is a measurement OF —
+   *   and whose own declared validation reaches the asserted rung. A ledger
+   *   constructed without a registry holds the EMPTY one and refuses every
+   *   direct claim above the bottom rung, because a ledger that knows no
+   *   models can resolve nothing; that is the ledger `Store` builds today,
+   *   and no production issuer writes a direct claim above `proxy_unvalidated`.
+   *   `Evidence` still records WHICH model a record was collected under and
+   *   never how well validated it is, so there is no evidence-side ceiling;
+   *   the derivation path keeps `measurement_validation`, and a claim it
+   *   legalizes is not judged here. A row persisted before this check reads
+   *   back as stored and an identical re-offer is `duplicate`: the floor runs
+   *   on INSERT only, and the read path does not re-judge, upgrade or
+   *   backfill what an earlier issuer wrote.
+   *
+   * `monetaryBasis` is not a ladder, so this floor never ranks one economic
+   * basis above another. The narrow direct-path guard only recognizes the
+   * explicitly unsafe transition from cited `estimated` or collectively
+   * `mixed` evidence to a `billed` or `allocated` Claim; its obligation is
+   * discharged only by a matching typed `monetary_rebasing` witness on a
+   * legal derivation in the same transaction. Other basis combinations stay
+   * outside this floor rather than acquiring an invented ordering.
+   *
+   * WHAT THIS RETURNS. The phrase naming the exceeded floor, or null. The
+   * refusal itself is raised at COMMIT by `assertStrengtheningDischarged`,
+   * because a derivation can only legalize a claim the ledger has already
+   * stored.
+   */
+  private directClaimObligation(item: Claim): string | null {
+    if (CAUSALITY.indexOf(item.profile.causality) > CAUSALITY.indexOf('observational')) {
+      return `declares causality ${item.profile.causality}, above the observational reading a claim may `
+        + 'reach without a derivation carrying a causal_identification witness';
+    }
+    if (DECISION_FITNESS.indexOf(item.profile.decisionFitness) > DECISION_FITNESS.indexOf('insufficient')) {
+      return `declares decision fitness ${item.profile.decisionFitness}, which no claim may reach without a `
+        + 'derivation carrying a decision_fitness witness';
+    }
+    if (item.profile.finality === 'final') {
+      const open = item.evidenceIds
+        .filter((evidenceId) => (this.readEvidence(evidenceId)?.finalizedAt ?? null) === null)
+        .sort();
+      if (open.length > 0) {
+        return `declares finality final while the evidence it cites is not finalized: ${open.join(', ')}`;
+      }
+    }
+    if (MEASUREMENT.indexOf(item.profile.measurement) > MEASUREMENT.indexOf('proxy_unvalidated')) {
+      const backed = item.evidenceIds.some((evidenceId) => (this.readEvidence(evidenceId)?.measurementModelRef ?? null) !== null);
+      if (!backed) {
+        return `declares measurement ${item.profile.measurement} while no cited evidence declares a measurement model`;
+      }
+      // The claim's own `asOf` is the instant the citation is made about
+      // (D-227). A claim that names none asks a windowed model a question it
+      // cannot answer, and the window check withholds rather than reads "now".
+      const backing = assessMeasurementBacking(this.measurementModels, {
+        measurementModelRef: item.measurementModelRef,
+        requiredConstruct: item.proposition.predicate,
+        assertedValidation: item.profile.measurement,
+        ...(item.time.asOf === null ? {} : { asOf: item.time.asOf }),
+      });
+      if (!backing.admissible) {
+        const known = this.measurementModels.ids.length === 0
+          ? 'this ledger holds no measurement models'
+          : `registered: ${this.measurementModels.ids.join(', ')}`;
+        return `declares measurement ${item.profile.measurement} citing ${item.measurementModelRef ?? 'no model'}, `
+          + `and the reference does not resolve to a model that backs it: ${backing.reasons.join('; ')} (${known})`;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Identify the direct monetary transition this boundary must not accept
+   * without a typed rebasing witness. Evidence has no `mixed` member of its
+   * own: disagreement among multiple cited monetary bases is the claim-level
+   * `mixed` state, so the set is collapsed only for that exact purpose.
+   */
+  private directClaimMonetaryObligation(item: Claim): MonetaryStrengtheningObligation | null {
+    const target = item.profile.monetaryBasis;
+    if (target !== 'billed' && target !== 'allocated') return null;
+
+    const citedBases = new Set(
+      item.evidenceIds
+        .map((evidenceId) => this.readEvidence(evidenceId)?.monetaryBasis)
+        .filter((basis): basis is NonNullable<typeof basis> => basis !== null && basis !== undefined),
+    );
+    const sourceBasis: 'estimated' | 'mixed' | null = citedBases.size > 1
+      ? 'mixed'
+      : citedBases.has('estimated')
+        ? 'estimated'
+        : null;
+    if (sourceBasis === null) return null;
+    return Object.freeze({
+      sourceBasis,
+      targetBasis: target,
+      reason: `declares monetary basis ${target} from cited evidence basis ${sourceBasis}; this direct strengthening requires a discharging monetary_rebasing witness`,
+    });
+  }
+
+  /**
+   * Refuse a derivation whose conclusion, or any stored conclusion it rests
+   * on, is not below what its chain licenses (D-222).
+   *
+   * The chain is the candidate plus every stored derivation reachable
+   * upstream from its input claims, with each claim in between. Leaves are
+   * claims no stored derivation produces, taken at face value -- the deliberate
+   * edge `abstract.ts` declares. A stored step that does not hold taints
+   * everything downstream of it and the refusal names it: a ledger written
+   * before this gate can hold such a step, and the answer is not to trust it
+   * because it is on record.
+   *
+   * WHAT LIFTS THE MONEY AXIS. A `monetary_rebasing` witness carries no rung
+   * to lift to; it declares a pair, and that pair is passed to the analysis as
+   * the transition licensed for the step citing it -- only from a registered
+   * record that reads `supported` (D-190), on every step of the chain alike.
+   * D-201's per-source content check stays where it is; the chain applies the
+   * declaration only where the step's meet holds the `from` basis, which is
+   * what makes `mixed -> billed` insufficient for a leaf that was `estimated`.
+   */
+  private assertChainWithinBound(candidate: Derivation, output: Claim): void {
+    const producers = new Map<string, Derivation[]>();
+    const rows = this.db.prepare('SELECT derivation_id FROM epistemic_derivations ORDER BY derivation_id').all() as unknown as Array<{ derivation_id: string }>;
+    for (const stored of rows) {
+      if (stored.derivation_id === candidate.id) continue;
+      const step = this.readDerivation(stored.derivation_id);
+      if (step === null) throw new Error(`stored derivation ${stored.derivation_id} has no payload`);
+      const existing = producers.get(step.outputClaimId);
+      if (existing === undefined) producers.set(step.outputClaimId, [step]);
+      else existing.push(step);
+    }
+
+    const claims = new Map<string, Claim>([[output.id, output]]);
+    const derivations = new Map<string, Derivation>([[candidate.id, candidate]]);
+    const stepBasisTransitions = new Map<string, ReadonlyArray<readonly [MonetaryBasisStatus, MonetaryBasisStatus]>>();
+    stepBasisTransitions.set(candidate.id, this.declaredRebasings(candidate));
+    const queue = [...candidate.inputClaimIds];
+    while (queue.length > 0) {
+      const claimId = queue.pop() as string;
+      if (claims.has(claimId)) continue;
+      const item = this.readClaim(claimId);
+      if (item === null) throw new Error(`unknown input claim: ${claimId}`);
+      claims.set(claimId, item);
+      for (const step of producers.get(claimId) ?? []) {
+        if (derivations.has(step.id)) continue;
+        derivations.set(step.id, step);
+        stepBasisTransitions.set(step.id, this.declaredRebasings(step));
+        queue.push(...step.inputClaimIds);
+      }
+    }
+
+    const analysis = analyzeDerivationChain({
+      claims: [...claims.values()],
+      derivations: [...derivations.values()],
+      stepBasisTransitions,
+    });
+    if (analysis.withinBound) return;
+    const detail = analysis.violations
+      .map((found) => {
+        const where = found.derivationId === candidate.id
+          ? `concludes ${found.claimId}`
+          : `rests on ${found.claimId}, produced by stored derivation ${found.derivationId},`;
+        return `${where} above what its chain licenses: ${found.violations.map((axis) => axis.message).join('; ')}`;
+      })
+      .join('. ');
+    throw new Error(`derivation ${candidate.id} ${detail}`);
+  }
+
+  /** The re-basings a step's registered, supported `monetary_rebasing` witnesses declare. */
+  private declaredRebasings(step: Derivation): ReadonlyArray<readonly [MonetaryBasisStatus, MonetaryBasisStatus]> {
+    const declared: Array<readonly [MonetaryBasisStatus, MonetaryBasisStatus]> = [];
+    for (const reference of step.witnesses) {
+      if (reference.kind !== 'monetary_rebasing') continue;
+      const registered = this.readWitness(reference.id);
+      if (registered === null || registered.epistemic !== 'supported' || registered.basisChange === undefined) continue;
+      declared.push([registered.basisChange.from, registered.basisChange.to]);
+    }
+    return Object.freeze(declared);
+  }
+
+  private ensureKinds(ids: readonly string[], kind: DagNode['kind']): void {
+    for (const id of ids) {
+      const node = this.node(id);
+      if (node === null) throw new Error(`unknown ${kind}: ${id}`);
+      if (node.kind !== kind) throw new Error(`${id} is not a ${kind} node`);
+    }
+  }
+
+  private insertEdge(edge: DagEdgeInput): AppendResult {
+    const existing = row<StoredEdgeRow>(this.db.prepare('SELECT from_id, to_id, relation FROM epistemic_edges WHERE from_id = ? AND to_id = ? AND relation = ?').get(edge.from, edge.to, edge.relation));
+    if (existing !== null) return 'duplicate';
+    this.db.prepare('INSERT INTO epistemic_edges (from_id, to_id, relation) VALUES (?, ?, ?)').run(edge.from, edge.to, edge.relation);
+    return 'inserted';
+  }
+}

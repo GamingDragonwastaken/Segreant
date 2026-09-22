@@ -8,7 +8,8 @@ the full design reasoning.
 
 This is a genuinely separate package (its own `package.json`) so the main
 `fiscus` CLI/proxy stays at zero runtime dependencies. `pg` (the standard
-Postgres driver) lives only here.
+Postgres driver) and `jose` (JWS verification for OIDC ID tokens, D-223)
+live only here.
 
 ## What this does today
 
@@ -60,7 +61,7 @@ Environment variables:
 | `TEAM_SERVER_EXPOSE_DEVELOPER_BREAKDOWN` | no (default off) | Set to exactly `true` to turn on `GET /dashboard/developers`. Off by default — opt-in, same fail-closed posture as `TEAM_SERVER_ADMIN_TOKEN`. |
 | `TEAM_SERVER_MIN_COHORT` | no (default `5`) | The k-anonymity floor: `/dashboard/projects` withholds any single project's numbers if fewer than this many distinct developers contributed to it, and `/dashboard/developers` withholds its whole distribution below this many total developers. Same default `cohort.ts` already uses for the single-machine per-user value feature. |
 | `PORT` | no (default `8092`) | Listen port. |
-| `HOST` | no (default `0.0.0.0`) | Listen address. Unlike Fiscus's own local dashboard, this server is *meant* to be reached across your network. |
+| `HOST` | no (default `127.0.0.1`) | Listen address. Loopback is the safe default; set this explicitly only behind the separately verified TLS/OIDC/Postgres deployment gate. |
 
 ### Dashboard aggregate authorization
 
@@ -82,7 +83,11 @@ infer group membership or generic roles from provider-specific claims. `GET
 This process speaks plain HTTP. Put a reverse proxy (nginx, Caddy, your cloud
 load balancer) in front of it for TLS — that's your infrastructure's job, not
 this process's; see `docs/TEAM-TIER-DESIGN.md` §1's "Fiscus provides the
-software, never the operation" framing.
+software, never the operation" framing. OIDC discovery/JWKS retrieval is
+HTTPS-only except for literal loopback test endpoints, follows no redirects,
+limits response bodies, and requires discovered JWKS to remain on the issuer
+origin. An explicitly configured HTTPS `OIDC_JWKS_URL` is the pin for providers
+that intentionally publish keys on another origin.
 
 ## Registering a developer
 
@@ -171,9 +176,18 @@ opt-in, k-anonymized distribution — never a name attached to a number.
 
 ## Security notes on the OIDC verification (`src/oidc.ts`)
 
-Hand-rolled against `node:crypto` — no `jsonwebtoken`/`jose` dependency, so
-`pg` stays this package's only one. Two easy-to-get-wrong details it handles
-explicitly:
+The JWS step — importing a candidate JWK and verifying the compact signature
+— is `jose`'s (`importJWK` + `compactVerify`, exact-pinned in
+`package.json`; D-223 records the decision). Everything around it is this
+package's responsibility and is tested in `test/oidc.test.ts` and the
+adversarial matrix in `test/oidc-adversarial.test.ts` rather than assumed of
+the library: canonical base64url of every segment before any key is fetched,
+the `RS256`/`ES256` allowlist read before `jose` sees the token, JWKS
+discovery (the document's own `issuer` must equal the configured one),
+caching and the forced-refresh cooldown, JWK metadata reconciliation
+(`kty`/`alg`/`use`/`key_ops`/`crv`), trying every candidate that shares a
+`kid` (a present-but-empty or non-string `kid` matches nothing), and every
+relying-party claim rule. Two easy-to-get-wrong details it handles explicitly:
 
 - **Algorithm whitelist.** Only `RS256`/`ES256` are accepted. A token with
   `alg: "none"` (a real historical JWT vulnerability class) is rejected
@@ -181,9 +195,9 @@ explicitly:
   confusion" attack where an attacker signs a forged token using the issuer's
   *public* RSA key as an HMAC secret.
 - **ES256 signature encoding.** JWT ES256 signatures are raw `r‖s` (IEEE
-  P1363), not the DER/ASN.1 encoding `node:crypto` uses by default for ECDSA —
-  handled via the `dsaEncoding: 'ieee-p1363'` option. Getting this wrong
-  silently rejects every genuine ES256 token.
+  P1363), not the DER/ASN.1 encoding `node:crypto` uses by default for ECDSA.
+  `jose` handles the encoding; the adversarial matrix keeps a genuine ES256
+  token passing so a regression here cannot be silent.
 
 Time claims use a 60-second clock-skew allowance for future-issued and
 not-before tokens. When an ID token has more than one `aud` value, its `azp`
@@ -202,13 +216,22 @@ logic without a live database (`test/fakeStore.ts` stands in for Postgres,
 implementing the exact same weighting semantics as the real SQL — see its
 header comment) and without a real SSO provider (`test/fakeIdp.ts` runs a real
 local OIDC-shaped server, signing tokens with genuine RS256/ES256 keypairs, so
-`oidc.ts` is proven against real signatures, not just assumed to work). 48
+`oidc.ts` is proven against real signatures, not just assumed to work). 61
 tests total: `test/aggregate.test.ts` covers the privacy-gating logic in
 isolation (k-anonymity boundaries, the opt-in gate, the $0-cost rate-exclusion
 edge case), and `test/server.test.ts`'s dashboard tests push hand-computed
 rollups through the real HTTP layer and assert exact expected numbers — chosen
 specifically so a naive (unweighted) average would produce a *different*,
 wrong answer, not just an untested one.
+
+The server accepts the additive team-rollup v2 protocol as well as v1. A v2
+project carries a canonical exact effective/source attribution object; the
+server validates that object after signature verification, retains the signed
+body in `rollups.body`, and stores the same project lineage in the nullable
+`rollup_projects.economic_json` JSONB column. The existing numeric columns stay
+as compatibility aggregates for older clients and dashboards. This proves
+protocol and semantic validation in the fake-store HTTP suite, not provider
+authority, causal truth, or execution against a live Postgres instance.
 
 It does not exercise `schema.sql` or the real SQL in `src/store.ts`'s
 `PgRollupStore` (including the two new aggregate queries) against an actual
