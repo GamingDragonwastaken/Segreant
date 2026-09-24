@@ -7,7 +7,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, chmodSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, chmodSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Store, type RequestRow } from '../src/store/db.ts';
@@ -64,6 +64,22 @@ test('findGitRepos: an unreadable directory is disclosed, not silently dropped',
   const blocked = dir(root, 'blocked');
   const okRepo = makeRepo(dir(root, 'ok-repo'));
   chmodSync(blocked, 0o000);
+  let premiseHolds = true;
+  try {
+    readdirSync(blocked);
+    premiseHolds = false;
+  } catch {
+    // expected: the directory is now unreadable to this process
+  }
+  if (!premiseHolds) {
+    // Root (uid 0, e.g. a container) bypasses POSIX mode bits, so the directory
+    // stays readable and there is nothing to disclose. The non-root ubuntu and
+    // macOS CI legs exercise this for real.
+    chmodSync(blocked, 0o755);
+    rmSync(root, { recursive: true, force: true });
+    t.skip('mode 000 did not make the directory unreadable to this process (running as root?)');
+    return;
+  }
   try {
     const res = findGitRepos([root]);
     assert.ok(res.unreadableDirs.includes(blocked), 'the unreadable dir is disclosed, not treated as empty');
