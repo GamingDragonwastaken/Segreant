@@ -1,7 +1,7 @@
 {
   "name": "fiscus",
   "version": "0.1.0",
-  "description": "Local-first FinOps and evidence-of-value layer for AI coding-agent spend.",
+  "description": "Local-first ledger and spend guard for AI coding agents: metering, budgets, provider-bill reconciliation, cost allocation and outcome evidence.",
   "type": "module",
   "engines": {
     "node": ">=24.0.0"

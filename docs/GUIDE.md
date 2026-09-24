@@ -1,0 +1,767 @@
+# Fiscus guide
+
+The complete operator reference: every command, the budget and attribution
+model, Return on Intelligence, provider billing evidence, reconciliation,
+allocation, privacy, and recovery. The [README](../README.md) is the short
+version; [GETTING-STARTED.md](GETTING-STARTED.md) is the first-run walkthrough.
+
+Commands are written as `fiscus <verb>`. From a cloned checkout that is not
+linked onto your `PATH`, run the same thing as `npm run fiscus -- <verb>`.
+
+**Contents:** [Egress control](#egress-control) · [Commands](#commands) · [Budgets](#budgets) ·
+[Attribution headers](#attribution-headers) ·
+[Return on Intelligence](#the-point-return-on-intelligence) ·
+[Budget controls and model trials](#budget-controls-and-model-trials) ·
+[How it works](#how-it-works) · [Provider billing evidence](#provider-billing-evidence-local-import-v1) ·
+[Reconciliation](#reconciliation-project-day-grain) ·
+[Cost-centre allocation](#cost-centre-allocation) ·
+[Beyond Anthropic & OpenAI](#beyond-anthropic--openai) ·
+[What's real, what's not](#whats-real-whats-not) · [Privacy](#privacy) ·
+[Backup and recovery](#backup-and-recovery) ·
+[Diagnostics](#diagnostics-and-support-bundles)
+
+---
+
+## Egress control
+
+Fiscus starts in **local-locked** mode. Before a cloud provider can receive
+routed traffic, grant only the exact route you intend to use. For the default
+OpenAI Responses/Chat API path:
+
+```bash
+fiscus egress apply --apply --mode controlled_cloud \
+  --id openai-inference --purpose provider_inference \
+  --data-class provider_request --method POST \
+  --origin https://api.openai.com --path-prefix /v1/
+```
+
+For Anthropic, add a second exact rule (this preserves the OpenAI rule):
+
+```bash
+fiscus egress apply --apply --mode controlled_cloud \
+  --id anthropic-inference --purpose provider_inference \
+  --data-class provider_request --method POST \
+  --origin https://api.anthropic.com --path-prefix /v1/
+```
+
+Use `fiscus egress status` to inspect the active mode/rules and
+`fiscus egress verify` to verify the local receipt chain. Return to
+`local_locked` with `fiscus egress apply --apply --mode local_locked`. These
+controls govern Fiscus's own HTTP(S) transport; they are not a machine-wide
+firewall or a provider-data-retention guarantee. A genuinely absent receipt
+file may establish the first genesis record; a present empty, malformed,
+truncated, hash-invalid, unreadable, or lock-failed history blocks the request
+before DNS or dial and is never silently reset with a null predecessor. Repair
+or restore the history, then rerun `fiscus egress verify`. If a lock is stale,
+first confirm that no Fiscus writer is active, then remove only that lock; Fiscus
+never auto-deletes an abandoned lock or restarts the history as genesis.
+
+When working from a checkout, `npm start` and `npm run fiscus` rebuild the full
+Node/browser output before launching; this keeps an ignored, stale `dist/`
+tree from silently running older source.
+
+## Commands
+
+Onboarding — where you are, and how spend gets in with no wiring at all:
+
+```
+fiscus guide                 Where you are + the single next step, read from your
+                                real state — also what bare `fiscus` shows  (--json)
+fiscus scan [path]           One-command setup: find the AI tools + git repos on
+                                this machine, preview a plan (read-only). --setup
+                                imports every detected tool and correlates every repo
+                                into per-project RoI, plus a read-only inventory of
+                                other AI tools seen (not yet imported). --deep widens
+                                the walk.
+fiscus import <tool|all>     NATIVE metering, no routing — reads the usage a tool
+                                already logs locally (works on subscriptions the proxy
+                                can never see). Tools: claude-code, opencode, codex.
+                                Idempotent; --watch keeps it live.  (--days N, --json)
+fiscus discover              Correlate already-imported projects into per-project
+                                RoI without re-importing — `scan --setup`'s other half
+fiscus connect <tool>        Wire a tool through the proxy as a connected source
+                                (opencode, antigravity, or any OpenAI-compatible API)
+fiscus sources                Spend by connected source, at its honest depth
+                                (--all for all-time, --json)
+```
+
+Metering, governance, and value:
+
+```
+fiscus start                 Start the proxy (:8090) + dashboard (:8091)
+fiscus egress status         Inspect Fiscus-process egress mode, exact cloud rules,
+                                and local receipt-chain health. `egress plan`
+                                previews a change; `egress apply --apply` persists it.
+fiscus today | week | month  Show spend for a window        (--json)
+fiscus roi --repo <path>     Return on Intelligence — four value lenses composed
+                                into one index (--labor-rate $/hr, --tsf X, --json)
+fiscus saved --repo <path>   Manual work-weeks reclaimed vs measured AI hours —
+                                honestly banded, split by task type (--window D, --json)
+fiscus frontier --repo <p>   Compare models on like tasks; lower-cost same-outcome trials + local headroom
+fiscus usage                 RoI for usage without code signals (chat/research),
+                                scored from reported outcomes
+fiscus judge                 Score a real session's AI-assisted efficiency —
+                                algorithmic by default; opt into a local/hosted LLM
+                                judge via config.judge.*. Full-content tiers read
+                                the session's own on-disk transcript ephemerally
+                                (Claude Code, opencode, Codex — bounded excerpt,
+                                nothing persisted)
+                                (--session <id>, --window D, --project <name>, --json)
+fiscus team                  Per-user value extraction — opt-in, distribution-only,
+                                k-anonymous (--me <user> for your own view, --json)
+fiscus team push --url <u>   Cross-machine: sign + push this window's per-project
+                                value/RoI to a team server YOU run (Fiscus hosts
+                                nothing). --dry-run to preview, --pubkey to publish
+                                this machine's rollup identity (--window D, --project
+                                <name>, --json)
+fiscus budget --recommend    Evidence-limited cap recommendation from usage +
+                                realized value (applies a cap only; no routing or
+                                budget reallocation)
+fiscus alerts                Governance alerts — spikes, throttling, runaway, value
+                                craters (--repo for value; --json; exits 1 if critical).
+                                Deliver to your webhook: --set-webhook <url>, then --notify
+                                (cron it; metadata only — never prompts/code/keys)
+fiscus export                Export the request ledger for BI (--csv|--json, --days N|
+                                --all, --out <file>); dashboard has a ↓ CSV button too
+fiscus realize --repo <path> Realization Standard — % of spend that became
+                                verified durable outcomes      (--window D, --json)
+fiscus report --kind K       Wire an outcome gate: tested|merged|shipped|incident
+                                --commit <hash> [--verdict pass|fail] [--detail "…"]
+fiscus exec -- <command>     AMBIENT outcome capture — wrap a command once (e.g.
+                                `npm test`); every run reports its own exit code
+fiscus receipt --repo <path> Emit signed value receipts (--pubkey to publish your
+                                identity; --verify <file> --key-id <id> to verify + pin)
+fiscus yield --repo <path>   Artifact persistence (legacy yield lens) — retained introduced lines per $
+fiscus budget ...            Set caps (see below)
+fiscus audit --repo <path>   Cost per commit from git history (--limit N, --json)
+```
+
+Operations:
+
+```
+fiscus init                  Write default config + print setup steps
+fiscus doctor                First-run health check — config, DB, proxy, caps, pricing
+fiscus config                Show config and file paths      (--json)
+fiscus pricing --refresh     Update the rate card from the community price feed
+                                (--auto opts into a refresh check on start when stale)
+fiscus pricing --coverage    Read-only per-model historical rate-card and match
+                                evidence (--days N or --all; --json for automation)
+fiscus reprice               Re-cost estimated rows against the current rate card
+                                (only rows the card now resolves exactly; dry-run
+                                by default, --apply writes)
+fiscus baseline              Show the Lift manual-minutes population prior: source,
+                                age, task-type count (--json). Update it: baseline
+                                --refresh --url <manifest> — no default source exists;
+                                unlike pricing, METR publishes research, not a feed
+fiscus project               Spend by project with aliases applied (--json). Tool
+                                launch dirs fragment one real project across labels;
+                                merge them: project merge <label...> --into <name>
+                                (query-time only, raw rows untouched — undo with
+                                project unalias <label>). --coverage reports how
+                                each label was obtained — declared, path-inferred,
+                                or never attributed at all
+fiscus prune                 Prune old rows and compact the DB
+fiscus backup --out <file>  Create a verified local SQLite ledger snapshot
+fiscus pack export --out <file>
+                                Write the epistemic ledger as a .fiscuspack: every
+                                record bound by digest, omissions and redactions
+                                stated ([--sign <private-key.pem>]); pack verify
+                                <file> [--trust <key>] and pack inspect <file>
+                                check the bytes and read the manifest — truth is
+                                never evaluated
+fiscus plugin run --manifest <file> --request <file> --exec <path> --scope k=v
+                                One bounded exchange with a plugin process; preview
+                                the kernel Evidence it would append (self-asserted,
+                                completeness unknown), --apply to append it
+fiscus restore --from <file> --out <file>
+                                Preview a snapshot, or create a new verified
+                                database with --apply (never overwrites the active ledger)
+fiscus demo                  Seed isolated, labeled synthetic data so every surface
+                                populates with no API key (--serve starts the dashboard
+                                on it; --clear removes it). Append --demo to today,
+                                alerts, usage, or start to view the demo data.
+```
+
+### Budgets
+
+```bash
+fiscus budget --daily 25 --soft 18 --session 5 --runaway 2 --window 60
+```
+
+By default the cap enforces on **live proxy spend only** — the traffic it can
+actually block. Imported subscription usage (Claude Code/opencode/codex logs) is
+metered and shown everywhere, but doesn't trip the cap: it's sunk cost observed
+after the fact, and letting it block live traffic froze a proxy that had spent
+almost nothing. Prefer one cap over total observed spend?
+`fiscus budget --include-imported on`.
+
+| Flag | Meaning |
+|---|---|
+| `--daily N` | Hard daily cap — requests are blocked once today's spend hits `N`. |
+| `--soft N` | Soft daily threshold — a warning header is added past `N` (no block). |
+| `--session N` | Hard per-session cap (`X-Fiscus-Session-Id`). |
+| `--runaway N` | Block when spend in the sliding window exceeds `N` (loop guard). |
+| `--window S` | Runaway window length in seconds (default 60). |
+
+Pass `off` to clear any cap (e.g. `--daily off`). Caps are opt-in; a fresh
+install meters but never blocks.
+
+### Attribution headers
+
+Group spend by project, developer/team, session, or task by sending custom
+headers (your agent or a wrapper script sets these):
+
+```
+X-Fiscus-Project: backend-refactor
+X-Fiscus-User: alice@team          # per-developer / per-team FinOps
+X-Fiscus-Session-Id: <uuid>
+X-Fiscus-Task-Weight: 1.5
+```
+
+Spend then rolls up by user in `fiscus today`, the dashboard's "By user"
+card, and the CSV export. Unset → reported as `unassigned`. These headers are
+stripped before the request is forwarded upstream; the provider receives the
+request without Fiscus's local attribution labels.
+
+**These labels are assertions, not verified identity.** Anything on this machine
+that can reach the proxy can set them, so Fiscus records *how* each project label
+was obtained alongside the label itself:
+
+| Basis | Meaning |
+| --- | --- |
+| `client_declared` | An `X-Fiscus-Project` header — or a `/fiscus/<project>/` base-URL prefix — on a proxied request. Self-asserted either way. |
+| `tool_log_repo_resolved` | The tool recorded a working directory, and it resolved to a git repository on this machine. The label is that repository's root name. |
+| `tool_log_inferred` | Derived from a working directory the tool recorded, which is not inside a git repository. |
+| `tool_log_fallback` | The tool recorded no usable path, so its own name was used. Not a real project. |
+| `unattributed` | The request declared no project. Stored under `default`, but it is not one. |
+| `synthetic_demo` | A demo row that declines to depict any route. Retained for stores seeded before the demo covered attribution; the current seed does not produce it. |
+| `legacy_unknown` | Recorded before attribution lineage existed. Never backfilled or guessed. |
+
+**Imports resolve the repository, not the folder name.** Claude Code and Codex
+record the working directory a session ran in, which is routinely a
+subdirectory — so the old basename rule split one repository's spend across
+`web`, `api`, `packages`, and merged unrelated repositories that share a common
+leaf name. The importers now ask git for the working-tree root, which produces
+the same label `fiscus realize` computes for that repo and records
+`tool_log_repo_resolved`. Outside a repository it degrades to the previous
+behaviour and says so. Existing rows are never rewritten, so an import that
+relabels reports it and points at `fiscus project alias` — the ledger records
+what it recorded.
+
+**A client with no headers can still declare a project.** Antigravity's
+custom-provider form has a base URL and no custom-headers field, so
+`X-Fiscus-Project` is simply unavailable to it. The proxy therefore also accepts
+the project as a path prefix — `http://localhost:8090/fiscus/backend-api/v1` —
+which it strips before forwarding, so the provider sees an unchanged request.
+The header wins if both are sent. Fiscus offers the URL and will not configure
+it: a provider entry is IDE-wide, so one baked-in project would mislabel every
+other repository. It is your declaration, recorded as `client_declared`, and
+never verified.
+
+`fiscus connect opencode` sets the project header for you **only when the config
+it edits is project-scoped** — an `opencode.json(c)` in the repo itself, which by
+construction applies to that project alone. For a global config it deliberately
+sets nothing and says so: one label baked into a config that governs every
+directory would be wrong in all the others, and a confidently wrong project is
+worse than an honest blank. To attribute a globally-configured tool, keep an
+`opencode.json` in the repo and re-run connect there.
+
+Inspect the split with `fiscus project --coverage` (`--json` for the full result);
+it also appears under each bar of the dashboard's "By project" card and as an
+`attributionBasis` column in the CSV export. Recording the basis changes no
+totals — the same spend rolls up the same way. This is deliberately **not**
+chargeback-grade attribution: that would require a verified collector identity,
+which Fiscus does not have.
+
+---
+
+## The point: Return on Intelligence
+
+Capping waste is the floor. The question that matters is **how much you actually
+get from the AI** — and neither "tokens consumed" nor "lines of code" ever
+answered it. Fiscus's core is **Return on Intelligence (RoI)**: an
+evidence-limited measurement of realized AI value. The current implementation
+and evidence are strongest for instrumented coding-agent workflows; the
+underlying accounting model is intended to extend to broader AI usage, but that
+intention is not a claim of present coverage. It composes four value lenses so a
+strong observed lens cannot compensate for a weak necessary lens.
+
+> **RoI Index** = geometric mean of **Realization · Acceptance · Lift · Impact** —
+> if any one lens collapses, the index collapses. The denominator is **tokens +
+> the human effort it cost** (priced at a labor rate), not tokens alone.
+
+That index is unitless on purpose — it answers *"how well is the intelligence
+working, across every axis at once?"*, and a geometric mean resists gaming because
+one weak lens drags the whole number down. But a budget owner also asks a blunter
+question: **did it pay for itself, in dollars?** So RoI has a second, independent
+face:
+
+> **Observed value scenario** ℛ = **realized manual-equivalent value ÷ honest
+> cost**. Value is the manual time the realized work would otherwise have taken,
+> priced at your labour rate and discounted by first-pass acceptance; cost is
+> **tokens + measured supervision time**. This scenario describes the recorded
+> workflow under stated baseline, labour-rate, realization, and supervision-time
+> assumptions. It cannot establish what the same eligible work would have
+> produced without AI, so it is not a causal break-even result.
+
+The two faces are deliberately **never multiplied**. The dollar scenario and
+the Lift lens answer distinct but observational questions; multiplying them
+would turn an index-scale lens into a financial causal claim. A
+supervision-time denominator prevents a token-only calculation from presenting
+an implausible scenario as evidence. Fiscus refuses to print a dollar scenario
+until it has measured supervision time to divide by. A causal net benefit result
+requires a registered randomized study with a frozen protocol, pre-exposure
+assignment, execution/outcome lineage, a predeclared quality guardrail, and a
+conservative confidence bound. The initial local study protocol is documented
+in [CAUSAL-EVIDENCE-PROTOCOL.md](CAUSAL-EVIDENCE-PROTOCOL.md).
+
+This guide, the README and both dashboard registers keep these claims separate: the ordinary
+**Observed value scenario** is manual-equivalent value under recorded assumptions;
+it is not a causal return or a claim that AI paid for itself. A qualified causal
+net benefit result appears only when the separate registered-study lane clears its
+protocol, cost, outcome, quality, and conservative-bound gates. Until then the
+causal card says **not established** and points to the next evidence step.
+
+The four lenses, each answering a different real question (full definitions in
+**[docs/RETURN-ON-INTELLIGENCE.md](RETURN-ON-INTELLIGENCE.md)**):
+
+| Lens | Question | 
+|------|----------|
+| **Realization** | Did the spend become something real and kept? |
+| **Acceptance** | Did you keep what it gave you, first try? (edit-distance, in-session) |
+| **Lift** | Was it worth it vs. not using it / a cheaper model? (behavioral, not self-report) |
+| **Impact** | Of what was realized, how much actually mattered? |
+
+A lens with no signal reads `uninstrumented` and is excluded — never faked — and
+the report shows your lens coverage. The path to a higher number is to wire more
+signal, not to game one. `fiscus roi --repo .`
+
+### The Realization substrate
+
+Underneath RoI, the **Realization Standard** verifies that a coding outcome is
+real. Each commit travels a funnel of eight objective gates — **Proposed →
+Accepted → Committed → Tested → Merged → Shipped → Survived → Clean** — and a
+unit is *realized* when it reaches the end with no failure. From that:
+
+- **Realization Rate** *(production, dollar-free)* — share of work that reached
+  verified durable value. The answer to "are we turning AI into real outcomes?"
+- **Realized Value Rate** *(the money lens)* — share of *spend* that reached
+  realized. Cost matched to outcome: an AI P&L. Money is a lens here, never the
+  definition of production.
+- **First-Pass Acceptance** *(collaboration)* — how much of what the AI
+  *proposed* actually shipped, measured by edit-distance between the proposed
+  diff (seen in the proxy path) and what was committed. This is the signal only
+  an in-path tool can capture, and it's available in the same session.
+
+What makes it a *standard* and not a dashboard: every realized unit emits a
+**Value Receipt** — an ed25519-signed, portable record of `cost → gate verdicts →
+outcome` that anyone can verify without access to your source (`fiscus
+receipt`). And `unknown` is never `fault`: a gate you haven't wired stays
+`unknown` and the report shows your instrumentation coverage ("3 of 8 gates
+wired"). The path to a higher number is to wire more gates — not to game one.
+
+```bash
+fiscus realize --repo .            # the funnel + the three headline numbers
+fiscus report --kind tested --commit HEAD   # wire an outcome gate
+fiscus receipt --repo .            # emit signed value receipts
+```
+
+The full model is in **[docs/THE-STANDARD.md](THE-STANDARD.md)**. The older
+**AI Yield** (`fiscus yield`) remains as a compatibility command for one
+*artifact-persistence lens* — retained introduced lines per dollar. It is not a
+quality grade and does not establish correctness, maintainability, business
+value, or AI/human contribution. The Standard, not this lens, is the headline.
+The historical account of why the research's "AI Efficiency Score" and our own
+first Yield-only attempt were rebuilt is in [docs/RESEARCH-REVIEW.md §3](RESEARCH-REVIEW.md).
+
+## Budget controls and model trials
+
+**Current evidence boundary (supersedes the historic generic-allocation wording
+below):** Fiscus does **not** issue a default reallocation instruction across
+unlike task types or projects. Raw RoI cells are not causal or generally
+comparable, so the CLI and dashboard withhold those actions. The current
+actionable decision support is the within-task, review-only cheaper-model trial
+below; any generic raw allocation arithmetic is retained only as an explicitly
+`exploratory_raw` offline scenario, never a forecast or applied budget change.
+
+Measuring RoI informs the controls and experiments below. It does not turn raw
+historical rankings into a default budget-allocation action:
+
+- **A value-aware cap** — `fiscus budget --recommend` derives a daily budget
+  from real usage (p90 of active days, after at least seven active days),
+  tightened when realized value is low, with projected monthly waste called
+  out.
+- **The budget owner's view** — because realized value is **persisted** (not
+  recomputed live from a working copy), a manager's dashboard shows per-project
+  RoI — *which team's AI spend is paying off* — without a single repository on
+  their machine. The person who holds the budget finally gets to see whether it
+  worked.
+- **Cheaper-model trials** — `fiscus frontier` compares models only within the
+  same task type. It surfaces a lower-cost candidate only when it has no worse
+  observed realized-outcome rate across at least three mature units per model.
+  Each model is priced by **its own attributed spend**, never by the whole
+  attribution window it worked in: a unit whose window is more than 20% other
+  models cannot price a single model, so it is excluded — and the excluded count
+  is reported alongside the result rather than quietly shrinking the sample.
+  A result is labelled **observational separation** only when the anytime-valid
+  outcome bounds separate *and* that separation survives one outcome flipping the
+  wrong way on each side; anything resting on a single observation stays a
+  **trial**, not a proven switch. Neither label is causal evidence — models are
+  not assigned, so a separation describes the observed comparison, not the
+  models. It never changes routing.
+- **It says when a comparison is confounded.** Cost-per-unit is blind to how big
+  each unit was, so if the two models' median changed lines differ by more than
+  2×, "cheaper" may just mean "smaller work" — that is named on the result and
+  caps it at a trial no matter how cleanly the statistics separate. Beyond
+  flagging the size gap, the saving is **re-checked against work volume**: the
+  same dollars are divided by changed lines as well as by commit count, and if
+  the candidate is cheaper per commit but not per hundred lines, what was
+  measured was smaller work rather than a cheaper model. Both figures are shown.
+  A cohort is also capped when its commits come from **too few working
+  sessions** — commits within eight hours of each other share an author, a task,
+  a codebase state and one decision to use that model, so forty-eight commits
+  from one sitting are not forty-eight trials. And because a price comparison is
+  only meaningful between comparable prices, a result is capped when the two
+  sides were **priced on different bases** (an exact list price against a
+  fallback rate for an unrecognized model), when the sample **spans a rate-card
+  revision** so pre- and post-change amounts pool into one per-unit cost, or
+  when the pricing lineage was never recorded at all. The same applies when the
+  two models were used in non-overlapping periods, which makes it an era
+  comparison as much as a model one. Unclassified (`other`) work is never
+  treated as a like-work cohort, and because every model pair scanned is another
+  chance at a false positive, the 5% is split across all of them — three models
+  in one task type is two comparisons, not one.
+- **It ships the assumptions it cannot check** on every result: the intervals
+  still treat each commit as an independent trial even though clustering now
+  caps the label; the model was chosen by an operator, not assigned, so easier
+  work may have gone to the cheaper one; and the pair under test was chosen by
+  searching on the very outcome being tested, over a sliding window whose past
+  verdicts can change on re-run, each of which weakens the anytime-valid
+  guarantee the interval would otherwise carry.
+
+Historical-equivalent headroom is disclosed as a local planning comparison, not
+a forecast, provider-billed saving, or guarantee. It is computed from local
+list-price estimates, so it is not provider-billed cost. The result must be
+re-measured after any operator-led trial.
+
+## How it works
+
+```
+IDE / Agent → ANTHROPIC_BASE_URL/OPENAI_BASE_URL → Fiscus proxy (:8090)
+                                                       │ price locally, log to SQLite
+                                                       ▼ forward, keys untouched
+                                                  api.anthropic.com / api.openai.com
+```
+
+1. **Point your tools at it** — base-URL override. No certificate to install.
+2. **Configured traffic is metered when usage is available** — the proxy reads
+   usable upstream usage (streaming or not), assigns a local estimate from a
+   versioned rate card, and logs it on-device. Prompt bodies are not stored by
+   this metering path.
+3. **Runaway spend is capped** — soft warnings, hard caps, and a velocity guard
+   can halt a looping agent before further proxy-routed provider usage.
+
+The rate card is a local list-price estimate. Every newly calculated ledger row
+retains the exact rate-card SHA-256, source kind, and exact/family/fallback
+match path that produced it; `fiscus reprice --apply` keeps an append-only
+before/after event instead of silently overwriting the estimate. Tool-reported
+and demo values are labelled separately. None of these labels claim
+provider-invoiced, discounted, credited, taxed, or reconciled cost.
+
+A reprice also moves the money that stored realized-value snapshots were built
+from, so `--apply` re-attributes those snapshots in the same transaction, on the
+basis each one recorded (its own project's spend, or the project-blind window
+sum). Only the dollars are recomputed — gate verdicts, maturity, and realized
+outcomes are independent of price and are never touched, so a reprice cannot
+change whether work realized. Snapshots written before that basis was recorded
+cannot be reproduced faithfully; rather than guess, they keep their original
+amounts, are marked as carrying pre-reprice costs on the CLI and the dashboard,
+and are excluded from cheaper-model comparison until `fiscus realize` recomputes
+them. Seeded demo units are neither: their costs are asserted by the seed, not
+summed from the ledger, so a ledger reprice leaves them alone.
+
+The dashboard's **Rate-card health** panel shows the active card separately
+from the historical, per-model evidence cohorts that produced the amounts in
+the selected window. It never merges different card revisions or match paths,
+and it never refreshes pricing or reprices history.
+
+Full design in **[docs/ARCHITECTURE.md](ARCHITECTURE.md)**.
+
+### Provider billing evidence (local import v1)
+
+Fiscus can now retain a separate, immutable ledger of **operator-supplied
+OpenAI provider-cost evidence**. This is the first step beyond a local price
+card: it gives a finance owner a source digest, account reference, source
+period, coverage declaration, and provider-declared positive/negative charge lines without
+turning them into proxy requests.
+
+```powershell
+fiscus billing import --file .\openai-costs.fiscus.json       # validate/dry-run
+fiscus billing import --file .\openai-costs.fiscus.json --apply
+fiscus billing status
+fiscus billing export --csv --out .\provider-cost-evidence.csv
+```
+
+If you operate the local proxy, you may additionally attach an **operator-declared,
+unverified** account/project reference to future OpenAI-proxy rows that use the
+exact configured upstream:
+
+```powershell
+fiscus billing scope set --account-ref finops-production --project-ref proj_123 # preview
+fiscus billing scope set --account-ref finops-production --project-ref proj_123 --apply
+```
+
+It is local routing provenance, not provider authentication or reconciliation:
+imports remain separate, historical rows are never backfilled, and a route-scope
+declaration never changes caps, RoI, or `today` totals.
+
+V1 is deliberately a strict local JSON contract, not a guessed CSV/PDF parser
+or a credentialed provider sync. It does not overwrite metered estimates, add
+provider totals to `today`, claim invoice accuracy, or calculate a variance:
+local request rows do not yet have a verified provider billing-account binding.
+See [BILLING-EVIDENCE-IMPORT.md](BILLING-EVIDENCE-IMPORT.md) for the exact
+schema, idempotency rules, retention model, and the gate before reconciliation.
+
+### Optional OpenAI Costs observation (read-only, preview first)
+
+With an active local declaration for the exact `https://api.openai.com` endpoint
+and an exact OpenAI `proj_...` project reference, Fiscus can make one explicit,
+read-only observation of the documented Organization Costs daily buckets:
+
+```powershell
+# Validates only — no credential lookup, no network request, no database write.
+fiscus billing openai-costs preview --from 2026-01-01 --to 2026-01-08
+
+# Dry pull is also a preview. --apply is required before any network call.
+# The process-only OPENAI_ADMIN_API_KEY is never written to config or SQLite.
+$env:OPENAI_ADMIN_API_KEY = '...'
+fiscus billing openai-costs pull --from 2026-01-01 --to 2026-01-08 --apply
+fiscus billing openai-costs status
+
+# Reads only the newest complete local provider snapshot and local request ledger.
+# It performs no network request, credential lookup, database write, or variance calculation.
+fiscus billing openai-costs coverage
+```
+
+The connector uses only `GET https://api.openai.com/v1/organization/costs`, with
+UTC daily `[from,to)` buckets, the declared project filter, and a maximum of 180
+days. It retains a digest chain, allowed normalized daily project/line-item
+observations, and successful or failed run metadata—never the API key or raw
+response body. It is still a provider observation, **not reconciliation**: its
+snapshots remain outside request totals, budgets, RoI, and model recommendations.
+The coverage report can make local capture gaps visible by separating matching
+declared-route proxy rows from imports, unscoped/legacy rows, another declared
+route, and other providers. It does not sum provider line items or produce a
+provider/request variance: a local route declaration is not provider-account
+verification and cannot see off-path usage.
+
+### Reconciliation (project-day grain)
+
+Once a complete snapshot exists, Fiscus compares it with local metering at the
+**only grain where the two join** — the project-day total:
+
+```powershell
+fiscus billing reconcile                        # read-only
+fiscus billing reconcile --apply                # record it as an immutable derived run
+fiscus billing reconcile --json --materiality 1.00
+```
+
+```text
+Provider reported   $70.20
+Fiscus metered      $66.60   (local rate-card estimate)
+Unexplained         +$3.60
+```
+
+The residual is the **output**, not an error. A run that drove it to zero would
+be fitting the numbers to each other. Its status is `reconciled_with_residual`
+and never `reconciled`, and each day carries a structural reason
+(`provider_exceeds_local`, `no_local_capture`, and so on) that says what shape
+the difference has and nothing about its cause.
+
+Provider line items do not join to models or requests, which is exactly why this
+compares day totals rather than inventing an allocation of line items across
+local calls. A run **refuses** rather than softening: a period ending within 48
+hours may still be accruing, and a non-USD or mixed-currency snapshot gets no
+exchange rate applied to it.
+
+Pull the same period twice, a day apart, and the run reports whether the
+provider's numbers moved — observed stability, never provider-attested finality.
+
+Four conditions ship on every result and never go away: the route scope is
+operator-declared and unverified, off-path usage is invisible (so the residual is
+an *upper bound* on it, not a measurement), line items do not join to requests,
+and local amounts are rate-card estimates. Reconciled cost stays out of request
+totals, budget enforcement, RoI, and model recommendations.
+
+**Two routes to the provider side, and Fiscus says which one you used.** A
+read-only Costs pull needs an Admin key and is the better evidence. If you can
+download a bill but cannot mint a key, import it and adopt it instead — no
+credential, no network request:
+
+```powershell
+fiscus billing import --file .\your-costs-export.fiscus.json --apply
+fiscus billing openai-costs adopt --import-id <id> --apply
+```
+
+The arithmetic is identical. The evidence is not: an adopted observation is
+permanently stamped `operator_supplied_export`, and every reconciliation built on
+it carries a **fifth** condition saying the provider figures were supplied by a
+person and that nothing here can detect a report edited before it was handed
+over. Adoption takes whole UTC days for your declared project only, and reports
+what it excluded — an account-level credit dropped in silence would surface later
+as a residual that never existed.
+
+Full walkthrough, including exactly which credential is needed and what Fiscus
+will not do with it: **[docs/PROVIDER-RECONCILIATION.md](PROVIDER-RECONCILIATION.md)**.
+
+### Cost-centre allocation
+
+Who an organization has **decided** owns the money — which is not the same
+question as which folder the spend arrived under:
+
+```powershell
+fiscus alloc centre eng --name "Engineering" --owner cto
+fiscus alloc rule backend --method direct --centre eng --match-project backend-api
+fiscus alloc rule web --method fixed_split --centre "eng:0.5,platform:0.5" --match-project web-frontend
+fiscus alloc rule infra --method proportional_to_direct --centre "shared:0" --match-project shared-infra
+fiscus alloc run --from 2026-08-01 --to 2026-09-01 [--apply] [--json]
+```
+
+```text
+     $71.718547   88.6%  allocated
+      $9.195772   11.4%  unallocated
+     $80.914319          ledger total for the period
+```
+
+`default` (nobody declared a project) is an *instrumentation* gap;
+`unallocated` (no rule claimed it) is an *accounting position*. Both are
+reported, neither is swept — and each unallocated bucket names the project
+labels inside it so you know what to write a rule for.
+
+`allocated + unallocated == ledger total` to the microdollar, checked on every
+run; the store refuses to record one where it is false. Rules are versioned,
+effective-dated, and reversible, and are matched against the instant the **spend
+happened**, so re-running a closed period after editing a rule restates nothing.
+
+Every line carries the cost basis underneath it. Allocating a local rate-card
+estimate is legitimate; presenting it as settled cost is not — so the run
+self-labels `derived_allocation_of_local_estimates` and stays out of budget
+enforcement, RoI, and model recommendations.
+
+The dashboard's **Allocation** view reads *recorded* runs and never computes
+one, so it cannot disagree with what you chose to record — and when no provider
+reconciliation has been recorded, it says on the page that the residual beneath
+every figure is unexamined. It is a showback statement, not a live gauge, and it
+authors nothing: centres, rules, and runs are written from the CLI.
+
+Full model, including the three methods and what is deliberately not built:
+**[docs/ALLOCATION.md](ALLOCATION.md)**.
+
+### Beyond Anthropic & OpenAI
+
+The OpenAI route speaks the wire format most of the ecosystem now exposes, so
+Fiscus can meter more than two vendors. The simplest way: point
+`upstreams.openai` at any compatible base — **OpenRouter** (which itself fronts
+Gemini, Claude, Llama, Mistral, DeepSeek, and more), **Ollama** and other local
+model servers, **DeepSeek**, **Mistral** — and configured traffic is metered,
+assigned a local estimate, and subject to proxy budget controls.
+
+**Pricing follows the local rate card, not the wire format.** The cost engine
+records whether a local estimate used an exact, family, or fallback match,
+together with the card identity used at calculation time. It does not represent
+that estimate as the configured upstream's billed, discounted, credited, taxed,
+or reconciled amount.
+
+Do **not** switch providers per request through a routing header. Configure one
+trusted OpenAI-compatible upstream in Fiscus instead; use separate Fiscus
+processes when you need separate upstreams. The legacy
+`X-Fiscus-OpenAI-Base` header is ignored on purpose: honoring a request-controlled
+destination could forward provider authorization to an untrusted URL.
+
+---
+
+## What's real, what's not
+
+This project ships with an honest audit of its own premise in
+**[docs/RESEARCH-REVIEW.md](RESEARCH-REVIEW.md)** — what was verified,
+what was corrected (the cost formula, the MITM design, model ids), and what was
+deliberately left out (a per-developer "efficiency score" that would just
+recreate the metric-gaming it's meant to stop).
+
+Cost-reduction percentages depend on your baseline waste. Fiscus's job is to
+make that baseline visible and give you the controls to act — not to promise a
+number.
+
+---
+
+## Privacy
+
+- Read the exact controls and outbound paths in **[docs/DATA-BOUNDARIES.md](DATA-BOUNDARIES.md)**.
+- Fiscus operates locally and sends no Fiscus telemetry or analytics by default.
+- When you route a request through the proxy, your configured AI provider receives the normal provider request; Fiscus does not store provider API keys.
+- Provider API keys pass through to the provider and are **never stored**.
+- **Locally stored, not transmitted:** to detect First-Pass Acceptance (whether
+  the AI's proposed edit matches what you actually committed), Fiscus
+  temporarily stores the AI's proposed code **on your own disk**
+  (`~/.fiscus/fiscus.db`) for up to `proposalRetentionDays` (default 30
+  days) — long enough to correlate against a later git commit, never
+  transmitted anywhere. Set `metadataOnly: true` in your config to disable
+  this and store only token/cost metadata (Acceptance tracking turns off).
+  `fiscus prune`, or the dashboard Settings page, purges it early on demand.
+
+- All cost computation happens on-device against a local pricing table.
+- The dashboard itself makes no third-party browser requests: no web fonts, CDNs,
+  or Fiscus analytics. This does not remove the explicit provider and
+  operator-configured outbound paths described in the data-boundary disclosure.
+- The local store lives under `~/.fiscus` (`%USERPROFILE%\.fiscus` on
+  Windows) under your OS file permissions.
+- **The one thing that can leave the device is opt-in and metadata-only:** if you
+  set an alert webhook (`fiscus alerts --set-webhook <url>`), Fiscus POSTs
+  alert summaries — severity, title, a short metric like `$35.00 / $30.00` — to
+  *your* endpoint. By construction it sends nothing else: no prompts, no code, no
+  keys. Off by default.
+
+## Backup and recovery
+
+Create a consistent, integrity-checked snapshot without stopping the local
+service:
+
+```text
+fiscus backup --out .\backups\fiscus-2026-08-28.sqlite --json
+```
+
+The command uses SQLite `VACUUM INTO`, verifies quick/foreign-key integrity, and
+writes a redacted `.manifest.json` containing the artifact hash and schema
+fingerprint. Backups may contain retained local proposals or causal assignment
+material; they are sensitive local files and are not encrypted by Fiscus.
+
+Inspect a backup without writing anything, then restore it into a new path:
+
+```text
+fiscus restore --from .\backups\fiscus-2026-08-28.sqlite --out .\recovered\fiscus.sqlite --json
+fiscus restore --from .\backups\fiscus-2026-08-28.sqlite --out .\recovered\fiscus.sqlite --apply --json
+```
+
+Restore accepts only a verified Fiscus-created backup artifact with its
+integrity manifest, refuses an existing destination, and never overwrites the
+active ledger.
+Point a later isolated run at the recovered file with `FISCUS_DB` only after
+inspecting the verification result. This is a local recovery artifact, not an
+independent audit attestation or provider-billing record.
+
+## Diagnostics and support bundles
+
+When a local run needs to be handed off for review, generate a redacted,
+read-only diagnostic bundle:
+
+```text
+fiscus diagnostics --json
+fiscus diagnostics --json --out .\support\fiscus-diagnostics.json
+```
+
+The bundle includes a correlation operation ID, probe durations and error
+classes, runtime/configuration/schema/egress/pricing health, and resource
+observations. It replaces the Fiscus home with `<FISCUS_HOME>/…` and excludes
+prompts, source, credentials, raw ledger rows, and provider response bodies.
+The export is atomic and refuses to overwrite an existing file; it never sends
+telemetry or mutates the active ledger/configuration.
