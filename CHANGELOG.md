@@ -82,6 +82,12 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ### Changed
 
+- Documentation: the README is now a short product page (what Fiscus is, a
+  30-second demo, real use, what it will not claim). The full command and
+  design reference moved to `docs/GUIDE.md`, and `docs/README.md`
+  indexes every document by audience. `docs/GETTING-STARTED.md` now includes
+  the provider egress grant a proxy user needs, and no longer tells anyone to
+  run `npx fiscus`, which would fetch an unrelated package of that name.
 - `fiscus backup --out` creates a verified SQLite `VACUUM INTO` snapshot with a
   hash/schema manifest, and `fiscus restore` is preview-first and restores only
   into a new path. Corrupt, symlinked, or existing destinations fail closed;
@@ -126,5 +132,10 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 
 ### Repository
 
+- Voluntary GitHub Sponsors button (`.github/FUNDING.yml`). Nothing is gated,
+  and no sponsorship is accepted from vendors Fiscus compares
+  (`docs/NEUTRALITY.md`).
+- `bin/fiscus.mjs` and `standalone/fiscuspack-verifier.mjs` are committed as
+  executable, so `npm link` from a clone no longer leaves a mode change behind.
 - Added security, contribution, pull-request, issue, and dependency-update
   policy surfaces for public maintenance.

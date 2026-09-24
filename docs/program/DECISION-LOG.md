@@ -3870,3 +3870,24 @@ coverage is 1/1; the existing Store/inference tranche remains green.
 cross-study family or correlation-adjusted multiplicity model, and precision
 planning still reports width rather than probability/power. The command does
 not weaken the pre-registration or no-action semantics.
+
+## D-285 — voluntary sponsorship is accepted, kept outside the product
+
+**Decision.** The owner asked for a sponsor button. `.github/FUNDING.yml`
+enables GitHub Sponsors and `README.md` mentions it once. `docs/NEUTRALITY.md`
+now states the rules: nothing is gated; no sponsorship from AI providers,
+gateways or model hosts that Fiscus prices or compares; no sponsorship affects
+a figure; and no in-product prompt exists. Any future prompt must be local-only,
+rare, permanently dismissible, absent from machine-readable output,
+non-interactive sessions and CI, and recorded here before it ships.
+
+**Reason.** `docs/NEUTRALITY.md` promised "no donation link" and said a change
+would be recorded as a decision, not a quiet edit. The claim that actually
+matters to a user is that nothing is gated and nothing is bought. The vendor
+exclusion exists because Fiscus's comparison surfaces lose their value the
+moment a compared vendor funds the project.
+
+**Boundary.** The button only works once the owner enables a GitHub Sponsors
+profile. The in-app notice the owner mentioned is deferred until there are
+users; there is nothing to fund-raise from before then.
+
