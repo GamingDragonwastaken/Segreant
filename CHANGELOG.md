@@ -147,8 +147,9 @@ The format follows Keep a Changelog and releases will use Semantic Versioning.
 - CI runs the team server against a real PostgreSQL on every change.
 - User-facing issue forms, Discussion category forms, and source archives that
   leave out maintainer and agent files.
-- Voluntary GitHub Sponsors button (`.github/FUNDING.yml`). Nothing is gated,
-  and no sponsorship is accepted from vendors Fiscus compares
+- Commercial licenses state their refund policy, and are arranged through a
+  discussion until a self-serve checkout exists. The GitHub Sponsors button was
+  added and then withdrawn before any sponsorship was taken
   (`docs/NEUTRALITY.md`).
 - `bin/fiscus.mjs` and `standalone/fiscuspack-verifier.mjs` are committed as
   executable, so `npm link` from a clone no longer leaves a mode change behind.

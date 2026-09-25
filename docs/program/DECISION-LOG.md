@@ -3975,3 +3975,20 @@ a real PostgreSQL 16.
 **Also added.** CI job `team-server-postgres` runs the existing real-PostgreSQL
 integration test (`team-server/integration/postgres.test.ts`) on every change;
 it previously ran only by hand.
+
+## D-289 — GitHub Sponsors is deferred; commercial licenses are arranged directly
+
+**Decision.** The owner deferred GitHub Sponsors on 2026-09-26 and wants to
+choose a payment route first. `.github/FUNDING.yml` is removed, so no Sponsor
+button points at a profile that does not exist. `COMMERCIAL-LICENSE.md` keeps
+its terms and price; licenses are arranged through a discussion until a
+self-serve checkout exists. Term 10 states the refund policy for any channel.
+
+**Why.** The Sponsors signup was never completed (the page still asks for
+country and payout details), and a button that leads to a signup page tells a
+visitor the project is unfinished. The owner also doubts donations will fund
+the work and is weighing other models.
+
+**Boundary.** `docs/NEUTRALITY.md`'s rules now cover any payment channel,
+including the commercial license. Choosing a checkout provider is the owner's
+decision.

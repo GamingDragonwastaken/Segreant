@@ -82,7 +82,7 @@ development.
 |---|---|---|
 | **Name / npm package.** `fiscus` on npm belongs to an unrelated AI-agent payments project (`docs/NAME-COLLISION-REVIEW.md`). Recommendation: rename to **Gryf** (`NAMING-DECISION.md`). | recommended, awaiting owner go | branding, mascot, landing page, npm publication |
 | **License.** Changed to PolyForm Noncommercial 1.0.0 with paid commercial licenses (D-287), at the owner's direction. Commercial terms stated in `COMMERCIAL-LICENSE.md` ($10/month organization-wide, perpetual after twelve paid months). | decided | — |
-| **Sponsorship.** GitHub Sponsors button added (`.github/FUNDING.yml`). Owner created the Sponsors profile on 2026-09-25; tiers per `OWNER-SETUP.md` §1. An in-app notice is deliberately deferred until there are users; its constraints are in `docs/NEUTRALITY.md`. | profile live, tiers pending | — |
+| **Sponsorship.** Deferred by the owner on 2026-09-26 (D-289): the Sponsors signup was never completed and the payment route is still open. `FUNDING.yml` removed; commercial licenses arranged through a discussion until a checkout exists. | deferred | self-serve commercial checkout |
 | **Branch retirement and `main` protection.** Branch history preserved on the product line, so deletion loses nothing; deletion and the ruleset import need the owner's settings access (`REPOSITORY-HYGIENE.md`). | awaiting owner clicks | — |
 
 ### Checklist

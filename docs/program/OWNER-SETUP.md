@@ -4,7 +4,12 @@ Everything here needs the repository owner's GitHub account. None of it can be
 done from the code. Each step lists where to click and what to paste, and
 takes about two minutes.
 
-## 1. GitHub Sponsors
+## 1. GitHub Sponsors (deferred)
+
+**Deferred by the owner on 2026-09-26 (D-289).** The profile signup was never
+completed, and the owner wants to choose a payment route first. `FUNDING.yml`
+has been removed, and commercial licenses are arranged through a discussion
+until a checkout exists. The text below is kept for when a channel is chosen.
 
 **Status:** profile created by the owner on 2026-09-25. What remains is the
 tiers and welcome message below. `.github/FUNDING.yml` on this branch already

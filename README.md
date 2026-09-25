@@ -255,11 +255,11 @@ for how a release is gated.
 
 ## Supporting Fiscus
 
-Fiscus is built independently. If it saves you money, the **Sponsor** button at
-the top of this page is how it keeps going. Sponsorship never unlocks features
-([docs/NEUTRALITY.md](docs/NEUTRALITY.md) makes that a checkable commitment);
-it does fund the work, and the Commercial tier doubles as your company's
-license.
+Fiscus is built independently and is free for personal and noncommercial use.
+Companies pay for a cheap commercial license
+([COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md)), and that is what funds the
+work. Paying never unlocks features
+([docs/NEUTRALITY.md](docs/NEUTRALITY.md) makes that a checkable commitment).
 
 ## License
 

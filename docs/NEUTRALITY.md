@@ -1,7 +1,7 @@
 # Neutrality
 
 Fiscus's core product runs with no hosted service, no account, and, for
-noncommercial use, no payment. Voluntary sponsorship exists, and is kept outside the
+noncommercial use, no payment. Money, when it is taken, is kept outside the
 product (see "Sponsorship" below). This states what that means concretely and
 which paths are opt-in add-ons rather than requirements.
 
@@ -58,9 +58,10 @@ collects nothing centrally.
 
 ## Sponsorship
 
-Fiscus accepts voluntary sponsorship through GitHub Sponsors: the button on
-the repository page, configured in `.github/FUNDING.yml`, plus one line in
-`README.md`. The rules:
+Fiscus does not take sponsorship today; there is no Sponsor button. Paid
+commercial licenses (`COMMERCIAL-LICENSE.md`) are the only money involved. If
+sponsorship or any other payment channel is opened, these rules apply to it
+and to the commercial license alike:
 
 - **Nothing is gated.** Every function works the same for someone who never
   sponsors. There is no license key, no "supporter edition", and no feature
