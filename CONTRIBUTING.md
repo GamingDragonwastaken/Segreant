@@ -9,9 +9,11 @@ to justify is a regression.
 Fiscus is published under the PolyForm Noncommercial License 1.0.0 and is also
 licensed commercially by its maintainer (`COMMERCIAL-LICENSE.md`). Both need
 the maintainer to hold the right to license every part of the code. By opening
-a pull request you agree that your contribution may be distributed under the
-project's license and under the maintainer's commercial licenses, and you
-confirm that you wrote it or have the right to submit it on those terms.
+a pull request you grant the maintainer a perpetual, worldwide, non-exclusive,
+royalty-free, irrevocable license to use, modify, sublicense and distribute
+your contribution under the project's license and under any commercial
+license, and you confirm that you wrote it or have the right to grant that.
+You keep the copyright in your contribution.
 
 ## Development baseline
 
