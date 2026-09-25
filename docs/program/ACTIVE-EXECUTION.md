@@ -81,7 +81,7 @@ development.
 | Decision | State | Blocks |
 |---|---|---|
 | **Name / npm package.** `fiscus` on npm belongs to an unrelated AI-agent payments project (`docs/NAME-COLLISION-REVIEW.md`). Keep the name with a different package name, or rename. | open | branding, mascot, landing page, npm publication |
-| **License.** MIT today: anyone may use, modify and sell it, including you. Alternatives: Apache-2.0 (adds a patent grant), or keep the core permissive and license `team-server/` separately later. Relicensing is easy only while the owner is the sole copyright holder. | open, MIT stands until decided | first public release |
+| **License.** Changed to PolyForm Noncommercial 1.0.0 with paid commercial licenses (D-287), at the owner's direction. Commercial-tier price and the written confirmation process are the owner's to set in GitHub Sponsors. | decided | — |
 | **Sponsorship.** GitHub Sponsors button added (`.github/FUNDING.yml`). The owner must enable a GitHub Sponsors profile for the button to accept money. An in-app notice is deliberately deferred until there are users; its constraints are in `docs/NEUTRALITY.md`. | profile pending | — |
 | **Branch retirement and `main` protection.** Prepared in `REPOSITORY-HYGIENE.md`. | awaiting owner action | — |
 

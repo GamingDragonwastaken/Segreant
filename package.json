@@ -48,7 +48,8 @@
     "pricing",
     "baselines",
     "docs/*.md",
-    "web/assets/seal-256.png"
+    "web/assets/seal-256.png",
+    "COMMERCIAL-LICENSE.md"
   ],
   "keywords": [
     "finops",
@@ -62,7 +63,7 @@
     "ai-governance"
   ],
   "author": "2am_seeker",
-  "license": "MIT",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/GamingDragonwastaken/Fiscus.git"

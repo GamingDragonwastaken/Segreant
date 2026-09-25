@@ -1,0 +1,19 @@
+name: Documentation problem
+description: Something in the docs is wrong, unclear, or missing
+title: "[docs] "
+labels: [documentation]
+body:
+  - type: input
+    id: where
+    attributes:
+      label: Which page or section?
+      placeholder: "docs/GETTING-STARTED.md, step 2"
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is wrong or confusing?
+      description: If a command did not work as written, paste what you ran and what happened.
+    validations:
+      required: true

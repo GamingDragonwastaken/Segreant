@@ -4,13 +4,19 @@
   "enforcement": "active",
   "conditions": {
     "ref_name": {
-      "include": ["~DEFAULT_BRANCH"],
+      "include": [
+        "~DEFAULT_BRANCH"
+      ],
       "exclude": []
     }
   },
   "rules": [
-    { "type": "deletion" },
-    { "type": "non_fast_forward" },
+    {
+      "type": "deletion"
+    },
+    {
+      "type": "non_fast_forward"
+    },
     {
       "type": "pull_request",
       "parameters": {
@@ -19,7 +25,9 @@
         "require_code_owner_review": false,
         "require_last_push_approval": false,
         "required_review_thread_resolution": true,
-        "allowed_merge_methods": ["merge"]
+        "allowed_merge_methods": [
+          "merge"
+        ]
       }
     },
     {
@@ -28,21 +36,59 @@
         "strict_required_status_checks_policy": false,
         "do_not_enforce_on_create": false,
         "required_status_checks": [
-          { "context": "test (ubuntu-latest)", "integration_id": 15368 },
-          { "context": "test (macos-latest)", "integration_id": 15368 },
-          { "context": "test (windows-latest)", "integration_id": 15368 },
-          { "context": "team-server-test (ubuntu-latest)", "integration_id": 15368 },
-          { "context": "team-server-test (macos-latest)", "integration_id": 15368 },
-          { "context": "team-server-test (windows-latest)", "integration_id": 15368 },
-          { "context": "package-smoke", "integration_id": 15368 },
-          { "context": "security", "integration_id": 15368 },
-          { "context": "browser-accessibility", "integration_id": 15368 },
-          { "context": "candidate-head", "integration_id": 15368 }
+          {
+            "context": "test (ubuntu-latest)",
+            "integration_id": 15368
+          },
+          {
+            "context": "test (macos-latest)",
+            "integration_id": 15368
+          },
+          {
+            "context": "test (windows-latest)",
+            "integration_id": 15368
+          },
+          {
+            "context": "team-server-test (ubuntu-latest)",
+            "integration_id": 15368
+          },
+          {
+            "context": "team-server-test (macos-latest)",
+            "integration_id": 15368
+          },
+          {
+            "context": "team-server-test (windows-latest)",
+            "integration_id": 15368
+          },
+          {
+            "context": "team-server-postgres",
+            "integration_id": 15368
+          },
+          {
+            "context": "package-smoke",
+            "integration_id": 15368
+          },
+          {
+            "context": "security",
+            "integration_id": 15368
+          },
+          {
+            "context": "browser-accessibility",
+            "integration_id": 15368
+          },
+          {
+            "context": "candidate-head",
+            "integration_id": 15368
+          }
         ]
       }
     }
   ],
   "bypass_actors": [
-    { "actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "pull_request" }
+    {
+      "actor_id": 5,
+      "actor_type": "RepositoryRole",
+      "bypass_mode": "pull_request"
+    }
   ]
 }

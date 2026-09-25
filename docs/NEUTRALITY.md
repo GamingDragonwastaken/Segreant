@@ -1,7 +1,7 @@
 # Neutrality
 
-Fiscus's core product runs with no hosted service, no account, and no
-payment of any kind. Voluntary sponsorship exists, and is kept outside the
+Fiscus's core product runs with no hosted service, no account, and, for
+noncommercial use, no payment. Voluntary sponsorship exists, and is kept outside the
 product (see "Sponsorship" below). This states what that means concretely and
 which paths are opt-in add-ons rather than requirements.
 
@@ -41,8 +41,11 @@ collects nothing centrally.
 
 ## Product and project neutrality
 
-- The LICENSE is MIT, copyright "Fiscus contributors" — no individual name
-  attached to ownership of the license grant.
+- The LICENSE is PolyForm Noncommercial 1.0.0 (D-287). Noncommercial use needs
+  no account, key or payment; commercial use needs a license from the
+  maintainer (`COMMERCIAL-LICENSE.md`). No function behaves differently for
+  licensed and unlicensed users: the license is a legal term, not a feature
+  gate. Earlier commits carried MIT, copyright "Fiscus contributors".
 - `docs/RELEASE-GATE.md`'s "Product claims allowed at this stage" section
   fixes the precise language this project may use about itself and forbids
   overclaiming (not "AI financial advice," not "zero egress," not a verified

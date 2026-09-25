@@ -78,3 +78,20 @@ overlapping subject matter to this one, at low visibility.
   registrant and any live product there, whether `fiscuslabs`'s use
   constitutes prior use in commerce, and jurisdiction-specific
   common-law trademark exposure.
+
+## Candidate names checked on 2026-09-25
+
+Checked with `npm view <name>`; "free" means the registry returned 404 on that
+date. This says nothing about trademarks, domains or GitHub organizations.
+
+| Name | npm |
+|---|---|
+| `fiscus` | taken (the AI-agent payments placeholder above) |
+| `fiscus-cli`, `fiscusai`, `fiscus-ledger`, `fiscusjs` | free |
+| `aerarium` (the Roman public treasury) | free |
+| `gryph`, `costgriffin`, `griffin-ledger` | free |
+| `quaestor`, `obol`, `denarius`, `tessera`, `gryphon`, `fisc`, `tallyman` | taken |
+| `agentledger`, `tokenledger`, `burnrate`, `spendguard`, `tokentally`, `ledgerline` | taken, several by 2026 packages in this same space |
+
+The last row matters beyond naming: other AI-spend tools are now publishing
+under the obvious descriptive names.

@@ -19,4 +19,4 @@ they are not a work queue.
 
 Everything else here is a packet-level design or report referenced from those
 ledgers. New work does not start from this directory; it starts from
-[HANDOFF.md](../../HANDOFF.md).
+[HANDOFF.md](HANDOFF.md).

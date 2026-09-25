@@ -45,8 +45,12 @@ None is active or future work. Why the unmerged commits are not needed:
   `test/epistemic-witness.test.ts`).
 - `agent/truth-closure` and `research/economic-control-foundation`: August
   remediation and research lanes, including CI-trigger commits. Their
-  correctness work was redone in the reconstruction; their research direction
-  lives in [ECONOMIC-CONTROL-FOUNDATION.md](../ECONOMIC-CONTROL-FOUNDATION.md).
+  correctness work was redone in the reconstruction. A symbol-level audit on
+  2026-09-25 found eleven research modules on `agent/truth-closure` with no
+  counterpart on `main`; they were recovered into `src/research/` with their
+  tests (D-286). What remains unique on these branches is CI-trigger and
+  release-record churn, plus `voi.ts` and two tests whose interfaces `main`
+  has replaced.
 
 **Archiving keeps every commit.** A tag named `archive/<branch>` holds each tip,
 so deleting the branch loses nothing and the SHAs cited in evidence records
@@ -88,14 +92,15 @@ assurance: a stray force-push could rewrite the history the release gate cites.
 | Dismiss stale approvals on push | on | Applies once other reviewers exist |
 | Require conversation resolution | on | Review threads must be closed before merging |
 | Allowed merge method | **merge commit only** | Squash and rebase create new SHAs, which breaks exact-candidate evidence (`candidate-head` checks the PR head SHA) |
-| Required checks | all ten CI jobs (below) | Each is a distinct gate: three OSes, team-server, packaged install, supply chain, accessibility, exact head |
+| Required checks | all eleven CI jobs (below) | Each is a distinct gate: three OSes, team-server, real PostgreSQL, packaged install, supply chain, accessibility, exact head |
 | Require branch up to date | off | Every merge would need a re-run. `candidate-head` already verifies the exact head |
 | Bypass | admins, **via pull request only** | The owner can merge a PR in an emergency, but nobody can push directly to `main` |
 
-The ten required checks, exactly as GitHub names them (observed on run
-`35743000421`, success on all ten): `test (ubuntu-latest)`, `test (macos-latest)`,
+The eleven required checks, exactly as GitHub names them. The first ten were
+observed on run `35743000421` (success on all ten); `team-server-postgres` was
+added on 2026-09-25: `test (ubuntu-latest)`, `test (macos-latest)`,
 `test (windows-latest)`, `team-server-test (ubuntu-latest)`,
-`team-server-test (macos-latest)`, `team-server-test (windows-latest)`,
+`team-server-test (macos-latest)`, `team-server-test (windows-latest)`, `team-server-postgres`,
 `package-smoke`, `security`, `browser-accessibility`, `candidate-head`.
 
 Dependabot PRs pass through the same checks, so nothing changes for them.

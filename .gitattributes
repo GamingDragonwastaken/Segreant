@@ -8,3 +8,14 @@
 *.gif binary
 *.ico binary
 *.db binary
+
+# Keep source downloads (GitHub "Download ZIP", release archives) to the product.
+# These files stay in the repository for maintainers and coding agents, but
+# `git archive` leaves them out.
+AGENTS.md export-ignore
+CONTEXT.md export-ignore
+PRODUCT.md export-ignore
+.claude export-ignore
+.github export-ignore
+docs/program export-ignore
+docs/superpowers export-ignore

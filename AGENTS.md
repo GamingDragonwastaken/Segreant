@@ -2,7 +2,7 @@
 
 > **Current phase (2026-09-24): pre-launch.** The reconstruction program
 > (Foundational Audit II, Execution Dossier III) is closed. Start every session
-> from [HANDOFF.md](HANDOFF.md), then
+> from [docs/program/HANDOFF.md](docs/program/HANDOFF.md), then
 > [docs/program/ACTIVE-EXECUTION.md](docs/program/ACTIVE-EXECUTION.md) for the
 > current checklist. The `docs/program/*` records remain the specification for
 > existing behaviour; they are not a work queue, and historical branches are not

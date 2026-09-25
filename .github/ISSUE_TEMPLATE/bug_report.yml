@@ -1,48 +1,84 @@
 name: Bug report
-description: Report reproducible incorrect behavior
+description: Something is broken, crashes, or shows a wrong number
 title: "[bug] "
 labels: [bug]
 body:
   - type: markdown
     attributes:
-      value: "Do not include credentials, provider exports, private source, or personal filesystem paths. Security issues belong in private vulnerability reporting."
-  - type: input
-    id: version
-    attributes:
-      label: Fiscus version / commit
-      placeholder: "0.1.0 or git SHA"
-    validations:
-      required: true
+      value: |
+        Thanks for taking the time. A good report gets fixed fast.
+        **Never paste API keys, provider bills, private source code, or personal file paths.**
+        Security problems go through [private vulnerability reporting](https://github.com/GamingDragonwastaken/Fiscus/security/advisories/new), not here.
   - type: dropdown
-    id: platform
+    id: area
     attributes:
-      label: Platform
-      options: [Windows, macOS, Linux, Other]
+      label: Where did it go wrong?
+      options:
+        - Install or first run
+        - Demo (npm run demo)
+        - Importing tool logs (scan / import)
+        - Proxy, egress or provider routing
+        - Budgets and alerts
+        - Dashboard (web UI)
+        - Provider billing or reconciliation
+        - Allocation
+        - Return on Intelligence / outcome evidence
+        - Team server
+        - Something else
     validations:
       required: true
   - type: textarea
     id: observed
     attributes:
       label: What happened?
-      description: Include the exact incorrect claim or behavior, with sensitive data redacted.
-    validations:
-      required: true
-  - type: textarea
-    id: expected
-    attributes:
-      label: What should have happened?
+      description: If a number is wrong, say which number, where you saw it, and what you expected it to be.
     validations:
       required: true
   - type: textarea
     id: reproduce
     attributes:
-      label: Minimal reproduction
+      label: How can we reproduce it?
+      description: The exact commands you ran, in order. The demo data (`npm run demo`) is ideal if the bug shows up there.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Error output or diagnostics
+      description: Paste the error, or attach the file from `fiscus diagnostics --json --out fiscus-diagnostics.json` (it is redacted by design).
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Fiscus version or commit
+      placeholder: "0.1.0, or the output of: git rev-parse --short HEAD"
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Operating system
+      options: [Windows, macOS, Linux, Other]
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node.js version
+      placeholder: "output of: node --version"
     validations:
       required: true
   - type: checkboxes
     id: safety
     attributes:
-      label: Data safety
+      label: Before you submit
       options:
-        - label: I removed secrets, private source, billing exports, and personal paths.
+        - label: I removed secrets, billing exports, private code and personal paths from everything above.
           required: true
