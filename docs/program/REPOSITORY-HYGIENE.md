@@ -1,8 +1,12 @@
 # Repository hygiene
 
-Two owner actions that finish the move from reconstruction to a normal
-repository: retiring the historical branches, and protecting `main`. Both are
-prepared here and neither has been executed; each needs the repository owner.
+Two actions that finish the move from reconstruction to a normal repository:
+retiring the historical branches, and protecting `main`.
+
+**Status (2026-09-25).** Branch history is preserved on the product line (see
+below), so the branches can be deleted with no loss. The deletion itself, and
+the `main` ruleset, are repository-settings actions that need the owner's
+GitHub account; the agent's git access is limited to its working branch.
 
 ## 1. Historical branch retirement
 
@@ -52,10 +56,18 @@ None is active or future work. Why the unmerged commits are not needed:
   release-record churn, plus `voi.ts` and two tests whose interfaces `main`
   has replaced.
 
-**Archiving keeps every commit.** A tag named `archive/<branch>` holds each tip,
-so deleting the branch loses nothing and the SHAs cited in evidence records
-stay resolvable. Tagging all eleven, including the ones that are safe to
-delete outright, costs nothing and keeps the names.
+**History is already preserved.** The commit *"archive: keep the historical
+branch tips reachable from the product history"* on this line has the seven
+divergent tips as extra parents and changes no file. Once it is on `main`,
+every commit on every historical branch is reachable from `main`, and the four
+ancestor branches already were. Deleting the branches then loses nothing, and
+every SHA cited in the evidence records keeps resolving.
+
+To delete them without a terminal: repository → *Branches* → the trash icon
+on each of the eleven branches in the table.
+
+**Optional archive tags.** Tags are not needed for preservation any more,
+but a tag named `archive/<branch>` also keeps each branch's name findable.
 
 Run from a full clone. This pushes eleven tags, then deletes eleven branches:
 

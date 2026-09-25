@@ -6,6 +6,11 @@ takes about two minutes.
 
 ## 1. GitHub Sponsors
 
+**Status:** profile created by the owner on 2026-09-25. What remains is the
+tiers and welcome message below. `.github/FUNDING.yml` on this branch already
+names the account; the owner's PR #23 added GitHub's blank template, which
+shows no button, and is superseded.
+
 **Where:** <https://github.com/sponsors> → *Get sponsored* → your personal
 account. GitHub asks for a short profile, a payout method (Stripe Connect or a
 bank account) and tax details. Approval takes a few days.
@@ -24,8 +29,8 @@ bank account) and tax details. Approval takes a few days.
 | Tier | Price | Description to paste |
 |---|---|---|
 | Supporter | $3 | Keeps Fiscus independent. Your name in the README supporters list if you want it. |
-| Commercial | $10 | **The commercial license for one organization.** Covers using Fiscus inside your company or for client work while you sponsor. After you sponsor, open a discussion or reply to the welcome message with your organization's name and you'll get written confirmation. |
-| Team | $50 | Commercial license for your organization, plus your logo in the README and priority on issues you open. |
+| Commercial | $10 | **The commercial license for your whole organization** (terms in COMMERCIAL-LICENSE.md). Unlimited users and machines. Twelve consecutive months earns a perpetual license to every version released in that time. Reply to the welcome message with your organization's legal name for written confirmation. |
+| Team | $50 | Everything in Commercial, plus your logo in the README and priority triage of issues you open. |
 
 The Commercial tier is the licensing path that `COMMERCIAL-LICENSE.md`
 describes, so keep its name as *Commercial*. Turn on the **welcome message**
@@ -70,9 +75,9 @@ to tell us what broke."*
 
 ## 5. Retire the historical branches
 
-`REPOSITORY-HYGIENE.md` §1 has the verified table and the exact commands (tag
-every branch as `archive/…`, then delete). Either run them yourself or tell the
-agent working on the repository to run them.
+History is preserved on the product line (`REPOSITORY-HYGIENE.md` §1), so
+after PR #21 merges: repository → *Branches* → trash icon on each of the
+eleven listed there, plus `GamingDragonwastaken-patch-1` and `-patch-2`.
 
 ## 6. Private vulnerability reporting
 

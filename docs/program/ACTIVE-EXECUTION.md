@@ -80,10 +80,10 @@ development.
 
 | Decision | State | Blocks |
 |---|---|---|
-| **Name / npm package.** `fiscus` on npm belongs to an unrelated AI-agent payments project (`docs/NAME-COLLISION-REVIEW.md`). Keep the name with a different package name, or rename. | open | branding, mascot, landing page, npm publication |
-| **License.** Changed to PolyForm Noncommercial 1.0.0 with paid commercial licenses (D-287), at the owner's direction. Commercial-tier price and the written confirmation process are the owner's to set in GitHub Sponsors. | decided | — |
-| **Sponsorship.** GitHub Sponsors button added (`.github/FUNDING.yml`). The owner must enable a GitHub Sponsors profile for the button to accept money. An in-app notice is deliberately deferred until there are users; its constraints are in `docs/NEUTRALITY.md`. | profile pending | — |
-| **Branch retirement and `main` protection.** Prepared in `REPOSITORY-HYGIENE.md`. | awaiting owner action | — |
+| **Name / npm package.** `fiscus` on npm belongs to an unrelated AI-agent payments project (`docs/NAME-COLLISION-REVIEW.md`). Recommendation: rename to **Gryf** (`NAMING-DECISION.md`). | recommended, awaiting owner go | branding, mascot, landing page, npm publication |
+| **License.** Changed to PolyForm Noncommercial 1.0.0 with paid commercial licenses (D-287), at the owner's direction. Commercial terms stated in `COMMERCIAL-LICENSE.md` ($10/month organization-wide, perpetual after twelve paid months). | decided | — |
+| **Sponsorship.** GitHub Sponsors button added (`.github/FUNDING.yml`). Owner created the Sponsors profile on 2026-09-25; tiers per `OWNER-SETUP.md` §1. An in-app notice is deliberately deferred until there are users; its constraints are in `docs/NEUTRALITY.md`. | profile live, tiers pending | — |
+| **Branch retirement and `main` protection.** Branch history preserved on the product line, so deletion loses nothing; deletion and the ruleset import need the owner's settings access (`REPOSITORY-HYGIENE.md`). | awaiting owner clicks | — |
 
 ### Checklist
 
