@@ -29,7 +29,7 @@ bank account) and tax details. Approval takes a few days.
 | Tier | Price | Description to paste |
 |---|---|---|
 | Supporter | $3 | Keeps Fiscus independent. Your name in the README supporters list if you want it. |
-| Commercial | $10 | **The commercial license for your whole organization** (terms in COMMERCIAL-LICENSE.md). Unlimited users and machines. Twelve consecutive months earns a perpetual license to every version released in that time. Reply to the welcome message with your organization's legal name for written confirmation. |
+| Commercial | $10 | **The commercial license for your whole organization** (terms in COMMERCIAL-LICENSE.md). Unlimited users and machines. Twelve consecutive months earns a perpetual license to every version released in that time. Reply to the welcome message with your organization's legal name for written confirmation. Cancel any time; payments are not refunded (term 10). |
 | Team | $50 | Everything in Commercial, plus your logo in the README and priority triage of issues you open. |
 
 The Commercial tier is the licensing path that `COMMERCIAL-LICENSE.md`
@@ -49,7 +49,9 @@ Once the profile is live, the **Sponsor** button already configured in
 
 **Where:** repository → *Settings* → *Rules* → *Rulesets* → *New ruleset* →
 *Import a ruleset* → choose `docs/program/main-ruleset.json` → *Create*.
-Then confirm *Protect main* shows **Active**. The policy and the reasons for
+Then confirm *Protect main* shows **Active**. The ruleset already in the
+repository (named `protection???`, created 2026-09-16) targets no branches,
+so it protects nothing; delete it once *Protect main* is active. The policy and the reasons for
 each rule are in `REPOSITORY-HYGIENE.md` §2.
 
 ## 3. Discussions categories

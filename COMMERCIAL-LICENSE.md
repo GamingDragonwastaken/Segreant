@@ -62,6 +62,12 @@ above, unless a separate signed agreement says otherwise.
 9. **Changes.** New terms apply only to sponsorships or agreements started
    after they are published, and to renewals at least 30 days after that. They
    never shorten a license already earned under term 6.
+10. **Refunds.** Payments are not refunded, because the license starts on
+    payment and the 30-day evaluation comes first. The licensee can cancel at
+    any time; cancelling stops the next payment, and term 5 still applies. A
+    payment taken by mistake (a duplicate charge, or a charge after
+    cancellation) is refunded on request. GitHub Sponsors leaves refund terms
+    to the sponsored developer, so this term is the whole refund policy.
 
 ## Versions released under MIT
 
